@@ -593,8 +593,10 @@ FocusScope {
             return true
         }
         // Touch: the selection mode of another day (or a selection over several days) — a tap here
-        // moves the selection's end into this day.
-        const spanTap = touch && stream !== null && (stream.active || stream.othersSelected(controller))
+        // moves the selection's end into this day. A span none of whose days is on screen any more
+        // shows no tools: a tap edits (and ends it), as after scrolling away from one day's selection.
+        const spanTap = touch && stream !== null
+                        && (stream.active ? stream.toolsController !== null : stream.othersSelected(controller))
         if (!selectionMode && !spanTap)
             return false
         if (pickMode && !inSpan)

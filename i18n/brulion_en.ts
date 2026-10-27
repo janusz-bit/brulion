@@ -123,7 +123,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="672"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="674"/>
         <source>Copied %n block(s) from several days</source>
         <translation>
             <numerusform>Copied %n block from several days</numerusform>
@@ -131,7 +131,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="674"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="676"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -139,7 +139,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="685"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="687"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -147,7 +147,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="701"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="703"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -155,7 +155,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1453"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1455"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -166,7 +166,7 @@
 <context>
     <name>BlockMenu</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="108"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="116"/>
         <source>Copy %n block(s)</source>
         <translation>
             <numerusform>Copy %n block</numerusform>
@@ -174,7 +174,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="115"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="123"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -182,7 +182,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="221"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="230"/>
         <source>Delete %n block(s)</source>
         <translation>
             <numerusform>Delete %n block</numerusform>
@@ -596,7 +596,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="287"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="292"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -707,7 +707,7 @@
 <context>
     <name>SelectionToolbar</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="96"/>
+        <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="94"/>
         <source>%n block(s) selected</source>
         <translation>
             <numerusform>%n block selected</numerusform>

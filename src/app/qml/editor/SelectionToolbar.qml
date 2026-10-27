@@ -59,15 +59,13 @@ Row {
     Accessible.role: Accessible.ToolBar
     Accessible.name: qsTr("Selection tools")
 
+    // `unavailable` (BIconButton): shown but not possible now, the reason as its tooltip; a tap
+    // says why.
     component Tool: BIconButton {
-        /// Shown but not possible now (drawn disabled, the reason as its description): a tap says why.
-        property string unavailable: ""
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         focusPolicy: Qt.NoFocus
         size: "small"
         enabled: bar.count > 0
-        opacity: unavailable === "" ? 1 : Theme.disabledOpacity
-        Accessible.description: unavailable !== "" ? unavailable : shortcut
     }
 
     // Docked: "Gotowe" first (Android's contextual bars), always on screen however narrow.

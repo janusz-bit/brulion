@@ -9,12 +9,15 @@ import Brulion
 // mouse, touch and key events (QtTest's TestEvent, EditorInput):
 //   * desktop: Shift+click from a block of one day into the next day; the floating tools on that
 //     day only; Ctrl+C copies both days' blocks after their [[date]] links; Delete and Tab change
-//     nothing (only copying works); Shift+↓ past a day's end into the next day and Shift+↑ back;
+//     nothing (only copying works), and so does the block menu's Przenieś w górę, shown unavailable
+//     (its Kopiuj counts the whole span), as are the floating Wytnij's tooltip;
+//     Shift+↓ past a day's end into the next day and Shift+↑ back;
 //     Esc clears every day; a mouse drag from one day into the next; a plain click edits and ends
 //     the span;
 //   * phone: a long press (the selection mode), a tap in the next day extends the selection
 //     there; one docked toolbar with the stream's count; its Wytnij changes nothing, Kopiuj copies;
-//     a tap two days further; Back clears every day;
+//     a tap two days further; Back clears every day; with every day of a span scrolled away a tap
+//     edits and ends it;
 //   * both: the anchor day scrolled far away (destroyed) and back gets its part again; copying
 //     meanwhile reads it from its file.
 // Prints "SELFTEST PASS|FAIL <what>" lines and quits with the number of failures as exit code.
@@ -35,6 +38,8 @@ Item {
     property int rowB: -1
     property int rowC: -1
     property string fileA: ""
+    /// A day far below them (-330).
+    property int rowFar: -1
 
     readonly property bool touch: Theme.touchUi
 
@@ -120,6 +125,15 @@ Item {
     function clipboard() {
         const d = dayAt(test.rowA) || dayAt(test.rowB) || dayAt(test.rowC)
         return d ? d.controller.clipboardText() : ""
+    }
+    /// The item of `menu` named `name`.
+    function menuItem(menu, name) {
+        for (let i = 0; menu && i < menu.count; ++i) {
+            const item = menu.itemAt(i)
+            if (item && item.objectName === name)
+                return item
+        }
+        return null
     }
     /// Nothing selected anywhere in the stream.
     function noneSelected() {
@@ -209,13 +223,39 @@ Item {
                            "Ctrl+C copies both days' blocks after their links: " + text.slice(0, 60))
                 test.key(Qt.Key_Delete, 0)
                 test.key(Qt.Key_Tab, 0)
+                const bars = test.shownOnFrame("floatingSelectionTools")
+                const cut = bars.length === 1 ? test.findShown(bars[0], "selectionCut") : null
+                test.check(cut !== null && cut.toolTipText === test.dayAt(test.rowB).editor.spanReason,
+                           "the floating Wytnij says why in its tooltip: " + (cut ? cut.toolTipText : ""))
+                // The block menu of a block in the span.
+                const a2 = test.blockText(test.dayAt(test.rowA), 2)
+                test.events.mouseClick(a2, 20, a2.height / 2, Qt.RightButton, Qt.NoModifier, -1)
             },
+            () => {
+                const editor = test.dayAt(test.rowA).editor
+                return editor.blockMenu !== null && editor.blockMenu.opened
+            },
+            () => {
+                const editor = test.dayAt(test.rowA).editor
+                const menu = editor.blockMenu
+                const up = test.menuItem(menu, "blockMenuMoveUp")
+                const cut = test.menuItem(menu, "blockMenuCut")
+                const copy = test.menuItem(menu, "blockMenuCopy")
+                test.check(test.stream.active && menu.inSelection && up !== null && up.unavailable === editor.spanReason
+                           && cut !== null && cut.unavailable === editor.spanReason,
+                           "the block menu in the span shows moving and cutting unavailable: " + (up ? up.unavailable : "no item"))
+                test.check(copy !== null && copy.text.indexOf("6") >= 0, "its Kopiuj counts the whole span: " + (copy ? copy.text : ""))
+                if (up)
+                    up.triggered()
+                menu.close()
+            },
+            () => !test.dayAt(test.rowA).editor.blockMenu.opened,
             () => test.dayAt(test.rowA).controller.save(),
             () => {
                 test.check(test.stream.active && test.dayAt(test.rowA).controller.blocks.count === 4
                            && Workspace.readFile(test.fileA).indexOf("- Dzień 300, blok 3") >= 0
                            && !test.dayAt(test.rowA).controller.canUndo && !test.dayAt(test.rowB).controller.canUndo,
-                           "Delete and Tab change nothing over several days")
+                           "Delete, Tab and the block menu's Przenieś w górę change nothing over several days")
                 // Shift+↓ to the day's end, then past it into the third day.
                 test.key(Qt.Key_Down, Qt.ShiftModifier)
                 test.key(Qt.Key_Down, Qt.ShiftModifier)
@@ -334,6 +374,38 @@ Item {
             },
             () => test.check(test.noneSelected(), test.touch ? "Back clears every day" : "Esc clears every day again"),
         ]
-        steps = common.concat(test.touch ? phone : desktop, scrolling)
+        const phoneAway = [
+            // ---- Every day of a span scrolled away: a tap edits --------------------------------------
+            () => test.list.positionViewAtIndex(test.rowA, ListView.Beginning),
+            () => test.loaded(test.rowA) && test.loaded(test.rowB),
+            () => {
+                const a1 = test.blockText(test.dayAt(test.rowA), 1)
+                test.events.touchEvent(a1).press(0, a1, a1.width / 2, a1.height / 2).commit()
+            },
+            ...test.idle(9),
+            () => {
+                const a1 = test.blockText(test.dayAt(test.rowA), 1)
+                test.events.touchEvent(a1).release(0, a1, a1.width / 2, a1.height / 2).commit()
+            },
+            () => test.dayAt(test.rowA).editor.selectionMode,
+            () => test.click(test.blockText(test.dayAt(test.rowB), 2), Qt.NoModifier),
+            () => {
+                test.check(test.stream.active, "a selection over two days again")
+                test.rowFar = test.days.exactRowOfDate(DatesHelper.addDays(DatesHelper.today, -330))
+                test.list.positionViewAtIndex(test.rowFar, ListView.Beginning)
+            },
+            () => test.dayAt(test.rowA) === null && test.dayAt(test.rowB) === null && test.loaded(test.rowFar),
+            () => {
+                test.check(test.stream.active && test.stream.toolsController === null, "no day of the span on screen: no tools")
+                test.click(test.blockText(test.dayAt(test.rowFar), 1), Qt.NoModifier)
+            },
+            () => test.dayAt(test.rowFar).controller.editingRow === 1,
+            () => {
+                test.check(!test.stream.active && test.dayAt(test.rowFar).controller.selectionCount === 0,
+                           "a tap there edits and ends the span: " + test.stream.pageCount)
+                test.dayAt(test.rowFar).controller.stopEditing()
+            },
+        ]
+        steps = common.concat(test.touch ? phone : desktop, scrolling, test.touch ? phoneAway : [])
     }
 }
