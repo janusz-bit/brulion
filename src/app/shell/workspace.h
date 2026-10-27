@@ -409,6 +409,10 @@ public:
     /// Append `text` as a new block ("- text", further lines indented) to today's journal.
     /// Returns the journal's path ("" when nothing was written).
     Q_INVOKABLE QString captureToJournal(const QString &text);
+    /// Append ready-made blocks (lines joined with "\n", written as given: a shared file's
+    /// indentation is kept; notebook::sharedFileBlock) to today's journal. Returns its path ("" when
+    /// nothing was written).
+    QString appendJournalBlocks(const QString &blocks);
     /// Quick capture: like captureToJournal(), but a date in the first line makes it a task with
     /// a reminder (with a time: "Kupić mleko jutro o 18" -> "- [ ] Kupić mleko ⏰ 2026-10-15
     /// 18:00") or a due date (without one: "📅 2026-10-16"); see notebook/capture.h.

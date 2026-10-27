@@ -160,6 +160,16 @@ FocusScope {
         else
             capture.open()
     }
+    /// The share dialog for what another app shared (AppController.pendingShare; Android's
+    /// "Udostępnij → Brulion", the --share option).
+    function openShare() {
+        if (AppController.pendingShare.kind === undefined)
+            return
+        if (shareDialog.opened)
+            shareDialog.reload() // a newer share replaced the one shown
+        else
+            shareDialog.open()
+    }
     /// A new page: in `folder`, or — Ctrl+N, the top bar, the sidebar's pencil pass "" — in the
     /// folder of the page shown, the root too (a removable chip in the dialog); else the
     /// notebook's folder for new pages.
@@ -230,6 +240,7 @@ FocusScope {
         case "palette": openPalette(); break
         case "switcher": openSwitcher(); break
         case "capture": openCapture(); break
+        case "share": openShare(); break
         case "newPage": openNewPage(""); break
         case "newFolder": openNewFolder(""); break
         case "movePage": if (route.view === "page") openMove(route.path, false); break
@@ -467,6 +478,8 @@ FocusScope {
                                   { kind: "success", actionText: qsTr("Open"), onAction: () => AppController.openToday() })
         }
     }
+
+    ShellShareDialog { id: shareDialog; objectName: "shellShare" }
 
     ShellNewPageDialog { id: newPage; objectName: "shellNewPage" }
     ShellRenameDialog { id: rename; objectName: "shellRename" }

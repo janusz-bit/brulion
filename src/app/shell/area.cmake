@@ -3,7 +3,7 @@
 # relative paths below are relative to src/app.
 #
 # C++: the static library brulion_shell (QtCore, QtGui, QtNetwork + core modules; unit-tested by
-# tests/app/shell without the app): AppController, AppSettings, Workspace (implements the
+# tests/app/shell without the app): AppController (appshare.cpp: shares from other apps), AppSettings, Workspace (implements the
 # editor's EditorHost and QueryHost; workspace*.cpp: index queries, history and trash, folders and
 # moves, quick capture — the last three through the core module notebook, shared with brulion-cli —,
 # the clipboard's HTML of copied blocks and pasted HTML (core io), reminders — WorkspaceReminders
@@ -40,6 +40,7 @@ endif()
 
 qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/appcontroller.h ${_brulion_shell_dir}/appcontroller.cpp
+    ${_brulion_shell_dir}/appshare.cpp
     ${_brulion_shell_dir}/appsettings.h ${_brulion_shell_dir}/appsettings.cpp
     ${_brulion_shell_dir}/commandmodel.h ${_brulion_shell_dir}/commandmodel.cpp
     ${_brulion_shell_dir}/demovault.h ${_brulion_shell_dir}/demovault.cpp
@@ -115,6 +116,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellRenameDialog.qml
     qml/shell/ShellRouteView.qml
     qml/shell/ShellSettingRow.qml
+    qml/shell/ShellShareDialog.qml
     qml/shell/ShellSidePanel.qml
     qml/shell/ShellSidebar.qml
     qml/shell/ShellSplash.qml

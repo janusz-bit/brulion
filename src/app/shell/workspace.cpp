@@ -1137,6 +1137,11 @@ QVariantMap Workspace::quickCapturePreview(const QString &text) const
     };
 }
 
+QString Workspace::appendJournalBlocks(const QString &blocks)
+{
+    return appendToTodaysJournal(blocks);
+}
+
 QString Workspace::appendToTodaysJournal(const QString &block)
 {
     if (!m_vault || block.trimmed().isEmpty())

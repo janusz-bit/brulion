@@ -7,7 +7,8 @@
   library to load) and the permissions Qt modules need. Brulion's own parts: the main activity
   (BrulionActivity, a QtActivity that forwards notification taps to C++), the permissions of
   reminders/alarms and of a vault on shared storage, the alarm receivers and AlarmActivity
-  (android/src/io/github/januszbit/brulion/android/), the launcher icons.
+  (android/src/io/github/januszbit/brulion/android/), ShareActivity (the share sheet's
+  "Brulion": text and text files from other apps), the launcher icons.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -127,6 +128,29 @@
             android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/Theme.BrulionAlarm" />
+
+        <!-- "Udostępnij → Brulion": text and .md/.txt files from other apps (text/* only). No UI
+             of its own: it copies the files and hands them to BrulionActivity (docs/ANDROID.md).
+             Its own task (the system starts it in the sender's task), not in Recents. -->
+        <activity
+            android:name="io.github.januszbit.brulion.android.ShareActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/brulion_share_label"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.BrulionShare">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
+        </activity>
 
         <provider
             android:name="androidx.core.content.FileProvider"

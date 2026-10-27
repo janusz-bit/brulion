@@ -8,4 +8,9 @@
         <item name="android:statusBarColor">@color/brulion_alarm_background</item>
         <item name="android:navigationBarColor">@color/brulion_alarm_background</item>
     </style>
+
+    <!-- Theme of ShareActivity: nothing shown while it copies a share (milliseconds). -->
+    <style name="Theme.BrulionShare" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

@@ -117,6 +117,9 @@
   link do dnia `[[2026-10-20]]`, `#tag` i `[[link]]` (otwórz, otwórz w panelu bocznym, kopiuj).
   Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku. Daty wpisujesz
   po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
+* **Udostępnij → Brulion (Android).** Stronę z przeglądarki, tekst albo pliki `.md`/`.txt`
+  z innej aplikacji zapiszesz w dzisiejszym dzienniku albo jako nową stronę — w oknie, w którym
+  poprawisz tekst i tytuł ([docs/ANDROID.md](docs/ANDROID.md#udostępnij--brulion)).
 * **Obliczenia.** Bloki ` ```calc ` liczą jak kalkulator w notatniku (zmienne, procenty,
   jednostki `5 km to mi`, waluty `12 zł + 5 zł`, `suma`), tabele z formułami jak w arkuszu
   (`=sum(above)`, `=[Cena]*[Ilość]`), obliczenia w tekście `` `= 2*21` ``.
@@ -398,7 +401,8 @@ iCalendar (export also as one
 Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 
 * Runs on **NixOS/Linux** (flake + NixOS module, AppImage), **Android** 9+ (APK; native exact
-  alarms that fire while the app is closed), in the **browser** (Qt for WebAssembly,
+  alarms that fire while the app is closed; text, links and `.md`/`.txt` files shared from other
+  apps go to the journal or a new page), in the **browser** (Qt for WebAssembly,
   works offline) and, as a **test version**, on **Windows** 10/11 x86_64 (a per-user installer
   without admin rights or a portable ZIP; unsigned; reminders as Windows toast notifications with
   Snooze/OK, optional start at sign-in —

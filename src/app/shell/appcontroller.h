@@ -1,7 +1,8 @@
 // AppController — the app's top-level state (QML singleton `AppController`, created by main()):
 // lifecycle (boot → onboarding / loading → ready, or error), the vault being opened, the
 // navigation history of the main view and the optional side panel, platform facts, permissions,
-// quick capture, window/tray requests and the seam for the sync integration.
+// quick capture, shares from other apps, window/tray requests and the seam for the sync
+// integration.
 //
 // Navigation (routes: see navigation.h):
 //   navigate(route, newPane)   main view (pushes history) or, with newPane on a wide window
@@ -29,6 +30,9 @@
 //   --route <view|json>    initial route, e.g. "settings" or '{"view":"page","path":"a.md"}'
 //   --popup <name[:query]> open a shell popup after start: palette, switcher, capture,
 //                          newPage, about (with an optional query for palette/switcher)
+//   --share <json>         receive a share as Android's ShareActivity hands it over
+//                          ({"subject", "text", "url", "files": [{"path", "name", "mime"}]},
+//                          notebook/share.h; appshare.cpp) once the notebook is ready
 //   --hidden               start minimised to the system tray (desktop; when a tray exists;
 //                          Windows' "Start when you sign in" starts Brulion so)
 //   --selftest-shell       drive the real shell with key events and exit with the number of
@@ -41,6 +45,8 @@
 #include "navigation.h"
 #include "workspace.h"
 
+#include "notebook/share.h"
+
 #include <QDateTime>
 #include <QJSValue>
 #include <QJsonObject>
@@ -51,6 +57,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace brulion::platform {
 class Autostart;
@@ -146,6 +153,14 @@ class AppController : public QObject {
     /// devtools/remoteControl), active (listening), forced (--remote-control), socket, error };
     /// { available: false } elsewhere. Settings → Application → "For developers".
     Q_PROPERTY(QVariantMap remoteControl READ remoteControl NOTIFY remoteControlChanged FINAL)
+
+    // ---- Shares from other apps (appshare.cpp) --------------------------------------------
+    /// The share waiting for the share dialog ({} when none): { kind: "text" | "files", text (one
+    /// capture text: notebook::composeSharedText; for "text"), files: [{ name, title, preview
+    /// (the first lines), size, error ("" or a translated reason it cannot be saved) }], readable
+    /// (files that can be saved), target ("journal" for text and several files, "page" for one
+    /// file), title (the new page's suggested title) }.
+    Q_PROPERTY(QVariantMap pendingShare READ pendingShare NOTIFY pendingShareChanged FINAL)
 
 public:
     struct Options {
@@ -326,12 +341,40 @@ public:
     Q_INVOKABLE void toastAction(const QString &text, const QString &kind, const QString &actionText,
                                  const QJSValue &onAction);
     /// Ask the shell to open one of its popups: "palette", "switcher", "capture", "newPage",
-    /// "about", "toggleTheme", "toggleSidePanel".
+    /// "about", "share" (the share dialog for pendingShare), "toggleTheme", "toggleSidePanel".
     Q_INVOKABLE void requestUiAction(const QString &action);
     /// Ask the shell to act on a page or folder of the tree from any view (its dialogs live in
     /// the shell): "move" (Przenieś do…), "rename", "delete" (the confirmation), "newPage" /
     /// "newFolder" (in that folder), "reveal" (show it in the sidebar's tree).
     Q_INVOKABLE void requestItemAction(const QString &action, const QString &path);
+
+    // ---- Shares from other apps (appshare.cpp; docs/ANDROID.md "Udostępnij → Brulion") ------
+    /// Text or .md/.txt files shared from another app (Android's ShareActivity through
+    /// AndroidBridge::shared, the --share option): the files are read at once (text types only, at
+    /// most notebook::SharedFileMaxBytes each), the window comes up and the shell's share dialog
+    /// opens (uiActionRequested("share")) — once the notebook is ready, in the user's notebook
+    /// (from the documentation it goes back to it first); with no notebook a notice asks for one
+    /// and the share waits. A newer share replaces one still waiting. Nothing is written until
+    /// saveShare().
+    Q_INVOKABLE void receiveShare(const QVariantMap &share);
+    /// receiveShare() of the platform's JSON (notebook::sharedContentFromJson).
+    void receiveShareJson(const QByteArray &json);
+    QVariantMap pendingShare() const;
+    /// Save the waiting share: { target: "journal" | "page", title (a single new page's title),
+    /// text (the edited text of a text share) }. Journal: the text as one block of today's journal
+    /// (no date parsing: "jutro" in a shared title makes no reminder), files one block each
+    /// (notebook::sharedFileBlock). Page: one new page per file (its text as it is, the title
+    /// from its name; "Dom 2" when taken) or one from the text, in the notebook's folder for new
+    /// pages; a page whose name differs only in letter case is never written over — one page:
+    /// nothing saved ({ ok: false, error }) and the share waits; several: that file is skipped.
+    /// Then the copies are removed, the journal or the (first) page opens and a toast says so.
+    /// Returns { ok, path, count (blocks or pages written), skipped [names], error }.
+    Q_INVOKABLE QVariantMap saveShare(const QVariantMap &choice);
+    /// Drop the waiting share ("Cancel"): nothing is written, the copies are removed.
+    Q_INVOKABLE void dismissShare();
+    /// Where the platform puts its copies of shared files (<dataDir>/share-in; Android's
+    /// ShareActivity: files/share-in/<stamp>). Only a share's folder inside it is ever removed.
+    QString shareInboxPath() const;
 
     // ---- Sync seam ----------------------------------------------------------------------
     bool syncAvailable() const { return m_syncAvailable; }
@@ -362,6 +405,7 @@ Q_SIGNALS:
     void permissionsChanged();
     void syncStatusChanged();
     void remoteControlChanged();
+    void pendingShareChanged();
     /// The UI language setting changed ("pl" | "en"); main() swaps the translation.
     void languageChanged(const QString &language);
     void toastRequested(const QString &text, const QString &kind);
@@ -391,6 +435,10 @@ private:
     void onFolderRenamed(const QString &oldPath, const QString &newPath);
     void onPathRemoved(const QString &path);
     void applyPendingNotification();
+    /// The share dialog for the waiting share, once a user notebook is ready (appshare.cpp).
+    void applyPendingShare();
+    /// Forget the waiting share and remove its copies (inside shareInboxPath() only).
+    void clearShare();
     QVariantMap initialRoute() const;
     /// `path` is the documentation notebook's folder.
     bool isDocsPath(const QString &path) const;
@@ -423,6 +471,16 @@ private:
     std::function<void(const QString &, const QString &)> m_testNotificationHandler;
     QString m_pendingNotePath;
     int m_pendingNoteLine = -1;
+    /// A shared file as read when the share came (appshare.cpp).
+    struct ShareFile {
+        QString name;
+        QString title;   ///< its page title (notebook::sharedPageTitle)
+        QString content; ///< decoded text ("" when `error`)
+        qint64 size = -1;
+        QString error;   ///< notebook::SharedFile::error code
+    };
+    std::optional<notebook::SharedContent> m_share; ///< waiting for saveShare() / dismissShare()
+    QList<ShareFile> m_shareFiles;
     bool m_syncAvailable = false;
     QVariantMap m_syncStatus;
     QVariantMap m_remoteControl{{QStringLiteral("available"), false}};
@@ -433,6 +491,7 @@ private:
     bool m_devOnboarding = false;
     QVariantMap m_devRoute;
     QString m_devPopup;
+    QByteArray m_devShare;
     bool m_startCapture = false;
     bool m_startToday = false;
     QVariantMap m_routeAfterOpen; ///< openVaultAt()

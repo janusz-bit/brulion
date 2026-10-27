@@ -27,6 +27,9 @@
 //     fnv1a64(bytes), fnv1a64Hex(bytes) ("cbf29ce484222325" for empty input),
 //     contentHash(text) == fnv1a64Hex(text.toUtf8())
 //
+//   Decoding files of unknown origin: decode.h — decodeText(bytes) (UTF-8 / UTF-16 BOM /
+//     windows-1250 or -1252)
+//
 // Regular expressions and Unicode — verified against Qt 6.11 / PCRE2 10.48 (see tst_text):
 // QRegularExpression compiles patterns in UTF mode, so `\p{L}` and friends always work, but
 // without QRegularExpression::UseUnicodePropertiesOption (PCRE2_UCP) the shorthands `\b`, `\w`,

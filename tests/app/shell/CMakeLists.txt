@@ -2,6 +2,9 @@
 # history, settings persistence, the Workspace's EditorHost implementation against a real vault
 # folder, the sample vault, commands and the folder tree (single-instance messages: tests/ipc).
 brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_shell brulion_platform)
+# "Udostępnij → Brulion" on AppController (appshare.cpp; the --share option): the share dialog's
+# data, saving to the journal or to new pages, waiting for the notebook, the copies removed.
+brulion_add_test(tst_shell_share SOURCES tst_share.cpp LIBS brulion_shell brulion_platform)
 brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell brulion_core_text)
 brulion_add_test(tst_shell_workspace SOURCES tst_workspace.cpp LIBS brulion_shell brulion_core_vault brulion_core_markdown)
 brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp

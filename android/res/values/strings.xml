@@ -20,4 +20,8 @@
     <!-- Title of the system ringtone picker opened from Brulion's settings -->
     <string name="brulion_pick_reminder_sound">Dźwięk przypomnień</string>
     <string name="brulion_pick_alarm_sound">Dźwięk alarmów</string>
+    <!-- The share sheet's entry for Brulion (ShareActivity) -->
+    <string name="brulion_share_label">Brulion</string>
+    <!-- A share with no text and no file -->
+    <string name="brulion_share_nothing">Nic do zapisania</string>
 </resources>

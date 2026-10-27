@@ -1,4 +1,5 @@
 #include "text/text.h"
+#include "text/decode.h"
 
 #include <QElapsedTimer>
 #include <QRandomGenerator>
@@ -573,6 +574,26 @@ private Q_SLOTS:
         QVERIFY(text::contentHash(u"\u017C"_s) != text::contentHash(u"z\u0307"_s));      // NFC vs NFD
         QVERIFY(text::contentHash(u"a\nb"_s) != text::contentHash(u"a\r\nb"_s));
         QCOMPARE(text::contentHash(u"0"_s).size(), 16); // leading zeros are kept
+    }
+
+    // text/decode.h: files of unknown origin (imports, shares) decode to some text, never fail.
+    void decodeText_data()
+    {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("utf-8") << u"Zażółć gęślą jaźń"_s.toUtf8() << u"Zażółć gęślą jaźń"_s;
+        QTest::newRow("utf-8 bom") << QByteArray("\xEF\xBB\xBF") + u"ćma\r\n"_s.toUtf8() << u"ćma\r\n"_s;
+        QTest::newRow("utf-16 le bom") << QByteArray("\xFF\xFE\x7C\x01", 4) << u"ż"_s;
+        QTest::newRow("utf-16 be bom") << QByteArray("\xFE\xFF\x01\x7A", 4) << u"ź"_s;
+        QTest::newRow("windows-1250") << QByteArray("\xA3\xF3" "d\x9F") << u"Łódź"_s;
+        QTest::newRow("windows-1252") << QByteArray("na\xEFve \x93q\x94") << u"naïve \u201Cq\u201D"_s;
+        QTest::newRow("lone continuation byte") << QByteArray("a\x80") << u"a\u20AC"_s;
+    }
+    void decodeText()
+    {
+        QFETCH(QByteArray, bytes);
+        QFETCH(QString, expected);
+        QCOMPARE(text::decodeText(bytes), expected);
     }
 };
 
