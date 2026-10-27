@@ -43,7 +43,9 @@
 # through the launcher's widget picker (tap a preview, "Add"); quick add with the app killed writes
 # into today's journal at once (Qt not even loaded), a task for today shows in the tasks widget,
 # a time and "Alarm" write "⏰!" and arm a provisional native reminder, an entry without a
-# snapshot waits in the inbox and the app writes it at its next start, a tap on a widget's task
+# snapshot or with the notebook's folder gone (never made again) waits in the inbox and the app
+# writes it at its next start, with the app alive in the background the provisional reminder
+# gives way once the app is back in front, a tap on a widget's task
 # opens the note; the calendar's month buttons; screenshots of each widget light and dark, the
 # tasks widget made taller (tomorrow's tasks) and the calendar lower (the agenda only) with the
 # launcher's resize handles (wg-*.png). Needs a google_apis image (adb root: quick add and the
@@ -727,6 +729,12 @@ place_widget() { # <label ERE>
   ((found)) || return 1
   ui_tap 'Widgets|Widżety' || return 1
   ui_tap 'Brulion' || return 1
+  # The previews of a tall widget may start below the fold: the picker's list scrolled up.
+  for y in 1 2 3; do
+    ui_has "($1) widget.*" && break
+    adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 75 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 40 / 100)) 400
+    sleep 2
+  done
   ui_tap "($1) widget.*" || return 1
   ui_tap "(Add|Dodaj) ($1) widget" first 4 || return 1
   home
@@ -749,14 +757,15 @@ resize_widget() { # <ERE of a text in the widget> <dy>
 }
 refresh_widgets() { adb shell am broadcast -a "$PKG.android.action.WIDGETS_MIDNIGHT" -n "$WIDGET_RECEIVER" >/dev/null; sleep 3; }
 quick_add() { # <text> [chips to tap…]: QuickAddActivity with the text, the chips, "Dodaj"
+  # ("Add": the dialog speaks the phone's language until the app published a snapshot)
   local chip
   adb shell am start -n "$QUICK_ADD" --es android.intent.extra.TEXT "'$1'" >/dev/null
-  wait_for 15 ui_has 'Dodaj' || return 1
+  wait_for 15 ui_has 'Dodaj|Add|ADD' || return 1
   shift
   for chip in "$@"; do
     if [[ $chip == OK ]]; then ui_tap 'OK' || return 1; else ui_tap "$chip" || return 1; fi
   done
-  ui_tap 'Dodaj'
+  ui_tap 'Dodaj|Add|ADD'
 }
 
 if ((WIDGETS)); then
@@ -806,16 +815,42 @@ if ((WIDGETS)); then
   check "the tasks widget shows today's new task at once" show_page 'Odebrać paczkę'
   app_shot wg-3-tasks-added
 
+  # 3b. A notebook folder that is gone (moved, deleted, not mounted) is never made again: the
+  # entry waits for the app instead.
+  adb shell am force-stop "$PKG"
+  adb shell run-as "$PKG" mv "\"$VAULT\"" "\"$VAULT-moved\""
+  check "quick add with the notebook's folder gone" quick_add 'Zadanie bez folderu' 'Bez terminu'
+  check "it waits for the app" wait_for 10 ui_has 'Zapisze się w dzienniku po otwarciu Brulionu.*'
+  check "the notebook's folder is not made again" vault_lacks ''
+  adb shell input keyevent 4
+  adb shell input keyevent 4
+  adb shell run-as "$PKG" mv "\"$VAULT-moved\"" "\"$VAULT\""
+
   # 4. Without a snapshot the entry waits for the app, which writes it at its start.
   adb shell am force-stop "$PKG"
   adb shell run-as "$PKG" rm -f "$WIDGET_PREFS"
   check "quick add without a snapshot" quick_add 'Zadanie z kolejki'
-  check "it waits for the app" wait_for 10 ui_has 'Zapisze się w dzienniku po otwarciu Brulionu.*'
+  check "it waits for the app (in the phone's language: no snapshot names the app's)" wait_for 10 ui_has \
+    'It will be written to the journal when Brulion opens.*'
   adb shell input keyevent 4
   adb shell input keyevent 4
   start_app '--demo --locale pl --route journals'
   check "the app wrote the queued entry" wait_for 20 vault_grep "$journal" '^- \[ \] Zadanie z kolejki 📅 '
+  check "… and the one queued while the folder was gone" vault_grep "$journal" '^- \[ \] Zadanie bez folderu$'
   check "the app's own reminder replaced the provisional one" bash -c \
+    "! '$SDK/platform-tools/adb' -s $SERIAL shell run-as $PKG cat shared_prefs/$PKG.android.reminders.xml | grep -q '&quot;provisional&quot;:true'"
+
+  # 4b. The app alive in the background: quick add writes itself; back in front the app reads the
+  # notebook and hands its reminders over again, the provisional one gives way.
+  home
+  adb logcat -c
+  check "quick add with the app in the background" quick_add 'Wizyta u dentysty' 'Godzina…' OK 'Jutro'
+  check "… written at once" wait_for 10 vault_grep "$journal" "^- \[ \] Wizyta u dentysty ⏰ $tomorrow 09:00\$"
+  adb shell input keyevent 4
+  adb shell input keyevent 4
+  adb shell am start -n "$ACTIVITY" >/dev/null
+  check "back in front the app hands its reminders over again" wait_for 20 log_has 'handing the reminders over again'
+  check "… and no provisional reminder is left" wait_for 10 bash -c \
     "! '$SDK/platform-tools/adb' -s $SERIAL shell run-as $PKG cat shared_prefs/$PKG.android.reminders.xml | grep -q '&quot;provisional&quot;:true'"
 
   # 5. A tap on a task of the widget opens its note (a cold start).

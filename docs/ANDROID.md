@@ -1128,10 +1128,13 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   „Add”); szybkie dodawanie przy zabitej aplikacji („Kupić żółty ser”, **Jutro**) — wiersz od
   razu w dzienniku, biblioteka Qt nie wczytana; zadanie na dziś od razu w widżecie; **Godzina…**
   09:00 + **Jutro** + **Alarm** — `⏰!` i tymczasowe przypomnienie systemowe, które aplikacja
-  potem zastępuje swoim; bez migawki wpis czeka w kolejce, a aplikacja dopisuje go przy starcie;
+  potem zastępuje swoim; przy przeniesionym folderze notatnika wpis czeka w kolejce, a folder
+  nie powstaje od nowa; bez migawki wpis czeka (okno mówi wtedy językiem telefonu), a aplikacja
+  dopisuje oba przy starcie; przy aplikacji żyjącej w tle szybkie dodawanie pisze samo, a po
+  powrocie na pierwszy plan aplikacja oddaje zestaw przypomnień jeszcze raz i tymczasowe znika;
   stuknięcie w zadanie widżetu otwiera notatkę (zimny start); › i ‹ kalendarza; widżet zadań
   powiększony uchwytami launchera pokazuje **Jutro**, kalendarz pomniejszony — samą agendę.
-  Zrzuty `wg-*.png` (jasne i ciemne). Sprawdzone 2026-10-27 (Android 16, Pixel 6).
+  Zrzuty `wg-*.png` (jasne i ciemne). Sprawdzone 2026-10-28 (Android 16, Pixel 6).
 * Klawiatura ekranowa na emulatorze (APK debugowalny — tylko takiemu Qt przekazuje argumenty
   i zmienne środowiska z intencji):
 
