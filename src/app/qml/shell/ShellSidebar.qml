@@ -394,6 +394,7 @@ Rectangle {
                         ].filter(e => AppSettings.sidebarHidden.indexOf(e.view) < 0)
                         delegate: BListItem {
                             required property var modelData
+                            objectName: "sidebarNav_" + modelData.view
                             width: parent.width
                             dense: true
                             text: modelData.title

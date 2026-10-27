@@ -17,6 +17,7 @@
 
 #include <QBuffer>
 #include <QClipboard>
+#include <QColor>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFile>
@@ -2909,6 +2910,137 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     app->goHome();
 }
 
+/// 5h. Ustawienia → Wygląd (docs/UI.md "Look & feel"): the default look keeps the logo's colours;
+///     a tap on an accent swatch recolours Theme at once and is saved, a custom colour from the
+///     accent dialog too; an entry unticked under "Pasek boczny" leaves the sidebar (the drawer on
+///     phones) and stays in the command palette; a bottom navigation slot takes another view from
+///     its menu (phones: the bar shows it); the quick note button's switch hides it; "Przywróć
+///     domyślny wygląd" brings the logo's colours back. The settings are put back at the end.
+void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const bool narrow = window->width() < 900;
+    AppSettings *settings = app->settings();
+    auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
+    if (!theme) {
+        check(false, "the Theme singleton exists");
+        return;
+    }
+    const auto color = [theme](const char *name) { return theme->property(name).value<QColor>().name(); };
+    const bool dark = theme->property("dark").toBool();
+    check(color("accent") == u"#e2574c" && color("accentText") == (dark ? u"#ef7a6f"_s : u"#ad3e2c"_s)
+                  && color("bg") == (dark ? u"#1c2130"_s : u"#fbf7ee"_s),
+          "the default look keeps the logo's colours (margin red, paper / slate)");
+    // Visible, maybe scrolled out of the view (activate() scrolls it in).
+    const auto shownItem = [window](const QString &name) {
+        QQuickItem *found = nullptr;
+        waitFor([&] {
+            found = shownNamed(window->contentItem(), name);
+            return found && shown(found);
+        });
+        return found && shown(found) ? found : nullptr;
+    };
+    const auto activate = [&](QQuickItem *item) {
+        if (!item)
+            return false;
+        uidriver::scrollIntoView(window, item);
+        settle(100);
+        tapOrClick(window, pointIn(item), touch);
+        return true;
+    };
+
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
+    check(activate(shownItem(u"accentSwatch_green"_s)), "the appearance settings show the accent swatches");
+    check(waitFor([&] { return settings->accentColor() == u"green" && color("accent") != u"#e2574c"; }),
+          "a tap on a swatch changes the accent at once and saves it");
+
+    // A custom colour: the dialog's field, then "Użyj tego koloru".
+    check(activate(shownItem(u"accentSwatch_custom"_s)), "the custom colour swatch exists");
+    QQuickItem *field = shownItem(u"accentDialogField"_s);
+    if (!field) {
+        check(false, "the custom colour opens the accent dialog");
+    } else {
+        field->setProperty("text", u"#1A6B8F"_s);
+        QMetaObject::invokeMethod(field, "textEdited");
+        QObject *accentDialog = window->findChild<QObject *>(u"accentDialog"_s);
+        if (accentDialog)
+            QMetaObject::invokeMethod(accentDialog, "tryAccept");
+        check(accentDialog
+                      && waitFor([&] {
+                             return settings->accentColor() == u"custom" && settings->customAccent() == u"#1a6b8f"
+                                    && theme->property("customAccent").toString() == u"#1a6b8f";
+                         }),
+              "a colour typed in the accent dialog becomes the accent");
+        // Its closing transition: the modal scrim takes taps until it is gone.
+        if (accentDialog)
+            waitFor([accentDialog] { return !accentDialog->property("visible").toBool(); });
+        settle(100);
+    }
+
+    // Sidebar entries: "Graf" unticked.
+    check(activate(shownItem(u"sidebarItem_graph"_s)), "the sidebar's entries can be ticked off");
+    const bool hidden = waitFor([&] { return settings->sidebarHidden() == QStringList{u"graph"_s}; });
+    if (!hidden)
+        std::fprintf(stderr, "selftest: hidden in the sidebar: %s\n", qPrintable(settings->sidebarHidden().join(u", ")));
+    check(hidden, "unticking an entry hides it (saved)");
+    QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
+    if (narrow && drawer)
+        QMetaObject::invokeMethod(drawer, "open");
+    check(shownItem(u"sidebarNav_calendar"_s) != nullptr
+                  && !findShown(window->contentItem(),
+                                [](QQuickItem *i) { return i->objectName() == u"sidebarNav_graph"; }),
+          "the hidden entry is gone from the sidebar, the others stay");
+    if (narrow && drawer) {
+        QMetaObject::invokeMethod(drawer, "close");
+        waitFor([drawer] { return !drawer->property("visible").toBool(); });
+    }
+    {
+        CommandModel commands(app);
+        const QVariantList all = commands.commands();
+        check(std::any_of(all.cbegin(), all.cend(),
+                          [](const QVariant &c) { return c.toMap().value(u"id"_s).toString() == u"go.graph"; }),
+              "a view hidden in the sidebar stays in the command palette");
+    }
+
+    // The bottom navigation's last slot: Graf instead of Zadania.
+    check(activate(shownItem(u"bottomNavSlot_3"_s)), "the bottom navigation's slots are listed");
+    check(activate(shownItem(u"bottomNavChoice_graph"_s)), "a slot's menu lists the views");
+    check(waitFor([&] {
+              return settings->bottomNavTabs()
+                     == QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"graph"_s};
+          }),
+          "a view picked in a slot's menu takes the slot");
+    if (narrow)
+        check(shownItem(u"bottomNav_graph"_s) != nullptr
+                      && !findShown(window->contentItem(),
+                                    [](QQuickItem *i) { return i->objectName() == u"bottomNav_tasks"; }),
+              "the phone's bottom bar shows the view picked");
+
+    // The quick note button.
+    check(activate(shownItem(u"captureButtonSetting"_s)) && waitFor([&] { return !settings->captureButtonShown(); }),
+          "the quick note button can be switched off");
+    if (narrow) {
+        app->navigate({{u"view"_s, u"journals"_s}});
+        auto *capture = window->findChild<QQuickItem *>(u"shellCaptureButton"_s);
+        check(capture && waitFor([&] { return app->currentView() == u"journals"; }) && !capture->isVisible(),
+              "switched off, the quick note button is not shown");
+        settings->setCaptureButtonShown(true);
+        check(capture && waitFor([&] { return capture->isVisible(); }), "switched on again, it is back");
+        app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
+    }
+
+    // Back to the default look (the visibility of elements stays).
+    check(activate(shownItem(u"resetAppearance"_s))
+                  && waitFor([&] { return settings->accentColor() == u"red" && color("accent") == u"#e2574c"; }),
+          "\"Restore the default look\" brings the logo's colours back");
+    settings->setSidebarHidden({});
+    settings->setBottomNavTabs({});
+    settings->setCaptureButtonShown(true);
+    settings->setCustomAccent(QString());
+    closeMenus(window);
+    app->goHome();
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -3396,6 +3528,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
 
     // 5d. The notebook switcher: to the documentation and back with one tap / click each.
     checkNotebookSwitcher(window, app, check);
+    closeMenus(window);
+
+    // 5h. Ustawienia → Wygląd: accent, sidebar entries, bottom navigation, quick note button.
+    checkAppearance(engine, window, app, check);
 
     // 6. Closing the notebook from the UI (as a click would: from inside an event).
     QTimer::singleShot(0, app, [app] { app->closeVault(); });

@@ -90,14 +90,18 @@ Rectangle {
                         }
                     }
                     BText {
+                        id: label
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: Math.min(implicitWidth, tab.width - 4)
-                        elide: Text.ElideRight
-                        horizontalAlignment: Text.AlignHCenter
                         text: tab.modelData.title
                         font.pixelSize: Theme.textXs
                         font.weight: tab.current ? Theme.weightSemiBold : Theme.weightMedium
                         color: tab.current ? Theme.fg : Theme.fgMuted
+                        // A long name (a view chosen in the settings) on a narrow tab: elided.
+                        Binding on width {
+                            when: label.implicitWidth > tab.width - 4
+                            value: tab.width - 4
+                        }
+                        elide: label.implicitWidth > tab.width - 4 ? Text.ElideRight : Text.ElideNone
                     }
                 }
                 background: Item {

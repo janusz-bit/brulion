@@ -153,6 +153,7 @@ Item {
         model: root.bottomNavViews
         delegate: BMenuItem {
             required property var modelData
+            objectName: "bottomNavChoice_" + modelData.value
             text: modelData.text
             iconName: modelData.icon
             checkable: true
