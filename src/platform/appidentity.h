@@ -21,8 +21,7 @@ QString appUserModelId();
 /// Writes the registration of `id` into `classes` (the AppUserModelId key; an INI file in the
 /// tests): DisplayName, and IconUri when `iconPath` is not empty — only what differs from what is
 /// there (a portable ZIP moved gets its new icon path). False when it could not be written.
-bool registerAppUserModelId(QSettings &classes, const QString &id, const QString &displayName,
-                            const QString &iconPath);
+bool registerAppUserModelId(QSettings &classes, const QString &id, const QString &displayName, const QString &iconPath);
 
 /// Windows: this process's AppUserModelID and its per-user registration (icon: brulion.ico next
 /// to the program). Call right after the application's names are set. Nothing elsewhere.

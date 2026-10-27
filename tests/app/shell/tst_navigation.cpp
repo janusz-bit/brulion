@@ -3,8 +3,8 @@
 // deleted pages), its vault lifecycle, the command palette's commands and the switch "Start when
 // you sign in" (over an Autostart on INI files).
 #include "appcontroller.h"
-#include "autostart.h"
 #include "appsettings.h"
+#include "autostart.h"
 #include "commandmodel.h"
 #include "demovault.h"
 #include "navigation.h"

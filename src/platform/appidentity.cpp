@@ -12,6 +12,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+// SetCurrentProcessExplicitAppUserModelID; after windows.h.
 #include <shobjidl.h>
 #endif
 

@@ -23,8 +23,8 @@ QString xmlSafe(const QString &text)
             continue;
         }
         const char16_t u = c.unicode();
-        const bool allowed = u == 0x9 || u == 0xA || u == 0xD || (u >= 0x20 && u <= 0xD7FF)
-                             || (u >= 0xE000 && u <= 0xFFFD);
+        const bool allowed =
+                u == 0x9 || u == 0xA || u == 0xD || (u >= 0x20 && u <= 0xD7FF) || (u >= 0xE000 && u <= 0xFFFD);
         if (allowed)
             out.append(c);
     }

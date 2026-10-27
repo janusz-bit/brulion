@@ -16,7 +16,8 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <objbase.h> // CoInitializeEx (not in WIN32_LEAN_AND_MEAN)
+// CoInitializeEx (not in WIN32_LEAN_AND_MEAN); after windows.h.
+#include <objbase.h>
 
 #pragma warning(push, 0)
 #include <winrt/Windows.Data.Xml.Dom.h>
@@ -64,14 +65,14 @@ void onGuiThread(Call call)
 
 struct WindowsToastBus::Private {
     struct Shown {
-        wn::ToastNotification toast{ nullptr };
+        wn::ToastNotification toast{nullptr};
         winrt::event_token activated;
         winrt::event_token dismissed;
         winrt::event_token failed;
         quint64 generation = 0;
     };
 
-    wn::ToastNotifier notifier{ nullptr };
+    wn::ToastNotifier notifier{nullptr};
     QHash<uint, Shown> shown;
     quint64 generation = 0;
 };
@@ -115,7 +116,7 @@ bool WindowsToastBus::isAvailable() const
 QStringList WindowsToastBus::capabilities() const
 {
     // No "body-markup": toast text is never markup (buildToastXml() escapes everything).
-    return { u"actions"_s, u"body"_s, u"sound"_s, u"persistence"_s };
+    return {u"actions"_s, u"body"_s, u"sound"_s, u"persistence"_s};
 }
 
 QString WindowsToastBus::name() const
@@ -231,8 +232,7 @@ QStringList WindowsToastBus::historyTags() const
         const auto history = wn::ToastNotificationManager::History().GetHistory(toHString(m_appUserModelId));
         for (const wn::ToastNotification &toast : history)
             tags.append(fromHString(toast.Tag()));
-    } catch (const winrt::hresult_error &) {
-    }
+    } catch (const winrt::hresult_error &) { }
     return tags;
 }
 
@@ -278,8 +278,7 @@ void WindowsToastBus::forget(uint id)
         it->toast.Activated(it->activated);
         it->toast.Dismissed(it->dismissed);
         it->toast.Failed(it->failed);
-    } catch (const winrt::hresult_error &) {
-    }
+    } catch (const winrt::hresult_error &) { }
     d->shown.erase(it);
 }
 

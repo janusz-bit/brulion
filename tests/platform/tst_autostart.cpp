@@ -43,8 +43,8 @@ private Q_SLOTS:
         QTest::addColumn<QString>("exe");
         QTest::addColumn<QString>("expected");
         QTest::newRow("Qt's slashes, Polish user name") << Exe << ExeCommand;
-        QTest::newRow("backslashes already") << u"D:\\Przenośne\\Brulion\\brulion.exe"_s
-                                             << u"\"D:\\Przenośne\\Brulion\\brulion.exe\" --hidden"_s;
+        QTest::newRow("backslashes already")
+                << u"D:\\Przenośne\\Brulion\\brulion.exe"_s << u"\"D:\\Przenośne\\Brulion\\brulion.exe\" --hidden"_s;
         QTest::newRow("no spaces") << u"C:/Brulion/brulion.exe"_s << u"\"C:\\Brulion\\brulion.exe\" --hidden"_s;
     }
     void command()
@@ -65,18 +65,19 @@ private Q_SLOTS:
         QTest::newRow("this program") << ExeCommand << Exe << true
                                       << u"C:\\Users\\Łucja Żółć\\AppData\\Local\\Programs\\Brulion\\brulion.exe"_s;
         QTest::newRow("other case (NTFS)")
-                << u"\"c:\\USERS\\łucja żółć\\appdata\\local\\programs\\brulion\\BRULION.EXE\" --hidden"_s << Exe << true
-                << u"c:\\USERS\\łucja żółć\\appdata\\local\\programs\\brulion\\BRULION.EXE"_s;
+                << u"\"c:\\USERS\\łucja żółć\\appdata\\local\\programs\\brulion\\BRULION.EXE\" --hidden"_s << Exe
+                << true << u"c:\\USERS\\łucja żółć\\appdata\\local\\programs\\brulion\\BRULION.EXE"_s;
         QTest::newRow("unquoted") << u"C:\\Brulion\\brulion.exe --hidden"_s << u"C:/Brulion/brulion.exe"_s << true
                                   << u"C:\\Brulion\\brulion.exe"_s;
-        QTest::newRow("unquoted, nothing more") << u"C:\\Brulion\\brulion.exe"_s << u"C:/Brulion/brulion.exe"_s
-                                                << true << u"C:\\Brulion\\brulion.exe"_s;
+        QTest::newRow("unquoted, nothing more") << u"C:\\Brulion\\brulion.exe"_s << u"C:/Brulion/brulion.exe"_s << true
+                                                << u"C:\\Brulion\\brulion.exe"_s;
         QTest::newRow("other arguments") << u"\"C:\\Brulion\\brulion.exe\" --today"_s << u"C:/Brulion/brulion.exe"_s
                                          << true << u"C:\\Brulion\\brulion.exe"_s;
         QTest::newRow("dot segments") << u"\"C:\\Brulion\\..\\Brulion\\.\\brulion.exe\" --hidden"_s
-                                      << u"C:/Brulion/brulion.exe"_s << true << u"C:\\Brulion\\..\\Brulion\\.\\brulion.exe"_s;
-        QTest::newRow("spaces around") << u"   \"C:\\Brulion\\brulion.exe\"   --hidden  "_s << u"C:/Brulion/brulion.exe"_s
-                                       << true << u"C:\\Brulion\\brulion.exe"_s;
+                                      << u"C:/Brulion/brulion.exe"_s << true
+                                      << u"C:\\Brulion\\..\\Brulion\\.\\brulion.exe"_s;
+        QTest::newRow("spaces around") << u"   \"C:\\Brulion\\brulion.exe\"   --hidden  "_s
+                                       << u"C:/Brulion/brulion.exe"_s << true << u"C:\\Brulion\\brulion.exe"_s;
         QTest::newRow("another copy") << u"\"D:\\Przenośne\\Brulion\\brulion.exe\" --hidden"_s << Exe << false
                                       << u"D:\\Przenośne\\Brulion\\brulion.exe"_s;
         QTest::newRow("another program") << u"\"C:\\Windows\\notepad.exe\""_s << Exe << false
@@ -85,8 +86,8 @@ private Q_SLOTS:
                                        << false << u"C:\\Brulion\\brulion.exe.old"_s;
         QTest::newRow("empty") << QString() << Exe << false << QString();
         QTest::newRow("only spaces") << u"   "_s << Exe << false << QString();
-        QTest::newRow("quote not closed") << u"\"C:\\Brulion\\brulion.exe --hidden"_s << u"C:/Brulion/brulion.exe"_s
-                                          << false << QString();
+        QTest::newRow("quote not closed")
+                << u"\"C:\\Brulion\\brulion.exe --hidden"_s << u"C:/Brulion/brulion.exe"_s << false << QString();
         QTest::newRow("empty quotes") << u"\"\" --hidden"_s << Exe << false << QString();
         QTest::newRow("no program known") << ExeCommand << QString() << false
                                           << u"C:\\Users\\Łucja Żółć\\AppData\\Local\\Programs\\Brulion\\brulion.exe"_s;
@@ -222,7 +223,8 @@ private Q_SLOTS:
         QTest::addColumn<bool>("rewritten");
         QTest::newRow("moved portable copy") << u"\"D:\\Pobrane\\Brulion\\brulion.exe\" --hidden"_s << false << true;
         QTest::newRow("unquoted, gone") << u"D:\\Stary\\brulion.exe --hidden"_s << false << true;
-        QTest::newRow("another copy that exists") << u"\"D:\\Pobrane\\Brulion\\brulion.exe\" --hidden"_s << true << false;
+        QTest::newRow("another copy that exists")
+                << u"\"D:\\Pobrane\\Brulion\\brulion.exe\" --hidden"_s << true << false;
         QTest::newRow("already this one") << ExeCommand << false << false;
         QTest::newRow("not Brulion's") << u"\"D:\\Inny\\brulion.exe\" --tryb"_s << false << false;
         QTest::newRow("another program") << u"\"C:\\Windows\\notepad.exe\""_s << false << false;
@@ -279,7 +281,8 @@ private Q_SLOTS:
             QCOMPARE(classes.value(u"JanuszBit.Brulion/IconUri"_s).toString(),
                      u"C:\\Users\\Łucja Żółć\\Brulion\\brulion.ico"_s);
             // The portable copy moved: the new icon path; a build without the icon keeps the old one.
-            QVERIFY(registerAppUserModelId(classes, u"JanuszBit.Brulion"_s, u"Brulion"_s, u"E:\\Brulion\\brulion.ico"_s));
+            QVERIFY(registerAppUserModelId(classes, u"JanuszBit.Brulion"_s, u"Brulion"_s,
+                                           u"E:\\Brulion\\brulion.ico"_s));
             QVERIFY(registerAppUserModelId(classes, u"JanuszBit.Brulion"_s, u"Brulion"_s, QString()));
             // A test profile's id is another key.
             QVERIFY(registerAppUserModelId(classes, u"JanuszBit.Brulion.test-shell"_s, u"Brulion (test-shell)"_s,

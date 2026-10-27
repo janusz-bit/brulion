@@ -117,9 +117,9 @@ std::unique_ptr<Autostart> Autostart::forThisProcess(bool separateProfile)
     auto approved = std::make_unique<QSettings>(
             u"HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run"_s,
             QSettings::NativeFormat);
-    auto autostart = std::make_unique<Autostart>(run.get(), approved.get(), QCoreApplication::applicationFilePath(),
-                                                 separateProfile ? Availability::SeparateProfile
-                                                                 : Availability::Available);
+    auto autostart =
+            std::make_unique<Autostart>(run.get(), approved.get(), QCoreApplication::applicationFilePath(),
+                                        separateProfile ? Availability::SeparateProfile : Availability::Available);
     autostart->m_ownedRun = std::move(run);
     autostart->m_ownedApproved = std::move(approved);
     return autostart;

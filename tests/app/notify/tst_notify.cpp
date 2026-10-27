@@ -122,7 +122,7 @@ Toast readToast(const QString &xml)
     return toast;
 }
 
-const QStringList ToastCaps{ u"actions"_s, u"body"_s, u"sound"_s, u"persistence"_s };
+const QStringList ToastCaps{u"actions"_s, u"body"_s, u"sound"_s, u"persistence"_s};
 
 } // namespace
 
@@ -326,31 +326,32 @@ private Q_SLOTS:
         QTest::addColumn<QString>("duration");
         QTest::addColumn<QStringList>("texts");
         QTest::addColumn<QStringList>("labels");
-        QTest::addColumn<QString>("audioSrc");  ///< "" none, "silent"
+        QTest::addColumn<QString>("audioSrc"); ///< "" none, "silent"
         QTest::addColumn<bool>("loop");
 
-        const QStringList buttons{ u"Snooze 10 min"_s, u"OK"_s };
-        const QStringList reminderTexts{ u"Kupić mleko i żółty ser"_s, u"Dom & ogród <b> · termin: dziś 18:00"_s };
-        const QStringList alarmTexts{ u"⏰ Pobudka na lotnisko"_s, u"Podróże"_s };
-        const auto custom = [](const QString &uri) { return SoundChoice{ SoundChoice::Mode::Custom, uri, {} }; };
+        const QStringList buttons{u"Snooze 10 min"_s, u"OK"_s};
+        const QStringList reminderTexts{u"Kupić mleko i żółty ser"_s, u"Dom & ogród <b> · termin: dziś 18:00"_s};
+        const QStringList alarmTexts{u"⏰ Pobudka na lotnisko"_s, u"Podróże"_s};
+        const auto custom = [](const QString &uri) { return SoundChoice{SoundChoice::Mode::Custom, uri, {}}; };
         const QString event = u"ms-winsoundevent:Notification."_s;
 
-        QTest::newRow("reminder") << reminder() << ToastCaps << SoundChoice{} << QString() << u"long"_s
-                                  << reminderTexts << buttons << QString() << false;
+        QTest::newRow("reminder") << reminder() << ToastCaps << SoundChoice{} << QString() << u"long"_s << reminderTexts
+                                  << buttons << QString() << false;
         QTest::newRow("alarm") << alarm() << ToastCaps << SoundChoice{} << u"alarm"_s << QString() << alarmTexts
                                << buttons << event + u"Looping.Alarm"_s << true;
-        QTest::newRow("alarm, silent") << alarm() << ToastCaps << SoundChoice{ SoundChoice::Mode::Silent, {}, {} }
+        QTest::newRow("alarm, silent") << alarm() << ToastCaps << SoundChoice{SoundChoice::Mode::Silent, {}, {}}
                                        << u"alarm"_s << QString() << alarmTexts << buttons << u"silent"_s << false;
-        QTest::newRow("alarm, Looping.Alarm3") << alarm() << ToastCaps << custom(u"Looping.Alarm3"_s) << u"alarm"_s
-                                               << QString() << alarmTexts << buttons << event + u"Looping.Alarm3"_s
-                                               << true;
+        QTest::newRow("alarm, Looping.Alarm3")
+                << alarm() << ToastCaps << custom(u"Looping.Alarm3"_s) << u"alarm"_s << QString() << alarmTexts
+                << buttons << event + u"Looping.Alarm3"_s << true;
         QTest::newRow("alarm, a short sound") << alarm() << ToastCaps << custom(u"Reminder"_s) << u"alarm"_s
                                               << QString() << alarmTexts << buttons << event + u"Reminder"_s << false;
-        QTest::newRow("alarm, a sound file") << alarm() << ToastCaps << custom(u"file:///C:/D%C5%BAwi%C4%99ki/budzik.wav"_s)
-                                             << u"alarm"_s << QString() << alarmTexts << buttons << QString() << false;
-        QTest::newRow("reminder, Looping.Call2: once") << reminder() << ToastCaps << custom(u"Looping.Call2"_s)
-                                                       << QString() << u"long"_s << reminderTexts << buttons
-                                                       << event + u"Looping.Call2"_s << false;
+        QTest::newRow("alarm, a sound file")
+                << alarm() << ToastCaps << custom(u"file:///C:/D%C5%BAwi%C4%99ki/budzik.wav"_s) << u"alarm"_s
+                << QString() << alarmTexts << buttons << QString() << false;
+        QTest::newRow("reminder, Looping.Call2: once")
+                << reminder() << ToastCaps << custom(u"Looping.Call2"_s) << QString() << u"long"_s << reminderTexts
+                << buttons << event + u"Looping.Call2"_s << false;
         QTest::newRow("reminder, Linux theme name") << reminder() << ToastCaps << custom(u"bell"_s) << QString()
                                                     << u"long"_s << reminderTexts << buttons << QString() << false;
         QTest::newRow("reminder, Linux name with a Windows sound")
@@ -358,28 +359,28 @@ private Q_SLOTS:
                 << reminderTexts << buttons << event + u"IM"_s << false;
         QTest::newRow("reminder, unknown name") << reminder() << ToastCaps << custom(u"Looping.Alarm11"_s) << QString()
                                                 << u"long"_s << reminderTexts << buttons << QString() << false;
-        QTest::newRow("reminder, silent") << reminder() << ToastCaps << SoundChoice{ SoundChoice::Mode::Silent, {}, {} }
+        QTest::newRow("reminder, silent") << reminder() << ToastCaps << SoundChoice{SoundChoice::Mode::Silent, {}, {}}
                                           << QString() << u"long"_s << reminderTexts << buttons << u"silent"_s << false;
 
         ScheduledNotification markup = reminder();
         markup.title = u"Zadzwonić do pani Łucji — żółć, ęą <b>&\"'"_s;
         markup.body = u"<i>&amp; \"cytat\" 'apostrof'</i> ]]> <!-- x -->"_s;
         QTest::newRow("markup is text") << markup << ToastCaps << SoundChoice{} << QString() << u"long"_s
-                                        << QStringList{ markup.title, markup.body } << buttons << QString() << false;
+                                        << QStringList{markup.title, markup.body} << buttons << QString() << false;
 
         ScheduledNotification control = reminder();
         control.title = u"Linia"_s + QChar(0x01) + u" dwa"_s + QChar(0x07);
         control.body = u"a"_s + QChar(0) + u"b"_s + QChar(0xD800) + u"c 😀 \t"_s + QChar(0xFFFE);
-        QTest::newRow("characters XML cannot carry") << control << ToastCaps << SoundChoice{} << QString() << u"long"_s
-                                                     << QStringList{ u"Linia dwa"_s, u"abc 😀 \t"_s } << buttons
-                                                     << QString() << false;
+        QTest::newRow("characters XML cannot carry")
+                << control << ToastCaps << SoundChoice{} << QString() << u"long"_s
+                << QStringList{u"Linia dwa"_s, u"abc 😀 \t"_s} << buttons << QString() << false;
 
         ScheduledNotification untitled = alarm();
         untitled.title.clear();
         untitled.body.clear();
         QTest::newRow("alarm without actions or text")
-                << untitled << QStringList{} << SoundChoice{} << QString() << u"long"_s
-                << QStringList{ u"⏰ Alarm"_s } << QStringList{} << event + u"Looping.Alarm"_s << false;
+                << untitled << QStringList{} << SoundChoice{} << QString() << u"long"_s << QStringList{u"⏰ Alarm"_s}
+                << QStringList{} << event + u"Looping.Alarm"_s << false;
     }
 
     void toastXml()
@@ -405,9 +406,9 @@ private Q_SLOTS:
         QCOMPARE(toast.texts, texts);
         QCOMPARE(toast.labels, labels);
         if (!labels.isEmpty()) {
-            QCOMPARE(toast.arguments, (QStringList{ u"brulion-toast:id=42&action=snooze"_s,
-                                                    u"brulion-toast:id=42&action=ok"_s }));
-            QCOMPARE(toast.activationTypes, (QStringList{ u"foreground"_s, u"foreground"_s }));
+            QCOMPARE(toast.arguments,
+                     (QStringList{u"brulion-toast:id=42&action=snooze"_s, u"brulion-toast:id=42&action=ok"_s}));
+            QCOMPARE(toast.activationTypes, (QStringList{u"foreground"_s, u"foreground"_s}));
         }
         if (audioSrc.isEmpty()) {
             QVERIFY2(!toast.hasAudio, qPrintable(xml));
@@ -430,7 +431,7 @@ private Q_SLOTS:
         d.actions << u"done"_s << u"Zrobione"_s << u"rm -rf"_s << u"Zło"_s;
         Toast toast = readToast(buildToastXml(d, 4294967295u));
         QVERIFY(toast.wellFormed);
-        QCOMPARE(toast.labels, (QStringList{ u"Snooze 5 min"_s, u"OK"_s, u"Zrobione"_s }));
+        QCOMPARE(toast.labels, (QStringList{u"Snooze 5 min"_s, u"OK"_s, u"Zrobione"_s}));
         QCOMPARE(toast.arguments.last(), u"brulion-toast:id=4294967295&action=done"_s);
         const ToastActivation done = parseToastArguments(toast.arguments.last());
         QVERIFY(done.valid);
@@ -443,7 +444,7 @@ private Q_SLOTS:
         QCOMPARE(readToast(buildToastXml(d, 1)).attributes.value(u"scenario"_s), u"reminder"_s);
 
         // "Play sample": a passing toast without buttons; the alarm's sample sounds like an alarm.
-        for (const SoundKind kind : { SoundKind::Reminder, SoundKind::Alarm }) {
+        for (const SoundKind kind : {SoundKind::Reminder, SoundKind::Alarm}) {
             toast = readToast(buildToastXml(buildSoundPreview(kind, SoundChoice{}), 9));
             QVERIFY(toast.wellFormed);
             QVERIFY(!toast.attributes.contains(u"scenario"_s));
@@ -456,7 +457,7 @@ private Q_SLOTS:
             }
         }
         toast = readToast(buildToastXml(
-                buildSoundPreview(SoundKind::Reminder, SoundChoice{ SoundChoice::Mode::Custom, u"Mail"_s, {} }), 9));
+                buildSoundPreview(SoundKind::Reminder, SoundChoice{SoundChoice::Mode::Custom, u"Mail"_s, {}}), 9));
         QCOMPARE(toast.audio.value(u"src"_s), u"ms-winsoundevent:Notification.Mail"_s);
     }
 
@@ -551,7 +552,7 @@ private Q_SLOTS:
         QDateTime now(QDate(2026, 10, 14), QTime(6, 30));
         notifier.setClock([&now] { return now; });
         notifier.setRingInterval(20);
-        notifier.setSounds({}, { SoundChoice::Mode::Custom, u"Looping.Alarm3"_s, {} });
+        notifier.setSounds({}, {SoundChoice::Mode::Custom, u"Looping.Alarm3"_s, {}});
         notifier.showNow(alarm());
         const uint id = bus->nextId;
         QCOMPARE(bus->sent.size(), 1);
@@ -853,7 +854,7 @@ private Q_SLOTS:
         QCOMPARE(notifier->parent(), &parent);
         QVERIFY(qobject_cast<DesktopNotifier *>(notifier)); // a desktop build
         QVERIFY(!notifier->firesWhenClosed());
-        QVERIFY(QStringList({ u"dbus"_s, u"toast"_s, u"tray"_s, u"none"_s }).contains(notifier->backend()));
+        QVERIFY(QStringList({u"dbus"_s, u"toast"_s, u"tray"_s, u"none"_s}).contains(notifier->backend()));
         notifier->setSnoozeMinutes(0);
         QCOMPARE(notifier->snoozeMinutes(), 1);
         notifier->setSnoozeMinutes(1000);

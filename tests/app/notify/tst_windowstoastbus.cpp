@@ -67,8 +67,8 @@ private Q_SLOTS:
         WindowsToastBus bus(TestId);
         if (!bus.isAvailable())
             QSKIP("Toast notifications are turned off on this machine");
-        const DesktopNotification message = buildDesktopNotification(
-                reminder(), bus.capabilities(), 10, 0, SoundChoice{ SoundChoice::Mode::Silent, {}, {} });
+        const DesktopNotification message = buildDesktopNotification(reminder(), bus.capabilities(), 10, 0,
+                                                                     SoundChoice{SoundChoice::Mode::Silent, {}, {}});
         uint id = 0;
         bool answered = false;
         bus.notify(message, [&](uint shown) {
@@ -106,7 +106,7 @@ private Q_SLOTS:
     void unregisteredIdFailsQuietly()
     {
         // An id nobody registered (and an empty one): no exception, at worst no toast.
-        for (const QString &id : { u"JanuszBit.Brulion.niezarejestrowany-żółw"_s, QString() }) {
+        for (const QString &id : {u"JanuszBit.Brulion.niezarejestrowany-żółw"_s, QString()}) {
             WindowsToastBus bus(id);
             bool answered = false;
             bus.notify(buildDesktopNotification(reminder(), bus.capabilities(), 5), [&](uint) { answered = true; });

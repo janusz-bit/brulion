@@ -19,8 +19,9 @@
 //
 // An alarm rings: it is sent again (same id, sound again) every ringInterval until the user acts
 // on it, closes it, or its ringMinutes are over (a bus that rings itself — Windows' alarm toasts
-// loop their sound — gets it once more, silently, when the ringMinutes are over). previewSound() sends a short-lived sample
-// notification with a sound (Settings → Reminders, "Play sample"). Without a notification
+// loop their sound — gets it once more, silently, when the ringMinutes are over).
+// previewSound() sends a short-lived sample notification with a sound (Settings → Reminders,
+// "Play sample"). Without a notification
 // service (no session bus, no daemon, or a failed Notify call) the notification goes to the tray
 // instead (trayMessageRequested(), shown by the shell's DesktopTray).
 #pragma once

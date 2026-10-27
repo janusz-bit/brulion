@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
         singleInstance = std::make_unique<brulion::ipc::SingleInstance>(brulion::ipc::SingleInstance::keyFor(
                 QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
         // --hidden (Windows' start at sign-in, the running one already there): no window.
-        const QByteArray message = args.contains(u"--capture"_s) ? "capture"
+        const QByteArray message = args.contains(u"--capture"_s)  ? "capture"
                                    : args.contains(u"--today"_s)  ? "today"
                                    : args.contains(u"--hidden"_s) ? "hidden"
                                                                   : "activate";

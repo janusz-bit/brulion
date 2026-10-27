@@ -257,30 +257,30 @@ void DesktopNotifier::ring()
             it->ringUntil = QDateTime(); // rang long enough: it stays on screen, silently
             // A notification looping its own sound is replaced by a silent one.
             if (ringsItself)
-                again.append({ it.key(), it->notification });
+                again.append({it.key(), it->notification});
         } else if (!ringsItself) {
             again.append({ it.key(), it->notification });
         }
     }
     const QStringList capabilities = m_bus->capabilities();
-    const SoundChoice alarmSound = ringsItself ? SoundChoice{ SoundChoice::Mode::Silent, {}, {} } : sound(SoundKind::Alarm);
+    const SoundChoice alarmSound =
+            ringsItself ? SoundChoice{SoundChoice::Mode::Silent, {}, {}} : sound(SoundKind::Alarm);
     for (const auto &[id, notification] : std::as_const(again)) {
         const QPointer<DesktopNotifier> self(this);
-        m_bus->notify(
-                buildDesktopNotification(notification, capabilities, m_snoozeMinutes, id, alarmSound),
-                [self, id](uint newId) {
-                    if (!self || newId == id)
-                        return;
-                    // Refused, or the server made a new one: stop ringing the old entry.
-                    const auto it = self->m_shown.find(id);
-                    if (it == self->m_shown.end())
-                        return;
-                    Shown shown = *it;
-                    self->m_shown.erase(it);
-                    if (newId != 0)
-                        self->m_shown.insert(newId, shown);
-                    self->updateRingTimer();
-                });
+        m_bus->notify(buildDesktopNotification(notification, capabilities, m_snoozeMinutes, id, alarmSound),
+                      [self, id](uint newId) {
+                          if (!self || newId == id)
+                              return;
+                          // Refused, or the server made a new one: stop ringing the old entry.
+                          const auto it = self->m_shown.find(id);
+                          if (it == self->m_shown.end())
+                              return;
+                          Shown shown = *it;
+                          self->m_shown.erase(it);
+                          if (newId != 0)
+                              self->m_shown.insert(newId, shown);
+                          self->updateRingTimer();
+                      });
     }
     updateRingTimer();
 }

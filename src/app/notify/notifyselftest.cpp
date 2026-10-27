@@ -291,10 +291,7 @@ private:
     }
 
     /// The sound the test picks: the sound theme's "bell" (Linux), Windows' "Mail".
-    QString themeSound() const
-    {
-        return m_sounds->themeSounds().contains(u"bell"_s) ? u"bell"_s : u"Mail"_s;
-    }
+    QString themeSound() const { return m_sounds->themeSounds().contains(u"bell"_s) ? u"bell"_s : u"Mail"_s; }
 
     // 3. A theme sound from the menu.
     void themeSoundForAlarms()
