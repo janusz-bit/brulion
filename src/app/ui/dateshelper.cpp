@@ -230,19 +230,7 @@ QString DatesHelper::formatShort(const QString &spec) const
 
 QString DatesHelper::formatLong(const QString &date) const
 {
-    const QDate d = parseDate(date);
-    if (!d.isValid())
-        return {};
-    const bool en = english({});
-    const auto loc = toUiLocale(en);
-    const QString weekday = dates::weekdayName(d.dayOfWeek(), loc, dates::NameForm::Nominative);
-    if (en) {
-        return u"%1, %2 %3, %4"_s.arg(weekday, dates::monthName(d.month(), loc, dates::NameForm::Nominative),
-                                      QString::number(d.day()), QString::number(d.year()));
-    }
-    return u"%1, %2 %3 %4"_s.arg(weekday, QString::number(d.day()),
-                                 dates::monthName(d.month(), loc, dates::NameForm::Genitive),
-                                 QString::number(d.year()));
+    return dates::longDate(parseDate(date), toUiLocale(english({})));
 }
 
 QString DatesHelper::monthTitle(int year, int month) const

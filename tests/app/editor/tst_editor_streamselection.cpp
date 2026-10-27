@@ -270,6 +270,40 @@ private Q_SLOTS:
         s.open(2);
         QCOMPARE(s.selected(2), QList<int>({0}));
     }
+    void countOfDayChangedWhileAway()
+    {
+        Stream s;
+        s.span(0, 3, 2, 3);
+        s.close(2);
+        QCOMPARE(s.stream.count(), 1 + 2 + 3);
+        // Sync rewrites the day scrolled away: the count follows its file, and so does the copy's.
+        s.host.externalWrite(Day3, u"- tylko jeden punkt\n"_s);
+        QCOMPARE(s.stream.count(), 1 + 2 + 1);
+        const QVariantMap r = s.stream.copy();
+        QVERIFY(r.value(u"ok"_s).toBool());
+        QCOMPARE(r.value(u"count"_s).toInt(), 1 + 2 + 1);
+        // Another file changing keeps the span as it is.
+        s.host.externalWrite(u"Źródła.md"_s, u"- źdźbło\n"_s);
+        QVERIFY(s.stream.active());
+        QCOMPARE(s.stream.count(), 1 + 2 + 1);
+    }
+    void countOfAnchorDayAwayWhenTheDirectionTurns()
+    {
+        Stream s;
+        // Down from Źdźbło (Day2 row 1) into Day3: Day2 gives Źdźbło and Gęślą.
+        s.span(1, 1, 2, 3);
+        QCOMPARE(s.stream.count(), 2 + 3);
+        s.close(1);
+        QCOMPARE(s.stream.count(), 2 + 3);
+        // The anchor day scrolled away, the focus goes above it: Day2 now gives Źdźbło alone.
+        QVERIFY(s.stream.extendTo(&s.page(0), 1));
+        QCOMPARE(s.selected(0), QList<int>({1, 2, 3}));
+        QCOMPARE(s.stream.count(), 3 + 1);
+        QCOMPARE(s.stream.copy().value(u"count"_s).toInt(), 3 + 1);
+        // And back below it.
+        QVERIFY(s.stream.extendTo(&s.page(2), 3));
+        QCOMPARE(s.stream.count(), 2 + 3);
+    }
 
     void dayUsedOnItsOwnEndsTheSpan_data()
     {

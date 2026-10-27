@@ -90,6 +90,18 @@ QString monthName(int month, UiLocale locale, NameForm form)
     return pick(form == NameForm::Short ? EnMonthsShort : EnMonths, month);
 }
 
+QString longDate(QDate date, UiLocale locale)
+{
+    if (!date.isValid())
+        return {};
+    const QString weekday = weekdayName(date.dayOfWeek(), locale, NameForm::Nominative);
+    const QString day = QString::number(date.day());
+    const QString year = QString::number(date.year());
+    if (locale == UiLocale::English)
+        return QStringLiteral("%1, %2 %3, %4").arg(weekday, monthName(date.month(), locale, NameForm::Nominative), day, year);
+    return QStringLiteral("%1, %2 %3 %4").arg(weekday, day, monthName(date.month(), locale, NameForm::Genitive), year);
+}
+
 QString englishOrdinal(int n)
 {
     const int mod100 = n % 100;

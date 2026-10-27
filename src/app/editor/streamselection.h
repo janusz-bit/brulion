@@ -149,7 +149,8 @@ private:
     void pageChanged(PageController *page);
     Part partOf(const QString &path, bool withText) const;
     QString label(const QString &path, bool plainText) const;
-    QString joined(bool plainText) const;
+    /// The copy's text; `count`: the blocks in it.
+    QString joined(bool plainText, int *count = nullptr) const;
 
     QPointer<EditorHost> m_host;
     QPointer<QAbstractItemModel> m_model;
@@ -166,7 +167,8 @@ private:
     int m_count = 0;
     int m_applying = 0;
     QPointer<PageController> m_tools;
-    /// Block counts of pages in the span that are not attached (read once).
+    /// Block counts of pages in the span that are not attached (read once per ends and direction;
+    /// dropped when the file changes: EditorHost::fileChanged).
     mutable QHash<QString, int> m_fileCounts;
 };
 

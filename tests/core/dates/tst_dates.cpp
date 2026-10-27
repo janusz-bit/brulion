@@ -256,6 +256,27 @@ private Q_SLOTS:
         QCOMPARE(monthName(13, UiLocale::English, NameForm::Short), QString());
         QCOMPARE(monthName(0, UiLocale::Polish), QString());
     }
+    void longDate_data()
+    {
+        QTest::addColumn<QDate>("date");
+        QTest::addColumn<bool>("english");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("pl") << QDate(2026, 10, 27) << false << u"wtorek, 27 października 2026"_s;
+        QTest::newRow("pl, genitive of a soft month") << QDate(2026, 3, 1) << false << u"niedziela, 1 marca 2026"_s;
+        QTest::newRow("pl, diacritics") << QDate(2027, 9, 15) << false << u"środa, 15 września 2027"_s;
+        QTest::newRow("pl, February 29") << QDate(2028, 2, 29) << false << u"wtorek, 29 lutego 2028"_s;
+        QTest::newRow("en") << QDate(2026, 10, 27) << true << u"Tuesday, October 27, 2026"_s;
+        QTest::newRow("en, January 1") << QDate(2027, 1, 1) << true << u"Friday, January 1, 2027"_s;
+        QTest::newRow("invalid") << QDate() << false << QString();
+        QTest::newRow("invalid, en") << QDate(2026, 2, 30) << true << QString();
+    }
+    void longDate()
+    {
+        QFETCH(QDate, date);
+        QFETCH(bool, english);
+        QFETCH(QString, expected);
+        QCOMPARE(dates::longDate(date, english ? UiLocale::English : UiLocale::Polish), expected);
+    }
     void englishOrdinal()
     {
         QStringList got;

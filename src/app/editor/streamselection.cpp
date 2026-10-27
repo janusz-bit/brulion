@@ -76,7 +76,27 @@ void StreamSelection::setHost(EditorHost *host)
 {
     if (m_host == host)
         return;
+    if (m_host)
+        disconnect(m_host, nullptr, this, nullptr);
     m_host = host;
+    if (host) {
+        // A day not attached changed on disk (sync): its count is read again.
+        connect(host, &EditorHost::fileChanged, this, [this](const QString &path) {
+            const QString prefix = path + u'\n';
+            bool dropped = false;
+            for (auto it = m_fileCounts.begin(); it != m_fileCounts.end();) {
+                if (it.key().startsWith(prefix)) {
+                    it = m_fileCounts.erase(it);
+                    dropped = true;
+                } else {
+                    ++it;
+                }
+            }
+            if (dropped && m_active)
+                update();
+        });
+    }
+    m_fileCounts.clear();
     Q_EMIT hostChanged();
 }
 
@@ -483,15 +503,7 @@ QString StreamSelection::label(const QString &path, bool plainText) const
         if (!d.isValid())
             return stemOf(path);
         // As the day's heading in the stream (DatesHelper.formatLong).
-        const dates::UiLocale loc = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
-        const QString weekday = dates::weekdayName(d.dayOfWeek(), loc, dates::NameForm::Nominative);
-        if (m_english) {
-            return u"%1, %2 %3, %4"_s.arg(weekday, dates::monthName(d.month(), loc, dates::NameForm::Nominative),
-                                          QString::number(d.day()), QString::number(d.year()));
-        }
-        return u"%1, %2 %3 %4"_s.arg(weekday, QString::number(d.day()),
-                                     dates::monthName(d.month(), loc, dates::NameForm::Genitive),
-                                     QString::number(d.year()));
+        return dates::longDate(d, m_english ? dates::UiLocale::English : dates::UiLocale::Polish);
     }
     QString target = m_host ? m_host->linkTarget(path, QString()) : QString();
     if (target.isEmpty())
@@ -499,14 +511,18 @@ QString StreamSelection::label(const QString &path, bool plainText) const
     return markdown::formatReference(markdown::ReferenceKind::PageLink, target);
 }
 
-QString StreamSelection::joined(bool plainText) const
+QString StreamSelection::joined(bool plainText, int *count) const
 {
+    if (count)
+        *count = 0;
     const auto [lo, hi] = bounds();
     if (lo < 0)
         return {};
     QStringList parts;
     for (int i = lo; i <= hi; ++i) {
         const Part part = partOf(m_paths.at(i), true);
+        if (count)
+            *count += part.count;
         const QString &text = plainText ? part.plainText : part.markdown;
         if (text.isEmpty())
             continue;
@@ -529,7 +545,9 @@ QVariantMap StreamSelection::copy(bool plainText)
 {
     if (!m_active)
         return failure(u"empty"_s);
-    const QString text = joined(plainText);
+    // The count of what is copied now (the cached count of a day not attached may be older).
+    int copied = 0;
+    const QString text = joined(plainText, &copied);
     if (text.isEmpty())
         return failure(u"empty"_s);
     LazyHtmlMimeData::Render html;
@@ -540,7 +558,7 @@ QVariantMap StreamSelection::copy(bool plainText)
     }
     QVariantMap result = PageController::writeClipboard(text, html);
     if (result.value(u"ok"_s).toBool()) {
-        result.insert(u"count"_s, std::max(1, m_count));
+        result.insert(u"count"_s, std::max(1, copied));
         result.insert(u"pages"_s, pageCount());
     } else {
         result.insert(u"pages"_s, 0);
@@ -559,9 +577,12 @@ void StreamSelection::update()
             count += page->selectionCount();
             continue;
         }
+        // The rows of its ends and the direction decide what a page selects (rowsIn()).
         const auto [first, last] = std::pair<int, int>{i == indexOf(m_anchorPath) ? m_anchorRow : -1,
                                                        i == indexOf(m_focusPath) ? m_focusRow : -1};
-        const QString key = path + u'\n' + QString::number(first) + u',' + QString::number(last);
+        const bool down = indexOf(m_anchorPath) < indexOf(m_focusPath);
+        const QString key = path + u'\n' + QString::number(first) + u',' + QString::number(last)
+                            + (down ? u'v' : u'^');
         auto it = m_fileCounts.constFind(key);
         if (it == m_fileCounts.cend())
             it = m_fileCounts.insert(key, partOf(path, false).count);
