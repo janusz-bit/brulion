@@ -427,7 +427,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     app->navigate({{u"view"_s, u"tasks"_s}});
     settle(800);
     QQuickItem *dueChip = shownWhere(window->contentItem(), [](QQuickItem *item) {
-        return isA(item, "BChip") && item->property("tokenKind").toString() == u"due";
+        return item->objectName() == u"taskChip_due";
     });
     check(dueChip != nullptr, "a task in Tasks shows its due date as a chip");
     if (dueChip) {

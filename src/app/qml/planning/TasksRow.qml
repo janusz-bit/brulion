@@ -53,8 +53,8 @@ T.ItemDelegate {
     function openMenuAt(x, y) {
         const c = chips.mapFromItem(control, x, y)
         const chip = chips.childAt(c.x, c.y)
-        if (chip && chip.tokenKind) {
-            control.tokenMenuRequested(chip.tokenKind, chip, c.x - chip.x, c.y - chip.y)
+        if (chip && chip.objectName.startsWith("taskChip_")) {
+            control.tokenMenuRequested(chip.objectName.slice(9), chip, c.x - chip.x, c.y - chip.y)
             return true
         }
         const p = label.mapFromItem(control, x, y)
@@ -242,21 +242,21 @@ T.ItemDelegate {
                     text: control.statusLabel
                 }
                 BChip {
-                    readonly property string tokenKind: "due"
+                    objectName: "taskChip_due" // (its token menu: openMenuAt())
                     visible: (control.task.dueLabel || "") !== ""
                     size: "small"
                     variant: control.closed ? "done" : control.task.overdue ? "overdue" : "due"
                     text: control.task.overdue ? qsTr("%1, overdue").arg(control.task.dueLabel) : control.task.dueLabel
                 }
                 BChip {
-                    readonly property string tokenKind: "scheduled"
+                    objectName: "taskChip_scheduled" // (its token menu: openMenuAt())
                     visible: (control.task.scheduledLabel || "") !== ""
                     size: "small"
                     variant: control.closed ? "done" : "scheduled"
                     text: control.task.scheduledLabel
                 }
                 BChip {
-                    readonly property string tokenKind: "start"
+                    objectName: "taskChip_start" // (its token menu: openMenuAt())
                     visible: (control.task.startLabel || "") !== ""
                     size: "small"
                     variant: "neutral"
@@ -264,21 +264,21 @@ T.ItemDelegate {
                     text: qsTr("from %1").arg(control.task.startLabel)
                 }
                 BChip {
-                    readonly property string tokenKind: "reminder"
+                    objectName: "taskChip_reminder" // (its token menu: openMenuAt())
                     visible: (control.task.reminderLabel || "") !== "" && !control.closed
                     size: "small"
                     variant: control.task.reminderAlarm ? "alarm" : "reminder"
                     text: control.task.reminderLabel
                 }
                 BChip {
-                    readonly property string tokenKind: "recurrence"
+                    objectName: "taskChip_recurrence" // (its token menu: openMenuAt())
                     visible: (control.task.recurrenceLabel || "") !== ""
                     size: "small"
                     variant: "recurrence"
                     text: control.task.recurrenceLabel
                 }
                 BChip {
-                    readonly property string tokenKind: "priority"
+                    objectName: "taskChip_priority" // (its token menu: openMenuAt())
                     visible: control.priorityLabel !== ""
                     size: "small"
                     variant: control.task.priority >= 4 && !control.closed ? "overdue" : "neutral"
