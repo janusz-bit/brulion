@@ -191,8 +191,9 @@ synchronizacji z API Syncthinga.
 
 **Masz już skarbiec Obsidiana w Syncthingu?** Nie importuj go i nie włączaj dla niego
 Nextclouda — po prostu otwórz jego folder jako notatnik na każdym urządzeniu. Obie aplikacje
-mogą z niego korzystać na zmianę; warto tylko raz ustawić folder i format dziennika jak
-w notatkach dziennych Obsidiana. Co działa, co się różni i co Brulion dopisuje do folderu:
+mogą z niego korzystać na zmianę; folder, format i szablon dziennika oraz folder załączników
+Brulion sam przejmie z ustawień Obsidiana (`.obsidian/`). Co działa, co się różni i co Brulion
+dopisuje do folderu:
 [docs/IMPORT.md](docs/IMPORT.md#folder-obsidiana-bez-importu).
 
 **Nextcloud (WebDAV):** w *Centrum synchronizacji* (menu *Więcej* ⋮ lub *Ustawienia →

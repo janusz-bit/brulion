@@ -172,7 +172,7 @@ Never compute a hash yourself.
 <!-- commands -->
 | Command | Arguments | What it does | Writes |
 |---|---|---|---|
-| `info` | | the notebook: folder, settings, counts, scan state, `gui.running` | |
+| `info` | | the notebook: folder, settings (`configFromObsidian`: those taken from `.obsidian/`), counts, scan state, `gui.running` | |
 | `page list` | `[--folder F] [--sort title\|path\|modified] [--limit N]` | the pages | |
 | `page read <ref>` | `[--blocks] [--backlinks]` | text, `hash`, frontmatter, tags, aliases, mode; blocks with refs | |
 | `page create <title>` | `[--folder F] [--mode outline\|document] [--content T \| --stdin]` | a new page; a name differing only in letter case is that page (`existing`) | yes |

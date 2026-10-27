@@ -981,6 +981,15 @@ Choosing and switching the mode:
 * **Settings → Notatnik**: "Domyślny tryb nowych stron" and "Tryb dziennika" (both: Dokument |
   Konspekt; defaults dokument and konspekt) — `pageMode` / `journalMode` in
   `.brulion/config.json`, synced.
+* **Settings → Notatnik, "Ustawienia z Obsidiana"** (only while the notebook has no
+  `.brulion/config.json` and settings were taken from `.obsidian/`, `Vault::configAdoptedFromObsidian`
+  → `Workspace.configFromObsidian()`): the row above "Folder dziennika" lists the settings taken
+  (their row titles: Folder dziennika, Nazwy plików dziennika, Szablon dziennika, Folder szablonów,
+  Folder załączników) and says that changing any setting saves them to `.brulion/config.json`;
+  **Zapisz w notatniku** (`Workspace.saveAdoptedConfig()`) writes them at once (for the browser
+  with Nextcloud, which never sees `.obsidian/`). Problems with Obsidian's files (a date format
+  without a Qt equivalent, attachments "next to the note") show in the warnings card at the end
+  of the section, like those of config.json.
 * The **journal stream** shows each day in its own resolved mode (journals default to outline).
   A day switched to a document among outline days keeps their left edge (the date, the text:
   `BlockEditor.documentInset` = the outline's gutter); with `journalMode` document the days use

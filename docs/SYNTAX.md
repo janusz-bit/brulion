@@ -72,7 +72,11 @@ This file is the single source of truth for parsers, renderers, importers and ex
 `journalFileFormat` uses Qt `QDate` format strings (`yyyy-MM-dd`, `dd.MM.yyyy`, …).
 `journalMode` / `pageMode` (`"outline"` | `"document"`) are the note modes of daily notes and of
 pages the content does not decide (§4 "Tryb notatki"). Missing keys and invalid values fall back
-to these defaults; unknown keys are kept when Brulion saves the file.
+to these defaults; unknown keys are kept when Brulion saves the file. When the file is missing
+and the folder is an Obsidian vault (`.obsidian/`), `journalsFolder`, `journalFileFormat`
+(converted from moment.js), `journalTemplate`, `templatesFolder` and `attachmentsFolder` default
+to Obsidian's settings (`daily-notes.json`, `templates.json`, `app.json`; docs/IMPORT.md "Folder
+Obsidiana bez importu") — in memory, until the settings are saved.
 
 ---
 

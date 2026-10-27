@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.4.6 — w przygotowaniu
+
+**Nowe**
+- **Ustawienia ze skarbca Obsidiana** — folder Obsidiana otwarty jako notatnik sam przejmuje folder, nazwy plików i szablon dziennika, folder szablonów i folder załączników z ustawień Obsidiana (`.obsidian/`), dopóki notatnik nie ma własnych ustawień. **Ustawienia → Notatnik** pokazują, co przejął, a **Zapisz w notatniku** zapisuje to w `.brulion/config.json`. Zobacz [[Import i eksport#Skarbiec Obsidiana bez importu|Skarbiec Obsidiana bez importu]].
+
 ## 0.4.5 — 26 października 2026
 
 **Nowe**
