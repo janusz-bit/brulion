@@ -98,6 +98,13 @@ nix run github:janusz-bit/brulion
   zalogowania. Każdy użytkownik może wyłączyć autostart u siebie w ustawieniach autostartu
   pulpitu (KDE: Ustawienia systemowe → Autostart; GNOME: Dostrajanie → Programy startowe) —
   to tworzy wpis z `Hidden=true` w `~/.config/autostart/`.
+* **Kalendarz z zasobnika**: menu ikony → **Kalendarz** otwiera małe okienko z miesiącem,
+  zadaniami i przypomnieniami wybranego dnia, **Otwórz Brulion** i **Szybka notatka…**.
+  *Ustawienia → Aplikacja → Kliknięcie ikony w zasobniku → Kalendarz* otwiera je samym
+  kliknięciem ikony (domyślnie na Linuksie kliknięcie pokazuje okno). Pod X11 okienko pojawia się
+  przy kursorze i znika po kliknięciu obok; pod Waylandem kompozytor kładzie je, gdzie chce, i może
+  nie oddać mu aktywności — wtedy zamkniesz je przyciskiem **×** albo ponownym kliknięciem ikony.
+  Szczegóły: docs/WINDOWS.md, „Kalendarz z zasobnika”.
 * KDE Plasma, XFCE, Cinnamon, Budgie, waybar/swaybar: zasobnik działa od razu. **GNOME** nie
   ma zasobnika — potrzebne jest rozszerzenie AppIndicator:
 

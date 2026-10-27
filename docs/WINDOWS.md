@@ -162,8 +162,9 @@ Można za to używać kalendarza Brulionu zamiast systemowego:
 Na Linuksie kalendarz działa tak samo (menu ikony → **Kalendarz**; kliknięcie ikony domyślnie
 pokazuje okno, ustawienie jak wyżej). Pod X11 okienko pojawia się przy kursorze; pod Waylandem
 okna nie da się ustawić samemu — kompozytor kładzie je, gdzie chce (zwykle na środku), i może nie
-oddać mu aktywności: wtedy nie znika po kliknięciu obok, tylko po Escape albo ponownym kliknięciu
-ikony.
+oddać mu aktywności: wtedy nie znika po kliknięciu obok i nie dostaje klawiatury (Escape do niego
+nie trafia) — zamkniesz je przyciskiem **×** w jego rogu, wybierając wpis albo **Otwórz Brulion**,
+albo ponownym kliknięciem ikony.
 
 ## Ograniczenia wersji testowej
 

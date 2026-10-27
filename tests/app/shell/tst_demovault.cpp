@@ -452,6 +452,11 @@ private Q_SLOTS:
                 content = f.content;
         }
         QVERIFY(!content.isEmpty());
+        // Each section's bullets stay one list: no blank line between two of them.
+        static const QRegularExpression splitList(u"^- [^\n]*\n\n- [^\n]*"_s,
+                                                  QRegularExpression::MultilineOption);
+        const QRegularExpressionMatch split = splitList.match(content);
+        QVERIFY2(!split.hasMatch(), qPrintable(split.captured(0).left(200)));
         const ParsedNote note = markdown::parseNote(u"Lista zmian.md"_s, content);
         QVERIFY(note.tasks.isEmpty());
         QVERIFY(note.reminders.isEmpty());

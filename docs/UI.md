@@ -163,8 +163,12 @@ components — no Material/Fusion look, so all targets look identical.
   screen; Wayland ignores it (the compositor places the window). It hides itself — always
   `hide()`, never a close: `onClosing` refuses Alt+F4's close — on Escape, the close button, and
   when it loses the activation after having had it (a click elsewhere; a refused activation keeps
-  it open until Escape or a click on the icon). That hide records the time: a click on the icon
-  within 300 ms (`trayPopupShouldReopen`, the click that took the activation) keeps it closed.
+  it open without the keyboard — no Escape — until the close button, an entry or a click on the
+  icon). That hide records the time and the cursor (`AppController.trayPopupHidItself`); the next
+  click on the icon (`trayPopupShouldReopen`, asked once per tray action) keeps it closed when it
+  is the click that took the activation: within 300 ms, or within 3 s when the hide happened with
+  the cursor on the icon or within 8 px of the click's (Windows hides it on the press, Trigger
+  comes on the release — a held button).
 
 ## Folders (the sidebar's tree, "Przenieś do…")
 
