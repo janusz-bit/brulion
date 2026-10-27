@@ -949,8 +949,9 @@ private Q_SLOTS:
         const brulion::drawing::Stroke s = canvas->currentDrawing().strokes.last();
         // The whole stroke, from the press to the release.
         const double first = canvas->toScene(at(0)).x(), last = canvas->toScene(at(25)).x();
-        QVERIFY2(std::abs(s.points.first().x - first) < 1 && std::abs(s.points.last().x - last) < 1,
-                 qPrintable(u"%1 … %2 (%3 … %4)"_s.arg(s.points.first().x).arg(s.points.last().x).arg(first).arg(last)));
+        QVERIFY2(
+                std::abs(s.points.first().x - first) < 1 && std::abs(s.points.last().x - last) < 1,
+                qPrintable(u"%1 … %2 (%3 … %4)"_s.arg(s.points.first().x).arg(s.points.last().x).arg(first).arg(last)));
         QVERIFY(canvas->modified());
         QVERIFY(canvas->canUndo()); // the stroke, after the history was cleared
     }
@@ -972,9 +973,9 @@ private Q_SLOTS:
 
     void externalPaperMerge_data()
     {
-        QTest::addColumn<QString>("here");    // the paper chosen here ("" none)
-        QTest::addColumn<bool>("savedHere");  // and saved before the other version came
-        QTest::addColumn<QString>("theirs");  // the other version's paper
+        QTest::addColumn<QString>("here");   // the paper chosen here ("" none)
+        QTest::addColumn<bool>("savedHere"); // and saved before the other version came
+        QTest::addColumn<QString>("theirs"); // the other version's paper
         QTest::addColumn<QString>("expected");
         QTest::newRow("not changed here: theirs") << QString() << false << u"grid"_s << u"grid"_s;
         QTest::newRow("changed here: ours") << u"lines"_s << false << u"grid"_s << u"lines"_s;

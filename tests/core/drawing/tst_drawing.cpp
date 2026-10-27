@@ -6,10 +6,10 @@
 #include "drawing/stroke.h"
 #include "drawing/svgwrite.h"
 
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonDocument>
 #include <QRandomGenerator>
-#include <QElapsedTimer>
 #include <QTest>
 #include <QXmlStreamReader>
 #include <QtMath>
@@ -411,9 +411,8 @@ private Q_SLOTS:
         QTest::newRow("far away") << QByteArray(
                 "{\"type\":\"freedraw\",\"x\":1e18,\"y\":1e18,\"points\":[[0,0],[1024,1024]]}")
                                   << false;
-        QTest::newRow("a point far away") << QByteArray(
-                "{\"type\":\"freedraw\",\"x\":0,\"y\":0,\"points\":[[0,0],[0,1000001]]}")
-                                          << false;
+        QTest::newRow("a point far away")
+                << QByteArray("{\"type\":\"freedraw\",\"x\":0,\"y\":0,\"points\":[[0,0],[0,1000001]]}") << false;
         QTest::newRow("at the limit") << QByteArray(
                 "{\"type\":\"freedraw\",\"x\":-1e6,\"y\":0,\"points\":[[0,0],[2e6,1e6]]}")
                                       << true;
