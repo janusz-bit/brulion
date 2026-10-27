@@ -10,6 +10,7 @@
 #include "markdown/properties.h"
 #include "markdown/structure_p.h"
 #include "markdown/tasks.h"
+#include "markdown/tokenedit.h"
 #include "markdown/tokens.h"
 #include "markdown/tokens_p.h"
 
@@ -386,40 +387,6 @@ QString assemble(QStringView text, const QList<Piece> &pieces)
     return out;
 }
 
-/// The recurrence rule of a 🔁 token and where its text ends: the whole value when it parses,
-/// else the longest run of leading words that does ("co tydzień" of "co tydzień kupić mleko");
-/// nullopt when no rule starts there (the token is shown as text).
-std::optional<std::pair<dates::RecurrenceRule, qsizetype>> recurrencePrefix(QStringView masked, const Token &tok)
-{
-    if (tok.valueFrom < 0 || tok.valueTo <= tok.valueFrom)
-        return std::nullopt;
-    const QStringView value = masked.sliced(tok.valueFrom, tok.valueTo - tok.valueFrom);
-    if (const auto rule = dates::parseRecurrence(value))
-        return std::pair{*rule, tok.valueTo};
-    // Ends of the leading words (at most a dozen: no rule is longer).
-    constexpr int MaxRuleWords = 12;
-    QList<qsizetype> ends;
-    for (qsizetype i = 0; i < value.size() && ends.size() < MaxRuleWords;) {
-        while (i < value.size() && value[i].isSpace())
-            ++i;
-        qsizetype j = i;
-        while (j < value.size() && !value[j].isSpace())
-            ++j;
-        if (j > i)
-            ends.append(j);
-        i = j;
-    }
-    for (qsizetype k = ends.size() - 1; k >= 0; --k) {
-        QStringView candidate = value.first(ends[k]);
-        // "co tydzień, kupić" -> "co tydzień": punctuation glued to the last word is not rule text.
-        while (!candidate.isEmpty() && (candidate.back() == u',' || candidate.back() == u';' || candidate.back() == u':'))
-            candidate.chop(1);
-        if (const auto rule = dates::parseRecurrence(candidate))
-            return std::pair{*rule, tok.valueFrom + candidate.size()};
-    }
-    return std::nullopt;
-}
-
 } // namespace
 
 std::function<std::optional<QString>(const QString &)> journalLinkTitle(const VaultConfig &config,
@@ -565,6 +532,9 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 return target;
             return m_ctx.linkTitle(target).value_or(target);
         };
+        const auto itemRange = [&](const InlineItem &item) {
+            return QString::number(toBody(runs, item.from)) + u'-' + QString::number(toBody(runs, item.to));
+        };
         lexInline(text, masked, [&](const InlineItem &item) {
             const QStringView source = text.sliced(item.from, item.to - item.from);
             QString html;
@@ -590,8 +560,13 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 }
                 const bool resolved =
                         w.target.isEmpty() || !m_ctx.resolvePage || m_ctx.resolvePage(w.target).has_value();
-                html = link(u"page:"_s + percentEncoded(w.target) + fragment(w.heading, w.blockId),
-                            resolved ? pal.link : pal.unresolved, esc(label));
+                // A day of the journal with RenderContext::dayLinks: a day: link naming its range
+                // (its menu changes the date); a fragment keeps it a page link.
+                const bool day = m_ctx.dayLinks && w.heading.isEmpty() && w.blockId.isEmpty()
+                                 && journalDateFromLinkTarget(w.target, m_ctx.journalConfig).has_value();
+                const QString href = day ? QString(u"day:"_s + itemRange(item))
+                                         : QString(u"page:"_s + percentEncoded(w.target) + fragment(w.heading, w.blockId));
+                html = link(href, resolved ? pal.link : pal.unresolved, esc(label));
                 break;
             }
             case InlineKind::Embed: {
@@ -699,7 +674,14 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 const auto rule = recurrencePrefix(masked, tok);
                 if (!rule)
                     continue;
-                html = chip(pal.recurrence, u"🔁 "_s + dates::formatRecurrence(rule->first, m_ctx.locale));
+                {
+                    const QString label = u"🔁 "_s + dates::formatRecurrence(rule->first, m_ctx.locale);
+                    // With RenderContext::dateLinks a recur: link naming the rule's range (its menu).
+                    html = m_ctx.dateLinks ? linkChip(u"recur:"_s + QString::number(toBody(runs, tok.from)) + u'-'
+                                                              + QString::number(toBody(runs, rule->second)),
+                                                      pal.recurrence, label)
+                                           : chip(pal.recurrence, label);
+                }
                 to = rule->second;
                 break;
             }
@@ -709,8 +691,17 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 html = linkChip(u"reminder:"_s + range(tok), tok.alarm ? pal.alarm : pal.reminder,
                                 (tok.alarm ? u"🔔 "_s : u"⏰ "_s) + human(tok.spec()));
                 break;
-            case TokenKind::Priority: html = esc(source); break;
-            case TokenKind::LogseqPriority: html = chip(pal.neutral, source.sliced(2, 1).toString()); break;
+            case TokenKind::Priority:
+                // A prio: link with RenderContext::dateLinks, not underlined (the emoji looks the same).
+                html = m_ctx.dateLinks ? QString(u"<a href=\"prio:"_s + range(tok) + u"\" style=\"color:"_s
+                                                 + safeColor(pal.muted) + u";text-decoration:none\">"_s + esc(source)
+                                                 + u"</a>"_s)
+                                       : esc(source);
+                break;
+            case TokenKind::LogseqPriority:
+                html = m_ctx.dateLinks ? linkChip(u"prio:"_s + range(tok), pal.neutral, source.sliced(2, 1).toString())
+                                       : chip(pal.neutral, source.sliced(2, 1).toString());
+                break;
             case TokenKind::TaskId:
             case TokenKind::DependsOn:
             case TokenKind::OnCompletion: html = muted(pal, esc(source)); break;

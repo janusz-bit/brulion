@@ -12,6 +12,7 @@
 #pragma once
 
 #include "markdown/blockdocument.h"
+#include "markdown/tokenedit.h"
 #include "markdown/tokens.h"
 #include "types.h"
 
@@ -191,35 +192,16 @@ QList<Transclusion> transclusionsOf(QStringView body);
 // Token edits (SYNTAX §5-6): content in -> content out, first line of the body
 // ---------------------------------------------------------------------------------------------
 
-/// Replace the token at [from, to) of `body` with `token`; an empty `token` removes it together
-/// with one adjacent space. Out-of-range ranges leave the body unchanged.
-QString replaceTokenRange(const QString &body, qsizetype from, qsizetype to, const QString &token);
-
-/// Set the token of `kind` on the body's first line: the first existing token of that kind is
-/// replaced (removed when `token` is empty); without one, `token` is appended to the first line
-/// (before a trailing block id) — always appended when `append` is true (reminders: a block may
-/// carry several). Tokens inside inline code are ignored.
-QString setFirstLineToken(const QString &body, markdown::TokenKind kind, const QString &token, bool append = false);
-
-/// The date token at body range [from, to) — a chip's range: 📅 ⏳ 🛫 ➕ ✅ ❌ or a reminder
-/// (⏰, ⏰!, `(@…)`), not a Logseq planning line —, its positions in `body`; nullopt when the
-/// range holds none (the text changed since the chip was drawn).
-std::optional<markdown::Token> dateTokenAt(const QString &body, qsizetype from, qsizetype to);
-
-/// Give the date token at [from, to) another date (and time, or none): only its value is
-/// rewritten — the emoji and everything around it stay byte for byte. No token there: unchanged.
-QString setTokenDate(const QString &body, qsizetype from, qsizetype to, const DateSpec &spec);
-
-/// Turn the reminder at [from, to) into an alarm (`⏰!`) or back into a plain reminder (`⏰`); a
-/// `(@…)` reminder is written as `⏰` / `⏰!`. No reminder there: unchanged.
-QString setReminderAlarm(const QString &body, qsizetype from, qsizetype to, bool alarm);
-
-/// `spec` moved by `days` and `minutes` (wall-clock time, never through UTC): a date without a time
-/// moves by whole days only, unless `minutes` is non-zero — then it gets `defaultTime` first.
-DateSpec shiftedSpec(const DateSpec &spec, int days, int minutes, QTime defaultTime);
-
-/// Range [from, to) of the first token of `kind` on the first line, or nullopt.
-std::optional<std::pair<qsizetype, qsizetype>> findFirstLineToken(const QString &body, markdown::TokenKind kind);
+// replaceTokenRange, setFirstLineToken, dateTokenAt, setTokenDate, setReminderAlarm, shiftedSpec
+// and findFirstLineToken live in markdown/tokenedit.h (the planning views and query results edit
+// tokens of other files too); the editor's code uses them from here.
+using markdown::dateTokenAt;
+using markdown::findFirstLineToken;
+using markdown::replaceTokenRange;
+using markdown::setFirstLineToken;
+using markdown::setReminderAlarm;
+using markdown::setTokenDate;
+using markdown::shiftedSpec;
 
 /// Insert `token` at `cursor` of `text` with spaces around it as needed; returns the new text and
 /// sets *newCursor to the position after the token (and its trailing space, if one was added).

@@ -37,6 +37,14 @@
 //                  toggleTask(content, line, today), removeTaskMarker(content, line) (no status),
 //                  ensureBlockId(content, line) -> {content, id},
 //                  generateBlockId(), listItemRange(content, line) -> {from, to}
+//   tokenedit.h    single-token edits of a block body (the token menus): dateTokenAt / tokenAt
+//                  (dates, reminders, 🔁 rules, priorities), setTokenDate, setReminderAlarm,
+//                  setRecurrenceAt / setBlockRecurrence, setPriorityAt / setBlockPriority,
+//                  journalLinkAt / setJournalLinkDate ([[2026-10-20]]), replaceTokenRange,
+//                  setFirstLineToken, applyTokenAction(body, from, to, action, a, b, context);
+//                  across copies of a block TokenRef {kind, value, ordinal} (tokenRefAt,
+//                  findTokenRef) and editBlockToken(content, line, ref, action, …) — only the
+//                  token's bytes of the file change
 //   rename.h       renameLinks(content, oldName, newName[, oldPath, newPath]),
 //                  renameTags(...[, naming]) (the tags naming the page: `#old`, `#[[old]]`,
 //                  `tags::` and frontmatter items; bracket form kept, sub-tags untouched; `naming`
@@ -100,4 +108,5 @@
 #include "markdown/rename.h"
 #include "markdown/tasks.h"
 #include "markdown/templates.h"
+#include "markdown/tokenedit.h"
 #include "markdown/tokens.h"
