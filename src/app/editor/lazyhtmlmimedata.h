@@ -2,7 +2,7 @@
 // the Markdown as text/plain, and a text/html flavour that is advertised at once but rendered
 // only when an application asks for it (a paste into a mail or office app reads it; a paste into
 // a code editor, a terminal or Brulion itself never does). A whole 5000-block page copies in
-// ~20 instead of ~55 ms on a desktop (docs/PERFORMANCE.md).
+// ~4 instead of ~40 ms of key handling on a desktop (docs/PERFORMANCE.md).
 //
 //   auto *mime = new LazyHtmlMimeData(markdown, [host, markdown, path] { return host->renderHtml(markdown, path); });
 //   QGuiApplication::clipboard()->setMimeData(mime);

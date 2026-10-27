@@ -15,6 +15,9 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 - **Zaznaczanie bloków z kilku dni dziennika** — w widoku **Dziennik** zaznaczysz bloki kilku dni naraz: Shift+kliknięciem w blok innego dnia, przeciągnięciem myszą, Shift+strzałkami za brzeg dnia albo na telefonie stuknięciem w blok innego dnia. Takie zaznaczenie kopiujesz (także jako tekst), a bloki każdego dnia trafiają do schowka po linku do tego dnia. Zobacz [[Dokument i konspekt#Zaznaczanie i kopiowanie|Zaznaczanie i kopiowanie]].
 - **Zmiana nazwy na serwerze dociera jako zmiana nazwy** — folder albo strona, którym zmieniono nazwę albo które przeniesiono na innym urządzeniu albo w Nextcloudzie w przeglądarce, dostają tu tę samą nową nazwę. Notatki nie są pobierane od nowa i nie trafiają do kosza, a ich historia wersji, ulubione i zwinięte bloki idą za nimi. Stronę, której nazwę zmienisz w Brulionie, synchronizacja przenosi na serwerze jednym poleceniem, tak jak folder — także gdy zaraz potem piszesz w niej dalej. Zobacz [[Synchronizacja#Foldery|Foldery]].
 
+**Zmiany**
+- **Szybsze kopiowanie bloków na komputerze** — sformatowana wersja kopii (dla poczty i edytorów dokumentów) powstaje dopiero wtedy, gdy wklejasz ją do takiego programu. Skopiowanie całej strony z 5000 bloków zajmuje teraz kilka milisekund zamiast około 40, a wklejenie do Brulionu, Obsidiana czy zwykłego pola tekstowego w ogóle jej nie tworzy.
+
 ## 0.4.5 — 26 października 2026
 
 **Nowe**

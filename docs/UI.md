@@ -749,8 +749,8 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   a paste into mail or an office app is formatted and one into Obsidian, a plain field or Brulion
   is Markdown. The text/html flavour is advertised at once but rendered only when an application
   asks for it (`LazyHtmlMimeData`: `retrieveData()`, once, kept; a paste into Brulion, a code
-  editor or a terminal never renders it; a whole 5000-block page copies in ~20 instead of ~55 ms,
-  docs/PERFORMANCE.md) — on desktops (xcb, Wayland, Windows) without a size limit of its own; the
+  editor or a terminal never renders it; Ctrl+C on a whole 5000-block page takes ~4 instead of
+  ~40 ms, docs/PERFORMANCE.md) — on desktops (xcb, Wayland, Windows) without a size limit of its own; the
   Markdown is a snapshot, `((id))` texts and links are resolved when the HTML is made, and when the
   app quits while the copy is still the clipboard's, it is made first (X11's clipboard manager and
   Windows' `OleFlushClipboard` read every flavour during shutdown). Android and the browser take
