@@ -32,7 +32,7 @@ delay="${DELAY:-1600}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
-all_shots=(editor page picture readonly new)
+all_shots=(editor page picture readonly new style more paper)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
 for f in "$bin" "$sample_test"; do
@@ -68,6 +68,9 @@ shot_args() {
     picture) printf '%s\n' --route '{"view":"page","path":"assets/Rysunek 2026-10-27 14.32.svg"}' ;;
     readonly) printf '%s\n' --route '{"view":"drawing","path":"assets/Schemat z Excalidraw.svg"}' ;;
     new) printf '%s\n' --route '{"view":"drawing","path":"assets/Pusty.svg"}' ;;
+    style) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"style"}' ;;
+    more) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"more"}' ;;
+    paper) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"paper"}' ;;
     *) return 1 ;;
   esac
 }
@@ -90,6 +93,9 @@ for shot in "${shots[@]}"; do
       *) echo "screenshots: unknown size $size" >&2; exit 2 ;;
     esac
     for theme in "${themes[@]}"; do
+      # The colours behind one swatch and "Więcej" exist on phones, the paper's button on wide windows.
+      [[ ( "$shot" == style || "$shot" == more ) && "$size" == desktop ]] && continue
+      [[ "$shot" == paper && "$size" != desktop ]] && continue
       file="$out/drawing-${shot}-${size}-${theme}${suffix}.png"
       home="$(mktemp -d)"
       copy="$home/Studia"

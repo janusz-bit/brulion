@@ -24,6 +24,8 @@ import Brulion
 //    with shapes or text ("readonly"), a picture without a scene, a scene that cannot be read; a
 //    missing file says so. Renames follow the file (the route applied one event-loop turn late, as
 //    in PageView); a deleted file is never written again.
+// route.open (screenshots): "style" (the colours and widths) and "more" on phones, "paper" (the
+// paper's menu) on wide windows.
 // View contract (ShellRouteView): `title` (the file's name), `editing` (no capture button over the
 // paper), `toolbarDocked` (phones: the tool bar at the bottom — the bottom navigation makes way),
 // `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
@@ -119,6 +121,18 @@ FocusScope {
             return
         root.save()
         root.load(root.routePath)
+        // route.open (screenshots): "style" | "more" (phones), "paper" (wide windows).
+        const open = root.route && root.route.open ? root.route.open : ""
+        if (open !== "" && root.status === "")
+            Qt.callLater(() => {
+                const bar = Theme.narrow ? bottomBar : topBar
+                if (open === "style")
+                    bar.openStyle()
+                else if (open === "more")
+                    bar.openMore()
+                else if (open === "paper")
+                    bar.openBackground()
+            })
     }
 
     function applyTool() {

@@ -312,6 +312,53 @@ private Q_SLOTS:
         QCOMPARE(canvas->strokeCount(), 1);
     }
 
+    void popupsOfQtQuickControls()
+    {
+        // Qt Quick Controls put popups into the window's overlay, which is visible over the whole
+        // window whenever a Drawer exists (the shell's, on phones) and takes every button: the pen
+        // still draws beside a closed drawer and a non-modal popup, never under a popup, nor while
+        // a modal one is open.
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData("import QtQuick\nimport QtQuick.Templates as T\nItem {\n"
+                          "  property alias drawer: drawer; property alias menu: menu; property alias dialog: dialog\n"
+                          "  T.Drawer { id: drawer; width: 120; height: 600; edge: Qt.LeftEdge }\n"
+                          "  T.Popup { id: menu; x: 0; y: 0; width: 300; height: 150; modal: false\n"
+                          "    background: Rectangle { color: \"#eee\" } }\n"
+                          "  T.Popup { id: dialog; x: 500; y: 400; width: 100; height: 100; modal: true\n"
+                          "    background: Rectangle { color: \"#ddd\" } }\n"
+                          "}",
+                          QUrl());
+        std::unique_ptr<QObject> root(component.create());
+        QVERIFY2(root, qPrintable(component.errorString()));
+        auto *item = qobject_cast<QQuickItem *>(root.get());
+        item->setParentItem(window->contentItem());
+        item->setSize(QSizeF(800, 600));
+        QCoreApplication::processEvents();
+        Pen pen(window.get());
+        // A closed drawer: the overlay is visible, the pen draws.
+        pen.stroke({200, 300}, {400, 320}, 10, 0.3, 0.6);
+        QCOMPARE(canvas->strokeCount(), 1);
+        // A non-modal popup: the pen is its over it, draws beside it.
+        QMetaObject::invokeMethod(root->property("menu").value<QObject *>(), "open");
+        QTRY_VERIFY(root->property("menu").value<QObject *>()->property("opened").toBool());
+        pen.stroke({100, 100}, {200, 120}, 10, 0.3, 0.6);
+        QCOMPARE(canvas->strokeCount(), 1);
+        pen.stroke({200, 400}, {400, 420}, 10, 0.3, 0.6);
+        QCOMPARE(canvas->strokeCount(), 2);
+        QMetaObject::invokeMethod(root->property("menu").value<QObject *>(), "close");
+        QTRY_VERIFY(!root->property("menu").value<QObject *>()->property("visible").toBool());
+        // A modal popup: nowhere.
+        QMetaObject::invokeMethod(root->property("dialog").value<QObject *>(), "open");
+        QTRY_VERIFY(root->property("dialog").value<QObject *>()->property("opened").toBool());
+        pen.stroke({200, 200}, {400, 220}, 10, 0.3, 0.6);
+        QCOMPARE(canvas->strokeCount(), 2);
+        QMetaObject::invokeMethod(root->property("dialog").value<QObject *>(), "close");
+        QTRY_VERIFY(!root->property("dialog").value<QObject *>()->property("visible").toBool());
+        pen.stroke({200, 200}, {400, 220}, 10, 0.3, 0.6);
+        QCOMPARE(canvas->strokeCount(), 3);
+    }
+
     void windowsMouseOfThePenIsIgnored()
     {
         // Windows makes mouse messages of the pen itself (no pressure): the tablet events drew it.

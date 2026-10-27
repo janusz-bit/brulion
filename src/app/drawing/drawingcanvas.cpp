@@ -734,6 +734,21 @@ QQuickItem *topInputItem(QQuickItem *item, QPointF scenePos)
 {
     if (!item->isVisible() || !item->isEnabled() || qFuzzyIsNull(item->opacity()))
         return nullptr;
+    if (item->inherits("QQuickOverlay")) {
+        // Qt Quick Controls' popup layer: visible over the whole window whenever a Drawer exists,
+        // and it takes every button. It lies over the canvas only where an open popup is — or
+        // everywhere while a modal one is open (the popup item's QObject parent is the popup).
+        const QList<QQuickItem *> popups = item->childItems();
+        for (auto it = popups.crbegin(); it != popups.crend(); ++it) {
+            QQuickItem *popup = *it;
+            if (!popup->isVisible())
+                continue;
+            if (popup->contains(popup->mapFromScene(scenePos))
+                || (popup->parent() && popup->parent()->property("modal").toBool()))
+                return popup;
+        }
+        return nullptr;
+    }
     const QPointF local = item->mapFromScene(scenePos);
     if (item->clip() && !item->contains(local))
         return nullptr;

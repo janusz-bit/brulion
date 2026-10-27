@@ -31,6 +31,12 @@ Rectangle {
 
     readonly property bool drawingTool: canvas.tool !== "eraser"
 
+    /// Open the colours and widths (compact), the "Więcej" menu (compact) or the paper's menu
+    /// (route.open, screenshots).
+    function openStyle() { stylePopup.open() }
+    function openMore() { moreMenu.popup(moreButton, 0, -moreMenu.implicitHeight) }
+    function openBackground() { backgroundMenu.popup(backgroundButton, 0, backgroundButton.height) }
+
     function backgroundIcon(name) {
         return name === "lines" ? "rows-3" : name === "grid" ? "grid-3x3" : "square"
     }
@@ -73,8 +79,8 @@ Rectangle {
                 width: Math.max(3, Math.min(Theme.controlHeight - 8, widthButton.value * 4.25 * 1.2))
                 height: width
                 radius: width / 2
-                color: bar.canvas.color
-                opacity: bar.canvas.tool === "highlighter" ? 0.6 : 1
+                // (Ink on a dark bar would vanish: the theme's text colour shows the thickness.)
+                color: Theme.fg
             }
         }
         BToolTip {
@@ -336,6 +342,10 @@ Rectangle {
         parent: bar
         x: Math.max(0, Math.min(bar.width - width, styleButton.mapToItem(bar, 0, 0).x - width / 2))
         y: bar.atBottom ? -height - Theme.space2 : bar.height + Theme.space2
+        implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
+                                contentWidth + leftPadding + rightPadding)
+        implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
+                                 contentHeight + topPadding + bottomPadding)
         padding: Theme.space3
         modal: true
         dim: false
