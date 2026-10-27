@@ -472,7 +472,7 @@ Item {
                 switch (type) {
                 case "tip": case "success": case "check": case "done": return Theme.success
                 case "warning": case "caution": case "attention": return Theme.warning
-                case "danger": case "error": case "bug": case "failure": return Theme.accent
+                case "danger": case "error": case "bug": case "failure": return Theme.marginRed // whatever the accent
                 case "todo": case "info": return Theme.info
                 case "quote": case "cite": return Theme.fgFaint
                 default: return Theme.info

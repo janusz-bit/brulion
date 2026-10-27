@@ -126,6 +126,10 @@
 * **Zapytania.** Blok ` ```query ` pokazuje na żywo np. wszystkie otwarte zadania z tagiem
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
+* **Twój wygląd.** Jasny, ciemny albo systemowy motyw; kolor akcentu (sześć gotowych albo
+  własny, zawsze czytelny), papierowe lub białe tło, granatowe lub czarne (OLED), dowolna
+  czcionka interfejsu, notatek i kodu, odstęp między wierszami, zwarta gęstość na komputerze,
+  wybór pozycji paska bocznego i przycisków dolnej nawigacji na telefonie (*Ustawienia → Wygląd*).
 * **Import i eksport.** Import z Obsidiana, Logseq, Notion, Evernote, Google Keep, Microsoft To Do
   (zadania: logowanie do Microsoft albo plik z Graph Explorera), Joplin, Simplenote, Roam,
   Trilium, Bear, plików Markdown/TXT, HTML i kalendarzy iCalendar — także na
@@ -437,6 +441,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   → For developers, or `brulion --remote-control`), agents can also drive the running desktop
   app — its state, clicks, typing, shortcuts, screenshots (`brulion-cli app …`,
   `brulion-cli mcp --app-control`).
+* Your look (Settings → Appearance): light, dark or system theme, an accent colour (six presets
+  or any colour, kept readable), paper or white and blue-grey or OLED-black backgrounds, any
+  installed font for the interface, notes and code, line spacing, a compact density on the
+  desktop, and which sidebar entries and phone navigation buttons are shown.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Something not working? Settings → Application → **Event log** shows what the app and the sync
   did (live sync progress and the history of runs are in the sync center); share or save it

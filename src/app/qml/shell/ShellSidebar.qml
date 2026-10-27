@@ -5,7 +5,7 @@ import QtQuick.Templates as T
 import Brulion
 
 // ShellSidebar — navigation (Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj),
-// favourites, recent pages, the vault's folder tree and the sync status footer. The same
+// favourites, recent pages (entries and these two sections can be hidden: AppSettings.sidebarHidden), the vault's folder tree and the sync status footer. The same
 // component is the left pane on wide windows and the drawer's content on narrow ones
 // (`navigated()` closes it).
 //
@@ -41,6 +41,9 @@ Rectangle {
     property bool favoritesOpen: flag(AppSettings.value("ui/sidebar/favorites", true))
     property bool recentOpen: flag(AppSettings.value("ui/sidebar/recent", true))
     property bool pagesOpen: flag(AppSettings.value("ui/sidebar/pages", true))
+    /// The sections Ulubione and Ostatnie, unless hidden (Ustawienia → Wygląd → Układ).
+    readonly property bool favoritesShown: AppSettings.sidebarHidden.indexOf("favorites") < 0
+    readonly property bool recentShown: AppSettings.sidebarHidden.indexOf("recent") < 0
     /// Show the open page in the tree on every route change.
     property bool revealCurrent: flag(AppSettings.value("ui/sidebar/revealCurrent", true))
     /// The file the current route shows — a page, or a daily note opened as a page: highlighted
@@ -379,6 +382,7 @@ Rectangle {
                     bottomPadding: Theme.space2
 
                     Repeater {
+                        // Without the entries hidden in Ustawienia → Wygląd → Układ.
                         model: [
                             { view: "journals", also: "journal", title: qsTr("Journals"), icon: "book-open" },
                             { view: "calendar", title: qsTr("Calendar"), icon: "calendar" },
@@ -387,9 +391,10 @@ Rectangle {
                             { view: "tags", also: "tag", title: qsTr("Tags"), icon: "tags" },
                             { view: "graph", title: qsTr("Graph"), icon: "waypoints" },
                             { view: "search", title: qsTr("Search"), icon: "search" }
-                        ]
+                        ].filter(e => AppSettings.sidebarHidden.indexOf(e.view) < 0)
                         delegate: BListItem {
                             required property var modelData
+                            objectName: "sidebarNav_" + modelData.view
                             width: parent.width
                             dense: true
                             text: modelData.title
@@ -418,6 +423,8 @@ Rectangle {
 
                 // ---- Favourites --------------------------------------------------------
                 BSectionHeader {
+                    objectName: "sidebarFavoritesHeader"
+                    visible: sidebar.favoritesShown
                     width: parent.width
                     text: qsTr("Favorites")
                     count: Workspace.favorites.length
@@ -429,7 +436,7 @@ Rectangle {
                     }
                 }
                 Column {
-                    visible: sidebar.favoritesOpen
+                    visible: sidebar.favoritesShown && sidebar.favoritesOpen
                     width: parent.width
                     bottomPadding: Theme.space2
 
@@ -466,7 +473,8 @@ Rectangle {
 
                 // ---- Recent ------------------------------------------------------------
                 BSectionHeader {
-                    visible: Workspace.recentPages.length > 0
+                    objectName: "sidebarRecentHeader"
+                    visible: sidebar.recentShown && Workspace.recentPages.length > 0
                     width: parent.width
                     text: qsTr("Recent")
                     collapsible: true
@@ -477,7 +485,7 @@ Rectangle {
                     }
                 }
                 Column {
-                    visible: sidebar.recentOpen && Workspace.recentPages.length > 0
+                    visible: sidebar.recentShown && sidebar.recentOpen && Workspace.recentPages.length > 0
                     width: parent.width
                     bottomPadding: Theme.space2
 

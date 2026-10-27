@@ -357,7 +357,9 @@ FocusScope {
         // on views of forms and tools (settings, sync, import/export, history, trash, the graph
         // with its zoom buttons): there it covered their buttons and fields, and capturing a note
         // is not what they are for.
-        visible: Theme.narrow && !routeView.viewEditing && !shell.typing
+        // Hidden by the user (Ustawienia → Wygląd → Układ): quick capture stays in the menu,
+        // the palette and its shortcut.
+        visible: AppSettings.captureButtonShown && Theme.narrow && !routeView.viewEditing && !shell.typing
                  && ["settings", "sync", "importExport", "history", "trash", "graph"].indexOf(shell.route.view) < 0
         anchors.right: parent.right
         anchors.bottom: parent.bottom

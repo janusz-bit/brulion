@@ -1,6 +1,6 @@
 // QML registration of the GUI-free helpers in brulion_ui_helpers (src/app/ui/CMakeLists.txt):
 // the classes themselves know nothing about QML; these wrappers make them singletons of the
-// app's QML module "Brulion" (DatesHelper, TextHelper, DiffHelper), so qmllint/qmlcachegen
+// app's QML module "Brulion" (DatesHelper, TextHelper, DiffHelper, ThemePalette), so qmllint/qmlcachegen
 // still see their full API (from the library's extracted metatypes); KeyboardInsets and
 // GestureInsets are the instances main() creates and feeds (keyboardsources.h). Also TouchFlick
 // (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`.
@@ -11,6 +11,7 @@
 #include "gestureinsets.h"
 #include "keyboardinsets.h"
 #include "texthelper.h"
+#include "themepalette.h"
 #include "touchflick.h"
 
 #include <QJSEngine>
@@ -46,6 +47,15 @@ struct DiffHelperForeign {
     QML_SINGLETON
 public:
     static DiffHelper *create(QQmlEngine *, QJSEngine *) { return new DiffHelper; }
+};
+
+struct ThemePaletteForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::ThemePalette)
+    QML_NAMED_ELEMENT(ThemePalette)
+    QML_SINGLETON
+public:
+    static ThemePalette *create(QQmlEngine *, QJSEngine *) { return new ThemePalette; }
 };
 
 struct KeyboardInsetsForeign {

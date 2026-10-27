@@ -2,7 +2,8 @@
 // app password kept outside QSettings in an owner-only file, and the Nextcloud switch and server
 // folder of each notebook: keyed by the notebook folder's id, the folder proposed for a notebook,
 // folders another notebook syncs with, switching sync off everywhere, and the settings of 0.3.0
-// and older going to the notebook they belong to.
+// and older going to the notebook they belong to; the appearance settings (accent, backgrounds,
+// font families, line spacing, density, sidebar entries, bottom navigation, capture button).
 #include "appsettings.h"
 #include "workspacesync.h"
 
@@ -11,6 +12,8 @@
 
 #include <QDir>
 #include <QFile>
+#include <QHash>
+#include <QMetaProperty>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -85,6 +88,19 @@ private Q_SLOTS:
         QCOMPARE(s.nextcloudFolder(), u"Brulion"_s);
         QCOMPARE(s.syncIntervalMinutes(), 15);
         QVERIFY(!s.hasNextcloudPassword());
+        // Appearance: today's look.
+        QCOMPARE(s.accentColor(), u"red"_s);
+        QCOMPARE(s.customAccent(), QString());
+        QCOMPARE(s.lightSurface(), u"paper"_s);
+        QCOMPARE(s.darkSurface(), u"slate"_s);
+        QCOMPARE(s.uiFontFamily(), QString());
+        QCOMPARE(s.editorFontFamily(), QString());
+        QCOMPARE(s.editorMonoFamily(), QString());
+        QCOMPARE(s.editorLineSpacing(), u"normal"_s);
+        QCOMPARE(s.density(), u"comfortable"_s);
+        QCOMPARE(s.sidebarHidden(), QStringList());
+        QCOMPARE(s.bottomNavTabs(), (QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s}));
+        QVERIFY(s.captureButtonShown());
     }
 
     void persistence()
@@ -112,6 +128,18 @@ private Q_SLOTS:
             s.setNextcloudFolder(u"/Notatki/Brulion/"_s);
             s.setSyncIntervalMinutes(30);
             s.setValue(u"views/tasks/showDone"_s, true);
+            s.setAccentColor(u"custom"_s);
+            s.setCustomAccent(u"#A1B2C3"_s);
+            s.setLightSurface(u"white"_s);
+            s.setDarkSurface(u"black"_s);
+            s.setUiFontFamily(u"Łódź Sans"_s);
+            s.setEditorFontFamily(u"Źródło Serif Pro"_s);
+            s.setEditorMonoFamily(u"  Zażółć Mono  "_s);
+            s.setEditorLineSpacing(u"relaxed"_s);
+            s.setDensity(u"compact"_s);
+            s.setSidebarHidden({u"graph"_s});
+            s.setBottomNavTabs({u"tags"_s, u"journals"_s, u"graph"_s, u"allPages"_s});
+            s.setCaptureButtonShown(false);
         }
         AppSettings s(file, m_tmp.path());
         QCOMPARE(s.themeMode(), u"dark"_s);
@@ -134,6 +162,170 @@ private Q_SLOTS:
         QCOMPARE(s.syncIntervalMinutes(), 30);
         QCOMPARE(s.value(u"views/tasks/showDone"_s).toBool(), true);
         QCOMPARE(s.value(u"views/missing"_s, 7).toInt(), 7);
+        QCOMPARE(s.accentColor(), u"custom"_s);
+        QCOMPARE(s.customAccent(), u"#a1b2c3"_s);
+        QCOMPARE(s.lightSurface(), u"white"_s);
+        QCOMPARE(s.darkSurface(), u"black"_s);
+        QCOMPARE(s.uiFontFamily(), u"Łódź Sans"_s);
+        QCOMPARE(s.editorFontFamily(), u"Źródło Serif Pro"_s);
+        QCOMPARE(s.editorMonoFamily(), u"Zażółć Mono"_s);
+        QCOMPARE(s.editorLineSpacing(), u"relaxed"_s);
+        QCOMPARE(s.density(), u"compact"_s);
+        QCOMPARE(s.sidebarHidden(), QStringList{u"graph"_s}); // one entry: a plain string in the file
+        QCOMPARE(s.bottomNavTabs(), (QStringList{u"tags"_s, u"journals"_s, u"graph"_s, u"allPages"_s}));
+        QVERIFY(!s.captureButtonShown());
+    }
+
+    void appearanceValidation_data()
+    {
+        QTest::addColumn<QString>("property");
+        QTest::addColumn<QVariant>("input");
+        QTest::addColumn<QVariant>("expected");
+        const auto list = [](std::initializer_list<const char16_t *> items) {
+            QStringList out;
+            for (const char16_t *i : items)
+                out.append(QString::fromUtf16(i));
+            return QVariant(out);
+        };
+        QTest::newRow("accent preset") << "accentColor" << QVariant(u"blue"_s) << QVariant(u"blue"_s);
+        QTest::newRow("accent custom") << "accentColor" << QVariant(u"custom"_s) << QVariant(u"custom"_s);
+        QTest::newRow("accent empty") << "accentColor" << QVariant(u""_s) << QVariant(u"red"_s);
+        QTest::newRow("accent Polish") << "accentColor" << QVariant(u"Czerwony"_s) << QVariant(u"red"_s);
+        QTest::newRow("accent spaces") << "accentColor" << QVariant(u"BLUE "_s) << QVariant(u"red"_s);
+        QTest::newRow("accent colour") << "accentColor" << QVariant(u"#12345"_s) << QVariant(u"red"_s);
+        QTest::newRow("custom upper") << "customAccent" << QVariant(u"#A1B2C3"_s) << QVariant(u"#a1b2c3"_s);
+        QTest::newRow("custom spaces") << "customAccent" << QVariant(u" #00ff7f "_s) << QVariant(u"#00ff7f"_s);
+        QTest::newRow("custom name") << "customAccent" << QVariant(u"zielony"_s) << QVariant(QString());
+        QTest::newRow("custom digits") << "customAccent" << QVariant(u"#ggg000"_s) << QVariant(QString());
+        QTest::newRow("custom short") << "customAccent" << QVariant(u"#abc"_s) << QVariant(QString());
+        QTest::newRow("custom diacritics") << "customAccent" << QVariant(u"#ąęćźżó"_s) << QVariant(QString());
+        QTest::newRow("light white") << "lightSurface" << QVariant(u"white"_s) << QVariant(u"white"_s);
+        QTest::newRow("light black") << "lightSurface" << QVariant(u"black"_s) << QVariant(u"paper"_s);
+        QTest::newRow("dark black") << "darkSurface" << QVariant(u"black"_s) << QVariant(u"black"_s);
+        QTest::newRow("dark white") << "darkSurface" << QVariant(u"white"_s) << QVariant(u"slate"_s);
+        QTest::newRow("dark Polish") << "darkSurface" << QVariant(u"czarne"_s) << QVariant(u"slate"_s);
+        QTest::newRow("font trimmed") << "uiFontFamily" << QVariant(u"  DejaVu Serif  "_s) << QVariant(u"DejaVu Serif"_s);
+        QTest::newRow("font diacritics") << "editorFontFamily" << QVariant(u"Źródło Serif Pro"_s)
+                                         << QVariant(u"Źródło Serif Pro"_s);
+        QTest::newRow("font too long") << "editorFontFamily" << QVariant(QString(300, u'ż')) << QVariant(QString());
+        QTest::newRow("font 128") << "editorMonoFamily" << QVariant(QString(128, u'ł')) << QVariant(QString(128, u'ł'));
+        QTest::newRow("font newline") << "editorMonoFamily" << QVariant(u"A\nB"_s) << QVariant(QString());
+        QTest::newRow("font tab") << "uiFontFamily" << QVariant(u"A\tB"_s) << QVariant(QString());
+        QTest::newRow("font line separator") << "uiFontFamily" << QVariant(u"A\u2028B"_s) << QVariant(QString());
+        QTest::newRow("spacing compact") << "editorLineSpacing" << QVariant(u"compact"_s) << QVariant(u"compact"_s);
+        QTest::newRow("spacing unknown") << "editorLineSpacing" << QVariant(u"ciasny"_s) << QVariant(u"normal"_s);
+        QTest::newRow("density compact") << "density" << QVariant(u"compact"_s) << QVariant(u"compact"_s);
+        QTest::newRow("density unknown") << "density" << QVariant(u"zwarta"_s) << QVariant(u"comfortable"_s);
+        QTest::newRow("sidebar dedupe") << "sidebarHidden" << list({u"graph", u"graph", u"śmieci", u"tags"})
+                                        << list({u"graph", u"tags"});
+        QTest::newRow("sidebar sections") << "sidebarHidden" << list({u"recent", u"favorites", u"pages"})
+                                          << list({u"recent", u"favorites"});
+        QTest::newRow("sidebar empty") << "sidebarHidden" << list({}) << list({});
+        QTest::newRow("tabs empty") << "bottomNavTabs" << list({})
+                                    << list({u"journals", u"calendar", u"search", u"tasks"});
+        QTest::newRow("tabs filled") << "bottomNavTabs" << list({u"tags", u"tags", u"menu"})
+                                     << list({u"tags", u"journals", u"calendar", u"search"});
+        QTest::newRow("tabs five") << "bottomNavTabs" << list({u"graph", u"tags", u"allPages", u"tasks", u"search"})
+                                   << list({u"graph", u"tags", u"allPages", u"tasks"});
+        QTest::newRow("tabs unknown") << "bottomNavTabs" << list({u"zadania", u"settings", u"graph"})
+                                      << list({u"graph", u"journals", u"calendar", u"search"});
+    }
+
+    void appearanceValidation()
+    {
+        QFETCH(QString, property);
+        QFETCH(QVariant, input);
+        QFETCH(QVariant, expected);
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QVERIFY(s.setProperty(qPrintable(property), input));
+            QCOMPARE(s.property(qPrintable(property)), expected);
+        }
+        // Written by hand (another version, a damaged file): read with the same rules.
+        {
+            QSettings raw(file, QSettings::IniFormat);
+            const QMetaProperty meta = AppSettings::staticMetaObject.property(
+                    AppSettings::staticMetaObject.indexOfProperty(qPrintable(property)));
+            QVERIFY(meta.isValid());
+            const QHash<QString, QString> keys{{u"accentColor"_s, u"ui/accent"_s},
+                                               {u"customAccent"_s, u"ui/customAccent"_s},
+                                               {u"lightSurface"_s, u"ui/lightSurface"_s},
+                                               {u"darkSurface"_s, u"ui/darkSurface"_s},
+                                               {u"uiFontFamily"_s, u"ui/fontFamily"_s},
+                                               {u"editorFontFamily"_s, u"editor/fontFamily"_s},
+                                               {u"editorMonoFamily"_s, u"editor/monoFamily"_s},
+                                               {u"editorLineSpacing"_s, u"editor/lineSpacing"_s},
+                                               {u"density"_s, u"ui/density"_s},
+                                               {u"sidebarHidden"_s, u"ui/sidebar/hidden"_s},
+                                               {u"bottomNavTabs"_s, u"ui/bottomNav/tabs"_s}};
+            QVERIFY(keys.contains(property));
+            raw.setValue(keys.value(property), input);
+        }
+        AppSettings s(file, m_tmp.path());
+        QCOMPARE(s.property(qPrintable(property)), expected);
+    }
+
+    void appearanceEdits()
+    {
+        AppSettings s(nextFile(), m_tmp.path());
+        QSignalSpy hidden(&s, &AppSettings::sidebarHiddenChanged);
+        s.setSidebarItemShown(u"graph"_s, false);
+        s.setSidebarItemShown(u"graph"_s, false);
+        s.setSidebarItemShown(u"recent"_s, false);
+        s.setSidebarItemShown(u"kosz"_s, false);
+        QCOMPARE(s.sidebarHidden(), (QStringList{u"graph"_s, u"recent"_s}));
+        s.setSidebarItemShown(u"graph"_s, true);
+        QCOMPARE(s.sidebarHidden(), QStringList{u"recent"_s});
+        QCOMPARE(hidden.size(), 3);
+
+        // A slot takes a view; one already in another slot swaps places.
+        QSignalSpy tabs(&s, &AppSettings::bottomNavTabsChanged);
+        s.setBottomNavTab(3, u"graph"_s);
+        QCOMPARE(s.bottomNavTabs(), (QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"graph"_s}));
+        s.setBottomNavTab(0, u"graph"_s);
+        QCOMPARE(s.bottomNavTabs(), (QStringList{u"graph"_s, u"calendar"_s, u"search"_s, u"journals"_s}));
+        s.setBottomNavTab(4, u"tags"_s);  // no such slot
+        s.setBottomNavTab(-1, u"tags"_s);
+        s.setBottomNavTab(1, u"menu"_s);  // the menu is always last, not a slot's view
+        s.setBottomNavTab(1, u"kalendarz"_s);
+        s.setBottomNavTab(2, u"search"_s); // there already
+        QCOMPARE(s.bottomNavTabs(), (QStringList{u"graph"_s, u"calendar"_s, u"search"_s, u"journals"_s}));
+        QCOMPARE(tabs.size(), 2);
+
+        // Back to the default look; the visibility of elements stays.
+        s.setAccentColor(u"violet"_s);
+        s.setCustomAccent(u"#123456"_s);
+        s.setDarkSurface(u"black"_s);
+        s.setLightSurface(u"white"_s);
+        s.setUiFontFamily(u"Łato"_s);
+        s.setEditorFontFamily(u"Łato"_s);
+        s.setEditorMonoFamily(u"Łato Mono"_s);
+        s.setEditorLineSpacing(u"compact"_s);
+        s.setDensity(u"compact"_s);
+        s.setFontScale(1.3);
+        s.setEditorFont(u"sans"_s);
+        s.setEditorFontSize(20);
+        s.setCaptureButtonShown(false);
+        QSignalSpy accent(&s, &AppSettings::accentChanged);
+        QSignalSpy fonts(&s, &AppSettings::fontFamiliesChanged);
+        s.resetAppearance();
+        QCOMPARE(s.accentColor(), u"red"_s);
+        QCOMPARE(s.customAccent(), u"#123456"_s); // kept for "Własny…"
+        QCOMPARE(s.lightSurface(), u"paper"_s);
+        QCOMPARE(s.darkSurface(), u"slate"_s);
+        QCOMPARE(s.uiFontFamily(), QString());
+        QCOMPARE(s.editorFontFamily(), QString());
+        QCOMPARE(s.editorMonoFamily(), QString());
+        QCOMPARE(s.editorLineSpacing(), u"normal"_s);
+        QCOMPARE(s.density(), u"comfortable"_s);
+        QCOMPARE(s.fontScale(), 1.0);
+        QCOMPARE(s.editorFont(), u"serif"_s);
+        QCOMPARE(s.editorFontSize(), 16);
+        QVERIFY(!s.captureButtonShown());
+        QCOMPARE(s.sidebarHidden(), QStringList{u"recent"_s});
+        QCOMPARE(accent.size(), 1);
+        QCOMPARE(fonts.size(), 3);
     }
 
     void nextcloudBelongsToNotebook()
@@ -593,6 +785,18 @@ private Q_SLOTS:
         s.setNextcloudUrl(u"https://a.example"_s);
         s.setNextcloudUrl(u"https://a.example/"_s); // same after normalisation
         QCOMPARE(nc.size(), 1);
+        QSignalSpy accent(&s, &AppSettings::accentChanged);
+        s.setAccentColor(u"red"_s); // the default
+        s.setAccentColor(u"Purpurowy"_s); // invalid: the default again
+        s.setCustomAccent(u"nie kolor"_s);
+        QCOMPARE(accent.size(), 0);
+        s.setCustomAccent(u"#ABCDEF"_s);
+        s.setCustomAccent(u"#abcdef"_s); // same after normalisation
+        QCOMPARE(accent.size(), 1);
+        QSignalSpy tabs(&s, &AppSettings::bottomNavTabsChanged);
+        s.setBottomNavTabs({u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s, u"graph"_s});
+        s.setBottomNavTabs({});
+        QCOMPARE(tabs.size(), 0);
         QSignalSpy value(&s, &AppSettings::valueChanged);
         s.setValue(u"x/y"_s, 1);
         s.setValue(u"x/y"_s, 1);

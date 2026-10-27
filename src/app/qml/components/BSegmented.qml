@@ -17,6 +17,9 @@ import Brulion
 // Bind currentValue to your state and update the state in onActivated (the binding is kept).
 // `fill: true` stretches segments to the control's width (equal widths).
 // `iconOnly: true` shows icons with the text as accessible name/tooltip.
+// `controlled: true`: the selection only ever follows currentValue's binding — for a segment
+// that may start an action instead of changing the state ("Other…" opening a picker that can
+// be cancelled), so the selection never shows a value the state does not have.
 T.Control {
     id: control
 
@@ -24,6 +27,7 @@ T.Control {
     property var currentValue
     property bool fill: false
     property bool iconOnly: false
+    property bool controlled: false
     property string size: "normal"   // "small" | "normal"
     property string accessibleName
 
@@ -65,7 +69,7 @@ T.Control {
         // binding, and later changes of the source (another conflict choice, a reopened
         // dialog) would no longer show. Uncontrolled use: keep the selection ourselves.
         activated(value)
-        if (currentValue !== value)
+        if (!controlled && currentValue !== value)
             currentValue = value
     }
 

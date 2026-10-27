@@ -571,7 +571,10 @@ void Journey::settings()
     if (!waitFor([this] { return m_app->settings()->language() == u"en"; }))
         fail(u"switching to English"_s);
     shot(u"settings-english"_s, 900);
-    // Now in English: the theme the run did not start with.
+    // Now in English: the theme the run did not start with, in the Appearance section (wide
+    // windows list the sections on the left; narrow ones show them all, one under another).
+    if (!narrow() && !clickText(u"Appearance"_s, "SettingsView"))
+        fail(u"the Appearance section"_s);
     if (!clickText(dark ? u"Light"_s : u"Dark"_s, "SettingsView"))
         fail(u"the theme switch"_s);
     shot(u"settings-theme"_s, 900);

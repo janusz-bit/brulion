@@ -252,7 +252,10 @@ Jak to działa:
   aplikacji odsuwają się od pasków systemu o marginesy `SafeArea`, a ikony pasków systemu
   dopasowują się do koloru okna, czyli do motywu aplikacji (ciemne na jasnym, jasne na ciemnym;
   `BrulionAndroid.setSystemBarsLight`, ponownie po zmianie konfiguracji, bo Qt ustawia je wtedy
-  według trybu dzień/noc systemu). Android 9–10 zostaje przy oknie wewnątrz pasków.
+  według trybu dzień/noc systemu). Tak samo przy tłach z Ustawienia → Wygląd (czarne OLED, białe):
+  liczy się jasność koloru okna. Zanim QML narysuje pierwszą klatkę, przez chwilę widać
+  domyślne tło startowe Qt, nie wybrane tło (krótki błysk przy czarnym). Android 9–10 zostaje
+  przy oknie wewnątrz pasków.
 * `ImeInsets.kt` (instalowany w `onCreate`) dokłada do okna niewidoczny widok 0×0 i z niego
   obserwuje wstawki klawiatury (`WindowInsets` typu `ime()`), nie ruszając słuchaczy Qt (`SafeArea`)
   i niczego nie konsumując: `OnApplyWindowInsetsListener` daje wartość końcową,

@@ -17,6 +17,7 @@
 
 #include <QBuffer>
 #include <QClipboard>
+#include <QColor>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFile>
@@ -2909,6 +2910,197 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     app->goHome();
 }
 
+/// 5h. Ustawienia → Wygląd (docs/UI.md "Look & feel"): the default look keeps the logo's colours;
+///     a tap on an accent swatch recolours Theme at once and is saved, a custom colour from the
+///     accent dialog too; an entry unticked under "Pasek boczny" leaves the sidebar (the drawer on
+///     phones) and stays in the command palette; a bottom navigation slot takes another view from
+///     its menu (phones: the bar shows it), and the view it already has stays checked there; the
+///     quick note button's switch hides it; "Przywróć domyślny wygląd" brings the logo's colours
+///     back. Edytor → Czcionka → "Inna…" opens the font picker; cancelled, the selection does not
+///     move; a missing family names the serif or sans-serif font used instead. The settings are
+///     put back at the end.
+void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const bool narrow = window->width() < 900;
+    AppSettings *settings = app->settings();
+    auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
+    if (!theme) {
+        check(false, "the Theme singleton exists");
+        return;
+    }
+    const auto color = [theme](const char *name) { return theme->property(name).value<QColor>().name(); };
+    const bool dark = theme->property("dark").toBool();
+    check(color("accent") == u"#e2574c" && color("accentText") == (dark ? u"#ef7a6f"_s : u"#ad3e2c"_s)
+                  && color("bg") == (dark ? u"#1c2130"_s : u"#fbf7ee"_s),
+          "the default look keeps the logo's colours (margin red, paper / slate)");
+    // Visible, maybe scrolled out of the view (activate() scrolls it in).
+    const auto shownItem = [window](const QString &name) {
+        QQuickItem *found = nullptr;
+        waitFor([&] {
+            found = shownNamed(window->contentItem(), name);
+            return found && shown(found);
+        });
+        return found && shown(found) ? found : nullptr;
+    };
+    const auto activate = [&](QQuickItem *item) {
+        if (!item)
+            return false;
+        uidriver::scrollIntoView(window, item);
+        settle(100);
+        tapOrClick(window, pointIn(item), touch);
+        return true;
+    };
+
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
+    check(activate(shownItem(u"accentSwatch_green"_s)), "the appearance settings show the accent swatches");
+    check(waitFor([&] { return settings->accentColor() == u"green" && color("accent") != u"#e2574c"; }),
+          "a tap on a swatch changes the accent at once and saves it");
+
+    // A custom colour: the dialog's field, then "Użyj tego koloru".
+    check(activate(shownItem(u"accentSwatch_custom"_s)), "the custom colour swatch exists");
+    QQuickItem *field = shownItem(u"accentDialogField"_s);
+    if (!field) {
+        check(false, "the custom colour opens the accent dialog");
+    } else {
+        field->setProperty("text", u"#1A6B8F"_s);
+        QMetaObject::invokeMethod(field, "textEdited");
+        QObject *accentDialog = window->findChild<QObject *>(u"accentDialog"_s);
+        if (accentDialog)
+            QMetaObject::invokeMethod(accentDialog, "tryAccept");
+        check(accentDialog
+                      && waitFor([&] {
+                             return settings->accentColor() == u"custom" && settings->customAccent() == u"#1a6b8f"
+                                    && theme->property("customAccent").toString() == u"#1a6b8f";
+                         }),
+              "a colour typed in the accent dialog becomes the accent");
+        // Its closing transition: the modal scrim takes taps until it is gone.
+        if (accentDialog)
+            waitFor([accentDialog] { return !accentDialog->property("visible").toBool(); });
+        settle(100);
+    }
+
+    // Sidebar entries: "Graf" unticked.
+    check(activate(shownItem(u"sidebarItem_graph"_s)), "the sidebar's entries can be ticked off");
+    const bool hidden = waitFor([&] { return settings->sidebarHidden() == QStringList{u"graph"_s}; });
+    if (!hidden)
+        std::fprintf(stderr, "selftest: hidden in the sidebar: %s\n", qPrintable(settings->sidebarHidden().join(u", ")));
+    check(hidden, "unticking an entry hides it (saved)");
+    QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
+    if (narrow && drawer)
+        QMetaObject::invokeMethod(drawer, "open");
+    check(shownItem(u"sidebarNav_calendar"_s) != nullptr
+                  && !findShown(window->contentItem(),
+                                [](QQuickItem *i) { return i->objectName() == u"sidebarNav_graph"; }),
+          "the hidden entry is gone from the sidebar, the others stay");
+    if (narrow && drawer) {
+        QMetaObject::invokeMethod(drawer, "close");
+        waitFor([drawer] { return !drawer->property("visible").toBool(); });
+    }
+    {
+        CommandModel commands(app);
+        const QVariantList all = commands.commands();
+        check(std::any_of(all.cbegin(), all.cend(),
+                          [](const QVariant &c) { return c.toMap().value(u"id"_s).toString() == u"go.graph"; }),
+              "a view hidden in the sidebar stays in the command palette");
+    }
+
+    // The bottom navigation's last slot: Graf instead of Zadania.
+    check(activate(shownItem(u"bottomNavSlot_3"_s)), "the bottom navigation's slots are listed");
+    check(activate(shownItem(u"bottomNavChoice_graph"_s)), "a slot's menu lists the views");
+    check(waitFor([&] {
+              return settings->bottomNavTabs()
+                     == QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"graph"_s};
+          }),
+          "a view picked in a slot's menu takes the slot");
+    if (narrow)
+        check(shownItem(u"bottomNav_graph"_s) != nullptr
+                      && !findShown(window->contentItem(),
+                                    [](QQuickItem *i) { return i->objectName() == u"bottomNav_tasks"; }),
+              "the phone's bottom bar shows the view picked");
+    // The view already in the slot, picked again: its menu still shows it checked.
+    closeMenus(window);
+    activate(shownItem(u"bottomNavSlot_3"_s));
+    activate(shownItem(u"bottomNavChoice_graph"_s));
+    closeMenus(window);
+    activate(shownItem(u"bottomNavSlot_3"_s));
+    {
+        QQuickItem *again = shownItem(u"bottomNavChoice_graph"_s);
+        check(again && again->property("checked").toBool(),
+              "picking the slot's own view again keeps it checked in the menu");
+    }
+    closeMenus(window);
+
+    // The quick note button.
+    check(activate(shownItem(u"captureButtonSetting"_s)) && waitFor([&] { return !settings->captureButtonShown(); }),
+          "the quick note button can be switched off");
+    if (narrow) {
+        app->navigate({{u"view"_s, u"journals"_s}});
+        auto *capture = window->findChild<QQuickItem *>(u"shellCaptureButton"_s);
+        check(capture && waitFor([&] { return app->currentView() == u"journals"; }) && !capture->isVisible(),
+              "switched off, the quick note button is not shown");
+        settings->setCaptureButtonShown(true);
+        check(capture && waitFor([&] { return capture->isVisible(); }), "switched on again, it is back");
+        app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
+    }
+
+    // Back to the default look (the visibility of elements stays).
+    check(activate(shownItem(u"resetAppearance"_s))
+                  && waitFor([&] { return settings->accentColor() == u"red" && color("accent") == u"#e2574c"; }),
+          "\"Restore the default look\" brings the logo's colours back");
+
+    // Settings → Editor → Font → "Other…" opens the picker; cancelled, the selection stays on the
+    // serif / sans-serif choice, and "Other…" opens the picker again. A missing family names the
+    // font used instead.
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"editor"_s}});
+    if (QQuickItem *fontSetting = shownItem(u"editorFontSetting"_s)) {
+        uidriver::scrollIntoView(window, fontSetting);
+        // The picker of the settings view shown (a window can hold more than one settings view).
+        const auto openPicker = [window]() -> QObject * {
+            const QList<QObject *> popups = uidriver::openPopups(window);
+            const auto it = std::find_if(popups.cbegin(), popups.cend(),
+                                         [](QObject *p) { return p->objectName() == u"fontPickerDialog"; });
+            return it != popups.cend() ? *it : nullptr;
+        };
+        QObject *fontPicker = nullptr;
+        bool stays = true;
+        for (int round = 0; round < 2 && stays; ++round) {
+            QMetaObject::invokeMethod(fontSetting, "select", Q_ARG(QVariant, 2));
+            stays = waitFor([&] {
+                fontPicker = openPicker();
+                return fontPicker && fontPicker->property("opened").toBool();
+            });
+            if (fontPicker) {
+                QMetaObject::invokeMethod(fontPicker, "close");
+                stays = waitFor([&] { return !openPicker(); }) && stays;
+            }
+            stays = stays && fontSetting->property("currentValue").toString() == settings->editorFont();
+        }
+        check(stays, "\"Other…\" opens the font picker; cancelled, the font selection does not move");
+        QQuickItem *fontRow = shownItem(u"editorFontRow"_s);
+        settings->setEditorFont(u"serif"_s);
+        settings->setEditorFontFamily(u"Łódź Nieobecna Ś"_s);
+        const QString serifNote = fontRow ? fontRow->property("description").toString() : QString();
+        settings->setEditorFont(u"sans"_s);
+        const QString sansNote = fontRow ? fontRow->property("description").toString() : QString();
+        check(fontRow && serifNote.contains(u"Łódź Nieobecna Ś"_s) && sansNote.contains(u"Łódź Nieobecna Ś"_s)
+                      && serifNote != sansNote && fontSetting->property("currentValue").toString() == u"other",
+              "a missing editor font names the serif or sans-serif font used instead");
+        settings->setEditorFontFamily(QString());
+        settings->setEditorFont(u"serif"_s);
+        check(fontSetting->property("currentValue").toString() == u"serif", "the font selection follows the settings");
+    } else {
+        check(false, "the editor settings show the font choice");
+    }
+
+    settings->setSidebarHidden({});
+    settings->setBottomNavTabs({});
+    settings->setCaptureButtonShown(true);
+    settings->setCustomAccent(QString());
+    closeMenus(window);
+    app->goHome();
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -3396,6 +3588,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
 
     // 5d. The notebook switcher: to the documentation and back with one tap / click each.
     checkNotebookSwitcher(window, app, check);
+    closeMenus(window);
+
+    // 5h. Ustawienia → Wygląd: accent, sidebar entries, bottom navigation, quick note button.
+    checkAppearance(engine, window, app, check);
 
     // 6. Closing the notebook from the UI (as a click would: from inside an event).
     QTimer::singleShot(0, app, [app] { app->closeVault(); });

@@ -28,7 +28,19 @@ constexpr auto kTheme = "ui/themeMode";
 constexpr auto kLanguage = "ui/language";
 constexpr auto kFontScale = "ui/fontScale";
 constexpr auto kReducedMotion = "ui/reducedMotion";
+constexpr auto kAccent = "ui/accent";
+constexpr auto kCustomAccent = "ui/customAccent";
+constexpr auto kLightSurface = "ui/lightSurface";
+constexpr auto kDarkSurface = "ui/darkSurface";
+constexpr auto kUiFontFamily = "ui/fontFamily";
+constexpr auto kDensity = "ui/density";
+constexpr auto kSidebarHidden = "ui/sidebar/hidden";
+constexpr auto kBottomNavTabs = "ui/bottomNav/tabs";
+constexpr auto kCaptureButton = "ui/captureButton";
 constexpr auto kEditorFont = "editor/font";
+constexpr auto kEditorFontFamily = "editor/fontFamily";
+constexpr auto kEditorMonoFamily = "editor/monoFamily";
+constexpr auto kEditorLineSpacing = "editor/lineSpacing";
 constexpr auto kEditorFontSize = "editor/fontSize";
 constexpr auto kEditorWidth = "editor/maxWidth";
 constexpr auto kEditorSource = "editor/sourceMode";
@@ -130,6 +142,72 @@ QString cleanPath(const QString &path)
     return QDir::cleanPath(QDir::fromNativeSeparators(path.trimmed()));
 }
 
+/// `value` when it is one of `allowed`, else the first of them (the default).
+QString oneOf(const QString &value, std::initializer_list<const char16_t *> allowed)
+{
+    for (const char16_t *a : allowed) {
+        if (value == QStringView(a))
+            return value;
+    }
+    return QString::fromUtf16(*allowed.begin());
+}
+
+QString accentName(const QString &v)
+{
+    return oneOf(v, {u"red", u"blue", u"green", u"teal", u"violet", u"graphite", u"custom"});
+}
+
+/// "#rrggbb" in lower case, else "".
+QString cleanColor(const QString &color)
+{
+    const QString v = color.trimmed().toLower();
+    if (v.size() != 7 || v.front() != u'#')
+        return {};
+    for (qsizetype i = 1; i < v.size(); ++i) {
+        const QChar c = v.at(i);
+        if (!((c >= u'0' && c <= u'9') || (c >= u'a' && c <= u'f')))
+            return {};
+    }
+    return v;
+}
+
+/// The known ids of `ids` in their order, each once.
+QStringList knownIds(const QStringList &ids, const QStringList &known)
+{
+    QStringList out;
+    for (const QString &id : ids) {
+        if (known.contains(id) && !out.contains(id))
+            out.append(id);
+    }
+    return out;
+}
+
+/// Four views for the bottom navigation: the known ones first, the rest from the default order.
+QStringList normalizedTabs(const QStringList &views)
+{
+    QStringList out = knownIds(views, AppSettings::bottomNavViews()).mid(0, 4);
+    // The default four first, then the other views.
+    for (const QString &d : AppSettings::defaultBottomNavTabs()) {
+        if (out.size() < 4 && !out.contains(d))
+            out.append(d);
+    }
+    for (const QString &d : AppSettings::bottomNavViews()) {
+        if (out.size() < 4 && !out.contains(d))
+            out.append(d);
+    }
+    return out;
+}
+
+/// A list stored in the INI file (one entry comes back as a plain string).
+QStringList storedList(const QVariant &v)
+{
+    if (v.typeId() == QMetaType::QString) {
+        const QString text = v.toString();
+        return text.isEmpty() ? QStringList() : QStringList{text};
+    }
+    return v.toStringList();
+}
+
 } // namespace
 
 AppSettings::AppSettings(const QString &settingsFile, const QString &dataDir, QObject *parent)
@@ -212,6 +290,172 @@ void AppSettings::setReducedMotion(bool on)
         Q_EMIT reducedMotionChanged();
 }
 
+// ---- Appearance -----------------------------------------------------------------------------
+
+QStringList AppSettings::sidebarItems()
+{
+    return {u"journals"_s, u"calendar"_s, u"tasks"_s, u"allPages"_s, u"tags"_s,
+            u"graph"_s,    u"search"_s,   u"favorites"_s, u"recent"_s};
+}
+
+QStringList AppSettings::bottomNavViews()
+{
+    return {u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s, u"allPages"_s, u"tags"_s, u"graph"_s};
+}
+
+QStringList AppSettings::defaultBottomNavTabs()
+{
+    return {u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s};
+}
+
+QString AppSettings::cleanFontFamily(const QString &family)
+{
+    const QString v = family.trimmed();
+    if (v.size() > 128)
+        return {};
+    for (const QChar c : v) {
+        const QChar::Category cat = c.category();
+        if (cat == QChar::Other_Control || cat == QChar::Separator_Line || cat == QChar::Separator_Paragraph)
+            return {};
+    }
+    return v;
+}
+
+QString AppSettings::accentColor() const
+{
+    return accentName(m_settings->value(key(kAccent)).toString());
+}
+
+void AppSettings::setAccentColor(const QString &name)
+{
+    if (store(key(kAccent), accentName(name), accentColor()))
+        Q_EMIT accentChanged();
+}
+
+QString AppSettings::customAccent() const
+{
+    return cleanColor(m_settings->value(key(kCustomAccent)).toString());
+}
+
+void AppSettings::setCustomAccent(const QString &color)
+{
+    if (store(key(kCustomAccent), cleanColor(color), customAccent()))
+        Q_EMIT accentChanged();
+}
+
+QString AppSettings::lightSurface() const
+{
+    return oneOf(m_settings->value(key(kLightSurface)).toString(), {u"paper", u"white"});
+}
+
+void AppSettings::setLightSurface(const QString &name)
+{
+    if (store(key(kLightSurface), oneOf(name, {u"paper", u"white"}), lightSurface()))
+        Q_EMIT surfacesChanged();
+}
+
+QString AppSettings::darkSurface() const
+{
+    return oneOf(m_settings->value(key(kDarkSurface)).toString(), {u"slate", u"black"});
+}
+
+void AppSettings::setDarkSurface(const QString &name)
+{
+    if (store(key(kDarkSurface), oneOf(name, {u"slate", u"black"}), darkSurface()))
+        Q_EMIT surfacesChanged();
+}
+
+QString AppSettings::uiFontFamily() const
+{
+    return cleanFontFamily(m_settings->value(key(kUiFontFamily)).toString());
+}
+
+void AppSettings::setUiFontFamily(const QString &family)
+{
+    if (store(key(kUiFontFamily), cleanFontFamily(family), uiFontFamily()))
+        Q_EMIT fontFamiliesChanged();
+}
+
+QString AppSettings::density() const
+{
+    return oneOf(m_settings->value(key(kDensity)).toString(), {u"comfortable", u"compact"});
+}
+
+void AppSettings::setDensity(const QString &density)
+{
+    if (store(key(kDensity), oneOf(density, {u"comfortable", u"compact"}), this->density()))
+        Q_EMIT densityChanged();
+}
+
+QStringList AppSettings::sidebarHidden() const
+{
+    return knownIds(storedList(m_settings->value(key(kSidebarHidden))), sidebarItems());
+}
+
+void AppSettings::setSidebarHidden(const QStringList &ids)
+{
+    if (store(key(kSidebarHidden), knownIds(ids, sidebarItems()), sidebarHidden()))
+        Q_EMIT sidebarHiddenChanged();
+}
+
+void AppSettings::setSidebarItemShown(const QString &id, bool shown)
+{
+    QStringList hidden = sidebarHidden();
+    hidden.removeAll(id);
+    if (!shown)
+        hidden.append(id);
+    setSidebarHidden(hidden);
+}
+
+QStringList AppSettings::bottomNavTabs() const
+{
+    return normalizedTabs(storedList(m_settings->value(key(kBottomNavTabs))));
+}
+
+void AppSettings::setBottomNavTabs(const QStringList &views)
+{
+    if (store(key(kBottomNavTabs), normalizedTabs(views), bottomNavTabs()))
+        Q_EMIT bottomNavTabsChanged();
+}
+
+void AppSettings::setBottomNavTab(int index, const QString &view)
+{
+    QStringList tabs = bottomNavTabs();
+    if (index < 0 || index >= tabs.size() || !bottomNavViews().contains(view))
+        return;
+    const qsizetype other = tabs.indexOf(view);
+    if (other >= 0)
+        tabs[other] = tabs.at(index);
+    tabs[index] = view;
+    setBottomNavTabs(tabs);
+}
+
+bool AppSettings::captureButtonShown() const
+{
+    return m_settings->value(key(kCaptureButton), true).toBool();
+}
+
+void AppSettings::setCaptureButtonShown(bool on)
+{
+    if (store(key(kCaptureButton), on, captureButtonShown()))
+        Q_EMIT captureButtonShownChanged();
+}
+
+void AppSettings::resetAppearance()
+{
+    setAccentColor(u"red"_s);
+    setLightSurface(u"paper"_s);
+    setDarkSurface(u"slate"_s);
+    setUiFontFamily(QString());
+    setDensity(u"comfortable"_s);
+    setFontScale(1.0);
+    setEditorFont(u"serif"_s);
+    setEditorFontFamily(QString());
+    setEditorMonoFamily(QString());
+    setEditorFontSize(16);
+    setEditorLineSpacing(u"normal"_s);
+}
+
 // ---- Editor ---------------------------------------------------------------------------------
 
 QString AppSettings::editorFont() const
@@ -224,6 +468,39 @@ void AppSettings::setEditorFont(const QString &font)
     const QString v = font == u"sans" ? u"sans"_s : u"serif"_s;
     if (store(key(kEditorFont), v, editorFont()))
         Q_EMIT editorFontChanged();
+}
+
+QString AppSettings::editorFontFamily() const
+{
+    return cleanFontFamily(m_settings->value(key(kEditorFontFamily)).toString());
+}
+
+void AppSettings::setEditorFontFamily(const QString &family)
+{
+    if (store(key(kEditorFontFamily), cleanFontFamily(family), editorFontFamily()))
+        Q_EMIT fontFamiliesChanged();
+}
+
+QString AppSettings::editorMonoFamily() const
+{
+    return cleanFontFamily(m_settings->value(key(kEditorMonoFamily)).toString());
+}
+
+void AppSettings::setEditorMonoFamily(const QString &family)
+{
+    if (store(key(kEditorMonoFamily), cleanFontFamily(family), editorMonoFamily()))
+        Q_EMIT fontFamiliesChanged();
+}
+
+QString AppSettings::editorLineSpacing() const
+{
+    return oneOf(m_settings->value(key(kEditorLineSpacing)).toString(), {u"normal", u"compact", u"relaxed"});
+}
+
+void AppSettings::setEditorLineSpacing(const QString &spacing)
+{
+    if (store(key(kEditorLineSpacing), oneOf(spacing, {u"normal", u"compact", u"relaxed"}), editorLineSpacing()))
+        Q_EMIT editorLineSpacingChanged();
 }
 
 int AppSettings::editorFontSize() const

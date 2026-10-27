@@ -446,7 +446,7 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | Method | Parameters | Result |
 |---|---|---|
 | `hello` | | `{protocol, app, version, platform, methods}` |
-| `state` | | `{status, ready, indexing, vault: {path, name, documentation}, currentRoute, sidePanelRoute, sidePanelVisible, canGoBack, focusedItem, editing: {page, row, text, cursorPosition, source, conflict}, conflicts: [{page}], syncConflicts, openPopups: [{type, objectName}], lastToasts: [{text, kind, at}], window: {width, height, visible, active, devicePixelRatio}, theme, themeSetting, touchUi, language, version}` |
+| `state` | | `{status, ready, indexing, vault: {path, name, documentation}, currentRoute, sidePanelRoute, sidePanelVisible, canGoBack, focusedItem, editing: {page, row, text, cursorPosition, source, conflict}, conflicts: [{page}], syncConflicts, openPopups: [{type, objectName}], lastToasts: [{text, kind, at}], window: {width, height, visible, active, devicePixelRatio}, theme, themeSetting, touchUi, appearance: {accent, accentColor, surface, background, density, fontUi, fontEditor, fontMono, lineSpacing}, language, version}` |
 | `navigate` | `route` (a view name or a route object, docs/UI.md "Navigation"), `side` | `{route, sidePanelRoute}` |
 | `open` | `ref`, `line` (0-based), `blockId`, `heading`, `side` | `{route, currentRoute}` |
 | `commands` / `command` | — / `id` | `{commands}` / `{id, route}` |

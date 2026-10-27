@@ -105,6 +105,38 @@ ApplicationWindow {
                 currentValue: Theme.mode
                 onActivated: (value) => Theme.mode = value
             }
+            // The appearance settings (Ustawienia → Wygląd): the "Podstawy" contrast checks follow.
+            BSegmented {
+                objectName: "galleryAccent"
+                visible: !Theme.narrow
+                size: "small"
+                accessibleName: "Akcent"
+                model: ThemePalette.accentNames()
+                currentValue: Theme.accentName
+                onActivated: (value) => Theme.accentName = value
+            }
+            BSegmented {
+                objectName: "gallerySurface"
+                visible: !Theme.narrow
+                size: "small"
+                accessibleName: "Tło"
+                model: Theme.dark ? ["slate", "black"] : ["paper", "white"]
+                currentValue: Theme.dark ? Theme.darkSurface : Theme.lightSurface
+                onActivated: (value) => {
+                    if (Theme.dark)
+                        Theme.darkSurface = value
+                    else
+                        Theme.lightSurface = value
+                }
+            }
+            BIconButton {
+                visible: !Theme.compact
+                iconName: "rows-2"
+                label: "Gęstość zwarta"
+                checkable: true
+                checked: Theme.density === "compact"
+                onClicked: Theme.density = Theme.density === "compact" ? "comfortable" : "compact"
+            }
             BSegmented {
                 visible: !Theme.compact
                 size: "small"

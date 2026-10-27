@@ -36,12 +36,14 @@ message(STATUS "Developer QML: ${BRULION_DEV_QML_ENABLED} (BRULION_DEV_QML=${BRU
 # DeviceInfo, DevTools).
 set(BRULION_UI_QML
     qml/theme/Theme.qml
+    qml/components/BAccentDialog.qml
     qml/components/BBadge.qml
     qml/components/BBreadcrumb.qml
     qml/components/BButton.qml
     qml/components/BCard.qml
     qml/components/BCheckBox.qml
     qml/components/BChip.qml
+    qml/components/BColorSwatch.qml
     qml/components/BCommandPalette.qml
     qml/components/BConfirmDialog.qml
     qml/components/BDatePicker.qml
@@ -49,6 +51,7 @@ set(BRULION_UI_QML
     qml/components/BDiffView.qml
     qml/components/BEmptyState.qml
     qml/components/BFocusRing.qml
+    qml/components/BFontPickerDialog.qml
     qml/components/BIcon.qml
     qml/components/BIconButton.qml
     qml/components/BKbd.qml

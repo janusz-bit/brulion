@@ -29,7 +29,7 @@ BDialog {
         }
     }
     function phaseColor(index) {
-        const colors = [Theme.info, Theme.success, Theme.warning, Theme.chipScheduledFg, Theme.accent, Theme.fgFaint]
+        const colors = [Theme.info, Theme.success, Theme.warning, Theme.chipScheduledFg, Theme.marginRed, Theme.fgFaint]
         return colors[index % colors.length]
     }
 

@@ -4,8 +4,9 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// ShellBottomNav — the phone's bottom navigation: Dziennik, Kalendarz, Szukaj, Zadania, Menu
-// (opens the drawer). Each tab is a ≥ 48 px touch target with icon and label; the bar extends
+// ShellBottomNav — the phone's bottom navigation: four views (AppSettings.bottomNavTabs, by
+// default Dziennik, Kalendarz, Szukaj, Zadania; Ustawienia → Wygląd → Układ) and Menu (opens the
+// drawer). Each tab is a ≥ 48 px touch target with icon and label; the bar extends
 // under the Android navigation bar (`bottomInset`).
 Rectangle {
     id: nav
@@ -15,6 +16,16 @@ Rectangle {
     signal menuClicked()
 
     readonly property string view: AppController.currentRoute.view || ""
+    /// The views a tab can show.
+    readonly property var tabs: ({
+        journals: { id: "journals", title: qsTr("Journal"), icon: "book-open" },
+        calendar: { id: "calendar", title: qsTr("Calendar"), icon: "calendar" },
+        search: { id: "search", title: qsTr("Search"), icon: "search" },
+        tasks: { id: "tasks", title: qsTr("Tasks"), icon: "list-todo" },
+        allPages: { id: "allPages", title: qsTr("Pages"), icon: "files" },
+        tags: { id: "tags", title: qsTr("Tags"), icon: "tags" },
+        graph: { id: "graph", title: qsTr("Graph"), icon: "waypoints" }
+    })
 
     implicitHeight: 60 + bottomInset
     color: Theme.bgElevated
@@ -34,18 +45,14 @@ Rectangle {
         spacing: 0
 
         Repeater {
-            model: [
-                { id: "journals", title: qsTr("Journal"), icon: "book-open" },
-                { id: "calendar", title: qsTr("Calendar"), icon: "calendar" },
-                { id: "search", title: qsTr("Search"), icon: "search" },
-                { id: "tasks", title: qsTr("Tasks"), icon: "list-todo" },
-                { id: "menu", title: qsTr("Menu"), icon: "menu" }
-            ]
+            model: AppSettings.bottomNavTabs.map(v => nav.tabs[v]).filter(t => t !== undefined)
+                       .concat([{ id: "menu", title: qsTr("Menu"), icon: "menu" }])
             delegate: T.AbstractButton {
                 id: tab
                 required property var modelData
                 readonly property bool current: modelData.id === nav.view
                                                 || (modelData.id === "journals" && nav.view === "journal")
+                                                || (modelData.id === "tags" && nav.view === "tag")
 
                 objectName: "bottomNav_" + modelData.id
                 Layout.fillWidth: true
@@ -83,11 +90,16 @@ Rectangle {
                         }
                     }
                     BText {
+                        id: label
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: tab.modelData.title
                         font.pixelSize: Theme.textXs
                         font.weight: tab.current ? Theme.weightSemiBold : Theme.weightMedium
                         color: tab.current ? Theme.fg : Theme.fgMuted
+                        // A long name (a view chosen in the settings) on a narrow tab: elided.
+                        readonly property bool tooWide: implicitWidth > tab.width - 4 && tab.width > 4
+                        width: tooWide ? tab.width - 4 : implicitWidth
+                        elide: tooWide ? Text.ElideRight : Text.ElideNone
                     }
                 }
                 background: Item {

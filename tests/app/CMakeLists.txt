@@ -14,6 +14,11 @@ brulion_add_test(tst_keyboardinsets
 brulion_add_test(tst_gestureinsets
     SOURCES tst_gestureinsets.cpp
     LIBS brulion_ui_helpers)
+# ThemePalette (brulion_ui_helpers): the appearance settings' colours — the default look unchanged,
+# contrast of every accent on every surface, malformed colours — and the font pickers' filter.
+brulion_add_test(tst_ui_themepalette
+    SOURCES tst_themepalette.cpp
+    LIBS brulion_ui_helpers)
 
 # App areas add their tests in tests/app/<area>/CMakeLists.txt (picked up automatically).
 file(GLOB _brulion_app_test_dirs LIST_DIRECTORIES true RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/*)

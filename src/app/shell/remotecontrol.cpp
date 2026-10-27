@@ -17,6 +17,7 @@
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#include <QColor>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -371,6 +372,20 @@ QJsonObject RemoteControl::state()
     out.insert(u"theme"_s, theme && theme->property("dark").toBool() ? u"dark"_s : u"light"_s);
     out.insert(u"themeSetting"_s, m_app->settings()->themeMode());
     out.insert(u"touchUi"_s, theme && theme->property("touchUi").toBool());
+    // What Theme shows now (the settings, or the --accent / --surface / --density overrides).
+    if (theme) {
+        const bool dark = theme->property("dark").toBool();
+        out.insert(u"appearance"_s,
+                   QJsonObject{{u"accent"_s, theme->property("accentName").toString()},
+                               {u"accentColor"_s, theme->property("accent").value<QColor>().name()},
+                               {u"surface"_s, theme->property(dark ? "darkSurface" : "lightSurface").toString()},
+                               {u"background"_s, theme->property("bg").value<QColor>().name()},
+                               {u"density"_s, theme->property("dense").toBool() ? u"compact"_s : u"comfortable"_s},
+                               {u"fontUi"_s, theme->property("fontUi").toString()},
+                               {u"fontEditor"_s, theme->property("fontEditor").toString()},
+                               {u"fontMono"_s, theme->property("fontMono").toString()},
+                               {u"lineSpacing"_s, theme->property("lineSpacing").toString()}});
+    }
     out.insert(u"language"_s, m_options.language ? m_options.language() : m_app->settings()->language());
     return out;
 }

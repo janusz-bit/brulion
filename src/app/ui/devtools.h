@@ -12,6 +12,10 @@
 //   --size <WxH>           initial window size, e.g. 1280x800 (desktop), 412x915 (phone)
 //   --scale <factor>       device pixel ratio (QT_SCALE_FACTOR), e.g. 2 or 2.625
 //   --theme light|dark     force the colour scheme (Theme.mode)
+//   --accent <name|#hex>   force the accent colour (red, blue, green, teal, violet, graphite, or
+//                          a custom "#rrggbb"; Theme.accentName / customAccent)
+//   --surface <name>       force a background: paper | white (light), slate | black (dark)
+//   --density compact|comfortable  force the density (Theme.density)
 //   --locale pl|en         UI language (translation + DatesHelper.locale)
 //   --touch                touch UI sizes (Theme.forceTouch), as on a phone
 //   --keyboard <px>        a simulated on-screen keyboard of that height (KeyboardInsets.simulated;
@@ -55,6 +59,13 @@ class DevTools : public QObject {
     Q_PROPERTY(bool editor READ editor CONSTANT FINAL)
     Q_PROPERTY(QString editorScript READ editorScript CONSTANT FINAL)
     Q_PROPERTY(QString theme READ theme CONSTANT FINAL)
+    /// --accent: a preset's name, "custom" for a colour (customAccent), "" without the option.
+    Q_PROPERTY(QString accentName READ accentName CONSTANT FINAL)
+    Q_PROPERTY(QString customAccent READ customAccent CONSTANT FINAL)
+    /// --surface: the light or dark background it names ("" otherwise).
+    Q_PROPERTY(QString lightSurface READ lightSurface CONSTANT FINAL)
+    Q_PROPERTY(QString darkSurface READ darkSurface CONSTANT FINAL)
+    Q_PROPERTY(QString density READ density CONSTANT FINAL)
     Q_PROPERTY(QString language READ language NOTIFY languageChanged FINAL)
     Q_PROPERTY(bool touch READ touch CONSTANT FINAL)
     /// --keyboard <px>: the simulated keyboard's height, -1 without the option.
@@ -82,6 +93,11 @@ public:
     bool editor() const { return m_editor; }
     QString editorScript() const { return m_editorScript; }
     QString theme() const { return m_theme; }
+    QString accentName() const { return m_accentName; }
+    QString customAccent() const { return m_customAccent; }
+    QString lightSurface() const { return m_lightSurface; }
+    QString darkSurface() const { return m_darkSurface; }
+    QString density() const { return m_density; }
     /// "pl" or "en": --locale, else English when the system locale is English, else Polish.
     QString language() const { return m_language; }
     bool touch() const { return m_touch; }
@@ -115,6 +131,11 @@ private:
     bool m_editor = false;
     QString m_editorScript;
     QString m_theme;
+    QString m_accentName;
+    QString m_customAccent;
+    QString m_lightSurface;
+    QString m_darkSurface;
+    QString m_density;
     QString m_language;
     QString m_screenshot;
     int m_delayMs = 800;

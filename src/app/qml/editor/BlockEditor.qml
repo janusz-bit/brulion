@@ -100,7 +100,7 @@ FocusScope {
     // Document mode: the marker column of a list level (bullet, number or checkbox) — the text
     // of a list item starts one column in per level — and the vertical rhythm of a page of text.
     readonly property real listIndent: Math.round(fontSize * (Theme.compact ? 1.5 : 1.7))
-    readonly property int paragraphGap: Math.round(fontSize * 0.75)
+    readonly property int paragraphGap: Math.round(fontSize * (Theme.dense ? 0.6 : 0.75))
     readonly property int listGap: Theme.touchUi ? 4 : 2
     readonly property int headingGapBelow: Math.round(fontSize * 0.3)
     function headingGapAbove(level) {
