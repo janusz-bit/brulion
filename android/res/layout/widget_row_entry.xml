@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An entry of the calendar widget's agenda: its time (tasks with a time first), a mark, the text. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/row_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="32dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingTop="2dp"
+    android:paddingBottom="2dp">
+
+    <TextView
+        android:id="@+id/row_time"
+        android:layout_width="44dp"
+        android:layout_height="wrap_content"
+        android:fontFeatureSettings="tnum"
+        android:textColor="@color/widget_muted"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/row_mark"
+        android:layout_width="20dp"
+        android:layout_height="wrap_content"
+        android:textColor="@color/widget_muted"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/row_text"
+        style="@style/BrulionWidget.Row"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:maxLines="1"
+        android:textSize="13sp" />
+</LinearLayout>

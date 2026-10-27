@@ -52,7 +52,9 @@ internal object Actions {
  * survives `scheduleReminders` replacing the set. [key] is the occurrence's id in Brulion and
  * [local] its wall-clock time (`yyyy-MM-ddTHH:mm`, unchanged by a snooze): with them "Zrobione"
  * names the occurrence whose [task] (the reminder is on an open task) is to be completed in the
- * notebook [vault] (its id in Brulion; empty when armed by an older version).
+ * notebook [vault] (its id in Brulion; empty when armed by an older version). [provisional] marks a
+ * reminder a widget's quick add armed with the app closed ([QuickAdd]; a negative id): the app's
+ * next set has the line it wrote, so `scheduleReminders` drops it rather than keeping it.
  */
 internal data class Reminder(
   val id: Int,
@@ -67,7 +69,8 @@ internal data class Reminder(
   val key: String = "",
   val local: String = "",
   val task: Boolean = false,
-  val vault: String = ""
+  val vault: String = "",
+  val provisional: Boolean = false
 ) {
   /** The notification and the alarm screen offer "Zrobione". */
   val canComplete: Boolean
@@ -88,6 +91,7 @@ internal data class Reminder(
     json.put("local", local)
     json.put("task", task)
     json.put("vault", vault)
+    json.put("provisional", provisional)
     return json
   }
 
@@ -113,7 +117,8 @@ internal data class Reminder(
           key = json.optString("key", ""),
           local = json.optString("local", ""),
           task = json.optBoolean("task", false),
-          vault = json.optString("vault", "")
+          vault = json.optString("vault", ""),
+          provisional = json.optBoolean("provisional", false)
         )
       } catch (e: JSONException) {
         null

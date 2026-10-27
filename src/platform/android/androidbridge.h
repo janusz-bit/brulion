@@ -121,6 +121,25 @@ public:
     QJsonArray takeDoneRequests(const QString &vault = {});
 
     /**
+     * Hands the home-screen widgets their snapshot (src/app/widgets/widgetsnapshot.h; Kotlin
+     * keeps it in SharedPreferences and renders it while Brulion is closed) and refreshes every
+     * placed widget. Returns how many widgets are placed, -1 when the call failed.
+     */
+    int updateWidgets(const QJsonObject &snapshot);
+
+    /**
+     * The entries quick add of a widget could not write itself (queued by WidgetInbox.kt — no
+     * snapshot of the notebook yet, an I/O error): a JSON array of
+     * `{id, kind, text, date, time, alarm, vault, added}` (src/app/widgets/widgetactions.h). Only
+     * those of notebook @p vault (and those without one); the others stay queued. Each entry is
+     * handed out once; widgetActionsQueued() says when there may be new ones.
+     */
+    QJsonArray takeWidgetActions(const QString &vault);
+    /// Puts entries taken with takeWidgetActions() that the app could not write either back into
+    /// the queue (same JSON; an entry with the same id is replaced), for the next try. Emits nothing.
+    void requeueWidgetActions(const QJsonArray &actions);
+
+    /**
      * Saves @p data as @p name in the public Download folder through MediaStore (Android 10+,
      * API 29): no storage permission is needed — with scoped storage a plain file write there
      * fails without "All files access". The system adds " (1)" to a taken name (`name` of the
@@ -185,6 +204,13 @@ Q_SIGNALS:
     /// "Zrobione" was tapped (or the app returned to the front): takeDoneRequests() may have
     /// some. Also emitted once after start-up, from the event loop.
     void doneRequestsQueued();
+    /// Quick add of a widget queued an entry for the app (or the app returned to the front, or
+    /// it started): takeWidgetActions() may have some.
+    void widgetActionsQueued();
+    /// Quick add of a widget wrote @p path (absolute) itself while the app runs (delivered when
+    /// Qt's event loop runs again, on return to the front; the notebook is read again then
+    /// anyway): a provisional reminder it armed gives way to the app's set.
+    void widgetNoteWritten(const QString &path);
     /// The ringtone picker of pickSound() answered: `choice` is `{mode, uri, title}` or
     /// `{"error": …}` (no picker on this phone).
     void soundPicked(int kind, const QJsonObject &choice);

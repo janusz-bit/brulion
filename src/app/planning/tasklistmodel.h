@@ -207,6 +207,13 @@ public:
     /// next reminder (used when the task has no due / scheduled date).
     static QString sectionOf(const Task &task, QDate today, Qt::DayOfWeek weekStart,
                              std::optional<QDate> reminder = std::nullopt);
+    /// The day an open task is filed under (see sectionOf()): the earlier of due and scheduled,
+    /// else `reminder`, else a start date after `today`; nullopt when it has none (no date).
+    static std::optional<QDate> filingDate(const Task &task, QDate today,
+                                           std::optional<QDate> reminder = std::nullopt);
+    /// The reminder of a block that counts on `today`: the earliest on or after `today`, else
+    /// the first of them (all are in the past); nullopt without reminders.
+    static std::optional<Reminder> nextReminder(const QList<Reminder> &reminders, QDate today);
     /// Section keys in display order.
     static QStringList sectionKeys();
     /// Translated section label.

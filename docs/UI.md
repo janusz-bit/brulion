@@ -128,7 +128,9 @@ components — no Material/Fusion look, so all targets look identical.
   one, the heading that of its section; nothing current: a toast "Najpierw zaznacz blok lub umieść
   w nim kursor"; in Markdown source the three block and heading commands are disabled — the
   page's views report it as `sourceMode`, AppShell binds `AppController.sourceModeShown`), quick switcher (`BQuickSwitcher`, fuzzy page search), quick capture (one
-  line → today's journal; dates in the text become ⏰ / 📅), the share dialog
+  line → today's journal; dates in the text become ⏰ / 📅; Android's home-screen widgets have a
+  quick add of their own, outside the QML UI — date chips instead of words, docs/ANDROID.md
+  "Widżety"), the share dialog
   (`ShellShareDialog`, "Zapisz w Brulionie": text or `.md`/`.txt` files another app shared —
   Android's share sheet, docs/ANDROID.md "Udostępnij → Brulion", or `--share` — go to today's
   journal or to new pages; `AppController.pendingShare` / `saveShare` / `dismissShare`; a

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Text styles of the widgets' layouts (colours from widget_colors.xml, day and night). -->
+    <style name="BrulionWidget" />
+    <style name="BrulionWidget.Title">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/widget_text</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+    <style name="BrulionWidget.Subtitle">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/widget_muted</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+    <style name="BrulionWidget.Section">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.06</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:textColor">@color/widget_muted</item>
+        <item name="android:maxLines">1</item>
+    </style>
+    <style name="BrulionWidget.Row">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/widget_text</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+    <style name="BrulionWidget.Empty">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/widget_muted</item>
+        <item name="android:gravity">center</item>
+        <item name="android:padding">12dp</item>
+    </style>
+    <style name="BrulionWidget.Add">
+        <item name="android:layout_width">36dp</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:background">@drawable/widget_add_background</item>
+        <item name="android:src">@drawable/widget_ic_add</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:padding">6dp</item>
+    </style>
+</resources>

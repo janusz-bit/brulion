@@ -213,6 +213,12 @@ void WorkspaceReminders::cancelAll()
     m_proxy->schedule({});
 }
 
+void WorkspaceReminders::resendUpcoming()
+{
+    if (m_scheduler && m_scheduler->isRunning())
+        m_proxy->schedule(m_scheduler->upcoming());
+}
+
 // ---- settings ---------------------------------------------------------------------------------
 
 void WorkspaceReminders::setEnabled(bool on)

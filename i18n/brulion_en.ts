@@ -1507,4 +1507,15 @@
         </translation>
     </message>
 </context>
+<context>
+    <name>brulion::widgets::WidgetActions</name>
+    <message numerus="yes">
+        <location filename="../src/app/widgets/widgetactions.cpp" line="82"/>
+        <source>%n entry(ies) added from the widget to today&apos;s journal.</source>
+        <translation>
+            <numerusform>%n entry added from the widget to today&apos;s journal.</numerusform>
+            <numerusform>%n entries added from the widget to today&apos;s journal.</numerusform>
+        </translation>
+    </message>
+</context>
 </TS>

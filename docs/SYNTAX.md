@@ -780,3 +780,9 @@ Files in `templatesFolder`. Variables: `{{date}}` (yyyy-MM-dd), `{{date:FORMAT}}
 `{{cursor}}` (caret position after insert). `journalTemplate` is applied to new daily notes:
 a day without a note shows the template as its starting text, and the note is created — with
 the template, filled for that day — by the first change; looking at a day never creates it.
+Entries appended to today's note (quick capture, shares, the Android widgets' quick add, which
+writes the same task line — `- [ ] text 📅 YYYY-MM-DD` or `⏰`/`⏰! YYYY-MM-DD HH:mm` — even with
+the app closed) fill the template's empty last bullet (`- `) instead of adding below it, and
+keep the note's line endings and BOM. A daily note that is not UTF-8 text is never appended to
+(rewriting it would replace its other characters); the entry is refused (the widgets' one waits
+in their queue).

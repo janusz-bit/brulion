@@ -122,6 +122,11 @@
 * **Udostępnij → Brulion (Android).** Stronę z przeglądarki, tekst albo pliki `.md`/`.txt`
   z innej aplikacji zapiszesz w dzisiejszym dzienniku albo jako nową stronę — w oknie, w którym
   poprawisz tekst i tytuł ([docs/ANDROID.md](docs/ANDROID.md#udostępnij--brulion)).
+* **Widżety Androida.** Zadania na dziś („Mój dzień”: zaległe i dzisiejsze) z szybkim dodawaniem
+  — dzień, godzina i alarm przyciskami, zapis do dziennika od razu, także przy zamkniętej
+  aplikacji —, kalendarz z kropkami i agendą (najpierw zadania z godziną) oraz notatki
+  (dzisiejszy dziennik, szybka notatka, ulubione i ostatnie strony)
+  ([docs/ANDROID.md](docs/ANDROID.md#widżety)).
 * **Obliczenia.** Bloki ` ```calc ` liczą jak kalkulator w notatniku (zmienne, procenty,
   jednostki `5 km to mi`, waluty `12 zł + 5 zł`, `suma`), tabele z formułami jak w arkuszu
   (`=sum(above)`, `=[Cena]*[Ilość]`), obliczenia w tekście `` `= 2*21` ``.
@@ -450,6 +455,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   undone; on a `#tag`, a `[[link]]` or a link to a day: open, open in the side panel, copy.
   A task's reminder notification has a **Done** button (Linux, Windows, Android) that completes
   the task without opening the note.
+* Android home-screen widgets: today's tasks ("My day": overdue and today) with a quick add —
+  day, time and alarm from chips, written to the journal at once, even with the app closed —, a
+  calendar with dots and an agenda (timed tasks first), and notes (today's journal, a quick
+  note, favourite and recent pages).
 * A command line for scripts and AI agents: `brulion-cli` captures, appends to journals, adds
   tasks and reminders, searches, queries and moves pages exactly as the app does (JSON output,
   stable exit codes, every change in the version history, destructive commands behind

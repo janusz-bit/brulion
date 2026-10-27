@@ -63,10 +63,10 @@ Priority priorityFromName(const QString &name);
 QString humanDate(const DateSpec &spec, dates::UiLocale locale, QDate today);
 
 /// The task line written by "Dodaj zadanie" / quick add: "- [ ] <text>" plus " 📅 <due>" and
-/// " ⏰ <reminder>" when given. The text is trimmed and its line breaks become spaces; a list
-/// marker or checkbox typed by the user is not doubled.
+/// " ⏰ <reminder>" (" ⏰! <reminder>" with `alarm`) when given. The text is trimmed and its line
+/// breaks become spaces; a list marker or checkbox typed by the user is not doubled.
 QString taskLine(const QString &text, const std::optional<DateSpec> &due = std::nullopt,
-                 const std::optional<DateSpec> &reminder = std::nullopt);
+                 const std::optional<DateSpec> &reminder = std::nullopt, bool alarm = false);
 
 /// The reminder line written by "Dodaj przypomnienie": "- <text> ⏰ <at>" (`⏰!` for alarms) and
 /// " 🔁 <recurrence>" when given (canonical English, as BReminderDialog returns it).

@@ -45,7 +45,7 @@ internal object AlarmScheduler {
   /**
    * Replaces the whole set with [incoming]: past reminders are skipped, the last entry of a
    * duplicated id wins, native snoozes still pending are kept unless the app sent the same id
-   * again. Alarms of reminders that are gone are cancelled.
+   * again ([keptOf]). Alarms of reminders that are gone are cancelled.
    */
   fun replaceAll(
     context: Context,
@@ -61,10 +61,8 @@ internal object AlarmScheduler {
         latest[reminder.id] = reminder.copy(snoozed = false)
       }
       val fresh = latest.values.filter { it.at > now }
-      val freshIds = fresh.mapTo(HashSet()) { it.id }
-      val keptSnoozes = previous.filter { it.snoozed && it.at > now && it.id !in freshIds }
       val next =
-        (fresh + keptSnoozes).sortedWith(compareBy<Reminder> { it.at }.thenBy { it.id }).take(MAX_ALARMS)
+        (fresh + keptOf(previous, fresh, now)).sortedWith(compareBy<Reminder> { it.at }.thenBy { it.id }).take(MAX_ALARMS)
 
       val nextIds = next.mapTo(HashSet()) { it.id }
       for (reminder in previous) {
@@ -77,6 +75,17 @@ internal object AlarmScheduler {
       store.save(next, TimeZone.getDefault().id)
       Result(next.size, exact)
     }
+
+  /**
+   * What [replaceAll] keeps of the [previous] set next to the app's [fresh] one: the native
+   * snoozes still pending whose id the app did not send again (also of a provisional reminder:
+   * the app re-arms only future times). A provisional reminder of a widget's quick add itself goes:
+   * the app's set has the line quick add wrote by now.
+   */
+  fun keptOf(previous: List<Reminder>, fresh: List<Reminder>, now: Long): List<Reminder> {
+    val freshIds = fresh.mapTo(HashSet()) { it.id }
+    return previous.filter { it.snoozed && it.at > now && it.id !in freshIds }
+  }
 
   /**
    * Re-arms the stored reminders (after a reboot, an app update, a clock or time-zone change,

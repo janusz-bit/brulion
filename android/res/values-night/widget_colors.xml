@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widgets in the dark: the app's "slate" theme (src/app/ui/themepalette.cpp). -->
+<resources>
+    <color name="widget_background">#FF1C2130</color>
+    <color name="widget_surface">#FF2B3245</color>
+    <color name="widget_border">#FF343C51</color>
+    <color name="widget_text">#FFE8E4DA</color>
+    <color name="widget_muted">#FFA7ADBC</color>
+    <color name="widget_faint">#FF6C7793</color>
+    <color name="widget_accent">#FF9FC3E6</color>
+    <color name="widget_overdue">#FFEC7F73</color>
+    <color name="widget_reminder">#FFF2B33D</color>
+    <color name="widget_done">#FF7D8597</color>
+    <color name="widget_scheduled">#FFA9C97A</color>
+    <color name="widget_selected">#409FC3E6</color>
+    <color name="widget_button">#FFE8E4DA</color>
+    <color name="widget_button_text">#FF1C2130</color>
+</resources>

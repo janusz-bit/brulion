@@ -8,7 +8,9 @@
   (BrulionActivity, a QtActivity that forwards notification taps to C++), the permissions of
   reminders/alarms and of a vault on shared storage, the alarm receivers and AlarmActivity
   (android/src/io/github/januszbit/brulion/android/), ShareActivity (the share sheet's
-  "Brulion": text and text files from other apps), the launcher icons.
+  "Brulion": text and text files from other apps), the home-screen widgets (TasksWidget,
+  CalendarWidget, NotesWidget, their list service and receiver, QuickAddActivity), the launcher
+  icons.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -151,6 +153,65 @@
                 <data android:mimeType="text/*" />
             </intent-filter>
         </activity>
+
+        <!-- Home-screen widgets (docs/ANDROID.md "Widgety"): they draw the snapshot the app
+             publishes, without starting Qt. The system's APPWIDGET_UPDATE reaches the
+             non-exported providers; other apps cannot. -->
+        <receiver
+            android:name="io.github.januszbit.brulion.android.TasksWidget"
+            android:exported="false"
+            android:label="@string/brulion_widget_tasks_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_tasks_info" />
+        </receiver>
+        <receiver
+            android:name="io.github.januszbit.brulion.android.CalendarWidget"
+            android:exported="false"
+            android:label="@string/brulion_widget_calendar_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_calendar_info" />
+        </receiver>
+        <receiver
+            android:name="io.github.januszbit.brulion.android.NotesWidget"
+            android:exported="false"
+            android:label="@string/brulion_widget_notes_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_notes_info" />
+        </receiver>
+
+        <!-- The widgets' midnight redraw and the calendar's month buttons and days. -->
+        <receiver
+            android:name="io.github.januszbit.brulion.android.WidgetReceiver"
+            android:exported="false" />
+
+        <!-- The rows of the widgets' lists (only the system's widget host may bind it). -->
+        <service
+            android:name="io.github.januszbit.brulion.android.WidgetListService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
+        <!-- Quick add of the widgets: a dialog over the home screen, its own task, not in Recents. -->
+        <activity
+            android:name="io.github.januszbit.brulion.android.QuickAddActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:label="@string/brulion_quick_add_task"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@style/Theme.BrulionQuickAdd"
+            android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

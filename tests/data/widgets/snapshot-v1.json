@@ -1,0 +1,1635 @@
+{
+    "built": "2026-10-27T14:05",
+    "calendar": {
+        "days": {
+            "2026-10-20": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "scheduled",
+                        "line": 4,
+                        "minutes": -1,
+                        "path": "journals/2026-10-27.md",
+                        "recurring": false,
+                        "time": "",
+                        "title": "Odebrać paczkę",
+                        "variant": "scheduled"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "scheduled"
+                ]
+            },
+            "2026-10-26": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 0,
+                        "minutes": -1,
+                        "path": "journals/2026-10-26.md",
+                        "recurring": false,
+                        "time": "",
+                        "title": "Zadzwonić do hydraulika #dom",
+                        "variant": "overdue"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": true,
+                        "isTask": true,
+                        "kind": "done",
+                        "line": 1,
+                        "minutes": -1,
+                        "path": "journals/2026-10-26.md",
+                        "recurring": false,
+                        "time": "",
+                        "title": "Zrobione wczoraj",
+                        "variant": "done"
+                    }
+                ],
+                "journal": "journals/2026-10-26.md",
+                "kinds": [
+                    "journal",
+                    "overdue",
+                    "done"
+                ]
+            },
+            "2026-10-27": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "reminder",
+                        "line": 3,
+                        "minutes": 540,
+                        "path": "journals/2026-10-27.md",
+                        "recurring": false,
+                        "time": "09:00",
+                        "title": "Kupić żółte jabłka",
+                        "variant": "reminder"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": false,
+                        "kind": "reminder",
+                        "line": 6,
+                        "minutes": 1080,
+                        "path": "journals/2026-10-27.md",
+                        "recurring": false,
+                        "time": "18:00",
+                        "title": "przypomnienie bez zadania",
+                        "variant": "reminder"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": true,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 9,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": false,
+                        "time": "",
+                        "title": "Anulowane",
+                        "variant": "done"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 2,
+                        "minutes": -1,
+                        "path": "journals/2026-10-27.md",
+                        "recurring": false,
+                        "time": "",
+                        "title": "Spotkanie z Łucją pilne #praca",
+                        "variant": "due"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 5,
+                        "minutes": -1,
+                        "path": "journals/2026-10-27.md",
+                        "recurring": false,
+                        "time": "",
+                        "title": "<script>alert(1)</script> & <b>x</b>",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "journals/2026-10-27.md",
+                "kinds": [
+                    "reminder",
+                    "journal",
+                    "due",
+                    "done"
+                ]
+            },
+            "2026-10-28": {
+                "items": [
+                    {
+                        "alarm": true,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "reminder",
+                        "line": 3,
+                        "minutes": 390,
+                        "path": "Projekty/Dom.md",
+                        "recurring": false,
+                        "time": "06:30",
+                        "title": "Pobudka na pociąg",
+                        "variant": "alarm"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 2,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": false,
+                        "time": "",
+                        "title": "Zapłacić rachunki",
+                        "variant": "due"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "alarm",
+                    "due"
+                ]
+            },
+            "2026-10-29": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 8,
+                        "minutes": 1110,
+                        "path": "Projekty/Dom.md",
+                        "recurring": false,
+                        "time": "18:30",
+                        "title": "W trakcie",
+                        "variant": "due"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-10-30": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-10-31": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-01": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-02": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-03": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-04": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-05": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 4,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": false,
+                        "time": "",
+                        "title": "Wymienić filtr",
+                        "variant": "due"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-06": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-07": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-08": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-09": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-10": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-11": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-12": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-13": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-14": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-15": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-16": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-17": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-18": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-19": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-20": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-21": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-22": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-23": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-24": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-25": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-26": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-27": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-28": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-29": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-11-30": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-01": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-02": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-03": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-04": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-05": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-06": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-07": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-08": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-09": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-10": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-11": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-12": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-13": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-14": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-15": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 5,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": false,
+                        "time": "",
+                        "title": "Malowanie",
+                        "variant": "due"
+                    },
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-16": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-17": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-18": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-19": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-20": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-21": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            },
+            "2026-12-22": {
+                "items": [
+                    {
+                        "alarm": false,
+                        "closed": false,
+                        "isTask": true,
+                        "kind": "due",
+                        "line": 7,
+                        "minutes": -1,
+                        "path": "Projekty/Dom.md",
+                        "recurring": true,
+                        "time": "",
+                        "title": "Podlać kwiaty",
+                        "variant": "due"
+                    }
+                ],
+                "journal": "",
+                "kinds": [
+                    "due"
+                ]
+            }
+        },
+        "from": "2026-10-19",
+        "to": "2026-12-22"
+    },
+    "capture": {
+        "days": [
+            {
+                "date": "2026-10-27",
+                "exists": true,
+                "newText": "",
+                "path": "journals/2026-10-27.md"
+            },
+            {
+                "date": "2026-10-28",
+                "exists": false,
+                "newText": "# środa, 28 października\n\n- ",
+                "path": "journals/2026-10-28.md"
+            }
+        ]
+    },
+    "locale": "pl",
+    "notes": {
+        "favorites": [
+            {
+                "path": "Projekty/Dom.md",
+                "title": "Dom"
+            },
+            {
+                "path": "Zakupy ąę.md",
+                "title": "Zakupy ąę"
+            }
+        ],
+        "recent": [
+            {
+                "path": "journals/2026-10-27.md",
+                "title": "2026-10-27"
+            }
+        ]
+    },
+    "taskCounts": {
+        "overdue": 1,
+        "today": 5,
+        "tomorrow": 2
+    },
+    "tasks": [
+        {
+            "alarm": false,
+            "due": "2026-10-26",
+            "key": "journals/2026-10-26.md:0",
+            "line": 0,
+            "page": "2026-10-26",
+            "path": "journals/2026-10-26.md",
+            "priority": 0,
+            "recurring": false,
+            "reminder": "",
+            "reminders": [
+            ],
+            "scheduled": "",
+            "section": "overdue",
+            "start": "",
+            "status": "todo",
+            "text": "Zadzwonić do hydraulika #dom"
+        },
+        {
+            "alarm": false,
+            "due": "",
+            "key": "journals/2026-10-27.md:4",
+            "line": 4,
+            "page": "2026-10-27",
+            "path": "journals/2026-10-27.md",
+            "priority": 0,
+            "recurring": false,
+            "reminder": "",
+            "reminders": [
+            ],
+            "scheduled": "2026-10-20",
+            "section": "today",
+            "start": "",
+            "status": "todo",
+            "text": "Odebrać paczkę"
+        },
+        {
+            "alarm": false,
+            "due": "2026-10-27",
+            "key": "journals/2026-10-27.md:2",
+            "line": 2,
+            "page": "2026-10-27",
+            "path": "journals/2026-10-27.md",
+            "priority": 0,
+            "recurring": false,
+            "reminder": "",
+            "reminders": [
+            ],
+            "scheduled": "",
+            "section": "today",
+            "start": "",
+            "status": "todo",
+            "text": "Spotkanie z Łucją pilne #praca"
+        },
+        {
+            "alarm": false,
+            "due": "2026-10-27",
+            "key": "journals/2026-10-27.md:5",
+            "line": 5,
+            "page": "2026-10-27",
+            "path": "journals/2026-10-27.md",
+            "priority": 0,
+            "recurring": false,
+            "reminder": "",
+            "reminders": [
+            ],
+            "scheduled": "",
+            "section": "today",
+            "start": "",
+            "status": "todo",
+            "text": "<script>alert(1)</script> & <b>x</b>"
+        },
+        {
+            "alarm": false,
+            "due": "2026-10-27",
+            "key": "Projekty/Dom.md:7",
+            "line": 7,
+            "page": "Dom",
+            "path": "Projekty/Dom.md",
+            "priority": 0,
+            "recurring": true,
+            "reminder": "",
+            "reminders": [
+            ],
+            "scheduled": "",
+            "section": "today",
+            "start": "",
+            "status": "todo",
+            "text": "Podlać kwiaty"
+        },
+        {
+            "alarm": false,
+            "due": "",
+            "key": "journals/2026-10-27.md:3",
+            "line": 3,
+            "page": "2026-10-27",
+            "path": "journals/2026-10-27.md",
+            "priority": 0,
+            "recurring": false,
+            "reminder": "2026-10-27 09:00",
+            "reminders": [
+                {
+                    "alarm": false,
+                    "at": "2026-10-27 09:00"
+                }
+            ],
+            "scheduled": "",
+            "section": "today",
+            "start": "",
+            "status": "todo",
+            "text": "Kupić żółte jabłka"
+        },
+        {
+            "alarm": false,
+            "due": "2026-10-28",
+            "key": "Projekty/Dom.md:2",
+            "line": 2,
+            "page": "Dom",
+            "path": "Projekty/Dom.md",
+            "priority": 4,
+            "recurring": false,
+            "reminder": "",
+            "reminders": [
+            ],
+            "scheduled": "",
+            "section": "tomorrow",
+            "start": "",
+            "status": "todo",
+            "text": "Zapłacić rachunki"
+        },
+        {
+            "alarm": true,
+            "due": "",
+            "key": "Projekty/Dom.md:3",
+            "line": 3,
+            "page": "Dom",
+            "path": "Projekty/Dom.md",
+            "priority": 0,
+            "recurring": false,
+            "reminder": "2026-10-28 06:30",
+            "reminders": [
+                {
+                    "alarm": true,
+                    "at": "2026-10-28 06:30"
+                }
+            ],
+            "scheduled": "",
+            "section": "tomorrow",
+            "start": "",
+            "status": "todo",
+            "text": "Pobudka na pociąg"
+        },
+        {
+            "alarm": false,
+            "due": "2026-10-29 18:30",
+            "key": "Projekty/Dom.md:8",
+            "line": 8,
+            "page": "Dom",
+            "path": "Projekty/Dom.md",
+            "priority": 0,
+            "recurring": false,
+            "reminder": "",
+            "reminders": [
+            ],
+            "scheduled": "",
+            "section": "thisWeek",
+            "start": "",
+            "status": "doing",
+            "text": "W trakcie"
+        },
+        {
+            "alarm": false,
+            "due": "2026-11-05",
+            "key": "Projekty/Dom.md:4",
+            "line": 4,
+            "page": "Dom",
+            "path": "Projekty/Dom.md",
+            "priority": 0,
+            "recurring": false,
+            "reminder": "",
+            "reminders": [
+            ],
+            "scheduled": "",
+            "section": "later",
+            "start": "",
+            "status": "todo",
+            "text": "Wymienić filtr"
+        }
+    ],
+    "today": "2026-10-27",
+    "vault": {
+        "id": "brulion-test",
+        "name": "Brulion",
+        "root": "/storage/emulated/0/Brulion"
+    },
+    "version": 1,
+    "weekStart": 1
+}

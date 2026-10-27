@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A task of the tasks widget: its status, its text and when / where. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/row_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="40dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp">
+
+    <TextView
+        android:id="@+id/row_mark"
+        android:layout_width="24dp"
+        android:layout_height="wrap_content"
+        android:textColor="@color/widget_muted"
+        android:textSize="17sp" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/row_text"
+            style="@style/BrulionWidget.Row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="2" />
+
+        <TextView
+            android:id="@+id/row_detail"
+            style="@style/BrulionWidget.Subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+</LinearLayout>

@@ -7,7 +7,8 @@
 //     ./gradlew --init-script ../../../../android/tests/unit-tests.gradle testDebugUnitTest
 //
 // The tests run on the JVM against android.jar stubs: they cover the pure logic (wall-clock
-// shifting, ring time, the reminder JSON), not Android APIs.
+// shifting, ring time, the reminder JSON, the widgets' snapshot and quick add), not Android APIs.
+// The system property brulion.testData names tests/data (golden files the C++ tests check too).
 allprojects {
     pluginManager.withPlugin('com.android.application') {
         def testsDir = System.getenv('BRULION_ANDROID_TESTS_DIR')
@@ -16,6 +17,9 @@ allprojects {
         }
         android.sourceSets.test.java.srcDirs += [testsDir]
         android.sourceSets.test.kotlin.srcDirs += [testsDir]
+        // Golden files shared with the C++ tests (tests/data, e.g. tests/data/widgets).
+        def testData = new File(testsDir, '../../../tests/data').canonicalPath
+        android.testOptions.unitTests.all { test -> test.systemProperty('brulion.testData', testData) }
         dependencies {
             testImplementation 'junit:junit:4.13.2'
             // The real org.json (android.jar only has stubs that throw).

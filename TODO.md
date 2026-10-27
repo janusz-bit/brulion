@@ -33,14 +33,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   w Brulionie” dla plików `.md`/`.txt` (wpis `.desktop` z `MimeType`, skojarzenie plików
   w Windows) — to samo okno co „Udostępnij → Brulion” na Androidzie (docs/ANDROID.md).
 
-## Android i telefon
-
-* **Widgety**:
-  * z zadaniami: podgląd listy i szybkie dodawanie bez wchodzenia do aplikacji (wzór: widget To Do
-    3×2 „My Day”);
-  * kalendarza, który pokazuje też zadania z ustawionym czasem;
-  * z notatkami (niski priorytet).
-
 ## Windows
 
 * **Podpisane pliki** — instalator i programy podpisane certyfikatem, bez ostrzeżenia SmartScreen;
