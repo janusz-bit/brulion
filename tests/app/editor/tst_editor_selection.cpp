@@ -1162,8 +1162,8 @@ private Q_SLOTS:
         const QVariantMap r = f.page.pasteClipboard(0, at, at);
         QCOMPARE(r.value(u"pictureUrl"_s).toString(), url);
         const QString pasted = f.text();
-        const QVariantMap done = f.page.urlToPicture(0, r.value(u"pictureFrom"_s).toInt(),
-                                                     r.value(u"pictureTo"_s).toInt(), url, false);
+        const QVariantMap done =
+                f.page.urlToPicture(0, r.value(u"pictureFrom"_s).toInt(), r.value(u"pictureTo"_s).toInt(), url, false);
         QCOMPARE(done.value(u"row"_s).toInt(), 0);
         QCOMPARE(f.page.blocks()->rowCount(), rows);
         QCOMPARE(f.page.blocks()->editTextAt(0), edit + u"![]("_s + url + u")"_s);
