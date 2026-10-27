@@ -2312,14 +2312,10 @@ QVariantMap PageController::copyLink(int row, const QString &kind)
     QVariantMap result = linkText(row, kind);
     if (!result.value(u"ok"_s).toBool())
         return result;
-    const QString text = result.value(u"text"_s).toString();
-    QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
-    if (clipboard)
-        clipboard->setText(text);
-    // Read back: a platform without a clipboard (or one that refused) must not be told "copied".
-    if (!clipboard || clipboard->text() != text) {
+    const QVariantMap copied = copyText(result.value(u"text"_s).toString());
+    if (!copied.value(u"ok"_s).toBool()) {
         result.insert(u"ok"_s, false);
-        result.insert(u"reason"_s, u"noClipboard"_s);
+        result.insert(u"reason"_s, copied.value(u"reason"_s));
     }
     return result;
 }
@@ -2444,32 +2440,179 @@ QVariantMap PageController::reminderAt(int row, int from, int to) const
 
 QVariantMap PageController::dateChip(int row, const QString &url) const
 {
-    static const QRegularExpression link(u"^(?:date|reminder):(\\d+)-(\\d+)$"_s);
-    const auto m = link.match(url);
-    if (!m.hasMatch() || !validRow(row))
+    if (!validRow(row))
         return {};
-    const int offset = m_model->renderOffsetAt(row);
-    const QString body = m_model->document().at(row).body;
-    const auto t = dateTokenAt(body, m.captured(1).toInt() + offset, m.captured(2).toInt() + offset);
-    if (!t)
-        return {};
-    QString kind;
-    switch (t->kind) {
-    case markdown::TokenKind::Due: kind = u"due"_s; break;
-    case markdown::TokenKind::Scheduled: kind = u"scheduled"_s; break;
-    case markdown::TokenKind::Start: kind = u"start"_s; break;
-    case markdown::TokenKind::Created: kind = u"created"_s; break;
-    case markdown::TokenKind::Done: kind = u"done"_s; break;
-    case markdown::TokenKind::Cancelled: kind = u"cancelled"_s; break;
-    default: kind = u"reminder"_s; break;
+    const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    const BlockShape shape = m_model->shapeAt(row);
+    QVariantMap chip = tokenChip(m_model->document().at(row).body, url, m_model->renderOffsetAt(row),
+                                 shape.task.has_value(), config);
+    if (chip.value(u"kind"_s).toString() == u"day") {
+        // What a click on the link opens, and the link "Kopiuj link" copies.
+        const QString target = chip.value(u"target"_s).toString();
+        const QString pageUrl = u"page:"_s + QString::fromLatin1(QUrl::toPercentEncoding(target));
+        chip.insert(u"url"_s, pageUrl);
+        chip.insert(u"copyText"_s, linkMenu(pageUrl).value(u"copyText"_s));
     }
-    return {{u"from"_s, int(t->from)},
-            {u"to"_s, int(t->to)},
-            {u"kind"_s, kind},
-            {u"at"_s, t->spec().toString()},
-            {u"date"_s, t->date.toString(u"yyyy-MM-dd"_s)},
-            {u"time"_s, t->time ? t->time->toString(u"HH:mm"_s) : QString()},
-            {u"alarm"_s, t->alarm}};
+    return chip;
+}
+
+markdown::TokenEditContext PageController::tokenEditContext() const
+{
+    markdown::TokenEditContext context;
+    context.config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    context.today = today();
+    context.defaultReminderTime = context.config.defaultReminderTime;
+    return context;
+}
+
+bool PageController::applyTokenAction(int row, int from, int to, const QString &action, const QVariant &a,
+                                      const QVariant &b)
+{
+    if (!validRow(row))
+        return false;
+    const QString body = m_model->document().at(row).body;
+    const QString edited = markdown::applyTokenAction(body, from, to, action, a, b, tokenEditContext());
+    if (edited == body)
+        return false;
+    editBody(row, edited);
+    return true;
+}
+
+namespace {
+
+/// What the reminder dialog shows for a reminder chip of a block copy or a cell (editReminderWith):
+/// dialogAt (with the default time when the reminder has none) and context (the text).
+void addReminderDialogData(QVariantMap &chip, const QString &context, QTime defaultTime)
+{
+    if (chip.value(u"kind"_s).toString() != u"reminder")
+        return;
+    QString at = chip.value(u"at"_s).toString();
+    if (chip.value(u"time"_s).toString().isEmpty())
+        at += u' ' + defaultTime.toString(u"HH:mm"_s);
+    chip.insert(u"dialogAt"_s, at);
+    chip.insert(u"context"_s, context);
+}
+
+/// The text of a table cell (tableRow -1 = the header), nullopt when there is no such cell.
+std::optional<QString> tableCellText(const QString &body, int tableRow, int column)
+{
+    const auto model = calc::parseTable(body);
+    if (!model || column < 0 || column >= model->header.size())
+        return std::nullopt;
+    if (tableRow < 0)
+        return model->header[column];
+    if (tableRow >= model->rows.size())
+        return std::nullopt;
+    const QStringList &cells = model->rows[tableRow];
+    return column < cells.size() ? cells[column] : QString();
+}
+
+} // namespace
+
+QVariantMap PageController::tokenChipIn(const QString &raw, const QString &url) const
+{
+    if (url.startsWith(u"day:"_s))
+        return {};
+    const BlockDocument doc(raw);
+    if (doc.isEmpty())
+        return {};
+    const markdown::BlockEntry &e = doc.at(0);
+    const BlockShape shape = shapeOf(e);
+    // Where the rendered text starts in the body (detail::renderBodyHtml(): a heading in a list item).
+    const int offset = shape.view == BlockView::Heading && e.kind != BlockKind::Heading ? shape.editOffset : 0;
+    const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    QVariantMap chip = tokenChip(e.body, url, offset, shape.task.has_value(), config);
+    if (!chip.contains(u"ref"_s))
+        return {};
+    addReminderDialogData(chip, plainTextOf(e, 120), config.defaultReminderTime);
+    return chip;
+}
+
+QVariantMap PageController::editTokenIn(const QString &path, int line, const QVariantMap &refMap, const QString &action,
+                                        const QVariant &a, const QVariant &b)
+{
+    const auto result = [](bool ok, const QString &reason, int undo = 0) {
+        return QVariantMap{{u"ok"_s, ok}, {u"reason"_s, reason}, {u"undo"_s, undo}};
+    };
+    const auto ref = tokenRefFromMap(refMap);
+    if (path.isEmpty() || line < 0 || !ref)
+        return result(false, u"gone"_s);
+    if (path == m_path) {
+        // This page: an edit of the block in the editor (its undo step).
+        const int row = rowOfLine(line);
+        if (!validRow(row))
+            return result(false, u"gone"_s);
+        const auto range = markdown::findTokenRef(m_model->document().at(row).body, *ref);
+        if (!range)
+            return result(false, u"gone"_s);
+        return applyTokenAction(row, int(range->first), int(range->second), action, a, b) ? result(true, QString())
+                                                                                          : result(false, u"unchanged"_s);
+    }
+    if (!m_host)
+        return result(false, u"failed"_s);
+    bool ok = false;
+    const QString before = m_host->read(path, &ok);
+    if (!ok)
+        return result(false, u"gone"_s);
+    const QString after = markdown::editBlockToken(before, line, *ref, action, a, b, tokenEditContext());
+    if (after == before) {
+        // The block or its token moved or went, or the action changes nothing.
+        const BlockDocument doc(before);
+        const int i = doc.indexAtLine(line);
+        const bool there = i >= 0 && markdown::findTokenRef(doc.at(i).body, *ref).has_value();
+        return result(false, there ? u"unchanged"_s : u"gone"_s);
+    }
+    switch (m_host->writeIfUnchanged(path, after, before)) {
+    case EditorHost::WriteResult::Written: break;
+    case EditorHost::WriteResult::Changed: return result(false, u"changed"_s);
+    case EditorHost::WriteResult::Failed: return result(false, u"failed"_s);
+    }
+    // Only the last few edits can be undone (each holds two copies of the file).
+    constexpr int MaxForeignEdits = 8;
+    const int handle = m_nextForeignEdit++;
+    m_foreignEdits.insert(handle, ForeignEdit{path, before, after});
+    m_foreignEdits.remove(handle - MaxForeignEdits);
+    return result(true, QString(), handle);
+}
+
+bool PageController::undoTokenEdit(int undo)
+{
+    const auto it = m_foreignEdits.constFind(undo);
+    if (it == m_foreignEdits.constEnd() || !m_host)
+        return false;
+    const ForeignEdit edit = *it;
+    m_foreignEdits.erase(it);
+    return m_host->writeIfUnchanged(edit.path, edit.before, edit.after) == EditorHost::WriteResult::Written;
+}
+
+
+QVariantMap PageController::tableCellChip(int row, int tableRow, int column, const QString &url) const
+{
+    if (!validRow(row) || url.startsWith(u"day:"_s))
+        return {};
+    const auto cell = tableCellText(m_model->document().at(row).body, tableRow, column);
+    if (!cell)
+        return {};
+    const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    QVariantMap chip = tokenChip(*cell, url, 0, false, config);
+    if (!chip.isEmpty())
+        addReminderDialogData(chip, markdown::stripTokens(*cell).simplified(), config.defaultReminderTime);
+    return chip;
+}
+
+bool PageController::applyTableCellToken(int row, int tableRow, int column, int from, int to, const QString &action,
+                                         const QVariant &a, const QVariant &b)
+{
+    if (!validRow(row))
+        return false;
+    const auto cell = tableCellText(m_model->document().at(row).body, tableRow, column);
+    if (!cell)
+        return false;
+    const QString edited = markdown::applyTokenAction(*cell, from, to, action, a, b, tokenEditContext());
+    if (edited == *cell)
+        return false;
+    setTableCell(row, tableRow, column, edited);
+    return true;
 }
 
 void PageController::setDateTokenAt(int row, int from, int to, const QString &spec)
@@ -2898,8 +3041,13 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
         }
         return out;
     }
-    if (scheme == u"date")
-        return out;
+    if (scheme == u"date" || scheme == u"recur" || scheme == u"prio")
+        return out; // a click edits the text; their menu changes them (dateChip())
+    if (scheme == u"day") {
+        // A link to a day of the journal: the page its target names.
+        const QString page = dateChip(row, url).value(u"url"_s).toString();
+        return page.isEmpty() ? out : activateLink(row, page, newPane);
+    }
     if (scheme == u"ext") {
         if (m_host)
             m_host->openUrl(QUrl(rest));
@@ -2975,6 +3123,75 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
         return out;
     }
     return out;
+}
+
+QVariantMap PageController::linkMenu(const QString &url, const QString &fromPath) const
+{
+    const qsizetype colon = url.indexOf(u':');
+    if (colon <= 0)
+        return {};
+    const QString scheme = url.left(colon);
+    const QString rest = url.mid(colon + 1);
+    if (scheme == u"tag") {
+        const QString tag = QUrl::fromPercentEncoding(rest.toUtf8());
+        return {{u"kind"_s, u"tag"_s}, {u"tag"_s, tag}, {u"copyText"_s, markdown::tagSyntax(tag)},
+                {u"unresolved"_s, false}};
+    }
+    if (scheme == u"block")
+        return {{u"kind"_s, u"block"_s}, {u"copyText"_s, QString(u"(("_s + rest + u"))"_s)}, {u"unresolved"_s, false}};
+    if (scheme == u"ext")
+        return {{u"kind"_s, u"ext"_s}, {u"copyText"_s, rest}, {u"unresolved"_s, false}};
+    if (scheme != u"page")
+        return {};
+    QString target = rest;
+    QString fragment;
+    if (const qsizetype hash = rest.indexOf(u'#'); hash >= 0) {
+        target = rest.left(hash);
+        fragment = QUrl::fromPercentEncoding(rest.mid(hash + 1).toUtf8());
+    }
+    target = QUrl::fromPercentEncoding(target.toUtf8());
+    const QString from = fromPath.isEmpty() ? m_path : fromPath;
+    const QString resolved = target.isEmpty() ? from : m_host ? m_host->resolveLink(target, from) : QString();
+    const QString suffix = fragment.isEmpty() ? QString() : u'#' + fragment;
+    QString copy;
+    if (!resolved.isEmpty()) {
+        // The page by the target every copied link uses (notebook::pageLinkTarget(), as linkTarget()):
+        // a link pasted on any page reaches it.
+        const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+        const QString page = notebook::pageLinkTarget(
+                resolved, config,
+                [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); },
+                [this](const QString &title) { return m_host ? m_host->resolveLink(title, QString()) : QString(); });
+        copy = u"[["_s + page + suffix + u"]]"_s;
+    } else if (!target.isEmpty()) {
+        copy = u"[["_s + target + suffix + u"]]"_s; // a page that does not exist yet: as written
+    }
+    return {{u"kind"_s, u"page"_s},
+            {u"unresolved"_s, resolved.isEmpty()},
+            {u"path"_s, resolved},
+            {u"copyText"_s, copy}};
+}
+
+QVariantMap PageController::copyText(const QString &text)
+{
+    QVariantMap result{{u"ok"_s, !text.isEmpty()}, {u"text"_s, text}, {u"reason"_s, QString()}};
+    if (text.isEmpty())
+        return result;
+    QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
+    if (clipboard)
+        clipboard->setText(text);
+    // Read back: a platform without a clipboard (or one that refused) must not be told "copied".
+    if (!clipboard || clipboard->text() != text) {
+        result.insert(u"ok"_s, false);
+        result.insert(u"reason"_s, u"noClipboard"_s);
+    }
+    return result;
+}
+
+void PageController::navigate(const QVariantMap &route, bool newPane)
+{
+    if (m_host && !route.isEmpty())
+        m_host->navigate(route, newPane);
 }
 
 // --- Title, tasks elsewhere, locations ----------------------------------------------------------------

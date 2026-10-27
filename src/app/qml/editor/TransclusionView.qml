@@ -10,8 +10,10 @@ import Brulion
 // headings, links, tags, chips, nested embeds (depth-limited, a cycle is named instead of
 // repeated). Tasks inside keep a working checkbox (it changes the task in its own file; a
 // right-click or long press: the status menu; while it is open, changed embeds wait — new rows
-// would take the menu away — and come a moment after it closed). A click on the header opens the
-// source; a click on the content edits the block with the embed.
+// would take the menu away — and come a moment after it closed). A right-click or long press on a
+// date, reminder, 🔁 or priority chip opens its menu (the change goes to the source's file, with a
+// toast to undo it), on a link the link's menu. A click on the header opens the source; a click on
+// the content edits the block with the embed.
 Column {
     id: root
 
@@ -112,8 +114,28 @@ Column {
         interval: 0
     }
 
-    /// A link inside the embedded text: tasks and reminders belong to the source block.
+    /// The menu of the token or link at (x, y) of an embedded block's text (`data`: its entry;
+    /// the change goes to the block's own file); false when there is none there.
+    function linkMenu(data, text, x, y) {
+        const link = text.linkAt(x, y)
+        if (link === "" || !root.editor)
+            return false
+        if (root.editor.openTokenMenuIn(data.path || "", data.line, data.raw || "", link, text, x, y))
+            return true
+        return root.editor.openLinkMenu(link, data.path || "", (newPane) => {
+            if (newPane)
+                root.controller.activateLink(root.block.index, link, true)
+            else
+                root.activate(link, data.path || "", data.line)
+        }, text, x, y)
+    }
+    /// A link inside the embedded text: tasks and reminders belong to the source block; a click on
+    /// a date, 🔁 or priority chip edits the block with the embed (their menu is the right button's).
     function activate(link, path, line) {
+        if (root.editor.editsOnClick(link)) {
+            root.editor.startEditing(root.block.index, -1)
+            return
+        }
         if (link.startsWith("task:") || link.startsWith("reminder:")) {
             if (path !== "") {
                 const r = root.controller.openLocation(path, line, false)
@@ -350,6 +372,26 @@ Column {
                                         root.activate(link, entry.modelData.path || "", entry.modelData.line)
                                     else
                                         root.editor.startEditing(root.block.index, -1)
+                                }
+                            }
+                            // A right-click or a finger held on a token or a link: its menu.
+                            TapHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                                acceptedButtons: Qt.RightButton
+                                gesturePolicy: TapHandler.WithinBounds
+                                onTapped: (eventPoint) => {
+                                    const p = eventPoint.position
+                                    if (!root.linkMenu(entry.modelData, body, p.x, p.y))
+                                        root.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition)
+                                }
+                            }
+                            TapHandler {
+                                id: embedHold
+                                enabled: Theme.touchUi
+                                acceptedDevices: PointerDevice.TouchScreen
+                                onLongPressed: {
+                                    if (!root.editor.selectionMode)
+                                        root.linkMenu(entry.modelData, body, embedHold.point.position.x, embedHold.point.position.y)
                                 }
                             }
                         }

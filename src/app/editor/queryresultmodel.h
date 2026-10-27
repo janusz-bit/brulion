@@ -14,7 +14,9 @@
 // (page title), folder, line (0-based), text (plain text), html (rendered), status ("" or the
 // task status), isTask, blockId, due ("YYYY-MM-DD[ HH:mm]" or ""), overdue, reminder ("" or
 // "YYYY-MM-DD HH:mm"), alarm, showPage (show the page next to the item: it is another page and
-// not the group header), journal ("YYYY-MM-DD" when the page is a daily note, else "").
+// not the group header), journal ("YYYY-MM-DD" when the page is a daily note, else ""), raw (the
+// item's block as Markdown: its token menus, PageController::tokenChipIn / editTokenIn — the
+// rendered date, 🔁 and priority chips are links naming ranges of it).
 // Only the first `maxItems` items get rows (hiddenCount: the others; showMore() adds rows).
 // A task's status menu open on a row holds the rows (hold() / release(): new rows would take the
 // menu away with the old ones): runs that come due meanwhile (index changes from sync or other
@@ -98,6 +100,7 @@ public:
         AlarmRole,
         ShowPageRole,
         JournalRole,
+        RawRole,
     };
     Q_ENUM(Role)
 
@@ -154,7 +157,8 @@ public:
     /// (for BlockEditor.revealRow), else navigated through the host.
     Q_INVOKABLE QVariantMap open(int row, bool newPane = false);
     /// A link in an item's text was clicked: page:/tag:/block:/ext: go through the controller (a
-    /// same-page link of another page's item to that page); task:/reminder: open the item.
+    /// same-page link of another page's item to that page); task:, reminder: and the token chips
+    /// (date:, recur:, prio: — their menu is the right button's) open the item.
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
 
 Q_SIGNALS:

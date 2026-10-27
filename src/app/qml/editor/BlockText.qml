@@ -9,11 +9,13 @@ import Brulion
 // gives its last line the font's own height, the editor the fixed one). `centered` centres both
 // (a formula block: the rendered formula and, while it is edited, its LaTeX source).
 // Clicks on links are handled (page:, tag:, block:, ext:, task:,
-// reminder:); a click elsewhere starts editing with the caret at the clicked position. Shift+click
-// selects the blocks from the edited or selected one to this one; on touch UIs a long press selects
-// the block (the editor's selection mode, where a tap moves the selection's end instead). A
-// right-click or a long press on a date chip (📅 ⏳ 🛫 ➕ ✅ ❌ ⏰) opens its menu (DateChipMenu); a
-// right-click elsewhere the block menu.
+// reminder:, day:); a click elsewhere — also on a date, 🔁 or priority chip — starts editing with
+// the caret at the clicked position. Shift+click selects the blocks from the edited or selected one
+// to this one; on touch UIs a long press selects the block (the editor's selection mode, where a
+// tap moves the selection's end instead). A right-click or a long press on a token (📅 ⏳ 🛫 ➕ ✅
+// ❌ ⏰ 🔁, a priority, a [[day]] link) opens its menu (DateChipMenu), on another link
+// ([[page]], #tag, ((block)), a web address) the link's menu (LinkMenu); a right-click elsewhere
+// the block menu.
 Item {
     id: root
 
@@ -64,10 +66,10 @@ Item {
         HoverHandler {
             id: textHover
             enabled: !Theme.touchUi
-            // (A click on a date chip edits the text: its menu is the right button's.)
+            // (A click on a date, 🔁 or priority chip edits the text: its menu is the right button's.)
             cursorShape: {
                 const link = rendered.linkAt(point.position.x, point.position.y)
-                return link !== "" && !link.startsWith("date:") ? Qt.PointingHandCursor : Qt.IBeamCursor
+                return link !== "" && !root.editor.editsOnClick(link) ? Qt.PointingHandCursor : Qt.IBeamCursor
             }
         }
     }
@@ -88,34 +90,38 @@ Item {
                     return
                 const p = eventPoint.position
                 const link = rendered.linkAt(p.x, p.y)
-                if (link !== "" && !link.startsWith("date:"))
+                if (link !== "" && !root.editor.editsOnClick(link))
                     root.editor.activateLink(root.block.index, link)
                 else
                     root.editor.editAt(root.block.index, p.x, p.y)
             }
         }
-        // A right-click: a date chip's menu, else the block menu (as the list's handler opens it;
-        // WithinBounds takes the press, so that one does not open it too).
+        // A right-click: a token's menu, a link's menu, else the block menu (as the list's handler
+        // opens it; WithinBounds takes the press, so that one does not open it too).
         TapHandler {
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
             acceptedButtons: Qt.RightButton
             gesturePolicy: TapHandler.WithinBounds
             onTapped: (eventPoint) => {
                 const p = eventPoint.position
-                if (!root.editor.openDateMenu(root.block.index, rendered.linkAt(p.x, p.y), rendered, p.x, p.y))
+                const link = rendered.linkAt(p.x, p.y)
+                if (!root.editor.openDateMenu(root.block.index, link, rendered, p.x, p.y)
+                        && !root.editor.openBlockLinkMenu(root.block.index, link, rendered, p.x, p.y))
                     root.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition)
             }
         }
         // A finger held on the text: the block selection (never the block menu: that is the
-        // bullet's) — on a date chip, outside the selection mode, the chip's menu.
+        // bullet's) — on a token or a link, outside the selection mode, its menu.
         TapHandler {
             id: hold
             acceptedDevices: PointerDevice.TouchScreen
             enabled: Theme.touchUi
             onLongPressed: {
                 const p = hold.point.position
+                const link = rendered.linkAt(p.x, p.y)
                 if (!root.editor.selectionMode
-                        && root.editor.openDateMenu(root.block.index, rendered.linkAt(p.x, p.y), rendered, p.x, p.y))
+                        && (root.editor.openDateMenu(root.block.index, link, rendered, p.x, p.y)
+                            || root.editor.openBlockLinkMenu(root.block.index, link, rendered, p.x, p.y)))
                     return
                 root.editor.longPressText(root.block.index)
             }

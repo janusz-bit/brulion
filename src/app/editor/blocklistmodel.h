@@ -37,7 +37,8 @@
 //                "block", target, title, href (page:/block: link of the header), path ("" when not
 //                found), found, message ("" | "missingPage" | "missingSection" | "missingBlock" |
 //                "empty"), more (blocks left out), blocks: [{ kind: "block" | "embed" | "note", html,
-//                depth, view, headingLevel, task, path, line, title, href, message ("cycle" |
+//                depth, view, headingLevel, task, path, line, raw (a text block's Markdown: its
+//                token menus, PageController::tokenChipIn), title, href, message ("cycle" |
 //                "depth" | ...) }] }]; nested embeds up to MaxTransclusionDepth levels, cycles cut
 //   properties   frontmatter: [{ key, value }]          query: { source, filters, terms }
 //   calloutType, calloutFolded, line (first line in the file), uid, plainText (one line, for

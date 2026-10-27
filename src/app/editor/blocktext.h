@@ -203,6 +203,22 @@ using markdown::setReminderAlarm;
 using markdown::setTokenDate;
 using markdown::shiftedSpec;
 
+/// What the menu of a token link needs (DateChipMenu): the `date:`, `reminder:`, `recur:`, `prio:`
+/// or `day:` link `url` of a block's rendered text — its range plus `offset` (where the rendered
+/// text starts in `body`, BlockListModel::renderOffsetAt()) — read in `body`:
+///   { from, to } (body range), kind ("due" | "scheduled" | "start" | "created" | "done" |
+///   "cancelled" | "reminder" | "recurrence" | "priority" | "day"), at ("YYYY-MM-DD[ HH:mm]"),
+///   date, time ("" without one), alarm, rule (canonical: the 🔁 token's, for a reminder the
+///   block's; "" = none), priority (name: the token's, for a reminder the block's), logseq (a
+///   Logseq priority), isTask, target (a day link's target as written), ref ({ kind, value,
+///   ordinal }: the token across copies of the block, markdown::TokenRef; not for day links).
+/// Empty when the link names nothing there (the text changed since it was drawn).
+QVariantMap tokenChip(const QString &body, const QString &url, int offset, bool isTask, const VaultConfig &config);
+/// markdown::TokenRef as a QVariantMap { kind (int), value, ordinal, defaultTime ("HH:mm" or "") }
+/// and back (nullopt for a malformed map).
+QVariantMap tokenRefToMap(const markdown::TokenRef &ref);
+std::optional<markdown::TokenRef> tokenRefFromMap(const QVariantMap &map);
+
 /// Insert `token` at `cursor` of `text` with spaces around it as needed; returns the new text and
 /// sets *newCursor to the position after the token (and its trailing space, if one was added).
 QString insertTokenAt(const QString &text, int cursor, const QString &token, int *newCursor);

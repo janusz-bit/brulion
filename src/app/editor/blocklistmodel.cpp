@@ -875,7 +875,7 @@ QVariantMap BlockListModel::computeTableData(int i) const
         if (!renderer) {
             markdown::RenderContext ctx = renderContext(i);
             ctx.hideTransclusions = false; // no embed frames in cells: placeholder links
-            ctx.dateLinks = false;         // a chip's range would be the cell's, not the block's
+            ctx.dateLinks = true;          // ranges in the cell's text (PageController::tableCellChip)
             renderer.emplace(ctx);
         }
         const QString html = renderer->renderBlock(cell, BlockKind::Paragraph);
@@ -934,7 +934,9 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
     ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today); // [[2026-10-13]]: "wt 13 paź"
     ctx.taskCheckbox = false;
     ctx.hideTransclusions = true; // the delegate shows them in frames (`transclusions`)
-    ctx.dateLinks = true;         // date chips have a menu (PageController::dateChip)
+    ctx.dateLinks = true;         // date, 🔁 and priority chips have a menu (PageController::dateChip)
+    ctx.dayLinks = true;          // so have links to days of the journal ([[2026-10-20]])
+    ctx.journalConfig = vaultConfig();
     const QPointer<EditorHost> host = m_host;
     const QString path = m_path;
     if (host) {
@@ -999,6 +1001,7 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
     ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today);
     ctx.taskCheckbox = false;
     ctx.hideTransclusions = true; // nested embeds get their own rows in a transclusion
+    ctx.dateLinks = true;         // token menus (PageController::tokenChipIn; ranges in the block's body)
     const QPointer<EditorHost> host = m_host;
     if (host) {
         ctx.resolvePage = [host, path](const QString &target) -> std::optional<QString> {

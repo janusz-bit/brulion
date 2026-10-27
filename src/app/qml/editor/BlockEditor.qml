@@ -2072,64 +2072,240 @@ FocusScope {
         }
     }
 
-    // ---- The menu of a date chip ---------------------------------------------------------------
-    /// DateChipMenu for a 📅 ⏳ 🛫 ➕ ✅ ❌ or ⏰ chip of a block's rendered text (`link`: its date: /
-    /// reminder: link): a right-click or long press on it (BlockText). Created when first opened;
-    /// the block is tracked while the menu is open and the chip's range is used only while the
-    /// block is unchanged (PageController.trackedRow). Returns false when `link` names no date.
+    // ---- Token menus: dates, reminders, 🔁, priorities, days (DateChipMenu) ---------------------
+    /// DateChipMenu for a token of rendered text (`link`: its date:, reminder:, recur:, prio: or day:
+    /// link): a right-click or long press on it — in a block (BlockText: openDateMenu()), a query
+    /// result or an embed of another block (openTokenMenuIn()), a table cell (openCellTokenMenu()).
+    /// Created when first opened; the menu's choice goes to the `apply(action, a, b)` its opener
+    /// gave (popupTokenMenu()). A block is tracked while its menu is open and the chip's range is
+    /// used only while the block is unchanged (PageController.trackedRow).
     property DateChipMenu dateMenu: null
     property int dateMenuBlock: -1
     property var dateMenuChip: ({})
+    property var dateMenuApply: null
     function isDateChipLink(link) {
-        return link.startsWith("date:") || link.startsWith("reminder:")
+        return link.startsWith("date:") || link.startsWith("reminder:") || link.startsWith("recur:")
+                || link.startsWith("prio:") || link.startsWith("day:")
     }
+    /// Links whose click edits the text (their menu is the right button's): date, 🔁 and priority chips.
+    function editsOnClick(link) {
+        return link.startsWith("date:") || link.startsWith("recur:") || link.startsWith("prio:")
+    }
+    /// Open DateChipMenu for `chip` (PageController.dateChip / tokenChipIn / tableCellChip) at
+    /// (x, y) of `item`; `apply(action, a, b)` does what is chosen (DateChipMenu.chosen).
+    function popupTokenMenu(chip, apply, item, x, y) {
+        if (!dateMenu)
+            dateMenu = dateMenuComponent.createObject(editor) as DateChipMenu
+        menuAbove = null
+        closeSuggestions()
+        dateMenuChip = chip
+        dateMenuApply = apply
+        dateMenu.kind = chip.kind
+        dateMenu.alarm = chip.alarm === true
+        dateMenu.rule = chip.rule || ""
+        dateMenu.priority = chip.priority || ""
+        dateMenu.logseq = chip.logseq === true
+        dateMenu.isTask = chip.isTask === true
+        dateMenu.occurrence = false
+        // Above the docked toolbar and the keyboard (it flips above its item when needed).
+        dateMenu.bottomMargin = menuBottomMargin()
+        dateMenu.popup(item, x, y)
+    }
+    function chooseDateAction(action, a, b) {
+        const apply = dateMenuApply
+        dateMenuApply = null
+        if (apply)
+            apply(action, a, b)
+    }
+    /// The menu of a token in block `row`'s text. False when `link` names none.
     function openDateMenu(row, link, item, x, y) {
         if (!controller || row < 0 || row >= controller.blocks.count || !isDateChipLink(link))
             return false
         const chip = controller.dateChip(row, link)
         if (!chip.kind)
             return false
-        if (!dateMenu)
-            dateMenu = dateMenuComponent.createObject(editor) as DateChipMenu
-        menuAbove = null
-        closeSuggestions()
         if (dateMenuBlock >= 0)
             controller.untrack(dateMenuBlock)
         dateMenuBlock = controller.trackBlock(row)
-        dateMenuChip = chip
-        dateMenu.kind = chip.kind
-        dateMenu.alarm = chip.alarm
-        // Above the docked toolbar and the keyboard (it flips above its item when needed).
-        dateMenu.bottomMargin = menuBottomMargin()
-        dateMenu.popup(item, x, y)
+        const handle = dateMenuBlock
+        popupTokenMenu(chip, (action, a, b) => editor.chooseOwnToken(handle, chip, action, a, b), item, x, y)
         return true
     }
-    function chooseDateAction(action, a, b) {
-        if (!controller || dateMenuBlock < 0)
+    function chooseOwnToken(handle, chip, action, a, b) {
+        if (!controller)
             return
-        const row = controller.trackedRow(dateMenuBlock)
-        controller.untrack(dateMenuBlock)
-        dateMenuBlock = -1
-        const chip = dateMenuChip
+        const row = controller.trackedRow(handle)
+        controller.untrack(handle)
+        if (dateMenuBlock === handle)
+            dateMenuBlock = -1
         if (row < 0)
             return
         switch (action) {
         case "change":
             if (chip.kind === "reminder")
                 dialogs.editReminder(row, chip.from, chip.to)
+            else if (chip.kind === "recurrence")
+                dialogs.pickRecurrenceAt(row, chip.from, chip.to, chip.rule)
             else
                 dialogs.pickDateAt(row, chip.from, chip.to, chip.kind, chip.at)
             break
-        case "move": controller.moveDateTokenTo(row, chip.from, chip.to, a); break
-        case "shift": controller.shiftDateTokenAt(row, chip.from, chip.to, a, b); break
-        case "alarm": controller.setReminderAlarmAt(row, chip.from, chip.to, a); break
-        case "remove": controller.removeToken(row, chip.from, chip.to); break
+        case "blockRecurrenceChange": dialogs.pickRecurrence(row); break
+        case "open": activateLink(row, chip.url); break
+        case "openSide": controller.activateLink(row, chip.url, true); break
+        case "copy": copyText(chip.copyText); break
+        default: controller.applyTokenAction(row, chip.from, chip.to, action, a, b); break
         }
+    }
+    /// The menu of a token in a copy of a block of `path` (a query result, an embed): `raw` is the
+    /// block's Markdown as the index has it, `line` its line. The edit goes to that block's file
+    /// (PageController.editTokenIn) with a toast to undo it; on this page it is an undo step.
+    function openTokenMenuIn(path, line, raw, link, item, x, y) {
+        if (!controller || !path || line < 0 || !raw || !isDateChipLink(link))
+            return false
+        const chip = controller.tokenChipIn(raw, link)
+        if (!chip.kind)
+            return false
+        const run = (action, a, b) => editor.reportTokenEdit(controller.editTokenIn(path, line, chip.ref, action, a, b), action)
+        popupTokenMenu(chip, (action, a, b) => editor.chooseTokenWith(chip, run, action, a, b), item, x, y)
+        return true
+    }
+    /// The menu of a token in a table cell (tableRow -1 = the header): the cell's text changes
+    /// (PageController.applyTableCellToken, one undo step).
+    function openCellTokenMenu(row, tableRow, column, link, item, x, y) {
+        if (!controller || row < 0 || !isDateChipLink(link))
+            return false
+        const chip = controller.tableCellChip(row, tableRow, column, link)
+        if (!chip.kind)
+            return false
+        if (dateMenuBlock >= 0)
+            controller.untrack(dateMenuBlock)
+        dateMenuBlock = controller.trackBlock(row)
+        const handle = dateMenuBlock
+        const run = (action, a, b) => {
+            const r = controller.trackedRow(handle)
+            if (r >= 0)
+                controller.applyTableCellToken(r, tableRow, column, chip.from, chip.to, action, a, b)
+        }
+        popupTokenMenu(chip, (action, a, b) => editor.chooseTokenWith(chip, run, action, a, b), item, x, y)
+        return true
+    }
+    /// A token menu's choice made with `run(action, a, b)`; "change" opens the dialog that ends in it.
+    function chooseTokenWith(chip, run, action, a, b) {
+        switch (action) {
+        case "change":
+            if (chip.kind === "reminder")
+                dialogs.editReminderWith(run, chip)
+            else if (chip.kind === "recurrence")
+                dialogs.pickRecurrenceWith((act, rule) => run(act, rule, 0), chip.rule, "recurrence")
+            else
+                dialogs.pickDateWith(run, chip.kind, chip.at)
+            break
+        case "blockRecurrenceChange":
+            dialogs.pickRecurrenceWith((act, rule) => run(act, rule, 0), chip.rule, "blockRecurrence")
+            break
+        default: run(action, a, b); break
+        }
+    }
+    /// The toast after editTokenIn(): what changed, with "Undo" for another file; why not.
+    function reportTokenEdit(r, action) {
+        if (!r)
+            return
+        if (r.ok) {
+            if (r.undo > 0) {
+                const undo = r.undo
+                const text = action === "recurrence" || action === "blockRecurrence" ? qsTr("Repeat changed")
+                           : action === "priority" || action === "blockPriority" ? qsTr("Priority changed")
+                           : action === "remove" ? qsTr("Removed")
+                           : action === "alarm" || action === "reminder" ? qsTr("Reminder changed")
+                           : qsTr("Date changed")
+                notice(text, "success", {
+                    text: qsTr("Undo"),
+                    run: () => {
+                        if (!editor.controller.undoTokenEdit(undo))
+                            editor.notice(qsTr("The page changed in the meantime; nothing was undone."), "info")
+                    }
+                })
+            }
+            return
+        }
+        if (r.reason === "gone" || r.reason === "changed")
+            notice(qsTr("The note changed in the meantime; nothing was changed."), "info")
+        else if (r.reason === "failed")
+            notice(qsTr("The change could not be saved."), "error")
     }
     Component {
         id: dateMenuComponent
         DateChipMenu {
             onChosen: (action, a, b) => editor.chooseDateAction(action, a, b)
+        }
+    }
+
+    // ---- The menu of a link: [[page]], #tag, ((block)), web address (LinkMenu) ------------------
+    /// LinkMenu for a page:, tag:, block: or ext: link of rendered text — `fromPath`: the page the
+    /// link is written on ("" = this one) —; `open(newPane)` does what a click does (in the side
+    /// panel with newPane). Created when first opened. False when `link` is no such link.
+    property LinkMenu linkMenu: null
+    property var linkMenuInfo: ({})
+    property var linkMenuOpen: null
+    function isLinkMenuLink(link) {
+        return link.startsWith("page:") || link.startsWith("tag:") || link.startsWith("block:") || link.startsWith("ext:")
+    }
+    function openLinkMenu(link, fromPath, open, item, x, y) {
+        if (!controller || !isLinkMenuLink(link))
+            return false
+        const info = controller.linkMenu(link, fromPath || "")
+        if (!info.kind)
+            return false
+        if (!linkMenu)
+            linkMenu = linkMenuComponent.createObject(editor) as LinkMenu
+        menuAbove = null
+        closeSuggestions()
+        linkMenuInfo = info
+        linkMenuOpen = open
+        linkMenu.kind = info.kind
+        linkMenu.unresolved = info.unresolved === true
+        linkMenu.bottomMargin = menuBottomMargin()
+        linkMenu.popup(item, x, y)
+        return true
+    }
+    /// The link menu of a link in block `row`'s text.
+    function openBlockLinkMenu(row, link, item, x, y) {
+        return openLinkMenu(link, "", (newPane) => {
+            if (newPane)
+                editor.controller.activateLink(row, link, true)
+            else
+                editor.activateLink(row, link)
+        }, item, x, y)
+    }
+    function chooseLinkAction(action) {
+        const info = linkMenuInfo
+        const open = linkMenuOpen
+        linkMenuOpen = null
+        if (!controller)
+            return
+        switch (action) {
+        case "open": if (open) open(false); break
+        case "openSide": if (open) open(true); break
+        case "copy": copyText(info.copyText); break
+        case "overview": controller.navigate({ view: "tag", tag: info.tag, overview: true }); break
+        case "tasks": controller.navigate({ view: "tasks", query: "tag:" + (/[\s,"]/.test(info.tag) ? "\"" + info.tag + "\"" : info.tag) }); break
+        }
+    }
+    /// Copy `text` and say so ("Skopiowano …", or that the clipboard is not available).
+    function copyText(text) {
+        if (!controller || !text)
+            return false
+        const r = controller.copyText(text)
+        if (r.ok)
+            notice(qsTr("Copied %1").arg(r.text), "success")
+        else
+            notice(copyFailure(r.reason), "error")
+        return r.ok
+    }
+    Component {
+        id: linkMenuComponent
+        LinkMenu {
+            onChosen: (action) => editor.chooseLinkAction(action)
         }
     }
 

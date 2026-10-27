@@ -65,7 +65,7 @@ QHash<int, QByteArray> QueryResultModel::roleNames() const
             {TitleRole, "title"},     {FolderRole, "folder"},   {LineRole, "line"},         {TextRole, "text"},
             {HtmlRole, "html"},       {StatusRole, "status"},   {IsTaskRole, "isTask"},     {BlockIdRole, "blockId"},
             {DueRole, "due"},         {OverdueRole, "overdue"}, {ReminderRole, "reminder"}, {AlarmRole, "alarm"},
-            {ShowPageRole, "showPage"}, {JournalRole, "journal"}};
+            {ShowPageRole, "showPage"}, {JournalRole, "journal"}, {RawRole, "raw"}};
 }
 
 QVariant QueryResultModel::data(const QModelIndex &index, int role) const
@@ -115,6 +115,7 @@ QVariant QueryResultModel::data(const QModelIndex &index, int role) const
         const auto date = markdown::journalDateFromPath(item.value(u"path"_s).toString(), m_config);
         return date ? date->toString(u"yyyy-MM-dd"_s) : QString();
     }
+    case RawRole: return r.group ? QString() : item.value(u"raw"_s).toString();
     default: return {};
     }
 }
@@ -499,7 +500,8 @@ QVariantMap QueryResultModel::activateLink(int row, const QString &url, bool new
 {
     if (!m_controller)
         return {};
-    if (url.startsWith(u"task:"_s) || url.startsWith(u"reminder:"_s))
+    if (url.startsWith(u"task:"_s) || url.startsWith(u"reminder:"_s) || url.startsWith(u"date:"_s)
+        || url.startsWith(u"recur:"_s) || url.startsWith(u"prio:"_s))
         return open(row, newPane);
     // `[[#Heading]]`, `[[#^id]]` in an item of another page name that page, not the query's.
     if (url.startsWith(u"page:#"_s) && row >= 0 && row < m_rows.size()) {

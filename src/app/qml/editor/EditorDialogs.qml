@@ -10,7 +10,12 @@ import Brulion
 //   editReminder(row, from, to)     a clicked reminder chip: edit / delete that token
 //   pickDate(row, field)            Termin (📅 due) / Zaplanuj (⏳ scheduled): BDatePicker
 //   pickDateAt(row, from, to, kind, at)  a date chip's "Zmień datę…" (DateChipMenu): that token
+//                                   (kind "day": a [[day]] link, a date without a time)
 //   pickRecurrence(row)             Powtarzaj (🔁): quick choices or a rule typed in Polish/English
+//   pickRecurrenceAt(row, from, to, rule)  a 🔁 chip's "Zmień regułę…": that rule
+//   pickDateWith / editReminderWith / pickRecurrenceWith(apply, …)  the same dialogs for a token
+//                                   elsewhere (a query result, an embed, a table cell, …): the
+//                                   choice goes to apply(action, a, b) (DateChipMenu's actions)
 //   pickJournalDate(row, cursor)    Data…: a [[journal day]] link at the caret
 //   pickTemplate(row)               Szablon…: insert a template from the templates folder
 //   pickImage(row, cursor)          Obraz…: pictures from the system's file picker (desktop,
@@ -76,7 +81,15 @@ Item {
     property int to: -1
     property string field: "due"
     property int cursor: -1
-    property string mode: ""   // date dialog: "token" | "range" (from, to) | "journal"
+    property string mode: ""   // date dialog: "token" | "range" (from, to) | "journal" | "apply"
+    /// "apply" dialogs: function(action, a, b) that makes the edit (pick…With()).
+    property var apply: null
+    /// The recurrence dialog: "" (the block's rule) | "range" (the rule at from, to) | "apply".
+    property string recurrenceMode: ""
+    /// The action the recurrence dialog's choice is given to in "apply" mode.
+    property string recurrenceAction: "recurrence"
+    /// The reminder dialog edits through `apply` (editReminderWith()).
+    property bool reminderApply: false
 
     function remember(r) {
         row = r
@@ -101,6 +114,7 @@ Item {
 
     function createReminder(r, alarm) {
         remember(r)
+        reminderApply = false
         from = -1
         to = -1
         const reminder = reminderPopup()
@@ -115,10 +129,23 @@ Item {
         if (!data.at)
             return
         remember(r)
+        reminderApply = false
         from = f
         to = t
         data.context = editor.autoTextSafe(data.context)
         reminderPopup().edit(data)
+    }
+    /// The reminder dialog for `chip` (a reminder elsewhere: its at, alarm, rule, context); the
+    /// result goes to apply("reminder", at, { alarm, recurrence }) — "Usuń" to apply("remove").
+    function editReminderWith(fn, chip) {
+        apply = fn
+        reminderApply = true
+        reminderPopup().edit({
+            at: chip.dialogAt || chip.at,
+            alarm: chip.alarm === true,
+            recurrence: chip.rule || "",
+            context: editor.autoTextSafe(chip.context || "")
+        })
     }
     function pickDate(r, which) {
         remember(r)
@@ -144,20 +171,32 @@ Item {
         from = f
         to = t
         mode = "range"
+        openDateDialog(kind, at)
+    }
+    /// The date dialog for a date token (or day link) elsewhere: apply("set", value) / ("remove").
+    function pickDateWith(fn, kind, at) {
+        apply = fn
+        mode = "apply"
+        openDateDialog(kind, at)
+    }
+    function openDateDialog(kind, at) {
+        const day = kind === "day"
         const parts = DatesHelper.splitSpec(at)
         const dateDialog = datePopup()
         const picker = dateDialog.picker
         picker.clearTyped()
-        dateDialog.title = kind === "scheduled" ? qsTr("Scheduled") : kind === "start" ? qsTr("Start date")
-                         : kind === "created" ? qsTr("Created") : kind === "done" ? qsTr("Done date")
-                         : kind === "cancelled" ? qsTr("Cancelled date") : qsTr("Due date")
-        dateDialog.iconName = kind === "scheduled" ? "hourglass" : kind === "done" ? "calendar-check" : "calendar"
+        dateDialog.title = day ? qsTr("Link to a day") : kind === "scheduled" ? qsTr("Scheduled")
+                         : kind === "start" ? qsTr("Start date") : kind === "created" ? qsTr("Created")
+                         : kind === "done" ? qsTr("Done date") : kind === "cancelled" ? qsTr("Cancelled date")
+                         : kind === "reminder" ? qsTr("Reminder") : qsTr("Due date")
+        dateDialog.iconName = day ? "calendar-days" : kind === "scheduled" ? "hourglass" : kind === "done" ? "calendar-check"
+                            : kind === "reminder" ? "calendar-clock" : "calendar"
         picker.selectedDate = parts.ok ? parts.date : DatesHelper.today
-        picker.time = parts.ok ? parts.time : ""
-        picker.withTime = true
-        picker.timeRequired = false
+        picker.time = parts.ok && !day ? parts.time : ""
+        picker.withTime = !day
+        picker.timeRequired = kind === "reminder"
         picker.showMonthOf(picker.selectedDate)
-        dateDialog.removable = true
+        dateDialog.removable = !day
         dateDialog.open()
     }
     function pickJournalDate(r, c) {
@@ -178,7 +217,36 @@ Item {
     }
     function pickRecurrence(r) {
         remember(r)
-        const current = controller.blockDates(r).recurrence
+        recurrenceMode = ""
+        openRecurrenceDialog(controller.blockDates(r).recurrence)
+    }
+    function pickRecurrenceAt(r, f, t, rule) {
+        remember(r)
+        from = f
+        to = t
+        recurrenceMode = "range"
+        openRecurrenceDialog(rule || "")
+    }
+    /// The recurrence dialog for a rule elsewhere: apply(action, rule) ("" = "Nie powtarzaj").
+    function pickRecurrenceWith(fn, rule, action) {
+        apply = fn
+        recurrenceMode = "apply"
+        recurrenceAction = action || "recurrence"
+        openRecurrenceDialog(rule || "")
+    }
+    /// The rule chosen (or "" for none) where the recurrence dialog was opened for.
+    function recurrenceChosen(rule) {
+        if (recurrenceMode === "apply") {
+            if (apply)
+                apply(recurrenceAction, rule)
+        } else if (blockRow() >= 0 && recurrenceMode === "range") {
+            controller.applyTokenAction(blockRow(), from, to, "recurrence", rule, 0)
+        } else if (blockRow() >= 0) {
+            controller.setRecurrence(blockRow(), rule)
+        }
+        refocus()
+    }
+    function openRecurrenceDialog(current) {
         const recurrenceDialog = recurrencePopup()
         recurrenceDialog.ruleField.text = current !== "" ? DatesHelper.ruleLabel(current) : ""
         recurrenceDialog.removable = current !== ""
@@ -279,13 +347,21 @@ Item {
         BReminderDialog {
             parent: T.Overlay.overlay
             onReminderAccepted: (r) => {
-                if (root.blockRow() >= 0)
+                if (root.reminderApply) {
+                    if (root.apply)
+                        root.apply("reminder", r.at, { alarm: r.alarm, recurrence: r.recurrence })
+                } else if (root.blockRow() >= 0) {
                     root.controller.setReminder(root.blockRow(), r.at, r.alarm, r.recurrence, root.from, root.to)
+                }
                 root.refocus()
             }
             onDeleteRequested: {
-                if (root.from >= 0 && root.blockRow() >= 0)
+                if (root.reminderApply) {
+                    if (root.apply)
+                        root.apply("remove", 0, 0)
+                } else if (root.from >= 0 && root.blockRow() >= 0) {
                     root.controller.removeToken(root.blockRow(), root.from, root.to)
+                }
                 root.refocus()
             }
             onRejected: root.refocus()
@@ -311,10 +387,14 @@ Item {
                     variant: "ghost"
                     textColor: Theme.dangerText
                     onClicked: {
-                        if (root.blockRow() >= 0 && root.mode === "range")
+                        if (root.mode === "apply") {
+                            if (root.apply)
+                                root.apply("remove", 0, 0)
+                        } else if (root.blockRow() >= 0 && root.mode === "range") {
                             root.controller.removeToken(root.blockRow(), root.from, root.to)
-                        else if (root.blockRow() >= 0)
+                        } else if (root.blockRow() >= 0) {
                             root.controller.setDateToken(root.blockRow(), root.field, "")
+                        }
                         dateDialog.close()
                         root.refocus()
                     }
@@ -323,10 +403,13 @@ Item {
             onAcceptRequested: picker.commitPending()
             onAccepted: {
                 const r = root.blockRow()
-                if (r >= 0 && root.mode === "journal")
+                if (root.mode === "apply") {
+                    if (root.apply)
+                        root.apply("set", picker.value, 0)
+                } else if (r >= 0 && root.mode === "journal")
                     root.controller.insertToken(r, root.cursor, root.controller.journalLink(picker.selectedDate))
                 else if (r >= 0 && root.mode === "range")
-                    root.controller.setDateTokenAt(r, root.from, root.to, picker.value)
+                    root.controller.applyTokenAction(r, root.from, root.to, "set", picker.value, 0)
                 else if (r >= 0)
                     root.controller.setDateToken(r, root.field, picker.value)
                 root.refocus()
@@ -371,18 +454,12 @@ Item {
                     variant: "ghost"
                     textColor: Theme.dangerText
                     onClicked: {
-                        if (root.blockRow() >= 0)
-                            root.controller.setRecurrence(root.blockRow(), "")
                         recurrenceDialog.close()
-                        root.refocus()
+                        root.recurrenceChosen("")
                     }
                 }
             ]
-            onAccepted: {
-                if (root.blockRow() >= 0)
-                    root.controller.setRecurrence(root.blockRow(), recurrenceDialog.parsed.canonical)
-                root.refocus()
-            }
+            onAccepted: root.recurrenceChosen(recurrenceDialog.parsed.canonical)
             onRejected: root.refocus()
 
             Flow {

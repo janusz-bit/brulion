@@ -4,6 +4,7 @@
 #include "markdown/blockclipboard.h"
 #include "markdown/frontmatter.h"
 #include "markdown/inline.h"
+#include "markdown/journal.h"
 #include "markdown/notemode.h"
 #include "markdown/properties.h"
 #include "markdown/tasks.h"
@@ -856,6 +857,116 @@ bool onlyEmbeds(QStringView body, bool transclusions)
 }
 
 // ---------------------------------------------------------------------------------------------
+
+namespace {
+
+/// The block's 🔁 rule (its first line): canonical when it parses, else as written; "" = none.
+QString blockRuleOf(const QString &body)
+{
+    const auto range = markdown::findFirstLineToken(body, markdown::TokenKind::Recurrence);
+    if (!range)
+        return {};
+    if (const auto t = markdown::tokenAt(body, range->first, range->second))
+        return t->canonical;
+    const QString masked = markdown::maskInlineCode(body);
+    const QList<markdown::Token> all = markdown::findTokens(QStringView(masked).first(range->second));
+    return all.isEmpty() ? QString() : markdown::recurrenceOf(all.last());
+}
+
+/// The block's priority (the first one on its first line): { name, logseq }.
+std::pair<QString, bool> blockPriorityOf(const QString &body)
+{
+    const QString first = firstLineOf(body).toString();
+    for (const markdown::Token &t : markdown::findTokens(markdown::maskInlineCode(first))) {
+        if (t.kind == markdown::TokenKind::Priority || t.kind == markdown::TokenKind::LogseqPriority)
+            return {markdown::priorityName(t.priority), t.kind == markdown::TokenKind::LogseqPriority};
+    }
+    return {};
+}
+
+} // namespace
+
+QVariantMap tokenChip(const QString &body, const QString &url, int offset, bool isTask, const VaultConfig &config)
+{
+    static const QRegularExpression link(u"^(date|reminder|recur|prio|day):(\\d+)-(\\d+)$"_s);
+    const auto m = link.match(url);
+    if (!m.hasMatch())
+        return {};
+    const QString scheme = m.captured(1);
+    const qsizetype from = m.captured(2).toLongLong() + offset;
+    const qsizetype to = m.captured(3).toLongLong() + offset;
+    QVariantMap out{{u"from"_s, int(from)}, {u"to"_s, int(to)}, {u"isTask"_s, isTask}, {u"alarm"_s, false},
+                    {u"rule"_s, QString()}, {u"priority"_s, QString()}, {u"logseq"_s, false}};
+    if (scheme == u"day") {
+        const auto day = markdown::journalLinkAt(body, from, to, config);
+        if (!day)
+            return {};
+        const QString date = day->date.toString(u"yyyy-MM-dd"_s);
+        out.insert({{u"from"_s, int(day->from)}, {u"to"_s, int(day->to)}, {u"kind"_s, u"day"_s}, {u"at"_s, date},
+                    {u"date"_s, date}, {u"time"_s, QString()}, {u"target"_s, day->target}});
+        return out;
+    }
+    const auto t = markdown::tokenAt(body, from, to);
+    if (!t)
+        return {};
+    using markdown::TokenKind;
+    QString kind;
+    switch (t->kind) {
+    case TokenKind::Due: kind = u"due"_s; break;
+    case TokenKind::Scheduled: kind = u"scheduled"_s; break;
+    case TokenKind::Start: kind = u"start"_s; break;
+    case TokenKind::Created: kind = u"created"_s; break;
+    case TokenKind::Done: kind = u"done"_s; break;
+    case TokenKind::Cancelled: kind = u"cancelled"_s; break;
+    case TokenKind::Reminder:
+    case TokenKind::ReminderCompat: kind = u"reminder"_s; break;
+    case TokenKind::Recurrence: kind = u"recurrence"_s; break;
+    case TokenKind::Priority:
+    case TokenKind::LogseqPriority: kind = u"priority"_s; break;
+    default: return {};
+    }
+    out.insert({{u"from"_s, int(t->from)}, {u"to"_s, int(t->to)}, {u"kind"_s, kind}});
+    if (t->hasDate()) {
+        out.insert({{u"at"_s, t->spec().toString()},
+                    {u"date"_s, t->date.toString(u"yyyy-MM-dd"_s)},
+                    {u"time"_s, t->time ? t->time->toString(u"HH:mm"_s) : QString()},
+                    {u"alarm"_s, t->alarm}});
+    }
+    if (kind == u"reminder") {
+        const auto [priority, logseq] = blockPriorityOf(body);
+        out.insert({{u"rule"_s, blockRuleOf(body)}, {u"priority"_s, priority}, {u"logseq"_s, logseq}});
+    } else if (kind == u"recurrence") {
+        out.insert(u"rule"_s, t->canonical);
+    } else if (kind == u"priority") {
+        out.insert({{u"priority"_s, markdown::priorityName(t->priority)},
+                    {u"logseq"_s, t->kind == TokenKind::LogseqPriority}});
+    }
+    if (const auto ref = markdown::tokenRefAt(body, t->from, t->to))
+        out.insert(u"ref"_s, tokenRefToMap(*ref));
+    return out;
+}
+
+QVariantMap tokenRefToMap(const markdown::TokenRef &ref)
+{
+    return {{u"kind"_s, int(ref.kind)},
+            {u"value"_s, ref.value},
+            {u"ordinal"_s, ref.ordinal},
+            {u"defaultTime"_s, ref.defaultTime.isValid() ? ref.defaultTime.toString(u"HH:mm"_s) : QString()}};
+}
+
+std::optional<markdown::TokenRef> tokenRefFromMap(const QVariantMap &map)
+{
+    bool ok = false;
+    const int kind = map.value(u"kind"_s).toInt(&ok);
+    if (!ok || kind < 0 || kind > int(markdown::TokenKind::Planning) || map.value(u"value"_s).toString().isEmpty())
+        return std::nullopt;
+    markdown::TokenRef ref;
+    ref.kind = markdown::TokenKind(kind);
+    ref.value = map.value(u"value"_s).toString();
+    ref.ordinal = std::max(0, map.value(u"ordinal"_s).toInt());
+    ref.defaultTime = QTime::fromString(map.value(u"defaultTime"_s).toString(), u"HH:mm"_s);
+    return ref;
+}
 
 QString insertTokenAt(const QString &text, int cursor, const QString &token, int *newCursor)
 {

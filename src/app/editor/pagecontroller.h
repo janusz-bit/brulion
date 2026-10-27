@@ -54,6 +54,7 @@
 #pragma once
 
 #include "blocklistmodel.h"
+#include "markdown/tokenedit.h"
 
 #include <QDateTime>
 #include <QObject>
@@ -519,11 +520,43 @@ public:
     /// The reminder at body range [from, to): { at, alarm, recurrence, context } for
     /// BReminderDialog.edit(); empty when there is no reminder there.
     Q_INVOKABLE QVariantMap reminderAt(int row, int from, int to) const;
-    /// The date chip a `date:FROM-TO` or `reminder:FROM-TO` link of the row's rendered text
-    /// names (its menu: a right-click or long press on it): { from, to } (body range), kind ("due"
-    /// | "scheduled" | "start" | "created" | "done" | "cancelled" | "reminder"), at ("YYYY-MM-DD
-    /// [HH:mm]"), date, time ("" without one), alarm; empty when the link names no date token.
+    /// The token a `date:FROM-TO`, `reminder:FROM-TO`, `recur:FROM-TO`, `prio:FROM-TO` or
+    /// `day:FROM-TO` link of the row's rendered text names (its menu, DateChipMenu: a right-click or
+    /// long press on it): { from, to } (body range), kind ("due" | "scheduled" | "start" | "created"
+    /// | "done" | "cancelled" | "reminder" | "recurrence" | "priority" | "day"), at ("YYYY-MM-DD
+    /// [HH:mm]"), date, time ("" without one), alarm, rule, priority, logseq, isTask (editor::
+    /// tokenChip()); a day link also url (its page: link, what a click opens) and copyText; empty
+    /// when the link names no token.
     Q_INVOKABLE QVariantMap dateChip(int row, const QString &url) const;
+    /// One edit of a token menu on body range [from, to) of a row (markdown::applyTokenAction():
+    /// "set", "move", "shift", "alarm", "reminder", "remove", "recurrence", "priority",
+    /// "blockRecurrence", "blockPriority"; on a [[day]] link "set", "move", "shift") — only the
+    /// token's bytes change. One undo step; false when nothing changed.
+    Q_INVOKABLE bool applyTokenAction(int row, int from, int to, const QString &action, const QVariant &a = {},
+                                      const QVariant &b = {});
+    /// The token a link of a block copy's rendered text names: `raw` is the block's Markdown as a
+    /// query result or an embed has it (an item of another page, rendered with renderContextFor())
+    /// — what dateChip() returns, with `ref` naming the token for editTokenIn(); empty when there is
+    /// none (day links are no tokens there: they are page links).
+    Q_INVOKABLE QVariantMap tokenChipIn(const QString &raw, const QString &url) const;
+    /// A token menu's edit (applyTokenAction()'s actions) on the token `ref` (tokenChipIn()) of the
+    /// block on `line` of `path`: on this page an undoable edit of that block; in another file the
+    /// edit is written like a hand edit (markdown::editBlockToken(), only if the file did not change
+    /// meanwhile: EditorHost::writeIfUnchanged()) and can be undone with undoTokenEdit(undo).
+    /// Returns { ok, undo (0: this page's undo, or nothing to undo), reason ("gone": the block or
+    /// its token is not there any more, "changed", "failed", "unchanged") }.
+    Q_INVOKABLE QVariantMap editTokenIn(const QString &path, int line, const QVariantMap &ref, const QString &action,
+                                        const QVariant &a = {}, const QVariant &b = {});
+    /// Put back what editTokenIn() changed in another file (`undo`: its handle) — only while the
+    /// file still holds what that edit wrote. False when it changed since or the handle is gone.
+    Q_INVOKABLE bool undoTokenEdit(int undo);
+    /// A token link of a table cell's rendered text (`url`, its range in the cell's text): as
+    /// dateChip() with the range in the cell (tableRow -1 = header). Empty when there is none.
+    Q_INVOKABLE QVariantMap tableCellChip(int row, int tableRow, int column, const QString &url) const;
+    /// applyTokenAction() on range [from, to) of a table cell's text: the table is rewritten with
+    /// that cell changed (setTableCell(), one undo step). False when nothing changed.
+    Q_INVOKABLE bool applyTableCellToken(int row, int tableRow, int column, int from, int to, const QString &action,
+                                         const QVariant &a = {}, const QVariant &b = {});
     /// The date token at body range [from, to) gets `spec` ("YYYY-MM-DD [HH:mm]") — only its value
     /// changes; an empty spec removes the token. One undo step.
     Q_INVOKABLE void setDateTokenAt(int row, int from, int to, const QString &spec);
@@ -572,6 +605,19 @@ public:
     /// to another page is opened there: EditorHost::blockIdTaken once the index is complete, the
     /// shell's route resolution).
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
+    /// What the menu of a link (LinkMenu: a right-click or long press on a page:, tag:, block: or
+    /// ext: link) needs — `fromPath`: the page the link is written on ("" = this one; query
+    /// results and embeds of other pages): { kind ("page" | "tag" | "block" | "ext"), unresolved
+    /// (a page that does not exist yet), path (the page it opens), tag, copyText (what "Kopiuj"
+    /// puts on the clipboard: `[[Page#Heading]]` by the page's shortest link target — it works
+    /// pasted on any page —, as written when it does not exist; `#tag` / `#[[tag with spaces]]`;
+    /// `((id))`; the address) }; empty for other links.
+    Q_INVOKABLE QVariantMap linkMenu(const QString &url, const QString &fromPath = QString()) const;
+    /// Put `text` on the clipboard: { ok, text, reason ("noClipboard" when the platform has none
+    /// or it did not take the text) } — as copyLink() reports it.
+    Q_INVOKABLE QVariantMap copyText(const QString &text);
+    /// Open a route through the host (the shell's navigation; `newPane`: the side panel).
+    Q_INVOKABLE void navigate(const QVariantMap &route, bool newPane = false);
 
     // --- Tasks and blocks elsewhere (query results, embeds) ------------------------------------------
     /// Set the status of the task on `line` (0-based) of `path` ("" = no status: the marker goes):
@@ -844,6 +890,16 @@ private:
     QList<quint64> m_pickedUids;
     bool m_selectionContiguous = true;
     QHash<int, quint64> m_tracked; ///< trackBlock() handles
+    /// editTokenIn() edits of other files, for undoTokenEdit(): handle -> { path, before, after }.
+    struct ForeignEdit {
+        QString path;
+        QString before;
+        QString after;
+    };
+    QHash<int, ForeignEdit> m_foreignEdits;
+    int m_nextForeignEdit = 1;
+    /// What the token edits need besides the text (today, the default reminder time, journals).
+    markdown::TokenEditContext tokenEditContext() const;
     int m_nextTrackHandle = 1;
     bool m_conflict = false;
     QString m_conflictText;

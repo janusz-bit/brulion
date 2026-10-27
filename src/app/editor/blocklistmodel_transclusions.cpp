@@ -307,10 +307,11 @@ private:
     }
 
     static QVariantMap blockEntry(const QString &html, int depth, const QString &view, int headingLevel,
-                                  const QString &task, const QString &path, int line)
+                                  const QString &task, const QString &path, int line, const QString &raw = QString())
     {
         return {{u"kind"_s, u"block"_s}, {u"html"_s, html},   {u"depth"_s, depth}, {u"view"_s, view},
-                {u"headingLevel"_s, headingLevel}, {u"task"_s, task}, {u"path"_s, path}, {u"line"_s, line}};
+                {u"headingLevel"_s, headingLevel}, {u"task"_s, task}, {u"path"_s, path}, {u"line"_s, line},
+                {u"raw"_s, raw}};
     }
 
     void addBlocks(const Resolved &r, int depthOffset, int level, QSet<QString> &visited, QVariantList &out, int &budget,
@@ -346,7 +347,8 @@ private:
                 view = u"code"_s;
             }
             if (!onlyNested && (!html.isEmpty() || s.view == BlockView::Rule)) {
-                out.append(blockEntry(html, depth, view, s.headingLevel, statusName(s), r.src.path, e.line));
+                out.append(blockEntry(html, depth, view, s.headingLevel, statusName(s), r.src.path, e.line,
+                                      textLike ? doc.blockSource(i) : QString()));
                 --budget;
             }
             for (const Transclusion &t : nested) {

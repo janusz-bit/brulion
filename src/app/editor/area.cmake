@@ -17,6 +17,7 @@ qt_target_qml_sources(brulion
         qml/editor/TaskBox.qml
         qml/editor/TaskStatusMenu.qml
         qml/editor/DateChipMenu.qml
+        qml/editor/LinkMenu.qml
         qml/editor/WebPictureMenu.qml
         qml/editor/CodeBlockView.qml
         qml/editor/CalcBlockView.qml
