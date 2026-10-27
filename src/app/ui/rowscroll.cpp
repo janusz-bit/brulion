@@ -12,7 +12,10 @@ namespace brulion::ui {
 
 namespace {
 
-bool finite(qreal v) { return std::isfinite(v); }
+bool finite(qreal v)
+{
+    return std::isfinite(v);
+}
 
 /// A unit's span in content coordinates (the header, a row, the footer).
 struct Segment {
@@ -35,7 +38,10 @@ QList<Segment> segments(const RowEdges &e)
     return out;
 }
 
-bool changed(qreal a, qreal b) { return std::abs(a - b) > 1e-9; }
+bool changed(qreal a, qreal b)
+{
+    return std::abs(a - b) > 1e-9;
+}
 
 // Rounding of item geometry: spans may overlap by this much.
 constexpr qreal Overlap = 0.5;
@@ -176,10 +182,9 @@ void RowScroll::connectView()
         if (index >= 0)
             m_connections.append(connect(object, object->metaObject()->method(index), this, slot));
     };
-    for (const char *signal :
-         {"contentYChanged()", "heightChanged()", "contentHeightChanged()", "originYChanged()", "countChanged()",
-          "movingChanged()", "topMarginChanged()", "bottomMarginChanged()", "headerItemChanged()",
-          "footerItemChanged()"})
+    for (const char *signal : {"contentYChanged()", "heightChanged()", "contentHeightChanged()", "originYChanged()",
+                               "countChanged()", "movingChanged()", "topMarginChanged()", "bottomMarginChanged()",
+                               "headerItemChanged()", "footerItemChanged()"})
         follow(m_view, signal);
     m_connections.append(connect(m_view, &QQuickItem::windowChanged, this, &RowScroll::attachWindow));
     attachWindow(m_view->window());

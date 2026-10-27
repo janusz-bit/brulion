@@ -137,8 +137,8 @@ double percentile(QList<double> values, double p)
 template<typename F>
 bool rowThumbJump(const F &prev, const F &f)
 {
-    if (std::isnan(f.rowThumb) || std::isnan(prev.rowThumb) || !f.moving || !prev.moving || f.atBound
-        || prev.atBound || f.rowSize != prev.rowSize)
+    if (std::isnan(f.rowThumb) || std::isnan(prev.rowThumb) || !f.moving || !prev.moving || f.atBound || prev.atBound
+        || f.rowSize != prev.rowSize)
         return false;
     const double thumb = (f.rowThumb - prev.rowThumb) * f.height;
     const double dy = f.contentY - prev.contentY;
@@ -1371,8 +1371,8 @@ private:
                      .arg(otherTotal, 0, 'f', 0)
                      .arg(frameDyDirect, 0, 'f', 0)
                      .arg(animTotal, 0, 'f', 0));
-        line(u"VIEW originY changes %1 (total %2 px), contentHeight changes while moving %3, scroll bar thumb jumps > 3 px %4 "
-             u"(visibleArea, an attached bar's), %5"_s.arg(originChanges)
+        line(u"VIEW originY changes %1 (total %2 px), contentHeight changes while moving %3, scroll bar thumb "
+             u"jumps > 3 px %4 (visibleArea, an attached bar's), %5"_s.arg(originChanges)
                      .arg(originTotal, 0, 'f', 0)
                      .arg(heightChanges)
                      .arg(thumbJumps)

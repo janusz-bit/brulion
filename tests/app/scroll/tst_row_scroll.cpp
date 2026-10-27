@@ -69,7 +69,10 @@ RowEdges layout(qreal header, const QList<qreal> &heights, qreal gap, qreal foot
     return e;
 }
 
-QList<qreal> repeated(qreal h, int n) { return QList<qreal>(n, h); }
+QList<qreal> repeated(qreal h, int n)
+{
+    return QList<qreal>(n, h);
+}
 
 /// The shortest of the live list's rows (`heights` in sceneQml: 18 to 600 px).
 constexpr qreal MinRow = 18;
@@ -285,8 +288,8 @@ private Q_SLOTS:
         QTest::addColumn<qreal>("expected"); // -1: none
 
         const QList<qreal> ten = repeated(100, 10);
-        QTest::newRow("the header's top") << 300.0 << ten << 0.0 << 0.0 << 0.0 << 500.0 << false << false << QList<int>{}
-                                          << 0.0;
+        QTest::newRow("the header's top")
+                << 300.0 << ten << 0.0 << 0.0 << 0.0 << 500.0 << false << false << QList<int>{} << 0.0;
         QTest::newRow("at the beginning (overshoot)")
                 << 300.0 << ten << 0.0 << 0.0 << -20.0 << 480.0 << true << false << QList<int>{} << 0.0;
         QTest::newRow("at the end") << 300.0 << ten << 0.0 << 0.0 << 800.0 << 1300.0 << false << true << QList<int>{}
@@ -295,15 +298,12 @@ private Q_SLOTS:
                 << 300.0 << ten << 0.0 << 0.0 << 800.0 << 1300.0 << false << false << QList<int>{} << 1.0;
         QTest::newRow("in the middle") << 0.0 << ten << 0.0 << 0.0 << 250.0 << 650.0 << false << false << QList<int>{}
                                        << 2.5 / 6;
-        QTest::newRow("a row taller than the view")
-                << 0.0 << QList<qreal>{100, 2000, 100} << 0.0 << 0.0 << 500.0 << 900.0 << false << false
-                << QList<int>{} << 1.2 / 2.8;
-        QTest::newRow("section headers inside the spans")
-                << 0.0 << repeated(100, 6) << 20.0 << 0.0 << 280.0 << 580.0 << false << false << QList<int>{}
-                << 2.5 / 3.1;
-        QTest::newRow("a header and a footer")
-                << 200.0 << repeated(100, 4) << 0.0 << 300.0 << 450.0 << 750.0 << false << false << QList<int>{}
-                << 0.875;
+        QTest::newRow("a row taller than the view") << 0.0 << QList<qreal>{100, 2000, 100} << 0.0 << 0.0 << 500.0
+                                                    << 900.0 << false << false << QList<int>{} << 1.2 / 2.8;
+        QTest::newRow("section headers inside the spans") << 0.0 << repeated(100, 6) << 20.0 << 0.0 << 280.0 << 580.0
+                                                          << false << false << QList<int>{} << 2.5 / 3.1;
+        QTest::newRow("a header and a footer") << 200.0 << repeated(100, 4) << 0.0 << 300.0 << 450.0 << 750.0 << false
+                                               << false << QList<int>{} << 0.875;
         QTest::newRow("only the rows at the edges")
                 << 0.0 << ten << 0.0 << 0.0 << 250.0 << 650.0 << false << false << QList<int>{2, 6} << 2.5 / 6;
         QTest::newRow("empty list") << 300.0 << QList<qreal>{} << 0.0 << 0.0 << 0.0 << 500.0 << false << false
@@ -314,8 +314,8 @@ private Q_SLOTS:
                 << 0.0 << ten << 0.0 << 0.0 << 120.0 << 520.0 << false << false << QList<int>{5} << -1.0;
         QTest::newRow("a NaN height") << 0.0 << QList<qreal>{100, NaN, 100} << 0.0 << 0.0 << 50.0 << 150.0 << false
                                       << false << QList<int>{} << -1.0;
-        QTest::newRow("a negative height") << 0.0 << QList<qreal>{100, -150, 100} << 0.0 << 0.0 << 10.0 << 60.0
-                                           << false << false << QList<int>{} << -1.0;
+        QTest::newRow("a negative height") << 0.0 << QList<qreal>{100, -150, 100} << 0.0 << 0.0 << 10.0 << 60.0 << false
+                                           << false << QList<int>{} << -1.0;
         QTest::newRow("a view of no height")
                 << 0.0 << ten << 0.0 << 0.0 << 300.0 << 300.0 << false << false << QList<int>{} << -1.0;
     }
@@ -461,7 +461,8 @@ private Q_SLOTS:
                 const Sample &b = samples.at(i);
                 QVERIFY2(!b.estimated, qPrintable(u"no row at an edge at step %1"_s.arg(i)));
                 const qreal d = down ? b.progress - a.progress : a.progress - b.progress;
-                QVERIFY2(d >= -1e-9, qPrintable(u"step %1 moved back: %2 -> %3"_s.arg(i).arg(a.progress).arg(b.progress)));
+                QVERIFY2(d >= -1e-9,
+                         qPrintable(u"step %1 moved back: %2 -> %3"_s.arg(i).arg(a.progress).arg(b.progress)));
                 worst = std::max(worst, d);
                 const qreal dq = down ? b.qtProgress - a.qtProgress : a.qtProgress - b.qtProgress;
                 if (dq < -1e-6 || dq > 0.02)
