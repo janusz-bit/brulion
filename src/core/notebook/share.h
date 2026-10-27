@@ -20,9 +20,9 @@ inline constexpr int SharedFilesMax = 20;
 /// One shared file. On Android a copy in the app's files (files/share-in/<stamp>/<n>): the
 /// sending app's read permission ends with the receiving activity; elsewhere any local file.
 struct SharedFile {
-    QString path;  ///< the local copy to read ("" when it could not be copied: `error`)
-    QString name;  ///< display name as the sending app gave it ("Lista zakupów.md"; may be "")
-    QString mime;  ///< its MIME type ("text/markdown"; may be "")
+    QString path;     ///< the local copy to read ("" when it could not be copied: `error`)
+    QString name;     ///< display name as the sending app gave it ("Lista zakupów.md"; may be "")
+    QString mime;     ///< its MIME type ("text/markdown"; may be "")
     qint64 size = -1; ///< bytes (-1 = unknown)
     /// Why it cannot be saved: "tooLarge", "notText", "binary", "unreadable", "tooMany" or "".
     QString error;

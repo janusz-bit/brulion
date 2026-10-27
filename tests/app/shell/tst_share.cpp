@@ -83,7 +83,8 @@ class TestShare : public QObject {
         for (qsizetype i = 0; i < files.size(); ++i) {
             const QString path = u"%1/%2/%3"_s.arg(dir).arg(i).arg(files.at(i).first);
             writeFile(path, files.at(i).second);
-            QJsonObject entry{{u"path"_s, path}, {u"name"_s, files.at(i).first}, {u"size"_s, files.at(i).second.size()}};
+            QJsonObject entry{
+                    {u"path"_s, path}, {u"name"_s, files.at(i).first}, {u"size"_s, files.at(i).second.size()}};
             if (!mime.isEmpty())
                 entry.insert(u"mime"_s, mime);
             entries.append(entry);
@@ -109,8 +110,8 @@ private Q_SLOTS:
         QSignalSpy ui(app.get(), &AppController::uiActionRequested);
         QSignalSpy changed(app.get(), &AppController::pendingShareChanged);
         // A browser shares a page: its title and its link (in the text, as Android does).
-        app->receiveShare({{u"subject"_s, u"Przepis na żurek jutro o 18"_s},
-                           {u"text"_s, u"https://kuchnia.pl/żurek"_s}});
+        app->receiveShare(
+                {{u"subject"_s, u"Przepis na żurek jutro o 18"_s}, {u"text"_s, u"https://kuchnia.pl/żurek"_s}});
         QCOMPARE(shareRequests(ui), 1);
         QVERIFY(changed.size() >= 1);
         const QVariantMap pending = app->pendingShare();
@@ -121,11 +122,12 @@ private Q_SLOTS:
         QCOMPARE(pending.value(u"files"_s).toList().size(), 0);
 
         // Saved as edited in the dialog, and never through quick capture's dates.
-        const QVariantMap saved = app->saveShare({{u"target"_s, u"journal"_s},
-                                                  {u"text"_s, pending.value(u"text"_s).toString() + u"\nDo zrobienia"_s}});
+        const QVariantMap saved = app->saveShare(
+                {{u"target"_s, u"journal"_s}, {u"text"_s, pending.value(u"text"_s).toString() + u"\nDo zrobienia"_s}});
         QVERIFY(saved.value(u"ok"_s).toBool());
         QCOMPARE(saved.value(u"count"_s).toInt(), 1);
-        QVERIFY(journal(*app).contains(u"- [Przepis na żurek jutro o 18](https://kuchnia.pl/żurek)\n  Do zrobienia\n"_s));
+        QVERIFY(journal(*app).contains(
+                u"- [Przepis na żurek jutro o 18](https://kuchnia.pl/żurek)\n  Do zrobienia\n"_s));
         QVERIFY(!journal(*app).contains(u"⏰"_s));
         QVERIFY(!journal(*app).contains(u"📅"_s));
         QVERIFY(app->pendingShare().isEmpty());
@@ -177,7 +179,7 @@ private Q_SLOTS:
         const QString first = saved.value(u"path"_s).toString();
         QVERIFY(first.endsWith(u"Lista zakupów.md"_s));
         QCOMPARE(rawPage(*app, first), kShoppingList); // byte for byte, CRLF kept
-        QVERIFY(!QFileInfo::exists(dir));               // the copies are gone
+        QVERIFY(!QFileInfo::exists(dir));              // the copies are gone
         QCOMPARE(app->currentRoute().value(u"path"_s).toString(), first);
 
         // The same name again: "Lista zakupów 2", the first page untouched.
@@ -254,7 +256,14 @@ private Q_SLOTS:
         QVERIFY(!app->saveShare({{u"target"_s, u"page"_s}}).value(u"ok"_s).toBool());
         // A file too large for Brulion.
         app->receiveShare(fileShare(*app, {{u"duży.md"_s, QByteArray(2 * 1024 * 1024 + 1, 'a')}}));
-        QVERIFY(app->pendingShare().value(u"files"_s).toList().value(0).toMap().value(u"error"_s).toString().contains(u"2"_s));
+        QVERIFY(app->pendingShare()
+                        .value(u"files"_s)
+                        .toList()
+                        .value(0)
+                        .toMap()
+                        .value(u"error"_s)
+                        .toString()
+                        .contains(u"2"_s));
         app->dismissShare();
     }
 
@@ -276,7 +285,8 @@ private Q_SLOTS:
         // A folder outside the inbox (any JSON may name one) is never removed, nor the inbox itself.
         const QString outside = m_tmp.filePath(u"cudzy folder"_s);
         QVERIFY(writeFile(outside + u"/ważne.md"_s, "ważne\n"));
-        app->receiveShare({{u"dir"_s, outside}, {u"files"_s, QVariantList{QVariantMap{{u"path"_s, outside + u"/ważne.md"_s}}}}});
+        app->receiveShare(
+                {{u"dir"_s, outside}, {u"files"_s, QVariantList{QVariantMap{{u"path"_s, outside + u"/ważne.md"_s}}}}});
         app->dismissShare();
         QVERIFY(QFileInfo::exists(outside + u"/ważne.md"_s));
         QVERIFY(writeFile(app->shareInboxPath() + u"/zostaje.md"_s, "x"));

@@ -477,7 +477,7 @@ private:
         QString title;   ///< its page title (notebook::sharedPageTitle)
         QString content; ///< decoded text ("" when `error`)
         qint64 size = -1;
-        QString error;   ///< notebook::SharedFile::error code
+        QString error; ///< notebook::SharedFile::error code
     };
     std::optional<notebook::SharedContent> m_share; ///< waiting for saveShare() / dismissShare()
     QList<ShareFile> m_shareFiles;

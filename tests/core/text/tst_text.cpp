@@ -1,5 +1,5 @@
-#include "text/text.h"
 #include "text/decode.h"
+#include "text/text.h"
 
 #include <QElapsedTimer>
 #include <QRandomGenerator>
@@ -585,7 +585,9 @@ private Q_SLOTS:
         QTest::newRow("utf-8 bom") << QByteArray("\xEF\xBB\xBF") + u"ćma\r\n"_s.toUtf8() << u"ćma\r\n"_s;
         QTest::newRow("utf-16 le bom") << QByteArray("\xFF\xFE\x7C\x01", 4) << u"ż"_s;
         QTest::newRow("utf-16 be bom") << QByteArray("\xFE\xFF\x01\x7A", 4) << u"ź"_s;
-        QTest::newRow("windows-1250") << QByteArray("\xA3\xF3" "d\x9F") << u"Łódź"_s;
+        QTest::newRow("windows-1250") << QByteArray("\xA3\xF3"
+                                                    "d\x9F")
+                                      << u"Łódź"_s;
         QTest::newRow("windows-1252") << QByteArray("na\xEFve \x93q\x94") << u"naïve \u201Cq\u201D"_s;
         QTest::newRow("lone continuation byte") << QByteArray("a\x80") << u"a\u20AC"_s;
     }

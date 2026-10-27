@@ -28,8 +28,7 @@ QString stringValue(const QJsonObject &object, const QString &key)
 /// Text extensions a shared file may have (lower case, without the dot).
 bool isTextExtension(const QString &suffix)
 {
-    static const QStringList known = {u"md"_s,  u"markdown"_s, u"mdown"_s, u"mkd"_s,
-                                      u"txt"_s, u"text"_s};
+    static const QStringList known = {u"md"_s, u"markdown"_s, u"mdown"_s, u"mkd"_s, u"txt"_s, u"text"_s};
     return known.contains(suffix.toLower());
 }
 
@@ -129,8 +128,9 @@ QString cutOnWord(const QString &title, qsizetype max)
     const qsizetype space = cut.lastIndexOf(u' ');
     cut = space > max / 3 ? cut.left(space) : title.left(max);
     // Trailing punctuation of a cut sentence reads badly in a file name.
-    while (!cut.isEmpty() && (cut.back().isSpace() || cut.back() == u',' || cut.back() == u';' || cut.back() == u':'
-                              || cut.back() == u'-' || cut.back() == u'—'))
+    while (!cut.isEmpty()
+           && (cut.back().isSpace() || cut.back() == u',' || cut.back() == u';' || cut.back() == u':'
+               || cut.back() == u'-' || cut.back() == u'—'))
         cut.chop(1);
     return cut;
 }

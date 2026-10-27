@@ -185,9 +185,7 @@ QVariantMap AppController::pendingShare() const
 
 QVariantMap AppController::saveShare(const QVariantMap &choice)
 {
-    const auto failed = [](const QString &error) {
-        return QVariantMap{{u"ok"_s, false}, {u"error"_s, error}};
-    };
+    const auto failed = [](const QString &error) { return QVariantMap{{u"ok"_s, false}, {u"error"_s, error}}; };
     if (!m_share)
         return failed(tr("Nothing to save."));
     // Never while a notebook opens (the documentation may still be the open one) or in the

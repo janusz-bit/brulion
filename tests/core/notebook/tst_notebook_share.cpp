@@ -47,22 +47,22 @@ private Q_SLOTS:
         QTest::newRow("parentheses in the url")
                 << u"Kraków"_s << u"https://pl.wikipedia.org/wiki/Kraków_(ujednoznacznienie)"_s << QString()
                 << u"[Kraków](https://pl.wikipedia.org/wiki/Kraków_%28ujednoznacznienie%29)"_s;
-        QTest::newRow("subject equals the url") << u"https://a.pl/x"_s << u"https://a.pl/x"_s << QString()
-                                                << u"<https://a.pl/x>"_s;
+        QTest::newRow("subject equals the url")
+                << u"https://a.pl/x"_s << u"https://a.pl/x"_s << QString() << u"<https://a.pl/x>"_s;
         QTest::newRow("http") << QString() << u"Strona http://stara.pl/ do zobaczenia"_s << QString()
                               << u"<http://stara.pl/> — Strona do zobaczenia"_s;
         QTest::newRow("ftp is text") << u"Pliki"_s << u"ftp://serwer.pl/plik"_s << QString()
                                      << u"Pliki — ftp://serwer.pl/plik"_s;
-        QTest::newRow("sentence dot after the link") << QString() << u"Przeczytaj https://a.pl/ś."_s << QString()
-                                                     << u"<https://a.pl/ś> — Przeczytaj"_s;
-        QTest::newRow("title inside the text") << u"Zakupy"_s << u"Zakupy: mleko, chleb"_s << QString()
-                                               << u"Zakupy: mleko, chleb"_s;
-        QTest::newRow("title whitespace collapsed") << u"  Dwa\n  wiersze  "_s << QString() << u"https://c.pl"_s
-                                                    << u"[Dwa wiersze](https://c.pl)"_s;
+        QTest::newRow("sentence dot after the link")
+                << QString() << u"Przeczytaj https://a.pl/ś."_s << QString() << u"<https://a.pl/ś> — Przeczytaj"_s;
+        QTest::newRow("title inside the text")
+                << u"Zakupy"_s << u"Zakupy: mleko, chleb"_s << QString() << u"Zakupy: mleko, chleb"_s;
+        QTest::newRow("title whitespace collapsed")
+                << u"  Dwa\n  wiersze  "_s << QString() << u"https://c.pl"_s << u"[Dwa wiersze](https://c.pl)"_s;
         QTest::newRow("title only") << u"Zażółć gęślą jaźń"_s << QString() << QString() << u"Zażółć gęślą jaźń"_s;
         QTest::newRow("only brackets as title") << u"[]"_s << QString() << u"https://d.pl"_s << u"<https://d.pl>"_s;
-        QTest::newRow("angle bracket in url") << QString() << QString() << u"https://e.pl/a>b"_s
-                                              << u"<https://e.pl/a%3Eb>"_s;
+        QTest::newRow("angle bracket in url")
+                << QString() << QString() << u"https://e.pl/a>b"_s << u"<https://e.pl/a%3Eb>"_s;
     }
     void composeSharedText()
     {
@@ -84,8 +84,8 @@ private Q_SLOTS:
                              << SharedFileProblem::None;
         QTest::newRow(".markdown") << u"a.markdown"_s << QString() << qint64(-1) << SharedFileProblem::None;
         QTest::newRow(".txt") << u"żółw.txt"_s << u"text/plain"_s << qint64(0) << SharedFileProblem::None;
-        QTest::newRow("text/plain without a name") << QString() << u"text/plain"_s << qint64(10)
-                                                   << SharedFileProblem::None;
+        QTest::newRow("text/plain without a name")
+                << QString() << u"text/plain"_s << qint64(10) << SharedFileProblem::None;
         QTest::newRow("text/markdown") << u"bez rozszerzenia"_s << u"Text/Markdown"_s << qint64(10)
                                        << SharedFileProblem::None;
         QTest::newRow("image") << u"zdjęcie.png"_s << u"image/png"_s << qint64(10) << SharedFileProblem::NotText;
@@ -94,8 +94,8 @@ private Q_SLOTS:
         QTest::newRow("at the cap") << u"duży.md"_s << QString() << SharedFileMaxBytes << SharedFileProblem::None;
         QTest::newRow("over the cap") << u"duży.md"_s << QString() << SharedFileMaxBytes + 1
                                       << SharedFileProblem::TooLarge;
-        QTest::newRow("not text and large") << u"film.mp4"_s << u"video/mp4"_s << SharedFileMaxBytes * 40
-                                            << SharedFileProblem::NotText;
+        QTest::newRow("not text and large")
+                << u"film.mp4"_s << u"video/mp4"_s << SharedFileMaxBytes * 40 << SharedFileProblem::NotText;
     }
     void checkSharedFile()
     {
@@ -154,8 +154,8 @@ private Q_SLOTS:
         QTest::newRow("heading") << QString() << u"# Zażółć gęślą jaźń\nreszta"_s << u"Zażółć gęślą jaźń"_s;
         QTest::newRow("checkbox") << QString() << u"\n\n- [ ] zadanie do zrobienia\n"_s << u"zadanie do zrobienia"_s;
         QTest::newRow("numbered") << QString() << u"1. Pierwszy punkt"_s << u"Pierwszy punkt"_s;
-        QTest::newRow("emphasis and link") << QString() << u"**Ważne**: [strona](https://a.pl) i [[Dom|dom]]"_s
-                                           << u"Ważne strona i dom"_s;
+        QTest::newRow("emphasis and link")
+                << QString() << u"**Ważne**: [strona](https://a.pl) i [[Dom|dom]]"_s << u"Ważne strona i dom"_s;
         QTest::newRow("frontmatter skipped") << QString() << u"---\ntags: a\n---\n## Treść"_s << u"Treść"_s;
         QTest::newRow("reserved characters in text") << QString() << u"Co/kiedy? #pilne"_s << u"Co kiedy pilne"_s;
         QTest::newRow("long line cut on a word")
@@ -189,8 +189,8 @@ private Q_SLOTS:
         QTest::newRow("newline added") << u"jedna linia"_s << u"jedna linia\n"_s;
         QTest::newRow("crlf added") << u"a\r\nb"_s << u"a\r\nb\r\n"_s;
         QTest::newRow("crlf kept") << u"a\r\nb\r\n"_s << u"a\r\nb\r\n"_s;
-        QTest::newRow("txt not reformatted") << u"  wcięcie\tz tabem  \n*nie lista"_s
-                                             << u"  wcięcie\tz tabem  \n*nie lista\n"_s;
+        QTest::newRow("txt not reformatted")
+                << u"  wcięcie\tz tabem  \n*nie lista"_s << u"  wcięcie\tz tabem  \n*nie lista\n"_s;
         QTest::newRow("blank") << u" \n\t\n"_s << QString();
         QTest::newRow("empty") << QString() << QString();
     }
@@ -206,12 +206,13 @@ private Q_SLOTS:
         QTest::addColumn<QString>("title");
         QTest::addColumn<QString>("text");
         QTest::addColumn<QString>("expected");
-        QTest::newRow("lines below the title") << u"Lista zakupów"_s << u"mleko\r\nchleb\r\n"_s
-                                               << u"- **Lista zakupów**\n  mleko\n  chleb"_s;
-        QTest::newRow("nested list kept") << u"Plan"_s << u"- a\n  - b\n\tc"_s << u"- **Plan**\n  - a\n    - b\n  \tc"_s;
+        QTest::newRow("lines below the title")
+                << u"Lista zakupów"_s << u"mleko\r\nchleb\r\n"_s << u"- **Lista zakupów**\n  mleko\n  chleb"_s;
+        QTest::newRow("nested list kept")
+                << u"Plan"_s << u"- a\n  - b\n\tc"_s << u"- **Plan**\n  - a\n    - b\n  \tc"_s;
         QTest::newRow("blank runs as one") << u"Ż"_s << u"\n\na\n\n\n\nb\n\n"_s << u"- **Ż**\n  a\n\n  b"_s;
-        QTest::newRow("frontmatter dropped") << u"Notatka"_s << u"---\ntags: x\n---\ntreść"_s
-                                             << u"- **Notatka**\n  treść"_s;
+        QTest::newRow("frontmatter dropped")
+                << u"Notatka"_s << u"---\ntags: x\n---\ntreść"_s << u"- **Notatka**\n  treść"_s;
         QTest::newRow("empty file") << u"Pusty"_s << QString() << u"- **Pusty**"_s;
         QTest::newRow("trailing spaces dropped") << u"T"_s << u"a   \nb\t"_s << u"- **T**\n  a\n  b"_s;
         QTest::newRow("asterisks in the title") << u"**Gwiazdki**"_s << u"x"_s << u"- **Gwiazdki**\n  x"_s;
@@ -226,11 +227,14 @@ private Q_SLOTS:
 
     void fromJson()
     {
-        const QByteArray json = "{\"subject\":\"Artykuł\",\"text\":\"Zażółć https://a.pl\",\"dir\":\"/x/share-in/1\",\n"
-            "            \"files\":[{\"path\":\"/x/share-in/1/0/Łódź.md\",\"name\":\"Łódź.md\",\"mime\":\"text/markdown\",\"size\":12},\n"
-            "                     {\"name\":\"duży.txt\",\"error\":\"tooLarge\",\"size\":9999999},\n"
-            "                     \"nie obiekt\",\n"
-            "                     {\"path\":\"/x/b.txt\",\"name\":7,\"mime\":null,\"size\":\"10\"}]}";
+        const QByteArray json =
+                "{\"subject\":\"Artykuł\",\"text\":\"Zażółć https://a.pl\",\"dir\":\"/x/share-in/1\",\n"
+                "            "
+                "\"files\":[{\"path\":\"/x/share-in/1/0/Łódź.md\",\"name\":\"Łódź.md\",\"mime\":\"text/"
+                "markdown\",\"size\":12},\n"
+                "                     {\"name\":\"duży.txt\",\"error\":\"tooLarge\",\"size\":9999999},\n"
+                "                     \"nie obiekt\",\n"
+                "                     {\"path\":\"/x/b.txt\",\"name\":7,\"mime\":null,\"size\":\"10\"}]}";
         const SharedContent share = sharedContentFromJson(json);
         QCOMPARE(share.subject, u"Artykuł"_s);
         QCOMPARE(share.text, u"Zażółć https://a.pl"_s);
