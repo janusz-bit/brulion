@@ -76,8 +76,17 @@ std::optional<std::pair<dates::RecurrenceRule, qsizetype>> recurrencePrefix(QStr
 /// adjacent space; text after the rule stays). No rule there: unchanged.
 QString setRecurrenceAt(const QString &body, qsizetype from, qsizetype to, const QString &rule);
 /// The block's 🔁 rule (on its first line) becomes `rule` as setRecurrenceAt() writes it, added at
-/// the end of the first line when the block has none; "" removes it.
+/// the end of the first line when the block has none; "" removes it. The same rule in another
+/// phrasing ("co tydzień" for "every week") leaves the body unchanged.
 QString setBlockRecurrence(const QString &body, const QString &rule);
+
+/// The block's 🔁 rule (the first on its first line) as the menus show it: the canonical rule at
+/// the start of the token's text ("every week" of "🔁 co tydzień kupić mleko"), else the token's
+/// text as written; "" when the block has none.
+QString blockRecurrence(const QString &body);
+/// The block's priority (the first on its first line, emoji or Logseq `[#A]`) and whether it is
+/// a Logseq one; {None, false} when it has none.
+std::pair<Priority, bool> blockPriority(const QString &body);
 
 /// "highest", "high", "medium", "low", "lowest"; "" for none — and back (unknown: None).
 QString priorityName(Priority priority);

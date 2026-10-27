@@ -39,6 +39,9 @@ BMenu {
     /// One of a series' dates in the calendar (not the date written in the note): it moves only
     /// as a whole series ("Change date…"), a reminder is snoozed for that one time.
     property bool occurrence: false
+    /// A reminder's "An hour later" / "Tomorrow at this time" are offered (false: a series' time
+    /// still to come, which a snooze would not keep from ringing).
+    property bool snoozable: true
     /// "Open in side panel" offered for a day link (wide windows, a host with panels).
     property bool sidePanel: !Theme.narrow
 
@@ -170,14 +173,14 @@ BMenu {
     }
     ShownItem {
         objectName: "dateChipHourLater"
-        shown: menu.reminder
+        shown: menu.reminder && menu.snoozable
         text: qsTr("An hour later")
         iconName: "clock"
         onTriggered: menu.chosen("shift", 0, 60)
     }
     ShownItem {
         objectName: "dateChipTomorrowSameTime"
-        shown: menu.reminder
+        shown: menu.reminder && menu.snoozable
         text: qsTr("Tomorrow at this time")
         iconName: "calendar-days"
         onTriggered: menu.chosen("move", 1, 0)

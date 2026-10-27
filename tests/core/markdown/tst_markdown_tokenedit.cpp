@@ -65,6 +65,13 @@ private Q_SLOTS:
                                          << u"reminder"_s << QVariant(u"2026-10-20 08:15"_s)
                                          << QVariant(QVariantMap{{u"alarm"_s, true}, {u"recurrence"_s, u"co tydzień"_s}})
                                          << u"Leki ⏰! 2026-10-20 08:15 🔁 every week"_s;
+        // Only the time changed: the rule stays as written (Polish, words after it).
+        QTest::newRow("reminder dialog, same rule") << u"Leki 🔁 co tydzień ⏰ 2026-10-20 09:00"_s
+                                                    << u"⏰ 2026-10-20 09:00"_s << u"reminder"_s
+                                                    << QVariant(u"2026-10-20 10:00"_s)
+                                                    << QVariant(QVariantMap{{u"alarm"_s, false},
+                                                                            {u"recurrence"_s, u"every week"_s}})
+                                                    << u"Leki 🔁 co tydzień ⏰ 2026-10-20 10:00"_s;
         QTest::newRow("reminder dialog keeps rule") << u"Leki (@2026-10-19 09:00)"_s << u"(@2026-10-19 09:00)"_s
                                                     << u"reminder"_s << QVariant(u"2026-10-20 08:15"_s)
                                                     << QVariant(QVariantMap{{u"alarm"_s, false}})
@@ -102,6 +109,14 @@ private Q_SLOTS:
         QTest::newRow("block recurrence changed") << u"Leki ⏰ 2026-10-19 09:00 🔁 every day"_s << u"⏰ 2026-10-19 09:00"_s
                                                   << u"blockRecurrence"_s << QVariant(u"every weekday"_s) << QVariant()
                                                   << u"Leki ⏰ 2026-10-19 09:00 🔁 every weekday"_s;
+        QTest::newRow("block recurrence, words after the rule")
+                << u"Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy"_s << u"⏰ 2026-10-20 09:00"_s
+                << u"blockRecurrence"_s << QVariant(u"codziennie"_s) << QVariant()
+                << u"Zadzwonić ⏰ 2026-10-20 09:00 🔁 every day do mamy"_s;
+        QTest::newRow("block recurrence, the same rule") << u"Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy"_s
+                                                         << u"⏰ 2026-10-20 09:00"_s << u"blockRecurrence"_s
+                                                         << QVariant(u"every week"_s) << QVariant()
+                                                         << u"Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy"_s;
         QTest::newRow("block recurrence removed") << u"Leki ⏰ 2026-10-19 09:00 🔁 every day"_s << u"⏰ 2026-10-19 09:00"_s
                                                   << u"blockRecurrence"_s << QVariant(QString()) << QVariant()
                                                   << u"Leki ⏰ 2026-10-19 09:00"_s;
@@ -141,6 +156,33 @@ private Q_SLOTS:
         const auto [from, to] = rangeOf(body, chip);
         QVERIFY(from >= 0);
         QCOMPARE(applyTokenAction(body, from, to, action, a, b, context()), expected);
+    }
+
+    void blockRuleAndPriority_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<QString>("rule");
+        QTest::addColumn<QString>("priority");
+        QTest::addColumn<bool>("logseq");
+        QTest::newRow("none") << u"Zażółć gęślą jaźń"_s << QString() << QString() << false;
+        QTest::newRow("rule with words after it") << u"Zakupy 🔁 co tydzień kupić mleko ⏫"_s << u"every week"_s
+                                                  << u"high"_s << false;
+        QTest::newRow("no rule, as written") << u"Coś 🔁 kiedyś tam"_s << u"kiedyś tam"_s << QString() << false;
+        QTest::newRow("logseq") << u"TODO [#C] Raport 🔁 every month"_s << u"every month"_s << u"low"_s << true;
+        QTest::newRow("second line is not the block's") << u"Raport\n🔁 every day 🔺"_s << QString() << QString() << false;
+        QTest::newRow("in code") << u"`🔁 every day ⏫` tekst"_s << QString() << QString() << false;
+    }
+
+    void blockRuleAndPriority()
+    {
+        QFETCH(QString, body);
+        QFETCH(QString, rule);
+        QFETCH(QString, priority);
+        QFETCH(bool, logseq);
+        QCOMPARE(blockRecurrence(body), rule);
+        const auto [p, isLogseq] = blockPriority(body);
+        QCOMPARE(priorityName(p), priority);
+        QCOMPARE(isLogseq, logseq);
     }
 
     void journalFormats()

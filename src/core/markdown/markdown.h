@@ -40,6 +40,7 @@
 //   tokenedit.h    single-token edits of a block body (the token menus): dateTokenAt / tokenAt
 //                  (dates, reminders, 🔁 rules, priorities), setTokenDate, setReminderAlarm,
 //                  setRecurrenceAt / setBlockRecurrence, setPriorityAt / setBlockPriority,
+//                  blockRecurrence / blockPriority (the block's rule and priority as shown),
 //                  journalLinkAt / setJournalLinkDate ([[2026-10-20]]), replaceTokenRange,
 //                  setFirstLineToken, applyTokenAction(body, from, to, action, a, b, context);
 //                  across copies of a block TokenRef {kind, value, ordinal} (tokenRefAt,

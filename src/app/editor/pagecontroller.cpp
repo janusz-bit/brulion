@@ -44,6 +44,7 @@
 #endif
 
 #include <algorithm>
+#include <cstdlib>
 
 using namespace Qt::StringLiterals;
 
@@ -2334,15 +2335,17 @@ void PageController::setReminder(int row, const QString &at, bool alarm, const Q
         body = replaceTokenRange(body, from, to, token);
     else
         body = setFirstLineToken(body, markdown::TokenKind::Reminder, token, true);
+    // The block's 🔁 rule as the dialog left it: only the rule's own text changes (words after it
+    // stay), and an unchanged rule stays as written (markdown::setBlockRecurrence()).
     QString ruleToken;
     if (!recurrence.trimmed().isEmpty()) {
         QString rule = dates::canonicalRecurrence(recurrence);
         if (rule.isEmpty())
             rule = recurrence.trimmed();
         ruleToken = u"🔁 "_s + rule;
-        body = setFirstLineToken(body, markdown::TokenKind::Recurrence, ruleToken);
+        body = markdown::setBlockRecurrence(body, recurrence);
     } else if (editingExisting) {
-        body = setFirstLineToken(body, markdown::TokenKind::Recurrence, QString());
+        body = markdown::setBlockRecurrence(body, QString());
     }
     // The caret at the end of the edited text stays there, after what was written — with a space
     // after it, as after a completed date: a "/" or "#" typed next starts a command or tag
@@ -2402,14 +2405,8 @@ void PageController::setRecurrence(int row, const QString &rule)
 {
     if (!validRow(row))
         return;
-    QString token;
-    if (!rule.trimmed().isEmpty()) {
-        QString canonical = dates::canonicalRecurrence(rule);
-        if (canonical.isEmpty())
-            canonical = rule.trimmed();
-        token = u"🔁 "_s + canonical;
-    }
-    editBody(row, setFirstLineToken(m_model->document().at(row).body, markdown::TokenKind::Recurrence, token));
+    // Only the rule's text changes: words written after it stay (markdown::setBlockRecurrence()).
+    editBody(row, markdown::setBlockRecurrence(m_model->document().at(row).body, rule));
 }
 
 QVariantMap PageController::reminderAt(int row, int from, int to) const
@@ -2507,6 +2504,73 @@ std::optional<QString> tableCellText(const QString &body, int tableRow, int colu
     return column < cells.size() ? cells[column] : QString();
 }
 
+/// The block of `doc` a copy of it is of (`raw`: its Markdown as a query result or an embed has
+/// it, `line`: its line there): the block on `line` when it is still that block, else the nearest
+/// one with the same text (the copy's line was a moment behind: an edit above it, a sync); -1 when
+/// no block has that text any more. The copy's own token may differ from the block's in nothing
+/// else: the token menus edit what the copy shows.
+int blockOfCopy(const BlockDocument &doc, int line, const QString &raw)
+{
+    const BlockDocument copy(raw);
+    if (copy.isEmpty())
+        return -1;
+    const QString &body = copy.at(0).body;
+    const int at = doc.indexAtLine(line);
+    if (at >= 0 && doc.at(at).body == body)
+        return at;
+    int best = -1;
+    for (int i = 0; i < doc.count(); ++i) {
+        if (doc.at(i).body != body)
+            continue;
+        if (best < 0 || std::abs(doc.at(i).line - line) < std::abs(doc.at(best).line - line))
+            best = i;
+    }
+    return best;
+}
+
+/// Where the text of a table cell (tableRow -1 = the header) is written in `body`: [from, to) of
+/// its trimmed text between the pipes (calc::parseTable()'s rows: the header, the delimiter row,
+/// then the body rows); nullopt when the row or the cell is not written.
+std::optional<std::pair<qsizetype, qsizetype>> tableCellSpan(const QString &body, int tableRow, int column)
+{
+    const QList<text::Line> lines = text::splitLines(body);
+    qsizetype header = 0;
+    while (header < lines.size() && QStringView(lines.at(header).text).trimmed().isEmpty())
+        ++header;
+    const qsizetype at = tableRow < 0 ? header : header + 2 + tableRow;
+    if (column < 0 || at >= lines.size())
+        return std::nullopt;
+    const QString &line = lines.at(at).text;
+    qsizetype begin = 0;
+    qsizetype end = line.size();
+    while (begin < end && line.at(begin).isSpace())
+        ++begin;
+    while (end > begin && line.at(end - 1).isSpace())
+        --end;
+    // The cells between unescaped pipes (`\|` is text), without the empty ones outside outer pipes.
+    QList<std::pair<qsizetype, qsizetype>> cells;
+    qsizetype start = begin;
+    for (qsizetype i = begin; i < end; ++i) {
+        if (line.at(i) == u'|' && (i == begin || line.at(i - 1) != u'\\')) {
+            cells.append({start, i});
+            start = i + 1;
+        }
+    }
+    cells.append({start, end});
+    if (!cells.isEmpty() && cells.front().first == cells.front().second)
+        cells.removeFirst();
+    if (!cells.isEmpty() && cells.back().first == cells.back().second)
+        cells.removeLast();
+    if (column >= cells.size())
+        return std::nullopt;
+    auto [from, to] = cells.at(column);
+    while (from < to && line.at(from).isSpace())
+        ++from;
+    while (to > from && line.at(to - 1).isSpace())
+        --to;
+    return std::pair{lines.at(at).start + from, lines.at(at).start + to};
+}
+
 } // namespace
 
 QVariantMap PageController::tokenChipIn(const QString &raw, const QString &url) const
@@ -2528,8 +2592,8 @@ QVariantMap PageController::tokenChipIn(const QString &raw, const QString &url) 
     return chip;
 }
 
-QVariantMap PageController::editTokenIn(const QString &path, int line, const QVariantMap &refMap, const QString &action,
-                                        const QVariant &a, const QVariant &b)
+QVariantMap PageController::editTokenIn(const QString &path, int line, const QString &raw, const QVariantMap &refMap,
+                                        const QString &action, const QVariant &a, const QVariant &b)
 {
     const auto result = [](bool ok, const QString &reason, int undo = 0) {
         return QVariantMap{{u"ok"_s, ok}, {u"reason"_s, reason}, {u"undo"_s, undo}};
@@ -2538,8 +2602,9 @@ QVariantMap PageController::editTokenIn(const QString &path, int line, const QVa
     if (path.isEmpty() || line < 0 || !ref)
         return result(false, u"gone"_s);
     if (path == m_path) {
-        // This page: an edit of the block in the editor (its undo step).
-        const int row = rowOfLine(line);
+        // This page: an edit of the block in the editor (its undo step) — the block the copy is
+        // of, wherever it is now (blocks typed above it are not in the index yet).
+        const int row = blockOfCopy(m_model->document(), line, raw);
         if (!validRow(row))
             return result(false, u"gone"_s);
         const auto range = markdown::findTokenRef(m_model->document().at(row).body, *ref);
@@ -2554,12 +2619,15 @@ QVariantMap PageController::editTokenIn(const QString &path, int line, const QVa
     const QString before = m_host->read(path, &ok);
     if (!ok)
         return result(false, u"gone"_s);
-    const QString after = markdown::editBlockToken(before, line, *ref, action, a, b, tokenEditContext());
+    const BlockDocument doc(before);
+    const int block = blockOfCopy(doc, line, raw);
+    if (block < 0)
+        return result(false, u"gone"_s); // the block changed or went since the copy was made
+    const QString after =
+            markdown::editBlockToken(before, doc.at(block).line, *ref, action, a, b, tokenEditContext());
     if (after == before) {
-        // The block or its token moved or went, or the action changes nothing.
-        const BlockDocument doc(before);
-        const int i = doc.indexAtLine(line);
-        const bool there = i >= 0 && markdown::findTokenRef(doc.at(i).body, *ref).has_value();
+        // The token is not there, or the action changes nothing.
+        const bool there = markdown::findTokenRef(doc.at(block).body, *ref).has_value();
         return result(false, there ? u"unchanged"_s : u"gone"_s);
     }
     switch (m_host->writeIfUnchanged(path, after, before)) {
@@ -2611,6 +2679,26 @@ bool PageController::applyTableCellToken(int row, int tableRow, int column, int 
     const QString edited = markdown::applyTokenAction(*cell, from, to, action, a, b, tokenEditContext());
     if (edited == *cell)
         return false;
+    // Like a hand edit: only the cell's text changes in the row as written (the other cells, the
+    // padding and the pipes stay) — when the row still reads the same with it; else the table is
+    // written anew (setTableCell()).
+    const QString body = m_model->document().at(row).body;
+    const auto escaped = [](QString text) { return text.replace(u"|"_s, u"\\|"_s); };
+    if (const auto span = tableCellSpan(body, tableRow, column);
+        span && QStringView(body).sliced(span->first, span->second - span->first) == escaped(*cell)) {
+        const QString spliced = body.left(span->first) + escaped(edited) + body.mid(span->second);
+        auto expected = calc::parseTable(body);
+        if (expected) {
+            if (tableRow < 0)
+                expected->header[column] = edited.trimmed();
+            else
+                expected->rows[tableRow][column] = edited.trimmed();
+        }
+        if (expected && calc::parseTable(spliced) == expected) {
+            editBody(row, spliced);
+            return true;
+        }
+    }
     setTableCell(row, tableRow, column, edited);
     return true;
 }
@@ -2679,10 +2767,11 @@ QVariantMap PageController::blockDates(int row) const
         case markdown::TokenKind::Due: out[u"due"_s] = t.spec().toString(); break;
         case markdown::TokenKind::Scheduled: out[u"scheduled"_s] = t.spec().toString(); break;
         case markdown::TokenKind::Start: out[u"start"_s] = t.spec().toString(); break;
-        case markdown::TokenKind::Recurrence: out[u"recurrence"_s] = markdown::recurrenceOf(t); break;
         default: break;
         }
     }
+    // The rule at the start of the 🔁 token's text (words after it are no part of it).
+    out[u"recurrence"_s] = markdown::blockRecurrence(body);
     return out;
 }
 

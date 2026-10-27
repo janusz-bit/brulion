@@ -192,6 +192,76 @@ private Q_SLOTS:
         QCOMPARE(host.file(u"Dom.md"_s), u"- nowy wpis\n- [ ] Zamówić farbę 📅 2026-10-17\n"_s);
     }
 
+    void staleLineWithAnEqualToken()
+    {
+        // A line was added above (a sync); the index still has "Zapłacić rachunek" on line 1,
+        // which now holds "Kupić chleb" with the same date: the task by its text is edited.
+        FakeEditorHost host;
+        host.setFile(u"Dom.md"_s, u"- nowy wpis\n- [ ] Kupić chleb 📅 2026-10-20\n- [ ] Zapłacić rachunek 📅 2026-10-20\n"_s);
+        PlanningActions actions;
+        actions.setHost(&host);
+        actions.setToday(u"2026-10-15"_s);
+        QVERIFY(actions.editToken(u"Dom.md"_s, 1, u"Zapłacić rachunek"_s, u"due"_s, u"2026-10-20"_s, u"shift"_s, 1, 0));
+        QCOMPARE(host.file(u"Dom.md"_s),
+                 u"- nowy wpis\n- [ ] Kupić chleb 📅 2026-10-20\n- [ ] Zapłacić rachunek 📅 2026-10-21\n"_s);
+        // A reminder of a plain bullet (no task with that text): its line.
+        host.setFile(u"Leki.md"_s, u"- Witaminy ⏰ 2026-10-16 08:00\n"_s);
+        QVERIFY(actions.editToken(u"Leki.md"_s, 0, u"Witaminy"_s, u"reminder"_s, u"2026-10-16 08:00"_s, u"alarm"_s, true));
+        QCOMPARE(host.file(u"Leki.md"_s), u"- Witaminy ⏰! 2026-10-16 08:00\n"_s);
+    }
+
+    void tokenMenuInfo_data()
+    {
+        QTest::addColumn<QString>("page");
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QString>("value");
+        QTest::addColumn<bool>("menu");
+        QTest::addColumn<QString>("rule");
+        QTest::addColumn<QString>("priority");
+        QTest::addColumn<bool>("logseq");
+        // The index's rule is the whole token's text; the menu edits the rule at its start.
+        QTest::newRow("rule with words after it") << u"- [ ] Zakupy 🔁 co tydzień kupić mleko\n"_s << u"recurrence"_s
+                                                  << u"co tydzień kupić mleko"_s << true << u"every week"_s
+                                                  << QString() << false;
+        QTest::newRow("reminder: the block's rule") << u"- [ ] Leki ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy ⏫\n"_s
+                                                    << u"reminder"_s << u"2026-10-20 09:00"_s << true
+                                                    << u"every week"_s << u"high"_s << false;
+        QTest::newRow("logseq priority") << u"- TODO [#B] Raport 📅 2026-10-20\n"_s << u"priority"_s << u"medium"_s
+                                         << true << QString() << u"medium"_s << true;
+        QTest::newRow("due of a logseq task") << u"- TODO [#A] Raport 📅 2026-10-20\n"_s << u"due"_s << u"2026-10-20"_s
+                                              << true << QString() << u"high"_s << true;
+        // Logseq planning lines are no tokens the menus edit: no menu.
+        QTest::newRow("SCHEDULED: line") << u"- TODO Raport\n  SCHEDULED: <2026-10-20 Tue .+1w>\n"_s << u"scheduled"_s
+                                         << u"2026-10-20"_s << false << QString() << QString() << false;
+        QTest::newRow("value gone") << u"- [ ] Raport 📅 2026-10-21\n"_s << u"due"_s << u"2026-10-20"_s << false
+                                    << QString() << QString() << false;
+        QTest::newRow("unknown kind") << u"- [ ] Raport 📅 2026-10-20\n"_s << u"journal"_s << u"2026-10-20"_s << false
+                                      << QString() << QString() << false;
+    }
+
+    void tokenMenuInfo()
+    {
+        QFETCH(QString, page);
+        QFETCH(QString, kind);
+        QFETCH(QString, value);
+        QFETCH(bool, menu);
+        QFETCH(QString, rule);
+        QFETCH(QString, priority);
+        QFETCH(bool, logseq);
+        FakeEditorHost host;
+        host.setFile(u"Dom.md"_s, page);
+        PlanningActions actions;
+        actions.setHost(&host);
+        actions.setToday(u"2026-10-15"_s);
+        const QVariantMap info = actions.tokenMenu(u"Dom.md"_s, 0, u"Raport"_s, kind, value);
+        QCOMPARE(!info.isEmpty(), menu);
+        if (!menu)
+            return;
+        QCOMPARE(info.value(u"rule"_s).toString(), rule);
+        QCOMPARE(info.value(u"priority"_s).toString(), priority);
+        QCOMPARE(info.value(u"logseq"_s).toBool(), logseq);
+    }
+
     void snoozeAnOccurrence()
     {
         FakeEditorHost host;

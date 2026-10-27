@@ -504,8 +504,9 @@ public:
     /// `row` is a heading ("## …", also a Logseq "- ## …" item).
     Q_INVOKABLE bool isHeading(int row) const;
     /// Add a reminder (`⏰`/`⏰!` at `at`, "YYYY-MM-DD HH:mm"), or replace the reminder token at
-    /// body range [from, to) (a clicked chip). `recurrence` (canonical rule) sets the block's 🔁
-    /// token; an empty rule removes it when editing an existing reminder. A caret at the end of
+    /// body range [from, to) (a clicked chip). `recurrence` sets the block's 🔁 rule
+    /// (markdown::setBlockRecurrence(): only the rule's text, unchanged when it is the same rule);
+    /// an empty rule removes it when editing an existing reminder. A caret at the end of
     /// the edited text that what was written reaches stays at the end, after an added space
     /// (never saved while nothing follows it: rememberEditorSpace()).
     Q_INVOKABLE void setReminder(int row, const QString &at, bool alarm, const QString &recurrence,
@@ -515,7 +516,8 @@ public:
     /// Set (or remove with an empty spec) the date token of `field` ("due" 📅, "scheduled" ⏳,
     /// "start" 🛫) on the row's first line.
     Q_INVOKABLE void setDateToken(int row, const QString &field, const QString &spec);
-    /// Set (or remove with "") the 🔁 rule of a row (any phrasing; written canonical).
+    /// Set (or remove with "") the 🔁 rule of a row (any phrasing; written canonical): only the
+    /// rule's text changes, words after it stay (markdown::setBlockRecurrence()).
     Q_INVOKABLE void setRecurrence(int row, const QString &rule);
     /// The reminder at body range [from, to): { at, alarm, recurrence, context } for
     /// BReminderDialog.edit(); empty when there is no reminder there.
@@ -540,21 +542,25 @@ public:
     /// none (day links are no tokens there: they are page links).
     Q_INVOKABLE QVariantMap tokenChipIn(const QString &raw, const QString &url) const;
     /// A token menu's edit (applyTokenAction()'s actions) on the token `ref` (tokenChipIn()) of the
-    /// block on `line` of `path`: on this page an undoable edit of that block; in another file the
+    /// block on `line` of `path` whose Markdown the copy has as `raw` (a block with another text
+    /// there: the nearest one with that text; none: nothing is written, "gone"): on this page an
+    /// undoable edit of that block; in another file the
     /// edit is written like a hand edit (markdown::editBlockToken(), only if the file did not change
     /// meanwhile: EditorHost::writeIfUnchanged()) and can be undone with undoTokenEdit(undo).
     /// Returns { ok, undo (0: this page's undo, or nothing to undo), reason ("gone": the block or
     /// its token is not there any more, "changed", "failed", "unchanged") }.
-    Q_INVOKABLE QVariantMap editTokenIn(const QString &path, int line, const QVariantMap &ref, const QString &action,
-                                        const QVariant &a = {}, const QVariant &b = {});
+    Q_INVOKABLE QVariantMap editTokenIn(const QString &path, int line, const QString &raw, const QVariantMap &ref,
+                                        const QString &action, const QVariant &a = {}, const QVariant &b = {});
     /// Put back what editTokenIn() changed in another file (`undo`: its handle) — only while the
     /// file still holds what that edit wrote. False when it changed since or the handle is gone.
     Q_INVOKABLE bool undoTokenEdit(int undo);
     /// A token link of a table cell's rendered text (`url`, its range in the cell's text): as
     /// dateChip() with the range in the cell (tableRow -1 = header). Empty when there is none.
     Q_INVOKABLE QVariantMap tableCellChip(int row, int tableRow, int column, const QString &url) const;
-    /// applyTokenAction() on range [from, to) of a table cell's text: the table is rewritten with
-    /// that cell changed (setTableCell(), one undo step). False when nothing changed.
+    /// applyTokenAction() on range [from, to) of a table cell's text: only that cell's text changes
+    /// in its row as written (the other cells, padding and pipes stay; a row that would read
+    /// differently then is written anew with setTableCell()). One undo step; false when nothing
+    /// changed.
     Q_INVOKABLE bool applyTableCellToken(int row, int tableRow, int column, int from, int to, const QString &action,
                                          const QVariant &a = {}, const QVariant &b = {});
     /// The date token at body range [from, to) gets `spec` ("YYYY-MM-DD [HH:mm]") — only its value

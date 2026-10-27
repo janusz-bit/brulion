@@ -327,14 +327,40 @@ QString setBlockRecurrence(const QString &body, const QString &rule)
 {
     if (const auto range = findFirstLineToken(body, TokenKind::Recurrence)) {
         // The rule at the start of the token's text (text after it stays), else the whole token.
-        if (const auto t = tokenAt(body, range->first, range->second))
+        if (const auto t = tokenAt(body, range->first, range->second)) {
+            // The same rule (in any phrasing: "co tydzień" is "every week"): written as it was.
+            const QString canonical = dates::canonicalRecurrence(rule);
+            if (!canonical.isEmpty() && canonical == t->canonical)
+                return body;
             return setRecurrenceAt(body, t->from, t->to, rule);
+        }
         return replaceTokenRange(body, range->first, range->second,
                                  rule.trimmed().isEmpty() ? QString() : u"🔁 "_s + writtenRule(rule));
     }
     if (rule.trimmed().isEmpty())
         return body;
     return setFirstLineToken(body, TokenKind::Recurrence, u"🔁 "_s + writtenRule(rule));
+}
+
+QString blockRecurrence(const QString &body)
+{
+    const auto range = findFirstLineToken(body, TokenKind::Recurrence);
+    if (!range)
+        return {};
+    if (const auto t = tokenAt(body, range->first, range->second))
+        return t->canonical;
+    const QString masked = maskInlineCode(body);
+    const QList<Token> all = findTokens(QStringView(masked).first(range->second));
+    return all.isEmpty() ? QString() : recurrenceOf(all.last());
+}
+
+std::pair<Priority, bool> blockPriority(const QString &body)
+{
+    for (const Token &t : findTokens(maskInlineCode(firstLineOf(body)))) {
+        if (isPriorityKind(t.kind))
+            return {t.priority, t.kind == TokenKind::LogseqPriority};
+    }
+    return {Priority::None, false};
 }
 
 QString priorityName(Priority priority)

@@ -10,8 +10,10 @@ import Brulion
 // changed() lets the view show a toast with "Cofnij". "Zmień…" opens the editor's dialogs
 // (EditorDialogs, without an editor). On a date of a recurring series (the calendar's other
 // dates than the written one) the date moves only as a whole series ("Zmień całą serię…"), and a
-// reminder's "Godzinę później" / "Jutro o tej porze" snooze that one time (a one-off child
-// reminder, like the notification's "Odłóż": PlanningActions.snoozeReminder).
+// reminder's "Godzinę później" / "Jutro o tej porze" snooze that one time once it has rung (a
+// one-off child reminder, like the notification's "Odłóż": PlanningActions.snoozeReminder) — a
+// time still to come offers no snooze, it would ring as well. A value that is no token of the
+// file (a Logseq SCHEDULED: line) opens no menu (PlanningActions.tokenMenu()).
 //
 //   PlanningTokenMenu { id: tokenMenu; actions: planningActions
 //                       onChanged: (text) => toasts.show(text, { actionText: qsTr("Undo"), onAction: () => planningActions.undo() }) }
@@ -45,18 +47,30 @@ Item {
     function openToken(t, item, x, y) {
         if (!actions || !t || !t.path || !t.value || t.kind === "journal")
             return false
-        target = t
+        // The token as the file has it (the block's rule, a Logseq priority); none written as a
+        // token (a Logseq SCHEDULED: line, a .+1w repeater): no menu.
+        const info = actions.tokenMenu(t.path, t.line, t.text || "", t.kind, t.value)
+        if (info.rule === undefined)
+            return false
+        target = Object.assign({}, t, { rule: info.rule, priority: info.priority })
         if (!dateMenu)
             dateMenu = dateMenuComponent.createObject(root) as DateChipMenu
         dateMenu.kind = t.kind
         dateMenu.alarm = t.alarm === true
-        dateMenu.rule = t.rule || ""
-        dateMenu.priority = t.priority || ""
-        dateMenu.logseq = false
+        dateMenu.rule = info.rule
+        dateMenu.priority = info.priority
+        dateMenu.logseq = info.logseq === true
         dateMenu.isTask = t.isTask === true
         dateMenu.occurrence = t.occurrence === true
+        // A later time of a recurring reminder that has not come yet would still ring: no snooze.
+        dateMenu.snoozable = !(t.occurrence === true && t.kind === "reminder"
+                               && DatesHelper.compare(occurrenceAt(t), DatesHelper.now()) > 0)
         dateMenu.popup(item, x, y)
         return true
+    }
+    /// When the occurrence `t` (a calendar entry of a recurring reminder) rings: "YYYY-MM-DD HH:mm".
+    function occurrenceAt(t) {
+        return t.date + " " + (t.time || "09:00")
     }
 
     /// The link menu of `url` (a tag:, page:, block: or ext: link of a task's text written on
@@ -117,7 +131,7 @@ Item {
         case "move":
             // One time of a recurring reminder (the calendar's other dates): snoozed, the series stays.
             if (t.kind === "reminder" && t.occurrence) {
-                const at = t.date + " " + (t.time || "09:00")
+                const at = occurrenceAt(t)
                 snooze(action === "shift" ? DatesHelper.addMinutes(at, b) : DatesHelper.addDays(DatesHelper.today, a) + " " + (t.time || "09:00"))
                 break
             }

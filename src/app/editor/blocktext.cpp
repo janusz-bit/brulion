@@ -858,34 +858,6 @@ bool onlyEmbeds(QStringView body, bool transclusions)
 
 // ---------------------------------------------------------------------------------------------
 
-namespace {
-
-/// The block's 🔁 rule (its first line): canonical when it parses, else as written; "" = none.
-QString blockRuleOf(const QString &body)
-{
-    const auto range = markdown::findFirstLineToken(body, markdown::TokenKind::Recurrence);
-    if (!range)
-        return {};
-    if (const auto t = markdown::tokenAt(body, range->first, range->second))
-        return t->canonical;
-    const QString masked = markdown::maskInlineCode(body);
-    const QList<markdown::Token> all = markdown::findTokens(QStringView(masked).first(range->second));
-    return all.isEmpty() ? QString() : markdown::recurrenceOf(all.last());
-}
-
-/// The block's priority (the first one on its first line): { name, logseq }.
-std::pair<QString, bool> blockPriorityOf(const QString &body)
-{
-    const QString first = firstLineOf(body).toString();
-    for (const markdown::Token &t : markdown::findTokens(markdown::maskInlineCode(first))) {
-        if (t.kind == markdown::TokenKind::Priority || t.kind == markdown::TokenKind::LogseqPriority)
-            return {markdown::priorityName(t.priority), t.kind == markdown::TokenKind::LogseqPriority};
-    }
-    return {};
-}
-
-} // namespace
-
 QVariantMap tokenChip(const QString &body, const QString &url, int offset, bool isTask, const VaultConfig &config)
 {
     static const QRegularExpression link(u"^(date|reminder|recur|prio|day):(\\d+)-(\\d+)$"_s);
@@ -933,8 +905,10 @@ QVariantMap tokenChip(const QString &body, const QString &url, int offset, bool 
                     {u"alarm"_s, t->alarm}});
     }
     if (kind == u"reminder") {
-        const auto [priority, logseq] = blockPriorityOf(body);
-        out.insert({{u"rule"_s, blockRuleOf(body)}, {u"priority"_s, priority}, {u"logseq"_s, logseq}});
+        const auto [priority, logseq] = markdown::blockPriority(body);
+        out.insert({{u"rule"_s, markdown::blockRecurrence(body)},
+                    {u"priority"_s, markdown::priorityName(priority)},
+                    {u"logseq"_s, logseq}});
     } else if (kind == u"recurrence") {
         out.insert(u"rule"_s, t->canonical);
     } else if (kind == u"priority") {

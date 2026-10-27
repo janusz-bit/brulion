@@ -248,15 +248,8 @@ bool PlanningActions::appendBlock(const QString &path, const QString &block)
 bool PlanningActions::editToken(const QString &path, int line, const QString &text, const QString &kind,
                                 const QString &value, const QString &action, const QVariant &a, const QVariant &b)
 {
-    using markdown::TokenKind;
-    static const QHash<QString, TokenKind> kinds{
-            {u"due"_s, TokenKind::Due},           {u"scheduled"_s, TokenKind::Scheduled},
-            {u"start"_s, TokenKind::Start},       {u"created"_s, TokenKind::Created},
-            {u"done"_s, TokenKind::Done},         {u"cancelled"_s, TokenKind::Cancelled},
-            {u"reminder"_s, TokenKind::Reminder}, {u"recurrence"_s, TokenKind::Recurrence},
-            {u"priority"_s, TokenKind::Priority},
-    };
-    if (!m_host || !kinds.contains(kind) || value.isEmpty())
+    const auto ref = tokenRefOf(kind, value);
+    if (!m_host || !ref)
         return false;
     bool ok = false;
     const QString content = m_host->read(path, &ok);
@@ -265,33 +258,85 @@ bool PlanningActions::editToken(const QString &path, int line, const QString &te
         return false;
     }
     const VaultConfig cfg = config();
-    markdown::TokenRef ref;
-    ref.kind = kinds.value(kind);
-    ref.value = value;
-    ref.defaultTime = cfg.defaultReminderTime; // the models' reminders have it filled in
     markdown::TokenEditContext context;
     context.today = currentDay();
     context.defaultReminderTime = cfg.defaultReminderTime;
     context.config = cfg;
-    const auto hasToken = [&](int at) {
-        const markdown::BlockDocument doc(content);
-        const int i = doc.indexAtLine(at);
-        return i >= 0 && markdown::findTokenRef(doc.at(i).body, ref).has_value();
-    };
-    int at = line;
-    if (!hasToken(at)) {
-        // The index was a moment behind: the task with the same text nearest to the line.
-        const int moved = text.isEmpty() ? -1 : locateTask(path, content, line, text);
-        if (moved < 0 || !hasToken(moved)) {
-            Q_EMIT failed(tr("The task was changed in the meantime."));
-            return false;
-        }
-        at = moved;
+    const int at = tokenBlockLine(path, content, line, text, *ref);
+    if (at < 0) {
+        Q_EMIT failed(tr("The task was changed in the meantime."));
+        return false;
     }
-    const QString after = markdown::editBlockToken(content, at, ref, action, a, b, context);
+    const QString after = markdown::editBlockToken(content, at, *ref, action, a, b, context);
     if (after == content)
         return false;
     return writeChange(path, content, after);
+}
+
+int PlanningActions::tokenBlockLine(const QString &path, const QString &content, int line, const QString &text,
+                                    const markdown::TokenRef &ref) const
+{
+    const markdown::BlockDocument doc(content);
+    const auto hasToken = [&](int at) {
+        const int i = doc.indexAtLine(at);
+        return i >= 0 && markdown::findTokenRef(doc.at(i).body, ref).has_value();
+    };
+    // The task with that text nearest to the line — the line itself while it holds it: the index
+    // may be a moment behind (a line added above, a sync), and the line may hold another task with
+    // an equal token by now. A block that is no task (a reminder of a plain bullet): its line.
+    const int task = text.isEmpty() ? -1 : locateTask(path, content, line, text);
+    if (task >= 0 && hasToken(task))
+        return task;
+    return hasToken(line) ? line : -1;
+}
+
+std::optional<markdown::TokenRef> PlanningActions::tokenRefOf(const QString &kind, const QString &value) const
+{
+    using markdown::TokenKind;
+    static const QHash<QString, TokenKind> kinds{
+            {u"due"_s, TokenKind::Due},           {u"scheduled"_s, TokenKind::Scheduled},
+            {u"start"_s, TokenKind::Start},       {u"created"_s, TokenKind::Created},
+            {u"done"_s, TokenKind::Done},         {u"cancelled"_s, TokenKind::Cancelled},
+            {u"reminder"_s, TokenKind::Reminder}, {u"recurrence"_s, TokenKind::Recurrence},
+            {u"priority"_s, TokenKind::Priority},
+    };
+    if (!kinds.contains(kind) || value.isEmpty())
+        return std::nullopt;
+    markdown::TokenRef ref;
+    ref.kind = kinds.value(kind);
+    ref.value = value;
+    ref.defaultTime = config().defaultReminderTime; // the models' reminders have it filled in
+    return ref;
+}
+
+QVariantMap PlanningActions::tokenMenu(const QString &path, int line, const QString &text, const QString &kind,
+                                       const QString &value) const
+{
+    const auto ref = tokenRefOf(kind, value);
+    if (!m_host || !ref)
+        return {};
+    bool ok = false;
+    const QString content = m_host->read(path, &ok);
+    if (!ok)
+        return {};
+    const int at = tokenBlockLine(path, content, line, text, *ref);
+    if (at < 0)
+        return {}; // not written as a token (a Logseq SCHEDULED: line, a .+1w repeater) or gone
+    const markdown::BlockDocument doc(content);
+    const QString body = doc.at(doc.indexAtLine(at)).body;
+    const auto range = markdown::findTokenRef(body, *ref);
+    const auto token = range ? markdown::tokenAt(body, range->first, range->second) : std::nullopt;
+    if (!token)
+        return {};
+    QString rule = markdown::blockRecurrence(body);
+    auto [priority, logseq] = markdown::blockPriority(body);
+    if (token->kind == markdown::TokenKind::Recurrence)
+        rule = token->canonical;
+    if (token->kind == markdown::TokenKind::Priority || token->kind == markdown::TokenKind::LogseqPriority) {
+        priority = token->priority;
+        logseq = token->kind == markdown::TokenKind::LogseqPriority;
+    }
+    return {{u"rule"_s, rule}, {u"priority"_s, markdown::priorityName(priority)}, {u"logseq"_s, logseq}};
 }
 
 bool PlanningActions::snoozeReminder(const QString &path, int line, const QString &at)

@@ -10,7 +10,8 @@
 //   editToken(path, line, text, kind, value, action, a, b)   the token menus of Tasks and the
 //                                       calendar (DateChipMenu): a date, the reminder, the 🔁 rule,
 //                                       the priority of the block on `line`, only that token's bytes
-//                                       written (markdown::editBlockToken)
+//                                       written (markdown::editBlockToken); tokenMenu(…) what
+//                                       its menu shows (none for Logseq planning lines)
 //   snoozeReminder(path, line, at)      one occurrence of a recurring reminder later (a one-off
 //                                       child bullet, the series untouched: reminders/snooze.h)
 //   linkText(url, fromPath) / copyText(text)   the link menu's "Kopiuj"
@@ -28,6 +29,7 @@
 #pragma once
 
 #include "editorhost.h"
+#include "markdown/tokenedit.h"
 #include "types.h"
 
 #include <QDateTime>
@@ -35,6 +37,8 @@
 #include <QPointer>
 #include <QString>
 #include <QVariantMap>
+
+#include <optional>
 
 namespace brulion {
 class VaultIndex;
@@ -99,6 +103,13 @@ public:
     Q_INVOKABLE bool editToken(const QString &path, int line, const QString &text, const QString &kind,
                                const QString &value, const QString &action, const QVariant &a = {},
                                const QVariant &b = {});
+    /// What the token menu of such a token shows besides the models' values: { rule (the block's
+    /// 🔁 rule as the menu edits it — "every week" of "🔁 co tydzień kupić mleko" —, or the 🔁
+    /// token's own), priority (its name, "" = none), logseq (a Logseq `[#A]` priority) }; empty
+    /// when the value is not written as such a token there (a Logseq `SCHEDULED:` line or `.+1w`
+    /// repeater, a task changed meanwhile): no menu then.
+    Q_INVOKABLE QVariantMap tokenMenu(const QString &path, int line, const QString &text, const QString &kind,
+                                      const QString &value) const;
     /// Snooze the reminder on `line` of `path` to `at` ("YYYY-MM-DD HH:mm"): a recurring one gets a
     /// one-off child bullet, a one-off one moves (reminders::snoozeReminder). undo() puts it back.
     Q_INVOKABLE bool snoozeReminder(const QString &path, int line, const QString &at);
@@ -126,6 +137,10 @@ public:
     /// The task on `line` of `content` (or the one with plain text `text` nearest to it): its
     /// line, or -1. Exposed for tests.
     int locateTask(const QString &path, const QString &content, int line, const QString &text) const;
+    /// The line of the block whose token `ref` names: the task with plain text `text` nearest to
+    /// `line` when it has that token, else `line` when its block has it; -1 when neither.
+    int tokenBlockLine(const QString &path, const QString &content, int line, const QString &text,
+                       const markdown::TokenRef &ref) const;
 
 Q_SIGNALS:
     void hostChanged();
@@ -145,6 +160,8 @@ private:
     QDateTime currentTime() const;
     VaultConfig config() const;
     bool writeChange(const QString &path, const QString &before, const QString &after);
+    /// The TokenRef of a menu's token (`kind` as editToken() takes it); nullopt for unknown kinds.
+    std::optional<markdown::TokenRef> tokenRefOf(const QString &kind, const QString &value) const;
 
     QPointer<EditorHost> m_host;
     QPointer<VaultIndex> m_index;

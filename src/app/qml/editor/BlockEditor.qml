@@ -2165,7 +2165,7 @@ FocusScope {
         const chip = controller.tokenChipIn(raw, link)
         if (!chip.kind)
             return false
-        const run = (action, a, b) => editor.reportTokenEdit(controller.editTokenIn(path, line, chip.ref, action, a, b), action)
+        const run = (action, a, b) => editor.reportTokenEdit(controller.editTokenIn(path, line, raw, chip.ref, action, a, b), action)
         popupTokenMenu(chip, (action, a, b) => editor.chooseTokenWith(chip, run, action, a, b), item, x, y)
         return true
     }
