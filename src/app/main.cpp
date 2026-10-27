@@ -50,6 +50,7 @@
 
 #ifdef Q_OS_ANDROID
 #include "android/androidbridge.h"
+#include "widgetpublisher.h"
 #endif
 
 #ifdef Q_OS_WASM
@@ -329,6 +330,9 @@ int main(int argc, char *argv[])
         // "Udostępnij → Brulion" (ShareActivity.kt): the share dialog once a notebook is ready.
         QObject::connect(androidBridge, &brulion::platform::AndroidBridge::shared, controller.get(),
                          [ctl = controller.get()](const QByteArray &json) { ctl->receiveShareJson(json); });
+        // The home-screen widgets' snapshot and the entries their quick add queued (docs/ANDROID.md).
+        if (mainUi)
+            new brulion::widgets::WidgetPublisher(controller.get());
 #endif
     };
     const auto startUi = [&] {

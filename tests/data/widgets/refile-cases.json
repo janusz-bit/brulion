@@ -1,0 +1,31 @@
+{
+  "comment": "The section of an open task on a day (TaskListModel::sectionOf in src/app/planning/tasklistmodel.h): the widgets file the snapshot's tasks again when the day changed since it was built. Dates as the snapshot writes them (\"YYYY-MM-DD[ HH:mm]\" or \"\"); weekStart 1 = Monday … 7 = Sunday. Checked by tests/app/widgets/tst_widgets.cpp and android/tests/kotlin/.../WidgetSnapshotTest.kt.",
+  "cases": [
+    { "name": "termin wczoraj", "today": "2026-10-27", "weekStart": 1, "due": "2026-10-26", "scheduled": "", "start": "", "reminder": "", "section": "overdue" },
+    { "name": "termin dziś", "today": "2026-10-27", "weekStart": 1, "due": "2026-10-27", "scheduled": "", "start": "", "reminder": "", "section": "today" },
+    { "name": "termin dziś z godziną", "today": "2026-10-27", "weekStart": 1, "due": "2026-10-27 18:30", "scheduled": "", "start": "", "reminder": "", "section": "today" },
+    { "name": "termin jutro", "today": "2026-10-27", "weekStart": 1, "due": "2026-10-28", "scheduled": "", "start": "", "reminder": "", "section": "tomorrow" },
+    { "name": "dzień później: dzisiejszy termin zaległy", "today": "2026-10-28", "weekStart": 1, "due": "2026-10-27", "scheduled": "", "start": "", "reminder": "", "section": "overdue" },
+    { "name": "dzień później: jutrzejszy termin dziś", "today": "2026-10-28", "weekStart": 1, "due": "2026-10-28", "scheduled": "", "start": "", "reminder": "", "section": "today" },
+    { "name": "zaplanowane w przeszłości przechodzi na dziś", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "2026-10-20", "start": "", "reminder": "", "section": "today" },
+    { "name": "zaplanowane wcześniej niż termin", "today": "2026-10-27", "weekStart": 1, "due": "2026-11-10", "scheduled": "2026-10-25", "start": "", "reminder": "", "section": "today" },
+    { "name": "termin wcześniej niż zaplanowane", "today": "2026-10-27", "weekStart": 1, "due": "2026-10-28", "scheduled": "2026-11-03", "start": "", "reminder": "", "section": "tomorrow" },
+    { "name": "przypomnienie dziś bez daty", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "", "start": "", "reminder": "2026-10-27 09:00", "section": "today" },
+    { "name": "przypomnienie jutro", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "", "start": "", "reminder": "2026-10-28 07:30", "section": "tomorrow" },
+    { "name": "przypomnienie wczoraj: dziś", "today": "2026-10-28", "weekStart": 1, "due": "", "scheduled": "", "start": "", "reminder": "2026-10-27 09:00", "section": "today" },
+    { "name": "termin ważniejszy niż przypomnienie", "today": "2026-10-27", "weekStart": 1, "due": "2026-11-20", "scheduled": "", "start": "", "reminder": "2026-10-27 09:00", "section": "later" },
+    { "name": "start w przyszłości", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "", "start": "2026-10-30", "reminder": "", "section": "thisWeek" },
+    { "name": "start w przeszłości", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "", "start": "2026-10-20", "reminder": "", "section": "noDate" },
+    { "name": "start dziś", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "", "start": "2026-10-27", "reminder": "", "section": "noDate" },
+    { "name": "bez dat", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "", "start": "", "reminder": "", "section": "noDate" },
+    { "name": "niedziela, tydzień od poniedziałku", "today": "2026-10-27", "weekStart": 1, "due": "2026-11-01", "scheduled": "", "start": "", "reminder": "", "section": "thisWeek" },
+    { "name": "niedziela, tydzień od niedzieli", "today": "2026-10-27", "weekStart": 7, "due": "2026-11-01", "scheduled": "", "start": "", "reminder": "", "section": "later" },
+    { "name": "sobota, tydzień od soboty", "today": "2026-10-27", "weekStart": 6, "due": "2026-10-31", "scheduled": "", "start": "", "reminder": "", "section": "later" },
+    { "name": "piątek, tydzień od soboty", "today": "2026-10-27", "weekStart": 6, "due": "2026-10-30", "scheduled": "", "start": "", "reminder": "", "section": "thisWeek" },
+    { "name": "niedziela jutro to jutro", "today": "2026-10-31", "weekStart": 1, "due": "2026-11-01", "scheduled": "", "start": "", "reminder": "", "section": "tomorrow" },
+    { "name": "przełom roku", "today": "2026-12-31", "weekStart": 1, "due": "2027-01-01", "scheduled": "", "start": "", "reminder": "", "section": "tomorrow" },
+    { "name": "29 lutego", "today": "2028-02-28", "weekStart": 1, "due": "2028-02-29", "scheduled": "", "start": "", "reminder": "", "section": "tomorrow" },
+    { "name": "zmiana czasu (25 października)", "today": "2026-10-24", "weekStart": 1, "due": "2026-10-25", "scheduled": "", "start": "", "reminder": "", "section": "tomorrow" },
+    { "name": "zła data jak brak", "today": "2026-10-27", "weekStart": 1, "due": "2026-02-30", "scheduled": "", "start": "", "reminder": "", "section": "noDate" }
+  ]
+}

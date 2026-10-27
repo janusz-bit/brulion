@@ -1,0 +1,385 @@
+{
+  "comment": "Quick add of the Android widgets: what an entry writes (lines: widgetActionBlock() in src/app/widgets/widgetactions.h) and how it is appended to a daily note (append: notebook::appendBlock()). Checked by tests/app/widgets/tst_widgets.cpp against the C++ functions and by android/tests/kotlin/.../JournalAppendTest.kt against their Kotlin port (JournalAppend.kt).",
+  "lines": [
+    {
+      "name": "Dziś",
+      "action": {
+        "kind": "task",
+        "text": "Kupić żółte jabłka",
+        "date": "2026-10-27",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] Kupić żółte jabłka 📅 2026-10-27"
+    },
+    {
+      "name": "Jutro",
+      "action": {
+        "kind": "task",
+        "text": "Zadzwonić do Łucji",
+        "date": "2026-10-28",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] Zadzwonić do Łucji 📅 2026-10-28"
+    },
+    {
+      "name": "bez terminu",
+      "action": {
+        "kind": "task",
+        "text": "Przeczytać książkę",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] Przeczytać książkę"
+    },
+    {
+      "name": "godzina",
+      "action": {
+        "kind": "task",
+        "text": "Wizyta u dentysty",
+        "date": "2026-10-28",
+        "time": "09:00",
+        "alarm": false
+      },
+      "line": "- [ ] Wizyta u dentysty ⏰ 2026-10-28 09:00"
+    },
+    {
+      "name": "alarm",
+      "action": {
+        "kind": "task",
+        "text": "Pobudka",
+        "date": "2026-10-29",
+        "time": "06:30",
+        "alarm": true
+      },
+      "line": "- [ ] Pobudka ⏰! 2026-10-29 06:30"
+    },
+    {
+      "name": "alarm bez godziny",
+      "action": {
+        "kind": "task",
+        "text": "Coś",
+        "date": "2026-10-27",
+        "time": "",
+        "alarm": true
+      },
+      "line": "- [ ] Coś 📅 2026-10-27"
+    },
+    {
+      "name": "godzina bez dnia",
+      "action": {
+        "kind": "task",
+        "text": "Bez dnia",
+        "date": "",
+        "time": "10:00",
+        "alarm": false
+      },
+      "line": "- [ ] Bez dnia"
+    },
+    {
+      "name": "zła data",
+      "action": {
+        "kind": "task",
+        "text": "Zła data",
+        "date": "2026-13-45",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] Zła data"
+    },
+    {
+      "name": "zła godzina",
+      "action": {
+        "kind": "task",
+        "text": "Zła godzina",
+        "date": "2026-10-27",
+        "time": "25:99",
+        "alarm": true
+      },
+      "line": "- [ ] Zła godzina 📅 2026-10-27"
+    },
+    {
+      "name": "wpisany checkbox",
+      "action": {
+        "kind": "task",
+        "text": "- [ ] Zadzwonić",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] Zadzwonić"
+    },
+    {
+      "name": "wpisany znacznik i x",
+      "action": {
+        "kind": "task",
+        "text": "  * [x] Coś zrobione",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] Coś zrobione"
+    },
+    {
+      "name": "numer listy",
+      "action": {
+        "kind": "task",
+        "text": "1. pierwszy punkt",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] pierwszy punkt"
+    },
+    {
+      "name": "checkbox bez myślnika",
+      "action": {
+        "kind": "task",
+        "text": "[ ] Bez myślnika",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] Bez myślnika"
+    },
+    {
+      "name": "kilka wierszy",
+      "action": {
+        "kind": "task",
+        "text": "Pierwsza\r\n  druga\n\ntrzecia ",
+        "date": "2026-10-27",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] Pierwsza druga trzecia 📅 2026-10-27"
+    },
+    {
+      "name": "spacje twarde",
+      "action": {
+        "kind": "task",
+        "text": "\u00a0Kupić ser\u00a0\t",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] Kupić ser"
+    },
+    {
+      "name": "jutro o 9 zostaje tekstem",
+      "action": {
+        "kind": "task",
+        "text": "Spotkanie jutro o 9",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] Spotkanie jutro o 9"
+    },
+    {
+      "name": "znaczniki HTML",
+      "action": {
+        "kind": "task",
+        "text": "<b>pogrubione</b> & <script>",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] <b>pogrubione</b> & <script>"
+    },
+    {
+      "name": "pusty tekst",
+      "action": {
+        "kind": "task",
+        "text": "  \n ",
+        "date": "2026-10-27",
+        "time": "",
+        "alarm": false
+      },
+      "line": ""
+    },
+    {
+      "name": "notatka",
+      "action": {
+        "kind": "note",
+        "text": "Szybka myśl: zażółć gęślą jaźń",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- Szybka myśl: zażółć gęślą jaźń"
+    },
+    {
+      "name": "notatka w kilku wierszach",
+      "action": {
+        "kind": "note",
+        "text": "\n\nLinia 1\r\n   Linia 2  \n\n",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- Linia 1\n  Linia 2"
+    },
+    {
+      "name": "notatka z listą",
+      "action": {
+        "kind": "note",
+        "text": "1. punkt",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "1. punkt"
+    },
+    {
+      "name": "notatka z zadaniem",
+      "action": {
+        "kind": "note",
+        "text": "- [ ] zadanie wpisane",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": "- [ ] zadanie wpisane"
+    },
+    {
+      "name": "notatka z datą (bez daty)",
+      "action": {
+        "kind": "note",
+        "text": "Notatka",
+        "date": "2026-10-27",
+        "time": "09:00",
+        "alarm": true
+      },
+      "line": "- Notatka"
+    },
+    {
+      "name": "pusta notatka",
+      "action": {
+        "kind": "note",
+        "text": " \t ",
+        "date": "",
+        "time": "",
+        "alarm": false
+      },
+      "line": ""
+    }
+  ],
+  "append": [
+    {
+      "name": "pusta notatka",
+      "content": "",
+      "block": "- [ ] Kupić mleko",
+      "expected": "- [ ] Kupić mleko\n"
+    },
+    {
+      "name": "LF",
+      "content": "- a\n",
+      "block": "- b",
+      "expected": "- a\n- b\n"
+    },
+    {
+      "name": "CRLF",
+      "content": "- a\r\n- b\r\n",
+      "block": "- c\n  dalej",
+      "expected": "- a\r\n- b\r\n- c\r\n  dalej\r\n"
+    },
+    {
+      "name": "same CR",
+      "content": "- a\r- b\r",
+      "block": "- c",
+      "expected": "- a\r- b\r- c\r"
+    },
+    {
+      "name": "bez końca wiersza",
+      "content": "- a",
+      "block": "- b",
+      "expected": "- a\n- b\n"
+    },
+    {
+      "name": "bez końca wiersza, CRLF",
+      "content": "- a\r\n- b",
+      "block": "- c",
+      "expected": "- a\r\n- b\r\n- c\r\n"
+    },
+    {
+      "name": "puste wiersze na końcu",
+      "content": "- a\n\n\n",
+      "block": "- b",
+      "expected": "- a\n- b\n"
+    },
+    {
+      "name": "puste wiersze ze spacjami",
+      "content": "- a\n  \n\t\n",
+      "block": "- b",
+      "expected": "- a\n- b\n"
+    },
+    {
+      "name": "pusty punkt szablonu",
+      "content": "## Plan dnia\n- \n",
+      "block": "- [ ] Zadzwonić do Łukasza",
+      "expected": "## Plan dnia\n- [ ] Zadzwonić do Łukasza\n"
+    },
+    {
+      "name": "pusty punkt z wcięciem",
+      "content": "# Dzień\n  *   \n",
+      "block": "- x",
+      "expected": "# Dzień\n- x\n"
+    },
+    {
+      "name": "pusty punkt, CRLF",
+      "content": "# Środa\r\n-\r\n\r\n",
+      "block": "- notatka",
+      "expected": "# Środa\r\n- notatka\r\n"
+    },
+    {
+      "name": "tylko jeden pusty punkt znika",
+      "content": "- \n- \n",
+      "block": "- y",
+      "expected": "- \n- y\n"
+    },
+    {
+      "name": "punkt z tekstem zostaje",
+      "content": "- a\n- b",
+      "block": "- c",
+      "expected": "- a\n- b\n- c\n"
+    },
+    {
+      "name": "BOM zostaje",
+      "content": "\ufeff- a\n",
+      "block": "- ż",
+      "expected": "\ufeff- a\n- ż\n"
+    },
+    {
+      "name": "sam BOM",
+      "content": "\ufeff",
+      "block": "- ż",
+      "expected": "\ufeff\n- ż\n"
+    },
+    {
+      "name": "blok z CRLF",
+      "content": "- a\n",
+      "block": "- b\r\n  c",
+      "expected": "- a\n- b\n  c\n"
+    },
+    {
+      "name": "mieszane końce wierszy",
+      "content": "- a\r\n- b\n",
+      "block": "- c",
+      "expected": "- a\r\n- b\n- c\r\n"
+    },
+    {
+      "name": "pusty blok",
+      "content": "- a\n\n",
+      "block": "  ",
+      "expected": "- a\n\n"
+    },
+    {
+      "name": "szablon dnia",
+      "content": "# wtorek, 27 października\n\n- ",
+      "block": "- [ ] Kupić żółte jabłka 📅 2026-10-27",
+      "expected": "# wtorek, 27 października\n\n- [ ] Kupić żółte jabłka 📅 2026-10-27\n"
+    }
+  ]
+}

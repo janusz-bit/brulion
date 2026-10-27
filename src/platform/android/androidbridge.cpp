@@ -128,6 +128,25 @@ void JNICALL nativeDoneQueued(JNIEnv *, jclass)
     QMetaObject::invokeMethod(bridge, [bridge] { Q_EMIT bridge->doneRequestsQueued(); }, Qt::QueuedConnection);
 }
 
+/// Quick add of a widget queued an entry (WidgetInbox.kt): C++ takes it with takeWidgetActions().
+void JNICALL nativeWidgetQueued(JNIEnv *, jclass)
+{
+    AndroidBridge *bridge = s_bridge.load();
+    if (!bridge)
+        return;
+    QMetaObject::invokeMethod(bridge, [bridge] { Q_EMIT bridge->widgetActionsQueued(); }, Qt::QueuedConnection);
+}
+
+/// Quick add of a widget wrote a note itself (JournalAppend.kt) while Qt runs.
+void JNICALL nativeWidgetWrote(JNIEnv *env, jclass, jstring path)
+{
+    AndroidBridge *bridge = s_bridge.load();
+    if (!bridge)
+        return;
+    const QString file = fromJString(env, path);
+    QMetaObject::invokeMethod(bridge, [bridge, file] { Q_EMIT bridge->widgetNoteWritten(file); }, Qt::QueuedConnection);
+}
+
 /// The ringtone picker answered (BrulionAndroid.onActivityResult): `json` is the choice.
 void JNICALL nativeSoundPicked(JNIEnv *env, jclass, jint kind, jstring json)
 {
@@ -191,6 +210,8 @@ AndroidBridge::AndroidBridge(QObject *parent)
             {"nativePermissionsChanged", "()V", reinterpret_cast<void *>(&nativePermissionsChanged)},
             {"nativeSoundPicked", "(ILjava/lang/String;)V", reinterpret_cast<void *>(&nativeSoundPicked)},
             {"nativeDoneQueued", "()V", reinterpret_cast<void *>(&nativeDoneQueued)},
+            {"nativeWidgetQueued", "()V", reinterpret_cast<void *>(&nativeWidgetQueued)},
+            {"nativeWidgetWrote", "(Ljava/lang/String;)V", reinterpret_cast<void *>(&nativeWidgetWrote)},
             {"nativeImeChanged", "(IZZ)V", reinterpret_cast<void *>(&nativeImeChanged)},
             {"nativeGestureInsetsChanged", "(II)V", reinterpret_cast<void *>(&nativeGestureInsetsChanged)},
     };
@@ -211,6 +232,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
                     deliverPendingActivation();
                     deliverPendingShare();
                     Q_EMIT doneRequestsQueued();
+                    Q_EMIT widgetActionsQueued();
                 });
     }
     // Cold start from a notification or a share: delivered once the event loop runs (after the
@@ -219,6 +241,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
     QMetaObject::invokeMethod(this, &AndroidBridge::deliverPendingActivation, Qt::QueuedConnection);
     QMetaObject::invokeMethod(this, &AndroidBridge::deliverPendingShare, Qt::QueuedConnection);
     QMetaObject::invokeMethod(this, &AndroidBridge::doneRequestsQueued, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, &AndroidBridge::widgetActionsQueued, Qt::QueuedConnection);
 }
 
 AndroidBridge::~AndroidBridge()
@@ -333,6 +356,39 @@ QJsonArray AndroidBridge::takeDoneRequests(const QString &vault)
             kClass, "takeDoneRequests", "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
             context.object(), QJniObject::fromString(vault).object<jstring>());
     if (failed("takeDoneRequests") || !answer.isValid())
+        return {};
+    return QJsonDocument::fromJson(answer.toString().toUtf8()).array();
+}
+
+int AndroidBridge::updateWidgets(const QJsonObject &snapshot)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return -1;
+    const QJniObject json =
+            QJniObject::fromString(QString::fromUtf8(QJsonDocument(snapshot).toJson(QJsonDocument::Compact)));
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, "updateWidgets", "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
+            context.object(), json.object<jstring>());
+    if (failed("updateWidgets") || !answer.isValid())
+        return -1;
+    const QJsonObject object = QJsonDocument::fromJson(answer.toString().toUtf8()).object();
+    if (object.contains("error"_L1)) {
+        qCWarning(lcAndroid) << "updateWidgets:" << object.value("error"_L1).toString();
+        return -1;
+    }
+    return object.value("widgets"_L1).toInt();
+}
+
+QJsonArray AndroidBridge::takeWidgetActions(const QString &vault)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return {};
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, "takeWidgetActions", "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
+            context.object(), QJniObject::fromString(vault).object<jstring>());
+    if (failed("takeWidgetActions") || !answer.isValid())
         return {};
     return QJsonDocument::fromJson(answer.toString().toUtf8()).array();
 }

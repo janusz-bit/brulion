@@ -223,13 +223,14 @@ QString cleanItemText(const QString &text)
 
 } // namespace
 
-QString taskLine(const QString &text, const std::optional<DateSpec> &due, const std::optional<DateSpec> &reminder)
+QString taskLine(const QString &text, const std::optional<DateSpec> &due, const std::optional<DateSpec> &reminder,
+                 bool alarm)
 {
     QString line = u"- [ ] "_s + cleanItemText(text);
     if (due && due->isValid())
         line += u' ' + markdown::tokens::Due.toString() + u' ' + due->toString();
     if (reminder && reminder->isValid() && reminder->hasTime())
-        line += u' ' + markdown::formatReminderToken(*reminder, false);
+        line += u' ' + markdown::formatReminderToken(*reminder, alarm);
     return line;
 }
 
