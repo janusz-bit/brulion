@@ -426,9 +426,8 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     // ---- Tasks: a due date's chip has the date menu (PlanningTokenMenu); "Dzień później" writes it.
     app->navigate({{u"view"_s, u"tasks"_s}});
     settle(800);
-    QQuickItem *dueChip = shownWhere(window->contentItem(), [](QQuickItem *item) {
-        return item->objectName() == u"taskChip_due";
-    });
+    QQuickItem *dueChip =
+            shownWhere(window->contentItem(), [](QQuickItem *item) { return item->objectName() == u"taskChip_due"; });
     check(dueChip != nullptr, "a task in Tasks shows its due date as a chip");
     if (dueChip) {
         QQuickItem *row = dueChip;
@@ -442,7 +441,9 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         else
             mouseClick(window, pointIn(dueChip), Qt::RightButton);
         QQuickItem *later = nullptr;
-        check(waitFor([&] { return openMenus(window) == 1 && (later = named(window->contentItem(), u"dateChipDayLater"_s)); }),
+        check(waitFor([&] {
+                  return openMenus(window) == 1 && (later = named(window->contentItem(), u"dateChipDayLater"_s));
+              }),
               "a long press or right-click on a due date's chip in Tasks opens its date menu");
         if (later)
             tapOrClick(window, pointIn(later), touch);
@@ -542,6 +543,43 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     check(entries && waitFor([&] { return qAbs(entries->height() - rowsHeight()) < 0.5; }),
           "a task written into another note joins today's agenda, inside its day");
     ws->deletePage(chimney);
+    restore();
+
+    // ---- The agenda: tomorrow's time of a reminder repeated every day (an occurrence) has the
+    //      series' menu without a snooze — that time still rings.
+    const QString pills = u"Leki.md"_s;
+    // Late in the day: today's time has not rung yet (no notification during the checks).
+    ws->writeFile(pills, u"- Leki na ciśnienie ⏰ "_s + app->today(0) + u" 23:58 🔁 every day\n"_s);
+    const auto isOccurrence = [](QQuickItem *row) {
+        QVariant entry = row->property("entry");
+        if (entry.canConvert<QJSValue>())
+            entry = entry.value<QJSValue>().toVariant();
+        return entry.toMap().value(u"occurrence"_s).toBool();
+    };
+    QQuickItem *pillsRow = agenda ? shownWhere(agenda,
+                                               [&](QQuickItem *item) {
+                                                   return isA(item, "PlanningItemRow")
+                                                          && entryTitle(item).contains(u"ciśnienie"_s)
+                                                          && isOccurrence(item);
+                                               })
+                                  : nullptr;
+    check(pillsRow != nullptr, "the agenda shows the next times of a repeated reminder");
+    if (pillsRow) {
+        if (touch)
+            touchTap(window, pointIn(pillsRow), 1000);
+        else
+            mouseClick(window, pointIn(pillsRow), Qt::RightButton);
+        const bool opened = waitFor(
+                [&] { return openMenus(window) == 1 && named(window->contentItem(), u"dateChipChange"_s) != nullptr; });
+        const auto shownNow = [window](const QString &name) {
+            return findShown(window->contentItem(), [&name](QQuickItem *item) { return item->objectName() == name; });
+        };
+        check(opened && shownNow(u"dateChipAlarm"_s) && !shownNow(u"dateChipHourLater"_s)
+                      && !shownNow(u"dateChipTomorrowSameTime"_s) && !shownNow(u"dateChipDayLater"_s),
+              "a later time of a repeated reminder in the agenda has the series' menu, without a snooze");
+        closeMenus(window);
+    }
+    ws->deletePage(pills);
     restore();
 
     // ---- A day of the week view: its day panel, beside the week on wide windows and a bottom

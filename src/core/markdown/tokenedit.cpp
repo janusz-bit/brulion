@@ -49,7 +49,7 @@ TokenKind refKind(TokenKind kind)
 
 /// A token with a menu and its chip range.
 struct MenuToken {
-    Token token;      ///< as findTokens() reads it in the whole body
+    Token token; ///< as findTokens() reads it in the whole body
     qsizetype from = 0;
     qsizetype to = 0; ///< a 🔁 rule's chip ends with the rule
 };
@@ -304,7 +304,8 @@ std::optional<std::pair<dates::RecurrenceRule, qsizetype>> recurrencePrefix(QStr
     for (qsizetype k = ends.size() - 1; k >= 0; --k) {
         QStringView candidate = value.first(ends[k]);
         // "co tydzień, kupić" -> "co tydzień": punctuation glued to the last word is not rule text.
-        while (!candidate.isEmpty() && (candidate.back() == u',' || candidate.back() == u';' || candidate.back() == u':'))
+        while (!candidate.isEmpty()
+               && (candidate.back() == u',' || candidate.back() == u';' || candidate.back() == u':'))
             candidate.chop(1);
         if (const auto rule = dates::parseRecurrence(candidate))
             return std::pair{*rule, tok.valueFrom + candidate.size()};

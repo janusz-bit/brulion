@@ -2288,7 +2288,7 @@ FocusScope {
         case "openSide": if (open) open(true); break
         case "copy": copyText(info.copyText); break
         case "overview": controller.navigate({ view: "tag", tag: info.tag, overview: true }); break
-        case "tasks": controller.navigate({ view: "tasks", query: "tag:" + (/[\s,"]/.test(info.tag) ? "\"" + info.tag + "\"" : info.tag) }); break
+        case "tasks": if (linkMenu) controller.navigate({ view: "tasks", query: linkMenu.tasksQuery(info.tag) }); break
         }
     }
     /// Copy `text` and say so ("Skopiowano …", or that the clipboard is not available).

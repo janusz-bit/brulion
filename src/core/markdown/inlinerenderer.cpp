@@ -564,8 +564,9 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 // (its menu changes the date); a fragment keeps it a page link.
                 const bool day = m_ctx.dayLinks && w.heading.isEmpty() && w.blockId.isEmpty()
                                  && journalDateFromLinkTarget(w.target, m_ctx.journalConfig).has_value();
-                const QString href = day ? QString(u"day:"_s + itemRange(item))
-                                         : QString(u"page:"_s + percentEncoded(w.target) + fragment(w.heading, w.blockId));
+                const QString href =
+                        day ? QString(u"day:"_s + itemRange(item))
+                            : QString(u"page:"_s + percentEncoded(w.target) + fragment(w.heading, w.blockId));
                 html = link(href, resolved ? pal.link : pal.unresolved, esc(label));
                 break;
             }

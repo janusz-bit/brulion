@@ -114,8 +114,7 @@ std::optional<JournalLinkMatch> journalLinkAt(const QString &body, qsizetype fro
 /// (written in the format it was written in: the vault's journalFileFormat, "yyyy-MM-dd" or
 /// "yyyy_MM_dd"; a folder or ".md" kept) — `|alias`, `#heading`, `#^id` and a leading `!` stay.
 /// No journal link there or an invalid date: unchanged.
-QString setJournalLinkDate(const QString &body, qsizetype from, qsizetype to, QDate date,
-                           const VaultConfig &config);
+QString setJournalLinkDate(const QString &body, qsizetype from, qsizetype to, QDate date, const VaultConfig &config);
 
 /// What the token edits need besides the text (they never read the clock).
 struct TokenEditContext {
@@ -142,8 +141,8 @@ struct TokenEditContext {
 ///   "blockPriority"   the block's priority becomes a (the reminder menu's "Priorytet")
 ///
 /// Unknown actions, invalid arguments or a range that holds no such token: `body` unchanged.
-QString applyTokenAction(const QString &body, qsizetype from, qsizetype to, const QString &action,
-                         const QVariant &a, const QVariant &b, const TokenEditContext &context);
+QString applyTokenAction(const QString &body, qsizetype from, qsizetype to, const QString &action, const QVariant &a,
+                         const QVariant &b, const TokenEditContext &context);
 
 /// A token named across copies of its block (see the file comment).
 struct TokenRef {
@@ -170,7 +169,7 @@ std::optional<std::pair<qsizetype, qsizetype>> findTokenRef(const QString &body,
 /// `content`. Only the edited line changes, byte for byte apart from the token (its line ending,
 /// indentation and every other line kept). `content` unchanged when the line holds no block, the
 /// block has no such token or the action changes nothing.
-QString editBlockToken(const QString &content, int line, const TokenRef &ref, const QString &action,
-                       const QVariant &a, const QVariant &b, const TokenEditContext &context);
+QString editBlockToken(const QString &content, int line, const TokenRef &ref, const QString &action, const QVariant &a,
+                       const QVariant &b, const TokenEditContext &context);
 
 } // namespace brulion::markdown

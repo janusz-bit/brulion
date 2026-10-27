@@ -19,7 +19,8 @@ Czas jest czasem lokalnym, zapisanym bez strefy; „9:00” znaczy 9:00 u Ciebie
 - Albo użyj „Przypomnienie…” lub „Alarm…” z menu `/`: okno z szybkimi terminami, kalendarzem, godziną, przełącznikiem alarmu i powtarzaniem.
 - Kliknięcie znaczka ⏰ w notatce otwiera okno, w którym możesz je zmienić, odłożyć albo usunąć.
 - Prawy przycisk myszy na znaczku ⏰ (na telefonie przytrzymanie palcem) otwiera menu: „Zmień datę i godzinę…”, „Godzinę później”, „Jutro o tej porze”, „Tydzień później”, przełącznik „Alarm”, podmenu **Powtarzanie** (gotowe reguły, „Zmień regułę…”, „Nie powtarzaj”) i — przy zadaniu — **Priorytet**, oraz „Usuń przypomnienie”. Każdą zmianę cofniesz (`Ctrl+Z`). To samo menu jest w wynikach zapytań, we wstawionych blokach, w tabelach, w widoku Zadania i w kalendarzu.
-- W kalendarzu przypomnienie cykliczne pokazuje się w każdym dniu serii. Menu takiego dnia zmienia całą serię („Zmień całą serię…”), a „Godzinę później” i „Jutro o tej porze” odkładają tylko ten jeden raz — tak jak „Odłóż” w powiadomieniu.
+- W kalendarzu przypomnienie cykliczne pokazuje się w każdym dniu serii. Menu takiego dnia zmienia całą serię („Zmień całą serię…”). Gdy ten raz już minął, „Godzinę później” i „Jutro o tej porze” odkładają tylko jego — tak jak „Odłóż” w powiadomieniu. Przy terminie, który dopiero nadejdzie, menu nie ma tych pozycji, bo przypomnienie i tak by zadzwoniło.
+- Zmiana reguły 🔁 zmienia tylko samą regułę: słowa zapisane po niej zostają. Gdy zmieniasz tylko godzinę, reguła zostaje zapisana tak jak była (np. „co tydzień”).
 - W szybkiej notatce (Ctrl+Shift+N) wystarczy napisać datę w treści.
 
 ## Powtarzanie

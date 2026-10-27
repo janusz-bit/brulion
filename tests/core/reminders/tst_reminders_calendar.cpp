@@ -232,7 +232,8 @@ private Q_SLOTS:
             QVERIFY(item.written.has_value());
             switch (item.kind) {
             case CalendarItem::Due:
-                QCOMPARE(*item.written, (DateSpec{item.title == u"Zrobione"_s ? QDate(2026, 10, 2) : QDate(2026, 10, 6), std::nullopt}));
+                QCOMPARE(*item.written, (DateSpec{item.title == u"Zrobione"_s ? QDate(2026, 10, 2) : QDate(2026, 10, 6),
+                                                  std::nullopt}));
                 break;
             case CalendarItem::Scheduled: QCOMPARE(*item.written, (DateSpec{QDate(2026, 10, 5), std::nullopt})); break;
             case CalendarItem::Reminder:
@@ -248,7 +249,8 @@ private Q_SLOTS:
         }
         // Due 13th, scheduled 12th, reminders 8th … 14th: series items, not the written dates.
         QCOMPARE(occurrences, 1 + 1 + 7);
-        const auto journals = calendarOf({{u"journals/2026-10-05.md"_s, u"- dzień"_s}}, QDate(2026, 10, 5), QDate(2026, 10, 5));
+        const auto journals =
+                calendarOf({{u"journals/2026-10-05.md"_s, u"- dzień"_s}}, QDate(2026, 10, 5), QDate(2026, 10, 5));
         QCOMPARE(journals.size(), 1);
         QVERIFY(!journals.first().written.has_value());
     }

@@ -360,33 +360,13 @@ bool PlanningActions::snoozeReminder(const QString &path, int line, const QStrin
 
 QString PlanningActions::linkText(const QString &url, const QString &fromPath) const
 {
-    const qsizetype colon = url.indexOf(u':');
-    if (colon <= 0)
-        return {};
-    const QString scheme = url.left(colon);
-    const QString rest = url.mid(colon + 1);
-    if (scheme == u"tag")
-        return markdown::tagSyntax(QUrl::fromPercentEncoding(rest.toUtf8()));
-    if (scheme == u"block")
-        return u"(("_s + rest + u"))"_s;
-    if (scheme == u"ext")
-        return rest;
-    if (scheme != u"page")
-        return {};
-    QString target = rest;
-    QString fragment;
-    if (const qsizetype hash = rest.indexOf(u'#'); hash >= 0) {
-        target = rest.left(hash);
-        fragment = u'#' + QUrl::fromPercentEncoding(rest.mid(hash + 1).toUtf8());
-    }
-    target = QUrl::fromPercentEncoding(target.toUtf8());
-    const QString resolved = target.isEmpty() ? fromPath : m_host ? m_host->resolveLink(target, fromPath) : QString();
-    if (resolved.isEmpty())
-        return target.isEmpty() ? QString() : u"[["_s + target + fragment + u"]]"_s;
-    const QString page = notebook::pageLinkTarget(
-            resolved, config(), [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); },
-            [this](const QString &title) { return m_host ? m_host->resolveLink(title, QString()) : QString(); });
-    return u"[["_s + page + fragment + u"]]"_s;
+    return notebook::copiedLink(
+                   url, fromPath, config(),
+                   [this](const QString &target, const QString &from) {
+                       return m_host ? m_host->resolveLink(target, from) : QString();
+                   },
+                   [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); })
+            .text;
 }
 
 bool PlanningActions::copyText(const QString &text) const

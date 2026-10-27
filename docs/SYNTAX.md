@@ -467,8 +467,12 @@ in `🔁 co tydzień kupić mleko` the rule is `co tydzień`, the rest stays tex
 its emoji (a Logseq `[#A]`/`[#B]`/`[#C]` stays Logseq: highest and high → `[#A]`, medium →
 `[#B]`, low and lowest → `[#C]`), a date or reminder only its `YYYY-MM-DD[ HH:mm]` value (`⏰` /
 `⏰!` for an alarm; `(@…)` is written as `⏰` then), a link to a day only the date part of its
-target, in the format it was written in. A token removed takes one adjacent space with it.
-Everything else in the file — other tokens, indentation, line endings — stays byte for byte.
+target, in the format it was written in. A token removed takes one adjacent space with it. A
+rule set to the rule it already is (in any phrasing: the reminder dialog with only the time
+changed) stays as written. In a table cell only the cell's text changes — the other cells, the
+padding and the pipes stay. Everything else in the file — other tokens, indentation, line
+endings — stays byte for byte. Logseq planning lines (`SCHEDULED:` / `DEADLINE:`) have no
+token menu.
 
 ## 8. Natural-language dates (editor input only)
 

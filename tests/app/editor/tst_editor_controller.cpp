@@ -9,8 +9,8 @@
 #include "index/vaultindex.h"
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
-#include "markdown/tokenedit.h"
 #include "markdown/parse.h"
+#include "markdown/tokenedit.h"
 #include "notebook/links.h"
 #include "pagecontroller.h"
 
@@ -1371,7 +1371,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(c.value(u"kind"_s).toString(), u"priority"_s);
         QCOMPARE(c.value(u"priority"_s).toString(), current);
         QCOMPARE(c.value(u"logseq"_s).toBool(), logseq);
-        QVERIFY(f.page.applyTokenAction(0, c.value(u"from"_s).toInt(), c.value(u"to"_s).toInt(), u"priority"_s, choice));
+        QVERIFY(f.page.applyTokenAction(0, c.value(u"from"_s).toInt(), c.value(u"to"_s).toInt(), u"priority"_s,
+                                        choice));
         QCOMPARE(f.text(), expected);
         f.page.undo();
         QCOMPARE(f.text(), content);
@@ -1468,7 +1469,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
     void tokenMenusOfOtherFiles()
     {
         Fixture f(u"- strona z zapytaniem\n"_s);
-        const QString other = u"# Plan\r\n\r\n- [ ] Zapłacić za żłobek 📅 2026-10-20 ⏫\r\n- [ ] inne 📅 2026-10-20\r\n"_s;
+        const QString other =
+                u"# Plan\r\n\r\n- [ ] Zapłacić za żłobek 📅 2026-10-20 ⏫\r\n- [ ] inne 📅 2026-10-20\r\n"_s;
         f.host.setFile(u"Plan.md"_s, other);
         // The item as a query result has it (its block's Markdown) and a link of its rendered text.
         const QString raw = u"- [ ] Zapłacić za żłobek 📅 2026-10-20 ⏫"_s;
@@ -1487,7 +1489,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(r.value(u"ok"_s).toBool());
         const int undo = r.value(u"undo"_s).toInt();
         QVERIFY(undo > 0);
-        const QString after = u"# Plan\r\n\r\n- [ ] Zapłacić za żłobek 📅 2026-10-21 ⏫\r\n- [ ] inne 📅 2026-10-20\r\n"_s;
+        const QString after =
+                u"# Plan\r\n\r\n- [ ] Zapłacić za żłobek 📅 2026-10-21 ⏫\r\n- [ ] inne 📅 2026-10-20\r\n"_s;
         QCOMPARE(f.host.file(u"Plan.md"_s), after);
         // The token moved on: the same ref finds nothing to change (the date is another now).
         r = f.page.editTokenIn(u"Plan.md"_s, 2, raw, ref, u"shift"_s, 1, 0);
@@ -1593,18 +1596,18 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
                                           << u"|Zadanie|Termin|\n|-|-|\n|Faktura||\n|Raport|x|\n"_s;
         const QString aligned = u"| Co       | Kiedy                |\n| -------- | -------------------- |\n"
                                 u"| Przegląd | jutro 📅 2026-10-20 ⏫ |\n"_s;
-        QTest::newRow("aligned, a week later") << aligned << 0 << 1 << u"shift"_s << QVariant(7)
-                                               << QString(aligned).replace(u"20 ⏫"_s, u"27 ⏫"_s);
-        QTest::newRow("aligned, priority") << QString(aligned).replace(u"📅 2026-10-20"_s, u"po obiedzie"_s) << 0 << 1
-                                           << u"priority"_s << QVariant(u"low"_s)
-                                           << QString(aligned).replace(u"📅 2026-10-20"_s, u"po obiedzie"_s)
-                                                      .replace(u"⏫"_s, u"🔽"_s);
+        QTest::newRow("aligned, a week later")
+                << aligned << 0 << 1 << u"shift"_s << QVariant(7) << QString(aligned).replace(u"20 ⏫"_s, u"27 ⏫"_s);
+        QTest::newRow("aligned, priority")
+                << QString(aligned).replace(u"📅 2026-10-20"_s, u"po obiedzie"_s) << 0 << 1 << u"priority"_s
+                << QVariant(u"low"_s)
+                << QString(aligned).replace(u"📅 2026-10-20"_s, u"po obiedzie"_s).replace(u"⏫"_s, u"🔽"_s);
         const QString header = u"Plan 📅 2026-10-20 | b\n--- | ---\nx | y\n"_s;
-        QTest::newRow("header without outer pipes") << header << -1 << 0 << u"shift"_s << QVariant(1)
-                                                    << u"Plan 📅 2026-10-21 | b\n--- | ---\nx | y\n"_s;
+        QTest::newRow("header without outer pipes")
+                << header << -1 << 0 << u"shift"_s << QVariant(1) << u"Plan 📅 2026-10-21 | b\n--- | ---\nx | y\n"_s;
         const QString escaped = u"| a \\| b ⏰ 2026-10-20 09:00 | c |\n| --- | --- |\n| x | y |\n"_s;
-        QTest::newRow("escaped pipe in the cell") << escaped << -1 << 0 << u"alarm"_s << QVariant(true)
-                                                  << QString(escaped).replace(u"⏰ "_s, u"⏰! "_s);
+        QTest::newRow("escaped pipe in the cell")
+                << escaped << -1 << 0 << u"alarm"_s << QVariant(true) << QString(escaped).replace(u"⏰ "_s, u"⏰! "_s);
     }
 
     void tableCellTokensKeepTheTable()
@@ -1638,8 +1641,16 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // A [[day]] in a cell opens the daily note (a page link with the link menu): its range would
         // name the cell's text, not the table's.
         Fixture f(u"| Dzień | Notatka |\n|---|---|\n| [[2026-10-20]] | x |\n"_s);
-        const QString html = f.role(0, "tableData").toMap().value(u"rows"_s).toList().at(0).toList().at(0).toMap()
-                                     .value(u"html"_s).toString();
+        const QString html = f.role(0, "tableData")
+                                     .toMap()
+                                     .value(u"rows"_s)
+                                     .toList()
+                                     .at(0)
+                                     .toList()
+                                     .at(0)
+                                     .toMap()
+                                     .value(u"html"_s)
+                                     .toString();
         QVERIFY2(html.contains(u"href=\"page:2026-10-20\""_s) && !html.contains(u"day:"_s), qPrintable(html));
     }
 
@@ -1657,7 +1668,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(second.value(u"at"_s).toString(), u"2026-10-21"_s);
         QCOMPARE(f.page.dateChip(0, urls.at(0)).value(u"at"_s).toString(), u"2026-10-20"_s);
         QCOMPARE(f.page.dateChip(0, urls.at(2)).value(u"rule"_s).toString(), u"every day"_s);
-        QVERIFY(f.page.applyTokenAction(0, second.value(u"from"_s).toInt(), second.value(u"to"_s).toInt(), u"shift"_s, 1, 0));
+        QVERIFY(f.page.applyTokenAction(0, second.value(u"from"_s).toInt(), second.value(u"to"_s).toInt(), u"shift"_s,
+                                        1, 0));
         QCOMPARE(f.text(), u"- # A 📅 2026-10-20\n  B c 📅 2026-10-22 🔁 every day\n"_s);
         // The same block as a copy (a query result, an embed).
         const QVariantMap copy = f.page.tokenChipIn(u"- # A 📅 2026-10-20\n  B c 📅 2026-10-21"_s, urls.at(1));

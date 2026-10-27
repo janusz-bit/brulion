@@ -30,6 +30,20 @@ QString pageLinkTarget(const VaultPath &path, const VaultConfig &config,
 /// pageLinkTarget() with the index's linkTarget() and resolveLink() (no index: the title).
 QString pageLinkTarget(const VaultPath &path, const VaultConfig &config, const VaultIndex *index);
 
+/// What a link menu's "Kopiuj link" copies for a link of rendered text (`url`: an InlineRenderer
+/// URL) written on `fromPath`: `#tag` / `#[[tag with spaces]]` for tag:, `((id))` for block:, the
+/// address for ext:, and for page: `[[target#fragment]]` with the page by pageLinkTarget() (a
+/// `[[#Heading]]` names `fromPath`) — as written when no page has that name (`path` "" then).
+/// `resolveLink(target, from)`: a link target written on `from` -> the page's path, "" when none.
+/// Empty `text` for other URLs.
+struct CopiedLink {
+    QString text;
+    QString path; ///< page: the linked page's path ("" when it does not exist)
+};
+CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultConfig &config,
+                      const std::function<QString(const QString &target, const QString &from)> &resolveLink,
+                      const std::function<QString(const VaultPath &path)> &shortestTarget);
+
 struct BlockLinks {
     QString id;          ///< the block id (without '^')
     bool added = false;  ///< the id was written now: `content` carries it

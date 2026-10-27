@@ -93,10 +93,6 @@ Item {
         return true
     }
 
-    function tagQuery(key) {
-        return "tag:" + (/[\s,"]/.test(key) ? "\"" + key + "\"" : key)
-    }
-
     /// Write `action` on the open menu's token; says what changed.
     function run(action, a, b) {
         const t = target
@@ -149,7 +145,7 @@ Item {
         case "open": actions.openLink(l.url, l.fromPath, false); break
         case "openSide": actions.openLink(l.url, l.fromPath, true); break
         case "overview": AppController.navigate({ view: "tag", tag: l.tag, overview: true }); break
-        case "tasks": AppController.navigate({ view: "tasks", query: tagQuery(l.tag) }); break
+        case "tasks": if (linkMenu) AppController.navigate({ view: "tasks", query: linkMenu.tasksQuery(l.tag) }); break
         case "copy": {
             const text = actions.linkText(l.url, l.fromPath)
             if (actions.copyText(text))

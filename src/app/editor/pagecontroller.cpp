@@ -2610,8 +2610,9 @@ QVariantMap PageController::editTokenIn(const QString &path, int line, const QSt
         const auto range = markdown::findTokenRef(m_model->document().at(row).body, *ref);
         if (!range)
             return result(false, u"gone"_s);
-        return applyTokenAction(row, int(range->first), int(range->second), action, a, b) ? result(true, QString())
-                                                                                          : result(false, u"unchanged"_s);
+        return applyTokenAction(row, int(range->first), int(range->second), action, a, b)
+                       ? result(true, QString())
+                       : result(false, u"unchanged"_s);
     }
     if (!m_host)
         return result(false, u"failed"_s);
@@ -2623,8 +2624,7 @@ QVariantMap PageController::editTokenIn(const QString &path, int line, const QSt
     const int block = blockOfCopy(doc, line, raw);
     if (block < 0)
         return result(false, u"gone"_s); // the block changed or went since the copy was made
-    const QString after =
-            markdown::editBlockToken(before, doc.at(block).line, *ref, action, a, b, tokenEditContext());
+    const QString after = markdown::editBlockToken(before, doc.at(block).line, *ref, action, a, b, tokenEditContext());
     if (after == before) {
         // The token is not there, or the action changes nothing.
         const bool there = markdown::findTokenRef(doc.at(block).body, *ref).has_value();
@@ -2652,7 +2652,6 @@ bool PageController::undoTokenEdit(int undo)
     m_foreignEdits.erase(it);
     return m_host->writeIfUnchanged(edit.path, edit.before, edit.after) == EditorHost::WriteResult::Written;
 }
-
 
 QVariantMap PageController::tableCellChip(int row, int tableRow, int column, const QString &url) const
 {
@@ -3217,48 +3216,22 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
 QVariantMap PageController::linkMenu(const QString &url, const QString &fromPath) const
 {
     const qsizetype colon = url.indexOf(u':');
-    if (colon <= 0)
+    const QString scheme = colon > 0 ? url.left(colon) : QString();
+    if (scheme != u"tag" && scheme != u"block" && scheme != u"ext" && scheme != u"page")
         return {};
-    const QString scheme = url.left(colon);
-    const QString rest = url.mid(colon + 1);
-    if (scheme == u"tag") {
-        const QString tag = QUrl::fromPercentEncoding(rest.toUtf8());
-        return {{u"kind"_s, u"tag"_s}, {u"tag"_s, tag}, {u"copyText"_s, markdown::tagSyntax(tag)},
-                {u"unresolved"_s, false}};
-    }
-    if (scheme == u"block")
-        return {{u"kind"_s, u"block"_s}, {u"copyText"_s, QString(u"(("_s + rest + u"))"_s)}, {u"unresolved"_s, false}};
-    if (scheme == u"ext")
-        return {{u"kind"_s, u"ext"_s}, {u"copyText"_s, rest}, {u"unresolved"_s, false}};
-    if (scheme != u"page")
-        return {};
-    QString target = rest;
-    QString fragment;
-    if (const qsizetype hash = rest.indexOf(u'#'); hash >= 0) {
-        target = rest.left(hash);
-        fragment = QUrl::fromPercentEncoding(rest.mid(hash + 1).toUtf8());
-    }
-    target = QUrl::fromPercentEncoding(target.toUtf8());
-    const QString from = fromPath.isEmpty() ? m_path : fromPath;
-    const QString resolved = target.isEmpty() ? from : m_host ? m_host->resolveLink(target, from) : QString();
-    const QString suffix = fragment.isEmpty() ? QString() : u'#' + fragment;
-    QString copy;
-    if (!resolved.isEmpty()) {
-        // The page by the target every copied link uses (notebook::pageLinkTarget(), as linkTarget()):
-        // a link pasted on any page reaches it.
-        const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
-        const QString page = notebook::pageLinkTarget(
-                resolved, config,
-                [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); },
-                [this](const QString &title) { return m_host ? m_host->resolveLink(title, QString()) : QString(); });
-        copy = u"[["_s + page + suffix + u"]]"_s;
-    } else if (!target.isEmpty()) {
-        copy = u"[["_s + target + suffix + u"]]"_s; // a page that does not exist yet: as written
-    }
-    return {{u"kind"_s, u"page"_s},
-            {u"unresolved"_s, resolved.isEmpty()},
-            {u"path"_s, resolved},
-            {u"copyText"_s, copy}};
+    const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    const notebook::CopiedLink copied = notebook::copiedLink(
+            url, fromPath.isEmpty() ? m_path : fromPath, config,
+            [this](const QString &target, const QString &from) {
+                return m_host ? m_host->resolveLink(target, from) : QString();
+            },
+            [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); });
+    QVariantMap out{{u"kind"_s, scheme}, {u"copyText"_s, copied.text}, {u"unresolved"_s, false}};
+    if (scheme == u"tag")
+        out.insert(u"tag"_s, QUrl::fromPercentEncoding(url.mid(colon + 1).toUtf8()));
+    if (scheme == u"page")
+        out.insert({{u"unresolved"_s, copied.path.isEmpty()}, {u"path"_s, copied.path}});
+    return out;
 }
 
 QVariantMap PageController::copyText(const QString &text)

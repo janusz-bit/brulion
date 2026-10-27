@@ -867,15 +867,20 @@ QVariantMap tokenChip(const QString &body, const QString &url, int offset, bool 
     const QString scheme = m.captured(1);
     const qsizetype from = m.captured(2).toLongLong() + offset;
     const qsizetype to = m.captured(3).toLongLong() + offset;
-    QVariantMap out{{u"from"_s, int(from)}, {u"to"_s, int(to)}, {u"isTask"_s, isTask}, {u"alarm"_s, false},
+    QVariantMap out{{u"from"_s, int(from)}, {u"to"_s, int(to)},         {u"isTask"_s, isTask}, {u"alarm"_s, false},
                     {u"rule"_s, QString()}, {u"priority"_s, QString()}, {u"logseq"_s, false}};
     if (scheme == u"day") {
         const auto day = markdown::journalLinkAt(body, from, to, config);
         if (!day)
             return {};
         const QString date = day->date.toString(u"yyyy-MM-dd"_s);
-        out.insert({{u"from"_s, int(day->from)}, {u"to"_s, int(day->to)}, {u"kind"_s, u"day"_s}, {u"at"_s, date},
-                    {u"date"_s, date}, {u"time"_s, QString()}, {u"target"_s, day->target}});
+        out.insert({{u"from"_s, int(day->from)},
+                    {u"to"_s, int(day->to)},
+                    {u"kind"_s, u"day"_s},
+                    {u"at"_s, date},
+                    {u"date"_s, date},
+                    {u"time"_s, QString()},
+                    {u"target"_s, day->target}});
         return out;
     }
     const auto t = markdown::tokenAt(body, from, to);

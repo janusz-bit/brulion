@@ -3,6 +3,7 @@
 #include "index/vaultindex.h"
 #include "markdown/journal.h"
 #include "markdown/notemode.h"
+#include "markdown/tokenedit.h"
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -59,15 +60,7 @@ std::optional<TaskStatus> taskStatusFromName(QStringView name)
 
 QString priorityName(Priority priority)
 {
-    switch (priority) {
-    case Priority::Highest: return u"highest"_s;
-    case Priority::High: return u"high"_s;
-    case Priority::Medium: return u"medium"_s;
-    case Priority::Low: return u"low"_s;
-    case Priority::Lowest: return u"lowest"_s;
-    case Priority::None: break;
-    }
-    return {};
+    return markdown::priorityName(priority); // the token menus' names
 }
 
 std::optional<Priority> priorityFromName(QStringView name)

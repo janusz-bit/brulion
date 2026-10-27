@@ -309,8 +309,14 @@ private:
     static QVariantMap blockEntry(const QString &html, int depth, const QString &view, int headingLevel,
                                   const QString &task, const QString &path, int line, const QString &raw = QString())
     {
-        return {{u"kind"_s, u"block"_s}, {u"html"_s, html},   {u"depth"_s, depth}, {u"view"_s, view},
-                {u"headingLevel"_s, headingLevel}, {u"task"_s, task}, {u"path"_s, path}, {u"line"_s, line},
+        return {{u"kind"_s, u"block"_s},
+                {u"html"_s, html},
+                {u"depth"_s, depth},
+                {u"view"_s, view},
+                {u"headingLevel"_s, headingLevel},
+                {u"task"_s, task},
+                {u"path"_s, path},
+                {u"line"_s, line},
                 {u"raw"_s, raw}};
     }
 

@@ -34,7 +34,7 @@ private Q_SLOTS:
     void actions_data()
     {
         QTest::addColumn<QString>("body");
-        QTest::addColumn<QString>("chip");   // the chip's text in the body (its range)
+        QTest::addColumn<QString>("chip"); // the chip's text in the body (its range)
         QTest::addColumn<QString>("action");
         QTest::addColumn<QVariant>("a");
         QTest::addColumn<QVariant>("b");
@@ -43,50 +43,54 @@ private Q_SLOTS:
         const QString task = u"[ ] Zapłacić za żłobek 📅 2026-10-20 ⏰ 2026-10-19 09:00"_s;
         QTest::newRow("set due") << task << u"📅 2026-10-20"_s << u"set"_s << QVariant(u"2026-10-22"_s) << QVariant()
                                  << u"[ ] Zapłacić za żłobek 📅 2026-10-22 ⏰ 2026-10-19 09:00"_s;
-        QTest::newRow("set due with time") << task << u"📅 2026-10-20"_s << u"set"_s << QVariant(u"2026-10-22 18:30"_s)
-                                           << QVariant() << u"[ ] Zapłacić za żłobek 📅 2026-10-22 18:30 ⏰ 2026-10-19 09:00"_s;
-        QTest::newRow("set empty removes") << task << u"📅 2026-10-20"_s << u"set"_s << QVariant(QString()) << QVariant()
-                                           << u"[ ] Zapłacić za żłobek ⏰ 2026-10-19 09:00"_s;
-        QTest::newRow("set garbage") << task << u"📅 2026-10-20"_s << u"set"_s << QVariant(u"jutro?"_s) << QVariant() << task;
+        QTest::newRow("set due with time")
+                << task << u"📅 2026-10-20"_s << u"set"_s << QVariant(u"2026-10-22 18:30"_s) << QVariant()
+                << u"[ ] Zapłacić za żłobek 📅 2026-10-22 18:30 ⏰ 2026-10-19 09:00"_s;
+        QTest::newRow("set empty removes") << task << u"📅 2026-10-20"_s << u"set"_s << QVariant(QString())
+                                           << QVariant() << u"[ ] Zapłacić za żłobek ⏰ 2026-10-19 09:00"_s;
+        QTest::newRow("set garbage") << task << u"📅 2026-10-20"_s << u"set"_s << QVariant(u"jutro?"_s) << QVariant()
+                                     << task;
         QTest::newRow("move") << task << u"📅 2026-10-20"_s << u"move"_s << QVariant(1) << QVariant()
                               << u"[ ] Zapłacić za żłobek 📅 2026-10-28 ⏰ 2026-10-19 09:00"_s;
         QTest::newRow("shift week") << task << u"📅 2026-10-20"_s << u"shift"_s << QVariant(7) << QVariant(0)
                                     << u"[ ] Zapłacić za żłobek 📅 2026-10-27 ⏰ 2026-10-19 09:00"_s;
-        QTest::newRow("reminder hour later") << task << u"⏰ 2026-10-19 09:00"_s << u"shift"_s << QVariant(0) << QVariant(60)
-                                             << u"[ ] Zapłacić za żłobek 📅 2026-10-20 ⏰ 2026-10-19 10:00"_s;
+        QTest::newRow("reminder hour later")
+                << task << u"⏰ 2026-10-19 09:00"_s << u"shift"_s << QVariant(0) << QVariant(60)
+                << u"[ ] Zapłacić za żłobek 📅 2026-10-20 ⏰ 2026-10-19 10:00"_s;
         QTest::newRow("reminder without time hour later")
                 << u"Zadzwonić ⏰ 2026-10-19"_s << u"⏰ 2026-10-19"_s << u"shift"_s << QVariant(0) << QVariant(60)
                 << u"Zadzwonić ⏰ 2026-10-19 10:00"_s;
         QTest::newRow("alarm on") << task << u"⏰ 2026-10-19 09:00"_s << u"alarm"_s << QVariant(true) << QVariant()
                                   << u"[ ] Zapłacić za żłobek 📅 2026-10-20 ⏰! 2026-10-19 09:00"_s;
-        QTest::newRow("alarm on a date does nothing") << task << u"📅 2026-10-20"_s << u"alarm"_s << QVariant(true)
-                                                      << QVariant() << task;
+        QTest::newRow("alarm on a date does nothing")
+                << task << u"📅 2026-10-20"_s << u"alarm"_s << QVariant(true) << QVariant() << task;
         QTest::newRow("reminder dialog") << u"Leki ⏰ 2026-10-19 09:00 🔁 every day"_s << u"⏰ 2026-10-19 09:00"_s
                                          << u"reminder"_s << QVariant(u"2026-10-20 08:15"_s)
-                                         << QVariant(QVariantMap{{u"alarm"_s, true}, {u"recurrence"_s, u"co tydzień"_s}})
+                                         << QVariant(
+                                                    QVariantMap{{u"alarm"_s, true}, {u"recurrence"_s, u"co tydzień"_s}})
                                          << u"Leki ⏰! 2026-10-20 08:15 🔁 every week"_s;
         // Only the time changed: the rule stays as written (Polish, words after it).
-        QTest::newRow("reminder dialog, same rule") << u"Leki 🔁 co tydzień ⏰ 2026-10-20 09:00"_s
-                                                    << u"⏰ 2026-10-20 09:00"_s << u"reminder"_s
-                                                    << QVariant(u"2026-10-20 10:00"_s)
-                                                    << QVariant(QVariantMap{{u"alarm"_s, false},
-                                                                            {u"recurrence"_s, u"every week"_s}})
-                                                    << u"Leki 🔁 co tydzień ⏰ 2026-10-20 10:00"_s;
-        QTest::newRow("reminder dialog keeps rule") << u"Leki (@2026-10-19 09:00)"_s << u"(@2026-10-19 09:00)"_s
-                                                    << u"reminder"_s << QVariant(u"2026-10-20 08:15"_s)
-                                                    << QVariant(QVariantMap{{u"alarm"_s, false}})
-                                                    << u"Leki ⏰ 2026-10-20 08:15"_s;
+        QTest::newRow("reminder dialog, same rule")
+                << u"Leki 🔁 co tydzień ⏰ 2026-10-20 09:00"_s << u"⏰ 2026-10-20 09:00"_s << u"reminder"_s
+                << QVariant(u"2026-10-20 10:00"_s)
+                << QVariant(QVariantMap{{u"alarm"_s, false}, {u"recurrence"_s, u"every week"_s}})
+                << u"Leki 🔁 co tydzień ⏰ 2026-10-20 10:00"_s;
+        QTest::newRow("reminder dialog keeps rule")
+                << u"Leki (@2026-10-19 09:00)"_s << u"(@2026-10-19 09:00)"_s << u"reminder"_s
+                << QVariant(u"2026-10-20 08:15"_s) << QVariant(QVariantMap{{u"alarm"_s, false}})
+                << u"Leki ⏰ 2026-10-20 08:15"_s;
         QTest::newRow("remove reminder") << task << u"⏰ 2026-10-19 09:00"_s << u"remove"_s << QVariant() << QVariant()
                                          << u"[ ] Zapłacić za żłobek 📅 2026-10-20"_s;
 
         const QString recurring = u"[ ] Podlać kwiaty 🔁 co tydzień w poniedziałek 📅 2026-10-20"_s;
         QTest::newRow("rule") << recurring << u"🔁 co tydzień w poniedziałek"_s << u"recurrence"_s
-                              << QVariant(u"co miesiąc"_s) << QVariant() << u"[ ] Podlać kwiaty 🔁 every month 📅 2026-10-20"_s;
+                              << QVariant(u"co miesiąc"_s) << QVariant()
+                              << u"[ ] Podlać kwiaty 🔁 every month 📅 2026-10-20"_s;
         QTest::newRow("rule when done") << recurring << u"🔁 co tydzień w poniedziałek"_s << u"recurrence"_s
                                         << QVariant(u"every week on Monday when done"_s) << QVariant()
                                         << u"[ ] Podlać kwiaty 🔁 every week on Monday when done 📅 2026-10-20"_s;
-        QTest::newRow("rule removed") << recurring << u"🔁 co tydzień w poniedziałek"_s << u"recurrence"_s << QVariant(QString())
-                                      << QVariant() << u"[ ] Podlać kwiaty 📅 2026-10-20"_s;
+        QTest::newRow("rule removed") << recurring << u"🔁 co tydzień w poniedziałek"_s << u"recurrence"_s
+                                      << QVariant(QString()) << QVariant() << u"[ ] Podlać kwiaty 📅 2026-10-20"_s;
         QTest::newRow("rule prefix only") << u"🔁 co tydzień kupić mleko"_s << u"🔁 co tydzień"_s << u"recurrence"_s
                                           << QVariant(u"every day"_s) << QVariant() << u"🔁 every day kupić mleko"_s;
         QTest::newRow("rule prefix removed") << u"Zakupy 🔁 co tydzień kupić mleko"_s << u"🔁 co tydzień"_s
@@ -94,47 +98,48 @@ private Q_SLOTS:
 
         QTest::newRow("priority") << u"[ ] Pilne ⏫ zadanie"_s << u"⏫"_s << u"priority"_s << QVariant(u"lowest"_s)
                                   << QVariant() << u"[ ] Pilne ⏬ zadanie"_s;
-        QTest::newRow("priority variation selector") << u"[ ] Pilne 🔼️ zadanie"_s << u"🔼️"_s << u"priority"_s
-                                                     << QVariant(u"highest"_s) << QVariant() << u"[ ] Pilne 🔺 zadanie"_s;
-        QTest::newRow("priority removed") << u"[ ] Pilne ⏫ zadanie"_s << u"⏫"_s << u"priority"_s << QVariant(QString())
-                                          << QVariant() << u"[ ] Pilne zadanie"_s;
+        QTest::newRow("priority variation selector")
+                << u"[ ] Pilne 🔼️ zadanie"_s << u"🔼️"_s << u"priority"_s << QVariant(u"highest"_s) << QVariant()
+                << u"[ ] Pilne 🔺 zadanie"_s;
+        QTest::newRow("priority removed") << u"[ ] Pilne ⏫ zadanie"_s << u"⏫"_s << u"priority"_s
+                                          << QVariant(QString()) << QVariant() << u"[ ] Pilne zadanie"_s;
         QTest::newRow("logseq priority") << u"TODO [#B] zażółć gęślą jaźń"_s << u"[#B]"_s << u"priority"_s
                                          << QVariant(u"highest"_s) << QVariant() << u"TODO [#A] zażółć gęślą jaźń"_s;
         QTest::newRow("logseq low") << u"TODO [#B] zadanie"_s << u"[#B]"_s << u"priority"_s << QVariant(u"lowest"_s)
                                     << QVariant() << u"TODO [#C] zadanie"_s;
 
-        QTest::newRow("block recurrence added") << u"[ ] Leki ⏰ 2026-10-19 09:00 ^abc"_s << u"⏰ 2026-10-19 09:00"_s
-                                                << u"blockRecurrence"_s << QVariant(u"codziennie"_s) << QVariant()
-                                                << u"[ ] Leki ⏰ 2026-10-19 09:00 🔁 every day ^abc"_s;
-        QTest::newRow("block recurrence changed") << u"Leki ⏰ 2026-10-19 09:00 🔁 every day"_s << u"⏰ 2026-10-19 09:00"_s
-                                                  << u"blockRecurrence"_s << QVariant(u"every weekday"_s) << QVariant()
-                                                  << u"Leki ⏰ 2026-10-19 09:00 🔁 every weekday"_s;
+        QTest::newRow("block recurrence added")
+                << u"[ ] Leki ⏰ 2026-10-19 09:00 ^abc"_s << u"⏰ 2026-10-19 09:00"_s << u"blockRecurrence"_s
+                << QVariant(u"codziennie"_s) << QVariant() << u"[ ] Leki ⏰ 2026-10-19 09:00 🔁 every day ^abc"_s;
+        QTest::newRow("block recurrence changed")
+                << u"Leki ⏰ 2026-10-19 09:00 🔁 every day"_s << u"⏰ 2026-10-19 09:00"_s << u"blockRecurrence"_s
+                << QVariant(u"every weekday"_s) << QVariant() << u"Leki ⏰ 2026-10-19 09:00 🔁 every weekday"_s;
         QTest::newRow("block recurrence, words after the rule")
                 << u"Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy"_s << u"⏰ 2026-10-20 09:00"_s
                 << u"blockRecurrence"_s << QVariant(u"codziennie"_s) << QVariant()
                 << u"Zadzwonić ⏰ 2026-10-20 09:00 🔁 every day do mamy"_s;
-        QTest::newRow("block recurrence, the same rule") << u"Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy"_s
-                                                         << u"⏰ 2026-10-20 09:00"_s << u"blockRecurrence"_s
-                                                         << QVariant(u"every week"_s) << QVariant()
-                                                         << u"Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy"_s;
-        QTest::newRow("block recurrence removed") << u"Leki ⏰ 2026-10-19 09:00 🔁 every day"_s << u"⏰ 2026-10-19 09:00"_s
-                                                  << u"blockRecurrence"_s << QVariant(QString()) << QVariant()
-                                                  << u"Leki ⏰ 2026-10-19 09:00"_s;
-        QTest::newRow("block priority added") << u"[ ] Leki ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s
-                                              << u"blockPriority"_s << QVariant(u"high"_s) << QVariant()
-                                              << u"[ ] Leki ⏰ 2026-10-19 09:00 ⏫"_s;
-        QTest::newRow("block priority logseq") << u"TODO [#C] Leki ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s
-                                               << u"blockPriority"_s << QVariant(u"medium"_s) << QVariant()
-                                               << u"TODO [#B] Leki ⏰ 2026-10-19 09:00"_s;
-        QTest::newRow("block priority removed") << u"[ ] Leki 🔽 ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s
-                                                << u"blockPriority"_s << QVariant(QString()) << QVariant()
-                                                << u"[ ] Leki ⏰ 2026-10-19 09:00"_s;
+        QTest::newRow("block recurrence, the same rule")
+                << u"Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy"_s << u"⏰ 2026-10-20 09:00"_s
+                << u"blockRecurrence"_s << QVariant(u"every week"_s) << QVariant()
+                << u"Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy"_s;
+        QTest::newRow("block recurrence removed")
+                << u"Leki ⏰ 2026-10-19 09:00 🔁 every day"_s << u"⏰ 2026-10-19 09:00"_s << u"blockRecurrence"_s
+                << QVariant(QString()) << QVariant() << u"Leki ⏰ 2026-10-19 09:00"_s;
+        QTest::newRow("block priority added")
+                << u"[ ] Leki ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s << u"blockPriority"_s
+                << QVariant(u"high"_s) << QVariant() << u"[ ] Leki ⏰ 2026-10-19 09:00 ⏫"_s;
+        QTest::newRow("block priority logseq")
+                << u"TODO [#C] Leki ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s << u"blockPriority"_s
+                << QVariant(u"medium"_s) << QVariant() << u"TODO [#B] Leki ⏰ 2026-10-19 09:00"_s;
+        QTest::newRow("block priority removed")
+                << u"[ ] Leki 🔽 ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s << u"blockPriority"_s
+                << QVariant(QString()) << QVariant() << u"[ ] Leki ⏰ 2026-10-19 09:00"_s;
 
         QTest::newRow("day link move") << u"Spotkanie [[2026-10-20]] w sali"_s << u"[[2026-10-20]]"_s << u"move"_s
                                        << QVariant(1) << QVariant() << u"Spotkanie [[2026-10-28]] w sali"_s;
-        QTest::newRow("day link shift keeps alias") << u"Zob. ![[2026-10-20|wtorek]]"_s << u"![[2026-10-20|wtorek]]"_s
-                                                    << u"shift"_s << QVariant(7) << QVariant(0)
-                                                    << u"Zob. ![[2026-10-27|wtorek]]"_s;
+        QTest::newRow("day link shift keeps alias")
+                << u"Zob. ![[2026-10-20|wtorek]]"_s << u"![[2026-10-20|wtorek]]"_s << u"shift"_s << QVariant(7)
+                << QVariant(0) << u"Zob. ![[2026-10-27|wtorek]]"_s;
         QTest::newRow("day link set") << u"[[journals/2026-10-20.md]]"_s << u"[[journals/2026-10-20.md]]"_s << u"set"_s
                                       << QVariant(u"2026-12-31"_s) << QVariant() << u"[[journals/2026-12-31.md]]"_s;
         QTest::newRow("no day link") << u"[[Strona]]"_s << u"[[Strona]]"_s << u"move"_s << QVariant(1) << QVariant()
@@ -142,7 +147,8 @@ private Q_SLOTS:
 
         QTest::newRow("token gone") << u"tekst bez znaczników"_s << u"tekst"_s << u"set"_s << QVariant(u"2026-10-22"_s)
                                     << QVariant() << u"tekst bez znaczników"_s;
-        QTest::newRow("unknown action") << task << u"📅 2026-10-20"_s << u"explode"_s << QVariant() << QVariant() << task;
+        QTest::newRow("unknown action") << task << u"📅 2026-10-20"_s << u"explode"_s << QVariant() << QVariant()
+                                        << task;
     }
 
     void actions()
@@ -165,11 +171,12 @@ private Q_SLOTS:
         QTest::addColumn<QString>("priority");
         QTest::addColumn<bool>("logseq");
         QTest::newRow("none") << u"Zażółć gęślą jaźń"_s << QString() << QString() << false;
-        QTest::newRow("rule with words after it") << u"Zakupy 🔁 co tydzień kupić mleko ⏫"_s << u"every week"_s
-                                                  << u"high"_s << false;
+        QTest::newRow("rule with words after it")
+                << u"Zakupy 🔁 co tydzień kupić mleko ⏫"_s << u"every week"_s << u"high"_s << false;
         QTest::newRow("no rule, as written") << u"Coś 🔁 kiedyś tam"_s << u"kiedyś tam"_s << QString() << false;
         QTest::newRow("logseq") << u"TODO [#C] Raport 🔁 every month"_s << u"every month"_s << u"low"_s << true;
-        QTest::newRow("second line is not the block's") << u"Raport\n🔁 every day 🔺"_s << QString() << QString() << false;
+        QTest::newRow("second line is not the block's")
+                << u"Raport\n🔁 every day 🔺"_s << QString() << QString() << false;
         QTest::newRow("in code") << u"`🔁 every day ⏫` tekst"_s << QString() << QString() << false;
     }
 
@@ -233,18 +240,18 @@ private Q_SLOTS:
                               << u"📅 2026-10-20"_s << 0;
         QTest::newRow("moved") << u"Zadanie 📅 2026-10-20"_s << u"📅 2026-10-20"_s << 0
                                << u"Zadanie z dłuższym opisem ⏫ 📅 2026-10-20"_s << u"📅 2026-10-20"_s << 0;
-        QTest::newRow("second of two equal reminders") << u"Leki ⏰ 2026-10-19 09:00 i ⏰ 2026-10-19 09:00"_s
-                                                       << u"⏰ 2026-10-19 09:00"_s << 1
-                                                       << u"Leki! ⏰ 2026-10-19 09:00 i ⏰ 2026-10-19 09:00"_s
-                                                       << u"⏰ 2026-10-19 09:00"_s << 1;
+        QTest::newRow("second of two equal reminders")
+                << u"Leki ⏰ 2026-10-19 09:00 i ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s << 1
+                << u"Leki! ⏰ 2026-10-19 09:00 i ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s << 1;
         QTest::newRow("alarm is the same reminder") << u"Leki ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s << 0
                                                     << u"Leki ⏰! 2026-10-19 09:00"_s << u"⏰! 2026-10-19 09:00"_s << 0;
         QTest::newRow("value changed") << u"Zadanie 📅 2026-10-20"_s << u"📅 2026-10-20"_s << 0
                                        << u"Zadanie 📅 2026-10-21"_s << QString() << 0;
         QTest::newRow("gone") << u"Zadanie 🔁 every day"_s << u"🔁 every day"_s << 0 << u"Zadanie"_s << QString() << 0;
-        QTest::newRow("rule") << u"Zadanie 🔁 every day kupić"_s << u"🔁 every day"_s << 0 << u"Inne 🔁 every day kupić"_s
-                              << u"🔁 every day"_s << 0;
-        QTest::newRow("logseq and emoji priority") << u"TODO [#A] x"_s << u"[#A]"_s << 0 << u"TODO [#A] x"_s << u"[#A]"_s << 0;
+        QTest::newRow("rule") << u"Zadanie 🔁 every day kupić"_s << u"🔁 every day"_s << 0
+                              << u"Inne 🔁 every day kupić"_s << u"🔁 every day"_s << 0;
+        QTest::newRow("logseq and emoji priority")
+                << u"TODO [#A] x"_s << u"[#A]"_s << 0 << u"TODO [#A] x"_s << u"[#A]"_s << 0;
         QTest::newRow("in code is no token") << u"Zadanie 📅 2026-10-20"_s << u"📅 2026-10-20"_s << 0
                                              << u"Zadanie `📅 2026-10-20`"_s << QString() << 0;
     }
@@ -303,32 +310,33 @@ private Q_SLOTS:
                              u"    ⏰ 2026-10-19 09:00\r\n  - [ ] Dziecko: ⏫ zabrać kurtkę\r\n"_s;
         QTest::newRow("crlf due") << page << 5 << int(TokenKind::Due) << u"2026-10-20"_s << u"move"_s << QVariant(1)
                                   << QString(page).replace(u"📅 2026-10-20"_s, u"📅 2026-10-28"_s);
-        QTest::newRow("continuation line, odd indentation") << page << 5 << int(TokenKind::Reminder)
-                                                            << u"2026-10-19 09:00"_s << u"alarm"_s << QVariant(true)
-                                                            << QString(page).replace(u"⏰ 2026-10-19"_s, u"⏰! 2026-10-19"_s);
-        QTest::newRow("line inside the block") << page << 6 << int(TokenKind::Reminder) << u"2026-10-19 09:00"_s
-                                               << u"remove"_s << QVariant()
-                                               << QString(page).replace(u"    ⏰ 2026-10-19 09:00\r\n"_s, u"   \r\n"_s); // (one space goes with it)
+        QTest::newRow("continuation line, odd indentation")
+                << page << 5 << int(TokenKind::Reminder) << u"2026-10-19 09:00"_s << u"alarm"_s << QVariant(true)
+                << QString(page).replace(u"⏰ 2026-10-19"_s, u"⏰! 2026-10-19"_s);
+        QTest::newRow("line inside the block")
+                << page << 6 << int(TokenKind::Reminder) << u"2026-10-19 09:00"_s << u"remove"_s << QVariant()
+                << QString(page).replace(u"    ⏰ 2026-10-19 09:00\r\n"_s, u"   \r\n"_s); // (one space goes with it)
         QTest::newRow("child") << page << 7 << int(TokenKind::Priority) << u"high"_s << u"priority"_s
                                << QVariant(u"low"_s) << QString(page).replace(u"⏫"_s, u"🔽"_s);
         QTest::newRow("token gone") << page << 7 << int(TokenKind::Due) << u"2026-10-20"_s << u"move"_s << QVariant(1)
                                     << page;
-        QTest::newRow("frontmatter line") << page << 1 << int(TokenKind::Due) << u"2026-10-20"_s << u"move"_s
-                                          << QVariant(1) << page;
-        QTest::newRow("out of range") << page << 99 << int(TokenKind::Due) << u"2026-10-20"_s << u"move"_s << QVariant(1)
-                                      << page;
+        QTest::newRow("frontmatter line")
+                << page << 1 << int(TokenKind::Due) << u"2026-10-20"_s << u"move"_s << QVariant(1) << page;
+        QTest::newRow("out of range") << page << 99 << int(TokenKind::Due) << u"2026-10-20"_s << u"move"_s
+                                      << QVariant(1) << page;
         const QString code = u"```\n- [ ] w kodzie 📅 2026-10-20\n```\n- [ ] na zewnątrz 📅 2026-10-20\n"_s;
         QTest::newRow("code fence") << code << 1 << int(TokenKind::Due) << u"2026-10-20"_s << u"move"_s << QVariant(1)
                                     << code;
-        QTest::newRow("after the fence") << code << 3 << int(TokenKind::Due) << u"2026-10-20"_s << u"move"_s << QVariant(1)
-                                         << u"```\n- [ ] w kodzie 📅 2026-10-20\n```\n- [ ] na zewnątrz 📅 2026-10-28\n"_s;
+        QTest::newRow("after the fence")
+                << code << 3 << int(TokenKind::Due) << u"2026-10-20"_s << u"move"_s << QVariant(1)
+                << u"```\n- [ ] w kodzie 📅 2026-10-20\n```\n- [ ] na zewnątrz 📅 2026-10-28\n"_s;
         const QString noFinalNewline = u"> cytat 🔁 co tydzień"_s;
-        QTest::newRow("quote without final newline") << noFinalNewline << 0 << int(TokenKind::Recurrence)
-                                                     << u"every week"_s << u"recurrence"_s << QVariant(u"every day"_s)
-                                                     << u"> cytat 🔁 every day"_s;
+        QTest::newRow("quote without final newline")
+                << noFinalNewline << 0 << int(TokenKind::Recurrence) << u"every week"_s << u"recurrence"_s
+                << QVariant(u"every day"_s) << u"> cytat 🔁 every day"_s;
         const QString bom = u"﻿- [ ] zadanie 📅 2026-10-20\n"_s;
-        QTest::newRow("bom") << bom << 0 << int(TokenKind::Due) << u"2026-10-20"_s << u"set"_s << QVariant(u"2026-11-01"_s)
-                             << u"﻿- [ ] zadanie 📅 2026-11-01\n"_s;
+        QTest::newRow("bom") << bom << 0 << int(TokenKind::Due) << u"2026-10-20"_s << u"set"_s
+                             << QVariant(u"2026-11-01"_s) << u"﻿- [ ] zadanie 📅 2026-11-01\n"_s;
     }
 
     void editBlockTokenInFiles()

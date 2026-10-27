@@ -532,21 +532,30 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 
   Where they open: the editor's blocks (`PageController.dateChip`, `applyTokenAction`: one undo
   step each; the block is tracked while the menu is open), **table cells** (ranges in the cell's
-  text, `PageController.tableCellChip` / `applyTableCellToken`: the table rewritten with that cell
-  changed, one undo step), **query results** and **embeds** (the item's block as Markdown — the
-  `raw` role, the embeds' `raw` — `PageController.tokenChipIn`, `editTokenIn`: on this page an undo
-  step of the editor, in another file a hand edit written only when the file did not change
+  text, `PageController.tableCellChip` / `applyTableCellToken`: only the cell's text changes in its
+  row as written — the other cells, the padding and the pipes stay —, one undo step; a `[[day]]` in
+  a cell is a page link with the link menu), **query results** and **embeds** (the item's block as
+  Markdown — the `raw` role, the embeds' `raw` — `PageController.tokenChipIn`, `editTokenIn`: the
+  block with that text on the item's line, else the nearest one with it — the index may be a moment
+  behind, the line may hold another block with an equal date by now —, none: nothing is written;
+  on this page an undo step of the editor, in another file a hand edit written only when the file did not change
   meanwhile — `EditorHost::writeIfUnchanged` — with a toast "Zmieniono datę" / "Zmieniono
   powtarzanie" / "Zmieniono priorytet" and **Cofnij**, `undoTokenEdit`, which puts the file back
   only while it still holds that edit; a token that is not there any more: "Notatka zmieniła się w
   międzyczasie"), **Tasks** (the chips of a row: due, scheduled, start, the reminder, the rule, the
   priority) and **the calendar** (an entry of the day panel, the agenda, the overdue list, the
-  week grid) — `PlanningTokenMenu` (`qml/planning`) with `PlanningActions.editToken` and the
-  views' "Cofnij" toasts (`PlanningActions.undo`). A calendar entry that is another date of a
-  recurring series (`CalendarModel` entry `occurrence`; `spec` is the token as written) offers
-  "Zmień całą serię…" instead of moving one date, and a reminder's Godzinę później / Jutro o tej
-  porze snooze that one time (`PlanningActions.snoozeReminder`: a one-off child reminder, as the
-  notification's "Odłóż"). The tokens are named across the copies of a block by
+  week grid) — `PlanningTokenMenu` (`qml/planning`) with `PlanningActions.editToken` (the task by
+  its text near the index's line, like the status menus) and the views' "Cofnij" toasts
+  (`PlanningActions.undo`); `PlanningActions.tokenMenu` reads the block's rule and priority from
+  the file (the rule at the start of a 🔁 token with words after it, a Logseq `[#A]`) and opens no
+  menu for a value that is no token there (a Logseq `SCHEDULED:` / `DEADLINE:` line, a `.+1w`
+  repeater). A calendar entry that is another date of a recurring series (`CalendarModel` entry
+  `occurrence`; `spec` is the token as written) offers "Zmień całą serię…" instead of moving one
+  date, and a reminder's time that has rung offers Godzinę później / Jutro o tej porze, a snooze of
+  that one time (`PlanningActions.snoozeReminder`: a one-off child reminder, as the notification's
+  "Odłóż"); a time still to come offers no snooze (it would ring as well). The 🔁 rule changes only
+  in its own text (`markdown::setBlockRecurrence`: words after it stay; the same rule in another
+  phrasing — the reminder dialog with only the time changed — stays as written). The tokens are named across the copies of a block by
   `markdown::TokenRef` (kind, value, which of the equal ones; markdown/tokenedit.h); the edit is
   `markdown::editBlockToken` — only the token's bytes of its line change (CRLF, indentation and
   every other line stay). The rendered text carries the links (`RenderContext::dateLinks`:

@@ -32,6 +32,11 @@ BMenu {
 
     signal chosen(string action)
 
+    /// The Tasks query of "tasks" for `tag`: `tag:dom`, `tag:"ważne sprawy"`.
+    function tasksQuery(tag) {
+        return "tag:" + (/[\s,"]/.test(tag) ? "\"" + tag + "\"" : tag)
+    }
+
     component ShownItem: BMenuItem {
         property bool shown: true
         visible: shown

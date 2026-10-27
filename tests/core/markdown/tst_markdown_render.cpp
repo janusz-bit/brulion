@@ -739,13 +739,14 @@ private Q_SLOTS:
         QTest::newRow("journal days") << u"Spotkanie [[2026-10-20]] i ![[2026-10-21|środa]] oraz [[Strona]]"_s
                                       << int(BlockKind::Paragraph)
                                       << QStringList{u"day:[[2026-10-20]]"_s}; // (an embed is a frame of its own)
-        QTest::newRow("journal heading link stays a page") << u"[[2026-10-20#Plan]]"_s << int(BlockKind::Paragraph)
-                                                           << QStringList{};
+        QTest::newRow("journal heading link stays a page")
+                << u"[[2026-10-20#Plan]]"_s << int(BlockKind::Paragraph) << QStringList{};
         QTest::newRow("heading offsets") << u"## Żółw 🔼 🔁 every day"_s << int(BlockKind::Heading)
                                          << QStringList{u"prio:🔼"_s, u"recur:🔁 every day"_s};
         QTest::newRow("quote offsets") << u"> cytat [[2026-10-20]] 🔽"_s << int(BlockKind::Quote)
                                        << QStringList{u"day:[[2026-10-20]]"_s, u"prio:🔽"_s};
-        QTest::newRow("in code") << u"`⏫ [[2026-10-20]]` 🔺"_s << int(BlockKind::Paragraph) << QStringList{u"prio:🔺"_s};
+        QTest::newRow("in code") << u"`⏫ [[2026-10-20]]` 🔺"_s << int(BlockKind::Paragraph)
+                                 << QStringList{u"prio:🔺"_s};
     }
 
     void tokenLinksPointIntoTheBody()

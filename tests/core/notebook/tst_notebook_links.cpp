@@ -103,6 +103,53 @@ private Q_SLOTS:
         QCOMPARE(notebook::pageLinkTarget(QString(), config, shortest, nowhere), QString());
     }
 
+    void copiedLinks_data()
+    {
+        QTest::addColumn<QString>("url");
+        QTest::addColumn<QString>("fromPath");
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("path");
+        QTest::newRow("tag") << u"tag:dom"_s << QString() << u"#dom"_s << QString();
+        QTest::newRow("tag with spaces") << u"tag:wa%C5%BCne%20sprawy"_s << QString() << u"#[[ważne sprawy]]"_s
+                                         << QString();
+        QTest::newRow("block") << u"block:abc123"_s << QString() << u"((abc123))"_s << QString();
+        QTest::newRow("web address") << u"ext:https://example.org/a?b=1"_s << QString()
+                                     << u"https://example.org/a?b=1"_s << QString();
+        // The page by its shortest target (two pages are called "Dom"), the heading kept.
+        QTest::newRow("page with heading") << u"page:Dom#Plan%20pi%C4%99tra"_s << u"Inne.md"_s
+                                           << u"[[Projekty/Dom#Plan piętra]]"_s << u"Projekty/Dom.md"_s;
+        QTest::newRow("same page heading")
+                << u"page:#Zakupy"_s << u"Projekty/Dom.md"_s << u"[[Projekty/Dom#Zakupy]]"_s << u"Projekty/Dom.md"_s;
+        QTest::newRow("daily note") << u"page:2026-10-22"_s << u"Inne.md"_s << u"[[2026-10-22]]"_s
+                                    << u"journals/2026-10-22.md"_s;
+        QTest::newRow("no such page") << u"page:Nowa%20strona"_s << u"Inne.md"_s << u"[[Nowa strona]]"_s << QString();
+        QTest::newRow("no such page, heading") << u"page:Nowa#Cel"_s << u"Inne.md"_s << u"[[Nowa#Cel]]"_s << QString();
+        QTest::newRow("date chip") << u"date:1-2"_s << QString() << QString() << QString();
+        QTest::newRow("no scheme") << u"Dom"_s << QString() << QString() << QString();
+    }
+
+    void copiedLinks()
+    {
+        QFETCH(QString, url);
+        QFETCH(QString, fromPath);
+        QFETCH(QString, text);
+        QFETCH(QString, path);
+        const VaultConfig config;
+        const auto resolve = [](const QString &target, const QString &) {
+            if (target == u"Dom")
+                return u"Projekty/Dom.md"_s;
+            if (target == u"2026-10-22")
+                return u"journals/2026-10-22.md"_s;
+            return QString();
+        };
+        const auto shortest = [](const VaultPath &p) {
+            return p == u"Projekty/Dom.md" ? u"Projekty/Dom"_s : QString();
+        };
+        const CopiedLink copied = notebook::copiedLink(url, fromPath, config, resolve, shortest);
+        QCOMPARE(copied.text, text);
+        QCOMPARE(copied.path, path);
+    }
+
     // With an index: VaultIndex::linkTarget(), the shortest target that tells same-named pages
     // in different folders apart — the text every copy-link command writes.
     void pageLinkTargetWithIndex_data()

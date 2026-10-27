@@ -61,11 +61,13 @@ int QueryResultModel::rowCount(const QModelIndex &parent) const
 
 QHash<int, QByteArray> QueryResultModel::roleNames() const
 {
-    return {{KindRole, "kind"},       {LabelRole, "label"},     {CountRole, "count"},       {PathRole, "path"},
-            {TitleRole, "title"},     {FolderRole, "folder"},   {LineRole, "line"},         {TextRole, "text"},
-            {HtmlRole, "html"},       {StatusRole, "status"},   {IsTaskRole, "isTask"},     {BlockIdRole, "blockId"},
-            {DueRole, "due"},         {OverdueRole, "overdue"}, {ReminderRole, "reminder"}, {AlarmRole, "alarm"},
-            {ShowPageRole, "showPage"}, {JournalRole, "journal"}, {RawRole, "raw"}};
+    return {{KindRole, "kind"},     {LabelRole, "label"},       {CountRole, "count"},
+            {PathRole, "path"},     {TitleRole, "title"},       {FolderRole, "folder"},
+            {LineRole, "line"},     {TextRole, "text"},         {HtmlRole, "html"},
+            {StatusRole, "status"}, {IsTaskRole, "isTask"},     {BlockIdRole, "blockId"},
+            {DueRole, "due"},       {OverdueRole, "overdue"},   {ReminderRole, "reminder"},
+            {AlarmRole, "alarm"},   {ShowPageRole, "showPage"}, {JournalRole, "journal"},
+            {RawRole, "raw"}};
 }
 
 QVariant QueryResultModel::data(const QModelIndex &index, int role) const

@@ -115,7 +115,7 @@ private Q_SLOTS:
     void editTokenChoices_data()
     {
         QTest::addColumn<QString>("page");
-        QTest::addColumn<int>("line");     // where the view thinks the task is
+        QTest::addColumn<int>("line"); // where the view thinks the task is
         QTest::addColumn<QString>("kind");
         QTest::addColumn<QString>("value"); // as the models give it
         QTest::addColumn<QString>("action");
@@ -135,18 +135,20 @@ private Q_SLOTS:
         QTest::newRow("priority") << page << 1 << u"priority"_s << u"high"_s << u"priority"_s << QVariant(u"low"_s)
                                   << QVariant() << with(u"⏫"_s, u"🔽"_s);
         // The index gives the reminder the default time (09:00).
-        QTest::newRow("reminder hour later") << page << 2 << u"reminder"_s << u"2026-10-15 09:00"_s << u"shift"_s
-                                             << QVariant(0) << QVariant(60)
-                                             << with(u"⏰ 2026-10-15"_s, u"⏰ 2026-10-15 10:00"_s);
+        QTest::newRow("reminder hour later")
+                << page << 2 << u"reminder"_s << u"2026-10-15 09:00"_s << u"shift"_s << QVariant(0) << QVariant(60)
+                << with(u"⏰ 2026-10-15"_s, u"⏰ 2026-10-15 10:00"_s);
         QTest::newRow("reminder alarm") << page << 2 << u"reminder"_s << u"2026-10-15 09:00"_s << u"alarm"_s
-                                        << QVariant(true) << QVariant() << with(u"⏰ 2026-10-15"_s, u"⏰! 2026-10-15"_s);
+                                        << QVariant(true) << QVariant()
+                                        << with(u"⏰ 2026-10-15"_s, u"⏰! 2026-10-15"_s);
         QTest::newRow("rule") << page << 2 << u"recurrence"_s << u"every month"_s << u"recurrence"_s
-                              << QVariant(u"co tydzień"_s) << QVariant() << with(u"🔁 every month"_s, u"🔁 every week"_s);
-        QTest::newRow("reminder's block priority") << page << 2 << u"reminder"_s << u"2026-10-15 09:00"_s
-                                                   << u"blockPriority"_s << QVariant(u"highest"_s) << QVariant()
-                                                   << with(u"🔁 every month\r\n"_s, u"🔁 every month 🔺\r\n"_s);
-        QTest::newRow("value changed meanwhile") << page << 1 << u"due"_s << u"2026-10-17"_s << u"move"_s << QVariant(1)
-                                                 << QVariant() << QString();
+                              << QVariant(u"co tydzień"_s) << QVariant()
+                              << with(u"🔁 every month"_s, u"🔁 every week"_s);
+        QTest::newRow("reminder's block priority")
+                << page << 2 << u"reminder"_s << u"2026-10-15 09:00"_s << u"blockPriority"_s << QVariant(u"highest"_s)
+                << QVariant() << with(u"🔁 every month\r\n"_s, u"🔁 every month 🔺\r\n"_s);
+        QTest::newRow("value changed meanwhile")
+                << page << 1 << u"due"_s << u"2026-10-17"_s << u"move"_s << QVariant(1) << QVariant() << QString();
         QTest::newRow("gone") << page << 1 << u"recurrence"_s << u"every day"_s << u"remove"_s << QVariant()
                               << QVariant() << QString();
     }
@@ -197,7 +199,8 @@ private Q_SLOTS:
         // A line was added above (a sync); the index still has "Zapłacić rachunek" on line 1,
         // which now holds "Kupić chleb" with the same date: the task by its text is edited.
         FakeEditorHost host;
-        host.setFile(u"Dom.md"_s, u"- nowy wpis\n- [ ] Kupić chleb 📅 2026-10-20\n- [ ] Zapłacić rachunek 📅 2026-10-20\n"_s);
+        host.setFile(u"Dom.md"_s,
+                     u"- nowy wpis\n- [ ] Kupić chleb 📅 2026-10-20\n- [ ] Zapłacić rachunek 📅 2026-10-20\n"_s);
         PlanningActions actions;
         actions.setHost(&host);
         actions.setToday(u"2026-10-15"_s);
@@ -206,7 +209,8 @@ private Q_SLOTS:
                  u"- nowy wpis\n- [ ] Kupić chleb 📅 2026-10-20\n- [ ] Zapłacić rachunek 📅 2026-10-21\n"_s);
         // A reminder of a plain bullet (no task with that text): its line.
         host.setFile(u"Leki.md"_s, u"- Witaminy ⏰ 2026-10-16 08:00\n"_s);
-        QVERIFY(actions.editToken(u"Leki.md"_s, 0, u"Witaminy"_s, u"reminder"_s, u"2026-10-16 08:00"_s, u"alarm"_s, true));
+        QVERIFY(actions.editToken(u"Leki.md"_s, 0, u"Witaminy"_s, u"reminder"_s, u"2026-10-16 08:00"_s, u"alarm"_s,
+                                  true));
         QCOMPARE(host.file(u"Leki.md"_s), u"- Witaminy ⏰! 2026-10-16 08:00\n"_s);
     }
 
@@ -220,12 +224,12 @@ private Q_SLOTS:
         QTest::addColumn<QString>("priority");
         QTest::addColumn<bool>("logseq");
         // The index's rule is the whole token's text; the menu edits the rule at its start.
-        QTest::newRow("rule with words after it") << u"- [ ] Zakupy 🔁 co tydzień kupić mleko\n"_s << u"recurrence"_s
-                                                  << u"co tydzień kupić mleko"_s << true << u"every week"_s
-                                                  << QString() << false;
-        QTest::newRow("reminder: the block's rule") << u"- [ ] Leki ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy ⏫\n"_s
-                                                    << u"reminder"_s << u"2026-10-20 09:00"_s << true
-                                                    << u"every week"_s << u"high"_s << false;
+        QTest::newRow("rule with words after it")
+                << u"- [ ] Zakupy 🔁 co tydzień kupić mleko\n"_s << u"recurrence"_s << u"co tydzień kupić mleko"_s
+                << true << u"every week"_s << QString() << false;
+        QTest::newRow("reminder: the block's rule")
+                << u"- [ ] Leki ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy ⏫\n"_s << u"reminder"_s
+                << u"2026-10-20 09:00"_s << true << u"every week"_s << u"high"_s << false;
         QTest::newRow("logseq priority") << u"- TODO [#B] Raport 📅 2026-10-20\n"_s << u"priority"_s << u"medium"_s
                                          << true << QString() << u"medium"_s << true;
         QTest::newRow("due of a logseq task") << u"- TODO [#A] Raport 📅 2026-10-20\n"_s << u"due"_s << u"2026-10-20"_s

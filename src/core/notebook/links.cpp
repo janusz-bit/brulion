@@ -2,10 +2,13 @@
 
 #include "index/vaultindex.h"
 #include "markdown/blockdocument.h"
+#include "markdown/inline.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
 #include "markdown/tasks.h"
 #include "util/paths.h"
+
+#include <QUrl>
 
 using namespace Qt::StringLiterals;
 
@@ -81,6 +84,40 @@ QString pageLinkTarget(const VaultPath &path, const VaultConfig &config, const V
     return pageLinkTarget(
             path, config, [index](const VaultPath &p) { return index->linkTarget(p).value_or(QString()); },
             [index](const QString &title) { return index->resolveLink(title).value_or(QString()); });
+}
+
+CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultConfig &config,
+                      const std::function<QString(const QString &target, const QString &from)> &resolveLink,
+                      const std::function<QString(const VaultPath &path)> &shortestTarget)
+{
+    const qsizetype colon = url.indexOf(u':');
+    if (colon <= 0)
+        return {};
+    const QStringView scheme = QStringView(url).left(colon);
+    const QString rest = url.mid(colon + 1);
+    if (scheme == u"tag")
+        return {markdown::tagSyntax(QUrl::fromPercentEncoding(rest.toUtf8())), QString()};
+    if (scheme == u"block")
+        return {u"(("_s + rest + u"))"_s, QString()};
+    if (scheme == u"ext")
+        return {rest, QString()};
+    if (scheme != u"page")
+        return {};
+    QString target = rest;
+    QString suffix;
+    if (const qsizetype hash = rest.indexOf(u'#'); hash >= 0) {
+        target = rest.left(hash);
+        suffix = u'#' + QUrl::fromPercentEncoding(rest.mid(hash + 1).toUtf8());
+    }
+    target = QUrl::fromPercentEncoding(target.toUtf8());
+    const QString resolved = target.isEmpty() ? fromPath : resolveLink ? resolveLink(target, fromPath) : QString();
+    if (resolved.isEmpty())
+        return {target.isEmpty() ? QString() : u"[["_s + target + suffix + u"]]"_s, QString()};
+    // The page by the target every copied link uses: a link pasted on any page reaches it.
+    const QString page = pageLinkTarget(resolved, config, shortestTarget, [&resolveLink](const QString &title) {
+        return resolveLink ? resolveLink(title, QString()) : QString();
+    });
+    return {u"[["_s + page + suffix + u"]]"_s, resolved};
 }
 
 std::optional<BlockLinks> blockLinks(const QString &content, int line, const QString &pageTarget,
