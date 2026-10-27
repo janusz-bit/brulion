@@ -709,10 +709,12 @@ FocusScope {
         if (!controller || spanRefuses())
             return
         const r = controller.pasteOverSelection()
-        if (r.row < 0)
+        if (r.row < 0) {
             notice(qsTr("Nothing to paste"), "info")
-        else
+        } else {
             ensureRowVisible(r.row)
+            offerPastedPictures(r)
+        }
     }
     /// Copy the exact characters [from, to) of the edited block `edit` (Ctrl+C, Ctrl+X, the text
     /// menu: TextEdit's own copy turns no-break spaces into spaces); `cut` removes them.
@@ -738,7 +740,45 @@ FocusScope {
             return false
         if (edit.preeditText !== "")
             EditorInput.commitPreedit(edit)
-        return controller.pasteClipboard(edit.row, edit.selectionStart, edit.selectionEnd).row >= 0
+        const r = controller.pasteClipboard(edit.row, edit.selectionStart, edit.selectionEnd)
+        if (r.row < 0)
+            return false
+        offerPastedPictures(r)
+        return true
+    }
+    /// Pictures from the internet a paste brought (PageController.pasteClipboard): a picture's
+    /// address alone (a browser's "Kopiuj adres obrazu") — "Zapisz w notatniku" makes it the
+    /// picture and stores it in the notebook (urlToPicture); pictures of pasted HTML — stored
+    /// on "Zapisz w notatniku" (downloadWebPictures). Offered on a toast; nothing is fetched before.
+    function offerPastedPictures(r) {
+        const ctl = controller
+        if (!ctl || !r)
+            return
+        const path = ctl.path
+        const samePage = () => controller === ctl && ctl.path === path
+        if (r.pictureUrl) {
+            const row = r.row, from = r.pictureFrom, to = r.pictureTo, url = r.pictureUrl
+            notice(qsTr("Picture address pasted"), "info", {
+                text: qsTr("Save to notebook"),
+                run: () => {
+                    if (!samePage() || ctl.urlToPicture(row, from, to, url, true).row < 0)
+                        notice(qsTr("Not changed: the address was edited since"), "info")
+                }
+            })
+        } else if (r.webPictures && r.webPictures.length > 0) {
+            const urls = r.webPictures
+            notice(qsTr("Pasted %n picture(s) from the internet", "", urls.length), "info", {
+                text: qsTr("Save to notebook"),
+                run: () => {
+                    if (!samePage()) {
+                        notice(qsTr("Open that page again to save its pictures"), "info")
+                        return
+                    }
+                    for (let i = 0; i < urls.length; ++i)
+                        downloadWebPictures(urls[i])
+                }
+            })
+        }
     }
 
     /// The row drawn at (x, y) of the list's content item; -1 when none (the header, the footer, a

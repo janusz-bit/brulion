@@ -3471,6 +3471,17 @@ QVariantMap PageController::insertWebPicture(int row, int from, int to, const QS
     return out;
 }
 
+QVariantMap PageController::urlToPicture(int row, int from, int to, const QString &url, bool download)
+{
+    const QVariantMap none{{u"row"_s, -1}, {u"cursor"_s, -1}};
+    if (!validRow(row) || !webpicture::isWebUrl(url) || from < 0 || to < from)
+        return none;
+    const QString edit = m_model->editTextAt(row);
+    if (to > edit.size() || QStringView(edit).sliced(from, to - from) != url)
+        return none;
+    return insertWebPicture(row, from, to, url, download);
+}
+
 bool PageController::copyWebPictureUrl(const QString &url)
 {
     QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
