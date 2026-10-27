@@ -244,7 +244,8 @@ EditorHost::WriteResult FakeEditorHost::writeIfUnchanged(const QString &path, co
 
 QVariantList FakeEditorHost::suggestPages(const QString &prefix, int limit) const
 {
-    const QString key = text::foldKey(prefix.trimmed());
+    // Like VaultIndex: runs of spaces count as one, and a query with '/' also matches the path.
+    const QString key = text::foldKey(prefix.simplified());
     struct Hit {
         int rank;
         QVariantMap item;
@@ -256,7 +257,8 @@ QVariantList FakeEditorHost::suggestPages(const QString &prefix, int limit) cons
         if (!paths::isMarkdown(path) || path.startsWith(u"templates/"_s))
             continue;
         const QString title = paths::pageTitle(path);
-        const QString folded = text::foldKey(title);
+        const QString folded = key.contains(u'/') ? text::foldKey(paths::stripMarkdownExtension(path))
+                                                  : text::foldKey(title);
         const int rank = key.isEmpty() ? 1 : folded.startsWith(key) ? 0 : folded.contains(key) ? 1 : -1;
         if (rank >= 0)
             hits.append({rank, {{u"path"_s, path}, {u"title"_s, title}, {u"folder"_s, paths::dirname(path)}}});

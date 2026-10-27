@@ -211,8 +211,12 @@ QVariantList SuggestionModel::pageItems() const
     if (!m_host)
         return out;
     const QString typed = m_filter.trimmed();
-    const QString typedKey = text::foldKey(typed);
-    bool exact = false;
+    // Compared as the search does: case, diacritics and runs of spaces ("Remont  kuchni") aside.
+    const auto key = [](const QString &s) { return text::foldKey(s.simplified()); };
+    const QString typedKey = key(typed);
+    // A link that already reaches a page or file ("Projekty/Remont kuchni", one ranked below the
+    // limit) creates nothing either.
+    bool exact = !typed.isEmpty() && !m_host->resolveLink(typed, m_currentPath).isEmpty();
     for (const QVariant &v : m_host->suggestPages(typed, m_limit)) {
         const QVariantMap p = v.toMap();
         const QString title = p.value(u"title"_s).toString();
@@ -221,7 +225,8 @@ QVariantList SuggestionModel::pageItems() const
         QString folder = p.value(u"folder"_s).toString();
         if (folder.isEmpty())
             folder = paths::dirname(path);
-        if (text::foldKey(title) == typedKey || (!alias.isEmpty() && text::foldKey(alias) == typedKey))
+        if (key(title) == typedKey || (!alias.isEmpty() && key(alias) == typedKey)
+            || (!path.isEmpty() && key(paths::stripMarkdownExtension(path)) == typedKey))
             exact = true;
         // The title alone may name another page of that name (the shortest path wins, docs/SYNTAX.md
         // §2): then the link names this one by its shortest unique path ("Projekty/Dom").

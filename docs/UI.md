@@ -382,7 +382,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   of the formula, as in the parser: it opens nothing and gets no closing fence.
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ "Create page “…”" as the first row whenever no page or alias has the typed name — folded
-  for case and diacritics —, on top of the `limit` matches, so a long list never hides it; the
+  for case, diacritics and runs of spaces — or folder path, and `[[typed]]` resolves to nothing; on top of the `limit` matches, so a long list never hides it; the
   highlighted row Enter/Tab take is still the first existing match, `SuggestionModel.defaultIndex`,
   and Up reaches the create row), `((` blocks (creates the target's block id), `#` tags and pages (a tag names a
   page: tags in use first, with the page they open, then pages no tag names yet with their

@@ -190,6 +190,63 @@ private Q_SLOTS:
         QVERIFY(m.count() > 0);
         QVERIFY(!values(m, u"kind"_s).contains(u"create"_s));
         QCOMPARE(m.defaultIndex(), 0);
+        // A page of exactly that name ranked below the limit: still no create row.
+        host.setFile(u"Projekt.md"_s, QString());
+        m.setMode(u"pages"_s);
+        m.setFilter(u"projekt"_s);
+        QCOMPARE(m.count(), 12);
+        QVERIFY(!values(m, u"kind"_s).contains(u"create"_s));
+        QVERIFY(!values(m, u"title"_s).contains(u"Projekt"_s));
+        QCOMPARE(m.defaultIndex(), 0);
+    }
+
+    // Other spellings of an existing page (its folder path, runs of spaces) are no new page.
+    void createPageItemForExistingSpellings_data()
+    {
+        QTest::addColumn<QString>("filter");
+        QTest::addColumn<QStringList>("expectedTitles");
+        QTest::addColumn<QStringList>("expectedKinds");
+        QTest::addColumn<int>("expectedDefault");
+
+        QTest::newRow("folder path") << u"Projekty/Remont kuchni"_s << QStringList{u"Remont kuchni"_s}
+                                     << QStringList{u"page"_s} << 0;
+        QTest::newRow("folder path, other case") << u"projekty/REMONT kuchni"_s << QStringList{u"Remont kuchni"_s}
+                                                 << QStringList{u"page"_s} << 0;
+        QTest::newRow("folder path, without diacritics") << u"Miasta/Lodz"_s << QStringList{u"Łódź"_s}
+                                                         << QStringList{u"page"_s} << 0;
+        QTest::newRow("folder path prefix") << u"Projekty/Remont"_s << QStringList{u"Projekty/Remont"_s, u"Remont kuchni"_s}
+                                            << QStringList{u"create"_s, u"page"_s} << 1;
+        QTest::newRow("folder path, no page") << u"Projekty/Ogród"_s << QStringList{u"Projekty/Ogród"_s}
+                                              << QStringList{u"create"_s} << 0;
+        QTest::newRow("doubled space") << u"Remont  kuchni"_s << QStringList{u"Remont kuchni"_s} << QStringList{u"page"_s}
+                                       << 0;
+        QTest::newRow("tab and spaces") << u" remont \t kuchni "_s << QStringList{u"Remont kuchni"_s}
+                                        << QStringList{u"page"_s} << 0;
+        QTest::newRow("doubled space, prefix") << u"Remont  kuch"_s << QStringList{u"Remont  kuch"_s, u"Remont kuchni"_s}
+                                               << QStringList{u"create"_s, u"page"_s} << 1;
+    }
+
+    void createPageItemForExistingSpellings()
+    {
+        QFETCH(QString, filter);
+        QFETCH(QStringList, expectedTitles);
+        QFETCH(QStringList, expectedKinds);
+        QFETCH(int, expectedDefault);
+        FakeEditorHost host;
+        host.setFile(u"Projekty/Remont kuchni.md"_s, u"- płytki\n"_s);
+        host.setFile(u"Miasta/Łódź.md"_s, QString());
+        host.setFile(u"Notatka.md"_s, QString());
+        SuggestionModel m;
+        QAbstractItemModelTester tester(&m, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        m.setHost(&host);
+        m.setMode(u"pages"_s);
+        m.setCurrentPath(u"Notatka.md"_s);
+        m.setFilter(filter);
+        QCOMPARE(titles(m), expectedTitles);
+        QCOMPARE(values(m, u"kind"_s), expectedKinds);
+        QCOMPARE(m.defaultIndex(), expectedDefault);
+        if (expectedKinds.first() == u"page")
+            QCOMPARE(m.get(0).value(u"insertText"_s).toString(), expectedTitles.first());
     }
 
     // Two pages called "Dom": the one the bare title does not reach is linked by its path (the
