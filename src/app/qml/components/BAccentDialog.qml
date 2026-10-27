@@ -7,7 +7,7 @@ import Brulion
 // a grid of colours (12 hues × 3 shades) and a field for any "#rrggbb", with a live preview of
 // what the app makes of it on the current background — the accent as a mark, as text and as a
 // filled badge. ThemePalette derives readable shades by itself (WCAG 2: text 4.5:1, marks 3:1);
-// when it had to, a note says so. Our own picker: Qt's ColorDialog is not themed and missing in
+// a note under the preview says so. Our own picker: Qt's ColorDialog is not themed and missing in
 // the browser.
 //
 //   BAccentDialog { id: accentDialog; onChosen: (color) => { AppSettings.customAccent = color; … } }
@@ -32,7 +32,6 @@ BDialog {
 
     /// What Theme would use with this colour.
     readonly property var preview: ThemePalette.colors(Theme.dark, Theme.lightSurface, Theme.darkSurface, "custom", value)
-    readonly property bool adjusted: preview.accent !== value || preview.accentText !== value
     /// 12 hues × 3 shades.
     readonly property var grid: {
         const out = []
@@ -51,15 +50,19 @@ BDialog {
     preferredWidth: Theme.dialogWidthSm
     onAccepted: dialog.chosen(dialog.value)
 
-    Flow {
+    // One row per shade when 12 fit, else two (the hues stay in columns).
+    Grid {
+        id: swatchGrid
         objectName: "accentDialogGrid"
         Layout.fillWidth: true
+        readonly property real cell: Theme.touchUi ? Theme.touchTarget : 28
+        columns: width >= 12 * cell ? 12 : 6
         spacing: 0
         Repeater {
             model: dialog.grid
             delegate: BColorSwatch {
                 required property string modelData
-                size: Theme.touchUi ? 26 : 22
+                size: Theme.touchUi ? 28 : 20
                 color: modelData
                 label: modelData
                 selected: dialog.value === modelData
@@ -167,7 +170,6 @@ BDialog {
     BText {
         objectName: "accentDialogNote"
         Layout.fillWidth: true
-        visible: dialog.adjusted
         text: qsTr("Brulion uses lighter or darker shades of this colour where it would be hard to read.")
         variant: "muted"
         font.pixelSize: Theme.textSm

@@ -132,10 +132,12 @@ Item {
                 AppSettings.uiFontFamily = family
             else if (target === "mono")
                 AppSettings.editorMonoFamily = family
-            else if (family === "")
-                AppSettings.editorFontFamily = "" // serif / sans decide again
-            else
+            else if (family === "") {
+                AppSettings.editorFontFamily = "" // the default row: serif
+                AppSettings.editorFont = "serif"
+            } else {
                 AppSettings.editorFontFamily = family
+            }
         }
     }
     BAccentDialog {
@@ -543,6 +545,7 @@ Item {
                             readonly property var view: root.viewInfo(AppSettings.bottomNavTabs[index])
                             objectName: "bottomNavSlot_" + index
                             Layout.fillWidth: true
+                            Layout.preferredWidth: 1 // equal widths
                             size: "small"
                             iconName: view.icon
                             text: view.text

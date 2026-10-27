@@ -1228,7 +1228,11 @@ inner ring's twelve hours sit closer together, so they are sized first and the o
 room left between the rings — so none overlap, down to the dialog's 180 px dial and with larger
 text; the outer numbers keep the small text size, the inner ones get a smaller font only where two
 digits would not fit), `BReminderDialog` (date/time, alarm switch, recurrence picker,
-quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00), `BDiffView`,
+quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00),
+`BColorSwatch` (a round colour button: selection ring and check mark, tooltip),
+`BAccentDialog` (a custom accent: colour grid, `#rrggbb` field, live preview of what
+`ThemePalette` makes of it), `BFontPickerDialog` (installed font families with fuzzy search, each
+row in its own font, the default first), `BDiffView`,
 `BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BPalette` with `BCommandPalette` and
 `BQuickSwitcher`, `BKeyboardFocusKeeper` (the focused form field above the on-screen keyboard,
 "On-screen keyboard"), `BKeyboardPlaceholder` (a simulated keyboard's grey block). Icons: SVGs in

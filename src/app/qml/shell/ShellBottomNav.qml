@@ -97,11 +97,9 @@ Rectangle {
                         font.weight: tab.current ? Theme.weightSemiBold : Theme.weightMedium
                         color: tab.current ? Theme.fg : Theme.fgMuted
                         // A long name (a view chosen in the settings) on a narrow tab: elided.
-                        Binding on width {
-                            when: label.implicitWidth > tab.width - 4
-                            value: tab.width - 4
-                        }
-                        elide: label.implicitWidth > tab.width - 4 ? Text.ElideRight : Text.ElideNone
+                        readonly property bool tooWide: implicitWidth > tab.width - 4 && tab.width > 4
+                        width: tooWide ? tab.width - 4 : implicitWidth
+                        elide: tooWide ? Text.ElideRight : Text.ElideNone
                     }
                 }
                 background: Item {

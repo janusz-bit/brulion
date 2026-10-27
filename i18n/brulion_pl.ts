@@ -6971,7 +6971,7 @@
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="123"/>
         <source>System monospaced font</source>
-        <translation>Systemowa czcionka o stałej szerokości</translation>
+        <translation>Systemowa o stałej szerokości</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="124"/>
