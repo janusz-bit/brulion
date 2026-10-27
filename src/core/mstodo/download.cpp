@@ -242,6 +242,12 @@ void TodoDownload::fetchTasks(qsizetype index, bool expand)
                     fetchTasks(index, false);
                     return;
                 }
+                // A list deleted meanwhile: the others still come.
+                if (response.status == 404) {
+                    warn(MsTodoMessages::tr("Not every list could be downloaded."));
+                    fetchList(index + 1);
+                    return;
+                }
                 failWith(response);
             });
 }

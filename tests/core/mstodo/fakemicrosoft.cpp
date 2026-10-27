@@ -194,7 +194,7 @@ HttpResponse FakeMicrosoft::graph(const HttpRequest &request)
         return json(200, o);
     }
     const QString listId = rest[0];
-    if (!tasks.contains(listId) || rest.size() < 2 || rest[1] != u"tasks")
+    if (!tasks.contains(listId) || missingLists.contains(listId) || rest.size() < 2 || rest[1] != u"tasks")
         return graphError(404, u"ResourceNotFound"_s, u"The list was not found."_s);
     const QList<QJsonObject> &listTasks = tasks[listId];
     if (rest.size() == 2) {

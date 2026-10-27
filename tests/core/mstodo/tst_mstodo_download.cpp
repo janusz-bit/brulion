@@ -295,6 +295,18 @@ private Q_SLOTS:
         QVERIFY(listNamed(r.bundle, u"Zakupy ąę"_s).contains(u"tasks@odata.nextLink"_s));
     }
 
+    void listDeletedMeanwhile()
+    {
+        FakeMicrosoft ms;
+        ms.addSampleData();
+        ms.missingLists = {u"AAMkADZhZG=="_s};
+        const Result r = download(ms);
+        QVERIFY2(r.failedCode.isEmpty(), qPrintable(r.failedMessage));
+        QCOMPARE(listNamed(r.bundle, u"Zadania"_s).value(u"tasks"_s).toArray().size(), 0);
+        QCOMPARE(listNamed(r.bundle, u"Zakupy ąę"_s).value(u"tasks"_s).toArray().size(), 1);
+        QCOMPARE(r.warnings.size(), 1);
+    }
+
     void noLists()
     {
         FakeMicrosoft ms;

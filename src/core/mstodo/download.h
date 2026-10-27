@@ -27,7 +27,7 @@ struct DownloadLimits {
     /// Attachments larger than this are left out (To Do itself takes up to 25 MB per file).
     qint64 maxAttachmentBytes = 25LL * 1024 * 1024;
     /// All attachments together; the rest are left out (with a warning).
-    qint64 maxTotalAttachmentBytes = 200LL * 1024 * 1024;
+    qint64 maxTotalAttachmentBytes = 100LL * 1024 * 1024;
     /// Tasks of all lists together; more are left out (the importer says the export is incomplete).
     int maxTasks = 100000;
     /// Retries of one request after 429 / 503 / 504 or a dropped connection.

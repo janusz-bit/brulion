@@ -53,6 +53,8 @@ public:
     int throttle = 0;
     /// Answer every Graph request with this status (0 = normally, -1 = no answer at all).
     int graphStatus = 0;
+    /// Lists that answer 404 (deleted while downloading).
+    QStringList missingLists;
     /// The tasks' paging link of this list points to another host.
     QString foreignNextLinkList;
 
