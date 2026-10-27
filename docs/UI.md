@@ -893,9 +893,12 @@ tablet (lectures, sketches), on every platform.
     erases whatever tool is chosen. Qt Quick hands an item no tablet events (only pointer handlers
     get them, and Qt makes mouse events of the unhandled ones only on some platforms — not on
     Android), so the canvas takes the stylus's tablet events from its window (an event filter) when
-    it is the topmost item taking input under the pen: a menu, a popup or a toast over it gets the
-    pen as before. Mouse events the system makes of the pen itself (Windows) are recognised by
-    their time and place and left alone;
+    it is the topmost item taking input under the pen: a menu, a popup, a toast or a bar over it
+    gets the pen as before, and so does any modal popup that is open (the drawer opened). Qt Quick
+    Controls' popup layer (`QQuickOverlay`), visible over the whole window whenever a Drawer exists
+    and taking every button, counts only where an open popup is (`tst_drawingcanvas`
+    `popupsOfQtQuickControls`). Mouse events the system makes of the pen itself (Windows) are
+    recognised by their time and place and left alone;
   * a **mouse** draws with the left button; the middle or right button — or the left one with
     Space held — moves the paper; the wheel scrolls it (Shift: sideways), Ctrl+wheel and a
     touchpad's pinch zoom at the pointer (10 %–1000 %);

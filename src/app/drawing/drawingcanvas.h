@@ -5,7 +5,7 @@
 //                   fingerDraws: !stylusSeen
 //                   onContentChanged: saveTimer.restart() }
 //   canvas.load(Workspace.readAttachment(path)) → "" | "readonly" | "notDrawing" | "corrupt"
-//   Workspace.writeAttachment(path, canvas.svg()); canvas.markSaved()
+//   const bytes = canvas.svg(); Workspace.writeAttachment(path, bytes); canvas.markSaved(bytes)
 //
 // Input (the rules of docs/UI.md "Drawing editor"):
 //  * a stylus draws with its pressure; its eraser end (or a held barrel button) erases whatever
@@ -13,9 +13,10 @@
 //    events of the unhandled ones only on some platforms (X11, the browser; not Android, whose
 //    stylus would never reach an item): the canvas takes the tablet events from its window (an
 //    event filter) when it is the topmost item taking input under the pen — not under a popup,
-//    a toast or a bar —, so no mouse events are made of them; mouse events the system makes of the
-//    pen itself (Windows) are recognised by their time and place and left alone. A mouse event
-//    whose device is a stylus draws as a stylus without pressure;
+//    a toast or a bar, nor while a modal popup is open —, so no mouse events are made of them;
+//    mouse events the system makes of the pen itself (Windows) are recognised by their time and
+//    place and left alone. A mouse event whose device is a stylus draws as a stylus without
+//    pressure;
 //  * a mouse draws with the left button; the middle or right button, or the left one while
 //    `panMode` (Space held), moves the paper; the wheel moves it (Shift: sideways), Ctrl+wheel and
 //    a touchpad's pinch zoom at the pointer;
