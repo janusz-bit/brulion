@@ -39,6 +39,9 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * zaznaczanie bloków z kilku dni dziennika naraz.
 * **Dostosowanie wyglądu interfejsu** — własne ustawienia UI (do doprecyzowania, np. kolory
   i motywy, czcionka i jej rozmiar, układ i widoczność elementów).
+* **„Zrobione” w powiadomieniu przypomnienia** — przycisk obok „Odłóż” i „OK”, który od razu
+  oznacza zadanie z przypomnieniem jako zrobione (`[x]` z datą ✅, jak zmiana statusu w edytorze),
+  bez otwierania notatki; na Linuksie, Androidzie i Windows.
 
 ## Import i synchronizacja
 
