@@ -95,6 +95,8 @@ private:
             item.status = task.status;
             item.recurring = recurring;
             item.written = written;
+            item.rule = task.recurrence;
+            item.priority = task.priority;
             m_items.append(std::move(item));
         };
         const auto addSeries = [&](CalendarItem::Kind kind, const std::optional<DateSpec> &anchor) {
@@ -141,6 +143,9 @@ private:
             item.recurring = recurring;
             item.alarm = ref.reminder.alarm;
             item.written = ref.reminder.at;
+            item.rule = ref.reminder.recurrence;
+            if (src.task)
+                item.priority = src.task->priority;
             m_items.append(std::move(item));
         }
     }

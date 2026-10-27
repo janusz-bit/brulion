@@ -43,6 +43,9 @@ struct CalendarItem {
     /// date than this one — its token menu changes the written date (the whole series).
     /// Unset for journals.
     std::optional<DateSpec> written;
+    /// The block's 🔁 rule (canonical; "" = none) and its task's priority (the token menus).
+    QString rule;
+    Priority priority = Priority::None;
 
     friend bool operator==(const CalendarItem &, const CalendarItem &) = default;
 };

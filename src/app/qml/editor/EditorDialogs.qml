@@ -14,8 +14,9 @@ import Brulion
 //   pickRecurrence(row)             Powtarzaj (🔁): quick choices or a rule typed in Polish/English
 //   pickRecurrenceAt(row, from, to, rule)  a 🔁 chip's "Zmień regułę…": that rule
 //   pickDateWith / editReminderWith / pickRecurrenceWith(apply, …)  the same dialogs for a token
-//                                   elsewhere (a query result, an embed, a table cell, …): the
-//                                   choice goes to apply(action, a, b) (DateChipMenu's actions)
+//                                   elsewhere (a query result, an embed, a table cell, Tasks, the
+//                                   calendar — there without an editor or controller): the choice
+//                                   goes to apply(action, a, b) (DateChipMenu's actions)
 //   pickJournalDate(row, cursor)    Data…: a [[journal day]] link at the caret
 //   pickTemplate(row)               Szablon…: insert a template from the templates folder
 //   pickImage(row, cursor)          Obraz…: pictures from the system's file picker (desktop,
@@ -144,7 +145,7 @@ Item {
             at: chip.dialogAt || chip.at,
             alarm: chip.alarm === true,
             recurrence: chip.rule || "",
-            context: editor.autoTextSafe(chip.context || "")
+            context: (chip.context || "").indexOf("<") >= 0 ? TextHelper.escapeHtml(chip.context) : (chip.context || "")
         })
     }
     function pickDate(r, which) {

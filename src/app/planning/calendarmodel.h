@@ -24,7 +24,8 @@
 // ("HH:mm" or ""), minutes (since midnight, -1 = all-day), title (plain text), path, line,
 // pageTitle, isTask, status ("todo" … or "" for reminders outside tasks), closed, overdue,
 // recurring, alarm, date, spec (the token as written, "YYYY-MM-DD[ HH:mm]": its menu names it),
-// occurrence (another date of a series than the written one) }. Within a day timed entries come
+// occurrence (another date of a series than the written one), rule (the block's 🔁, canonical),
+// priority (the task's: "high" …, "" = none) }. Within a day timed entries come
 // first by time, then all-day ones.
 //
 // The model watches the index (debounced by refreshDelay ms; refresh() rebuilds at once).

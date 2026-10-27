@@ -24,6 +24,7 @@ target_sources(brulion PRIVATE planning/planningqml.h)
 qt_target_qml_sources(brulion
     QML_FILES
         qml/planning/PlanningItemRow.qml
+        qml/planning/PlanningTokenMenu.qml
         qml/planning/CalendarHeader.qml
         qml/planning/CalendarMonthGrid.qml
         qml/planning/CalendarWeekGrid.qml

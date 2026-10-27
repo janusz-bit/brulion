@@ -7,8 +7,9 @@ import Brulion
 // TasksView — route "tasks" ({query?}): every task of the vault (TaskListModel over
 // PlanningContext.vaultIndex) in sections Zaległe / Dziś / Jutro / Ten tydzień / Później / Bez
 // terminu / Zrobione (collapsed): tick them off inline (undo in the toast), see their dates,
-// reminders, recurrence and priority as chips, open them at their line, set any status from the
-// context menu. Filters (status, tag, page, folder, priority, text) and the sort order sit in
+// reminders, recurrence and priority as chips (a right-click or long press on one: its menu,
+// PlanningTokenMenu — the change goes to the task's file, undo in the toast), open them at their
+// line, set any status from the context menu. Filters (status, tag, page, folder, priority, text) and the sort order sit in
 // TasksFilterBar; "Show as query" turns them into the equivalent ```query block (SYNTAX §10);
 // route.query pre-sets them. Quick add with natural-language dates writes into today's journal.
 //
@@ -64,6 +65,14 @@ FocusScope {
         if (planningActions.setTaskStatus(task.path, task.line, status, task.text))
             toasts.show(qsTr("Status changed"), { actionText: qsTr("Undo"), onAction: () => planningActions.undo() })
     }
+    /// The menu of a task's chip: its token in the task's file (PlanningTokenMenu).
+    function openTokenMenu(task, kind, item, x, y) {
+        const value = kind === "due" ? task.due : kind === "scheduled" ? task.scheduled : kind === "start" ? task.start
+                    : kind === "reminder" ? task.reminderSpec : kind === "recurrence" ? task.recurrence : task.priorityName
+        tokenMenu.openToken({ path: task.path, line: task.line, text: task.text, kind: kind, value: value,
+                              alarm: task.reminderAlarm, rule: task.recurrence, priority: task.priorityName,
+                              isTask: true, occurrence: false }, item, x, y)
+    }
     function activateLink(link, task) {
         // A tag filters this list (Ctrl+click or a long press opens its page: TasksRow); everything
         // else navigates.
@@ -100,6 +109,12 @@ FocusScope {
         weekStart: DatesHelper.weekStart
         locale: DatesHelper.locale
         palette: root.rendererPalette
+    }
+    PlanningTokenMenu {
+        id: tokenMenu
+        actions: planningActions
+        onChanged: (text) => toasts.show(text, { actionText: qsTr("Undo"), onAction: () => planningActions.undo() })
+        onMessage: (text, kind) => toasts.show(text, { kind: kind })
     }
     PlanningActions {
         id: planningActions
@@ -229,6 +244,9 @@ FocusScope {
                     onLinkActivated: (url) => root.activateLink(url, row.model)
                     onTagPageRequested: (tag) => AppController.openTag(tag)
                     onStatusRequested: (status) => root.setStatus(row.model, status)
+                    onTokenMenuRequested: (kind, item, x, y) => root.openTokenMenu(row.model, kind, item, x, y)
+                    onLinkMenuRequested: (url, item, x, y) =>
+                        tokenMenu.openLink(url, row.model.path, item, x, y, (tag) => { taskModel.tagFilter = tag })
                 }
             }
         }
