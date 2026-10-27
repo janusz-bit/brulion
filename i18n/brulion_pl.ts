@@ -14982,36 +14982,36 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::Workspace</name>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="438"/>
-        <location filename="../src/app/shell/workspace.cpp" line="454"/>
+        <location filename="../src/app/shell/workspace.cpp" line="449"/>
+        <location filename="../src/app/shell/workspace.cpp" line="465"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="592"/>
         <location filename="../src/app/shell/workspace.cpp" line="603"/>
+        <location filename="../src/app/shell/workspace.cpp" line="614"/>
         <source>Could not save the drawing %1: %2</source>
         <translation>Nie można zapisać rysunku %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="828"/>
+        <location filename="../src/app/shell/workspace.cpp" line="839"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="886"/>
-        <location filename="../src/app/shell/workspace.cpp" line="907"/>
+        <location filename="../src/app/shell/workspace.cpp" line="897"/>
+        <location filename="../src/app/shell/workspace.cpp" line="918"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="330"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1037"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1048"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1040"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1051"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
@@ -15121,17 +15121,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1054"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1065"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1069"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1080"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1100"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1111"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
@@ -15247,38 +15247,38 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceReminders</name>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="407"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="413"/>
         <source>“%1” is in another notebook and was not snoozed.</source>
         <translation>„%1” jest w innym notatniku, więc nie zostało odłożone.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="425"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="431"/>
         <source>“%1” has changed in the note meanwhile and was not snoozed.</source>
         <translation>„%1” zmieniło się w międzyczasie w notatce, więc nie zostało odłożone.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="431"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="437"/>
         <source>Could not snooze the reminder: %1</source>
         <translation>Nie udało się odłożyć przypomnienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="448"/>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="517"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="454"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="523"/>
         <source>“%1” was not marked done: no notebook is open.</source>
         <translation>Nie oznaczono „%1” jako zrobione: żaden notatnik nie jest otwarty.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="522"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="528"/>
         <source>“%1” is in another notebook and was not marked done.</source>
         <translation>„%1” jest w innym notatniku, więc nie zostało oznaczone jako zrobione.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="543"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="549"/>
         <source>“%1” has changed in the note meanwhile and was not marked done.</source>
         <translation>„%1” zmieniło się w międzyczasie w notatce, więc nie zostało oznaczone jako zrobione.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="546"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="552"/>
         <source>Could not mark the task done: %1</source>
         <translation>Nie udało się oznaczyć zadania jako zrobionego: %1</translation>
     </message>
@@ -16084,7 +16084,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::widgets::WidgetActions</name>
     <message numerus="yes">
-        <location filename="../src/app/widgets/widgetactions.cpp" line="67"/>
+        <location filename="../src/app/widgets/widgetactions.cpp" line="82"/>
         <source>%n entry(ies) added from the widget to today&apos;s journal.</source>
         <translation>
             <numerusform>Dodano %n wpis z widżetu do dzisiejszego dziennika.</numerusform>
@@ -16093,9 +16093,9 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/widgets/widgetactions.cpp" line="73"/>
-        <source>Could not add “%1” from the widget to today&apos;s journal.</source>
-        <translation>Nie udało się dodać „%1” z widżetu do dzisiejszego dziennika.</translation>
+        <location filename="../src/app/widgets/widgetactions.cpp" line="88"/>
+        <source>Could not add “%1” from the widget to today&apos;s journal; it is kept and tried again later.</source>
+        <translation>Nie udało się dodać „%1” z widżetu do dzisiejszego dziennika; wpis czeka na kolejną próbę.</translation>
     </message>
 </context>
 <context>

@@ -783,4 +783,6 @@ the template, filled for that day — by the first change; looking at a day neve
 Entries appended to today's note (quick capture, shares, the Android widgets' quick add, which
 writes the same task line — `- [ ] text 📅 YYYY-MM-DD` or `⏰`/`⏰! YYYY-MM-DD HH:mm` — even with
 the app closed) fill the template's empty last bullet (`- `) instead of adding below it, and
-keep the note's line endings and BOM.
+keep the note's line endings and BOM. A daily note that is not UTF-8 text is never appended to
+(rewriting it would replace its other characters); the entry is refused (the widgets' one waits
+in their queue).

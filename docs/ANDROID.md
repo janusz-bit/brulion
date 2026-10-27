@@ -331,6 +331,8 @@ ekranu startowego) czyści widżety: „Otwórz Brulion, aby pokazać tu swój n
 (**Szybka notatka** w widżecie notatek — okno na zwykły punkt listy, także w kilku wierszach):
 
 * tekst, a pod nim dzień: **Dziś** (wybrany), **Jutro**, **Bez terminu**, **Data…** (kalendarz);
+  „Dziś” i „Jutro” liczą się w chwili stuknięcia **Dodaj** (okno otwarte przed północą zapisze
+  po północy już nowy dzień);
 * **Godzina…** dodaje przypomnienie o tej godzinie w wybranym dniu, a **Alarm** zmienia je
   w alarm;
 * **Dodaj** zapisuje i czyści pole, więc można dodać kilka zadań z rzędu; Wstecz albo
@@ -344,21 +346,33 @@ dodawaniu w aplikacji); od daty są przyciski.
 
 **Przy zamkniętej aplikacji też od razu.** Okno nie uruchamia Brulionu: dopisuje wiersz do
 pliku dziennika samo (Kotlin, `JournalAppend.kt`) — to jedyne miejsce, w którym część
-androidowa pisze w notatniku. Robi to bezpiecznie: tylko w folderze notatnika z migawki
-(ścieżka sprawdzana po rozwinięciu `..` i dowiązań), tylko w pliku `.md` w UTF-8, przez plik
+androidowa pisze w notatniku. Robi to bezpiecznie: tylko w folderze notatnika z migawki, i tylko gdy ten folder
+istnieje (przeniesionego, usuniętego albo niedostępnego notatnika nie zakłada od nowa — wpis
+czeka wtedy w kolejce; ścieżka sprawdzana po rozwinięciu `..` i dowiązań), tylko w pliku `.md` w UTF-8, przez plik
 tymczasowy `.brulion-tmp-…` w tym samym folderze zamieniany na notatkę jednym ruchem, i tylko
 gdy notatki nikt w tym czasie nie zmienił; zachowuje końce wierszy i BOM notatki, wypełnia pusty
 punkt `- ` z szablonu, a brakujący dziennik zakłada z szablonu dziennika. Nowe zadanie od razu
 widać w widżetach, a zadanie z godziną dostaje od razu systemowe przypomnienie (tymczasowe —
-aplikacja zastępuje je własnym przy następnym uruchomieniu). Syncthing wyśle zmieniony plik
-od razu.
+aplikacja zastępuje je swoim zestawem przy następnym uruchomieniu albo powrocie na pierwszy
+plan; przypomnienie dalej niż 14 dni naprzód aplikacja ustawi, jak każde, gdy się przybliży).
+Syncthing wyśle zmieniony plik od razu.
 
-Gdy działa Brulion (w tle), okno też pisze samo, a aplikacja wczytuje notatkę ponownie, gdy
-wraca na pierwszy plan (Qt w tle wstrzymuje swoją pętlę zdarzeń). Gdy wpisu nie da się zapisać
+Gdy działa Brulion (w tle), okno też pisze samo, a aplikacja wczytuje notatnik ponownie, gdy
+wraca na pierwszy plan (Qt w tle wstrzymuje swoją pętlę zdarzeń), i oddaje Androidowi swój
+zestaw przypomnień jeszcze raz — tymczasowe przypomnienie ustępuje mu nawet wtedy, gdy zestaw
+się nie zmienił. Gdy wpisu nie da się zapisać
 od razu — Brulion nie był jeszcze otwarty z notatnikiem (brak migawki), migawka jest starsza niż
 tydzień, notatkę ktoś właśnie zmieniał, błąd zapisu — okno mówi „Zapisze się w dzienniku po
 otwarciu Brulionu”: wpis czeka w kolejce i aplikacja dopisze go do dzisiejszego dziennika przy
-następnym uruchomieniu z tym notatnikiem (komunikat „Dodano 1 wpis z widżetu…”).
+następnym uruchomieniu z tym notatnikiem (komunikat „Dodano 1 wpis z widżetu…”). Jeśli i
+aplikacja nie może go dopisać (np. dziennik nie jest tekstem UTF-8 — Brulion nie przepisuje
+takiej notatki, żeby nie zepsuć jej znaków), wpis wraca do kolejki i czeka na kolejną próbę
+(„…wpis czeka na kolejną próbę”); nic, co wpisano, nie ginie.
+
+Zanim aplikacja po raz pierwszy opublikuje migawkę, widżety i okno mówią językiem, w którym
+aplikacja wystartuje (angielskim na telefonie po angielsku, inaczej polskim). Na Androidzie
+9–11 wybór widżetów pokazuje ich szkic (`android:previewImage`, wektorowe rysunki z
+`scripts/gen-widget-previews.py`), od Androida 12 — podgląd z układu (`previewLayout`).
 
 **Odhaczanie zadań z widżetu** nie jest możliwe — zadanie zaznaczysz w aplikacji (albo
 **Zrobione** w powiadomieniu przypomnienia).
@@ -930,8 +944,9 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | sygnał `doneRequestsQueued()` | natywna `nativeDoneQueued()` (z `ReminderActions.done`) + powrót na pierwszy plan + raz po starcie |
 | `int updateWidgets(const QJsonObject &)` | `updateWidgets(Context, String): String` — migawka widżetów (`src/app/widgets/widgetsnapshot.h`) zapisana, widżety odświeżone: `{"widgets": n}` (ile postawionych) albo `{"error":…}` (poprzednia migawka zostaje) |
 | `QJsonArray takeWidgetActions(vault)` | `takeWidgetActions(Context, String): String` — kolejka szybkiego dodawania (`WidgetInbox.kt`): `[{id, kind, text, date, time, alarm, vault, added}, …]` notatnika `vault` (i wpisy bez notatnika), wydane znikają |
+| `void requeueWidgetActions(const QJsonArray &)` | `requeueWidgetActions(Context, String)` — wpisy, których aplikacja też nie zapisała, wracają do kolejki (ten sam JSON; bez sygnału) |
 | sygnał `widgetActionsQueued()` | natywna `nativeWidgetQueued()` (z `QuickAdd`) + powrót na pierwszy plan + raz po starcie |
-| sygnał `widgetNoteWritten(QString path)` | natywna `nativeWidgetWrote(String)` — szybkie dodawanie samo dopisało do notatki (ścieżka bezwzględna): notatnik wczytuje ją ponownie |
+| sygnał `widgetNoteWritten(QString path)` | natywna `nativeWidgetWrote(String)` — szybkie dodawanie samo dopisało do notatki (ścieżka bezwzględna): aplikacja oddaje zestaw przypomnień jeszcze raz (`WorkspaceReminders::resendUpcoming`), tymczasowe ustępuje; notatnik i tak wczytuje się ponownie po powrocie na pierwszy plan |
 | sygnał `soundPicked(int kind, QJsonObject choice)` | natywna `nativeSoundPicked(Int, String)` (z `BrulionActivity.onActivityResult`) |
 | sygnał `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | natywna `nativeImeChanged(Int, Boolean, Boolean)` (z `ImeInsets`, piksele fizyczne, każda klatka wysuwania na Androidzie 11+) / `requestImeState()` — raport jeszcze raz |
 | sygnał `systemGesturesChanged(int left, int right)` | natywna `nativeGestureInsetsChanged(Int, Int)` (z `ImeInsets`, piksele fizyczne stref gestów systemu przy krawędziach widoku Qt; raport jeszcze raz też przez `requestImeState()`) |
@@ -1008,7 +1023,8 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   podglądu, JSON dla C++: `ShareIntentTest`; widżety — migawka z C++ i przekładanie zadań na
   nowy dzień, wiersze list, siatka miesiąca, daty: `WidgetSnapshotTest`; wiersz szybkiego
   dodawania, dopisywanie do dziennika, zapis atomowy i ścieżki spoza notatnika (`..`, dowiązanie),
-  plik nie w UTF-8: `JournalAppendTest`; kolejka dla C++: `WidgetInboxTest`. Przypadki
+  plik nie w UTF-8, brakujący folder notatnika: `JournalAppendTest`; kolejka dla C++ i powrót
+  do niej: `WidgetInboxTest`. Przypadki
   `tests/data/widgets/*.json` sprawdza też C++ — `tst_widgets` —, więc obie strony piszą
   i przekładają tak samo; skrypt init podaje ich folder we właściwości `brulion.testData`):
   `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (uruchamia
