@@ -19,6 +19,7 @@ qt_target_qml_sources(brulion
         qml/editor/DateChipMenu.qml
         qml/editor/LinkMenu.qml
         qml/editor/WebPictureMenu.qml
+        qml/editor/WebPictureViewer.qml
         qml/editor/CodeBlockView.qml
         qml/editor/CalcBlockView.qml
         qml/editor/TableBlockView.qml

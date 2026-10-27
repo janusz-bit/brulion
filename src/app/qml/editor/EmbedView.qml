@@ -20,7 +20,8 @@ import Brulion
 // (EditorHost::webPicture — QML loads nothing from the network): until it is there its frame
 // names the site with "Pokaż" (asking first is the default, AppSettings.webPicturesShown) and
 // "Zapisz w notatniku", a spinner while it loads, the reason when it failed; a click on the shown
-// picture opens its menu (webMenu: WebPictureMenu) instead of the picture view. Its frame grows
+// picture opens it on its own (webOpen: WebPictureViewer, like the picture view of an
+// attachment), a right-click or a long press its menu (webMenu: WebPictureMenu). Its frame grows
 // to fit what it says (a phone's narrow column, a long alt text), and keeps that height while the
 // picture loads, so the row changes once: when the picture is there.
 Column {
@@ -32,6 +33,8 @@ Column {
     signal showWeb(string url)
     signal downloadWeb(string url)
     signal webMenu(string url, string host, Item item, real x, real y)
+    /// A click on a shown picture from the internet: `picture` is its embed (the cached copy).
+    signal webOpen(var picture)
     signal backgroundClicked()
     /// A finger held beside the picture / chip (touch UIs).
     signal backgroundLongPressed()
@@ -250,9 +253,9 @@ Column {
                 TapHandler {
                     enabled: !embed.webPending
                     acceptedButtons: Qt.LeftButton
-                    onTapped: (point) => {
+                    onTapped: {
                         if (embed.web)
-                            root.webMenu(embed.modelData.target, embed.modelData.host, picture, point.position.x, point.position.y)
+                            root.webOpen(embed.modelData)
                         else
                             root.clicked(embed.modelData.target)
                     }

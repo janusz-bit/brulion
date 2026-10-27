@@ -2166,8 +2166,8 @@ FocusScope {
         else if (count === 0 && !url)
             notice(qsTr("This page has no pictures from the internet"), "info")
     }
-    /// WebPictureMenu for a shown picture from the internet (EmbedView: a click, right-click or
-    /// long press on it). Created when first opened.
+    /// WebPictureMenu for a shown picture from the internet (EmbedView: a right-click or long
+    /// press on it; "⋯" in its viewer). Created when first opened.
     property WebPictureMenu webPictureMenu: null
     property string webPictureMenuUrl: ""
     property int webPictureMenuRow: -1
@@ -2181,15 +2181,46 @@ FocusScope {
         webPictureMenuUrl = url
         webPictureMenuRow = row
         webPictureMenu.host = host
+        webPictureMenu.canView = !(webPictureViewer && webPictureViewer.visible)
         webPictureMenu.bottomMargin = menuBottomMargin()
         webPictureMenu.popup(item, x, y)
+    }
+    /// WebPictureViewer: a shown picture from the internet on its own (EmbedView: a click on it;
+    /// "Powiększ" in its menu). `picture` is its embed. Created when first opened.
+    property WebPictureViewer webPictureViewer: null
+    property int webPictureViewerRow: -1
+    function openWebPictureViewer(row, picture) {
+        if (!controller || !picture || picture.state !== "ready")
+            return
+        if (!webPictureViewer)
+            webPictureViewer = webPictureViewerComponent.createObject(editor) as WebPictureViewer
+        menuAbove = null
+        closeSuggestions()
+        webPictureViewerRow = row
+        webPictureViewer.picture = picture
+        webPictureViewer.open()
+    }
+    /// The embed of the picture from the internet `url` in row `row` ({} when not shown there).
+    function webPictureEmbed(row, url) {
+        const item = list.itemAtIndex(row) as BlockDelegate
+        const embeds = item && item.embeds ? item.embeds : []
+        for (let i = 0; i < embeds.length; ++i) {
+            if (embeds[i].web && embeds[i].target === url)
+                return embeds[i]
+        }
+        return ({})
     }
     function chooseWebPictureAction(action) {
         const url = webPictureMenuUrl
         if (!controller || url === "")
             return
         switch (action) {
-        case "download": downloadWebPictures(url); break
+        case "view": openWebPictureViewer(webPictureMenuRow, webPictureEmbed(webPictureMenuRow, url)); break
+        case "download":
+            downloadWebPictures(url)
+            if (webPictureViewer)
+                webPictureViewer.close()
+            break
         case "open": controller.activateLink(webPictureMenuRow, "ext:" + url, false); break
         case "copy":
             if (controller.copyWebPictureUrl(url))
@@ -2203,6 +2234,22 @@ FocusScope {
         id: webPictureMenuComponent
         WebPictureMenu {
             onChosen: (action) => editor.chooseWebPictureAction(action)
+        }
+    }
+    Component {
+        id: webPictureViewerComponent
+        WebPictureViewer {
+            id: pictureViewer
+            onSaveRequested: {
+                const url = pictureViewer.picture ? pictureViewer.picture.target : ""
+                pictureViewer.close()
+                if (url)
+                    editor.downloadWebPictures(url)
+            }
+            onMenuRequested: (item) => {
+                const p = pictureViewer.picture || {}
+                editor.openWebPictureMenu(editor.webPictureViewerRow, p.target || "", p.host || "", item, 0, item.height)
+            }
         }
     }
 

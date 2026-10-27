@@ -3,16 +3,19 @@ import QtQuick
 import Brulion
 
 // WebPictureMenu — the menu of a picture from the internet in a block (`![alt](https://…)`,
-// EmbedView): a click, right-click or long press on the shown picture. Store it in the notebook
+// EmbedView): a right-click or long press on the shown picture, "⋯" in its viewer. View it on its
+// own (WebPictureViewer; not offered in the viewer itself), store it in the notebook
 // (PageController.downloadWebPictures: an attachment, the link points at it), open its address
 // in the browser, copy the address. Its first line names the site (BMenu shows no title).
 //
-//   WebPictureMenu { host: "example.com"; onChosen: (action) => … }   // "download" | "open" | "copy"
+//   WebPictureMenu { host: "example.com"; onChosen: (action) => … }   // "view" | "download" | "open" | "copy"
 BMenu {
     id: menu
 
     /// The picture's host, shown on the menu's first line.
     property string host
+    /// Offer "Powiększ" (not from the viewer itself).
+    property bool canView: true
 
     signal chosen(string action)
 
@@ -23,6 +26,14 @@ BMenu {
         iconName: "image"
     }
     BMenuSeparator { objectName: "webPictureHostLine" }
+    BMenuItem {
+        objectName: "webPictureView"
+        visible: menu.canView
+        height: visible ? implicitHeight : 0
+        text: qsTr("View picture")
+        iconName: "zoom-in"
+        onTriggered: menu.chosen("view")
+    }
     BMenuItem {
         objectName: "webPictureDownload"
         text: qsTr("Save to notebook")
