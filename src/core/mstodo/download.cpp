@@ -91,8 +91,21 @@ void TodoDownload::warn(const QString &message)
 
 void TodoDownload::fail(const QString &code, const QString &message)
 {
+    // Redacted while the token is still registered: cancel() forgets it.
+    const QString text = logging::redact(message);
     cancel();
-    Q_EMIT failed(code, logging::redact(message));
+    Q_EMIT failed(code, text);
+}
+
+bool TodoDownload::fatal(const sync::HttpResponse &response, bool timeoutFatal)
+{
+    // No network (after the retries), a sign-in that expired, no permission: the next request
+    // would fail the same way, so the download stops instead of going on job by job.
+    const bool lost = response.status == 0 && (timeoutFatal || !response.timedOut);
+    if (!lost && response.status != 401 && response.status != 403)
+        return false;
+    failWith(response);
+    return true;
 }
 
 void TodoDownload::failWith(const sync::HttpResponse &response)
@@ -271,19 +284,19 @@ void TodoDownload::queueTaskDetails(qsizetype index)
                             next();
                         },
                         [this, next](const sync::HttpResponse &response) {
-                            if (response.status == 401 || response.status == 403) {
-                                failWith(response);
+                            if (fatal(response))
                                 return;
-                            }
                             warn(MsTodoMessages::tr("Some steps, links or attachments could not be downloaded."));
                             next();
                         });
             });
         };
-        if (!m_expand && !task.contains(u"checklistItems"_s)) {
+        // Without $expand (refused), or when Graph answered but left the expansion out (an
+        // expanded collection is always there, if empty): task by task.
+        if (!task.contains(u"checklistItems"_s))
             detail(u"checklistItems"_s);
+        if (!task.contains(u"linkedResources"_s))
             detail(u"linkedResources"_s);
-        }
         if (task.value(u"hasAttachments"_s).toBool()) {
             m_jobs.append([this, index, t, taskPath](std::function<void()> next) {
                 collect(
@@ -354,10 +367,10 @@ void TodoDownload::queueTaskDetails(qsizetype index)
                                             (*s)();
                                         },
                                         [this, s = weak.lock()](const sync::HttpResponse &response) {
-                                            if (response.status == 401 || response.status == 403) {
-                                                failWith(response);
+                                            // A large file may take longer than the time limit
+                                            // on a slow line: only that file is left out.
+                                            if (fatal(response, false))
                                                 return;
-                                            }
                                             warn(MsTodoMessages::tr(
                                                     "Some steps, links or attachments could not be downloaded."));
                                             (*s)();
@@ -366,10 +379,8 @@ void TodoDownload::queueTaskDetails(qsizetype index)
                             (*step)();
                         },
                         [this, next](const sync::HttpResponse &response) {
-                            if (response.status == 401 || response.status == 403) {
-                                failWith(response);
+                            if (fatal(response))
                                 return;
-                            }
                             warn(MsTodoMessages::tr("Some steps, links or attachments could not be downloaded."));
                             next();
                         });

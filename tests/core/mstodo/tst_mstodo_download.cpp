@@ -187,6 +187,51 @@ private Q_SLOTS:
                  0);
     }
 
+    void expandIgnored()
+    {
+        // Graph answers 200 but leaves the expanded steps and links out: they come task by task.
+        FakeMicrosoft ms;
+        ms.addSampleData();
+        ms.ignoreExpand = true;
+        const Result r = download(ms);
+        QVERIFY2(r.failedCode.isEmpty(), qPrintable(r.failedMessage));
+        const QJsonObject t1 = taskTitled(listNamed(r.bundle, u"Zadania"_s), u"Zadzwonić do pani Józefy"_s);
+        QCOMPARE(t1.value(u"checklistItems"_s).toArray().size(), 2);
+        QCOMPARE(t1.value(u"linkedResources"_s).toArray().size(), 1);
+        QCOMPARE(requestsMatching(ms, u"/checklistItems"_s), 4);
+        QCOMPARE(requestsMatching(ms, u"/linkedResources"_s), 4);
+        QCOMPARE(r.warnings, QStringList());
+    }
+
+    void networkLostDuringDetails()
+    {
+        // The connection drops once the first list's tasks are there: the download fails at the
+        // first step request (after its retries) instead of trying every task's details.
+        FakeMicrosoft ms;
+        ms.addSampleData();
+        ms.ignoreExpand = true;
+        ms.dropNetworkAfter = 4; // two pages of lists, two pages of tasks
+        const Result r = download(ms);
+        QCOMPARE(r.failedCode, u"network"_s);
+        QVERIFY(r.raw.isEmpty());
+        QCOMPARE(ms.graphRequests(), 4 + 1 + 4); // one step request and its four retries
+    }
+
+    void failureMessageRedacted()
+    {
+        // Graph's error text echoing the token: the shown message has it masked (a personal
+        // account's token is no JWT, only the registered secret catches it).
+        FakeMicrosoft ms;
+        ms.addSampleData();
+        ms.graphStatus = 500;
+        ms.graphErrorMessage = u"Token "_s + ms.accessToken + u" ąę nie pasuje."_s;
+        const Result r = download(ms);
+        QCOMPARE(r.failedCode, u"server"_s);
+        QVERIFY2(!r.failedMessage.contains(ms.accessToken), qPrintable(r.failedMessage));
+        QVERIFY2(r.failedMessage.contains(u"Token ***"_s), qPrintable(r.failedMessage));
+        QVERIFY2(r.failedMessage.contains(u"nie pasuje"_s), qPrintable(r.failedMessage));
+    }
+
     void throttled()
     {
         FakeMicrosoft ms;

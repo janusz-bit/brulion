@@ -48,11 +48,17 @@ public:
     int listPageSize = 1;
     int taskPageSize = 2;
     bool refuseExpand = false;
+    /// $expand is answered 200 but without the expanded collections.
+    bool ignoreExpand = false;
     bool attachmentListHasContent = false;
     /// The first `throttle` Graph requests are answered 429 with Retry-After: 1.
     int throttle = 0;
     /// Answer every Graph request with this status (0 = normally, -1 = no answer at all).
     int graphStatus = 0;
+    /// The error message of those answers.
+    QString graphErrorMessage = QStringLiteral("Something failed.");
+    /// After this many Graph requests every further one gets no answer (-1 = never).
+    int dropNetworkAfter = -1;
     /// Lists that answer 404 (deleted while downloading).
     QStringList missingLists;
     /// The tasks' paging link of this list points to another host.
@@ -73,6 +79,7 @@ private:
     brulion::sync::HttpResponse login(const brulion::sync::HttpRequest &request);
     brulion::sync::HttpResponse graph(const brulion::sync::HttpRequest &request);
     QStringList m_answers;
+    int m_graphSeen = 0;
 };
 
 } // namespace mstodotest

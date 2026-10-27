@@ -163,13 +163,14 @@ HttpResponse FakeMicrosoft::graph(const HttpRequest &request)
 {
     if (request.header("Authorization") != "Bearer " + accessToken.toUtf8())
         return graphError(401, u"InvalidAuthenticationToken"_s, u"Access token is empty."_s);
-    if (graphStatus < 0) {
+    if (graphStatus < 0 || (dropNetworkAfter >= 0 && m_graphSeen >= dropNetworkAfter)) {
         HttpResponse r;
         r.networkError = u"Connection refused"_s;
         return r;
     }
+    ++m_graphSeen;
     if (graphStatus)
-        return graphError(graphStatus, u"ErrorCode"_s, u"Something failed."_s);
+        return graphError(graphStatus, u"ErrorCode"_s, graphErrorMessage);
     if (throttle > 0) {
         --throttle;
         HttpResponse r = graphError(429, u"TooManyRequests"_s, u"Please retry again later."_s);
@@ -208,9 +209,9 @@ HttpResponse FakeMicrosoft::graph(const HttpRequest &request)
         for (int i = skip; i < listTasks.size() && i < skip + size; ++i) {
             QJsonObject task = listTasks[i];
             const QString id = task.value(u"id"_s).toString();
-            if (expand.contains(u"checklistItems"_s))
+            if (expand.contains(u"checklistItems"_s) && !ignoreExpand)
                 task.insert(u"checklistItems"_s, checklistItems.value(id));
-            if (expand.contains(u"linkedResources"_s))
+            if (expand.contains(u"linkedResources"_s) && !ignoreExpand)
                 task.insert(u"linkedResources"_s, linkedResources.value(id));
             page.append(task);
         }

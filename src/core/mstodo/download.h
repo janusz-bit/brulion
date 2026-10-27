@@ -85,6 +85,10 @@ private:
     void finish();
     void fail(const QString &code, const QString &message);
     void failWith(const sync::HttpResponse &response);
+    /// Fails the download (true) when a step's, link's or attachment's request cannot succeed
+    /// later either: no network (a timed-out request too, unless `timeoutFatal` is false),
+    /// sign-in expired, no permission.
+    bool fatal(const sync::HttpResponse &response, bool timeoutFatal = true);
     void warn(const QString &message);
     QUrl graph(const QString &path, const QString &query = {}) const;
     bool isGraphUrl(const QUrl &url) const;
