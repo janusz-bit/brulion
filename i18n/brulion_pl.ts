@@ -8270,7 +8270,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2889"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2967"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -8406,56 +8406,57 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="28"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2853"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="49"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="50"/>
         <source>Nothing to save.</source>
         <translation>Nie ma nic do zapisania.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="61"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="62"/>
         <source>Save to</source>
         <translation>Zapisz w</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="62"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="63"/>
         <source>Today&apos;s journal</source>
         <translation>Dzisiejszy dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="63"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="64"/>
         <source>New pages</source>
         <translation>Nowe strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="63"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="64"/>
         <source>New page</source>
         <translation>Nowa strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="78"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="79"/>
         <source>Page title</source>
         <translation>Tytuł strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="90"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="91"/>
         <source>Shared text</source>
         <translation>Udostępniony tekst</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="140"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="142"/>
         <source>Each file becomes one block at the end of today&apos;s journal.</source>
         <translation>Każdy plik to jeden blok na końcu dzisiejszego dziennika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="141"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="143"/>
         <source>Goes to the end of today&apos;s journal.</source>
         <translation>Trafi na koniec dzisiejszego dziennika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="142"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="144"/>
         <source>New pages go to the notebook&apos;s folder for new pages.</source>
         <translation>Nowe strony trafiają do folderu notatnika na nowe strony.</translation>
     </message>
