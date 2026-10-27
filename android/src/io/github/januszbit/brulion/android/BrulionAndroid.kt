@@ -291,14 +291,15 @@ object BrulionAndroid {
     }
 
   /**
-   * The "Zrobione" taps not handed over yet ([DoneQueue], also those of while Brulion was
-   * closed): a JSON array of `{key, local, path, line, title, day}`, `[]` when none. Forgets
-   * them: each tap is handed out once.
+   * The "Zrobione" taps of notebook [vault] not handed over yet ([DoneQueue], also those of while
+   * Brulion was closed): a JSON array of `{key, local, path, line, title, day, vault}`, `[]` when
+   * none. Forgets them (each tap is handed out once); the taps of other notebooks stay queued.
+   * Empty [vault]: all of them.
    */
   @JvmStatic
-  fun takeDoneRequests(context: Context): String =
+  fun takeDoneRequests(context: Context, vault: String?): String =
     try {
-      DoneQueue.take(context)
+      DoneQueue.take(context, vault ?: "")
     } catch (e: RuntimeException) {
       Log.e(TAG, "takeDoneRequests failed", e)
       "[]"
@@ -539,7 +540,7 @@ object BrulionAndroid {
 
   /**
    * A "Zrobione" tap was queued ([ReminderActions.done], main thread): tells C++ when it listens;
-   * otherwise it takes the queue after its start.
+   * otherwise it takes the queue once a notebook is ready after its start.
    */
   internal fun doneQueued() {
     synchronized(lock) {

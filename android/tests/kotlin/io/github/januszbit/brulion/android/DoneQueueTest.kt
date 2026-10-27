@@ -23,11 +23,12 @@ class DoneQueueTest {
       line = 4,
       key = "0123456789abcdef",
       local = "2026-10-27T09:00",
-      task = true
+      task = true,
+      vault = "notatnik-dom"
     )
 
-  private fun request(key: String, day: String = "2026-10-27") =
-    DoneRequest(key, "2026-10-27T09:00", "Łódź.md", 2, "Zadanie $key", day)
+  private fun request(key: String, day: String = "2026-10-27", vault: String = "") =
+    DoneRequest(key, "2026-10-27T09:00", "Łódź.md", 2, "Zadanie $key", day, vault)
 
   @Test
   fun requestOfAReminderKeepsTheOccurrenceAndTheDayOfTheTap() {
@@ -35,11 +36,20 @@ class DoneQueueTest {
     val snoozed = reminder.copy(at = reminder.at + 600_000L, snoozed = true)
     val done = DoneRequest.of(snoozed, LocalDate.of(2026, 10, 28))
     assertEquals(
-      DoneRequest("0123456789abcdef", "2026-10-27T09:00", "dziennik/2026-10-27.md", 4, "Kupić żółty ser — ąćęłńóśźż", "2026-10-28"),
+      DoneRequest(
+        "0123456789abcdef",
+        "2026-10-27T09:00",
+        "dziennik/2026-10-27.md",
+        4,
+        "Kupić żółty ser — ąćęłńóśźż",
+        "2026-10-28",
+        "notatnik-dom"
+      ),
       done
     )
     val json = done.toJson()
     assertEquals("2026-10-28", json.getString("day"))
+    assertEquals("notatnik-dom", json.getString("vault"))
     assertEquals(done, DoneRequest.fromJson(JSONObject(json.toString())))
   }
 
@@ -53,6 +63,27 @@ class DoneQueueTest {
     val items = DoneQueue.parse(raw)
     assertEquals(listOf("b", "a"), items.map { it.key })
     assertEquals("2026-10-28", items.last().day)
+  }
+
+  @Test
+  fun takeHandsOverOnlyTheReadyNotebooksTaps() {
+    var raw: String? = null
+    raw = DoneQueue.appended(raw, request("dom", vault = "notatnik-dom"))
+    raw = DoneQueue.appended(raw, request("praca", vault = "notatnik-praca"))
+    // Queued from a reminder armed by an older version: no notebook, any one takes it.
+    raw = DoneQueue.appended(raw, request("stary"))
+    // The same occurrence in two notebooks (a shared template): two requests.
+    raw = DoneQueue.appended(raw, request("dom", vault = "notatnik-praca"))
+
+    val (taken, kept) = DoneQueue.split(raw, "notatnik-dom")
+    assertEquals(listOf("dom", "stary"), taken.map { it.key })
+    assertEquals(listOf("notatnik-dom", ""), taken.map { it.vault })
+    // The other notebook's taps wait for it.
+    assertEquals(listOf("praca", "dom"), kept.map { it.key })
+    assertTrue(kept.all { it.vault == "notatnik-praca" })
+    // No notebook named: everything (the self-test).
+    assertEquals(4, DoneQueue.split(raw, "").first.size)
+    assertTrue(DoneQueue.split(null, "notatnik-dom").first.isEmpty())
   }
 
   @Test

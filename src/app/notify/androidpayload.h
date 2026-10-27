@@ -6,12 +6,13 @@
 //     path: vault-relative note, line: 0-based line of the reminder,
 //     key: the occurrence's id (ScheduledNotification::id), local: its wall-clock time
 //     "yyyy-MM-ddTHH:mm" (never derived through UTC: a natively snoozed copy has another `at`),
-//     task: the reminder is on an open task (the notification offers "Zrobione") }
+//     task: the reminder is on an open task (the notification offers "Zrobione"),
+//     vault: the notebook's id (ScheduledNotification::vault) }
 //
 // "Zrobione" tapped in a notification or on the alarm screen is queued by the Kotlin side
 // (DoneQueue.kt) and taken by AndroidBridge::takeDoneRequests() as a JSON array of
 //
-//   { key, local, path, line, title, day: "yyyy-MM-dd" — the local date of the tap }
+//   { key, local, path, line, title, day: "yyyy-MM-dd" — the local date of the tap, vault }
 //
 // androidDoneRequests() turns them into the notifications to complete (Notifier::doneRequested).
 //
@@ -38,7 +39,8 @@ QJsonObject androidReminderItem(const ScheduledNotification &notification);
 /// All reminders, in order; entries without a valid time are left out.
 QJsonArray androidReminderPayload(const QList<ScheduledNotification> &notifications);
 
-/// A "Done" tapped on Android: the notification (id, at, path, line, title) and the day of the tap.
+/// A "Done" tapped on Android: the notification (id, at, path, line, title, vault) and the day of
+/// the tap.
 struct AndroidDoneRequest {
     ScheduledNotification notification;
     QDate day; ///< invalid: not given (completed with today's date)

@@ -12,7 +12,8 @@ import java.time.LocalDate
 /**
  * "Zrobione" tapped for the reminder occurrence [key] at [local] (`yyyy-MM-ddTHH:mm`) of the note
  * [path] (reminder on [line], titled [title]) on [day] (`yyyy-MM-dd`, the phone's local date of
- * the tap: the ✅ date written).
+ * the tap: the ✅ date written) in the notebook [vault] (empty: not known — armed by an older
+ * version).
  */
 internal data class DoneRequest(
   val key: String,
@@ -20,7 +21,8 @@ internal data class DoneRequest(
   val path: String,
   val line: Int,
   val title: String,
-  val day: String
+  val day: String,
+  val vault: String = ""
 ) {
   fun toJson(): JSONObject =
     JSONObject()
@@ -30,10 +32,19 @@ internal data class DoneRequest(
       .put("line", line)
       .put("title", title)
       .put("day", day)
+      .put("vault", vault)
 
   companion object {
     fun of(reminder: Reminder, day: LocalDate): DoneRequest =
-      DoneRequest(reminder.key, reminder.local, reminder.path, reminder.line, reminder.title, day.toString())
+      DoneRequest(
+        reminder.key,
+        reminder.local,
+        reminder.path,
+        reminder.line,
+        reminder.title,
+        day.toString(),
+        reminder.vault
+      )
 
     /** Null when the occurrence or the note is missing. */
     fun fromJson(json: JSONObject): DoneRequest? {
@@ -44,7 +55,8 @@ internal data class DoneRequest(
           path = json.optString("path", ""),
           line = json.optInt("line", 0),
           title = json.optString("title", ""),
-          day = json.optString("day", "")
+          day = json.optString("day", ""),
+          vault = json.optString("vault", "")
         )
       return request.takeIf { it.key.isNotEmpty() && it.local.isNotEmpty() && it.path.isNotEmpty() }
     }
@@ -55,8 +67,10 @@ internal data class DoneRequest(
  * The "Zrobione" taps C++ has not taken yet. A notification button runs in a BroadcastReceiver,
  * usually while Qt is not running, and the Markdown is edited by C++ only (one parser): the tap is
  * persisted here and handed over through `BrulionAndroid.takeDoneRequests` — at once when the app
- * runs ([BrulionAndroid.doneQueued]), else at its next start. Under [AlarmScheduler.lock] (receivers
- * run on the main thread, C++ takes the queue on Qt's).
+ * runs with the tap's notebook ready ([BrulionAndroid.doneQueued]), else once it is (the next
+ * start, the notebook opened): C++ takes only the taps it writes right away, so none is lost when
+ * the process ends first. Under [AlarmScheduler.lock] (receivers run on the main thread, C++ takes
+ * the queue on Qt's).
  */
 internal object DoneQueue {
   /** More taps than this before Brulion runs again: the oldest go. */
@@ -74,22 +88,39 @@ internal object DoneQueue {
     }
   }
 
-  /** The queued requests as a JSON array (`[]` when none), emptying the queue. */
+  /**
+   * The queued requests of notebook [vault] (see [split]) as a JSON array (`[]` when none),
+   * removed from the queue; the others stay.
+   */
   @SuppressLint("ApplySharedPref")
-  fun take(context: Context): String =
+  fun take(context: Context, vault: String = ""): String =
     synchronized(AlarmScheduler.lock) {
       val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-      val raw = prefs.getString(KEY_QUEUE, null)
-      if (raw != null) prefs.edit().remove(KEY_QUEUE).commit()
-      toJson(parse(raw))
+      val raw = prefs.getString(KEY_QUEUE, null) ?: return "[]"
+      val (taken, kept) = split(raw, vault)
+      val edit = prefs.edit()
+      if (kept.isEmpty()) edit.remove(KEY_QUEUE) else edit.putString(KEY_QUEUE, toJson(kept))
+      edit.commit()
+      toJson(taken)
     }
+
+  /**
+   * The requests of [raw] for notebook [vault] — and those without a notebook (queued from a
+   * reminder armed by an older version) — and the rest, which wait for their notebook. Empty
+   * [vault]: every request. Broken entries are dropped.
+   */
+  fun split(raw: String?, vault: String): Pair<List<DoneRequest>, List<DoneRequest>> =
+    parse(raw).partition { vault.isEmpty() || it.vault.isEmpty() || it.vault == vault }
 
   /**
    * [raw] with [request] appended: broken entries dropped, an earlier tap of the same occurrence
    * replaced (the notification and its alarm screen), at most [max] entries (the newest).
    */
   fun appended(raw: String?, request: DoneRequest, max: Int = MAX_ENTRIES): String {
-    val items = parse(raw).filterNot { it.key == request.key && it.local == request.local } + request
+    val items =
+      parse(raw).filterNot {
+        it.key == request.key && it.local == request.local && it.vault == request.vault
+      } + request
     return toJson(items.takeLast(max.coerceAtLeast(1)))
   }
 

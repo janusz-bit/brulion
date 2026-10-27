@@ -297,13 +297,14 @@ Activation AndroidBridge::takeActivation()
     return {object.value("path"_L1).toString(), object.value("line"_L1).toInt()};
 }
 
-QJsonArray AndroidBridge::takeDoneRequests()
+QJsonArray AndroidBridge::takeDoneRequests(const QString &vault)
 {
     const QJniObject context = appContext();
     if (!context.isValid())
         return {};
     const QJniObject answer = QJniObject::callStaticObjectMethod(
-            kClass, "takeDoneRequests", "(Landroid/content/Context;)Ljava/lang/String;", context.object());
+            kClass, "takeDoneRequests", "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
+            context.object(), QJniObject::fromString(vault).object<jstring>());
     if (failed("takeDoneRequests") || !answer.isValid())
         return {};
     return QJsonDocument::fromJson(answer.toString().toUtf8()).array();

@@ -266,7 +266,9 @@ private Q_SLOTS:
         QSignalSpy snoozed(&notifier, &Notifier::snoozeRequested);
         QSignalSpy activated(&notifier, &Notifier::activated);
 
-        notifier.showNow(taskReminder());
+        ScheduledNotification task = taskReminder();
+        task.vault = u"/home/ewa/Zeszyt ąę"_s; // stamped by the shell, handed back with the action
+        notifier.showNow(task);
         const uint id = bus->nextId;
         bus->invoke(4711, u"done"_s); // another program's notification
         QVERIFY(done.isEmpty());
@@ -276,6 +278,7 @@ private Q_SLOTS:
         const ScheduledNotification n = qvariant_cast<ScheduledNotification>(done.first().at(0));
         QCOMPARE(n.id, taskReminder().id);
         QCOMPARE(n.taskLine, 2);
+        QCOMPARE(n.vault, task.vault);
         QVERIFY(!done.first().at(1).toDate().isValid()); // today's date, chosen by the shell
         QCOMPARE(bus->closed, (QList<uint>{id}));
         QCOMPARE(notifier.shownCount(), 0);
@@ -772,6 +775,10 @@ private Q_SLOTS:
         const QJsonObject item = androidReminderItem(task);
         QCOMPARE(item.value(u"task"_s).toBool(), true);
         QCOMPARE(item.value(u"local"_s).toString(), u"2026-10-25T02:30"_s);
+        // The notebook (stamped by the shell): Android keeps a tap queued until it is open.
+        QCOMPARE(first.value(u"vault"_s).toString(), QString());
+        task.vault = u"/home/ewa/Notatki-źródła"_s;
+        QCOMPARE(androidReminderItem(task).value(u"vault"_s).toString(), u"/home/ewa/Notatki-źródła"_s);
     }
 
     void androidDoneRequestsParsed()
@@ -782,7 +789,8 @@ private Q_SLOTS:
                             {u"path"_s, u"dziennik/Łódź.md"_s},
                             {u"line"_s, 4},
                             {u"title"_s, u"Zapłacić za źródło wody"_s},
-                            {u"day"_s, u"2026-10-26"_s}},
+                            {u"day"_s, u"2026-10-26"_s},
+                            {u"vault"_s, u"zeszyt-ąę"_s}},
                 // No day (or a broken one): completed with today's date.
                 QJsonObject{{u"key"_s, u"k2"_s},
                             {u"local"_s, u"2026-10-14T09:00"_s},
@@ -806,12 +814,15 @@ private Q_SLOTS:
         QCOMPARE(n.line, 4);
         QCOMPARE(n.title, u"Zapłacić za źródło wody"_s);
         QCOMPARE(requests.at(0).day, QDate(2026, 10, 26));
+        QCOMPARE(n.vault, u"zeszyt-ąę"_s);
         QCOMPARE(requests.at(1).notification.line, 0);
+        QCOMPARE(requests.at(1).notification.vault, QString()); // queued by an older version
         QVERIFY(!requests.at(1).day.isValid());
         QVERIFY(androidDoneRequests({}).isEmpty());
 
         // What the payload sends comes back as the same occurrence.
-        const ScheduledNotification task = taskReminder();
+        ScheduledNotification task = taskReminder();
+        task.vault = u"zeszyt-ąę"_s;
         QJsonObject tapped = androidReminderItem(task);
         tapped.insert(u"day"_s, u"2026-10-14"_s);
         const AndroidDoneRequest back = androidDoneRequests({tapped}).value(0);
@@ -819,6 +830,7 @@ private Q_SLOTS:
         QCOMPARE(back.notification.at, task.at);
         QCOMPARE(back.notification.path, task.path);
         QCOMPARE(back.notification.line, task.line);
+        QCOMPARE(back.notification.vault, task.vault);
     }
 
     void soundChoiceKeys()

@@ -108,10 +108,12 @@ public:
     /**
      * The "Zrobione" taps on reminder notifications and the alarm screen not handed over yet
      * (queued by DoneQueue.kt — while Brulion was closed, too): a JSON array of
-     * `{key, local, path, line, title, day}` (src/app/notify/androidpayload.h). Each tap is
-     * handed out once; doneRequestsQueued() says when there are new ones.
+     * `{key, local, path, line, title, day, vault}` (src/app/notify/androidpayload.h). Only the
+     * taps of notebook @p vault (and those without one: reminders armed by an older version);
+     * the others stay queued. Empty @p vault: all. Each tap is handed out once;
+     * doneRequestsQueued() says when there may be new ones.
      */
-    QJsonArray takeDoneRequests();
+    QJsonArray takeDoneRequests(const QString &vault = {});
 
     /**
      * Saves @p data as @p name in the public Download folder through MediaStore (Android 10+,

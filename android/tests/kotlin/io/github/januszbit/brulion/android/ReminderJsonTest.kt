@@ -36,7 +36,8 @@ class ReminderJsonTest {
 
   @Test
   fun occurrenceKeyAndTaskRoundTrip() {
-    val task = alarm.copy(key = "0123456789abcdef", local = "2026-10-25T02:30", task = true)
+    val task =
+      alarm.copy(key = "0123456789abcdef", local = "2026-10-25T02:30", task = true, vault = "zeszyt-ąę")
     assertTrue(task.canComplete)
     assertEquals(task, Reminder.fromJson(JSONObject(task.toJson().toString())))
     // Snoozing keeps the occurrence: "Zrobione" on the snoozed notification completes the same task.
@@ -61,6 +62,7 @@ class ReminderJsonTest {
     assertEquals(Reminder(3, "Budzik", "", 1_792_000_000_000L, true, "a.md", 4), reminder)
     assertEquals("", reminder.key)
     assertFalse(reminder.task)
+    assertEquals("", reminder.vault)
   }
 
   @Test

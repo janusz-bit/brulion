@@ -35,6 +35,8 @@ public:
     NotificationSink *target = nullptr;
     QPointer<QObject> lifetime;
     bool guarded = false;
+    /// Vault::id() of the attached notebook, stamped on everything handed to the platform.
+    QString vault;
 
     NotificationSink *live() const
     {
@@ -49,13 +51,21 @@ public:
     }
     void schedule(const QList<ScheduledNotification> &notifications) override
     {
-        if (NotificationSink *t = live())
-            t->schedule(notifications);
+        NotificationSink *t = live();
+        if (!t)
+            return;
+        QList<ScheduledNotification> stamped = notifications;
+        for (ScheduledNotification &n : stamped)
+            n.vault = vault;
+        t->schedule(stamped);
     }
     void showNow(const ScheduledNotification &notification) override
     {
-        if (NotificationSink *t = live())
-            t->showNow(notification);
+        if (NotificationSink *t = live()) {
+            ScheduledNotification stamped = notification;
+            stamped.vault = vault;
+            t->showNow(stamped);
+        }
     }
 };
 
@@ -107,14 +117,21 @@ void WorkspaceReminders::attach(Vault *vault, VaultIndex *index)
     detach();
     m_vault = vault;
     m_index = index;
+    m_proxy->vault = vault ? vault->id() : QString();
 }
 
 void WorkspaceReminders::detach()
 {
+    const bool wasTarget = !doneTarget().isEmpty();
     m_wantRunning = false;
     stopScheduler();
     m_vault = nullptr;
     m_index = nullptr;
+    m_proxy->vault.clear();
+    // Requests of this notebook that waited for its index (another notebook must not get them).
+    m_pendingDone.clear();
+    if (wasTarget)
+        Q_EMIT doneTargetChanged();
 }
 
 void WorkspaceReminders::start()
@@ -129,6 +146,13 @@ void WorkspaceReminders::start()
         for (const auto &[notification, day] : pending)
             applyCompletion(notification, day);
     }
+    // The platform may hand over the requests it kept for this notebook now (Android).
+    Q_EMIT doneTargetChanged();
+}
+
+QString WorkspaceReminders::doneTarget() const
+{
+    return m_wantRunning && m_vault && m_index ? m_vault->id() : QString();
 }
 
 void WorkspaceReminders::startScheduler()
@@ -379,39 +403,31 @@ bool WorkspaceReminders::snoozeNotification(const ScheduledNotification &notific
 {
     if (!m_vault || !m_index || notification.path.isEmpty())
         return false;
-    const int length = minutes > 0 ? std::min(minutes, 24 * 60) : m_snoozeMinutes;
-    // The note may have changed since the notification was made: find the occurrence again
-    // (same id = same text and time) for its current line. Not found: the reminder was edited,
-    // moved to another time, completed or deleted meanwhile — its old line may now hold another
-    // reminder, which must not be moved instead.
-    ScheduledNotification target = notification;
-    if (notification.at.isValid()) {
-        bool found = false;
-        for (const ScheduledNotification &n : notificationsBetween(*m_index, notification.at, notification.at)) {
-            if (n.id == notification.id) {
-                target = n;
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            qCInfo(lcReminders) << "Not snoozed: the reminder changed in" << notification.path;
-            Q_EMIT errorOccurred(tr("“%1” has changed in the note meanwhile and was not snoozed.").arg(notification.title));
-            return false;
-        }
-    }
-    bool ok = false;
-    const QString content = m_vault->readText(target.path, &ok);
-    if (!ok)
+    if (foreign(notification)) {
+        Q_EMIT errorOccurred(tr("“%1” is in another notebook and was not snoozed.").arg(notification.title));
         return false;
+    }
+    const int length = minutes > 0 ? std::min(minutes, 24 * 60) : m_snoozeMinutes;
     QDateTime when = now().addSecs(qint64(length) * 60);
     when.setTime(QTime(when.time().hour(), when.time().minute()));
-    const QString edited = snoozeReminder(content, target.line, when);
-    if (edited == content) {
+    ScheduledNotification target;
+    switch (editOccurrence(
+            notification,
+            [&](const QString &content, const ScheduledNotification &n) {
+                return snoozeReminder(content, n.line, when);
+            },
+            &target)) {
+    case EditResult::Written: break;
+    case EditResult::Gone:
+        // Edited, moved to another time, completed or deleted meanwhile — its old line may now
+        // hold another reminder, which must not be moved instead.
+        qCInfo(lcReminders) << "Not snoozed: the reminder changed in" << notification.path;
+        Q_EMIT errorOccurred(tr("“%1” has changed in the note meanwhile and was not snoozed.").arg(notification.title));
+        return false;
+    case EditResult::Unchanged:
         qCInfo(lcReminders) << "Nothing to snooze at" << target.path << target.line;
         return false;
-    }
-    if (!m_vault->writeText(target.path, edited, ChangeSource::User)) {
+    case EditResult::Failed:
         Q_EMIT errorOccurred(tr("Could not snooze the reminder: %1").arg(m_vault->errorString()));
         return false;
     }
@@ -428,9 +444,13 @@ bool WorkspaceReminders::complete(const QString &id)
 
 bool WorkspaceReminders::completeNotification(const ScheduledNotification &notification, QDate day)
 {
+    if (!m_vault || !m_index) {
+        Q_EMIT errorOccurred(tr("“%1” was not marked done: no notebook is open.").arg(notification.title));
+        return false;
+    }
     if (!m_wantRunning) {
-        // The index is not complete yet (or no vault is open): a half-built index must not answer
-        // "changed meanwhile". Applied by start().
+        // The index is not complete yet: a half-built index must not answer "changed
+        // meanwhile". Applied by start().
         qCInfo(lcReminders) << "Done request kept until the notebook is ready:" << notification.path;
         m_pendingDone.append({notification, day});
         return true;
@@ -449,39 +469,86 @@ std::optional<ScheduledNotification> WorkspaceReminders::current(const Scheduled
     return std::nullopt;
 }
 
+bool WorkspaceReminders::foreign(const ScheduledNotification &notification) const
+{
+    return !notification.vault.isEmpty() && m_vault && notification.vault != m_vault->id();
+}
+
+WorkspaceReminders::EditResult
+WorkspaceReminders::editOccurrence(const ScheduledNotification &notification,
+                                   const std::function<QString(const QString &, const ScheduledNotification &)> &edit,
+                                   ScheduledNotification *target)
+{
+    // The second round runs after the first write found the file changed behind the index's back
+    // (the vault took the change in, the index followed it); a third mismatch in a row is
+    // reported as a changed note.
+    for (int round = 0; round < 2; ++round) {
+        // Found again by id (same text and time) for its current line. Not found: the reminder
+        // was edited, moved, its task completed (here or on another device) or deleted.
+        const std::optional<ScheduledNotification> found = current(notification);
+        if (!found)
+            return EditResult::Gone;
+        *target = *found;
+        // The file must exist and be readable: writeTextIfUnchanged() would create a deleted one.
+        bool ok = false;
+        m_vault->readText(found->path, &ok);
+        if (!ok)
+            return EditResult::Failed;
+        const QString indexed = m_index->content(found->path);
+        const QString edited = edit(indexed, *found);
+        if (edited == indexed)
+            return EditResult::Unchanged;
+        switch (m_vault->writeTextIfUnchanged(found->path, edited, indexed, ChangeSource::User)) {
+        case WriteOutcome::Written: return EditResult::Written;
+        case WriteOutcome::Failed: return EditResult::Failed;
+        case WriteOutcome::Changed:
+            qCInfo(lcReminders) << "Note changed behind the index, looking the reminder up again:" << found->path;
+            break;
+        }
+    }
+    return EditResult::Gone;
+}
+
 bool WorkspaceReminders::applyCompletion(const ScheduledNotification &notification, QDate day)
 {
-    if (!m_vault || !m_index || notification.path.isEmpty())
+    // Every way out says why: the platform closed the notification already, a silent failure
+    // would leave the user believing the task is done.
+    if (!m_vault || !m_index) {
+        Q_EMIT errorOccurred(tr("“%1” was not marked done: no notebook is open.").arg(notification.title));
         return false;
-    // Found again by id (same text and time) for the task's current line. Not found: the
-    // reminder was edited, moved, its task completed (here or on another device) or deleted —
-    // the old line may now hold another task, which must not be completed instead.
-    const std::optional<ScheduledNotification> target = current(notification);
-    if (!target) {
+    }
+    if (foreign(notification)) {
+        qCInfo(lcReminders) << "Not marked done: a notification of another notebook," << notification.path;
+        Q_EMIT errorOccurred(tr("“%1” is in another notebook and was not marked done.").arg(notification.title));
+        return false;
+    }
+    const QDate doneDay = day.isValid() ? day : now().date();
+    ScheduledNotification target;
+    const EditResult result = editOccurrence(
+            notification,
+            [&](const QString &content, const ScheduledNotification &n) {
+                // Not on a task (any more): nothing to complete. A notification offers "Done" only
+                // for a task's reminder.
+                return n.taskLine < 0 ? content
+                                      : markdown::setTaskStatus(content, n.taskLine, TaskStatus::Done, doneDay);
+            },
+            &target);
+    switch (result) {
+    case EditResult::Written: break;
+    case EditResult::Gone:
+    case EditResult::Unchanged:
+        // The old line may now hold another task, which must not be completed instead.
         qCInfo(lcReminders) << "Not marked done: the reminder changed in" << notification.path;
         Q_EMIT errorOccurred(
                 tr("“%1” has changed in the note meanwhile and was not marked done.").arg(notification.title));
         return false;
-    }
-    if (target->taskLine < 0)
-        return false; // not a task (a notification never offers "Done" for one)
-    bool ok = false;
-    const QString content = m_vault->readText(target->path, &ok);
-    if (!ok)
-        return false;
-    const QDate doneDay = day.isValid() ? day : now().date();
-    const QString edited = markdown::setTaskStatus(content, target->taskLine, TaskStatus::Done, doneDay);
-    if (edited == content) {
-        qCInfo(lcReminders) << "Nothing to mark done at" << target->path << target->taskLine;
-        return false;
-    }
-    if (!m_vault->writeText(target->path, edited, ChangeSource::User)) {
+    case EditResult::Failed:
         Q_EMIT errorOccurred(tr("Could not mark the task done: %1").arg(m_vault->errorString()));
         return false;
     }
     if (m_scheduler)
         m_scheduler->dismissMissed(notification.id);
-    Q_EMIT taskCompleted(target->title);
+    Q_EMIT taskCompleted(target.title);
     return true;
 }
 

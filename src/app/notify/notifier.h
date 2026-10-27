@@ -56,6 +56,12 @@ public:
     /// The set last handed to schedule().
     QList<ScheduledNotification> scheduled() const { return m_scheduled; }
 
+    /// The notebook (Vault::id()) whose "Done" requests the shell applies now; empty: none (no
+    /// notebook, still indexing, reminders paused) — WorkspaceReminders::doneTarget(). Android
+    /// hands its queued taps over only then, and only that notebook's (the others stay queued);
+    /// the desktop notifiers ignore it.
+    virtual void setDoneTarget(const QString &vault) { (void)vault; }
+
     // NotificationSink: schedule() remembers the set (subclasses arm it); showNow() is theirs.
     void schedule(const QList<ScheduledNotification> &notifications) override;
 

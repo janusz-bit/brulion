@@ -87,6 +87,13 @@ void wireReminders(AppController *app)
     QObject::connect(
             notifier, &notify::Notifier::doneRequested, reminders,
             [reminders](const ScheduledNotification &n, QDate day) { reminders->completeNotification(n, day); });
+    // Android keeps its queued taps until their notebook is ready to write them.
+    const auto doneTarget = [reminders, guard] {
+        if (guard)
+            guard->setDoneTarget(reminders->doneTarget());
+    };
+    QObject::connect(reminders, &WorkspaceReminders::doneTargetChanged, notifier, doneTarget);
+    doneTarget();
     // The confirmation (also of the missed banner's "Done"): after a cold start on Android the
     // only sign that the queued tap was written.
     QObject::connect(reminders, &WorkspaceReminders::taskCompleted, app, [app](const QString &title) {

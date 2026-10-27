@@ -15045,32 +15045,32 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="93"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="100"/>
         <source>“%1” marked done</source>
         <translation>„%1” — zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="122"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="129"/>
         <source>The browser does not allow notifications for Brulion.</source>
         <translation>Przeglądarka nie zezwala Brulionowi na powiadomienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="125"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="132"/>
         <source>Notifications are turned off for Brulion in Android&apos;s settings.</source>
         <translation>Powiadomienia Brulionu są wyłączone w ustawieniach Androida.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="128"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="135"/>
         <source>No notification service or system tray on this desktop: reminders appear only inside Brulion.</source>
         <translation>Na tym pulpicie nie ma usługi powiadomień ani zasobnika systemowego: przypomnienia pojawiają się tylko w Brulionie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="136"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="143"/>
         <source>A test notification will appear in a few seconds.</source>
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="209"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="216"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n notatka zmieniła się jednocześnie na dwóch urządzeniach. Zachowano obie wersje: scal je w centrum synchronizacji.</numerusform>
@@ -15082,22 +15082,38 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceReminders</name>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="399"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="407"/>
+        <source>“%1” is in another notebook and was not snoozed.</source>
+        <translation>„%1” jest w innym notatniku, więc nie zostało odłożone.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="425"/>
         <source>“%1” has changed in the note meanwhile and was not snoozed.</source>
         <translation>„%1” zmieniło się w międzyczasie w notatce, więc nie zostało odłożone.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="415"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="431"/>
         <source>Could not snooze the reminder: %1</source>
         <translation>Nie udało się odłożyć przypomnienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="463"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="448"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="517"/>
+        <source>“%1” was not marked done: no notebook is open.</source>
+        <translation>Nie oznaczono „%1” jako zrobione: żaden notatnik nie jest otwarty.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="522"/>
+        <source>“%1” is in another notebook and was not marked done.</source>
+        <translation>„%1” jest w innym notatniku, więc nie zostało oznaczone jako zrobione.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="543"/>
         <source>“%1” has changed in the note meanwhile and was not marked done.</source>
         <translation>„%1” zmieniło się w międzyczasie w notatce, więc nie zostało oznaczone jako zrobione.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="479"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="546"/>
         <source>Could not mark the task done: %1</source>
         <translation>Nie udało się oznaczyć zadania jako zrobionego: %1</translation>
     </message>

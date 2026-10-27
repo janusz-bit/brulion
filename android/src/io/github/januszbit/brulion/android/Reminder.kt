@@ -43,7 +43,7 @@ internal object Actions {
 
 /**
  * One native reminder. The C++ side (`AndroidBridge::scheduleReminders`) sends them as a JSON
- * array of `{id, title, body, at, alarm, ringMinutes, path, line, key, local, task}`; the same
+ * array of `{id, title, body, at, alarm, ringMinutes, path, line, key, local, task, vault}`; the same
  * JSON (plus `snoozed`) is the persisted form.
  *
  * [at] is epoch ms. [ringMinutes] (alarms only) is how long the alarm rings before it turns into
@@ -51,7 +51,8 @@ internal object Actions {
  * reminder re-armed natively by "Drzemka 10 min": the app does not know about it, so it
  * survives `scheduleReminders` replacing the set. [key] is the occurrence's id in Brulion and
  * [local] its wall-clock time (`yyyy-MM-ddTHH:mm`, unchanged by a snooze): with them "Zrobione"
- * names the occurrence whose [task] (the reminder is on an open task) is to be completed.
+ * names the occurrence whose [task] (the reminder is on an open task) is to be completed in the
+ * notebook [vault] (its id in Brulion; empty when armed by an older version).
  */
 internal data class Reminder(
   val id: Int,
@@ -65,7 +66,8 @@ internal data class Reminder(
   val ringMinutes: Int = RingTimeout.DEFAULT_MINUTES,
   val key: String = "",
   val local: String = "",
-  val task: Boolean = false
+  val task: Boolean = false,
+  val vault: String = ""
 ) {
   /** The notification and the alarm screen offer "Zrobione". */
   val canComplete: Boolean
@@ -85,6 +87,7 @@ internal data class Reminder(
     json.put("key", key)
     json.put("local", local)
     json.put("task", task)
+    json.put("vault", vault)
     return json
   }
 
@@ -109,7 +112,8 @@ internal data class Reminder(
           // Absent (stored by an older version): no "Zrobione".
           key = json.optString("key", ""),
           local = json.optString("local", ""),
-          task = json.optBoolean("task", false)
+          task = json.optBoolean("task", false),
+          vault = json.optString("vault", "")
         )
       } catch (e: JSONException) {
         null

@@ -98,8 +98,10 @@ dzwoni jak budzik. Składnia: `docs/SYNTAX.md`.
   razu, gdy Brulion działa (także w tle), a przy zamkniętej aplikacji — przy jej następnym
   uruchomieniu, gdy notatnik jest już wczytany (komunikat „… — zrobione”); data `✅` to dzień
   stuknięcia. Do tego czasu inne urządzenia widzą zadanie jako otwarte, a pozostałe przypomnienia
-  tego zadania mogą jeszcze zadzwonić. Gdy przypomnienie albo zadanie zmieniło się w międzyczasie
-  (także na innym urządzeniu), notatka zostaje bez zmian, a Brulion o tym mówi.
+  tego zadania mogą jeszcze zadzwonić. Stuknięcie czeka w telefonie, aż jego notatnik będzie
+  otwarty i wczytany — także gdy Brulion zamkniesz przed końcem wczytywania albo otworzysz
+  najpierw inny notatnik (np. dokumentację). Gdy przypomnienie albo zadanie zmieniło się
+  w międzyczasie (także na innym urządzeniu), notatka zostaje bez zmian, a Brulion o tym mówi.
 * **Po restarcie** telefonu (po pierwszym odblokowaniu), po aktualizacji aplikacji i po zmianie
   godziny przypomnienia są nastawiane ponownie. Te, które przypadły, gdy telefon był wyłączony
   (do 24 godzin wstecz), pojawią się od razu jako „Przegapione”.
@@ -771,7 +773,7 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | `bool canUseFullScreenIntent()` / `void requestFullScreenIntent()` | `canUseFullScreenIntent(Context)` / `requestFullScreenIntent(Context)` |
 | `ScheduleResult scheduleReminders(const QJsonArray &)` | `scheduleReminders(Context, String): String` — `{"scheduled":n,"exact":b}` albo `{"error":…}` |
 | `Activation takeActivation()` | `takeActivation(Context): String` — `{"path":…,"line":n}` albo `{}` |
-| `QJsonArray takeDoneRequests()` | `takeDoneRequests(Context): String` — kolejka „Zrobione” (`DoneQueue.kt`): `[{key, local, path, line, title, day}, …]`, opróżniana |
+| `QJsonArray takeDoneRequests(vault)` | `takeDoneRequests(Context, String): String` — kolejka „Zrobione” (`DoneQueue.kt`): `[{key, local, path, line, title, day, vault}, …]` notatnika `vault` (i wpisy bez notatnika), wydane wpisy znikają z kolejki, pozostałe czekają; pusty `vault` — wszystkie |
 | `static DocumentsResult documentInfo(const QString &uri)` | `documentInfo(Context, String): String` — `{uri, name, dir, size, virtual}` albo `{"error":…}` |
 | `static DocumentsResult listDocuments(const QString &folderUri)` | `listDocuments(Context, String): String` — `{"documents":[…]}` albo `{"error":…}` |
 | `QJsonObject setReminderSounds(const QJsonObject &)` | `setReminderSounds(Context, String): String` — `{"reminderChannel", "alarmChannel"}` albo `{"error":…}` |
@@ -822,14 +824,22 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
     z „Ostatnich” są pomijane.
 * **„Zrobione”** — przycisk działa w `BroadcastReceiver`, zwykle bez uruchomionego Qt, a Markdown
   zmienia tylko C++ (jeden parser): `ReminderActions.done` zamyka powiadomienie (jak „OK”), usuwa
-  natywną drzemkę tego przypomnienia i dopisuje `{key, local, path, line, title, day}` (`day` —
-  lokalna data stuknięcia) do kolejki w SharedPreferences (`DoneQueue`, najwyżej 100 wpisów,
-  ponowne stuknięcie tego samego wystąpienia zastępuje wpis, zapis `commit()`), potem woła
-  `nativeDoneQueued`, jeśli C++ słucha. `AndroidNotifier` odbiera kolejkę
-  (`takeDoneRequests()`) po tym sygnale, raz po starcie i przy powrocie na pierwszy plan,
-  i przekazuje ją jako `Notifier::doneRequested`; `WorkspaceReminders` trzyma prośby do
-  zakończenia indeksowania, odnajduje wystąpienie po `key` i `local` i zapisuje
-  `markdown::setTaskStatus(…, Done, day)`.
+  natywną drzemkę tego przypomnienia i dopisuje `{key, local, path, line, title, day, vault}`
+  (`day` — lokalna data stuknięcia, `vault` — id notatnika, `Vault::id()`, z danych przypomnienia)
+  do kolejki w SharedPreferences (`DoneQueue`, najwyżej 100 wpisów, ponowne stuknięcie tego
+  samego wystąpienia zastępuje wpis, zapis `commit()`), potem woła `nativeDoneQueued`, jeśli C++
+  słucha. `AndroidNotifier` odbiera kolejkę (`takeDoneRequests(vault)`) tylko wtedy, gdy notatnik
+  jest gotowy (`Notifier::setDoneTarget` z `WorkspaceReminders::doneTarget()`: od `start()` po
+  pełnym indeksowaniu do zamknięcia notatnika; notatnik z wstrzymanymi przypomnieniami, np.
+  dokumentacja, nie odbiera nic): przy jego gotowości, po sygnale i przy powrocie na pierwszy
+  plan — i tylko wpisy tego notatnika (oraz wpisy bez `vault`, ze starszej wersji); pozostałe
+  zostają w kolejce. Prośby idą jako `Notifier::doneRequested` i są od razu zapisywane: żadna nie
+  wisi tylko w pamięci, więc zakończenie procesu przed wczytaniem notatnika niczego nie gubi.
+  `WorkspaceReminders` odnajduje wystąpienie po `key` i `local` w indeksie, zmienia jego treść
+  (`markdown::setTaskStatus(…, Done, day)`) i zapisuje ją tylko wtedy, gdy plik wciąż ją zawiera
+  (`Vault::writeTextIfUnchanged`); zmianę innego programu, której skan jeszcze nie widział
+  (Syncthing w tle, zapis na miejscu), najpierw przyjmuje i szuka wystąpienia ponownie — numer
+  wiersza z nieaktualnego indeksu nigdy nie trafia w inny wiersz.
 * `nativeActivated` jest wołana w głównym wątku Androida; C++ tylko kolejkuje emisję sygnału.
   Destruktor `AndroidBridge` woła `detach()` (czeka na blokadę), dopiero potem zeruje wskaźnik.
 

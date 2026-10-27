@@ -131,9 +131,16 @@ public:
     /// Same for a notification the platform handed back: the occurrence is looked up again by id
     /// (its task's line may have moved; not found — edited, moved, completed elsewhere or deleted
     /// meanwhile — errorOccurred() and false). ✅ `day` (invalid: today; Android: the day of the
-    /// tap). Before start() (the index is not complete yet: an Android tap queued while Brulion
-    /// was closed) the request is kept and applied by start(); then it returns true.
+    /// tap). Before start() (the index is not complete yet) the request is kept and applied by
+    /// start(), then it returns true; detach() forgets such requests. A notification of another
+    /// notebook (`vault` set and not this one's id) is refused. Every failure is reported by
+    /// errorOccurred(): the platform has closed the notification already.
     bool completeNotification(const ScheduledNotification &notification, QDate day = {});
+    /// The id (Vault::id()) of the notebook whose "Done" requests are applied right away: set
+    /// from start() to detach(), empty otherwise (no notebook, still indexing, reminders paused).
+    /// The shell hands it to the notifier (Notifier::setDoneTarget(): Android keeps the taps
+    /// queued while Brulion was closed until their notebook is ready). doneTargetChanged().
+    QString doneTarget() const;
     /// Show a notification now through the sink (the settings page's test notification).
     bool sendTestNotification(const QString &title, const QString &body);
 
@@ -154,6 +161,7 @@ Q_SIGNALS:
     void errorOccurred(const QString &message);
     /// A task was marked done from a notification or the missed banner (its reminder's title).
     void taskCompleted(const QString &title);
+    void doneTargetChanged();
 
 private:
     class Proxy;
@@ -163,6 +171,24 @@ private:
     std::optional<ScheduledNotification> find(const QString &id) const;
     /// The occurrence `notification` names, as the index has it now (nullopt: gone or changed).
     std::optional<ScheduledNotification> current(const ScheduledNotification &notification) const;
+    enum class EditResult {
+        Written,   ///< the note holds the edit
+        Gone,      ///< the occurrence is not in the note any more (edited, moved, deleted)
+        Unchanged, ///< the edit changes nothing at the occurrence
+        Failed,    ///< the note cannot be read or written (Vault::errorString())
+    };
+    /// Apply `edit` (content and the occurrence as the content has it → new content) to the
+    /// note of `notification`'s occurrence, looked up again by id. The edit works on the content
+    /// the index has and is written only when the file still holds it (compare-and-swap): another
+    /// program's change the vault has not taken in yet (an in-place save, a sync while Brulion
+    /// was in the background) is taken in first and the occurrence looked up again in it — a
+    /// line number from a stale index never lands on another line. `target` receives the
+    /// occurrence edited.
+    EditResult editOccurrence(const ScheduledNotification &notification,
+                              const std::function<QString(const QString &, const ScheduledNotification &)> &edit,
+                              ScheduledNotification *target);
+    /// The notification belongs to another notebook than the open one.
+    bool foreign(const ScheduledNotification &notification) const;
     bool applyCompletion(const ScheduledNotification &notification, QDate day);
     QDateTime now() const;
 
@@ -181,7 +207,7 @@ private:
     QString m_language = QStringLiteral("pl");
     int m_testHeartbeatMs = 0;
     int m_testDebounceMs = 0;
-    /// "Done" requests that came before start() (applied by it).
+    /// "Done" requests that came after attach(), before start() (applied by it, dropped by detach()).
     QList<std::pair<ScheduledNotification, QDate>> m_pendingDone;
 };
 

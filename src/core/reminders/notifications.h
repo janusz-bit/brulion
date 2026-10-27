@@ -49,6 +49,11 @@ struct ScheduledNotification {
     /// a bare reminder bullet the enclosing item's); -1: the reminder is not on a task. The
     /// notification's "Done" marks this task done (markdown::setTaskStatus).
     int taskLine = -1;
+    /// The notebook the occurrence belongs to (an opaque id: the app's Vault::id()). Empty in
+    /// everything the reminders module computes; the app stamps it on what it hands to the
+    /// platform, so a "Done" or "Snooze" from a notification of another notebook is not applied
+    /// to the open one.
+    QString vault;
 
     friend bool operator==(const ScheduledNotification &, const ScheduledNotification &) = default;
 };

@@ -30,6 +30,7 @@ QJsonObject androidReminderItem(const ScheduledNotification &n)
             {u"key"_s, n.id},
             {u"local"_s, n.at.toString(LocalFormat)},
             {u"task"_s, n.taskLine >= 0},
+            {u"vault"_s, n.vault},
     };
 }
 
@@ -45,6 +46,7 @@ QList<AndroidDoneRequest> androidDoneRequests(const QJsonArray &array)
         n.path = o.value(u"path"_s).toString();
         n.line = std::max(0, o.value(u"line"_s).toInt());
         n.title = o.value(u"title"_s).toString();
+        n.vault = o.value(u"vault"_s).toString(); // empty: armed by an older version
         if (n.id.isEmpty() || n.path.isEmpty() || !n.at.isValid())
             continue;
         request.day = QDate::fromString(o.value(u"day"_s).toString(), Qt::ISODate);
