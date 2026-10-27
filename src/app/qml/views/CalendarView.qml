@@ -23,12 +23,21 @@ import Brulion
 // the day's sheet on phones, "task" / "reminder" = the add dialog for that day — also used by
 // tests/app/planning/screenshots.sh).
 //
-// Contract with the shell (qml/shell/ShellRouteView.qml): `route`, optional `title`.
+// Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `covered`, optional `title`;
+// offers `edgeSwipe`.
 FocusScope {
     id: root
 
     property var route: ({})
     readonly property string title: qsTr("Calendar")
+    /// The week and month grids reach the left edge and swipe sideways from there to the previous
+    /// period (touch UIs): the shell's drawer leaves that edge to them (☰ opens it).
+    readonly property bool edgeSwipe: Theme.touchUi && mode !== "agenda"
+    /// A modal panel of the shell lies over the view (the drawer): the grids' swipe makes way for
+    /// the panel's own (set by ShellRouteView).
+    property bool covered: false
+    /// The grids swipe to the previous / next period unless something modal lies over them.
+    readonly property bool gridSwipe: !covered && !daySheet.visible && !addDialog.visible
 
     /// The day panel sits next to the calendar.
     readonly property bool sideBySide: width >= 860
@@ -234,6 +243,7 @@ FocusScope {
         id: monthView
         CalendarMonthGrid {
             calendar: cal
+            swipeEnabled: root.gridSwipe
             focus: true
             onDayTapped: (date) => root.showDay(date)
             onDayOpened: (date) => root.openJournal(date)
@@ -244,6 +254,7 @@ FocusScope {
         id: weekView
         CalendarWeekGrid {
             calendar: cal
+            swipeEnabled: root.gridSwipe
             focus: true
             onDayTapped: (date) => root.showDay(date)
             onDayOpened: (date) => root.openJournal(date)

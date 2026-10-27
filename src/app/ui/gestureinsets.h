@@ -1,7 +1,9 @@
 // GestureInsets — how much of the window's left and right edges the system keeps for its own
 // swipes (QML singleton `GestureInsets`): Android's gesture navigation takes a swipe that starts
 // there for "back", so the shell's drawer starts its edge swipe beyond them (docs/UI.md "Window
-// layout"). 0 where nothing is reported: button navigation, desktops, the browser.
+// layout"). 0 where nothing is reported: button navigation, desktops, the browser (a mobile
+// browser cannot learn the OS's zones: there the strip lies at the edge, where the OS's or the
+// browser's own "back" swipe may take it first).
 //
 // Sources, by priority:
 //   1. `simulate()` — tests (the shell's self-test) and manual checks on a desktop.

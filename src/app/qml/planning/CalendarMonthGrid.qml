@@ -17,6 +17,9 @@ FocusScope {
     id: root
 
     required property CalendarModel calendar
+    /// The horizontal swipe is on (touch UIs); the view turns it off under a modal panel (the
+    /// shell's drawer), whose own swipe the handler would take.
+    property bool swipeEnabled: true
 
     readonly property real headerHeight: Theme.touchUi ? 30 : 26
     readonly property real cellWidth: width / 7
@@ -225,7 +228,7 @@ FocusScope {
                                 required property int index
                                 readonly property var entry: cell.items[index]
                                 readonly property var colors: Theme.chip(entry.variant)
-                                width: parent.width
+                                width: parent ? parent.width : 0 // (null while the Repeater drops it: a new month)
                                 height: root.pillHeight
                                 radius: Theme.radiusSm
                                 color: colors.bg
@@ -319,13 +322,19 @@ FocusScope {
         DragHandler {
             id: swipe
             target: null
-            enabled: Theme.touchUi
+            enabled: Theme.touchUi && root.swipeEnabled
             xAxis.enabled: true
             yAxis.enabled: false
+            // The drag's length is read from persistentTranslation: when activeChanged reports
+            // the end, the active translation is already back at 0 (Qt 6.11), so a swipe slower
+            // than the velocity limit did nothing.
+            property real startX: 0
             onActiveChanged: {
-                if (active)
+                if (active) {
+                    startX = persistentTranslation.x
                     return
-                const dx = translation.x
+                }
+                const dx = persistentTranslation.x - startX
                 if (Math.abs(dx) > Math.min(120, root.width * 0.18) || Math.abs(centroid.velocity.x) > 700) {
                     if (dx < 0)
                         root.calendar.next()

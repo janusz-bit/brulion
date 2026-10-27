@@ -292,8 +292,12 @@ zamyka (docs/UI.md „Window layout”). Przy **nawigacji gestami** (Android 10+
 przesunięcie zaczęte przy samej krawędzi na gest „Wstecz” (pas ~30 dp, szerszy przy wyższej
 czułości gestu „Wstecz” w ustawieniach systemu), więc palec trzeba położyć odrobinę dalej od
 krawędzi: pas aplikacji (24 dp) zaczyna się tuż za strefą systemu. Przy nawigacji przyciskami
-pas leży przy samej krawędzi. Podczas pisania i zaznaczania bloków gest nie otwiera szuflady
-(wtedy ☰).
+pas leży przy samej krawędzi. Podczas pisania i zaznaczania bloków oraz na siatce tygodnia
+i miesiąca w kalendarzu (tam przesunięcie w prawo od krawędzi pokazuje poprzedni okres) gest nie
+otwiera szuflady (wtedy ☰). Pas zależy od trybu interfejsu, nie od wskaźnika: mysz albo touchpad
+w interfejsie dotykowym (np. telefon z myszą) też go dostaje. W przeglądarce na telefonie
+(WebAssembly) nikt nie zgłasza stref systemu: pas leży przy samej krawędzi, gdzie gest „Wstecz”
+systemu albo przeglądarki może przejąć przesunięcie — szufladę otwiera wtedy ☰ albo „Menu”.
 
 Jak to działa:
 
@@ -310,7 +314,10 @@ Jak to działa:
   Androida nad aplikacją — pas ich nie dotyczy. Podczas pisania i zaznaczania bloków (klawiatura
   albo zadokowany pasek edycji, gdy dolna nawigacja też się chowa) pasa nie ma: szuflada
   przejmowała przeciąganie uchwytu początku zaznaczenia bloków, który leży przy lewej krawędzi;
-  ☰ nadal ją otwiera.
+  ☰ nadal ją otwiera. Z tego samego powodu pasa nie ma na widoku, który sam przesuwa w bok od
+  lewej krawędzi (`edgeSwipe` widoku: siatki tygodnia i miesiąca w kalendarzu — przesunięcie od
+  krawędzi należy do nich). Gdy szuflada jest otwarta, przesuwanie siatek jest wyłączone
+  (`covered`), żeby przesunięcie w lewo zamykało szufladę, a nie zmieniało okresu pod nią.
 * Aplikacja nie wyłącza gestu „Wstecz” przy krawędzi (`setSystemGestureExclusionRects`): Android
   ogranicza takie wyłączenie do 200 dp wysokości, a użytkownik straciłby „Wstecz” w tym miejscu.
 
@@ -319,8 +326,8 @@ przez `GestureInsets.simulate`). **Do sprawdzenia na telefonie / emulatorze** (n
 i przyciskami, Android 10 i 15+, pion i poziom z wycięciem ekranu): czy obserwator zgłasza strefę
 (`adb shell setprop log.tag.BrulionIme DEBUG` → „system gestures left … px” w logcat), czy
 przesunięcie zaczęte tuż za strefą otwiera szufladę, a zaczęte przy krawędzi nadal cofa, i czy
-pas nie przeszkadza w przewijaniu tabel, zaznaczaniu tekstu ani w przesuwaniu miesięcy
-w kalendarzu przy lewej krawędzi.
+pas nie przeszkadza w przewijaniu tabel ani zaznaczaniu tekstu (przesuwanie tygodni i miesięcy
+w kalendarzu od lewej krawędzi sprawdza `tst_shell_qml`).
 
 ## Rejestr zdarzeń: udostępnianie
 

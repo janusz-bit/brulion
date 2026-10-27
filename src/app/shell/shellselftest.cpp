@@ -194,6 +194,95 @@ QStringList fingerRightClickHandlers(QQuickWindow *window)
 
 using Check = std::function<void(bool, const char *)>;
 
+/// 5e'. The calendar's swipe to the previous week / month (phones, real touch input) against the
+///      drawer's edge strip (checkDrawerSwipe): the grids reach the window's left edge and swipe
+///      sideways from there, so on them there is no strip — a finger that starts at the edge (or,
+///      with Android's back zone, just beyond it) and moves right shows the previous period, the
+///      drawer stays closed. The drag is not a fast flick: such a swipe once did nothing (its
+///      length was read after Qt had reset it). ☰ still opens the drawer, a swipe on it closes it
+///      (the grid under it took that swipe); the agenda (a vertical list) has the strip. Runs on
+///      the calendar `calendarView` shows, switched between its modes and back, the drawer
+///      closed.
+void checkCalendarEdgeSwipe(QQuickWindow *window, QQuickItem *calendarView, const Check &check)
+{
+    QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
+    QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+    if (!drawer || !shellItem) {
+        check(false, "the shell and its drawer exist");
+        return;
+    }
+    const auto run = [&](const QString &js) {
+        QQmlExpression expression(qmlContext(shellItem), shellItem, js);
+        expression.evaluate();
+        if (expression.hasError())
+            std::fprintf(stderr, "selftest: %s\n", qPrintable(expression.error().toString()));
+        return !expression.hasError();
+    };
+    const auto opened = [drawer] { return drawer->property("opened").toBool(); };
+    const auto closed = [drawer] { return !drawer->property("visible").toBool(); };
+    const auto margin = [drawer] { return drawer->property("dragMargin").toReal(); };
+    const QVariant mode = calendarView->property("mode");
+    run(u"GestureInsets.simulate(32, 32)"_s);
+    for (const char *gridMode : {"week", "month"}) {
+        const bool week = qstrcmp(gridMode, "week") == 0;
+        calendarView->setProperty("mode", QString::fromLatin1(gridMode));
+        const char *type = week ? "CalendarWeekGrid" : "CalendarMonthGrid";
+        QQuickItem *grid = nullptr;
+        waitFor([&] { return (grid = findShown(calendarView, [type](QQuickItem *item) { return isA(item, type); })); });
+        auto *calendar = grid ? grid->property("calendar").value<QObject *>() : nullptr;
+        if (!calendar) {
+            check(false, "the calendar shows its grid");
+            continue;
+        }
+        settle(300);
+        const qreal y = grid->mapToScene(QPointF(0, grid->height() / 2)).y();
+        check(grid->mapToScene(QPointF(0, 0)).x() < 1 && waitFor([&] { return margin() <= 0; }),
+              week ? "the week grid reaches the left edge, and there is no edge strip on it"
+                   : "the month grid reaches the left edge, and there is no edge strip on it");
+        // From the very edge (Android's back gesture there on a phone with gesture navigation),
+        // and from just beyond the system's 32 px zone, where the strip would lie.
+        for (const qreal x : {qreal(6), qreal(32 + 12)}) {
+            const QString before = calendar->property("anchorDate").toString();
+            touchDrag(window, QPointF(x, y), QPointF(window->width() * 0.5, 0));
+            const bool previous = waitFor([&] {
+                const QString now = calendar->property("anchorDate").toString();
+                return !now.isEmpty() && now < before;
+            });
+            check(previous && closed(),
+                  week ? (x < 32 ? "a swipe right on the week from the left edge shows the previous week, the drawer "
+                                   "stays closed"
+                                 : "a swipe right on the week from beyond the system's zone shows the previous week, "
+                                   "the drawer stays closed")
+                       : (x < 32 ? "a swipe right on the month from the left edge shows the previous month, the "
+                                   "drawer stays closed"
+                                 : "a swipe right on the month from beyond the system's zone shows the previous "
+                                   "month, the drawer stays closed"));
+            if (!closed()) {
+                QMetaObject::invokeMethod(drawer, "close");
+                waitFor(closed);
+            }
+        }
+        QMetaObject::invokeMethod(calendar, "goToday");
+    }
+    // The drawer opened by its button (here by a call) closes with a swipe on it, no strip needed.
+    QMetaObject::invokeMethod(drawer, "open");
+    check(waitFor(opened, 3000) && margin() <= 0, "on the calendar's grid the drawer opens by its button");
+    const qreal w = drawer->property("width").toReal();
+    touchDrag(window, QPointF(w * 0.7, window->height() * 0.45), QPointF(-w * 0.6, 0));
+    check(waitFor(closed, 3000), "on the calendar's grid a swipe to the left closes the drawer");
+    if (!closed()) {
+        QMetaObject::invokeMethod(drawer, "close");
+        waitFor(closed);
+    }
+    calendarView->setProperty("mode", u"agenda"_s);
+    const qreal strip = shellItem->property("edgeSwipeStrip").toReal();
+    check(strip > 0 && waitFor([&] { return qAbs(margin() - (32 + strip)) <= 1; }),
+          "the calendar's agenda has the edge strip");
+    run(u"GestureInsets.simulate(-1, -1)"_s);
+    calendarView->setProperty("mode", mode);
+    settle(200);
+}
+
 /// 3c. Task statuses wherever a checkbox is shown, with real input: a right-click (desktop) or a
 ///     long press (--touch) on the checkbox opens the status menu with the task's status checked
 ///     and does not toggle it; a click / tap on a status writes it — in Tasks, the backlinks under a
@@ -483,6 +572,11 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     if (inSheet)
         QMetaObject::invokeMethod(daySheet, "close");
     restore();
+    if (touch && calendarView && window->width() < 900) {
+        if (daySheet)
+            waitFor([&] { return !daySheet->property("visible").toBool(); });
+        checkCalendarEdgeSwipe(window, calendarView, check);
+    }
 
     // ---- A day of the journal stream: its checkbox's menu, and a "/" command typed into a block.
     app->goHome();
@@ -1031,7 +1125,8 @@ void checkNotebookSwitcher(QQuickWindow *window, AppController *app, const Check
 /// from the left edge opens it, a swipe to the left closes it; where the system keeps the edge for
 /// its back gesture (GestureInsets, simulated here as Android's gesture navigation reports it) the
 /// strip starts beyond that zone. What the strip must not take: a vertical scroll, a swipe that
-/// starts farther in, a tap on what lies under it, the drag of a selection grip lying in it. Runs
+/// starts farther in, a tap on what lies under it, the drag of a selection grip lying in it (no
+/// strip while blocks are selected or the keyboard is up; a swipe still closes the drawer). Runs
 /// on a page (Remont mieszkania) with the drawer closed and stays there, without navigating: a
 /// view the shell leaves waits for its deferred deletion, which never comes while the self-test
 /// runs, and later findChild() calls would find its items.
@@ -1108,11 +1203,29 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
         settle(400);
         check(closed(), "dragging the selection's grip at the left edge does not open the drawer");
         check(editor->property("selectionMode").toBool(), "the blocks stay selected");
+        // Opened by its button (here by a call) while there is no strip, the drawer still closes
+        // with a swipe on it.
+        QMetaObject::invokeMethod(drawer, "open");
+        check(waitFor(opened, 3000) && margin() <= 0, "the drawer opens while blocks are selected");
+        check(swipeClose(), "with no edge strip (blocks selected) a swipe to the left closes the drawer");
     }
     if (editor)
         QMetaObject::invokeMethod(editor, "leaveSelectionMode");
     check(waitFor([&] { return qAbs(margin() - (32 + plain)) <= 1; }), "the selection gone, the edge strip is back");
     run(u"GestureInsets.simulate(-1, -1)"_s);
+
+    // The on-screen keyboard up (simulated): no strip either, and the drawer opened by its button
+    // closes with a swipe.
+    if (run(u"KeyboardInsets.simulated = 300"_s)) {
+        check(waitFor([&] { return margin() <= 0; }), "while the keyboard is up there is no edge strip");
+        QMetaObject::invokeMethod(drawer, "open");
+        check(waitFor(opened, 3000), "the drawer opens while the keyboard is up");
+        check(swipeClose(), "with the keyboard up a swipe to the left closes the drawer");
+        run(u"KeyboardInsets.simulated = -1"_s);
+        check(waitFor([&] { return qAbs(margin() - plain) <= 1; }), "the keyboard gone, the edge strip is back");
+    } else {
+        check(false, "the on-screen keyboard can be simulated");
+    }
 
     // What the strip leaves alone.
     touchDrag(window, QPointF(margin() / 2, window->height() * 0.7), QPointF(0, -260));

@@ -15,13 +15,18 @@ import Brulion
 // on the keyboard: the bottom navigation hides),
 // `pictureRoute` / `pictureAsText` (PageView: a picture is shown, as text or not — the top bar's
 // menu acts on it), `sourceMode` (PageView: the page is shown as Markdown source — the palette's
-// block commands are off).
+// block commands are off), `edgeSwipe` (CalendarView: the view's own horizontal swipe starts at
+// the left edge — the drawer's edge strip makes way). The shell sets `covered` (CalendarView: a
+// modal panel lies over the view).
 Item {
     id: root
 
     property var route: ({})
     /// The view is shown in the side panel (views may render more compactly).
     property bool inSidePanel: false
+    /// A modal panel of the shell (the drawer) lies over the view: views with their own swipes
+    /// (CalendarView's `covered`) turn them off, so the panel's swipe stays the panel's.
+    property bool covered: false
 
     readonly property Item view: loader.item as Item
     readonly property string viewName: route && route.view ? route.view : ""
@@ -41,6 +46,8 @@ Item {
     readonly property bool viewPictureAsText: viewPicture && _view.pictureAsText === true
     /// The view's editor shows the page's Markdown source (source mode).
     readonly property bool viewSourceMode: !!_view && _view.sourceMode === true
+    /// The view swipes sideways from the left edge itself (the calendar's grids): no edge strip.
+    readonly property bool viewEdgeSwipe: !!_view && _view.edgeSwipe === true
 
     function componentFor(view) {
         switch (view) {
@@ -88,7 +95,7 @@ Item {
 
     Component { id: journalsView; JournalsView { route: root.route; inSidePanel: root.inSidePanel } }
     Component { id: pageView; PageView { route: root.route; inSidePanel: root.inSidePanel } }
-    Component { id: calendarView; CalendarView { route: root.route } }
+    Component { id: calendarView; CalendarView { route: root.route; covered: root.covered } }
     Component { id: tasksView; TasksView { route: root.route } }
     Component { id: graphView; GraphView { route: root.route } }
     Component { id: searchView; SearchView { route: root.route } }

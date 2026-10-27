@@ -46,7 +46,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
             --size 1280x800 --now "2026-10-14 10:00" --locale en)
     # Next to other tests (two cores each): every wait of the self-test follows the state it waits
     # for (shellselftest.cpp), so a loaded machine only makes it slower.
-    math(EXPR _shell_qml_timeout "90 + 10 * ${BRULION_TEST_SLOWDOWN}")
+    math(EXPR _shell_qml_timeout "150 + 10 * ${BRULION_TEST_SLOWDOWN}")
     foreach(_pair "tst_shell_qml;phone" "tst_shell_qml_capture;desktop")
         list(GET _pair 0 _test)
         list(GET _pair 1 _kind)

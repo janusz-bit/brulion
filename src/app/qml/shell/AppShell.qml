@@ -312,6 +312,8 @@ FocusScope {
                 Layout.fillHeight: true
                 focus: true
                 route: AppController.currentRoute
+                // The calendar grids' swipe took the swipe that closes the drawer over them.
+                covered: drawer.visible
             }
             // The palette's block commands follow the main view's source mode (CommandModel).
             Binding { target: AppController; property: "sourceModeShown"; value: routeView.viewSourceMode }
@@ -383,9 +385,12 @@ FocusScope {
         // While typing or selecting blocks (the keyboard up or an editing toolbar docked: the
         // bottom navigation makes way too) there is no strip: the drawer took the drag of the
         // selection's start grip, which lies at the left edge (its MouseArea's preventStealing
-        // did not stop it). The ☰ button still opens it, a swipe on it still closes it.
+        // did not stop it). Nor on a view that swipes sideways from that edge itself (`edgeSwipe`:
+        // the calendar's week and month grids, to the previous period): a swipe there is the
+        // view's. The ☰ button still opens it, a swipe on it still closes it. The strip follows
+        // the UI mode, not the pointer: a mouse in a touch UI gets it too.
         dragMargin: !Theme.touchUi ? Application.styleHints.startDragDistance
-                    : shell.typing ? 0
+                    : shell.typing || routeView.viewEdgeSwipe ? 0
                     : Math.max(shell.safe.left, GestureInsets.left) + shell.edgeSwipeStrip
         dim: true
         // Focus while open (Drawer's default, stated because the keys rely on it): Escape / the
