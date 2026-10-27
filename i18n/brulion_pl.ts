@@ -12202,23 +12202,23 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::editor::PageController</name>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3393"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3392"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3393"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3392"/>
         <source>Pictures (%1)</source>
         <extracomment>%1: the file name patterns of pictures, e.g. &quot;*.png *.jpg *.jpeg&quot;</extracomment>
         <translation>Obrazy (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3605"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3604"/>
         <source>Attachment</source>
         <translation>Załącznik</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3669"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3668"/>
         <source>Pasted image %1</source>
         <translation>Wklejony obraz %1</translation>
     </message>
