@@ -8963,18 +8963,18 @@
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="107"/>
+        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="110"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="4025"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="124"/>
+        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="127"/>
         <source>Open Brulion</source>
         <translation>Otwórz Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="132"/>
+        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="135"/>
         <source>Quick capture…</source>
         <translation>Szybka notatka…</translation>
     </message>
