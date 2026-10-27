@@ -80,6 +80,8 @@ void WorkspaceSync::onRunFinished(const sync::SyncReport &report, bool stalled)
     }
     if (!folders.isEmpty())
         Q_EMIT foldersChanged(folders);
+    for (const sync::SyncFolderMove &move : report.localFolderMoves)
+        Q_EMIT folderMovedHere(move.from, move.to);
     scheduleLive();
 }
 
@@ -286,8 +288,10 @@ QVariantMap WorkspaceSync::historyRow(const sync::SyncRunRecord &r) const
         parts.append(tr("%n merged", "", r.merged));
     if (r.deletedLocal + r.deletedRemote > 0)
         parts.append(tr("%n deleted", "", r.deletedLocal + r.deletedRemote));
-    if (r.foldersMoved > 0)
-        parts.append(tr("%n folder(s) moved", "", r.foldersMoved));
+    if (r.foldersMoved + r.foldersMovedHere > 0)
+        parts.append(tr("%n folder(s) moved", "", r.foldersMoved + r.foldersMovedHere));
+    if (r.filesMoved + r.filesMovedHere > 0)
+        parts.append(tr("%n file(s) moved", "", r.filesMoved + r.filesMovedHere));
     if (r.foldersCreated > 0)
         parts.append(tr("%n new folder(s)", "", r.foldersCreated));
     if (r.foldersDeleted > 0)
@@ -430,6 +434,9 @@ QVariantMap WorkspaceSync::runDetails(int number) const
                                     {u"foldersCreated"_s, r.foldersCreated},
                                     {u"foldersDeleted"_s, r.foldersDeleted},
                                     {u"foldersMoved"_s, r.foldersMoved},
+                                    {u"foldersMovedHere"_s, r.foldersMovedHere},
+                                    {u"filesMoved"_s, r.filesMoved},
+                                    {u"filesMovedHere"_s, r.filesMovedHere},
                                     {u"conflicts"_s, r.conflicts},
                                     {u"fileErrors"_s, r.fileErrors},
                                     {u"skipped"_s, r.skipped},
@@ -441,7 +448,7 @@ QVariantMap WorkspaceSync::runDetails(int number) const
     return out;
 }
 
-QString WorkspaceSync::folderCountsText(int created, int deleted, int moved) const
+QString WorkspaceSync::folderCountsText(int created, int deleted, int moved, int movedHere) const
 {
     QStringList parts;
     if (created > 0)
@@ -450,7 +457,19 @@ QString WorkspaceSync::folderCountsText(int created, int deleted, int moved) con
         parts.append(tr("%n deleted", "folders", deleted));
     if (moved > 0)
         parts.append(tr("%n moved on the server", "folders", moved));
+    if (movedHere > 0)
+        parts.append(tr("%n moved here", "folders", movedHere));
     return parts.isEmpty() ? QString() : tr("Folders: %1").arg(parts.join(u", "_s));
+}
+
+QString WorkspaceSync::fileMovesText(int moved, int movedHere) const
+{
+    QStringList parts;
+    if (moved > 0)
+        parts.append(tr("%n moved on the server", "files", moved));
+    if (movedHere > 0)
+        parts.append(tr("%n moved here", "files", movedHere));
+    return parts.isEmpty() ? QString() : tr("Files: %1").arg(parts.join(u", "_s));
 }
 
 QString WorkspaceSync::runDetailsText(int number) const
@@ -483,8 +502,13 @@ QString WorkspaceSync::runDetailsText(int number) const
     const int foldersCreated = c.value(u"foldersCreated"_s).toInt();
     const int foldersDeleted = c.value(u"foldersDeleted"_s).toInt();
     const int foldersMoved = c.value(u"foldersMoved"_s).toInt();
-    if (foldersCreated + foldersDeleted + foldersMoved > 0)
-        lines.append(folderCountsText(foldersCreated, foldersDeleted, foldersMoved));
+    const int foldersMovedHere = c.value(u"foldersMovedHere"_s).toInt();
+    if (foldersCreated + foldersDeleted + foldersMoved + foldersMovedHere > 0)
+        lines.append(folderCountsText(foldersCreated, foldersDeleted, foldersMoved, foldersMovedHere));
+    if (const QString files = fileMovesText(c.value(u"filesMoved"_s).toInt(), c.value(u"filesMovedHere"_s).toInt());
+        !files.isEmpty()) {
+        lines.append(files);
+    }
     for (const QVariant &v : d.value(u"phases"_s).toList()) {
         const QVariantMap p = v.toMap();
         QString line = u"  %1: %2"_s.arg(p.value(u"text"_s).toString(), p.value(u"durationText"_s).toString());

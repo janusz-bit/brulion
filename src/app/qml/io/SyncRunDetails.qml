@@ -193,13 +193,23 @@ BDialog {
     BText {
         readonly property string folders: dialog.known && Workspace.sync
             ? Workspace.sync.folderCountsText(dialog.counts.foldersCreated || 0, dialog.counts.foldersDeleted || 0,
-                                              dialog.counts.foldersMoved || 0)
+                                              dialog.counts.foldersMoved || 0, dialog.counts.foldersMovedHere || 0)
             : ""
         Layout.fillWidth: true
         visible: folders !== ""
         wrapMode: Text.Wrap
         variant: "small"
         text: folders
+    }
+    BText {
+        readonly property string files: dialog.known && Workspace.sync
+            ? Workspace.sync.fileMovesText(dialog.counts.filesMoved || 0, dialog.counts.filesMovedHere || 0)
+            : ""
+        Layout.fillWidth: true
+        visible: files !== ""
+        wrapMode: Text.Wrap
+        variant: "small"
+        text: files
     }
 
     // ---- Requests ------------------------------------------------------------------------------

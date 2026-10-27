@@ -525,8 +525,10 @@ void SyncRun::adoptCaseOnlyFolderRenames()
                 continue;
             if (!renameHere(here, from, to, true))
                 continue;
-            m_report.localFolderMoves.append(SyncFolderMove{from, to});
-            record(to, SyncAction::MoveLocal);
+            if (here != to) { // else renamed so here already: only the states followed
+                m_report.localFolderMoves.append(SyncFolderMove{here, to});
+                record(to, SyncAction::MoveLocal);
+            }
             qCInfo(lcSync).noquote() << u"%1 folder %2 renamed on the server to %3 (letter case): renamed here too"_s
                                                 .arg(tag(), from, to);
             renamed = true;
