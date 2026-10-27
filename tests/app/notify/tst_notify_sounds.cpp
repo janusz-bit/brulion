@@ -1,6 +1,7 @@
 // ReminderSounds — the sound settings of reminders and alarms: persistence through the storage
 // seam (AppSettings in the app; a map here) and a second instance reading it back, the modes a
-// platform offers (Android with vibration, the desktop with theme sounds and files, no notifier),
+// platform offers (Android with vibration, the desktop with theme sounds and files, Windows with
+// its notification sounds and no files, no notifier),
 // "Ringtone" without a ringtone chosen yet, the remembered ringtone, the system picker's answer,
 // previews and the system settings, the choices reaching the notifier.
 #include "notifier.h"
@@ -23,6 +24,7 @@ class FakeNotifier : public Notifier {
 public:
     QList<Mode> modes{Mode::Default, Mode::Custom, Mode::VibrateOnly, Mode::Silent};
     bool picker = true;
+    bool files = true; ///< without a picker: sound files can be played (not Windows' toasts)
     QStringList themes;
     int applied = 0;
     QList<SoundKind> picks;
@@ -37,7 +39,7 @@ public:
     QList<Mode> soundModes() const override { return modes; }
     bool hasSystemSoundPicker() const override { return picker; }
     bool hasSystemSoundSettings() const override { return picker; }
-    bool supportsSoundFiles() const override { return !picker; }
+    bool supportsSoundFiles() const override { return !picker && files; }
     QStringList themeSounds() const override { return themes; }
     bool pickSound(SoundKind kind) override
     {
@@ -219,6 +221,28 @@ private Q_SLOTS:
         QVERIFY(!sounds.setCustom(u"budzik"_s, u"bell"_s));
         QVERIFY(!sounds.pick(u"alarm"_s)); // no system picker: the page shows its menu
         QVERIFY(desktop.picks.isEmpty());
+    }
+
+    // Windows: its notification sounds (toastxml.h), no sound files (toasts cannot play them).
+    void windowsSounds()
+    {
+        MapStore map;
+        FakeNotifier windows;
+        windows.modes = {Mode::Default, Mode::Custom, Mode::Silent};
+        windows.picker = false;
+        windows.files = false;
+        windows.themes = {u"Default"_s, u"Mail"_s, u"Looping.Alarm"_s, u"Looping.Alarm3"_s};
+        ReminderSounds sounds;
+        sounds.setStorage(map.load(), map.store());
+        sounds.setNotifier(&windows);
+        QVERIFY(!sounds.soundFiles());
+        QCOMPARE(sounds.themeSounds(), windows.themes);
+        QVERIFY(sounds.setCustom(u"alarm"_s, u"Looping.Alarm3"_s));
+        QCOMPARE(windows.sound(SoundKind::Alarm), (SoundChoice{Mode::Custom, u"Looping.Alarm3"_s, {}}));
+        QVERIFY(!sounds.setCustom(u"reminder"_s, u"file:///C:/D%C5%BAwi%C4%99ki/dzwonek.wav"_s));
+        QVERIFY(!sounds.setCustom(u"reminder"_s, u"C:/Dźwięki/dzwonek.wav"_s));
+        QVERIFY(!sounds.setCustom(u"reminder"_s, u"bell"_s)); // a Linux name is not offered here
+        QCOMPARE(sounds.choice(SoundKind::Reminder).mode, Mode::Default);
     }
 
     void ringtoneNeedsAChoiceFirst()

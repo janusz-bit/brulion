@@ -1,7 +1,7 @@
 # Tests of the app shell's C++ (library brulion_shell, src/app/shell/area.cmake): navigation
 # history, settings persistence, the Workspace's EditorHost implementation against a real vault
 # folder, the sample vault, commands and the folder tree (single-instance messages: tests/ipc).
-brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_shell)
+brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_shell brulion_platform)
 brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell brulion_core_text)
 brulion_add_test(tst_shell_workspace SOURCES tst_workspace.cpp LIBS brulion_shell brulion_core_vault brulion_core_markdown)
 brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp

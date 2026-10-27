@@ -750,6 +750,9 @@ private Q_SLOTS:
         QVERIFY(!app.handleInstanceMessage("screenshot", payload({{u"path"_s, u"/tmp/x.png"_s}})));
         QVERIFY(!app.handleInstanceMessage("navigate", payload(open)));
         QCOMPARE(shown.size(), 4);
+        // A second start with --hidden (Windows' start at sign-in while it runs): known, no window.
+        QVERIFY(app.handleInstanceMessage("hidden", {}));
+        QCOMPARE(shown.size(), 4);
         QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Projekty/Dom.md"_s);
 
         // A route of another notebook asked for while this one opens: a notice, no navigation.

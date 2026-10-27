@@ -9,8 +9,9 @@ w dwóch postaciach:
 | `Brulion-<wersja>-windows-x86_64-setup.exe` | instalator (Inno Setup) — instalacja dla bieżącego użytkownika, bez uprawnień administratora |
 | `brulion-<wersja>-windows-x86_64.zip` | wersja przenośna — folder `Brulion` z `brulion.exe`, `brulion-cli.exe`, bibliotekami Qt i środowiskiem MSVC |
 
-„Testowa” znaczy: buduje się i przechodzi testy w CI, ale nie była jeszcze długo używana na co dzień
-i ma ograniczenia opisane niżej. Błędy zgłaszaj w
+„Testowa” znaczy: buduje się i przechodzi testy w CI, ale nie była jeszcze długo używana na co dzień,
+pliki nie są podpisane i ma ograniczenia opisane niżej. Od wersji 0.4.6 przypomnienia i alarmy są
+natywnymi powiadomieniami Windows z przyciskami, a Brulion może się uruchamiać po zalogowaniu. Błędy zgłaszaj w
 [issues](https://github.com/janusz-bit/brulion/issues) (z rejestrem zdarzeń — README, „Gdy coś nie
 działa”).
 
@@ -18,8 +19,9 @@ działa”).
 
 * **Instalator:** uruchom `Brulion-<wersja>-windows-x86_64-setup.exe`. Program trafia do
   `%LOCALAPPDATA%\Programs\Brulion`, skrót do menu Start, ikona na pulpicie na życzenie (zadanie
-  „Utwórz ikonę na pulpicie”). Język instalatora: polski albo angielski (według systemu). Nowa
-  wersja instaluje się na poprzednią (ten sam `AppId`); uruchomiony Brulion zostanie poproszony
+  „Utwórz ikonę na pulpicie”) i — tylko przy pierwszej instalacji, zaznaczone — „Uruchamiaj Brulion
+  po zalogowaniu” (niżej, „Autostart”). Język instalatora: polski albo angielski (według systemu).
+  Nowa wersja instaluje się na poprzednią (ten sam `AppId`); uruchomiony Brulion zostanie poproszony
   o zamknięcie.
 * **SmartScreen:** pliki nie są podpisane certyfikatem, więc Windows ostrzega przy pierwszym
   uruchomieniu: „System Windows ochronił ten komputer” → **Więcej informacji** → **Uruchom mimo to**.
@@ -28,10 +30,13 @@ działa”).
   nie instaluje; notatki i ustawienia są w tych samych miejscach co przy instalatorze (niżej), nie
   w folderze programu.
 * **Odinstalowanie:** Ustawienia → Aplikacje → Brulion → Odinstaluj (albo `unins000.exe` w folderze
-  programu). Usuwa tylko pliki programu i skróty — **notatki, ustawienia i rejestr zdarzeń zostają**.
+  programu). Usuwa tylko pliki programu, skróty, wpis autostartu tej instalacji i rejestrację
+  powiadomień — **notatki, ustawienia i rejestr zdarzeń zostają**.
 * Instalacja bez okien (np. skrypt): `Brulion-<wersja>-windows-x86_64-setup.exe /VERYSILENT
-  /SUPPRESSMSGBOXES /CURRENTUSER`, odinstalowanie: `unins000.exe /VERYSILENT /SUPPRESSMSGBOXES`.
-  Administrator może zainstalować dla wszystkich (`/ALLUSERS`, do `C:\Program Files\Brulion`).
+  /SUPPRESSMSGBOXES /CURRENTUSER` (z autostartem: `/TASKS=autostart`, bez: `/TASKS=""`),
+  odinstalowanie: `unins000.exe /VERYSILENT /SUPPRESSMSGBOXES`. Administrator może zainstalować dla
+  wszystkich (`/ALLUSERS`, do `C:\Program Files\Brulion`); autostart i rejestracja powiadomień są
+  wtedy i tak wpisami użytkownika, który instaluje (każdy inny włącza autostart w ustawieniach).
 
 ## Gdzie są dane
 
@@ -46,6 +51,8 @@ działa”).
 | Pamięć podręczna (obrazy z internetu) | `%LOCALAPPDATA%\Brulion\Brulion\cache\` |
 | Program (instalator) | `%LOCALAPPDATA%\Programs\Brulion\` |
 | Jedna kopia programu (single instance) | potok nazwany `\\.\pipe\<%TEMP%>/brulion-<skrót>` i plik blokady `%TEMP%\brulion-<skrót>.lock` |
+| Rejestracja powiadomień (nazwa i ikona toastów) | rejestr: `HKCU\Software\Classes\AppUserModelId\JanuszBit.Brulion` (`DisplayName`, `IconUri` → `brulion.ico` obok programu) |
+| Autostart | rejestr: wartość `Brulion` w `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`; wyłączenie w Menedżerze zadań: `…\Explorer\StartupApproved\Run\Brulion` |
 
 `%APPDATA%` to zwykle `C:\Users\<użytkownik>\AppData\Roaming`, `%LOCALAPPDATA%` —
 `…\AppData\Local`, `%TEMP%` — `…\AppData\Local\Temp`.
@@ -56,19 +63,67 @@ jednej kopii są wtedy osobne (`%APPDATA%\Brulion-<nazwa>\…`). Tak samo dla `b
 i `brulion-cli.exe`. Służy testom (na Windows zmienne `XDG_*` z testów linuksowych nic nie
 zmieniają) i do wypróbowania czegoś bez ruszania własnego profilu; działa też na Linuksie.
 
+## Powiadomienia
+
+Przypomnienia ⏰ i alarmy ⏰! są powiadomieniami Windows (toastami; `src/app/notify/windowstoastbus.h`,
+C++/WinRT, Windows 10 1809 lub nowszy):
+
+* **Przypomnienie** pokazuje tekst przypomnienia, pod nim stronę i termin, z przyciskami
+  **„Drzemka 10 min”** (długość z Ustawień → Przypomnienia) i **„OK”**. Kliknięcie w powiadomienie
+  otwiera notatkę na tej linii i wyciąga okno Brulionu na wierzch. Na ekranie zostaje ok. 25 s,
+  potem czeka w Centrum akcji (tam też działa, dopóki Brulion jest uruchomiony).
+* **Alarm** (scenariusz „alarm” Windows) zostaje na ekranie, aż odpowiesz, a jego dźwięk się
+  powtarza przez czas dzwonienia alarmu (domyślnie 10 min); potem powiadomienie zostaje, już
+  ciche — jak na Linuksie. Zapętlony dźwięk (Alarm 1–10, Połączenie 1–10, domyślny dźwięk alarmu)
+  gra samo powiadomienie; krótki dźwięk (np. Poczta) Brulion odtwarza ponownie co 30 s, pokazując
+  powiadomienie jeszcze raz.
+* **Dźwięki** (Ustawienia → Przypomnienia): „Domyślny” to dźwięk powiadomień Windows (alarm:
+  zapętlony dźwięk alarmu Windows), „Dzwonek” — jeden z dźwięków powiadomień Windows (Powiadomienie,
+  Wiadomość błyskawiczna, Poczta, Przypomnienie, SMS, Alarm 1–10, Połączenie 1–10), „Cisza” — bez
+  dźwięku. Własnych plików dźwiękowych powiadomienia programu bez pakietu MSIX odtwarzać nie mogą
+  (pozycja „Plik dźwiękowy…” jest wyłączona; plik wybrany na Linuksie gra jako dźwięk domyślny).
+  „Odtwórz próbkę” pokazuje krótkie powiadomienie z wybranym dźwiękiem.
+* Nazwę i ikonę powiadomień daje rejestracja `JanuszBit.Brulion` (AppUserModelID), którą Brulion
+  zapisuje przy każdym starcie (`src/platform/appidentity.h`) — także wersja przenośna, bez skrótu
+  w menu Start; skrót instalatora ma ten sam identyfikator (grupowanie na pasku zadań).
+* Przy „Zakończ” Brulion usuwa swoje powiadomienia z Centrum akcji: kliknięcie w nie nie miałoby już
+  dokąd trafić. Przypomnienia, które minęły przy zamkniętym programie, czekają w dzienniku
+  (i wracają przy następnym starcie).
+* **Wyłączone powiadomienia:** gdy w Ustawieniach Windows → System → Powiadomienia Brulion (albo
+  wszystkie powiadomienia) jest wyłączony, przypomnienia pokazuje dymek ikony w zasobniku, jak
+  wcześniej — bez przycisków. Tak samo, gdy identyfikator `JanuszBit.Brulion` nie jest
+  zarejestrowany (wtedy Windows przyjąłby powiadomienie i go nie pokazał). Zanim Brulion pokaże
+  pierwsze powiadomienie, Windows nie zna jeszcze jego ustawienia — liczy się to jako włączone. **„Nie przeszkadzać” / Asystent skupienia** chowa powiadomienia od
+  razu do Centrum akcji bez dźwięku; alarmy przebiją się tylko wtedy, gdy Brulion jest na liście
+  priorytetowej.
+* Przypomnienia odlicza uruchomiony Brulion — zamknięcie okna zostawia go w zasobniku (ustawienie
+  „Działaj dalej w zasobniku systemowym”, domyślnie włączone; „Zakończ” w menu ikony go zamyka).
+
+## Autostart
+
+**Ustawienia → Aplikacja → „Uruchamiaj po zalogowaniu”** (albo zadanie instalatora): Windows
+uruchamia Brulion po zalogowaniu ukryty w zasobniku (`brulion.exe --hidden`), więc przypomnienia
+dzwonią od początku sesji. To wartość `Brulion` klucza
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (`src/platform/autostart.h`):
+
+* Widać ją w **Menedżerze zadań → Aplikacje autostartu**; wyłączona tam pokazuje się w Brulionie
+  jako wyłączona, a włączona ponownie w Brulionie znosi wyłączenie z Menedżera zadań.
+* Gdy Brulion już działa, uruchomienie z `--hidden` nie pokazuje okna (druga kopia tylko się kończy).
+* **Wersja przenośna:** wpis wskazuje ten `brulion.exe`, z którego go włączono. Gdy folder
+  przeniesiesz, przy następnym ręcznym starcie wpis sam wskaże nowe miejsce (o ile pod starą
+  ścieżką nie ma już programu — wpisu innej, istniejącej kopii Brulion nie rusza).
+* Z osobnym profilem (`BRULION_PROFILE`) przełącznik jest wyłączony: wpis autostartu nie ustawi
+  zmiennej środowiskowej, więc uruchomiłby profil domyślny.
+* Zadanie instalatora jest tylko przy pierwszej instalacji: aktualizacja zostawia autostart taki,
+  jak go ustawiono w Brulionie albo w Menedżerze zadań.
+* Odinstalowanie usuwa wpis, gdy wskazuje tę instalację.
+
 ## Ograniczenia wersji testowej
 
-* **Przypomnienia tylko przez ikonę w zasobniku systemowym.** Nie ma natywnych powiadomień Windows
-  z przyciskami: przypomnienie i alarm pokazują się jako dymek ikony Brulionu (Windows wyświetla go
-  jak powiadomienie), bez „Odłóż”/„OK” — kliknięcie otwiera Brulion. Dźwięk to dźwięk powiadomienia
-  systemu; wybór dźwięku w ustawieniach i „Odtwórz próbkę” działają tylko na Linuksie (D-Bus).
-  Przypomnienia odlicza uruchomiony Brulion — zamknięcie okna zostawia go w zasobniku (ustawienie
-  „Działaj dalej w zasobniku systemowym”, domyślnie włączone; „Zakończ” w menu ikony go zamyka);
-  przypomnienia, które minęły przy zamkniętym programie, czekają w dzienniku.
-* **Brak autostartu.** Brulion nie uruchamia się sam po zalogowaniu (na NixOS robi to moduł
-  `programs.brulion`). Można dodać skrót do `brulion.exe --hidden` w folderze `shell:startup`.
 * **Niepodpisane pliki** (SmartScreen, wyżej) i **brak automatycznych aktualizacji** — nową wersję
   instaluje się instalatorem na poprzednią.
+* **Powiadomienia działają, dopóki Brulion jest uruchomiony** (bez aktywatora COM): kliknięcie
+  w powiadomienie po zamknięciu programu nic by nie zrobiło, dlatego „Zakończ” je usuwa (wyżej).
 * **Wiersz poleceń:** `brulion-cli.exe` (obok `brulion.exe`) działa jak na Linuksie
   (docs/CLI.md). `brulion.exe cli …` też działa, ale `brulion.exe` jest programem okienkowym —
   w konsoli nie widać jego wyjścia; w skryptach i dla agentów AI używaj `brulion-cli.exe`.
@@ -131,7 +186,9 @@ Kroki:
    `/utf-8` (polskie napisy w kodzie), `/permissive-`, `/Zc:__cplusplus`, `/bigobj` i ostrzeżenia
    `/W4` bez `/WX` (CMakeLists.txt, `cmake/BrulionWarnings.cmake`); `brulion.exe`
    i `brulion-cli.exe` mają ikonę `packaging/windows/brulion.ico` i wersję w zasobach
-   (`packaging/windows/brulion.rc.in`, `cmake/BrulionWindows.cmake`).
+   (`packaging/windows/brulion.rc.in`, `cmake/BrulionWindows.cmake`). Powiadomienia używają
+   nagłówków C++/WinRT z Windows SDK (`<winrt/Windows.UI.Notifications.h>`, folder `cppwinrt`, który
+   środowisko MSVC ma w `INCLUDE`) i `WindowsApp.lib`; nic dodatkowego się nie instaluje.
 2. **test** — `ctest` offscreen (`QT_QPA_PLATFORM=offscreen`) z Qt w `PATH`.
 3. **package** — do `build-windows\package\Brulion`: `brulion.exe`, `brulion-cli.exe`,
    `windeployqt --release --qmldir src\app\qml --no-translations --no-opengl-sw` (biblioteki Qt,
@@ -142,11 +199,16 @@ Kroki:
    instalator z `packaging/windows/brulion.iss` →
    `dist-windows\Brulion-<wersja>-windows-x86_64-setup.exe`.
 4. **check** — bez Qt w `PATH` i bez zmiennych Qt: ZIP rozpakowany do nowego folderu, potem
-   instalator zainstalowany po cichu dla bieżącego użytkownika; z obu `brulion-cli.exe --version`
-   i autotest powłoki prawdziwej aplikacji (`brulion.exe --demo --route journals --selftest-shell
-   --no-single-instance …`, offscreen, profil `BRULION_PROFILE=package-check`) — brak biblioteki
-   albo modułu QML go oblewa; na koniec ciche odinstalowanie, po którym ustawienia profilu muszą
-   zostać.
+   instalator zainstalowany po cichu dla bieżącego użytkownika z zadaniem `autostart` (wartość
+   `Run\Brulion` musi uruchamiać zainstalowany `brulion.exe --hidden`); z obu `brulion-cli.exe
+   --version` i autotest powłoki prawdziwej aplikacji (`brulion.exe --demo --route journals
+   --selftest-shell --no-single-instance …`, offscreen, profil `BRULION_PROFILE=package-check`) —
+   brak biblioteki albo modułu QML go oblewa; każde uruchomienie musi zarejestrować identyfikator
+   powiadomień profilu (`AppUserModelId\JanuszBit.Brulion.package-check`, ikona obok programu),
+   a wersja przenośna w osobnym profilu nie może dopisać autostartu; potem ten sam instalator
+   jeszcze raz po cichu jako aktualizacja, po wyłączeniu autostartu — nie może go włączyć z powrotem;
+   na koniec ciche odinstalowanie, po którym ustawienia profilu muszą zostać, a wpisu autostartu ma
+   nie być.
 
 `AppId` instalatora (`{5E3B8C1A-7F42-4D6B-9A0E-2C8D4B6F1E37}`) jest stały — po nim Windows poznaje
 zainstalowanego Brulionu; nie zmieniać.
@@ -178,10 +240,18 @@ z wyjątkami:
 * w `tst_vault_watch`: `watcherDetectsFolderRenames` (inny program nie zmieni na Windows nazwy
   obserwowanego folderu) i koniec `inPlaceRewriteOfAnOpenFileIsReportedAtOnce` (zapis notatki,
   którą inny program trzyma otwartą) — oba opisane wyżej w „Ograniczeniach”;
+* tylko na Windows: `tst_windowstoastbus` — prawdziwe powiadomienia pod testowym identyfikatorem
+  (pokazane, zastąpione, zamknięte, wyczyszczone); gdy powiadomienia są na danym komputerze
+  wyłączone (np. runner CI), te przypadki są pomijane;
 * autotesty QML (`tst_shell_qml*`, `tst_shell_journey*`, `tst_notify_sounds_qml*`,
   `tst_appio_import_qml*`, `tst_content_journals_qml`) dostają osobny profil
   `BRULION_PROFILE=test-<nazwa>` (`brulion_test_profile()` w `tests/CMakeLists.txt`), który ich
-  fixture usuwa przed uruchomieniem — zamiast folderów `XDG_*`.
+  fixture usuwa przed uruchomieniem — zamiast folderów `XDG_*`. W takim profilu przełącznik
+  autostartu jest wyłączony, więc żaden test nie pisze do klucza `Run`; każdy profil rejestruje
+  własny identyfikator powiadomień (`JanuszBit.Brulion.test-<nazwa>`). Testy C++ w procesie
+  (np. `tst_shell_navigation`) nie ustawiają nazw Brulionu i dostają identyfikator
+  `JanuszBit.Brulion.unnamed`, którego nikt nie rejestruje: ich powiadomienia idą do zasobnika,
+  a sprzątanie nie usuwa powiadomień prawdziwego Brulionu.
 
 ## Jedna kopia programu i zdalne sterowanie
 

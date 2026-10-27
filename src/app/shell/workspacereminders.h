@@ -52,7 +52,7 @@ class WorkspaceReminders : public QObject {
     Q_PROPERTY(QVariantList upcoming READ upcoming NOTIFY upcomingChanged FINAL)
     /// The next reminder ({} when none).
     Q_PROPERTY(QVariantMap next READ next NOTIFY upcomingChanged FINAL)
-    /// "dbus", "tray", "android", "browser", "none" (from the notifier), "" without one.
+    /// "dbus", "toast", "tray", "android", "browser", "none" (from the notifier), "" without one.
     Q_PROPERTY(QString backend READ backend NOTIFY sinkChanged FINAL)
     /// The platform rings reminders while Brulion is closed (Android).
     Q_PROPERTY(bool firesWhenClosed READ firesWhenClosed NOTIFY sinkChanged FINAL)

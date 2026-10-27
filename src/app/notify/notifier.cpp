@@ -6,6 +6,9 @@
 #include "androidnotifier.h"
 #elif defined(Q_OS_WASM)
 #include "wasmnotifiersink.h"
+#elif defined(BRULION_NOTIFY_HAVE_WINTOAST)
+#include "appidentity.h" // src/platform
+#include "windowstoastbus.h"
 #elif defined(BRULION_NOTIFY_HAVE_DBUS)
 #include "dbusnotificationbus.h"
 #endif
@@ -86,6 +89,8 @@ Notifier *createPlatformNotifier(QObject *parent)
     return new AndroidNotifier(parent);
 #elif defined(Q_OS_WASM)
     return new WasmNotifierSink(parent);
+#elif defined(BRULION_NOTIFY_HAVE_WINTOAST)
+    return new DesktopNotifier(new WindowsToastBus(platform::appUserModelId()), parent);
 #elif defined(BRULION_NOTIFY_HAVE_DBUS)
     return new DesktopNotifier(new DBusNotificationBus, parent);
 #else

@@ -29,7 +29,8 @@
 //   --route <view|json>    initial route, e.g. "settings" or '{"view":"page","path":"a.md"}'
 //   --popup <name[:query]> open a shell popup after start: palette, switcher, capture,
 //                          newPage, about (with an optional query for palette/switcher)
-//   --hidden               start minimised to the system tray (desktop; when a tray exists)
+//   --hidden               start minimised to the system tray (desktop; when a tray exists;
+//                          Windows' "Start when you sign in" starts Brulion so)
 //   --selftest-shell       drive the real shell with key events and exit with the number of
 //                          failed checks (desktop; main.cpp, shellselftest.h; ctest tst_shell_qml)
 // and for launchers (desktop entry actions): --capture opens quick capture, --today today's
@@ -52,6 +53,7 @@
 #include <memory>
 
 namespace brulion::platform {
+class Autostart;
 class WasmNotifier;
 }
 
@@ -101,6 +103,12 @@ class AppController : public QObject {
     Q_PROPERTY(bool startHidden READ startHidden NOTIFY trayAvailableChanged FINAL)
     /// quit() was called (the window must not veto closing any more).
     Q_PROPERTY(bool quitting READ quitting NOTIFY quittingChanged FINAL)
+    /// "Start when you sign in" (src/platform/autostart.h): "available" (Windows), "profile"
+    /// (Windows with a separate BRULION_PROFILE: shown, disabled) or "unsupported" (not offered).
+    Q_PROPERTY(QString autostartAvailability READ autostartAvailability NOTIFY startAtLoginChanged FINAL)
+    /// Windows starts Brulion hidden in the tray at sign-in (the Run key); a failed change says so
+    /// in a toast and the switch goes back.
+    Q_PROPERTY(bool startAtLogin READ startAtLogin WRITE setStartAtLogin NOTIFY startAtLoginChanged FINAL)
 
     // ---- Vault locations ----------------------------------------------------------------
     /// Suggested folder for a new vault (desktop: ~/Documents/Brulion, Android:
@@ -222,6 +230,11 @@ public:
     void setTrayAvailable(bool available);
     bool startHidden() const { return m_startHidden && m_trayAvailable; }
     bool quitting() const { return m_quitting; }
+    QString autostartAvailability() const;
+    bool startAtLogin() const;
+    void setStartAtLogin(bool on);
+    /// Replaces this process's autostart (tests: one over INI files).
+    void setAutostart(std::unique_ptr<platform::Autostart> autostart);
     QString devPopup() const { return m_devPopup; }
     QVariantMap remoteControl() const { return m_remoteControl; }
     void setRemoteControl(const QVariantMap &status);
@@ -343,6 +356,7 @@ Q_SIGNALS:
     void sourceModeShownChanged();
     void trayAvailableChanged();
     void quittingChanged();
+    void startAtLoginChanged();
     void pendingVaultPathChanged();
     void inDocsVaultChanged();
     void permissionsChanged();
@@ -386,6 +400,7 @@ private:
     std::unique_ptr<AppSettings> m_settings;
     std::unique_ptr<Workspace> m_workspace;
     std::unique_ptr<CommandModel> m_commands;
+    std::unique_ptr<platform::Autostart> m_autostart;
     QString m_dataDir;
     QString m_status = QStringLiteral("boot");
     QString m_error;

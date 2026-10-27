@@ -13,9 +13,13 @@ Steps (all by default, in this order; -Steps picks some):
              dist-windows\Brulion-<version>-windows-x86_64-setup.exe    (Inno Setup,
                                                                           packaging\windows\brulion.iss)
   check    the packages on this machine, without Qt on PATH: the ZIP unpacked into a fresh folder
-           and the installer installed silently for the current user, each started headless
-           (brulion-cli --version, the shell self-test of the real app in a separate profile),
-           then uninstalled silently — the profile's settings and notes must still be there.
+           and the installer installed silently for the current user (with the task "autostart":
+           the Run value must start the installed brulion.exe --hidden), each started headless
+           (brulion-cli --version, the shell self-test of the real app in a separate profile,
+           which registers its AppUserModelID for the toasts with the icon next to the program),
+           then installed again as a silent update with the Run value removed (it must stay
+           removed), then uninstalled silently — the profile's settings and notes must still be
+           there, the Run value must be gone.
 
 CI: .github/workflows/windows.yml (windows-2022, Qt from aqt through jurplel/install-qt-action,
 MSVC from ilammy/msvc-dev-cmd). Locally, in PowerShell from the repository root, with Visual Studio
@@ -164,6 +168,8 @@ if ($Steps -contains 'package') {
         Copy-Item $built $Stage
     }
     Copy-Item (Join-Path $Root 'LICENSE') (Join-Path $Stage 'LICENSE.txt')
+    # The icon of the toasts (the AppUserModelID's IconUri, src/platform/appidentity.h).
+    Copy-Item (Join-Path $Root 'packaging\windows\brulion.ico') $Stage
     $skill = Join-Path $Stage 'agent-skills\brulion'
     New-Item -ItemType Directory -Force -Path $skill | Out-Null
     Copy-Item (Join-Path $Root 'packaging\agent\brulion\SKILL.md') $skill
@@ -219,6 +225,26 @@ if ($Steps -contains 'package') {
 # nothing of Qt on PATH or in Qt's search variables: whatever is missing from the package fails it.
 $CheckProfile = 'package-check'
 $ProfileDirs = @((Join-Path $env:APPDATA "Brulion-$CheckProfile"), (Join-Path $env:LOCALAPPDATA "Brulion-$CheckProfile"))
+# The profile's AppUserModelID (src/platform/appidentity.h) and the start at sign-in (autostart.h).
+$AumidKey = "HKCU:\Software\Classes\AppUserModelId\JanuszBit.Brulion.$CheckProfile"
+$RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+
+function Get-RunValue {
+    $item = Get-ItemProperty -Path $RunKey -Name 'Brulion' -ErrorAction SilentlyContinue
+    if ($item) { return $item.Brulion }
+    return $null
+}
+
+# The run registered the profile's AppUserModelID with the icon next to the program.
+function Assert-AppIdentity([string] $Dir, [string] $Label) {
+    if (-not (Test-Path $AumidKey)) { Fail "$Label`: no AppUserModelID registration $AumidKey" }
+    $registration = Get-ItemProperty -Path $AumidKey
+    $icon = Join-Path $Dir 'brulion.ico'
+    if (-not (Test-Path $icon)) { Fail "$Label`: $icon missing" }
+    if ($registration.IconUri -ne $icon) { Fail "$Label`: IconUri is '$($registration.IconUri)', not $icon" }
+    Write-Host "$Label`: AppUserModelID registered ($($registration.DisplayName), $($registration.IconUri))"
+    Remove-Item -Recurse -Force $AumidKey
+}
 
 function Invoke-Packaged([string] $Dir, [string] $Label) {
     $exe = Join-Path $Dir 'brulion.exe'
@@ -302,19 +328,39 @@ if ($Steps -contains 'check') {
     # Portable: unpacked into a fresh folder.
     Info "Unpacking $ZipName into $work\zip"
     Expand-Archive -Path $zip -DestinationPath (Join-Path $work 'zip')
+    if (Get-RunValue) { Fail "A start at sign-in entry exists already: $(Get-RunValue)" }
     Invoke-Packaged (Join-Path $work 'zip\Brulion') 'ZIP'
+    Assert-AppIdentity (Join-Path $work 'zip\Brulion') 'ZIP'
+    # A separate profile never writes the Run key.
+    if (Get-RunValue) { Fail "The ZIP's run wrote a start at sign-in entry: $(Get-RunValue)" }
 
     # Installer: per user, silent; then the installed copy; then the uninstaller.
     $installDir = Join-Path $env:LOCALAPPDATA 'Programs\Brulion'
     if (Test-Path (Join-Path $installDir 'brulion.exe')) { Fail "Brulion is already installed in ${installDir}: uninstall it first" }
     Info "Installing $SetupName (silent, current user)"
     $install = Start-Process -FilePath $setup -PassThru -Wait -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES',
-        '/CURRENTUSER', '/NORESTART', "/LOG=`"$work\install.log`"")
+        '/CURRENTUSER', '/NORESTART', '/TASKS=autostart', "/LOG=`"$work\install.log`"")
     if ($install.ExitCode -ne 0) { Get-Content "$work\install.log" | Write-Host; Fail "The installer exited with $($install.ExitCode)" }
     if (-not (Test-Path (Join-Path $installDir 'brulion.exe'))) { Get-Content "$work\install.log" | Write-Host; Fail "Not installed into $installDir" }
     $shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Brulion.lnk'
     if (-not (Test-Path $shortcut)) { Fail "No Start menu shortcut $shortcut" }
+    $expectedRun = "`"$(Join-Path $installDir 'brulion.exe')`" --hidden"
+    if ((Get-RunValue) -ne $expectedRun) { Fail "The task autostart wrote '$(Get-RunValue)', not '$expectedRun'" }
+    Write-Host "Start at sign-in: $(Get-RunValue)"
     Invoke-Packaged $installDir 'Installed'
+    Assert-AppIdentity $installDir 'Installed'
+
+    # An update: autostart turned off (as the app's switch does) stays off — the task is offered on
+    # the first install only (UsePreviousTasks would select it again).
+    Remove-ItemProperty -Path $RunKey -Name 'Brulion'
+    Info "Installing $SetupName again (silent update)"
+    $update = Start-Process -FilePath $setup -PassThru -Wait -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES',
+        '/CURRENTUSER', '/NORESTART', "/LOG=`"$work\update.log`"")
+    if ($update.ExitCode -ne 0) { Get-Content "$work\update.log" | Write-Host; Fail "The update exited with $($update.ExitCode)" }
+    if (Get-RunValue) { Get-Content "$work\update.log" | Write-Host; Fail "The update turned the start at sign-in on again: $(Get-RunValue)" }
+    Write-Host 'Update: the start at sign-in stays off'
+    # On again for the uninstaller's check below.
+    Set-ItemProperty -Path $RunKey -Name 'Brulion' -Value $expectedRun
 
     Info 'Uninstalling (silent)'
     $settings = Join-Path $env:APPDATA "Brulion-$CheckProfile\Brulion.ini"
@@ -327,11 +373,12 @@ if ($Steps -contains 'check') {
     while ((Test-Path (Join-Path $installDir 'brulion.exe')) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 1 }
     if (Test-Path (Join-Path $installDir 'brulion.exe')) { Fail "The uninstaller left $installDir\brulion.exe" }
     if (Test-Path $shortcut) { Fail "The uninstaller left the Start menu shortcut" }
+    if (Get-RunValue) { Fail "The uninstaller left the start at sign-in entry: $(Get-RunValue)" }
     # The user's settings and notes are never the uninstaller's.
     if (-not (Test-Path $settings)) { Fail "The uninstaller removed the settings $settings" }
     Write-Host "Uninstalled; the profile's settings stay ($settings)"
 
-    foreach ($old in $ProfileDirs + @($work)) { if (Test-Path $old) { Remove-Item -Recurse -Force $old } }
+    foreach ($old in $ProfileDirs + @($work, $AumidKey)) { if (Test-Path $old) { Remove-Item -Recurse -Force $old } }
 }
 
 Info 'Done'

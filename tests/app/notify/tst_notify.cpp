@@ -1,17 +1,20 @@
 // Notifier adapters: the freedesktop Notify message of a reminder or alarm, DesktopNotifier
 // against a fake notification bus (snooze / open / OK actions, foreign notifications, replacing,
 // ringing alarms, the tray fallback, Wayland activation tokens), the sounds (freedesktop hints of
-// every choice, the sample notification), the JSON for Android's alarm scheduler and sound
-// channels, and the platform factory.
+// every choice, the sample notification), the Windows toast XML (scenarios, buttons, sounds,
+// escaping) and its activation arguments, a bus that rings itself (Windows' alarm toasts), the
+// JSON for Android's alarm scheduler and sound channels, and the platform factory.
 #include "androidpayload.h"
 #include "desktopnotifier.h"
 #include "notifier.h"
 #include "soundchoice.h"
+#include "toastxml.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
+#include <QXmlStreamReader>
 
 using namespace Qt::StringLiterals;
 using brulion::ScheduledNotification;
@@ -53,9 +56,19 @@ public:
     QList<DesktopNotification> sent;
     QList<uint> closed;
     uint nextId = 100;
+    // A Windows-like bus: its own name and sounds, no sound files, alarms with a looping sound
+    // ringing by themselves (as WindowsToastBus decides).
+    QString busName = u"dbus"_s;
+    QStringList sounds = desktopThemeSounds();
+    bool soundFiles = true;
+    bool selfRinging = false;
 
     bool isAvailable() const override { return available; }
     QStringList capabilities() const override { return caps; }
+    QString name() const override { return busName; }
+    QStringList themeSounds() const override { return sounds; }
+    bool supportsSoundFiles() const override { return soundFiles; }
+    bool ringsItself(const DesktopNotification &n) const override { return selfRinging && toastLoopsItsSound(n); }
     void notify(const DesktopNotification &n, std::function<void(uint id)> done) override
     {
         sent.append(n);
@@ -67,6 +80,50 @@ public:
     void dismiss(uint id) { Q_EMIT notificationClosed(id, 2); }
     void token(uint id, const QString &t) { Q_EMIT activationTokenReceived(id, t); }
 };
+
+/// A toast's XML read back.
+struct Toast {
+    bool wellFormed = false;
+    QString root;
+    QHash<QString, QString> attributes; ///< of <toast>
+    QStringList texts;
+    QStringList labels;    ///< <action content>
+    QStringList arguments; ///< <action arguments>
+    QStringList activationTypes;
+    bool hasAudio = false;
+    QHash<QString, QString> audio;
+};
+
+Toast readToast(const QString &xml)
+{
+    Toast toast;
+    QXmlStreamReader r(xml);
+    while (!r.atEnd()) {
+        if (r.readNext() != QXmlStreamReader::StartElement)
+            continue;
+        const QString name = r.name().toString();
+        QHash<QString, QString> attributes;
+        for (const QXmlStreamAttribute &a : r.attributes())
+            attributes.insert(a.name().toString(), a.value().toString());
+        if (toast.root.isEmpty()) {
+            toast.root = name;
+            toast.attributes = attributes;
+        } else if (name == u"text") {
+            toast.texts.append(r.readElementText());
+        } else if (name == u"action") {
+            toast.labels.append(attributes.value(u"content"_s));
+            toast.arguments.append(attributes.value(u"arguments"_s));
+            toast.activationTypes.append(attributes.value(u"activationType"_s));
+        } else if (name == u"audio") {
+            toast.hasAudio = true;
+            toast.audio = attributes;
+        }
+    }
+    toast.wellFormed = !r.hasError();
+    return toast;
+}
+
+const QStringList ToastCaps{u"actions"_s, u"body"_s, u"sound"_s, u"persistence"_s};
 
 } // namespace
 
@@ -259,6 +316,354 @@ private Q_SLOTS:
         bus->invoke(4711, u"default"_s);
         bus->invoke(bus->nextId, u"default"_s);
         QVERIFY(qgetenv("XDG_ACTIVATION_TOKEN").isEmpty());
+    }
+
+    void toastXml_data()
+    {
+        QTest::addColumn<ScheduledNotification>("notification");
+        QTest::addColumn<QStringList>("caps");
+        QTest::addColumn<SoundChoice>("sound");
+        QTest::addColumn<QString>("scenario");
+        QTest::addColumn<QString>("duration");
+        QTest::addColumn<QStringList>("texts");
+        QTest::addColumn<QStringList>("labels");
+        QTest::addColumn<QString>("audioSrc"); ///< "" none, "silent"
+        QTest::addColumn<bool>("loop");
+
+        const QStringList buttons{u"Snooze 10 min"_s, u"OK"_s};
+        const QStringList reminderTexts{u"Kupić mleko i żółty ser"_s, u"Dom & ogród <b> · termin: dziś 18:00"_s};
+        const QStringList alarmTexts{u"⏰ Pobudka na lotnisko"_s, u"Podróże"_s};
+        const auto custom = [](const QString &uri) { return SoundChoice{SoundChoice::Mode::Custom, uri, {}}; };
+        const QString event = u"ms-winsoundevent:Notification."_s;
+
+        QTest::newRow("reminder") << reminder() << ToastCaps << SoundChoice{} << QString() << u"long"_s << reminderTexts
+                                  << buttons << QString() << false;
+        QTest::newRow("alarm") << alarm() << ToastCaps << SoundChoice{} << u"alarm"_s << QString() << alarmTexts
+                               << buttons << event + u"Looping.Alarm"_s << true;
+        QTest::newRow("alarm, silent") << alarm() << ToastCaps << SoundChoice{SoundChoice::Mode::Silent, {}, {}}
+                                       << u"alarm"_s << QString() << alarmTexts << buttons << u"silent"_s << false;
+        QTest::newRow("alarm, Looping.Alarm3")
+                << alarm() << ToastCaps << custom(u"Looping.Alarm3"_s) << u"alarm"_s << QString() << alarmTexts
+                << buttons << event + u"Looping.Alarm3"_s << true;
+        QTest::newRow("alarm, a short sound") << alarm() << ToastCaps << custom(u"Reminder"_s) << u"alarm"_s
+                                              << QString() << alarmTexts << buttons << event + u"Reminder"_s << false;
+        QTest::newRow("alarm, a sound file")
+                << alarm() << ToastCaps << custom(u"file:///C:/D%C5%BAwi%C4%99ki/budzik.wav"_s) << u"alarm"_s
+                << QString() << alarmTexts << buttons << QString() << false;
+        QTest::newRow("reminder, Looping.Call2: once")
+                << reminder() << ToastCaps << custom(u"Looping.Call2"_s) << QString() << u"long"_s << reminderTexts
+                << buttons << event + u"Looping.Call2"_s << false;
+        QTest::newRow("reminder, Linux theme name") << reminder() << ToastCaps << custom(u"bell"_s) << QString()
+                                                    << u"long"_s << reminderTexts << buttons << QString() << false;
+        QTest::newRow("reminder, Linux name with a Windows sound")
+                << reminder() << ToastCaps << custom(u"message-new-instant"_s) << QString() << u"long"_s
+                << reminderTexts << buttons << event + u"IM"_s << false;
+        QTest::newRow("reminder, unknown name") << reminder() << ToastCaps << custom(u"Looping.Alarm11"_s) << QString()
+                                                << u"long"_s << reminderTexts << buttons << QString() << false;
+        QTest::newRow("reminder, silent") << reminder() << ToastCaps << SoundChoice{SoundChoice::Mode::Silent, {}, {}}
+                                          << QString() << u"long"_s << reminderTexts << buttons << u"silent"_s << false;
+
+        ScheduledNotification markup = reminder();
+        markup.title = u"Zadzwonić do pani Łucji — żółć, ęą <b>&\"'"_s;
+        markup.body = u"<i>&amp; \"cytat\" 'apostrof'</i> ]]> <!-- x -->"_s;
+        QTest::newRow("markup is text") << markup << ToastCaps << SoundChoice{} << QString() << u"long"_s
+                                        << QStringList{markup.title, markup.body} << buttons << QString() << false;
+
+        ScheduledNotification control = reminder();
+        control.title = u"Linia"_s + QChar(0x01) + u" dwa"_s + QChar(0x07);
+        control.body = u"a"_s + QChar(0) + u"b"_s + QChar(0xD800) + u"c 😀 \t"_s + QChar(0xFFFE);
+        QTest::newRow("characters XML cannot carry")
+                << control << ToastCaps << SoundChoice{} << QString() << u"long"_s
+                << QStringList{u"Linia dwa"_s, u"abc 😀 \t"_s} << buttons << QString() << false;
+
+        ScheduledNotification untitled = alarm();
+        untitled.title.clear();
+        untitled.body.clear();
+        QTest::newRow("alarm without actions or text")
+                << untitled << QStringList{} << SoundChoice{} << QString() << u"long"_s << QStringList{u"⏰ Alarm"_s}
+                << QStringList{} << event + u"Looping.Alarm"_s << false;
+    }
+
+    void toastXml()
+    {
+        QFETCH(ScheduledNotification, notification);
+        QFETCH(QStringList, caps);
+        QFETCH(SoundChoice, sound);
+        QFETCH(QString, scenario);
+        QFETCH(QString, duration);
+        QFETCH(QStringList, texts);
+        QFETCH(QStringList, labels);
+        QFETCH(QString, audioSrc);
+        QFETCH(bool, loop);
+
+        const DesktopNotification message = buildDesktopNotification(notification, caps, 10, 0, sound);
+        const QString xml = buildToastXml(message, 42);
+        const Toast toast = readToast(xml);
+        QVERIFY2(toast.wellFormed, qPrintable(xml));
+        QCOMPARE(toast.root, u"toast"_s);
+        QCOMPARE(toast.attributes.value(u"launch"_s), u"brulion-toast:id=42&action=default"_s);
+        QCOMPARE(toast.attributes.value(u"scenario"_s), scenario);
+        QCOMPARE(toast.attributes.value(u"duration"_s), duration);
+        QCOMPARE(toast.texts, texts);
+        QCOMPARE(toast.labels, labels);
+        if (!labels.isEmpty()) {
+            QCOMPARE(toast.arguments,
+                     (QStringList{u"brulion-toast:id=42&action=snooze"_s, u"brulion-toast:id=42&action=ok"_s}));
+            QCOMPARE(toast.activationTypes, (QStringList{u"foreground"_s, u"foreground"_s}));
+        }
+        if (audioSrc.isEmpty()) {
+            QVERIFY2(!toast.hasAudio, qPrintable(xml));
+        } else if (audioSrc == u"silent") {
+            QCOMPARE(toast.audio.value(u"silent"_s), u"true"_s);
+            QVERIFY(!toast.audio.contains(u"src"_s));
+        } else {
+            QCOMPARE(toast.audio.value(u"src"_s), audioSrc);
+            QCOMPARE(toast.audio.value(u"loop"_s), loop ? u"true"_s : QString());
+        }
+        // The bus rings exactly the alarms whose toast loops (DesktopNotifier re-sends the others).
+        QCOMPARE(toastLoopsItsSound(message), loop);
+        // Markup in a note never becomes elements of the toast.
+        QVERIFY(!xml.contains(u"<b>"_s));
+        QVERIFY(!xml.contains(u"<i>"_s));
+    }
+
+    void toastXmlActionsAndSamples()
+    {
+        // Every known action becomes a button ("done": TODO notifydone); unknown ones do not.
+        DesktopNotification d = buildDesktopNotification(reminder(), ToastCaps, 5);
+        d.actions << u"done"_s << u"Zrobione"_s << u"rm -rf"_s << u"Zło"_s;
+        Toast toast = readToast(buildToastXml(d, 4294967295u));
+        QVERIFY(toast.wellFormed);
+        QCOMPARE(toast.labels, (QStringList{u"Snooze 5 min"_s, u"OK"_s, u"Zrobione"_s}));
+        QCOMPARE(toast.arguments.last(), u"brulion-toast:id=4294967295&action=done"_s);
+        const ToastActivation done = parseToastArguments(toast.arguments.last());
+        QVERIFY(done.valid);
+        QCOMPARE(done.id, 4294967295u);
+        QCOMPARE(done.action, u"done"_s);
+
+        // A reminder that waits for the user (expire timeout 0) stays on screen too.
+        d = buildDesktopNotification(reminder(), ToastCaps, 5);
+        d.expireTimeout = 0;
+        QCOMPARE(readToast(buildToastXml(d, 1)).attributes.value(u"scenario"_s), u"reminder"_s);
+
+        // "Play sample": a passing toast without buttons; the alarm's sample sounds like an alarm.
+        for (const SoundKind kind : {SoundKind::Reminder, SoundKind::Alarm}) {
+            toast = readToast(buildToastXml(buildSoundPreview(kind, SoundChoice{}), 9));
+            QVERIFY(toast.wellFormed);
+            QVERIFY(!toast.attributes.contains(u"scenario"_s));
+            QVERIFY(!toast.attributes.contains(u"duration"_s));
+            QVERIFY(toast.labels.isEmpty());
+            QCOMPARE(toast.hasAudio, kind == SoundKind::Alarm);
+            if (kind == SoundKind::Alarm) {
+                QCOMPARE(toast.audio.value(u"src"_s), u"ms-winsoundevent:Notification.Looping.Alarm"_s);
+                QVERIFY(!toast.audio.contains(u"loop"_s));
+            }
+        }
+        toast = readToast(buildToastXml(
+                buildSoundPreview(SoundKind::Reminder, SoundChoice{SoundChoice::Mode::Custom, u"Mail"_s, {}}), 9));
+        QCOMPARE(toast.audio.value(u"src"_s), u"ms-winsoundevent:Notification.Mail"_s);
+    }
+
+    void toastSounds()
+    {
+        const QStringList sounds = windowsToastSounds();
+        QCOMPARE(sounds.size(), 25);
+        QCOMPARE(sounds.first(), u"Default"_s);
+        QVERIFY(sounds.contains(u"Looping.Alarm"_s));
+        QVERIFY(sounds.contains(u"Looping.Alarm10"_s));
+        QVERIFY(sounds.contains(u"Looping.Call10"_s));
+        QVERIFY(!sounds.contains(u"Looping.Alarm1"_s)); // the first one has no number
+        for (const QString &sound : sounds) {
+            QCOMPARE(windowsToastSoundFor(sound), sound);
+            QVERIFY(!isSoundFile(sound)); // stored as a "sound-name"
+        }
+        QCOMPARE(windowsToastSoundFor(defaultAlarmThemeSound()), u"Looping.Alarm"_s);
+        QCOMPARE(windowsToastSoundFor(u"phone-incoming-call"_s), u"Looping.Call"_s);
+        QVERIFY(windowsToastSoundFor(u"bell"_s).isEmpty());
+        QVERIFY(windowsToastSoundFor(u"default"_s).isEmpty()); // case matters
+        QVERIFY(windowsToastSoundFor(QString()).isEmpty());
+    }
+
+    void toastArguments_data()
+    {
+        QTest::addColumn<QString>("arguments");
+        QTest::addColumn<bool>("valid");
+        QTest::addColumn<uint>("id");
+        QTest::addColumn<QString>("action");
+        QTest::newRow("click") << u"brulion-toast:id=7&action=default"_s << true << 7u << u"default"_s;
+        QTest::newRow("snooze") << u"brulion-toast:id=101&action=snooze"_s << true << 101u << u"snooze"_s;
+        QTest::newRow("ok") << u"brulion-toast:id=1&action=ok"_s << true << 1u << u"ok"_s;
+        QTest::newRow("done") << u"brulion-toast:id=3&action=done"_s << true << 3u << u"done"_s;
+        QTest::newRow("largest id") << u"brulion-toast:id=4294967295&action=ok"_s << true << 4294967295u << u"ok"_s;
+        QTest::newRow("leading zeros") << u"brulion-toast:id=0007&action=ok"_s << true << 7u << u"ok"_s;
+        QTest::newRow("empty") << QString() << false << 0u << QString();
+        QTest::newRow("prefix only") << u"brulion-toast:"_s << false << 0u << QString();
+        QTest::newRow("another prefix") << u"toast:id=7&action=ok"_s << false << 0u << QString();
+        QTest::newRow("upper-case prefix") << u"BRULION-TOAST:id=7&action=ok"_s << false << 0u << QString();
+        QTest::newRow("id 0") << u"brulion-toast:id=0&action=ok"_s << false << 0u << QString();
+        QTest::newRow("negative id") << u"brulion-toast:id=-1&action=ok"_s << false << 0u << QString();
+        QTest::newRow("plus sign") << u"brulion-toast:id=+5&action=ok"_s << false << 0u << QString();
+        QTest::newRow("space") << u"brulion-toast:id= 5&action=ok"_s << false << 0u << QString();
+        QTest::newRow("too large") << u"brulion-toast:id=4294967296&action=ok"_s << false << 0u << QString();
+        QTest::newRow("far too large") << u"brulion-toast:id=99999999999&action=ok"_s << false << 0u << QString();
+        QTest::newRow("hex") << u"brulion-toast:id=0x1f&action=ok"_s << false << 0u << QString();
+        QTest::newRow("other digits") << u"brulion-toast:id=٣&action=ok"_s << false << 0u << QString();
+        QTest::newRow("no id") << u"brulion-toast:id=&action=ok"_s << false << 0u << QString();
+        QTest::newRow("unknown action") << u"brulion-toast:id=7&action=drzemka"_s << false << 0u << QString();
+        QTest::newRow("empty action") << u"brulion-toast:id=7&action="_s << false << 0u << QString();
+        QTest::newRow("no action") << u"brulion-toast:id=7"_s << false << 0u << QString();
+        QTest::newRow("swapped") << u"brulion-toast:action=ok&id=7"_s << false << 0u << QString();
+        QTest::newRow("extra &") << u"brulion-toast:id=7&action=ok&path=/etc"_s << false << 0u << QString();
+        QTest::newRow("injected quote") << u"brulion-toast:id=7&action=ok\""_s << false << 0u << QString();
+        QTest::newRow("trailing space") << u"brulion-toast:id=7&action=ok "_s << false << 0u << QString();
+    }
+
+    void toastArguments()
+    {
+        QFETCH(QString, arguments);
+        QFETCH(bool, valid);
+        QFETCH(uint, id);
+        QFETCH(QString, action);
+        const ToastActivation activation = parseToastArguments(arguments);
+        QCOMPARE(activation.valid, valid);
+        QCOMPARE(activation.id, id);
+        QCOMPARE(activation.action, action);
+        if (valid) {
+            const ToastActivation again = parseToastArguments(brulion::notify::toastArguments(id, action));
+            QVERIFY(again.valid);
+            QCOMPARE(again.id, id);
+            QCOMPARE(again.action, action);
+        }
+    }
+
+    void toastPermission_data()
+    {
+        QTest::addColumn<bool>("registered");
+        QTest::addColumn<ToastSetting>("setting");
+        QTest::addColumn<bool>("allowed");
+        QTest::newRow("allowed") << true << ToastSetting::Enabled << true;
+        // ERROR_NOT_FOUND before the first toast of an app without a package: try it.
+        QTest::newRow("not known yet") << true << ToastSetting::Unknown << true;
+        QTest::newRow("off for Brulion") << true << ToastSetting::DisabledForApplication << false;
+        QTest::newRow("off for all apps") << true << ToastSetting::DisabledForUser << false;
+        QTest::newRow("group policy") << true << ToastSetting::DisabledByGroupPolicy << false;
+        QTest::newRow("manifest") << true << ToastSetting::DisabledByManifest << false;
+        // Nobody registered the id (tests): its toasts would never appear — the tray shows them.
+        QTest::newRow("unregistered") << false << ToastSetting::Enabled << false;
+        QTest::newRow("unregistered, not known") << false << ToastSetting::Unknown << false;
+    }
+    void toastPermission()
+    {
+        QFETCH(bool, registered);
+        QFETCH(ToastSetting, setting);
+        QFETCH(bool, allowed);
+        QCOMPARE(toastsAllowed(registered, setting), allowed);
+    }
+
+    // Windows' alarm toasts with a looping sound loop it themselves: not sent again every ring
+    // interval, once silently when the ring time is over (it stays on screen).
+    void busThatRingsItself()
+    {
+        auto *bus = new FakeBus;
+        bus->busName = u"toast"_s;
+        bus->sounds = windowsToastSounds();
+        bus->soundFiles = false;
+        bus->selfRinging = true;
+        bus->caps = ToastCaps;
+        DesktopNotifier notifier(bus);
+        QCOMPARE(notifier.backend(), u"toast"_s);
+        QCOMPARE(notifier.themeSounds(), windowsToastSounds());
+        QVERIFY(!notifier.supportsSoundFiles());
+        QVERIFY(notifier.soundModes().contains(SoundChoice::Mode::Custom));
+
+        QDateTime now(QDate(2026, 10, 14), QTime(6, 30));
+        notifier.setClock([&now] { return now; });
+        notifier.setRingInterval(20);
+        notifier.setSounds({}, {SoundChoice::Mode::Custom, u"Looping.Alarm3"_s, {}});
+        notifier.showNow(alarm());
+        const uint id = bus->nextId;
+        QCOMPARE(bus->sent.size(), 1);
+        QCOMPARE(bus->sent.first().hints.value(u"sound-name"_s).toString(), u"Looping.Alarm3"_s);
+        QCOMPARE(notifier.ringingCount(), 1);
+        QTest::qWait(120);
+        QCOMPARE(bus->sent.size(), 1); // it rings by itself
+        QCOMPARE(notifier.ringingCount(), 1);
+
+        now = now.addSecs(61);
+        QTRY_COMPARE(notifier.ringingCount(), 0);
+        QCOMPARE(bus->sent.size(), 2);
+        QCOMPARE(bus->sent.last().replacesId, id);
+        QCOMPARE(bus->sent.last().hints.value(u"suppress-sound"_s).toBool(), true);
+        QVERIFY(!bus->sent.last().hints.contains(u"sound-name"_s));
+        QCOMPARE(bus->sent.last().actions, bus->sent.first().actions); // the buttons stay
+        QTest::qWait(80);
+        QCOMPARE(bus->sent.size(), 2);
+        QCOMPARE(notifier.shownCount(), 1);
+
+        // An action before the time is over: no silent copy.
+        ScheduledNotification other = alarm();
+        other.id = u"2222222222222222"_s;
+        notifier.showNow(other);
+        QCOMPARE(notifier.ringingCount(), 1);
+        bus->invoke(bus->nextId, u"snooze"_s);
+        QCOMPARE(notifier.ringingCount(), 0);
+        now = now.addSecs(600);
+        QTest::qWait(80);
+        QCOMPARE(bus->sent.size(), 3);
+    }
+
+    // An alarm with a short Windows sound ("Poczta") plays it once per toast: it is sent again
+    // every ring interval, as on Linux, and stays on screen silently when the time is over.
+    void busThatRingsItselfShortSound()
+    {
+        auto *bus = new FakeBus;
+        bus->busName = u"toast"_s;
+        bus->sounds = windowsToastSounds();
+        bus->soundFiles = false;
+        bus->selfRinging = true;
+        bus->caps = ToastCaps;
+        DesktopNotifier notifier(bus);
+
+        QDateTime now(QDate(2026, 10, 14), QTime(6, 30));
+        notifier.setClock([&now] { return now; });
+        notifier.setRingInterval(20);
+        notifier.setSounds({}, {SoundChoice::Mode::Custom, u"Mail"_s, {}});
+        notifier.showNow(alarm());
+        const uint id = bus->nextId;
+        QCOMPARE(notifier.ringingCount(), 1);
+        QVERIFY(!toastLoopsItsSound(bus->sent.first()));
+        QTRY_VERIFY(bus->sent.size() >= 3);
+        for (const DesktopNotification &sent : std::as_const(bus->sent)) {
+            QCOMPARE(sent.hints.value(u"sound-name"_s).toString(), u"Mail"_s);
+            QVERIFY(!sent.hints.value(u"suppress-sound"_s).toBool());
+        }
+        QCOMPARE(bus->sent.last().replacesId, id);
+
+        now = now.addSecs(61);
+        QTRY_COMPARE(notifier.ringingCount(), 0);
+        const qsizetype sent = bus->sent.size();
+        QTest::qWait(80);
+        QCOMPARE(bus->sent.size(), sent); // nothing more, not even a silent copy
+        QVERIFY(!bus->sent.last().hints.value(u"suppress-sound"_s).toBool());
+        QCOMPARE(notifier.shownCount(), 1);
+
+        // Switched to a looping sound while it rings: sent once more (looping), then left alone,
+        // and a silent copy when the time is over.
+        ScheduledNotification other = alarm();
+        other.id = u"3333333333333333"_s;
+        notifier.showNow(other);
+        const uint otherId = bus->nextId;
+        notifier.setSounds({}, {SoundChoice::Mode::Custom, u"Looping.Alarm2"_s, {}});
+        QTRY_COMPARE(bus->sent.last().hints.value(u"sound-name"_s).toString(), u"Looping.Alarm2"_s);
+        QCOMPARE(bus->sent.last().replacesId, otherId);
+        const qsizetype looped = bus->sent.size();
+        QTest::qWait(120);
+        QCOMPARE(bus->sent.size(), looped);
+        QCOMPARE(notifier.ringingCount(), 1);
+        now = now.addSecs(61);
+        QTRY_COMPARE(notifier.ringingCount(), 0);
+        QCOMPARE(bus->sent.size(), looped + 1);
+        QVERIFY(bus->sent.last().hints.value(u"suppress-sound"_s).toBool());
     }
 
     void androidPayload()
@@ -530,7 +935,7 @@ private Q_SLOTS:
         QCOMPARE(notifier->parent(), &parent);
         QVERIFY(qobject_cast<DesktopNotifier *>(notifier)); // a desktop build
         QVERIFY(!notifier->firesWhenClosed());
-        QVERIFY(QStringList({ u"dbus"_s, u"tray"_s, u"none"_s }).contains(notifier->backend()));
+        QVERIFY(QStringList({u"dbus"_s, u"toast"_s, u"tray"_s, u"none"_s}).contains(notifier->backend()));
         notifier->setSnoozeMinutes(0);
         QCOMPARE(notifier->snoozeMinutes(), 1);
         notifier->setSnoozeMinutes(1000);

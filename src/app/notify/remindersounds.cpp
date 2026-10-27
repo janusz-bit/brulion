@@ -181,9 +181,12 @@ bool ReminderSounds::setCustom(const QString &kind, const QString &uri, const QS
         return false;
     if (c.title.isEmpty() && isSoundFile(c.uri))
         c.title = QUrl::fromLocalFile(soundFilePath(c.uri)).fileName();
-    // Linux: a sound file or one of the offered theme sounds (Android: any ringtone URI).
+    // Linux: a sound file or one of the offered theme sounds; Windows: one of its notification
+    // sounds, no files (Android: any ringtone URI).
     const QStringList names = themeSounds();
     if (!isSoundFile(c.uri) && !names.isEmpty() && !names.contains(c.uri))
+        return false;
+    if (isSoundFile(c.uri) && !names.isEmpty() && !soundFiles())
         return false;
     return setChoice(k, c);
 }

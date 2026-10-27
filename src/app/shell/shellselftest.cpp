@@ -3747,6 +3747,28 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 5h. Ustawienia → Wygląd: accent, sidebar entries, bottom navigation, quick note button.
     checkAppearance(engine, window, app, check);
 
+    // 5i. Ustawienia → Aplikacja → "Start when you sign in": Windows only, and disabled in a
+    // separate profile (the tests' BRULION_PROFILE: a Run entry would start the default one).
+    {
+        app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"app"_s}});
+        check(waitFor([&] { return shownNamed(window->contentItem(), u"settingsDetailedLog"_s) != nullptr; }),
+              "the application settings are shown");
+        QQuickItem *startAtLogin = nullptr;
+        for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
+            if (item->objectName() == u"settingsStartAtLogin")
+                startAtLogin = item;
+        }
+#ifdef Q_OS_WIN
+        const bool separateProfile = app->autostartAvailability() == u"profile";
+        check(startAtLogin && startAtLogin->isVisible() && startAtLogin->isEnabled() == !separateProfile
+                      && startAtLogin->property("checked").toBool() == app->startAtLogin(),
+              "Windows offers to start at sign-in (disabled in a separate profile)");
+#else
+        check(startAtLogin && !startAtLogin->isVisible(), "starting at sign-in is offered on Windows only");
+#endif
+        app->goHome();
+    }
+
     // 6. Closing the notebook from the UI (as a click would: from inside an event).
     QTimer::singleShot(0, app, [app] { app->closeVault(); });
     check(waitFor([app] { return app->status() == u"onboarding" && !app->workspace()->isOpen(); }),
