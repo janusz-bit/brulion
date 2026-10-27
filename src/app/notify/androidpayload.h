@@ -3,7 +3,17 @@
 //
 //   { id: nativeId (positive 31-bit, stable per occurrence), title, body,
 //     at: epoch ms of the local wall-clock time, alarm: bool, ringMinutes: 1–60 (alarms),
-//     path: vault-relative note, line: 0-based line of the reminder }
+//     path: vault-relative note, line: 0-based line of the reminder,
+//     key: the occurrence's id (ScheduledNotification::id), local: its wall-clock time
+//     "yyyy-MM-ddTHH:mm" (never derived through UTC: a natively snoozed copy has another `at`),
+//     task: the reminder is on an open task (the notification offers "Zrobione") }
+//
+// "Zrobione" tapped in a notification or on the alarm screen is queued by the Kotlin side
+// (DoneQueue.kt) and taken by AndroidBridge::takeDoneRequests() as a JSON array of
+//
+//   { key, local, path, line, title, day: "yyyy-MM-dd" — the local date of the tap }
+//
+// androidDoneRequests() turns them into the notifications to complete (Notifier::doneRequested).
 //
 // The sounds (AndroidBridge::setReminderSounds(), previewSound(), pickSound()):
 //
@@ -15,6 +25,7 @@
 #include "reminders/notifications.h"
 #include "soundchoice.h"
 
+#include <QDate>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
@@ -26,6 +37,16 @@ QJsonObject androidReminderItem(const ScheduledNotification &notification);
 
 /// All reminders, in order; entries without a valid time are left out.
 QJsonArray androidReminderPayload(const QList<ScheduledNotification> &notifications);
+
+/// A "Done" tapped on Android: the notification (id, at, path, line, title) and the day of the tap.
+struct AndroidDoneRequest {
+    ScheduledNotification notification;
+    QDate day; ///< invalid: not given (completed with today's date)
+};
+
+/// The "Done" requests of `array` (AndroidBridge::takeDoneRequests()), in order; entries without
+/// a key, a note or a valid `local` time are left out.
+QList<AndroidDoneRequest> androidDoneRequests(const QJsonArray &array);
 
 /// One sound: {mode, uri, title} (normalised: a custom sound without a uri is the default).
 QJsonObject androidSoundItem(const SoundChoice &choice);

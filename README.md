@@ -115,6 +115,8 @@
   notatce, w wynikach zapytań, we wstawionych blokach, w tabelach, w widoku zadań i w kalendarzu
   (zmiana trafia do notatki z zadaniem i da się cofnąć). Menu mają też 🔁 (reguła), priorytet,
   link do dnia `[[2026-10-20]]`, `#tag` i `[[link]]` (otwórz, otwórz w panelu bocznym, kopiuj).
+  Przycisk **Zrobione** w powiadomieniu przypomnienia przy zadaniu (Linux, Windows, Android)
+  oznacza zadanie jako zrobione bez otwierania notatki.
   Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku. Daty wpisujesz
   po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
 * **Obliczenia.** Bloki ` ```calc ` liczą jak kalkulator w notatniku (zmienne, procenty,
@@ -180,7 +182,7 @@
 |---|---|
 | **NixOS** | flake + moduł `programs.brulion` (z autostartem w zasobniku) — [docs/NIXOS.md](docs/NIXOS.md) |
 | **Inne Linuksy** | AppImage (x86_64, aarch64) z [Wydań](https://github.com/janusz-bit/brulion/releases); aktualizuje się przez AppImageUpdate, Gear Lever albo AppImageLauncher |
-| **Windows** 10/11 (x86_64) — **wersja testowa** | instalator `Brulion-<wersja>-windows-x86_64-setup.exe` (dla bieżącego użytkownika, bez uprawnień administratora) albo przenośny `brulion-<wersja>-windows-x86_64.zip` z [Wydań](https://github.com/janusz-bit/brulion/releases); pliki nie są podpisane (SmartScreen: „Więcej informacji” → „Uruchom mimo to”); przypomnienia jako powiadomienia Windows z „Drzemka”/„OK”, autostart po zalogowaniu — [docs/WINDOWS.md](docs/WINDOWS.md) |
+| **Windows** 10/11 (x86_64) — **wersja testowa** | instalator `Brulion-<wersja>-windows-x86_64-setup.exe` (dla bieżącego użytkownika, bez uprawnień administratora) albo przenośny `brulion-<wersja>-windows-x86_64.zip` z [Wydań](https://github.com/janusz-bit/brulion/releases); pliki nie są podpisane (SmartScreen: „Więcej informacji” → „Uruchom mimo to”); przypomnienia jako powiadomienia Windows z „Drzemka”/„Zrobione”/„OK”, autostart po zalogowaniu — [docs/WINDOWS.md](docs/WINDOWS.md) |
 | **Android** (9+) | plik APK (arm64) z [Wydań](https://github.com/janusz-bit/brulion/releases) — [docs/ANDROID.md](docs/ANDROID.md) |
 | **Przeglądarka** | <https://janusz-bit.github.io/brulion/> (działa offline po pierwszym otwarciu) — [docs/WEB.md](docs/WEB.md); na własnym serwerze: `brulion-web-<wersja>.zip` z Wydań albo moduł `services.brulion-web` |
 
@@ -401,7 +403,7 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   alarms that fire while the app is closed), in the **browser** (Qt for WebAssembly,
   works offline) and, as a **test version**, on **Windows** 10/11 x86_64 (a per-user installer
   without admin rights or a portable ZIP; unsigned; reminders as Windows toast notifications with
-  Snooze/OK, optional start at sign-in —
+  Snooze/Done/OK, optional start at sign-in —
   [docs/WINDOWS.md](docs/WINDOWS.md)). On phones the editing toolbar always sits right on the on-screen keyboard
   (Android's IME insets, frame by frame on Android 11+; the browser's visualViewport).
 * Sync through **Syncthing** (it's just a folder; conflict copies are detected and merged in
@@ -442,6 +444,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   priority opens its menu (move the date, snooze, alarm, change the rule or priority) in notes,
   query results, embeds, tables, Tasks and the calendar — only that token changes, and it can be
   undone; on a `#tag`, a `[[link]]` or a link to a day: open, open in the side panel, copy.
+  A task's reminder notification has a **Done** button (Linux, Windows, Android) that completes
+  the task without opening the note.
 * A command line for scripts and AI agents: `brulion-cli` captures, appends to journals, adds
   tasks and reminders, searches, queries and moves pages exactly as the app does (JSON output,
   stable exit codes, every change in the version history, destructive commands behind

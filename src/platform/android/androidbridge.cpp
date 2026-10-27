@@ -109,6 +109,15 @@ void JNICALL nativePermissionsChanged(JNIEnv *, jclass)
         bridge, [bridge] { Q_EMIT bridge->permissionsChanged(); }, Qt::QueuedConnection);
 }
 
+/// "Zrobione" was tapped (DoneQueue.kt queued it): C++ takes it with takeDoneRequests().
+void JNICALL nativeDoneQueued(JNIEnv *, jclass)
+{
+    AndroidBridge *bridge = s_bridge.load();
+    if (!bridge)
+        return;
+    QMetaObject::invokeMethod(bridge, [bridge] { Q_EMIT bridge->doneRequestsQueued(); }, Qt::QueuedConnection);
+}
+
 /// The ringtone picker answered (BrulionAndroid.onActivityResult): `json` is the choice.
 void JNICALL nativeSoundPicked(JNIEnv *env, jclass, jint kind, jstring json)
 {
@@ -170,6 +179,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
             {"nativeActivated", "(Ljava/lang/String;I)V", reinterpret_cast<void *>(&nativeActivated)},
             {"nativePermissionsChanged", "()V", reinterpret_cast<void *>(&nativePermissionsChanged)},
             {"nativeSoundPicked", "(ILjava/lang/String;)V", reinterpret_cast<void *>(&nativeSoundPicked)},
+            {"nativeDoneQueued", "()V", reinterpret_cast<void *>(&nativeDoneQueued)},
             {"nativeImeChanged", "(IZZ)V", reinterpret_cast<void *>(&nativeImeChanged)},
             {"nativeGestureInsetsChanged", "(II)V", reinterpret_cast<void *>(&nativeGestureInsetsChanged)},
     };
@@ -188,11 +198,13 @@ AndroidBridge::AndroidBridge(QObject *parent)
                         return;
                     Q_EMIT permissionsChanged();
                     deliverPendingActivation();
+                    Q_EMIT doneRequestsQueued();
                 });
     }
     // Cold start from a notification: delivered once the event loop runs (after the UI
-    // connected to activated()).
+    // connected to activated()). "Zrobione" taps queued while Brulion was closed likewise.
     QMetaObject::invokeMethod(this, &AndroidBridge::deliverPendingActivation, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, &AndroidBridge::doneRequestsQueued, Qt::QueuedConnection);
 }
 
 AndroidBridge::~AndroidBridge()
@@ -283,6 +295,18 @@ Activation AndroidBridge::takeActivation()
         return {};
     const QJsonObject object = QJsonDocument::fromJson(answer.toString().toUtf8()).object();
     return {object.value("path"_L1).toString(), object.value("line"_L1).toInt()};
+}
+
+QJsonArray AndroidBridge::takeDoneRequests()
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return {};
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, "takeDoneRequests", "(Landroid/content/Context;)Ljava/lang/String;", context.object());
+    if (failed("takeDoneRequests") || !answer.isValid())
+        return {};
+    return QJsonDocument::fromJson(answer.toString().toUtf8()).array();
 }
 
 namespace {

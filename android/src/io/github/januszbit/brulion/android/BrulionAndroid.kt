@@ -38,6 +38,9 @@ import java.lang.ref.WeakReference
  *   right after [attach];
  * * app running — `onNewIntent` calls the native method [nativeActivated], which C++ registered
  *   before calling [attach]; it emits `AndroidBridge::activated` on Qt's thread.
+ *
+ * "Zrobione" taps go the same two ways, through a persisted queue ([DoneQueue]): [nativeDoneQueued]
+ * while C++ listens, [takeDoneRequests] after its start.
  */
 object BrulionAndroid {
   private const val TAG = "BrulionAndroid"
@@ -74,6 +77,9 @@ object BrulionAndroid {
 
   /** A permission dialog was answered: the app should re-check its permissions. */
   @JvmStatic external fun nativePermissionsChanged()
+
+  /** "Zrobione" was tapped ([DoneQueue] holds it): C++ takes the queue with [takeDoneRequests]. */
+  @JvmStatic external fun nativeDoneQueued()
 
   /**
    * The ringtone picker of [pickSound] answered for [kind] (0 reminders, 1 alarms): [json] is the
@@ -282,6 +288,20 @@ object BrulionAndroid {
       val activation = pendingActivation
       pendingActivation = null
       (activation ?: JSONObject()).toString()
+    }
+
+  /**
+   * The "Zrobione" taps not handed over yet ([DoneQueue], also those of while Brulion was
+   * closed): a JSON array of `{key, local, path, line, title, day}`, `[]` when none. Forgets
+   * them: each tap is handed out once.
+   */
+  @JvmStatic
+  fun takeDoneRequests(context: Context): String =
+    try {
+      DoneQueue.take(context)
+    } catch (e: RuntimeException) {
+      Log.e(TAG, "takeDoneRequests failed", e)
+      "[]"
     }
 
   // -----------------------------------------------------------------------------------------
@@ -513,6 +533,21 @@ object BrulionAndroid {
       } catch (e: UnsatisfiedLinkError) {
         Log.w(TAG, "native gesture insets callback not registered", e)
         return false
+      }
+    }
+  }
+
+  /**
+   * A "Zrobione" tap was queued ([ReminderActions.done], main thread): tells C++ when it listens;
+   * otherwise it takes the queue after its start.
+   */
+  internal fun doneQueued() {
+    synchronized(lock) {
+      if (!nativeAttached) return
+      try {
+        nativeDoneQueued()
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native done callback not registered", e)
       }
     }
   }

@@ -8,6 +8,7 @@
     <string name="brulion_channel_missed_alarms_description">Alarms that stopped ringing with no reaction — a silent notification, tap to open the note</string>
     <string name="brulion_reminder_default_title">Reminder</string>
     <string name="brulion_action_snooze">Snooze 10 min</string>
+    <string name="brulion_action_done">Done</string>
     <string name="brulion_action_ok">OK</string>
     <string name="brulion_action_open">Open note</string>
     <string name="brulion_missed">Missed · %1$s</string>

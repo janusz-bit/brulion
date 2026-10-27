@@ -4,7 +4,8 @@
 // scripts/android-emulator-test.sh — not part of the app. Writes "SELFTEST ..." lines to
 // logcat: the permission state, two rounds of scheduleReminders() (a reminder in 45 s, an alarm
 // in 75 s ringing 1 minute, one in the past that must be skipped), two files saved to Downloads
-// (saveToDownloads: MediaStore) and every activated() tap.
+// (saveToDownloads: MediaStore), every activated() tap and every "Zrobione" tap (reminder 101 is
+// on a task: its notification has the button; takeDoneRequests()).
 
 #include "android/androidbridge.h"
 
@@ -48,16 +49,31 @@ int main(int argc, char *argv[])
     QObject::connect(bridge, &AndroidBridge::activated, &app, [](const QString &path, int line) {
         qCWarning(lcSelfTest, "SELFTEST activated path=%s line=%d", qUtf8Printable(path), line);
     });
+    QObject::connect(bridge, &AndroidBridge::doneRequestsQueued, &app, [bridge] {
+        for (const QJsonValue &value : bridge->takeDoneRequests()) {
+            const QJsonObject done = value.toObject();
+            qCWarning(lcSelfTest, "SELFTEST done key=%s local=%s path=%s line=%d day=%s",
+                      qUtf8Printable(done.value(u"key"_s).toString()),
+                      qUtf8Printable(done.value(u"local"_s).toString()),
+                      qUtf8Printable(done.value(u"path"_s).toString()), done.value(u"line"_s).toInt(),
+                      qUtf8Printable(done.value(u"day"_s).toString()));
+        }
+    });
     QObject::connect(bridge, &AndroidBridge::permissionsChanged, &app,
                      [bridge] { logPermissions("changed", bridge); });
     logPermissions("start", bridge);
 
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    // 101 is a task's reminder ("Zrobione" in its notification).
+    QJsonObject task =
+            reminder(101, u"Przypomnienie — zażółć gęślą jaźń"_s, now + 45'000, false, u"dziennik/2026-10-14.md"_s, 3);
+    task.insert(u"key"_s, u"selftest-101"_s);
+    task.insert(u"local"_s, QDateTime::fromMSecsSinceEpoch(now + 45'000).toString(u"yyyy-MM-ddTHH:mm"_s));
+    task.insert(u"task"_s, true);
     const QJsonArray items{
-        reminder(101, u"Przypomnienie — zażółć gęślą jaźń"_s, now + 45'000, false,
-                 u"dziennik/2026-10-14.md"_s, 3),
-        reminder(102, u"Alarm — pobudka"_s, now + 75'000, true, u"strony/Łódź.md"_s, 7),
-        reminder(103, u"Przeszłe"_s, now - 60'000, false, u"stare.md"_s, 1),
+            task,
+            reminder(102, u"Alarm — pobudka"_s, now + 75'000, true, u"strony/Łódź.md"_s, 7),
+            reminder(103, u"Przeszłe"_s, now - 60'000, false, u"stare.md"_s, 1),
     };
     // Twice: replacing the set with the same items must be idempotent.
     for (int round = 1; round <= 2; ++round) {

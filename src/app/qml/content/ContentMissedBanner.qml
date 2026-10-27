@@ -5,8 +5,9 @@ import Brulion
 
 // ContentMissedBanner — reminders that came due while Brulion was closed or the device was off
 // (Workspace.reminders.missed), on top of the journals: each with its time, "Otwórz" (the note
-// at the reminder's line), "Drzemka" (snooze: the new time is written into the note) and
-// dismiss; "Odrzuć wszystkie". Hidden when nothing was missed.
+// at the reminder's line), "Drzemka" (snooze: the new time is written into the note),
+// "Zrobione" (a task's reminder: the task is marked done in the note, ✅ today — the shell's
+// toast confirms it) and dismiss; "Odrzuć wszystkie". Hidden when nothing was missed.
 //
 //   ContentMissedBanner { Layout.fillWidth: true }
 BCard {
@@ -103,6 +104,13 @@ BCard {
                         onClicked: banner.snooze(item.modelData.id)
                     }
                     BIconButton {
+                        visible: !Theme.compact && item.modelData.task === true
+                        size: "small"
+                        iconName: "check"
+                        label: qsTr("Done")
+                        onClicked: banner.reminders.complete(item.modelData.id)
+                    }
+                    BIconButton {
                         size: "small"
                         iconName: "x"
                         label: qsTr("Dismiss")
@@ -126,6 +134,14 @@ BCard {
                         iconName: "clock"
                         text: qsTr("Snooze %n min", "", banner.reminders.snoozeMinutes)
                         onClicked: banner.snooze(item.modelData.id)
+                    }
+                    BButton {
+                        visible: item.modelData.task === true
+                        size: "small"
+                        variant: "ghost"
+                        iconName: "check"
+                        text: qsTr("Done")
+                        onClicked: banner.reminders.complete(item.modelData.id)
                     }
                 }
             }

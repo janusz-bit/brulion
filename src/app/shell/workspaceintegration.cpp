@@ -82,6 +82,17 @@ void wireReminders(AppController *app)
                      [reminders](const ScheduledNotification &n, int minutes) {
                          reminders->snoozeNotification(n, minutes);
                      });
+    // "Done" on a task's reminder (D-Bus, Windows toasts, Android — there possibly a tap queued
+    // while Brulion was closed, applied once the notebook is ready).
+    QObject::connect(
+            notifier, &notify::Notifier::doneRequested, reminders,
+            [reminders](const ScheduledNotification &n, QDate day) { reminders->completeNotification(n, day); });
+    // The confirmation (also of the missed banner's "Done"): after a cold start on Android the
+    // only sign that the queued tap was written.
+    QObject::connect(reminders, &WorkspaceReminders::taskCompleted, app, [app](const QString &title) {
+        app->toast(QCoreApplication::translate("brulion::shell::WorkspaceIntegration", "“%1” marked done").arg(title),
+                   u"success"_s);
+    });
     QObject::connect(notifier, &notify::Notifier::errorOccurred, app,
                      [app](const QString &message) { app->toast(message, u"error"_s); });
     // The sounds of reminders and alarms (Settings → Reminders, QML ReminderSounds): device-local,

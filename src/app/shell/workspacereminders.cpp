@@ -3,6 +3,7 @@
 #include "dates/dates.h"
 #include "index/vaultindex.h"
 #include "log/categories.h"
+#include "markdown/edit.h"
 #include "reminders/reminders.h"
 #include "vault/vault.h"
 
@@ -10,6 +11,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -118,8 +120,19 @@ void WorkspaceReminders::detach()
 void WorkspaceReminders::start()
 {
     m_wantRunning = true;
-    if (!m_enabled || !m_index || m_scheduler)
-        return;
+    if (m_enabled && m_index && !m_scheduler)
+        startScheduler();
+    // "Done" taps that came before the index was complete (Android: queued while Brulion was
+    // closed). After the scheduler started: completing one dismisses its missed entry.
+    if (m_index && !m_pendingDone.isEmpty()) {
+        const QList<std::pair<ScheduledNotification, QDate>> pending = std::exchange(m_pendingDone, {});
+        for (const auto &[notification, day] : pending)
+            applyCompletion(notification, day);
+    }
+}
+
+void WorkspaceReminders::startScheduler()
+{
     m_scheduler = std::make_unique<ReminderScheduler>(m_index.data(), m_proxy.get(), m_vault ? m_vault->store() : nullptr,
                                                       [this] { return now(); });
     m_scheduler->setAlarmRingMinutes(m_ringMinutes);
@@ -250,14 +263,15 @@ QVariantMap WorkspaceReminders::toMap(const ScheduledNotification &n) const
     const QDateTime at = n.at.toLocalTime();
     DateSpec spec{ at.date(), at.time() };
     return {
-        { u"id"_s, n.id },
-        { u"title"_s, n.title },
-        { u"body"_s, n.body },
-        { u"at"_s, at.toString(u"yyyy-MM-dd HH:mm"_s) },
-        { u"when"_s, at.isValid() ? dates::formatHuman(spec, locale, now().date()) : QString() },
-        { u"alarm"_s, n.alarm },
-        { u"path"_s, n.path },
-        { u"line"_s, n.line },
+            {u"id"_s, n.id},
+            {u"title"_s, n.title},
+            {u"body"_s, n.body},
+            {u"at"_s, at.toString(u"yyyy-MM-dd HH:mm"_s)},
+            {u"when"_s, at.isValid() ? dates::formatHuman(spec, locale, now().date()) : QString()},
+            {u"alarm"_s, n.alarm},
+            {u"path"_s, n.path},
+            {u"line"_s, n.line},
+            {u"task"_s, n.taskLine >= 0},
     };
 }
 
@@ -403,6 +417,71 @@ bool WorkspaceReminders::snoozeNotification(const ScheduledNotification &notific
     }
     if (m_scheduler)
         m_scheduler->dismissMissed(notification.id);
+    return true;
+}
+
+bool WorkspaceReminders::complete(const QString &id)
+{
+    const std::optional<ScheduledNotification> n = find(id);
+    return n && applyCompletion(*n, {});
+}
+
+bool WorkspaceReminders::completeNotification(const ScheduledNotification &notification, QDate day)
+{
+    if (!m_wantRunning) {
+        // The index is not complete yet (or no vault is open): a half-built index must not answer
+        // "changed meanwhile". Applied by start().
+        qCInfo(lcReminders) << "Done request kept until the notebook is ready:" << notification.path;
+        m_pendingDone.append({notification, day});
+        return true;
+    }
+    return applyCompletion(notification, day);
+}
+
+std::optional<ScheduledNotification> WorkspaceReminders::current(const ScheduledNotification &notification) const
+{
+    if (!m_index || !notification.at.isValid())
+        return std::nullopt;
+    for (const ScheduledNotification &n : notificationsBetween(*m_index, notification.at, notification.at)) {
+        if (n.id == notification.id)
+            return n;
+    }
+    return std::nullopt;
+}
+
+bool WorkspaceReminders::applyCompletion(const ScheduledNotification &notification, QDate day)
+{
+    if (!m_vault || !m_index || notification.path.isEmpty())
+        return false;
+    // Found again by id (same text and time) for the task's current line. Not found: the
+    // reminder was edited, moved, its task completed (here or on another device) or deleted —
+    // the old line may now hold another task, which must not be completed instead.
+    const std::optional<ScheduledNotification> target = current(notification);
+    if (!target) {
+        qCInfo(lcReminders) << "Not marked done: the reminder changed in" << notification.path;
+        Q_EMIT errorOccurred(
+                tr("“%1” has changed in the note meanwhile and was not marked done.").arg(notification.title));
+        return false;
+    }
+    if (target->taskLine < 0)
+        return false; // not a task (a notification never offers "Done" for one)
+    bool ok = false;
+    const QString content = m_vault->readText(target->path, &ok);
+    if (!ok)
+        return false;
+    const QDate doneDay = day.isValid() ? day : now().date();
+    const QString edited = markdown::setTaskStatus(content, target->taskLine, TaskStatus::Done, doneDay);
+    if (edited == content) {
+        qCInfo(lcReminders) << "Nothing to mark done at" << target->path << target->taskLine;
+        return false;
+    }
+    if (!m_vault->writeText(target->path, edited, ChangeSource::User)) {
+        Q_EMIT errorOccurred(tr("Could not mark the task done: %1").arg(m_vault->errorString()));
+        return false;
+    }
+    if (m_scheduler)
+        m_scheduler->dismissMissed(notification.id);
+    Q_EMIT taskCompleted(target->title);
     return true;
 }
 

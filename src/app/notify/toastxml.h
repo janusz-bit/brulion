@@ -18,9 +18,8 @@
 //                                               "default" (the click on the toast: `launch`)
 //     <audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="true"/>  or silent="true"
 //
-// Every action the message carries becomes a button, so a new action key (e.g. "done" for "mark
-// the task done", TODO notifydone) needs only buildDesktopNotification() and DesktopNotifier;
-// parseToastArguments() already accepts it.
+// Every action the message carries becomes a button: "Drzemka", "Zrobione" (a task's reminder:
+// marks the task done) and "OK".
 #pragma once
 
 #include "desktopnotifier.h"

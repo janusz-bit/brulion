@@ -36,6 +36,19 @@ AndroidNotifier::AndroidNotifier(QObject *parent) : Notifier(parent)
         }
         Q_EMIT soundPicked(kind == 1 ? SoundKind::Alarm : SoundKind::Reminder, picked);
     });
+    connect(bridge, &platform::AndroidBridge::doneRequestsQueued, this, &AndroidNotifier::takeDoneRequests);
+    // Taps queued while Brulion was closed: from the event loop, once the shell listens.
+    QMetaObject::invokeMethod(this, &AndroidNotifier::takeDoneRequests, Qt::QueuedConnection);
+}
+
+void AndroidNotifier::takeDoneRequests()
+{
+    const QList<AndroidDoneRequest> requests =
+            androidDoneRequests(platform::AndroidBridge::instance()->takeDoneRequests());
+    for (const AndroidDoneRequest &request : requests) {
+        qCInfo(lcAndroidNotify) << "Done tapped for" << request.notification.path << "on" << request.day;
+        Q_EMIT doneRequested(request.notification, request.day);
+    }
 }
 
 AndroidNotifier::~AndroidNotifier() = default;

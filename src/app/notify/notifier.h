@@ -3,14 +3,17 @@
 // signals the reminders integration (shell/workspacereminders.h) listens to.
 //
 //   DesktopNotifier    Linux: org.freedesktop.Notifications over QtDBus (actions "Snooze" /
-//                      "OK" / click = open, alarms critical + sound + resident and ringing again
-//                      for their ring time); without a notification service the tray shows them
-//                      (trayMessageRequested). In-app timed: firesWhenClosed() = false.
+//                      "Done" (a task's reminder) / "OK" / click = open, alarms critical + sound
+//                      + resident and ringing again for their ring time); without a notification
+//                      service the tray shows them (trayMessageRequested). In-app timed:
+//                      firesWhenClosed() = false.
 //                      Windows: the same over toast notifications (WindowsToastBus: buttons,
 //                      alarms on screen with a looping sound); the tray when they are off.
 //   AndroidNotifier    AndroidBridge::scheduleReminders() (AlarmManager: fires while the app is
 //                      closed and after a reboot; firesWhenClosed() = true). Snoozing happens
-//                      in the Android notification itself.
+//                      in the Android notification itself; its "Done" is queued by the Kotlin
+//                      side and handed over as doneRequested() (at once while the app runs,
+//                      else at its next start).
 //   WasmNotifierSink   the browser's Notification API through platform::WasmNotifier (only
 //                      while the page is open; firesWhenClosed() = false).
 //
@@ -24,6 +27,7 @@
 #include "reminders/notifications.h"
 #include "soundchoice.h"
 
+#include <QDate>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -84,6 +88,10 @@ Q_SIGNALS:
     void activated(const QString &path, int line);
     /// The user chose "Snooze" on a notification: move the reminder `minutes` later.
     void snoozeRequested(const brulion::ScheduledNotification &notification, int minutes);
+    /// The user chose "Done" on the notification of a task's reminder: mark the task done with
+    /// ✅ `day` (invalid: today). Android passes the day of the tap, which may lie before the
+    /// day the request arrives (the app was closed).
+    void doneRequested(const brulion::ScheduledNotification &notification, QDate day);
     /// Arming or showing notifications failed (translated message).
     void errorOccurred(const QString &message);
     /// The system's ringtone picker answered (pickSound()).

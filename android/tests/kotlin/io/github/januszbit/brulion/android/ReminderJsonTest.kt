@@ -5,6 +5,7 @@ package io.github.januszbit.brulion.android
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,6 +35,22 @@ class ReminderJsonTest {
   }
 
   @Test
+  fun occurrenceKeyAndTaskRoundTrip() {
+    val task = alarm.copy(key = "0123456789abcdef", local = "2026-10-25T02:30", task = true)
+    assertTrue(task.canComplete)
+    assertEquals(task, Reminder.fromJson(JSONObject(task.toJson().toString())))
+    // Snoozing keeps the occurrence: "Zrobione" on the snoozed notification completes the same task.
+    val snoozed = task.copy(at = task.at + 600_000L, snoozed = true)
+    assertEquals("2026-10-25T02:30", snoozed.local)
+    assertTrue(snoozed.canComplete)
+    // Not a task, or no occurrence key (an older version's): no "Zrobione".
+    assertFalse(task.copy(task = false).canComplete)
+    assertFalse(task.copy(key = "").canComplete)
+    assertFalse(task.copy(local = "").canComplete)
+    assertFalse(alarm.canComplete)
+  }
+
+  @Test
   fun remindersStoredByOlderVersionsGetTheDefaultRingTime() {
     val old =
       JSONObject(
@@ -42,6 +59,8 @@ class ReminderJsonTest {
     val reminder = Reminder.fromJson(old)!!
     assertEquals(RingTimeout.DEFAULT_MINUTES, reminder.ringMinutes)
     assertEquals(Reminder(3, "Budzik", "", 1_792_000_000_000L, true, "a.md", 4), reminder)
+    assertEquals("", reminder.key)
+    assertFalse(reminder.task)
   }
 
   @Test
@@ -70,14 +89,18 @@ class ReminderJsonTest {
       JSONArray(
         """[
           {"id":42,"title":"Spotkanie","body":"Sala 3","at":1.792e12,"alarm":false,"path":"dziennik/2026-10-14.md","line":3},
-          {"id":43.0,"title":"Pobudka","body":"","at":1792003600000,"alarm":true,"ringMinutes":5,"path":"Ąę.md","line":0}
+          {"id":43.0,"title":"Pobudka","body":"","at":1792003600000,"alarm":true,"ringMinutes":5,"path":"Ąę.md","line":0,
+           "key":"00ff00ff00ff00ff","local":"2026-10-14T09:00","task":true}
         ]"""
       )
     val parsed = Reminder.listFromJson(items)
     assertEquals(
       listOf(
         Reminder(42, "Spotkanie", "Sala 3", 1_792_000_000_000L, false, "dziennik/2026-10-14.md", 3),
-        Reminder(43, "Pobudka", "", 1_792_003_600_000L, true, "Ąę.md", 0, ringMinutes = 5)
+        Reminder(
+          43, "Pobudka", "", 1_792_003_600_000L, true, "Ąę.md", 0, ringMinutes = 5,
+          key = "00ff00ff00ff00ff", local = "2026-10-14T09:00", task = true
+        )
       ),
       parsed
     )

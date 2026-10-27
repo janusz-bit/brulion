@@ -129,6 +129,7 @@ QList<ScheduledNotification> collect(const VaultIndex &index, const QDateTime &s
             n.alarm = ref.reminder.alarm;
             n.path = ref.path;
             n.line = ref.reminder.line;
+            n.taskLine = src.task ? src.task->line : -1;
             byId.insert(id, out.size());
             out.append(std::move(n));
         }

@@ -88,10 +88,18 @@ dzwoni jak budzik. Składnia: `docs/SYNTAX.md`.
   wtedy w ciche powiadomienie **„Przegapiony alarm”**, a ekran alarmu się zamyka; stuknięcie
   w powiadomienie nadal otwiera notatkę.
 * **Alarm przy wygaszonym ekranie** otwiera pełnoekranowy ekran alarmu nad ekranem blokady
-  z przyciskami **Drzemka 10 min**, **OK** i **Otwórz notatkę**.
+  z przyciskami **Drzemka 10 min**, **Zrobione** (przy zadaniu), **OK** i **Otwórz notatkę**.
 * Przyciski w powiadomieniu: **Drzemka 10 min** (przypomnienie wróci za 10 minut — działa także
-  przy zamkniętej aplikacji) i **OK**. Stuknięcie w powiadomienie otwiera notatkę w miejscu
-  przypomnienia. Przy alarmie każda z tych reakcji wycisza go i zamyka ekran alarmu.
+  przy zamkniętej aplikacji), **Zrobione** (tylko przypomnienie przy zadaniu) i **OK**.
+  Stuknięcie w powiadomienie otwiera notatkę w miejscu przypomnienia. Przy alarmie każda z tych
+  reakcji wycisza go i zamyka ekran alarmu.
+* **Zrobione** oznacza zadanie jako zrobione (`[x]` z `✅` — jak zmiana stanu w edytorze,
+  zadanie cykliczne dostaje następny termin) bez otwierania notatki. Zmiana trafia do notatki od
+  razu, gdy Brulion działa (także w tle), a przy zamkniętej aplikacji — przy jej następnym
+  uruchomieniu, gdy notatnik jest już wczytany (komunikat „… — zrobione”); data `✅` to dzień
+  stuknięcia. Do tego czasu inne urządzenia widzą zadanie jako otwarte, a pozostałe przypomnienia
+  tego zadania mogą jeszcze zadzwonić. Gdy przypomnienie albo zadanie zmieniło się w międzyczasie
+  (także na innym urządzeniu), notatka zostaje bez zmian, a Brulion o tym mówi.
 * **Po restarcie** telefonu (po pierwszym odblokowaniu), po aktualizacji aplikacji i po zmianie
   godziny przypomnienia są nastawiane ponownie. Te, które przypadły, gdy telefon był wyłączony
   (do 24 godzin wstecz), pojawią się od razu jako „Przegapione”.
@@ -112,7 +120,7 @@ dzwoni jak budzik. Składnia: `docs/SYNTAX.md`.
 
 **Odtwórz próbkę** gra wybrany dźwięk przez około 3 sekundy (dźwięk alarmu na strumieniu
 alarmu — z głośnością budzika; „Wibracja” — wibruje). Alarm gra wybrany dźwięk w pętli
-(`FLAG_INSISTENT`) aż do reakcji („OK”, „Drzemka 10 min”, stuknięcie) albo do końca czasu
+(`FLAG_INSISTENT`) aż do reakcji („OK”, „Drzemka 10 min”, „Zrobione”, stuknięcie) albo do końca czasu
 dzwonienia. Przycisk **Ustawienia powiadomień systemowych** (Przypomnienia / Alarmy) otwiera
 ustawienia kanału w Androidzie — dla wyjątków: tryb „Nie przeszkadzać”, wibracje na zegarku,
 dźwięk zmieniony przez producenta telefonu.
@@ -763,6 +771,7 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | `bool canUseFullScreenIntent()` / `void requestFullScreenIntent()` | `canUseFullScreenIntent(Context)` / `requestFullScreenIntent(Context)` |
 | `ScheduleResult scheduleReminders(const QJsonArray &)` | `scheduleReminders(Context, String): String` — `{"scheduled":n,"exact":b}` albo `{"error":…}` |
 | `Activation takeActivation()` | `takeActivation(Context): String` — `{"path":…,"line":n}` albo `{}` |
+| `QJsonArray takeDoneRequests()` | `takeDoneRequests(Context): String` — kolejka „Zrobione” (`DoneQueue.kt`): `[{key, local, path, line, title, day}, …]`, opróżniana |
 | `static DocumentsResult documentInfo(const QString &uri)` | `documentInfo(Context, String): String` — `{uri, name, dir, size, virtual}` albo `{"error":…}` |
 | `static DocumentsResult listDocuments(const QString &folderUri)` | `listDocuments(Context, String): String` — `{"documents":[…]}` albo `{"error":…}` |
 | `QJsonObject setReminderSounds(const QJsonObject &)` | `setReminderSounds(Context, String): String` — `{"reminderChannel", "alarmChannel"}` albo `{"error":…}` |
@@ -771,13 +780,18 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | `void openSoundSettings(int kind)` | `openSoundSettings(Context, Int)` — `ACTION_CHANNEL_NOTIFICATION_SETTINGS` |
 | sygnał `activated(QString path, int line)` | natywna `nativeActivated(String, Int)` |
 | sygnał `permissionsChanged()` | natywna `nativePermissionsChanged()` + powrót aplikacji na pierwszy plan |
+| sygnał `doneRequestsQueued()` | natywna `nativeDoneQueued()` (z `ReminderActions.done`) + powrót na pierwszy plan + raz po starcie |
 | sygnał `soundPicked(int kind, QJsonObject choice)` | natywna `nativeSoundPicked(Int, String)` (z `BrulionActivity.onActivityResult`) |
 | sygnał `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | natywna `nativeImeChanged(Int, Boolean, Boolean)` (z `ImeInsets`, piksele fizyczne, każda klatka wysuwania na Androidzie 11+) / `requestImeState()` — raport jeszcze raz |
 | sygnał `systemGesturesChanged(int left, int right)` | natywna `nativeGestureInsetsChanged(Int, Int)` (z `ImeInsets`, piksele fizyczne stref gestów systemu przy krawędziach widoku Qt; raport jeszcze raz też przez `requestImeState()`) |
 | `void setSystemBarsLight(bool light)` | `setSystemBarsLight(Boolean)` — ikony pasków systemu ciemne nad jasnym oknem (Android 11+, okno pod paskami) |
 
 * Element `scheduleReminders`: `{id: int, title, body, at: ms od epoki, alarm: bool,
-  ringMinutes: int (alarmy, 1–60, domyślnie 10), path: ścieżka notatki w notatniku, line: int}`.
+  ringMinutes: int (alarmy, 1–60, domyślnie 10), path: ścieżka notatki w notatniku, line: int,
+  key: id wystąpienia w Brulionie, local: jego czas ścienny "yyyy-MM-ddTHH:mm", task: bool}`.
+  `key` i `local` (niezmienione przez drzemkę, nigdy przeliczane przez UTC) wskazują wystąpienie,
+  które ma zakończyć „Zrobione”; przycisk jest tylko przy `task: true` (przypomnienie przy
+  otwartym zadaniu). Zapisane przez starszą wersję przypomnienia (bez tych pól) go nie mają.
   `id` musi być stały między wywołaniami (ponowne nastawienie tego samego `id` zastępuje budzik).
   Wywołanie zastępuje cały zbiór; drzemki z powiadomienia zostają, dopóki aplikacja nie przyśle
   tego samego `id`. Błędny JSON nie kasuje nastawionych budzików.
@@ -806,6 +820,16 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
     jeszcze raz sprawdza `takeActivation()`. Dostęp do celu chroni blokada po stronie Kotlina,
     więc żadne stuknięcie nie ginie ani nie jest dostarczone dwa razy; intencje odtworzone
     z „Ostatnich” są pomijane.
+* **„Zrobione”** — przycisk działa w `BroadcastReceiver`, zwykle bez uruchomionego Qt, a Markdown
+  zmienia tylko C++ (jeden parser): `ReminderActions.done` zamyka powiadomienie (jak „OK”), usuwa
+  natywną drzemkę tego przypomnienia i dopisuje `{key, local, path, line, title, day}` (`day` —
+  lokalna data stuknięcia) do kolejki w SharedPreferences (`DoneQueue`, najwyżej 100 wpisów,
+  ponowne stuknięcie tego samego wystąpienia zastępuje wpis, zapis `commit()`), potem woła
+  `nativeDoneQueued`, jeśli C++ słucha. `AndroidNotifier` odbiera kolejkę
+  (`takeDoneRequests()`) po tym sygnale, raz po starcie i przy powrocie na pierwszy plan,
+  i przekazuje ją jako `Notifier::doneRequested`; `WorkspaceReminders` trzyma prośby do
+  zakończenia indeksowania, odnajduje wystąpienie po `key` i `local` i zapisuje
+  `markdown::setTaskStatus(…, Done, day)`.
 * `nativeActivated` jest wołana w głównym wątku Androida; C++ tylko kolejkuje emisję sygnału.
   Destruktor `AndroidBridge` woła `detach()` (czeka na blokadę), dopiero potem zeruje wskaźnik.
 
@@ -835,7 +859,9 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   dwa razy `scheduleReminders` (przypomnienie za 45 s, alarm za 75 s dzwoniący 1 min,
   przeszłe — pominięte), budziki w `dumpsys alarm`, powiadomienia na kanałach `reminders`
   i `alarms`, zamiana alarmu w „Przegapiony alarm” po czasie dzwonienia, stuknięcia
-  (zimny start i działająca aplikacja, ścieżka z polskimi znakami) dochodzące do C++.
+  (zimny start i działająca aplikacja, ścieżka z polskimi znakami) dochodzące do C++, „Zrobione”
+  w powiadomieniu przypomnienia przy zadaniu (prośba w C++ z dniem stuknięcia, powiadomienie
+  znika).
   APK testowy ma ten sam pakiet co aplikacja (zastępuje ją) — tylko na emulatorze/telefonie
   testowym.
 * Zaznaczanie i kopiowanie prawdziwym palcem (`adb shell input`, APK debugowalny jak niżej):

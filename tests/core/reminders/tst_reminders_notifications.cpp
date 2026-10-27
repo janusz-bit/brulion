@@ -581,6 +581,51 @@ private Q_SLOTS:
         QVERIFY(upcomingOf(QString(content).replace(u"- [ ]"_s, u"- [x]"_s), Now, 1).isEmpty());
     }
 
+    void taskLine_data()
+    {
+        // Every reminder of the day, in order; the line of the task "Done" would complete.
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QList<int>>("taskLines");
+        QTest::newRow("task") << u"- [ ] Zadzwonić do Żanety ⏰ 2026-10-14 09:00"_s << QList<int>{0};
+        QTest::newRow("below a heading") << lines({u"# Dom"_s, u""_s, u"- [/] Pomalować ścianę ⏰ 2026-10-14 09:00"_s})
+                                         << QList<int>{2};
+        QTest::newRow("logseq") << u"- TODO Kupić żółty ser ⏰ 2026-10-14 09:00"_s << QList<int>{0};
+        QTest::newRow("continuation line")
+                << lines({u"- [ ] Napisać raport"_s, u"  dla Łucji ⏰ 2026-10-14 09:00"_s}) << QList<int>{0};
+        QTest::newRow("nested task") << lines({u"- Projekt źródłowy"_s, u"  - [ ] Ułożyć plan ⏰ 2026-10-14 09:00"_s})
+                                     << QList<int>{1};
+        QTest::newRow("bare bullet under a task")
+                << lines({u"- [ ] Leki"_s, u"  - ⏰ 2026-10-14 09:00"_s}) << QList<int>{0};
+        QTest::newRow("nested bare bullets")
+                << lines({u"- Wstęp"_s, u"- [ ] Leki"_s, u"  - ⏰ 2026-10-14 09:00 🔁 every day"_s,
+                          u"    - ⏰ 2026-10-14 09:10"_s})
+                << QList<int>{1, 1};
+        QTest::newRow("recurring task") << lines(
+                {u"Wstęp"_s, u""_s, u"- [ ] Łyknąć witaminy 🔁 every day ⏰ 2026-10-10 12:00"_s})
+                                        << QList<int>{2};
+        QTest::newRow("plain bullet") << u"- Kupić chleb ⏰ 2026-10-14 09:00"_s << QList<int>{-1};
+        QTest::newRow("paragraph") << u"Akapit o źrebaku ⏰ 2026-10-14 09:00"_s << QList<int>{-1};
+        QTest::newRow("bare bullet under a plain item")
+                << lines({u"- Akapit"_s, u"  - ⏰ 2026-10-14 09:00"_s}) << QList<int>{-1};
+        QTest::newRow("bare bullet in a quote")
+                << lines({u"- [ ] Zadanie obok"_s, u""_s, u"> Cytat o zadaniu"_s, u"> - ⏰ 2026-10-14 09:00"_s})
+                << QList<int>{-1};
+        QTest::newRow("child with text under a task")
+                << lines({u"- [ ] Zadanie"_s, u"  - Osobna notatka ⏰ 2026-10-14 09:00"_s}) << QList<int>{-1};
+        QTest::newRow("crlf") << u"Wstęp\r\n\r\n- [ ] Żółw ⏰ 2026-10-14 09:00\r\n- Ćma ⏰ 2026-10-14 10:00\r\n"_s
+                              << QList<int>{2, -1};
+    }
+
+    void taskLine()
+    {
+        QFETCH(QString, content);
+        QFETCH(QList<int>, taskLines);
+        QList<int> actual;
+        for (const ScheduledNotification &n : upcomingOf(content, Now, 0))
+            actual.append(n.taskLine);
+        QCOMPARE(actual, taskLines);
+    }
+
     void bareBulletInQuoteIsIndependent()
     {
         // Inside a quote the list's container is not a parent item: page title, fires on its own.

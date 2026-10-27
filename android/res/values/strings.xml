@@ -9,6 +9,7 @@
     <string name="brulion_channel_missed_alarms_description">Alarmy, które przestały dzwonić bez reakcji — ciche powiadomienie, stuknięcie otwiera notatkę</string>
     <string name="brulion_reminder_default_title">Przypomnienie</string>
     <string name="brulion_action_snooze">Drzemka 10 min</string>
+    <string name="brulion_action_done">Zrobione</string>
     <string name="brulion_action_ok">OK</string>
     <string name="brulion_action_open">Otwórz notatkę</string>
     <!-- %1$s: time of the reminder, e.g. 09:00 -->

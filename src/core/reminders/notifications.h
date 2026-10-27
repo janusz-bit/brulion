@@ -45,6 +45,10 @@ struct ScheduledNotification {
     VaultPath path;
     /// 0-based line of the reminder token.
     int line = 0;
+    /// 0-based first line of the open task the reminder belongs to (its own block's task, or for
+    /// a bare reminder bullet the enclosing item's); -1: the reminder is not on a task. The
+    /// notification's "Done" marks this task done (markdown::setTaskStatus).
+    int taskLine = -1;
 
     friend bool operator==(const ScheduledNotification &, const ScheduledNotification &) = default;
 };
@@ -104,6 +108,7 @@ QList<ScheduledNotification> notificationsBetween(const VaultIndex &index, const
 ///   list item, e.g. `- ⏰ …` written by snoozeReminder() under a recurring task) belongs to its
 ///   parent item — through further bare bullets: it takes that item's text and task, so it does
 ///   not fire once the task is done or cancelled;
+/// * taskLine = the first line of that task (-1 when the reminder is not on a task);
 /// * title = plain text of the reminder's block (links show their display text, `**`/`==`/
 ///   `~~`/`` ` `` removed, whitespace collapsed), at most 120 characters, else the page title;
 ///   body = page title, plus " · termin: <date>" ("due <date>" in English) when the task has a

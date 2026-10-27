@@ -5,9 +5,9 @@
 #include "reminders/reminders_p.h"
 #include "vault/localstore.h"
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QSet>
 
 #include <algorithm>
 #include <chrono>
@@ -42,10 +42,13 @@ constexpr int MaxScheduledLimit = 1000;
 
 QJsonObject toJson(const ScheduledNotification &n)
 {
-    return QJsonObject{
+    QJsonObject o{
             {u"id"_s, n.id},       {u"title"_s, n.title}, {u"body"_s, n.body}, {u"at"_s, formatStamp(n.at)},
             {u"alarm"_s, n.alarm}, {u"path"_s, n.path},   {u"line"_s, n.line},
     };
+    if (n.taskLine >= 0)
+        o.insert(u"taskLine"_s, n.taskLine);
+    return o;
 }
 
 std::optional<ScheduledNotification> fromJson(const QJsonValue &value)
@@ -61,6 +64,8 @@ std::optional<ScheduledNotification> fromJson(const QJsonValue &value)
     n.alarm = o.value(u"alarm"_s).toBool();
     n.path = o.value(u"path"_s).toString();
     n.line = std::max(0, o.value(u"line"_s).toInt());
+    // Absent (not on a task, or stored by an older version): no "Done" in the missed banner.
+    n.taskLine = std::max(-1, o.value(u"taskLine"_s).toInt(-1));
     return n;
 }
 
@@ -465,17 +470,26 @@ void ReminderScheduler::pruneMissed(const QDateTime &now)
     const QDateTime limit = now.addDays(-HistoryDays);
     // Entries whose reminder is gone from the notes (deleted, edited, task done) — checked only
     // when the index holds notes (not while the vault is loading).
-    QSet<QString> alive;
+    // The task line of the ones still there follows the note (the banner's "Done").
+    QHash<QString, int> alive; // id → taskLine
     const bool check = hasNotes();
     if (check) {
         const QDateTime from = m_missed.constFirst().at;
         const QDateTime to = std::max(m_missed.constLast().at, from);
         for (const ScheduledNotification &n : notificationsBetween(*m_index, from, to, m_locale))
-            alive.insert(n.id);
+            alive.insert(n.id, n.taskLine);
     }
     const qsizetype removed = m_missed.removeIf(
             [&](const ScheduledNotification &n) { return n.at < limit || (check && !alive.contains(n.id)); });
-    if (removed == 0)
+    bool changed = removed > 0;
+    if (check) {
+        for (ScheduledNotification &n : m_missed) {
+            const int taskLine = alive.value(n.id, n.taskLine);
+            changed = changed || taskLine != n.taskLine;
+            n.taskLine = taskLine;
+        }
+    }
+    if (!changed)
         return;
     saveMissed();
     Q_EMIT missedChanged();

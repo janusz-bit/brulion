@@ -69,7 +69,8 @@ Przypomnienia ⏰ i alarmy ⏰! są powiadomieniami Windows (toastami; `src/app/
 C++/WinRT, Windows 10 1809 lub nowszy):
 
 * **Przypomnienie** pokazuje tekst przypomnienia, pod nim stronę i termin, z przyciskami
-  **„Drzemka 10 min”** (długość z Ustawień → Przypomnienia) i **„OK”**. Kliknięcie w powiadomienie
+  **„Drzemka 10 min”** (długość z Ustawień → Przypomnienia), przy zadaniu **„Zrobione”** (zadanie
+  oznaczone jako zrobione, `[x]` z `✅`, bez otwierania notatki) i **„OK”**. Kliknięcie w powiadomienie
   otwiera notatkę na tej linii i wyciąga okno Brulionu na wierzch. Na ekranie zostaje ok. 25 s,
   potem czeka w Centrum akcji (tam też działa, dopóki Brulion jest uruchomiony).
 * **Alarm** (scenariusz „alarm” Windows) zostaje na ekranie, aż odpowiesz, a jego dźwięk się

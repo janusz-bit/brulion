@@ -10,7 +10,8 @@
 //   * summary = the reminder's text ("⏰ " in front for alarms), body = page title and due info
 //     (escaped when the server interprets markup — note text never becomes markup);
 //   * actions (when the server supports them): "default" (a click: open the note), "snooze"
-//     ("Snooze 10 min"), "ok";
+//     ("Snooze 10 min"), "done" ("Done": only for a task's reminder, marks the task done —
+//     doneRequested()), "ok";
 //   * hints: urgency normal / critical (alarms), alarms also "resident" (they stay until acted
 //     upon, expire timeout 0); "desktop-entry" so the server shows Brulion's name and icon; the
 //     sound chosen in the settings (applyDesktopSoundHints(): "sound-name" — alarm-clock-elapsed
@@ -55,7 +56,8 @@ struct DesktopNotification {
 QString desktopAppId();
 
 /// The Notify call for `notification`. `capabilities` are the server's (GetCapabilities):
-/// "actions" adds the actions, "body-markup" escapes the body. `snoozeMinutes` names the snooze
+/// "actions" adds the actions ("done" only when the reminder is on a task: taskLine >= 0),
+/// "body-markup" escapes the body. `snoozeMinutes` names the snooze
 /// action ("Snooze 10 min"); `sound` is the sound of its kind (reminder or alarm). Labels are
 /// translated (context "brulion::notify::DesktopNotifier").
 DesktopNotification buildDesktopNotification(const ScheduledNotification &notification, const QStringList &capabilities,

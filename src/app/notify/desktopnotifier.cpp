@@ -37,11 +37,17 @@ DesktopNotification buildDesktopNotification(const ScheduledNotification &notifi
 
     if (capabilities.contains(u"actions"_s)) {
         d.actions = {
-            u"default"_s, QCoreApplication::translate("brulion::notify::DesktopNotifier", "Open note"),
-            u"snooze"_s, QCoreApplication::translate("brulion::notify::DesktopNotifier", "Snooze %n min", nullptr,
-                                                         std::clamp(snoozeMinutes, 1, 120)),
-            u"ok"_s, QCoreApplication::translate("brulion::notify::DesktopNotifier", "OK"),
+                u"default"_s,
+                QCoreApplication::translate("brulion::notify::DesktopNotifier", "Open note"),
+                u"snooze"_s,
+                QCoreApplication::translate("brulion::notify::DesktopNotifier", "Snooze %n min", nullptr,
+                                            std::clamp(snoozeMinutes, 1, 120)),
         };
+        // A task's reminder: "Done" marks the task done without opening the note. Three buttons
+        // are what GNOME Shell shows; KDE and Windows show them all.
+        if (notification.taskLine >= 0)
+            d.actions << u"done"_s << QCoreApplication::translate("brulion::notify::DesktopNotifier", "Done");
+        d.actions << u"ok"_s << QCoreApplication::translate("brulion::notify::DesktopNotifier", "OK");
     }
 
     d.hints.insert(u"urgency"_s, QVariant::fromValue(uchar(notification.alarm ? 2 : 1)));
@@ -233,6 +239,8 @@ void DesktopNotifier::onActionInvoked(uint id, const QString &action)
         m_bus->close(id);
     if (action == u"snooze")
         Q_EMIT snoozeRequested(notification, m_snoozeMinutes);
+    else if (action == u"done")
+        Q_EMIT doneRequested(notification, QDate());
     else if (action == u"default" || action == u"open")
         Q_EMIT activated(notification.path, notification.line);
 }
