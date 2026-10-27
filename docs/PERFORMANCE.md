@@ -37,6 +37,9 @@ benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsk
   Przeciąganie strony lub folderu w drzewie już nie przycina się nad kolejnymi folderami:
   podpowiedź „Zaktualizowane linki: …” liczy się po kawałku, w tle między klatkami.
   Otwarcie strony, którą nazywa popularny tag, jest do 2 razy szybsze.
+* **Kopiowanie bloków na komputerze** (2026-10-27): Ctrl+C na całej stronie z 5000 bloków
+  zajmuje ok. 4 ms zamiast ok. 40 ms (do odświeżenia ekranu 13–15 zamiast 46–50 ms). Wersja
+  sformatowana dla poczty i edytorów dokumentów powstaje dopiero przy wklejeniu do nich.
 
 ### Jak jest teraz
 
