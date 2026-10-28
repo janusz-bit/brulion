@@ -12,10 +12,27 @@
   <head>
     <meta charset="utf-8">
     <!-- 1:1 mapping between CSS pixels and Qt device independent pixels (as in Qt's shell).
-         The on-screen keyboard keeps the browser's default (interactive-widget=resizes-visual):
-         the page and Qt's screen keep their size, and the app lifts its content by the part the
-         keyboard covers, read from window.visualViewport (src/platform/wasm/wasmshell.cpp). -->
-    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=0">
+         The on-screen keyboard shrinks the page (interactive-widget=resizes-content): Brave's
+         visualViewport is too low while its bottom toolbar hides for the keyboard
+         (brave-browser#60074: the editing toolbar floated 48 px above the keyboard), the page's
+         own size is right in every browser. Qt's screen (#screen) shrinks with it and the app
+         lifts nothing. iOS Safari ignores it: there the app lifts its content by the part of
+         #screen the visual viewport leaves out (src/platform/wasm/wasmshell.cpp,
+         src/app/ui/keyboardinsets.h; docs/WEB.md "Klawiatura ekranowa"). -->
+    <meta name="viewport" id="brulion-viewport"
+          content="width=device-width, initial-scale=1, user-scalable=0, interactive-widget=resizes-content">
+    <script>
+      // ?keyboard=visual (tests, diagnosis): the browser's default instead — the keyboard shrinks
+      // only the visual viewport, the page keeps its size.
+      (function () {
+        var visual = new URLSearchParams(location.search).get('keyboard') === 'visual';
+        if (visual) {
+          document.getElementById('brulion-viewport').setAttribute('content',
+            'width=device-width, initial-scale=1, user-scalable=0, interactive-widget=resizes-visual');
+        }
+        window.brulionKeyboardMode = visual ? 'visual' : 'content';
+      })();
+    </script>
     <title>Brulion</title>
     <meta name="description" content="Brulion — notatki offline w Markdown: konspekt, dziennik, kalendarz, przypomnienia.">
     <meta name="application-name" content="Brulion">
@@ -231,6 +248,12 @@
             });
           });
         }
+        // ?report=<path on this site>: the app's self-test results are also POSTed there (a test
+        // server, scripts/web-test-server.py: browsers on the Android emulator have no DevTools).
+        var reportPath = (function () {
+          var path = new URLSearchParams(location.search).get('report') || '';
+          return /^\/(?![\/\\])/.test(path) ? path : '';
+        })();
         var shellBridge = {
           stage: function (name) {
             bridged = true;
@@ -240,9 +263,54 @@
           done: hideLoader,
           // The vault's index is complete (search, links, tasks, reminders). The time
           // (performance.now()) is read by scripts/wasm-smoke.mjs and the browser benchmarks.
-          indexed: function () { shellBridge.indexedAt = performance.now(); }
+          indexed: function () { shellBridge.indexedAt = performance.now(); },
+          // How the on-screen keyboard resizes the page: "content" or "visual" (above).
+          keyboardMode: window.brulionKeyboardMode || 'content',
+          // A self-test result (src/platform/wasm/wasmselftest.cpp): to the test's server.
+          selftest: function (name, json) {
+            if (!reportPath || !window.fetch) return;
+            var body = '{"name":' + JSON.stringify(String(name)) + ',"t":' + performance.now().toFixed(1)
+              + ',"json":' + json + '}';
+            fetch(reportPath, { method: 'POST', body: body, keepalive: true,
+                                headers: { 'Content-Type': 'text/plain;charset=UTF-8' } }).catch(function () {});
+          }
         };
         window.brulionShell = shellBridge;
+
+        // Qt's hidden text field (the keyboard types into it, qwasminputcontext.cpp) sits at the
+        // edited text's top-left corner: focusing it made Chrome pan the page to it (the top bar
+        // out of sight) and iOS scroll the page, and below a window the keyboard shrank it scrolled
+        // Qt's own containers. On touch screens it stays in the window's top-left corner, and Qt's
+        // containers never stay scrolled. Qt keeps them in an open shadow root
+        // (#qt-shadow-container, qwasmscreen.cpp), which a style of this document cannot reach.
+        function touchScreen() {
+          return !!window.matchMedia && (matchMedia('(pointer: coarse)').matches
+            || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches));
+        }
+        function fixQtKeyboardInput() {
+          var host = document.getElementById('qt-shadow-container');
+          var root = host && host.shadowRoot;
+          if (!root) return false;
+          if (!root.getElementById('brulion-keyboard-style')) {
+            var style = document.createElement('style');
+            style.id = 'brulion-keyboard-style';
+            if (touchScreen()) style.textContent = '.qt-window-input-element { left: 0 !important; top: 0 !important; }';
+            root.appendChild(style);
+            root.addEventListener('scroll', function (e) {
+              var t = e.target;
+              if (t && t.nodeType === 1 && (t.scrollTop || t.scrollLeft)) {
+                t.scrollTop = 0;
+                t.scrollLeft = 0;
+              }
+            }, true);
+          }
+          return true;
+        }
+        if (window.MutationObserver) {
+          new MutationObserver(function (records, observer) {
+            if (fixQtKeyboardInput()) observer.disconnect();
+          }).observe(screen, { childList: true });
+        }
 
         // Download progress: bytes of the uncompressed file vs. its known size, read from a copy
         // of the response body.

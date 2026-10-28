@@ -45,7 +45,8 @@ Rectangle {
     /// The edited block is a list item (the document mode indents only those).
     readonly property bool listItem: edit !== null && edit.block !== null && edit.block.listItem
 
-    color: Theme.bgElevated
+    // Cyan in the browser's keyboard self-test (KeyboardInsets.marked): found on a screenshot.
+    color: KeyboardInsets.marked ? "#00ffff" : Theme.bgElevated
 
     Accessible.role: Accessible.ToolBar
     Accessible.name: qsTr("Editing tools")

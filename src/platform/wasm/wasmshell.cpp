@@ -5,10 +5,11 @@
 #include <emscripten/bind.h>
 #include <emscripten/em_js.h>
 
-#include <cmath>
+#include <limits>
+#include <string>
 #include <utility>
 
-// The shell defines globalThis.brulionShell = { stage(name), done(), indexed() }
+// The shell defines globalThis.brulionShell = { stage(name), done(), indexed(), keyboardMode, … }
 // (wasm/index.html). JavaScript in EM_JS: semicolons everywhere, double quotes only (see
 // wasmstorage.cpp).
 EM_JS(void, brulion_shell_stage, (int stage), {
@@ -32,35 +33,95 @@ EM_JS(int, brulion_shell_page_scheme, (), {
     return protocol === "https:" ? 1 : protocol === "http:" ? 2 : 0;
 });
 
-// The keyboard: window.visualViewport's resize and scroll events report
-// innerHeight - height - offsetTop to Module.brulionViewportEvent (below), 0 for a pinch-zoomed
-// page. iOS scrolls the page to the input element Qt keeps for the keyboard: the page is put back
-// at the top (best effort).
+// The keyboard: raw readings of the viewports go to Module.brulionViewportEvent (below), which
+// hands them to C++ (KeyboardInsets computes the keyboard, src/app/ui/keyboardinsets.h). Every
+// event starts a loop over animation frames that reports each change and, once the values stayed
+// put for 6 frames (at most 60 frames after the last event), a last reading marked settled: the
+// keyboard slides for a few hundred milliseconds and the browser resizes in steps. iOS scrolls the
+// page to the input element Qt keeps for the keyboard: the page is put back at the top (the shell
+// also pins that element, wasm/index.html).
 EM_JS(int, brulion_shell_watch_viewport, (), {
     var vv = globalThis["visualViewport"];
     if (!vv || !vv.addEventListener) return 0;
-    var last = -1;
-    var send = function() {
-        var overlap = Math.max(0, (globalThis["innerHeight"] || 0) - vv.height - vv.offsetTop);
-        if (!isFinite(overlap)) overlap = 0;
-        // A pinch-zoomed page (a desktop touchpad) shrinks the visual viewport too: no keyboard.
-        if (vv.scale > 1.01) overlap = 0;
-        if (Math.abs(overlap - last) < 0.5) return;
-        last = overlap;
+    var doc = globalThis["document"];
+    var container = doc.getElementById("screen") || doc.documentElement;
+    var mm = globalThis["matchMedia"];
+    var touch = function() {
+        if (!mm) return false;
+        var nav = globalThis["navigator"] || {};
+        return !!(mm("(pointer: coarse)").matches || ((nav.maxTouchPoints || 0) > 0 && mm("(hover: none)").matches));
+    };
+    var editing = function() {
+        var host = doc.getElementById("qt-shadow-container");
+        var active = host && host.shadowRoot ? host.shadowRoot.activeElement : null;
+        return !!(active && active.classList && active.classList.contains("qt-window-input-element"));
+    };
+    var read = function(settled) {
+        var shell = globalThis["brulionShell"];
+        return { innerWidth: globalThis["innerWidth"], innerHeight: globalThis["innerHeight"],
+                 height: vv.height, offsetTop: vv.offsetTop, scale: vv.scale,
+                 containerHeight: container.getBoundingClientRect().height,
+                 touch: touch(), editing: editing(), settled: settled,
+                 mode: String((shell && shell.keyboardMode) || globalThis["brulionKeyboardMode"] || "") };
+    };
+    var keyOf = function(s) {
+        return [s.innerWidth, s.innerHeight, s.height, s.offsetTop, s.scale, s.containerHeight]
+            .map(function(v) { return Math.round(Number(v) * 2); }).join(",") + "," + s.touch + "," + s.editing;
+    };
+    var post = function(s) {
         try {
-            Module["brulionViewportEvent"](overlap);
+            Module["brulionViewportEvent"](s);
         } catch (e) {
             console.error("Brulion keyboard: callback failed", e);
         }
     };
-    var onScroll = function() {
-        if ((globalThis["scrollY"] || 0) > 0 && globalThis["scrollTo"]) globalThis["scrollTo"](0, 0);
-        send();
+    var last = "";
+    var stable = 0;
+    var frames = 0;
+    var looping = false;
+    var check = function() {
+        var s = read(false);
+        var k = keyOf(s);
+        if (k !== last) {
+            last = k;
+            stable = 0;
+            post(s);
+        } else {
+            ++stable;
+        }
+        return s;
     };
-    vv.addEventListener("resize", send);
-    vv.addEventListener("scroll", onScroll);
-    globalThis.addEventListener("resize", send);
-    send();
+    var frame = function() {
+        var s = check();
+        if (stable >= 6 || ++frames >= 60) {
+            looping = false;
+            s.settled = true;
+            post(s);
+            return;
+        }
+        globalThis["requestAnimationFrame"](frame);
+    };
+    var trigger = function() {
+        frames = 0;
+        check();
+        stable = 0;
+        if (!looping) {
+            looping = true;
+            globalThis["requestAnimationFrame"](frame);
+        }
+    };
+    vv.addEventListener("resize", trigger);
+    vv.addEventListener("scroll", function() {
+        if ((globalThis["scrollY"] || 0) > 0 && globalThis["scrollTo"]) globalThis["scrollTo"](0, 0);
+        trigger();
+    });
+    globalThis.addEventListener("resize", trigger);
+    doc.addEventListener("focusin", trigger, true);
+    doc.addEventListener("focusout", trigger, true);
+    if (globalThis["ResizeObserver"]) new ResizeObserver(trigger).observe(container);
+    var first = read(true);
+    last = keyOf(first);
+    post(first);
     return 1;
 });
 
@@ -68,9 +129,9 @@ namespace brulion::platform {
 
 namespace {
 
-std::function<void(double)> &viewportCallback()
+std::function<void(const BrowserViewport &)> &viewportCallback()
 {
-    static std::function<void(double)> callback;
+    static std::function<void(const BrowserViewport &)> callback;
     return callback;
 }
 
@@ -79,21 +140,39 @@ std::function<void(double)> &viewportCallback()
 /// JavaScript -> C++ (registered with embind as Module.brulionViewportEvent).
 struct WasmShellJs
 {
-    static void viewportEvent(double overlap)
+    static void viewportEvent(emscripten::val reading)
     {
-        const double value = std::isfinite(overlap) && overlap > 0 ? overlap : 0;
+        if (reading.isNull() || reading.isUndefined())
+            return;
+        const auto number = [&reading](const char *key) {
+            const emscripten::val v = reading[key];
+            return v.isNumber() ? v.as<double>() : std::numeric_limits<double>::quiet_NaN();
+        };
+        BrowserViewport viewport;
+        viewport.innerWidth = number("innerWidth");
+        viewport.innerHeight = number("innerHeight");
+        viewport.height = number("height");
+        viewport.offsetTop = number("offsetTop");
+        viewport.scale = number("scale");
+        viewport.containerHeight = number("containerHeight");
+        viewport.touch = reading["touch"].isTrue();
+        viewport.editing = reading["editing"].isTrue();
+        viewport.settled = reading["settled"].isTrue();
+        const emscripten::val mode = reading["mode"];
+        if (mode.isString())
+            viewport.mode = QString::fromStdString(mode.as<std::string>()).left(16);
         // Called from browser events: continue in Qt's event loop.
         QMetaObject::invokeMethod(
                 QCoreApplication::instance(),
-                [value] {
+                [viewport] {
                     if (viewportCallback())
-                        viewportCallback()(value);
+                        viewportCallback()(viewport);
                 },
                 Qt::QueuedConnection);
     }
 };
 
-void watchVisualViewport(std::function<void(double overlap)> callback)
+void watchVisualViewport(std::function<void(const BrowserViewport &viewport)> callback)
 {
     viewportCallback() = std::move(callback);
     brulion_shell_watch_viewport();
