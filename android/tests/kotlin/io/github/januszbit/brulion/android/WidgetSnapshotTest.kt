@@ -46,6 +46,9 @@ class WidgetSnapshotTest {
     assertEquals(listOf(PageRef("Projekty/Dom.md", "Dom"), PageRef("Zakupy ąę.md", "Zakupy ąę")), s.favorites)
     assertEquals(CaptureDay(LocalDate.of(2026, 10, 28), "journals/2026-10-28.md", false, "# środa, 28 października\n\n- "), s.captureOn(day.plusDays(1)))
     assertNull(s.captureOn(day.plusDays(2)))
+    // An existing note carries its template text too: deleted before quick add writes, it starts as the app's would.
+    assertEquals(CaptureDay(day, "journals/2026-10-27.md", true, "# wtorek, 27 października\n\n- "), s.captureOn(day))
+    assertTrue(s.remindersOn)
     assertEquals(LocalDate.of(2026, 10, 19), s.calendarFrom)
     assertTrue(s.covers(day) && s.covers(LocalDate.of(2026, 12, 22)) && !s.covers(LocalDate.of(2026, 12, 23)))
     val today = s.day(day)!!
@@ -277,6 +280,12 @@ class WidgetSnapshotTest {
     assertEquals(LocalDateTime.of(2026, 10, 28, 6, 30).atZone(zone).toInstant().toEpochMilli(), reminder.at)
     assertEquals("journals/2026-10-27.md", reminder.path)
     assertEquals(4, reminder.line)
+    // "Zrobione" as on the app's reminders: the app finds the task by note, time, line and text.
+    assertTrue(reminder.canComplete)
+    assertEquals("widget:id-ż", reminder.key)
+    assertEquals("2026-10-28T06:30", reminder.local)
+    assertEquals(DoneRequest("widget:id-ż", "2026-10-28T06:30", "journals/2026-10-27.md", 4, "Pobudka", "2026-10-28", "v"),
+      DoneRequest.of(reminder, LocalDate.of(2026, 10, 28)))
     // The JSON keeps the flag (ReminderStore), an older one has none.
     assertTrue(Reminder.fromJson(reminder.toJson())!!.provisional)
     assertFalse(Reminder.fromJson(JSONObject().put("id", 1).put("at", 5L))!!.provisional)
@@ -284,6 +293,15 @@ class WidgetSnapshotTest {
     assertNull(QuickAdd.provisionalReminder(action, task, vault, LocalDateTime.of(2026, 10, 28, 7, 0), zone))
     val plain = QuickAdd.optimisticTask(WidgetAction("p", WidgetAction.KIND_TASK, "x", "2026-10-28"), "j.md", 1, day, 1)
     assertNull(QuickAdd.provisionalReminder(action, plain, vault, LocalDateTime.of(2026, 10, 27, 8, 0), zone))
+  }
+
+  /** Reminders off in Brulion: the snapshot says so (an older one without the field: on). */
+  @Test
+  fun snapshotSaysWhetherRemindersAreOn() {
+    val off = JSONObject(data("snapshot-v1.json")).put("reminders", false)
+    assertFalse(WidgetSnapshot.parse(off.toString()).remindersOn)
+    val older = JSONObject(data("snapshot-v1.json")).apply { remove("reminders") }
+    assertTrue(WidgetSnapshot.parse(older.toString()).remindersOn)
   }
 
   /** The app's next set replaces a provisional reminder; a snooze of one stays. */

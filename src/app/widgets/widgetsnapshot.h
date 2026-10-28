@@ -18,7 +18,8 @@
 //                   ("HH:mm" or ""), "minutes" (-1 all-day), "title", "kind", "variant", "path",
 //                   "line", "isTask", "closed", "alarm", "recurring" } ] } } },
 //     "notes": { "favorites": [ { "path", "title" } ], "recent": [ … ] },
-//     "capture": { "days": [ { "date", "path", "exists", "newText" } ] } }
+//     "capture": { "days": [ { "date", "path", "exists", "newText" } ] },
+//     "reminders": true (the app's reminders are on; off: quick add arms no reminder) }
 //
 // tasks: the open tasks of TasksView (same sections and "due" order, TaskListModel) that are
 // overdue or filed at most taskDays ahead; their raw dates let the widget file them again for a
@@ -26,8 +27,9 @@
 // and TaskListModel::nextReminder — a block with several reminders counts the next one).
 // calendar: CalendarModel's agenda from a week before today to eight weeks ahead (days without
 // entries left out). capture: where the widget's quick add writes while Brulion is closed — the
-// daily note of each of the next days and, for a missing one, the text it starts with (the
-// journal template filled in).
+// daily note of each of the next days and the text it starts with when it is missing (the
+// journal template filled in; given for an existing note too: it may be gone by the time quick
+// add writes).
 #pragma once
 
 #include "dates/names.h"
@@ -57,7 +59,7 @@ struct CaptureDay {
     QDate date;
     QString path;    ///< vault-relative
     bool exists = false;
-    QString newText; ///< the text a missing note starts with (the journal template; often "")
+    QString newText; ///< the text the note starts with when missing (the journal template; often "")
 };
 
 struct SnapshotOptions {
@@ -70,6 +72,7 @@ struct SnapshotOptions {
     QList<PageRef> favorites;
     QList<PageRef> recent;
     QList<CaptureDay> captureDays;
+    bool reminders = true;                  ///< the app's reminders are on (WorkspaceReminders)
     int taskDays = 14;                      ///< open tasks filed at most this many days ahead
     int maxTasks = 200;
     int calendarDaysBefore = 7;
@@ -88,8 +91,8 @@ QJsonObject buildSnapshot(const VaultIndex &index, const SnapshotOptions &option
 QJsonObject emptySnapshot(const QDateTime &now, const QString &locale);
 
 /// The daily notes of `days` days from `today` (notebook::journalFileFor: also a note under
-/// another name the journal folder accepts), each missing one with notebook::newJournalText.
-/// Never writes.
+/// another name the journal folder accepts), each with notebook::newJournalText (what quick add
+/// starts it with when it is missing). Never writes.
 QList<CaptureDay> captureDays(Vault &vault, QDate today, int days, const QDateTime &now, dates::UiLocale locale);
 
 } // namespace brulion::widgets

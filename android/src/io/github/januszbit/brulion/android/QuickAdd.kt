@@ -48,13 +48,15 @@ internal object QuickAdd {
     val today = now.toLocalDate()
     val day = snapshot.captureOn(today)
     if (vault != null && day != null) {
-      val result = JournalAppend.appendToFile(File(vault.root), day.path, if (day.exists) "" else day.newText, block)
+      // The template text also when the snapshot saw the note: deleted since, it starts as the app would.
+      val result = JournalAppend.appendToFile(File(vault.root), day.path, day.newText, block)
       if (result.ok && result.file != null) {
         Log.i(TAG, "quick add wrote ${day.path}:${result.line}")
         if (action.kind == WidgetAction.KIND_TASK) {
           val task = optimisticTask(action, day.path, result.line, snapshot.today ?: today, snapshot.weekStart)
           WidgetStore.saveSnapshot(app, snapshot.withAddedTask(task, JournalAppend.parseDate(action.date), entryOf(task, action)).toString())
-          provisionalReminder(action, task, vault, now)?.let { arm(app, it) }
+          // Reminders turned off in Brulion: nothing may ring (the app would not arm it either).
+          if (snapshot.remindersOn) provisionalReminder(action, task, vault, now)?.let { arm(app, it) }
         }
         // The notebook's own spelling of the path (the canonical one may differ: /data/user/0 is /data/data).
         BrulionAndroid.widgetWrote(File(vault.root, day.path).path)
@@ -118,7 +120,9 @@ internal object QuickAdd {
   /**
    * A native reminder for a task with a time ahead of [now] (null otherwise): the app's next
    * `scheduleReminders` replaces it with its own for the line (provisional ones are not kept).
-   * A negative id: the app's ids are positive.
+   * A negative id: the app's ids are positive. It offers "Zrobione" like the app's: its key
+   * ([PROVISIONAL_KEY] + the entry's id) has no occurrence id of the app's, so the app finds the
+   * task by its note, time, line and text (WorkspaceReminders::current()).
    */
   fun provisionalReminder(action: WidgetAction, task: WidgetTask, vault: VaultInfo, now: LocalDateTime, zone: ZoneId = ZoneId.systemDefault()): Reminder? {
     if (task.reminder.isEmpty()) return null
@@ -135,9 +139,15 @@ internal object QuickAdd {
       path = task.path,
       line = task.line,
       vault = vault.id,
-      provisional = true
+      provisional = true,
+      key = PROVISIONAL_KEY + action.id,
+      local = "${date}T${JournalAppend.hhmm(time)}",
+      task = true
     )
   }
+
+  /** Key prefix of provisional reminders (WorkspaceReminders::ProvisionalIdPrefix in C++). */
+  const val PROVISIONAL_KEY = "widget:"
 
   private fun arm(context: Context, reminder: Reminder) {
     synchronized(AlarmScheduler.lock) {

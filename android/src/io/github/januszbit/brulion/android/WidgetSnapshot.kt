@@ -237,7 +237,10 @@ internal data class CalendarDay(val journal: String, val kinds: List<String>, va
 
 internal data class PageRef(val path: String, val title: String)
 
-/** Where quick add writes on [date] (vault-relative [path]; [newText] for a missing note). */
+/**
+ * Where quick add writes on [date] (vault-relative [path]; [newText] starts the note when it is
+ * missing — given for an existing note too: it may be deleted before quick add writes).
+ */
 internal data class CaptureDay(val date: LocalDate, val path: String, val exists: Boolean, val newText: String)
 
 internal data class VaultInfo(val id: String, val name: String, val root: String)
@@ -271,6 +274,9 @@ internal class WidgetSnapshot private constructor(val json: JSONObject) {
       val path = it.optString("path", "")
       if (path.isEmpty()) null else CaptureDay(date, path, it.optBoolean("exists", false), it.optString("newText", ""))
     }
+
+  /** The app's reminders are on (absent in a snapshot of an older version: on). Off: quick add arms none. */
+  val remindersOn: Boolean = json.optBoolean("reminders", true)
 
   val hasVault: Boolean get() = vault != null
 

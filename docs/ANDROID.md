@@ -316,7 +316,8 @@ wczytaniu notatnika, o północy i **gdy wychodzisz z aplikacji** zapisuje dla w
 „migawkę”: otwarte zadania zaległe i na najbliższe dwa tygodnie (z datami, najwyżej 200),
 kalendarz od tygodnia wstecz do ośmiu tygodni naprzód, ulubione i ostatnie strony oraz to, gdzie
 szybkie dodawanie ma pisać (ścieżki dziennika na najbliższy tydzień i tekst z szablonu dziennika
-dla dni, które jeszcze nie mają notatki). Widżety rysują ją same, **bez uruchamiania Brulionu**:
+dla każdego z tych dni — także takiego, który ma już notatkę: gdyby ktoś ją usunął, zanim widżet
+coś dopisze, nowa zaczyna się od szablonu, jak w aplikacji) oraz to, czy przypomnienia są włączone. Widżety rysują ją same, **bez uruchamiania Brulionu**:
 pokazują stan z chwili, gdy Brulion był ostatnio otwarty — zmiany przysłane przez Syncthing
 pojawią się po otwarciu aplikacji. Po północy (i po zmianie strefy czasowej albo restarcie
 telefonu) widżety same przekładają zadania na nowy dzień: dzisiejsze z terminem stają się
@@ -354,7 +355,9 @@ gdy notatki nikt w tym czasie nie zmienił; zachowuje końce wierszy i BOM notat
 punkt `- ` z szablonu, a brakujący dziennik zakłada z szablonu dziennika. Nowe zadanie od razu
 widać w widżetach, a zadanie z godziną dostaje od razu systemowe przypomnienie (tymczasowe —
 aplikacja zastępuje je swoim zestawem przy następnym uruchomieniu albo powrocie na pierwszy
-plan; przypomnienie dalej niż 14 dni naprzód aplikacja ustawi, jak każde, gdy się przybliży).
+plan; przypomnienie dalej niż 14 dni naprzód aplikacja ustawi, jak każde, gdy się przybliży),
+z **Zrobione** jak każde przypomnienie zadania (aplikacja znajduje zadanie po notatce, godzinie,
+wierszu i treści). Gdy przypomnienia są w Brulionie wyłączone, widżet żadnego nie ustawia.
 Syncthing wyśle zmieniony plik od razu.
 
 Gdy działa Brulion (w tle), okno też pisze samo, a aplikacja wczytuje notatnik ponownie, gdy

@@ -34,6 +34,16 @@ internal object ShareIntent {
   private val TEXT_EXTENSIONS = setOf("md", "markdown", "mdown", "mkd", "txt", "text")
 
   /** A shared file Brulion saves: a text extension, or a text MIME type. */
+  /**
+   * A content URI's authority is one of Brulion's own providers ([packageName], or below it). A
+   * leading "<userId>@" is stripped as ContentResolver does when it resolves the provider:
+   * `content://0@<package>.qtprovider/…` names Brulion's own FileProvider too.
+   */
+  fun isOwnAuthority(authority: String?, packageName: String): Boolean {
+    val host = (authority ?: "").substringAfterLast('@')
+    return host.isEmpty() || host == packageName || host.startsWith("$packageName.")
+  }
+
   fun isText(name: String?, mime: String?): Boolean {
     val extension = name?.substringAfterLast('.', "")?.lowercase() ?: ""
     if (extension in TEXT_EXTENSIONS) return true

@@ -468,11 +468,26 @@ std::optional<ScheduledNotification> WorkspaceReminders::current(const Scheduled
 {
     if (!m_index || !notification.at.isValid())
         return std::nullopt;
-    for (const ScheduledNotification &n : notificationsBetween(*m_index, notification.at, notification.at)) {
+    const QList<ScheduledNotification> found = notificationsBetween(*m_index, notification.at, notification.at);
+    for (const ScheduledNotification &n : found) {
         if (n.id == notification.id)
             return n;
     }
-    return std::nullopt;
+    if (!notification.id.startsWith(ProvisionalIdPrefix))
+        return std::nullopt;
+    // The note's occurrence of that time with the entry's text: the one on the line quick add
+    // wrote, else the only one (lines moved since, a sync); two alike elsewhere tell nothing.
+    std::optional<ScheduledNotification> titled;
+    int count = 0;
+    for (const ScheduledNotification &n : found) {
+        if (n.path != notification.path || n.title != notification.title)
+            continue;
+        if (n.line == notification.line)
+            return n;
+        titled = n;
+        ++count;
+    }
+    return count == 1 ? titled : std::nullopt;
 }
 
 bool WorkspaceReminders::foreign(const ScheduledNotification &notification) const
