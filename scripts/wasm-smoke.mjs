@@ -3,7 +3,8 @@
 // Chromium over the DevTools protocol (Node >= 22 for the global WebSocket). See docs/WEB.md.
 //
 //   node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/p \
-//       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--keyboard] [--two-tabs] [--lang pl-PL] \
+//       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--keyboard] [--keyboard-phone] \
+//       [--two-tabs] [--lang pl-PL] \
 //       [--index-notes N] [--copy] [--screenshot shot.png] [--loader-screenshot loading.png] [--timeout 120]
 //
 // Opens the page `--loads` times in one browser (reloads), each time waiting until the app
@@ -19,7 +20,15 @@
 // (a phone browser's on-screen keyboard shrinks it) and runs ?selftest=keyboard: the app must
 // report how much of the page the keyboard covers (KeyboardInsets, src/app/ui/keyboardsources.h)
 // as the stub changes, 0 for malformed values and for a pinch-zoomed page, and put a page the
-// browser scrolled (iOS) back at the top. --two-tabs opens a second tab,
+// browser scrolled (iOS) back at the top. --keyboard-phone does the same on an emulated phone
+// (412×915 CSS px, DPR 2.625, touch) with today's journal written into IndexedDB and a block
+// edited with a tap: the page asks for interactive-widget=resizes-content (and resizes-visual with
+// ?keyboard=visual), Qt's hidden keyboard <input> stays pinned in the window's corner, a keyboard
+// that shrinks the visual viewport (resizes-visual, iOS) lifts the docked toolbar onto it, a page
+// the browser shrank itself (resizes-content: the emulated screen made lower) gets no overlap,
+// the keyboard still counts as shown and the toolbar ends at the window's bottom — also with a
+// stale innerHeight (the old formula's double count) —, and Qt's containers never stay scrolled.
+// --two-tabs opens a second tab,
 // which must wait ("open in another tab") until the first one leaves the app. --index-notes N
 // writes a vault of N generated notes into IndexedDB before the first load (as the app's IDBFS
 // mount stores it, named the current vault): every load must then report a complete index
@@ -54,6 +63,7 @@ function parseArgs(argv) {
     else if (a === '--notify') args.notify = true;
     else if (a === '--glyphs') args.glyphs = true;
     else if (a === '--keyboard') args.keyboard = true;
+    else if (a === '--keyboard-phone') args.keyboardPhone = true;
     else if (a === '--two-tabs') args.twoTabs = true;
     else if (a === '--lang') args.lang = next();
     else if (a === '--loader-screenshot') args.loaderScreenshot = next();
@@ -139,17 +149,20 @@ const copyJournal = [
 const copyExpected = copyJournal.split('\n').slice(0, 3).join('\n');
 
 // A visualViewport the test controls (installed before the page's own scripts): its height is
-// the window's minus a keyboard, divided by a pinch zoom — window.__brulionKeyboard(px,
+// the page's minus a keyboard, divided by a pinch zoom — window.__brulionKeyboard(px,
 // offsetTop, scale). window.__brulionScroll(y) scrolls the page as iOS does (to the input element
 // Qt keeps for the keyboard; scrollY and scrollTo are stubbed too), __brulionScrollY() reads it.
+// window.__brulionInnerHeight(px) makes innerHeight lie (a stale value, as Chromium reports
+// while it resizes the page; null: the real one again).
 const viewportStub = `(() => {
   const vv = new EventTarget();
   let keyboard = 0;
   let offset = 0;
   let scale = 1;
   let scrollY = 0;
+  const page = () => document.documentElement.clientHeight || window.innerHeight;
   Object.defineProperty(vv, 'width', { get: () => window.innerWidth / scale });
-  Object.defineProperty(vv, 'height', { get: () => (window.innerHeight - keyboard) / scale });
+  Object.defineProperty(vv, 'height', { get: () => (page() - keyboard) / scale });
   Object.defineProperty(vv, 'offsetTop', { get: () => offset });
   Object.defineProperty(vv, 'offsetLeft', { get: () => 0 });
   Object.defineProperty(vv, 'scale', { get: () => scale });
@@ -167,7 +180,20 @@ const viewportStub = `(() => {
     vv.dispatchEvent(new Event('scroll'));
   };
   window.__brulionScrollY = () => scrollY;
+  const realInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
+    ?? Object.getOwnPropertyDescriptor(Window.prototype, 'innerHeight');
+  window.__brulionInnerHeight = (px) => {
+    if (px === null || px === undefined) Object.defineProperty(window, 'innerHeight', { ...realInnerHeight, configurable: true });
+    else Object.defineProperty(window, 'innerHeight', { get: () => px, configurable: true });
+    vv.dispatchEvent(new Event('resize'));
+  };
 })()`;
+
+// Today's journal for --keyboard-phone: long Polish blocks (two lines on a phone, so a tap in the
+// middle of the screen lands on text).
+const phoneJournal = Array.from({ length: 40 }, (_, i) =>
+  `- Blok ${i + 1}: zażółć gęślą jaźń, źródło łódź ćwiczenia — notatka o spotkaniu i ogrodzie, pomysł na wtorek`)
+  .join('\n') + '\n';
 
 function findChrome() {
   if (process.env.CHROME) return process.env.CHROME;
@@ -296,29 +322,38 @@ async function main() {
     ...(args.selftest ? ['storage'] : []),
     ...(args.notify ? ['notify'] : []),
     ...(args.glyphs ? ['glyphs'] : []),
-    ...(args.keyboard ? ['keyboard'] : []),
+    ...(args.keyboard || args.keyboardPhone ? ['keyboard'] : []),
   ];
   if (flows.length) url.searchParams.set('selftest', flows.join(','));
   if (args.notify) {
     await cdp.send('Browser.grantPermissions', { origin: url.origin, permissions: ['notifications'] });
   }
-  if (args.keyboard) await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: viewportStub });
+  if (args.keyboard || args.keyboardPhone) {
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: viewportStub });
+  }
+  // A phone: Pixel-class 1080×2400 at 2.625 (412×915 CSS px), a touch screen.
+  const phone = { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true };
+  if (args.keyboardPhone) {
+    await cdp.send('Emulation.setDeviceMetricsOverride', phone);
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  }
   const shoot = async (file) => {
     const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(file, Buffer.from(shot.data, 'base64'));
     console.log(`screenshot: ${file}`);
   };
 
-  if (args.indexNotes > 0 || args.copy) {
+  if (args.indexNotes > 0 || args.copy || args.keyboardPhone) {
     // Any document of the site's origin can write its IndexedDB; the logo does not start the app.
     const logo = new URL('icons/logo.svg', url).href;
     await cdp.send('Page.navigate', { url: logo });
     for (const end = deadline(30); Date.now() < end; await sleep(250)) {
       if ((await evaluate('location.href + " " + document.readyState').catch(() => '')) === `${logo} complete`) break;
     }
-    const written = await evaluate(seedVaultScript(args.indexNotes || 0, args.copy ? copyJournal : null), true)
+    const journal = args.copy ? copyJournal : args.keyboardPhone ? phoneJournal : null;
+    const written = await evaluate(seedVaultScript(args.indexNotes || 0, journal), true)
       .catch(() => undefined);
-    console.log(`vault of ${args.indexNotes || 0} notes${args.copy ? ' and today\'s journal' : ''} written into IndexedDB (${written} entries)`);
+    console.log(`vault of ${args.indexNotes || 0} notes${journal ? ' and today\'s journal' : ''} written into IndexedDB (${written} entries)`);
     if (!written) problems.push('could not write the test vault into IndexedDB');
   }
 
@@ -361,7 +396,7 @@ async function main() {
         };
       })()`);
       const appUp = state?.loaderHidden && (!args.selftest || state.selftest) && (!args.notify || state.notify)
-        && (!args.glyphs || state.glyphs) && (!args.keyboard || state.keyboard);
+        && (!args.glyphs || state.glyphs) && (!(args.keyboard || args.keyboardPhone) || state.keyboard);
       const failed = state && !state.loaderHidden && state.details;
       if (appUp || failed) break;
     }
@@ -460,6 +495,117 @@ async function main() {
         if (scrollY !== scrollAfter) problems.push(`keyboard: ${what}: the page stays scrolled ${scrollY} px`);
       }
       if (what === 'a 300 px keyboard' && args.screenshot) await shoot(args.screenshot.replace(/\.png$/, '-keyboard.png'));
+    }
+  }
+
+  if (args.keyboardPhone) {
+    // The phone's keyboard (docs/WEB.md "Klawiatura ekranowa"): the stubbed visualViewport for a
+    // keyboard that only shrinks the visual viewport (resizes-visual: iOS Safari, ?keyboard=visual),
+    // the emulated screen made lower for a page the browser shrank itself (resizes-content).
+    const keyboardState = () => evaluate('window.brulionKeyboardSelfTest ?? null');
+    const waitKeyboard = async (pred, seconds = 15) => {
+      let k;
+      for (const end = deadline(seconds); Date.now() < end; await sleep(100)) {
+        k = await keyboardState();
+        if (k && !k.animating && pred(k)) return k;
+      }
+      return k;
+    };
+    const near = (a, b, tolerance = 1) => typeof a === 'number' && Math.abs(a - b) <= tolerance;
+    const tap = async (x, y) => {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      await sleep(60);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await sleep(800);
+    };
+    const qtInput = `(() => {
+      const root = document.getElementById('qt-shadow-container')?.shadowRoot;
+      const input = root?.querySelector('.qt-window-input-element');
+      const cs = input ? getComputedStyle(input) : null;
+      const scrolled = root ? [...root.querySelectorAll('.qt-screen, .qt-window, .qt-window *')]
+        .filter((e) => e.scrollTop || e.scrollLeft).map((e) => e.className || e.tagName) : null;
+      return { style: !!root?.getElementById('brulion-keyboard-style'), focused: !!input && root.activeElement === input,
+               left: cs?.left ?? null, top: cs?.top ?? null, scrolled,
+               pageScroll: document.scrollingElement?.scrollTop ?? null };
+    })()`;
+    const mode = await evaluate(`({ meta: document.getElementById('brulion-viewport')?.content ?? null,
+                                    mode: window.brulionShell?.keyboardMode ?? null })`);
+    console.log(`keyboard-phone: viewport ${JSON.stringify(mode)}`);
+    if (!/interactive-widget=resizes-content/.test(mode?.meta ?? '') || mode?.mode !== 'content') {
+      problems.push(`keyboard-phone: the page does not ask for resizes-content: ${JSON.stringify(mode)}`);
+    }
+    const shot = async (name) => {
+      if (args.screenshot) await shoot(args.screenshot.replace(/\.png$/, `-${name}.png`));
+    };
+    // A block low on the screen (80 % down: below where a keyboard would end) edited with a tap;
+    // a few heights tried (fonts differ).
+    let k;
+    for (const y of [0.8, 0.75, 0.7, 0.6, 0.5].map((f) => Math.round(phone.height * f))) {
+      await tap(phone.width / 2, y);
+      k = await waitKeyboard((s) => s.sample?.editing && s.toolbarBottom >= 0, 6);
+      console.log(`keyboard-phone: a tap at (${phone.width / 2}, ${y}): ${JSON.stringify(k)}`);
+      if (k?.sample?.editing && k.toolbarBottom >= 0) break;
+    }
+    if (!k?.sample?.editing || !(k.toolbarBottom >= 0)) problems.push(`keyboard-phone: no block edited after a tap: ${JSON.stringify(k)}`);
+    await shot('edit');
+    const pin = await evaluate(qtInput);
+    console.log(`keyboard-phone: Qt's keyboard input ${JSON.stringify(pin)}`);
+    if (!pin?.style || pin.left !== '0px' || pin.top !== '0px') {
+      problems.push(`keyboard-phone: Qt's keyboard input is not pinned in the window's corner: ${JSON.stringify(pin)}`);
+    }
+    // [what, the page's setup, the report expected]
+    const H = phone.height;
+    const steps = [
+      ['visual: a 300 px keyboard', 'window.__brulionKeyboard(300)',
+        (s) => near(s.overlap, 300) && s.shown && near(s.contentBottom, H - 300) && near(s.toolbarBottom, H - 300)],
+      ['visual: the view panned to the field (offsetTop 120)', 'window.__brulionKeyboard(300, 120)',
+        (s) => near(s.overlap, 180) && s.shown && near(s.toolbarBottom, H - 180)],
+      ['visual: the keyboard goes', 'window.__brulionKeyboard(0)', (s) => s.overlap === 0 && !s.shown],
+      ['content: the page shrank by 300 px', { height: H - 300 },
+        (s) => s.overlap === 0 && s.shown && near(s.windowHeight, H - 300) && near(s.toolbarBottom, H - 300)
+          && near(s.contentBottom, H - 300)],
+      ['content: a stale innerHeight', 'window.__brulionInnerHeight(' + H + ')',
+        (s) => s.overlap === 0 && s.shown && near(s.legacyOverlap, 300) && near(s.toolbarBottom, H - 300)],
+      ['content: the keyboard hidden (Back)', { height: H, innerHeight: null },
+        (s) => s.overlap === 0 && !s.shown && near(s.windowHeight, H) && near(s.toolbarBottom, H)],
+      ['malformed (NaN)', 'window.__brulionKeyboard(NaN)', (s) => s.overlap === 0 && !s.shown],
+      ['a page zoomed in twice, no keyboard', 'window.__brulionKeyboard(0, 0, 2)', (s) => s.overlap === 0 && !s.shown],
+      ['no keyboard, not zoomed', 'window.__brulionKeyboard(0, 0, 1)', (s) => s.overlap === 0 && !s.shown],
+    ];
+    for (const [what, setup, pred] of steps) {
+      if (typeof setup === 'string') {
+        await evaluate(setup);
+      } else {
+        if ('innerHeight' in setup) await evaluate('window.__brulionInnerHeight(null)');
+        await cdp.send('Emulation.setDeviceMetricsOverride', { ...phone, height: setup.height });
+      }
+      const got = await waitKeyboard(pred);
+      console.log(`keyboard-phone: ${what}: ${JSON.stringify(got)}`);
+      if (!got || !pred(got)) problems.push(`keyboard-phone: ${what}: the app reported ${JSON.stringify(got)}`);
+      if (what.startsWith('content: the page shrank')) {
+        await shot('content');
+        // Qt's containers stay where they were (the edited block was below the shrunk window).
+        const containers = await evaluate(qtInput);
+        console.log(`keyboard-phone: ${what}: Qt's containers ${JSON.stringify(containers)}`);
+        if (!containers || containers.scrolled === null || containers.scrolled.length || containers.pageScroll) {
+          problems.push(`keyboard-phone: Qt's containers scrolled: ${JSON.stringify(containers)}`);
+        }
+      }
+      if (what === 'visual: a 300 px keyboard') await shot('visual');
+    }
+    // ?keyboard=visual: the browser's default (the page keeps its size), for tests and diagnosis.
+    const visualUrl = new URL(url.href);
+    visualUrl.searchParams.set('keyboard', 'visual');
+    await cdp.send('Page.navigate', { url: visualUrl.href });
+    let visual;
+    for (const end = deadline(20); Date.now() < end; await sleep(250)) {
+      visual = await evaluate(`({ href: location.href, meta: document.getElementById('brulion-viewport')?.content ?? null,
+                                   mode: window.brulionShell?.keyboardMode ?? null })`);
+      if (visual?.href === visualUrl.href && visual.mode) break;
+    }
+    console.log(`keyboard-phone: ?keyboard=visual: ${JSON.stringify(visual)}`);
+    if (!/interactive-widget=resizes-visual/.test(visual?.meta ?? '') || visual?.mode !== 'visual') {
+      problems.push(`keyboard-phone: ?keyboard=visual does not switch to resizes-visual: ${JSON.stringify(visual)}`);
     }
   }
 
