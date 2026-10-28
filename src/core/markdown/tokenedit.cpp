@@ -163,7 +163,18 @@ QString replaceTokenRange(const QString &body, qsizetype from, qsizetype to, con
         --a;
     else if (b < body.size() && (body[b] == u' ' || body[b] == u'\t'))
         ++b;
-    return body.left(a) + body.mid(b);
+    QString out = body.left(a) + body.mid(b);
+    // Alone on a line below the first one: the line goes too — a whitespace-only line left behind
+    // would be a blank line (a paragraph break in the item, a loose list in CommonMark and Obsidian).
+    const qsizetype lineStart = a == 0 ? 0 : out.lastIndexOf(u'\n', a - 1) + 1;
+    if (lineStart > 0) {
+        qsizetype lineEnd = out.indexOf(u'\n', a);
+        if (lineEnd < 0)
+            lineEnd = out.size();
+        if (QStringView(out).sliced(lineStart, lineEnd - lineStart).trimmed().isEmpty())
+            out.remove(lineStart - 1, lineEnd - lineStart + 1);
+    }
+    return out;
 }
 
 std::optional<std::pair<qsizetype, qsizetype>> findFirstLineToken(const QString &body, TokenKind kind)
@@ -576,42 +587,62 @@ QString editBlockToken(const QString &content, int line, const TokenRef &ref, co
     const QString edited = applyTokenAction(body, range->first, range->second, action, a, b, context);
     if (edited == body)
         return content;
-    // The changed run (common prefix and suffix left out): on one line of the body, it is written
-    // into that line of the file as it stands — indentation, markers and the line ending untouched.
-    qsizetype p = 0;
-    while (p < body.size() && p < edited.size() && body[p] == edited[p])
-        ++p;
-    qsizetype s = 0;
-    while (s < body.size() - p && s < edited.size() - p && body[body.size() - 1 - s] == edited[edited.size() - 1 - s])
-        ++s;
-    const QString oldPart = body.mid(p, body.size() - p - s);
-    const QString newPart = edited.mid(p, edited.size() - p - s);
-    const qsizetype lineStart = p == 0 ? 0 : body.lastIndexOf(u'\n', p - 1) + 1;
-    const qsizetype lineEnd = [&] {
-        const qsizetype nl = body.indexOf(u'\n', p);
-        return nl < 0 ? body.size() : nl;
-    }();
-    if (!oldPart.contains(u'\n') && !newPart.contains(u'\n') && p + oldPart.size() <= lineEnd) {
-        const QString bodyLine = body.mid(lineStart, lineEnd - lineStart);
-        const int docLine = doc.at(i).line + int(body.left(lineStart).count(u'\n'));
-        qsizetype ls = 0;
-        for (int k = 0; k < docLine && ls >= 0; ++k) {
-            ls = content.indexOf(u'\n', ls);
-            if (ls >= 0)
-                ++ls;
+    // Written into the file line by line as it stands — indentation, markers and line endings
+    // untouched: one changed line of the body (only its changed run replaced), or one line below
+    // the first removed (a token alone on it, replaceTokenRange()) — the file's line goes with
+    // its line ending.
+    const QStringList oldLines = body.split(u'\n');
+    const QStringList newLines = edited.split(u'\n');
+    // [start, end) of the file's line `k` of the block, without its line ending; false when the
+    // file line does not end with the body's line (cannot happen for tokens; kept safe).
+    const auto fileLine = [&](qsizetype row, qsizetype *start, qsizetype *end) {
+        const int docLine = doc.at(i).line + int(row);
+        qsizetype from = 0;
+        for (int n = 0; n < docLine && from >= 0; ++n) {
+            from = content.indexOf(u'\n', from);
+            if (from >= 0)
+                ++from;
         }
-        if (ls >= 0) {
-            qsizetype le = content.indexOf(u'\n', ls);
-            if (le < 0)
-                le = content.size();
-            if (le > ls && content[le - 1] == u'\r')
-                --le;
-            const QStringView fileLine = QStringView(content).sliced(ls, le - ls);
-            if (fileLine.endsWith(bodyLine)) {
-                const qsizetype at = ls + fileLine.size() - bodyLine.size() + (p - lineStart);
-                return content.left(at) + newPart + content.mid(at + oldPart.size());
-            }
+        if (from < 0)
+            return false;
+        qsizetype to = content.indexOf(u'\n', from);
+        if (to < 0)
+            to = content.size();
+        if (to > from && content[to - 1] == u'\r')
+            --to;
+        *start = from;
+        *end = to;
+        return QStringView(content).sliced(from, to - from).endsWith(oldLines.at(row));
+    };
+    qsizetype k = 0;
+    while (k < oldLines.size() && k < newLines.size() && oldLines.at(k) == newLines.at(k))
+        ++k;
+    qsizetype ls = 0;
+    qsizetype le = 0;
+    if (oldLines.size() == newLines.size() && k < oldLines.size()
+        && oldLines.mid(k + 1) == newLines.mid(k + 1) && fileLine(k, &ls, &le)) {
+        const QString &before = oldLines.at(k);
+        const QString &after = newLines.at(k);
+        qsizetype p = 0;
+        while (p < before.size() && p < after.size() && before[p] == after[p])
+            ++p;
+        qsizetype q = 0;
+        while (q < before.size() - p && q < after.size() - p
+               && before[before.size() - 1 - q] == after[after.size() - 1 - q]) {
+            ++q;
         }
+        const qsizetype at = le - before.size() + p;
+        return content.left(at) + after.mid(p, after.size() - p - q) + content.mid(at + before.size() - p - q);
+    }
+    if (newLines.size() == oldLines.size() - 1 && k > 0 && oldLines.mid(k + 1) == newLines.mid(k)
+        && fileLine(k, &ls, &le)) {
+        if (const qsizetype nl = content.indexOf(u'\n', le); nl >= 0)
+            return content.left(ls) + content.mid(nl + 1);
+        // The file's last line, without a line ending: the one before it goes instead.
+        qsizetype prev = ls - 1; // the previous line's '\n'
+        if (prev > 0 && content[prev - 1] == u'\r')
+            --prev;
+        return content.left(prev);
     }
     // Not one line of the file as it stands (cannot happen for tokens; kept safe): the block's
     // body as the editor writes it.

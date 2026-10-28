@@ -533,6 +533,49 @@ private Q_SLOTS:
         QVERIFY(ws->readFile(u"Dom.md"_s).contains(u"✅ 2026-10-14\r\n"_s));
     }
 
+    void completeAWidgetsProvisionalReminder_data()
+    {
+        QTest::addColumn<QString>("note");
+        QTest::addColumn<int>("line");
+        QTest::addColumn<QString>("expected"); // "" = not completed
+        const QString task = u"- [ ] Zadzwonić do hydraulika ⏰ 2026-10-14 15:00\n"_s;
+        const QString done = u"- [x] Zadzwonić do hydraulika ⏰ 2026-10-14 15:00 ✅ 2026-10-14\n"_s;
+        const QString other = u"- [ ] Odebrać paczkę ⏰ 2026-10-14 15:00\n"_s;
+        QTest::newRow("on the line quick add wrote") << QString(u"# Środa\n\n"_s + task) << 2
+                                                     << QString(u"# Środa\n\n"_s + done);
+        QTest::newRow("moved down, found by its text")
+                << QString(u"# Środa\n\n"_s + other + task) << 2 << QString(u"# Środa\n\n"_s + other + done);
+        QTest::newRow("another task of that time on the line, its own gone")
+                << QString(u"# Środa\n\n"_s + other) << 2 << QString();
+        // Two equal tasks of one time are one occurrence (one id), as for the app's own reminders.
+        QTest::newRow("two alike, neither on the line")
+                << QString(u"# Środa\n\n- x\n"_s + task + task) << 2 << QString(u"# Środa\n\n- x\n"_s + done + task);
+        QTest::newRow("another text at that time and line")
+                << QString(u"# Środa\n\n- [ ] Zadzwonić do hydraulika jutro ⏰ 2026-10-14 15:00\n"_s) << 2 << QString();
+    }
+
+    void completeAWidgetsProvisionalReminder()
+    {
+        // "Zrobione" on the reminder the widget's quick add armed while Brulion was closed: it has
+        // no occurrence id of the app's, so the occurrence is found by its place in the note.
+        QFETCH(QString, note);
+        QFETCH(int, line);
+        QFETCH(QString, expected);
+        FakeSink sink;
+        m_now = QDateTime(QDate(2026, 10, 14), QTime(13, 0));
+        auto ws = open({{u"journals/2026-10-14.md"_s, note}}, nullptr, &sink);
+        ScheduledNotification provisional;
+        provisional.id = u"widget:7f3c-ąę"_s;
+        provisional.at = QDateTime(QDate(2026, 10, 14), QTime(15, 0));
+        provisional.path = u"journals/2026-10-14.md"_s;
+        provisional.line = line;
+        provisional.title = u"Zadzwonić do hydraulika"_s;
+        QSignalSpy errors(ws->reminders(), &brulion::shell::WorkspaceReminders::errorOccurred);
+        QCOMPARE(ws->reminders()->completeNotification(provisional), !expected.isEmpty());
+        QCOMPARE(ws->readFile(u"journals/2026-10-14.md"_s), expected.isEmpty() ? note : expected);
+        QCOMPARE(errors.size(), expected.isEmpty() ? 1 : 0);
+    }
+
     void completeFollowsTheTaskNotItsOldLine()
     {
         FakeSink sink;

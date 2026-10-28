@@ -25,6 +25,20 @@ class ShareIntentTest {
     assertFalse(ShareIntent.isText("umowa.pdf", "application/pdf"))
   }
 
+  /** Brulion's own providers are refused, also behind a "<userId>@" prefix the resolver drops. */
+  @Test
+  fun ownProvidersAreRecognised() {
+    val pkg = "io.github.januszbit.brulion"
+    assertTrue(ShareIntent.isOwnAuthority("io.github.januszbit.brulion.qtprovider", pkg))
+    assertTrue(ShareIntent.isOwnAuthority("0@io.github.januszbit.brulion.qtprovider", pkg))
+    assertTrue(ShareIntent.isOwnAuthority("10@0@io.github.januszbit.brulion", pkg))
+    assertTrue(ShareIntent.isOwnAuthority("", pkg))
+    assertTrue(ShareIntent.isOwnAuthority(null, pkg))
+    assertFalse(ShareIntent.isOwnAuthority("com.android.providers.downloads.documents", pkg))
+    assertFalse(ShareIntent.isOwnAuthority("0@com.google.android.apps.docs.storage", pkg))
+    assertFalse(ShareIntent.isOwnAuthority("io.github.januszbit.brulionżółw", pkg))
+  }
+
   @Test
   fun copyNamesAreSafe() {
     assertEquals("Łódź — notatka.md", ShareIntent.copyName("Łódź — notatka.md", 0))

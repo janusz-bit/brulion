@@ -199,6 +199,13 @@ std::optional<Drawing> parseScene(QByteArrayView json)
 {
     if (json.size() > MaxSceneBytes)
         return std::nullopt;
+    // Counted before parsing (brackets inside strings too: an upper bound): what the parse would
+    // allocate grows with the arrays and objects, not with the bytes.
+    qsizetype containers = 0;
+    for (const char c : json) {
+        if ((c == '[' || c == '{') && ++containers > MaxSceneContainers)
+            return std::nullopt;
+    }
     QJsonParseError error{};
     const QJsonDocument doc = QJsonDocument::fromJson(json.toByteArray(), &error);
     if (error.error != QJsonParseError::NoError || !doc.isObject())

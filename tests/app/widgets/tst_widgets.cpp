@@ -91,7 +91,7 @@ SnapshotOptions fixtureOptions()
     o.vaultRoot = u"/storage/emulated/0/Brulion"_s;
     o.favorites = {{u"Projekty/Dom.md"_s, u"Dom"_s}, {u""_s, u"pusta"_s}, {u"Zakupy ąę.md"_s, u"Zakupy ąę"_s}};
     o.recent = {{u"journals/2026-10-27.md"_s, u"2026-10-27"_s}};
-    o.captureDays = {{QDate(2026, 10, 27), u"journals/2026-10-27.md"_s, true, u"ignored"_s},
+    o.captureDays = {{QDate(2026, 10, 27), u"journals/2026-10-27.md"_s, true, u"# wtorek, 27 października\n\n- "_s},
                      {QDate(2026, 10, 28), u"journals/2026-10-28.md"_s, false, u"# środa, 28 października\n\n- "_s}};
     return o;
 }
@@ -263,7 +263,12 @@ private Q_SLOTS:
 
         const QJsonArray capture = snapshot.value(u"capture"_s).toObject().value(u"days"_s).toArray();
         QCOMPARE(capture.size(), 2);
-        QCOMPARE(capture.at(0).toObject().value(u"newText"_s).toString(), QString()); // exists: no text
+        // Also for a note that exists: it may be deleted before quick add writes.
+        QCOMPARE(capture.at(0).toObject().value(u"newText"_s).toString(), u"# wtorek, 27 października\n\n- "_s);
+        QCOMPARE(snapshot.value(u"reminders"_s), QJsonValue(true));
+        SnapshotOptions off = fixtureOptions();
+        off.reminders = false;
+        QCOMPARE(buildSnapshot(*index, off).value(u"reminders"_s), QJsonValue(false));
         QCOMPARE(capture.at(1).toObject().value(u"newText"_s).toString(), u"# środa, 28 października\n\n- "_s);
     }
 
@@ -358,7 +363,7 @@ private Q_SLOTS:
         QCOMPARE(days.size(), 3);
         QCOMPARE(days.at(0).path, u"journals/2026_10_27.md"_s);
         QVERIFY(days.at(0).exists);
-        QCOMPARE(days.at(0).newText, QString());
+        QCOMPARE(days.at(0).newText, u"# wtorek, 2026-10-27\n\n- "_s); // in case it is deleted
         QCOMPARE(days.at(1).path, u"journals/2026-10-28.md"_s);
         QVERIFY(!days.at(1).exists);
         QCOMPARE(days.at(1).newText, u"# środa, 2026-10-28\n\n- "_s);

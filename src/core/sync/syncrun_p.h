@@ -212,6 +212,10 @@ private:
     /// The sync states, merge bases and folder states below `from` move to `to` (`folder` false:
     /// the one file's state and base only).
     void rebaseStates(const VaultPath &from, const VaultPath &to, bool folder = true);
+    /// The rename journal follows a rename in this run: the synced names below `from` move to
+    /// `to`, and so do the new local names below `here` when the vault renamed them too (a rename
+    /// on the server adopted here); the stored entries are rewritten.
+    void rebaseJournal(const std::optional<VaultPath> &here, const VaultPath &from, const VaultPath &to, bool folder);
     /// Case-insensitive storage: a synced folder another device renamed in letter case only
     /// ("projekty" -> "Projekty", one folder here) is renamed here too, its states following, so
     /// its notes are unchanged at the new paths — not trashed under the old name while the very
@@ -232,6 +236,9 @@ private:
     /// The server's file `entry` is the one synced as `state`: the same oc:fileid, or (when
     /// either has none) the same real ETag and size.
     static bool sameRemoteFile(const RemoteEntry &entry, const SyncFileState &state);
+    /// The server's file at the synced `path` is another file than the one synced there (both
+    /// oc:fileids known and different): deleted and created anew, or another file renamed onto it.
+    bool replacedOnServer(const VaultPath &path) const;
     /// Something here at or below `to` in any letter case (files, folders, also ones the vault
     /// does not list), but `from` itself (a case-only rename).
     bool takenHere(const VaultPath &to, const VaultPath &from) const;

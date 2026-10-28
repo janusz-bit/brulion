@@ -11,7 +11,7 @@ import Brulion
 // (EditorDialogs, without an editor). On a date of a recurring series (the calendar's other
 // dates than the written one) the date moves only as a whole series ("Zmień całą serię…"), and a
 // reminder's "Godzinę później" / "Jutro o tej porze" snooze that one time once it has rung (a
-// one-off child reminder, like the notification's "Odłóż": PlanningActions.snoozeReminder) — a
+// one-off child reminder, like the notification's "Drzemka": PlanningActions.snoozeReminder) — a
 // time still to come offers no snooze, it would ring as well. A value that is no token of the
 // file (a Logseq SCHEDULED: line) opens no menu (PlanningActions.tokenMenu()).
 //
@@ -87,7 +87,8 @@ Item {
         if (!linkMenu)
             linkMenu = linkMenuComponent.createObject(root) as LinkMenu
         linkMenu.kind = kind
-        linkMenu.unresolved = false
+        // A [[link]] to a page that does not exist offers "Utwórz stronę", as in the editor.
+        linkMenu.unresolved = kind === "page" && actions.linkMissing(url, fromPath || "")
         linkMenu.filterFirst = kind === "tag" && !!filter
         linkMenu.popup(item, x, y)
         return true
@@ -105,7 +106,8 @@ Item {
                 : qsTr("Date changed"))
     }
     function snooze(at) {
-        if (actions.snoozeReminder(target.path, target.line, at))
+        const t = target
+        if (actions.snoozeReminder(t.path, t.line, t.text || "", t.value, at))
             changed(qsTr("Reminder snoozed until %1").arg(DatesHelper.formatHuman(at)))
     }
     function choose(action, a, b) {

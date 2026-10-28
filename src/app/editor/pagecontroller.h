@@ -573,7 +573,8 @@ public:
     Q_INVOKABLE QVariantMap editTokenIn(const QString &path, int line, const QString &raw, const QVariantMap &ref,
                                         const QString &action, const QVariant &a = {}, const QVariant &b = {});
     /// Put back what editTokenIn() changed in another file (`undo`: its handle) — only while the
-    /// file still holds what that edit wrote. False when it changed since or the handle is gone.
+    /// file still holds what that edit wrote. False when it changed, was renamed or deleted since,
+    /// or the handle is gone (a missing file is never written anew).
     Q_INVOKABLE bool undoTokenEdit(int undo);
     /// A token link of a table cell's rendered text (`url`, its range in the cell's text): as
     /// dateChip() with the range in the cell (tableRow -1 = header). Empty when there is none.

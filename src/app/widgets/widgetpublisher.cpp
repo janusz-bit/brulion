@@ -62,6 +62,8 @@ WidgetPublisher::WidgetPublisher(shell::AppController *app) : QObject(app), m_ap
     connect(ws, &shell::Workspace::recentPagesChanged, this, &WidgetPublisher::schedule);
     connect(ws, &shell::Workspace::configChanged, this, &WidgetPublisher::schedule);
     connect(app->settings(), &shell::AppSettings::languageChanged, this, &WidgetPublisher::schedule);
+    // Reminders turned off: quick add must not arm one any more (the snapshot says so).
+    connect(ws->reminders(), &shell::WorkspaceReminders::settingsChanged, this, &WidgetPublisher::schedule);
     connect(ws->reminders(), &shell::WorkspaceReminders::doneTargetChanged, this, [this] {
         if (target().isEmpty())
             return;
@@ -126,6 +128,7 @@ void WidgetPublisher::publish()
     options.vaultRoot = QDir::cleanPath(vault->rootPath());
     options.favorites = pageRefs(ws->favorites());
     options.recent = pageRefs(ws->recentPages());
+    options.reminders = ws->reminders()->enabled();
     options.captureDays =
             captureDays(*vault, options.now.date(), CaptureDays, options.now, notebook::contentLocale(language));
     const int placed = platform::AndroidBridge::instance()->updateWidgets(buildSnapshot(*index, options));

@@ -184,7 +184,7 @@ QJsonObject buildSnapshot(const VaultIndex &constIndex, const SnapshotOptions &o
         capture.append(QJsonObject{{u"date"_s, planning::isoDate(day.date)},
                                    {u"path"_s, day.path},
                                    {u"exists"_s, day.exists},
-                                   {u"newText"_s, day.exists ? QString() : day.newText}});
+                                   {u"newText"_s, day.newText}});
     }
 
     return QJsonObject{
@@ -202,6 +202,7 @@ QJsonObject buildSnapshot(const VaultIndex &constIndex, const SnapshotOptions &o
             {u"notes"_s, QJsonObject{{u"favorites"_s, pagesJson(options.favorites, options.maxPages)},
                                      {u"recent"_s, pagesJson(options.recent, options.maxPages)}}},
             {u"capture"_s, QJsonObject{{u"days"_s, capture}}},
+            {u"reminders"_s, options.reminders},
     };
 }
 
@@ -232,8 +233,9 @@ QList<CaptureDay> captureDays(Vault &vault, QDate today, int days, const QDateTi
         if (day.path.isEmpty())
             continue;
         day.exists = vault.exists(day.path) || QFileInfo::exists(vault.absolutePath(day.path));
-        if (!day.exists)
-            day.newText = notebook::newJournalText(vault, day.date, now, locale);
+        // Also for a note that exists now: it may be deleted (another device, a file manager)
+        // before quick add writes, which then starts it as the app would.
+        day.newText = notebook::newJournalText(vault, day.date, now, locale);
         out.append(day);
     }
     return out;

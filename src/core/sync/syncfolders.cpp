@@ -315,8 +315,8 @@ std::optional<VaultPath> SyncRun::renameTarget(const VaultPath &from, const QSet
             const VaultPath target = to + file.mid(from.size());
             if (!m_local.contains(target))
                 continue;
-            if (!m_remote.contains(file))
-                return false;
+            if (!m_remote.contains(file) || replacedOnServer(file))
+                return false; // another file there now: moved, it would land on the renamed note
             ++found;
             if (m_renamedHere.value(target) == file || sameContent(target, m_states.value(file)))
                 unchanged.insert(file);
@@ -393,9 +393,13 @@ QList<SyncRun::FolderMove> SyncRun::findFileMoves()
     if (m_states.isEmpty() || m_localLookedEmpty)
         return {};
     const qint64 maxSize = m_engine->maxFileSize();
+    // The server must still have the synced file at the old name: one written there since by
+    // another device (deleted and created anew, another file renamed onto it) is not this file,
+    // and a MOVE would carry it over the renamed note (whose rename wins over the deletion on the
+    // other side: uploaded as a new file instead).
     const auto goneHere = [this](const VaultPath &path) {
         return path != vaultConfigPath() && m_states.contains(path) && !m_local.contains(path)
-               && m_remote.contains(path);
+               && m_remote.contains(path) && !replacedOnServer(path);
     };
     const auto newHere = [this](const VaultPath &path) {
         return path != vaultConfigPath() && m_local.contains(path) && !m_states.contains(path)
@@ -562,6 +566,35 @@ void SyncRun::rebaseStates(const VaultPath &from, const VaultPath &to, bool isFo
     }
 }
 
+void SyncRun::rebaseJournal(const std::optional<VaultPath> &here, const VaultPath &from, const VaultPath &to,
+                            bool folder)
+{
+    const auto moved = [folder](const VaultPath &path, const VaultPath &old, const VaultPath &now) {
+        if (folder ? isWithin(path, old) : path == old)
+            return std::optional<VaultPath>(now + path.mid(old.size()));
+        return std::optional<VaultPath>();
+    };
+    QHash<VaultPath, VaultPath> journal;
+    for (auto it = m_renamedHere.cbegin(); it != m_renamedHere.cend(); ++it) {
+        // The new local name moves with a rename here, the synced name with the states.
+        const std::optional<VaultPath> key = here ? moved(it.key(), *here, to) : std::nullopt;
+        const std::optional<VaultPath> origin = moved(it.value(), from, to);
+        if (!key && !origin) {
+            journal.insert(it.key(), it.value());
+            continue;
+        }
+        const VaultPath newKey = key.value_or(it.key());
+        const VaultPath newOrigin = origin.value_or(it.value());
+        // The sync's own rename here dropped the stored entry (SyncEngine::onVaultChanged()).
+        store()->remove(SyncEngine::renamedKey(it.key()));
+        if (newKey == newOrigin || m_states.contains(newKey))
+            continue; // renamed back, or the rename is synced
+        journal.insert(newKey, newOrigin);
+        store()->set(SyncEngine::renamedKey(newKey), QJsonObject{{u"from"_s, newOrigin}});
+    }
+    m_renamedHere = std::move(journal);
+}
+
 void SyncRun::adoptCaseOnlyFolderRenames()
 {
     QHash<QString, VaultPath> remoteDirs; // lower-cased -> as the server spells it
@@ -618,6 +651,7 @@ bool SyncRun::renameHere(const VaultPath &here, const VaultPath &from, const Vau
         return false;
     }
     rebaseStates(from, to, folder);
+    rebaseJournal(here, from, to, folder);
     if (!folder) {
         if (const auto it = m_local.find(here); it != m_local.end()) {
             FileStat stat = *it;
@@ -636,6 +670,14 @@ bool SyncRun::renameHere(const VaultPath &here, const VaultPath &from, const Vau
     }
     m_local = local;
     return true;
+}
+
+bool SyncRun::replacedOnServer(const VaultPath &path) const
+{
+    const auto state = m_states.constFind(path);
+    const auto remote = m_remote.constFind(path);
+    return state != m_states.cend() && remote != m_remote.cend() && !state->remoteId.isEmpty()
+           && !remote->fileId.isEmpty() && state->remoteId != remote->fileId;
 }
 
 bool SyncRun::sameRemoteFile(const RemoteEntry &entry, const SyncFileState &state)
@@ -795,11 +837,19 @@ void SyncRun::adoptRemoteFileMoves()
     // A side that lost every file under its name: nothing is renamed on such evidence.
     if (m_states.isEmpty() || m_localLookedEmpty)
         return;
+    // New server files by identity: never synced, or at a synced name that now holds another
+    // file (the oc:fileids differ: a file renamed onto it, or a new one made under the old name
+    // of a renamed one).
     QHash<QString, VaultPath> byId;
     QHash<QString, QList<VaultPath>> byEtag;
     for (auto it = m_remote.cbegin(); it != m_remote.cend(); ++it) {
-        if (m_states.contains(it.key()) || it.key() == vaultConfigPath())
+        if (it.key() == vaultConfigPath())
             continue;
+        if (m_states.contains(it.key())) {
+            if (replacedOnServer(it.key()))
+                byId.insert(it->fileId, it.key());
+            continue;
+        }
         if (!it->fileId.isEmpty())
             byId.insert(it->fileId, it.key());
         if (!it->etag.isEmpty())
@@ -807,11 +857,14 @@ void SyncRun::adoptRemoteFileMoves()
     }
     if (byId.isEmpty() && byEtag.isEmpty())
         return;
-    // Synced files still here that the server no longer has.
+    // Synced files still here that the server no longer has under their names: gone there, or
+    // another file in their place (whose edits here would otherwise be merged into that file).
     QStringList gone;
     for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
-        if (it.key() != vaultConfigPath() && !m_remoteAll.contains(it.key()) && m_local.contains(it.key()))
+        if (it.key() != vaultConfigPath() && m_local.contains(it.key())
+            && (!m_remoteAll.contains(it.key()) || replacedOnServer(it.key()))) {
             gone.append(it.key());
+        }
     }
     std::sort(gone.begin(), gone.end());
     // Synced versions by ETag: one that several synced files had (a server whose ETags are mtime
@@ -843,38 +896,53 @@ void SyncRun::adoptRemoteFileMoves()
         return QFileInfo::exists(absTo) && !sameEntryOnDisk(vault()->absolutePath(from), absTo);
     };
     QSet<VaultPath> taken;
-    for (const VaultPath &from : std::as_const(gone)) {
-        const SyncFileState state = m_states.value(from);
-        std::optional<VaultPath> to;
-        if (const auto id = byId.constFind(state.remoteId); !state.remoteId.isEmpty() && id != byId.cend()) {
-            to = *id;
-        } else if (!m_remoteLookedEmpty && syncedEtags.value(state.remoteEtag) == 1) {
-            // Without ids: the one new file with this version and size, the one synced file with
-            // that version (a server that looked empty may hold an older copy put back: no rename
-            // on such evidence).
-            QList<VaultPath> same;
-            for (const VaultPath &path : byEtag.value(state.remoteEtag)) {
-                if (sameRemoteFile(m_remote.value(path), state))
-                    same.append(path);
+    // A chain (Y -> Z, then X -> Y on the server) is renamed here from its end: a target this
+    // device still has under a name that moves on is free on the next pass. A cycle (a swap)
+    // stays as it is: its files are compared at their old names as before.
+    for (bool renamed = true; renamed && !gone.isEmpty();) {
+        renamed = false;
+        for (qsizetype i = 0; i < gone.size(); ++i) {
+            const VaultPath from = gone.at(i);
+            const SyncFileState state = m_states.value(from);
+            std::optional<VaultPath> to;
+            if (const auto id = byId.constFind(state.remoteId); !state.remoteId.isEmpty() && id != byId.cend()) {
+                to = *id;
+            } else if (!m_remoteLookedEmpty && syncedEtags.value(state.remoteEtag) == 1) {
+                // Without ids: the one new file with this version and size, the one synced file
+                // with that version (a server that looked empty may hold an older copy put back:
+                // no rename on such evidence).
+                QList<VaultPath> same;
+                for (const VaultPath &path : byEtag.value(state.remoteEtag)) {
+                    if (sameRemoteFile(m_remote.value(path), state))
+                        same.append(path);
+                }
+                if (same.size() == 1)
+                    to = same.first();
             }
-            if (same.size() == 1)
-                to = same.first();
+            if (!to || taken.contains(*to) || !sameRemoteFile(m_remote.value(*to), state)
+                || takenHereAlready(*to, from)) {
+                continue;
+            }
+            if (!renameHere(from, from, *to, false)) {
+                gone.removeAt(i--); // refused: downloaded and trashed as before
+                continue;
+            }
+            taken.insert(*to);
+            addHere(*to);
+            here.remove(from.toLower()); // free for the next link of a chain
+            gone.removeAt(i--);
+            renamed = true;
+            m_report.localFileMoves.append(SyncFolderMove{from, *to});
+            record(*to, SyncAction::MoveFileLocal);
+            qCInfo(lcSync).noquote() << u"%1 %2 renamed on the server to %3: renamed here too"_s.arg(tag(), from, *to);
         }
-        if (!to || taken.contains(*to) || !sameRemoteFile(m_remote.value(*to), state) || takenHereAlready(*to, from))
-            continue;
-        if (!renameHere(from, from, *to, false))
-            continue;
-        taken.insert(*to);
-        addHere(*to);
-        m_report.localFileMoves.append(SyncFolderMove{from, *to});
-        record(*to, SyncAction::MoveFileLocal);
-        qCInfo(lcSync).noquote() << u"%1 %2 renamed on the server to %3: renamed here too"_s.arg(tag(), from, *to);
     }
 }
 
 void SyncRun::applyRemoteMove(const FolderMove &move, bool folder)
 {
     rebaseStates(move.from, move.to, folder);
+    rebaseJournal(std::nullopt, move.from, move.to, folder);
     // The listing as the server has it now (a file: just its own entry, a folder: everything at
     // or below it).
     const auto follow = [&move, folder](QHash<VaultPath, RemoteEntry> &listing) {

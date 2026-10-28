@@ -194,6 +194,10 @@ Brulion edits only freehand strokes: a scene with other elements (shapes, arrows
 rotated or filled freehand lines, freehand lines with a point farther than 10⁶ scene units from the
 origin on either axis — `drawing::CoordinateLimit`) is shown, never written. Elements and fields Brulion does not
 model are written back as they were; deleted elements are dropped (as Excalidraw's own export does).
+A scene beyond 32 MB (decompressed) or with more than 500 000 JSON arrays and objects (every point
+of a stroke is one — some thirty pages of dense handwriting) is not read (`drawing::MaxSceneBytes`,
+`MaxSceneContainers`): a small synced file must never inflate into gigabytes; it shows as a drawing
+that cannot be read.
 
 **Pictures from the internet:** a Markdown picture whose destination is an `http:` / `https:` URL
 with a host — `![alt](https://example.com/kot.jpg)`, `![](<https://example.com/mój kot.png>)`,

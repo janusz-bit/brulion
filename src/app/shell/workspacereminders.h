@@ -94,6 +94,10 @@ public:
     ReminderScheduler *scheduler() const { return m_scheduler.get(); }
 
     // ---- settings -----------------------------------------------------------------------------
+    /// Ids of the reminders the Android widgets' quick add arms natively while the app is closed
+    /// (QuickAdd.kt: "widget:<entry id>"); their "Zrobione" is found by place, see current().
+    static constexpr QStringView ProvisionalIdPrefix = u"widget:";
+
     bool enabled() const { return m_enabled; }
     void setEnabled(bool on);
     void setAlarmRingMinutes(int minutes);
@@ -173,6 +177,9 @@ private:
     void stopScheduler();
     std::optional<ScheduledNotification> find(const QString &id) const;
     /// The occurrence `notification` names, as the index has it now (nullopt: gone or changed).
+    /// A reminder a widget's quick add armed while the app was closed (an id starting with
+    /// ProvisionalIdPrefix: it never had an occurrence id) is the occurrence of its time and
+    /// title in its note: the one on the line quick add wrote, else the only one.
     std::optional<ScheduledNotification> current(const ScheduledNotification &notification) const;
     enum class EditResult {
         Written,   ///< the note holds the edit

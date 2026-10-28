@@ -143,14 +143,23 @@ class ShareActivity : Activity() {
       return ShareIntent.toJson(subject, text, dirPath, files).toString()
     }
 
+    /** The provider of [authority] (a user prefix dropped) is one of Brulion's own. */
+    @Suppress("DEPRECATION") // the ComponentInfoFlags overload needs API 33
+    private fun ownProvider(context: Context, authority: String?): Boolean {
+      val host = (authority ?: "").substringAfterLast('@')
+      val provider = safely { context.packageManager.resolveContentProvider(host, 0) } ?: return false
+      return provider.packageName == context.packageName
+    }
+
     /** One stream: copied below [dir], or with the reason it is not. */
     fun copy(context: Context, uri: Uri, dir: File, index: Int, type: String?, copied: Int): ShareIntent.SharedFile {
       val resolver = context.contentResolver
       // Only another app's content: a file:// path, or a content:// URI of Brulion's own provider,
-      // would let a sender make Brulion read its own private files (a confused deputy).
-      val authority = uri.authority ?: ""
-      if (uri.scheme != "content" || authority == context.packageName ||
-        authority.startsWith(context.packageName + ".")
+      // would let a sender make Brulion read its own private files (a confused deputy). The
+      // authority as the resolver reads it ("0@" user prefix dropped), and the package that
+      // provider resolves to.
+      if (uri.scheme != "content" || ShareIntent.isOwnAuthority(uri.authority, context.packageName) ||
+        ownProvider(context, uri.authority)
       ) {
         return ShareIntent.SharedFile(null, uri.lastPathSegment, null, -1, "unreadable")
       }

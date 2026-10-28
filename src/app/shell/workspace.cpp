@@ -598,6 +598,14 @@ bool Workspace::writeAttachment(const QString &rawPath, const QByteArray &data)
     if (!m_vault || rawPath.isEmpty() || data.isEmpty())
         return false;
     const QString path = paths::normalize(rawPath);
+    // Only over the file as it is on disk: one deleted there (another device through Syncthing, a
+    // file manager) whose deletion the vault has not seen yet is never written again. The read
+    // that fails makes the vault check the path, so pathRemoved follows.
+    if (!QFileInfo(m_vault->absolutePath(path)).isFile()) {
+        bool ok = false;
+        m_vault->readBinary(path, &ok);
+        return false;
+    }
     if (m_vault->writeBinary(path, data, ChangeSource::User))
         return true;
     Q_EMIT errorOccurred(tr("Could not save the drawing %1: %2").arg(paths::basename(path), m_vault->errorString()));

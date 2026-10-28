@@ -1399,7 +1399,7 @@
             {
                 "date": "2026-10-27",
                 "exists": true,
-                "newText": "",
+                "newText": "# wtorek, 27 października\n\n- ",
                 "path": "journals/2026-10-27.md"
             },
             {
@@ -1429,6 +1429,7 @@
             }
         ]
     },
+    "reminders": true,
     "taskCounts": {
         "overdue": 1,
         "today": 5,

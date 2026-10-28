@@ -303,7 +303,11 @@ app; these guards keep data from being lost:
   looked empty, every file found there must be proven. Then single files the same way
   (`adoptRemoteFileMoves()`: one new server file with the synced file's id — or, without ids and
   unless the server looked empty, the one file with its ETag and size, an ETag no other synced
-  file had: servers whose ETags are mtime and size repeat them). It is `Vault::rename`
+  file had: servers whose ETags are mtime and size repeat them). A synced name the server now
+  fills with another file (both ids known and different: a file renamed onto it, or a new note
+  made under the old name of a renamed one) counts as gone there and as a new server file, so a
+  chain (Y → Z, then X → Y) is renamed here from its end and an edit made here stays with its
+  page instead of being merged into the other one; a cycle (a swap) is compared as before. It is `Vault::rename`
   with `ChangeSource::Sync` (history, favourites, folds and open editors follow the `Renamed`
   changes; links are not rewritten — the renaming device did that, and its edits arrive as
   downloads), the states and merge bases follow, and the files are then compared at their new
@@ -315,9 +319,13 @@ app; these guards keep data from being lost:
   (`SyncEngine` records every `Renamed` change of a synced file that is not the sync's own or a
   rescan's guess — `ChangeSource::Sync`, `External` — as `sync/renamed/<new path>` → the synced
   path, chains followed to their start, dropped on deletion, once the new path is synced and by
-  `resetState()`), so text typed or links rewritten after the rename are uploaded after the MOVE
-  as an edit; else by its synced content, unchanged, in exactly one new local file (empty files and
-  look-alikes without a telling name prove nothing); never when this device looked empty. Many
+  `resetState()`; a folder rename of the same run, here or adopted from the server, carries the
+  journal along, `rebaseJournal()`), so text typed or links rewritten after the rename are
+  uploaded after the MOVE as an edit; else by its synced content, unchanged, in exactly one new
+  local file (empty files and look-alikes without a telling name prove nothing); never when this
+  device looked empty, and never when the server's file at the old name is not the synced one
+  (another `oc:fileid`: deleted and made anew there — a MOVE would carry it over the renamed note;
+  the same holds for a folder MOVE): the renamed page is uploaded as a new one instead. Many
   single renames in one run cost one step each (the run's listings and states are updated in
   place, not rebuilt per file). Concurrent edits are
   merged three-way; when that fails both versions stay (conflict copy) for `ConflictResolver`.

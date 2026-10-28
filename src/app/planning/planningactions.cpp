@@ -339,10 +339,12 @@ QVariantMap PlanningActions::tokenMenu(const QString &path, int line, const QStr
     return {{u"rule"_s, rule}, {u"priority"_s, markdown::priorityName(priority)}, {u"logseq"_s, logseq}};
 }
 
-bool PlanningActions::snoozeReminder(const QString &path, int line, const QString &at)
+bool PlanningActions::snoozeReminder(const QString &path, int line, const QString &text, const QString &value,
+                                     const QString &at)
 {
     const QDateTime when = QDateTime::fromString(at, u"yyyy-MM-dd HH:mm"_s);
-    if (!m_host || !when.isValid())
+    const auto ref = tokenRefOf(u"reminder"_s, value);
+    if (!m_host || !when.isValid() || !ref)
         return false;
     bool ok = false;
     const QString content = m_host->read(path, &ok);
@@ -350,7 +352,18 @@ bool PlanningActions::snoozeReminder(const QString &path, int line, const QStrin
         Q_EMIT failed(tr("The page could not be read."));
         return false;
     }
-    const QString after = brulion::snoozeReminder(content, line, when);
+    // The reminder found again (the line may have moved since the menu opened, or hold another
+    // task's reminder by now), then the line of its block that holds it.
+    const int block = tokenBlockLine(path, content, line, text, *ref);
+    const markdown::BlockDocument doc(content);
+    const int i = block < 0 ? -1 : doc.indexAtLine(block);
+    const auto range = i < 0 ? std::nullopt : markdown::findTokenRef(doc.at(i).body, *ref);
+    if (!range) {
+        Q_EMIT failed(tr("The reminder was changed in the meantime."));
+        return false;
+    }
+    const int reminderLine = doc.at(i).line + int(doc.at(i).body.left(range->first).count(u'\n'));
+    const QString after = brulion::snoozeReminder(content, reminderLine, when);
     if (after == content) {
         Q_EMIT failed(tr("The reminder was changed in the meantime."));
         return false;
@@ -358,15 +371,24 @@ bool PlanningActions::snoozeReminder(const QString &path, int line, const QStrin
     return writeChange(path, content, after);
 }
 
-QString PlanningActions::linkText(const QString &url, const QString &fromPath) const
+notebook::CopiedLink PlanningActions::copiedLink(const QString &url, const QString &fromPath) const
 {
     return notebook::copiedLink(
-                   url, fromPath, config(),
-                   [this](const QString &target, const QString &from) {
-                       return m_host ? m_host->resolveLink(target, from) : QString();
-                   },
-                   [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); })
-            .text;
+            url, fromPath, config(),
+            [this](const QString &target, const QString &from) {
+                return m_host ? m_host->resolveLink(target, from) : QString();
+            },
+            [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); });
+}
+
+QString PlanningActions::linkText(const QString &url, const QString &fromPath) const
+{
+    return copiedLink(url, fromPath).text;
+}
+
+bool PlanningActions::linkMissing(const QString &url, const QString &fromPath) const
+{
+    return url.startsWith(u"page:"_s) && copiedLink(url, fromPath).path.isEmpty();
 }
 
 bool PlanningActions::copyText(const QString &text) const

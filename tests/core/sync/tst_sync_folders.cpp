@@ -1721,6 +1721,192 @@ private Q_SLOTS:
         QCOMPARE(p.server.files(kFolder), p.b.files());
     }
 
+    void aPageMadeAnewUnderTheOldNameIsNotMoved_data()
+    {
+        QTest::addColumn<QString>("how");
+        QTest::newRow("page renamed in Brulion (journal)") << u"journal"_s;
+        QTest::newRow("page renamed behind the vault (content)") << u"behind"_s;
+        QTest::newRow("folder renamed in Brulion") << u"folder"_s;
+    }
+
+    void aPageMadeAnewUnderTheOldNameIsNotMoved()
+    {
+        // The laptop deletes a synced page and writes a new one of that name (the server gives it a
+        // new file id); the phone, offline, renames the old page. The server's file under the old
+        // name is not the phone's synced one: no MOVE carries it over the renamed note. Both pages
+        // stay: the new one under the old name, the renamed one under its new name (a rename wins
+        // over a deletion on the other side).
+        QFETCH(QString, how);
+        const bool folder = how == u"folder"_s;
+        const QString old = folder ? u"Dom/Zakupy ą.md"_s : u"Zakupy ą.md"_s;
+        const QString renamed = folder ? u"Mieszkanie ż/Zakupy ą.md"_s : u"Zakupy 2025 ż.md"_s;
+        FakeWebDavServer::Options options;
+        options.fileIds = true;
+        Pair p(notesIn(u""_s, 3) + notesIn(u"Dom"_s, folder ? 1 : 0, 10)
+                       + QMap<QString, QByteArray>{{old, u8(u"stara lista — mąka, jaja\n"_s)}},
+               options);
+        p.settle();
+        const QString oldId = p.server.fileId(kFolder + u'/' + old);
+        QVERIFY(p.a.remove(old));
+        QVERIFY(!p.a.sync().failed());
+        QVERIFY(p.a.write(old, u"nowa lista — śliwki, żurek\n"_s));
+        QVERIFY(!p.a.sync().failed());
+        QVERIFY(p.server.fileId(kFolder + u'/' + old) != oldId);
+        if (how == u"journal"_s) {
+            QVERIFY(p.b.vault->rename(old, renamed));
+        } else if (how == u"behind"_s) {
+            QVERIFY(QFile::rename(p.b.root + u'/' + old, p.b.root + u'/' + renamed));
+            p.b.vault->rescan();
+        } else {
+            QVERIFY(p.b.vault->rename(u"Dom"_s, u"Mieszkanie ż"_s));
+        }
+        p.server.clearLog();
+        const SyncReport rb = p.b.sync();
+        QVERIFY2(!rb.failed(), qPrintable(rb.failureMessage()));
+        QCOMPARE(rb.foldersMoved, 0);
+        // The folder's other page is moved on its own; the replaced one never.
+        QCOMPARE(rb.filesMoved, folder ? 1 : 0);
+        QVERIFY(!requestPaths(p.server, "MOVE").contains(old));
+        QCOMPARE(p.b.read(old), u"nowa lista — śliwki, żurek\n"_s);
+        QCOMPARE(p.b.read(renamed), u"stara lista — mąka, jaja\n"_s);
+        QCOMPARE(p.server.files(kFolder), p.b.files());
+        QVERIFY(!p.a.sync().failed());
+        QCOMPARE(p.a.files(), p.b.files());
+        QCOMPARE(p.a.read(old), u"nowa lista — śliwki, żurek\n"_s);
+    }
+
+    void pageRenamedInARenamedFolderIsMoved_data()
+    {
+        QTest::addColumn<bool>("onServer");
+        QTest::newRow("folder renamed here too") << false;
+        QTest::newRow("folder renamed on the server") << true;
+    }
+
+    void pageRenamedInARenamedFolderIsMoved()
+    {
+        // A page renamed and typed on inside a folder renamed in the same run (here, or on the
+        // server and adopted here): the rename journal follows the folder, so the page travels as
+        // a MOVE and its edit — not as a deletion and a new file (the other device keeps its
+        // history, favourite and folds).
+        QFETCH(bool, onServer);
+        FakeWebDavServer::Options options;
+        options.fileIds = true;
+        Pair p(notesIn(u""_s, 3) + notesIn(u"Dom"_s, 3, 10), options);
+        p.settle();
+        if (onServer) {
+            QVERIFY(p.a.vault->rename(u"Dom"_s, u"Mieszkanie ż"_s));
+            QCOMPARE(p.a.sync().foldersMoved, 1);
+        }
+        const QString page = onServer ? u"Dom/Plan ż.md"_s : u"Mieszkanie ż/Plan ż.md"_s;
+        QVERIFY(p.b.vault->rename(u"Dom/"_s + noteName(10), u"Dom/Plan ż.md"_s));
+        if (!onServer)
+            QVERIFY(p.b.vault->rename(u"Dom"_s, u"Mieszkanie ż"_s));
+        const QString edited = p.b.read(page) + u"Dopisane w telefonie — źrebię\n"_s;
+        QVERIFY(p.b.write(page, edited));
+        const QString now = u"Mieszkanie ż/Plan ż.md"_s;
+        p.server.clearLog();
+        const SyncReport rb = p.b.sync();
+        QVERIFY2(!rb.failed(), qPrintable(rb.failureMessage()));
+        QCOMPARE(onServer ? rb.foldersMovedHere : rb.foldersMoved, 1);
+        QCOMPARE(rb.filesMoved, 1);
+        QCOMPARE(rb.fileMoves, (QList<SyncFolderMove>{{u"Mieszkanie ż/"_s + noteName(10), now}}));
+        QVERIFY(p.server.requests("DELETE").isEmpty());
+        QCOMPARE(counts(rb), (Counts{.up = 1}));
+        QCOMPARE(p.server.text(kFolder + u'/' + now), std::optional<QString>(edited));
+        QCOMPARE(p.server.files(kFolder), p.b.files());
+        QVERIFY(p.b.store->keys(SyncEngine::renamedKey(QString())).isEmpty());
+        const SyncReport ra = p.a.sync();
+        QVERIFY2(!ra.failed(), qPrintable(ra.failureMessage()));
+        QCOMPARE(ra.filesMovedHere, 1);
+        QCOMPARE(counts(ra), (Counts{.down = 1}));
+        QVERIFY(p.a.trash().isEmpty());
+        QCOMPARE(p.a.files(), p.b.files());
+    }
+
+    void journalFollowsAFolderRenameAcrossRuns()
+    {
+        // The folder's MOVE is done, the page's is not (the connection drops): the stored journal
+        // follows the folder, so the next run still moves the page.
+        FakeWebDavServer::Options options;
+        options.fileIds = true;
+        Pair p(notesIn(u""_s, 3) + notesIn(u"Dom"_s, 3, 10), options);
+        p.settle();
+        QVERIFY(p.b.vault->rename(u"Dom/"_s + noteName(10), u"Dom/Plan ż.md"_s));
+        QVERIFY(p.b.vault->rename(u"Dom"_s, u"Mieszkanie ż"_s));
+        QCOMPARE(p.b.engine->renamedFrom(u"Mieszkanie ż/Plan ż.md"_s), u"Dom/"_s + noteName(10));
+        p.server.hooks.append([](const HttpRequest &request, const QString &path) -> std::optional<HttpResponse> {
+            if (request.method == "MOVE" && path.endsWith(u".md"_s))
+                return FakeWebDavServer::status(0);
+            return std::nullopt;
+        });
+        const SyncReport failed = p.b.sync();
+        QVERIFY(failed.remoteError.is(WebDavErrorCode::Network));
+        QCOMPARE(failed.foldersMoved, 1);
+        QCOMPARE(p.b.engine->renamedFrom(u"Mieszkanie ż/Plan ż.md"_s), u"Mieszkanie ż/"_s + noteName(10));
+        p.server.hooks.clear();
+        p.server.clearLog();
+        const SyncReport r = p.b.sync();
+        QVERIFY2(!r.failed(), qPrintable(r.failureMessage()));
+        QCOMPARE(r.filesMoved, 1);
+        QVERIFY(p.server.requests("DELETE").isEmpty());
+        QVERIFY(p.server.requests("PUT").isEmpty());
+        QCOMPARE(p.server.files(kFolder), p.b.files());
+    }
+
+    void serverRenameChainsKeepEditsWithTheirPage_data()
+    {
+        QTest::addColumn<bool>("chain");
+        QTest::newRow("Y -> Z, then X -> Y") << true;
+        QTest::newRow("X -> Y, then a new X") << false;
+    }
+
+    void serverRenameChainsKeepEditsWithTheirPage()
+    {
+        // On the server a page takes over the name of another synced page (moved on, or renamed
+        // and a new page made under its old name) while the phone edited its copy. The file ids
+        // tell which page is which: the phone renames its pages the same way, its edit stays with
+        // its page and is never merged into the other one.
+        QFETCH(bool, chain);
+        FakeWebDavServer::Options options;
+        options.fileIds = true;
+        QMap<QString, QByteArray> files = notesIn(u""_s, 3);
+        files.insert(u"X ą.md"_s, u8(u"iks ą\n"_s));
+        if (chain)
+            files.insert(u"Y ę.md"_s, u8(u"igrek ę\n"_s));
+        Pair p(files, options);
+        p.settle();
+        const QString edited = chain ? u"Y ę.md"_s : u"X ą.md"_s;
+        const QString text = p.b.read(edited) + u"edycja telefonu — żółw\n"_s;
+        QVERIFY(p.b.write(edited, text));
+        if (chain) {
+            QVERIFY(p.server.moveNode(u"Notatki/Y ę.md"_s, u"Notatki/Z ź.md"_s));
+            QVERIFY(p.server.moveNode(u"Notatki/X ą.md"_s, u"Notatki/Y ę.md"_s));
+        } else {
+            QVERIFY(p.server.moveNode(u"Notatki/X ą.md"_s, u"Notatki/Y ę.md"_s));
+            p.server.putText(u"Notatki/X ą.md"_s, u"zupełnie nowa notatka\n"_s);
+        }
+        p.b.changes.clear();
+        const SyncReport rb = p.b.sync();
+        QVERIFY2(!rb.failed(), qPrintable(rb.failureMessage()));
+        QCOMPARE(rb.merged, 0);
+        if (chain) {
+            QCOMPARE(rb.localFileMoves,
+                     (QList<SyncFolderMove>{{u"Y ę.md"_s, u"Z ź.md"_s}, {u"X ą.md"_s, u"Y ę.md"_s}}));
+            QCOMPARE(counts(rb), (Counts{.up = 1}));
+            QCOMPARE(p.b.read(u"Z ź.md"_s), text);
+            QCOMPARE(p.b.read(u"Y ę.md"_s), u"iks ą\n"_s);
+            QVERIFY(!p.b.vault->exists(u"X ą.md"_s));
+        } else {
+            QCOMPARE(rb.localFileMoves, (QList<SyncFolderMove>{{u"X ą.md"_s, u"Y ę.md"_s}}));
+            QCOMPARE(counts(rb), (Counts{.up = 1, .down = 1}));
+            QCOMPARE(p.b.read(u"Y ę.md"_s), text);
+            QCOMPARE(p.b.read(u"X ą.md"_s), u"zupełnie nowa notatka\n"_s);
+        }
+        QVERIFY(p.b.trash().isEmpty());
+        QCOMPARE(p.server.files(kFolder), p.b.files());
+        QCOMPARE(p.b.sync().changeCount(), 0);
+    }
+
     void manyPagesMovedAtOnce()
     {
         // Every root page moved into one folder (select all, Move — on the server, then here):
