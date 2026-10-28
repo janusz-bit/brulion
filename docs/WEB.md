@@ -171,6 +171,19 @@ Pozostałe opcje:
   `--screenshot` dochodzi zrzut `…-copy.png`. Wynik i miejsce kliknięcia zależą od układu strony
   1280×800 (pierwszy wiersz dnia ok. 153 px od góry; skrypt próbuje kilku wysokości).
 
+Rysunki w motywie aplikacji sprawdza osobny skrypt `tests/app/drawing/wasm-drawing-check.mjs`
+(ten sam minimalny klient DevTools, bez zmian w `wasm-smoke.mjs`): zapisuje do IndexedDB
+notatnik z dzisiejszym dziennikiem osadzającym `Rysunek.svg` (złoty plik testów,
+`tests/data/drawing/auto_theme.svg`, „Jak motyw”) i `settings.ini` z motywem `ui/themeMode`
+jasnym, a potem ciemnym; po starcie aplikacji zrzut ekranu dekoduje w osobnej karcie (płótna
+WebGL Qt nie da się odczytać) i sprawdza, że papier rysunku ma kolor motywu (#ffffff / #121212)
+z tuszem w jego kolorze (#1f2430 / #caced8). To dowód, że dostawca obrazów `drawing` działa
+w wątku GUI przeglądarki i czyta pliki z IDBFS (2026-10-28, laptop; CI go nie uruchamia).
+
+```sh
+node tests/app/drawing/wasm-drawing-check.mjs --url http://127.0.0.1:8123/brulion/ [--shots katalog]
+```
+
 Sterowania działającą aplikacją przez agentów AI (`brulion --remote-control`, `brulion-cli app …`,
 docs/CLI.md „Remote control”) w przeglądarce nie ma: stronę prowadzi się przez Chrome DevTools
 Protocol — Playwrightem, obscurą albo jak ten skrypt — z jej `?selftest=…`.
@@ -493,6 +506,7 @@ do pola tekstowego, przez które Qt odbiera pisanie; powłoka przewija ją z pow
 | `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, most do ekranu ładowania i `visualViewport` (klawiatura ekranowa; `wasmshell.h`), test trwałości (`wasmselftest.h`) |
 | `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |
 | `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + złożenie strony, test w Chromium |
+| `tests/app/drawing/wasm-drawing-check.mjs` | rysunek w notatce w jasnym i ciemnym motywie, w Chromium |
 
 Ikony po zmianie logo:
 

@@ -2653,22 +2653,16 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         AppSettings *settings = app->settings();
         const QString mode = settings->themeMode();
         const bool wasDark = darkQuery(before);
+        const auto embedShows = [&](bool dark) {
+            QQuickItem *again = embedImage();
+            return again && darkQuery(again->property("source").toUrl()) == dark
+                   && again->property("status").toInt() == 1;
+        };
         settings->setThemeMode(wasDark ? u"light"_s : u"dark"_s);
-        check(waitFor([&] {
-                  QQuickItem *again = embedImage();
-                  return again && darkQuery(again->property("source").toUrl()) != wasDark
-                         && again->property("status").toInt() == 1;
-              },
-                      5000),
+        check(waitFor([&] { return embedShows(!wasDark); }, 5000),
               "the app's other theme shows the drawing's embed in that theme");
         settings->setThemeMode(mode);
-        check(waitFor([&] {
-                  QQuickItem *again = embedImage();
-                  return again && darkQuery(again->property("source").toUrl()) == wasDark
-                         && again->property("status").toInt() == 1;
-              },
-                      5000),
-              "and back");
+        check(waitFor([&] { return embedShows(wasDark); }, 5000), "and back");
         image = embedImage();
         if (!image)
             return;

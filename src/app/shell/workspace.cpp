@@ -815,7 +815,8 @@ QUrl Workspace::drawingUrl(const QString &path, bool dark) const
     if (const std::optional<FileStat> st = m_vault->stat(key))
         version = QString::number(st->mtime) + u'-' + QString::number(st->size);
     return QUrl(u"image://drawing/"_s
-                        + QString::fromLatin1(QUrl::toPercentEncoding(QDir::fromNativeSeparators(m_vault->absolutePath(key))))
+                        + QString::fromLatin1(
+                                QUrl::toPercentEncoding(QDir::fromNativeSeparators(m_vault->absolutePath(key))))
                         + u"?v="_s + QString::fromLatin1(QUrl::toPercentEncoding(version)) + u"&dark="_s
                         + (dark ? u'1' : u'0'),
                 QUrl::StrictMode);

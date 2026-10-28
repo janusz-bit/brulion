@@ -47,8 +47,8 @@ void paintPaper(QPainter &painter, const drawing::Drawing &drawing, bool dark, c
     painter.save();
     painter.fillRect(QRectF(QPointF(0, 0), size), QColor(drawing::displayPaper(drawing.paper, dark)));
     const double zoom = sceneToItem.m11();
-    const double spacing = drawing.background == drawing::Background::Lines ? drawing::LineSpacing
-                                                                            : drawing::GridSpacing;
+    const double spacing =
+            drawing.background == drawing::Background::Lines ? drawing::LineSpacing : drawing::GridSpacing;
     bool invertible = false;
     const QTransform itemToScene = sceneToItem.inverted(&invertible);
     if (drawing.background != drawing::Background::Plain && invertible && spacing * zoom >= 6) {

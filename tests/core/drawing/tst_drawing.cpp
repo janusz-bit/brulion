@@ -831,10 +831,12 @@ private Q_SLOTS:
         QTest::newRow("highlighter") << u"#ffd43b"_s << true << 40 << u"#ffd43b"_s << 40 << u"#ffd43b"_s << 50;
         QTest::newRow("Excalidraw's 30") << u"#8ce99a"_s << true << 30 << u"#8ce99a"_s << 30 << u"#8ce99a"_s << 38;
         QTest::newRow("highlighter at 90") << u"#74c0fc"_s << true << 90 << u"#74c0fc"_s << 90 << u"#74c0fc"_s << 100;
-        QTest::newRow("dark highlighter stays") << u"#1f2430"_s << true << 40 << u"#1f2430"_s << 40 << u"#1f2430"_s << 50;
+        QTest::newRow("dark highlighter stays")
+                << u"#1f2430"_s << true << 40 << u"#1f2430"_s << 40 << u"#1f2430"_s << 50;
         QTest::newRow("short form") << u"#ABC"_s << false << 100 << u"#aabbcc"_s << 100 << darkColor(u"#aabbcc") << 100;
         QTest::newRow("malformed") << u"czerwony"_s << false << 100 << u"#1e1e1e"_s << 100 << u"#d3d3d3"_s << 100;
-        QTest::newRow("opacity out of range") << u"#1f2430"_s << false << 250 << u"#1f2430"_s << 100 << u"#caced8"_s << 100;
+        QTest::newRow("opacity out of range")
+                << u"#1f2430"_s << false << 250 << u"#1f2430"_s << 100 << u"#caced8"_s << 100;
         QTest::newRow("negative opacity") << u"#ffd43b"_s << true << -20 << u"#ffd43b"_s << 0 << u"#ffd43b"_s << 0;
     }
     void displayInks()
@@ -945,8 +947,7 @@ private Q_SLOTS:
         const QJsonObject before = QJsonDocument::fromJson(appState).object();
         for (const PaperTheme t : {PaperTheme::Auto, PaperTheme::Light, PaperTheme::Dark}) {
             d->theme = t;
-            const QJsonObject written =
-                    QJsonDocument::fromJson(sceneJson(*d)).object().value(u"appState"_s).toObject();
+            const QJsonObject written = QJsonDocument::fromJson(sceneJson(*d)).object().value(u"appState"_s).toObject();
             if (t == PaperTheme::Auto)
                 QVERIFY(!written.contains(u"brulionTheme"_s));
             else
@@ -1045,7 +1046,8 @@ private Q_SLOTS:
             QVERIFY(css.contains(u".h0{fill-opacity:0.5}"_s));
             // Every class used is defined, every class defined is used.
             QSet<QString> used, defined;
-            for (const QRegularExpressionMatch &m : QRegularExpression(u"class=\"([a-z0-9]+)\""_s).globalMatch(QString::fromUtf8(svg)))
+            for (const QRegularExpressionMatch &m :
+                 QRegularExpression(u"class=\"([a-z0-9]+)\""_s).globalMatch(QString::fromUtf8(svg)))
                 used.insert(m.captured(1));
             for (const QRegularExpressionMatch &m : QRegularExpression(u"\\.([a-z0-9]+)\\{"_s).globalMatch(css))
                 defined.insert(m.captured(1));

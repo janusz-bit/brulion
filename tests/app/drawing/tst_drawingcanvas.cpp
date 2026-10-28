@@ -1324,8 +1324,8 @@ private Q_SLOTS:
     void darkImageMatchesDarkColor()
     {
         QImage light(4, 2, QImage::Format_ARGB32);
-        const QList<QRgb> colours = {qRgb(255, 255, 255), qRgb(0x1f, 0x24, 0x30), qRgb(0xe0, 0x31, 0x31),
-                                     qRgb(0xff, 0xd4, 0x3b), qRgb(0, 0, 0),         qRgb(0x2f, 0x9e, 0x44),
+        const QList<QRgb> colours = {qRgb(255, 255, 255),    qRgb(0x1f, 0x24, 0x30), qRgb(0xe0, 0x31, 0x31),
+                                     qRgb(0xff, 0xd4, 0x3b), qRgb(0, 0, 0),          qRgb(0x2f, 0x9e, 0x44),
                                      qRgb(0x12, 0x34, 0x56), qRgb(0xc9, 0xd3, 0xe0)};
         for (int i = 0; i < colours.size(); ++i)
             light.setPixel(i % 4, i / 4, colours.at(i));
@@ -1341,32 +1341,33 @@ private Q_SLOTS:
         // Translucent pixels keep their alpha; nothing for nothing.
         QImage translucent(1, 1, QImage::Format_ARGB32);
         translucent.setPixel(0, 0, qRgba(255, 255, 255, 128));
-        QCOMPARE(qAlpha(brulion::drawingview::darkImage(translucent).convertToFormat(QImage::Format_ARGB32).pixel(0, 0)),
-                 128);
+        QCOMPARE(
+                qAlpha(brulion::drawingview::darkImage(translucent).convertToFormat(QImage::Format_ARGB32).pixel(0, 0)),
+                128);
         QVERIFY(brulion::drawingview::darkImage(QImage()).isNull());
     }
 
     void imageProvider_data()
     {
-        QTest::addColumn<QByteArray>("bytes");     // the file ("" none)
-        QTest::addColumn<QString>("name");         // its name in the temporary folder
+        QTest::addColumn<QByteArray>("bytes"); // the file ("" none)
+        QTest::addColumn<QString>("name");     // its name in the temporary folder
         QTest::addColumn<bool>("appDark");
-        QTest::addColumn<QString>("paper");        // the corner pixel ("" no picture)
-        QTest::addColumn<QString>("ink");          // at the stroke ("" not checked)
+        QTest::addColumn<QString>("paper"); // the corner pixel ("" no picture)
+        QTest::addColumn<QString>("ink");   // at the stroke ("" not checked)
         using brulion::drawing::PaperTheme;
-        QTest::newRow("as the app, light") << inkFile(PaperTheme::Auto) << u"Rysunek ćwiczenia.svg"_s << false
-                                           << u"#ffffff"_s << u"#1f2430"_s;
-        QTest::newRow("as the app, dark") << inkFile(PaperTheme::Auto) << u"Rysunek ćwiczenia.svg"_s << true
-                                          << u"#121212"_s << u"#caced8"_s;
-        QTest::newRow("light paper, dark app") << inkFile(PaperTheme::Light) << u"Jasny.svg"_s << true << u"#ffffff"_s
-                                               << u"#1f2430"_s;
-        QTest::newRow("dark paper, light app") << inkFile(PaperTheme::Dark) << u"Ciemny #1 (100%).svg"_s << false
-                                               << u"#121212"_s << u"#caced8"_s;
+        QTest::newRow("as the app, light")
+                << inkFile(PaperTheme::Auto) << u"Rysunek ćwiczenia.svg"_s << false << u"#ffffff"_s << u"#1f2430"_s;
+        QTest::newRow("as the app, dark")
+                << inkFile(PaperTheme::Auto) << u"Rysunek ćwiczenia.svg"_s << true << u"#121212"_s << u"#caced8"_s;
+        QTest::newRow("light paper, dark app")
+                << inkFile(PaperTheme::Light) << u"Jasny.svg"_s << true << u"#ffffff"_s << u"#1f2430"_s;
+        QTest::newRow("dark paper, light app")
+                << inkFile(PaperTheme::Dark) << u"Ciemny #1 (100%).svg"_s << false << u"#121212"_s << u"#caced8"_s;
         // An Excalidraw drawing with shapes: its own picture, turned dark like Excalidraw does.
-        QTest::newRow("excalidraw, light") << fixture(u"excalidraw_mixed.svg"_s) << u"Schemat.svg"_s << false
-                                           << u"#ffffff"_s << QString();
-        QTest::newRow("excalidraw, dark") << fixture(u"excalidraw_mixed.svg"_s) << u"Schemat.svg"_s << true
-                                          << u"#121212"_s << QString();
+        QTest::newRow("excalidraw, light")
+                << fixture(u"excalidraw_mixed.svg"_s) << u"Schemat.svg"_s << false << u"#ffffff"_s << QString();
+        QTest::newRow("excalidraw, dark")
+                << fixture(u"excalidraw_mixed.svg"_s) << u"Schemat.svg"_s << true << u"#121212"_s << QString();
         QTest::newRow(".excalidraw") << fixture(u"excalidraw_mixed.excalidraw"_s) << u"scena.excalidraw"_s << true
                                      << QString() << QString();
         QTest::newRow("empty file") << QByteArray() << u"Pusty.svg"_s << false << QString() << QString();

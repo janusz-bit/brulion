@@ -1,6 +1,7 @@
 # The drawing editor's canvas (library brulion_drawing, src/app/drawing): stylus input through
 # QWindowSystemInterface (a QPA header: Qt6::GuiPrivate, for this test only), a mouse, fingers,
-# the wheel, undo, the SVG checked with Qt's SVG renderer, Excalidraw files, merging. Offscreen
+# the wheel, undo, the SVG checked with Qt's SVG renderer, Excalidraw files, merging, painting in
+# the light and the dark theme, the previews' image provider (also through a QML Image). Offscreen
 # with the software scene graph.
 set(QT_NO_PRIVATE_MODULE_WARNING ON)
 find_package(Qt6 QUIET COMPONENTS GuiPrivate Svg)
