@@ -252,7 +252,7 @@
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="64"/>
         <location filename="../src/app/qml/shell/AppShell.qml" line="132"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2019"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2020"/>
         <source>All pages</source>
         <translation>Wszystkie strony</translation>
     </message>
@@ -1137,7 +1137,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockDelegate.qml" line="300"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1578"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1579"/>
         <source>Zoom into block</source>
         <translation>Przybliż blok</translation>
     </message>
@@ -1192,15 +1192,15 @@
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="460"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2087"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2106"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2088"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2107"/>
         <source>Heading “%1” is not on this page</source>
         <translation>Nagłówka „%1” nie ma na tej stronie</translation>
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="482"/>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="2491"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2140"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2141"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
@@ -2492,7 +2492,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPageHeader.qml" line="376"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="800"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="801"/>
         <source>Start writing</source>
         <translation>Zacznij pisać</translation>
     </message>
@@ -2502,14 +2502,14 @@
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="115"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="61"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2318"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2319"/>
         <source>Fit to view</source>
         <translation>Dopasuj do widoku</translation>
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="115"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="62"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2310"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2311"/>
         <source>Zoom to actual size</source>
         <translation>Pokaż naturalny rozmiar</translation>
     </message>
@@ -2534,21 +2534,21 @@
         <translation>Pokaż obraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="287"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="288"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="251"/>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="265"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="267"/>
         <source>Pictures in the %1 format cannot be shown on this device.</source>
         <translation>Obrazów w formacie %1 nie można wyświetlić na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="288"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="289"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="253"/>
         <source>Cannot load %1</source>
         <translation>Nie można wczytać %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="367"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2460"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="368"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2461"/>
         <source>The start of the file: %1 of %2.</source>
         <translation>Początek pliku: %1 z %2.</translation>
     </message>
@@ -3408,29 +3408,29 @@
 <context>
     <name>EmbedView</name>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="267"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="269"/>
         <source>Cannot load %1</source>
         <translation>Nie można wczytać %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="223"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="225"/>
         <source>Picture from %1</source>
         <translation>Obraz z %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="241"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="243"/>
         <location filename="../src/app/qml/dev/EditorPlayground.qml" line="437"/>
         <source>Try again</source>
         <translation>Spróbuj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="241"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="243"/>
         <location filename="../src/app/qml/dev/EditorPlayground.qml" line="437"/>
         <source>Show</source>
         <translation>Pokaż</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="250"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="252"/>
         <source>Save to notebook</source>
         <translation>Zapisz w notatniku</translation>
     </message>
@@ -8073,7 +8073,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="125"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1752"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1753"/>
         <source>Move here</source>
         <translation>Przenieś tutaj</translation>
     </message>
@@ -8228,7 +8228,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="56"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="987"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="988"/>
         <source>Moved to “%1” as “%2”</source>
         <translation>Przeniesiono do „%1” jako „%2”</translation>
     </message>
@@ -8270,7 +8270,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellNewPageDialog.qml" line="38"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1791"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1792"/>
         <source>Create</source>
         <translation>Utwórz</translation>
     </message>
@@ -8322,7 +8322,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3156"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3225"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -8458,7 +8458,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="28"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2890"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2959"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -8646,7 +8646,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="564"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1423"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1424"/>
         <source>Empty folder</source>
         <translation>Pusty folder</translation>
     </message>
@@ -8878,7 +8878,7 @@
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="161"/>
         <location filename="../src/app/io/ioselftest.cpp" line="371"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2336"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2337"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -8914,7 +8914,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="211"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2345"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2346"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
@@ -8930,7 +8930,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="222"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2344"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2345"/>
         <source>Toggle note mode</source>
         <translation>Przełącz tryb notatki</translation>
     </message>
@@ -8999,13 +8999,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4080"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4151"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="114"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4070"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4141"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -15087,24 +15087,24 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Nie można zapisać rysunku %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="866"/>
+        <location filename="../src/app/shell/workspace.cpp" line="867"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="924"/>
-        <location filename="../src/app/shell/workspace.cpp" line="945"/>
+        <location filename="../src/app/shell/workspace.cpp" line="925"/>
+        <location filename="../src/app/shell/workspace.cpp" line="946"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="330"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1075"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1076"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1078"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1079"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
@@ -15214,17 +15214,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1092"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1093"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1107"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1108"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1138"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1139"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>

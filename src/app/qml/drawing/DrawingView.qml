@@ -430,7 +430,9 @@ FocusScope {
                         /// The picture's own size (its SVG root), shown at most as wide as the view.
                         readonly property size natural: root.loadedPath !== "" && notice.visible
                                                         ? Workspace.pictureSize(root.loadedPath) : Qt.size(0, 0)
-                        visible: root.status !== "missing" && status === Image.Ready
+                        // (Also while the app's other theme loads: the shown picture stays.)
+                        visible: root.status !== "missing"
+                                 && (status === Image.Ready || (status === Image.Loading && implicitWidth > 0))
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: Math.min(parent.width, natural.width > 0 ? natural.width : parent.width)
                         height: natural.width > 0 ? width * natural.height / natural.width : implicitHeight
