@@ -274,11 +274,49 @@ private Q_SLOTS:
         PlanningActions actions;
         actions.setHost(&host);
         actions.setToday(u"2026-10-15"_s);
-        QVERIFY(actions.snoozeReminder(u"Dom.md"_s, 0, u"2026-10-15 09:00"_s));
+        QVERIFY(actions.snoozeReminder(u"Dom.md"_s, 0, QString(), u"2026-10-10 08:00"_s, u"2026-10-15 09:00"_s));
         QCOMPARE(host.file(u"Dom.md"_s), u"- Leki ⏰ 2026-10-10 08:00 🔁 every day\n\t- ⏰ 2026-10-15 09:00\n"_s);
         QVERIFY(actions.undo());
         QCOMPARE(host.file(u"Dom.md"_s), page);
-        QVERIFY(!actions.snoozeReminder(u"Dom.md"_s, 0, u"jutro"_s));
+        QVERIFY(!actions.snoozeReminder(u"Dom.md"_s, 0, QString(), u"2026-10-10 08:00"_s, u"jutro"_s));
+    }
+
+    void snoozeFindsTheReminderAgain_data()
+    {
+        QTest::addColumn<QString>("page");
+        QTest::addColumn<QString>("expected"); // "" = nothing written
+        const QString lek = u"- [ ] Lek 🔁 every day ⏰ 2026-10-27 09:00\n"_s;
+        const QString faktura = u"- [ ] Faktura ⏰ 2026-10-28 15:00\n"_s;
+        const QString child = u"\t- ⏰ 2026-10-29 10:00\n"_s;
+        QTest::newRow("on its line") << QString(u"# Dom\n\n- x\n"_s + lek) << QString(u"# Dom\n\n- x\n"_s + lek + child);
+        // A line was added above since the menu opened: line 3 is another task's one-off reminder.
+        QTest::newRow("moved down, another reminder on the line")
+                << QString(u"# Dom\n\n- x\n"_s + faktura + lek)
+                << QString(u"# Dom\n\n- x\n"_s + faktura + lek + child);
+        QTest::newRow("on a continuation line")
+                << QString(u"# Dom\n\n- x\n- [ ] Lek 🔁 every day\n  ⏰ 2026-10-27 09:00\n"_s)
+                << QString(u"# Dom\n\n- x\n- [ ] Lek 🔁 every day\n  ⏰ 2026-10-27 09:00\n"_s + child);
+        QTest::newRow("gone: the one-off of another task stays") << QString(u"# Dom\n\n- x\n"_s + faktura) << QString();
+        QTest::newRow("its time changed meanwhile")
+                << QString(u"# Dom\n\n- x\n- [ ] Lek 🔁 every day ⏰ 2026-10-27 08:30\n"_s) << QString();
+    }
+
+    void snoozeFindsTheReminderAgain()
+    {
+        // The calendar's menu on another date of "Lek" keeps line 3; whatever the file holds by the
+        // time "Godzinę później" is chosen, only that reminder is snoozed.
+        QFETCH(QString, page);
+        QFETCH(QString, expected);
+        FakeEditorHost host;
+        host.setFile(u"Dom.md"_s, page);
+        PlanningActions actions;
+        actions.setHost(&host);
+        actions.setToday(u"2026-10-29"_s);
+        QSignalSpy failed(&actions, &PlanningActions::failed);
+        const bool ok = actions.snoozeReminder(u"Dom.md"_s, 3, u"Lek"_s, u"2026-10-27 09:00"_s, u"2026-10-29 10:00"_s);
+        QCOMPARE(ok, !expected.isEmpty());
+        QCOMPARE(host.file(u"Dom.md"_s), expected.isEmpty() ? page : expected);
+        QCOMPARE(failed.size(), expected.isEmpty() ? 1 : 0);
     }
 
     void copiedLinks()

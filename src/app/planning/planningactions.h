@@ -12,7 +12,7 @@
 //                                       the priority of the block on `line`, only that token's bytes
 //                                       written (markdown::editBlockToken); tokenMenu(…) what
 //                                       its menu shows (none for Logseq planning lines)
-//   snoozeReminder(path, line, at)      one occurrence of a recurring reminder later (a one-off
+//   snoozeReminder(path, line, text, value, at)   one occurrence of a recurring reminder later (a one-off
 //                                       child bullet, the series untouched: reminders/snooze.h)
 //   linkText(url, fromPath) / copyText(text)   the link menu's "Kopiuj"
 //   undo()                              puts the file back as it was before the last change made
@@ -110,9 +110,13 @@ public:
     /// repeater, a task changed meanwhile): no menu then.
     Q_INVOKABLE QVariantMap tokenMenu(const QString &path, int line, const QString &text, const QString &kind,
                                       const QString &value) const;
-    /// Snooze the reminder on `line` of `path` to `at` ("YYYY-MM-DD HH:mm"): a recurring one gets a
-    /// one-off child bullet, a one-off one moves (reminders::snoozeReminder). undo() puts it back.
-    Q_INVOKABLE bool snoozeReminder(const QString &path, int line, const QString &at);
+    /// Snooze the reminder `value` ("YYYY-MM-DD HH:mm" as the models give it) of the block on
+    /// `line` of `path` — or, when the line moved, of the task with plain text `text` nearest to
+    /// it — to `at` ("YYYY-MM-DD HH:mm"): a recurring one gets a one-off child bullet, a one-off one
+    /// moves (reminders::snoozeReminder). undo() puts it back. False (and failed()) when that
+    /// reminder is not there any more: another one on the old line is never moved instead.
+    Q_INVOKABLE bool snoozeReminder(const QString &path, int line, const QString &text, const QString &value,
+                                    const QString &at);
 
     /// Follow a link of rendered text (markdown::InlineRenderer URLs: page:, tag:, block:, ext:)
     /// written in `fromPath`, through the host's navigation (`newPane`: in the side panel). False
