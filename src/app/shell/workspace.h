@@ -193,6 +193,10 @@ public:
     Q_INVOKABLE QString ensureBlockId(const QString &path, int line) override;
     Q_INVOKABLE QVariantList templates() const override;
     Q_INVOKABLE QUrl assetUrl(const QString &path) const override;
+    /// image://drawing/<the file's absolute path, percent-encoded>?v=<mtime>-<size>&dark=0|1: the
+    /// preview of a drawing in the light or the dark theme (DrawingImageProvider); empty without
+    /// a vault or a path.
+    Q_INVOKABLE QUrl drawingUrl(const QString &path, bool dark) const override;
     /// The browser: the picture's size, read with its data: URL (else invalid: the editor reads
     /// the local file's header itself).
     QSize assetPixelSize(const QString &path) const override;

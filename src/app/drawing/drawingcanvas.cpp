@@ -1,5 +1,8 @@
 #include "drawingcanvas.h"
 
+#include "drawingrender.h"
+
+#include "drawing/palette.h"
 #include "drawing/stroke.h"
 #include "drawing/svgwrite.h"
 
@@ -60,7 +63,7 @@ DrawingCanvas::DrawingCanvas(QQuickItem *parent) : QQuickPaintedItem(parent)
     m_settle.setInterval(160);
     connect(&m_settle, &QTimer::timeout, this, &DrawingCanvas::endViewGesture);
     m_clock = [] { return QDateTime::currentMSecsSinceEpoch(); };
-    m_doc.paper = m_paper.name();
+    m_doc.paper = m_paperLight.name();
     // Tablet events pass the window first: the canvas takes the stylus's (see the header). (An
     // item made with a parent has its window before this constructor runs.)
     connect(this, &QQuickItem::windowChanged, this, &DrawingCanvas::filterWindow);
@@ -132,6 +135,58 @@ void DrawingCanvas::setBackground(const QString &name)
     push(std::move(op));
 }
 
+QString DrawingCanvas::theme() const
+{
+    return drawing::paperThemeName(m_doc.theme);
+}
+
+void DrawingCanvas::setTheme(const QString &name)
+{
+    // (Allowed while a stroke is being drawn: it changes only how everything looks.)
+    const drawing::PaperTheme t = drawing::paperThemeFromName(name);
+    if (t == m_doc.theme || !m_editable)
+        return;
+    Op op;
+    op.kind = Op::Theme;
+    op.themeBefore = m_doc.theme;
+    op.themeAfter = t;
+    apply(op, true);
+    push(std::move(op));
+}
+
+bool DrawingCanvas::dark() const
+{
+    return drawing::rendersDark(m_doc.theme, m_appDark);
+}
+
+void DrawingCanvas::setAppDark(bool on)
+{
+    if (on == m_appDark)
+        return;
+    const bool wasDark = dark();
+    m_appDark = on;
+    Q_EMIT appDarkChanged();
+    renderMaybeChanged(wasDark);
+}
+
+void DrawingCanvas::renderMaybeChanged(bool wasDark)
+{
+    if (dark() == wasDark)
+        return;
+    invalidateCache();
+    if (m_gesture == Gesture::Draw)
+        updateLive();
+    Q_EMIT renderChanged();
+}
+
+QColor DrawingCanvas::displayColor(const QColor &stored, bool highlighter) const
+{
+    if (!stored.isValid() || !dark() || highlighter)
+        return stored;
+    const drawing::Rgba c = drawing::darkRgba({stored.red(), stored.green(), stored.blue(), stored.alpha()});
+    return QColor(c.r, c.g, c.b, c.a);
+}
+
 void DrawingCanvas::setFingerDraws(bool on)
 {
     if (on == m_fingerDraws)
@@ -176,32 +231,13 @@ void DrawingCanvas::setCenterY(qreal y)
 
 // --- The drawing ------------------------------------------------------------------------------
 
-QPainterPath DrawingCanvas::outlinePath(const QList<QPointF> &outline)
-{
-    // The curves of the SVG path (perfect-freehand's getSvgPathFromStroke): quadratic segments
-    // through the midpoints, so the screen and the file show the same outline.
-    QPainterPath path;
-    path.setFillRule(Qt::WindingFill);
-    if (outline.isEmpty())
-        return path;
-    path.moveTo(outline.first());
-    const qsizetype max = outline.size() - 1;
-    for (qsizetype i = 0; i <= max; ++i) {
-        const QPointF p = outline.at(i);
-        const QPointF next = i == max ? outline.first() : outline.at(i + 1);
-        path.quadTo(p, (p + next) / 2);
-    }
-    path.closeSubpath();
-    return path;
-}
-
 DrawingCanvas::Item DrawingCanvas::makeItem(drawing::Stroke stroke)
 {
     Item item;
-    item.path = outlinePath(drawing::strokeOutline(stroke));
+    item.path = strokePath(stroke);
     item.bounds = item.path.boundingRect();
-    item.color = QColor(drawing::safeColor(stroke.color, u"#1e1e1e"_s));
-    item.color.setAlphaF(item.color.alphaF() * std::clamp(stroke.opacity, 0, 100) / 100.0);
+    item.light = toQColor(drawing::displayInk(stroke, false));
+    item.dark = toQColor(drawing::displayInk(stroke, true));
     item.stroke = std::move(stroke);
     return item;
 }
@@ -230,8 +266,8 @@ void DrawingCanvas::setDocument(drawing::Drawing doc)
         m_items.append(makeItem(std::move(s)));
     doc.strokes.clear();
     m_doc = std::move(doc);
-    const QColor paper(drawing::safeColor(m_doc.paper, QString()));
-    m_paper = paper.isValid() ? paper : QColor(Qt::white);
+    m_paperLight = QColor(drawing::displayPaper(m_doc.paper, false));
+    m_paperDark = QColor(drawing::displayPaper(m_doc.paper, true));
     m_erasing.clear();
     invalidateCache();
 }
@@ -257,6 +293,7 @@ QString DrawingCanvas::load(const QByteArray &bytes)
     for (const Item &item : std::as_const(m_items))
         m_baseIds.insert(item.stroke.id);
     m_baseBackground = m_doc.background;
+    m_baseTheme = m_doc.theme;
     m_known = bytes;
     const bool hadHistory = canUndo() || canRedo();
     m_undo.clear();
@@ -268,6 +305,8 @@ QString DrawingCanvas::load(const QByteArray &bytes)
     placeView();
     Q_EMIT loadedChanged();
     Q_EMIT backgroundChanged();
+    Q_EMIT themeChanged();
+    Q_EMIT renderChanged();
     Q_EMIT contentChanged();
     return status;
 }
@@ -283,6 +322,7 @@ bool DrawingCanvas::takeExternal(const QByteArray &bytes)
     for (const int i : std::as_const(m_erasing))
         erasingIds.insert(m_items.at(i).stroke.id);
     const drawing::Background theirBackground = theirs->background;
+    const drawing::PaperTheme theirTheme = theirs->theme;
     QSet<QString> theirIds;
     for (const drawing::Stroke &s : std::as_const(theirs->strokes))
         theirIds.insert(s.id);
@@ -305,8 +345,11 @@ bool DrawingCanvas::takeExternal(const QByteArray &bytes)
         theirs->strokes = std::move(merged);
         if (m_doc.background != m_baseBackground)
             theirs->background = m_doc.background;
+        if (m_doc.theme != m_baseTheme)
+            theirs->theme = m_doc.theme;
     }
     m_baseBackground = theirBackground;
+    m_baseTheme = theirTheme;
     setDocument(std::move(*theirs));
     for (qsizetype i = 0; i < m_items.size(); ++i) {
         if (erasingIds.contains(m_items.at(i).stroke.id))
@@ -319,7 +362,11 @@ bool DrawingCanvas::takeExternal(const QByteArray &bytes)
         m_redo.clear();
         Q_EMIT historyChanged();
     }
+    if (m_gesture == Gesture::Draw)
+        updateLive(); // (in the colours of the theme taken in)
     Q_EMIT backgroundChanged();
+    Q_EMIT themeChanged();
+    Q_EMIT renderChanged();
     Q_EMIT contentChanged();
     return true;
 }
@@ -339,6 +386,7 @@ void DrawingCanvas::markSaved(const QByteArray &written)
     for (const Item &item : std::as_const(m_items))
         m_baseIds.insert(item.stroke.id);
     m_baseBackground = m_doc.background;
+    m_baseTheme = m_doc.theme;
     setModified(false);
 }
 
@@ -394,6 +442,13 @@ void DrawingCanvas::apply(const Op &op, bool forward)
         m_doc.background = forward ? op.after : op.before;
         Q_EMIT backgroundChanged();
         break;
+    case Op::Theme: {
+        const bool wasDark = dark();
+        m_doc.theme = forward ? op.themeAfter : op.themeBefore;
+        Q_EMIT themeChanged();
+        renderMaybeChanged(wasDark);
+        break;
+    }
     case Op::Add:
     case Op::Remove: {
         const bool insert = (op.kind == Op::Add) == forward;
@@ -581,48 +636,19 @@ void DrawingCanvas::renderCache()
     if (m_cache.size() != pixels || !m_cache.isDetached())
         m_cache = QImage(pixels, QImage::Format_ARGB32_Premultiplied);
     m_cache.setDevicePixelRatio(dpr);
-    m_cache.fill(m_paper);
     QPainter p(&m_cache);
+    const bool shownDark = dark();
+    // The paper, its lines or grid at the scene's multiples of the spacing, as the SVG has them.
+    paintPaper(p, m_doc, shownDark, sceneToItem(), QSizeF(width(), height()), dpr);
     p.setRenderHint(QPainter::Antialiasing);
     const QRectF visible(toScene(QPointF(0, 0)), toScene(QPointF(width(), height())));
-    // The lines or the grid at the scene's multiples of the spacing, as the SVG has them.
-    if (m_doc.background != drawing::Background::Plain) {
-        const double spacing =
-                m_doc.background == drawing::Background::Lines ? drawing::LineSpacing : drawing::GridSpacing;
-        if (spacing * m_zoom >= 6) {
-            QPen pen(QColor(drawing::RuleColor.toString()));
-            pen.setCosmetic(true);
-            pen.setWidthF(1);
-            p.setPen(pen);
-            // Counted by index: a step added to a huge coordinate would change nothing. (At most
-            // one line per 6 px of the view.)
-            const auto rules = [spacing](double from, double to, const auto &line) {
-                const double first = std::ceil(from / spacing);
-                const double last = std::floor(to / spacing);
-                if (!std::isfinite(first) || !std::isfinite(last) || last < first || last - first > 10000)
-                    return;
-                for (int i = 0; i <= int(last - first); ++i)
-                    line((first + i) * spacing);
-            };
-            rules(visible.top(), visible.bottom(), [&](double y) {
-                const double iy = std::round(toItem(QPointF(0, y)).y() * dpr) / dpr + 0.5 / dpr;
-                p.drawLine(QPointF(0, iy), QPointF(width(), iy));
-            });
-            if (m_doc.background == drawing::Background::Grid) {
-                rules(visible.left(), visible.right(), [&](double x) {
-                    const double ix = std::round(toItem(QPointF(x, 0)).x() * dpr) / dpr + 0.5 / dpr;
-                    p.drawLine(QPointF(ix, 0), QPointF(ix, height()));
-                });
-            }
-        }
-    }
     p.setPen(Qt::NoPen);
     p.setTransform(sceneToItem(), true);
     for (qsizetype i = 0; i < m_items.size(); ++i) {
         const Item &item = m_items.at(i);
         if (m_erasing.contains(int(i)) || !item.bounds.intersects(visible))
             continue;
-        p.fillPath(item.path, item.color);
+        p.fillPath(item.path, shownDark ? item.dark : item.light);
     }
     p.end();
     m_lastRenderMs = double(timer.nsecsElapsed()) / 1e6;
@@ -638,7 +664,7 @@ void DrawingCanvas::drawItemIntoCache(const Item &item)
     p.setRenderHint(QPainter::Antialiasing);
     p.setPen(Qt::NoPen);
     p.setTransform(sceneToItem(), true);
-    p.fillPath(item.path, item.color);
+    p.fillPath(item.path, inkOf(item));
 }
 
 void DrawingCanvas::updateLive()
@@ -680,10 +706,10 @@ void DrawingCanvas::prepareSnapshot()
         t.translate(-m_cacheSize.width() / 2, -m_cacheSize.height() / 2);
         s.cacheToItem = t;
     }
-    s.paper = m_paper;
+    s.paper = paperColor();
+    s.dark = dark();
     s.live = m_livePath;
-    s.liveColor = QColor(drawing::safeColor(m_live.color, u"#1e1e1e"_s));
-    s.liveOpacity = m_live.opacity / 100.0;
+    s.liveColor = toQColor(drawing::displayInk(m_live, s.dark));
     if (m_gesture == Gesture::Erase || (m_tool == u"eraser" && m_gesture == Gesture::None && m_hover.x() >= 0)) {
         s.eraser = m_gesture == Gesture::Erase ? m_lastItemPos : m_hover;
         s.eraserRadius = EraserRadius;
@@ -706,14 +732,12 @@ void DrawingCanvas::paintSnapshot(QPainter *painter, const QSizeF &size) const
         painter->restore();
     }
     painter->setRenderHint(QPainter::Antialiasing);
-    if (!s.live.isEmpty()) {
-        QColor c = s.liveColor;
-        c.setAlphaF(c.alphaF() * std::clamp(s.liveOpacity, 0.0, 1.0));
-        painter->fillPath(s.live, c);
-    }
+    if (!s.live.isEmpty())
+        painter->fillPath(s.live, s.liveColor);
     if (s.eraser.x() >= 0) {
-        painter->setPen(QPen(QColor(31, 36, 48, 150), 1));
-        painter->setBrush(QColor(255, 255, 255, 90));
+        // A ring that shows on the paper of either theme.
+        painter->setPen(QPen(s.dark ? QColor(220, 224, 232, 160) : QColor(31, 36, 48, 150), 1));
+        painter->setBrush(s.dark ? QColor(0, 0, 0, 90) : QColor(255, 255, 255, 90));
         painter->drawEllipse(s.eraser, s.eraserRadius, s.eraserRadius);
     }
 }

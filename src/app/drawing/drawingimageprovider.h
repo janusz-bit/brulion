@@ -1,0 +1,44 @@
+// DrawingImageProvider — the previews of drawings (the QML image provider "drawing"; docs/UI.md
+// "Drawing editor"): the embeds of drawings in notes (EmbedView), the picture view
+// (ContentPictureView) and the drawing editor's notice show a drawing through it, in the light or
+// the dark theme, so a drawing looks as on the drawing editor's paper and follows the app's theme
+// at once (a new URL: Qt's pixmap cache keeps both).
+//
+//   image://drawing/<absolute file path, percent-encoded>?v=<mtime>-<size>&dark=0|1
+//   (Workspace::drawingUrl builds it; `v` only keeps Qt's cache honest when the file changes;
+//   `dark`: the app is dark — an "auto" drawing follows it, a "light" or "dark" one does not.)
+//
+// A drawing Brulion draws (drawing::editable) is painted by drawingrender.h (renderDrawing) — the
+// whole picture its SVG shows, fitted into the requested size; anything else in such a file
+// (an Excalidraw drawing with shapes or text, a scene that cannot be read) is the file's own
+// picture through Qt's SVG renderer, in the dark theme through Excalidraw's dark filter
+// (darkImage). Stateless: Qt Quick calls it in its image reader thread (the browser build: on the
+// GUI thread); it only reads the file.
+#pragma once
+
+#include <QQuickImageProvider>
+#include <QUrl>
+
+namespace brulion::drawingview {
+
+class DrawingImageProvider : public QQuickImageProvider {
+public:
+    DrawingImageProvider();
+
+    /// Largest file read (a drawing is far smaller; pictures pasted into an Excalidraw scene are a
+    /// few MB each).
+    static constexpr qint64 MaxFileBytes = 64 * 1024 * 1024;
+    /// Largest side of a preview (px); a larger requested size is scaled down, aspect kept.
+    static constexpr int MaxSide = 4096;
+
+    /// The preview URL of the drawing file at `absolutePath` (see above).
+    static QUrl url(const QString &absolutePath, const QString &version, bool dark);
+    /// The picture of a drawing file's bytes as the app's theme (`appDark`) shows it, fitted into
+    /// `requested` (an empty side: from the other one; none: the natural size); `natural` gets
+    /// the picture's own size. Null when the bytes are no picture.
+    static QImage picture(const QByteArray &bytes, bool appDark, const QSize &requested, QSize *natural = nullptr);
+
+    QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override;
+};
+
+} // namespace brulion::drawingview

@@ -21,7 +21,8 @@ import Brulion
 // A picture whose format this device cannot decode (WebP or AVIF without Qt's image plugins:
 // Workspace.canDecodePicture) is named so instead of a load error.
 // A drawing (Workspace.isDrawing) has "Edytuj rysunek" in the bar (the drawing editor, route
-// "drawing"); the picture follows the file when it is saved again.
+// "drawing"); the picture follows the file when it is saved again, and the app's theme (light or
+// dark paper, as the drawing chooses: Workspace.drawingUrl, the drawing image provider).
 // The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
 // never read whole for it), again whenever the file changes (sync, another program).
 //
@@ -72,7 +73,9 @@ Item {
     /// Grows when the file changes on disk (a drawing saved again): its URL is asked for again
     /// (a drawing's carries its version, Workspace.assetUrl).
     property int fileRevision: 0
-    readonly property url source: root.decodable && root.fileRevision >= 0 ? Workspace.assetUrl(root.path) : ""
+    readonly property url source: !root.decodable || root.fileRevision < 0 ? ""
+                                  : root.drawing ? Workspace.drawingUrl(root.path, Theme.dark)
+                                  : Workspace.assetUrl(root.path)
     /// A drawing (docs/SYNTAX.md §2 "Drawings"): the bar offers the drawing editor.
     readonly property bool drawing: root.scalable && root.fileRevision >= 0 && Workspace.isDrawing(root.path)
 
@@ -250,6 +253,8 @@ Item {
             height: root.actualSize ? root.shownSize.height : Math.max(1, Math.round(root.shownSize.height * root.fitScale))
             source: root.asText ? "" : root.source
             sourceSize: root.decodeSize
+            // A drawing's other theme or version: the shown one stays until it is there.
+            retainWhileLoading: root.drawing
             fillMode: root.scalable ? Image.PreserveAspectFit : Image.Stretch
             asynchronous: true
             smooth: true

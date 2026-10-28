@@ -26,6 +26,7 @@
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUrlQuery>
 
 #include <functional>
 
@@ -208,6 +209,18 @@ private Q_SLOTS:
         QVERIFY(before.query().startsWith(u"v="_s));
         QCOMPARE(QFileInfo(before.toLocalFile()).fileName(), u"Rysunek — wykład z łączności ćw. 3.svg"_s);
         QVERIFY(!ws.assetUrl(u"assets/logo.svg"_s).hasQuery()); // other pictures as they were
+        // The previews: the drawing image provider, the file by its absolute path, the version and
+        // the app's theme in the query.
+        const QUrl light = ws.drawingUrl(path, false);
+        const QUrl dark = ws.drawingUrl(path, true);
+        QCOMPARE(light.scheme(), u"image"_s);
+        QCOMPARE(light.host(), u"drawing"_s);
+        QCOMPARE(QUrl::fromPercentEncoding(light.path(QUrl::FullyEncoded).mid(1).toLatin1()), before.toLocalFile());
+        QCOMPARE(QUrlQuery(light).queryItemValue(u"v"_s), QUrlQuery(before).queryItemValue(u"v"_s));
+        QCOMPARE(QUrlQuery(light).queryItemValue(u"dark"_s), u"0"_s);
+        QCOMPARE(QUrlQuery(dark).queryItemValue(u"dark"_s), u"1"_s);
+        QVERIFY(!light.path(QUrl::FullyEncoded).mid(1).contains(u'/')); // one segment: the path's slashes escaped
+        QVERIFY(ws.drawingUrl(QString(), false).isEmpty());
         QCOMPARE(ws.readAttachment(path), brulion::drawing::toSvg(d));
         QVERIFY(ws.readAttachment(u"assets/brak.svg"_s).isEmpty());
 
@@ -231,7 +244,9 @@ private Q_SLOTS:
         QVERIFY(ws.assetUrl(path) != before);
         QCOMPARE(ws.readAttachment(path), brulion::drawing::toSvg(d));
         QTRY_VERIFY(embedOf(page, 0).value(u"width"_s).toInt() > 600);
-        QCOMPARE(embedOf(page, 0).value(u"url"_s).toUrl(), ws.assetUrl(path));
+        QCOMPARE(embedOf(page, 0).value(u"url"_s).toUrl(), ws.drawingUrl(path, false));
+        QCOMPARE(embedOf(page, 0).value(u"darkUrl"_s).toUrl(), ws.drawingUrl(path, true));
+        QVERIFY(ws.drawingUrl(path, false) != light);
         // Nothing to write, or nowhere: refused.
         QVERIFY(!ws.writeAttachment(path, QByteArray()));
         QVERIFY(!ws.writeAttachment(QString(), "x"));

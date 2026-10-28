@@ -56,25 +56,32 @@ QString colorName(Rgba c)
     return out;
 }
 
-Rgba darkRgba(Rgba c)
+int darkInvertChannel(int v)
 {
     // cssInvert(93 %): every channel rounded and clamped (colors.ts).
-    const auto invert = [](int v) {
-        return std::clamp(jsRound(v * (1 - DarkInvert) + (255 - v) * DarkInvert), 0.0, 255.0);
-    };
-    const double r = invert(c.r) / 255;
-    const double g = invert(c.g) / 255;
-    const double b = invert(c.b) / 255;
+    return int(std::clamp(jsRound(v * (1 - DarkInvert) + (255 - v) * DarkInvert), 0.0, 255.0));
+}
+
+std::array<double, 9> darkHueMatrix()
+{
     // cssHueRotate(180°): the CSS filter's matrix (Filter Effects 1, feColorMatrix hueRotate),
     // sin(π) as the reference computes it (≈ 1.2e-16, not 0: the results match to the integer).
     const double a = 180 * std::numbers::pi / 180;
     const double cs = std::cos(a);
     const double sn = std::sin(a);
-    const double m[9] = {
+    return {
             0.213 + cs * 0.787 - sn * 0.213, 0.715 - cs * 0.715 - sn * 0.715, 0.072 - cs * 0.072 + sn * 0.928,
             0.213 - cs * 0.213 + sn * 0.143, 0.715 + cs * 0.285 + sn * 0.14,  0.072 - cs * 0.072 - sn * 0.283,
             0.213 - cs * 0.213 - sn * 0.787, 0.715 - cs * 0.715 + sn * 0.715, 0.072 + cs * 0.928 + sn * 0.072,
     };
+}
+
+Rgba darkRgba(Rgba c)
+{
+    static const std::array<double, 9> m = darkHueMatrix();
+    const double r = darkInvertChannel(std::clamp(c.r, 0, 255)) / 255.0;
+    const double g = darkInvertChannel(std::clamp(c.g, 0, 255)) / 255.0;
+    const double b = darkInvertChannel(std::clamp(c.b, 0, 255)) / 255.0;
     const auto channel = [](double v) { return int(jsRound(std::clamp(v, 0.0, 1.0) * 255)); };
     return Rgba{channel(r * m[0] + g * m[1] + b * m[2]), channel(r * m[3] + g * m[4] + b * m[5]),
                 channel(r * m[6] + g * m[7] + b * m[8]), c.a};

@@ -5,10 +5,14 @@ import Brulion
 
 // DrawingToolbar — the drawing editor's tools (DrawingView; docs/UI.md "Drawing editor"): undo,
 // redo, the pen, the highlighter and the eraser, the current tool's colours and widths, the
-// paper (plain, lines, grid), "Rysuj palcem" on touch screens, "Pokaż cały rysunek" and Gotowe.
+// paper (plain, lines, grid), its light or dark background ("Tło rysunku": as the app, light,
+// dark), "Rysuj palcem" on touch screens, "Pokaż cały rysunek" and Gotowe.
 // Wide windows: everything in one row above the paper. `compact` (phones; at the bottom, in
 // reach of the thumb): the colours and widths behind one swatch (a popup above the bar), the
-// paper, finger drawing and fitting in "Więcej"; the row scrolls sideways when it still does not fit.
+// paper, its background, finger drawing and fitting in "Więcej"; the row scrolls sideways when it
+// still does not fit. The swatches show the colours as the paper shows them (on dark paper the
+// pen's colours mapped as the strokes are, DrawingCanvas.displayColor); what is chosen and saved
+// is the colour as drawn on light paper.
 // The buttons take no keyboard focus: Space is the view's (held: move the paper).
 Rectangle {
     id: bar
@@ -31,14 +35,27 @@ Rectangle {
 
     readonly property bool drawingTool: canvas.tool !== "eraser"
 
-    /// Open the colours and widths (compact), the "Więcej" menu (compact) or the paper's menu
-    /// (route.open, screenshots).
+    /// Open the colours and widths (compact), the "Więcej" menu (compact), the paper's menu or
+    /// the background's (the "Więcej" menu on phones) — route.open, screenshots.
     function openStyle() { stylePopup.open() }
     function openMore() { moreMenu.popup(moreButton, 0, -moreMenu.implicitHeight) }
     function openBackground() { backgroundMenu.popup(backgroundButton, 0, backgroundButton.height) }
+    function openTheme() {
+        if (bar.compact)
+            bar.openMore()
+        else
+            themeMenu.popup(themeButton, 0, themeButton.height)
+    }
 
     function backgroundIcon(name) {
         return name === "lines" ? "rows-3" : name === "grid" ? "grid-3x3" : "square"
+    }
+    function themeIcon(name) {
+        return name === "light" ? "sun" : name === "dark" ? "moon" : "sun-moon"
+    }
+    /// A colour of the current tool as the paper shows it now (re-evaluated when it turns dark).
+    function shown(color) {
+        return bar.canvas.dark ? bar.canvas.displayColor(color, bar.canvas.tool === "highlighter") : color
     }
 
     implicitHeight: Theme.touchUi ? 56 : 46
@@ -178,7 +195,7 @@ Rectangle {
                 delegate: BColorSwatch {
                     required property var modelData
                     anchors.verticalCenter: parent.verticalCenter
-                    color: modelData.color
+                    color: bar.shown(modelData.color)
                     label: modelData.label
                     size: 22
                     focusPolicy: Qt.NoFocus
@@ -204,7 +221,7 @@ Rectangle {
                 objectName: "drawingStyle"
                 visible: bar.compact && bar.drawingTool
                 anchors.verticalCenter: parent.verticalCenter
-                color: bar.canvas.color
+                color: bar.shown(bar.canvas.color)
                 label: qsTr("Colour and thickness")
                 size: 26
                 focusPolicy: Qt.NoFocus
@@ -222,6 +239,18 @@ Rectangle {
                 label: qsTr("Paper")
                 focusPolicy: Qt.NoFocus
                 onClicked: backgroundMenu.popup(backgroundButton, 0, backgroundButton.height)
+            }
+            // Light or dark paper: as the app, light, dark.
+            BIconButton {
+                id: themeButton
+                objectName: "drawingTheme"
+                visible: !bar.compact
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: bar.themeIcon(bar.canvas.theme)
+                label: qsTr("Drawing background")
+                focusPolicy: Qt.NoFocus
+                enabled: bar.canvas.editable
+                onClicked: themeMenu.popup(themeButton, 0, themeButton.height)
             }
             BIconButton {
                 objectName: "drawingFinger"
@@ -297,6 +326,35 @@ Rectangle {
     }
 
     BMenu {
+        id: themeMenu
+        objectName: "drawingThemeMenu"
+        BMenuItem {
+            objectName: "drawingThemeAuto"
+            text: qsTr("Like the app")
+            iconName: "sun-moon"
+            checkable: true
+            checked: bar.canvas.theme === "auto"
+            onTriggered: bar.canvas.theme = "auto"
+        }
+        BMenuItem {
+            objectName: "drawingThemeLight"
+            text: qsTr("Light")
+            iconName: "sun"
+            checkable: true
+            checked: bar.canvas.theme === "light"
+            onTriggered: bar.canvas.theme = "light"
+        }
+        BMenuItem {
+            objectName: "drawingThemeDark"
+            text: qsTr("Dark")
+            iconName: "moon"
+            checkable: true
+            checked: bar.canvas.theme === "dark"
+            onTriggered: bar.canvas.theme = "dark"
+        }
+    }
+
+    BMenu {
         id: moreMenu
         BMenuItem {
             text: qsTr("Plain paper")
@@ -318,6 +376,30 @@ Rectangle {
             checkable: true
             checked: bar.canvas.background === "grid"
             onTriggered: bar.canvas.background = "grid"
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "drawingThemeAutoItem"
+            text: qsTr("Background like the app")
+            iconName: "sun-moon"
+            checkable: true
+            checked: bar.canvas.theme === "auto"
+            onTriggered: bar.canvas.theme = "auto"
+        }
+        BMenuItem {
+            text: qsTr("Light background")
+            iconName: "sun"
+            checkable: true
+            checked: bar.canvas.theme === "light"
+            onTriggered: bar.canvas.theme = "light"
+        }
+        BMenuItem {
+            objectName: "drawingThemeDarkItem"
+            text: qsTr("Dark background")
+            iconName: "moon"
+            checkable: true
+            checked: bar.canvas.theme === "dark"
+            onTriggered: bar.canvas.theme = "dark"
         }
         BMenuSeparator {}
         BMenuItem {
@@ -371,7 +453,7 @@ Rectangle {
                     model: bar.colors
                     delegate: BColorSwatch {
                         required property var modelData
-                        color: modelData.color
+                        color: bar.shown(modelData.color)
                         label: modelData.label
                         focusPolicy: Qt.NoFocus
                         selected: Qt.colorEqual(bar.canvas.color, modelData.color)

@@ -43,6 +43,7 @@
 #include <QRegularExpression>
 #include <QScreen>
 #include <QTimer>
+#include <QUrlQuery>
 #include <QWheelEvent>
 #include <QWindow>
 
@@ -2612,7 +2613,9 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
 /// editor; a stroke drawn with real input — a finger on the phone run ("Rysuj palcem" is on until a
 /// stylus is seen), the mouse on the desktop — is saved by itself, its undo kept (the save coming
 /// back is the editor's own, not a change to merge); an undo (the bar's button / Ctrl+Z) is saved
-/// too; back on the page, the embed loads the drawing saved again (its URL's version).
+/// too; back on the page, the embed loads the drawing saved again (its URL's version). The embed is
+/// the drawing image provider's picture in the app's theme: switching the app to the other theme
+/// loads the other one at once; the editor's paper follows the app's theme too.
 void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -2625,12 +2628,15 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
         return d ? int(d->strokes.size()) : -1;
     };
+    // (image://drawing/<the file's path, percent-encoded>?v=…&dark=…: Workspace::drawingUrl.)
     const auto embedImage = [window]() -> QQuickItem * {
         return uidriver::topmost(window, [](QQuickItem *item) {
-            return item->objectName() == u"embedImage" && item->property("source").toUrl().path().endsWith(u".svg"_s)
-                   && item->property("source").toUrl().fileName() == u"Szkic z wykładu.svg";
+            const QUrl url = item->property("source").toUrl();
+            return item->objectName() == u"embedImage" && url.scheme() == u"image" && url.host() == u"drawing"
+                   && QUrl::fromPercentEncoding(url.path().toUtf8()).endsWith(u"/Szkic z wykładu.svg"_s);
         });
     };
+    const auto darkQuery = [](const QUrl &url) { return QUrlQuery(url).queryItemValue(u"dark"_s) == u"1"; };
     app->openPage(page);
     check(waitFor([&] { return embedImage() && embedImage()->property("status").toInt() == 1; }, 5000),
           "the drawing's embed is shown");
@@ -2642,6 +2648,31 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     check(uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"embedDrawingBadge"; })
                   != nullptr,
           "a drawing's embed has the pen in its corner");
+    {
+        // The app's theme switched: the embed shows the drawing in the other one at once.
+        AppSettings *settings = app->settings();
+        const QString mode = settings->themeMode();
+        const bool wasDark = darkQuery(before);
+        settings->setThemeMode(wasDark ? u"light"_s : u"dark"_s);
+        check(waitFor([&] {
+                  QQuickItem *again = embedImage();
+                  return again && darkQuery(again->property("source").toUrl()) != wasDark
+                         && again->property("status").toInt() == 1;
+              },
+                      5000),
+              "the app's other theme shows the drawing's embed in that theme");
+        settings->setThemeMode(mode);
+        check(waitFor([&] {
+                  QQuickItem *again = embedImage();
+                  return again && darkQuery(again->property("source").toUrl()) == wasDark
+                         && again->property("status").toInt() == 1;
+              },
+                      5000),
+              "and back");
+        image = embedImage();
+        if (!image)
+            return;
+    }
     tapOrClick(window, pointIn(image), touch);
     check(waitFor([&] { return app->currentRoute().value(u"view"_s).toString() == u"drawing"; }),
           "a tap / click on the drawing opens the drawing editor");
@@ -2655,6 +2686,8 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         check(false, "the drawing editor shows its paper");
         return;
     }
+    check(canvas->property("dark").toBool() == darkQuery(before) && canvas->property("theme").toString() == u"auto",
+          "a new drawing's paper follows the app's theme");
     settle(100);
     const QPointF from = pointIn(canvas, 0.25, 0.4);
     const QPointF to = pointIn(canvas, 0.7, 0.45);

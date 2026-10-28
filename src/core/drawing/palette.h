@@ -17,6 +17,7 @@
 #include <QString>
 #include <QStringView>
 
+#include <array>
 #include <optional>
 
 namespace brulion::drawing {
@@ -47,6 +48,11 @@ inline constexpr QStringView FallbackInk = u"#1e1e1e";
 /// Excalidraw's applyDarkModeFilter: invert(93 %), then hue-rotate(180°) with the CSS filter
 /// matrix, every channel rounded as JavaScript's Math.round and clamped; the alpha kept.
 Rgba darkRgba(Rgba c);
+/// darkRgba()'s two steps, for code that maps many pixels with tables (the app's darkImage()): a
+/// channel inverted (93 %, rounded) and the hue-rotate(180°) matrix (row-major); darkRgba()
+/// gives round(clamp(Σ (inverted / 255) × matrix entry, 0, 1) × 255) per channel.
+int darkInvertChannel(int v);
+std::array<double, 9> darkHueMatrix();
 /// `hex` as the dark theme shows it ("#rrggbb", "#rrggbbaa" with an alpha); a malformed colour
 /// gives `fallback` as it is.
 QString darkColor(QStringView hex, const QString &fallback = QString());

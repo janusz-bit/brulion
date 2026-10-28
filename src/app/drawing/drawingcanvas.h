@@ -2,7 +2,7 @@
 // "Drawing editor"): shows a drawing (core drawing module) and draws, erases and moves around it.
 //
 //   DrawingCanvas { tool: "pen"; color: "#1f2430"; penWidth: 1; background: "lines"
-//                   fingerDraws: !stylusSeen
+//                   fingerDraws: !stylusSeen; appDark: Theme.dark
 //                   onContentChanged: saveTimer.restart() }
 //   canvas.load(Workspace.readAttachment(path)) → "" | "readonly" | "notDrawing" | "corrupt"
 //   const bytes = canvas.svg(); Workspace.writeAttachment(path, bytes); canvas.markSaved(bytes)
@@ -27,15 +27,20 @@
 //    touch is ignored (until all fingers lift); a pen that lands while fingers move the paper or
 //    draw ends their gesture (a finger stroke just begun is dropped) and takes over.
 // Erasing removes whole strokes the eraser touches (as Excalidraw's eraser), one undo step per
-// gesture. A stroke is one undo step; the background too. Undo history: the strokes of this
-// session (cleared by load()).
+// gesture. A stroke is one undo step; the background and the theme too. Undo history: the strokes
+// of this session (cleared by load()).
+//
+// Light and dark (core drawing/palette.h): the drawing's own `theme` — "auto" (as the app:
+// `appDark`, which QML binds to Theme.dark), "light" or "dark" — is saved in the file; the paper,
+// its lines and the strokes are shown in the colours of the theme in force (`dark`), the stored
+// colours never change. A change of either repaints at once (a stroke being drawn too).
 //
 // Rendering: a QQuickPaintedItem (every scene graph backend, the software one of the screenshots
 // too). The committed strokes are rendered on the GUI thread into a cached image of the view;
 // while the view moves the cached image is drawn moved and scaled and rendered again when the
 // gesture rests; the stroke being drawn is drawn on top, only its area repainted. paint() may
 // run on the render thread: it draws only a snapshot taken in updatePaintNode() (the GUI thread
-// waits there).
+// waits there). The paper and the strokes are painted as the previews paint them (drawingrender.h).
 #pragma once
 
 #include "drawing/drawing.h"
@@ -66,6 +71,13 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(qreal penWidth READ penWidth WRITE setPenWidth NOTIFY penWidthChanged FINAL)
     /// The paper's pattern: "plain", "lines", "grid" (setting it is an undo step).
     Q_PROPERTY(QString background READ background WRITE setBackground NOTIFY backgroundChanged FINAL)
+    /// The drawing's own light or dark: "auto" (as the app), "light", "dark" (setting it is an undo
+    /// step; saved in the file).
+    Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY themeChanged FINAL)
+    /// The app is dark (QML: Theme.dark): an "auto" drawing follows it, at once. No edit.
+    Q_PROPERTY(bool appDark READ appDark WRITE setAppDark NOTIFY appDarkChanged FINAL)
+    /// The drawing is shown dark now (its theme "dark", or "auto" while the app is dark).
+    Q_PROPERTY(bool dark READ dark NOTIFY renderChanged FINAL)
     /// One finger draws (else it moves the paper).
     Q_PROPERTY(bool fingerDraws READ fingerDraws WRITE setFingerDraws NOTIFY fingerDrawsChanged FINAL)
     /// A stylus has touched the canvas.
@@ -85,8 +97,8 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(int strokeCount READ strokeCount NOTIFY contentChanged FINAL)
     /// A stroke or an erasing gesture is in progress.
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged FINAL)
-    /// The paper's colour (from the drawing).
-    Q_PROPERTY(QColor paperColor READ paperColor NOTIFY loadedChanged FINAL)
+    /// The paper's colour as shown (the drawing's, in the theme in force).
+    Q_PROPERTY(QColor paperColor READ paperColor NOTIFY renderChanged FINAL)
     /// Milliseconds the last cached image took to render (diagnostics).
     Q_PROPERTY(double lastRenderMs READ lastRenderMs FINAL)
 
@@ -109,6 +121,11 @@ public:
     void setPenWidth(qreal width);
     QString background() const;
     void setBackground(const QString &name);
+    QString theme() const;
+    void setTheme(const QString &name);
+    bool appDark() const { return m_appDark; }
+    void setAppDark(bool on);
+    bool dark() const;
     bool fingerDraws() const { return m_fingerDraws; }
     void setFingerDraws(bool on);
     bool stylusSeen() const { return m_stylusSeen; }
@@ -126,7 +143,7 @@ public:
     bool editable() const { return m_editable; }
     int strokeCount() const { return int(m_items.size()); }
     bool busy() const { return m_gesture == Gesture::Draw || m_gesture == Gesture::Erase; }
-    QColor paperColor() const { return m_paper; }
+    QColor paperColor() const { return dark() ? m_paperDark : m_paperLight; }
     double lastRenderMs() const { return m_lastRenderMs; }
 
     /// Show the drawing in `bytes` (Brulion's SVG, excalidraw.com's "Embed scene" SVG, a
@@ -160,6 +177,9 @@ public:
     Q_INVOKABLE void panBy(qreal dx, qreal dy);
     /// The scene rect the strokes cover (tests, QML).
     Q_INVOKABLE QRectF contentBounds() const;
+    /// A stored colour as the paper shows it now (the tool bar's swatches): mapped in the dark
+    /// (drawing::darkRgba), a highlighter's colour as it is.
+    Q_INVOKABLE QColor displayColor(const QColor &stored, bool highlighter = false) const;
     /// Scene ↔ item coordinates.
     Q_INVOKABLE QPointF toScene(QPointF item) const;
     Q_INVOKABLE QPointF toItem(QPointF scene) const;
@@ -178,6 +198,11 @@ Q_SIGNALS:
     void colorChanged();
     void penWidthChanged();
     void backgroundChanged();
+    void themeChanged();
+    void appDarkChanged();
+    /// What the paper shows changed colours: `dark`, `paperColor` (a theme, the app's theme, a
+    /// drawing loaded or taken in).
+    void renderChanged();
     void fingerDrawsChanged();
     void stylusSeenChanged();
     void panModeChanged();
@@ -186,7 +211,8 @@ Q_SIGNALS:
     void modifiedChanged();
     void loadedChanged();
     void busyChanged();
-    /// The drawing changed (a stroke, erasing, undo, redo, the background): QML saves later.
+    /// The drawing changed (a stroke, erasing, undo, redo, the background, the theme): QML saves
+    /// later.
     void contentChanged();
     /// The user moved or zoomed the paper.
     void userMovedView();
@@ -212,14 +238,19 @@ private:
         drawing::Stroke stroke;
         QPainterPath path; ///< the outline, scene coordinates
         QRectF bounds;     ///< scene coordinates
-        QColor color;
+        /// The ink as the light and the dark theme show it (drawing::displayInk; the stored colour
+        /// is the stroke's).
+        QColor light;
+        QColor dark;
     };
     struct Op {
-        enum Kind { Add, Remove, Background } kind = Add;
+        enum Kind { Add, Remove, Background, Theme } kind = Add;
         /// Add: the strokes appended; Remove: the strokes with their indices (ascending).
         QList<std::pair<int, Item>> items;
         drawing::Background before = drawing::Background::Plain;
         drawing::Background after = drawing::Background::Plain;
+        drawing::PaperTheme themeBefore = drawing::PaperTheme::Auto;
+        drawing::PaperTheme themeAfter = drawing::PaperTheme::Auto;
     };
     enum class Gesture { None, Draw, Erase, Pan, Pinch };
     /// What a pointer event is (from its device and the tablet event it was made of).
@@ -231,7 +262,10 @@ private:
 
     void filterWindow(QQuickWindow *window);
     static Item makeItem(drawing::Stroke stroke);
-    static QPainterPath outlinePath(const QList<QPointF> &outline);
+    /// The ink of a stroke as the paper shows it now.
+    QColor inkOf(const Item &item) const { return dark() ? item.dark : item.light; }
+    /// Repaint in the colours of the theme in force when `wasDark` differs from it.
+    void renderMaybeChanged(bool wasDark);
     Pointer pointerOf(const QPointerEvent *event) const;
     /// A tablet event that passed the window: true when the canvas took it (see the header).
     bool handleTablet(QTabletEvent *event);
@@ -280,13 +314,18 @@ private:
     // The drawing.
     drawing::Drawing m_doc; ///< everything but the strokes (m_items)
     QList<Item> m_items;
-    QColor m_paper = QColor(u"#ffffff");
+    /// The paper as the light and the dark theme show it (drawing::displayPaper).
+    QColor m_paperLight = QColor(u"#ffffff");
+    QColor m_paperDark = QColor(u"#121212");
+    bool m_appDark = false;
     bool m_editable = true;
     bool m_modified = false;
     /// Stroke ids at the last load or save (takeExternal() merges against them).
     QSet<QString> m_baseIds;
     /// The paper's pattern at the last load or save (a merge keeps ours only when it changed).
     drawing::Background m_baseBackground = drawing::Background::Plain;
+    /// The theme at the last load or save (as the pattern).
+    drawing::PaperTheme m_baseTheme = drawing::PaperTheme::Auto;
     /// The file as last loaded, taken in or written.
     QByteArray m_known;
     QList<Op> m_undo;
@@ -350,9 +389,9 @@ private:
         QTransform cacheToItem;
         bool cacheCurrent = false;
         QColor paper;
+        bool dark = false;
         QPainterPath live;
-        QColor liveColor;
-        double liveOpacity = 1;
+        QColor liveColor; ///< with its opacity
         QPointF eraser{-1, -1};
         double eraserRadius = 0;
     } m_snapshot;
