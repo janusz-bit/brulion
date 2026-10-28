@@ -595,7 +595,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `LinkMenu` (`qml/editor`) on a `[[page]]` (also a Markdown link to a note): Otwórz ("Utwórz
   stronę" for one not written yet — created by its first content, as a click does), Otwórz w
   panelu bocznym, Kopiuj link (`[[Strona#Nagłówek]]` by the page's shortest link target — it works
-  pasted on any page —, as written for a page that does not exist; `PageController.linkMenu`); on a
+  pasted on any page —, as written for a page that does not exist; `PageController.linkMenu`, in Tasks and the calendar
+  `PlanningActions.linkText` / `linkMissing`); on a
   `#tag`: Otwórz stronę tagu, Otwórz w panelu bocznym, Widok tagu, Zadania z tym tagiem, Kopiuj tag
   (`#tag`, `#[[tag ze spacjami]]`); on a `((block))`: Otwórz, Otwórz w panelu bocznym, Kopiuj link;
   on a web address: Otwórz w przeglądarce, Kopiuj adres. Every copy says "Skopiowano …" or that the
@@ -624,7 +625,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `occurrence`; `spec` is the token as written) offers "Zmień całą serię…" instead of moving one
   date, and a reminder's time that has rung offers Godzinę później / Jutro o tej porze, a snooze of
   that one time (`PlanningActions.snoozeReminder`: a one-off child reminder, as the notification's
-  "Odłóż"); a time still to come offers no snooze (it would ring as well). The 🔁 rule changes only
+  "Drzemka"); a time still to come offers no snooze (it would ring as well). The 🔁 rule changes only
   in its own text (`markdown::setBlockRecurrence`: words after it stay; the same rule in another
   phrasing — the reminder dialog with only the time changed — stays as written). The tokens are named across the copies of a block by
   `markdown::TokenRef` (kind, value, which of the equal ones; markdown/tokenedit.h); the edit is
