@@ -87,7 +87,8 @@ Item {
         if (!linkMenu)
             linkMenu = linkMenuComponent.createObject(root) as LinkMenu
         linkMenu.kind = kind
-        linkMenu.unresolved = false
+        // A [[link]] to a page that does not exist offers "Utwórz stronę", as in the editor.
+        linkMenu.unresolved = kind === "page" && actions.linkMissing(url, fromPath || "")
         linkMenu.filterFirst = kind === "tag" && !!filter
         linkMenu.popup(item, x, y)
         return true

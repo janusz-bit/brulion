@@ -371,15 +371,24 @@ bool PlanningActions::snoozeReminder(const QString &path, int line, const QStrin
     return writeChange(path, content, after);
 }
 
-QString PlanningActions::linkText(const QString &url, const QString &fromPath) const
+notebook::CopiedLink PlanningActions::copiedLink(const QString &url, const QString &fromPath) const
 {
     return notebook::copiedLink(
-                   url, fromPath, config(),
-                   [this](const QString &target, const QString &from) {
-                       return m_host ? m_host->resolveLink(target, from) : QString();
-                   },
-                   [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); })
-            .text;
+            url, fromPath, config(),
+            [this](const QString &target, const QString &from) {
+                return m_host ? m_host->resolveLink(target, from) : QString();
+            },
+            [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); });
+}
+
+QString PlanningActions::linkText(const QString &url, const QString &fromPath) const
+{
+    return copiedLink(url, fromPath).text;
+}
+
+bool PlanningActions::linkMissing(const QString &url, const QString &fromPath) const
+{
+    return url.startsWith(u"page:"_s) && copiedLink(url, fromPath).path.isEmpty();
 }
 
 bool PlanningActions::copyText(const QString &text) const

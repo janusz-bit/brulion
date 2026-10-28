@@ -334,6 +334,33 @@ private Q_SLOTS:
         QCOMPARE(actions.linkText(u"date:1-2"_s), QString());
     }
 
+    void missingLinks_data()
+    {
+        QTest::addColumn<QString>("url");
+        QTest::addColumn<bool>("missing");
+        QTest::newRow("existing page") << u"page:Dom"_s << false;
+        QTest::newRow("existing page, heading") << u"page:Dom#Plan"_s << false;
+        QTest::newRow("existing page, Polish name") << u"page:Za%C5%BC%C3%B3%C5%82%C4%87"_s << false;
+        QTest::newRow("no such page") << u"page:Notatki%20z%20wyk%C5%82adu%205"_s << true;
+        QTest::newRow("no such page, heading") << u"page:Nowa%20strona#Plan"_s << true;
+        QTest::newRow("tag") << u"tag:wa%C5%BCne"_s << false;
+        QTest::newRow("block") << u"block:abc"_s << false;
+        QTest::newRow("address") << u"ext:https://example.org"_s << false;
+        QTest::newRow("unknown scheme") << u"date:1-2"_s << false;
+    }
+
+    void missingLinks()
+    {
+        QFETCH(QString, url);
+        QFETCH(bool, missing);
+        FakeEditorHost host;
+        host.setFile(u"Projekty/Dom.md"_s, u"- x\n"_s);
+        host.setFile(u"Zażółć.md"_s, u"- y\n"_s);
+        PlanningActions actions;
+        actions.setHost(&host);
+        QCOMPARE(actions.linkMissing(url, u"Zadania.md"_s), missing);
+    }
+
     void recurringCompletion()
     {
         FakeEditorHost host;

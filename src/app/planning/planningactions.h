@@ -30,6 +30,7 @@
 
 #include "editorhost.h"
 #include "markdown/tokenedit.h"
+#include "notebook/links.h"
 #include "types.h"
 
 #include <QDateTime>
@@ -126,6 +127,9 @@ public:
     /// page's shortest link target (as written when the page does not exist), `#tag` /
     /// `#[[tag with spaces]]`, `((id))`, the address; "" for other URLs.
     Q_INVOKABLE QString linkText(const QString &url, const QString &fromPath = QString()) const;
+    /// A page: link written in `fromPath` that leads to no page (its menu offers "Utwórz stronę",
+    /// as in the editor); false for other links.
+    Q_INVOKABLE bool linkMissing(const QString &url, const QString &fromPath = QString()) const;
     /// Put `text` on the clipboard; false when the platform has none or it did not take it.
     Q_INVOKABLE bool copyText(const QString &text) const;
 
@@ -164,6 +168,8 @@ private:
     QDateTime currentTime() const;
     VaultConfig config() const;
     bool writeChange(const QString &path, const QString &before, const QString &after);
+    /// `url` (a link written in `fromPath`) as the link menus copy and resolve it.
+    notebook::CopiedLink copiedLink(const QString &url, const QString &fromPath) const;
     /// The TokenRef of a menu's token (`kind` as editToken() takes it); nullopt for unknown kinds.
     std::optional<markdown::TokenRef> tokenRefOf(const QString &kind, const QString &value) const;
 
