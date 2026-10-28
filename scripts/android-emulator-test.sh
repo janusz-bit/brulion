@@ -1465,7 +1465,6 @@ HTML
   # A run's last report: "count windowHeight overlap shown animating editing settled toolbarBottom
   # contentBottom legacyOverlap containerHeight" (empty before the app's first one).
   wk_state() { wk_py state "$OUT/report.jsonl" "$1"; }
-  wk_ready() { local s; s=$(wk_state "$1"); [[ -n $s ]] && awk '{ exit !($2 > 0) }' <<<"$s"; }
   # The keyboard counted as up, settled, a block edited and its toolbar docked.
   wk_keyboard_settled() {
     local s
@@ -1502,81 +1501,50 @@ HTML
     app_shot "wk-$1-0-first-start"
     adb shell am force-stop "$pkg"
   }
+  # The app up in a page opened after `base` reports of the run (an earlier page's do not count).
+  wk_ready_since() { # <run> <base>
+    local s
+    s=$(wk_state "$1")
+    [[ -n $s ]] && awk -v base="$2" '{ exit !($1 > base && $2 > 0) }' <<<"$s"
+  }
   wk_open() { # <browser> <run> <query>: the seeded journal, then the app (first-run screens tapped away)
-    local pkg=${WK_PKG[$1]} url="$WK_ORIGIN/seed.html?$3" i xy last="" idle=0 sent=1
+    local pkg=${WK_PKG[$1]} url="$WK_ORIGIN/seed.html?$3" i xy last="" base count seen stall=0 sent=1
+    base=$(wk_count "$2")
+    base=${base:-0}
+    seen=$base
     adb shell am force-stop "$pkg"
     adb shell am start -a android.intent.action.VIEW -d "'$url'" -p "$pkg" >/dev/null
-    for i in $(seq 1 40); do
+    for i in $(seq 1 60); do
       sleep 3
-      wk_ready "$2" && return 0
+      wk_ready_since "$2" "$base" && return 0
       xy=$(ui_find_all "$WK_DISMISS" | head -n 1 || true)
       # The same place twice: not a dialog's button (a heading on the browser's home page).
       if [[ -n $xy && $xy != "$last" ]]; then
         echo "    tapping away a browser's screen at $xy"
         adb shell input tap "$xy"
         last=$xy
-        idle=0
+        stall=0
         continue
       fi
-      # Nothing to tap and the app not up (its tab left behind the welcome screens): the browser
-      # started again (a tab still loading in the background would keep the app's storage lock).
-      if ((++idle >= 4 && sent < 3)); then
+      # Nothing to tap and no report for a minute (the app's tab left behind a welcome screen,
+      # or stalled): the browser started again (a tab still loading in the background would keep
+      # the app's storage lock).
+      count=$(wk_count "$2")
+      count=${count:-0}
+      if ((count != seen)); then
+        seen=$count
+        stall=0
+      elif ((++stall >= 20 && sent < 3)); then
         echo "    starting $1 again ($i)"
         adb shell am force-stop "$pkg"
+        base=$count
         adb shell am start -a android.intent.action.VIEW -d "'$url'" -p "$pkg" >/dev/null
-        idle=0
         last=""
+        stall=0
         sent=$((sent + 1))
       fi
     done
-    wk_ready "$2"
-  }
-  wk_capture() { # <file>: the screen's raw pixels (header + RGBA), gzipped on the device: 10 MB
-    # through `adb exec-out` broke adb's connection to the emulator. Tried again if adb drops out.
-    local _
-    for _ in 1 2 3; do
-      if adb exec-out 'screencap | gzip -1' >"$1.gz" 2>/dev/null && gzip -dc "$1.gz" >"$1" 2>/dev/null && [[ -s $1 ]]; then
-        rm -f "$1.gz"
-        return 0
-      fi
-      sleep 2
-      adb wait-for-device
-    done
-    rm -f "$1.gz"
-    return 1
-  }
-  # The keyboard's key whose name matches the ERE: "x y name" (UiAutomator's dump of every window).
-  ime_key() {
-    adb shell rm -f /sdcard/brulion-ime.xml
-    adb shell uiautomator dump --windows /sdcard/brulion-ime.xml >/dev/null 2>&1 || true
-    adb exec-out cat /sdcard/brulion-ime.xml 2>/dev/null | sed 's/<node /\n<node /g' | grep 'inputmethod' |
-      sed -nE "s/.*content-desc=\"($1)\".*bounds=\"\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]\".*/\2 \3 \4 \5 \1/p" |
-      awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2), $5 }' | head -n 1 || true
-  }
-  wk_focus_text() { # the focused editor's text in the run's last report
-    python3 -c 'import json, sys
-last = ""
-for line in open(sys.argv[1], encoding="utf-8"):
-    try:
-        r = json.loads(line)
-    except ValueError:
-        continue
-    b = r.get("body")
-    if r.get("path") == "/__report/" + sys.argv[2] and isinstance(b, dict) and isinstance(b.get("json"), dict):
-        last = b["json"].get("focusText", last)
-print(last)' "$OUT/report.jsonl" "$1"
-  }
-  wk_focus_has() { local t; t=$(wk_focus_text "$1"); [[ ${t,,} == *"$2"* ]]; } # <run> <lower-case text>
-  wk_focus_lacks() { ! wk_focus_has "$@"; }
-  wk_ime_top() { # the keyboard's top (ime_top), tried again if adb drops out
-    local top _
-    for _ in 1 2 3; do
-      top=$(ime_top 2>/dev/null || true)
-      [[ -n $top ]] && break
-      sleep 2
-      adb wait-for-device
-    done
-    echo "$top"
+    wk_ready_since "$2" "$base"
   }
   wk_screen_line() { # <name> <gap> <magenta> <rows> <magenta anywhere>
     echo "    $1: ${2} px between the keyboard's top and the toolbar (${3} px of them the keyboard's room), the toolbar ${4} px tall; magenta rows on screen: $5"
@@ -1596,7 +1564,7 @@ print(last)' "$OUT/report.jsonl" "$1"
       cp "$OUT/ui.xml" "$OUT/wk-$run-0-failed.xml" 2>/dev/null || true
       return
     fi
-    sleep 6 # the journal's first frames
+    sleep 8 # the journal's first frames
     # A browser's prompt over the page (Firefox asks for a survey now and then): tapped away.
     local _ xy
     for _ in 1 2 3; do
