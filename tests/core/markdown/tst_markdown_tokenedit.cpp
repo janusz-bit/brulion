@@ -296,6 +296,34 @@ private Q_SLOTS:
         QVERIFY(findTokenRef(u"[ ] x ⏫"_s, priority));
     }
 
+    void removeTokenRange_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<QString>("token"); // removed: its first occurrence
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("with the space before it") << u"[ ] kupić mleko 📅 2026-10-20"_s << u"📅 2026-10-20"_s
+                                                  << u"[ ] kupić mleko"_s;
+        QTest::newRow("with the space after it") << u"📅 2026-10-20 kupić"_s << u"📅 2026-10-20"_s << u"kupić"_s;
+        QTest::newRow("alone on a line below the first") << u"[ ] zażółć\n📅 2026-10-20\ndalej"_s << u"📅 2026-10-20"_s
+                                                         << u"[ ] zażółć\ndalej"_s;
+        QTest::newRow("alone on the last line") << u"[ ] gęś\n ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s
+                                                << u"[ ] gęś"_s;
+        QTest::newRow("alone on the first line: the line stays") << u"📅 2026-10-20\ndalej"_s << u"📅 2026-10-20"_s
+                                                                 << u"\ndalej"_s;
+        QTest::newRow("beside text on its line") << u"a\nnotatka 📅 2026-10-20"_s << u"📅 2026-10-20"_s
+                                                 << u"a\nnotatka"_s;
+    }
+
+    void removeTokenRange()
+    {
+        QFETCH(QString, body);
+        QFETCH(QString, token);
+        QFETCH(QString, expected);
+        const qsizetype from = body.indexOf(token);
+        QVERIFY(from >= 0);
+        QCOMPARE(replaceTokenRange(body, from, from + token.size(), QString()), expected);
+    }
+
     void editBlockTokenInFiles_data()
     {
         QTest::addColumn<QString>("content");
@@ -313,9 +341,25 @@ private Q_SLOTS:
         QTest::newRow("continuation line, odd indentation")
                 << page << 5 << int(TokenKind::Reminder) << u"2026-10-19 09:00"_s << u"alarm"_s << QVariant(true)
                 << QString(page).replace(u"⏰ 2026-10-19"_s, u"⏰! 2026-10-19"_s);
+        // A token alone on its line goes with the line (no blank line left in the block).
         QTest::newRow("line inside the block")
                 << page << 6 << int(TokenKind::Reminder) << u"2026-10-19 09:00"_s << u"remove"_s << QVariant()
-                << QString(page).replace(u"    ⏰ 2026-10-19 09:00\r\n"_s, u"   \r\n"_s); // (one space goes with it)
+                << QString(page).replace(u"    ⏰ 2026-10-19 09:00\r\n"_s, QString());
+        QTest::newRow("alone on a line, the next item stays tight")
+                << u"- [ ] a\n  📅 2026-10-20\n- b\n"_s << 0 << int(TokenKind::Due) << u"2026-10-20"_s << u"remove"_s
+                << QVariant() << u"- [ ] a\n- b\n"_s;
+        QTest::newRow("alone on a line, text below it")
+                << u"- [ ] zażółć\n  📅 2026-10-20\n  dalszy tekst\n"_s << 0 << int(TokenKind::Due) << u"2026-10-20"_s
+                << u"remove"_s << QVariant() << u"- [ ] zażółć\n  dalszy tekst\n"_s;
+        QTest::newRow("alone on the file's last line, no line ending")
+                << u"- [ ] gęś\r\n  ⏰ 2026-10-19 09:00"_s << 1 << int(TokenKind::Reminder) << u"2026-10-19 09:00"_s
+                << u"remove"_s << QVariant() << u"- [ ] gęś"_s;
+        QTest::newRow("beside text on its line: only the token")
+                << u"- [ ] a\n  notatka 📅 2026-10-20\n"_s << 0 << int(TokenKind::Due) << u"2026-10-20"_s
+                << u"remove"_s << QVariant() << u"- [ ] a\n  notatka\n"_s;
+        QTest::newRow("on the first line: the item stays")
+                << u"- 📅 2026-10-20\n- b\n"_s << 0 << int(TokenKind::Due) << u"2026-10-20"_s << u"remove"_s
+                << QVariant() << u"- \n- b\n"_s;
         QTest::newRow("child") << page << 7 << int(TokenKind::Priority) << u"high"_s << u"priority"_s
                                << QVariant(u"low"_s) << QString(page).replace(u"⏫"_s, u"🔽"_s);
         QTest::newRow("token gone") << page << 7 << int(TokenKind::Due) << u"2026-10-20"_s << u"move"_s << QVariant(1)

@@ -4,8 +4,9 @@
 // markdown/markdown.h for the module overview.
 //
 // Everything is "text in -> text out": only the bytes of the edited token change (its value, or
-// the token with one adjacent space when it is removed); a token that is not where it was any
-// more leaves the text unchanged. A body is BlockEntry::body (lines joined by "\n"); ranges are
+// the token with one adjacent space when it is removed — with its whole line when it stood alone
+// on a line below the block's first one); a token that is not where it was any more leaves the
+// text unchanged. A body is BlockEntry::body (lines joined by "\n"); ranges are
 // [from, to) in UTF-16 code units of the body — a chip's range as the renderer's `date:`,
 // `reminder:`, `recur:`, `prio:` and `day:` links name it (inlinerenderer.h).
 //
@@ -30,7 +31,8 @@
 namespace brulion::markdown {
 
 /// Replace the token at [from, to) of `body` with `token`; an empty `token` removes it together
-/// with one adjacent space. Out-of-range ranges leave the body unchanged.
+/// with one adjacent space, and with its line when nothing but whitespace is left on a line below
+/// the first one (no blank line inside the block). Out-of-range ranges leave the body unchanged.
 QString replaceTokenRange(const QString &body, qsizetype from, qsizetype to, const QString &token);
 
 /// Range [from, to) of the first token of `kind` on the first line, or nullopt (tokens inside
@@ -167,7 +169,7 @@ std::optional<std::pair<qsizetype, qsizetype>> findTokenRef(const QString &body,
 
 /// applyTokenAction() on the token `ref` names in the block on `line` (0-based) of a whole file's
 /// `content`. Only the edited line changes, byte for byte apart from the token (its line ending,
-/// indentation and every other line kept). `content` unchanged when the line holds no block, the
+/// indentation and every other line kept); a line the token stood alone on goes as a whole. `content` unchanged when the line holds no block, the
 /// block has no such token or the action changes nothing.
 QString editBlockToken(const QString &content, int line, const TokenRef &ref, const QString &action, const QVariant &a,
                        const QVariant &b, const TokenEditContext &context);
