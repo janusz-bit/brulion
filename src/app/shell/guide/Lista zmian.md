@@ -7,7 +7,7 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
-## 0.4.6 — w przygotowaniu
+## 0.5.0 — 28 października 2026
 
 **Nowe**
 - **Rysunki w notatkach** — polecenie `/Rysunek` (na telefonie także przycisk **Rysunek** nad klawiaturą) wstawia rysunek i otwiera go do rysowania: pióro z naciskiem rysika, zakreślacz, gumka (także drugim końcem rysika), kolory i grubości, papier gładki, w linie albo w kratkę, cofanie. Gdy rysujesz rysikiem, palce tylko przesuwają i powiększają kartkę; na telefonie bez rysika rysuje palec. Rysunek to plik SVG w załącznikach: Obsidian pokazuje go jako obraz, excalidraw.com otwiera do edycji, Syncthing go synchronizuje, a zmiany z dwóch urządzeń łączą się linia po linii. Kliknięcie rysunku w notatce otwiera go ponownie. Zobacz [[Rysunki|Rysunki]].

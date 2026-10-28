@@ -10,7 +10,7 @@ w dwóch postaciach:
 | `brulion-<wersja>-windows-x86_64.zip` | wersja przenośna — folder `Brulion` z `brulion.exe`, `brulion-cli.exe`, bibliotekami Qt i środowiskiem MSVC |
 
 „Testowa” znaczy: buduje się i przechodzi testy w CI, ale nie była jeszcze długo używana na co dzień,
-pliki nie są podpisane i ma ograniczenia opisane niżej. Od wersji 0.4.6 przypomnienia i alarmy są
+pliki nie są podpisane i ma ograniczenia opisane niżej. Od wersji 0.5.0 przypomnienia i alarmy są
 natywnymi powiadomieniami Windows z przyciskami, a Brulion może się uruchamiać po zalogowaniu. Błędy zgłaszaj w
 [issues](https://github.com/janusz-bit/brulion/issues) (z rejestrem zdarzeń — README, „Gdy coś nie
 działa”).
