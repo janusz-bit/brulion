@@ -34,7 +34,7 @@ Na ciemnej kartce kolory są dopasowane tak samo jak w ciemnym trybie Excalidraw
 
 W innych programach:
 - rysunek z tłem **Ciemne** jest ciemny wszędzie;
-- rysunek z tłem **Jak motyw** jest ciemny w przeglądarkach, a często też w Obsidianie i na GitHubie, gdy używają ciemnego motywu — plik ma w środku opis ciemnych kolorów dla przeglądarek (`prefers-color-scheme`). Program, który go nie rozumie, pokaże jasny rysunek;
+- rysunek z tłem **Jak motyw** jest ciemny w Obsidianie z ciemnym motywem (na komputerze także wtedy, gdy system jest jasny), a w przeglądarkach i zwykle też na GitHubie, gdy używają ciemnego motywu — plik ma w środku opis ciemnych kolorów dla przeglądarek (`prefers-color-scheme`). Program, który go nie rozumie, pokaże jasny rysunek;
 - **excalidraw.com** pokazuje rysunek w swoim motywie, niezależnie od tego wyboru.
 
 ## Rysik, palec i mysz
@@ -53,6 +53,6 @@ Jeśli na innym urządzeniu ktoś doda do rysunku kształty albo tekst w excalid
 Plik rysunku to obraz SVG z ukrytą w środku sceną Excalidraw:
 - **Obsidian**, **Logseq**, przeglądarki i menedżery plików pokazują go jako zwykły obraz;
 - **excalidraw.com** otwiera go do edycji (przeciągnij plik na stronę) — możesz tam dodać kształty i tekst;
-- rysunek z Excalidraw wyeksportowany jako SVG z opcją **Embed scene** Brulion też otworzy. Jeśli ma tylko pismo odręczne, możesz w nim rysować dalej; jeśli ma kształty, strzałki albo tekst, Brulion tylko go pokaże (zmienisz go w excalidraw.com), żeby niczego nie zgubić.
+- rysunek z Excalidraw wyeksportowany jako SVG z opcją **Embed scene** Brulion też otworzy. Jeśli ma tylko pismo odręczne, możesz w nim rysować dalej; jeśli ma kształty, strzałki albo tekst, Brulion tylko go pokaże (zmienisz go w excalidraw.com), żeby niczego nie zgubić. W ciemnym motywie taki rysunek też ciemnieje, jak w ciemnym trybie Excalidraw, a wklejone do niego zdjęcia i emoji zachowują swoje kolory.
 
 Pliki `*.excalidraw.md` wtyczki Excalidraw dla Obsidiana zostają zwykłymi notatkami. Zobacz też [[Format plików|Format plików]] i [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]].

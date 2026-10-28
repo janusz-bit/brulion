@@ -126,7 +126,9 @@ Column {
                 id: picture
                 objectName: "embedPicture" // (the editor's self-test)
                 visible: embed.image
-                readonly property bool loaded: img.status === Image.Ready && img.implicitWidth > 0 && img.implicitHeight > 0
+                /// (Also while a drawing's other theme or version loads: the shown one stays, its size too.)
+                readonly property bool loaded: (img.status === Image.Ready || (img.retainWhileLoading && img.status === Image.Loading))
+                                               && img.implicitWidth > 0 && img.implicitHeight > 0
                 /// The loaded picture has another shape than the file's header said (Qt's pixmap
                 /// cache still had the file's old picture, replaced since): the frame takes the
                 /// picture's shape, never stretching it. Normally the two agree, so nothing moves
@@ -177,7 +179,7 @@ Column {
                 BSpinner {
                     anchors.centerIn: parent
                     size: 20
-                    running: img.status === Image.Loading || (embed.web && embed.modelData.state === "loading")
+                    running: (img.status === Image.Loading && !picture.loaded) || (embed.web && embed.modelData.state === "loading")
                     visible: running
                 }
                 // A picture from the internet waiting to be shown (asking first) or that failed.

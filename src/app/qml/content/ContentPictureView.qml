@@ -273,7 +273,8 @@ Item {
             x: (flick.width - width) / 2
             y: (flick.height - height) / 2
             size: Theme.iconSizeLg
-            running: picture.status === Image.Loading
+            // (Not over a drawing shown while its other theme or version loads.)
+            running: picture.status === Image.Loading && !(picture.retainWhileLoading && picture.implicitWidth > 0)
             visible: running
         }
         Text {

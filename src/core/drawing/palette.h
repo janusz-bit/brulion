@@ -14,6 +14,7 @@
 
 #include "drawing/drawing.h"
 
+#include <QByteArray>
 #include <QString>
 #include <QStringView>
 
@@ -73,11 +74,21 @@ struct Ink {
 Ink displayInk(const Stroke &stroke, bool dark);
 /// The highlighter's opacity in the dark theme (0–100).
 int highlighterDarkOpacity(int opacity);
-/// The paper's colour as shown ("transparent" or malformed: white; dark: darkColor() of it —
-/// white gives #121212, Excalidraw's dark canvas).
+/// The paper's colour as shown, always opaque "#rrggbb" ("transparent" or malformed: white; a
+/// see-through colour such as Excalidraw's "#ffffff80": as it shows over white; dark: darkColor()
+/// of that — white gives #121212, Excalidraw's dark canvas).
 QString displayPaper(QStringView paper, bool dark);
 /// The colour of the lines and the grid as shown (RuleColor; dark #323a45).
 QString displayRule(bool dark);
+
+/// An SVG picture with its colours as the dark theme shows them — what Excalidraw's dark mode does
+/// to a scene, colour by colour: every colour parseColor() reads in the attributes fill, stroke,
+/// stop-color, flood-color, lighting-color and color, in `style` attributes and in style sheets
+/// (`fill: #…` and the like) darkColor()'d; everything else as it is — pictures (<image>: a
+/// pasted photo is no negative), the glyphs of colour emoji, "none", url(#…), named colours, the
+/// comments (the embedded scene). For pictures Brulion does not draw itself (an Excalidraw drawing
+/// with shapes or text). nullopt when the bytes are no well-formed XML.
+std::optional<QByteArray> darkSvg(const QByteArray &svg);
 
 /// WCAG 2 relative luminance (0–1) of an opaque colour, and the contrast ratio of two (1–21).
 double luminance(Rgba c);

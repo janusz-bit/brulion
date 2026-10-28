@@ -14,6 +14,7 @@
 #include "drawing/stroke.h"
 #include "drawing/svgwrite.h"
 
+#include <QBuffer>
 #include <QFile>
 #include <QImage>
 #include <QJsonArray>
@@ -216,6 +217,60 @@ QByteArray inkFile(brulion::drawing::PaperTheme theme)
         s.points.append({60.0 + i * 10, 100, 0.5});
     d.strokes = {s};
     return brulion::drawing::toSvg(d);
+}
+
+/// The file with its scene made unreadable (a damaged payload: status "corrupt"); its picture
+/// stays as it was.
+QByteArray unreadable(QByteArray svg)
+{
+    const QByteArray start = "<!-- payload-start -->";
+    const qsizetype from = svg.indexOf(start) + start.size();
+    const qsizetype to = svg.indexOf("<!-- payload-end -->");
+    if (from < start.size() || to < from)
+        qFatal("no payload");
+    svg.replace(from, to - from, "@@@ zepsute ąę");
+    return svg;
+}
+
+/// An Excalidraw drawing with a pasted picture (an orange photo at 10,10–50,50) and a dark line
+/// (y 30, x 60–110) on white paper, 120 × 60: no drawing Brulion edits.
+QByteArray pictureFile()
+{
+    brulion::drawing::Drawing d;
+    d.foreign.append(QJsonObject{{u"type"_s, u"image"_s},
+                                 {u"id"_s, u"zdjęcie łąki"_s},
+                                 {u"x"_s, 10},
+                                 {u"y"_s, 10},
+                                 {u"width"_s, 40},
+                                 {u"height"_s, 40}});
+    QImage photo(8, 8, QImage::Format_RGB32);
+    photo.fill(QColor(u"#ff8800"_s));
+    QByteArray png;
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    photo.save(&buffer, "PNG");
+    return "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" "
+           "viewBox=\"0 0 120 60\" width=\"120\" height=\"60\"><!-- svg-source:excalidraw --><metadata><!-- "
+           "payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 --><!-- payload-start -->"
+           + brulion::drawing::encodePayload(brulion::drawing::sceneJson(d))
+           + "<!-- payload-end --></metadata><rect x=\"0\" y=\"0\" width=\"120\" height=\"60\" fill=\"#ffffff\"/>"
+             "<image x=\"10\" y=\"10\" width=\"40\" height=\"40\" preserveAspectRatio=\"none\" "
+             "xlink:href=\"data:image/png;base64,"
+           + png.toBase64()
+           + "\"/><path d=\"M60,30 L110,30\" stroke=\"#1e1e1e\" stroke-width=\"8\" fill=\"none\"/></svg>";
+}
+
+/// The bounding box of the pixels unlike `paper` (by more than `tolerance` a channel).
+QRect inkBox(const QImage &image, const QColor &paper, int tolerance = 40)
+{
+    QRect box;
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            if (!near(image.pixelColor(x, y), paper, tolerance))
+                box |= QRect(x, y, 1, 1);
+        }
+    }
+    return box;
 }
 
 QStringList strokeIds(const DrawingCanvas *canvas)
@@ -1118,6 +1173,44 @@ private Q_SLOTS:
         QCOMPARE(canvas->currentDrawing().strokes.last().color, u"#1f2430"_s);
     }
 
+    void seeThroughPaper_data()
+    {
+        QTest::addColumn<QString>("paper");
+        QTest::addColumn<bool>("appDark");
+        QTest::addColumn<QString>("shown");
+        // Excalidraw's background picker takes any colour, "#rrggbbaa" too: the paper is opaque,
+        // as it shows over white (Qt would read the nine characters as #aarrggbb: a see-through
+        // navy in the dark, an opaque yellow in the light).
+        QTest::newRow("half white, light") << u"#ffffff80"_s << false << u"#ffffff"_s;
+        QTest::newRow("half white, dark") << u"#ffffff80"_s << true << u"#121212"_s;
+        QTest::newRow("invisible, dark") << u"#00000000"_s << true << u"#121212"_s;
+        QTest::newRow("half ink, light") << u"#1f243080"_s << false << u"#8f9197"_s;
+    }
+    void seeThroughPaper()
+    {
+        QFETCH(QString, paper);
+        QFETCH(bool, appDark);
+        QFETCH(QString, shown);
+        brulion::drawing::Drawing d;
+        d.paper = paper;
+        canvas->setAppDark(appDark);
+        QCOMPARE(canvas->load(brulion::drawing::toSvg(d)), QString());
+        QCOMPARE(canvas->paperColor().name(QColor::HexArgb), u"#ff"_s + shown.mid(1));
+        mouseStroke(window.get(), {100, 100}, {300, 100}, 10);
+        QImage image = painted(canvas);
+        QCOMPARE(image.pixelColor(400, 50).name(QColor::HexArgb), u"#ff"_s + shown.mid(1));
+        QVERIFY(!near(image.pixelColor(200, 100), QColor(shown), 20));
+        // The stroke taken back: the paper again where it was (the reused cache is painted over).
+        canvas->undo();
+        image = painted(canvas);
+        QCOMPARE(image.pixelColor(200, 100).name(QColor::HexArgb), u"#ff"_s + shown.mid(1));
+        // The previews' renderer too.
+        const QImage preview = brulion::drawingview::renderDrawing(canvas->currentDrawing(), QSize(64, 36), appDark);
+        QCOMPARE(preview.pixelColor(1, 1).name(QColor::HexArgb), u"#ff"_s + shown.mid(1));
+        QCOMPARE(brulion::drawingview::toQColor(u"#12345680").name(QColor::HexArgb), u"#80123456"_s);
+        QVERIFY(!brulion::drawingview::toQColor(u"granatowy").isValid());
+    }
+
     void themeIsAnUndoStepAndSaved()
     {
         mouseStroke(window.get(), {100, 100}, {300, 100}, 10);
@@ -1370,6 +1463,23 @@ private Q_SLOTS:
                 << fixture(u"excalidraw_mixed.svg"_s) << u"Schemat.svg"_s << true << u"#121212"_s << QString();
         QTest::newRow(".excalidraw") << fixture(u"excalidraw_mixed.excalidraw"_s) << u"scena.excalidraw"_s << true
                                      << QString() << QString();
+        // A freehand drawing Excalidraw wrote: Brulion's renderer (in the file's frame).
+        QTest::newRow("excalidraw freehand, light")
+                << fixture(u"excalidraw_freedraw.svg"_s) << u"Odręczny.svg"_s << false << u"#ffffff"_s << QString();
+        QTest::newRow("excalidraw freehand, dark")
+                << fixture(u"excalidraw_freedraw.svg"_s) << u"Odręczny.svg"_s << true << u"#121212"_s << QString();
+        // A scene that cannot be read (damaged, too large): the file's picture — turned dark in a
+        // dark app, but a "dark" drawing's picture is dark already and stays so.
+        QTest::newRow("unreadable, as the app, light")
+                << unreadable(inkFile(PaperTheme::Auto)) << u"Zepsuty.svg"_s << false << u"#ffffff"_s << QString();
+        QTest::newRow("unreadable, as the app, dark")
+                << unreadable(inkFile(PaperTheme::Auto)) << u"Zepsuty.svg"_s << true << u"#121212"_s << QString();
+        QTest::newRow("unreadable, dark paper, dark app")
+                << unreadable(inkFile(PaperTheme::Dark)) << u"Zepsuty ciemny.svg"_s << true << u"#121212"_s
+                << QString();
+        QTest::newRow("unreadable, dark paper, light app")
+                << unreadable(inkFile(PaperTheme::Dark)) << u"Zepsuty ciemny.svg"_s << false << u"#121212"_s
+                << QString();
         QTest::newRow("empty file") << QByteArray() << u"Pusty.svg"_s << false << QString() << QString();
         QTest::newRow("not svg") << QByteArray("<svg/>") << u"notatka.txt"_s << false << QString() << QString();
         QTest::newRow("garbage") << QByteArray("\x89PNG zażółć") << u"Zepsuty.svg"_s << true << QString() << QString();
@@ -1423,6 +1533,89 @@ private Q_SLOTS:
         image->setProperty("source", url);
         QTRY_COMPARE(image->property("status").toInt(), 1); // Image.Ready
         QCOMPARE(image->property("implicitWidth").toInt(), size.width());
+        // The other theme (the app's switched): the shown picture and its size stay until the
+        // other one is there — what EmbedView's frame keeps its size by.
+        const int width = image->property("implicitWidth").toInt();
+        const int height = image->property("implicitHeight").toInt();
+        image->setProperty("source", brulion::drawingview::DrawingImageProvider::url(path, u"123-456"_s, !appDark));
+        QVERIFY(image->property("status").toInt() == 2 || image->property("status").toInt() == 1);
+        QCOMPARE(image->property("implicitWidth").toInt(), width);
+        QCOMPARE(image->property("implicitHeight").toInt(), height);
+        QTRY_COMPARE(image->property("status").toInt(), 1);
+        QCOMPARE(image->property("implicitWidth").toInt(), width);
+    }
+
+    void imageProviderKeepsPicturesInTheDark_data()
+    {
+        QTest::addColumn<bool>("appDark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+    void imageProviderKeepsPicturesInTheDark()
+    {
+        // An Excalidraw drawing Brulion does not draw itself, in the dark: its colours one by one
+        // as Excalidraw's dark mode shows them — a pasted photo keeps its own (the filter on
+        // every pixel would show it as a negative).
+        QFETCH(bool, appDark);
+        const QByteArray bytes = pictureFile();
+        const std::optional<brulion::drawing::Drawing> d = brulion::drawing::readDrawing(bytes);
+        QVERIFY(d && !brulion::drawing::editable(*d));
+        QSize natural;
+        const QImage image = brulion::drawingview::DrawingImageProvider::picture(bytes, appDark, QSize(), &natural);
+        QCOMPARE(natural, QSize(120, 60));
+        QCOMPARE(image.size(), QSize(120, 60));
+        QCOMPARE(image.pixelColor(2, 2).name(), appDark ? u"#121212"_s : u"#ffffff"_s);
+        QVERIFY2(near(image.pixelColor(30, 30), QColor(u"#ff8800"_s)), qPrintable(image.pixelColor(30, 30).name()));
+        const QColor line(appDark ? brulion::drawing::darkColor(u"#1e1e1e") : u"#1e1e1e"_s);
+        QVERIFY2(near(image.pixelColor(85, 30), line, 3), qPrintable(image.pixelColor(85, 30).name()));
+    }
+
+    void imageProviderKeepsTheFilesFrame_data()
+    {
+        QTest::addColumn<bool>("appDark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+    void imageProviderKeepsTheFilesFrame()
+    {
+        // A freehand drawing Excalidraw wrote names its own size (240 × 230: its margins, its
+        // bounds) — what the embeds, the picture view and the notice are sized by. Brulion draws
+        // it in that frame: the strokes at one unit a pixel, centred; the frame never changes
+        // shape when the picture has loaded.
+        QFETCH(bool, appDark);
+        const QByteArray bytes = fixture(u"excalidraw_freedraw.svg"_s);
+        const QSize own(240, 230);
+        QCOMPARE(QSvgRenderer(bytes).defaultSize(), own);
+        const std::optional<brulion::drawing::Drawing> d = brulion::drawing::readDrawing(bytes);
+        QVERIFY(d && brulion::drawing::editable(*d));
+        const QRectF rect = brulion::drawing::pictureRect(*d);
+        QVERIFY(rect.size().toSize() != own);
+        QSize natural;
+        const QImage image = brulion::drawingview::DrawingImageProvider::picture(bytes, appDark, QSize(), &natural);
+        QCOMPARE(natural, own);
+        QCOMPARE(image.size(), own);
+        // An embed's sourceSize in a narrow column: the same shape.
+        QCOMPARE(brulion::drawingview::DrawingImageProvider::picture(bytes, appDark, QSize(120, 0)).size(),
+                 QSize(120, 115));
+        // The ink as large as drawn (Brulion's picture less its margins), in the middle.
+        const QColor paper(appDark ? u"#121212"_s : u"#ffffff"_s);
+        QCOMPARE(image.pixelColor(0, 0).name(), paper.name());
+        QCOMPARE(image.pixelColor(own.width() - 1, own.height() - 1).name(), paper.name());
+        const QRect ink = inkBox(image, paper);
+        const QSizeF drawn = rect.size() - 2 * QSizeF(brulion::drawing::SvgMargin, brulion::drawing::SvgMargin);
+        QVERIFY2(std::abs(ink.width() - drawn.width()) <= 4 && std::abs(ink.height() - drawn.height()) <= 4,
+                 qPrintable(u"%1 x %2 drawn %3 x %4"_s.arg(ink.width())
+                                    .arg(ink.height())
+                                    .arg(drawn.width())
+                                    .arg(drawn.height())));
+        QVERIFY(std::abs(ink.center().x() - own.width() / 2.0) <= 3);
+        QVERIFY(std::abs(ink.center().y() - own.height() / 2.0) <= 3);
+        // Brulion's own file of it (saved again) names its picture's size: the frame is that.
+        const QByteArray again = brulion::drawing::toSvg(*d);
+        QCOMPARE(QSvgRenderer(again).defaultSize(), rect.size().toSize());
+        QCOMPARE(brulion::drawingview::DrawingImageProvider::picture(again, appDark, QSize(), &natural).size(),
+                 rect.size().toSize());
+        QCOMPARE(natural, rect.size().toSize());
     }
 
     void imageProviderRefuses_data()

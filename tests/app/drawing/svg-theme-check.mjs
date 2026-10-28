@@ -7,7 +7,9 @@
 // tst_drawing (svgAutoGolden) with the preferred colour scheme emulated light and dark:
 //  * as a page of its own: the paper's computed fill is #ffffff / #121212;
 //  * inside <img>, as notes embed it: read back through a canvas, the paper pixel is #ffffff /
-//    #121212 and the ink is #1f2430 / #caced8 (± 2), hardly ever the other theme's.
+//    #121212 and the ink is #1f2430 / #caced8 (± 2), hardly ever the other theme's;
+//  * inside <img> on a page whose own colour scheme is the other one (`color-scheme` on its body:
+//    an app's theme unlike the system's, as Obsidian's dark theme on a light system): the page's.
 //
 //   node tests/app/drawing/svg-theme-check.mjs [tests/data/drawing/auto_theme.svg]
 //
@@ -133,7 +135,18 @@ async function main() {
       if (!fillOk) problems.push(`${scheme}: the paper's fill is ${fill}`);
 
       // Inside <img>, as notes embed it: the pixels.
-      const html = `<!doctype html><body style="margin:0"><img id="i" src="${svgUrl}"></body>`;
+      await checkImg(scheme, '', want, `${scheme}, inside <img>`);
+    }
+    // An app whose own theme differs from the system's (Obsidian's dark theme on a light system:
+    // its body has `color-scheme: dark`): Chromium shows an SVG image in the colour scheme its
+    // <img> uses, so the drawing follows the app's theme — as Obsidian 1.14.4 was seen to do.
+    await checkImg('light', 'color-scheme:dark', themes.dark, "the app's dark theme on a light system");
+    await checkImg('dark', 'color-scheme:light', themes.light, "the app's light theme on a dark system");
+    cdp.close();
+
+    async function checkImg(scheme, bodyStyle, want, what) {
+      await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });
+      const html = `<!doctype html><body style="margin:0;${bodyStyle}"><img id="i" src="${svgUrl}"></body>`;
       await navigate(`data:text/html,${encodeURIComponent(html)}`);
       const pixels = await evaluate(`(async () => {
         const img = document.getElementById('i');
@@ -159,11 +172,10 @@ async function main() {
       const other = count(want.other);
       // (Antialiased edges are mixtures: the other theme's ink at most in a few of them.)
       const ok = near(paper, want.paper) && ink >= 20 && other * 10 < ink;
-      console.log(`${ok ? 'ok' : 'FAIL'}: ${scheme}, inside <img>: paper ${hex(paper)}, ${ink} ink pixels ${hex(want.ink)}, `
+      console.log(`${ok ? 'ok' : 'FAIL'}: ${what}: paper ${hex(paper)}, ${ink} ink pixels ${hex(want.ink)}, `
         + `${other} of the other theme's ink`);
-      if (!ok) problems.push(`${scheme} inside <img>: paper ${hex(paper)}, ink ${ink}, other ${other}`);
+      if (!ok) problems.push(`${what}: paper ${hex(paper)}, ink ${ink}, other ${other}`);
     }
-    cdp.close();
   } finally {
     chrome.kill();
     await sleep(300);

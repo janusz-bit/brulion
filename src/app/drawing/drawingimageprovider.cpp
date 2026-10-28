@@ -2,10 +2,14 @@
 
 #include "drawingrender.h"
 
+#include "picturesize.h"
+
 #include "drawing/drawing.h"
+#include "drawing/excalidraw.h"
 #include "drawing/palette.h"
 #include "drawing/svgwrite.h"
 
+#include <QBuffer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -60,6 +64,59 @@ QString fileOf(const QString &id, bool *dark)
     return path;
 }
 
+/// The size an SVG drawing file's root names (what the editor's embeds, the picture view and the
+/// drawing editor's notice were told: editor::pictureSize); invalid when it names none or the
+/// bytes are no SVG drawing (an .excalidraw scene).
+QSize ownSize(const QByteArray &bytes)
+{
+    if (!drawing::looksLikeExcalidrawSvg(bytes.left(drawing::HeadBytes)))
+        return {};
+    QByteArray copy = bytes; // (shared, not copied)
+    QBuffer buffer(&copy);
+    if (!buffer.open(QIODevice::ReadOnly))
+        return {};
+    return editor::pictureSize(&buffer, u"drawing.svg"_s);
+}
+
+/// The part of the scene a preview shows: the file's own frame `own` around the picture
+/// `picture` (drawing::pictureRect), centred on it, the strokes at one unit a pixel — made
+/// smaller only when they do not fit.
+QRectF frameAround(const QRectF &picture, const QSize &own)
+{
+    const double k = std::min({1.0, own.width() / picture.width(), own.height() / picture.height()});
+    const QSizeF scene(own.width() / k, own.height() / k);
+    return QRectF(picture.center() - QPointF(scene.width() / 2, scene.height() / 2), scene);
+}
+
+/// The picture is dark already (a "dark" drawing's file whose scene cannot be read): its edge —
+/// the paper — over white is darker than mid grey.
+bool looksDark(const QImage &picture)
+{
+    const QImage image = picture.convertToFormat(QImage::Format_ARGB32);
+    const int w = image.width();
+    const int h = image.height();
+    if (w <= 0 || h <= 0)
+        return false;
+    double sum = 0;
+    int n = 0;
+    const auto add = [&](int x, int y) {
+        const QRgb p = image.pixel(x, y);
+        const drawing::Rgba seen =
+                drawing::over({qRed(p), qGreen(p), qBlue(p), qAlpha(p)}, 100, drawing::Rgba{255, 255, 255, 255});
+        sum += drawing::luminance(seen);
+        ++n;
+    };
+    for (int x = 0; x < w; ++x) {
+        add(x, 0);
+        add(x, h - 1);
+    }
+    for (int y = 1; y < h - 1; ++y) {
+        add(0, y);
+        add(w - 1, y);
+    }
+    return n > 0 && sum / n < 0.18;
+}
+
 } // namespace
 
 DrawingImageProvider::DrawingImageProvider() : QQuickImageProvider(QQuickImageProvider::Image) { }
@@ -77,14 +134,20 @@ QImage DrawingImageProvider::picture(const QByteArray &bytes, bool appDark, cons
         *natural = QSize();
     const std::optional<drawing::Drawing> d = drawing::readDrawing(bytes);
     if (d && drawing::editable(*d)) {
-        // Brulion's own renderer: what the drawing editor's paper shows.
+        // Brulion's own renderer: what the drawing editor's paper shows, in the frame of the
+        // file's own size — what the embeds were sized by. Brulion's SVG has its pictureRect
+        // there; one Excalidraw wrote frames the strokes a little differently.
         const QRectF rect = drawing::pictureRect(*d);
+        const QSize own = ownSize(bytes);
+        const bool framed = own.isValid() && !own.isEmpty();
+        const QSize size = framed ? own : QSize(int(rect.width()), int(rect.height()));
         if (natural)
-            *natural = QSize(int(rect.width()), int(rect.height()));
-        return renderDrawing(*d, fitted(rect.size(), requested), drawing::rendersDark(d->theme, appDark));
+            *natural = size;
+        return renderDrawing(*d, fitted(QSizeF(size), requested), drawing::rendersDark(d->theme, appDark),
+                             framed ? frameAround(rect, own) : rect);
     }
     // Shapes, text, pictures (an Excalidraw drawing), a scene that cannot be read: the file's own
-    // picture, in the dark through Excalidraw's dark filter.
+    // picture, in the dark with Excalidraw's dark colours.
     QSvgRenderer svg(bytes);
     if (!svg.isValid())
         return {};
@@ -94,16 +157,32 @@ QImage DrawingImageProvider::picture(const QByteArray &bytes, bool appDark, cons
         return {};
     if (natural)
         *natural = own;
-    QImage image(size, QImage::Format_ARGB32_Premultiplied);
-    if (image.isNull())
-        return {};
-    image.fill(Qt::transparent);
-    {
-        QPainter p(&image);
-        svg.render(&p, QRectF(QPointF(0, 0), QSizeF(size)));
+    const auto render = [&size](QSvgRenderer &renderer) {
+        QImage image(size, QImage::Format_ARGB32_Premultiplied);
+        if (image.isNull())
+            return image;
+        image.fill(Qt::transparent);
+        {
+            QPainter p(&image);
+            renderer.render(&p, QRectF(QPointF(0, 0), QSizeF(size)));
+        }
+        return image;
+    };
+    const QImage image = render(svg);
+    // Dark when the drawing (or, its scene unread, the app) says so — unless the file's picture
+    // is dark already: a "dark" drawing's file whose scene cannot be read (damaged, too large)
+    // has the dark colours in it, which the filter would turn light again.
+    const bool dark = d ? drawing::rendersDark(d->theme, appDark) : appDark;
+    if (!dark || image.isNull() || looksDark(image))
+        return image;
+    // Its colours as Excalidraw's dark mode shows them, one by one: the pictures and emoji in it
+    // keep theirs. (Not well-formed for the colour mapping: the dark filter on every pixel.)
+    if (const std::optional<QByteArray> mapped = drawing::darkSvg(bytes)) {
+        QSvgRenderer mappedSvg(*mapped);
+        if (mappedSvg.isValid() && mappedSvg.defaultSize() == own)
+            return render(mappedSvg);
     }
-    return d ? (drawing::rendersDark(d->theme, appDark) ? darkImage(image) : image)
-             : (appDark ? darkImage(image) : image);
+    return darkImage(image);
 }
 
 QImage DrawingImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize)

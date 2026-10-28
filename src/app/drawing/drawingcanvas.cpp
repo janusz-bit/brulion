@@ -266,8 +266,8 @@ void DrawingCanvas::setDocument(drawing::Drawing doc)
         m_items.append(makeItem(std::move(s)));
     doc.strokes.clear();
     m_doc = std::move(doc);
-    m_paperLight = QColor(drawing::displayPaper(m_doc.paper, false));
-    m_paperDark = QColor(drawing::displayPaper(m_doc.paper, true));
+    m_paperLight = toQColor(drawing::displayPaper(m_doc.paper, false));
+    m_paperDark = toQColor(drawing::displayPaper(m_doc.paper, true));
     m_erasing.clear();
     invalidateCache();
 }
@@ -636,6 +636,8 @@ void DrawingCanvas::renderCache()
     if (m_cache.size() != pixels || !m_cache.isDetached())
         m_cache = QImage(pixels, QImage::Format_ARGB32_Premultiplied);
     m_cache.setDevicePixelRatio(dpr);
+    // (Every pixel: the image is reused, and the paper's rectangle may end inside the last pixel.)
+    m_cache.fill(paperColor());
     QPainter p(&m_cache);
     const bool shownDark = dark();
     // The paper, its lines or grid at the scene's multiples of the spacing, as the SVG has them.

@@ -213,11 +213,13 @@ at most 100 %). The picture in the file follows the choice: `light` — the colo
 — the dark colours in the attributes (every program shows it dark); none (as the app) — the light
 attributes plus one `<style>` right after `</metadata>` holding nothing but an `@media
 (prefers-color-scheme: dark)` block with the dark colours by class (`p` the paper, `r` the rules,
-`k<n>` one per pen colour in first-use order, `h<n>` one per highlighter opacity), so browsers,
-Obsidian and GitHub show it dark when their viewer prefers dark. Only hex colours and numbers of
-Brulion's own formatting go into the CSS, never text from a scene; Qt's SVG renderer ignores such a
-style sheet (it applies media rules only for a medium it is given and drops a style sheet with a
-media feature query), so it draws the light picture.
+`k<n>` one per pen colour in first-use order, `h<n>` one per highlighter opacity), so a browser
+shows it dark when its viewer prefers dark — or, in an `<img>`, when the page's own colour scheme
+is dark (Chromium applies the `color-scheme` the `<img>` uses: Obsidian 1.14 on the desktop shows
+it dark in its dark theme even on a light system, light in its light theme). Only hex colours and
+numbers of Brulion's own formatting go into the CSS, never text from a scene; Qt's SVG renderer
+ignores such a style sheet (it applies media rules only for a medium it is given and drops a style
+sheet with a media feature query), so it draws the light picture.
 
 **Pictures from the internet:** a Markdown picture whose destination is an `http:` / `https:` URL
 with a host — `![alt](https://example.com/kot.jpg)`, `![](<https://example.com/mój kot.png>)`,

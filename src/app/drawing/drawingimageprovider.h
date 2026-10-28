@@ -9,11 +9,16 @@
 //   `dark`: the app is dark — an "auto" drawing follows it, a "light" or "dark" one does not.)
 //
 // A drawing Brulion draws (drawing::editable) is painted by drawingrender.h (renderDrawing) — the
-// whole picture its SVG shows, fitted into the requested size; anything else in such a file
-// (an Excalidraw drawing with shapes or text, a scene that cannot be read) is the file's own
-// picture through Qt's SVG renderer, in the dark theme through Excalidraw's dark filter
-// (darkImage). Stateless: Qt Quick calls it in its image reader thread (the browser build: on the
-// GUI thread); it only reads the file.
+// whole picture, in the frame of the size the file's SVG root names (what the embeds, the picture
+// view and the notice are sized by, editor::pictureSize: Brulion writes its pictureRect there, a
+// file Excalidraw wrote has its own margins; the strokes centred in it at one unit a pixel, smaller
+// only when they do not fit), fitted into the requested size; anything else in such a file (an
+// Excalidraw drawing with shapes or text, a scene that cannot be read) is the file's own picture
+// through Qt's SVG renderer, in the dark theme with its colours mapped one by one as Excalidraw's
+// dark mode does (drawing::darkSvg: pictures and emoji in it keep theirs; the per-pixel filter
+// darkImage when it is not well-formed) — unless that picture is dark already (its edge, the paper,
+// darker than mid grey: a "dark" drawing whose scene cannot be read). Stateless: Qt Quick calls it
+// in its image reader thread (the browser build: on the GUI thread); it only reads the file.
 #pragma once
 
 #include <QQuickImageProvider>

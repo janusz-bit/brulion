@@ -1,5 +1,9 @@
 #include "drawing/palette.h"
 
+#include <QRegularExpression>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
+
 #include <algorithm>
 #include <cmath>
 #include <numbers>
@@ -121,13 +125,105 @@ Ink displayInk(const Stroke &stroke, bool dark)
 
 QString displayPaper(QStringView paper, bool dark)
 {
-    const Rgba c = parseColor(paper).value_or(Rgba{255, 255, 255, 255});
+    // Opaque: the paper is what everything is drawn on (a see-through one over white, as a page).
+    const Rgba white{255, 255, 255, 255};
+    const Rgba c = over(parseColor(paper).value_or(white), 100, white);
     return colorName(dark ? darkRgba(c) : c);
 }
 
 QString displayRule(bool dark)
 {
     return dark ? darkColor(RuleColor) : RuleColor.toString();
+}
+
+namespace {
+
+/// The colour of a presentation attribute in the dark theme; anything but a colour as it is.
+QString darkValue(const QString &value)
+{
+    const std::optional<Rgba> c = parseColor(value);
+    return c ? colorName(darkRgba(*c)) : value;
+}
+
+/// The colours of CSS declarations (a style sheet, a `style` attribute) in the dark theme.
+QString darkCss(const QString &css)
+{
+    // (`color` not inside `stop-color`; a selector `#id` is no declaration.)
+    static const QRegularExpression declaration(
+            uR"((?<![\w-])(fill|stroke|stop-color|flood-color|lighting-color|color)(\s*:\s*)(#[0-9A-Fa-f]{3,8})(?![0-9A-Za-z_-]))"_s);
+    QString out;
+    qsizetype done = 0;
+    for (const QRegularExpressionMatch &m : declaration.globalMatch(css)) {
+        out += QStringView(css).sliced(done, m.capturedStart(3) - done);
+        out += darkValue(m.captured(3));
+        done = m.capturedEnd(3);
+    }
+    out += QStringView(css).sliced(done);
+    return out;
+}
+
+bool isColorAttribute(QStringView name)
+{
+    return name == u"fill" || name == u"stroke" || name == u"stop-color" || name == u"flood-color"
+           || name == u"lighting-color" || name == u"color";
+}
+
+} // namespace
+
+std::optional<QByteArray> darkSvg(const QByteArray &svg)
+{
+    QXmlStreamReader in(svg);
+    // Names as written (xlink:href, xmlns:… as they are): nothing is renamed.
+    in.setNamespaceProcessing(false);
+    QByteArray bytes;
+    QXmlStreamWriter out(&bytes);
+    bool inStyle = false;
+    while (!in.atEnd()) {
+        switch (in.readNext()) {
+        case QXmlStreamReader::StartDocument:
+            if (!in.documentVersion().isEmpty())
+                out.writeStartDocument(in.documentVersion().toString());
+            break;
+        case QXmlStreamReader::DTD: out.writeDTD(in.text().toString()); break;
+        case QXmlStreamReader::StartElement: {
+            const QStringView name = in.qualifiedName();
+            out.writeStartElement(name.toString());
+            for (const QXmlStreamAttribute &a : in.attributes()) {
+                const QString attribute = a.qualifiedName().toString();
+                const QString value = a.value().toString();
+                out.writeAttribute(attribute, isColorAttribute(attribute) ? darkValue(value)
+                                              : attribute == u"style"     ? darkCss(value)
+                                                                          : value);
+            }
+            inStyle = name == u"style" || name.endsWith(u":style");
+            break;
+        }
+        case QXmlStreamReader::EndElement:
+            inStyle = false;
+            out.writeEndElement();
+            break;
+        case QXmlStreamReader::Characters: {
+            const QString text = inStyle ? darkCss(in.text().toString()) : in.text().toString();
+            if (in.isCDATA())
+                out.writeCDATA(text);
+            else
+                out.writeCharacters(text);
+            break;
+        }
+        case QXmlStreamReader::Comment: out.writeComment(in.text().toString()); break;
+        case QXmlStreamReader::ProcessingInstruction:
+            out.writeProcessingInstruction(in.processingInstructionTarget().toString(),
+                                           in.processingInstructionData().toString());
+            break;
+        case QXmlStreamReader::EntityReference: out.writeEntityReference(in.name().toString()); break;
+        case QXmlStreamReader::EndDocument: out.writeEndDocument(); break;
+        case QXmlStreamReader::NoToken:
+        case QXmlStreamReader::Invalid: break;
+        }
+    }
+    if (in.hasError())
+        return std::nullopt;
+    return bytes;
 }
 
 double luminance(Rgba c)

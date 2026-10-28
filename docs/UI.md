@@ -940,10 +940,10 @@ tablet (lectures, sketches), on every platform.
   tool bar's swatches show the colours as the paper shows them (`displayColor`); what is chosen
   and remembered is the colour as drawn. The file's picture follows the choice (docs/SYNTAX.md §2:
   dark attributes for Ciemne; for Jak motyw an `@media (prefers-color-scheme: dark)` style sheet,
-  so browsers and Obsidian show it dark when their viewer prefers dark). A merge with another
-  device's version keeps the theme chosen here only when it was changed here since the last load
-  or save (as the paper's pattern). No keyboard shortcut (Excalidraw's Alt+Shift+D switches its
-  app's theme; this one is per drawing).
+  so browsers show it dark when their viewer prefers dark, Obsidian in its dark theme). A merge
+  with another device's version keeps the theme chosen here only when it was changed here since
+  the last load or save (as the paper's pattern). No keyboard shortcut (Excalidraw's Alt+Shift+D
+  switches its app's theme; this one is per drawing).
 * **Input:**
   * a **stylus** draws with its pressure (the line widens as it presses harder; a stylus that
     reports one pressure only draws like a mouse); its **eraser end**, or the barrel button held,
@@ -1017,31 +1017,46 @@ tablet (lectures, sketches), on every platform.
   the image provider `drawing` (`DrawingImageProvider`, registered in `main.cpp`):
   `image://drawing/<absolute path, percent-encoded>?v=<mtime>-<size>&dark=0|1`
   (`Workspace.drawingUrl(path, Theme.dark)`; `EditorHost::drawingUrl`, the embeds' `url` and
-  `darkUrl`). A drawing Brulion draws is painted by `renderDrawing` (the picture its SVG shows,
-  fitted into the requested size, at the screen's pixel ratio) in the theme the drawing and the
-  app give; anything else (an Excalidraw drawing with shapes, a scene that cannot be read) is the
-  file's own picture through Qt SVG, turned dark in a dark app by Excalidraw's filter
-  (`darkImage`). It runs in Qt Quick's image reader thread (the browser: the GUI thread) and only
-  reads the file. A theme switch loads the other URL; `retainWhileLoading` keeps the shown picture
-  until it is there.
+  `darkUrl`). A drawing Brulion draws is painted by `renderDrawing` in the theme the drawing and
+  the app give, in the frame of the size the file's SVG root names — what the embed, the picture
+  view and the notice are sized by from the start (`editor::pictureSize`): Brulion writes its
+  `pictureRect` there, a file excalidraw.com wrote has its own margins, and the strokes are centred
+  in it at one unit a pixel (smaller only when they do not fit), so the frame never changes shape
+  when the picture has loaded —, fitted into the requested size, at the screen's pixel ratio. The
+  paper is always opaque (`displayPaper`: a see-through `viewBackgroundColor` as over white).
+  Anything else (an Excalidraw drawing with shapes, a scene that cannot be read) is the file's own
+  picture through Qt SVG, turned dark in a dark app colour by colour as Excalidraw's dark mode does
+  (`drawing::darkSvg`: the colours of its attributes and style sheets; pasted pictures and colour
+  emoji keep theirs; the per-pixel filter `darkImage` only for a file that mapping cannot read) —
+  unless it is dark already (its edge darker than mid grey: a "Ciemne" drawing whose scene cannot
+  be read keeps its dark picture). It runs in Qt Quick's image reader thread (the browser: the GUI
+  thread) and only reads the file. A theme switch loads the other URL; `retainWhileLoading` keeps
+  the shown picture — and the embed's frame its size — until it is there.
 * View contract: `title`, `editing` (no capture button over the paper), `toolbarDocked` (phones),
   `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
 
-Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, the SVG),
+Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, the SVG, the dark
+colours — of another program's SVG too),
 `tst_drawingcanvas` (stylus, eraser end, barrel button, a popup over the paper, Windows' mouse
 events of the pen, fingers, a pinch, a palm while the pen is down, mouse buttons and the wheel,
 undo, the SVG checked with Qt's SVG renderer, loading, merging — also during a stroke, the paper,
 the theme —, far-away strokes, painting light and dark, the app's theme as no edit, a stroke drawn
-while the theme changes, Qt SVG ignoring the dark CSS, the image provider — light, dark, an
-Excalidraw drawing inverted, refused ids, through a QML Image — and the dark filter per pixel),
+while the theme changes, a see-through paper, Qt SVG ignoring the dark CSS, the image provider —
+light, dark, an Excalidraw drawing turned dark (a pasted photo keeping its colours), a freehand
+one in the file's own frame, a scene that cannot be read (a dark one kept dark), refused ids,
+through a QML Image and its other theme loading behind the shown one — and the dark filter per
+pixel),
 `tst_drawing_qml` (the route and its notices, the background menu, embeds and the picture view in
 the real app, light and dark; nothing written by looking), `tst_editor_controller`
 (`drawingSlashCommand`, `drawingEmbedsFollowTheirFile`), `tst_shell_workspace_pictures`
 (`drawingsAreSavedAndShownAgain`), the shell's self-test (`tst_shell_qml`, `_capture`: opened from
 its embed, drawn with a finger / the mouse, saved, undone; the embed in the app's other theme;
+the embed of a drawing whose file names another frame (excalidraw.com's margins) keeping its size
+when loaded and while the app's theme switches;
 a version written behind the vault's back merged by the save; one with a shape not written over,
 the strokes kept in a copy), `tests/app/drawing/svg-theme-check.mjs` (a browser — Chrome over CDP —
-shows `tests/data/drawing/auto_theme.svg` dark when it prefers dark, light otherwise; CI) and
+shows `tests/data/drawing/auto_theme.svg` dark when it prefers dark, light otherwise, and inside
+an `<img>` in the page's own colour scheme — an app's dark theme on a light system; CI) and
 `tests/app/drawing/wasm-drawing-check.mjs` (the web build: a drawing's embed light and dark).
 Screenshots: `tests/app/drawing/screenshots.sh` (the `theme` shot: the background's menu).
 

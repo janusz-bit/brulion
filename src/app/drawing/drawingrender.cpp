@@ -19,6 +19,12 @@ QColor toQColor(const drawing::Ink &ink)
     return color;
 }
 
+QColor toQColor(QStringView hex)
+{
+    const std::optional<drawing::Rgba> c = drawing::parseColor(hex);
+    return c ? QColor(c->r, c->g, c->b, c->a) : QColor();
+}
+
 QPainterPath outlinePath(const QList<QPointF> &outline)
 {
     QPainterPath path;
@@ -45,7 +51,9 @@ void paintPaper(QPainter &painter, const drawing::Drawing &drawing, bool dark, c
                 const QSizeF &size, qreal dpr)
 {
     painter.save();
-    painter.fillRect(QRectF(QPointF(0, 0), size), QColor(drawing::displayPaper(drawing.paper, dark)));
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.fillRect(QRectF(QPointF(0, 0), size), toQColor(drawing::displayPaper(drawing.paper, dark)));
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     const double zoom = sceneToItem.m11();
     const double spacing =
             drawing.background == drawing::Background::Lines ? drawing::LineSpacing : drawing::GridSpacing;
@@ -54,7 +62,7 @@ void paintPaper(QPainter &painter, const drawing::Drawing &drawing, bool dark, c
     if (drawing.background != drawing::Background::Plain && invertible && spacing * zoom >= 6) {
         const QRectF visible = itemToScene.mapRect(QRectF(QPointF(0, 0), size));
         painter.setRenderHint(QPainter::Antialiasing);
-        QPen pen{QColor(drawing::displayRule(dark))};
+        QPen pen{toQColor(drawing::displayRule(dark))};
         pen.setCosmetic(true);
         pen.setWidthF(1);
         painter.setPen(pen);
@@ -84,14 +92,15 @@ void paintPaper(QPainter &painter, const drawing::Drawing &drawing, bool dark, c
     painter.restore();
 }
 
-QImage renderDrawing(const drawing::Drawing &drawing, QSize pixels, bool dark)
+QImage renderDrawing(const drawing::Drawing &drawing, QSize pixels, bool dark, const QRectF &frame)
 {
     if (pixels.isEmpty())
         return {};
     QImage image(pixels, QImage::Format_ARGB32_Premultiplied);
     if (image.isNull())
         return {};
-    const QRectF picture = drawing::pictureRect(drawing);
+    image.fill(toQColor(drawing::displayPaper(drawing.paper, dark)));
+    const QRectF picture = frame.isEmpty() ? drawing::pictureRect(drawing) : frame;
     const double k = std::min(pixels.width() / picture.width(), pixels.height() / picture.height());
     QTransform t;
     t.translate((pixels.width() - picture.width() * k) / 2, (pixels.height() - picture.height() * k) / 2);

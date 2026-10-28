@@ -809,6 +809,18 @@ private Q_SLOTS:
         QCOMPARE(displayPaper(u"transparent", false), u"#ffffff"_s);
         QCOMPARE(displayPaper(u"transparent", true), u"#121212"_s);
         QCOMPARE(displayPaper(u"#fff9db", true), u"#1e1900"_s);
+        // A see-through paper (Excalidraw's background picker takes any colour): opaque, as it
+        // shows over white — never "#rrggbbaa", which Qt would read as #aarrggbb.
+        QCOMPARE(displayPaper(u"#ffffff80", false), u"#ffffff"_s);
+        QCOMPARE(displayPaper(u"#ffffff80", true), u"#121212"_s);
+        QCOMPARE(displayPaper(u"#FFFFFF00", true), u"#121212"_s);
+        QCOMPARE(displayPaper(u"#1f243080", false), u"#8f9197"_s);
+        QCOMPARE(displayPaper(u"#1f243080", true), darkColor(u"#8f9197"));
+        QCOMPARE(displayPaper(u" #1F2430ff ", false), u"#1f2430"_s);
+        for (const QString &paper : {u"#ffffff80"_s, u"#00000001"_s, u"#fff"_s, u"żółty"_s, QString(), u"#12345"_s}) {
+            for (const bool dark : {false, true})
+                QCOMPARE(displayPaper(paper, dark).size(), 7);
+        }
         QCOMPARE(displayRule(false), RuleColor.toString());
         QCOMPARE(displayRule(true), u"#323a45"_s);
         QVERIFY(!rendersDark(PaperTheme::Auto, false));
@@ -1056,6 +1068,109 @@ private Q_SLOTS:
             break;
         }
         }
+        // A see-through paper (Excalidraw takes any colour) is opaque in the dark colours.
+        Drawing seeThrough = d;
+        seeThrough.paper = u"#ffffff80"_s;
+        const QByteArray withPaper = toSvg(seeThrough);
+        if (d.theme == PaperTheme::Dark)
+            QVERIFY(withPaper.contains("fill=\"#121212\""));
+        if (d.theme == PaperTheme::Auto)
+            QVERIFY(withPaper.contains(".p{fill:#121212}"));
+        QVERIFY(!withPaper.contains("#12121280"));
+    }
+
+    void darkSvgColours_data()
+    {
+        QTest::addColumn<QByteArray>("svg");
+        QTest::addColumn<QByteArrayList>("expected"); // in the result
+        QTest::addColumn<QByteArrayList>("gone");     // not in it
+        const QByteArray head = "<svg xmlns=\"http://www.w3.org/2000/svg\" "
+                                "xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 100 60\">";
+        QTest::newRow("paper and a line")
+                << head
+                           + "<rect width=\"100\" height=\"60\" fill=\"#ffffff\"/>"
+                             "<path d=\"M0,0 L10,10\" stroke=\"#1E1E1E\" fill=\"none\"/></svg>"
+                << QByteArrayList{"fill=\"#121212\"", "stroke=\"" + darkColor(u"#1e1e1e").toLatin1() + '"',
+                                  "fill=\"none\""}
+                << QByteArrayList{"#ffffff", "#1E1E1E"};
+        QTest::newRow("style attribute")
+                << head + "<rect style=\"fill: #fff; stroke:#1f2430;stroke-width:2\" width=\"5\" height=\"5\"/></svg>"
+                << QByteArrayList{"fill: #121212; stroke:#caced8;stroke-width:2"} << QByteArrayList{"#fff;"};
+        QTest::newRow("style sheet")
+                << head
+                           + "<defs><style>#ffffff{fill:#000} .a{fill:#ffffff} .b{stop-color: #c9d3e0}"
+                             " .c{background:#ffffff}</style></defs></svg>"
+                << QByteArrayList{"#ffffff{fill:" + darkColor(u"#000").toLatin1() + '}', ".a{fill:#121212}",
+                                  ".b{stop-color: #323a45}", ".c{background:#ffffff}"}
+                << QByteArrayList{};
+        QTest::newRow("gradient")
+                << head
+                           + "<linearGradient id=\"g\"><stop offset=\"0\" stop-color=\"#ffffff\"/></linearGradient>"
+                             "<rect fill=\"url(#g)\" width=\"5\" height=\"5\"/></svg>"
+                << QByteArrayList{"stop-color=\"#121212\"", "fill=\"url(#g)\""} << QByteArrayList{"#ffffff"};
+        // Not colours Brulion reads: as they are.
+        QTest::newRow("other values")
+                << head
+                           + "<rect fill=\"currentColor\" stroke=\"transparent\" color=\"red\" width=\"1\" "
+                             "height=\"1\"/>"
+                             "<rect fill=\"#12\" stroke=\"#ffffff80\" width=\"1\" height=\"1\"/></svg>"
+                << QByteArrayList{"fill=\"currentColor\"", "stroke=\"transparent\"", "color=\"red\"", "fill=\"#12\"",
+                                  "stroke=\"#12121280\""}
+                << QByteArrayList{};
+        // A pasted photo and an emoji keep their own colours; the scene in the comments is kept.
+        QTest::newRow("picture, text, scene")
+                << head
+                           + "<!-- svg-source:excalidraw --><metadata><!-- payload-start -->eyJ0eXBlIjoi<!-- "
+                             "payload-end --></metadata><image x=\"1\" y=\"1\" width=\"9\" height=\"9\" "
+                             "xlink:href=\"data:image/png;base64,iVBORw0KGgo=\"/><text fill=\"#c92a2a\" "
+                             "font-family=\"Virgil, Segoe UI Emoji\">😀 zażółć &amp; &lt;gęślą&gt;</text></svg>"
+                << QByteArrayList{"<!-- svg-source:excalidraw -->",
+                                  "<!-- payload-start -->eyJ0eXBlIjoi<!-- payload-end -->",
+                                  "xlink:href=\"data:image/png;base64,iVBORw0KGgo=\"",
+                                  "fill=\"" + darkColor(u"#c92a2a").toLatin1() + '"',
+                                  QString(u"😀 zażółć &amp; &lt;gęślą&gt;</text>"_s).toUtf8(),
+                                  "xmlns:xlink=\"http://www.w3.org/1999/xlink\""}
+                << QByteArrayList{"#c92a2a"};
+    }
+    void darkSvgColours()
+    {
+        QFETCH(QByteArray, svg);
+        QFETCH(QByteArrayList, expected);
+        QFETCH(QByteArrayList, gone);
+        const std::optional<QByteArray> dark = darkSvg(svg);
+        QVERIFY(dark);
+        for (const QByteArray &e : expected)
+            QVERIFY2(dark->contains(e), qPrintable(QString::fromUtf8(e + "\n in \n" + *dark)));
+        for (const QByteArray &g : gone)
+            QVERIFY2(!dark->contains(g), qPrintable(QString::fromUtf8(g + "\n in \n" + *dark)));
+        // Still the same picture: well-formed, the same elements.
+        QXmlStreamReader a(svg), b(*dark);
+        while (!a.atEnd()) {
+            if (a.readNext() != QXmlStreamReader::StartElement)
+                continue;
+            while (!b.atEnd() && b.readNext() != QXmlStreamReader::StartElement) { }
+            QCOMPARE(b.qualifiedName(), a.qualifiedName());
+            QCOMPARE(b.attributes().size(), a.attributes().size());
+        }
+        QVERIFY(!a.hasError() && !b.hasError());
+    }
+
+    void darkSvgOfExcalidrawAndBroken()
+    {
+        // Excalidraw's own file (shapes): every colour mapped, the scene kept byte for byte.
+        const QByteArray mixed = fixture(u"excalidraw_mixed.svg"_s);
+        const std::optional<QByteArray> dark = darkSvg(mixed);
+        QVERIFY(dark);
+        QVERIFY(dark->contains("fill=\"#121212\""));
+        QVERIFY(dark->contains(QByteArray("stroke=\"" + darkColor(u"#1e1e1e").toLatin1() + '"')));
+        QVERIFY(svgPayload(mixed) && svgPayload(*dark) == svgPayload(mixed));
+        // Brulion's own dark picture would turn light: only for pictures not yet dark.
+        QVERIFY(darkSvg(toSvg(twoStrokes()))->contains("fill=\"#121212\""));
+        // Not well-formed: nothing (the caller falls back to the filter per pixel).
+        QVERIFY(!darkSvg("<svg><rect fill=\"#fff\"></svg>"));
+        QVERIFY(!darkSvg("\x89PNG zażółć"));
+        QVERIFY(!darkSvg(QByteArray()) || darkSvg(QByteArray())->isEmpty());
+        QVERIFY(!darkSvg("<svg>&nieznana;</svg>"));
     }
 
     void svgAutoGolden()
