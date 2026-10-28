@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
+# The helpers defined inside a mode run through check/wait_for, which shellcheck cannot follow.
+# shellcheck disable=SC2329
 #
 # End-to-end test of Brulion's Android part on an emulator (x86_64, Android 16 / API 36):
 #   1. the app APK starts and keeps running (no crash), notification channels exist;
@@ -448,7 +450,7 @@ if ((KEYBOARD)); then
   # the screen (the system bars differ between versions).
   paragraph_xy=$(ui_find_all 'Brulion to notatnik w zwykłych plikach Markdown[^"]*' | head -n 1)
   if [[ -n $paragraph_xy ]]; then
-    adb shell input tap $paragraph_xy
+    adb shell input tap "$paragraph_xy"
     wait_for 6 ime_shown || true
   else
     for fraction in 40 30 35 45 27; do
@@ -487,7 +489,11 @@ vault_name() { adb shell run-as "$PKG" ls "\"$VAULT\"" 2>/dev/null | tr -d '\r' 
 
 # --- selecting and copying with a finger (--selection) -------------------------------------------
 
-long_press() { adb shell input swipe "$1" "$2" "$1" "$2" 1400; } # <x> <y>
+long_press() { # <x> <y>, or one "<x> <y>" word as ui_find_all prints it
+  local x y
+  read -r x y <<<"$*"
+  adb shell input swipe "$x" "$y" "$x" "$y" 1400
+}
 
 if ((SELECTION)); then
   info "Selection: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
@@ -738,7 +744,7 @@ if ((SHARE)); then
     -d content://com.android.providers.downloads.documents/root/downloads >/dev/null
   check "the file manager lists the files" wait_for 15 ui_has 'Notatka źdźbło\.txt'
   xy=$(ui_find_all 'Lista zakupów\.md' | head -n 1)
-  [[ -z $xy ]] || long_press $xy
+  [[ -z $xy ]] || long_press "$xy"
   sleep 2
   ui_tap 'Notatka źdźbło\.txt' first 1 || true
   ui_tap 'obrazek\.png' first 1 || true
@@ -843,13 +849,13 @@ resize_widget() { # <ERE of a text in the widget> <dy>
   local xy handle
   xy=$(ui_find_all "$1" | head -n 1)
   [[ -n $xy ]] || return 1
-  adb shell input swipe $xy $xy 1500
+  adb shell input swipe "$xy" "$xy" 1500
   sleep 2
   ui_dump
   handle=$(sed 's/<node /\n<node /g' "$OUT/ui.xml" | grep 'widget_resize_bottom_handle' |
     sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/p' | awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2) }')
   [[ -n $handle ]] || return 1
-  adb shell input swipe $handle "${handle% *}" $((${handle#* } + $2)) 1500
+  adb shell input swipe "$handle" "${handle% *}" $((${handle#* } + $2)) 1500
   sleep 2
   adb shell input keyevent 4
   sleep 3
@@ -874,8 +880,9 @@ if ((WIDGETS)); then
   sleep 3
   adb wait-for-device
   adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
-  adb shell am start -n "$QUICK_ADD" >/dev/null 2>&1 && adb shell am force-stop "$PKG" ||
+  adb shell am start -n "$QUICK_ADD" >/dev/null 2>&1 ||
     die "cannot start the (not exported) QuickAddActivity: a google_apis image with adb root is needed"
+  adb shell am force-stop "$PKG"
   today=$(adb shell date +%Y-%m-%d | tr -d '\r')
   tomorrow=$(adb shell date -d @$(($(adb shell date +%s | tr -d '\r') + 86400)) +%Y-%m-%d | tr -d '\r')
   journal="journals/$today.md"
@@ -1042,7 +1049,7 @@ if ((DONE)); then
     ui_tap 'Zrobione|ZROBIONE|Done|DONE'
     local ok=$?
     adb shell cmd statusbar collapse >/dev/null 2>&1 || true
-    return $ok
+    return "$ok"
   }
   echo "    reminders at $first and $second ($zone)"
   start_app "--vault /data/user/0/$PKG/$DN_VAULT --locale pl --route journals"
@@ -1144,7 +1151,7 @@ PY
   # 3. A tap opens the viewer: actual size and back, Back closes it.
   picture_xy=$(ui_find_all 'Gradient przez http' | tail -n 1)
   echo "    the http picture at $picture_xy"
-  adb shell input tap $picture_xy
+  adb shell input tap "$picture_xy"
   sleep 2
   check "a tap opens the viewer" wait_for 10 ui_has 'Zamknij'
   app_shot wp-4-viewer
@@ -1154,7 +1161,7 @@ PY
   check "Back closes the viewer" wait_for 10 ui_lacks 'Zamknij'
   check "… and stays in the journal" ui_has 'Gradient przez http'
   # 4. A long press opens the picture's menu.
-  long_press $picture_xy
+  long_press "$picture_xy"
   sleep 2
   check "a long press opens the menu" ui_has 'Obraz z 10\.0\.2\.2'
   check "… Powiększ, Zapisz w notatniku, Otwórz w przeglądarce, Kopiuj adres obrazu" bash -c \
@@ -1183,7 +1190,7 @@ PY
   check "… the https picture's link untouched" bash -c "grep -qF '![Logo przez https]($https_url)' <<<\"\$1\"" _ "$(wp_cat)"
   app_shot wp-7-saved
   # 7. Otwórz w przeglądarce hands the address to a browser.
-  long_press $(ui_find_all 'Logo przez https' | tail -n 1)
+  long_press "$(ui_find_all 'Logo przez https' | tail -n 1)"
   sleep 2
   check "Otwórz w przeglądarce (the https picture)" ui_tap 'Otwórz w przeglądarce' first 4
   check "… a browser is in front" wait_for 10 in_front 'chrome|browser' 
