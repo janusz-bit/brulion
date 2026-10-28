@@ -1285,11 +1285,12 @@ def cpp(v):
     return ("%.2f" % v).rstrip("0").rstrip(".") if v != int(v) else str(int(v))
 
 def samples(report, run, start, out):
-    # The run's samples from record `start` on (and the first one: the tallest page), as JSON lines
-    # and as rows for tests/app/tst_keyboardinsets.cpp; the Qt window's heights on the way.
+    # The run's samples from record `start` on (and the one before: the page before the tap), as
+    # JSON lines and as rows for tests/app/tst_keyboardinsets.cpp (one per change; none before the
+    # browser's first reading); the Qt window's heights on the way.
     rs = records(report, run)
-    picked = rs[:1] + rs[max(1, int(start)):]
-    seen, rows, heights = set(), [], []
+    picked = rs[max(0, int(start) - 1):]
+    last, rows, heights = None, [], []
     with open(out, "w", encoding="utf-8") as f:
         for k in picked:
             s = k.get("sample") or {}
@@ -1297,9 +1298,9 @@ def samples(report, run, start, out):
             wh = num(k.get("windowHeight"))
             if not heights or heights[-1] != wh:
                 heights.append(wh)
-            if key in seen or not s:
+            if key == last or not s or not k.get("mode"):
                 continue
-            seen.add(key)
+            last = key
             f.write(json.dumps(k, ensure_ascii=False) + "\n")
             mode = k.get("mode") or ""
             row = "step(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, u\"%s\"_s, %s, %s)," % (
@@ -1395,7 +1396,8 @@ PY
     [root + '/journals/' + day + '.md', { timestamp, mode: 33188, contents: enc.encode(journal) }],
   ]);
   await put(appData, [[appData + '/settings.ini', { timestamp, mode: 33188, contents: enc.encode('[vaults]\ncurrent=' + root + '\n') }]]);
-  location.replace('/brulion/' + location.search);
+  if (location.search) location.replace('/brulion/' + location.search);
+  else fetch('/__report/first-start', { method: 'POST', body: '{}' }).catch(() => {});
 })().catch((e) => { document.getElementById('status').textContent = 'Błąd: ' + e; });
 </script>
 HTML
@@ -1477,7 +1479,26 @@ HTML
   # First-run screens, prompts and tips of the browsers: tapped away by their buttons' names
   # (Firefox's "Set as default browser" opens the system's dialog: Cancel).
   WK_DISMISS='Accept & continue|Accept and continue|Use without an account|No thanks|No, thanks|NO THANKS|Not now|NOT NOW|Skip|SKIP|Got it|GOT IT|Maybe later|Not interested|Continue|Close|Dismiss|Cancel|Pomiń|Nie teraz|Nie, dziękuję|Anuluj'
-  wk_records() { local s; s=$(wk_state "$1"); echo "${s%% *}"; }
+  # A browser's first start: its welcome screens tapped away on a page that does not start the
+  # app (seed.html without a query reports itself and stays), then the browser stopped.
+  wk_first_start() { # <browser>
+    local pkg=${WK_PKG[$1]} i xy last="" quiet=0
+    adb shell am start -a android.intent.action.VIEW -d "'$WK_ORIGIN/seed.html'" -p "$pkg" >/dev/null
+    for i in $(seq 1 30); do
+      sleep 3
+      xy=$(ui_find_all "$WK_DISMISS" | head -n 1)
+      if [[ -n $xy && $xy != "$last" ]]; then
+        echo "    tapping away a first-run screen of $1 at $xy"
+        adb shell input tap "$xy"
+        last=$xy
+        quiet=0
+        continue
+      fi
+      grep -q "\"/__report/first-start\"" "$OUT/report.jsonl" && ((++quiet >= 2)) && break
+    done
+    app_shot "wk-$1-0-first-start"
+    adb shell am force-stop "$pkg"
+  }
   wk_open() { # <browser> <run> <query>: the seeded journal, then the app (first-run screens tapped away)
     local pkg=${WK_PKG[$1]} url="$WK_ORIGIN/seed.html?$3" i xy last="" idle=0 sent=1
     adb shell am force-stop "$pkg"
@@ -1494,11 +1515,14 @@ HTML
         idle=0
         continue
       fi
-      # Nothing to tap and the app not started (the welcome screens ate the link): again.
-      if ((++idle >= 4 && sent < 3)) && [[ -z $(wk_records "$2") ]]; then
-        echo "    opening the page again ($i)"
+      # Nothing to tap and the app not up (its tab left behind the welcome screens): the browser
+      # started again (a tab still loading in the background would keep the app's storage lock).
+      if ((++idle >= 4 && sent < 3)); then
+        echo "    starting $1 again ($i)"
+        adb shell am force-stop "$pkg"
         adb shell am start -a android.intent.action.VIEW -d "'$url'" -p "$pkg" >/dev/null
         idle=0
+        last=""
         sent=$((sent + 1))
       fi
     done
@@ -1524,7 +1548,7 @@ HTML
     adb shell uiautomator dump --windows /sdcard/brulion-ime.xml >/dev/null 2>&1 || true
     adb exec-out cat /sdcard/brulion-ime.xml 2>/dev/null | sed 's/<node /\n<node /g' | grep 'inputmethod' |
       sed -nE "s/.*content-desc=\"($1)\".*bounds=\"\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]\".*/\2 \3 \4 \5 \1/p" |
-      awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2), $5 }' | head -n 1
+      awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2), $5 }' | head -n 1 || true
   }
   wk_focus_text() { # the focused editor's text in the run's last report
     python3 -c 'import json, sys
@@ -1560,7 +1584,10 @@ print(last)' "$OUT/report.jsonl" "$1"
     query="selftest=keyboard&report=/__report/$run"
     [[ $mode == visual ]] && query+="&keyboard=visual"
     info "$b, interactive-widget=resizes-$mode"
-    if ! check "$run: the app starts and reports the keyboard" wk_open "$b" "$run" "$query"; then
+    local opened=0
+    wk_open "$b" "$run" "$query" || opened=1
+    check "$run: the app starts and reports the keyboard" test "$opened" -eq 0
+    if ((opened)); then
       app_shot "wk-$run-0-failed"
       ui_dump
       cp "$OUT/ui.xml" "$OUT/wk-$run-0-failed.xml" 2>/dev/null || true
@@ -1632,6 +1659,7 @@ print(last)' "$OUT/report.jsonl" "$1"
   }
 
   for b in "${browsers[@]}"; do
+    wk_first_start "$b"
     wk_run "$b" content
     wk_run "$b" visual
   done

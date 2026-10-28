@@ -303,6 +303,18 @@ void TestKeyboardInsets::viewportKeyboardSequence_data()
             step(412, 780, 780, 780, 780, false, true, 0, false, false),
             step(412, 480, 480, 480, 480, false, true, 0, false, false),
     };
+    // Enter splits a block: Qt's focus passes through its focus helper (editing false for a
+    // moment) while the page stays shrunk — the keyboard stays shown; once the focus is gone and
+    // the page grows back, it is hidden.
+    QTest::newRow("fokus przechodzi do następnego bloku (Enter)") << QList<Step>{
+            step(412, 786, 786.29, 786.29, 786, true, true, 0, false, false),
+            step(412, 474, 474.29, 474.29, 474, true, true, 0, true, false),
+            step(412, 474, 474.29, 474.29, 474, false, false, 0, true, false),
+            step(412, 474, 474.29, 474.29, 474, true, false, 0, true, false),
+            step(412, 474, 474.29, 474.29, 474, false, true, 0, true, false),
+            step(412, 786, 786.29, 786.29, 786, false, false, 0, false, true),
+            step(412, 474, 474.29, 474.29, 474, false, true, 0, false, false), // not editing: not ours
+    };
     // A focus change alone (the editor taps another block) is no keyboard motion.
     QTest::newRow("sama zmiana fokusu nie animuje") << QList<Step>{
             step(412, 480, 480, 480, 480, true, true, 0, false, false),

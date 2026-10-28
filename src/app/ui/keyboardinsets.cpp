@@ -88,9 +88,12 @@ ViewportKeyboard::State ViewportKeyboard::update(const ViewportSample &sample, q
     if (usable) {
         qreal &tallest = m_tallest[qRound(finite(sample.innerWidth) ? std::clamp<qreal>(sample.innerWidth, 0, 1e6) : 0)];
         tallest = std::max(tallest, sample.height);
-        if (sample.touch && sample.editing && tallest - sample.height >= MinKeyboard)
+        // Qt's <input> focused starts it; a focus passing between Qt's elements (Enter: the next
+        // block) does not end it while the page stays shrunk.
+        if (sample.touch && (sample.editing || m_shrunk) && tallest - sample.height >= MinKeyboard)
             state.shown = true;
     }
+    m_shrunk = state.shown;
     if (state.overlap > 0)
         state.shown = true;
     if (sample.settled) {
