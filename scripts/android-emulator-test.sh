@@ -1486,7 +1486,7 @@ HTML
     adb shell am start -a android.intent.action.VIEW -d "'$WK_ORIGIN/seed.html'" -p "$pkg" >/dev/null
     for i in $(seq 1 30); do
       sleep 3
-      xy=$(ui_find_all "$WK_DISMISS" | head -n 1)
+      xy=$(ui_find_all "$WK_DISMISS" | head -n 1 || true)
       if [[ -n $xy && $xy != "$last" ]]; then
         echo "    tapping away a first-run screen of $1 at $xy"
         adb shell input tap "$xy"
@@ -1506,7 +1506,7 @@ HTML
     for i in $(seq 1 40); do
       sleep 3
       wk_ready "$2" && return 0
-      xy=$(ui_find_all "$WK_DISMISS" | head -n 1)
+      xy=$(ui_find_all "$WK_DISMISS" | head -n 1 || true)
       # The same place twice: not a dialog's button (a heading on the browser's home page).
       if [[ -n $xy && $xy != "$last" ]]; then
         echo "    tapping away a browser's screen at $xy"
