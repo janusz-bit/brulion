@@ -10,6 +10,7 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 ## 0.5.1 — w przygotowaniu
 
 **Nowe**
+- **Ciemne tło rysunków** — przycisk **Tło rysunku** w edytorze rysunku (na telefonie w menu **Więcej**) ma trzy możliwości: **Jak motyw** (domyślnie: rysunek ciemnieje i jaśnieje razem z motywem Brulionu, od razu), **Jasne** i **Ciemne**. Na ciemnej kartce kolory są dopasowane jak w ciemnym trybie Excalidraw — atrament jasny, kolory czytelne, linie papieru przygaszone, a zakreślacz zostaje widoczny. Kolory zapisane w rysunku się nie zmieniają, a wybór zapisuje się w pliku. Podglądy rysunków w notatkach i widok obrazu też idą za motywem, a rysunek „jak motyw” ciemnieje również w przeglądarce i w Obsidianie z ciemnym motywem. Zobacz [[Rysunki#Jasne i ciemne tło|Jasne i ciemne tło]].
 
 **Zmiany**
 

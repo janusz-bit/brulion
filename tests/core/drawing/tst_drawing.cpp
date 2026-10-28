@@ -122,12 +122,13 @@ QString styleSheet(const QByteArray &svg, int *count = nullptr)
     return from < 0 || to < from ? QString() : text.mid(from + 7, to - from - 7);
 }
 
-/// A drawing of an ink stroke and a highlighter stroke over it, on lined paper (svgAutoGolden).
+/// A drawing of an ink stroke and a highlighter stroke under it, on lined paper (svgAutoGolden).
 Drawing twoStrokes()
 {
     Drawing d;
     d.background = Background::Lines;
-    d.strokes = {wavyStroke(u"atrament"_s, 20, 40, 24), wavyStroke(u"zakreślacz"_s, 16, 44, 26)};
+    // (Apart: the browser check finds the ink's own colour, not mixed with the highlighter's.)
+    d.strokes = {wavyStroke(u"atrament"_s, 20, 40, 24), wavyStroke(u"zakreślacz"_s, 16, 84, 26)};
     d.strokes[1].tool = Tool::Highlighter;
     d.strokes[1].color = u"#ffd43b"_s;
     d.strokes[1].opacity = 40;

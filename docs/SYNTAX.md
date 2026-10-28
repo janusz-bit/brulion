@@ -173,7 +173,8 @@ module `drawing`, `drawing/excalidraw.h`):
 <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 W H" width="W" height="H">
 <!-- svg-source:excalidraw -->
 <metadata><!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 --><!-- payload-start -->BASE64<!-- payload-end --></metadata>
-<rect …paper…/> <path …lines or grid…/> <path d="…" fill="#1f2430"/> …
+<style>@media (prefers-color-scheme: dark){.p{fill:#121212}.r{stroke:#323a45}.k0{fill:#caced8}.h0{fill-opacity:0.5}}</style>
+<rect … fill="#ffffff" class="p"/> <path …lines or grid… class="r"/> <path d="…" fill="#1f2430" class="k0"/> …
 </svg>
 ```
 
@@ -182,8 +183,10 @@ BASE64 (one line) is base64 of the Latin-1 bytes of `{"version":"1","encoding":"
 character per byte; the scene is `{"type":"excalidraw","version":2,"source","elements","appState",
 "files"}`, every stroke a `freedraw` element (`x`, `y`, `points` relative to them, `pressures`,
 `simulatePressure`, `strokeColor`, `strokeWidth`, `opacity`; a highlighter stroke has
-`customData.brulionTool: "highlighter"`), the paper `appState.viewBackgroundColor` and the pattern
-`appState.brulionBackground` (`lines`, `grid`; none: plain — Excalidraw ignores it). The picture
+`customData.brulionTool: "highlighter"`), the paper `appState.viewBackgroundColor`, the pattern
+`appState.brulionBackground` (`lines`, `grid`; none: plain — Excalidraw ignores it) and the light
+or dark paper `appState.brulionTheme` (`light`, `dark`; none: as the app's theme, the default —
+Excalidraw ignores it too, its own `appState.theme` is never exported). The picture
 covers the strokes plus a 16 px margin at one scene unit a pixel (an empty drawing: 320 × 180), on
 the paper, drawn as filled outlines (perfect-freehand's, as Excalidraw draws freehand lines): every
 program shows the file as a picture (Obsidian, Logseq, browsers, file managers), excalidraw.com
@@ -198,6 +201,23 @@ A scene beyond 32 MB (decompressed) or with more than 500 000 JSON arrays and ob
 of a stroke is one — some thirty pages of dense handwriting) is not read (`drawing::MaxSceneBytes`,
 `MaxSceneContainers`): a small synced file must never inflate into gigabytes; it shows as a drawing
 that cannot be read.
+
+*Light and dark (Jasne i ciemne tło):* colours are stored as drawn, in light-theme terms, whatever
+the paper (as Excalidraw does). The dark paper shows them through **Excalidraw's dark mode
+mapping** (`drawing/palette.h`, a port of `applyDarkModeFilter`: the CSS filter `invert(93%)
+hue-rotate(180deg)` applied to each colour, channels rounded as JavaScript's `Math.round`, the
+alpha kept): white paper `#ffffff` → `#121212`, the ink `#1f2430` → `#caced8`, the lines `#c9d3e0`
+→ `#323a45`, blue `#2f6fdd` → `#6198f7`. Highlighter strokes keep their colour (mapped, a pastel
+would sink into the dark paper: `#ffd43b` → `#5f3a00`, 1.9:1) at 1.25 × their opacity (40 % → 50 %,
+at most 100 %). The picture in the file follows the choice: `light` — the colours as drawn; `dark`
+— the dark colours in the attributes (every program shows it dark); none (as the app) — the light
+attributes plus one `<style>` right after `</metadata>` holding nothing but an `@media
+(prefers-color-scheme: dark)` block with the dark colours by class (`p` the paper, `r` the rules,
+`k<n>` one per pen colour in first-use order, `h<n>` one per highlighter opacity), so browsers,
+Obsidian and GitHub show it dark when their viewer prefers dark. Only hex colours and numbers of
+Brulion's own formatting go into the CSS, never text from a scene; Qt's SVG renderer ignores such a
+style sheet (it applies media rules only for a medium it is given and drops a style sheet with a
+media feature query), so it draws the light picture.
 
 **Pictures from the internet:** a Markdown picture whose destination is an `http:` / `https:` URL
 with a host — `![alt](https://example.com/kot.jpg)`, `![](<https://example.com/mój kot.png>)`,

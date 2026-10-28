@@ -650,10 +650,12 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   the picture view's bar. "/Rysunek", the touch toolbar's Rysunek and the block menu's "Wstaw
   rysunek" (`BlockEditor.insertDrawing` → `PageController.insertDrawing`: an empty drawing stored as
   `Rysunek <yyyy-MM-dd HH.mm>.svg`, embedded at the caret, one undo step) open the editor on a new
-  one. A drawing saved again is shown again at once: its URL carries its version
-  (`Workspace::assetUrl` adds `?v=<mtime>-<size>`; Qt's pixmap cache keys by the URL, the file
-  itself is found without the query) and the embeds of the page follow the file's change
-  (`PageController` on `fileChanged` → `BlockListModel::attachmentChanged`).
+  one. Its picture is Brulion's own rendering in the app's theme (the image provider `drawing`,
+  "Drawing editor" → Previews: the embed's `url` light, `darkUrl` dark, `EditorHost::drawingUrl`),
+  so a drawing on "Jak motyw" turns dark with the app at once. A drawing saved again is shown again
+  at once: its URL carries its version (`Workspace::drawingUrl` / `assetUrl` add
+  `v=<mtime>-<size>`; Qt's pixmap cache keys by the URL) and the embeds of the page follow the
+  file's change (`PageController` on `fileChanged` → `BlockListModel::attachmentChanged`).
 * Pictures: Ctrl+V pastes a copied picture as an attachment, files dropped on the page are
   stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files (the
   pictures: `paths::pictureExtensions()`, docs/SYNTAX.md §2). Opening one (a click on the embed,
@@ -922,11 +924,26 @@ Route `drawing` (`{path}`): `DrawingView` on a drawing attachment (docs/SYNTAX.m
 an SVG with an embedded Excalidraw scene, core module `drawing`). For handwritten notes on a
 tablet (lectures, sketches), on every platform.
 
-* **The paper** (`DrawingCanvas`, a `QQuickPaintedItem`): white in every theme (the file's paper,
-  `appState.viewBackgroundColor`), plain, lined (32 px) or squared (24 px), endless in every
+* **The paper** (`DrawingCanvas`, a `QQuickPaintedItem`): the file's paper
+  (`appState.viewBackgroundColor`, white), plain, lined (32 px) or squared (24 px), endless in every
   direction; the picture written covers the strokes plus a margin. Opened: the strokes from their
   top left at 100 %, zoomed out to the view's width when they are wider (a phone); a zoom other
-  than 100 % is shown in the corner.
+  than 100 % is shown in the corner (`#535a6a` on light paper, `#9ba1af` on dark: 6.9 / 7.2:1).
+* **Light or dark paper** ("Tło rysunku", per drawing: `DrawingCanvas.theme`, saved in the file as
+  `appState.brulionTheme`, an undo step that marks it modified): **Jak motyw** (`auto`, the
+  default: follows the app's theme — `appDark: Theme.dark` —, at once, also while a stroke is being
+  drawn; the app's theme is no edit), **Jasne**, **Ciemne**. The stored colours never change: the
+  dark paper (`#121212`) shows the strokes in Excalidraw's dark-mode colours (`drawing/palette.h`:
+  the ink `#1f2430` as `#caced8`, every pen colour ≥ 4.2:1 on the paper; the lines and the grid
+  `#323a45`), highlighter strokes in their own colour at 1.25 × the opacity (≥ 3.2:1 on the paper,
+  the dark ink on them ≥ 2.9:1), the eraser's ring light (`DrawingCanvas.dark`, `paperColor`). The
+  tool bar's swatches show the colours as the paper shows them (`displayColor`); what is chosen
+  and remembered is the colour as drawn. The file's picture follows the choice (docs/SYNTAX.md §2:
+  dark attributes for Ciemne; for Jak motyw an `@media (prefers-color-scheme: dark)` style sheet,
+  so browsers and Obsidian show it dark when their viewer prefers dark). A merge with another
+  device's version keeps the theme chosen here only when it was changed here since the last load
+  or save (as the paper's pattern). No keyboard shortcut (Excalidraw's Alt+Shift+D switches its
+  app's theme; this one is per drawing).
 * **Input:**
   * a **stylus** draws with its pressure (the line widens as it presses harder; a stylus that
     reports one pressure only draws like a mouse); its **eraser end**, or the barrel button held,
@@ -960,7 +977,9 @@ tablet (lectures, sketches), on every platform.
   czerwony, zielony, pomarańczowy, fioletowy; highlighter: żółty, zielony, różowy, niebieski,
   pomarańczowy) and widths (cienka / średnia / gruba; wąska / średnia / szeroka) — on phones
   behind one swatch, a popup above the bar —, Papier (gładki, w linie, w kratkę: an undo step),
-  Rysuj palcem (touch screens), Pokaż cały rysunek (Ctrl+0; Ctrl++ / Ctrl+- zoom) and **Gotowe**
+  **Tło rysunku** (a sun-and-moon, sun or moon icon: Jak motyw / Jasne / Ciemne; on phones in
+  Więcej: "Tło jak motyw", "Jasne tło", "Ciemne tło"), Rysuj palcem (touch screens), Pokaż cały
+  rysunek (Ctrl+0; Ctrl++ / Ctrl+- zoom) and **Gotowe**
   (saved, back). Colours and widths are remembered on the device (`drawing/…`). Undo: Ctrl+Z,
   Ctrl+Shift+Z / Ctrl+Y; the history is the session's (a reload clears it).
 * **Saving:** by itself, 1.2 s after the last change, and when the route changes, the view goes
@@ -972,7 +991,8 @@ tablet (lectures, sketches), on every platform.
 * **Changes from elsewhere** (Syncthing, Nextcloud, another program) while the drawing is open:
   with nothing changed here the other version is shown; else they are merged stroke by stroke
   (`DrawingCanvas.takeExternal`: the other version, plus the strokes drawn here since the last
-  load or save, minus the ones erased here; the paper's pattern theirs unless it was changed here)
+  load or save, minus the ones erased here; the paper's pattern and its light or dark theirs unless
+  changed here)
   and saved, with a toast. A stroke or an erasing gesture in progress goes on and ends on the
   new version. A version Brulion cannot edit any more (shapes or text added in excalidraw.com) is
   shown as it is; what was drawn here and not saved is written to a new file beside it ("… (to
@@ -990,20 +1010,40 @@ tablet (lectures, sketches), on every platform.
   view (600 strokes of 60 points: ~7 ms on the laptop); while the paper moves the cached image is
   drawn moved and scaled and rendered again once the gesture rests; the stroke being drawn is
   drawn on top, only its area repainted. `paint()` (maybe on the render thread) draws a snapshot
-  taken in `updatePaintNode()`, while the GUI thread waits.
+  taken in `updatePaintNode()`, while the GUI thread waits. The paper and the ink's colours come
+  from `drawingrender.h` (`paintPaper`, `toQColor(displayInk(…))`; every stroke keeps its light and
+  dark colour, so a theme switch only repaints), shared with the previews.
+* **Previews** (the embeds in notes, the picture view, the notice of a file Brulion does not edit):
+  the image provider `drawing` (`DrawingImageProvider`, registered in `main.cpp`):
+  `image://drawing/<absolute path, percent-encoded>?v=<mtime>-<size>&dark=0|1`
+  (`Workspace.drawingUrl(path, Theme.dark)`; `EditorHost::drawingUrl`, the embeds' `url` and
+  `darkUrl`). A drawing Brulion draws is painted by `renderDrawing` (the picture its SVG shows,
+  fitted into the requested size, at the screen's pixel ratio) in the theme the drawing and the
+  app give; anything else (an Excalidraw drawing with shapes, a scene that cannot be read) is the
+  file's own picture through Qt SVG, turned dark in a dark app by Excalidraw's filter
+  (`darkImage`). It runs in Qt Quick's image reader thread (the browser: the GUI thread) and only
+  reads the file. A theme switch loads the other URL; `retainWhileLoading` keeps the shown picture
+  until it is there.
 * View contract: `title`, `editing` (no capture button over the paper), `toolbarDocked` (phones),
   `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
 
 Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, the SVG),
 `tst_drawingcanvas` (stylus, eraser end, barrel button, a popup over the paper, Windows' mouse
 events of the pen, fingers, a pinch, a palm while the pen is down, mouse buttons and the wheel,
-undo, the SVG checked with Qt's SVG renderer, loading, merging — also during a stroke, the paper —,
-far-away strokes, painting), `tst_drawing_qml` (the route and its notices, embeds and
-the picture view in the real app; nothing written by looking), `tst_editor_controller`
+undo, the SVG checked with Qt's SVG renderer, loading, merging — also during a stroke, the paper,
+the theme —, far-away strokes, painting light and dark, the app's theme as no edit, a stroke drawn
+while the theme changes, Qt SVG ignoring the dark CSS, the image provider — light, dark, an
+Excalidraw drawing inverted, refused ids, through a QML Image — and the dark filter per pixel),
+`tst_drawing_qml` (the route and its notices, the background menu, embeds and the picture view in
+the real app, light and dark; nothing written by looking), `tst_editor_controller`
 (`drawingSlashCommand`, `drawingEmbedsFollowTheirFile`), `tst_shell_workspace_pictures`
 (`drawingsAreSavedAndShownAgain`), the shell's self-test (`tst_shell_qml`, `_capture`: opened from
-its embed, drawn with a finger / the mouse, saved, undone; a version written behind the vault's
-back merged by the save; one with a shape not written over, the strokes kept in a copy).
+its embed, drawn with a finger / the mouse, saved, undone; the embed in the app's other theme;
+a version written behind the vault's back merged by the save; one with a shape not written over,
+the strokes kept in a copy), `tests/app/drawing/svg-theme-check.mjs` (a browser — Chrome over CDP —
+shows `tests/data/drawing/auto_theme.svg` dark when it prefers dark, light otherwise; CI) and
+`tests/app/drawing/wasm-drawing-check.mjs` (the web build: a drawing's embed light and dark).
+Screenshots: `tests/app/drawing/screenshots.sh` (the `theme` shot: the background's menu).
 
 ## Scrolling performance
 

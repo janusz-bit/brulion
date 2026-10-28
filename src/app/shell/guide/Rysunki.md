@@ -18,8 +18,24 @@ Rysunek w notatce ma w rogu ikonę pióra. Kliknij go albo stuknij, żeby rysowa
 - **Gumka** (E) — usuwa każdą linię, której dotknie. Drugi koniec rysika (gumka na rysiku) albo wciśnięty przycisk na rysiku ściera zawsze, bez przełączania narzędzia.
 - **Kolory i grubości** — sześć kolorów pióra (atrament, niebieski, czerwony, zielony, pomarańczowy, fioletowy), pięć kolorów zakreślacza i trzy grubości każdego. Na telefonie są pod kółkiem z bieżącym kolorem. Brulion pamięta ostatni wybór na tym urządzeniu.
 - **Papier** — gładki, w linie albo w kratkę (na telefonie w menu **Więcej**).
-- **Cofnij** i **Ponów** (`Ctrl+Z`, `Ctrl+Shift+Z`) — cofają linie, starcie gumką i zmianę papieru.
+- **Tło rysunku** — jasne albo ciemne, zobacz niżej [[#Jasne i ciemne tło|Jasne i ciemne tło]] (na telefonie w menu **Więcej**).
+- **Cofnij** i **Ponów** (`Ctrl+Z`, `Ctrl+Shift+Z`) — cofają linie, starcie gumką, zmianę papieru i tła.
 - **Pokaż cały rysunek** (`Ctrl+0`) i **Gotowe** — powrót do notatki.
+
+## Jasne i ciemne tło
+Przycisk **Tło rysunku** (słońce z księżycem, słońce albo księżyc na pasku narzędzi) ma trzy możliwości:
+- **Jak motyw** (domyślnie) — rysunek jest jasny w jasnym motywie Brulionu i ciemny w ciemnym, a zmienia się od razu, gdy przełączysz motyw (także wieczorem, gdy motyw idzie za systemem);
+- **Jasne** — zawsze biała kartka;
+- **Ciemne** — zawsze ciemna kartka, także w jasnym motywie.
+
+Wybór zapisuje się w pliku rysunku, więc każde urządzenie pokaże go tak samo. Działa i w edytorze rysunku, i w podglądzie w notatce, i w widoku samego obrazu.
+
+Na ciemnej kartce kolory są dopasowane tak samo jak w ciemnym trybie Excalidraw: atrament jest jasnoszary, niebieski, czerwony i fioletowy jaśniejsze, linie papieru ciemniejsze. Zakreślacz zostaje w swoim kolorze, tylko trochę mocniejszy, żeby był widoczny na ciemnym tle, a pismo pod nim dało się przeczytać. Same kolory w pliku się nie zmieniają: przełączenie z powrotem na jasne tło pokaże dokładnie to, co narysowałeś. Kółka kolorów na pasku pokazują kolory tak, jak wyglądają na bieżącej kartce.
+
+W innych programach:
+- rysunek z tłem **Ciemne** jest ciemny wszędzie;
+- rysunek z tłem **Jak motyw** jest ciemny w przeglądarkach, a często też w Obsidianie i na GitHubie, gdy używają ciemnego motywu — plik ma w środku opis ciemnych kolorów dla przeglądarek (`prefers-color-scheme`). Program, który go nie rozumie, pokaże jasny rysunek;
+- **excalidraw.com** pokazuje rysunek w swoim motywie, niezależnie od tego wyboru.
 
 ## Rysik, palec i mysz
 - **Rysik** rysuje. **Palce** wtedy nie rysują, tylko przesuwają kartkę (jeden palec) i powiększają ją (dwa palce) — możesz więc oprzeć dłoń na ekranie. Dopóki rysik dotyka ekranu, dłoń niczego nie zmienia: nie przesuwa kartki i nie przerywa linii.
