@@ -471,12 +471,13 @@ przypina je w lewym górnym rogu okna (styl w otwartym shadow root `#qt-shadow-c
 przewinięte kontenery Qt wraca na 0; stronę przewiniętą przez iOS przewija z powrotem na górę.
 Okna kandydatów klawiatur CJK pojawiają się przez to w rogu okna.
 
-Chrome i Brave nad klawiaturą każdego pola tekstowego stawiają też własny pasek autouzupełniania
-(hasła, karty, adresy; 48 px w Chrome, 64 px w Brave — biały pas z trzema ikonami po prawej), także
-z `autocomplete="off"`, a nie robią tego dla pola wyszukiwania. Na ekranach dotykowych powłoka
-zmienia więc ukryte pole Qt w pole wyszukiwania (`type="search"`; Qt dalej odczytuje „text”)
-z klawiszem Enter na klawiaturze (`enterkeyhint="enter"`, nie lupa) — pasek leży bezpośrednio na
-klawiaturze. Pola haseł (`type="password"`) zostają bez zmian, z autouzupełnianiem haseł.
+Chrome i Brave nad klawiaturą każdego pola tekstowego stawiają własny pasek autouzupełniania
+(hasła, karty, adresy; 48 px w Chrome, 64 px w Brave — pas z trzema ikonami po prawej): pasek
+narzędzi Brulionu leży wtedy na nim, a ten na klawiaturze. To część przeglądarki, nie strony
+(`visualViewport` i rozmiar strony go nie obejmują). Na emulatorze sprawdzone: `autocomplete="off"`,
+nazwy i etykiety pola go nie chowają; chowa go tylko pole wyszukiwania (`type="search"`), ale
+w nim klawiatura zaczynała od wielkiej litery pierwsze słowo wpisane w środku zdania — więc pole Qt
+zostaje polem tekstowym.
 
 Znane ograniczenia: przeglądarka, która pomija `interactive-widget`, a ma błąd Brave, dalej
 zostawi pas (nie da się go wykryć). Nowa karta w Brave dostaje na chwilę widok jak przy schowanym
@@ -494,8 +495,9 @@ Serwuje witrynę pod `/brulion/` (`scripts/web-test-server.py`; w emulatorze
 `?selftest=keyboard&report=…` (oraz z `&keyboard=visual`), stuka blok i czeka na klawiaturę.
 Aplikacja w tym teście maluje miejsce klawiatury na purpurowo, a pasek narzędzi na
 turkusowo (`KeyboardInsets.marked`): na zrzucie ekranu nad górną krawędzią klawiatury (ramka
-IME z `dumpsys window`) nie może być purpurowych wierszy (pasa) ani paska autouzupełniania
-przeglądarki, tylko od razu ≥ 20 wierszy paska (dopuszczalne 3 px). Słowo wpisane klawiszami
+IME z `dumpsys window`) nie może być purpurowych wierszy (pasa; dopuszczalne 3 px), tylko ≥ 20
+wierszy paska — co najwyżej nad paskiem autouzupełniania przeglądarki (≤ 72 dp) — a według
+aplikacji pasek kończy się na dole okna Qt, które wypełnia stronę. Słowo wpisane klawiszami
 klawiatury trafia do bloku, a klawisz akcji klawiatury to Enter, który dzieli blok
 (`focusText` w wyniku testu). Po „Wstecz” (klawiatura schowana) nie zostaje nic purpurowego, a pasek
 zostaje na dole. Z `?keyboard=visual` wynik tylko się zapisuje (Brave pokazuje pas z #60074).

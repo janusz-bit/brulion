@@ -1269,7 +1269,8 @@ def num(v, default=0):
     return v if isinstance(v, (int, float)) else default
 
 def state(report, run):
-    # "count windowHeight overlap shown animating editing settled toolbarBottom contentBottom legacy"
+    # "count windowHeight overlap shown animating editing settled toolbarBottom contentBottom legacy
+    # containerHeight"
     rs = records(report, run)
     if not rs:
         return
@@ -1277,7 +1278,8 @@ def state(report, run):
     s = k.get("sample") or {}
     print(len(rs), round(num(k.get("windowHeight")), 1), round(num(k.get("overlap")), 1), int(bool(k.get("shown"))),
           int(bool(k.get("animating"))), int(bool(s.get("editing"))), int(bool(s.get("settled"))),
-          round(num(k.get("toolbarBottom"), -1), 1), round(num(k.get("contentBottom")), 1), round(num(k.get("legacyOverlap")), 1))
+          round(num(k.get("toolbarBottom"), -1), 1), round(num(k.get("contentBottom")), 1), round(num(k.get("legacyOverlap")), 1),
+          round(num(s.get("containerHeight")), 1))
 
 def cpp(v):
     if not isinstance(v, (int, float)):
@@ -1317,8 +1319,9 @@ def samples(report, run, start, out):
 
 def screen(raw, top):
     # Rows up from just above `top` (the keyboard's top, or the screen's bottom): the rows that
-    # are not the cyan toolbar (the gap; how many of them magenta: the keyboard's room), then the
-    # toolbar's rows; also the magenta rows anywhere. A row is magenta or cyan when most of it is.
+    # are not the cyan toolbar (the gap: the keyboard's room — magenta — and the browser's own
+    # bars), then the toolbar's rows; also the magenta rows anywhere. A row is magenta or cyan
+    # when most of it is.
     data = open(raw, "rb").read()
     if len(data) < 16:
         print("-1 -1 -1 -1")
@@ -1460,7 +1463,7 @@ HTML
   adb push "$OUT/geckoview-config.yaml" /data/local/tmp/org.mozilla.firefox-geckoview-config.yaml >/dev/null || true
 
   # A run's last report: "count windowHeight overlap shown animating editing settled toolbarBottom
-  # contentBottom legacyOverlap" (empty before the app's first one).
+  # contentBottom legacyOverlap containerHeight" (empty before the app's first one).
   wk_state() { wk_py state "$OUT/report.jsonl" "$1"; }
   wk_ready() { local s; s=$(wk_state "$1"); [[ -n $s ]] && awk '{ exit !($2 > 0) }' <<<"$s"; }
   # The keyboard counted as up, settled, a block edited and its toolbar docked.
@@ -1605,15 +1608,23 @@ print(last)' "$OUT/report.jsonl" "$1"
     wk_capture "$OUT/wk-$run-2-keyboard.raw" || true
     app_shot "wk-$run-2-keyboard"
     s=$(wk_state "$run")
-    echo "    report: $s (count windowHeight overlap shown animating editing settled toolbarBottom contentBottom legacyOverlap)"
+    echo "    report: $s (count windowHeight overlap shown animating editing settled toolbarBottom contentBottom legacyOverlap containerHeight)"
     read -r gap magenta rows anywhere < <(wk_py screen "$OUT/wk-$run-2-keyboard.raw" "${ime:-$SCREEN_H}") ||
       gap=-1 magenta=-1 rows=-1 anywhere=-1
     echo "    the keyboard's top at ${ime:-?} px"
     wk_screen_line "on screen" "$gap" "$magenta" "$rows" "$anywhere"
     legacy=$(awk '{ print $10 }' <<<"$s")
     if [[ $mode == content ]]; then
-      check "$run: the toolbar sits on the keyboard (gap <= 3 px, toolbar >= 20 px)" \
-        test "$gap" -ge 0 -a "$gap" -le 3 -a "$rows" -ge 20
+      # Nothing of the page under the toolbar: no magenta row on screen, the toolbar ends at Qt's
+      # window's bottom and the window fills the page. Rows that are neither are the browser's
+      # own: Chrome's and Brave's autofill bar (passwords, cards, addresses: 48 and 64 dp) sits
+      # over the keyboard for every text field.
+      echo "    the browser's own bar between them: $((gap - magenta)) px"
+      check "$run: the toolbar sits on the keyboard (no room of the page under it, toolbar >= 20 px, the browser's bar <= 72 dp)" \
+        test "$gap" -ge 0 -a "$magenta" -le 3 -a "$rows" -ge 20 -a $((gap - magenta)) -le $((72 * DENSITY / 160))
+      check "$run: the toolbar ends at the page's bottom (report)" \
+        awk -v s="$s" 'BEGIN { split(s, a, " "); d1 = a[8] - a[2]; d2 = a[2] - a[11];
+          exit !(d1 <= 1 && d1 >= -1 && d2 <= 1 && d2 >= -1) }'
       check "$run: the browser shrank the page (overlap 0, the keyboard shown)" \
         awk -v s="$s" 'BEGIN { split(s, a, " "); exit !(a[3] == 0 && a[4] == 1) }'
       echo "    the old formula (innerHeight - height - offsetTop) gives $legacy px"
@@ -1633,9 +1644,9 @@ print(last)' "$OUT/report.jsonl" "$1"
       fi
       app_shot "wk-$run-2-typed"
     else
-      # resizes-visual, informational: Brave's gap (#60074) or none.
-      if ((gap > 3)); then
-        echo "    resizes-visual: a gap of $gap px (brave-browser#60074 when this is Brave)"
+      # resizes-visual, informational: Brave's gap (#60074: the page's room shows) or none.
+      if ((magenta > 3)); then
+        echo "    resizes-visual: a gap of $magenta px of the page under the toolbar (brave-browser#60074 when this is Brave)"
       else
         echo "    resizes-visual: no gap in $b (if this is Brave: brave-browser#60074 is fixed upstream)"
       fi

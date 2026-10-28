@@ -14,7 +14,7 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 **Zmiany**
 
 **Poprawki**
-- **Wersja w przeglądarce na telefonie: pasek narzędzi leży na klawiaturze** — w Brave na Androidzie między paskiem formatowania a klawiaturą był pusty pas (Brave podaje za małą wysokość widocznej części strony, gdy chowa swój dolny pasek). Teraz przeglądarka sama zmniejsza stronę nad klawiaturą, więc pasek przylega do niej w Brave, Chrome i Firefoksie. Nad klawiaturą nie pojawia się też już pasek autouzupełniania Chrome i Brave (klucz, karta, pinezka), a górny pasek aplikacji nie ucieka z ekranu po stuknięciu w blok nisko na stronie.
+- **Wersja w przeglądarce na telefonie: pasek narzędzi leży na klawiaturze** — w Brave na Androidzie między paskiem formatowania a klawiaturą był pusty pas (Brave podaje za małą wysokość widocznej części strony, gdy chowa swój dolny pasek). Teraz przeglądarka sama zmniejsza stronę nad klawiaturą, więc pasek przylega do niej w Brave, Chrome i Firefoksie (w Chrome i Brave między nimi zostaje tylko pasek autouzupełniania samej przeglądarki), a górny pasek aplikacji nie ucieka już z ekranu po stuknięciu w blok nisko na stronie.
 
 ## 0.5.0 — 28 października 2026
 

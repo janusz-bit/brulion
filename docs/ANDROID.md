@@ -1164,6 +1164,18 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   scripts/android-emulator-test.sh --web-pictures
   ```
   Opis i wynik — sekcja [Obrazy z internetu](#obrazy-z-internetu). Zrzuty `wp-*.png`.
+* Wersja w przeglądarce w przeglądarkach Androida (bez APK Brulionu: witryna z
+  `scripts/wasm-build.sh`; potrzebny dostęp do internetu przy pierwszym pobraniu przeglądarek
+  i `python3` na hoście):
+  ```sh
+  scripts/android-emulator-test.sh --web-keyboard dist-wasm
+  ```
+  Chrome z obrazu systemu, Brave 1.97.59 i Firefox 157.0.1 (APK przypięte sumami SHA-256, w
+  `~/.cache/brulion-web-browsers`): pasek narzędzi edycji leży na klawiaturze (w Chrome i Brave
+  na pasku autouzupełniania przeglądarki), słowo wpisane
+  klawiszami trafia do bloku, Enter dzieli blok, Wstecz chowa klawiaturę. Opis — docs/WEB.md
+  „Klawiatura ekranowa”. Zrzuty `wk-*.png`, odczyty `samples-*.jsonl`. Ten sam test uruchamia job
+  `keyboard-android` w `.github/workflows/wasm.yml`.
 * Widżety (ten sam APK debugowalny; obraz `google_apis` z `adb root` — okno szybkiego
   dodawania i odbiornik widżetów nie są eksportowane):
   ```sh

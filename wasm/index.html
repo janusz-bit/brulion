@@ -281,43 +281,23 @@
         // edited text's top-left corner: focusing it made Chrome pan the page to it (the top bar
         // out of sight) and iOS scroll the page, and below a window the keyboard shrank it scrolled
         // Qt's own containers. On touch screens it stays in the window's top-left corner, and Qt's
-        // containers never stay scrolled. Chrome and Brave also put their autofill bar (passwords,
-        // cards, addresses) between the page and the keyboard for every text field, also with
-        // autocomplete=off — not for a search field: on touch screens Qt's text field is one
-        // (type=search, with the keyboard's Enter key: enterkeyhint=enter); password fields stay.
-        // Qt keeps its elements in an open shadow root (#qt-shadow-container, qwasmscreen.cpp),
-        // which a style of this document cannot reach. docs/WEB.md "Klawiatura ekranowa".
+        // containers never stay scrolled. Qt keeps them in an open shadow root
+        // (#qt-shadow-container, qwasmscreen.cpp), which a style of this document cannot reach.
+        // (Chrome and Brave put their autofill bar over the keyboard for every text field; only a
+        // search field avoids it, but there the keyboard capitalized the first word typed in the
+        // middle of a sentence: the field stays as Qt makes it. docs/WEB.md "Klawiatura ekranowa".)
         function touchScreen() {
           return !!window.matchMedia && (matchMedia('(pointer: coarse)').matches
             || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches));
-        }
-        var inputType = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'type');
-        function fixQtInputElement(input) {
-          if (input.brulionFixed || !inputType || !inputType.get || !inputType.set) return;
-          input.brulionFixed = true;
-          input.setAttribute('enterkeyhint', 'enter');
-          input.setAttribute('autocomplete', 'off');
-          // Qt sets `type` to "text" or "password" on every focus: "text" becomes "search" (and
-          // reads back as "text").
-          Object.defineProperty(input, 'type', {
-            configurable: true,
-            get: function () {
-              var type = inputType.get.call(this);
-              return type === 'search' ? 'text' : type;
-            },
-            set: function (value) { inputType.set.call(this, String(value) === 'text' ? 'search' : value); }
-          });
-          if (inputType.get.call(input) === 'text') inputType.set.call(input, 'search');
         }
         function fixQtKeyboardInput() {
           var host = document.getElementById('qt-shadow-container');
           var root = host && host.shadowRoot;
           if (!root) return false;
           if (!root.getElementById('brulion-keyboard-style')) {
-            var touch = touchScreen();
             var style = document.createElement('style');
             style.id = 'brulion-keyboard-style';
-            if (touch) style.textContent = '.qt-window-input-element { left: 0 !important; top: 0 !important; }';
+            if (touchScreen()) style.textContent = '.qt-window-input-element { left: 0 !important; top: 0 !important; }';
             root.appendChild(style);
             root.addEventListener('scroll', function (e) {
               var t = e.target;
@@ -326,13 +306,6 @@
                 t.scrollLeft = 0;
               }
             }, true);
-            if (touch) {
-              var fixAll = function () {
-                Array.prototype.forEach.call(root.querySelectorAll('input.qt-window-input-element'), fixQtInputElement);
-              };
-              new MutationObserver(fixAll).observe(root, { childList: true, subtree: true });
-              fixAll();
-            }
           }
           return true;
         }
