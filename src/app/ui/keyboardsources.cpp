@@ -23,6 +23,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QQuickItem>
+#include <QVariant>
 
 #include <algorithm>
 #include <cmath>
@@ -83,8 +84,9 @@ QQuickItem *visibleItem(QQuickItem *item, QStringView name)
 
 // `?selftest=keyboard` (scripts/wasm-smoke.mjs --keyboard and --keyboard-phone,
 // scripts/android-emulator-test.sh --web-keyboard): the keyboard's state, the browser's last
-// sample, the old formula (innerHeight − height − offsetTop, for the record) and where the shell's
-// content and the docked editing toolbar end in the window (logical px).
+// sample, the old formula (innerHeight − height − offsetTop, for the record), where the shell's
+// content and the docked editing toolbar end in the window (logical px) and the focused editor's
+// text (its first 120 characters).
 QJsonObject keyboardSelfTestResult(const KeyboardInsets *insets, QQuickWindow *window)
 {
     const ViewportSample &s = insets->viewportSample();
@@ -117,6 +119,12 @@ QJsonObject keyboardSelfTestResult(const KeyboardInsets *insets, QQuickWindow *w
         if (QQuickItem *toolbar = visibleItem(window->contentItem(), u"editToolbarSlot"))
             toolbarBottom = toolbar->mapToScene(QPointF(0, toolbar->height())).y();
         result.insert(u"dpr"_s, window->devicePixelRatio());
+        // What the keyboard types into (an editor's text): typing and Enter reach the app.
+        if (QQuickItem *focus = window->activeFocusItem()) {
+            const QVariant text = focus->property("text");
+            if (text.metaType() == QMetaType::fromType<QString>())
+                result.insert(u"focusText"_s, text.toString().left(120));
+        }
     }
     result.insert(u"windowHeight"_s, windowHeight);
     result.insert(u"contentBottom"_s, contentBottom);

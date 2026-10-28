@@ -253,12 +253,18 @@ everything near the bottom, the same way on Android, in the browser and with a s
   (`android/src/…/ImeInsets.kt`, every frame of the slide on Android 11+, where the window is drawn
   behind the system bars and keeps its size — Qt's expanded client area, set on Android 11–14 by
   `keyboardsources.cpp`, always so on 15+; Android 9–10 resize the window once, no frames;
-  docs/ANDROID.md "Klawiatura ekranowa"), the browser's `visualViewport` (docs/WEB.md) — and, as
+  docs/ANDROID.md "Klawiatura ekranowa"), the browser's viewports (`setViewportSample`, computed
+  by `ViewportKeyboard`: the part of Qt's container the visual viewport leaves out; the page asks
+  for `interactive-widget=resizes-content`, so the browser shrinks the page and Qt's window itself
+  — overlap 0 — and `shown` comes from that shrink on a touch screen while Qt's keyboard field has
+  the focus; `animating` until the readings settle; docs/WEB.md "Klawiatura ekranowa") — and, as
   the fallback,
   Qt's `QInputMethod::keyboardRectangle` mapped by `keyboardOverlap()` (native pixels on Android,
   the window's place on a split screen, clamped; malformed values give 0). `ui/keyboardsources.cpp`
   connects them. Settled changes are logged (detailed event log): "On-screen keyboard shown,
-  overlap 336 px (platform)".
+  overlap 336 px (platform)". `marked` (the browser's `?selftest=keyboard` only) paints the
+  keyboard's room magenta and the docked toolbar cyan, so a screenshot shows any gap between them
+  (`scripts/android-emulator-test.sh --web-keyboard`).
 * **The shell** (`AppShell`) ends its content — the sidebar, the current view and the side panel
   (a page pinned there on a wide touch window, a tablet or a phone held sideways, docks its
   toolbar on the keyboard too) — at the keyboard's top (a strip of `overlap` under it). While
@@ -273,7 +279,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   never scrolls (`BlockEditor.toolbarHost`): the editor itself on a page, the journal stream's
   frame for its days (a day's toolbar used to scroll with the day and sit at its bottom in the
   middle of the screen). So it sits on the keyboard, follows its slide frame by frame where the
-  platform reports the slide (Android 11+; elsewhere it moves once; no animation of its own), and
+  platform reports the slide (Android 11+; elsewhere — the browser too, where the window itself
+  shrinks — it moves once; no animation of its own), and
   stays docked at the bottom when the system hides the keyboard while
   editing goes on; "Ukryj klawiaturę" ends the editing and takes it away. Its tools follow
   `BlockEditor.toolbarMode`: `block`, `cell` (a table cell — Cofnij, Ponów, Następna komórka,

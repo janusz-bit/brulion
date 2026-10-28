@@ -131,8 +131,9 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   loads them before the app opens anything and writes changes back (debounced, on page hide);
   `WasmNotifier` (Notification API, service-worker fallback, clicks → `activated`);
   `wasmshell.h` (`setShellStage`/`hideShellLoadingScreen`: the loading screen of
-  `wasm/index.html`; `watchVisualViewport`: the part of the page the on-screen keyboard covers,
-  for `KeyboardInsets`); `wasmselftest.h` (`runStorageSelfTest`/`runNotifierSelfTest` for
+  `wasm/index.html`; `watchVisualViewport`: readings of the browser's viewports and Qt's container
+  for the on-screen keyboard — the computation is `ViewportKeyboard` in `ui/keyboardinsets.h`,
+  unit-tested); `wasmselftest.h` (`runStorageSelfTest`/`runNotifierSelfTest` for
   `?selftest=storage,notify`, driven by `scripts/wasm-smoke.mjs`).
 
 The notifier adapters themselves live in the app (`src/app/notify`, below), because they also

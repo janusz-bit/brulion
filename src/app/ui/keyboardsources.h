@@ -17,8 +17,8 @@ class KeyboardInsets;
 /// --keyboard-phone, scripts/android-emulator-test.sh --web-keyboard) the keyboard's room and the
 /// docked toolbar get marker colours (KeyboardInsets::marked) and every change is published as
 /// `window.brulionKeyboardSelfTest` {overlap, shown, animating, source, mode, sample {…},
-/// legacyOverlap, dpr, windowHeight, contentBottom, toolbarBottom} (logical px; toolbarBottom -1:
-/// no toolbar shown).
+/// legacyOverlap, dpr, windowHeight, contentBottom, toolbarBottom, focusText} (logical px;
+/// toolbarBottom -1: no toolbar shown; focusText: the focused editor's text, 120 characters).
 void connectKeyboardSources(KeyboardInsets *insets, QQmlApplicationEngine *engine);
 
 /// Feeds `insets` for the windows `engine` creates (call before loading the QML). Only Android

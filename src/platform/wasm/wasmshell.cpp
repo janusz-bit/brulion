@@ -33,13 +33,13 @@ EM_JS(int, brulion_shell_page_scheme, (), {
     return protocol === "https:" ? 1 : protocol === "http:" ? 2 : 0;
 });
 
-// The keyboard: raw readings of the viewports go to Module.brulionViewportEvent (below), which
-// hands them to C++ (KeyboardInsets computes the keyboard, src/app/ui/keyboardinsets.h). Every
-// event starts a loop over animation frames that reports each change and, once the values stayed
-// put for 6 frames (at most 60 frames after the last event), a last reading marked settled: the
-// keyboard slides for a few hundred milliseconds and the browser resizes in steps. iOS scrolls the
-// page to the input element Qt keeps for the keyboard: the page is put back at the top (the shell
-// also pins that element, wasm/index.html).
+// The keyboard: raw readings of the viewports (and whether Qt's keyboard <input> has the focus) go
+// to Module.brulionViewportEvent (below), which hands them to C++ (KeyboardInsets computes the
+// keyboard, src/app/ui/keyboardinsets.h). Every event starts a loop over animation frames that
+// reports each change and, once the values stayed put for 6 frames (at most 60 frames after the
+// last event), a last reading marked settled: the keyboard slides for a few hundred milliseconds
+// and the browser resizes in steps. iOS scrolls the page to the input element Qt keeps for the
+// keyboard: the page is put back at the top (the shell also pins that element, wasm/index.html).
 EM_JS(int, brulion_shell_watch_viewport, (), {
     var vv = globalThis["visualViewport"];
     if (!vv || !vv.addEventListener) return 0;
@@ -101,7 +101,19 @@ EM_JS(int, brulion_shell_watch_viewport, (), {
         }
         globalThis["requestAnimationFrame"](frame);
     };
-    var trigger = function() {
+    // Focus moving between Qt's elements stays inside its shadow root (the document sees no
+    // focusin when both ends are in it): listened to there.
+    var hooked = false;
+    var trigger;
+    var hookQt = function() {
+        var host = doc.getElementById("qt-shadow-container");
+        if (hooked || !host || !host.shadowRoot) return;
+        hooked = true;
+        host.shadowRoot.addEventListener("focusin", trigger, true);
+        host.shadowRoot.addEventListener("focusout", trigger, true);
+    };
+    trigger = function() {
+        hookQt();
         frames = 0;
         check();
         stable = 0;
@@ -119,6 +131,7 @@ EM_JS(int, brulion_shell_watch_viewport, (), {
     doc.addEventListener("focusin", trigger, true);
     doc.addEventListener("focusout", trigger, true);
     if (globalThis["ResizeObserver"]) new ResizeObserver(trigger).observe(container);
+    hookQt();
     var first = read(true);
     last = keyOf(first);
     post(first);

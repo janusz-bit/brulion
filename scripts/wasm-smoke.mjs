@@ -23,7 +23,8 @@
 // browser scrolled (iOS) back at the top. --keyboard-phone does the same on an emulated phone
 // (412×915 CSS px, DPR 2.625, touch) with today's journal written into IndexedDB and a block
 // edited with a tap: the page asks for interactive-widget=resizes-content (and resizes-visual with
-// ?keyboard=visual), Qt's hidden keyboard <input> stays pinned in the window's corner, a keyboard
+// ?keyboard=visual), Qt's hidden keyboard <input> stays pinned in the window's corner (a search
+// field with the Enter key: no autofill bar over the keyboard in Chrome and Brave), a keyboard
 // that shrinks the visual viewport (resizes-visual, iOS) lifts the docked toolbar onto it, a page
 // the browser shrank itself (resizes-content: the emulated screen made lower) gets no overlap,
 // the keyboard still counts as shown and the toolbar ends at the window's bottom — also with a
@@ -525,7 +526,8 @@ async function main() {
       const scrolled = root ? [...root.querySelectorAll('.qt-screen, .qt-window, .qt-window *')]
         .filter((e) => e.scrollTop || e.scrollLeft).map((e) => e.className || e.tagName) : null;
       return { style: !!root?.getElementById('brulion-keyboard-style'), focused: !!input && root.activeElement === input,
-               left: cs?.left ?? null, top: cs?.top ?? null, scrolled,
+               left: cs?.left ?? null, top: cs?.top ?? null, scrolled, type: input?.getAttribute('type') ?? null,
+               typeProperty: input?.type ?? null, enterKey: input?.getAttribute('enterkeyhint') ?? null,
                pageScroll: document.scrollingElement?.scrollTop ?? null };
     })()`;
     const mode = await evaluate(`({ meta: document.getElementById('brulion-viewport')?.content ?? null,
@@ -552,6 +554,11 @@ async function main() {
     console.log(`keyboard-phone: Qt's keyboard input ${JSON.stringify(pin)}`);
     if (!pin?.style || pin.left !== '0px' || pin.top !== '0px') {
       problems.push(`keyboard-phone: Qt's keyboard input is not pinned in the window's corner: ${JSON.stringify(pin)}`);
+    }
+    // A search field (no autofill bar over the keyboard in Chrome and Brave) that Qt still reads
+    // as "text", with the keyboard's Enter key.
+    if (pin?.type !== 'search' || pin.typeProperty !== 'text' || pin.enterKey !== 'enter') {
+      problems.push(`keyboard-phone: Qt's keyboard input is not a search field with an Enter key: ${JSON.stringify(pin)}`);
     }
     // [what, the page's setup, the report expected]
     const H = phone.height;
