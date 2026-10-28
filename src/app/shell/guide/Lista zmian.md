@@ -7,6 +7,14 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.5.1 — w przygotowaniu
+
+**Nowe**
+
+**Zmiany**
+
+**Poprawki**
+
 ## 0.5.0 — 28 października 2026
 
 **Nowe**
