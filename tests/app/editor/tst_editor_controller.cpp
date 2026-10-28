@@ -1522,6 +1522,18 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(!f.page.undoTokenEdit(r.value(u"undo"_s).toInt()));
         QVERIFY(f.host.file(u"Plan.md"_s).endsWith(u"- dopisane\r\n"_s));
 
+        // Undo after the page was renamed or deleted meanwhile: the old name never comes back.
+        f.host.setFile(u"Plan.md"_s, other);
+        r = f.page.editTokenIn(u"Plan.md"_s, 2, raw, ref, u"shift"_s, 1, 0);
+        QVERIFY(r.value(u"ok"_s).toBool());
+        f.host.setFile(u"Archiwum/Plan.md"_s, f.host.file(u"Plan.md"_s));
+        f.host.removeFile(u"Plan.md"_s);
+        QVERIFY(!f.page.undoTokenEdit(r.value(u"undo"_s).toInt()));
+        bool exists = true;
+        f.host.read(u"Plan.md"_s, &exists);
+        QVERIFY(!exists);
+        QCOMPARE(f.host.file(u"Archiwum/Plan.md"_s), after);
+
         // A block the file does not have any more (its text changed): nothing written.
         f.host.setFile(u"Plan.md"_s, other);
         r = f.page.editTokenIn(u"Plan.md"_s, 2, u"- [ ] Zapłacić za żłobek i przedszkole 📅 2026-10-20 ⏫"_s, ref,

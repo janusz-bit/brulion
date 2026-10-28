@@ -2654,6 +2654,12 @@ bool PageController::undoTokenEdit(int undo)
         return false;
     const ForeignEdit edit = *it;
     m_foreignEdits.erase(it);
+    // writeIfUnchanged() writes a missing file too: a page renamed or deleted since the edit must
+    // not come back under its old name with its old text.
+    bool exists = false;
+    m_host->read(edit.path, &exists);
+    if (!exists)
+        return false;
     return m_host->writeIfUnchanged(edit.path, edit.before, edit.after) == EditorHost::WriteResult::Written;
 }
 
