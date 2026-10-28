@@ -5,13 +5,13 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 ## Funkcje
 
-* **Zdjęcia z internetu — sprawdzić na telefonie i w przeglądarce.** Funkcja jest zrobiona, ale
-  nie była uruchomiona na Androidzie ani w wersji webowej (listy kontrolne: docs/ANDROID.md
-  „Obrazy z internetu”, docs/WEB.md):
-  * Android: czy `http://` działa przy `cleartextTrafficPermitted` (jeśli nie — zdecydować
-    w `network_security_config.xml`), pamięć podręczna po restarcie i offline, dotknięcie →
-    przeglądarka zdjęcia i gest Wstecz, długie przytrzymanie → menu, wklejenie adresu z Chrome,
-    eksport z „Dołącz kopie”;
+* **Zdjęcia z internetu — sprawdzić na telefonie i w przeglądarce.** Na emulatorze Androida
+  sprawdzone (`scripts/android-emulator-test.sh --web-pictures`: `https://` i `http://`, pamięć
+  podręczna po restarcie i offline, przeglądarka zdjęcia i Wstecz, menu z przytrzymania, zapis
+  w notatniku); wersja webowa nie była uruchomiona (listy kontrolne: docs/ANDROID.md „Obrazy
+  z internetu”, docs/WEB.md):
+  * prawdziwy telefon: przesuwanie powiększonego zdjęcia palcem i gest Wstecz z krawędzi,
+    wklejenie adresu skopiowanego w Chrome przez „Wklej” z menu tekstu, eksport z „Dołącz kopie”;
   * przeglądarka: obraz z serwera z CORS i bez (komunikat nazywa CORS), `http://` na stronie
     `https://` (komunikat o mieszanej treści), brak zapytania wstępnego (preflight) w Firefoksie,
     eksport z kopiami.

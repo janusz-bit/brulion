@@ -4,8 +4,9 @@
 // scripts/android-emulator-test.sh — not part of the app. Writes "SELFTEST ..." lines to
 // logcat: the permission state, two rounds of scheduleReminders() (a reminder in 45 s, an alarm
 // in 75 s ringing 1 minute, one in the past that must be skipped), two files saved to Downloads
-// (saveToDownloads: MediaStore), every activated() tap and every "Zrobione" tap (reminder 101 is
-// on a task: its notification has the button; takeDoneRequests()).
+// (saveToDownloads: MediaStore), every activated() tap and every "Zrobione" tap (reminders 101 and
+// 104 are on tasks: their notifications have the button; takeDoneRequests()). 104 comes due in
+// 200 s, after the script killed the process: its tap waits in the queue for the next start.
 
 #include "android/androidbridge.h"
 
@@ -64,16 +65,19 @@ int main(int argc, char *argv[])
     logPermissions("start", bridge);
 
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    // 101 is a task's reminder ("Zrobione" in its notification).
-    QJsonObject task =
-            reminder(101, u"Przypomnienie — zażółć gęślą jaźń"_s, now + 45'000, false, u"dziennik/2026-10-14.md"_s, 3);
-    task.insert(u"key"_s, u"selftest-101"_s);
-    task.insert(u"local"_s, QDateTime::fromMSecsSinceEpoch(now + 45'000).toString(u"yyyy-MM-ddTHH:mm"_s));
-    task.insert(u"task"_s, true);
+    // 101 and 104 are tasks' reminders ("Zrobione" in their notifications).
+    const auto task = [now](int id, const QString &title, qint64 in, const QString &path, int line) {
+        QJsonObject item = reminder(id, title, now + in, false, path, line);
+        item.insert(u"key"_s, u"selftest-%1"_s.arg(id));
+        item.insert(u"local"_s, QDateTime::fromMSecsSinceEpoch(now + in).toString(u"yyyy-MM-ddTHH:mm"_s));
+        item.insert(u"task"_s, true);
+        return item;
+    };
     const QJsonArray items{
-            task,
+            task(101, u"Przypomnienie — zażółć gęślą jaźń"_s, 45'000, u"dziennik/2026-10-14.md"_s, 3),
             reminder(102, u"Alarm — pobudka"_s, now + 75'000, true, u"strony/Łódź.md"_s, 7),
             reminder(103, u"Przeszłe"_s, now - 60'000, false, u"stare.md"_s, 1),
+            task(104, u"Zadanie przy zamkniętej aplikacji"_s, 200'000, u"strony/Źródła.md"_s, 9),
     };
     // Twice: replacing the set with the same items must be idempotent.
     for (int round = 1; round <= 2; ++round) {

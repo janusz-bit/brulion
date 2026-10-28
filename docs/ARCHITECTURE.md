@@ -11,7 +11,7 @@ One C++/QML code base, four targets, all built against **Qt 6.11.2** (CMake acce
 |---|---|---|---|
 | **NixOS / Linux desktop** | Qt from nixpkgs: flake package + NixOS module; AppImage (Qt from aqt) for other distributions | a folder (e.g. a Syncthing folder) | `org.freedesktop.Notifications` over D-Bus, tray as fallback; timed in-app (`ReminderScheduler`), the app can live hidden in the tray (`--hidden`, autostart); the tray calendar from the icon's menu (or its click, a setting) |
 | **Windows** 10/11 x86_64 (test version, docs/WINDOWS.md) | MSVC 2022 + Qt from aqt, `windeployqt`; portable ZIP and a per-user Inno Setup installer from GitHub Actions | a folder (default `Documents\Brulion`) | toast notifications through C++/WinRT (`WindowsToastBus`: Snooze/Done/OK, alarms on screen with a looping sound; the tray icon's messages when toasts are off), timed in-app (`ReminderScheduler`) while the app runs, also hidden in the tray; optional start at sign-in (the Run key, `Autostart`); a click on the tray icon opens the tray calendar (a setting; the system clock's flyout cannot be replaced) |
-| **Android** (9+, API 28–36) | Qt for Android (aqt) + `androiddeployqt`, signed APK from GitHub Actions | a folder on shared storage (Syncthing-Fork; "All files access") or app storage + Nextcloud | native `AlarmManager` alarms (Kotlin via JNI) — fire while the app is closed and after a reboot; "Zrobione" taps queued natively (`DoneQueue.kt`) and written by C++ when it runs; home-screen widgets drawn by Kotlin from a snapshot the app publishes (their quick add writes today's journal itself, see below) |
+| **Android** (9+, API 28–36) | Qt for Android (aqt) + `androiddeployqt`, signed APK from GitHub Actions | a folder on shared storage (Syncthing-Fork; "All files access") or app storage + Nextcloud | native `AlarmManager` alarms (Kotlin via JNI) — fire while the app is closed and after a reboot; "Zrobione" taps queued natively (`DoneQueue.kt`) and written by C++ at once while the app is in front, else when it returns to the front or starts (Qt's event loop is paused in the background); home-screen widgets drawn by Kotlin from a snapshot the app publishes (their quick add writes today's journal itself, see below) |
 | **Browser** | Qt for WebAssembly (single-threaded) + emsdk, offline PWA shell (`wasm/`) on GitHub Pages | Emscripten IDBFS (IndexedDB) + import/export, Nextcloud sync | web Notification API (service worker where needed) while the page is open |
 
 On the desktop (Linux, Windows) a command line for scripts and AI agents comes with it:
@@ -112,8 +112,9 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   `scheduleReminders(json)` (replaces the armed set), notification taps (`activated`,
   `takeActivation()` after a cold start), shares from other apps (`shared` / `takeShare()`: the
   JSON of what `ShareActivity` received, its files copied to `files/share-in/`; docs/ANDROID.md
-  "Udostępnij → Brulion"), "Zrobione" taps (`DoneQueue.kt`, persisted while Qt is not running:
-  `doneRequestsQueued` + `takeDoneRequests()`), the home-screen widgets (`updateWidgets(json)`:
+  "Udostępnij → Brulion"), "Zrobione" taps (`DoneQueue.kt`, persisted while Qt is not running or
+  in the background, where Qt for Android pauses its event loop: `doneRequestsQueued` +
+  `takeDoneRequests()`), the home-screen widgets (`updateWidgets(json)`:
   the snapshot of `src/app/widgets` — the app computes, Kotlin only renders; `takeWidgetActions()`
   / `widgetActionsQueued`: quick-add entries Kotlin could not write, `requeueWidgetActions()`
   those the app could not write either; `widgetNoteWritten`: one it wrote — the reminder set is
