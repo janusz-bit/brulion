@@ -1427,7 +1427,7 @@ HTML
     local file=$WK_CACHE/$1
     mkdir -p "$WK_CACHE"
     if [[ ! -f $file ]]; then
-      echo "    downloading $2"
+      echo "    downloading $2" >&2
       curl -fsSL --retry 3 -o "$file.part" "$2" && mv "$file.part" "$file"
     fi
     [[ -f $file ]] && sha256sum "$file" | grep -q "^$3 " && echo "$file"
