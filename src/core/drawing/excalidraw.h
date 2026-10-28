@@ -24,16 +24,23 @@
 
 namespace brulion::drawing {
 
-/// Largest scene read (decompressed), and largest payload looked at — a drawing is far smaller;
-/// more is a broken or hostile file.
-inline constexpr qsizetype MaxSceneBytes = 64 * 1024 * 1024;
+/// Largest scene read (decompressed), and largest payload looked at — a drawing is far smaller
+/// (pictures pasted into an Excalidraw scene are its `files`, a few MB each); more is a broken or
+/// hostile file. A small file may inflate to this much (zlib reaches 1000:1).
+inline constexpr qsizetype MaxSceneBytes = 32 * 1024 * 1024;
+/// Most JSON arrays and objects a scene may have — every point of a stroke is an array, every
+/// element an object: half a million is some thirty pages of dense handwriting. The parsed JSON
+/// takes some 200 bytes per container, so a scene of nothing but `[0,0]` within MaxSceneBytes
+/// would take gigabytes; such a scene is refused before it is parsed.
+inline constexpr qsizetype MaxSceneContainers = 500'000;
 
 /// The scene's `source` Brulion writes.
 inline constexpr QStringView SceneSource = u"https://github.com/janusz-bit/brulion";
 
 /// The drawing in a scene's JSON (UTF-8). Elements of other types, and `freedraw` elements Brulion
 /// cannot draw as they are (rotated, filled, broken points), go to Drawing::foreign; deleted
-/// elements are dropped (as Excalidraw's own export does). nullopt: no Excalidraw scene.
+/// elements are dropped (as Excalidraw's own export does). nullopt: no Excalidraw scene, or one
+/// beyond MaxSceneBytes or MaxSceneContainers.
 std::optional<Drawing> parseScene(QByteArrayView json);
 /// The scene's JSON (UTF-8, compact): the strokes (each stroke read from a scene as it was, new
 /// ones as Excalidraw writes them), the foreign elements after them, the appState with the paper

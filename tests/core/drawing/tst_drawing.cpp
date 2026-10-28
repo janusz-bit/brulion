@@ -87,6 +87,29 @@ SvgCheck checkSvg(const QByteArray &svg)
     return out;
 }
 
+/// A scene of one freehand stroke of `points` points [0,0] (a hostile file).
+QByteArray freedrawScene(qsizetype points)
+{
+    QByteArray out("{\"type\":\"excalidraw\",\"version\":2,\"elements\":[{\"type\":\"freedraw\",\"id\":\"ź\","
+                   "\"x\":0,\"y\":0,\"points\":[");
+    out.reserve(out.size() + points * 6 + 8);
+    for (qsizetype i = 0; i < points; ++i)
+        out.append(i ? ",[0,0]" : "[0,0]");
+    out.append("]}]}");
+    return out;
+}
+
+/// A scene of `count` empty elements (a hostile file).
+QByteArray emptyElementsScene(qsizetype count)
+{
+    QByteArray out("{\"type\":\"excalidraw\",\"version\":2,\"elements\":[");
+    out.reserve(out.size() + count * 3 + 4);
+    for (qsizetype i = 0; i < count; ++i)
+        out.append(i ? ",{}" : "{}");
+    out.append("]}");
+    return out;
+}
+
 } // namespace
 
 class TestDrawing : public QObject {
@@ -654,6 +677,42 @@ private Q_SLOTS:
         QVERIFY(strokeBounds(empty).isNull());
         d.strokes.append(empty);
         QCOMPARE(bounds(d), b);
+    }
+
+    void hostileScenesAreRefusedEarly_data()
+    {
+        QTest::addColumn<QByteArray>("scene");
+        QTest::addColumn<bool>("readable");
+        QTest::newRow("a long stroke, within the budget") << freedrawScene(100000) << true;
+        QTest::newRow("one stroke of a million points") << freedrawScene(1000000) << false;
+        QTest::newRow("six hundred thousand empty elements") << emptyElementsScene(600000) << false;
+        // Beyond MaxSceneBytes: a few KB of zlib inflating to 40 MB.
+        QByteArray padded = "{\"type\":\"excalidraw\",\"version\":2,\"elements\":[],\"source\":\"";
+        padded += QByteArray(40 * 1024 * 1024, 'a');
+        QTest::newRow("inflating beyond the scene limit") << (padded + "\"}") << false;
+    }
+
+    void hostileScenesAreRefusedEarly()
+    {
+        // A small file synced or imported into the notebook (an SVG with an embedded scene) that
+        // would inflate and parse into gigabytes is refused before it is parsed.
+        QFETCH(QByteArray, scene);
+        QFETCH(bool, readable);
+        const QByteArray svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><!-- svg-source:excalidraw -->"
+                               "<!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->"
+                               "<!-- payload-start -->"
+                               + encodePayload(scene) + "<!-- payload-end --></svg>";
+        QVERIFY(svg.size() < 2 * 1024 * 1024);
+        QElapsedTimer timer;
+        timer.start();
+        ReadError error = ReadError::None;
+        const std::optional<Drawing> d = readDrawing(svg, &error);
+        QCOMPARE(d.has_value(), readable);
+        if (readable)
+            QCOMPARE(d->strokes.size(), 1);
+        else
+            QCOMPARE(error, ReadError::Corrupt);
+        QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
     }
 
     void randomInputNeverCrashes()
