@@ -235,6 +235,16 @@ private Q_SLOTS:
         // Nothing to write, or nowhere: refused.
         QVERIFY(!ws.writeAttachment(path, QByteArray()));
         QVERIFY(!ws.writeAttachment(QString(), "x"));
+        // Deleted on the disk before the vault noticed (Syncthing, a file manager): the drawing
+        // editor's next save never writes it again, and the vault reports the deletion.
+        QSignalSpy removed(&ws, &Workspace::pathRemoved);
+        const QString disk = ws.assetUrl(path).toLocalFile();
+        QVERIFY(QFile::remove(disk));
+        QVERIFY(ws.exists(path));
+        QVERIFY(!ws.writeAttachment(path, brulion::drawing::toSvg(d)));
+        QVERIFY(!QFileInfo::exists(disk));
+        QTRY_VERIFY(removed.contains(QVariantList{path}));
+        QVERIFY(!QFileInfo::exists(disk));
     }
 
     void automaticFetchesLimits();

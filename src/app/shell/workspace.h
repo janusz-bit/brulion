@@ -275,8 +275,10 @@ public:
     Q_INVOKABLE bool isDrawing(const QString &path) const override;
     /// An attachment's bytes (the drawing editor); empty when missing or unreadable.
     Q_INVOKABLE QByteArray readAttachment(const QString &path) const;
-    /// Write an attachment (the drawing editor's saves): atomic, what it replaces kept in History
-    /// as for notes, fileChanged follows. False (and errorOccurred) when it could not be written.
+    /// Write an existing attachment again (the drawing editor's saves): atomic, what it replaces
+    /// kept in History as for notes, fileChanged follows. False (and errorOccurred) when it could
+    /// not be written; false without a message when the file is gone from the disk (deleted
+    /// elsewhere, not reported yet): it is never written again, pathRemoved follows.
     Q_INVOKABLE bool writeAttachment(const QString &path, const QByteArray &data);
     /// Write a new attachment at `path`, or at "Name 2.ext", … when that is taken (the drawing
     /// editor keeps what was drawn here beside a file changed elsewhere into one it cannot edit).
