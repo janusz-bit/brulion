@@ -1546,6 +1546,53 @@ HTML
     done
     wk_ready_since "$2" "$base"
   }
+  wk_capture() { # <file>: the screen's raw pixels (header + RGBA), gzipped on the device: 10 MB
+    # through `adb exec-out` broke adb's connection to the emulator. Tried again if adb drops out.
+    local _
+    for _ in 1 2 3; do
+      if adb exec-out 'screencap | gzip -1' >"$1.gz" 2>/dev/null && gzip -dc "$1.gz" >"$1" 2>/dev/null && [[ -s $1 ]]; then
+        rm -f "$1.gz"
+        return 0
+      fi
+      sleep 2
+      adb wait-for-device
+    done
+    rm -f "$1.gz"
+    return 1
+  }
+  # The keyboard's key whose name matches the ERE: "x y name" (UiAutomator's dump of every window).
+  ime_key() {
+    adb shell rm -f /sdcard/brulion-ime.xml
+    adb shell uiautomator dump --windows /sdcard/brulion-ime.xml >/dev/null 2>&1 || true
+    adb exec-out cat /sdcard/brulion-ime.xml 2>/dev/null | sed 's/<node /\n<node /g' | grep 'inputmethod' |
+      sed -nE "s/.*content-desc=\"($1)\".*bounds=\"\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]\".*/\2 \3 \4 \5 \1/p" |
+      awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2), $5 }' | head -n 1 || true
+  }
+  wk_focus_text() { # the focused editor's text in the run's last report
+    python3 -c 'import json, sys
+last = ""
+for line in open(sys.argv[1], encoding="utf-8"):
+    try:
+        r = json.loads(line)
+    except ValueError:
+        continue
+    b = r.get("body")
+    if r.get("path") == "/__report/" + sys.argv[2] and isinstance(b, dict) and isinstance(b.get("json"), dict):
+        last = b["json"].get("focusText", last)
+print(last)' "$OUT/report.jsonl" "$1"
+  }
+  wk_focus_has() { local t; t=$(wk_focus_text "$1"); [[ ${t,,} == *"$2"* ]]; } # <run> <lower-case text>
+  wk_focus_lacks() { ! wk_focus_has "$@"; }
+  wk_ime_top() { # the keyboard's top (ime_top), tried again if adb drops out
+    local top _
+    for _ in 1 2 3; do
+      top=$(ime_top 2>/dev/null || true)
+      [[ -n $top ]] && break
+      sleep 2
+      adb wait-for-device
+    done
+    echo "$top"
+  }
   wk_screen_line() { # <name> <gap> <magenta> <rows> <magenta anywhere>
     echo "    $1: ${2} px between the keyboard's top and the toolbar (${3} px of them the keyboard's room), the toolbar ${4} px tall; magenta rows on screen: $5"
   }
