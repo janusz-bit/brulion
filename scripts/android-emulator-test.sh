@@ -1481,7 +1481,7 @@ HTML
   wk_count() { local s; s=$(wk_state "$1"); echo "${s%% *}"; }
   # First-run screens, prompts and tips of the browsers: tapped away by their buttons' names
   # (Firefox's "Set as default browser" opens the system's dialog: Cancel).
-  WK_DISMISS='Accept & continue|Accept and continue|Use without an account|No thanks|No, thanks|NO THANKS|Not now|NOT NOW|Skip|SKIP|Got it|GOT IT|Maybe later|Not interested|Continue|Close|Dismiss|Cancel|Pomiń|Nie teraz|Nie, dziękuję|Anuluj'
+  WK_DISMISS='Accept & continue|Accept and continue|Use without an account|No thanks|No Thanks|No, thanks|NO THANKS|Not now|NOT NOW|Skip|SKIP|Got it|GOT IT|Maybe later|Not interested|Continue|Close|Dismiss|Cancel|Pomiń|Nie teraz|Nie, dziękuję|Anuluj'
   # A browser's first start: its welcome screens tapped away on a page that does not start the
   # app (seed.html without a query reports itself and stays), then the browser stopped.
   wk_first_start() { # <browser>
@@ -1597,6 +1597,15 @@ print(last)' "$OUT/report.jsonl" "$1"
       return
     fi
     sleep 6 # the journal's first frames
+    # A browser's prompt over the page (Firefox asks for a survey now and then): tapped away.
+    local _ xy
+    for _ in 1 2 3; do
+      xy=$(ui_find_all "$WK_DISMISS" | head -n 1 || true)
+      [[ -n $xy ]] || break
+      echo "    tapping away a browser's prompt at $xy"
+      adb shell input tap "$xy"
+      sleep 3
+    done
     app_shot "wk-$run-1-journal"
     start=$(wk_count "$run")
     adb shell input tap $((SCREEN_W / 2)) $((SCREEN_H * 45 / 100))

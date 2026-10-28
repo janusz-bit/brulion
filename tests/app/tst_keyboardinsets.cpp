@@ -15,8 +15,8 @@
 using namespace Qt::StringLiterals;
 using brulion::ui::KeyboardInsets;
 using brulion::ui::keyboardOverlap;
-using brulion::ui::viewportOverlap;
 using brulion::ui::ViewportKeyboard;
+using brulion::ui::viewportOverlap;
 using brulion::ui::ViewportSample;
 
 namespace {
@@ -62,8 +62,8 @@ Step step(qreal width, qreal inner, qreal height, qreal container, qreal window,
           qreal overlap, bool shown, bool animating, const QString &mode = u"content"_s, qreal offsetTop = 0,
           bool touch = true)
 {
-    return {sample(width, inner, height, offsetTop, container, touch, editing, settled, mode), window, overlap,
-            shown, animating};
+    return {sample(width, inner, height, offsetTop, container, touch, editing, settled, mode), window, overlap, shown,
+            animating};
 }
 
 } // namespace
@@ -189,7 +189,8 @@ void TestKeyboardInsets::viewportOverlap_data()
     QTest::addColumn<qreal>("expected");
 
     QTest::newRow("komputer, bez klawiatury") << 800.0 << 800.0 << 0.0 << 1.0 << 800.0 << 800.0 << 0.0;
-    QTest::newRow("Chrome, resizes-visual, klawiatura 300 px") << 780.0 << 480.0 << 0.0 << 1.0 << 780.0 << 780.0 << 300.0;
+    QTest::newRow("Chrome, resizes-visual, klawiatura 300 px")
+            << 780.0 << 480.0 << 0.0 << 1.0 << 780.0 << 780.0 << 300.0;
     QTest::newRow("Chrome, widok przesunięty do pola (offsetTop 120)")
             << 780.0 << 480.0 << 120.0 << 1.0 << 780.0 << 780.0 << 180.0;
     // brave-browser#60074: Brave's visualViewport.height leaves out its bottom toolbar, which it
@@ -198,14 +199,17 @@ void TestKeyboardInsets::viewportOverlap_data()
     QTest::newRow("Brave #60074, resizes-visual (pomiar zgłaszającego)")
             << 762.0 << 385.9 << 0.0 << 1.0 << 762.0 << 762.0 << 376.1;
     QTest::newRow("Brave, resizes-content (Qt jeszcze 762)") << 433.9 << 433.9 << 0.0 << 1.0 << 433.9 << 762.0 << 0.0;
-    QTest::newRow("nieaktualne innerHeight w trakcie animacji") << 780.0 << 480.0 << 0.0 << 1.0 << 480.0 << 480.0 << 0.0;
+    QTest::newRow("nieaktualne innerHeight w trakcie animacji")
+            << 780.0 << 480.0 << 0.0 << 1.0 << 480.0 << 480.0 << 0.0;
     QTest::newRow("iOS Safari, strona przewinięta o 20 px") << 800.0 << 530.0 << 20.0 << 1.0 << 800.0 << 800.0 << 250.0;
     QTest::newRow("powiększenie gestem ×2") << 800.0 << 400.0 << 0.0 << 2.0 << 800.0 << 800.0 << 0.0;
-    QTest::newRow("powiększenie 1,005 (zaokrąglenie skali)") << 780.0 << 480.0 << 0.0 << 1.005 << 780.0 << 780.0 << 300.0;
+    QTest::newRow("powiększenie 1,005 (zaokrąglenie skali)")
+            << 780.0 << 480.0 << 0.0 << 1.005 << 780.0 << 780.0 << 300.0;
     QTest::newRow("zaokrąglenie 780,4 / 780") << 780.4 << 780.4 << 0.0 << 1.0 << 780.0 << 780.0 << 0.0;
     QTest::newRow("różnica 1,9 px to jeszcze zaokrąglenie") << 780.0 << 778.1 << 0.0 << 1.0 << 780.0 << 780.0 << 0.0;
     QTest::newRow("różnica 2 px to już klawiatura") << 780.0 << 778.0 << 0.0 << 1.0 << 780.0 << 780.0 << 2.0;
-    QTest::newRow("ujemny offsetTop (overscroll Firefoksa)") << 780.0 << 480.0 << -15.0 << 1.0 << 780.0 << 780.0 << 300.0;
+    QTest::newRow("ujemny offsetTop (overscroll Firefoksa)")
+            << 780.0 << 480.0 << -15.0 << 1.0 << 780.0 << 780.0 << 300.0;
     QTest::newRow("klawiatura wyższa niż kontener") << 400.0 << 0.5 << 0.0 << 1.0 << 400.0 << 400.0 << 399.5;
     QTest::newRow("widok poniżej kontenera") << 400.0 << 300.0 << 500.0 << 1.0 << 400.0 << 400.0 << 0.0;
     QTest::newRow("bez rozmiaru kontenera: okno Qt") << 780.0 << 480.0 << 0.0 << 1.0 << 0.0 << 780.0 << 300.0;
@@ -231,8 +235,8 @@ void TestKeyboardInsets::viewportOverlap()
     QFETCH(qreal, containerHeight);
     QFETCH(qreal, windowHeight);
     QFETCH(qreal, expected);
-    const ViewportSample s = sample(412, innerHeight, height, offsetTop, containerHeight, true, true, true,
-                                    u"visual"_s, scale);
+    const ViewportSample s =
+            sample(412, innerHeight, height, offsetTop, containerHeight, true, true, true, u"visual"_s, scale);
     const qreal got = brulion::ui::viewportOverlap(s, windowHeight);
     QVERIFY2(std::isfinite(got), "finite");
     QVERIFY2(qAbs(got - expected) < 0.01, qPrintable(u"%1 != %2"_s.arg(got).arg(expected)));
@@ -335,6 +339,93 @@ void TestKeyboardInsets::viewportKeyboardSequence_data()
             step(kNaN, 780, -40, kInf, kNaN, true, true, 0, false, false),
             step(412, 480, 480, 480, 480, true, true, 0, true, false),
     };
+
+    // Recorded in real browsers on the Android 16 emulator (Pixel 6, 1080×2400, density 420):
+    // scripts/android-emulator-test.sh --web-keyboard, 2026-10-28 — a block tapped, the keyboard up,
+    // a word typed, Enter, Back. The rows are the app's own reports (rounded to 0.01 px).
+    // Chrome's autofill bar (48 px) comes first, then the keyboard; Enter passes the focus through
+    // Qt's focus helper (the bar goes and comes back). The page shrinks: overlap 0 throughout.
+    QTest::newRow("nagranie: Chrome 133, Android 16 (emulator), resizes-content") << QList<Step>{
+            step(412, 786, 786.29, 786.29, 786, false, true, 0, false, false, u"content"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, false, 0, false, false, u"content"_s, 0, true),
+            step(412, 738, 738.29, 738.29, 738, true, false, 0, false, true, u"content"_s, 0, true),
+            step(412, 738, 738.29, 738.29, 738, true, true, 0, false, false, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, true, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, true, true, 0, true, false, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, false, false, 0, true, false, u"content"_s, 0, true),
+            step(412, 474, 474.29, 474.29, 474, false, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 474, 474.29, 474.29, 474, true, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, true, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, true, true, 0, true, false, u"content"_s, 0, true),
+            step(412, 474, 474.29, 474.29, 474, true, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, false, 0, false, true, u"content"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, true, 0, false, false, u"content"_s, 0, true),
+    };
+
+    // The visual viewport shrinks, the page keeps its size: the overlap is what is covered.
+    QTest::newRow("nagranie: Chrome 133, resizes-visual") << QList<Step>{
+            step(412, 786, 786.29, 786.29, 786, false, true, 0, false, false, u"visual"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, false, 0, false, false, u"visual"_s, 0, true),
+            step(412, 786, 738.29, 786.29, 786, true, false, 48, true, true, u"visual"_s, 0, true),
+            step(412, 786, 738.29, 786.29, 786, true, true, 48, true, false, u"visual"_s, 0, true),
+            step(412, 786, 426.29, 786.29, 786, true, false, 360, true, true, u"visual"_s, 0, true),
+            step(412, 786, 426.29, 786.29, 786, true, true, 360, true, false, u"visual"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, false, 0, false, true, u"visual"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, true, 0, false, false, u"visual"_s, 0, true),
+    };
+
+    // Brave hides its bottom toolbar with the keyboard; the page's own size is right.
+    QTest::newRow("nagranie: Brave 1.97.59, resizes-content") << QList<Step>{
+            step(411, 737, 737.52, 737.52, 738, false, true, 0, false, false, u"content"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, false, 0, false, false, u"content"_s, 0, true),
+            step(411, 673, 673.52, 673.52, 674, true, false, 0, false, true, u"content"_s, 0, true),
+            step(411, 673, 673.52, 673.52, 674, true, true, 0, false, false, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, false, 0, true, true, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, true, 0, true, false, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 473, false, false, 0, true, false, u"content"_s, 0, true),
+            step(411, 473, 473.14, 473.14, 473, false, false, 0, true, true, u"content"_s, 0, true),
+            step(411, 473, 473.14, 473.14, 473, true, false, 0, true, true, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, false, 0, true, true, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, true, 0, true, false, u"content"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, false, 0, false, true, u"content"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, true, 0, false, false, u"content"_s, 0, true),
+    };
+
+    // brave-browser#60074: 376.38 px reported, 328.38 px really covered (the page shrinks to 409.14
+    // with resizes-content): the 48 px band the user saw. Why the page asks for resizes-content.
+    QTest::newRow("nagranie: Brave 1.97.59, resizes-visual (błąd #60074)") << QList<Step>{
+            step(411, 737, 737.52, 737.52, 738, false, true, 0, false, false, u"visual"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, false, 0, false, false, u"visual"_s, 0, true),
+            step(411, 737, 673.52, 737.52, 738, true, false, 64, true, true, u"visual"_s, 0, true),
+            step(411, 737, 673.52, 737.52, 738, true, true, 64, true, false, u"visual"_s, 0, true),
+            step(411, 737, 361.14, 737.52, 738, true, false, 376.38, true, true, u"visual"_s, 0, true),
+            step(411, 737, 361.14, 737.52, 738, true, true, 376.38, true, false, u"visual"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, false, 0, false, true, u"visual"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, true, 0, false, false, u"visual"_s, 0, true),
+    };
+
+    QTest::newRow("nagranie: Firefox 157.0.1, resizes-content") << QList<Step>{
+            step(414, 782, 782.38, 782.38, 782, false, true, 0, false, false, u"content"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, false, 0, false, false, u"content"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, true, 0, false, false, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, true, false, 0, true, true, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, true, true, 0, true, false, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, false, false, 0, true, false, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, true, false, 0, true, false, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, true, true, 0, true, false, u"content"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, false, 0, false, true, u"content"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, true, 0, false, false, u"content"_s, 0, true),
+    };
+
+    QTest::newRow("nagranie: Firefox 157.0.1, resizes-visual") << QList<Step>{
+            step(414, 782, 782.38, 782.38, 782, false, true, 0, false, false, u"visual"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, false, 0, false, false, u"visual"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, true, 0, false, false, u"visual"_s, 0, true),
+            step(414, 782, 468.05, 782.38, 782, true, false, 314.33, true, true, u"visual"_s, 0, true),
+            step(414, 782, 468.05, 782.38, 782, true, true, 314.33, true, false, u"visual"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, false, 0, false, true, u"visual"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, true, 0, false, false, u"visual"_s, 0, true),
+    };
 }
 
 void TestKeyboardInsets::viewportKeyboardSequence()
@@ -370,7 +461,8 @@ void TestKeyboardInsets::viewportTallestPerWidth()
     QCOMPARE(keyboard.tallest(411.6), 780.0); // rounded widths
     QCOMPARE(keyboard.tallest(915), 360.0);
     // A pinch-zoomed page is no shrink, malformed heights never become the tallest.
-    const ViewportKeyboard::State zoomed = keyboard.update(sample(412, 780, 390, 0, 780, true, true, true, u"visual"_s, 2), 780);
+    const ViewportKeyboard::State zoomed =
+            keyboard.update(sample(412, 780, 390, 0, 780, true, true, true, u"visual"_s, 2), 780);
     QCOMPARE(zoomed.overlap, 0.0);
     QVERIFY(!zoomed.shown);
     keyboard.update(sample(412, 780, kInf, 0, 780), 780);
@@ -412,7 +504,7 @@ void TestKeyboardInsets::viewportSampleFeedsInsets()
     insets.setViewportSample(sample(412, 780, 480, 0, 780, true, true, true, u"visual"_s));
     QCOMPARE(insets.overlap(), 300.0);
     QVERIFY(!insets.animating());
-    QCOMPARE(overlap.count(), 2);   // 180, 300
+    QCOMPARE(overlap.count(), 2); // 180, 300
     QCOMPARE(shown.count(), 1);
     QCOMPARE(animating.count(), 2); // on, off
     QCOMPARE(source.count(), 0);

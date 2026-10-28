@@ -87,11 +87,11 @@ public:
     qreal tallest(qreal innerWidth) const;
 
 private:
-    QHash<int, qreal> m_tallest;      // qRound(innerWidth) → the tallest visualViewport.height
-    ViewportSample m_settled;         // the last settled sample (geometry only)
+    QHash<int, qreal> m_tallest; // qRound(innerWidth) → the tallest visualViewport.height
+    ViewportSample m_settled;    // the last settled sample (geometry only)
     bool m_hasSettled = false;
-    bool m_moving = false;            // an unsettled sample moved away from m_settled
-    bool m_shrunk = false;            // shown from the page's shrink (the last sample)
+    bool m_moving = false; // an unsettled sample moved away from m_settled
+    bool m_shrunk = false; // shown from the page's shrink (the last sample)
 };
 
 class KeyboardInsets : public QObject {

@@ -28,9 +28,11 @@ constexpr qreal kMaxScale = 1.01;
 // half a pixel and more).
 bool sameGeometry(const ViewportSample &a, const ViewportSample &b)
 {
-    const auto same = [](qreal x, qreal y) { return finite(x) && finite(y) ? std::abs(x - y) < 0.5 : finite(x) == finite(y); };
+    const auto same = [](qreal x, qreal y) {
+        return finite(x) && finite(y) ? std::abs(x - y) < 0.5 : finite(x) == finite(y);
+    };
     return same(a.innerWidth, b.innerWidth) && same(a.innerHeight, b.innerHeight) && same(a.height, b.height)
-        && same(a.offsetTop, b.offsetTop) && same(a.scale, b.scale) && same(a.containerHeight, b.containerHeight);
+           && same(a.offsetTop, b.offsetTop) && same(a.scale, b.scale) && same(a.containerHeight, b.containerHeight);
 }
 
 } // namespace
@@ -67,9 +69,9 @@ qreal viewportOverlap(const ViewportSample &sample, qreal windowHeight)
         || sample.scale <= 0 || sample.scale > kMaxScale)
         return 0;
     const qreal container = finite(sample.containerHeight) && sample.containerHeight > 0 ? sample.containerHeight
-        : finite(windowHeight) && windowHeight > 0                                        ? windowHeight
-        : finite(sample.innerHeight) && sample.innerHeight > 0                            ? sample.innerHeight
-                                                                                          : 0;
+                            : finite(windowHeight) && windowHeight > 0                   ? windowHeight
+                            : finite(sample.innerHeight) && sample.innerHeight > 0       ? sample.innerHeight
+                                                                                         : 0;
     if (container <= 0)
         return 0;
     const qreal top = std::max<qreal>(0, sample.offsetTop);
@@ -84,9 +86,10 @@ ViewportKeyboard::State ViewportKeyboard::update(const ViewportSample &sample, q
     // The page the browser shrank itself (interactive-widget=resizes-content): the visual
     // viewport is the whole page, so the keyboard shows as a shrink against the tallest seen.
     const bool usable = finite(sample.height) && sample.height > 0 && finite(sample.scale) && sample.scale > 0
-        && sample.scale <= kMaxScale;
+                        && sample.scale <= kMaxScale;
     if (usable) {
-        qreal &tallest = m_tallest[qRound(finite(sample.innerWidth) ? std::clamp<qreal>(sample.innerWidth, 0, 1e6) : 0)];
+        qreal &tallest =
+                m_tallest[qRound(finite(sample.innerWidth) ? std::clamp<qreal>(sample.innerWidth, 0, 1e6) : 0)];
         tallest = std::max(tallest, sample.height);
         // Qt's <input> focused starts it; a focus passing between Qt's elements (Enter: the next
         // block) does not end it while the page stays shrunk.
@@ -196,7 +199,8 @@ void KeyboardInsets::applyPlatform(qreal overlap, bool shown, bool animating, co
     m_platform = {clampOverlap(overlap), shown, animating};
     if (first) {
         qCInfo(brulion::logging::lcPlatform).noquote()
-                << u"On-screen keyboard: reported by the platform"_s + (how.isEmpty() ? QString() : u" ("_s + how + u")"_s);
+                << u"On-screen keyboard: reported by the platform"_s
+                           + (how.isEmpty() ? QString() : u" ("_s + how + u")"_s);
     }
     update();
 }

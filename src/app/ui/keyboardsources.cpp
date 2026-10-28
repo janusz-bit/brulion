@@ -222,7 +222,8 @@ void connectKeyboardSources(KeyboardInsets *insets, QQmlApplicationEngine *engin
         QObject::connect(engine, &QQmlApplicationEngine::objectCreated, insets,
                          [insets, publish](QObject *object, const QUrl &) {
                              if (auto *w = qobject_cast<QQuickWindow *>(object))
-                                 QObject::connect(w, &QQuickWindow::frameSwapped, insets, publish, Qt::QueuedConnection);
+                                 QObject::connect(w, &QQuickWindow::frameSwapped, insets, publish,
+                                                  Qt::QueuedConnection);
                          });
     }
     QPointer<KeyboardInsets> target(insets);
