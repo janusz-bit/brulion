@@ -579,7 +579,7 @@ private Q_SLOTS:
         const QPointF inkScene(200, 140); // on the first line (100,100 → 300,180)
         const QPoint ink = (inkScene - bounds.topLeft() + QPointF(16, 16)).toPoint();
         QVERIFY2(image.pixelColor(ink).lightness() < 140, qPrintable(image.pixelColor(ink).name()));
-        QCOMPARE(image.pixelColor(2, 2).alpha(), 255); // the paper (a white sheet in every theme)
+        QCOMPARE(image.pixelColor(2, 2).alpha(), 255); // the paper (Qt draws the light picture)
         // Loaded again: the same drawing and the same file.
         DrawingCanvas other;
         QCOMPARE(other.load(svg), QString());
