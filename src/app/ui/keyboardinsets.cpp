@@ -20,6 +20,19 @@ bool finite(qreal v)
     return std::isfinite(v);
 }
 
+// A pinch-zoomed page shrinks the visual viewport too (a desktop touchpad, two fingers on a
+// phone): no keyboard. A little above 1: browsers round the scale.
+constexpr qreal kMaxScale = 1.01;
+
+// Two readings of the viewports' geometry the browser build tells apart (it reports changes of
+// half a pixel and more).
+bool sameGeometry(const ViewportSample &a, const ViewportSample &b)
+{
+    const auto same = [](qreal x, qreal y) { return finite(x) && finite(y) ? std::abs(x - y) < 0.5 : finite(x) == finite(y); };
+    return same(a.innerWidth, b.innerWidth) && same(a.innerHeight, b.innerHeight) && same(a.height, b.height)
+        && same(a.offsetTop, b.offsetTop) && same(a.scale, b.scale) && same(a.containerHeight, b.containerHeight);
+}
+
 } // namespace
 
 qreal keyboardOverlap(const QRectF &keyboard, bool nativePixels, qreal dpr, const QRect &window, bool visible)
@@ -46,6 +59,54 @@ qreal keyboardOverlap(const QRectF &keyboard, bool nativePixels, qreal dpr, cons
     // Everything from the keyboard's top down counts (also below a keyboard that ends above the
     // window's bottom: what sits on the keyboard goes above its top).
     return std::clamp<qreal>(bottom - std::max(kb.top(), top), 0, window.height());
+}
+
+qreal viewportOverlap(const ViewportSample &sample, qreal windowHeight)
+{
+    if (!finite(sample.height) || sample.height <= 0 || !finite(sample.offsetTop) || !finite(sample.scale)
+        || sample.scale <= 0 || sample.scale > kMaxScale)
+        return 0;
+    const qreal container = finite(sample.containerHeight) && sample.containerHeight > 0 ? sample.containerHeight
+        : finite(windowHeight) && windowHeight > 0                                        ? windowHeight
+        : finite(sample.innerHeight) && sample.innerHeight > 0                            ? sample.innerHeight
+                                                                                          : 0;
+    if (container <= 0)
+        return 0;
+    const qreal top = std::max<qreal>(0, sample.offsetTop);
+    const qreal overlap = std::clamp<qreal>(container - (top + sample.height), 0, container);
+    return overlap < ViewportKeyboard::MinOverlap ? 0 : overlap;
+}
+
+ViewportKeyboard::State ViewportKeyboard::update(const ViewportSample &sample, qreal windowHeight)
+{
+    State state;
+    state.overlap = viewportOverlap(sample, windowHeight);
+    // The page the browser shrank itself (interactive-widget=resizes-content): the visual
+    // viewport is the whole page, so the keyboard shows as a shrink against the tallest seen.
+    const bool usable = finite(sample.height) && sample.height > 0 && finite(sample.scale) && sample.scale > 0
+        && sample.scale <= kMaxScale;
+    if (usable) {
+        qreal &tallest = m_tallest[qRound(finite(sample.innerWidth) ? std::clamp<qreal>(sample.innerWidth, 0, 1e6) : 0)];
+        tallest = std::max(tallest, sample.height);
+        if (sample.touch && sample.editing && tallest - sample.height >= MinKeyboard)
+            state.shown = true;
+    }
+    if (state.overlap > 0)
+        state.shown = true;
+    if (sample.settled) {
+        m_settled = sample;
+        m_hasSettled = true;
+        m_moving = false;
+    } else if (!m_hasSettled || !sameGeometry(sample, m_settled)) {
+        m_moving = true;
+    }
+    state.animating = m_moving && !sample.settled;
+    return state;
+}
+
+qreal ViewportKeyboard::tallest(qreal innerWidth) const
+{
+    return m_tallest.value(qRound(finite(innerWidth) ? std::clamp<qreal>(innerWidth, 0, 1e6) : 0), 0);
 }
 
 KeyboardInsets::KeyboardInsets(QObject *parent) : QObject(parent)
@@ -112,12 +173,37 @@ void KeyboardInsets::simulate(qreal overlap, bool animating)
 
 void KeyboardInsets::setPlatformState(qreal overlap, bool shown, bool animating)
 {
+    m_hasViewportSample = false;
+    applyPlatform(overlap, shown, animating, QString());
+}
+
+void KeyboardInsets::setViewportSample(const ViewportSample &sample)
+{
+    m_viewportSample = sample;
+    m_hasViewportSample = true;
+    const ViewportKeyboard::State state = m_viewportKeyboard.update(sample, m_windowHeight);
+    applyPlatform(state.overlap, state.shown, state.animating,
+                  sample.mode.isEmpty() ? u"browser"_s : u"browser, interactive-widget=resizes-%1"_s.arg(sample.mode));
+}
+
+void KeyboardInsets::applyPlatform(qreal overlap, bool shown, bool animating, const QString &how)
+{
     const bool first = !m_hasPlatform;
     m_hasPlatform = true;
     m_platform = {clampOverlap(overlap), shown, animating};
-    if (first)
-        qCInfo(brulion::logging::lcPlatform) << "On-screen keyboard: reported by the platform";
+    if (first) {
+        qCInfo(brulion::logging::lcPlatform).noquote()
+                << u"On-screen keyboard: reported by the platform"_s + (how.isEmpty() ? QString() : u" ("_s + how + u")"_s);
+    }
     update();
+}
+
+void KeyboardInsets::setMarked(bool marked)
+{
+    if (marked == m_marked)
+        return;
+    m_marked = marked;
+    Q_EMIT markedChanged();
 }
 
 void KeyboardInsets::setInputMethodState(qreal overlap, bool shown)
@@ -132,8 +218,14 @@ void KeyboardInsets::setWindowHeight(qreal height)
     if (h == m_windowHeight)
         return;
     m_windowHeight = h;
-    // Clamp what is known already (a smaller window after a rotation).
-    m_platform.overlap = clampOverlap(m_platform.overlap);
+    // The browser's last sample again (without a container height the window is the container);
+    // else clamp what is known already (a smaller window after a rotation).
+    if (m_hasViewportSample) {
+        const ViewportKeyboard::State state = m_viewportKeyboard.update(m_viewportSample, m_windowHeight);
+        m_platform = {clampOverlap(state.overlap), state.shown, state.animating};
+    } else {
+        m_platform.overlap = clampOverlap(m_platform.overlap);
+    }
     m_inputMethod.overlap = clampOverlap(m_inputMethod.overlap);
     update();
 }
