@@ -434,8 +434,10 @@ nie działa w Brave: Brave na Androidzie chowa przy klawiaturze swój dolny pase
 ([brave-browser#60074](https://github.com/brave/brave-browser/issues/60074); na Pixelu
 412×915: widoczne 433,9 px, `visualViewport.height` 385,9 px) — aplikacja podnosiła pasek o ok.
 48 px za wysoko i między nim a klawiaturą zostawał pusty pas. Żadne API strony nie pokazuje
-prawdziwej wartości; rozmiar strony, który przeglądarka ustala sama, jest dobry. Kosztem jest jedno
-przeliczenie układu okna przy każdym otwarciu i zamknięciu klawiatury. `resizes-content`
+prawdziwej wartości; rozmiar strony, który przeglądarka ustala sama, jest dobry. Kosztem jest
+przeliczenie układu okna przy otwarciu i zamknięciu klawiatury (na emulatorze: jedna zmiana
+wysokości okna Qt w każdą stronę; w Chrome i Brave jeszcze jedna, gdy przed klawiaturą pojawia się
+pasek autouzupełniania przeglądarki, niżej). `resizes-content`
 obsługują Chrome ≥ 108, Brave, Edge, Samsung Internet i Firefox ≥ 132; iOS Safari i starsze
 przeglądarki je pomijają.
 
@@ -488,10 +490,11 @@ i `--keyboard-phone` (wyżej).
 
 Test w prawdziwych przeglądarkach: `scripts/android-emulator-test.sh --web-keyboard dist-wasm`
 (emulator Androida 16 z KVM, Pixel 6; job `keyboard-android` w `.github/workflows/wasm.yml`).
-Serwuje witrynę pod `/brulion/` (`scripts/web-test-server.py`; w emulatorze
-`http://10.0.2.2`, które przeglądarki traktują jak bezpieczny kontekst: Chrome i Brave przez
-`--unsafely-treat-insecure-origin-as-secure`, Firefox przez `dom.securecontext.allowlist`), w Chrome z obrazu systemu, Brave 1.97.59 (wersja z #60074) i Firefoksie
-157.0.1 (przypięte APK z sumami SHA-256) zapisuje dziennik 40 polskich bloków, otwiera
+Serwuje witrynę pod `/brulion/` (`scripts/web-test-server.py`; w emulatorze `http://10.0.2.2`,
+które przeglądarki traktują jak bezpieczny kontekst: Chrome i Brave przez
+`--unsafely-treat-insecure-origin-as-secure`, Firefox przez `dom.securecontext.allowlist`),
+w Chrome z obrazu systemu, Brave 1.97.59 (wersja z #60074) i Firefoksie 157.0.1 (przypięte APK
+z sumami SHA-256) zapisuje dziennik 40 polskich bloków, otwiera
 `?selftest=keyboard&report=…` (oraz z `&keyboard=visual`), stuka blok i czeka na klawiaturę.
 Aplikacja w tym teście maluje miejsce klawiatury na purpurowo, a pasek narzędzi na
 turkusowo (`KeyboardInsets.marked`): na zrzucie ekranu nad górną krawędzią klawiatury (ramka
@@ -503,6 +506,12 @@ klawiatury trafia do bloku, a klawisz akcji klawiatury to Enter, który dzieli b
 zostaje na dole. Z `?keyboard=visual` wynik tylko się zapisuje (Brave pokazuje pas z #60074).
 Skrypt zapisuje odczyty (`samples-<przeglądarka>-<tryb>.jsonl`), wypisuje je jako wiersze testu
 `tst_keyboardinsets` i liczy, ile razy okno Qt zmieniło wysokość przy otwarciu klawiatury.
+
+Wynik z 28.10.2026 (Android 16, Pixel 6, 1080×2400, gęstość 420): w Chrome 133, Brave 1.97.59
+i Firefoksie 157.0.1 pasek narzędzi leży na klawiaturze (Firefox: 0 px; Chrome i Brave: na ich
+pasku autouzupełniania, 126 i 168 px, bez ani jednego piksela strony między nimi), okno Qt
+zmniejsza się raz przy otwarciu i raz przy zamknięciu; z `?keyboard=visual` Brave pokazuje pas
+124 px (#60074: zgłasza zakrycie 376 px przy 328 px rzeczywistego), Chrome i Firefox nie.
 
 ## Ograniczenia techniczne
 
