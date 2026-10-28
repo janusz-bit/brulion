@@ -6,8 +6,9 @@
 #   2. the bridge self-test APK (src/platform/android/selftest): JNI calls work, reminders are
 #      armed in AlarmManager (the past one skipped), the reminder and the alarm notification
 #      fire on their channels, the alarm turns into "Przegapiony alarm" after its ring time,
-#      notification taps reach C++ (cold start and while running, Polish path), "Zrobione" in the
-#      task reminder's notification reaches C++ with the day of the tap and removes it.
+#      notification taps reach C++ (cold start and while running, Polish path), "Zrobione" in a
+#      task reminder's notification removes it and reaches C++ with the day of the tap — at once
+#      with the app on screen, at the next start when the app's process was gone (queued).
 # Needs an x86_64 Linux host with KVM. Build both APKs first:
 #   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh
 # With --keyboard instead: the editing toolbar on the on-screen keyboard (docs/ANDROID.md,
@@ -36,8 +37,10 @@
 # With --share instead: "Udostępnij → Brulion" (docs/ANDROID.md) — text shared to ShareActivity
 # while the app runs (the share dialog, "Zapisz": a block of today's journal, no date parsing), a
 # .md file on shared storage shared through MediaStore after a cold start (a new page, its bytes
-# kept, CRLF too), a picture refused (no dialog: ShareActivity accepts text/* only), and the
-# copies in files/share-in removed. Screenshots of each step (sh-*.png); the same debuggable APK.
+# kept, CRLF too), a picture refused (no dialog: ShareActivity accepts text/* only), several files
+# selected in the system's file manager and shared (two text files and a picture: the picture
+# listed as not a text file, or left out when the share sheet does not offer Brulion for it; a
+# block per text file in today's journal), and the copies in files/share-in removed. Screenshots of each step (sh-*.png); the same debuggable APK.
 # With --widgets instead: the home-screen widgets (docs/ANDROID.md "Widgety") — the sample
 # notebook publishes their snapshot when the app leaves the front; the three widgets are placed
 # through the launcher's widget picker (tap a preview, "Add"); quick add with the app killed writes
@@ -50,7 +53,23 @@
 # tasks widget made taller (tomorrow's tasks) and the calendar lower (the agenda only) with the
 # launcher's resize handles (wg-*.png). Needs a google_apis image (adb root: quick add and the
 # widgets' receiver are not exported) and the same debuggable APK.
-# --selection, --folders, --share and --widgets find what they tap by its accessible name (UiAutomator reads Qt's
+# With --web-pictures instead: pictures from the internet (docs/ANDROID.md "Obrazy z internetu") — a
+# notebook whose journal has a picture over https (a public site, BRULION_WEBPICTURE_HTTPS) and one
+# over http from a server this script starts on the host (the emulator reaches it at 10.0.2.2;
+# cleartextTrafficPermitted is false): "Pokaż" fetches each into the cache; after a restart in
+# airplane mode both show from the cache; a tap opens the viewer (actual size and back, Back closes
+# it), a long press the menu (Powiększ, Zapisz w notatniku, Otwórz w przeglądarce, Kopiuj adres
+# obrazu); with the cache cleared and no network "Pokaż" says why ("Brak połączenia z …") and
+# "Spróbuj ponownie" works once the network is back; "Zapisz w notatniku" writes the picture into
+# assets/ and the note's link to it; "Otwórz w przeglądarce" hands the address to a browser.
+# Screenshots of each step (wp-*.png); the same debuggable APK.
+# With --done instead: "Zrobione" in a task reminder's notification of the app itself (docs/ANDROID.md
+# "Przypomnienia") — a notebook whose journal has two tasks with reminders a few minutes ahead: the
+# first one's "Zrobione" tapped with the app on screen marks the task done in the note at once
+# (`[x]` and `✅ <the day of the tap>`); the second one's tapped with the app's process gone leaves
+# the note as it is until the next start, which writes it. Screenshots (dn-*.png); the same
+# debuggable APK.
+# --selection, --folders, --share, --widgets, --web-pictures and --done find what they tap by its accessible name (UiAutomator reads Qt's
 # accessibility tree; the keyboard's keys from its dump of every window),
 # so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).
 #
@@ -60,6 +79,8 @@
 #        scripts/android-emulator-test.sh --folders [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --share [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --widgets [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --web-pictures [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --done [DEBUG_APP_APK]
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
 #   ANDROID_SDK_ROOT         Android SDK (default ~/.cache/brulion-android-sdk); the emulator and
@@ -69,6 +90,8 @@
 #   BRULION_EMULATOR_PORT    console port (default 5584; adb serial emulator-<port>; 5554-5584:
 #                            the emulator warns that adb may not work with others)
 #   BRULION_EMULATOR_OUT     logs and screenshots (default dist-android/emulator-test)
+#   BRULION_WEBPICTURE_HTTPS --web-pictures: the public https picture (default: Google's logo)
+#   BRULION_WEBPICTURE_PORT  --web-pictures: the host's port of the http picture (default 8765)
 # On NixOS the emulator runs under steam-run (its bundled libraries expect an FHS system).
 set -euo pipefail
 
@@ -101,6 +124,8 @@ SELECTION=0
 FOLDERS=0
 SHARE=0
 WIDGETS=0
+WEBPICTURES=0
+DONE=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
   shift
@@ -116,11 +141,17 @@ elif [[ ${1:-} == --share ]]; then
 elif [[ ${1:-} == --widgets ]]; then
   WIDGETS=1
   shift
+elif [[ ${1:-} == --done ]]; then
+  DONE=1
+  shift
+elif [[ ${1:-} == --web-pictures ]]; then
+  WEBPICTURES=1
+  shift
 fi
 APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
 SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
 [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
+((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
 
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
 IMAGE=${BRULION_EMULATOR_IMAGE:-system-images;android-36;google_apis;x86_64}
@@ -170,7 +201,9 @@ info "Starting the emulator ($AVD, $SERIAL)"
 "${emulator[@]}" -avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
   -gpu swangle_indirect >"$OUT/emulator.log" 2>&1 &
 emulator_pid=$!
+http_pid=""
 cleanup() {
+  [[ -z $http_pid ]] || kill "$http_pid" 2>/dev/null || true
   adb emu kill >/dev/null 2>&1 || true
   sleep 3
   kill "$emulator_pid" 2>/dev/null || true
@@ -197,6 +230,7 @@ check() { # <description> <command...>
 }
 log_has() { adb logcat -d | grep -q -- "$1"; }
 running() { [[ -n $(adb shell pidof "$PKG" | tr -d '\r') ]]; }
+not_running() { ! running; }
 notification_on() { # <id> <channel>
   adb shell dumpsys notification --noredact | grep -E "pkg=$PKG .*id=$1 " -A 12 | grep -q "channel=$2"
 }
@@ -292,74 +326,7 @@ start_app() { # <app arguments> [more am start arguments]
 ime_frames() { adb logcat -d -s BrulionIme:D | grep -c 'animating=true' || true; }
 android_api=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 
-if ((KEYBOARD)); then
-  info "Keyboard: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
-  adb install -r -g "$APP_APK" >/dev/null
-  adb shell setprop log.tag.BrulionIme DEBUG
-  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
-  # The journal stream: today's first block tapped with a finger (the sample notebook on a
-  # Pixel 6: "Pierwszy dzień z Brulionem" a quarter down the screen).
-  start_app '--demo --locale pl --route journals'
-  check "the app is running" running
-  app_shot keyboard-journal-start
-  adb shell input tap $((SCREEN_W * 24 / 100)) $((SCREEN_H * 25 / 100))
-  check "a tap on today's block brings up the keyboard" wait_for 15 ime_shown
-  sleep 3
-  app_shot keyboard-journal
-  check "the app reports the keyboard (KeyboardInsets, platform)" wait_for 10 log_has 'On-screen keyboard shown, overlap'
-  check "the app's view ends at the keyboard's top" keyboard_matches
-  frames=$(ime_frames)
-  report=$(observer_report)
-  if ((android_api >= 30)); then
-    # (Android 11+: the window is drawn behind the system bars and keeps its size, the keyboard
-    # covers its bottom; keyboardsources.cpp.)
-    check "the window keeps its size: the keyboard covers its bottom (Android 11+)" test "${report#* }" -gt 0
-    check "the keyboard's slide is followed frame by frame (Android 11+, $frames frames)" test "$frames" -ge 3
-  else
-    echo "    the system resized the window above the keyboard ($frames frame(s) of a slide reported)"
-  fi
-  # The journal scrolls (a finger on the days above the keyboard): the toolbar stays on it.
-  adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 15 / 100)) 400
-  sleep 2
-  app_shot keyboard-journal-scrolled
-  check "scrolling the journal leaves the keyboard up" ime_shown
-  # Back hides the keyboard; the toolbar stays docked at the bottom while editing goes on.
-  adb shell input keyevent 4
-  check "Back hides the keyboard" wait_for 10 ime_hidden
-  sleep 2
-  app_shot keyboard-journal-hidden
-  check "the app reports it hidden" wait_for 10 keyboard_reported_hidden
-  check "the toolbar stays docked right above the system's navigation bar, editing goes on" \
-    wait_for 10 toolbar_above_navigation_bar
-  echo "    $(typing_report)"
-  # A page: the guide (opened as by a tapped notification), its first paragraph tapped.
-  start_app '--demo --locale pl' --es "$EXTRA.PATH" "'Witaj w Brulionie.md'" --ei "$EXTRA.LINE" 0
-  app_shot keyboard-page-start
-  # Its first paragraphs lie 25–45 % down the screen (the system bars differ between versions).
-  for fraction in 40 30 35 45 27; do
-    adb shell input tap $((SCREEN_W * 30 / 100)) $((SCREEN_H * fraction / 100))
-    wait_for 6 ime_shown && break
-  done
-  check "a tap on the guide's text brings up the keyboard" wait_for 10 ime_shown
-  sleep 3
-  app_shot keyboard-page
-  check "the page's view ends at the keyboard's top" keyboard_matches
-  # The window is drawn behind the system bars (Android 11+): their icons follow the app's theme
-  # (the screenshots: dark icons over the light theme above, light ones over the dark theme here).
-  start_app '--demo --locale pl --theme dark --route journals'
-  app_shot keyboard-dark-theme
-  adb logcat -d >"$OUT/keyboard-logcat.txt"
-  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/keyboard-logcat.txt'"
-  grep -E 'On-screen keyboard|BrulionIme|brulion.platform' "$OUT/keyboard-logcat.txt" >"$OUT/keyboard-summary.txt" || true
-  info "Result"
-  cat "$OUT/keyboard-summary.txt"
-  echo "logs and screenshots: $(cd "$OUT" && pwd)"
-  ((failures == 0)) || die "$failures check(s) failed"
-  echo "all checks passed"
-  exit 0
-fi
-
-# --- items on screen found by their names (--selection, --folders) -----------------------------
+# --- items on screen found by their names (every mode but the self-test) ---------------------------
 
 # Qt for Android gives its accessibility tree to UiAutomator (its service turns accessibility on):
 # items are found on screen by their accessible names (content-desc: a button's label and its
@@ -433,6 +400,81 @@ back_to() { # <ERE>: Back until the item shows (the keyboard first, then the his
   done
   ui_has "$1"
 }
+if ((KEYBOARD)); then
+  info "Keyboard: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell setprop log.tag.BrulionIme DEBUG
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  # The journal stream: today's first block tapped with a finger (the sample notebook on a
+  # Pixel 6: "Pierwszy dzień z Brulionem" a quarter down the screen).
+  start_app '--demo --locale pl --route journals'
+  check "the app is running" running
+  app_shot keyboard-journal-start
+  adb shell input tap $((SCREEN_W * 24 / 100)) $((SCREEN_H * 25 / 100))
+  check "a tap on today's block brings up the keyboard" wait_for 15 ime_shown
+  sleep 3
+  app_shot keyboard-journal
+  check "the app reports the keyboard (KeyboardInsets, platform)" wait_for 10 log_has 'On-screen keyboard shown, overlap'
+  check "the app's view ends at the keyboard's top" keyboard_matches
+  frames=$(ime_frames)
+  report=$(observer_report)
+  if ((android_api >= 30)); then
+    # (Android 11+: the window is drawn behind the system bars and keeps its size, the keyboard
+    # covers its bottom; keyboardsources.cpp.)
+    check "the window keeps its size: the keyboard covers its bottom (Android 11+)" test "${report#* }" -gt 0
+    check "the keyboard's slide is followed frame by frame (Android 11+, $frames frames)" test "$frames" -ge 3
+  else
+    echo "    the system resized the window above the keyboard ($frames frame(s) of a slide reported)"
+  fi
+  # The journal scrolls (a finger on the days above the keyboard): the toolbar stays on it.
+  adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 15 / 100)) 400
+  sleep 2
+  app_shot keyboard-journal-scrolled
+  check "scrolling the journal leaves the keyboard up" ime_shown
+  # Back hides the keyboard; the toolbar stays docked at the bottom while editing goes on.
+  adb shell input keyevent 4
+  check "Back hides the keyboard" wait_for 10 ime_hidden
+  sleep 2
+  app_shot keyboard-journal-hidden
+  check "the app reports it hidden" wait_for 10 keyboard_reported_hidden
+  check "the toolbar stays docked right above the system's navigation bar, editing goes on" \
+    wait_for 10 toolbar_above_navigation_bar
+  echo "    $(typing_report)"
+  # A page: the guide (opened as by a tapped notification), its first paragraph tapped.
+  start_app '--demo --locale pl' --es "$EXTRA.PATH" "'Witaj w Brulionie.md'" --ei "$EXTRA.LINE" 0
+  app_shot keyboard-page-start
+  # Its first paragraph, found by its text (the page's tag chips, "Widok tagu" and the properties
+  # above it move it down — a blind tap opened the tag's tasks); else a few heights 25–45 % down
+  # the screen (the system bars differ between versions).
+  paragraph_xy=$(ui_find_all 'Brulion to notatnik w zwykłych plikach Markdown[^"]*' | head -n 1)
+  if [[ -n $paragraph_xy ]]; then
+    adb shell input tap $paragraph_xy
+    wait_for 6 ime_shown || true
+  else
+    for fraction in 40 30 35 45 27; do
+      adb shell input tap $((SCREEN_W * 30 / 100)) $((SCREEN_H * fraction / 100))
+      wait_for 6 ime_shown && break
+    done
+  fi
+  check "a tap on the guide's text brings up the keyboard" wait_for 10 ime_shown
+  sleep 3
+  app_shot keyboard-page
+  check "the page's view ends at the keyboard's top" keyboard_matches
+  # The window is drawn behind the system bars (Android 11+): their icons follow the app's theme
+  # (the screenshots: dark icons over the light theme above, light ones over the dark theme here).
+  start_app '--demo --locale pl --theme dark --route journals'
+  app_shot keyboard-dark-theme
+  adb logcat -d >"$OUT/keyboard-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/keyboard-logcat.txt'"
+  grep -E 'On-screen keyboard|BrulionIme|brulion.platform' "$OUT/keyboard-logcat.txt" >"$OUT/keyboard-summary.txt" || true
+  info "Result"
+  cat "$OUT/keyboard-summary.txt"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
 # The sample notebook's files (the app's private storage: run-as on a debuggable APK).
 VAULT="files/Przykładowy brulion"
 vault_cat() { adb shell run-as "$PKG" cat "\"$VAULT/$1\"" 2>/dev/null | tr -d '\r'; }
@@ -613,8 +655,10 @@ fi
 SHARE_ACTIVITY=$PKG/$PKG.android.ShareActivity
 # No copy left in the share inbox (files/share-in/<stamp>/…) once a share is saved.
 inbox_empty() { [[ -z $(adb shell run-as "$PKG" find files/share-in -type f 2>/dev/null | tr -d '\r') ]]; }
-# A notebook file byte for byte as a local file (exec-out: no line ending conversion).
-vault_same() { adb exec-out run-as "$PKG" cat "\"$VAULT/$1\"" 2>/dev/null | cmp -s - "$2"; } # <file> <local>
+# A notebook file byte for byte (through base64: no line ending conversion; not `exec-out`, which
+# passes the quotes of a path with spaces on to run-as).
+vault_bytes() { adb shell run-as "$PKG" base64 "\"$VAULT/$1\"" 2>/dev/null | tr -d '\r\n' | base64 -d; } # <file>
+vault_same() { vault_bytes "$1" | cmp -s - "$2"; } # <file> <local>
 # A file pushed to the shared Download folder, as the MediaStore content:// URI another app shares.
 media_uri() { # <file name>
   local id
@@ -658,12 +702,14 @@ if ((SHARE)); then
   adb logcat -c
   adb shell am start -n "$SHARE_ACTIVITY" -a android.intent.action.SEND -t text/markdown \
     --eu android.intent.extra.STREAM "$uri" --grant-read-uri-permission >/dev/null
-  check "a cold start opens the share dialog" wait_for 40 ui_has 'Zapisz w Brulionie'
+  # (A cold start has no --locale pl: the app speaks the phone's language.)
+  check "a cold start opens the share dialog" wait_for 40 ui_has 'Zapisz w Brulionie|Save to Brulion'
   check "the file is listed" ui_has 'Lista zakupów.md'
   app_shot sh-3-file-dialog
-  check "Zapisz saves it" ui_tap 'Zapisz' last
+  check "Zapisz saves it" ui_tap 'Zapisz|Save' last
   check "a new page named after the file" wait_for 10 vault_has 'Lista zakupów.md'
   check "its bytes kept (CRLF too)" vault_same 'Lista zakupów.md' "$OUT/Lista zakupów.md"
+  vault_bytes 'Lista zakupów.md' >"$OUT/Lista zakupów (saved).md" || true
   check "the copies in files/share-in are gone" inbox_empty
   app_shot sh-4-file-saved
 
@@ -676,6 +722,59 @@ if ((SHARE)); then
     "'$SDK/platform-tools/adb' -s $SERIAL shell cmd package query-activities -a android.intent.action.SEND -t text/plain | grep -q ShareActivity"
   check "but not for pictures" bash -c \
     "! '$SDK/platform-tools/adb' -s $SERIAL shell cmd package query-activities -a android.intent.action.SEND -t image/png | grep -q ShareActivity"
+
+  # 4. Several files at once from the system's file manager (ACTION_SEND_MULTIPLE, which `am` cannot
+  # send): two text files and a picture. The selection's type is */*, which the share sheet may
+  # match with Brulion's text/* filter: then the dialog lists the picture as not a text file;
+  # otherwise the picture is left out of the selection. Either way the text files go to today's
+  # journal, one block per file.
+  printf 'Notatka ąę\nwiersz 2\n' >"$OUT/Notatka źdźbło.txt"
+  adb push "$OUT/Notatka źdźbło.txt" "/sdcard/Download/Notatka źdźbło.txt" >/dev/null
+  adb exec-out screencap -p >"$OUT/obrazek.png"
+  adb push "$OUT/obrazek.png" /sdcard/Download/obrazek.png >/dev/null
+  adb shell content call --uri content://media --method scan_volume --arg external_primary >/dev/null 2>&1 || true
+  sleep 2
+  adb shell am start -a android.intent.action.VIEW -t vnd.android.document/root \
+    -d content://com.android.providers.downloads.documents/root/downloads >/dev/null
+  check "the file manager lists the files" wait_for 15 ui_has 'Notatka źdźbło\.txt'
+  xy=$(ui_find_all 'Lista zakupów\.md' | head -n 1)
+  [[ -z $xy ]] || long_press $xy
+  sleep 2
+  ui_tap 'Notatka źdźbło\.txt' first 1 || true
+  ui_tap 'obrazek\.png' first 1 || true
+  check "three files selected" ui_has '3 selected|Zaznaczono: 3|3 wybrane'
+  share_sheet() { # the share sheet of the selection, expanded
+    ui_tap 'Share|Udostępnij' first 4 || return 1
+    adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 70 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 25 / 100)) 300
+    sleep 2
+  }
+  check "the share sheet opens" share_sheet
+  app_shot sh-5-share-sheet
+  with_picture=0
+  if ui_has 'Brulion'; then
+    with_picture=1
+    echo "    the share sheet offers Brulion for the selection with the picture (*/*)"
+  else
+    echo "    the share sheet leaves Brulion out for the selection with the picture: the picture deselected"
+    adb shell input keyevent 4
+    sleep 2
+    ui_tap 'obrazek\.png' first 1 || true
+    check "two text files selected" ui_has '2 selected|Zaznaczono: 2|2 wybrane'
+    check "the share sheet opens" share_sheet
+  fi
+  check "… and offers Brulion" ui_tap 'Brulion' first 4
+  check "the share dialog lists the text files" wait_for 30 ui_has 'Notatka źdźbło\.txt'
+  check "… the .md one too" ui_has 'Lista zakupów\.md'
+  if ((with_picture)); then
+    check "… and the picture, which it cannot save" ui_has 'obrazek\.png'
+  fi
+  app_shot sh-6-files-dialog
+  check "Zapisz saves them" ui_tap 'Zapisz|Save' last
+  check "one block per file: the .md" wait_for 10 vault_grep "$today_journal" '^- \*\*Lista zakupów\*\*$'
+  check "… and the .txt with its lines" bash -c "grep -A2 -x -- '- \*\*Notatka źdźbło\*\*' <<<\"\$1\" | grep -qx '  wiersz 2'" _ "$(vault_cat "$today_journal")"
+  check "… nothing of the picture" bash -c "! grep -q obrazek <<<\"\$1\"" _ "$(vault_cat "$today_journal")"
+  check "the copies in files/share-in are gone" wait_for 6 inbox_empty
+  app_shot sh-7-files-saved
 
   adb logcat -d >"$OUT/share-logcat.txt"
   check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/share-logcat.txt'"
@@ -914,6 +1013,194 @@ if ((WIDGETS)); then
   exit 0
 fi
 
+# --- "Zrobione" in the app's own reminders (--done) -----------------------------------------------
+
+if ((DONE)); then
+  info "Done from a notification: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  # Two tasks with reminders (the phone's wall clock): 2 and 4 minutes ahead, whole minutes.
+  zone=$(adb shell getprop persist.sys.timezone | tr -d '\r')
+  now=$(adb shell date +%s | tr -d '\r')
+  at() { TZ=${zone:-UTC} date -d "@$((now + $1 * 60))" '+%Y-%m-%d %H:%M'; } # <minutes ahead>
+  today=$(TZ=${zone:-UTC} date -d "@$now" +%Y-%m-%d)
+  first=$(at 2)
+  second=$(at 4)
+  DN_VAULT=files/Zadania
+  dn_journal="$DN_VAULT/journals/$today.md"
+  printf -- '- [ ] Podlać kwiaty ⏰ %s\n- [ ] Zadzwonić do Łucji ⏰ %s\n- Koniec dnia\n' "$first" "$second" >"$OUT/journal.md"
+  adb push "$OUT/journal.md" /data/local/tmp/brulion-journal.md >/dev/null
+  adb shell run-as "$PKG" mkdir -p "$DN_VAULT/journals"
+  adb shell run-as "$PKG" cp /data/local/tmp/brulion-journal.md "$dn_journal"
+  dn_cat() { adb shell run-as "$PKG" cat "$dn_journal" 2>/dev/null | tr -d '\r'; }
+  dn_line() { dn_cat | grep -qxF -- "$1"; } # <the whole line>
+  notified() { adb shell dumpsys notification --noredact | grep -q "$1"; } # <title>
+  shade_done() { # "Zrobione" in the notification <title> (the only one in the shade)
+    adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
+    sleep 2
+    app_shot "dn-shade-$2"
+    ui_tap 'Zrobione|ZROBIONE|Done|DONE'
+    local ok=$?
+    adb shell cmd statusbar collapse >/dev/null 2>&1 || true
+    return $ok
+  }
+  echo "    reminders at $first and $second ($zone)"
+  start_app "--vault /data/user/0/$PKG/$DN_VAULT --locale pl --route journals"
+  check "the app is running" running
+  app_shot dn-1-journal
+  check "the first reminder is armed natively" bash -c \
+    "'$SDK/platform-tools/adb' -s $SERIAL shell run-as $PKG cat shared_prefs/$PKG.android.reminders.xml | grep -q 'Podlać kwiaty'"
+  # 1. The app on screen: written at once.
+  check "the first reminder fires" wait_for 150 notified 'Podlać kwiaty'
+  check "'Zrobione' tapped with the app on screen" shade_done 'Podlać kwiaty' first
+  check "the task is done in the note at once (✅ the day of the tap)" wait_for 15 dn_line \
+    "- [x] Podlać kwiaty ⏰ $first ✅ $today"
+  check "… its notification is gone" wait_for 6 bash -c "! '$SDK/platform-tools/adb' -s $SERIAL shell dumpsys notification --noredact | grep -q 'Podlać kwiaty'"
+  sleep 3
+  app_shot dn-2-done-at-once
+  # 2. The app's process gone: queued, written at the next start.
+  adb shell input keyevent 3
+  sleep 2
+  adb shell am kill "$PKG"
+  check "the app's process is gone (am kill)" wait_for 6 not_running
+  check "the second reminder fires with the app closed" wait_for 200 notified 'Zadzwonić do Łucji'
+  check "'Zrobione' tapped with the app closed" shade_done 'Zadzwonić do Łucji' second
+  check "… the note is not changed yet" dn_line "- [ ] Zadzwonić do Łucji ⏰ $second"
+  check "… the tap waits in the queue" bash -c \
+    "'$SDK/platform-tools/adb' -s $SERIAL shell run-as $PKG cat shared_prefs/$PKG.android.done.xml | grep -q 'Zadzwonić do Łucji'"
+  start_app "--vault /data/user/0/$PKG/$DN_VAULT --locale pl --route journals"
+  check "the next start writes it (✅ the day of the tap)" wait_for 20 dn_line \
+    "- [x] Zadzwonić do Łucji ⏰ $second ✅ $today"
+  check "… the rest of the note untouched" dn_line "- Koniec dnia"
+  app_shot dn-3-done-at-start
+
+  adb logcat -d >"$OUT/done-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/done-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/done-logcat.txt'"
+  info "Result"
+  echo "    the journal:"
+  dn_cat | sed 's/^/      /'
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- pictures from the internet (--web-pictures) -------------------------------------------------
+
+if ((WEBPICTURES)); then
+  info "Web pictures: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  https_url=${BRULION_WEBPICTURE_HTTPS:-https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png}
+  http_port=${BRULION_WEBPICTURE_PORT:-8765}
+  # The http picture: a 640×400 gradient (PNG) served from the host (10.0.2.2 in the emulator).
+  mkdir -p "$OUT/www"
+  python3 - "$OUT/www/gradient.png" <<'PY'
+import struct, sys, zlib
+w, h = 640, 400
+raw = b"".join(b"\0" + bytes(v for x in range(w) for v in (x * 255 // w, y * 255 // h, 160)) for y in range(h))
+chunk = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d))
+open(sys.argv[1], "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                              + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+PY
+  python3 -m http.server "$http_port" --bind 127.0.0.1 --directory "$OUT/www" >"$OUT/http-server.log" 2>&1 &
+  http_pid=$!
+  sleep 1
+  kill -0 "$http_pid" 2>/dev/null || die "the http server did not start on port $http_port (BRULION_WEBPICTURE_PORT)"
+  # The notebook: today's journal with both pictures, each a block of its own.
+  WP_VAULT=files/Obrazy
+  wp_journal="$WP_VAULT/journals/$(adb shell date +%Y-%m-%d | tr -d '\r').md"
+  printf -- '- Zdjęcie przez https:\n- ![Logo przez https](%s)\n- Zdjęcie przez http:\n- ![Gradient przez http](http://10.0.2.2:%s/gradient.png)\n- Koniec strony ąćęłńóśźż\n' \
+    "$https_url" "$http_port" >"$OUT/journal.md"
+  adb push "$OUT/journal.md" /data/local/tmp/brulion-journal.md >/dev/null
+  adb shell run-as "$PKG" mkdir -p "$WP_VAULT/journals"
+  adb shell run-as "$PKG" cp /data/local/tmp/brulion-journal.md "$wp_journal"
+  cached() { [[ $(adb shell run-as "$PKG" ls cache/web-pictures 2>/dev/null | tr -d '\r' | grep -c .) -ge $1 ]]; } # <n>
+  airplane() { adb shell cmd connectivity airplane-mode "$1" >/dev/null; sleep 4; } # enable|disable
+  wp_start() { start_app "--vault /data/user/0/$PKG/$WP_VAULT --locale pl --route journals"; }
+  wp_cat() { adb shell run-as "$PKG" cat "$wp_journal" 2>/dev/null | tr -d '\r'; }
+  in_front() { adb shell dumpsys activity activities | grep -m 1 topResumedActivity | grep -qE "$1"; } # <ERE>
+  asking() { [[ $(ui_find_all 'Pokaż' | sort -u | wc -l) -eq $1 ]]; } # <n>: pictures waiting for Pokaż
+
+  wp_start
+  check "the app is running" running
+  check "both pictures wait for Pokaż (asking first is the default)" asking 2
+  app_shot wp-1-asking
+  # 1. Pokaż: the https picture and the http one (Qt's own sockets: cleartextTrafficPermitted is
+  # Java's policy and does not apply).
+  check "Pokaż fetches the https picture" ui_tap 'Pokaż' first 1
+  check "… into the cache" wait_for 20 cached 1
+  check "Pokaż fetches the http picture" ui_tap 'Pokaż' first 1
+  check "… into the cache (http:// is not blocked)" wait_for 20 cached 2
+  check "… from the host's server" grep -q 'GET /gradient.png HTTP/1.1" 200' "$OUT/http-server.log"
+  check "both shown" wait_for 10 ui_lacks 'Pokaż'
+  app_shot wp-2-shown
+  # 2. A restart without network: both from the cache, nothing asked.
+  airplane enable
+  wp_start
+  check "offline after a restart: both pictures shown from the cache" ui_lacks 'Pokaż'
+  app_shot wp-3-offline-cached
+  # 3. A tap opens the viewer: actual size and back, Back closes it.
+  picture_xy=$(ui_find_all 'Gradient przez http' | tail -n 1)
+  echo "    the http picture at $picture_xy"
+  adb shell input tap $picture_xy
+  sleep 2
+  check "a tap opens the viewer" wait_for 10 ui_has 'Zamknij'
+  app_shot wp-4-viewer
+  check "… actual size" ui_tap 'Pokaż naturalny rozmiar'
+  check "… and fit again" ui_tap 'Dopasuj do widoku'
+  adb shell input keyevent 4
+  check "Back closes the viewer" wait_for 10 ui_lacks 'Zamknij'
+  check "… and stays in the journal" ui_has 'Gradient przez http'
+  # 4. A long press opens the picture's menu.
+  long_press $picture_xy
+  sleep 2
+  check "a long press opens the menu" ui_has 'Obraz z 10\.0\.2\.2'
+  check "… Powiększ, Zapisz w notatniku, Otwórz w przeglądarce, Kopiuj adres obrazu" bash -c \
+    "grep -q 'content-desc=\"Powiększ\"' '$OUT/ui.xml' && grep -q 'content-desc=\"Zapisz w notatniku\"' '$OUT/ui.xml' &&
+     grep -q 'content-desc=\"Otwórz w przeglądarce\"' '$OUT/ui.xml' && grep -q 'content-desc=\"Kopiuj adres obrazu\"' '$OUT/ui.xml'"
+  app_shot wp-5-menu
+  check "Powiększ opens the viewer" ui_tap 'Powiększ'
+  check "… Zamknij closes it" ui_tap 'Zamknij'
+  check "… closed" wait_for 10 ui_lacks 'Zamknij'
+  # 5. Cache cleared, no network: Pokaż says why; Spróbuj ponownie once the network is back.
+  adb shell run-as "$PKG" rm -rf cache/web-pictures
+  wp_start
+  check "the cleared cache asks again" asking 2
+  check "Pokaż without network" ui_tap 'Pokaż' first 4
+  check "… fails with a reason (no connection)" wait_for 15 log_has 'Picture from .* not loaded: network error'
+  check "… and offers Spróbuj ponownie" ui_has 'Spróbuj ponownie'
+  app_shot wp-6-offline-error
+  airplane disable
+  check "Spróbuj ponownie with the network back" ui_tap 'Spróbuj ponownie' first 1
+  check "… fetched" wait_for 30 cached 1
+  # 6. Zapisz w notatniku: the picture in assets/, the note's link to it.
+  check "Zapisz w notatniku (the http picture)" ui_tap 'Zapisz w notatniku' last 4
+  check "… the picture saved in the notebook" wait_for 15 bash -c \
+    "'$SDK/platform-tools/adb' -s $SERIAL shell run-as $PKG ls $WP_VAULT/assets/gradient.png >/dev/null 2>&1"
+  check "… the note links to the copy" bash -c "grep -q '!\[Gradient przez http\](assets/gradient.png)' <<<\"\$1\"" _ "$(wp_cat)"
+  check "… the https picture's link untouched" bash -c "grep -qF '![Logo przez https]($https_url)' <<<\"\$1\"" _ "$(wp_cat)"
+  app_shot wp-7-saved
+  # 7. Otwórz w przeglądarce hands the address to a browser.
+  long_press $(ui_find_all 'Logo przez https' | tail -n 1)
+  sleep 2
+  check "Otwórz w przeglądarce (the https picture)" ui_tap 'Otwórz w przeglądarce' first 4
+  check "… a browser is in front" wait_for 10 in_front 'chrome|browser' 
+  app_shot wp-8-browser
+
+  adb logcat -d >"$OUT/web-pictures-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/web-pictures-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/web-pictures-logcat.txt'"
+  info "Result"
+  echo "    the journal:"
+  wp_cat | sed 's/^/      /'
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
 # --- 1. the app --------------------------------------------------------------------------------
 
 info "App: $APP_APK"
@@ -938,8 +1225,8 @@ adb logcat -c
 # Cold start from a "notification tap": the activation must reach C++ via takeActivation.
 adb shell am start -W -n "$ACTIVITY" --es "$EXTRA.PATH" dziennik/zimny-start.md --ei "$EXTRA.LINE" 5 >/dev/null
 started=$SECONDS
-check "scheduleReminders round 1: 2 armed (past one skipped)" wait_for 20 log_has "SELFTEST schedule round=1 ok=1 scheduled=2 exact=1"
-check "scheduleReminders round 2: idempotent" log_has "SELFTEST schedule round=2 ok=1 scheduled=2 exact=1"
+check "scheduleReminders round 1: 3 armed (past one skipped)" wait_for 20 log_has "SELFTEST schedule round=1 ok=1 scheduled=3 exact=1"
+check "scheduleReminders round 2: idempotent" log_has "SELFTEST schedule round=2 ok=1 scheduled=3 exact=1"
 check "permissions reported (notifications granted, exact alarms)" log_has "SELFTEST permissions(start) allFiles=0 notifications=1 exact=1"
 check "cold-start tap delivered to C++" wait_for 10 log_has "SELFTEST activated path=dziennik/zimny-start.md line=5"
 # A tap while the app runs: onNewIntent -> nativeActivated (Polish path).
@@ -947,21 +1234,57 @@ adb shell am start -n "$ACTIVITY" --es "$EXTRA.PATH" "'strony/Łódź.md'" --ei 
 check "tap while running delivered to C++ (Polish path)" wait_for 10 log_has "SELFTEST activated path=strony/Łódź.md line=7"
 adb shell dumpsys alarm >"$OUT/dumpsys-alarm.txt"
 check "AlarmManager holds Brulion's alarms" bash -c "grep -q '$PKG' '$OUT/dumpsys-alarm.txt'"
-adb shell input keyevent 3 # home: the notifications are posted while the app is in the background
 check "reminder 101 fired on channel 'reminders'" wait_for $((60 - (SECONDS - started))) notification_on 101 reminders
-# "Zrobione" in the notification of the task reminder 101 (app in the background, C++ listens):
-# the tap is queued natively and taken by C++ at once, the notification goes.
-adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
-sleep 2
-check "'Zrobione' tapped in the notification of 101" ui_tap 'Zrobione|ZROBIONE|Done|DONE'
-adb shell cmd statusbar collapse >/dev/null 2>&1 || true
-check "'Zrobione' reached C++ (key, note, line, the day of the tap)" wait_for 10 log_has \
-  "SELFTEST done key=selftest-101 local=.* path=dziennik/2026-10-14.md line=3 day=$(adb shell date +%Y-%m-%d | tr -d '\r')"
-check "notification 101 removed by 'Zrobione'" bash -c "! adb shell dumpsys notification --noredact | grep -qE 'pkg=$PKG .*id=101 '"
+# "Zrobione" in the notification of the task reminder 101 with the app on screen (the shade pulled
+# over it: Qt's event loop runs): the tap is queued natively and taken by C++ at once, the
+# notification goes. (With the app in the background Qt's event loop is paused — no
+# android.app.background_running — and C++ takes the queue when the app is back in front; with
+# the process gone, at its next start: reminder 104 below.)
+today=$(adb shell date +%Y-%m-%d | tr -d '\r')
+tap_done() { # <reminder id>: "Zrobione" in its notification in the shade
+  adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
+  sleep 2
+  app_shot "shade-$1"
+  check "'Zrobione' tapped in the notification of $1" ui_tap 'Zrobione|ZROBIONE|Done|DONE'
+  adb shell cmd statusbar collapse >/dev/null 2>&1 || true
+}
+notification_gone() { ! adb shell dumpsys notification --noredact | grep -qE "pkg=$PKG .*id=$1 "; } # <id>
+done_queued() { adb shell run-as "$PKG" cat "shared_prefs/$PKG.android.done.xml" 2>/dev/null | grep -q "selftest-$1"; }
+tap_done 101
+check "'Zrobione' reached C++ at once (key, note, line, the day of the tap)" wait_for 10 log_has \
+  "SELFTEST done key=selftest-101 local=.* path=dziennik/2026-10-14.md line=3 day=$today"
+check "notification 101 removed by 'Zrobione'" wait_for 6 notification_gone 101
+adb shell input keyevent 3 # home: the alarm is posted while the app is in the background
 check "alarm 102 rings on channel 'alarms'" wait_for $((95 - (SECONDS - started))) notification_on 102 alarms
 adb exec-out screencap -p >"$OUT/alarm.png" || true
 check "alarm 102 became 'missed-alarms' after its ring time (1 min)" wait_for $((170 - (SECONDS - started))) notification_on 102 missed-alarms
 adb shell dumpsys notification --noredact >"$OUT/dumpsys-notification.txt"
+adb logcat -d >"$OUT/selftest-logcat.txt"
+# "Zrobione" with the app closed: the process killed (not force-stopped: its alarms stay), the task
+# reminder 104 fires into a new process without Qt, the tap waits in the queue, and C++ takes it
+# at the next start. The shade cleared first: next to the missed alarm 104 would be grouped
+# (collapsed, without its buttons).
+adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
+sleep 2
+ui_tap 'Clear all|CLEAR ALL|Wyczyść wszystko|WYCZYŚĆ WSZYSTKO' >/dev/null || true
+adb shell cmd statusbar collapse >/dev/null 2>&1 || true
+adb shell am kill "$PKG"
+sleep 2
+check "the app's process is gone (am kill)" wait_for 6 not_running
+check "reminder 104 fired with the app closed" wait_for $((230 - (SECONDS - started))) notification_on 104 reminders
+tap_done 104
+check "notification 104 removed by 'Zrobione'" wait_for 6 notification_gone 104
+if adb shell run-as "$PKG" true 2>/dev/null; then # a debuggable APK: the queue can be read
+  check "… the tap waits in the queue (DoneQueue)" wait_for 6 done_queued 104
+fi
+adb logcat -d >"$OUT/selftest-logcat.txt"
+check "… nothing reached C++ yet" bash -c "! grep -q 'SELFTEST done key=selftest-104' '$OUT/selftest-logcat.txt'"
+adb shell am start -W -n "$ACTIVITY" >/dev/null
+check "the next start hands the queued tap to C++ (the day of the tap)" wait_for 20 log_has \
+  "SELFTEST done key=selftest-104 local=.* path=strony/Źródła.md line=9 day=$today"
+if adb shell run-as "$PKG" true 2>/dev/null; then
+  check "… and empties the queue" bash -c "! '$SDK/platform-tools/adb' -s $SERIAL shell run-as $PKG cat shared_prefs/$PKG.android.done.xml 2>/dev/null | grep -q selftest-"
+fi
 adb logcat -d >"$OUT/selftest-logcat.txt"
 grep -E 'SELFTEST|BrulionAndroid:|brulion\.android:|AndroidRuntime:' "$OUT/selftest-logcat.txt" >"$OUT/selftest-summary.txt" || true
 check "no crash in the self-test" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/selftest-logcat.txt'"

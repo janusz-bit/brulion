@@ -99,9 +99,10 @@ dzwoni jak budzik. Składnia: `docs/SYNTAX.md`.
   reakcji wycisza go i zamyka ekran alarmu.
 * **Zrobione** oznacza zadanie jako zrobione (`[x]` z `✅` — jak zmiana stanu w edytorze,
   zadanie cykliczne dostaje następny termin) bez otwierania notatki. Zmiana trafia do notatki od
-  razu, gdy Brulion działa (także w tle), a przy zamkniętej aplikacji — przy jej następnym
-  uruchomieniu, gdy notatnik jest już wczytany (komunikat „… — zrobione”); data `✅` to dzień
-  stuknięcia. Do tego czasu inne urządzenia widzą zadanie jako otwarte, a pozostałe przypomnienia
+  razu, gdy Brulion jest na ekranie (także pod rozwiniętym panelem powiadomień); gdy działa w tle —
+  po powrocie do niego (Android wstrzymuje wtedy aplikację Qt), a przy zamkniętej aplikacji — przy
+  jej następnym uruchomieniu, gdy notatnik jest już wczytany (komunikat „… — zrobione”); data `✅`
+  to dzień stuknięcia. Do tego czasu inne urządzenia widzą zadanie jako otwarte, a pozostałe przypomnienia
   tego zadania mogą jeszcze zadzwonić. Stuknięcie czeka w telefonie, aż jego notatnik będzie
   otwarty i wczytany — także gdy Brulion zamkniesz przed końcem wczytywania albo otworzysz
   najpierw inny notatnik (np. dokumentację). Gdy przypomnienie albo zadanie zmieniło się
@@ -581,10 +582,10 @@ silnik QML — tak samo jak na komputerze:
   urzędami certyfikacji (systemowe i zainstalowane przez użytkownika).
 * **http://**: Qt łączy się własnymi gniazdami, a nie przez `HttpURLConnection` Javy, więc
   `cleartextTrafficPermitted` z Androida 9+ (domyślnie wyłączone, nie zmieniamy go w
-  `network_security_config.xml`) nie powinno blokować zdjęć spod `http://` —
-  **do potwierdzenia na telefonie**. Gdyby blokowało, zdjęcie pokaże „Brak połączenia z …”;
-  wtedy trzeba zdecydować: `<base-config cleartextTrafficPermitted="true">` albo zostawić `http://`
-  zablokowane z czytelnym komunikatem.
+  `network_security_config.xml`) nie blokuje zdjęć spod `http://` — sprawdzone na emulatorze
+  (niżej): zdjęcie spod `http://10.0.2.2:…` pobrane i pokazane bez zmian w konfiguracji. Zasada
+  Androida dotyczy tylko stosu sieciowego Javy (np. `WebView`, `HttpURLConnection`), którego
+  Brulion do zdjęć nie używa.
 * **Pamięć podręczna** leży w `QStandardPaths::CacheLocation`/`web-pictures`
   (`/data/data/<pakiet>/cache/web-pictures`), do 200 MB, najdawniej oglądane znikają pierwsze.
   Android może ją wyczyścić sam (mało miejsca, „Wyczyść pamięć podręczną” w ustawieniach
@@ -599,11 +600,25 @@ silnik QML — tak samo jak na komputerze:
   Brulionu proponuje „Zapisz w notatniku”; wklejenie z klawiatury systemowej (jej schowek wpisuje
   tekst jak pisanie) wstawia sam adres bez propozycji.
 
-Do sprawdzenia na telefonie (APK z GitHub Actions — tu nie było urządzenia): zdjęcie spod
-`https://` i spod `http://`, pamięć podręczna po ponownym uruchomieniu i bez sieci, przytrzymanie →
-menu, „Otwórz w przeglądarce”, stuknięcie → powiększenie (dopasowane / rzeczywisty rozmiar,
-przesuwanie palcem) i Wstecz, wklejenie adresu z Chrome przez menu tekstu, eksport HTML z
-„Dołącz kopie”.
+Sprawdzone na emulatorze 2026-10-28 (Android 16, Pixel 6, APK debugowalny x86_64;
+`scripts/android-emulator-test.sh --web-pictures`, 33 sprawdzenia, zrzuty `wp-*.png`): w dzienniku
+notatnika zdjęcie spod `https://` (logo Google) i spod `http://` (PNG z serwera, który skrypt
+uruchamia na hoście — emulator widzi go pod `10.0.2.2`). Oba czekają na **Pokaż**; po stuknięciu
+trafiają do `cache/web-pictures` i są widoczne (serwer dostał `GET`, więc `http://` nie jest
+blokowane). Po ponownym uruchomieniu w trybie samolotowym oba są widoczne z pamięci podręcznej bez
+pytania. Stuknięcie otwiera przeglądarkę zdjęcia (rzeczywisty rozmiar i z powrotem), **Wstecz** ją
+zamyka; przytrzymanie — menu „Obraz z 10.0.2.2” z Powiększ, Zapisz w notatniku, Otwórz
+w przeglądarce, Kopiuj adres obrazu; **Powiększ** i **Zamknij** działają. Po wyczyszczeniu pamięci
+podręcznej bez sieci **Pokaż** kończy się komunikatem „Brak połączenia z www.google.com.”
+i przyciskiem **Spróbuj ponownie**, który po powrocie sieci pobiera zdjęcie. **Zapisz w notatniku**
+zapisuje `assets/gradient.png` i zmienia odnośnik w notatce na `![…](assets/gradient.png)` (drugi
+odnośnik bez zmian). **Otwórz w przeglądarce** otwiera Chrome. Ręcznie potwierdzone też: „Kopiuj
+adres obrazu” kładzie adres do schowka (klawiatura proponuje go do wklejenia).
+
+Zostaje do sprawdzenia na prawdziwym telefonie: przesuwanie palcem powiększonego zdjęcia
+i gest **Wstecz** z krawędzi ekranu (emulator dostaje tylko klawisz Wstecz i proste przeciągnięcia),
+wklejenie adresu skopiowanego w Chrome przez **Wklej** z menu tekstu Brulionu, eksport HTML
+z „Dołącz kopie”, prawdziwa sieć komórkowa / Wi-Fi zamiast sieci emulatora.
 
 ## Budowanie APK
 
@@ -903,7 +918,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--web-pictures`: obrazy z internetu |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
@@ -997,7 +1012,10 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   (`day` — lokalna data stuknięcia, `vault` — id notatnika, `Vault::id()`, z danych przypomnienia)
   do kolejki w SharedPreferences (`DoneQueue`, najwyżej 100 wpisów, ponowne stuknięcie tego
   samego wystąpienia zastępuje wpis, zapis `commit()`), potem woła `nativeDoneQueued`, jeśli C++
-  słucha. `AndroidNotifier` odbiera kolejkę (`takeDoneRequests(vault)`) tylko wtedy, gdy notatnik
+  słucha. Sygnał dochodzi do C++ od razu tylko wtedy, gdy aplikacja jest na pierwszym planie: bez
+  `android.app.background_running` Qt for Android wstrzymuje pętlę zdarzeń, gdy aktywność jest
+  w tle (proces żyje, kolejka czeka), i bierze kolejkę przy powrocie na pierwszy plan
+  (`applicationStateChanged`). Sprawdzone na emulatorze 2026-10-28 (`--done` i test mostu). `AndroidNotifier` odbiera kolejkę (`takeDoneRequests(vault)`) tylko wtedy, gdy notatnik
   jest gotowy (`Notifier::setDoneTarget` z `WorkspaceReminders::doneTarget()`: od `start()` po
   pełnym indeksowaniu do zamknięcia notatnika; notatnik z wstrzymanymi przypomnieniami, np.
   dokumentacja, nie odbiera nic): przy jego gotowości, po sygnale i przy powrocie na pierwszy
@@ -1043,12 +1061,15 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   Instaluje emulator i obraz `system-images;android-36;google_apis;x86_64` (rysowanie programowe
   `-gpu swangle_indirect`; `swiftshader_indirect` zostawia czarne pasy na przyciskach), uruchamia APK
   aplikacji (czy działa, kanały powiadomień), potem APK testowy mostu: uprawnienia przez JNI,
-  dwa razy `scheduleReminders` (przypomnienie za 45 s, alarm za 75 s dzwoniący 1 min,
-  przeszłe — pominięte), budziki w `dumpsys alarm`, powiadomienia na kanałach `reminders`
-  i `alarms`, zamiana alarmu w „Przegapiony alarm” po czasie dzwonienia, stuknięcia
+  dwa razy `scheduleReminders` (przypomnienia przy zadaniach za 45 s i 200 s, alarm za 75 s
+  dzwoniący 1 min, przeszłe — pominięte), budziki w `dumpsys alarm`, powiadomienia na kanałach
+  `reminders` i `alarms`, zamiana alarmu w „Przegapiony alarm” po czasie dzwonienia, stuknięcia
   (zimny start i działająca aplikacja, ścieżka z polskimi znakami) dochodzące do C++, „Zrobione”
-  w powiadomieniu przypomnienia przy zadaniu (prośba w C++ z dniem stuknięcia, powiadomienie
-  znika).
+  w powiadomieniu przypomnienia przy zadaniu: przy aplikacji na ekranie (panel powiadomień nad nią)
+  prośba od razu w C++ z dniem stuknięcia, powiadomienie znika; po zabiciu procesu (`am kill`, nie
+  `force-stop` — budziki zostają) drugie przypomnienie przychodzi do nowego procesu bez Qt, stuknięcie
+  czeka w kolejce (`shared_prefs/…done.xml`, APK debugowalny) i C++ dostaje je przy następnym
+  starcie. Sprawdzone 2026-10-28 (Android 16, Pixel 6; 24 sprawdzenia).
   APK testowy ma ten sam pakiet co aplikacja (zastępuje ją) — tylko na emulatorze/telefonie
   testowym.
 * Zaznaczanie i kopiowanie prawdziwym palcem (`adb shell input`, APK debugowalny jak niżej):
@@ -1104,8 +1125,15 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   `MediaStore` i udostępniony jako `content://media/…` po zimnym starcie: okno z plikiem, „Zapisz”
   — nowa strona bajt w bajt, folder kopii usunięty. Na koniec obrazek: system nie proponuje
   Brulionu (`cmd package query-activities`), a wysłany wprost nie otwiera okna. Zrzuty
-  `sh-*.png`. **Jeszcze nieuruchomiony** (dodany 2026-10-27 bez hosta z KVM). Ręcznie na telefonie
-  (APK z GitHub Actions `android.yml`):
+  `sh-*.png`. Na koniec kilka plików naraz z menedżera plików systemu (`ACTION_SEND_MULTIPLE`, którego
+  `am` nie wyśle): w „Pobranych” zaznaczone `Lista zakupów.md`, `Notatka źdźbło.txt` i obrazek.
+  Zaznaczenie ma wtedy typ `*/*`, który Android dopasowuje do filtra `text/*`, więc arkusz
+  udostępniania proponuje Brulion (na Androidzie 16 tak; gdyby nie zaproponował, test odznacza
+  obrazek); okno wymienia oba pliki tekstowe i obrazek jako „To nie jest plik tekstowy”, „Zapisz”
+  — po jednym bloku na plik tekstowy w dzisiejszym dzienniku (pogrubiony tytuł, wcięte wiersze
+  pliku), obrazek pominięty. Po zimnym starcie z „Udostępnij” aplikacja mówi językiem telefonu
+  (bez `--locale pl`), więc test szuka napisów po polsku i po angielsku. Sprawdzone 2026-10-28
+  (Android 16, Pixel 6). Ręcznie na telefonie (APK z GitHub Actions `android.yml`):
   1. Chrome → strona → Udostępnij → Brulion: okno z `[Tytuł](adres)`, „Zapisz” → blok w
      dzisiejszym dzienniku, nic więcej (bez ⏰ nawet przy „jutro” w tytule);
   2. Pliki → `.md` z polskimi znakami → Udostępnij → Brulion przy zamkniętej aplikacji (zimny
@@ -1118,6 +1146,21 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   5. udostępnienie przy otwartej dokumentacji → Brulion wraca do Twojego notatnika i tam
      pokazuje okno; „Anuluj” → nic nie zapisane, `adb shell run-as io.github.januszbit.brulion
      ls files/share-in` pusty (debuggable APK).
+* „Zrobione” w powiadomieniu przypomnienia samej aplikacji (ten sam APK debugowalny):
+  ```sh
+  scripts/android-emulator-test.sh --done
+  ```
+  Notatnik w pamięci aplikacji z dwoma zadaniami w dzisiejszym dzienniku, z przypomnieniami za 2
+  i 4 minuty (zegar telefonu): pierwsze „Zrobione” przy aplikacji na ekranie — w notatce od razu
+  `- [x] … ⏰ … ✅ <dzień stuknięcia>`, powiadomienie znika; drugie po zabiciu procesu — notatka
+  bez zmian, stuknięcie w kolejce, następny start zapisuje `[x]` z `✅`, reszta notatki nietknięta.
+  Zrzuty `dn-*.png`. Sprawdzone 2026-10-28 (Android 16, Pixel 6).
+* Obrazy z internetu (ten sam APK debugowalny; potrzebny dostęp emulatora do internetu
+  i `python3` na hoście):
+  ```sh
+  scripts/android-emulator-test.sh --web-pictures
+  ```
+  Opis i wynik — sekcja [Obrazy z internetu](#obrazy-z-internetu). Zrzuty `wp-*.png`.
 * Widżety (ten sam APK debugowalny; obraz `google_apis` z `adb root` — okno szybkiego
   dodawania i odbiornik widżetów nie są eksportowane):
   ```sh
