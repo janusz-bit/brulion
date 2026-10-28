@@ -8,8 +8,8 @@ Serves the files under ROOT (the site, e.g. ROOT/brulion/ -> dist-wasm) on 127.0
 no caching, and appends every POST to /__report[/<name>] as one JSON line to REPORT.jsonl:
 {"path": "/__report/<name>", "time": <unix seconds>, "body": <the body: JSON when it parses, else
 the text>}. Browsers on the Android emulator (scripts/android-emulator-test.sh --web-keyboard)
-reach it through `adb reverse` at http://localhost:PORT/ (a secure context: the service worker
-and IndexedDB work) and send the app's self-test results there (wasm/index.html ?report=).
+reach it at http://10.0.2.2:PORT/ (the emulator's alias of the host's loopback) and send the
+app's self-test results there (wasm/index.html ?report=).
 Prints "listening on PORT" once ready. Standard library only.
 """
 import http.server

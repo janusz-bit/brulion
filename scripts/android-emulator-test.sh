@@ -74,7 +74,7 @@
 # With --web-keyboard SITE_DIR instead: the web build (scripts/wasm-build.sh -> dist-wasm) in Android's
 # browsers — Chrome (in the google_apis image), Brave 1.97.59 and Firefox 157.0.1 (pinned APKs,
 # SHA-256 checked, cached in ~/.cache/brulion-web-browsers): the site served from the host under
-# /brulion/ (scripts/web-test-server.py, `adb reverse`: http://localhost in the emulator), today's
+# /brulion/ (scripts/web-test-server.py; http://10.0.2.2 in the emulator, a secure context), today's
 # journal written into IndexedDB, the app opened with ?selftest=keyboard (its results POSTed to the
 # server), a block tapped: the keyboard comes up and the editing toolbar sits right on it — on a
 # screenshot no magenta row (the app paints the keyboard's room so) between the IME's top and the
@@ -107,7 +107,7 @@
 #   BRULION_EMULATOR_OUT     logs and screenshots (default dist-android/emulator-test)
 #   BRULION_WEBPICTURE_HTTPS --web-pictures: the public https picture (default: Google's logo)
 #   BRULION_WEBPICTURE_PORT  --web-pictures: the host's port of the http picture (default 8765)
-#   BRULION_WEB_PORT         --web-keyboard: the host's (and the emulator's) port of the site (8123)
+#   BRULION_WEB_PORT         --web-keyboard: the host's port of the site (default 8123)
 #   BRULION_WEB_BROWSERS     --web-keyboard: the browsers tested (default "chrome brave firefox")
 #   BRULION_WEB_BROWSERS_CACHE --web-keyboard: the browsers' APKs (~/.cache/brulion-web-browsers)
 # On NixOS the emulator runs under steam-run (its bundled libraries expect an FHS system).
@@ -1407,13 +1407,12 @@ HTML
     sleep 0.5
   done
   grep -q listening "$OUT/web-server.log" || die "the web server did not start on port $WK_PORT (BRULION_WEB_PORT): $(cat "$OUT/web-server.log")"
-  # The host's server at the emulator's localhost (a secure context: the service worker, Web
-  # Locks and IndexedDB work). adb drops the forwarding when its connection to the emulator
-  # breaks (it reconnects by itself): set again before every page.
-  wk_reverse() {
-    adb reverse --list 2>/dev/null | grep -q "tcp:$WK_PORT " || adb reverse "tcp:$WK_PORT" "tcp:$WK_PORT" >/dev/null
-  }
-  wk_reverse || die "adb reverse failed"
+  # The host's server at the emulator's alias of the host's loopback, 10.0.2.2 (not `adb
+  # reverse`: adb's connection to the emulator drops now and then and takes the forwarding with
+  # it). The browsers treat it as a secure context (the service worker, Web Locks): Chrome and
+  # Brave by their command line, Firefox (GeckoView) by its configuration file — both read on a
+  # debuggable system image for the debug app.
+  WK_ORIGIN=http://10.0.2.2:$WK_PORT
 
   # The browsers: [name] = package. Chrome and Brave read a command line (their first-run screens
   # off) from /data/local/tmp on a debuggable system image (set-debug-app); anything left (Brave's
@@ -1453,8 +1452,10 @@ HTML
     browsers+=("$b")
   done
   for f in chrome-command-line brave-command-line; do
-    adb shell "echo '_ --disable-fre --no-default-browser-check --no-first-run --disable-signin-promo' > /data/local/tmp/$f" || true
+    adb shell "echo '_ --disable-fre --no-default-browser-check --no-first-run --disable-signin-promo --unsafely-treat-insecure-origin-as-secure=$WK_ORIGIN' > /data/local/tmp/$f" || true
   done
+  printf 'prefs:\n  dom.securecontext.allowlist: "10.0.2.2"\n' >"$OUT/geckoview-config.yaml"
+  adb push "$OUT/geckoview-config.yaml" /data/local/tmp/org.mozilla.firefox-geckoview-config.yaml >/dev/null || true
 
   # A run's last report: "count windowHeight overlap shown animating editing settled toolbarBottom
   # contentBottom legacyOverlap" (empty before the app's first one).
@@ -1478,24 +1479,24 @@ HTML
   WK_DISMISS='Accept & continue|Accept and continue|Use without an account|No thanks|No, thanks|NO THANKS|Not now|NOT NOW|Skip|SKIP|Got it|GOT IT|Maybe later|Not interested|Continue|Close|Dismiss|Cancel|Pomiń|Nie teraz|Nie, dziękuję|Anuluj'
   wk_records() { local s; s=$(wk_state "$1"); echo "${s%% *}"; }
   wk_open() { # <browser> <run> <query>: the seeded journal, then the app (first-run screens tapped away)
-    local pkg=${WK_PKG[$1]} url="http://localhost:$WK_PORT/seed.html?$3" i xy idle=0 sent=1
+    local pkg=${WK_PKG[$1]} url="$WK_ORIGIN/seed.html?$3" i xy last="" idle=0 sent=1
     adb shell am force-stop "$pkg"
-    wk_reverse
     adb shell am start -a android.intent.action.VIEW -d "'$url'" -p "$pkg" >/dev/null
     for i in $(seq 1 40); do
       sleep 3
       wk_ready "$2" && return 0
       xy=$(ui_find_all "$WK_DISMISS" | head -n 1)
-      if [[ -n $xy ]]; then
+      # The same place twice: not a dialog's button (a heading on the browser's home page).
+      if [[ -n $xy && $xy != "$last" ]]; then
         echo "    tapping away a browser's screen at $xy"
         adb shell input tap "$xy"
+        last=$xy
         idle=0
         continue
       fi
       # Nothing to tap and the app not started (the welcome screens ate the link): again.
       if ((++idle >= 4 && sent < 3)) && [[ -z $(wk_records "$2") ]]; then
         echo "    opening the page again ($i)"
-        wk_reverse
         adb shell am start -a android.intent.action.VIEW -d "'$url'" -p "$pkg" >/dev/null
         idle=0
         sent=$((sent + 1))
@@ -1612,8 +1613,6 @@ print(last)' "$OUT/report.jsonl" "$1"
         echo "    resizes-visual: no gap in $b (if this is Brave: brave-browser#60074 is fixed upstream)"
       fi
     fi
-    echo "    samples (tests/app/tst_keyboardinsets.cpp rows):"
-    wk_py samples "$OUT/report.jsonl" "$run" "$start" "$OUT/samples-$run.jsonl"
     # Back: the keyboard goes, the block stays edited and its toolbar docked at the bottom.
     adb shell input keyevent 4
     check "$run: Back hides the keyboard" wait_for 15 ime_hidden
@@ -1626,6 +1625,8 @@ print(last)' "$OUT/report.jsonl" "$1"
     wk_screen_line "after Back (from the screen's bottom)" "$gap" "$magenta" "$rows" "$anywhere"
     check "$run: no keyboard's room left after Back, the toolbar on screen" test "$anywhere" -eq 0 -a "$rows" -ge 20
     echo "    report: $(wk_state "$run")"
+    echo "    samples from the tap to Back (tests/app/tst_keyboardinsets.cpp rows):"
+    wk_py samples "$OUT/report.jsonl" "$run" "$start" "$OUT/samples-$run.jsonl"
     rm -f "$OUT/wk-$run-"*.raw
     adb shell am force-stop "${WK_PKG[$b]}"
   }

@@ -471,6 +471,13 @@ przypina je w lewym górnym rogu okna (styl w otwartym shadow root `#qt-shadow-c
 przewinięte kontenery Qt wraca na 0; stronę przewiniętą przez iOS przewija z powrotem na górę.
 Okna kandydatów klawiatur CJK pojawiają się przez to w rogu okna.
 
+Chrome i Brave nad klawiaturą każdego pola tekstowego stawiają też własny pasek autouzupełniania
+(hasła, karty, adresy; 48 px w Chrome, 64 px w Brave — biały pas z trzema ikonami po prawej), także
+z `autocomplete="off"`, a nie robią tego dla pola wyszukiwania. Na ekranach dotykowych powłoka
+zmienia więc ukryte pole Qt w pole wyszukiwania (`type="search"`; Qt dalej odczytuje „text”)
+z klawiszem Enter na klawiaturze (`enterkeyhint="enter"`, nie lupa) — pasek leży bezpośrednio na
+klawiaturze. Pola haseł (`type="password"`) zostają bez zmian, z autouzupełnianiem haseł.
+
 Znane ograniczenia: przeglądarka, która pomija `interactive-widget`, a ma błąd Brave, dalej
 zostawi pas (nie da się go wykryć). Nowa karta w Brave dostaje na chwilę widok jak przy schowanym
 pasku ([brave-browser#59940](https://github.com/brave/brave-browser/issues/59940)) — to błąd
@@ -480,14 +487,17 @@ i `--keyboard-phone` (wyżej).
 
 Test w prawdziwych przeglądarkach: `scripts/android-emulator-test.sh --web-keyboard dist-wasm`
 (emulator Androida 16 z KVM, Pixel 6; job `keyboard-android` w `.github/workflows/wasm.yml`).
-Serwuje witrynę pod `/brulion/` (`scripts/web-test-server.py`, przez `adb reverse` jako
-`http://localhost`), w Chrome z obrazu systemu, Brave 1.97.59 (wersja z #60074) i Firefoksie
+Serwuje witrynę pod `/brulion/` (`scripts/web-test-server.py`; w emulatorze
+`http://10.0.2.2`, które przeglądarki traktują jak bezpieczny kontekst: Chrome i Brave przez
+`--unsafely-treat-insecure-origin-as-secure`, Firefox przez `dom.securecontext.allowlist`), w Chrome z obrazu systemu, Brave 1.97.59 (wersja z #60074) i Firefoksie
 157.0.1 (przypięte APK z sumami SHA-256) zapisuje dziennik 40 polskich bloków, otwiera
 `?selftest=keyboard&report=…` (oraz z `&keyboard=visual`), stuka blok i czeka na klawiaturę.
 Aplikacja w tym teście maluje miejsce klawiatury na purpurowo, a pasek narzędzi na
 turkusowo (`KeyboardInsets.marked`): na zrzucie ekranu nad górną krawędzią klawiatury (ramka
-IME z `dumpsys window`) nie może być purpurowych wierszy (pasa), tylko od razu ≥ 20 wierszy
-paska (dopuszczalne 3 px). Po „Wstecz” (klawiatura schowana) nie zostaje nic purpurowego, a pasek
+IME z `dumpsys window`) nie może być purpurowych wierszy (pasa) ani paska autouzupełniania
+przeglądarki, tylko od razu ≥ 20 wierszy paska (dopuszczalne 3 px). Słowo wpisane klawiszami
+klawiatury trafia do bloku, a klawisz akcji klawiatury to Enter, który dzieli blok
+(`focusText` w wyniku testu). Po „Wstecz” (klawiatura schowana) nie zostaje nic purpurowego, a pasek
 zostaje na dole. Z `?keyboard=visual` wynik tylko się zapisuje (Brave pokazuje pas z #60074).
 Skrypt zapisuje odczyty (`samples-<przeglądarka>-<tryb>.jsonl`), wypisuje je jako wiersze testu
 `tst_keyboardinsets` i liczy, ile razy okno Qt zmieniło wysokość przy otwarciu klawiatury.
