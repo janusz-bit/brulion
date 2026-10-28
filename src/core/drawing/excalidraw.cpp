@@ -231,6 +231,8 @@ std::optional<Drawing> parseScene(QByteArrayView json)
     if (const QString paper = d.appState.value(u"viewBackgroundColor"_s).toString(); !paper.isEmpty())
         d.paper = paper;
     d.background = backgroundFromName(d.appState.value(u"brulionBackground"_s).toString());
+    // (A number or null reads as "": Auto.)
+    d.theme = paperThemeFromName(d.appState.value(u"brulionTheme"_s).toString());
     for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
         if (it.key() != u"type" && it.key() != u"version" && it.key() != u"elements" && it.key() != u"appState"
             && it.key() != u"files")
@@ -258,6 +260,10 @@ QByteArray sceneJson(const Drawing &drawing)
         appState.remove(u"brulionBackground"_s);
     else
         appState.insert(u"brulionBackground"_s, backgroundName(drawing.background));
+    if (drawing.theme == PaperTheme::Auto)
+        appState.remove(u"brulionTheme"_s);
+    else
+        appState.insert(u"brulionTheme"_s, paperThemeName(drawing.theme));
     root.insert(u"appState"_s, appState);
     root.insert(u"files"_s, drawing.files);
     return QJsonDocument(root).toJson(QJsonDocument::Compact);

@@ -10,13 +10,15 @@
 // API overview (namespace brulion::drawing)
 //
 //   StrokePoint, Stroke, Background, Drawing   the model: freehand strokes in scene coordinates
+//   PaperTheme                                 how the drawing is shown: as the app, light, dark
 //   bounds(drawing), strokeBounds(stroke)      what the strokes cover (their outlines)
 //   editable(drawing)                          only strokes Brulion draws itself (no shapes, text,
 //                                              pictures, rotated or filled freehand lines)
 //   normalizeStroke(stroke)                    its points rounded as the scene stores them
 //   readDrawing(bytes, &error)                 an SVG with an embedded scene, or a `.excalidraw`
 //                                              file → Drawing (nullopt: not a drawing / broken)
-//   toSvg(drawing)                             the file Brulion writes (svgwrite.h)
+//   toSvg(drawing), pictureRect(drawing)       the file Brulion writes (svgwrite.h)
+//   darkColor(), displayInk(), displayPaper()  the colours of the dark theme (palette.h)
 //   strokeOutline(stroke), outlineToSvgPath()  the outline of a stroke (stroke.h)
 //   parseScene(), sceneJson(), svgPayload(),   the Excalidraw format (excalidraw.h)
 //   encodePayload(), looksLikeExcalidrawSvg()
@@ -89,6 +91,11 @@ inline constexpr QStringView DefaultPaper = u"#ffffff";
 /// The colour of the lines and the grid on the paper.
 inline constexpr QStringView RuleColor = u"#c9d3e0";
 
+/// How the drawing is shown (appState key `brulionTheme`: "light" | "dark"; absent: Auto, which
+/// follows the app's theme — Excalidraw ignores the key). The colours stay stored as drawn, in
+/// light-theme terms; the dark theme maps them when it shows them (palette.h).
+enum class PaperTheme { Auto, Light, Dark };
+
 /// A drawing: strokes in drawing order, and what the scene has besides them.
 struct Drawing {
     QList<Stroke> strokes;
@@ -104,6 +111,8 @@ struct Drawing {
     Background background = Background::Plain;
     /// The paper's colour, "#rrggbb" (appState `viewBackgroundColor`).
     QString paper = DefaultPaper.toString();
+    /// Light or dark paper, or as the app (appState `brulionTheme`).
+    PaperTheme theme = PaperTheme::Auto;
 };
 
 /// The area a stroke's outline covers (an empty rect for a stroke without points).
@@ -133,5 +142,8 @@ std::optional<Drawing> readDrawing(QByteArrayView bytes, ReadError *error = null
 /// The background's name in the scene ("plain", "lines", "grid") and back (unknown: Plain).
 QString backgroundName(Background background);
 Background backgroundFromName(QStringView name);
+/// The theme's name ("auto", "light", "dark") and back (unknown or empty: Auto).
+QString paperThemeName(PaperTheme theme);
+PaperTheme paperThemeFromName(QStringView name);
 
 } // namespace brulion::drawing

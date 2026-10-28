@@ -1,8 +1,11 @@
 // Tests of the drawing module: the outline of strokes (perfect-freehand), the Excalidraw scene
 // and its SVG payload (Excalidraw's own fixtures and ones written like excalidraw.com writes them,
-// tests/data/drawing/make-fixtures.py), the SVG Brulion writes and malformed input.
+// tests/data/drawing/make-fixtures.py), the SVG Brulion writes, the colours of the dark theme
+// (Excalidraw's dark mode, readable contrast) and malformed input.
+// BRULION_UPDATE_GOLDEN=1 rewrites tests/data/drawing/auto_theme.svg (svgAutoGolden).
 #include "drawing/drawing.h"
 #include "drawing/excalidraw.h"
+#include "drawing/palette.h"
 #include "drawing/stroke.h"
 #include "drawing/svgwrite.h"
 
@@ -10,6 +13,8 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QRandomGenerator>
+#include <QRegularExpression>
+#include <QSaveFile>
 #include <QTest>
 #include <QXmlStreamReader>
 #include <QtMath>
@@ -97,6 +102,37 @@ QByteArray freedrawScene(qsizetype points)
         out.append(i ? ",[0,0]" : "[0,0]");
     out.append("]}]}");
     return out;
+}
+
+/// The scene embedded in an SVG Brulion wrote, as JSON.
+QJsonObject embeddedScene(const QByteArray &svg)
+{
+    const std::optional<QByteArray> scene = svgPayload(svg);
+    return scene ? QJsonDocument::fromJson(*scene).object() : QJsonObject();
+}
+
+/// The text of the SVG's only <style> element ("" none), and how many there are.
+QString styleSheet(const QByteArray &svg, int *count = nullptr)
+{
+    const QString text = QString::fromUtf8(svg);
+    if (count)
+        *count = int(text.count(u"<style"_s));
+    const qsizetype from = text.indexOf(u"<style>"_s);
+    const qsizetype to = text.indexOf(u"</style>"_s);
+    return from < 0 || to < from ? QString() : text.mid(from + 7, to - from - 7);
+}
+
+/// A drawing of an ink stroke and a highlighter stroke over it, on lined paper (svgAutoGolden).
+Drawing twoStrokes()
+{
+    Drawing d;
+    d.background = Background::Lines;
+    d.strokes = {wavyStroke(u"atrament"_s, 20, 40, 24), wavyStroke(u"zakreślacz"_s, 16, 44, 26)};
+    d.strokes[1].tool = Tool::Highlighter;
+    d.strokes[1].color = u"#ffd43b"_s;
+    d.strokes[1].opacity = 40;
+    d.strokes[1].width = 5;
+    return d;
 }
 
 /// A scene of `count` empty elements (a hostile file).
@@ -713,6 +749,361 @@ private Q_SLOTS:
         else
             QCOMPARE(error, ReadError::Corrupt);
         QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
+    }
+
+    // --- The dark theme (palette.h) -------------------------------------------------------
+
+    void darkColors_data()
+    {
+        // Excalidraw's dark mode (applyDarkModeFilter, computed with its reference algorithm).
+        QTest::addColumn<QString>("color");
+        QTest::addColumn<QString>("dark");
+        QTest::newRow("white paper") << u"#ffffff"_s << u"#121212"_s;
+        QTest::newRow("black") << u"#000000"_s << u"#ededed"_s;
+        QTest::newRow("Brulion's ink") << u"#1f2430"_s << u"#caced8"_s;
+        QTest::newRow("Excalidraw's ink") << u"#1e1e1e"_s << u"#d3d3d3"_s;
+        QTest::newRow("blue") << u"#2f6fdd"_s << u"#6198f7"_s;
+        QTest::newRow("red") << u"#e03131"_s << u"#ff8383"_s;
+        QTest::newRow("green") << u"#2f9e44"_s << u"#39994b"_s;
+        QTest::newRow("orange") << u"#f08c00"_s << u"#b86200"_s;
+        QTest::newRow("violet") << u"#7048e8"_s << u"#af8dff"_s;
+        QTest::newRow("rules") << u"#c9d3e0"_s << u"#323a45"_s;
+        QTest::newRow("yellow") << u"#ffd43b"_s << u"#5f3a00"_s;
+        QTest::newRow("zoom label") << u"#535a6a"_s << u"#9ba1af"_s;
+        QTest::newRow("Excalidraw's paper") << u"#f8f9fa"_s << u"#161718"_s;
+        QTest::newRow("short form") << u"#fff"_s << u"#121212"_s;
+        QTest::newRow("upper case") << u"#1F2430"_s << u"#caced8"_s;
+        QTest::newRow("spaces") << u" #1f2430 "_s << u"#caced8"_s;
+        QTest::newRow("alpha kept") << u"#1f243080"_s << u"#caced880"_s;
+        QTest::newRow("opaque alpha") << u"#1f2430ff"_s << u"#caced8"_s;
+        QTest::newRow("named") << u"red"_s << u"brak"_s;
+        QTest::newRow("too short") << u"#12"_s << u"brak"_s;
+        QTest::newRow("empty") << QString() << u"brak"_s;
+        QTest::newRow("bad digits") << u"#gggggg"_s << u"brak"_s;
+        QTest::newRow("four digits") << u"#1f24"_s << u"brak"_s;
+        QTest::newRow("url") << u"url(javascript:x)"_s << u"brak"_s;
+        QTest::newRow("css") << u"#ffffff;fill:red"_s << u"brak"_s;
+        QTest::newRow("polish") << u"#żółć12"_s << u"brak"_s;
+    }
+    void darkColors()
+    {
+        QFETCH(QString, color);
+        QFETCH(QString, dark);
+        QCOMPARE(darkColor(color, u"brak"_s), dark);
+        const std::optional<Rgba> rgba = parseColor(color);
+        QCOMPARE(rgba.has_value(), dark != u"brak");
+        if (rgba)
+            QCOMPARE(colorName(darkRgba(*rgba)), dark);
+    }
+
+    void colorNames()
+    {
+        QCOMPARE(parseColor(u"#abc"), (Rgba{0xaa, 0xbb, 0xcc, 255}));
+        QCOMPARE(parseColor(u"#0a0B0c80"), (Rgba{10, 11, 12, 128}));
+        QCOMPARE(colorName({10, 11, 12, 255}), u"#0a0b0c"_s);
+        QCOMPARE(colorName({10, 11, 12, 0}), u"#0a0b0c00"_s);
+        QCOMPARE(colorName({-5, 300, 12, 255}), u"#00ff0c"_s);
+        // Light paper and rules stay as they are; malformed paper is white.
+        QCOMPARE(displayPaper(u"#FFF9DB", false), u"#fff9db"_s);
+        QCOMPARE(displayPaper(u"transparent", false), u"#ffffff"_s);
+        QCOMPARE(displayPaper(u"transparent", true), u"#121212"_s);
+        QCOMPARE(displayPaper(u"#fff9db", true), u"#1e1900"_s);
+        QCOMPARE(displayRule(false), RuleColor.toString());
+        QCOMPARE(displayRule(true), u"#323a45"_s);
+        QVERIFY(!rendersDark(PaperTheme::Auto, false));
+        QVERIFY(rendersDark(PaperTheme::Auto, true));
+        QVERIFY(!rendersDark(PaperTheme::Light, true));
+        QVERIFY(rendersDark(PaperTheme::Dark, false));
+    }
+
+    void displayInks_data()
+    {
+        QTest::addColumn<QString>("color");
+        QTest::addColumn<bool>("highlighter");
+        QTest::addColumn<int>("opacity");
+        QTest::addColumn<QString>("lightColor");
+        QTest::addColumn<int>("lightOpacity");
+        QTest::addColumn<QString>("darkColor");
+        QTest::addColumn<int>("darkOpacity");
+        QTest::newRow("ink") << u"#1f2430"_s << false << 100 << u"#1f2430"_s << 100 << u"#caced8"_s << 100;
+        QTest::newRow("translucent ink") << u"#2f6fdd"_s << false << 60 << u"#2f6fdd"_s << 60 << u"#6198f7"_s << 60;
+        QTest::newRow("highlighter") << u"#ffd43b"_s << true << 40 << u"#ffd43b"_s << 40 << u"#ffd43b"_s << 50;
+        QTest::newRow("Excalidraw's 30") << u"#8ce99a"_s << true << 30 << u"#8ce99a"_s << 30 << u"#8ce99a"_s << 38;
+        QTest::newRow("highlighter at 90") << u"#74c0fc"_s << true << 90 << u"#74c0fc"_s << 90 << u"#74c0fc"_s << 100;
+        QTest::newRow("dark highlighter stays") << u"#1f2430"_s << true << 40 << u"#1f2430"_s << 40 << u"#1f2430"_s << 50;
+        QTest::newRow("short form") << u"#ABC"_s << false << 100 << u"#aabbcc"_s << 100 << darkColor(u"#aabbcc") << 100;
+        QTest::newRow("malformed") << u"czerwony"_s << false << 100 << u"#1e1e1e"_s << 100 << u"#d3d3d3"_s << 100;
+        QTest::newRow("opacity out of range") << u"#1f2430"_s << false << 250 << u"#1f2430"_s << 100 << u"#caced8"_s << 100;
+        QTest::newRow("negative opacity") << u"#ffd43b"_s << true << -20 << u"#ffd43b"_s << 0 << u"#ffd43b"_s << 0;
+    }
+    void displayInks()
+    {
+        QFETCH(QString, color);
+        QFETCH(bool, highlighter);
+        QFETCH(int, opacity);
+        QFETCH(QString, lightColor);
+        QFETCH(int, lightOpacity);
+        QFETCH(QString, darkColor);
+        QFETCH(int, darkOpacity);
+        Stroke s;
+        s.color = color;
+        s.opacity = opacity;
+        s.tool = highlighter ? Tool::Highlighter : Tool::Pen;
+        QCOMPARE(displayInk(s, false), (Ink{lightColor, lightOpacity}));
+        QCOMPARE(displayInk(s, true), (Ink{darkColor, darkOpacity}));
+    }
+
+    void darkInkContrast_data()
+    {
+        QTest::addColumn<QString>("color");
+        QTest::addColumn<double>("minimum");
+        // The pen's colours (DrawingView.qml) on the dark paper: readable (AA for large text,
+        // the ink the default far above).
+        for (const QString &c : {u"#1f2430"_s, u"#2f6fdd"_s, u"#e03131"_s, u"#2f9e44"_s, u"#f08c00"_s, u"#7048e8"_s})
+            QTest::newRow(qPrintable(c)) << c << 4.2;
+        // The lines: subtle, as on white paper (1.51:1).
+        QTest::newRow("rules") << RuleColor.toString() << 1.5;
+    }
+    void darkInkContrast()
+    {
+        QFETCH(QString, color);
+        QFETCH(double, minimum);
+        Stroke s;
+        s.color = color;
+        const Rgba paper = *parseColor(displayPaper(DefaultPaper, true));
+        const Rgba ink = color == RuleColor ? *parseColor(displayRule(true)) : *parseColor(displayInk(s, true).color);
+        const double ratio = contrast(ink, paper);
+        QVERIFY2(ratio >= minimum, qPrintable(u"%1 → %2: %3"_s.arg(color, colorName(ink)).arg(ratio)));
+        // On white the same colours as drawn.
+        const Rgba light = *parseColor(color == RuleColor ? displayRule(false) : displayInk(s, false).color);
+        QVERIFY(contrast(light, *parseColor(DefaultPaper)) >= 1.5);
+    }
+
+    void highlighterInDark_data()
+    {
+        QTest::addColumn<QString>("color");
+        for (const QString &c : {u"#ffd43b"_s, u"#8ce99a"_s, u"#faa2c1"_s, u"#74c0fc"_s, u"#ffa94d"_s})
+            QTest::newRow(qPrintable(c)) << c;
+    }
+    void highlighterInDark()
+    {
+        // The highlighter's colours (DrawingView.qml) at 40 % show at 50 % in the dark: visible on
+        // the dark paper, the dark ink readable on them. (Mapped as ink they would sink: < 3:1.)
+        QFETCH(QString, color);
+        Stroke s;
+        s.color = color;
+        s.tool = Tool::Highlighter;
+        s.opacity = 40;
+        const Ink ink = displayInk(s, true);
+        QCOMPARE(ink.opacity, 50);
+        const Rgba paper = *parseColor(displayPaper(DefaultPaper, true));
+        const Rgba seen = over(*parseColor(ink.color), ink.opacity, paper);
+        QVERIFY2(contrast(seen, paper) >= 3.2, qPrintable(u"%1: %2"_s.arg(colorName(seen)).arg(contrast(seen, paper))));
+        const Rgba darkInk = *parseColor(darkColor(u"#1f2430"));
+        QVERIFY2(contrast(darkInk, seen) >= 2.9, qPrintable(QString::number(contrast(darkInk, seen))));
+        QVERIFY(contrast(over(darkRgba(*parseColor(color)), 40, paper), paper) < 3.2);
+    }
+
+    void contrastHelpers()
+    {
+        QCOMPARE(qRound(contrast({0, 0, 0, 255}, {255, 255, 255, 255}) * 100), 2100);
+        QCOMPARE(contrast({18, 18, 18, 255}, {18, 18, 18, 255}), 1.0);
+        QCOMPARE(over({255, 255, 255, 255}, 50, {0, 0, 0, 255}), (Rgba{128, 128, 128, 255}));
+        QCOMPARE(over({255, 255, 255, 128}, 100, {0, 0, 0, 255}), (Rgba{128, 128, 128, 255}));
+        QCOMPARE(over({255, 0, 0, 255}, 0, {1, 2, 3, 255}), (Rgba{1, 2, 3, 255}));
+        QCOMPARE(over({255, 0, 0, 255}, 400, {1, 2, 3, 255}), (Rgba{255, 0, 0, 255}));
+    }
+
+    void paperThemeRoundTrip_data()
+    {
+        QTest::addColumn<QByteArray>("appState"); // the scene's appState JSON
+        QTest::addColumn<int>("theme");
+        QTest::newRow("none") << QByteArray("{}") << int(PaperTheme::Auto);
+        QTest::newRow("light") << QByteArray(R"({"brulionTheme":"light"})") << int(PaperTheme::Light);
+        QTest::newRow("dark") << QByteArray(R"({"brulionTheme":"dark"})") << int(PaperTheme::Dark);
+        QTest::newRow("auto") << QByteArray(R"({"brulionTheme":"auto"})") << int(PaperTheme::Auto);
+        QTest::newRow("unknown") << QByteArray(R"({"brulionTheme":"sepia"})") << int(PaperTheme::Auto);
+        QTest::newRow("upper case") << QByteArray(R"({"brulionTheme":"DARK"})") << int(PaperTheme::Auto);
+        QTest::newRow("number") << QByteArray(R"({"brulionTheme":42})") << int(PaperTheme::Auto);
+        QTest::newRow("null") << QByteArray(R"({"brulionTheme":null})") << int(PaperTheme::Auto);
+        QTest::newRow("object") << QByteArray(R"({"brulionTheme":{"ciemny":true}})") << int(PaperTheme::Auto);
+        QTest::newRow("with others") << QByteArray(R"({"gridSize":20,"brulionBackground":"grid","zażółć":1,)"
+                                                   R"("brulionTheme":"dark","theme":"light"})")
+                                     << int(PaperTheme::Dark);
+    }
+    void paperThemeRoundTrip()
+    {
+        QFETCH(QByteArray, appState);
+        QFETCH(int, theme);
+        const QByteArray scene = R"({"type":"excalidraw","version":2,"elements":[],"appState":)" + appState + "}";
+        std::optional<Drawing> d = parseScene(scene);
+        QVERIFY(d);
+        QCOMPARE(int(d->theme), theme);
+        QCOMPARE(paperThemeFromName(paperThemeName(d->theme)), d->theme);
+        // Written back: the key only for Light and Dark; every other key as it was.
+        const QJsonObject before = QJsonDocument::fromJson(appState).object();
+        for (const PaperTheme t : {PaperTheme::Auto, PaperTheme::Light, PaperTheme::Dark}) {
+            d->theme = t;
+            const QJsonObject written =
+                    QJsonDocument::fromJson(sceneJson(*d)).object().value(u"appState"_s).toObject();
+            if (t == PaperTheme::Auto)
+                QVERIFY(!written.contains(u"brulionTheme"_s));
+            else
+                QCOMPARE(written.value(u"brulionTheme"_s).toString(), paperThemeName(t));
+            for (auto it = before.constBegin(); it != before.constEnd(); ++it) {
+                if (it.key() != u"brulionTheme")
+                    QCOMPARE(written.value(it.key()), it.value());
+            }
+            const std::optional<Drawing> back = parseScene(sceneJson(*d));
+            QVERIFY(back);
+            QCOMPARE(back->theme, t);
+            QCOMPARE(back->background, d->background);
+        }
+    }
+
+    void svgThemes_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::addColumn<QString>("inkColor");
+        QTest::newRow("light") << int(PaperTheme::Light) << u"#1f2430"_s;
+        QTest::newRow("dark") << int(PaperTheme::Dark) << u"#1f2430"_s;
+        QTest::newRow("auto") << int(PaperTheme::Auto) << u"#1f2430"_s;
+        // A scene from anywhere: the colour is no markup in the attributes nor in the CSS.
+        QTest::newRow("auto, hostile colour") << int(PaperTheme::Auto) << u"#123;}</style><script>"_s;
+        QTest::newRow("dark, hostile colour") << int(PaperTheme::Dark) << u"#fff\"/><script>"_s;
+        QTest::newRow("auto, short form") << int(PaperTheme::Auto) << u"#E03"_s;
+    }
+    void svgThemes()
+    {
+        QFETCH(int, theme);
+        QFETCH(QString, inkColor);
+        Drawing d = twoStrokes();
+        d.theme = PaperTheme(theme);
+        d.strokes[0].color = inkColor;
+        d.strokes.append(wavyStroke(u"druga linia ćwiczenia"_s, 30, 90, 10));
+        d.strokes.append(wavyStroke(u"niebieska"_s, 30, 120, 10));
+        d.strokes.last().color = u"#2f6fdd"_s;
+        const QByteArray svg = toSvg(d);
+        const SvgCheck check = checkSvg(svg);
+        QVERIFY(check.wellFormed);
+        QCOMPARE(check.paths, 5);
+        QVERIFY(!svg.contains("<script"));
+        QVERIFY(looksLikeExcalidrawSvg(svg.left(HeadBytes)));
+        // The scene keeps the colours as drawn, and the choice.
+        const QJsonObject scene = embeddedScene(svg);
+        QCOMPARE(scene.value(u"elements"_s).toArray().at(0).toObject().value(u"strokeColor"_s).toString(), inkColor);
+        QCOMPARE(scene.value(u"appState"_s).toObject().value(u"brulionTheme"_s).toString(),
+                 d.theme == PaperTheme::Auto ? QString() : paperThemeName(d.theme));
+        const std::optional<Drawing> back = readDrawing(svg);
+        QVERIFY(back);
+        QCOMPARE(back->theme, d.theme);
+        QCOMPARE(toSvg(*back), svg);
+        int styles = 0;
+        const QString css = styleSheet(svg, &styles);
+        const QString ink = safeColor(inkColor, u"#1e1e1e"_s);
+        switch (d.theme) {
+        case PaperTheme::Light:
+            QCOMPARE(styles, 0);
+            QVERIFY(!svg.contains("class="));
+            QVERIFY(svg.contains("fill=\"#ffffff\""));
+            QVERIFY(svg.contains(QByteArray("fill=\"" + ink.toLatin1() + '"')));
+            QVERIFY(svg.contains("stroke=\"#c9d3e0\""));
+            QVERIFY(svg.contains("fill=\"#ffd43b\" fill-opacity=\"0.4\""));
+            break;
+        case PaperTheme::Dark:
+            // The dark picture in the attributes: every program shows it dark.
+            QCOMPARE(styles, 0);
+            QVERIFY(!svg.contains("class="));
+            QVERIFY(svg.contains("<rect x=\"0\" y=\"0\""));
+            QVERIFY(svg.contains("fill=\"#121212\""));
+            QVERIFY(!svg.contains("fill=\"#ffffff\""));
+            QVERIFY(svg.contains(QByteArray("fill=\"" + darkColor(ink).toLatin1() + '"')));
+            QVERIFY(svg.contains("fill=\"#6198f7\""));
+            QVERIFY(svg.contains("stroke=\"#323a45\""));
+            QVERIFY(svg.contains("fill=\"#ffd43b\" fill-opacity=\"0.5\""));
+            break;
+        case PaperTheme::Auto: {
+            // The light picture, and the dark one for browsers in one @media block right after the
+            // metadata.
+            QCOMPARE(styles, 1);
+            QVERIFY(svg.contains("</metadata>\n<style>@media (prefers-color-scheme: dark){"));
+            QVERIFY(svg.contains("fill=\"#ffffff\" class=\"p\""));
+            QVERIFY(svg.contains(QByteArray("fill=\"" + ink.toLatin1() + "\" class=\"k0\"")));
+            QVERIFY(svg.contains("fill=\"#ffd43b\" fill-opacity=\"0.4\" class=\"h0\""));
+            // One class per pen colour: the second stroke's #1f2430 shares the first one's unless
+            // that one has another colour.
+            const bool shared = ink == u"#1f2430";
+            QVERIFY(svg.contains(QByteArray("fill=\"#2f6fdd\" class=\"" + QByteArray(shared ? "k1" : "k2") + '"')));
+            QVERIFY2(QRegularExpression(u"^@media \\(prefers-color-scheme: dark\\)\\{[@#.a-z0-9{}:;()\\- ]*\\}$"_s)
+                             .match(css)
+                             .hasMatch(),
+                     qPrintable(css));
+            QVERIFY(css.contains(u".p{fill:#121212}"_s));
+            QVERIFY(css.contains(u".r{stroke:#323a45}"_s));
+            QVERIFY(css.contains(u".k0{fill:"_s + darkColor(ink) + u'}'));
+            QVERIFY(css.contains(u".h0{fill-opacity:0.5}"_s));
+            // Every class used is defined, every class defined is used.
+            QSet<QString> used, defined;
+            for (const QRegularExpressionMatch &m : QRegularExpression(u"class=\"([a-z0-9]+)\""_s).globalMatch(QString::fromUtf8(svg)))
+                used.insert(m.captured(1));
+            for (const QRegularExpressionMatch &m : QRegularExpression(u"\\.([a-z0-9]+)\\{"_s).globalMatch(css))
+                defined.insert(m.captured(1));
+            QCOMPARE(used, defined);
+            QCOMPARE(used.size(), shared ? 5 : 6); // p, r, h0 and the pens' colours
+            break;
+        }
+        }
+    }
+
+    void svgAutoGolden()
+    {
+        // The file a two-stroke drawing gives as the app writes it by default (Auto): byte for byte
+        // (the browser check, tests/app/drawing/svg-theme-check.mjs, loads it).
+        const QByteArray svg = toSvg(twoStrokes());
+        const QString path = QStringLiteral(BRULION_TEST_DATA "/drawing/auto_theme.svg");
+        if (qEnvironmentVariableIsSet("BRULION_UPDATE_GOLDEN")) {
+            QSaveFile out(path);
+            QVERIFY(out.open(QIODevice::WriteOnly));
+            out.write(svg);
+            QVERIFY(out.commit());
+            QSKIP("auto_theme.svg rewritten");
+        }
+        const QByteArray golden = fixture(u"auto_theme.svg"_s);
+        if (svg != golden)
+            qWarning().noquote() << svg;
+        QCOMPARE(svg, golden);
+        QCOMPARE(readDrawing(golden)->theme, PaperTheme::Auto);
+    }
+
+    void pictureRectMatchesSvgRoot_data()
+    {
+        QTest::addColumn<int>("strokes");
+        QTest::addColumn<double>("x");
+        QTest::newRow("empty") << 0 << 0.0;
+        QTest::newRow("one") << 1 << 10.5;
+        QTest::newRow("left of the origin") << 3 << -812.37;
+        QTest::newRow("far") << 2 << 98765.4;
+    }
+    void pictureRectMatchesSvgRoot()
+    {
+        QFETCH(int, strokes);
+        QFETCH(double, x);
+        Drawing d;
+        for (int i = 0; i < strokes; ++i)
+            d.strokes.append(wavyStroke(u"ż%1"_s.arg(i), x + i * 17, x / 3 + i * 9, 12, i % 2));
+        const QRectF r = pictureRect(d);
+        const SvgCheck check = checkSvg(toSvg(d));
+        QCOMPARE(int(r.width()), check.root.value(u"width"_s).toInt());
+        QCOMPARE(int(r.height()), check.root.value(u"height"_s).toInt());
+        QCOMPARE(r.width(), std::round(r.width()));
+        if (strokes == 0) {
+            QCOMPARE(r, QRectF(0, 0, EmptyWidth, EmptyHeight));
+        } else {
+            const QRectF b = bounds(d);
+            QVERIFY(r.contains(b));
+            QVERIFY(std::abs(r.left() - (b.left() - SvgMargin)) <= 1);
+            QVERIFY(std::abs(r.bottom() - (b.bottom() + SvgMargin)) <= 1);
+        }
     }
 
     void randomInputNeverCrashes()
