@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <QHash>
 #include <QList>
+#include <QMap>
 #include <QString>
 #include <QStringList>
 #include <QTime>
@@ -237,7 +238,9 @@ struct ParsedNote {
     QList<Heading> headings;
     QList<Task> tasks;
     QList<Reminder> reminders;
-    QHash<QString, int> blockIds; ///< block id -> index into blocks
+    /// Block id -> index into blocks. A QMap: most notes have one or two ids, and a QHash
+    /// allocates ~1.8 KB on its first insert (docs/PERFORMANCE.md, L8).
+    QMap<QString, int> blockIds;
     std::optional<QDate> journalDate;
 };
 
