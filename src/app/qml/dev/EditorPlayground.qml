@@ -408,6 +408,15 @@ ApplicationWindow {
         return editor.handleEditorKey({ key: k, modifiers: modifiers || Qt.NoModifier }, edit)
     }
     function info(row) { return page.blocks.get(row) }
+    /// The delegate of `row` is laid out and wholly inside the list's view.
+    function rowInView(row) {
+        const list = editor.listView
+        const item = list.itemAtIndex(row)
+        if (!item || !item.visible)
+            return false
+        const p = item.mapToItem(list, 0, 0)
+        return p.y >= -0.5 && p.y + item.height <= list.height + 0.5
+    }
     // What an input method (Gboard) is told about the text around the caret.
     function surroundingText(edit) { return edit ? String(edit.inputMethodQuery(Qt.ImSurroundingText, null)) : "<none>" }
     function imCursor(edit) { return edit ? Number(edit.inputMethodQuery(Qt.ImCursorPosition, null)) : -1 }
@@ -664,8 +673,7 @@ ApplicationWindow {
             () => key(Qt.Key_Return),
             () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && info(page.editingRow).visible
                         && editor.activeEditor !== null && editor.activeEditor.activeFocus
-                        && editor.activeEditor.row === page.editingRow
-                        && editor.listView.itemAtIndex(page.editingRow) !== null,
+                        && editor.activeEditor.row === page.editingRow && rowInView(page.editingRow),
                         "Enter at the end of a zoomed paragraph ends the zoom and edits the new block below it: zoom "
                         + page.zoomBlock + ", row " + page.editingRow + " (paragraph " + window.zoomTextRow + ")"),
             () => key(Qt.Key_Z, Qt.ControlModifier),
@@ -759,6 +767,33 @@ ApplicationWindow {
             () => typeKeys("Q"),
             () => check(info(window.farRow).plainText.indexOf("Q") > 0 && page.editingRow === window.farRow
                         && editor.activeEditor && editor.activeEditor.activeFocus, "typing brings the edited block back: " + info(window.farRow).plainText),
+            // Enter at the end of a zoomed heading far down the page: the rows above it come back
+            // with the zoom's end, and the view follows the new block below it (it does not stay
+            // at the page's top, where the zoom had shown the heading).
+            () => {
+                window.zoomTextRow = page.insertMarkdown(page.lastVisibleRow(), "## Na dole strony ąę")
+                page.zoomInto(window.zoomTextRow)
+                editor.startEditing(window.zoomTextRow, -1)
+            },
+            () => check(page.zoomBlock === window.zoomTextRow && info(window.zoomTextRow).view === "heading"
+                        && page.editingRow === window.zoomTextRow && rowInView(window.zoomTextRow),
+                        "a zoomed heading far down the page is edited: " + window.zoomTextRow),
+            () => key(Qt.Key_Return),
+            () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && editor.activeEditor !== null
+                        && editor.activeEditor.activeFocus && rowInView(window.zoomTextRow + 1)
+                        && rowInView(window.zoomTextRow),
+                        "Enter at the end of a zoomed heading far down the page keeps it and the new block in view: zoom "
+                        + page.zoomBlock + ", row " + page.editingRow + ", y "
+                        + (editor.listView.itemAtIndex(window.zoomTextRow + 1)
+                           ? editor.listView.itemAtIndex(window.zoomTextRow + 1).mapToItem(editor.listView, 0, 0).y : "-")),
+            () => key(Qt.Key_Z, Qt.ControlModifier),
+            () => check(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
+                        && rowInView(window.zoomTextRow), "Ctrl+Z zooms back into the heading, in view"),
+            () => key(Qt.Key_Z, Qt.ControlModifier), // the heading added above
+            () => {
+                check(page.zoomBlock < 0 && rowOf("Na dole strony") < 0, "and the heading is gone with the zoom: " + page.zoomBlock)
+                page.zoomTo(-1)
+            },
             // ---- Table cells: typed text is in the document before the cell is left -------------
             // With a mouse, a table takes no room below its grid until it is selected or edited
             // (the "+ Row / + Column" buttons): its height never changes under a resting pointer.
