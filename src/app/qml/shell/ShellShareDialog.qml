@@ -21,7 +21,7 @@ BDialog {
     readonly property var files: share.files || []
     readonly property int readable: share.readable || 0
     /// Files opened with Brulion on a desktop: copies go into the notebook, the files stay.
-    readonly property bool opened: share.source === "open"
+    readonly property bool openedWithBrulion: share.source === "open"
     /// "journal" | "page"
     property string target: "journal"
     /// The last save failed (a page of that name exists): changed input tries again.
@@ -29,7 +29,7 @@ BDialog {
     property bool saved: false
 
     title: qsTr("Save to Brulion")
-    subtitle: hasFiles ? (opened ? qsTr("%n file(s) to save in the notebook", "", files.length)
+    subtitle: hasFiles ? (openedWithBrulion ? qsTr("%n file(s) to save in the notebook", "", files.length)
                                  : qsTr("%n file(s) shared", "", files.length))
                        : ""
     iconName: "share"
@@ -147,7 +147,7 @@ BDialog {
     BText {
         objectName: "shareCopyHint"
         Layout.fillWidth: true
-        visible: dialog.opened
+        visible: dialog.openedWithBrulion
         text: qsTr("Brulion saves a copy in the notebook. The file itself stays where it is, unchanged.")
         variant: "faint"
         font.pixelSize: Theme.textSm
