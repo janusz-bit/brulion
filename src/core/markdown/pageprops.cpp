@@ -392,6 +392,19 @@ QStringList yamlNames(const QVariant &value, PropertyType kind)
     return namesFrom(value, kind == PropertyType::Tags);
 }
 
+/// The YAML string `old` is text `t` once its ends are trimmed (as typed text is): a text
+/// committed unchanged keeps its form (a `|` block scalar's last line break, quoted blanks).
+bool sameTrimmedText(const QVariant &old, const Intended &t)
+{
+    if (t.type != PropertyType::Text || old.typeId() != QMetaType::QString)
+        return false;
+    QString s = old.toString();
+    s.replace(u"\r\n"_s, u"\n"_s);
+    s.replace(u'\r', u'\n');
+    s = s.trimmed();
+    return t.empty ? s.isEmpty() : s == t.scalar.toString();
+}
+
 /// The YAML value `read` (of a present key) reads as `t`.
 bool yamlReadsAs(const QVariant &read, const Intended &t)
 {
@@ -550,9 +563,11 @@ QString blockListIndent(const YamlDoc &doc)
 }
 
 /// The lines of YAML entry `key` holding `t` (with terminators): `old` is the entry it replaces
-/// (its key part, comment and list style are kept), nullptr for a new one.
+/// (its key part, comment and list style are kept), nullptr for a new one. `keepComments`: the
+/// indented `# comment` lines under a value written on its key line (`status: a` then
+/// `  # uwaga`) stay after the new value.
 QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QString &key, const Intended &t,
-                      const QString &eol, const QString &lastEol)
+                      const QString &eol, const QString &lastEol, bool keepComments = true)
 {
     QString keyPart = yamlString(key) + u':';
     QString comment;             // a `# comment` of the key line
@@ -575,11 +590,35 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
             rest = trimEndBlanks(firstLine.sliced(kl->rest, c - kl->rest));
         }
     }
+    // Comment lines under a value on the key line (only comments and blank lines follow it; a
+    // block scalar's lines are its text, `#` too): they stay after the new value.
+    QList<OutLine> keptComments;
+    if (old && keepComments && old->last > old->first + 1 && !rest.startsWith(u'|') && !rest.startsWith(u'>')) {
+        bool onlyComments = true;
+        for (int i = old->first + 1; i < old->last && onlyComments; ++i) {
+            const QStringView l = QStringView(doc.lines[i].text).trimmed();
+            onlyComments = l.isEmpty() || l.startsWith(u'#');
+        }
+        if (onlyComments) {
+            for (int i = old->first + 1; i < old->last; ++i)
+                keptComments.append({doc.lines[i].text, doc.lines[i].eol});
+        }
+    }
     QList<OutLine> out;
     const auto withComment = [&](const QString &line, bool hasValue) -> QString {
         if (comment.isEmpty())
             return line;
         return line + (hasValue ? commentGap : u" "_s) + comment;
+    };
+    // The entry's last line ends as the old entry did (the kept comments end it when there are).
+    const auto finish = [&]() -> QString {
+        if (keptComments.isEmpty()) {
+            out.last().eol = lastEol;
+        } else {
+            out.last().eol = eol.isEmpty() ? text::detectEol(doc.fm.yaml) : eol;
+            out.append(keptComments);
+        }
+        return joined(out);
     };
 
     if (!isListType(t.type)) {
@@ -599,13 +638,12 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
                     t.type == PropertyType::Number ? numberText(t.scalar) : yamlScalar(t.scalar).value_or(QString());
             out.append({withComment(keyPart + u' ' + value, true), eol});
         }
-        out.last().eol = lastEol;
-        return joined(out);
+        return finish();
     }
 
     if (t.items.isEmpty()) {
-        out.append({withComment(keyPart + u" []"_s, true), lastEol});
-        return joined(out);
+        out.append({withComment(keyPart + u" []"_s, true), eol});
+        return finish();
     }
 
     // The style of the old entry: a block list, a flow list or anything else.
@@ -663,10 +701,10 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
             keptOld.insert(n, o);
         for (int k = 0; k < t.items.size(); ++k)
             parts.append(keptOld.contains(k) ? oldRaw[keptOld.value(k)] : yamlFlowString(t.items[k]));
-        const bool oneLineBefore = old->last == old->first + 1;
+        const bool oneLineBefore = old->last == old->first + 1 || !keptComments.isEmpty();
         const QString line = keyPart + u" ["_s + parts.join(u", "_s) + u']';
-        out.append({oneLineBefore ? withComment(line, true) : line, lastEol});
-        return joined(out);
+        out.append({oneLineBefore ? withComment(line, true) : line, eol});
+        return finish();
     }
 
     // A block list: the key line, then `- item` lines.
@@ -730,31 +768,34 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
     }
     if (simple)
         out.append(trailing);
-    out.last().eol = lastEol;
-    return joined(out);
+    return finish();
 }
 
 /// Replace (or add) entry `key` of a frontmatter with `t`; verified. nullopt: not safely possible.
 std::optional<QString> writeYamlEntry(const QString &content, const YamlDoc &doc, const QString &key, const Intended &t)
 {
     const QList<FrontmatterEntry> entries = entriesOf(doc, key);
-    QString edited;
-    if (!entries.isEmpty()) {
-        const FrontmatterEntry &first = entries.first();
-        const QString text =
-                yamlEntryText(doc, &first, key, t, doc.lines[first.first].eol, doc.lines[first.last - 1].eol);
-        edited = rebuildLines(doc.lines, entries, first.first, text);
-    } else {
+    const auto verified = [&](const QString &edited) {
+        return verifyYaml(content, doc.fm, edited, {key}, [&](const QVariantMap &data) {
+            return data.contains(key) && yamlReadsAs(data.value(key), t);
+        });
+    };
+    if (entries.isEmpty()) {
         const QString eol = doc.lines[doc.fm.endLine - 1].eol;
-        const QString text = yamlEntryText(doc, nullptr, key, t, eol, eol);
-        edited = rebuildLines(doc.lines, {}, doc.fm.endLine, text);
+        const QString edited = rebuildLines(doc.lines, {}, doc.fm.endLine, yamlEntryText(doc, nullptr, key, t, eol, eol));
+        return verified(edited) ? std::optional<QString>(edited) : std::nullopt;
     }
-    const bool ok = verifyYaml(content, doc.fm, edited, {key}, [&](const QVariantMap &data) {
-        return data.contains(key) && yamlReadsAs(data.value(key), t);
-    });
-    if (!ok)
-        return std::nullopt;
-    return edited;
+    const FrontmatterEntry &first = entries.first();
+    // Comment lines under the old value stay — unless they would read as part of the new one
+    // (under a block scalar): then they go with the old value.
+    for (const bool keepComments : {true, false}) {
+        const QString text = yamlEntryText(doc, &first, key, t, doc.lines[first.first].eol,
+                                           doc.lines[first.last - 1].eol, keepComments);
+        const QString edited = rebuildLines(doc.lines, entries, first.first, text);
+        if (verified(edited))
+            return edited;
+    }
+    return std::nullopt;
 }
 
 /// A new frontmatter block holding only `key` in front of `content`.
@@ -1022,18 +1063,11 @@ QString logseqValueText(const Intended &t, const LogseqLine *old)
         return old && linkedDate(old->raw) ? QString(u"[["_s + t.scalar.toString() + u"]]"_s) : t.scalar.toString();
     case PropertyType::DateTime: return t.scalar.toString();
     case PropertyType::List: {
-        QStringList oldParts;
-        if (old) {
-            for (const QString &part : splitTopLevelCommas(old->raw))
-                oldParts.append(part.trimmed());
-        }
+        // A Logseq list is links and tags (parsePropertyValue()): those stay as written, any other
+        // item becomes a link — also an old text's parts ("a, b" as a list: `[[a]], [[b]]`).
         QStringList out;
-        for (const QString &item : t.items) {
-            if (oldParts.contains(item) || !refName(item).isEmpty())
-                out.append(item);
-            else
-                out.append(u"[["_s + item.trimmed() + u"]]"_s);
-        }
+        for (const QString &item : t.items)
+            out.append(!refName(item).isEmpty() ? item : QString(u"[["_s + item.trimmed() + u"]]"_s));
         return out.join(u", "_s);
     }
     case PropertyType::Tags:
@@ -1058,6 +1092,23 @@ QString logseqValueText(const Intended &t, const LogseqLine *old)
     }
 }
 
+/// The Logseq line `old` holds `t` already, as its own type reads it (`ilosc:: 1.50` is 1.5,
+/// `done:: TRUE` is true): a value committed unchanged keeps its form.
+bool logseqHolds(const LogseqLine &old, const Intended &t)
+{
+    if (t.empty)
+        return old.raw.isEmpty();
+    switch (t.type) {
+    case PropertyType::Number: {
+        const auto n = strictNumber(old.raw);
+        return n && numberText(*n) == numberText(t.scalar);
+    }
+    case PropertyType::Checkbox:
+        return old.raw.compare(t.scalar.toBool() ? u"true" : u"false", Qt::CaseInsensitive) == 0;
+    default: return false;
+    }
+}
+
 /// The (key, raw value) pairs of the Logseq block, for verification.
 QList<std::pair<QString, QString>> logseqPairs(const QList<LogseqLine> &lines)
 {
@@ -1067,9 +1118,15 @@ QList<std::pair<QString, QString>> logseqPairs(const QList<LogseqLine> &lines)
     return out;
 }
 
-/// `edited` holds the Logseq lines `expected` (the YAML part untouched by construction).
-bool verifyLogseq(const QString &edited, const QList<std::pair<QString, QString>> &expected)
+/// `edited` (an edit of `before`) holds the Logseq lines `expected`, and its frontmatter is the
+/// one `before` had (none stays none: a body starting with `---` must not become one).
+bool verifyLogseq(const QString &before, const QString &edited, const QList<std::pair<QString, QString>> &expected)
 {
+    const auto fmBefore = findFrontmatter(before);
+    const auto fmAfter = findFrontmatter(edited);
+    if (fmBefore.has_value() != fmAfter.has_value()
+        || (fmBefore && (fmBefore->yaml != fmAfter->yaml || fmBefore->endLine != fmAfter->endLine)))
+        return false;
     const QList<text::Line> lines = text::splitLines(edited);
     return logseqPairs(logseqLines(edited, lines, bodyStartLine(edited))) == expected;
 }
@@ -1109,7 +1166,7 @@ PropertyEditResult setLogseq(const QString &content, const PageRead &page, const
     QList<std::pair<QString, QString>> expected = logseqPairs(page.logseq);
     QString edited;
     if (old) {
-        if (old->raw == valueText)
+        if (old->raw == valueText || logseqHolds(*old, *t))
             return unchanged(content);
         const QStringView line = page.lines[old->line].text;
         QString text;
@@ -1138,8 +1195,15 @@ PropertyEditResult setLogseq(const QString &content, const PageRead &page, const
         edited = out;
         expected.append({key, valueText});
     }
-    if (!verifyLogseq(edited, expected))
+    if (!verifyLogseq(content, edited, expected))
         return unchanged(content, PropertyEditStatus::Unsafe);
+    if (t->type == PropertyType::List && !t->empty) {
+        // A list must read back as one (an item like `a]]b` cannot be a link).
+        const PageRead after = readPage(edited);
+        const PageProperty *p = after.props.find(PropertySource::Logseq, key);
+        if (!p || p->type != PropertyType::List || p->items.size() != t->items.size())
+            return unchanged(content, PropertyEditStatus::InvalidValue);
+    }
     return changed(edited);
 }
 
@@ -1155,31 +1219,51 @@ PropertyEditResult removeLogseq(const QString &content, const PageRead &page, co
     }
     if (drop.isEmpty())
         return unchanged(content, PropertyEditStatus::NotFound);
+    // The lines without `dropped`; `blank`: the first dropped line stays as an empty line.
+    const auto without = [&](const QSet<int> &dropped, bool blank) {
+        QString out;
+        int lastKept = -1;
+        const int firstDropped = *std::min_element(dropped.begin(), dropped.end());
+        for (int i = 0; i < page.lines.size(); ++i) {
+            if (blank && i == firstDropped) {
+                out += page.lines[i].eol;
+                lastKept = i;
+                continue;
+            }
+            if (dropped.contains(i))
+                continue;
+            out += page.lines[i].text + page.lines[i].eol;
+            lastKept = i;
+        }
+        // The document ended inside the dropped lines without a final line break: so does the
+        // result. (A trailing terminator gives a last empty line: dropping that one changes nothing.)
+        const bool endedWithout = !page.lines.isEmpty() && page.lines.last().eol.isEmpty()
+                                  && !page.lines.last().text.isEmpty()
+                                  && dropped.contains(int(page.lines.size()) - 1);
+        if (endedWithout && lastKept >= 0)
+            out.chop(page.lines[lastKept].eol.size());
+        if (startsWithBom(content) && !startsWithBom(out))
+            out.prepend(QChar(ByteOrderMark));
+        return out;
+    };
+    QList<QString> tries;
     if (expected.isEmpty()) {
-        // The block goes with the blank lines after it: the page gets back its old start.
+        // The block goes with the blank lines after it: the page gets back its old start. Unless
+        // the body would then read differently (it starts with `---` and would become a
+        // frontmatter): then the blank lines stay, else an empty line stands for the block.
+        QSet<int> withBlanks = drop;
         int j = page.logseq.last().line + 1;
         while (j < page.lines.size() && isBlank(page.lines[j].text))
-            drop.insert(j++);
+            withBlanks.insert(j++);
+        tries = {without(withBlanks, false), without(drop, false), without(drop, true)};
+    } else {
+        tries = {without(drop, false)};
     }
-    QString out;
-    int lastKept = -1;
-    for (int i = 0; i < page.lines.size(); ++i) {
-        if (drop.contains(i))
-            continue;
-        out += page.lines[i].text + page.lines[i].eol;
-        lastKept = i;
+    for (const QString &out : std::as_const(tries)) {
+        if (verifyLogseq(content, out, expected))
+            return changed(out);
     }
-    // The document ended inside the dropped lines without a final line break: so does the result.
-    // (A trailing terminator gives a last empty line: dropping that one changes nothing.)
-    const bool endedWithout = !page.lines.isEmpty() && page.lines.last().eol.isEmpty()
-                              && !page.lines.last().text.isEmpty() && drop.contains(int(page.lines.size()) - 1);
-    if (endedWithout && lastKept >= 0)
-        out.chop(page.lines[lastKept].eol.size());
-    if (startsWithBom(content) && !startsWithBom(out))
-        out.prepend(QChar(ByteOrderMark));
-    if (!verifyLogseq(out, expected))
-        return unchanged(content, PropertyEditStatus::Unsafe);
-    return changed(out);
+    return unchanged(content, PropertyEditStatus::Unsafe);
 }
 
 PropertyEditResult renameLogseq(const QString &content, const PageRead &page, const QString &oldKey,
@@ -1206,7 +1290,7 @@ PropertyEditResult renameLogseq(const QString &content, const PageRead &page, co
     const QString edited = replaceLine(page.lines, l.line, text);
     QList<std::pair<QString, QString>> expected = logseqPairs(page.logseq);
     expected[found].first = newKey;
-    if (!verifyLogseq(edited, expected))
+    if (!verifyLogseq(content, edited, expected))
         return unchanged(content, PropertyEditStatus::Unsafe);
     return changed(edited);
 }
@@ -1477,6 +1561,8 @@ PropertyEditResult setPageProperty(const QString &content, PropertySource source
     const auto t = intendedValue(value, type, old);
     if (!t)
         return unchanged(content, PropertyEditStatus::InvalidValue);
+    if (entries.size() == 1 && sameTrimmedText(old, *t))
+        return unchanged(content);
     if (entries.size() == 1 && yamlReadsAs(old, *t)) {
         // Already so; a list keeps a form that reads the same (`tags: a, b`) — but an empty list
         // of a type the key has nowhere else (`key:` set as a list) is written as `key: []`.
@@ -1488,6 +1574,19 @@ PropertyEditResult setPageProperty(const QString &content, PropertySource source
     if (!out)
         return unchanged(content, PropertyEditStatus::Unsafe);
     return *out == content ? unchanged(content) : changed(*out);
+}
+
+PropertyEditResult addPageProperty(const QString &content, PropertySource source, const QString &key,
+                                   const QVariant &value, PropertyType type)
+{
+    const QString keyProblem = checkPropertyKey(key, source);
+    if (keyProblem == u"reserved")
+        return unchanged(content, PropertyEditStatus::Reserved);
+    if (!keyProblem.isEmpty())
+        return unchanged(content, PropertyEditStatus::InvalidKey);
+    if (pageHasKey(readPageProperties(content), key))
+        return unchanged(content, PropertyEditStatus::KeyExists);
+    return setPageProperty(content, source, key, value, type);
 }
 
 PropertyEditResult removePageProperty(const QString &content, PropertySource source, const QString &key)

@@ -326,6 +326,32 @@ private Q_SLOTS:
         yaml("multi-line crlf", u"---\r\na: x\r\n---\r\n"_s, u"a"_s, u"ż\r\nź"_s, u"text"_s,
              u"---\r\na: |-\r\n  ż\r\n  ź\r\n---\r\n"_s);
         yaml("empty text", u"---\na: x # c\n---\n"_s, u"a"_s, QString(), u"text"_s, u"---\na: # c\n---\n"_s);
+        // A text committed as it was keeps its form (the field trims the ends of what it holds).
+        yaml("block scalar committed unchanged", u"---\nnotatka: |\n  linia 1\n  linia 2\nkoszt: 5\n---\n"_s,
+             u"notatka"_s, u"linia 1\nlinia 2\n"_s, u"text"_s, QString(), u"unchanged"_s);
+        yaml("block scalar committed trimmed", u"---\nnotatka: |\r\n  żółw\r\n  jaźń\r\n---\r\n"_s, u"notatka"_s,
+             u"żółw\njaźń"_s, u"text"_s, QString(), u"unchanged"_s);
+        yaml("quoted blanks committed unchanged", u"---\ntytul: \" a \"\n---\n"_s, u"tytul"_s, u" a "_s, u"text"_s,
+             QString(), u"unchanged"_s);
+        yaml("quoted blanks committed trimmed", u"---\ntytul: \" a \"\n---\n"_s, u"tytul"_s, u"a"_s, u"text"_s,
+             QString(), u"unchanged"_s);
+        yaml("block scalar changed", u"---\nnotatka: |\n  linia 1\n---\n"_s, u"notatka"_s, u"linia 1\nlinia 2"_s,
+             u"text"_s, u"---\nnotatka: |-\n  linia 1\n  linia 2\n---\n"_s);
+        // Comment lines under a value written on its key line stay with the key.
+        yaml("comment line under the value kept", u"---\nstatus: a\n  # uwaga do kosztu\nkoszt: 1\n---\n"_s,
+             u"status"_s, u"b"_s, u"text"_s, u"---\nstatus: b\n  # uwaga do kosztu\nkoszt: 1\n---\n"_s);
+        yaml("comment lines and blank kept crlf", u"---\r\nstatus: a # c\r\n  # ż\r\n\r\n  # ź\r\nb: 1\r\n---\r\n"_s,
+             u"status"_s, u"Zażółć"_s, u"text"_s, u"---\r\nstatus: Zażółć # c\r\n  # ż\r\n\r\n  # ź\r\nb: 1\r\n---\r\n"_s);
+        yaml("comment line under an empty value kept", u"---\nstatus:\n  # do uzupełnienia\n---\n"_s, u"status"_s,
+             u"x"_s, u"text"_s, u"---\nstatus: x\n  # do uzupełnienia\n---\n"_s);
+        yaml("comment line kept when emptied", u"---\nkoszt: 5\n  # netto\n---\n"_s, u"koszt"_s, QVariant(),
+             u"number"_s, u"---\nkoszt:\n  # netto\n---\n"_s);
+        yaml("comment line kept under a new list", u"---\nl: a\n  # uwaga\nb: 1\n---\n"_s, u"l"_s,
+             list({u"a"_s, u"b"_s}), u"list"_s, u"---\nl:\n  - a\n  - b\n  # uwaga\nb: 1\n---\n"_s);
+        yaml("comment line kept under a flow list", u"---\nl: [a]\n  # uwaga\n---\n"_s, u"l"_s,
+             list({u"a"_s, u"b"_s}), u"list"_s, u"---\nl: [a, b]\n  # uwaga\n---\n"_s);
+        yaml("block scalar lines are no comments", u"---\nopis: |\n  # nagłówek\n  tekst\n---\n"_s, u"opis"_s,
+             u"nowy"_s, u"text"_s, u"---\nopis: nowy\n---\n"_s);
         // Numbers, checkboxes, dates.
         yaml("decimal comma", u"---\na: 1\n---\n"_s, u"a"_s, u"3,5"_s, u"number"_s, u"---\na: 3.5\n---\n"_s);
         yaml("thousands", u"---\na: 1\n---\n"_s, u"a"_s, u"1 200"_s, u"number"_s, u"---\na: 1200\n---\n"_s);
@@ -416,6 +442,22 @@ private Q_SLOTS:
         logseq("comment would swallow lines", u"a:: 1\nb:: 2\n\n- tekst %%x%%\n"_s, u"a"_s, u"%%"_s, u"text"_s,
                QString(), u"unsafe"_s);
         logseq("no logseq lines", u"# x\n"_s, u"a"_s, u"b"_s, u"text"_s, QString(), u"notFound"_s);
+        // A value committed as it was keeps its form.
+        logseq("number as written", u"ilosc:: 1.50\n"_s, u"ilosc"_s, u"1.50"_s, u"number"_s, QString(), u"unchanged"_s);
+        logseq("number leading zeros", u"ilosc:: 007\n"_s, u"ilosc"_s, u"007"_s, u"number"_s, QString(),
+               u"unchanged"_s);
+        logseq("number plus", u"ilosc:: +5\n"_s, u"ilosc"_s, u"+5"_s, u"number"_s, QString(), u"unchanged"_s);
+        logseq("number same value", u"ilosc:: 1.50\n"_s, u"ilosc"_s, 1.5, u"number"_s, QString(), u"unchanged"_s);
+        logseq("number changed", u"ilosc:: 1.50\n"_s, u"ilosc"_s, u"1,75"_s, u"number"_s, u"ilosc:: 1.75\n"_s);
+        logseq("text number becomes one", u"ilosc:: 1,5\n"_s, u"ilosc"_s, 1.5, u"number"_s, u"ilosc:: 1.5\n"_s);
+        logseq("checkbox as written", u"done:: TRUE\n"_s, u"done"_s, true, u"checkbox"_s, QString(), u"unchanged"_s);
+        // A list is links and tags: a text's parts become links.
+        logseq("text becomes a list", u"autorzy:: a, b\n"_s, u"autorzy"_s, list({u"a"_s, u"b"_s}), u"list"_s,
+               u"autorzy:: [[a]], [[b]]\n"_s);
+        logseq("polish list", u"miejsca:: Łódź\n"_s, u"miejsca"_s, list({u"Łódź"_s, u"#żółw"_s}), u"list"_s,
+               u"miejsca:: [[Łódź]], #żółw\n"_s);
+        logseq("list item no link can hold", u"rel:: [[a]]\n"_s, u"rel"_s, list({u"[[a]]"_s, u"x]]y"_s}), u"list"_s,
+               QString(), u"invalidValue"_s);
         (void)none;
     }
     void set()
@@ -481,6 +523,17 @@ private Q_SLOTS:
         row("logseq any case", l, u"Tags:: x\n"_s, u"tags"_s, QString());
         row("logseq duplicates", l, u"a:: 1\nb:: 2\na:: 3\n"_s, u"a"_s, u"b:: 2\n"_s);
         row("logseq not found", l, u"a:: 1\n"_s, u"b"_s, QString(), u"notFound"_s);
+        // The body must not start a frontmatter of its own (a rule and a heading would hide).
+        row("logseq body starts with a rule", l, u"status:: a\n\n---\nfoo: bar\n---\ntekst\n"_s, u"status"_s,
+            u"\n---\nfoo: bar\n---\ntekst\n"_s);
+        row("logseq rule right after", l, u"status:: a\n---\nfoo: bar\n---\ntekst\n"_s, u"status"_s,
+            u"\n---\nfoo: bar\n---\ntekst\n"_s);
+        row("logseq rule after two lines crlf", l, u"a:: 1\r\nb:: 2\r\n---\r\nż: ź\r\n---\r\n"_s, u"b"_s,
+            u"a:: 1\r\n---\r\nż: ź\r\n---\r\n"_s);
+        row("logseq bom rule", l, u"\uFEFFstatus:: a\n---\nfoo: bar\n---\n"_s, u"status"_s,
+            u"\uFEFF\n---\nfoo: bar\n---\n"_s);
+        // Blank lines in front of `key::` lines do not end them: the next paragraph would become them.
+        row("logseq next paragraph of properties", l, u"a:: 1\n\nb:: 2\n"_s, u"a"_s, QString(), u"unsafe"_s);
     }
     void remove()
     {
@@ -490,6 +543,60 @@ private Q_SLOTS:
         QFETCH(QString, expected);
         QFETCH(QString, status);
         const PropertyEditResult r = removePageProperty(content, sourceOf(source), key);
+        QCOMPARE(propertyEditStatusName(r.status), status);
+        QCOMPARE(r.content, expected);
+    }
+
+    // ---- adding ("Dodaj właściwość") ---------------------------------------------------------------
+    void add_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("key");
+        QTest::addColumn<QString>("type");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<QString>("status");
+        const auto row = [](const char *name, const QString &source, const QString &content, const QString &key,
+                            const QString &type, const QString &expected, const QString &status = u"changed"_s) {
+            QTest::newRow(name) << source << content << key << type << (status == u"changed" ? expected : content)
+                                << status;
+        };
+        const QString y = u"yaml"_s;
+        const QString l = u"logseq"_s;
+        const QString page = u"---\nstatus: w toku # wybrany\ntags: [projekt, dom]\nźródło: Wikipedia\n---\n- a\n"_s;
+        // An existing key is never overwritten by adding it.
+        row("existing key", y, page, u"status"_s, u"text"_s, QString(), u"keyExists"_s);
+        row("existing tags", y, page, u"tags"_s, u"tags"_s, QString(), u"keyExists"_s);
+        row("existing in another case", y, page, u"STATUS"_s, u"text"_s, QString(), u"keyExists"_s);
+        row("existing decomposed", y, page, u"z\u0301ro\u0301d\u0142o"_s, u"text"_s, QString(), u"keyExists"_s);
+        row("existing in logseq lines", y, u"---\na: 1\n---\nstatus:: x\n"_s, u"Status"_s, u"text"_s, QString(),
+            u"keyExists"_s);
+        row("existing in yaml", l, u"---\na: 1\n---\nstatus:: x\n"_s, u"a"_s, u"text"_s, QString(), u"keyExists"_s);
+        row("existing logseq", l, u"status:: x\n"_s, u"status"_s, u"text"_s, QString(), u"keyExists"_s);
+        // New keys are written with an empty value.
+        row("new", y, page, u"koszt"_s, u"number"_s,
+            u"---\nstatus: w toku # wybrany\ntags: [projekt, dom]\nźródło: Wikipedia\nkoszt:\n---\n- a\n"_s);
+        row("new list", y, u"---\na: 1\n---\n"_s, u"autorzy"_s, u"list"_s, u"---\na: 1\nautorzy: []\n---\n"_s);
+        row("new frontmatter", y, u"- żółw\n"_s, u"status"_s, u"text"_s, u"---\nstatus:\n---\n- żółw\n"_s);
+        row("into the note mode block", y, u"---\nbrulion: outline\n---\n- a\n"_s, u"status"_s, u"text"_s,
+            u"---\nbrulion: outline\nstatus:\n---\n- a\n"_s);
+        row("new logseq", l, u"status:: x\n"_s, u"termin"_s, u"date"_s, u"status:: x\ntermin::\n"_s);
+        // Refused keys.
+        row("reserved", y, page, u"brulion"_s, u"text"_s, QString(), u"reserved"_s);
+        row("empty", y, page, u"  "_s, u"text"_s, QString(), u"invalidKey"_s);
+        row("polish logseq key", l, u"status:: x\n"_s, u"źródło"_s, u"text"_s, QString(), u"invalidKey"_s);
+    }
+    void add()
+    {
+        QFETCH(QString, source);
+        QFETCH(QString, content);
+        QFETCH(QString, key);
+        QFETCH(QString, type);
+        QFETCH(QString, expected);
+        QFETCH(QString, status);
+        const PropertyType t = typeOf(type);
+        const QVariant empty = t == PropertyType::List || t == PropertyType::Tags ? QVariant(QStringList()) : QVariant();
+        const PropertyEditResult r = addPageProperty(content, sourceOf(source), key, empty, t);
         QCOMPARE(propertyEditStatusName(r.status), status);
         QCOMPARE(r.content, expected);
     }
