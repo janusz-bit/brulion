@@ -1316,28 +1316,32 @@ void BlockListModel::ensureEmbeds(int row) const
         // plugins) is named as such instead of failing to load (EmbedView).
         bool decodable = em.image;
         QString path; // the attachment's vault path
+        // A drawing (docs/SYNTAX.md §2 "Drawings": an SVG, a `.excalidraw` scene, an Obsidian
+        // Excalidraw plugin file — `![[x.excalidraw]]` resolves to `x.excalidraw.md` when there is
+        // no `x.excalidraw`): a click opens the drawing editor at `path`; its preview in the light
+        // and the dark theme (EmbedView picks one by the app's theme), sized as the provider draws
+        // it (an SVG by its root, the others by their scene: EditorHost::drawingSize).
+        bool drawing = false;
         if (m_host) {
             path = m_host->resolveLink(em.target, m_path);
             if (path.isEmpty()) {
                 const QString decoded = QUrl::fromPercentEncoding(em.target.toUtf8());
                 path = decoded.contains(u'/') ? paths::normalize(decoded) : paths::join(attachments, decoded);
             }
-            url = m_host->assetUrl(path);
-            if (em.image) {
-                decodable = m_host->canDecodePicture(path);
-                if (decodable)
-                    size = m_host->assetPixelSize(path);
+            drawing = (em.image || isDrawingTarget(em.target) || pageDrawings.contains(k)) && m_host->isDrawing(path);
+            // (A scene file is no picture: its preview is the drawing provider's, never a data:
+            // URL of its bytes in the browser.)
+            if (!drawing || path.endsWith(u".svg"_s, Qt::CaseInsensitive)) {
+                url = m_host->assetUrl(path);
+                if (em.image) {
+                    decodable = m_host->canDecodePicture(path);
+                    if (decodable)
+                        size = m_host->assetPixelSize(path);
+                }
             }
         }
         if (decodable && !size.isValid() && url.isLocalFile())
             size = localPictureSize(url.toLocalFile());
-        // A drawing (docs/SYNTAX.md §2 "Drawings": an SVG, a `.excalidraw` scene, an Obsidian
-        // Excalidraw plugin file — `![[x.excalidraw]]` resolves to `x.excalidraw.md` when there is
-        // no `x.excalidraw`): a click opens the drawing editor at `path`; its preview in the light
-        // and the dark theme (EmbedView picks one by the app's theme), sized as the provider draws
-        // it (an SVG by its root, the others by their scene: EditorHost::drawingSize).
-        const bool drawing = m_host && (em.image || isDrawingTarget(em.target) || pageDrawings.contains(k))
-                             && m_host->isDrawing(path);
         QUrl darkUrl;
         if (drawing) {
             url = m_host->drawingUrl(path, false);

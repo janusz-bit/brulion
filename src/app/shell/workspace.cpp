@@ -956,14 +956,14 @@ QSize Workspace::pictureSize(const QString &path) const
 {
     if (!m_vault || path.isEmpty())
         return {};
-    const QSize pixels = assetPixelSize(path); // WebAssembly: the data URL's bytes (cached above)
-    if (pixels.isValid() && !pixels.isEmpty())
-        return pixels;
     // A `.excalidraw` scene or an Obsidian Excalidraw plugin file: its preview's size (the drawing
     // image provider draws it so; an SVG drawing has its root's size, as any picture).
     if ((path.endsWith(u".md"_s, Qt::CaseInsensitive) || path.endsWith(u".excalidraw"_s, Qt::CaseInsensitive))
         && isDrawing(path))
         return drawingSize(path);
+    const QSize pixels = assetPixelSize(path); // WebAssembly: the data URL's bytes (cached above)
+    if (pixels.isValid() && !pixels.isEmpty())
+        return pixels;
     const QUrl url = assetUrl(path); // desktop / Android: the file on disk
     return url.isLocalFile() ? editor::localPictureSize(url.toLocalFile()) : QSize();
 }
