@@ -1115,17 +1115,32 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   wstrzyknięte klawisze — po pierwszym lub dwóch, które trafiały wprost do pola — w słowo
   w budowie i zatwierdzał je przed nimi („Archiwum” → „rchiwumA”, „archiwum” → „chiwumar”; może to dotyczyć klawiatury sprzętowej
   z Gboard na Androidzie 11 — niesprawdzone). Kroki: stuknięcie w `#przewodnik` w dzienniku
-  otwiera stronę z tym aliasem (z paskiem tagu), w `#pomysł` — pustą stronę tagu z odnośnikami do
+  otwiera stronę z tym aliasem (z paskiem tagu), a szuflada otwarta na niej pokazuje wiersz tej
+  strony w drzewie — w widocznej części listy; w `#pomysł` — pustą stronę tagu z odnośnikami do
   oznaczonych bloków (pliku nie tworzy), Wstecz wraca; „Więcej” paska edycji (przewiniętego
   palcem) otwiera menu bloku, „Kopiuj odnośnik” → „Odwołanie do bloku” dopisuje id bloku
   w notatce i kopiuje `((id))` (komunikat „Skopiowano ((id))”; na Androidzie 13+ Ctrl+V —
   `input keycombination` — wkleja je na końcu innego bloku, co widać w pliku); „+” nagłówka
   „Strony” w szufladzie → „Nowy folder”: nazwa wpisana na klawiaturze i „Utwórz” stuknięte, gdy
-  klawiatura jeszcze składa słowo; „⋯” strony w drzewie → „Przenieś do…” (arkusz, folder
+  klawiatura jeszcze składa słowo, a szuflada pokazuje nowy folder nad stopką synchronizacji;
+  „⋯” strony w drzewie → „Przenieś do…” (arkusz, folder
   wyszukany, „Zaktualizowane linki: 1 (w 1 notatce)”) przenosi „Remont mieszkania” z `Projekty`
   do nowego folderu: plik leży w nowym miejscu, filtr `path:Projekty` jego zapytania zmienia się
-  na `path:Archiwum`, komunikat ma „Cofnij”. Zrzuty `fl-*.png`; sprawdzone 2026-10-23 (Android 16
-  i 11, Pixel 6). Test znalazł dwa błędy (poprawione): menu wyższe niż miejsce nad paskiem edycji
+  na `path:Archiwum`, komunikat ma „Cofnij”. Wiersze szuflady skrypt najpierw przewija palcem
+  (`drawer_show`/`drawer_tap`), aż cały wiersz leży między wierszem notatnika a stopką
+  synchronizacji: UiAutomator podaje granice elementów nieprzycięte do przewijanej listy, więc
+  wiersz schowany pod stopką też „jest na ekranie”, a stuknięcie w niego trafia w stopkę. Po
+  każdym przeciągnięciu zamyka i otwiera szufladę od nowa — na Androidzie 11 drzewo dostępności
+  nie miało węzłów dla wierszy, które przeciągnięcie wsunęło do listy, a inne zostawiało w starych
+  miejscach, dopóki szuflada nie pokazała się znowu. Zrzuty `fl-*.png`; sprawdzone 2026-10-29
+  (Android 16 i 11, Pixel 6; 38 sprawdzeń na Androidzie 16). W 2026-10-29 test znalazł błąd (poprawiony): wiersz
+  otwartej strony, nowego folderu i „Pokaż w drzewie” lista ustawiała, gdy szuflada była jeszcze
+  zamknięta albo dopiero się otwierała — z wysokością, którą lista miała przy poprzednim
+  rozłożeniu; szuflada dostaje marginesy pasków systemu i traci miejsce klawiatury dopiero przy
+  otwarciu, więc wiersz lądował pod stopką, a stuknięcie w niego otwierało Synchronizację
+  (wcześniej test przechodził przypadkiem: lista była przewinięta o 11 px). Teraz wiersz jest
+  ustawiany od nowa przy każdej zmianie wysokości listy, dopóki użytkownik jej nie przewinie
+  (docs/UI.md „Folders”). Wcześniej test znalazł dwa błędy (poprawione): menu wyższe niż miejsce nad paskiem edycji
   wchodziło pod pasek stanu, gdzie stuknięcie trafia do systemu — „Odwołanie do bloku”
   w podmenu było nieosiągalne palcem (`BMenu.topMargin`); a słowo, które klawiatura jeszcze
   składa (Gboard trzyma każde słowo poza tekstem pola aż do spacji), nie liczyło się jako

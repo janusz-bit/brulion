@@ -30,13 +30,16 @@
 # Kopiuj ("Skopiowano 2 bloki"), Back.
 # Screenshots of each step (sel-*.png); the same debuggable APK.
 # With --folders instead: folders, links and tags with a real finger — a tap on a #tag in the
-# journal opens its page (not created by looking at it) and Back returns; the editing toolbar's
-# "Więcej" opens the block menu, "Kopiuj odnośnik" copies a reference to the block (its id written
-# into the note, the copy pasted back into another block with Ctrl+V on Android 13+); the
-# drawer's "Strony" header "+" makes a folder (its name typed on the keyboard, "Utwórz" tapped
-# while the keyboard still composes the word); a page's "⋯" in the folder tree → "Przenieś do…"
-# (the bottom sheet, the folder searched for, what the move rewrites) moves it there, and the
-# files say so: the page in its new folder, the query filter naming its old folder rewritten.
+# journal opens its page (not created by looking at it; the drawer opened on it shows the page's
+# row in the tree, within the list's view) and Back returns; the editing toolbar's "Więcej" opens
+# the block menu, "Kopiuj odnośnik" copies a reference to the block (its id written into the
+# note, the copy pasted back into another block with Ctrl+V on Android 13+); the drawer's
+# "Strony" header "+" makes a folder (its name typed on the keyboard, "Utwórz" tapped while the
+# keyboard still composes the word; the drawer shows it above its sync footer); a page's "⋯" in
+# the folder tree → "Przenieś do…" (the bottom sheet, the folder searched for, what the move
+# rewrites) moves it there, and the files say so: the page in its new folder, the query filter
+# naming its old folder rewritten. Rows of the drawer are dragged into its view before a tap
+# (drawer_tap).
 # Screenshots of each step (fl-*.png); the same debuggable APK.
 # With --share instead: "Udostępnij → Brulion" (docs/ANDROID.md) — text shared to ShareActivity
 # while the app runs (the share dialog, "Zapisz": a block of today's journal, no date parsing), a
@@ -408,14 +411,22 @@ ui_dump() {
   adb shell uiautomator dump /sdcard/brulion-ui.xml >/dev/null 2>&1 || true
   adb exec-out cat /sdcard/brulion-ui.xml >"$OUT/ui.xml" 2>/dev/null || true
 }
+# The bounds "x1 y1 x2 y2" of the nodes whose text or content-desc is the whole ERE, in the last
+# dump (ui.xml), top to bottom. Only those on the screen: a row scrolled away or hidden keeps its
+# node (bounds 0,0,0,0). Bounds are not clipped to a scrolling list, only to the window: a row
+# scrolled under a list's bottom edge is "on screen" there (see drawer_view). Nothing found is no
+# failure (an empty list): a failing grep made `xy=$(…)` in ui_tap fail, and `set -e` ended the
+# whole script without a word where ui_tap was the last command of an `||` list.
+ui_nodes() {
+  sed 's/<node /\n<node /g' "$OUT/ui.xml" | { grep -E "(text|content-desc)=\"($1)\"" || true; } |
+    sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/p' |
+    awk -v w="$SCREEN_W" -v h="$SCREEN_H" '$3 > $1 && $4 > $2 && $3 <= w && $4 <= h' | sort -n -k 2
+}
 # The centres "x y" of the nodes whose text or content-desc is the whole ERE, top to bottom (a new
-# dump). Only those on the screen: a row scrolled away or hidden keeps its node (bounds 0,0,0,0).
+# dump; as ui_nodes).
 ui_find_all() {
   ui_dump
-  sed 's/<node /\n<node /g' "$OUT/ui.xml" | grep -E "(text|content-desc)=\"($1)\"" |
-    sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/p' |
-    awk -v w="$SCREEN_W" -v h="$SCREEN_H" '$3 > $1 && $4 > $2 && $3 <= w && $4 <= h {
-      print int(($1 + $3) / 2), int(($2 + $4) / 2) }' | sort -n -k 2
+  ui_nodes "$1" | awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2) }' | sort -n -k 2
 }
 ui_has() { [[ -n $(ui_find_all "$1") ]]; }
 ui_lacks() { ! ui_has "$1"; }
@@ -435,6 +446,67 @@ ui_tap() { # <ERE> [first|last] [pause]: a tap on the item named so (the topmost
   adb shell input tap "$xy"
   sleep "${3:-2}"
 }
+# The drawer's list on screen, "top bottom" (in the last dump): below the notebook's row (its
+# "Przełącz notatnik"), above the sync footer ("Synchronizacja: …"); nothing when the drawer is
+# closed. Its rows (and the "Strony" header above them) scroll inside it and keep their nodes
+# outside it: a row under the footer is on screen for ui_find_all, and a tap on it lands on the
+# footer — the sync center opened instead of the folder the tap was for (sweep2, 2026-10-29).
+drawer_view() {
+  local top bottom
+  top=$(ui_nodes 'Przełącz notatnik' | head -n 1 | cut -d ' ' -f 4)
+  bottom=$(ui_nodes 'Synchronizacja: .*' | tail -n 1 | cut -d ' ' -f 2)
+  [[ -n $top && -n $bottom ]] && echo "$top $bottom"
+}
+drawer_in_view() { # <ERE>: the first item so named lies wholly in the drawer's list (a new dump)
+  local view top bottom item _ y1 y2
+  ui_dump
+  view=$(drawer_view) || return 1
+  read -r top bottom <<<"$view"
+  item=$(ui_nodes "$1" | head -n 1)
+  [[ -n $item ]] || return 1
+  read -r _ y1 _ y2 <<<"$item"
+  ((y1 >= top && y2 <= bottom))
+}
+drawer_show() { # <ERE>: a finger drags the drawer's list until the item so named lies wholly in it
+  # (towards its middle: the slow drag's little fling cannot take it out again). An item not on
+  # the screen at all is further down the list. After each drag the drawer is closed and opened
+  # again (Back, ☰): on Android 11 the accessibility tree had no nodes for the rows the drag
+  # brought into the list and kept others at their old places until the drawer showed again.
+  local _ view top bottom item y1 y2 x from to delta
+  x=$((SCREEN_W * 30 / 100)) # (on the rows' text, left of their "⋯")
+  for _ in 1 2 3 4 5 6 7 8; do
+    ui_dump
+    if ! view=$(drawer_view); then
+      echo "    the drawer is not open"
+      return 1
+    fi
+    read -r top bottom <<<"$view"
+    item=$(ui_nodes "$1" | head -n 1)
+    if [[ -n $item ]]; then
+      read -r _ y1 _ y2 <<<"$item"
+      ((y1 >= top && y2 <= bottom)) && return 0
+      delta=$(((y1 + y2) / 2 - (top + bottom) / 2))
+    else
+      y1="" y2=""
+      delta=$(((bottom - top) / 2))
+    fi
+    # Dragged up (delta > 0) from near the footer, down from near the notebook's row, never
+    # beyond the list.
+    if ((delta > 0)); then from=$((bottom - 30)); else from=$((top + 30)); fi
+    to=$((from - delta))
+    ((to < top + 30)) && to=$((top + 30))
+    ((to > bottom - 30)) && to=$((bottom - 30))
+    echo "    (the drawer's list ${top}-$bottom, the item ${y1:-?}-${y2:-?}: dragged $from → $to)"
+    adb shell input swipe "$x" "$from" "$x" "$to" 1200
+    sleep 1
+    adb shell input keyevent 4
+    sleep 2
+    ui_tap 'Menu' first 1 || return 1
+  done
+  echo "    not brought into the drawer's list: $1"
+  return 1
+}
+drawer_tap() { drawer_show "$1" && ui_tap "$1" first "${2:-2}"; } # <ERE> [pause]
 # A word typed with a finger on the on-screen keyboard: its keys found by their names in
 # UiAutomator's dump of every window (`--windows`: the keyboard's too); letters and spaces, the
 # case as the keyboard has it (it capitalizes a field's first letter itself). Not `input text`:
@@ -638,6 +710,13 @@ if ((FOLDERS)); then
   app_shot fl-2-tag-alias
   check "a tap on #przewodnik opens the page with that alias" ui_has 'Witaj w Brulionie'
   check "with the tag's strip (Widok tagu)" ui_has 'Widok tagu.*'
+  # The drawer opened on that page shows its row in the tree ("Pokazuj otwartą stronę": revealed
+  # while the drawer was closed, placed as it opens) in the list's view, not under its footer.
+  check "☰ opens the drawer" ui_tap 'Menu' first
+  check "the drawer shows the page's row in its view" wait_for 6 drawer_in_view 'Więcej: Witaj w Brulionie'
+  app_shot fl-2b-drawer-on-page
+  adb shell input keyevent 4 # Back: the drawer closes
+  sleep 2
   check "Back returns to the journal" back_to "$first_block"
   adb shell input tap $((SCREEN_W * 79 / 100)) "$(ui_y 'Pomysł na obiad: .*')"
   sleep 3
@@ -686,10 +765,11 @@ if ((FOLDERS)); then
   fi
 
   # A new folder from the drawer's "Strony" header: its "+" → "Nowy folder", the name typed.
-  ui_tap 'Menu' first
+  # Whatever is tapped in the drawer's list is first brought into its view (drawer_tap).
+  check "☰ opens the drawer" ui_tap 'Menu' first
   check "the drawer shows the Strony section" wait_for 10 ui_has 'Strony.*'
   app_shot fl-9-drawer
-  check "the Strony header's + opens its menu" ui_tap 'Nowa strona lub folder'
+  check "the Strony header's + opens its menu" drawer_tap 'Nowa strona lub folder'
   check "its Nowy folder opens the dialog" ui_tap 'Nowy folder'
   # The name typed on the keyboard, "Utwórz" tapped while it still composes the word.
   type_on_keyboard Archiwum
@@ -700,12 +780,18 @@ if ((FOLDERS)); then
   folder=$(vault_name Archiwum || true)
   folder=${folder:-Archiwum}
   echo "    the folder: $folder"
-  check "and shows in the tree" ui_has "$folder(, folder .*)?"
+  # The drawer opens again with the new folder revealed: its row in the list's view, above the
+  # sync footer (the app placed it while the drawer still had the keyboard's height: the row
+  # ended up under the footer, where a tap opened the sync center — sweep2, 2026-10-29).
+  check "and shows in the tree, in the drawer's view" wait_for 6 drawer_in_view "$folder(, folder .*)?"
   app_shot fl-11-folder-made
 
   # "⋯" on a page of the tree → "Przenieś do…": "Remont mieszkania" from Projekty into Archiwum.
-  ui_has 'Więcej: Remont mieszkania' || ui_tap 'Projekty, folder .*'
-  check "the page's row has its ⋯ button" ui_tap 'Więcej: Remont mieszkania'
+  check "the folder Projekty is brought into the drawer's view" drawer_show 'Projekty, folder .*'
+  if ui_has 'Projekty, folder zwinięty'; then
+    check "a tap opens it" ui_tap 'Projekty, folder zwinięty'
+  fi
+  check "the page's row has its ⋯ button" drawer_tap 'Więcej: Remont mieszkania'
   app_shot fl-12-row-menu
   check "its menu offers Przenieś do…" ui_tap 'Przenieś do…'
   check "the move sheet opens" ui_has 'Przenieś „Remont mieszkania”'
