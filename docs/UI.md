@@ -1181,7 +1181,9 @@ and diagrams (shapes, arrows, text), on every platform.
   unless it is dark already (its edge darker than mid grey: a "Ciemne" drawing whose scene cannot
   be read keeps its dark picture). A `.excalidraw` scene or a plugin file has no picture of its
   own: one Brulion draws is rendered so in the frame of its `pictureRect` (the size
-  `editor::localDrawingSize` gives the embeds and the picture view); one it does not draw (frames)
+  `editor::localDrawingSize` gives the embeds and the picture view, on the GUI thread, once per
+  version of the file: a 300 KB plugin file of 1500 strokes ~45 ms on the laptop, mostly Qt's JSON
+  parser — `tst_editor_picturesize largeDrawingSizeIsCached`); one it does not draw (frames)
   shows the plugin's export beside it (`Szkic.excalidraw.svg` / `.png`, `editor::drawingExportOf`)
   or else its elements with a dashed grey box for each of the others (`drawing::previewDrawing`) —
   never a blank picture. A `.md` file is read only when it is a plugin drawing. It runs in Qt
