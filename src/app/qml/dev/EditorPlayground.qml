@@ -385,6 +385,8 @@ ApplicationWindow {
     property int countBefore: 0
     property int realRow: -1
     property int farRow: -1
+    /// The paragraph zoomed into for Enter at its end.
+    property int zoomTextRow: -1
     property string textBefore: ""
     property real headerBefore: 0
     property real tableBefore: 0
@@ -394,6 +396,8 @@ ApplicationWindow {
     /// Repeats of a step waiting for something asynchronous (a picture loading).
     property int waits: 0
     property var crumbsProbe: null
+    /// Real mouse clicks of the self-test (QtTest's TestEvent, made when first needed).
+    property var zoomEvents: null
     function check(ok, what) {
         if (!ok)
             failures += 1
@@ -406,6 +410,15 @@ ApplicationWindow {
         return editor.handleEditorKey({ key: k, modifiers: modifiers || Qt.NoModifier }, edit)
     }
     function info(row) { return page.blocks.get(row) }
+    /// The delegate of `row` is laid out and wholly inside the list's view.
+    function rowInView(row) {
+        const list = editor.listView
+        const item = list.itemAtIndex(row)
+        if (!item || !item.visible)
+            return false
+        const p = item.mapToItem(list, 0, 0)
+        return p.y >= -0.5 && p.y + item.height <= list.height + 0.5
+    }
     // What an input method (Gboard) is told about the text around the caret.
     function surroundingText(edit) { return edit ? String(edit.inputMethodQuery(Qt.ImSurroundingText, null)) : "<none>" }
     function imCursor(edit) { return edit ? Number(edit.inputMethodQuery(Qt.ImCursorPosition, null)) : -1 }
@@ -437,6 +450,19 @@ ApplicationWindow {
               && (show.text === (failed ? qsTranslate("EmbedView", "Try again") : qsTranslate("EmbedView", "Show")))
               && (show.width + save.width + Theme.space2 > holder.width || show.y === save.y),
               what + "its buttons are side by side: " + (show && save ? show.y + " / " + save.y : "-"))
+    }
+    /// The first item under `item` (itself included) for which `pred` holds, or null.
+    function findWhere(item, pred) {
+        if (!item)
+            return null
+        if (pred(item))
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = findWhere(item.children[i], pred)
+            if (found)
+                return found
+        }
+        return null
     }
     function findItem(item, name) {
         if (!item)
@@ -647,6 +673,44 @@ ApplicationWindow {
                         && editor.listView.headerItem.height === window.headerBefore,
                         "zooming out leaves no room for the breadcrumb: "
                         + (editor.listView.headerItem ? editor.listView.headerItem.height : -1) + " (was " + window.headerBefore + ")"),
+            // Enter at the end of a zoomed paragraph: a paragraph has no children, so the zoom
+            // ends and the new block below it is edited — never a caret in a hidden block. Ctrl+Z
+            // zooms back in, Ctrl+Shift+Z ends the zoom again.
+            () => {
+                window.textBefore = page.sourceText
+                window.zoomTextRow = rowOf("Plan remontu")
+                page.zoomInto(window.zoomTextRow)
+                editor.startEditing(window.zoomTextRow, -1)
+            },
+            () => check(window.zoomTextRow > 0 && page.zoomBlock === window.zoomTextRow
+                        && page.editingRow === window.zoomTextRow && editor.activeEditor !== null
+                        && editor.activeEditor.activeFocus, "a zoomed paragraph is edited: " + window.zoomTextRow),
+            () => key(Qt.Key_Return),
+            () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && info(page.editingRow).visible
+                        && editor.activeEditor !== null && editor.activeEditor.activeFocus
+                        && editor.activeEditor.row === page.editingRow && rowInView(page.editingRow),
+                        "Enter at the end of a zoomed paragraph ends the zoom and edits the new block below it: zoom "
+                        + page.zoomBlock + ", row " + page.editingRow + " (paragraph " + window.zoomTextRow + ")"),
+            () => key(Qt.Key_Z, Qt.ControlModifier),
+            () => check(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
+                        && page.sourceText === window.textBefore && editor.activeEditor !== null
+                        && editor.activeEditor.activeFocus,
+                        "Ctrl+Z zooms back into the paragraph: zoom " + page.zoomBlock + ", row " + page.editingRow),
+            () => key(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier),
+            () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && editor.activeEditor !== null
+                        && editor.activeEditor.activeFocus && editor.activeEditor.row === window.zoomTextRow + 1,
+                        "Ctrl+Shift+Z ends the zoom again: zoom " + page.zoomBlock + ", row " + page.editingRow),
+            () => typeKeys("Źdźbło"),
+            () => check(info(window.zoomTextRow + 1).plainText === "Źdźbło" && page.zoomBlock < 0,
+                        "typing goes into the new block: " + info(window.zoomTextRow + 1).plainText),
+            () => key(Qt.Key_Z, Qt.ControlModifier), // the typing
+            () => key(Qt.Key_Z, Qt.ControlModifier), // Enter
+            () => {
+                check(page.sourceText === window.textBefore && page.zoomBlock === window.zoomTextRow,
+                      "two Ctrl+Z undo the typing and Enter, back in the zoom: zoom " + page.zoomBlock)
+                page.zoomTo(-1)
+                page.stopEditing()
+            },
             () => { window.pasteRow = page.insertBlockAfter(rowOf("Ekipa może"), ""); window.countBefore = page.blocks.count },
             () => { const e = editor.activeEditor; e.insert(e.cursorPosition, "- [ ] pierwsze\n- drugie") },
             () => {
@@ -718,6 +782,103 @@ ApplicationWindow {
             () => typeKeys("Q"),
             () => check(info(window.farRow).plainText.indexOf("Q") > 0 && page.editingRow === window.farRow
                         && editor.activeEditor && editor.activeEditor.activeFocus, "typing brings the edited block back: " + info(window.farRow).plainText),
+            // Enter at the end of a zoomed heading far down the page: the rows above it come back
+            // with the zoom's end, and the view follows the new block below it (it does not stay
+            // at the page's top, where the zoom had shown the heading).
+            () => {
+                window.zoomTextRow = page.insertMarkdown(page.lastVisibleRow(), "## Na dole strony ąę")
+                page.zoomInto(window.zoomTextRow)
+                editor.startEditing(window.zoomTextRow, -1)
+            },
+            () => check(page.zoomBlock === window.zoomTextRow && info(window.zoomTextRow).view === "heading"
+                        && page.editingRow === window.zoomTextRow && rowInView(window.zoomTextRow),
+                        "a zoomed heading far down the page is edited: " + window.zoomTextRow),
+            () => key(Qt.Key_Return),
+            () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && editor.activeEditor !== null
+                        && editor.activeEditor.activeFocus && rowInView(window.zoomTextRow + 1)
+                        && rowInView(window.zoomTextRow),
+                        "Enter at the end of a zoomed heading far down the page keeps it and the new block in view: zoom "
+                        + page.zoomBlock + ", row " + page.editingRow + ", y "
+                        + (editor.listView.itemAtIndex(window.zoomTextRow + 1)
+                           ? editor.listView.itemAtIndex(window.zoomTextRow + 1).mapToItem(editor.listView, 0, 0).y : "-")),
+            () => key(Qt.Key_Z, Qt.ControlModifier),
+            () => check(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
+                        && rowInView(window.zoomTextRow), "Ctrl+Z zooms back into the heading, in view"),
+            () => key(Qt.Key_Z, Qt.ControlModifier), // the heading added above
+            () => {
+                check(page.zoomBlock < 0 && rowOf("Na dole strony") < 0, "and the heading is gone with the zoom: " + page.zoomBlock)
+                page.zoomTo(-1)
+            },
+            // Zooming out (the breadcrumb) while a block far down the page is edited: the rows
+            // above it come back, the edited block stays in view.
+            () => {
+                window.zoomTextRow = rowOf("Wiersz 140")
+                page.zoomInto(window.zoomTextRow)
+                editor.startEditing(window.zoomTextRow, -1)
+            },
+            () => check(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
+                        && rowInView(window.zoomTextRow), "a zoomed block far down the page is edited: " + window.zoomTextRow),
+            () => page.zoomOut(),
+            () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow && rowInView(window.zoomTextRow)
+                        && editor.activeEditor !== null && editor.activeEditor.activeFocus,
+                        "zooming out keeps the edited block in view: y "
+                        + (editor.listView.itemAtIndex(window.zoomTextRow)
+                           ? editor.listView.itemAtIndex(window.zoomTextRow).mapToItem(editor.listView, 0, 0).y : "-")
+                        + ", zoom " + page.zoomBlock + ", row " + page.editingRow + ", editor row "
+                        + (editor.activeEditor ? editor.activeEditor.row : -1)
+                        + ", contentY " + editor.listView.contentY + " (origin " + editor.listView.originY + ")"),
+            // The breadcrumb's arrow clicked with the mouse while a child of a folded zoom root is
+            // edited (Enter in the zoom made it; the zoom root's children are shown whatever its
+            // fold): the zoom ends, the fold opens over the child, which stays edited, in view,
+            // and gets the keys typed next.
+            () => {
+                page.stopEditing()
+                window.textBefore = page.sourceText
+                window.zoomTextRow = rowOf("Wiersz 145")
+                page.zoomInto(window.zoomTextRow)
+                editor.startEditing(window.zoomTextRow, -1)
+            },
+            () => key(Qt.Key_Return),
+            () => typeKeys("Dziecko ąę"),
+            () => page.setFolded(window.zoomTextRow, true),
+            () => check(page.zoomBlock === window.zoomTextRow && info(window.zoomTextRow).collapsed
+                        && page.editingRow === window.zoomTextRow + 1 && info(window.zoomTextRow + 1).visible
+                        && info(window.zoomTextRow + 1).plainText === "Dziecko ąę",
+                        "a child of a folded zoom root is edited: zoom " + page.zoomBlock + ", row " + page.editingRow),
+            () => {
+                if (!window.zoomEvents)
+                    window.zoomEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "zoomEvents")
+                const arrow = findWhere(editor.listView.headerItem, item => item.iconName === "arrow-left" && item.visible)
+                check(arrow !== null, "the breadcrumb's arrow is there")
+                if (!arrow)
+                    return
+                // A finger on touch UIs, else the mouse.
+                const x = arrow.width / 2
+                const y = arrow.height / 2
+                if (Theme.touchUi) {
+                    window.zoomEvents.touchEvent(arrow).press(0, arrow, x, y).commit()
+                    window.zoomEvents.touchEvent(arrow).release(0, arrow, x, y).commit()
+                } else {
+                    window.zoomEvents.mouseClick(arrow, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+                }
+            },
+            () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && info(page.editingRow).visible
+                        && !info(window.zoomTextRow).collapsed && rowInView(page.editingRow)
+                        && editor.activeEditor !== null && editor.activeEditor.row === page.editingRow,
+                        "the breadcrumb's arrow clicked: the zoom ends, the edited child stays shown and in view: zoom "
+                        + page.zoomBlock + ", row " + page.editingRow + ", shown " + info(window.zoomTextRow + 1).visible),
+            () => EditorInput.sendKey(window.activeFocusItem, 0, 0, "ż"),
+            () => check(info(window.zoomTextRow + 1).plainText === "Dziecko ąęż" && editor.activeEditor !== null
+                        && editor.activeEditor.activeFocus,
+                        "a key typed after the click goes into the edited child: " + info(window.zoomTextRow + 1).plainText
+                        + " (focus " + window.activeFocusItem + ")"),
+            () => {
+                for (let i = 0; i < 6 && page.sourceText !== window.textBefore; ++i)
+                    page.undo()
+                check(page.sourceText === window.textBefore, "undo takes the child away again")
+                page.zoomTo(-1)
+                page.stopEditing()
+            },
             // ---- Table cells: typed text is in the document before the cell is left -------------
             // With a mouse, a table takes no room below its grid until it is selected or edited
             // (the "+ Row / + Column" buttons): its height never changes under a resting pointer.

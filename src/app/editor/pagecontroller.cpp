@@ -991,7 +991,27 @@ void PageController::restore(const QString &snapshot, const Focus &focus, const 
     const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot, blankBlocks);
     m_restoring = false;
     remapBlocks(mapping);
-    if (focus.row < 0 && validRow(focus.selectionAnchor) && validRow(focus.selectionFocus)) {
+    // Enter made in a zoom recorded the zoom of both versions (split()): undo zooms back in (also
+    // when the step ended the zoom or changed the zoomed block's text), redo restores the zoom
+    // after it. Other steps leave the zoom as it is. A document has no zoom.
+    if (focus.zoom != Focus::KeepZoom)
+        m_model->setZoomUid(validRow(focus.zoom) && !documentMode() ? m_model->uidAt(focus.zoom) : 0);
+    // Never a caret or a block selection in a hidden block: a zoom that does not hold the restored
+    // block ends — one chosen after the step (the breadcrumb, then Undo), or the zoom brought back
+    // above for an Enter next to a step made on the page — and the folds over it open, as when a
+    // hidden block is edited (startEditing()).
+    const bool selects = focus.row < 0 && validRow(focus.selectionAnchor) && validRow(focus.selectionFocus);
+    if (validRow(focus.row)) {
+        reveal(focus.row);
+    } else if (selects) {
+        reveal(focus.selectionFocus);
+        reveal(focus.selectionAnchor);
+        for (const int row : focus.selectionPicks)
+            reveal(row);
+    } else {
+        reveal(editingRow()); // the block edited now stays edited
+    }
+    if (selects) {
         // The block selection of that version (an undone deletion selects its blocks again) —
         // with no block edited: the two never go together (another block edited meanwhile stops).
         m_anchorUid = m_model->uidAt(focus.selectionAnchor);
@@ -1316,6 +1336,20 @@ QVariantMap PageController::split(int row, int cursor)
         return result(row, cursor);
     const int len = int(shape.editText.size());
     cursor = cursor < 0 ? len : snapToCharacter(shape.editText, cursor);
+    // Enter made in a zoom records the zoomed row of both versions (Focus::zoom): undo and redo
+    // bring that zoom back also when the zoomed block's own text changed (a block whose source
+    // changed loses the zoom in BlockListModel::replaceContent) and when the step ended the zoom.
+    const int zoom = zoomBlock();
+    const auto finish = [&](Focus f) {
+        if (zoom >= 0) {
+            if (m_commandDepth == 1)
+                m_commandFocusBefore.zoom = zoom; // the zoomed row of the text before this step
+            f.zoom = zoomBlock();
+        }
+        endCommand(f);
+        setFocus(f, true);
+        return f;
+    };
 
     // "```calc" + Enter opens a code block (any fence length and info string Markdown accepts).
     // Not after a task marker: "- [ ] ```js" is a task's text, not a fence.
@@ -1327,9 +1361,7 @@ QVariantMap PageController::split(int row, int cursor)
             applyOp([&](BlockDocument &d) {
                 return d.setBody(row, bodyWithEditText(entry, opening + u"\n\n"_s + closing));
             });
-            const Focus f{row, 0};
-            endCommand(f);
-            setFocus(f, true);
+            const Focus f = finish({row, 0});
             return result(f.row, f.cursor);
         }
     }
@@ -1342,15 +1374,12 @@ QVariantMap PageController::split(int row, int cursor)
                 bodyWithEditText(entry, shape.editText.left(cursor) + u'\n' + shape.editText.mid(cursor));
         beginCommand();
         applyOp([&](BlockDocument &d) { return d.setBody(row, updated); });
-        const Focus f{row, cursor + 1};
-        endCommand(f);
-        setFocus(f, true);
+        const Focus f = finish({row, cursor + 1});
         return result(f.row, m_cursor);
     }
 
     // Document mode: Enter on an empty list item leaves the list (Obsidian) — a nested item moves
     // one level out, a top-level one becomes a paragraph.
-    const int zoom = zoomBlock();
     if (len == 0 && entry.kind == BlockKind::ListItem && documentMode()) {
         const QVariantMap left = leaveList(row);
         if (left.value(u"row"_s).toInt() >= 0)
@@ -1364,23 +1393,36 @@ QVariantMap PageController::split(int row, int cursor)
             return result(editingRow(), 0);
     }
 
+    // A zoomed list item keeps what Enter makes inside the zoom: a new first child at its end or
+    // start (an item above the zoom root would be outside the zoom, out of sight), its tail as the
+    // first child in the middle (the zoom root's children are shown whatever its fold).
+    const bool listRoot = row == zoom && entry.kind == BlockKind::ListItem;
     beginCommand();
     EditResult r;
-    if (row == zoom && (cursor == len || (cursor == 0 && entry.kind == BlockKind::ListItem))) {
-        // The zoomed block: a new first child keeps the caret inside the zoom (at the start of a
-        // list item too: an item above the zoom root would be outside the zoom, out of sight). A
-        // zoomed heading or paragraph splits as usual: the empty paragraph above stays hidden and
-        // the caret stays in the zoom root.
+    if (listRoot && (cursor == len || cursor == 0)) {
         r = applyOp([&](BlockDocument &d) { return d.insertAfter(row, QString(), entry.depth + 1); });
     } else {
-        const bool collapsed = m_model->isCollapsed(row);
+        const bool collapsed = !listRoot && m_model->isCollapsed(row);
         const int bodyCursor = toBodyCursor(row, cursor);
         r = applyOp([&](BlockDocument &d) { return d.split(row, bodyCursor, collapsed); });
+        if (listRoot && r.changed() && r.focus > row && m_model->document().parent(r.focus) != row) {
+            // No children: the tail became the next sibling, outside the zoom — its first child
+            // instead (its body, so the caret after a continued task marker, stays as it is).
+            const quint64 uid = m_model->uidAt(r.focus);
+            applyOp([&](BlockDocument &d) { return d.indent(m_model->rowOfUid(uid)); });
+            r.focus = m_model->rowOfUid(uid);
+        }
     }
     const Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
-    endCommand(f);
-    setFocus(f, true);
-    return result(f.row, f.cursor);
+    // Never leave the caret in a hidden block. A zoomed heading or paragraph has no children
+    // (BlockDocument: only list items nest), so the block Enter made below it (at its end, in its
+    // middle, on an empty one) cannot be inside the zoom: the zoom ends, the page shows it, and
+    // Enter has done what it does on the page; undo zooms back in. At its start the empty
+    // paragraph goes above, out of sight, and the caret stays in the zoom root.
+    if (zoom >= 0 && validRow(f.row) && !m_model->isRowVisible(f.row))
+        reveal(f.row); // leaves the zoom (zoomChanged); a heading or paragraph has no folds to open
+    const Focus done = finish(f);
+    return result(done.row, done.cursor);
 }
 
 QVariantMap PageController::mergeWithPrevious(int row)
@@ -1896,11 +1938,40 @@ void PageController::zoomOut()
 
 void PageController::zoomTo(int row)
 {
+    setZoomRow(row);
+    // The block being edited stays shown. The zoom root's children are shown whatever its fold:
+    // leaving a folded zoom root (or a zoom below a fold) opens the folds over the block, as when
+    // a hidden block is edited; a zoom that does not hold the block stops editing (zoomInto()).
+    const int editing = editingRow();
+    bool unfolded = false;
+    if (editing >= 0 && !m_model->isRowVisible(editing)) {
+        const BlockDocument &doc = m_model->document();
+        const int zoom = zoomBlock();
+        const markdown::RowRange range = zoom >= 0 ? doc.subtreeRange(zoom) : markdown::RowRange{0, doc.count()};
+        if (editing >= range.first && editing <= range.last()) {
+            for (int p = doc.parent(editing); p >= 0 && p != zoom; p = doc.parent(p)) {
+                if (m_model->isCollapsed(p)) {
+                    m_model->setCollapsed(p, false);
+                    unfolded = true;
+                }
+            }
+        }
+        if (!m_model->isRowVisible(editing))
+            stopEditing();
+    }
+    Q_EMIT zoomChanged();
+    if (unfolded) {
+        updateSelection();
+        Q_EMIT foldStateChanged();
+    }
+}
+
+void PageController::setZoomRow(int row)
+{
     const quint64 uid = validRow(row) ? m_model->uidAt(row) : 0;
     if (uid != m_model->zoomUid())
         clearSelection(); // its rows may be outside the zoom
     m_model->setZoomUid(uid);
-    Q_EMIT zoomChanged();
 }
 
 void PageController::toggleFold(int row)
@@ -1966,8 +2037,11 @@ void PageController::reveal(int row)
     const int zoom = zoomBlock();
     if (zoom >= 0) {
         const markdown::RowRange range = doc.subtreeRange(zoom);
-        if (row < range.first || row > range.last())
-            zoomTo(-1);
+        if (row < range.first || row > range.last()) {
+            // (Not zoomTo(): the block edited until now need not stay shown, `row` is shown next.)
+            setZoomRow(-1);
+            Q_EMIT zoomChanged();
+        }
     }
     for (int p = doc.parent(row); p >= 0; p = doc.parent(p)) {
         if (m_model->isCollapsed(p))

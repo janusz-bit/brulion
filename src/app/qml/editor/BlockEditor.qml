@@ -246,6 +246,8 @@ FocusScope {
     readonly property bool titleFirst: controller !== null && controller.titleRow > 0 && controller.zoomBlock < 0
     property real titleHeight: 0
     property real propertiesHeight: 0
+    /// The zoomed row the view last followed (onZoomChanged in the controller's Connections).
+    property int shownZoom: -1
 
     /// The next / previous visible row in on-screen order (the title above the properties).
     function visualNext(row) {
@@ -379,6 +381,7 @@ FocusScope {
     onControllerChanged: {
         if (!controller)
             return
+        shownZoom = controller.zoomBlock
         controller.palette = rendererPalette
         controller.locale = DatesHelper.locale
         controller.now = DatesHelper.fixedNow
@@ -1483,6 +1486,33 @@ FocusScope {
         function onSelectionChanged() {
             if (editor.controller.selectionCount === 0)
                 editor.selectionMode = false
+        }
+        // A zoom ended or began while a block is edited (Enter in a zoomed heading or paragraph,
+        // Undo / Redo across it, the breadcrumb): the rows around it come and go, the edited block
+        // stays in view.
+        // The row is read once the caret has moved (the zoom changes before it does). Undo / redo
+        // signal the zoom every time: only a zoom that changed moves the view.
+        function onZoomChanged() {
+            const zoom = editor.controller.zoomBlock
+            if (zoom === editor.shownZoom)
+                return
+            editor.shownZoom = zoom
+            if (editor.controller.editingRow < 0)
+                return
+            // The breadcrumb coming or going changes the header's height: the view must not go
+            // back to the page's top, away from the block (as revealRow).
+            list.userMoved = true
+            editor.later(() => {
+                const row = editor.controller ? editor.controller.editingRow : -1
+                if (row < 0 || row >= list.count)
+                    return
+                // The rows the zoom showed or hid get their heights first: positioned before, the
+                // view kept its place among the zoom's rows and then showed the page's top.
+                list.forceLayout()
+                list.positionViewAtIndex(row, ListView.Contain)
+                list.forceLayout()
+                editor.ensureEditVisible()
+            })
         }
         function onLoadingChanged() {
             if (!editor.controller.loading) {

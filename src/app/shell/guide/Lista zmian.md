@@ -17,6 +17,7 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 
 **Poprawki**
 - **Wersja w przeglądarce na telefonie: pasek narzędzi leży na klawiaturze** — w Brave na Androidzie między paskiem formatowania a klawiaturą był pusty pas (Brave podaje za małą wysokość widocznej części strony, gdy chowa swój dolny pasek). Teraz przeglądarka sama zmniejsza stronę nad klawiaturą, więc pasek przylega do niej w Brave, Chrome i Firefoksie (w Chrome i Brave między nimi zostaje tylko pasek autouzupełniania samej przeglądarki), a górny pasek aplikacji nie ucieka już z ekranu po stuknięciu w blok nisko na stronie.
+- **Enter w przybliżonym nagłówku albo akapicie** — w konspekcie, po „Przybliż” na nagłówku albo akapicie, Enter na końcu (albo w środku) tekstu wstawiał blok poza przybliżeniem i kursor znikał. Teraz przybliżenie się kończy, a nowy blok pojawia się pod nim z kursorem; Ctrl+Z wraca do przybliżenia. W przybliżonym punkcie listy Enter w środku tekstu przenosi resztę do nowego podpunktu, który zostaje widoczny (także gdy punkt nie miał dzieci albo był zwinięty). Cofanie i ponawianie nie zostawiają już kursora w ukrytym bloku: przybliżenie, które go nie obejmuje, się kończy, a zwinięte punkty nad nim się rozwijają. Oddalenie (strzałka albo ścieżka nad blokami) w trakcie pisania w podpunkcie zwiniętego punktu rozwija go, więc pisany blok zostaje na ekranie.
 
 ## 0.5.0 — 28 października 2026
 
