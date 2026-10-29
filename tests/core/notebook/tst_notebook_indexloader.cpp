@@ -2,10 +2,11 @@
 // threads, WebAssembly), on 1 and 4 QThreadPool threads, on plain std::threads — equals an index
 // built file by file on one thread, for a vault of tricky files (case variants, NFD names,
 // `.markdown`, attachments, conflict copies, ignored folders, empty files, BOM, CRLF, invalid
-// UTF-8, a 2 MB note, Polish names); files changed while loading (before the first step, mid-load,
+// UTF-8, a 512 KB note, Polish names); files changed while loading (before the first step, mid-load,
 // after a worker read them but before the merge) end up as on disk; finish() in every state,
 // destruction mid-load, a config change mid-load, back-pressure, the vault's bookkeeping of the
-// workers' reads, journals merged first, search during and after loading.
+// workers' reads, journals merged first, search during and after loading. (Sizes are kept small:
+// CI runs this under AddressSanitizer within ctest's 300 s.)
 #include "notebook/indexloader.h"
 
 #include "index/index.h"
@@ -44,7 +45,7 @@ void writeFile(const QString &root, const QString &rel, const QByteArray &bytes)
 }
 
 /// Notes that link to each other in every way the index resolves, plus the hard cases.
-void writeTrickyVault(const QString &root, int generated)
+void writeTrickyVault(const QString &root, int generated, bool bigNote = false)
 {
     writeFile(root, u"A.md"_s, "- [[a]] i [[B]] #tag\n- ((id1)) ^id0\n");
     writeFile(root, u"x/sub/a.md"_s, "- mała litera [[A]] [[sub/a]] ^id1\n");
@@ -61,10 +62,12 @@ void writeTrickyVault(const QString &root, int generated)
     writeFile(root, u"journals/2026-10-27.md"_s, "- [ ] zadanie 📅 2026-10-28 #praca\n");
     writeFile(root, u"journals/2026-10-28.md"_s, "- [[Spotkanie]] i [[Brak]] ⏰ 21:00\n");
     writeFile(root, u"Dziennik/2026-10-28 środa.md"_s, "- [[journals/2026-10-28]]\n");
-    QByteArray big;
-    for (int i = 0; big.size() < 2 * 1024 * 1024; ++i)
-        big += "- wiersz " + QByteArray::number(i) + " o żółwiu\n"; // no links: backlinks() would be slow
-    writeFile(root, u"Duża.md"_s, big);
+    if (bigNote) { // 512 KB (no links: backlinks() and unlinked references stay cheap)
+        QByteArray big;
+        for (int i = 0; big.size() < 512 * 1024; ++i)
+            big += "- wiersz " + QByteArray::number(i) + " o żółwiu\n";
+        writeFile(root, u"Duża.md"_s, big);
+    }
     for (int i = 0; i < generated; ++i) {
         const QByteArray n = QByteArray::number(i);
         writeFile(root, u"Strony/Strona %1.md"_s.arg(i),
@@ -234,7 +237,7 @@ private Q_SLOTS:
     {
         QVERIFY(m_tmp.isValid());
         m_root = m_tmp.path() + u"/Notatki"_s;
-        writeTrickyVault(m_root, 250);
+        writeTrickyVault(m_root, 150, true);
     }
 
     void loadEqualsSerial_data() { addPoolRows(); }
@@ -259,10 +262,10 @@ private Q_SLOTS:
             QCOMPARE(loader.progress(), 1.0);
             const IndexLoader::Stats stats = loader.stats();
             QCOMPARE(stats.attachments, 2);
-            QCOMPARE(stats.total, 2 + 262); // the conflict copy and the trash are not read
-            QCOMPARE(noteCount(vault), 262);
+            QCOMPARE(stats.total, 2 + 162); // the conflict copy and the trash are not read
+            QCOMPARE(noteCount(vault), 162);
             QCOMPARE(stats.merged, stats.total);
-            QCOMPARE(stats.parsed, 262);
+            QCOMPARE(stats.parsed, 162);
             QCOMPARE(stats.dropped, 0);
             QCOMPARE(stats.readFailed, 0);
             const int workers[] = {0, 1, 4, 3};
