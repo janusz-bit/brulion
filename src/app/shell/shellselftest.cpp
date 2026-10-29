@@ -1709,12 +1709,60 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             ws->renamePage(u"Projekty/TCP IP.md"_s, u"Remont mieszkania"_s);
         settle(200);
     };
+    // The row of `path` lies wholly in the tree's visible part, where the sidebar left it (not
+    // placed by the test as treeRow() does): a row under the list's bottom edge is behind the
+    // sync footer — a tap there opened the sync center (the Android emulator's --folders run).
+    const auto rowIn = [&](QQuickItem *list, const QString &path) -> QQuickItem * {
+        return !list ? nullptr : findShown(list, [&](QQuickItem *item) {
+            return item->objectName() == u"treeRow" && item->property("path").toString() == path;
+        });
+    };
+    const auto rowInView = [&](const QString &path) {
+        QQuickItem *list = treeList();
+        const QQuickItem *r = rowIn(list, path);
+        if (!r)
+            return false;
+        const QRectF in = r->mapRectToItem(list, QRectF(0, 0, r->width(), r->height()));
+        return in.top() >= -0.5 && in.bottom() <= list->height() + 0.5;
+    };
+    const auto rowPlace = [&](const QString &path) {
+        QQuickItem *list = treeList();
+        const QQuickItem *r = rowIn(list, path);
+        const QRectF in = r ? r->mapRectToItem(list, QRectF(0, 0, r->width(), r->height())) : QRectF();
+        std::fprintf(stderr, "selftest: tree row %s at %.0f-%.0f of the list's %.0f px (contentY %.0f)\n",
+                     qPrintable(path), in.top(), in.bottom(), list ? list->height() : -1.0,
+                     list ? list->property("contentY").toReal() : -1.0);
+    };
+    // A sidebar laid out at another height before it shows the row: on phones the drawer gets
+    // its system-bar padding only as it opens, and a keyboard that was up goes as it opens — its
+    // list ends up shorter than it was when the row was revealed. Here the window is shorter.
+    const QSize fullSize = window->size();
+    const auto shortWindow = [&](bool shorter) {
+        window->resize(fullSize.width(), shorter ? fullSize.height() * 2 / 3 : fullSize.height());
+        settle(100);
+    };
 
-    // ---- The page opened elsewhere (a link, search, the switcher) shows in the tree.
+    // ---- The page opened elsewhere (a link, search, the switcher) shows in the tree — in its
+    //      visible part, though the drawer was closed (and the sidebar laid out at another height).
     app->goHome();
     settle(200);
+    openDrawer(); // (its list at the top, as a fresh start leaves it)
+    if (QQuickItem *list = treeList()) {
+        QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+        list->setProperty("userScrolled", false);
+    }
+    settle(100);
+    closeDrawer();
     app->openPage(remont);
+    settle(200);
+    shortWindow(true);
     openDrawer();
+    const bool remontInView = waitFor([&] { return rowInView(remont); });
+    if (!remontInView)
+        rowPlace(remont);
+    check(remontInView, "the page opened is scrolled into the tree's visible part (above the sync footer)");
+    shortWindow(false);
+    check(waitFor([&] { return rowInView(remont); }), "and stays in view when the sidebar grows again");
     QQuickItem *row = nullptr;
     check(waitFor([&] { return (row = treeRow(remont)) && row->property("selected").toBool(); }),
           "the page opened is revealed and highlighted in the tree");
@@ -1786,6 +1834,9 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             const QQuickItem *f = window->activeFocusItem();
             return f && f->inherits("QQuickTextInput");
         });
+        // (The drawer, closed for the dialog, opens again with the new folder revealed while it
+        // lays itself out at another height: the keyboard's room on a phone.)
+        shortWindow(true);
         if (touch) {
             // A phone's keyboard still composes the word when "Utwórz" is tapped: preedit text,
             // outside the field's text (Android's keyboards compose every word).
@@ -1803,6 +1854,11 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
         }
         check(waitFor([&] { return ws->exists(u"Zażółć"_s); }), "the typed folder is created at the root");
         openDrawer();
+        const bool folderInView = waitFor([&] { return rowInView(u"Zażółć"_s); });
+        if (!folderInView)
+            rowPlace(u"Zażółć"_s);
+        check(folderInView, "the new folder is revealed in the tree's visible part");
+        shortWindow(false);
         check(waitFor([&] { return treeRow(u"Zażółć"_s) != nullptr; }), "the new folder shows in the tree");
         // An empty folder deleted leaves the tree at once (folders have no file changes).
         check(!ws->deletePage(u"Zażółć"_s).isEmpty() && waitFor([&] { return treeRow(u"Zażółć"_s) == nullptr; }),
@@ -1944,6 +2000,8 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
         // (On desktops the rows of the folder removed above were pooled: opened again, the tree
         // shows its own rows, not those.)
         app->requestUiAction(u"revealInTree"_s);
+        check(waitFor([&] { return sidebar->property("pagesOpen").toBool() && rowInView(recipes); }),
+              "“Pokaż w drzewie” scrolls the page into the tree's visible part");
         check(waitFor([&] {
                   QQuickItem *r = sidebar->property("pagesOpen").toBool() ? treeRow(recipes) : nullptr;
                   return r && r->property("selected").toBool();

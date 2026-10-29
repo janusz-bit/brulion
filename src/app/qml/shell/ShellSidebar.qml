@@ -16,7 +16,11 @@ import Brulion
 // folder at the root, "Zwiń wszystkie", "Pokaż załączniki" and "Pokazuj otwartą stronę" (reveal:
 // the open page or daily note is shown and highlighted in the tree on every route change,
 // `ui/sidebar/revealCurrent`, on by default — a collapsed "Strony" section stays collapsed, only
-// "Pokaż w drzewie" opens it). With a mouse or touchpad (never a finger: the list flicks and
+// "Pokaż w drzewie" opens it). The revealed row is kept fully in the list's visible part — above
+// the sync footer — until the user scrolls the list: it is placed again whenever the list's
+// geometry changes, since a closed drawer lays itself out only when it opens (its system-bar
+// padding, a keyboard that goes, sections that grew meanwhile), so a row placed while it was
+// closed or still opening could end up under the footer. With a mouse or touchpad (never a finger: the list flicks and
 // press-and-hold stay as they are) a row is dragged onto a folder (a closed one opens after
 // 600 ms; the list scrolls near its edges) or onto the "Strony" header (the notebook's root) to
 // move it there (`dropMoveRequested()`); the ghost names the target and what the move rewrites
@@ -46,6 +50,9 @@ Rectangle {
     readonly property bool recentShown: AppSettings.sidebarHidden.indexOf("recent") < 0
     /// Show the open page in the tree on every route change.
     property bool revealCurrent: flag(AppSettings.value("ui/sidebar/revealCurrent", true))
+    /// The row `reveal()` keeps in view ("" = none): placed again on every change of the list's
+    /// geometry (`placeList()`) until the user scrolls the list or another route shows no file.
+    property string revealedPath
     /// The file the current route shows — a page, or a daily note opened as a page: highlighted
     /// in the tree.
     readonly property string currentPath: {
@@ -103,9 +110,9 @@ Rectangle {
         const step = Theme.touchUi ? 18 : 14
         return depth <= 4 ? depth * step : 4 * step + (depth - 4) * 8
     }
-    /// Show `path` in the tree: the folders above it open, the row scrolled into view. A
-    /// collapsed "Strony" section is opened only when `force` ("Pokaż w drzewie", a new folder);
-    /// the reveal on every route change leaves it collapsed.
+    /// Show `path` in the tree: the folders above it open, the row scrolled into view (and kept
+    /// there: `revealedPath`). A collapsed "Strony" section is opened only when `force` ("Pokaż w
+    /// drzewie", a new folder); the reveal on every route change leaves it collapsed.
     function reveal(path, force) {
         if (!path)
             return
@@ -115,19 +122,32 @@ Rectangle {
             pagesOpen = true
             AppSettings.setValue("ui/sidebar/pages", true)
         }
-        const row = tree.reveal(path)
-        if (row < 0)
+        if (tree.reveal(path) < 0)
             return
-        Qt.callLater(() => {
-            if (!list || list.model !== tree)
-                return
-            list.positionViewAtIndex(row, ListView.Contain)
-            list.userScrolled = !list.atYBeginning
-        })
+        revealedPath = path
+        Qt.callLater(placeList)
     }
     function revealRoute() {
         if (currentPath !== "")
             reveal(currentPath, false)
+        else
+            revealedPath = "" // (a route with no file in the tree: the list stays as it is)
+    }
+    /// The list's position after its geometry changed or a row was revealed: at the top (the
+    /// navigation in sight) unless the user scrolled it, then the revealed row fully in view —
+    /// with the least scrolling, so the navigation stays in sight where the row allows it. Only
+    /// while shown: a closed drawer's list still has the size it had (it is laid out again as it
+    /// opens, and placed again then).
+    function placeList() {
+        if (!list || !sidebar.visible)
+            return
+        if (!list.userScrolled)
+            list.positionViewAtBeginning()
+        if (revealedPath === "" || list.model !== tree)
+            return
+        const row = tree.indexOf(revealedPath)
+        if (row >= 0)
+            list.positionViewAtIndex(row, ListView.Contain)
     }
     /// "Kopiuj link": the same text as the page menu's and the editor's (PageTools.wikiLink).
     function copyLink(path) {
@@ -139,6 +159,7 @@ Rectangle {
     // The drag itself: started by a row's DragHandler, followed by `pointerWatch` (it sees the
     // pointer whoever holds it — a row scrolled out of the list may lose its handler).
     function beginDrag(path, isDir, title) {
+        revealedPath = "" // (the list scrolls under the pointer)
         dragPath = path
         dragIsDir = isDir
         dragTitle = title
@@ -246,9 +267,13 @@ Rectangle {
         function onCurrentRouteChanged() {
             if (sidebar.revealCurrent)
                 Qt.callLater(sidebar.revealRoute)
+            else
+                sidebar.revealedPath = ""
         }
     }
     Component.onCompleted: if (revealCurrent) Qt.callLater(revealRoute)
+    // Shown (the drawer opens): its list is laid out again — the revealed row placed again.
+    onVisibleChanged: if (visible && revealedPath !== "") Qt.callLater(placeList)
 
     Timer {
         id: expandTimer
@@ -362,18 +387,31 @@ Rectangle {
             // it returned with their old required properties — the tree showed folders that were
             // gone instead of its rows.
             reuseItems: sidebar.pagesOpen
-            T.ScrollBar.vertical: BScrollBar {}
-            /// The user scrolled down into the list (a flick or drag that did not end at the top).
+            // (Its handle dragged is the user's scrolling too.)
+            T.ScrollBar.vertical: BScrollBar {
+                onPressedChanged: {
+                    sidebar.revealedPath = ""
+                    if (!pressed)
+                        list.userScrolled = !list.atYBeginning
+                }
+            }
+            /// The user scrolled down into the list (a flick, a drag or the scroll bar, that did
+            /// not end at the top).
             property bool userScrolled: false
+            // The user scrolls: the revealed row is no longer kept in view.
+            onMovementStarted: sidebar.revealedPath = ""
             onMovementEnded: userScrolled = !atYBeginning
+            // Laid out again (the drawer opening, a keyboard, the window): the revealed row too.
+            onHeightChanged: if (sidebar.revealedPath !== "") Qt.callLater(sidebar.placeList)
 
             header: Column {
                 width: list.width - list.leftMargin - list.rightMargin
                 spacing: 0
                 // A ListView keeps its rows in place when the header grows (a page added to
                 // Recent), which scrolled the navigation up out of sight: the drawer then opened
-                // on "Tasks" with "Journals" and "Calendar" hidden. Stay at the top instead.
-                onHeightChanged: if (!list.userScrolled) Qt.callLater(() => { if (list) list.positionViewAtBeginning() })
+                // on "Tasks" with "Journals" and "Calendar" hidden. Stay at the top instead (the
+                // revealed row still in view: it moved down with the rows).
+                onHeightChanged: if (!list.userScrolled || sidebar.revealedPath !== "") Qt.callLater(sidebar.placeList)
 
                 // ---- Navigation --------------------------------------------------------
                 Column {
