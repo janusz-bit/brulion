@@ -1,6 +1,8 @@
 #include "picturesize.h"
 
+#include "drawing/drawingfile.h"
 #include "drawing/excalidraw.h"
+#include "drawing/svgwrite.h"
 
 #include <QBuffer>
 #include <QByteArray>
@@ -14,6 +16,7 @@
 #include <QSet>
 #include <QXmlStreamReader>
 
+#include <cmath>
 #include <optional>
 
 using namespace Qt::StringLiterals;
@@ -128,7 +131,7 @@ QSize localPictureSize(const QString &file)
 
 bool localFileIsDrawing(const QString &file)
 {
-    if (!hasSuffix(file, ".svg"_L1))
+    if (!hasSuffix(file, ".svg"_L1) && !hasSuffix(file, ".excalidraw"_L1) && !hasSuffix(file, ".md"_L1))
         return false;
     const QFileInfo info(file);
     if (!info.isFile())
@@ -148,12 +151,82 @@ bool localFileIsDrawing(const QString &file)
             return it->drawing;
     }
     QFile f(file);
-    const bool drawing = f.open(QIODevice::ReadOnly) && brulion::drawing::looksLikeExcalidrawSvg(f.read(brulion::drawing::HeadBytes));
+    const bool drawing = f.open(QIODevice::ReadOnly)
+                         && brulion::drawing::looksLikeDrawingFile(file, f.read(brulion::drawing::HeadBytes));
     const QMutexLocker lock(&mutex);
     if (cache.size() > 2000)
         cache.clear();
     cache.insert(file, Entry{modified, info.size(), drawing});
     return drawing;
+}
+
+QString drawingExportOf(const QString &file)
+{
+    if (!hasSuffix(file, ".md"_L1))
+        return {};
+    // "Szkic.excalidraw.md" → "Szkic.excalidraw.svg", "Szkic.svg" (the plugin's two naming
+    // settings); "Plan.md" → "Plan.svg".
+    QStringList stems{file.chopped(3)};
+    if (hasSuffix(stems.first(), ".excalidraw"_L1))
+        stems.append(stems.first().chopped(11));
+    for (const QString &stem : std::as_const(stems)) {
+        for (const QLatin1StringView ext : {".svg"_L1, ".png"_L1}) {
+            const QString candidate = stem + ext;
+            if (QFileInfo(candidate).isFile())
+                return candidate;
+        }
+    }
+    return {};
+}
+
+QSize localDrawingSize(const QString &file)
+{
+    const QFileInfo info(file);
+    if (!info.isFile() || info.size() > brulion::drawing::MaxSceneBytes)
+        return {};
+    struct Entry {
+        QDateTime modified;
+        qint64 bytes = -1;
+        QSize size;
+        bool foreign = false; ///< a drawing Brulion does not draw (its export may stand for it)
+    };
+    static QMutex mutex;
+    static QHash<QString, Entry> cache;
+    const QDateTime modified = info.lastModified();
+    std::optional<Entry> entry;
+    {
+        const QMutexLocker lock(&mutex);
+        const auto it = cache.constFind(file);
+        if (it != cache.constEnd() && it->modified == modified && it->bytes == info.size())
+            entry = *it;
+    }
+    if (!entry) {
+        entry = Entry{modified, info.size(), {}, false};
+        QFile f(file);
+        if (f.open(QIODevice::ReadOnly)) {
+            const std::optional<brulion::drawing::DrawingFile> read =
+                    brulion::drawing::readDrawingFile(f.read(brulion::drawing::MaxSceneBytes));
+            if (read && read->format != brulion::drawing::FileFormat::Svg) {
+                entry->foreign = !brulion::drawing::editable(read->drawing);
+                const QRectF rect = brulion::drawing::pictureRect(brulion::drawing::previewDrawing(read->drawing));
+                entry->size = QSize(int(std::ceil(rect.width())), int(std::ceil(rect.height())));
+            }
+        }
+        const QMutexLocker lock(&mutex);
+        if (cache.size() > 2000)
+            cache.clear();
+        cache.insert(file, *entry);
+    }
+    if (entry->foreign) {
+        // A drawing Brulion does not draw: the plugin's export beside it is its preview (looked up
+        // every time: it may come or go without the drawing changing).
+        const QString exportFile = drawingExportOf(file);
+        if (!exportFile.isEmpty()) {
+            if (const QSize own = localPictureSize(exportFile); own.isValid() && !own.isEmpty())
+                return own;
+        }
+    }
+    return entry->size;
 }
 
 bool canDecodePictureFormat(const QString &fileName)

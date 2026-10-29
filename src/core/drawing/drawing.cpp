@@ -1,5 +1,6 @@
 #include "drawing/drawing.h"
 
+#include "drawing/drawingfile.h"
 #include "drawing/excalidraw.h"
 #include "drawing/geometry.h"
 
@@ -127,30 +128,10 @@ PaperTheme paperThemeFromName(QStringView name)
 
 std::optional<Drawing> readDrawing(QByteArrayView bytes, ReadError *error)
 {
-    const auto fail = [error](ReadError why) -> std::optional<Drawing> {
-        if (error)
-            *error = why;
+    std::optional<DrawingFile> file = readDrawingFile(bytes, error);
+    if (!file)
         return std::nullopt;
-    };
-    if (error)
-        *error = ReadError::None;
-    QByteArrayView text = bytes;
-    if (text.startsWith("\xEF\xBB\xBF"))
-        text = text.sliced(3);
-    qsizetype i = 0;
-    while (i < text.size() && (text.at(i) == ' ' || text.at(i) == '\n' || text.at(i) == '\r' || text.at(i) == '\t'))
-        ++i;
-    if (i < text.size() && text.at(i) == '{') {
-        // A .excalidraw file.
-        std::optional<Drawing> d = parseScene(text);
-        return d ? d : fail(ReadError::NoScene);
-    }
-    bool corrupt = false;
-    const std::optional<QByteArray> scene = svgPayload(text, &corrupt);
-    if (!scene)
-        return fail(corrupt ? ReadError::Corrupt : ReadError::NoScene);
-    std::optional<Drawing> d = parseScene(*scene);
-    return d ? d : fail(ReadError::Corrupt);
+    return std::move(file->drawing);
 }
 
 } // namespace brulion::drawing

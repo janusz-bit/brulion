@@ -13,7 +13,8 @@ import Brulion
 // header), and the view's height is a binding, not the Column's own (a positioner sets it only in
 // its next polish): a block that grew when its picture had loaded moved everything below it while
 // the page or the journal scrolled (docs/UI.md "Scrolling performance").
-// A drawing (the embed's `drawing`: an SVG with an embedded scene, docs/SYNTAX.md §2) is shown at
+// A drawing (the embed's `drawing`: an SVG with an embedded scene, a `.excalidraw` scene, an
+// Obsidian Excalidraw plugin file — docs/SYNTAX.md §2) is shown at
 // its own size, never enlarged like other SVGs (it is handwriting, drawn at one unit a pixel), with
 // a pen in its corner; a click on it emits drawingClicked(path): the drawing editor. Its picture
 // comes from the drawing image provider in the app's theme (`url` light, `darkUrl` dark:
@@ -84,8 +85,8 @@ Column {
             readonly property bool drawing: modelData.drawing === true
             /// SVG: a local file by its name; a picture from the internet by the format the host
             /// found in its bytes (its URL need not end with .svg, `name` is "host › segment").
-            readonly property bool scalable: web ? /^svgz?$/i.test(modelData.format || "")
-                                                 : /\.svgz?$/i.test(modelData.name || "")
+            readonly property bool scalable: drawing || (web ? /^svgz?$/i.test(modelData.format || "")
+                                                             : /\.svgz?$/i.test(modelData.name || ""))
             /// The picture's size as the Image below shows it once loaded: a raster picture's pixels,
             /// at most 2048 a side; an SVG fitted into 1024 × 420 (rendered at the screen's pixel
             /// ratio) — null when the model does not know the file's size (then: once loaded).

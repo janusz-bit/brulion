@@ -75,7 +75,8 @@ target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
 target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui Qt6::Qml brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook
-    PRIVATE Qt6::Network brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture brulion_notify)
+    PRIVATE Qt6::Network brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
+            brulion_core_drawing brulion_notify)
 # Autostart ("Start when you sign in", Windows); AndroidBridge (permissions, test notification);
 # WasmStorage + WasmNotifier.
 target_link_libraries(brulion_shell PRIVATE brulion_platform)

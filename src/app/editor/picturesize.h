@@ -30,10 +30,26 @@ QSize pictureSize(QIODevice *device, const QString &fileName);
 /// The size of a local picture file, cached per file, modification time and file size.
 QSize localPictureSize(const QString &file);
 
-/// The local file is a drawing (docs/SYNTAX.md §2 "Drawings"): an SVG whose first 4 KB name an
-/// embedded Excalidraw scene (drawing::looksLikeExcalidrawSvg). Cached per file, modification time
-/// and size, like localPictureSize(): the editor asks for every embedded SVG it shows.
+/// The local file is a drawing (docs/SYNTAX.md §2 "Drawings"), by its name and first 4 KB
+/// (drawing::looksLikeDrawingFile): an SVG naming an embedded Excalidraw scene, a `.excalidraw`
+/// scene, an Obsidian Excalidraw plugin file (a `.md` with the key `excalidraw-plugin` in its
+/// frontmatter). Cached per file, modification time and size, like localPictureSize(): the editor
+/// asks for every embedded SVG it shows.
 bool localFileIsDrawing(const QString &file);
+
+/// The picture the Obsidian Excalidraw plugin exported beside its drawing `file` (the plugin's
+/// "auto-export": `Szkic.excalidraw.svg` or `.png` of `Szkic.excalidraw.md`, also `Szkic.svg` /
+/// `.png`), "" none — the preview of a drawing Brulion does not draw itself (frames, embedded
+/// pages). Only for a `.md` file.
+QString drawingExportOf(const QString &file);
+
+/// The size of the preview of a local `.excalidraw` or Obsidian Excalidraw plugin drawing (what
+/// the drawing image provider renders): the scene's drawing::pictureRect (EmptyWidth × EmptyHeight
+/// for one without elements), with dashed boxes for elements Brulion does not draw
+/// (drawing::previewDrawing) — or, for such a drawing, the size of the plugin's export beside it.
+/// Invalid when the file is no drawing. Cached per file, modification time and size (a scene is
+/// read and parsed once per version).
+QSize localDrawingSize(const QString &file);
 
 /// This device has a decoder for the picture format of `fileName`, by its extension: one of
 /// QImageReader's formats — WebP and AVIF need Qt's image plugins, which Android, the browser and

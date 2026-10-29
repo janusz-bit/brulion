@@ -5,7 +5,9 @@
 // editable data inside: an Excalidraw scene, embedded the way Excalidraw itself writes "Export →
 // SVG → Embed scene" (excalidraw.h). Every program shows the file as a picture (Obsidian, Logseq,
 // browsers, file managers); excalidraw.com opens it as an editable scene; Brulion's drawing editor
-// edits its handwriting, shapes, lines, arrows, text and pictures.
+// edits its handwriting, shapes, lines, arrows, text and pictures. The same editor edits
+// `.excalidraw` scene files and the Obsidian Excalidraw plugin's `*.excalidraw.md` files, each
+// written back in its own format (drawingfile.h).
 //
 // API overview (namespace brulion::drawing)
 //
@@ -17,8 +19,14 @@
 //   editable(drawing)                          only elements Brulion draws itself (no frames,
 //                                              embedded pages, unknown or far-away elements)
 //   normalizeStroke(stroke)                    its points rounded as the scene stores them
-//   readDrawing(bytes, &error)                 an SVG with an embedded scene, or a `.excalidraw`
-//                                              file → Drawing (nullopt: not a drawing / broken)
+//   readDrawing(bytes, &error)                 an SVG with an embedded scene, a `.excalidraw`
+//                                              file or an Obsidian Excalidraw plugin file →
+//                                              Drawing (nullopt: not a drawing / broken)
+//   readDrawingFile(), writeDrawingFile(),     a drawing file read and written back in its own
+//   looksLikeDrawingFile(), previewDrawing()   format: SVG, `.excalidraw`, `*.excalidraw.md`
+//                                              (drawingfile.h)
+//   readExcalidrawMarkdown(),                  the Obsidian Excalidraw plugin's files
+//   writeExcalidrawMarkdown(), stringifyJson() (excalidrawmd.h); LZ-String (lzstring.h)
 //   toSvg(drawing), pictureRect(drawing)       the file Brulion writes (svgwrite.h)
 //   elementShape(), hitTest(), lassoSelects()  the look and the hit tests of elements (geometry.h)
 //   moveElements(), duplicateElements(), …     the edits of elements; undo diffs (edit.h)
@@ -237,7 +245,9 @@ enum class ReadError {
 };
 
 /// The drawing in a file's bytes: an SVG with an embedded Excalidraw scene (Brulion's own and
-/// excalidraw.com's "Embed scene" exports, payload versions 1 and 2) or a `.excalidraw` JSON file.
+/// excalidraw.com's "Embed scene" exports, payload versions 1 and 2), a `.excalidraw` JSON file or
+/// an Obsidian Excalidraw plugin file (`*.excalidraw.md`) — drawingfile.h readDrawingFile(), which
+/// also tells the format to write it back in.
 std::optional<Drawing> readDrawing(QByteArrayView bytes, ReadError *error = nullptr);
 
 /// The background's name in the scene ("plain", "lines", "grid") and back (unknown: Plain).

@@ -9,8 +9,10 @@
 #include "drawingimageprovider.h"
 #include "drawingrender.h"
 
+#include "drawing/drawingfile.h"
 #include "drawing/edit.h"
 #include "drawing/excalidraw.h"
+#include "drawing/excalidrawmd.h"
 #include "drawing/geometry.h"
 #include "drawing/palette.h"
 #include "drawing/stroke.h"
@@ -1563,6 +1565,20 @@ private Q_SLOTS:
         QTest::newRow("unreadable, dark paper, light app")
                 << unreadable(inkFile(PaperTheme::Dark)) << u"Zepsuty ciemny.svg"_s << false << u"#121212"_s
                 << QString();
+        // Drawings of Obsidian's Excalidraw plugin: Brulion's renderer; one with a frame: its
+        // elements and a dashed box (no export of the plugin beside it).
+        QTest::newRow("plugin, light") << fixture(u"obsidian_freedraw.excalidraw.md"_s)
+                                       << u"Szkic ćwiczeń.excalidraw.md"_s << false << u"#ffffff"_s << QString();
+        QTest::newRow("plugin, dark") << fixture(u"obsidian_mixed.excalidraw.md"_s) << u"Schemat.excalidraw.md"_s
+                                      << true << u"#121212"_s << QString();
+        QTest::newRow("plugin, CRLF") << fixture(u"obsidian_crlf.excalidraw.md"_s) << u"Plan.md"_s << false
+                                      << u"#ffffff"_s << QString();
+        QTest::newRow("plugin with a frame") << fixture(u"obsidian_frame.excalidraw.md"_s) << u"Ramka.excalidraw.md"_s
+                                             << true << u"#121212"_s << QString();
+        QTest::newRow("plugin's oldest form") << fixture(u"obsidian_legacy.excalidraw.md"_s) << u"Stary.excalidraw.md"_s
+                                              << false << u"#ffffff"_s << QString();
+        QTest::newRow("a note") << QByteArray("---\ntytul: Notatka\n---\n# Notatka ąę\n") << u"Notatka.md"_s << false
+                                << QString() << QString();
         QTest::newRow("empty file") << QByteArray() << u"Pusty.svg"_s << false << QString() << QString();
         QTest::newRow("not svg") << QByteArray("<svg/>") << u"notatka.txt"_s << false << QString() << QString();
         QTest::newRow("garbage") << QByteArray("\x89PNG zażółć") << u"Zepsuty.svg"_s << true << QString() << QString();
@@ -1701,6 +1717,55 @@ private Q_SLOTS:
         QCOMPARE(natural, rect.size().toSize());
     }
 
+    void imageProviderPluginPreviews()
+    {
+        // A plugin drawing Brulion does not draw (a frame): its elements with a dashed grey box for
+        // the frame — never a blank picture — or the plugin's export beside it when there is one.
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"Szkic ćwiczeń.excalidraw.md"_s);
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(fixture(u"obsidian_frame.excalidraw.md"_s));
+        f.close();
+        brulion::drawingview::DrawingImageProvider provider;
+        const QUrl url = brulion::drawingview::DrawingImageProvider::url(path, u"1-1"_s, false);
+        QSize size;
+        QImage image = provider.requestImage(imageId(url), &size, QSize());
+        QVERIFY(!image.isNull());
+        const brulion::drawing::Drawing preview = brulion::drawing::previewDrawing(
+                *brulion::drawing::readDrawing(fixture(u"obsidian_frame.excalidraw.md"_s)));
+        const QRectF rect = brulion::drawing::pictureRect(preview);
+        QCOMPARE(size, rect.size().toSize());
+        // The frame's dashed grey outline on its left edge (x 360): nothing else is drawn there.
+        bool grey = false;
+        const int edge = int(std::round(360 - rect.left()));
+        for (int y = int(180 - rect.top()); y < int(480 - rect.top()) && !grey; ++y) {
+            for (int x = edge - 2; x <= edge + 2 && !grey; ++x) {
+                const QColor c = image.pixelColor(x, y);
+                grey = c.red() < 235 && std::abs(c.red() - c.blue()) < 40;
+            }
+        }
+        QVERIFY(grey);
+        // The plugin's export: its picture and size instead (an SVG, then a PNG).
+        const QByteArray red = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"300\" height=\"150\">"
+                               "<rect width=\"300\" height=\"150\" fill=\"#e03131\"/></svg>";
+        QFile svg(dir.filePath(u"Szkic ćwiczeń.excalidraw.svg"_s));
+        QVERIFY(svg.open(QIODevice::WriteOnly));
+        svg.write(red);
+        svg.close();
+        image = provider.requestImage(imageId(url), &size, QSize());
+        QCOMPARE(size, QSize(300, 150));
+        QVERIFY(near(image.pixelColor(150, 75), QColor(u"#e03131"_s)));
+        QVERIFY(QFile::remove(svg.fileName()));
+        QImage png(40, 20, QImage::Format_RGB32);
+        png.fill(QColor(u"#2f9e44"_s));
+        QVERIFY(png.save(dir.filePath(u"Szkic ćwiczeń.png"_s)));
+        image = provider.requestImage(imageId(url), &size, QSize(80, 0));
+        QCOMPARE(size, QSize(40, 20));
+        QCOMPARE(image.size(), QSize(80, 40));
+        QVERIFY(near(image.pixelColor(40, 20), QColor(u"#2f9e44"_s)));
+    }
+
     void imageProviderRefuses_data()
     {
         QTest::addColumn<QString>("id");
@@ -1759,6 +1824,178 @@ private Q_SLOTS:
         QCOMPARE(written->strokes.at(2).text, u"Zażółć gęślą jaźń"_s);
         // Untouched elements as Excalidraw wrote them (rough stays rough there).
         QCOMPARE(written->strokes.at(1).element, brulion::drawing::readDrawing(bytes)->strokes.at(1).element);
+    }
+
+    void excalidrawMarkdownLoadsAndSaves()
+    {
+        // A drawing of Obsidian's Excalidraw plugin: edited, written back as the plugin's file —
+        // its Markdown around the scene as it was.
+        const QByteArray bytes = fixture(u"obsidian_freedraw.excalidraw.md"_s);
+        QSignalSpy loaded(canvas, &DrawingCanvas::loadedChanged);
+        QCOMPARE(canvas->load(bytes), QString());
+        QCOMPARE(loaded.size(), 1);
+        QCOMPARE(canvas->format(), u"excalidrawMd"_s);
+        QVERIFY(!canvas->legacy());
+        QVERIFY(canvas->isKnownFile(bytes));
+        QCOMPARE(canvas->strokeCount(), 2);
+        const std::optional<brulion::drawing::ExcalidrawMarkdownRead> layout =
+                brulion::drawing::readExcalidrawMarkdown(bytes);
+        QVERIFY(layout);
+        mouseStroke(window.get(), {100, 400}, {300, 460}, 10);
+        QCOMPARE(canvas->strokeCount(), 3);
+        const QByteArray written = canvas->fileBytes();
+        QCOMPARE(written.left(layout->layout.sceneFrom), bytes.left(layout->layout.sceneFrom));
+        QVERIFY(written.endsWith("\n```\n%%"));
+        const std::optional<brulion::drawing::DrawingFile> back = brulion::drawing::readDrawingFile(written);
+        QVERIFY(back);
+        QCOMPARE(back->format, brulion::drawing::FileFormat::ExcalidrawMarkdown);
+        QCOMPARE(back->drawing.strokes.size(), 3);
+        const QString drawn = back->drawing.strokes.last().id;
+        // (The SVG of it too: "export as SVG".)
+        QVERIFY(brulion::drawing::looksLikeExcalidrawSvg(canvas->svg()));
+        canvas->markSaved(written);
+        QVERIFY(canvas->isKnownFile(written));
+        QVERIFY(!canvas->modified());
+        // Erased after that save: the next save marks it deleted (the plugin, showing the drawing,
+        // removes it), the file's own deleted element kept.
+        canvas->setTool(u"eraser"_s);
+        mouseStroke(window.get(), {200, 380}, {200, 480}, 6);
+        QCOMPARE(canvas->strokeCount(), 2);
+        const std::optional<brulion::drawing::ExcalidrawMarkdownRead> erased =
+                brulion::drawing::readExcalidrawMarkdown(canvas->fileBytes());
+        QVERIFY(erased);
+        QStringList buried;
+        for (const QJsonValue &v : erased->layout.tombstones)
+            buried.append(v.toObject().value(u"id"_s).toString());
+        QCOMPARE(buried, (QStringList{u"deleted_stroke_0000001"_s, drawn}));
+    }
+
+    void excalidrawMarkdownTakesOtherDevice()
+    {
+        // The plugin's file changed in Obsidian while drawn on here: the drawings merged, written
+        // into *their* file (their back of the card).
+        const QByteArray mine = fixture(u"obsidian_freedraw.excalidraw.md"_s);
+        QCOMPARE(canvas->load(mine), QString());
+        std::optional<brulion::drawing::ExcalidrawMarkdownRead> read = brulion::drawing::readExcalidrawMarkdown(mine);
+        QVERIFY(read);
+        brulion::drawing::Drawing other = read->drawing;
+        brulion::drawing::Stroke stroke;
+        stroke.id = u"zObsidianu"_s;
+        stroke.points = {{500, 100, 0.5}, {600, 140, 0.5}};
+        other.strokes.append(stroke);
+        QByteArray theirs = brulion::drawing::writeExcalidrawMarkdown(read->layout, other, 1761600000000);
+        theirs.replace("Notatka z tyłu: Zażółć gęślą jaźń", "Notatka z tyłu: dopisana w Obsidianie");
+        mouseStroke(window.get(), {100, 400}, {300, 460}, 10);
+        QVERIFY(canvas->modified());
+        QVERIFY(canvas->takeExternal(theirs));
+        QCOMPARE(canvas->strokeCount(), 4);
+        QVERIFY(canvas->modified());
+        const QByteArray written = canvas->fileBytes();
+        QVERIFY(written.contains("Notatka z tyłu: dopisana w Obsidianie"));
+        const std::optional<brulion::drawing::DrawingFile> back = brulion::drawing::readDrawingFile(written);
+        QVERIFY(back);
+        QCOMPARE(back->drawing.strokes.size(), 4);
+        QCOMPARE(back->drawing.strokes.at(2).id, u"zObsidianu"_s);
+        // A legacy file is no version Brulion edits: refused, nothing changes.
+        QVERIFY(!canvas->takeExternal(fixture(u"obsidian_legacy.excalidraw.md"_s)));
+        QCOMPARE(canvas->strokeCount(), 4);
+        QCOMPARE(canvas->format(), u"excalidrawMd"_s);
+    }
+
+    void excalidrawMarkdownTextsKeepTheirMarkdown()
+    {
+        // The plugin reads a text's "## Text Elements" entry (its Markdown, a link here) first.
+        // Moved — in one save or across saves (markSaved) — the entry stays as it is; edited, the
+        // new text is its entry and rawText, also in the saves after that one.
+        QByteArray bytes = fixture(u"obsidian_mixed.excalidraw.md"_s);
+        QVERIFY(bytes.contains("\nZażółć gęślą jaźń ^Zt8xQw1a\n"));
+        bytes.replace("\nZażółć gęślą jaźń ^Zt8xQw1a\n", "\nZażółć [[gęślą]] jaźń ^Zt8xQw1a\n");
+        QCOMPARE(canvas->load(bytes), QString());
+        const std::optional<brulion::drawing::ExcalidrawMarkdownRead> read =
+                brulion::drawing::readExcalidrawMarkdown(bytes);
+        QVERIFY(read);
+        const qsizetype sceneFrom = read->layout.sceneFrom;
+        const auto layoutOf = [](const QByteArray &file) {
+            const std::optional<brulion::drawing::ExcalidrawMarkdownRead> r =
+                    brulion::drawing::readExcalidrawMarkdown(file);
+            return r ? r->layout : brulion::drawing::ExcalidrawMarkdown();
+        };
+        const auto rawText = [&layoutOf](const QByteArray &file) {
+            const brulion::drawing::ExcalidrawMarkdown layout = layoutOf(file);
+            for (const QJsonValue &v : layout.elements) {
+                if (v.toObject().value(u"id"_s).toString() == u"Zt8xQw1a")
+                    return v.toObject().value(u"rawText"_s).toString();
+            }
+            return QString();
+        };
+        for (int save = 0; save < 2; ++save) {
+            canvas->selectAll();
+            canvas->nudgeSelection(10, 0);
+            QVERIFY(canvas->modified());
+            const QByteArray written = canvas->fileBytes();
+            QCOMPARE(written.left(sceneFrom), bytes.left(sceneFrom));
+            QCOMPARE(rawText(written), u"Zażółć gęślą jaźń"_s);
+            canvas->markSaved(written);
+        }
+        canvas->clearSelection();
+        QSignalSpy requests(canvas, &DrawingCanvas::textEditRequested);
+        canvas->editText(u"Zt8xQw1a"_s);
+        QCOMPARE(requests.size(), 1);
+        canvas->commitText(requests.takeFirst().at(0).toMap(), u"Żółw"_s);
+        QByteArray written = canvas->fileBytes();
+        QVERIFY(written.contains("\n## Text Elements\nŻółw ^Zt8xQw1a\n"));
+        QCOMPARE(rawText(written), u"Żółw"_s);
+        canvas->markSaved(written);
+        // The next save (a stroke drawn): the text's raw text as written, not the one first read.
+        mouseStroke(window.get(), {100, 400}, {300, 460}, 10);
+        written = canvas->fileBytes();
+        QVERIFY(written.contains("\n## Text Elements\nŻółw ^Zt8xQw1a\n"));
+        QCOMPARE(rawText(written), u"Żółw"_s);
+    }
+
+    void excalidrawMarkdownReadOnly_data()
+    {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<QString>("status");
+        QTest::addColumn<bool>("legacy");
+        QTest::newRow("the plugin's oldest form")
+                << fixture(u"obsidian_legacy.excalidraw.md"_s) << u"readonly"_s << true;
+        QTest::newRow("a frame") << fixture(u"obsidian_frame.excalidraw.md"_s) << u"readonly"_s << false;
+        QTest::newRow("a note") << QByteArray("---\ntytul: Notatka\n---\n# Notatka\n\nTekst ąę.\n") << u"notDrawing"_s
+                                << false;
+    }
+    void excalidrawMarkdownReadOnly()
+    {
+        QFETCH(QByteArray, bytes);
+        QFETCH(QString, status);
+        QFETCH(bool, legacy);
+        QCOMPARE(canvas->load(bytes), status);
+        QVERIFY(!canvas->editable());
+        QCOMPARE(canvas->legacy(), legacy);
+        QCOMPARE(canvas->format(), status == u"notDrawing"_s ? QString() : u"excalidrawMd"_s);
+        QVERIFY(canvas->fileBytes().isEmpty());
+        mouseStroke(window.get(), {100, 100}, {300, 160}, 6);
+        QCOMPARE(canvas->strokeCount(), 0);
+    }
+
+    void excalidrawJsonIsEditable()
+    {
+        // A .excalidraw scene (excalidraw.com's "Save to disk"): written back as one, not as SVG.
+        QCOMPARE(canvas->load(fixture(u"excalidraw_freedraw.excalidraw"_s)), QString());
+        QCOMPARE(canvas->format(), u"excalidraw"_s);
+        mouseStroke(window.get(), {100, 400}, {300, 460}, 10);
+        const QByteArray written = canvas->fileBytes();
+        QVERIFY(written.startsWith("{\n  \""));
+        QVERIFY(written.endsWith("}\n"));
+        const std::optional<brulion::drawing::DrawingFile> back = brulion::drawing::readDrawingFile(written);
+        QVERIFY(back);
+        QCOMPARE(back->format, brulion::drawing::FileFormat::Excalidraw);
+        QCOMPARE(back->drawing.strokes.size(), 3);
+        // A new drawing is an SVG.
+        QCOMPARE(canvas->load({}), QString());
+        QCOMPARE(canvas->format(), u"svg"_s);
+        mouseStroke(window.get(), {100, 400}, {300, 460}, 10);
+        QVERIFY(brulion::drawing::looksLikeExcalidrawSvg(canvas->fileBytes()));
     }
 
     void shapesWithMouse_data()

@@ -4,15 +4,27 @@
 // a large drawing whose root gives its size is read only at its start.
 #include "picturesize.h"
 
+#include "drawing/drawing.h"
+#include "drawing/drawingfile.h"
+#include "drawing/excalidrawmd.h"
+#include "drawing/svgwrite.h"
+
 #include <QBuffer>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <cmath>
+
 using namespace Qt::StringLiterals;
 using brulion::editor::canDecodePictureFormat;
+using brulion::editor::drawingExportOf;
+using brulion::editor::localDrawingSize;
+using brulion::editor::localFileIsDrawing;
 using brulion::editor::localPictureSize;
 using brulion::editor::MaxFullSvgBytes;
 using brulion::editor::pictureFormatName;
@@ -266,6 +278,176 @@ private Q_SLOTS:
         QCOMPARE(localPictureSize(file), QSize(100, 400));
         QVERIFY(!localPictureSize(dir.filePath(u"brak.png"_s)).isValid());
         QVERIFY(!localPictureSize(dir.path()).isValid());
+    }
+
+    void drawingFiles_data()
+    {
+        // Drawings by their name and start (the editor's embeds, Workspace::isDrawing): an SVG with
+        // a scene, a .excalidraw scene, an Obsidian Excalidraw plugin file (any .md name).
+        QTest::addColumn<QString>("fixture"); // tests/data/drawing ("" inline)
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<bool>("drawing");
+        QTest::newRow("svg drawing") << u"excalidraw_freedraw.svg"_s << QByteArray() << u"Rysunek.svg"_s << true;
+        QTest::newRow(".excalidraw") << u"excalidraw_freedraw.excalidraw"_s << QByteArray() << u"Szkic.excalidraw"_s
+                                     << true;
+        QTest::newRow("plugin file") << u"obsidian_freedraw.excalidraw.md"_s << QByteArray()
+                                     << u"Szkic ćwiczeń.excalidraw.md"_s << true;
+        QTest::newRow("plugin file, any name")
+                << u"obsidian_mixed.excalidraw.md"_s << QByteArray() << u"Plan.md"_s << true;
+        QTest::newRow("plugin file named .txt")
+                << u"obsidian_mixed.excalidraw.md"_s << QByteArray() << u"Plan.txt"_s << false;
+        QTest::newRow("a note") << QString() << QByteArray("---\ntytul: Szkic\n---\n# Szkic ąę\n") << u"Szkic.md"_s
+                                << false;
+        QTest::newRow("a note naming the key in its text")
+                << QString() << QByteArray("# Notatka\n\nexcalidraw-plugin: parsed\n") << u"Notatka.md"_s << false;
+        QTest::newRow("JSON, no scene") << QString() << QByteArray("{\"type\": \"lista\"}") << u"dane.excalidraw"_s
+                                        << false;
+        QTest::newRow("a picture") << QString() << QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\"/>")
+                                   << u"ikona.svg"_s << false;
+    }
+    void drawingFiles()
+    {
+        QFETCH(QString, fixture);
+        QFETCH(QByteArray, bytes);
+        QFETCH(QString, name);
+        QFETCH(bool, drawing);
+        if (!fixture.isEmpty()) {
+            QFile f(QStringLiteral(BRULION_TEST_DATA "/drawing/") + fixture);
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            bytes = f.readAll();
+        }
+        QTemporaryDir dir;
+        const QString file = dir.filePath(name);
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(bytes);
+        f.close();
+        QCOMPARE(localFileIsDrawing(file), drawing);
+        // The preview's size of a .excalidraw or plugin drawing: its scene's picture rect.
+        const QSize size = localDrawingSize(file);
+        if (drawing && !name.endsWith(u".svg"_s)) {
+            const QRectF rect = brulion::drawing::pictureRect(*brulion::drawing::readDrawing(bytes));
+            QCOMPARE(size, rect.size().toSize());
+        } else if (!drawing && !name.endsWith(u".txt"_s)) {
+            QVERIFY(!size.isValid() || size.isEmpty());
+        }
+    }
+
+    void drawingSizeFollowsTheFile()
+    {
+        QTemporaryDir dir;
+        const QString file = dir.filePath(u"Szkic ćwiczeń.excalidraw.md"_s);
+        QFile in(QStringLiteral(BRULION_TEST_DATA "/drawing/obsidian_freedraw.excalidraw.md"));
+        QVERIFY(in.open(QIODevice::ReadOnly));
+        const QByteArray bytes = in.readAll();
+        const auto write = [&](const QByteArray &data) {
+            QFile f(file);
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QCOMPARE(f.write(data), data.size());
+        };
+        write(bytes);
+        const std::optional<brulion::drawing::ExcalidrawMarkdownRead> read =
+                brulion::drawing::readExcalidrawMarkdown(bytes);
+        QVERIFY(read);
+        const QSize before = localDrawingSize(file);
+        QCOMPARE(before, brulion::drawing::pictureRect(read->drawing).size().toSize());
+        // A stroke far to the right: the file (and its size) changes, the preview grows.
+        brulion::drawing::Drawing wider = read->drawing;
+        brulion::drawing::Stroke s;
+        s.id = u"daleko"_s;
+        s.points = {{1500, 300, 0.5}, {1600, 320, 0.5}};
+        wider.strokes.append(s);
+        write(brulion::drawing::writeExcalidrawMarkdown(read->layout, wider, 1));
+        const QSize after = localDrawingSize(file);
+        QVERIFY2(after.width() > before.width() + 900, qPrintable(u"%1 → %2"_s.arg(before.width()).arg(after.width())));
+        // Emptied: the empty drawing's size.
+        write(brulion::drawing::writeExcalidrawMarkdown(read->layout, brulion::drawing::Drawing(), 1));
+        QCOMPARE(localDrawingSize(file), QSize(brulion::drawing::EmptyWidth, brulion::drawing::EmptyHeight));
+        QVERIFY(!localDrawingSize(dir.filePath(u"brak.excalidraw.md"_s)).isValid());
+    }
+
+    void largeDrawingSizeIsCached()
+    {
+        // A plugin drawing of some 1 MB of scene (dense handwriting): its size read once per
+        // version — the embeds ask on the GUI thread while the page scrolls (docs/UI.md
+        // "Scrolling performance").
+        QFile in(QStringLiteral(BRULION_TEST_DATA "/drawing/obsidian_freedraw.excalidraw.md"));
+        QVERIFY(in.open(QIODevice::ReadOnly));
+        const std::optional<brulion::drawing::ExcalidrawMarkdownRead> read =
+                brulion::drawing::readExcalidrawMarkdown(in.readAll());
+        QVERIFY(read);
+        brulion::drawing::Drawing d;
+        for (int k = 0; k < 1500; ++k) {
+            brulion::drawing::Stroke s;
+            s.id = u"kreska-"_s + QString::number(k);
+            s.simulatePressure = false;
+            for (int i = 0; i < 40; ++i)
+                s.points.append({(k % 30) * 40.0 + i * 1.5, (k / 30) * 32.0 + 8 * std::sin(i / 3.0), 0.3 + 0.01 * i});
+            brulion::drawing::normalizeStroke(s);
+            d.strokes.append(s);
+        }
+        QTemporaryDir dir;
+        const QString file = dir.filePath(u"Notatki z wykładu.excalidraw.md"_s);
+        QFile out(file);
+        QVERIFY(out.open(QIODevice::WriteOnly));
+        out.write(brulion::drawing::writeExcalidrawMarkdown(read->layout, d, 1));
+        out.close();
+        QElapsedTimer timer;
+        timer.start();
+        const QSize size = localDrawingSize(file);
+        const qint64 first = timer.nsecsElapsed();
+        timer.restart();
+        QCOMPARE(localDrawingSize(file), size);
+        const qint64 again = timer.nsecsElapsed();
+        QCOMPARE(size, brulion::drawing::pictureRect(d).size().toSize());
+        // Where the first time goes: reading the file (LZ-String, JSON), the picture's rect.
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray bytes = f.readAll();
+        timer.restart();
+        const std::optional<brulion::drawing::DrawingFile> parsed = brulion::drawing::readDrawingFile(bytes);
+        const qint64 parse = timer.nsecsElapsed();
+        QVERIFY(parsed);
+        timer.restart();
+        const QRectF rect = brulion::drawing::pictureRect(parsed->drawing);
+        const qint64 bounds = timer.nsecsElapsed();
+        QCOMPARE(rect.size().toSize(), size);
+        qInfo("%lld KB plugin file: its size %.1f ms the first time (read %.1f ms, rect %.1f ms), %.3f ms cached",
+              qlonglong(QFileInfo(file).size() / 1024), first / 1e6, parse / 1e6, bounds / 1e6, again / 1e6);
+        QVERIFY(again < first);
+    }
+
+    void drawingExportsStandIn()
+    {
+        // A plugin drawing Brulion does not draw (a frame): the plugin's export beside it is its
+        // preview — its size then.
+        QTemporaryDir dir;
+        const QString file = dir.filePath(u"Ramka.excalidraw.md"_s);
+        QVERIFY(QFile::copy(QStringLiteral(BRULION_TEST_DATA "/drawing/obsidian_frame.excalidraw.md"), file));
+        QVERIFY(drawingExportOf(file).isEmpty());
+        const QSize own = localDrawingSize(file);
+        QVERIFY(own.width() >= 400 && own.height() >= 300); // the frame's box (400 × 300) and margins
+        QFile svg(dir.filePath(u"Ramka.excalidraw.svg"_s));
+        QVERIFY(svg.open(QIODevice::WriteOnly));
+        svg.write("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"480\"/>");
+        svg.close();
+        QCOMPARE(drawingExportOf(file), svg.fileName());
+        QCOMPARE(localDrawingSize(file), QSize(640, 480));
+        QVERIFY(QFile::remove(svg.fileName()));
+        QCOMPARE(localDrawingSize(file), own);
+        // "Ramka.png" (the plugin's other naming), only for .md files.
+        QImage png(30, 20, QImage::Format_RGB32);
+        png.fill(Qt::white);
+        QVERIFY(png.save(dir.filePath(u"Ramka.png"_s)));
+        QCOMPARE(drawingExportOf(file), dir.filePath(u"Ramka.png"_s));
+        QCOMPARE(localDrawingSize(file), QSize(30, 20));
+        QVERIFY(drawingExportOf(dir.filePath(u"Ramka.excalidraw"_s)).isEmpty());
+        // An editable drawing is drawn by Brulion: no export stands in.
+        const QString editable = dir.filePath(u"Szkic.excalidraw.md"_s);
+        QVERIFY(QFile::copy(QStringLiteral(BRULION_TEST_DATA "/drawing/obsidian_freedraw.excalidraw.md"), editable));
+        QVERIFY(png.save(dir.filePath(u"Szkic.png"_s)));
+        QVERIFY(localDrawingSize(editable) != QSize(30, 20));
     }
 
     void pictureFormatNames_data()

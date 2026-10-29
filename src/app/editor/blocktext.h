@@ -165,7 +165,12 @@ struct Embed {
 };
 /// Attachment embeds of a body (embeds of pages and blocks are not included); Markdown pictures
 /// with another URL scheme than http(s) (`![x](ftp://…)`, `data:`) are none — they stay text.
+/// `![[Szkic.excalidraw.md]]` (an Obsidian Excalidraw plugin drawing) is an attachment embed, not
+/// a page's (`image` false: the editor asks its host whether it is a drawing).
 QList<Embed> embedsOf(QStringView body);
+/// An embed's target names a drawing file by its name (docs/SYNTAX.md §2 "Drawings"): `.svg`,
+/// `.excalidraw` (also a plugin file `x.excalidraw.md` the link resolves to), `.excalidraw.md`.
+bool isDrawingTarget(QStringView target);
 /// True when the body consists of nothing but attachment embeds (and whitespace); with
 /// `transclusions` also page, section and block embeds count (transclusionsOf()).
 bool onlyEmbeds(QStringView body, bool transclusions = false);

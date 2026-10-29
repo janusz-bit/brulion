@@ -469,7 +469,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `trash` | `TrashView` | — |
 | `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled | `section?` |
 | `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
-| `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing attachment ("Drawing editor" below); title: the file's name without `.svg` | `path` |
+| `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path` |
 
 `OnboardingView` is shown before a notebook is open (pick or create a folder, or the sample
 notebook "Przykładowy brulion").
@@ -727,9 +727,12 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   the cursor and a long press selects the word under the finger (a TapHandler on an item above
   the TextEdit, which leaves a finger's taps alone too when it does not select by dragging; the
   system's selection handles take a selection on where the platform has them).
-* Drawings (an SVG with an embedded scene, docs/SYNTAX.md §2 "Drawings"; the embeds' `drawing` and
-  `path`, `EditorHost::isDrawing`): shown at their own size (one scene unit a pixel, never enlarged
-  as other SVGs are) with a pen in the corner; a click opens the drawing editor
+* Drawings (an SVG with an embedded scene, a `.excalidraw` scene, a drawing of Obsidian's Excalidraw
+  plugin — `![[Szkic.excalidraw]]`, `![[Szkic.excalidraw.md]]`, a page embed `![[Plan]]` of a
+  plugin file, not a transclusion then —, docs/SYNTAX.md §2 "Drawings"; the embeds' `drawing` and
+  `path`, `EditorHost::isDrawing`, the size of a scene's preview `EditorHost::drawingSize`): shown
+  at their own size (one scene unit a pixel, never enlarged as other SVGs are) with a pen in the
+  corner; a click opens the drawing editor
   (`PageController.openDrawing`: the page is saved, route `drawing`), so does "Edytuj rysunek" in
   the picture view's bar. "/Rysunek", the touch toolbar's Rysunek and the block menu's "Wstaw
   rysunek" (`BlockEditor.insertDrawing` → `PageController.insertDrawing`: an empty drawing stored as
@@ -1005,9 +1008,20 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
 
 ## Drawing editor (`qml/drawing`, `src/app/drawing`)
 
-Route `drawing` (`{path}`): `DrawingView` on a drawing attachment (docs/SYNTAX.md §2 "Drawings":
-an SVG with an embedded Excalidraw scene, core module `drawing`). For handwritten notes on a
-tablet (lectures, sketches) and diagrams (shapes, arrows, text), on every platform.
+Route `drawing` (`{path}`): `DrawingView` on a drawing file (docs/SYNTAX.md §2 "Drawings": an SVG
+with an embedded Excalidraw scene, a `.excalidraw` scene, a drawing of Obsidian's Excalidraw plugin
+`*.excalidraw.md`; core module `drawing`). For handwritten notes on a tablet (lectures, sketches)
+and diagrams (shapes, arrows, text), on every platform.
+
+* **Files:** each is saved in its own format (`DrawingCanvas.format`: `svg` | `excalidraw` |
+  `excalidrawMd`; `fileBytes()` → core `drawing::writeDrawingFile`): an SVG as Brulion writes it, a
+  `.excalidraw` scene as Excalidraw does, a plugin file with only its `## Drawing` block and the
+  entries of text changed or removed here rewritten — the frontmatter, the back of the card and the
+  plugin's other sections as they were; elements erased here written as deleted ones, so Obsidian,
+  showing the drawing, removes them (after a save the file written is the base of the next:
+  `markSaved`). New drawings are SVGs. A plugin file opened as a page (from the page list, a link,
+  search) is shown as its drawing: `PageView.drawingPage` → the picture view, its "Edytuj rysunek"
+  opens this editor, "Pokaż jako tekst" the plugin's Markdown read-only — never the block editor.
 
 * **The paper** (`DrawingCanvas`, a `QQuickPaintedItem`): the file's paper
   (`appState.viewBackgroundColor`, white), plain, lined (32 px) or squared (24 px), endless in every
@@ -1133,7 +1147,9 @@ tablet (lectures, sketches) and diagrams (shapes, arrows, text), on every platfo
   and saved, with a toast. A gesture in progress goes on and ends on the new version. A version
   Brulion cannot edit any more (a frame or an embedded page added in excalidraw.com) is
   shown as it is; what was drawn here and not saved is written to a new file beside it ("… (to
-  urządzenie).svg", `Workspace.createAttachment`), with a toast naming it. The canvas's own saves
+  urządzenie).svg" — or `.excalidraw`, `.excalidraw.md`: the file's own format —,
+  `Workspace.createAttachment`), with a toast naming it. A plugin file's Markdown is theirs then
+  (their back of the card, their text entries), the merged scene in it. The canvas's own saves
   coming back are recognised (`isKnownFile`). A rename follows the file (the route is applied one
   event-loop turn late, as in PageView); a file deleted while open is never written again ("Rysunku
   … nie ma w notatniku").
@@ -1143,7 +1159,10 @@ tablet (lectures, sketches) and diagrams (shapes, arrows, text), on every platfo
   internetowe z Excalidraw"), an SVG without a scene, a scene that cannot be read, and elements
   farther than 10⁶ units from the origin (`drawing::CoordinateLimit`: the paper's lines and the
   file's size stay bounded; the editor's own elements stay within it). Nothing is written for
-  them. Excalidraw drawings with shapes, arrows, text and pictures are edited (docs/SYNTAX.md §2
+  them. A drawing of Obsidian's Excalidraw plugin with frames or embedded pages says to change it
+  in Obsidian ("ma ramki albo osadzone strony, których Brulion jeszcze nie edytuje"), one in the
+  plugin's oldest form (the scene on one line, no code block: `DrawingCanvas.legacy`) to open it
+  there once. Excalidraw drawings with shapes, arrows, text and pictures are edited (docs/SYNTAX.md §2
   "Elements": drawn clean — the hand-drawn look is kept in the file, not drawn —, text in the
   app's fonts, elbow arrows moved rigidly).
 * **Rendering:** every element is prepared once (`drawingrender.h` `prepare`: its paths from core
@@ -1175,14 +1194,27 @@ tablet (lectures, sketches) and diagrams (shapes, arrows, text), on every platfo
   (`drawing::darkSvg`: the colours of its attributes and style sheets; pasted pictures and colour
   emoji keep theirs; the per-pixel filter `darkImage` only for a file that mapping cannot read) —
   unless it is dark already (its edge darker than mid grey: a "Ciemne" drawing whose scene cannot
-  be read keeps its dark picture). It runs in Qt Quick's image reader thread (the browser: the GUI
-  thread) and only reads the file. A theme switch loads the other URL; `retainWhileLoading` keeps
+  be read keeps its dark picture). A `.excalidraw` scene or a plugin file has no picture of its
+  own: one Brulion draws is rendered so in the frame of its `pictureRect` (the size
+  `editor::localDrawingSize` gives the embeds and the picture view, on the GUI thread, once per
+  version of the file: a 300 KB plugin file of 1500 strokes ~45 ms on the laptop, mostly Qt's JSON
+  parser — `tst_editor_picturesize largeDrawingSizeIsCached`); one it does not draw (frames)
+  shows the plugin's export beside it (`Szkic.excalidraw.svg` / `.png`, `editor::drawingExportOf`)
+  or else its elements with a dashed grey box for each of the others (`drawing::previewDrawing`) —
+  never a blank picture. A `.md` file is read only when it is a plugin drawing. It runs in Qt
+  Quick's image reader thread (the browser: the GUI thread) and only reads the file. A theme switch loads the other URL; `retainWhileLoading` keeps
   the shown picture — and the embed's frame its size — until it is there.
 * View contract: `title`, `editing` (no capture button over the paper), `toolbarDocked` (phones),
   `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
 
 Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, the SVG, the dark
-colours — of another program's SVG too), `tst_drawing_elements` (every kind of element read —
+colours — of another program's SVG too), `tst_drawing_exmd` (LZ-String against lz-string's own
+vectors and the fixture generator's port, malformed and random input; the plugin's files —
+compressed, json, CRLF, commented text, a frame, the oldest form — read, written back with every
+byte around the block kept, deleted elements, text entries following edits — a text only moved,
+recoloured or carried by its shape keeps its Markdown (links, transclusions), also across saves —,
+crafted files read in linear time, the one API of drawing files, the `.excalidraw` layout — type
+first, still a drawing beyond 4 KB), `tst_drawing_elements` (every kind of element read —
 `excalidraw_shapes.*` —, malformed ones normalised or foreign, written back byte for byte, a
 changed one's version, new elements as excalidraw.com reads them, fractional indices, corners,
 arrowheads, hatching, hit tests, the lasso, every edit, undo diffs of random edits, the SVG of
@@ -1198,12 +1230,18 @@ one in the file's own frame, a scene that cannot be read (a dark one kept dark),
 through a QML Image and its other theme loading behind the shown one — and the dark filter per
 pixel; shapes with the mouse, a stylus and fingers, the lasso and moving, the selection's actions,
 text and labels, erasing shapes, painting shapes and text light and dark, Qt SVG drawing them, a
-merge with shapes, text drawn in a worker thread, 600 shapes),
+merge with shapes, text drawn in a worker thread, 600 shapes; plugin files loaded, saved in their
+format, a stroke erased after a save marked deleted, a text's link kept when moved and its edit
+kept in later saves, another device's file merged into theirs, the oldest form and a frame read-only, a `.excalidraw` saved as one; the previews of plugin files and
+the plugin's export standing in),
 `tst_drawing_qml` (the route and its notices, the background menu, a drawing of shapes with the
 shapes' menu and everything selected, a frame read-only, embeds and the picture view in the real
-app, light and dark; nothing written by looking), `tst_editor_controller`
+app, Obsidian Excalidraw plugin drawings — editable, a frame, the oldest form, opened as a page,
+embedded three ways —, light and dark; nothing written by looking), `tst_editor_picturesize`
+(`drawingFiles`, `drawingSizeFollowsTheFile`, `drawingExportsStandIn`), `tst_editor_blocktext`
+(`drawingEmbeds`), `tst_editor_controller`
 (`drawingSlashCommand`, `drawingEmbedsFollowTheirFile`), `tst_shell_workspace_pictures`
-(`drawingsAreSavedAndShownAgain`), the shell's self-test (`tst_shell_qml`, `_capture`: opened from
+(`drawingsAreSavedAndShownAgain`, `excalidrawMarkdownIsADrawing`), the shell's self-test (`tst_shell_qml`, `_capture`: opened from
 its embed, drawn with a finger / the mouse, saved, undone; the embed in the app's other theme;
 the embed of a drawing whose file names another frame (excalidraw.com's margins) keeping its size
 when loaded and while the app's theme switches;
@@ -2042,8 +2080,9 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
   journal stream (`journals-editing-keyboard`) and quick capture's sheet (`capture-keyboard`).
 * `tests/app/drawing/screenshots.sh` — the drawing editor (`editor`: a page of handwritten notes on
   lined paper, written by `tst_drawingcanvas handwritingSample`), the page embedding it (`page`), its
-  picture view with "Edytuj rysunek" (`picture`), an Excalidraw drawing with text (`readonly`) and
-  a new drawing (`new`).
+  picture view with "Edytuj rysunek" (`picture`), an Excalidraw drawing with text (`readonly`),
+  a new drawing (`new`) and drawings of Obsidian's Excalidraw plugin (`obsidian` in the editor,
+  `obsidianpage` opened as a page, `obsidianframe` with a frame: read-only).
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
   `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center and
   import/export with prepared notebooks; the io script also seeds a sync history and an earlier

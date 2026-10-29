@@ -17,11 +17,11 @@ endif()
 
 # The drawing editor in the real app (qml-smoke.sh): the route on a drawing, a read-only Excalidraw
 # drawing, a picture, a missing and a new file, the background menu, the embeds and the picture
-# view, desktop and phone, light and dark; QML warnings from those files fail it, and so does any
-# file written by only looking.
+# view, drawings of Obsidian's Excalidraw plugin, desktop and phone, light and dark; QML warnings
+# from those files fail it, and so does any file written by only looking.
 # Not on Windows: qml-smoke.sh is a bash script.
 if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND NOT WIN32 AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
-    math(EXPR _drawing_qml_timeout "360 + 20 * ${BRULION_TEST_SLOWDOWN}")
+    math(EXPR _drawing_qml_timeout "480 + 25 * ${BRULION_TEST_SLOWDOWN}")
     add_test(NAME tst_drawing_qml
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/qml-smoke.sh $<TARGET_FILE:brulion> ${CMAKE_CURRENT_BINARY_DIR}/qml-smoke
                 ${PROJECT_SOURCE_DIR}/tests/data/drawing)

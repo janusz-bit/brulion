@@ -4,7 +4,9 @@ import QtQuick.Layouts
 import Brulion
 
 // DrawingView — route "drawing" ({path}): the drawing editor (docs/UI.md "Drawing editor") on a
-// drawing attachment (docs/SYNTAX.md §2 "Drawings": an SVG with an embedded Excalidraw scene).
+// drawing attachment (docs/SYNTAX.md §2 "Drawings": an SVG with an embedded Excalidraw scene, a
+// `.excalidraw` scene, an Obsidian Excalidraw plugin file `*.excalidraw.md` — each saved in its
+// own format: DrawingCanvas.fileBytes).
 //
 //  * The paper (DrawingCanvas: a stylus works the tool with its pressure, its eraser end erases; a
 //    mouse works it; one finger works it or moves the paper — "Rysuj palcem", on by default until
@@ -30,10 +32,12 @@ import Brulion
 //    and saved; the canvas's own saves coming back are recognised (isKnownFile). Every save
 //    first reads the file: a change not reported yet is taken in the same way, never written
 //    over. A version Brulion cannot edit (frames, embedded pages) is shown as it is; what was drawn
-//    here and not saved is kept in a new file beside it ("… (to urządzenie).svg").
+//    here and not saved is kept in a new file beside it ("… (to urządzenie).svg", in the file's own
+//    format and extension).
 //  * A file Brulion cannot edit is shown as the picture it is, with why: an Excalidraw drawing
-//    with frames or embedded web pages ("readonly"), a picture without a scene, a scene that
-//    cannot be read; a missing file says so. Renames follow the file (the route applied one event-loop turn late, as
+//    with frames or embedded web pages ("readonly"; one of Obsidian's Excalidraw plugin says to
+//    change it in Obsidian, one in the plugin's oldest form to open it there once), a picture
+//    without a scene, a scene that cannot be read; a missing file says so. Renames follow the file (the route applied one event-loop turn late, as
 //    in PageView); a deleted file is never written again.
 //  * The paper is light or dark as the drawing chooses ("Tło rysunku": as the app — the default —,
 //    light, dark; DrawingCanvas.theme, saved in the file, an undo step) and follows the app's
@@ -59,7 +63,15 @@ FocusScope {
         const i = root.loadedPath.lastIndexOf("/")
         return i < 0 ? root.loadedPath : root.loadedPath.slice(i + 1)
     }
-    readonly property string title: root.fileName.replace(/\.svg$/i, "")
+    /// The drawing file's extension as written (".svg", ".excalidraw", ".excalidraw.md"; the title
+    /// goes without it, a kept copy gets it).
+    readonly property string extension: {
+        const m = /(\.excalidraw\.md|\.excalidraw|\.svg|\.md)$/i.exec(root.fileName)
+        return m ? m[1] : ".svg"
+    }
+    readonly property string title: root.fileName.endsWith(root.extension)
+                                    ? root.fileName.slice(0, root.fileName.length - root.extension.length)
+                                    : root.fileName
     readonly property bool editing: true
     readonly property bool toolbarDocked: Theme.narrow && root.status === ""
     readonly property bool replacesBottomNav: toolbarDocked
@@ -138,7 +150,7 @@ FocusScope {
             if (disk.byteLength > 0 && !canvas.isKnownFile(disk) && !root.takeIn(disk))
                 return true // shown as it is now; what was drawn here kept in a copy beside it
         }
-        const bytes = canvas.svg()
+        const bytes = canvas.fileBytes()
         // The vault reports the write at once (Workspace.fileChanged, below): that is this save,
         // not another device's change to merge.
         root._writing = true
@@ -170,12 +182,13 @@ FocusScope {
         return false
     }
 
-    /// What was drawn here, written beside the drawing as a new file ("Rysunek (to urządzenie).svg").
+    /// What was drawn here, written beside the drawing as a new file in its format ("Rysunek (to
+    /// urządzenie).svg", "Szkic (to urządzenie).excalidraw.md").
     function keepCopy() {
         const slash = root.loadedPath.lastIndexOf("/")
         const folder = slash < 0 ? "" : root.loadedPath.slice(0, slash + 1)
-        const path = Workspace.createAttachment(folder + qsTr("%1 (this device)").arg(root.title) + ".svg",
-                                                canvas.svg())
+        const path = Workspace.createAttachment(folder + qsTr("%1 (this device)").arg(root.title) + root.extension,
+                                                canvas.fileBytes())
         if (path !== "")
             AppController.toast(qsTr("The drawing was changed elsewhere into one Brulion cannot edit. What you drew here is kept in %1").arg(path.slice(path.lastIndexOf("/") + 1)))
     }
@@ -520,6 +533,10 @@ FocusScope {
                         text: {
                             switch (root.status) {
                             case "readonly":
+                                if (canvas.legacy)
+                                    return qsTr("This drawing is in an old format of Obsidian's Excalidraw plugin. Open it once in Obsidian to update it; Brulion shows it as it is.")
+                                if (canvas.format === "excalidrawMd")
+                                    return qsTr("This drawing from Obsidian's Excalidraw plugin has frames or embedded pages, which Brulion does not edit yet. Change it in Obsidian; Brulion shows it as it is.")
                                 return qsTr("This drawing has frames or embedded web pages from Excalidraw, which Brulion does not edit. Open the file in excalidraw.com to change it.")
                             case "notDrawing":
                                 return qsTr("This picture is not a drawing: it can only be viewed.")

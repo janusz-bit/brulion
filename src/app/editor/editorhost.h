@@ -136,12 +136,22 @@ public:
     /// embeds name a format it cannot show (WebP, AVIF without Qt's image plugins) instead of
     /// failing to load it. Hosts (tests) may say less.
     virtual bool canDecodePicture(const QString &path) const { return editor::canDecodePictureFormat(path); }
-    /// The attachment at `path` is a drawing (an SVG with an embedded scene, docs/SYNTAX.md §2):
-    /// its embed opens the drawing editor. Default: assetUrl()'s local file, read by its start.
+    /// The file at `path` is a drawing (docs/SYNTAX.md §2 "Drawings": an SVG with an embedded
+    /// scene, a `.excalidraw` scene, an Obsidian Excalidraw plugin file `*.excalidraw.md`): its
+    /// embed shows its preview (drawingUrl()) and opens the drawing editor. Default: assetUrl()'s
+    /// local file, read by its start.
     virtual bool isDrawing(const QString &path) const
     {
         const QUrl url = assetUrl(path);
         return url.isLocalFile() && editor::localFileIsDrawing(url.toLocalFile());
+    }
+    /// The size of the preview of a `.excalidraw` or plugin drawing (an SVG drawing has its root's
+    /// size, assetPixelSize() / picturesize.h): what drawingUrl()'s picture is drawn at. Default:
+    /// assetUrl()'s local file (editor::localDrawingSize); invalid when unknown.
+    virtual QSize drawingSize(const QString &path) const
+    {
+        const QUrl url = assetUrl(path);
+        return url.isLocalFile() ? editor::localDrawingSize(url.toLocalFile()) : QSize();
     }
     /// Store pasted/dropped bytes in the attachments folder; returns the new vault path.
     virtual QString saveAttachment(const QString &fileName, const QByteArray &data) = 0;

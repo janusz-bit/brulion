@@ -74,7 +74,7 @@ Nie trzeba niczego zapisywać: Brulion zapisuje rysunek chwilę po każdej linii
 
 Gdy ten sam rysunek zmieni się na innym urządzeniu (Syncthing, Nextcloud) w czasie, gdy go rysujesz, Brulion łączy obie wersje: zostaje to, co dorysowano tu i tam, przesunięte albo zmienione tutaj ma pierwszeństwo, a znika to, co zostało starte. Linia, którą właśnie rysujesz, też zostaje.
 
-Jeśli na innym urządzeniu ktoś doda do rysunku w excalidraw.com ramkę albo osadzoną stronę internetową, Brulion pokaże tę wersję tak, jak jest, a to, co narysowano tutaj i czego jeszcze nie zapisał, zapisze obok w nowym pliku „… (to urządzenie).svg”.
+Jeśli na innym urządzeniu ktoś doda do rysunku w excalidraw.com ramkę albo osadzoną stronę internetową, Brulion pokaże tę wersję tak, jak jest, a to, co narysowano tutaj i czego jeszcze nie zapisał, zapisze obok w nowym pliku „… (to urządzenie).svg” (albo `.excalidraw`, `.excalidraw.md` — w formacie rysunku).
 
 ## Rysunki i inne programy
 Plik rysunku to obraz SVG z ukrytą w środku sceną Excalidraw:
@@ -83,4 +83,16 @@ Plik rysunku to obraz SVG z ukrytą w środku sceną Excalidraw:
 - rysunek z Excalidraw wyeksportowany jako SVG z opcją **Embed scene** Brulion też otworzy i możesz go dalej edytować: pismo odręczne, kształty, strzałki, tekst i wklejone obrazy. Brulion rysuje je gładko — „ręczny” wygląd z Excalidraw zostaje w pliku, ale w Brulionie kreski są proste — a tekst pokazuje swoją czcionką, więc może wyjść odrobinę poza swoje pole. Strzałek łamanych Brulion nie układa na nowo, tylko przesuwa;
 - rysunek z **ramkami** albo **osadzonymi stronami internetowymi** Brulion tylko pokaże (zmienisz go w excalidraw.com), żeby niczego nie zgubić. W ciemnym motywie taki rysunek też ciemnieje, jak w ciemnym trybie Excalidraw, a wklejone do niego zdjęcia i emoji zachowują swoje kolory.
 
-Pliki `*.excalidraw.md` wtyczki Excalidraw dla Obsidiana zostają zwykłymi notatkami. Zobacz też [[Format plików|Format plików]] i [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]].
+Pliki **`.excalidraw`** (excalidraw.com: „Save to disk”, wtyczki Excalidraw dla Logseq i Obsidiana w trybie zgodności) Brulion też otwiera i edytuje — zapisuje je dalej jako `.excalidraw`.
+
+## Rysunki z Obsidiana (Excalidraw)
+Rysunki wtyczki **Excalidraw dla Obsidiana** to pliki `*.excalidraw.md` (na przykład `Rysunek 2026-10-28 14.32.05.excalidraw.md`) — notatki, których nagłówek (frontmatter) ma klucz `excalidraw-plugin`. Brulion rozpoznaje je po tym kluczu, także gdy nazwa nie kończy się na `.excalidraw.md`.
+- **W notatce** pokazują się jako rysunek: `![[Rysunek.excalidraw]]`, `![[Rysunek.excalidraw.md]]`, a także `![[Rysunek]]`, gdy ta strona jest rysunkiem. Kliknięcie otwiera edytor rysunków.
+- **Z listy stron, linku albo wyszukiwania** taki plik otwiera się jako obraz rysunku z przyciskiem „Edytuj rysunek”. „Pokaż jako tekst” pokazuje jego Markdown (tylko do czytania) — notatek „z tyłu” rysunku nie edytuje się w Brulionie, tylko w Obsidianie.
+- **Edycja:** pismo odręczne, kształty, strzałki, tekst i zaznaczanie działają tak samo jak w rysunkach Brulionu.
+- **Zapis w tym samym formacie:** Brulion zmienia tylko blok `## Drawing` ze sceną (skompresowany — `compressed-json` — zostaje skompresowany, `json` zostaje JSON-em) i wpisy w „Text Elements” tekstów, które zmieniłeś albo usunąłeś (tekst tylko przesunięty, przekolorowany albo przeniesiony razem z kształtem zachowuje swoje linki). Frontmatter, notatki z tyłu rysunku, linki elementów („Element Links”), osadzone pliki („Embedded Files”) i znaczniki `%%` zostają bajt w bajt. Obsidian otworzy rysunek dalej, a to, co starłeś w Brulionie, zniknie też w Obsidianie, nawet jeśli ma ten rysunek otwarty.
+- **Ograniczenia:** obrazy wklejone w Obsidianie (z sekcji „Embedded Files”) Brulion pokazuje jako szare prostokąty — można je przesuwać i usuwać. Link w tekście zmienionym w Brulionie staje się zwykłym tekstem. Rysunek z **ramkami** albo **osadzonymi stronami** Brulion tylko pokazuje (zmienisz go w Obsidianie); jego podglądem jest eksport wtyczki obok (`Rysunek.excalidraw.svg` albo `.png`), a gdy go nie ma — rysunek z przerywanymi ramkami w miejscu tych elementów. Rysunek w bardzo starym formacie wtyczki (bez bloku kodu) wystarczy raz otworzyć w Obsidianie.
+- **Synchronizacja:** gdy taki rysunek zmieni się na dwóch urządzeniach naraz, Nextcloud zachowa obie wersje (kopię konfliktu), nigdy nie skleja ich wiersz po wierszu. Gdy rysunek jest otwarty w Brulionie, wersja z innego urządzenia łączy się z twoją kreska po kresce, jak w rysunkach Brulionu.
+- Nowe rysunki Brulion tworzy zawsze jako SVG.
+
+Zobacz też [[Format plików|Format plików]] i [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]].

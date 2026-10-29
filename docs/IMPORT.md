@@ -102,15 +102,25 @@ folderach się pojawiają albo znikają (np. z synchronizacji na nowym urządzen
   używaj *Kopiuj link do bloku* — `[[Strona#^id]]` działa w obu.
 * Przypomnienia `⏰ …`, bloki kodu `calc` i `query` oraz formuły w tabelach to składnia
   Brulionu — Obsidian pokaże je jako tekst albo blok kodu. W drugą stronę: zapytania Dataview
-  i pliki innych wtyczek (np. rysunki Excalidraw `*.excalidraw.md`) Brulion pokaże jako zwykły
-  tekst lub stronę; pliki `.canvas` nie są stronami.
+  i pliki innych wtyczek Brulion pokaże jako zwykły tekst lub stronę (wyjątek: rysunki
+  Excalidraw, niżej); pliki `.canvas` nie są stronami.
 * **Rysunki** Brulionu (`/Rysunek`) to pliki SVG z wbudowaną sceną Excalidraw: Obsidian pokazuje
   je jako obrazy, a excalidraw.com otwiera do edycji. Rysunek z Excalidraw zapisany jako SVG
   z opcją *Embed scene* („Osadź scenę”) Brulion otwiera w edytorze rysunków — pismo odręczne,
   kształty, strzałki, tekst i obrazy zmienia, a rysunek z ramkami albo osadzonymi stronami
-  internetowymi tylko pokazuje. Pliki
-  `*.excalidraw.md` wtyczki Excalidraw dla Obsidiana zostają tekstem (docs/SYNTAX.md §2
-  „Drawings”).
+  internetowymi tylko pokazuje.
+* **Rysunki wtyczki Excalidraw dla Obsidiana** (`Rysunek 2026-10-28 14.32.05.excalidraw.md` —
+  każdy plik `.md` z kluczem `excalidraw-plugin` we frontmatterze) Brulion pokazuje jako rysunki:
+  w notatkach (`![[Rysunek.excalidraw]]`, `![[Rysunek.excalidraw.md]]`, `![[Rysunek]]`), po
+  otwarciu z listy stron (widok obrazu z „Edytuj rysunek”) i w edytorze rysunków. Zapisuje je
+  w tym samym formacie (scena w bloku `## Drawing`: `compressed-json` — LZ-String — albo `json`),
+  zmieniając tylko ten blok i wpisy tekstów zmienionych lub usuniętych w Brulionie; frontmatter,
+  notatki „z tyłu” rysunku, linki elementów i osadzone pliki zostają bajt w bajt — Obsidian
+  otworzy rysunek dalej. Pliki `.excalidraw` też się edytuje. Ograniczenia: obrazy z sekcji
+  „Embedded Files” (wklejone w Obsidianie) widać jako szare prostokąty; link w tekście zmienionym
+  w Brulionie staje się zwykłym tekstem; rysunek z ramkami albo osadzonymi stronami tylko się
+  ogląda (jego podgląd to eksport wtyczki obok, jeśli jest); nowe rysunki Brulion tworzy jako SVG
+  (docs/SYNTAX.md §2 „Drawings”).
 * **Ulubione** (zakładki Obsidiana z `.obsidian/bookmarks.json` nie są czytane) i **zwinięcia
   bloków** Brulion pamięta na urządzeniu, nie w plikach.
 

@@ -74,9 +74,14 @@ FocusScope {
     readonly property alias editor: editor
 
     readonly property string routePath: route && route.path ? route.path : ""
+    /// A drawing of Obsidian's Excalidraw plugin (`Szkic.excalidraw.md`, a note whose frontmatter
+    /// has `excalidraw-plugin`) or a `.excalidraw` scene: shown as its drawing, never in the block
+    /// editor (its Markdown is the plugin's; "Edytuj rysunek" opens the drawing editor).
+    readonly property bool drawingPage: /\.(md|excalidraw)$/i.test(root.routePath) && Workspace.isDrawing(root.routePath)
     /// A picture attachment opens as a picture (its bytes are not a note, the editor never loads
-    /// them); the file read as text, read-only, when asked for ("Pokaż jako tekst", Ctrl+E).
-    readonly property bool pictureRoute: Workspace.isPicture(root.routePath)
+    /// them), a drawing page as its drawing; the file read as text, read-only, when asked for
+    /// ("Pokaż jako tekst", Ctrl+E).
+    readonly property bool pictureRoute: Workspace.isPicture(root.routePath) || root.drawingPage
     property bool pictureAsText: false
     property string _revealed: ""
     property string _opened: ""

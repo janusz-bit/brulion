@@ -421,8 +421,12 @@ void BlockListModel::ensureTransclusions(int row) const
     if (list.isEmpty())
         return;
     Builder builder(*this, m_host, m_doc, m_path);
-    for (const Transclusion &t : list)
+    for (const Transclusion &t : list) {
+        // (A page that is an Obsidian Excalidraw plugin drawing is an embed of its drawing.)
+        if (!drawingPageOf(t).isEmpty())
+            continue;
         st.transclusions.append(builder.build(t));
+    }
     st.transclusionsLocal = builder.usedOwnPage();
 }
 
