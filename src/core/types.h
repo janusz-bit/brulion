@@ -110,7 +110,11 @@ struct Heading {
     int line = 0;
 };
 
-using Properties = QHash<QString, QVariant>;  ///< QString or QStringList values
+/// Page or block properties: lower-case key -> QString or QStringList (frontmatter values may be
+/// other QVariants). A QMap (= QVariantMap): most blocks with properties have one or two
+/// (`collapsed::`, a Logseq `id::`, a callout's type), and a QHash allocated ~2.9 KB on its first
+/// insert (docs/PERFORMANCE.md, L8). Iteration is by key (deterministic), not as written.
+using Properties = QMap<QString, QVariant>;
 
 /// An optional value on the heap, shared by copies until one of them changes it (copy on
 /// write), read like std::optional. Block::task: most blocks are no tasks, and an in-place
