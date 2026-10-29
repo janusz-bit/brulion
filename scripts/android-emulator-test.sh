@@ -30,13 +30,16 @@
 # Kopiuj ("Skopiowano 2 bloki"), Back.
 # Screenshots of each step (sel-*.png); the same debuggable APK.
 # With --folders instead: folders, links and tags with a real finger — a tap on a #tag in the
-# journal opens its page (not created by looking at it) and Back returns; the editing toolbar's
-# "Więcej" opens the block menu, "Kopiuj odnośnik" copies a reference to the block (its id written
-# into the note, the copy pasted back into another block with Ctrl+V on Android 13+); the
-# drawer's "Strony" header "+" makes a folder (its name typed on the keyboard, "Utwórz" tapped
-# while the keyboard still composes the word); a page's "⋯" in the folder tree → "Przenieś do…"
-# (the bottom sheet, the folder searched for, what the move rewrites) moves it there, and the
-# files say so: the page in its new folder, the query filter naming its old folder rewritten.
+# journal opens its page (not created by looking at it; the drawer opened on it shows the page's
+# row in the tree, within the list's view) and Back returns; the editing toolbar's "Więcej" opens
+# the block menu, "Kopiuj odnośnik" copies a reference to the block (its id written into the
+# note, the copy pasted back into another block with Ctrl+V on Android 13+); the drawer's
+# "Strony" header "+" makes a folder (its name typed on the keyboard, "Utwórz" tapped while the
+# keyboard still composes the word; the drawer shows it above its sync footer); a page's "⋯" in
+# the folder tree → "Przenieś do…" (the bottom sheet, the folder searched for, what the move
+# rewrites) moves it there, and the files say so: the page in its new folder, the query filter
+# naming its old folder rewritten. Rows of the drawer are dragged into its view before a tap
+# (drawer_tap).
 # Screenshots of each step (fl-*.png); the same debuggable APK.
 # With --share instead: "Udostępnij → Brulion" (docs/ANDROID.md) — text shared to ShareActivity
 # while the app runs (the share dialog, "Zapisz": a block of today's journal, no date parsing), a

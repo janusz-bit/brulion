@@ -195,7 +195,16 @@ rename and move").
   note is revealed (its folders opened, scrolled into view) and highlighted on every route
   change — the "+" menu's "Pokazuj otwartą stronę" (`ui/sidebar/revealCurrent`, on by default)
   turns that off; a collapsed "Strony" stays collapsed (revealed when opened again), only "Pokaż
-  w drzewie" opens it. "Strony" counts pages without the daily notes.
+  w drzewie" opens it. "Strony" counts pages without the daily notes. The revealed row (also a
+  new folder's, "Pokaż w drzewie"'s) stays wholly in the list's visible part, above the sync
+  footer: `ShellSidebar.revealedPath` is placed again (`placeList()`: the top unless the user
+  scrolled, then the row with the least scrolling) whenever the list's or its header's height
+  changes or the sidebar shows, until the user flicks the list, drags its scroll bar or a row,
+  or a route shows no file. A closed drawer lays itself out only as it opens (Qt's system-bar
+  padding of the popup, a keyboard that goes meanwhile, Recent grown): a row placed earlier
+  ended up under the footer on Android, where a tap opened the sync center (the shell
+  self-test's `checkFolders` makes the window shorter while the drawer is closed to check it;
+  `scripts/android-emulator-test.sh --folders` checks it with a real finger).
 * **Menus**: right-click, press-and-hold, the Menu key, and on touch screens a "⋯" button on
   every row (44 px; press-and-hold stays). A folder: Nowa strona tutaj, Nowy folder…, Pokaż
   strony folderu (All pages in it), Szukaj w folderze (search in it), Przenieś do…, Eksportuj
