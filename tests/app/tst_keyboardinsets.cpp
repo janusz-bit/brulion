@@ -92,6 +92,10 @@ private Q_SLOTS:
     void platformWinsOverInputMethod();
     void simulatedWinsOverEverything();
     void slideFrameByFrame();
+    void simulatedSlideDown();
+    void slidesOverBySource_data();
+    void slidesOverBySource();
+    void slidesOverFollowsTheSource();
     void signalsOnlyOnChange();
     void clampedToTheWindow();
     void malformedPlatformValues_data();
@@ -758,6 +762,131 @@ void TestKeyboardInsets::slideFrameByFrame()
     QVERIFY(!platform.shown());
     platform.setPlatformState(0, false, false);
     QCOMPARE(platform.overlap(), 0.0);
+}
+
+void TestKeyboardInsets::simulatedSlideDown()
+{
+    // A simulated keyboard going away frame by frame (`hiding`): `shown` is false from the first
+    // frame on, while `overlap` still follows it down — as Android reports a slide down.
+    KeyboardInsets insets;
+    insets.simulate(320, false);
+    QVERIFY(insets.shown());
+    QSignalSpy overlap(&insets, &KeyboardInsets::overlapChanged);
+    QSignalSpy shown(&insets, &KeyboardInsets::shownChanged);
+    QSignalSpy animating(&insets, &KeyboardInsets::animatingChanged);
+    for (const qreal frame : {300.0, 200.0, 40.0}) {
+        insets.simulate(frame, true, true);
+        QCOMPARE(insets.overlap(), frame);
+        QVERIFY(!insets.shown());
+        QVERIFY(insets.animating());
+    }
+    insets.simulate(40, true, true); // the same frame again: no change
+    insets.simulate(0, false);
+    QCOMPARE(insets.overlap(), 0.0);
+    QVERIFY(!insets.shown());
+    QVERIFY(!insets.animating());
+    QCOMPARE(overlap.count(), 4);   // 300, 200, 40, 0
+    QCOMPARE(shown.count(), 1);     // off at the first frame
+    QCOMPARE(animating.count(), 2); // on, off
+    // `hiding` counts only while the keyboard slides: a settled one is up.
+    insets.simulate(250, false, true);
+    QVERIFY(insets.shown());
+    QVERIFY(!insets.animating());
+    // Coming up again: shown from its first frame.
+    insets.simulate(0, false);
+    insets.simulate(30, true);
+    QVERIFY(insets.shown());
+    insets.simulate(30, true, true); // turned back half way
+    QVERIFY(!insets.shown());
+    QCOMPARE(insets.overlap(), 30.0);
+    // Off, or a malformed height: nothing is hiding.
+    insets.simulate(-1, true, true);
+    QVERIFY(!insets.shown());
+    QVERIFY(!insets.animating());
+    insets.simulate(kNaN, true, true);
+    QCOMPARE(insets.simulated(), -1.0);
+    QVERIFY(!insets.animating());
+}
+
+void TestKeyboardInsets::slidesOverBySource_data()
+{
+    // How the latest values came: [the source's setup] → slidesOver.
+    QTest::addColumn<QString>("how");
+    QTest::addColumn<bool>("slides");
+    QTest::newRow("nic") << u"none"_s << false;
+    QTest::newRow("prostokąt Qt (metoda wprowadzania)") << u"inputMethod"_s << false;
+    QTest::newRow("Android, klatki wysuwania") << u"android"_s << true;
+    QTest::newRow("Android 9–10: okno zmniejszone (0, bez klatek)") << u"androidResized"_s << true;
+    QTest::newRow("przeglądarka, resizes-content") << u"browserContent"_s << false;
+    QTest::newRow("przeglądarka, resizes-visual") << u"browserVisual"_s << false;
+    QTest::newRow("przeglądarka, odczyt błędny (NaN)") << u"browserMalformed"_s << false;
+    QTest::newRow("udawana klawiatura") << u"simulated"_s << true;
+    QTest::newRow("udawana klawiatura o wysokości 0") << u"simulatedZero"_s << true;
+    QTest::newRow("udawana klawiatura wyłączona po Androidzie") << u"simulatedOffAndroid"_s << true;
+    QTest::newRow("udawana klawiatura wyłączona po przeglądarce") << u"simulatedOffBrowser"_s << false;
+}
+
+void TestKeyboardInsets::slidesOverBySource()
+{
+    QFETCH(QString, how);
+    QFETCH(bool, slides);
+    KeyboardInsets insets;
+    insets.setWindowHeight(780);
+    if (how == u"inputMethod") {
+        insets.setInputMethodState(300, true);
+    } else if (how == u"android") {
+        insets.setPlatformState(120, true, true);
+    } else if (how == u"androidResized") {
+        insets.setPlatformState(0, true, false);
+    } else if (how == u"browserContent") {
+        insets.setViewportSample(sample(412, 780, 780, 0, 780, true, false));
+        insets.setViewportSample(sample(412, 480, 480, 0, 480, true, true, false));
+        QVERIFY(insets.shown());
+        QVERIFY(insets.animating());
+        QCOMPARE(insets.overlap(), 0.0);
+    } else if (how == u"browserVisual") {
+        insets.setViewportSample(sample(412, 780, 600, 0, 780, true, true, false, u"visual"_s));
+        QCOMPARE(insets.overlap(), 180.0);
+    } else if (how == u"browserMalformed") {
+        insets.setViewportSample(sample(412, 780, kNaN, 0, 780, true, true, true, u"visual"_s));
+    } else if (how == u"simulated") {
+        insets.simulate(100, true);
+    } else if (how == u"simulatedZero") {
+        insets.setSimulated(0);
+    } else if (how == u"simulatedOffAndroid") {
+        insets.setPlatformState(0, false, false);
+        insets.setSimulated(300);
+        insets.setSimulated(-1);
+    } else if (how == u"simulatedOffBrowser") {
+        insets.setViewportSample(sample(412, 780, 780, 0, 780, true, false));
+        insets.setSimulated(300);
+        insets.setSimulated(-1);
+    }
+    QCOMPARE(insets.slidesOver(), slides);
+}
+
+void TestKeyboardInsets::slidesOverFollowsTheSource()
+{
+    KeyboardInsets insets;
+    QSignalSpy spy(&insets, &KeyboardInsets::slidesOverChanged);
+    QVERIFY(!insets.slidesOver());
+    insets.setInputMethodState(300, true);
+    QCOMPARE(spy.count(), 0);
+    insets.setPlatformState(0, false, false); // Android reports
+    QVERIFY(insets.slidesOver());
+    insets.setPlatformState(200, true, true);
+    QCOMPARE(spy.count(), 1);
+    insets.setViewportSample(sample(412, 780, 780, 0, 780, true, false)); // then the browser
+    QVERIFY(!insets.slidesOver());
+    QCOMPARE(spy.count(), 2);
+    insets.setSimulated(300); // a simulated keyboard wins
+    QVERIFY(insets.slidesOver());
+    QCOMPARE(spy.count(), 3);
+    insets.setViewportSample(sample(412, 480, 480, 0, 480, true, true, true));
+    QVERIFY(insets.slidesOver());
+    insets.setSimulated(-1);
+    QVERIFY(!insets.slidesOver());
+    QCOMPARE(spy.count(), 4);
 }
 
 void TestKeyboardInsets::signalsOnlyOnChange()

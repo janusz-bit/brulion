@@ -170,15 +170,17 @@ void KeyboardInsets::setSimulated(qreal overlap)
     simulate(overlap, false);
 }
 
-void KeyboardInsets::simulate(qreal overlap, bool animating)
+void KeyboardInsets::simulate(qreal overlap, bool animating, bool hiding)
 {
     const qreal value = finite(overlap) && overlap >= 0 ? overlap : -1;
     const bool moving = value >= 0 && animating;
-    if (value == m_simulated && moving == m_simulatedAnimating)
+    const bool going = moving && hiding;
+    if (value == m_simulated && moving == m_simulatedAnimating && going == m_simulatedHiding)
         return;
     const bool changed = value != m_simulated;
     m_simulated = value;
     m_simulatedAnimating = moving;
+    m_simulatedHiding = going;
     if (changed)
         Q_EMIT simulatedChanged();
     update();
@@ -187,6 +189,7 @@ void KeyboardInsets::simulate(qreal overlap, bool animating)
 void KeyboardInsets::setPlatformState(qreal overlap, bool shown, bool animating)
 {
     m_hasViewportSample = false;
+    m_platformSlides = true;
     applyPlatform(overlap, shown, animating, QString());
 }
 
@@ -194,6 +197,7 @@ void KeyboardInsets::setViewportSample(const ViewportSample &sample)
 {
     m_viewportSample = sample;
     m_hasViewportSample = true;
+    m_platformSlides = false;
     const ViewportKeyboard::State state = m_viewportKeyboard.update(sample, m_windowHeight);
     applyPlatform(state.overlap, state.shown, state.animating,
                   sample.mode.isEmpty() ? u"browser"_s : u"browser, interactive-widget=resizes-%1"_s.arg(sample.mode));
@@ -248,12 +252,15 @@ void KeyboardInsets::update()
 {
     State next;
     Source source = Source::None;
+    bool slides = false;
     if (m_simulated >= 0) {
-        next = {clampOverlap(m_simulated), m_simulated > 0, m_simulatedAnimating};
+        next = {clampOverlap(m_simulated), m_simulated > 0 && !m_simulatedHiding, m_simulatedAnimating};
         source = Source::Simulated;
+        slides = true;
     } else if (m_hasPlatform) {
         next = m_platform;
         source = Source::Platform;
+        slides = m_platformSlides;
     } else if (m_inputMethod.shown || m_inputMethod.overlap > 0) {
         next = m_inputMethod;
         source = Source::InputMethod;
@@ -261,8 +268,10 @@ void KeyboardInsets::update()
 
     const State previous = m_current;
     const Source previousSource = m_source;
+    const bool previousSlides = m_slidesOver;
     m_current = next;
     m_source = source;
+    m_slidesOver = slides;
     if (!qFuzzyCompare(1 + previous.overlap, 1 + next.overlap))
         Q_EMIT overlapChanged();
     if (previous.shown != next.shown)
@@ -271,6 +280,8 @@ void KeyboardInsets::update()
         Q_EMIT animatingChanged();
     if (previousSource != source)
         Q_EMIT sourceChanged();
+    if (previousSlides != slides)
+        Q_EMIT slidesOverChanged();
 
     // The log: settled values only (a slide reports every frame).
     if (!next.animating && (std::abs(next.overlap - m_loggedOverlap) >= 1 || next.shown != m_loggedShown)) {

@@ -109,6 +109,13 @@ class KeyboardInsets : public QObject {
     /// The keyboard is sliding in or out and `overlap` follows it frame by frame: callers wait
     /// for the end before scrolling a caret into view.
     Q_PROPERTY(bool animating READ animating NOTIFY animatingChanged FINAL)
+    /// The keyboard slides over the window and `overlap` grows with it while it comes up —
+    /// Android's own report (on Android 11+ the window keeps its size and gets every frame), a
+    /// simulated keyboard: what sits at the window's bottom (the phone's bottom navigation) can
+    /// stay until the keyboard covers it. False for the browser (the page is resized for the
+    /// keyboard, or its readings come once they settle: `overlap` 0 while `shown` and
+    /// `animating`) and Qt's input method (no slide reported).
+    Q_PROPERTY(bool slidesOver READ slidesOver NOTIFY slidesOverChanged FINAL)
     /// A simulated keyboard of this height (tests, screenshots: `--keyboard <px>`); -1 = off.
     Q_PROPERTY(qreal simulated READ simulated WRITE setSimulated NOTIFY simulatedChanged FINAL)
     /// Where the values come from: "none", "inputMethod", "platform" or "simulated".
@@ -129,6 +136,7 @@ public:
     qreal overlap() const { return m_current.overlap; }
     bool shown() const { return m_current.shown; }
     bool animating() const { return m_current.animating; }
+    bool slidesOver() const { return m_slidesOver; }
     qreal simulated() const { return m_simulated; }
     Source source() const { return m_source; }
     QString sourceName() const;
@@ -136,8 +144,9 @@ public:
     /// < 0 or not finite: no simulated keyboard (the platform's values again).
     void setSimulated(qreal overlap);
     /// A simulated keyboard of `overlap` px that is still sliding (`animating`) or has settled;
-    /// overlap < 0 turns the simulation off.
-    Q_INVOKABLE void simulate(qreal overlap, bool animating = false);
+    /// overlap < 0 turns the simulation off. `hiding` (while animating): the keyboard is going
+    /// away — `shown` false while it still covers `overlap`, as Android reports a slide down.
+    Q_INVOKABLE void simulate(qreal overlap, bool animating = false, bool hiding = false);
 
     /// The platform's report in logical pixels (see above). Not finite or negative overlaps
     /// count as 0; overlaps are clamped to the window's height when it is known.
@@ -166,6 +175,7 @@ Q_SIGNALS:
     void overlapChanged();
     void shownChanged();
     void animatingChanged();
+    void slidesOverChanged();
     void simulatedChanged();
     void sourceChanged();
     void markedChanged();
@@ -184,12 +194,15 @@ private:
     State m_inputMethod;
     State m_current;
     bool m_hasPlatform = false;
+    bool m_platformSlides = false; // the platform's report came from setPlatformState (Android)
+    bool m_slidesOver = false;
     ViewportKeyboard m_viewportKeyboard;
     ViewportSample m_viewportSample;
     bool m_hasViewportSample = false;
     bool m_marked = false;
     qreal m_simulated = -1;
     bool m_simulatedAnimating = false;
+    bool m_simulatedHiding = false;
     qreal m_windowHeight = 0;
     Source m_source = Source::None;
     // What the log said last (settled values only, not every frame of a slide).

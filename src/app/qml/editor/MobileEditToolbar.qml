@@ -5,7 +5,8 @@ import Brulion
 // MobileEditToolbar — the editing toolbar of touch UIs, docked on the virtual keyboard: BlockEditor
 // places it on the bottom edge of its dock host (the editor on a page, the journal stream's frame
 // for its days), which the shell keeps on the keyboard's top (KeyboardInsets, docs/UI.md
-// "On-screen keyboard"); it stays there when the system hides the keyboard while editing goes on.
+// "On-screen keyboard"); when the system hides the keyboard while editing goes on it stays, right
+// above the phone's bottom navigation, which comes back.
 // The tools follow `mode` (BlockEditor.toolbarMode):
 //   "block"   outdent, indent, move up/down, task (a tap cycles the status, a long press opens the
 //             status menu), [[, #, /, date, reminder, picture, undo, redo, "Więcej" (the block

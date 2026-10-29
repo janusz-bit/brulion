@@ -4,6 +4,7 @@
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "demovault.h"
+#include "keyboardinsets.h"
 #include "traypopup.h"
 #include "uidriver.h"
 #include "workspace.h"
@@ -2683,6 +2684,13 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     }
     check(canvas->property("dark").toBool() == darkQuery(before) && canvas->property("theme").toString() == u"auto",
           "a new drawing's paper follows the app's theme");
+    // Phones: the drawing's tool bar at the bottom takes the bottom navigation's place (no
+    // keyboard involved: it stays away while the drawing is edited).
+    QQuickItem *nav = window->findChild<QQuickItem *>(u"shellBottomNav"_s);
+    const bool phone = window->width() < 900;
+    if (phone)
+        check(nav && waitFor([&] { return !nav->isVisible(); }),
+              "the drawing's tool bar at the bottom: the bottom navigation makes way");
     settle(100);
     const QPointF from = pointIn(canvas, 0.25, 0.4);
     const QPointF to = pointIn(canvas, 0.7, 0.45);
@@ -2781,6 +2789,8 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
           },
                   5000),
           "back on the page, the embed shows the drawing saved again");
+    if (phone)
+        check(nav && waitFor([&] { return nav->isVisible(); }), "back on the page, the bottom navigation too");
     app->goHome();
 }
 
@@ -3173,11 +3183,16 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
 
 /// 5f. The on-screen keyboard (phones; a simulated one, KeyboardInsets.simulated): the bottom
 ///     navigation makes way while it is up, the view ends at its top, toasts and a bottom sheet
-///     (quick capture) sit above it; the editing toolbar docked after the system hid the keyboard
-///     keeps the navigation away until the editing stops, above the system's navigation bar, and
-///     toasts then show at the top, away from the line being written; a
-///     settings field that gets the focus is scrolled above the keyboard; on a wide touch window
-///     a page in the side panel docks its toolbar on the keyboard too.
+///     (quick capture) sit above it. Editing with the keyboard hidden by the system: the bottom
+///     navigation is back and the editing toolbar docks right on it (also with a system
+///     navigation bar under it), toasts show at the top, away from the line being written, the
+///     capture button stays away; the keyboard sliding in leaves the navigation under it until it
+///     covers it (the toolbar never drops first), sliding away uncovers it again, the toolbar
+///     following the keyboard's top down to the navigation; a browser's keyboard (the page resized
+///     for it: no overlap, still settling) takes the navigation away at once; a tap on a navigation
+///     tab while editing opens that view and the editing ends. A settings field that gets the
+///     focus is scrolled above the keyboard; on a wide touch window a page in the side panel docks
+///     its toolbar on the keyboard too.
 void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
 {
     auto *insets = engine->singletonInstance<QObject *>("Brulion", "KeyboardInsets");
@@ -3246,35 +3261,55 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
           }),
           "the keyboard goes: the bottom navigation is back at the window's bottom");
 
-    // Editing with the keyboard hidden by the system: the toolbar stays docked, no navigation.
+    // Editing with the keyboard hidden by the system: the bottom navigation is back, the toolbar
+    // docks right on it.
     const QString guide = u"Witaj w Brulionie.md"_s;
-    app->openPage(guide);
+    QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+    QQuickItem *captureButton = window->findChild<QQuickItem *>(u"shellCaptureButton"_s);
+    const auto navTop = [&] { return nav->mapToScene(QPointF(0, 0)).y(); };
+    const auto navAtBottom = [&] { return nav->isVisible() && near(navTop() + nav->height(), window->height()); };
     QQuickItem *editor = nullptr;
     QObject *page = nullptr;
-    check(waitFor([&] {
-              for (QQuickItem *e : window->findChildren<QQuickItem *>(u"pageEditor"_s)) {
-                  auto *c = e->property("controller").value<QObject *>();
-                  if (c && c->property("path").toString() == guide && c->property("loaded").toBool()
-                      && e->isVisible()) {
-                      editor = e;
-                      page = c;
-                  }
-              }
-              return editor != nullptr;
-          }),
-          "the guide opens");
-    if (editor && page) {
+    const auto openGuide = [&] {
+        editor = nullptr;
+        page = nullptr;
+        app->openPage(guide);
+        return waitFor([&] {
+            for (QQuickItem *e : window->findChildren<QQuickItem *>(u"pageEditor"_s)) {
+                auto *c = e->property("controller").value<QObject *>();
+                if (c && c->property("path").toString() == guide && c->property("loaded").toBool()
+                    && e->isVisible()) {
+                    editor = e;
+                    page = c;
+                }
+            }
+            return editor != nullptr;
+        });
+    };
+    const auto editLastRow = [&] {
         int row = -1;
         QMetaObject::invokeMethod(page, "lastVisibleRow", qReturnArg(row));
         QMetaObject::invokeMethod(editor, "startEditing", QVariant(row), QVariant(-1));
-        check(waitFor([&] { return editor->property("toolbarVisible").toBool() && !nav->isVisible(); }),
-              "editing with the keyboard hidden: the toolbar is docked and the bottom navigation stays away");
-        // (No keyboard and no navigation bar here: the view, and the toolbar, end at the window's
-        // bottom.)
+    };
+    check(openGuide(), "the guide opens");
+    if (editor && page && shellItem) {
+        editLastRow();
+        check(waitFor([&] { return editor->property("toolbarVisible").toBool() && navAtBottom(); }),
+              "editing with the keyboard hidden: the toolbar is docked and the bottom navigation is shown");
         QQuickItem *slot = toolbarSlotOf(window, editor);
+        const auto slotBottom = [&] { return slot ? slot->mapToScene(QPointF(0, slot->height())).y() : -1.0; };
         // (Laid out with the shell's next polish.)
-        check(waitFor([&] { return slot && near(slot->mapToScene(QPointF(0, slot->height())).y(), window->height()); }),
-              "the docked toolbar sits on the bottom edge of the view");
+        check(waitFor([&] { return slot && near(slotBottom(), navTop()); }),
+              "the docked toolbar sits right on the bottom navigation");
+        check(waitFor([&] { return !room->isVisible(); }) && captureButton && !captureButton->isVisible(),
+              "no keyboard's room under the navigation, no capture button over the toolbar");
+        auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
+        check(theme
+                      && near(shellItem->property("toastClearance").toReal(),
+                              nav->height() + theme->property("editToolbarHeight").toReal()),
+              "toasts would clear the bottom navigation and the toolbar on it");
+        std::fprintf(stderr, "selftest: keyboard hidden: the toolbar ends at %.0f, the navigation starts at %.0f (window %d)\n",
+                     slotBottom(), navTop(), window->height());
         // A toast while typing ("Scalono…", a sync): at the top, never over the line being
         // written (the caret is kept right above the toolbar, where the toasts used to be).
         if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
@@ -3297,9 +3332,8 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
             QMetaObject::invokeMethod(toasts, "clear");
         // A system navigation bar under the window's bottom edge (a phone's SafeArea margin, here
-        // added to the shell's): the docked toolbar sits right above it.
-        QQuickItem *shellItem =
-                findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+        // added to the shell's): the bottom navigation pads itself over it, the toolbar stays on
+        // the navigation.
         const auto setSafeBottom = [&](int px) {
             QQmlExpression set(qmlContext(shellItem), shellItem, u"SafeArea.additionalMargins.bottom = %1"_s.arg(px));
             set.evaluate();
@@ -3307,19 +3341,107 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
                 std::fprintf(stderr, "selftest: %s\n", qPrintable(set.error().toString()));
             return !set.hasError();
         };
-        if (shellItem && slot && setSafeBottom(48)) {
+        const qreal navHeight = nav->height();
+        if (slot && setSafeBottom(48)) {
             check(waitFor([&] {
-                      return near(slot->mapToScene(QPointF(0, slot->height())).y(), window->height() - 48)
-                             && near(room->height(), 48) && room->isVisible() && !nav->isVisible();
+                      return navAtBottom() && near(nav->height(), navHeight + 48) && near(slotBottom(), navTop())
+                             && near(slotBottom(), window->height() - navHeight - 48) && !room->isVisible();
                   }),
-                  "with the keyboard hidden the docked toolbar sits right above the system's navigation bar");
+                  "with a system navigation bar the toolbar still sits right on the bottom navigation above it");
             setSafeBottom(0);
-            waitFor([&] { return near(slot->mapToScene(QPointF(0, slot->height())).y(), window->height()); });
+            waitFor([&] { return near(slotBottom(), window->height() - navHeight); });
         } else {
             check(false, "the shell's SafeArea margins can be set");
         }
+
+        // The keyboard comes back, sliding in frame by frame (Android 11+): the navigation stays
+        // under it until it is covered, the toolbar never drops below where it was.
+        auto *keyboardInsets = qobject_cast<brulion::ui::KeyboardInsets *>(insets);
+        check(keyboardInsets != nullptr, "KeyboardInsets is the C++ type");
+        if (!keyboardInsets)
+            return;
+        const qreal low = navHeight / 3;
+        keyboardInsets->simulate(low, true);
+        check(waitFor([&] { return nav->isVisible() && near(slotBottom(), window->height() - navHeight); }),
+              "a keyboard sliding in below the navigation's top: the navigation stays, the toolbar on it");
+        keyboardInsets->simulate(navHeight + 40, true);
+        check(waitFor([&] { return !nav->isVisible() && near(slotBottom(), window->height() - navHeight - 40); }),
+              "past the navigation's top: the navigation is covered, the toolbar rides on the keyboard");
+        keyboardInsets->simulate(keyboard, false);
+        check(waitFor([&] { return !nav->isVisible() && near(slotBottom(), top) && near(room->mapToScene(QPointF(0, 0)).y(), top); }),
+              "the keyboard up: the toolbar on it, the navigation away");
+        // … and goes away again (Back): shown no more from its first frame, the navigation is
+        // shown under it, the toolbar follows the keyboard's top down to the navigation.
+        keyboardInsets->simulate(200, true, true);
+        check(waitFor([&] { return nav->isVisible() && near(slotBottom(), window->height() - 200); }),
+              "a keyboard sliding away: the navigation is back under it, the toolbar on the keyboard's top");
+        keyboardInsets->simulate(low, true, true);
+        check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()); }),
+              "below the navigation's top: the toolbar rests on the navigation");
+        insets->setProperty("simulated", 0);
+        check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()) && !room->isVisible(); }),
+              "the keyboard gone: the toolbar on the bottom navigation");
+
+        // A browser's keyboard: the page resized for it (interactive-widget=resizes-content), so no
+        // overlap, `shown` from the page's shrink while the readings settle — the navigation goes
+        // at once (nothing would cover it); the page tall again brings it back.
+        {
+            insets->setProperty("simulated", -1);
+            const qreal h = window->height();
+            const auto browser = [&](qreal height, bool settled) {
+                brulion::ui::ViewportSample sample;
+                sample.innerWidth = window->width();
+                sample.innerHeight = height;
+                sample.height = height;
+                sample.containerHeight = height;
+                sample.touch = true;
+                sample.editing = true;
+                sample.settled = settled;
+                sample.mode = u"content"_s;
+                keyboardInsets->setViewportSample(sample);
+            };
+            browser(h, true);
+            check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()); }),
+                  "a browser without the keyboard: the toolbar on the bottom navigation");
+            browser(h - keyboard, false);
+            check(keyboardInsets->shown() && keyboardInsets->animating() && keyboardInsets->overlap() == 0
+                          && !keyboardInsets->slidesOver()
+                          && waitFor([&] { return !nav->isVisible() && near(slotBottom(), h); }),
+                  "a browser's keyboard (the page shrank, still settling): the navigation goes at once");
+            browser(h - keyboard, true);
+            browser(h, false);
+            check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()); }),
+                  "the browser's page tall again: the navigation is back under the toolbar");
+            browser(h, true);
+        }
+        insets->setProperty("simulated", 0);
+
         QMetaObject::invokeMethod(page, "stopEditing");
-        check(waitFor([&] { return nav->isVisible(); }), "editing stops: the bottom navigation is back");
+        check(waitFor([&] { return !editor->property("toolbarVisible").toBool() && navAtBottom(); })
+                      && waitFor([&] { return captureButton && captureButton->isVisible(); }),
+              "editing stops: the toolbar goes, the bottom navigation stays, the capture button is back");
+
+        // A tap on a navigation tab while editing without the keyboard: that view opens, the
+        // editing ends with the page (nothing written).
+        const QString before = app->workspace()->readFile(guide);
+        editLastRow();
+        QQuickItem *calendarTab = nullptr;
+        check(waitFor([&] {
+                  calendarTab = shownNamed(window->contentItem(), u"bottomNav_calendar"_s);
+                  return editor->property("toolbarVisible").toBool() && calendarTab && navAtBottom();
+              }),
+              "editing again, the keyboard hidden: Kalendarz is on the bottom navigation");
+        if (calendarTab)
+            tapOrClick(window, pointIn(calendarTab), QCoreApplication::arguments().contains(u"--touch"_s));
+        check(waitFor([&] {
+                  return app->currentRoute().value(u"view"_s).toString() == u"calendar"
+                         && !findShown(window->contentItem(), [](QQuickItem *item) {
+                                return item->objectName() == u"editToolbarSlot";
+                            })
+                         && navAtBottom();
+              }),
+              "a tap on Kalendarz while editing opens the calendar: the editing and its toolbar end");
+        check(app->workspace()->readFile(guide) == before, "the guide is left as it was");
     }
 
     // A form field low in the settings: the window is never panned to it, it is scrolled above

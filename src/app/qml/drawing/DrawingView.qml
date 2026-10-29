@@ -33,7 +33,8 @@ import Brulion
 // route.open (screenshots): "style" (the colours and widths) and "more" on phones, "paper" (the
 // paper's menu) on wide windows, "theme" (the background's menu; on phones "Więcej").
 // View contract (ShellRouteView): `title` (the file's name), `editing` (no capture button over the
-// paper), `toolbarDocked` (phones: the tool bar at the bottom — the bottom navigation makes way),
+// paper), `toolbarDocked` and `replacesBottomNav` (phones: the tool bar at the bottom — the
+// bottom navigation makes way; no keyboard involved, unlike an editor's toolbar),
 // `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
 FocusScope {
     id: root
@@ -51,6 +52,7 @@ FocusScope {
     readonly property string title: root.fileName.replace(/\.svg$/i, "")
     readonly property bool editing: true
     readonly property bool toolbarDocked: Theme.narrow && root.status === ""
+    readonly property bool replacesBottomNav: toolbarDocked
     readonly property bool edgeSwipe: true
     readonly property alias canvas: canvas
 

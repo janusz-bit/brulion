@@ -85,8 +85,9 @@ QQuickItem *visibleItem(QQuickItem *item, QStringView name)
 // `?selftest=keyboard` (scripts/wasm-smoke.mjs --keyboard and --keyboard-phone,
 // scripts/android-emulator-test.sh --web-keyboard): the keyboard's state, the browser's last
 // sample, the old formula (innerHeight − height − offsetTop, for the record), where the shell's
-// content and the docked editing toolbar end in the window (logical px) and the focused editor's
-// text (its first 120 characters; not a password field's).
+// content and the docked editing toolbar end and the phone's bottom navigation starts in the
+// window (logical px) and the focused editor's text (its first 120 characters; not a password
+// field's).
 QJsonObject keyboardSelfTestResult(const KeyboardInsets *insets, QQuickWindow *window)
 {
     const ViewportSample &s = insets->viewportSample();
@@ -111,6 +112,7 @@ QJsonObject keyboardSelfTestResult(const KeyboardInsets *insets, QQuickWindow *w
     qreal windowHeight = 0;
     qreal contentBottom = 0;
     qreal toolbarBottom = -1;
+    qreal bottomNavTop = -1;
     if (window) {
         windowHeight = window->height();
         contentBottom = windowHeight;
@@ -118,6 +120,8 @@ QJsonObject keyboardSelfTestResult(const KeyboardInsets *insets, QQuickWindow *w
             contentBottom = room->mapToScene(QPointF(0, 0)).y();
         if (QQuickItem *toolbar = visibleItem(window->contentItem(), u"editToolbarSlot"))
             toolbarBottom = toolbar->mapToScene(QPointF(0, toolbar->height())).y();
+        if (QQuickItem *nav = visibleItem(window->contentItem(), u"shellBottomNav"))
+            bottomNavTop = nav->mapToScene(QPointF(0, 0)).y();
         result.insert(u"dpr"_s, window->devicePixelRatio());
         // What the keyboard types into (an editor's text): typing and Enter reach the app. Never
         // a password's (a field that hides its text or marks it sensitive).
@@ -134,6 +138,7 @@ QJsonObject keyboardSelfTestResult(const KeyboardInsets *insets, QQuickWindow *w
     result.insert(u"windowHeight"_s, windowHeight);
     result.insert(u"contentBottom"_s, contentBottom);
     result.insert(u"toolbarBottom"_s, toolbarBottom);
+    result.insert(u"bottomNavTop"_s, bottomNavTop);
     return result;
 }
 #endif

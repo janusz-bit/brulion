@@ -11,8 +11,10 @@ import Brulion
 // bar), `property Component sidePanel` (context panel: backlinks, outline, mini calendar) and
 // `property bool editing` (text is being edited, or a picture fills the view: the floating capture
 // button hides),
-// `property bool toolbarDocked` (an editor's touch toolbar is docked at the view's bottom edge,
-// on the keyboard: the bottom navigation hides),
+// `property bool toolbarDocked` (an editor's touch toolbar is docked at the view's bottom edge:
+// on the keyboard, or on the phone's bottom navigation once the keyboard went — the floating
+// capture button hides), `replacesBottomNav` (DrawingView on phones: the view's own bar at the
+// bottom takes the bottom navigation's place),
 // `pictureRoute` / `pictureAsText` (PageView: a picture is shown, as text or not — the top bar's
 // menu acts on it), `sourceMode` (PageView: the page is shown as Markdown source — the palette's
 // block commands are off), `edgeSwipe` (CalendarView: the view's own horizontal swipe starts at
@@ -41,6 +43,8 @@ Item {
     readonly property bool viewEditing: !!_view && _view.editing === true
     /// The view's editing toolbar is docked at its bottom edge (touch UIs).
     readonly property bool viewToolbarDocked: !!_view && _view.toolbarDocked === true
+    /// The view has a bar of its own at the bottom instead of the bottom navigation (phones).
+    readonly property bool viewReplacesBottomNav: !!_view && _view.replacesBottomNav === true
     /// The view shows a picture attachment (not a note), and that picture's text instead.
     readonly property bool viewPicture: !!_view && _view.pictureRoute === true
     readonly property bool viewPictureAsText: viewPicture && _view.pictureAsText === true
