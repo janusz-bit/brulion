@@ -353,6 +353,9 @@ private Q_SLOTS:
              u"list"_s, u"---\nl: [a, b]\n  # uwaga\n---\n"_s);
         yaml("block scalar lines are no comments", u"---\nopis: |\n  # nagłówek\n  tekst\n---\n"_s, u"opis"_s,
              u"nowy"_s, u"text"_s, u"---\nopis: nowy\n---\n"_s);
+        // Under a new block scalar a comment line would read as its text: it goes with the old value.
+        yaml("comment line under a new block scalar", u"---\nopis: a\n  # uwaga\nb: 1\n---\n"_s, u"opis"_s,
+             u"żółw\njaźń"_s, u"text"_s, u"---\nopis: |-\n  żółw\n  jaźń\nb: 1\n---\n"_s);
         // Numbers, checkboxes, dates.
         yaml("decimal comma", u"---\na: 1\n---\n"_s, u"a"_s, u"3,5"_s, u"number"_s, u"---\na: 3.5\n---\n"_s);
         yaml("thousands", u"---\na: 1\n---\n"_s, u"a"_s, u"1 200"_s, u"number"_s, u"---\na: 1200\n---\n"_s);
