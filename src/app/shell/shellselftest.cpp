@@ -4239,7 +4239,11 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                                 QObject::connect(app, &AppController::toastRequested, app,
                                                  [&toast](const QString &text) { toast = text; });
                         typeText(u"Dom|ż"_s);
-                        editor->forceActiveFocus();
+                        // The keyboard goes elsewhere (outside the editor: its focus scope would
+                        // give it back to the field).
+                        auto *elsewhere = new QQuickItem;
+                        elsewhere->setParentItem(window->contentItem());
+                        elsewhere->forceActiveFocus();
                         const QString reason = QCoreApplication::translate(
                                 "brulion::editor::PageController", "An alias with this character cannot be used in a link");
                         check(waitFor([&] { return toast == reason; }),
@@ -4247,6 +4251,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                         QObject::disconnect(toasts);
                         check(waitFor([&] { return !shownNamed(editor, u"pageHeaderField"_s); }), "the field closed");
                         check(saveNow() && app->workspace()->readFile(guide) == before, "nothing was written");
+                        delete elsewhere;
                     } else {
                         check(false, "the menu has “Dodaj alias” again");
                     }
