@@ -39,6 +39,10 @@ on:
         description: Upload the site as the GitHub Pages artifact for the caller to deploy
         type: boolean
         default: false
+      skip-emulator:
+        description: Leave out the Android emulator's browser check (release.yml)
+        type: boolean
+        default: false
     outputs:
       artifact:
         description: Name of the uploaded workflow artifact (the site, dist-wasm/)
@@ -165,11 +169,12 @@ jobs:
   # The editing toolbar on the on-screen keyboard in real browsers — Chrome, Brave (its
   # visualViewport bug, brave-browser#60074) and Firefox — on an Android 16 emulator (KVM):
   # scripts/android-emulator-test.sh --web-keyboard, docs/WEB.md "Klawiatura ekranowa". Not for
-  # release builds (release.yml: pages-artifact) and not needed for the deployment.
+  # releases (release.yml sets skip-emulator for every release, pre-releases too: a flaky emulator
+  # must not hold one back) and not needed for the deployment.
   keyboard-android:
     name: On-screen keyboard in Android browsers (emulator)
     needs: build
-    if: ${{ !inputs.pages-artifact }}
+    if: ${{ !inputs.skip-emulator }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
