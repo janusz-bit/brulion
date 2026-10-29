@@ -84,6 +84,15 @@ qsizetype findDrawingHeading(QByteArrayView b, qsizetype from, qsizetype *next)
     return -1;
 }
 
+/// The line at `i` (a line start) is "# Drawing" or "## Drawing" with a line break after it (what
+/// findDrawingHeading(b, i, …) finds at `i` itself) — a check of that line only.
+bool drawingHeadingAt(QByteArrayView b, qsizetype i)
+{
+    const QByteArrayView rest = b.sliced(i);
+    const qsizetype n = rest.startsWith("## Drawing") ? 10 : rest.startsWith("# Drawing") ? 9 : 0;
+    return n > 0 && eolAt(b, i + n) > 0;
+}
+
 /// The file's frontmatter (from its start, after a BOM) holds the plugin's key at the start of a
 /// line; `head` may end inside the frontmatter.
 bool frontmatterHasKey(QByteArrayView head)
@@ -172,6 +181,13 @@ QList<ExcalidrawMarkdown::TextEntry> textEntries(QByteArrayView b, qsizetype fro
     return out;
 }
 
+/// The text a text element shows, unwrapped: its originalText (else its text).
+QString shownText(const QJsonObject &e)
+{
+    const QJsonValue original = e.value(u"originalText"_s);
+    return original.isString() ? original.toString() : e.value(u"text"_s).toString();
+}
+
 quint32 fnv1a(QByteArrayView data, quint32 h = 2166136261u)
 {
     for (const char c : data) {
@@ -224,13 +240,19 @@ std::optional<ExcalidrawMarkdownRead> readExcalidrawMarkdown(QByteArrayView byte
     qsizetype firstHeading = -1;
     qsizetype legacyLine = -1;
     bool found = false;
+    // (Every search goes on from where the last one ended — a file of many headings, `%%` lines
+    // or backticks is read in linear time: a crafted file never stalls the app.)
+    qsizetype tick = -2; // the first backtick after the heading's line (-2: not looked for yet)
     for (qsizetype next = 0, h = findDrawingHeading(b, 0, &next); h >= 0; h = findDrawingHeading(b, next, &next)) {
         if (firstHeading < 0) {
             firstHeading = h;
             legacyLine = next;
         }
-        const qsizetype tick = b.indexOf('`', next);
-        if (tick < 0 || !b.sliced(tick).startsWith(fence))
+        if (tick == -2 || (tick >= 0 && tick < next))
+            tick = b.indexOf('`', next);
+        if (tick < 0)
+            break; // no backtick after this heading: none after a later one
+        if (!b.sliced(tick).startsWith(fence))
             continue;
         const qsizetype eol = eolAt(b, tick + fence.size());
         if (eol == 0)
@@ -245,7 +267,7 @@ std::optional<ExcalidrawMarkdownRead> readExcalidrawMarkdown(QByteArrayView byte
             }
         }
         if (close < 0)
-            continue;
+            break; // never closed: a later heading's block (opened after this one) neither
         layout.encoding =
                 compressed ? ExcalidrawMarkdown::Encoding::CompressedJson : ExcalidrawMarkdown::Encoding::Json;
         layout.sceneFrom = from;
@@ -317,9 +339,8 @@ std::optional<ExcalidrawMarkdownRead> readExcalidrawMarkdown(QByteArrayView byte
         }
         // "%%" right before the drawing's heading.
         for (qsizetype at = findLine(b, "%%", from, to); at >= 0; at = findLine(b, "%%", at + 1, to)) {
-            qsizetype next = 0;
-            const qsizetype after = at + 2 + eolAt(b, at + 2);
-            if (findDrawingHeading(b, after, &next) == after) {
+            const qsizetype eol = eolAt(b, at + 2);
+            if (eol > 0 && drawingHeadingAt(b, at + 2 + eol)) {
                 to = at;
                 break;
             }
@@ -344,8 +365,13 @@ QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawi
         if (!id.isEmpty())
             read.insert(id, e);
     }
-    // Text elements new or changed here: their text is their raw text too (the plugin reads the
-    // section's, then rawText); the entries of the changed ones get it.
+    // Text elements: the raw text (Markdown: links, transclusions; the plugin reads the section's
+    // entry, then rawText) of the text they show — the file's while the text is the file's (a text
+    // moved, recoloured, carried by its container, or written by an earlier save: its entry stays
+    // as it is), else the one the element was read with while it shows that text (a text the file
+    // has changed meanwhile: another device's), else the text itself (new or changed here). The
+    // entries of the texts that differ from the file's get it. (Never by `version`: every edit
+    // raises it, and an element keeps the version it was read with across saves.)
     QSet<QString> present;
     present.reserve(elements.size());
     QHash<QString, QString> newText;
@@ -355,15 +381,25 @@ QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawi
         present.insert(id);
         if (e.value(u"type"_s).toString() != u"text")
             continue;
+        const QString shown = shownText(e);
         const auto it = read.constFind(id);
-        if (it != read.constEnd() && it->value(u"version"_s).toInteger(1) == e.value(u"version"_s).toInteger(1))
-            continue;
-        const QJsonValue original = e.value(u"originalText"_s);
-        const QString raw = original.isString() ? original.toString() : e.value(u"text"_s).toString();
-        e.insert(u"rawText"_s, raw);
-        elements.replace(i, e);
-        if (it != read.constEnd())
-            newText.insert(id, raw);
+        const bool asInFile = it != read.constEnd() && shownText(*it) == shown;
+        if (asInFile && !it->value(u"rawText"_s).isString())
+            continue; // (an older plugin's element: no raw text, its entry as it is)
+        QJsonValue raw = asInFile ? it->value(u"rawText"_s) : QJsonValue();
+        if (!raw.isString() && i < drawing.strokes.size() && drawing.strokes.at(i).id == id) {
+            const QJsonObject &base = drawing.strokes.at(i).element;
+            if (!base.isEmpty() && shownText(base) == shown)
+                raw = base.value(u"rawText"_s);
+        }
+        if (!raw.isString())
+            raw = shown;
+        if (e.value(u"rawText"_s) != raw) {
+            e.insert(u"rawText"_s, raw);
+            elements.replace(i, e);
+        }
+        if (it != read.constEnd() && !asInFile)
+            newText.insert(id, raw.toString());
     }
     // Tombstones: the file's (unless the element is back), then the elements read and gone.
     QSet<QString> buried;

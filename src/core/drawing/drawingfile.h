@@ -42,7 +42,8 @@ struct DrawingFile {
 std::optional<DrawingFile> readDrawingFile(QByteArrayView bytes, ReadError *error = nullptr);
 
 /// The file of `drawing` in `file`'s format: Svg — toSvg(); Excalidraw — the scene as Excalidraw
-/// writes it (JSON with two spaces, a line break at the end); ExcalidrawMarkdown —
+/// writes it (JSON with two spaces, "type", "version", "source", "elements", "appState", "files"
+/// in that order, a line break at the end); ExcalidrawMarkdown —
 /// writeExcalidrawMarkdown(*file.markdown, drawing, now). Empty when `file` is not writable.
 QByteArray writeDrawingFile(const DrawingFile &file, const Drawing &drawing, qint64 now = 0);
 

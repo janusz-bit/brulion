@@ -3,6 +3,8 @@
 #include "drawing/excalidraw.h"
 #include "drawing/svgwrite.h"
 
+#include <QStringList>
+
 #include <cmath>
 
 using namespace Qt::StringLiterals;
@@ -14,6 +16,35 @@ namespace {
 bool endsWith(QStringView path, QStringView suffix)
 {
     return path.endsWith(suffix, Qt::CaseInsensitive);
+}
+
+/// A `.excalidraw` file as Excalidraw's serializeAsJSON writes it: JSON.stringify(scene, null, 2)
+/// with its keys in Excalidraw's order — "type", "version", "source", "elements", "appState",
+/// "files", then any other — so "type": "excalidraw" opens the file (looksLikeExcalidrawJson()
+/// looks at its first HeadBytes, however large the scene); a line break at the end.
+QByteArray excalidrawFileJson(const QJsonObject &scene)
+{
+    static constexpr QStringView First[] = {u"type", u"version", u"source", u"elements", u"appState", u"files"};
+    QStringList keys;
+    for (const QStringView key : First) {
+        if (scene.contains(key))
+            keys.append(key.toString());
+    }
+    for (const QString &key : scene.keys()) {
+        if (!keys.contains(key))
+            keys.append(key);
+    }
+    if (keys.isEmpty())
+        return "{}\n";
+    QByteArray out = "{";
+    for (const QString &key : std::as_const(keys)) {
+        out += out.size() == 1 ? "\n  " : ",\n  ";
+        out += stringifyJson(QJsonValue(key), "  ");
+        out += ": ";
+        // (A value's lines one level deeper: JSON's strings hold no line breaks.)
+        out += stringifyJson(scene.value(key), "  ").replace("\n", "\n  ");
+    }
+    return out + "\n}\n";
 }
 
 } // namespace
@@ -78,7 +109,7 @@ QByteArray writeDrawingFile(const DrawingFile &file, const Drawing &drawing, qin
     if (!file.writable)
         return {};
     switch (file.format) {
-    case FileFormat::Excalidraw: return stringifyJson(sceneObject(drawing), "  ") + '\n';
+    case FileFormat::Excalidraw: return excalidrawFileJson(sceneObject(drawing));
     case FileFormat::ExcalidrawMarkdown:
         return file.markdown ? writeExcalidrawMarkdown(*file.markdown, drawing, now) : QByteArray();
     case FileFormat::Svg: break;

@@ -1902,6 +1902,57 @@ private Q_SLOTS:
         QCOMPARE(canvas->format(), u"excalidrawMd"_s);
     }
 
+    void excalidrawMarkdownTextsKeepTheirMarkdown()
+    {
+        // The plugin reads a text's "## Text Elements" entry (its Markdown, a link here) first.
+        // Moved — in one save or across saves (markSaved) — the entry stays as it is; edited, the
+        // new text is its entry and rawText, also in the saves after that one.
+        QByteArray bytes = fixture(u"obsidian_mixed.excalidraw.md"_s);
+        QVERIFY(bytes.contains("\nZażółć gęślą jaźń ^Zt8xQw1a\n"));
+        bytes.replace("\nZażółć gęślą jaźń ^Zt8xQw1a\n", "\nZażółć [[gęślą]] jaźń ^Zt8xQw1a\n");
+        QCOMPARE(canvas->load(bytes), QString());
+        const std::optional<brulion::drawing::ExcalidrawMarkdownRead> read =
+                brulion::drawing::readExcalidrawMarkdown(bytes);
+        QVERIFY(read);
+        const qsizetype sceneFrom = read->layout.sceneFrom;
+        const auto layoutOf = [](const QByteArray &file) {
+            const std::optional<brulion::drawing::ExcalidrawMarkdownRead> r =
+                    brulion::drawing::readExcalidrawMarkdown(file);
+            return r ? r->layout : brulion::drawing::ExcalidrawMarkdown();
+        };
+        const auto rawText = [&layoutOf](const QByteArray &file) {
+            const brulion::drawing::ExcalidrawMarkdown layout = layoutOf(file);
+            for (const QJsonValue &v : layout.elements) {
+                if (v.toObject().value(u"id"_s).toString() == u"Zt8xQw1a")
+                    return v.toObject().value(u"rawText"_s).toString();
+            }
+            return QString();
+        };
+        for (int save = 0; save < 2; ++save) {
+            canvas->selectAll();
+            canvas->nudgeSelection(10, 0);
+            QVERIFY(canvas->modified());
+            const QByteArray written = canvas->fileBytes();
+            QCOMPARE(written.left(sceneFrom), bytes.left(sceneFrom));
+            QCOMPARE(rawText(written), u"Zażółć gęślą jaźń"_s);
+            canvas->markSaved(written);
+        }
+        canvas->clearSelection();
+        QSignalSpy requests(canvas, &DrawingCanvas::textEditRequested);
+        canvas->editText(u"Zt8xQw1a"_s);
+        QCOMPARE(requests.size(), 1);
+        canvas->commitText(requests.takeFirst().at(0).toMap(), u"Żółw"_s);
+        QByteArray written = canvas->fileBytes();
+        QVERIFY(written.contains("\n## Text Elements\nŻółw ^Zt8xQw1a\n"));
+        QCOMPARE(rawText(written), u"Żółw"_s);
+        canvas->markSaved(written);
+        // The next save (a stroke drawn): the text's raw text as written, not the one first read.
+        mouseStroke(window.get(), {100, 400}, {300, 460}, 10);
+        written = canvas->fileBytes();
+        QVERIFY(written.contains("\n## Text Elements\nŻółw ^Zt8xQw1a\n"));
+        QCOMPARE(rawText(written), u"Żółw"_s);
+    }
+
     void excalidrawMarkdownReadOnly_data()
     {
         QTest::addColumn<QByteArray>("bytes");

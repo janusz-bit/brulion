@@ -5,6 +5,7 @@
 // tests/data/drawing/make-fixtures.py as the plugin writes its files.
 #include "drawing/drawing.h"
 #include "drawing/drawingfile.h"
+#include "drawing/edit.h"
 #include "drawing/excalidraw.h"
 #include "drawing/excalidrawmd.h"
 #include "drawing/lzstring.h"
@@ -80,6 +81,76 @@ QStringList strokeIds(const Drawing &d)
     for (const Stroke &s : d.strokes)
         out.append(s.id);
     return out;
+}
+
+/// A text element as the plugin writes it: `shown` its text, `raw` its Markdown.
+QJsonObject pluginText(const QString &id, double x, double y, const QString &shown, const QString &raw,
+                       const QString &containerId = {})
+{
+    return QJsonObject{
+            {u"id"_s, id},
+            {u"type"_s, u"text"_s},
+            {u"x"_s, x},
+            {u"y"_s, y},
+            {u"width"_s, 260},
+            {u"height"_s, 25},
+            {u"angle"_s, 0},
+            {u"strokeColor"_s, u"#1e1e1e"_s},
+            {u"backgroundColor"_s, u"transparent"_s},
+            {u"fillStyle"_s, u"solid"_s},
+            {u"strokeWidth"_s, 1},
+            {u"strokeStyle"_s, u"solid"_s},
+            {u"roughness"_s, 1},
+            {u"opacity"_s, 100},
+            {u"groupIds"_s, QJsonArray()},
+            {u"frameId"_s, QJsonValue::Null},
+            {u"roundness"_s, QJsonValue::Null},
+            {u"seed"_s, 7},
+            {u"version"_s, 3},
+            {u"versionNonce"_s, 11},
+            {u"isDeleted"_s, false},
+            {u"boundElements"_s, QJsonValue::Null},
+            {u"updated"_s, 1761600000000.0},
+            {u"link"_s, QJsonValue::Null},
+            {u"locked"_s, false},
+            {u"text"_s, shown},
+            {u"rawText"_s, raw},
+            {u"fontSize"_s, 20},
+            {u"fontFamily"_s, 5},
+            {u"textAlign"_s, containerId.isEmpty() ? u"left"_s : u"center"_s},
+            {u"verticalAlign"_s, containerId.isEmpty() ? u"top"_s : u"middle"_s},
+            {u"containerId"_s, containerId.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(containerId)},
+            {u"originalText"_s, shown},
+            {u"autoResize"_s, true},
+            {u"lineHeight"_s, 1.25}};
+}
+
+const QString LinkedRaw = u"Zobacz [[Plan ogrodu]] i [[Dom|dom]]"_s;
+const QString LabelRaw = u"![[Notatka z łąki#^blok1]]"_s;
+
+/// A plugin file (the json form) whose texts hold Obsidian's Markdown: a text with links
+/// (Tx12Ab34) and a label transcluding a block (Lb34Cd56) in a rectangle (Rr5Kd9mq).
+QByteArray linkedPluginFile()
+{
+    QJsonObject rect = pluginText(u"Rr5Kd9mq"_s, 300, 300, {}, {});
+    for (const QString &key : {u"text"_s, u"rawText"_s, u"originalText"_s, u"fontSize"_s, u"fontFamily"_s,
+                               u"textAlign"_s, u"verticalAlign"_s, u"containerId"_s, u"autoResize"_s, u"lineHeight"_s})
+        rect.remove(key);
+    rect.insert(u"type"_s, u"rectangle"_s);
+    rect.insert(u"height"_s, 80);
+    rect.insert(u"version"_s, 2);
+    rect.insert(u"boundElements"_s, QJsonArray{QJsonObject{{u"type"_s, u"text"_s}, {u"id"_s, u"Lb34Cd56"_s}}});
+    const QJsonObject scene{
+            {u"type"_s, u"excalidraw"_s},
+            {u"version"_s, 2},
+            {u"source"_s, u"https://github.com/zsviczian/obsidian-excalidraw-plugin/releases/tag/2.16.0"_s},
+            {u"elements"_s,
+             QJsonArray{pluginText(u"Tx12Ab34"_s, 10, 10, u"Zobacz Plan ogrodu i dom"_s, LinkedRaw), rect,
+                        pluginText(u"Lb34Cd56"_s, 305, 327, u"Żółta kartka"_s, LabelRaw, u"Rr5Kd9mq"_s)}},
+            {u"appState"_s, QJsonObject{{u"viewBackgroundColor"_s, u"#ffffff"_s}}},
+            {u"files"_s, QJsonObject()}};
+    return PluginFrontmatter + "# Excalidraw Data\n\n## Text Elements\n" + LinkedRaw.toUtf8() + " ^Tx12Ab34\n\n"
+           + LabelRaw.toUtf8() + " ^Lb34Cd56\n\n%%\n## Drawing\n```json\n" + stringifyJson(scene, "\t") + "\n```\n%%";
 }
 
 /// The element `id` of a JSON array (empty: none).
@@ -760,14 +831,213 @@ private Q_SLOTS:
             QCOMPARE(back->drawing.strokes.at(i).box, f->drawing.strokes.at(i).box);
         }
         if (f->format == FileFormat::Excalidraw) {
-            // Excalidraw's layout: two spaces, a line break at the end.
-            QVERIFY(written.startsWith("{\n  \"appState\": {\n    \""));
+            // Excalidraw's layout: two spaces, its keys in serializeAsJSON's order, a line break at
+            // the end.
+            QVERIFY(written.startsWith("{\n  \"type\": \"excalidraw\",\n  \"version\": 2,\n  \"source\": \""));
+            QVERIFY(written.contains("\n  \"elements\": [\n    {\n      \""));
+            QVERIFY(written.indexOf("\n  \"elements\": [") < written.indexOf("\n  \"appState\": {\n    \""));
+            QVERIFY(written.indexOf("\n  \"appState\": {") < written.indexOf("\n  \"files\": "));
             QVERIFY(written.endsWith("\n}\n"));
-            QVERIFY(written.contains("\n  \"type\": \"excalidraw\",\n"));
             QCOMPARE(writeDrawingFile(*back, back->drawing, 1), written);
         }
         if (f->format == FileFormat::Svg)
             QCOMPARE(written, toSvg(f->drawing));
+    }
+
+    void largeExcalidrawFileStaysADrawing()
+    {
+        // Written larger than HeadBytes: "type": "excalidraw" still opens it, so the file is still
+        // a drawing by its start (embeds, the picture view, sync's guard).
+        const QByteArray bytes = fixture(u"excalidraw_freedraw.excalidraw"_s);
+        std::optional<DrawingFile> f = readDrawingFile(bytes);
+        QVERIFY(f);
+        Drawing d = f->drawing;
+        for (int i = 0; i < 20; ++i)
+            d.strokes.append(newStroke(u"kreska-ż-%1"_s.arg(i)));
+        d.scene.insert(u"prevTextMode"_s, u"parsed"_s); // a key of the plugin's own: after the others
+        const QByteArray written = writeDrawingFile(*f, d, 1761700000000);
+        QVERIFY2(written.size() > 4 * HeadBytes, qPrintable(QString::number(written.size())));
+        QVERIFY(looksLikeExcalidrawJson(written.left(HeadBytes)));
+        QVERIFY(looksLikeDrawingFile(u"Szkic ćwiczeń.excalidraw"_s, written.left(HeadBytes)));
+        QVERIFY(written.startsWith("{\n  \"type\": \"excalidraw\",\n  \"version\": 2,\n  \"source\": "));
+        QVERIFY(written.endsWith("\n  \"files\": {},\n  \"prevTextMode\": \"parsed\"\n}\n"));
+        const std::optional<DrawingFile> back = readDrawingFile(written);
+        QVERIFY(back);
+        QCOMPARE(back->format, FileFormat::Excalidraw);
+        QCOMPARE(strokeIds(back->drawing), strokeIds(d));
+        QCOMPARE(back->drawing.scene.value(u"prevTextMode"_s).toString(), u"parsed"_s);
+        // The same as JSON as the scene written compact.
+        QCOMPARE(QJsonDocument::fromJson(written).object(), QJsonDocument::fromJson(sceneJson(d)).object());
+    }
+
+    void textMovedKeepsItsMarkdown_data()
+    {
+        QTest::addColumn<QString>("edit");
+        QTest::addColumn<bool>("changesText");
+        QTest::newRow("text moved") << u"move text"_s << false;
+        QTest::newRow("shape moved with its label") << u"move shape"_s << false;
+        QTest::newRow("recoloured") << u"recolour"_s << false;
+        QTest::newRow("to the front") << u"front"_s << false;
+        QTest::newRow("changed and changed back") << u"same text"_s << false;
+        QTest::newRow("text changed") << u"change text"_s << true;
+    }
+
+    void textMovedKeepsItsMarkdown()
+    {
+        // The plugin reads a text's entry (its Markdown: links, transclusions) before the scene's
+        // text. A text only moved, recoloured or carried by its shape keeps its entry and rawText;
+        // only a text changed in Brulion gets its new text as both.
+        QFETCH(QString, edit);
+        QFETCH(bool, changesText);
+        const QByteArray bytes = linkedPluginFile();
+        const std::optional<ExcalidrawMarkdownRead> read = readExcalidrawMarkdown(bytes);
+        QVERIFY(read);
+        QCOMPARE(read->layout.encoding, ExcalidrawMarkdown::Encoding::Json);
+        QCOMPARE(read->layout.textEntries.size(), 2);
+        QVERIFY(::brulion::drawing::editable(read->drawing));
+        Drawing d = read->drawing;
+        EditStamp stamp;
+        stamp.now = 1761700000000;
+        const QString changed = u"Nowy tekst: źdźbło"_s;
+        if (edit == u"move text")
+            moveElements(d, {u"Tx12Ab34"_s}, QPointF(30, 0), stamp);
+        else if (edit == u"move shape")
+            moveElements(d, {u"Rr5Kd9mq"_s, u"Lb34Cd56"_s}, QPointF(0, -40), stamp);
+        else if (edit == u"recolour")
+            recolorElements(d, {u"Tx12Ab34"_s, u"Lb34Cd56"_s}, u"#e03131"_s, stamp);
+        else if (edit == u"front")
+            reorderElements(d, {u"Tx12Ab34"_s}, Reorder::ToFront, stamp);
+        else if (edit == u"same text") {
+            setText(d, u"Tx12Ab34"_s, u"Inny tekst"_s, {}, stamp);
+            setText(d, u"Tx12Ab34"_s, u"Zobacz Plan ogrodu i dom"_s, {}, stamp);
+        } else
+            setText(d, u"Tx12Ab34"_s, changed, {}, stamp);
+        const QByteArray out = writeExcalidrawMarkdown(read->layout, d, stamp.now);
+        QVERIFY(d.strokes.at(indexOfElement(d, u"Tx12Ab34")).version > 3
+                || d.strokes.at(indexOfElement(d, u"Lb34Cd56")).version > 3);
+        const std::optional<ExcalidrawMarkdownRead> again = readExcalidrawMarkdown(out);
+        QVERIFY(again);
+        const QJsonObject text = elementById(again->layout.elements, u"Tx12Ab34"_s);
+        const QJsonObject label = elementById(again->layout.elements, u"Lb34Cd56"_s);
+        QCOMPARE(label.value(u"rawText"_s).toString(), LabelRaw);
+        QVERIFY(out.contains(QByteArray(LabelRaw.toUtf8() + " ^Lb34Cd56\n")));
+        if (!changesText) {
+            // Every byte before the block as it was: both entries untouched.
+            QCOMPARE(out.left(read->layout.sceneFrom), bytes.left(read->layout.sceneFrom));
+            QCOMPARE(text.value(u"rawText"_s).toString(), LinkedRaw);
+            QCOMPARE(text.value(u"originalText"_s).toString(), u"Zobacz Plan ogrodu i dom"_s);
+        } else {
+            QVERIFY(out.contains(
+                    QByteArray("## Text Elements\n" + changed.toUtf8() + " ^Tx12Ab34\n\n" + LabelRaw.toUtf8())));
+            QVERIFY(!out.contains("[[Plan ogrodu]]"));
+            QCOMPARE(text.value(u"rawText"_s).toString(), changed);
+        }
+        // Written again from the file just written: the same bytes.
+        QCOMPARE(writeExcalidrawMarkdown(again->layout, again->drawing, stamp.now + 1), out);
+    }
+
+    void rawTextAcrossSaves()
+    {
+        // The editor keeps its elements (with the element each was read with) across saves; after
+        // a save the file written is the layout of the next one (DrawingCanvas::markSaved). The
+        // raw text written once stays in later saves.
+        const QByteArray bytes = linkedPluginFile();
+        const std::optional<ExcalidrawMarkdownRead> read = readExcalidrawMarkdown(bytes);
+        QVERIFY(read);
+        EditStamp stamp;
+        stamp.now = 1761700000000;
+        const auto saveTwice = [&read, &stamp](const std::function<void(Drawing &)> &edit, QByteArray *first) {
+            Drawing d = read->drawing;
+            edit(d);
+            *first = writeExcalidrawMarkdown(read->layout, d, stamp.now);
+            const std::optional<ExcalidrawMarkdownRead> saved = readExcalidrawMarkdown(*first);
+            if (!saved)
+                return QByteArray();
+            // Another stroke, the next save: against the file written.
+            d.strokes.append(newStroke(u"potem"_s));
+            return writeExcalidrawMarkdown(saved->layout, d, stamp.now + 1000);
+        };
+        const auto rawOf = [](const QByteArray &file, const QString &id) {
+            const std::optional<ExcalidrawMarkdownRead> r = readExcalidrawMarkdown(file);
+            return r ? elementById(r->layout.elements, id).value(u"rawText"_s) : QJsonValue();
+        };
+
+        // A text changed in Brulion: its new text (not the one read) in the second save too.
+        QByteArray first;
+        QByteArray second = saveTwice(
+                [&stamp](Drawing &d) { setText(d, u"Tx12Ab34"_s, u"Żółw i [[link]]?"_s, {}, stamp); }, &first);
+        QCOMPARE(rawOf(first, u"Tx12Ab34"_s).toString(), u"Żółw i [[link]]?"_s);
+        QCOMPARE(rawOf(second, u"Tx12Ab34"_s).toString(), u"Żółw i [[link]]?"_s);
+        QVERIFY(second.contains("## Text Elements\nŻółw i [[link]]? ^Tx12Ab34\n\n"));
+        QCOMPARE(rawOf(second, u"Lb34Cd56"_s).toString(), LabelRaw);
+
+        // A text new in Brulion: its rawText in the second save too.
+        second = saveTwice(
+                [&stamp](Drawing &d) {
+                    TextStyle style;
+                    d.strokes.append(newText(QPointF(40, 200), u"Nowy ąę"_s, style, {}, stamp));
+                },
+                &first);
+        const std::optional<ExcalidrawMarkdownRead> firstRead = readExcalidrawMarkdown(first);
+        QVERIFY(firstRead);
+        const QString newId = firstRead->drawing.strokes.last().id;
+        QCOMPARE(rawOf(first, newId).toString(), u"Nowy ąę"_s);
+        QCOMPARE(rawOf(second, newId).toString(), u"Nowy ąę"_s);
+        QVERIFY(!second.contains(QByteArray(" ^" + newId.toUtf8())));
+
+        // A text moved after the first save: its links stay.
+        second = saveTwice([&stamp](Drawing &d) { moveElements(d, {u"Tx12Ab34"_s}, QPointF(5, 5), stamp); }, &first);
+        QCOMPARE(rawOf(second, u"Tx12Ab34"_s).toString(), LinkedRaw);
+        QVERIFY(second.contains(QByteArray("## Text Elements\n" + LinkedRaw.toUtf8() + " ^Tx12Ab34\n")));
+
+        // The file changed meanwhile (another device wrote another text), this text moved here and
+        // kept as it is here (DrawingCanvas::takeExternal, "changed here wins"): the entry gets this
+        // text's own Markdown back, its links included.
+        Drawing theirs = read->drawing;
+        setText(theirs, u"Tx12Ab34"_s, u"Inny tekst"_s, {}, stamp);
+        const std::optional<ExcalidrawMarkdownRead> other =
+                readExcalidrawMarkdown(writeExcalidrawMarkdown(read->layout, theirs, stamp.now));
+        QVERIFY(other);
+        Drawing mine = read->drawing;
+        moveElements(mine, {u"Tx12Ab34"_s}, QPointF(30, 0), stamp);
+        const QByteArray merged = writeExcalidrawMarkdown(other->layout, mine, stamp.now + 2000);
+        QCOMPARE(rawOf(merged, u"Tx12Ab34"_s).toString(), LinkedRaw);
+        QVERIFY(merged.contains(QByteArray("## Text Elements\n" + LinkedRaw.toUtf8() + " ^Tx12Ab34\n")));
+        QVERIFY(!merged.contains("Inny tekst"));
+    }
+
+    void craftedFilesReadInLinearTime_data()
+    {
+        // Many "%%" lines in "Text Elements", many "# Drawing" headings before a far backtick: each
+        // made the reader scan to the end again (quadratic — minutes for a few MB). Read on the GUI
+        // thread (embeds, the picture view, the editor): it must stay linear.
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<bool>("readable");
+        const QByteArray scene = "```json\n{\"type\":\"excalidraw\",\"elements\":[]}\n```\n%%";
+        QTest::newRow("%% lines") << QByteArray(PluginFrontmatter + "# Excalidraw Data\n## Text Elements\n"
+                                                + QByteArray("%%\n").repeated(300'000) + "%%\n## Drawing\n" + scene)
+                                  << true;
+        QTest::newRow("headings before a backtick")
+                << QByteArray(PluginFrontmatter + QByteArray("# Drawing\nx\n").repeated(300'000) + "`") << false;
+        QTest::newRow("headings before an unclosed block")
+                << QByteArray(PluginFrontmatter + QByteArray("## Drawing\nż\n").repeated(300'000)
+                              + "## Drawing\n```json\n{\"type\":\"excalidraw\",\"elements\":[]}\n")
+                << false;
+    }
+
+    void craftedFilesReadInLinearTime()
+    {
+        QFETCH(QByteArray, bytes);
+        QFETCH(bool, readable);
+        QElapsedTimer timer;
+        timer.start();
+        ReadError why = ReadError::None;
+        const std::optional<ExcalidrawMarkdownRead> read = readExcalidrawMarkdown(bytes, &why);
+        const qint64 ms = timer.elapsed();
+        QCOMPARE(bool(read), readable);
+        QCOMPARE(int(why), int(readable ? ReadError::None : ReadError::Corrupt));
+        // (Linear: a few ms; quadratic took seconds for these.)
+        QVERIFY2(ms < 1500, qPrintable(u"%1 ms"_s.arg(ms)));
     }
 
     void previewDrawingBoxes()

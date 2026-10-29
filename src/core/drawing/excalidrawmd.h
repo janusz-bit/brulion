@@ -26,7 +26,8 @@
 // or "```json" with the scene as JSON.stringify(scene, null, "\t"). The plugin reads a text
 // element's text from its "## Text Elements" entry (its Markdown, links included) before the
 // scene's. Brulion rewrites only the block (in the file's own encoding) and the entries of text
-// elements it changed (their new text) or removed (gone); every other byte stays as it was —
+// elements whose text it changed (their new text; a text only moved or recoloured keeps its entry
+// and its links) or removed (gone); every other byte stays as it was —
 // frontmatter, the back of the card, element links, embedded files, `%%` markers. Elements read
 // from the file and gone from the drawing are written as deleted ones (`isDeleted: true`, a
 // "tombstone"): the plugin, showing the drawing while the file changes under it, removes only
@@ -105,12 +106,15 @@ std::optional<ExcalidrawMarkdownRead> readExcalidrawMarkdown(QByteArrayView byte
 
 /// The file with `drawing` as its scene (see above): the block's content in the file's encoding
 /// (compressed: lines of 256 characters with an empty line between; json: tab-indented), the
-/// "## Text Elements" entries of text elements whose version changed (their text, which also
-/// becomes their `rawText`) or that are gone (removed); every other byte as read. Elements read
-/// from the file and absent from `drawing` are written as tombstones (`isDeleted: true`, version
-/// + 1, a versionNonce from the id and `now`, `updated: now`); the file's tombstones are kept
-/// (but those whose id is in the drawing again). Text elements new or changed in `drawing` get
-/// `rawText` = their originalText. Precondition: layout.encoding != Legacy.
+/// "## Text Elements" entries of text elements whose text (originalText) differs from the file's
+/// (their raw text) or that are gone (removed); every other byte as read. A text element's
+/// `rawText` is the raw text of the text it shows: the file's while it shows the file's text
+/// (moved, recoloured, carried by its container — its links stay), else its own element's
+/// (Stroke::element) while it shows that one's text, else the text itself (new or changed in
+/// Brulion). Elements read from the file and absent from `drawing` are written as tombstones
+/// (`isDeleted: true`, version + 1, a versionNonce from the id and `now`, `updated: now`); the
+/// file's tombstones are kept (but those whose id is in the drawing again).
+/// Precondition: layout.encoding != Legacy.
 QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawing &drawing, qint64 now);
 
 /// JSON.stringify(value, null, indent)'s layout: one member or item a line, `"key": value`, "{}"
