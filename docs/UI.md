@@ -1151,6 +1151,12 @@ content jump now and then, not every time. Hence:
   since replaced in the file), the frame takes the picture's shape — never stretched;
 * the zoom breadcrumb above the blocks is hidden with its Loader (an inactive Loader kept its
   height: a blank band after zooming out);
+* a zoom that begins or ends while a block is edited (Enter in a zoomed heading or paragraph,
+  undo / redo across it, the breadcrumb) keeps the edited block in view: `BlockEditor`
+  `onZoomChanged` lays the list out first (the rows the zoom showed or hid get their heights),
+  then positions it at the block and the caret; positioned before that layout, the view stayed
+  among the zoom's rows and then showed the page's top (`EditorPlayground` self-test: a heading
+  and a list item far down a long page);
 * a day of the journal stream is created whole: its editor (`BlockEditor.autoHeight`) creates all
   its blocks with it, at the day's width from the start, so the list places the day with its final
   height. Creating a day is therefore one long step (below); Qt 6.11 creates the rows of a

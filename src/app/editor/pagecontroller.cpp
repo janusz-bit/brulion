@@ -991,8 +991,9 @@ void PageController::restore(const QString &snapshot, const Focus &focus, const 
     const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot, blankBlocks);
     m_restoring = false;
     remapBlocks(mapping);
-    // A step that ended a zoom (Enter in a zoomed heading or paragraph): undo zooms back in, redo
-    // ends it again. A document has no zoom.
+    // Enter made in a zoom recorded the zoom of both versions (split()): undo zooms back in (also
+    // when the step ended the zoom or changed the zoomed block's text), redo restores the zoom
+    // after it. Other steps leave the zoom as it is. A document has no zoom.
     if (focus.zoom != Focus::KeepZoom)
         m_model->setZoomUid(validRow(focus.zoom) && !documentMode() ? m_model->uidAt(focus.zoom) : 0);
     if (focus.row < 0 && validRow(focus.selectionAnchor) && validRow(focus.selectionFocus)) {

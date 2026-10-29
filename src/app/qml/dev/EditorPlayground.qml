@@ -794,6 +794,24 @@ ApplicationWindow {
                 check(page.zoomBlock < 0 && rowOf("Na dole strony") < 0, "and the heading is gone with the zoom: " + page.zoomBlock)
                 page.zoomTo(-1)
             },
+            // Zooming out (the breadcrumb) while a block far down the page is edited: the rows
+            // above it come back, the edited block stays in view.
+            () => {
+                window.zoomTextRow = rowOf("Wiersz 140")
+                page.zoomInto(window.zoomTextRow)
+                editor.startEditing(window.zoomTextRow, -1)
+            },
+            () => check(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
+                        && rowInView(window.zoomTextRow), "a zoomed block far down the page is edited: " + window.zoomTextRow),
+            () => page.zoomOut(),
+            () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow && rowInView(window.zoomTextRow)
+                        && editor.activeEditor !== null && editor.activeEditor.activeFocus,
+                        "zooming out keeps the edited block in view: y "
+                        + (editor.listView.itemAtIndex(window.zoomTextRow)
+                           ? editor.listView.itemAtIndex(window.zoomTextRow).mapToItem(editor.listView, 0, 0).y : "-")
+                        + ", zoom " + page.zoomBlock + ", row " + page.editingRow + ", editor row "
+                        + (editor.activeEditor ? editor.activeEditor.row : -1)
+                        + ", contentY " + editor.listView.contentY + " (origin " + editor.listView.originY + ")"),
             // ---- Table cells: typed text is in the document before the cell is left -------------
             // With a mouse, a table takes no room below its grid until it is selected or edited
             // (the "+ Row / + Column" buttons): its height never changes under a resting pointer.
