@@ -3,7 +3,9 @@
 # folder, the sample vault, commands and the folder tree (single-instance messages: tests/ipc).
 brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_shell brulion_platform)
 # "Udostępnij → Brulion" on AppController (appshare.cpp; the --share option): the share dialog's
-# data, saving to the journal or to new pages, waiting for the notebook, the copies removed.
+# data, saving to the journal or to new pages, waiting for the notebook, the copies removed; files
+# opened with Brulion (--open, a second launch's `share` message: copies, the files untouched, a
+# page of the notebook opened), the browser's share target (--share-query).
 brulion_add_test(tst_shell_share SOURCES tst_share.cpp LIBS brulion_shell brulion_platform)
 # The tray calendar's placement next to the tray icon and its reopen guard (traypopup.h; offscreen
 # QGuiApplication for the screen lookup).
