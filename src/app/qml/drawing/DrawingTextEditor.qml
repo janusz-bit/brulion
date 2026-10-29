@@ -80,6 +80,13 @@ Item {
         target: root.canvas
         function onTextEditRequested(r) { root.open(r) }
         function onTextCommitRequested() { root.commit() }
+        function onTextEditingChanged() {
+            // The canvas ended it (another drawing loaded): nothing to write.
+            if (!root.canvas.textEditing && root.active) {
+                root.request = null
+                root.closed()
+            }
+        }
     }
 
     Rectangle {
