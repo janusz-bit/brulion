@@ -1,5 +1,5 @@
 # Tests of the markdown module (brulion_core_markdown), one executable per area.
-foreach(_t tokens inline frontmatter parse edit blockdoc render notemode math mathsafety linkformat blockclipboard tokenedit)
+foreach(_t tokens inline frontmatter parse model edit blockdoc render notemode math mathsafety linkformat blockclipboard tokenedit)
     brulion_add_test(tst_markdown_${_t} SOURCES tst_markdown_${_t}.cpp LIBS brulion_core_markdown)
 endforeach()
 # The renderer's HTML as seen by Qt's rich-text engine (QTextDocument, QtGui; offscreen).
