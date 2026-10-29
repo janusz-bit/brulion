@@ -225,140 +225,140 @@
 <context>
     <name>AppShell</name>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="158"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="167"/>
         <source>Journals</source>
         <translation>Dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="161"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="170"/>
         <source>Calendar</source>
         <translation>Kalendarz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="162"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="171"/>
         <source>Tasks</source>
         <translation>Zadania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="163"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="172"/>
         <source>Graph</source>
         <translation>Graf</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="164"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="173"/>
         <source>Search</source>
         <translation>Szukaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="96"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="165"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="105"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="174"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="2021"/>
         <source>All pages</source>
         <translation>Wszystkie strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="166"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="175"/>
         <source>Tags</source>
         <translation>Tagi</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="168"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="177"/>
         <source>Sync</source>
         <translation>Synchronizacja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="169"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="178"/>
         <source>Import and export</source>
         <translation>Import i eksport</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="170"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="179"/>
         <source>History of %1</source>
         <translation>Historia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="171"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="180"/>
         <source>Trash</source>
         <translation>Kosz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="172"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="181"/>
         <source>Settings</source>
         <translation>Ustawienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="518"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="527"/>
         <source>Added to today&apos;s journal</source>
         <translation>Dodano do dzisiejszego dziennika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="519"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="528"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="553"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="562"/>
         <source>This is the journals folder: new daily notes will create it again.</source>
         <translation>To folder dziennika: nowe notatki dzienne utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="554"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="563"/>
         <source>It holds the journals folder “%1”: new daily notes will create it again.</source>
         <translation>Zawiera folder dziennika „%1”: nowe notatki dzienne utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="556"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="565"/>
         <source>This is the templates folder: its templates will no longer be offered.</source>
         <translation>To folder szablonów: jego szablony nie będą już proponowane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="557"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="566"/>
         <source>It holds the templates folder “%1”: its templates will no longer be offered.</source>
         <translation>Zawiera folder szablonów „%1”: jego szablony nie będą już proponowane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="559"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="568"/>
         <source>This is the attachments folder: the pictures and files in it go too.</source>
         <translation>To folder załączników: obrazy i pliki z niego też trafią do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="560"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="569"/>
         <source>It holds the attachments folder “%1”: the pictures and files in it go too.</source>
         <translation>Zawiera folder załączników „%1”: obrazy i pliki z niego też trafią do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="562"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="571"/>
         <source>This is the folder for new pages: new pages will create it again.</source>
         <translation>To folder nowych stron: nowe strony utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="563"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="572"/>
         <source>It holds the folder for new pages “%1”: new pages will create it again.</source>
         <translation>Zawiera folder nowych stron „%1”: nowe strony utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="565"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="574"/>
         <source>This is the journal template: new daily notes will start empty.</source>
         <translation>To szablon dziennika: nowe notatki dzienne będą zaczynać się puste.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="566"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="575"/>
         <source>It holds the journal template “%1”: new daily notes will start empty.</source>
         <translation>Zawiera szablon dziennika „%1”: nowe notatki dzienne będą zaczynać się puste.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="571"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="580"/>
         <source>Move to trash?</source>
         <translation>Przenieść do kosza?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="575"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="580"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="584"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="589"/>
         <source>“%1” will be moved to the trash. You can restore it from there.</source>
         <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="577"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="586"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>Folder „%1” i %n strona w nim trafią do kosza.</numerusform>
@@ -367,23 +367,23 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="578"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="587"/>
         <source>You can restore them from there.</source>
         <translation>Możesz je stamtąd przywrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="583"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="592"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="588"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="597"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="240"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="589"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="249"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="598"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
@@ -8322,7 +8322,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3240"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3241"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -8999,13 +8999,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4281"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4304"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="114"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4271"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4294"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
