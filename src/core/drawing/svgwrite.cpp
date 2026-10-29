@@ -212,6 +212,8 @@ QByteArray toSvg(const Drawing &drawing)
         const QString c = classes.trimmed();
         return c.isEmpty() ? QString() : u" class=\""_s + c + u'"';
     };
+    // (The drawing's hatch lines counted: geometry.h DrawingHatchLines.)
+    qsizetype hatchBudget = DrawingHatchLines;
     for (const Stroke &s : drawing.strokes) {
         const QString color = safeColor(s.color, FallbackInk.toString());
         const QString fillColor = s.fill.trimmed() == u"transparent" ? QString() : safeColor(s.fill, QString());
@@ -264,7 +266,8 @@ QByteArray toSvg(const Drawing &drawing)
             body += rotated ? u"<g transform=\""_s + rotation + u"\">\n"_s + part + u"</g>\n"_s : part;
             continue;
         }
-        const ElementShape shape = elementShape(s, false);
+        const ElementShape shape = elementShape(s, false, std::min(MaxHatchLines, hatchBudget));
+        hatchBudget -= shape.hatch.size();
         const QString strokeWidth = formatNumber(std::max(0.05, s.width));
         const QList<double> dashes = dashPattern(s);
         QString dashAttr;

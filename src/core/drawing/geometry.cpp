@@ -300,9 +300,10 @@ QList<QLineF> clipLineEllipse(QPointF origin, QPointF dir, const QRectF &box)
     return {QLineF(origin + dir * t1, origin + dir * t2)};
 }
 
-/// Hatch lines over `region` (its bounding box `box`) at `angle`, `gap` apart.
+/// Hatch lines over `region` (its bounding box `box`) at `angle`, `gap` apart — at most `limit`
+/// of them (further apart when more would be needed).
 template<typename Clip>
-void hatchLines(QList<QLineF> &out, const QRectF &box, double angle, double gap, const Clip &clip)
+void addHatchLines(QList<QLineF> &out, const QRectF &box, double angle, double gap, qsizetype limit, const Clip &clip)
 {
     const QPointF dir(std::cos(angle), std::sin(angle));
     const QPointF normal(-dir.y(), dir.x());
@@ -312,29 +313,47 @@ void hatchLines(QList<QLineF> &out, const QRectF &box, double angle, double gap,
         lo = std::min(lo, v);
         hi = std::max(hi, v);
     }
-    if (!(hi > lo) || gap <= 0 || (hi - lo) / gap > 20000)
+    if (!(hi > lo) || !std::isfinite(hi - lo) || !(gap > 0) || limit < 1)
         return;
-    for (double offset = lo + gap / 2; offset < hi; offset += gap)
-        out.append(clip(normal * offset, dir));
+    if ((hi - lo) / gap > double(limit))
+        gap = (hi - lo) / double(limit);
+    // Counted by index (a step added to a big offset could change nothing); a concave outline
+    // cuts a line in several: `limit` lines in all.
+    const qsizetype n = std::min(limit, qsizetype(std::ceil((hi - lo) / gap - 0.5)));
+    const qsizetype start = out.size();
+    for (qsizetype k = 0; k < n; ++k) {
+        const double offset = lo + gap / 2 + double(k) * gap;
+        if (offset >= hi)
+            break;
+        for (const QLineF &line : clip(normal * offset, dir)) {
+            if (out.size() - start >= limit)
+                return;
+            out.append(line);
+        }
+    }
 }
 
-ElementShape localShape(const Stroke &e)
+/// The element's shape, unrotated. `maxHatch`: at most so many hatch lines (0: a hatched fill
+/// drawn solid; −1: none at all — bounds and hit tests, which never look at them).
+ElementShape localShape(const Stroke &e, qsizetype maxHatch)
 {
     ElementShape s;
     const bool filled = !transparent(e.fill);
-    const bool solid = e.fillStyle == FillStyle::Solid;
+    const bool solid = e.fillStyle == FillStyle::Solid || maxHatch == 0;
     const double gap = std::max(4.0, 4 * e.width);
+    const bool cross = e.fillStyle == FillStyle::CrossHatch;
+    const qsizetype perDirection = cross ? std::max<qsizetype>(1, maxHatch / 2) : maxHatch;
     s.hatchWidth = e.width / 2;
     const auto hatchPolygon = [&](const QList<QPointF> &corners) {
-        if (!filled || solid)
+        if (!filled || solid || maxHatch < 0)
             return;
         QList<QPointF> closed = corners;
         closed.append(corners.first());
         const auto clip = [&closed](QPointF o, QPointF d) { return clipLine(o, d, {closed}); };
         const QRectF box = pointsRectOf(corners);
-        hatchLines(s.hatch, box, HatchAngle, gap, clip);
-        if (e.fillStyle == FillStyle::CrossHatch)
-            hatchLines(s.hatch, box, HatchAngle + std::numbers::pi / 2, gap, clip);
+        addHatchLines(s.hatch, box, HatchAngle, gap, perDirection, clip);
+        if (cross)
+            addHatchLines(s.hatch, box, HatchAngle + std::numbers::pi / 2, gap, perDirection, clip);
     };
     switch (e.type) {
     case ElementType::Freedraw: {
@@ -353,12 +372,12 @@ ElementShape localShape(const Stroke &e)
         s.outline = ellipsePath(e.box);
         if (filled && solid)
             s.area = s.outline;
-        if (filled && !solid) {
+        if (filled && !solid && maxHatch > 0) {
             const QRectF box = e.box;
             const auto clip = [&box](QPointF o, QPointF d) { return clipLineEllipse(o, d, box); };
-            hatchLines(s.hatch, box, HatchAngle, gap, clip);
-            if (e.fillStyle == FillStyle::CrossHatch)
-                hatchLines(s.hatch, box, HatchAngle + std::numbers::pi / 2, gap, clip);
+            addHatchLines(s.hatch, box, HatchAngle, gap, perDirection, clip);
+            if (cross)
+                addHatchLines(s.hatch, box, HatchAngle + std::numbers::pi / 2, gap, perDirection, clip);
         }
         break;
     case ElementType::Diamond:
@@ -489,9 +508,11 @@ Path arrowhead(Arrowhead head, QPointF tip, QPointF from, double width, bool *fi
     return polygonPath({a, tip, b}, false);
 }
 
-ElementShape elementShape(const Stroke &e, bool rotated)
+namespace {
+
+ElementShape shapeOf(const Stroke &e, bool rotated, qsizetype maxHatch)
 {
-    ElementShape s = localShape(e);
+    ElementShape s = localShape(e, maxHatch);
     const QPointF center = elementCenter(e);
     if (rotated && e.angle != 0 && std::isfinite(e.angle)) {
         transformPath(s.area, center, e.angle);
@@ -524,6 +545,13 @@ ElementShape elementShape(const Stroke &e, bool rotated)
     return s;
 }
 
+} // namespace
+
+ElementShape elementShape(const Stroke &e, bool rotated, qsizetype hatchLines)
+{
+    return shapeOf(e, rotated, std::clamp<qsizetype>(hatchLines, 0, MaxHatchLines));
+}
+
 QRectF elementBounds(const Stroke &e)
 {
     if (e.type == ElementType::Text || e.type == ElementType::Image) {
@@ -536,7 +564,7 @@ QRectF elementBounds(const Stroke &e)
             r = QRectF(r.topLeft(), QSizeF(std::max(r.width(), 0.01), std::max(r.height(), 0.01)));
         return r;
     }
-    return elementShape(e).bounds;
+    return shapeOf(e, true, -1).bounds; // (hatch lines lie inside the outline)
 }
 
 QList<TextLine> textLines(const Stroke &e)
@@ -668,7 +696,7 @@ struct HitShape {
 HitShape hitShape(const Stroke &e)
 {
     HitShape h;
-    const ElementShape s = localShape(e);
+    const ElementShape s = localShape(e, -1);
     h.lines = flatten(s.outline, 1);
     for (const Path &head : s.heads)
         h.lines.append(flatten(head, 1));

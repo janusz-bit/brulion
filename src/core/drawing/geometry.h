@@ -15,7 +15,9 @@
 //    when it has a background colour;
 //  * fills — solid: the interior; hachure, cross-hatch (and zigzag, drawn as hachure): clean
 //    parallel lines at −41° (cross-hatch: also at +49°), max(4, 4 × strokeWidth) apart, half the
-//    stroke's width, clipped exactly to the shape;
+//    stroke's width, clipped exactly to the shape — at most MaxHatchLines an element (a bigger
+//    shape gets them further apart) and DrawingHatchLines a drawing (the hatched fills beyond it
+//    drawn solid), so a scene of huge hatched shapes stays small and quick;
 //  * text — one line per "\n" at font-independent baselines (textLines()); the box is the
 //    element's; pictures — their box.
 // Rotation (`angle`, clockwise) about the element's centre: its box's, or its points' bounding
@@ -62,9 +64,17 @@ struct ElementShape {
     QRectF bounds;
 };
 
+/// The most hatch lines one element draws (both directions together).
+inline constexpr qsizetype MaxHatchLines = 2000;
+/// The most hatch lines a drawing draws (the editor, the previews, the SVG each count them in
+/// drawing order and give each element at most what is left; with nothing left a hatched fill is
+/// drawn solid).
+inline constexpr qsizetype DrawingHatchLines = 200'000;
+
 /// The element's shape (see the header); `rotated` false: without its rotation (the SVG writer
-/// rotates it with a transform).
-ElementShape elementShape(const Stroke &e, bool rotated = true);
+/// rotates it with a transform). `hatchLines`: at most so many hatch lines (up to MaxHatchLines;
+/// 0: a hatched fill drawn solid).
+ElementShape elementShape(const Stroke &e, bool rotated = true, qsizetype hatchLines = MaxHatchLines);
 /// elementShape(e).bounds — for text and pictures without building the paths.
 QRectF elementBounds(const Stroke &e);
 /// The centre the element rotates about.

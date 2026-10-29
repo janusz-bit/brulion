@@ -9,7 +9,7 @@
 // with a containerId) belong to their shape: they move, are copied and deleted with it. Arrows
 // bound to elements (Excalidraw's startBinding/endBinding) follow them when they move; Brulion
 // never binds new arrows. Groups (groupIds) are selected, copied and reordered as a whole. Locked
-// elements are never touched.
+// elements — and the labels of locked shapes (isLocked()) — are never touched.
 #pragma once
 
 #include "drawing/drawing.h"
@@ -62,6 +62,9 @@ inline constexpr double NewTextLineHeight = 1.15;
 
 /// The index of the element `id` in the drawing (−1 none).
 qsizetype indexOfElement(const Drawing &d, QStringView id);
+/// The element is locked, or the label of a locked shape: never selected, moved, erased, recoloured
+/// or edited.
+bool isLocked(const Drawing &d, const Stroke &e);
 /// The ids a selection of `ids` really takes, in drawing order: whole outermost groups, a shape's
 /// label and a label's shape; locked elements and unknown ids left out.
 QStringList selectionClosure(const Drawing &d, const QStringList &ids);
@@ -90,9 +93,19 @@ Stroke newShape(ElementType type, QPointF from, QPointF to, bool constrain, cons
                 const EditStamp &s);
 /// A new text at `topLeft`, its box measured.
 Stroke newText(QPointF topLeft, const QString &text, const TextStyle &st, const TextMetrics &m, const EditStamp &s);
+/// The text an editor offers for the Text element `e`: as typed (originalText) for a label or a
+/// text wrapped at its box, its lines (text) for one whose box follows it. setText() with it
+/// changes nothing.
+QString editableText(const Stroke &e);
+/// The width a label wraps at in the shape `container` (Excalidraw's getBoundTextMaxWidth): a
+/// rectangle's width, the widest rectangle inside an ellipse (width / 2 · √2) or a diamond
+/// (width / 2), less 2 × LabelPadding. The label's editor is as wide.
+double labelMaxWidth(const Stroke &container);
 /// The text of the Text element `id` replaced: measured (autoResize), wrapped at its box's width,
-/// or — a label — wrapped to its shape (its width − 2 × LabelPadding) and centred in it (the shape
-/// grows to hold it). An empty text deletes the element.
+/// or — a label — wrapped to labelMaxWidth() of its shape and centred in it (the shape grows to
+/// hold it as Excalidraw grows it: computeContainerDimensionForBoundText). An empty text deletes
+/// the element; the text it has (editableText()) changes nothing — no stamp, no new wrapping in
+/// Brulion's fonts. Locked texts and labels of locked shapes stay.
 void setText(Drawing &d, const QString &id, const QString &text, const TextMetrics &m, const EditStamp &s);
 /// A label `text` for the shape `containerId`, right after it (its boundElements name it). The new
 /// text's id ("" when there is no such shape or the text is empty).

@@ -116,6 +116,16 @@ qsizetype indexOfElement(const Drawing &d, QStringView id)
     return -1;
 }
 
+bool isLocked(const Drawing &d, const Stroke &e)
+{
+    if (e.locked)
+        return true;
+    if (e.containerId.isEmpty())
+        return false;
+    const qsizetype c = indexOfElement(d, e.containerId);
+    return c >= 0 && d.strokes.at(c).locked;
+}
+
 QStringList selectionClosure(const Drawing &d, const QStringList &ids)
 {
     const QHash<QString, qsizetype> index = indexById(d);
@@ -166,11 +176,12 @@ void moveElements(Drawing &d, const QSet<QString> &ids, QPointF delta, const Edi
 {
     if (!std::isfinite(delta.x()) || !std::isfinite(delta.y()) || (delta.x() == 0 && delta.y() == 0))
         return;
+    const QHash<QString, qsizetype> index = indexById(d);
     QSet<QString> moved;
     QRectF extent;
     const auto extend = [&extent](const QRectF &r) { extent = extent.isNull() ? r : extent.united(r); };
-    for (Stroke &e : d.strokes) {
-        if (e.locked || !ids.contains(e.id))
+    for (const Stroke &e : std::as_const(d.strokes)) {
+        if (!ids.contains(e.id) || lockedIn(d, index, e))
             continue;
         moved.insert(e.id);
         extend(hasPoints(e.type) ? pointsRect(e.points).adjusted(0, 0, 1e-9, 1e-9) : e.box);
@@ -242,11 +253,12 @@ QStringList duplicateElements(Drawing &d, const QStringList &ids, QPointF offset
         if (e.type == ElementType::Text && want.contains(e.containerId))
             want.insert(e.id);
     }
+    const QHash<QString, qsizetype> index = indexById(d);
     QList<qsizetype> originals;
     QHash<QString, QString> idMap;
     for (qsizetype i = 0; i < d.strokes.size(); ++i) {
         const Stroke &e = d.strokes.at(i);
-        if (e.locked || !want.contains(e.id) || idMap.contains(e.id))
+        if (!want.contains(e.id) || idMap.contains(e.id) || lockedIn(d, index, e))
             continue;
         originals.append(i);
         idMap.insert(e.id, newIdOf(s));
@@ -291,9 +303,10 @@ QStringList duplicateElements(Drawing &d, const QStringList &ids, QPointF offset
 
 void deleteElements(Drawing &d, const QSet<QString> &ids, const EditStamp &s)
 {
+    const QHash<QString, qsizetype> index = indexById(d);
     QSet<QString> gone;
     for (const Stroke &e : d.strokes) {
-        if (!e.locked && ids.contains(e.id))
+        if (ids.contains(e.id) && !lockedIn(d, index, e))
             gone.insert(e.id);
     }
     for (const Stroke &e : d.strokes) {
@@ -328,11 +341,16 @@ void deleteElements(Drawing &d, const QSet<QString> &ids, const EditStamp &s)
 
 void recolorElements(Drawing &d, const QSet<QString> &ids, const QString &color, const EditStamp &s)
 {
-    for (Stroke &e : d.strokes) {
-        if (e.locked || !ids.contains(e.id) || e.color == color)
-            continue;
-        e.color = color;
-        stamp(e, s);
+    const QHash<QString, qsizetype> index = indexById(d);
+    QList<qsizetype> chosen;
+    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
+        const Stroke &e = d.strokes.at(i);
+        if (ids.contains(e.id) && e.color != color && !lockedIn(d, index, e))
+            chosen.append(i);
+    }
+    for (const qsizetype i : std::as_const(chosen)) {
+        d.strokes[i].color = color;
+        stamp(d.strokes[i], s);
     }
 }
 
@@ -366,18 +384,20 @@ void reorderElements(Drawing &d, const QSet<QString> &ids, Reorder how, const Ed
             blocks.append(unit);
         lastGroup = g;
     }
-    // The backdrop: the leading locked blocks stay at the bottom.
+    // The backdrop: the leading locked blocks (with their shapes' labels) stay at the bottom.
+    const QHash<QString, qsizetype> index = indexById(d);
     qsizetype fixed = 0;
     while (fixed < blocks.size()
            && std::all_of(blocks.at(fixed).cbegin(), blocks.at(fixed).cend(),
-                          [&d](qsizetype i) { return d.strokes.at(i).locked; }))
+                          [&](qsizetype i) { return lockedIn(d, index, d.strokes.at(i)); }))
         ++fixed;
+    const auto picked = [&](qsizetype i) {
+        return ids.contains(d.strokes.at(i).id) && !lockedIn(d, index, d.strokes.at(i));
+    };
     QList<bool> selected;
     for (qsizetype b = 0; b < blocks.size(); ++b) {
         const QList<qsizetype> &block = blocks.at(b);
-        selected.append(b >= fixed && std::any_of(block.cbegin(), block.cend(), [&](qsizetype i) {
-                            return !d.strokes.at(i).locked && ids.contains(d.strokes.at(i).id);
-                        }));
+        selected.append(b >= fixed && std::any_of(block.cbegin(), block.cend(), picked));
     }
     QList<qsizetype> order(blocks.size());
     for (qsizetype b = 0; b < blocks.size(); ++b)
@@ -418,7 +438,7 @@ void reorderElements(Drawing &d, const QSet<QString> &ids, Reorder how, const Ed
     out.reserve(d.strokes.size());
     for (qsizetype k = 0; k < flat.size(); ++k) {
         Stroke e = d.strokes.at(flat.at(k));
-        if (!e.locked && ids.contains(e.id))
+        if (picked(flat.at(k)))
             stamp(e, s);
         out.append(std::move(e));
     }
@@ -541,27 +561,69 @@ Stroke newText(QPointF topLeft, const QString &text, const TextStyle &st, const 
     return e;
 }
 
-void setText(Drawing &d, const QString &id, const QString &text, const TextMetrics &m, const EditStamp &s)
+QString editableText(const Stroke &e)
 {
-    const qsizetype i = indexOfElement(d, id);
-    if (i < 0 || d.strokes.at(i).type != ElementType::Text || d.strokes.at(i).locked)
-        return;
-    const QString typed = QString(text).remove(u'\r');
-    if (typed.trimmed().isEmpty()) {
-        deleteElements(d, {id}, s);
-        return;
+    return (e.containerId.isEmpty() && e.autoResize) || e.originalText.isEmpty() ? e.text : e.originalText;
+}
+
+namespace {
+
+/// JavaScript's Math.round (halves up), as Excalidraw computes.
+double jsRound(double v)
+{
+    return std::floor(v + 0.5);
+}
+
+/// The widest (tallest) text a shape holds: Excalidraw's getBoundTextMaxWidth / …MaxHeight of a
+/// `dimension` of the shape.
+double labelMax(ElementType type, double dimension)
+{
+    switch (type) {
+    case ElementType::Ellipse: return jsRound(dimension / 2 * std::numbers::sqrt2) - 2 * LabelPadding;
+    case ElementType::Diamond: return jsRound(dimension / 2) - 2 * LabelPadding;
+    default: break;
     }
+    return dimension - 2 * LabelPadding;
+}
+
+/// The shape's dimension that holds text `dimension` wide (high): Excalidraw's
+/// computeContainerDimensionForBoundText.
+double containerDimension(ElementType type, double dimension)
+{
+    dimension = std::ceil(dimension);
+    const double padding = 2 * LabelPadding;
+    switch (type) {
+    case ElementType::Ellipse: return jsRound((dimension + padding) / std::numbers::sqrt2 * 2);
+    case ElementType::Diamond: return 2 * (dimension + padding);
+    default: break;
+    }
+    return dimension + padding;
+}
+
+/// The Text element at `i` given the text `typed`: measured, wrapped, placed — its label's shape
+/// grown to hold it — and stamped.
+void layoutText(Drawing &d, qsizetype i, const QString &typed, const TextMetrics &m, const EditStamp &s)
+{
     Stroke e = d.strokes.at(i);
     e.originalText = typed;
     const qsizetype c = indexOfElement(d, e.containerId);
     if (c >= 0 && isShape(d.strokes.at(c).type)) {
         Stroke &container = d.strokes[c];
-        e.text = wrapText(typed, container.box.width() - 2 * LabelPadding, e.fontFamily, e.fontSize, m);
+        const double maxWidth = labelMaxWidth(container);
+        e.text = wrapText(typed, maxWidth, e.fontFamily, e.fontSize, m);
         const QSizeF size = measureText(e.text, e.fontFamily, e.fontSize, e.lineHeight, m);
-        if (size.height() + 2 * LabelPadding > container.box.height()) {
-            container.box.setHeight(round2(size.height() + 2 * LabelPadding));
-            stamp(container, s);
+        // (Grown as Excalidraw grows it: its top left stays.)
+        bool grown = false;
+        if (size.height() > labelMax(container.type, container.box.height())) {
+            container.box.setHeight(containerDimension(container.type, size.height()));
+            grown = true;
         }
+        if (size.width() > maxWidth) {
+            container.box.setWidth(containerDimension(container.type, size.width()));
+            grown = true;
+        }
+        if (grown)
+            stamp(container, s);
         const QPointF centre = container.box.center();
         e.box = QRectF(QPointF(round2(centre.x() - size.width() / 2), round2(centre.y() - size.height() / 2)), size);
         e.angle = container.angle;
@@ -583,6 +645,28 @@ void setText(Drawing &d, const QString &id, const QString &text, const TextMetri
     d.strokes[i] = std::move(e);
 }
 
+} // namespace
+
+double labelMaxWidth(const Stroke &container)
+{
+    return labelMax(container.type, container.box.width());
+}
+
+void setText(Drawing &d, const QString &id, const QString &text, const TextMetrics &m, const EditStamp &s)
+{
+    const qsizetype i = indexOfElement(d, id);
+    if (i < 0 || d.strokes.at(i).type != ElementType::Text || isLocked(d, d.strokes.at(i)))
+        return;
+    const QString typed = QString(text).remove(u'\r');
+    if (typed == QString(editableText(d.strokes.at(i))).remove(u'\r'))
+        return; // (unchanged: kept as it is, wrapped as its program wrapped it)
+    if (typed.trimmed().isEmpty()) {
+        deleteElements(d, {id}, s);
+        return;
+    }
+    layoutText(d, i, typed, m, s);
+}
+
 QString addLabel(Drawing &d, const QString &containerId, const QString &text, const TextStyle &st,
                  const TextMetrics &m, const EditStamp &s)
 {
@@ -590,7 +674,7 @@ QString addLabel(Drawing &d, const QString &containerId, const QString &text, co
     if (c < 0 || text.trimmed().isEmpty())
         return {};
     const ElementType type = d.strokes.at(c).type;
-    if ((!isShape(type) && !isLinear(type)) || d.strokes.at(c).locked)
+    if ((!isShape(type) && !isLinear(type)) || isLocked(d, d.strokes.at(c)))
         return {};
     Stroke t = newText(d.strokes.at(c).box.topLeft(), text, st, m, s);
     t.containerId = containerId;
@@ -600,8 +684,9 @@ QString addLabel(Drawing &d, const QString &containerId, const QString &text, co
     container.boundIds.append(t.id);
     stamp(container, s);
     const QString id = t.id;
+    const QString typed = t.text;
     d.strokes.insert(c + 1, std::move(t));
-    setText(d, id, text, m, s);
+    layoutText(d, c + 1, typed, m, s);
     return id;
 }
 

@@ -634,6 +634,89 @@ private Q_SLOTS:
         }
     }
 
+    void hatchingIsBounded_data()
+    {
+        QTest::addColumn<int>("type");
+        QTest::addColumn<int>("style");
+        QTest::addColumn<double>("side");
+        QTest::addColumn<double>("width");
+        QTest::newRow("huge cross-hatch, hair-thin") << int(ElementType::Rectangle) << int(FillStyle::CrossHatch) << 55000.0 << 0.05;
+        QTest::newRow("huge hachure ellipse") << int(ElementType::Ellipse) << int(FillStyle::Hachure) << 1e6 << 1.0;
+        QTest::newRow("huge diamond") << int(ElementType::Diamond) << int(FillStyle::Zigzag) << 2e5 << 0.5;
+        QTest::newRow("concave polygon") << int(ElementType::Line) << int(FillStyle::CrossHatch) << 50000.0 << 1.0;
+    }
+    void hatchingIsBounded()
+    {
+        // A small file of huge hatched shapes never turns into millions of lines: at most
+        // MaxHatchLines an element (further apart), and bounds and hit tests make none.
+        QFETCH(int, type);
+        QFETCH(int, style);
+        QFETCH(double, side);
+        QFETCH(double, width);
+        Stroke s;
+        if (ElementType(type) == ElementType::Line) {
+            // A comb: 2000 teeth, each scan line cut in many pieces.
+            QList<QPointF> points;
+            for (int i = 0; i < 2000; ++i) {
+                points.append(QPointF(i * side / 2000, 0));
+                points.append(QPointF((i + 0.5) * side / 2000, side));
+            }
+            points.append(QPointF(side, -10));
+            points.append(QPointF(0, -10));
+            s = lineOf(ElementType::Line, u"grzebień"_s, points);
+            s.polygon = true;
+        } else {
+            s = shapeOf(ElementType(type), u"wielki"_s, QRectF(-side / 2, -side / 2, side, side));
+        }
+        s.width = width;
+        s.fill = u"#ffc9c9"_s;
+        s.fillStyle = FillStyle(style);
+        const ElementShape shape = elementShape(s);
+        QVERIFY2(shape.hatch.size() <= MaxHatchLines, qPrintable(QString::number(shape.hatch.size())));
+        QVERIFY(shape.hatch.size() >= MaxHatchLines / 4);
+        QVERIFY(shape.area.isEmpty());
+        // A smaller share: fewer lines; none: drawn solid.
+        QVERIFY(elementShape(s, true, 100).hatch.size() <= 100);
+        const ElementShape solid = elementShape(s, true, 0);
+        QVERIFY(solid.hatch.isEmpty());
+        QVERIFY(!solid.area.isEmpty());
+        QCOMPARE(solid.bounds, shape.bounds);
+        QCOMPARE(elementBounds(s), shape.bounds);
+        // Hit tests without hatching: an outline edge hits, the far outside does not.
+        QVERIFY(!brulion::drawing::hitTest(s, QPointF(4 * side, 4 * side), 1));
+    }
+
+    void svgHatchingIsBounded()
+    {
+        // 110 hatched squares wanting MaxHatchLines each: the SVG has DrawingHatchLines in all, the
+        // squares beyond them filled solid.
+        Drawing d;
+        for (int i = 0; i < 110; ++i) {
+            Stroke s = rectangle(u"k%1"_s.arg(i), QRectF(0, 0, 50000, 50000));
+            s.width = 0.05;
+            s.fill = u"#ffc9c9"_s;
+            s.fillStyle = FillStyle::CrossHatch;
+            d.strokes.append(s);
+        }
+        d.theme = PaperTheme::Light;
+        const QByteArray svg = toSvg(d);
+        qsizetype hatched = 0, segments = 0;
+        for (qsizetype at = svg.indexOf("<path d=\""); at >= 0; at = svg.indexOf("<path d=\"", at + 1)) {
+            const qsizetype end = svg.indexOf("/>", at);
+            const QByteArray path = svg.mid(at, end - at);
+            if (!path.contains("stroke=\"#ffc9c9\""))
+                continue;
+            ++hatched;
+            segments += path.count('M');
+        }
+        const qsizetype solid = svg.count("fill=\"#ffc9c9\"");
+        QVERIFY2(hatched >= 100 && hatched + solid == 110 && solid >= 5,
+                 qPrintable(u"%1 hatched, %2 solid"_s.arg(hatched).arg(solid)));
+        QVERIFY2(segments <= DrawingHatchLines, qPrintable(QString::number(segments)));
+        QVERIFY(svg.size() < 16 * 1024 * 1024);
+        QVERIFY(wellFormed(svg));
+    }
+
     void ellipseWithinItsBox()
     {
         const Stroke s = shapeOf(ElementType::Ellipse, u"e"_s, QRectF(10, 20, 160, 60));
@@ -1024,6 +1107,140 @@ private Q_SLOTS:
         // No label on a picture, none of nothing.
         QVERIFY(addLabel(d, label, u"x"_s, TextStyle{}, m, stamp).isEmpty());
         QVERIFY(addLabel(d, u"R"_s, u""_s, TextStyle{}, m, stamp).isEmpty());
+    }
+
+    void unchangedTextIsNoEdit_data()
+    {
+        QTest::addColumn<QString>("kind");
+        QTest::newRow("Excalidraw's free text") << u"free"_s;
+        QTest::newRow("a text wrapped at its box") << u"fixed"_s;
+        QTest::newRow("a label Excalidraw wrapped") << u"label"_s;
+        QTest::newRow("a label without originalText") << u"bare label"_s;
+        QTest::newRow("an arrow's label") << u"arrow"_s;
+        QTest::newRow("CRLF lines") << u"crlf"_s;
+    }
+    void unchangedTextIsNoEdit()
+    {
+        // Closing the editor on a text as it is changes nothing: no stamp, no wrapping in Brulion's
+        // fonts (docs/SYNTAX.md: Brulion never re-wraps text it did not edit).
+        QFETCH(QString, kind);
+        Drawing d;
+        Stroke t = textOf(u"T"_s, QRectF(10, 10, 123.45, 25), u"Zażółć gęślą jaźń"_s);
+        t.fontFamily = 5;
+        t.version = 3;
+        if (kind == u"fixed") {
+            t.autoResize = false;
+            t.text = u"Zażółć\ngęślą jaźń"_s;
+        } else if (kind == u"label" || kind == u"bare label") {
+            Stroke r = rectangle(u"R"_s, QRectF(0, 0, 80, 40));
+            r.boundIds = {u"T"_s};
+            t.containerId = u"R"_s;
+            t.text = u"Zażółć\ngęślą\njaźń"_s; // (Virgil's metrics: not Brulion's)
+            if (kind == u"bare label")
+                t.originalText.clear();
+            d.strokes.append(r);
+        } else if (kind == u"arrow") {
+            Stroke a = lineOf(ElementType::Arrow, u"A"_s, {{0, 0}, {300, 0}});
+            a.boundIds = {u"T"_s};
+            t.containerId = u"A"_s;
+            t.text = u"Zażółć gęślą\njaźń"_s;
+            d.strokes.append(a);
+        } else if (kind == u"crlf") {
+            t.text = u"Zażółć\r\ngęślą"_s;
+            t.originalText = t.text;
+        }
+        d.strokes.append(t);
+        const Drawing before = d;
+        const QString shown = editableText(t);
+        QVERIFY(!shown.isEmpty());
+        setText(d, u"T"_s, QString(shown).remove(u'\r'), fakeMetrics(), testStamp());
+        QVERIFY(sameElements(d.strokes, before.strokes));
+        QCOMPARE(find(d, u"T"_s)->text, t.text);
+        QCOMPARE(find(d, u"T"_s)->box, t.box);
+        QCOMPARE(find(d, u"T"_s)->versionNonce, t.versionNonce);
+        QVERIFY(diffElements(before.strokes, d.strokes).isEmpty());
+        // Changed: written in Brulion's measure, stamped.
+        setText(d, u"T"_s, shown + u" ąę"_s, fakeMetrics(), testStamp());
+        QCOMPARE(find(d, u"T"_s)->version, 4);
+        QCOMPARE(find(d, u"T"_s)->originalText, QString(shown).remove(u'\r') + u" ąę"_s);
+    }
+
+    void lockedShapesKeepTheirLabels()
+    {
+        // A locked rectangle (a backdrop) with a label of its own, not locked itself: the label is
+        // as locked as its shape.
+        Drawing d;
+        Stroke r = rectangle(u"R"_s, QRectF(0, 0, 100, 50));
+        r.locked = true;
+        r.boundIds = {u"L"_s};
+        Stroke l = textOf(u"L"_s, QRectF(20, 15, 60, 20), u"Tło"_s);
+        l.containerId = u"R"_s;
+        d.strokes = {r, l, rectangle(u"S"_s, QRectF(0, 100, 50, 50))};
+        QVERIFY(isLocked(d, d.strokes.at(0)));
+        QVERIFY(isLocked(d, d.strokes.at(1)));
+        QVERIFY(!isLocked(d, d.strokes.at(2)));
+        const EditStamp stamp = testStamp();
+        const Drawing before = d;
+        deleteElements(d, {u"L"_s}, stamp);
+        moveElements(d, {u"L"_s}, QPointF(10, 10), stamp);
+        recolorElements(d, {u"L"_s}, u"#e03131"_s, stamp);
+        reorderElements(d, {u"L"_s}, Reorder::ToFront, stamp);
+        setText(d, u"L"_s, u"Zmieniony napis, dłuższy niż ramka"_s, fakeMetrics(), stamp);
+        QVERIFY(duplicateElements(d, {u"L"_s}, QPointF(10, 10), stamp).isEmpty());
+        QVERIFY(addLabel(d, u"R"_s, u"Drugi"_s, TextStyle{}, fakeMetrics(), stamp).isEmpty());
+        QVERIFY(selectionClosure(d, {u"L"_s}).isEmpty());
+        QVERIFY(sameElements(d.strokes, before.strokes));
+        QCOMPARE(d.strokes.at(0).version, 1);
+        QCOMPARE(d.strokes.at(1).color, before.strokes.at(1).color);
+        // The backdrop with its label stays at the bottom.
+        reorderElements(d, {u"S"_s}, Reorder::ToBack, stamp);
+        QCOMPARE(ids(d), (QStringList{u"R"_s, u"L"_s, u"S"_s}));
+        // Unlocked: it is an ordinary label again.
+        d.strokes[0].locked = false;
+        deleteElements(d, {u"L"_s}, stamp);
+        QCOMPARE(ids(d), (QStringList{u"R"_s, u"S"_s}));
+    }
+
+    void labelsWrapInsideTheirShape_data()
+    {
+        QTest::addColumn<int>("type");
+        QTest::addColumn<QRectF>("box");
+        QTest::addColumn<double>("maxWidth");
+        // Excalidraw's getBoundTextMaxWidth (BOUND_TEXT_PADDING 5).
+        QTest::newRow("rectangle") << int(ElementType::Rectangle) << QRectF(0, 0, 100, 100) << 90.0;
+        QTest::newRow("ellipse") << int(ElementType::Ellipse) << QRectF(0, 0, 100, 100) << 61.0; // round(50√2) − 10
+        QTest::newRow("diamond") << int(ElementType::Diamond) << QRectF(0, 0, 100, 100) << 40.0;
+        QTest::newRow("wide ellipse") << int(ElementType::Ellipse) << QRectF(10, 20, 300, 60) << 202.0;
+        QTest::newRow("tiny diamond") << int(ElementType::Diamond) << QRectF(0, 0, 15, 15) << -2.0;
+    }
+    void labelsWrapInsideTheirShape()
+    {
+        QFETCH(int, type);
+        QFETCH(QRectF, box);
+        QFETCH(double, maxWidth);
+        const TextMetrics m = fakeMetrics();
+        Drawing d;
+        d.strokes = {shapeOf(ElementType(type), u"K"_s, box)};
+        QCOMPARE(labelMaxWidth(d.strokes.first()), maxWidth);
+        const QString id = addLabel(d, u"K"_s, u"Zażółć gęślą jaźń"_s, TextStyle{}, m, testStamp());
+        QVERIFY(!id.isEmpty());
+        const Stroke &shape = *find(d, u"K"_s);
+        const Stroke &label = *find(d, id);
+        QCOMPARE(QString(label.text).remove(u'\n').remove(u' '), u"Zażółćgęśląjaźń"_s);
+        // Every line within the inside's width (a shape too small for one letter grows instead).
+        const double width = std::max(maxWidth, labelMaxWidth(shape));
+        for (const QString &line : label.text.split(u'\n'))
+            QVERIFY2(m.width(line, 2, 20) <= width + 1e-9, qPrintable(line));
+        QVERIFY(label.box.width() <= labelMaxWidth(shape) + 1e-9);
+        // The shape holds the text's height as Excalidraw's getBoundTextMaxHeight measures it.
+        const double h = shape.box.height();
+        const double maxHeight = ElementType(type) == ElementType::Ellipse ? std::floor(h / 2 * std::numbers::sqrt2 + 0.5) - 10
+                                 : ElementType(type) == ElementType::Diamond ? std::floor(h / 2 + 0.5) - 10
+                                                                             : h - 10;
+        QVERIFY2(label.box.height() <= maxHeight + 1e-9, qPrintable(u"%1 > %2"_s.arg(label.box.height()).arg(maxHeight)));
+        QVERIFY(std::abs(label.box.center().x() - shape.box.center().x()) < 0.01);
+        QVERIFY(std::abs(label.box.center().y() - shape.box.center().y()) < 0.01);
+        QCOMPARE(shape.box.topLeft(), box.topLeft()); // (grown from its top left, as Excalidraw does)
     }
 
     void wrapping_data()
