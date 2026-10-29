@@ -3,6 +3,13 @@
 #include <QStandardPaths>
 #include <QSysInfo>
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace brulion::platform {
 
 QString targetName()
@@ -52,6 +59,13 @@ QString deviceDescription()
             : QString();
     return QStringLiteral("%1%2, %3").arg(product, kernel, QSysInfo::currentCpuArchitecture());
 #endif
+#endif
+}
+
+void allowForegroundActivation()
+{
+#ifdef Q_OS_WIN
+    AllowSetForegroundWindow(ASFW_ANY);
 #endif
 }
 

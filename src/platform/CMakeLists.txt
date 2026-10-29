@@ -24,12 +24,14 @@ if(ANDROID)
     endif()
 endif()
 
-# WebAssembly: IndexedDB persistence (IDBFS), browser notifications, loading-screen bridge and
-# the self-tests (?selftest=…) — docs/WEB.md. Include as "wasm/wasmstorage.h" etc.
+# WebAssembly: IndexedDB persistence (IDBFS), browser notifications, shares handed over by another
+# tab (the share target), loading-screen bridge and the self-tests (?selftest=…) — docs/WEB.md.
+# Include as "wasm/wasmstorage.h" etc.
 if(EMSCRIPTEN)
     target_sources(brulion_platform PRIVATE
         wasm/wasmstorage.h wasm/wasmstorage.cpp
         wasm/wasmnotifier.h wasm/wasmnotifier.cpp
+        wasm/wasmshare.h wasm/wasmshare.cpp
         wasm/wasmshell.h wasm/wasmshell.cpp
         wasm/wasmselftest.h wasm/wasmselftest.cpp
     )

@@ -1,6 +1,9 @@
 // AppController: text and files shared to Brulion from another app ("Udostępnij → Brulion",
-// docs/ANDROID.md; the --share developer option elsewhere). The pure parts — the platform's JSON,
-// the capture text, page titles and contents, a file's journal block — are notebook/share.h.
+// docs/ANDROID.md; the browser version's share target, docs/WEB.md; the --share developer option)
+// and files opened with Brulion on a desktop ("Otwórz za pomocą": --open, a second launch's `share`
+// message; docs/WINDOWS.md, docs/NIXOS.md). The pure parts — the platform's JSON, the share
+// target's query, the opened files, the capture text, page titles and contents, a file's journal
+// block, which opened file is a page of the notebook — are notebook/share.h.
 #include "appcontroller.h"
 
 #include "log/categories.h"
@@ -15,8 +18,12 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMimeDatabase>
 #include <QStringList>
 #include <QVariantList>
+
+#include <algorithm>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -54,6 +61,14 @@ void removeShareCopies(const QString &rawDir, const QString &inbox)
         qCWarning(lcApp) << "Could not remove the shared files' copies in" << dir;
 }
 
+/// How the notebook's folder is compared with an opened file's (Windows' file names ignore letter
+/// case).
+#ifdef Q_OS_WIN
+constexpr Qt::CaseSensitivity FileNameCase = Qt::CaseInsensitive;
+#else
+constexpr Qt::CaseSensitivity FileNameCase = Qt::CaseSensitive;
+#endif
+
 } // namespace
 
 QString AppController::shareInboxPath() const
@@ -66,6 +81,11 @@ void AppController::receiveShareJson(const QByteArray &json)
     receiveShare(QJsonDocument::fromJson(json).object().toVariantMap());
 }
 
+void AppController::receiveShareQuery(const QString &query)
+{
+    receiveShare(notebook::sharedContentToJson(notebook::sharedContentFromQuery(query)).toVariantMap());
+}
+
 void AppController::receiveShare(const QVariantMap &map)
 {
     notebook::SharedContent share = notebook::sharedContentFromJson(QJsonObject::fromVariantMap(map));
@@ -75,23 +95,46 @@ void AppController::receiveShare(const QVariantMap &map)
         toast(tr("Nothing to save."), u"info"_s);
         return;
     }
-    // A newer share replaces one still waiting (its copies go).
-    if (m_share)
+    // Files opened with Brulion join opened files still waiting (Windows starts Brulion once per
+    // selected file, each start sends its own); any other newer share replaces the waiting one
+    // (its copies go).
+    QList<ShareFile> known;
+    if (m_share && m_share->source == u"open" && share.source == u"open") {
+        share = notebook::mergeOpenedShares(*m_share, share);
+        known = std::exchange(m_shareFiles, {});
+        m_share.reset(); // opened files have no copies to remove
+    } else if (m_share) {
         clearShare();
+    }
 
     // Read the files now: on Android the copies were made for this moment, and the dialog shows
     // their titles and first lines.
     QList<ShareFile> files;
     for (const notebook::SharedFile &shared : std::as_const(share.files)) {
+        // A file read for the waiting share is not read again.
+        const auto read = std::find_if(known.cbegin(), known.cend(), [&shared](const ShareFile &file) {
+            return !shared.path.isEmpty() && shared.error.isEmpty() && file.path == shared.path;
+        });
+        if (read != known.cend()) {
+            files.append(*read);
+            continue;
+        }
         ShareFile file;
+        file.path = shared.path;
         file.name = shared.name.isEmpty() ? QFileInfo(shared.path).fileName() : shared.name;
         file.size = shared.size;
         file.error = shared.error;
         if (file.error.isEmpty()) {
             const QFileInfo info(shared.path);
-            if (info.exists() && info.isFile())
+            QString mime = shared.mime;
+            if (info.exists() && info.isFile()) {
                 file.size = info.size();
-            notebook::SharedFileProblem problem = notebook::checkSharedFile(file.name, shared.mime, file.size);
+                // A file opened with Brulion has no type: its name, else its content tells ("README"
+                // or "notatka" without an extension is text/plain, a picture is not text).
+                if (mime.isEmpty())
+                    mime = QMimeDatabase().mimeTypeForFile(info).name();
+            }
+            notebook::SharedFileProblem problem = notebook::checkSharedFile(file.name, mime, file.size);
             if (problem == notebook::SharedFileProblem::None && !(info.exists() && info.isFile()))
                 file.error = u"unreadable"_s;
             else
@@ -137,6 +180,40 @@ void AppController::applyPendingShare()
         toast(tr("Open or create a notebook first to save what you shared."), u"warning"_s);
         return;
     }
+    if (m_share->source == u"open") {
+        // A file opened with Brulion that already is a page of this notebook opens as that page
+        // (also through a linked folder: canonical paths); only the others are offered as copies.
+        const QString root = QFileInfo(m_workspace->rootPath()).canonicalFilePath();
+        QString first;
+        QList<notebook::SharedFile> keptShared;
+        QList<ShareFile> keptFiles;
+        for (qsizetype i = 0; i < m_shareFiles.size(); ++i) {
+            const ShareFile &file = m_shareFiles.at(i);
+            const QString page = file.path.isEmpty() || root.isEmpty()
+                                         ? QString()
+                                         : notebook::pageForOpenedFile(QFileInfo(file.path).canonicalFilePath(),
+                                                                       root, FileNameCase);
+            if (!page.isEmpty()) {
+                if (first.isEmpty())
+                    first = page;
+                continue;
+            }
+            keptFiles.append(file);
+            if (i < m_share->files.size()) // one entry per file (receiveShare)
+                keptShared.append(m_share->files.at(i));
+        }
+        if (!first.isEmpty()) {
+            qCInfo(lcApp) << "An opened file is a page of the notebook: opening it";
+            m_shareFiles = keptFiles;
+            m_share->files = keptShared;
+            if (m_shareFiles.isEmpty())
+                m_share.reset(); // nothing else to offer (opened files have no copies)
+            Q_EMIT pendingShareChanged();
+            openPage(first);
+            if (!m_share)
+                return;
+        }
+    }
     requestUiAction(u"share"_s);
 }
 
@@ -180,7 +257,8 @@ QVariantMap AppController::pendingShare() const
             {u"files"_s, files},
             {u"readable"_s, readable},
             {u"target"_s, hasFiles && readable == 1 ? u"page"_s : u"journal"_s},
-            {u"title"_s, title}};
+            {u"title"_s, title},
+            {u"source"_s, m_share->source}};
 }
 
 QVariantMap AppController::saveShare(const QVariantMap &choice)

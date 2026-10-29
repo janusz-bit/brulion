@@ -19,4 +19,10 @@ QString logDirectory();
 /// (Linux 6.18), x86_64", "WebAssembly (wasm32)". No user or host names.
 QString deviceDescription();
 
+/// A second launch is about to hand its request to the running Brulion (main.cpp): on Windows
+/// that process may then take the foreground this one was given (AllowSetForegroundWindow:
+/// Explorer's "Otwórz za pomocą" brings the running window to the front, not just flashes it).
+/// Nothing elsewhere (Wayland: the activation token goes with the message, ipc/appmessage.h).
+void allowForegroundActivation();
+
 } // namespace brulion::platform

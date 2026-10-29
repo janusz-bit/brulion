@@ -3,8 +3,10 @@
 // WebAssembly only (compiled when EMSCRIPTEN is set, see src/platform/CMakeLists.txt).
 //
 // Debug flows for the browser build, driven by scripts/wasm-smoke.mjs. The HTML shell turns
-// `?selftest=storage,notify,glyphs,keyboard` into the app arguments `--selftest-storage
-// --selftest-notify --selftest-glyphs --selftest-keyboard` (the last: src/app/ui/keyboardsources.h).
+// `?selftest=storage,notify,glyphs,keyboard,share` into the app arguments `--selftest-storage
+// --selftest-notify --selftest-glyphs --selftest-keyboard --selftest-share` (keyboard:
+// src/app/ui/keyboardsources.h; share: main.cpp publishes `window.brulionShareSelfTest`, the share
+// dialog's data — AppController::pendingShare — with `dialog`: whether the dialog was asked to open).
 // Results are published as JavaScript globals (and console lines `BRULION_SELFTEST …`; with
 // `?report=/__report[/<name>]` the shell also POSTs each one to that path of the same site:
 // {name, json, t}).

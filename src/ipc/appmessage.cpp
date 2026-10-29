@@ -40,4 +40,25 @@ QByteArray openMessage(const QJsonObject &route, const QString &vaultRoot)
     return encodeMessage("open", QJsonObject{{u"route"_s, route}, {u"vault"_s, vaultRoot}});
 }
 
+namespace {
+
+QJsonObject withToken(QJsonObject payload, const QByteArray &activationToken)
+{
+    if (!activationToken.isEmpty())
+        payload.insert(u"activationToken"_s, QString::fromLatin1(activationToken));
+    return payload;
+}
+
+} // namespace
+
+QByteArray shareMessage(const QJsonObject &share, const QByteArray &activationToken)
+{
+    return encodeMessage("share", withToken(QJsonObject{{u"share"_s, share}}, activationToken));
+}
+
+QByteArray launchMessage(const QByteArray &verb, const QByteArray &activationToken)
+{
+    return encodeMessage(verb, withToken({}, activationToken));
+}
+
 } // namespace brulion::ipc

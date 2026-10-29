@@ -12,6 +12,7 @@
 #include "autostart.h" // src/platform
 
 #include "notebook/session.h"
+#include "notebook/share.h"
 #include "sync/syncengine.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
@@ -31,6 +32,7 @@
 #include <QUrl>
 #include <QWindow>
 
+#include <algorithm>
 #include <utility>
 
 #ifdef Q_OS_ANDROID
@@ -70,6 +72,15 @@ QString argValue(const QStringList &args, const QString &option)
             return arg.mid(prefix.size());
     }
     return {};
+}
+
+/// An activation token as a launcher hands it over (XDG_ACTIVATION_TOKEN): 1–512 printable ASCII
+/// characters, no spaces. Anything else from the socket is ignored.
+bool isActivationToken(const QString &token)
+{
+    if (token.isEmpty() || token.size() > 512)
+        return false;
+    return std::all_of(token.cbegin(), token.cend(), [](QChar c) { return c.unicode() > 0x20 && c.unicode() < 0x7f; });
 }
 
 QString cleanLocalPath(const QString &raw)
@@ -130,7 +141,14 @@ AppController::AppController(const Options &options, QObject *parent)
     m_startCapture = args.contains(u"--capture"_s);
     m_startToday = args.contains(u"--today"_s);
     m_devPopup = argValue(args, u"--popup"_s);
-    m_devShare = argValue(args, u"--share"_s).toUtf8();
+    // Files opened with Brulion (--open: a file manager's "Otwórz za pomocą"), else --share.
+    if (!options.openFiles.isEmpty())
+        m_startShare = QJsonDocument(notebook::sharedContentToJson(
+                                             notebook::openedFilesShare(options.openFiles, options.workingDirectory)))
+                               .toJson(QJsonDocument::Compact);
+    else
+        m_startShare = argValue(args, u"--share"_s).toUtf8();
+    m_startShareQuery = argValue(args, u"--share-query"_s);
     const QString route = argValue(args, u"--route"_s);
     if (route.startsWith(u'{'))
         m_devRoute = normalizeRoute(QJsonDocument::fromJson(route.toUtf8()).object().toVariantMap());
@@ -208,8 +226,11 @@ void AppController::start()
     if (platform::WasmNotifier::takeLaunchActivation(&activation) && !activation.path.isEmpty())
         openNotification(activation.path, activation.line);
 #endif
-    if (!m_devShare.isEmpty())
-        receiveShareJson(std::exchange(m_devShare, {})); // shown once the notebook is ready
+    // Shown once the notebook is ready.
+    if (!m_startShare.isEmpty())
+        receiveShareJson(std::exchange(m_startShare, {}));
+    if (!m_startShareQuery.isEmpty())
+        receiveShareQuery(std::exchange(m_startShareQuery, {}));
     if (m_devDemo && m_devVault.isEmpty()) {
         openDemoVault();
         return;
@@ -1176,13 +1197,26 @@ bool AppController::trayPopupShouldReopen()
 
 bool AppController::handleInstanceMessage(const QByteArray &verb, const QJsonObject &payload)
 {
-    if (verb != "activate" && verb != "capture" && verb != "today" && verb != "open" && verb != "hidden") {
+    if (verb != "activate" && verb != "capture" && verb != "today" && verb != "open" && verb != "hidden"
+        && verb != "share") {
         qCInfo(lcApp) << "Ignoring an instance message with an unknown verb" << verb;
         return false;
     }
     // A second start with --hidden (the sign-in's entry while Brulion already runs): nothing.
     if (verb == "hidden")
         return true;
+    // Wayland: the window raised for the second launch presents the launcher's activation token
+    // (as DesktopNotifier does for a notification's click); other platforms ignore it.
+    if (const QString token = payload.value(u"activationToken"_s).toString(); isActivationToken(token))
+        qputenv("XDG_ACTIVATION_TOKEN", token.toLatin1());
+    if (verb == "share") {
+        // Files opened with Brulion while it runs (ipc::shareMessage). A message never names a
+        // folder to remove: only the platform's own copies are ever removed.
+        QJsonObject share = payload.value(u"share"_s).toObject();
+        share.remove(u"dir"_s);
+        receiveShare(share.toVariantMap()); // shows the window (or says there is nothing to save)
+        return true;
+    }
     showWindow();
     // They wait for the notebook when it is still opening.
     if (verb == "capture")
