@@ -273,6 +273,72 @@ numbers of Brulion's own formatting go into the CSS, never text from a scene; Qt
 ignores such a style sheet (it applies media rules only for a medium it is given and drops a style
 sheet with a media feature query), so it draws the light picture.
 
+*Other drawing files (Inne pliki rysunków; `drawing/drawingfile.h`):* Brulion's drawing editor
+also edits **`.excalidraw` scene files** (excalidraw.com's "Save to disk", the Obsidian plugin's
+compatibility mode, Logseq's Excalidraw plugin: the scene's JSON, `{` first) — written back as
+Excalidraw writes them, JSON with two spaces and a line break at the end — and **drawings of the
+Obsidian Excalidraw plugin** (`Szkic.excalidraw.md`, `drawing/excalidrawmd.h`): Markdown whose
+frontmatter has the key `excalidraw-plugin` (`parsed` or `raw`; any file name — the plugin's
+setting without `.excalidraw` in the name too), with the scene in a code block under `## Drawing`:
+
+````
+---
+excalidraw-plugin: parsed
+tags: [excalidraw]
+---
+==⚠  Switch to EXCALIDRAW VIEW … ⚠== …
+(the back of the card: any Markdown)
+# Excalidraw Data
+## Text Elements
+Zażółć gęślą jaźń ^Zt8xQw1a
+
+## Element Links
+Rr5Kd9mq: [[Plan ogrodu]]
+
+## Embedded Files
+a1b2c3d4e5f60718: [[Pasted Image 20261028143205.png]]
+
+%%
+## Drawing
+```compressed-json
+N4KAkARALgngDgUwgLgAQQQDwMYEMA2AlgCYBOuA7hADTgQBuCpAzoQPYB2KqATLZMzYBXUtiRoIACyhQ4zZAHoFAc…
+```
+%%
+````
+
+`compressed-json`: the scene (`JSON.stringify(scene, null, "\t")`) as **LZ-String**'s
+`compressToBase64` (`drawing/lzstring.h`, our own port of lz-string 1.5, MIT, tested against its
+own vectors) in lines of 256 characters with an empty line between; `json`: the scene itself,
+tab-indented; the plugin's oldest form — the scene's JSON on one line under `# Drawing`, no code
+block — is shown, never written. The block is found as the plugin finds it (the first `# Drawing` /
+`## Drawing` heading whose first backtick opens the block; compressed when a
+"```compressed-json" block is anywhere), CRLF files too. The plugin reads a text element's text
+from its `## Text Elements` entry (`raw text ^id`, its Markdown with links) before the scene's.
+Brulion rewrites **only** the block — in the file's own encoding and line breaks — and the
+entries of text elements it changed (their new text, also the element's `rawText`; a link in such
+a text becomes plain text) or removed (the entry goes); a new text element gets no entry (the
+plugin adds it with its own id). Every other byte stays as it was: frontmatter, the warning line,
+the back of the card, `## Element Links`, `## Embedded Files`, `%%` markers, `# Markdown Images`.
+Elements read from the file and erased in Brulion are written as deleted ones (`isDeleted: true`,
+`version + 1`, `updated`: the plugin showing the drawing while the file changes removes only such
+elements); the file's deleted elements are kept. Pictures the plugin links through `## Embedded
+Files` (`files` in its scene is usually `{}`) are shown as placeholders; frames and embedded pages
+make the drawing read-only, as in any scene (its preview: the plugin's export beside it —
+`Szkic.excalidraw.svg` / `.png`, also `Szkic.svg` / `.png` — when there is one, else its elements
+with a dashed grey box for each of those). A `.md` file is such a drawing only by the key (a note
+quoting a `## Drawing` block is a note). The index keeps such a file a page (its text entries
+searchable, the tag `excalidraw` lists the drawings); opened as a page it shows its drawing (the
+picture view: "Edytuj rysunek", "Pokaż jako tekst"), never the block editor. Brulion creates new
+drawings as SVG only. Sync (Nextcloud) never merges such a file line by line: changed on both
+devices, both versions are kept (a conflict copy).
+
+*Embeds of drawings:* `![[Szkic.excalidraw]]` (the link resolves to `Szkic.excalidraw` or, when
+there is none, the note `Szkic.excalidraw.md`), `![[Szkic.excalidraw.md]]` and a page embed
+`![[Plan]]` that resolves to a plugin drawing are shown as the drawing (its preview in the app's
+theme; a click opens the drawing editor) — not as a transclusion of the plugin's Markdown.
+`![[x.excalidraw.md]]` naming a note that is no drawing is a file chip. Exports (HTML, Pandoc,
+Logseq ZIP) still embed such a drawing as a page.
+
 **Pictures from the internet:** a Markdown picture whose destination is an `http:` / `https:` URL
 with a host — `![alt](https://example.com/kot.jpg)`, `![](<https://example.com/mój kot.png>)`,
 also the embed `![[https://example.com/kot.jpg]]` (`webpicture::isWebUrl`) — is a picture whatever
