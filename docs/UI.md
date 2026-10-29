@@ -1667,7 +1667,7 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 
 ## Shared components (`qml/components/`)
 
-`BButton`, `BIconButton`, `BTextField`, `BTextArea`, `BSearchField`, `BSwitch`, `BCheckBox`,
+`BButton`, `BIconButton`, `BTextField`, `BSuggestField` (a field with a suggestion list: key and value suggestions of the properties panel), `BTextArea`, `BSearchField`, `BSwitch`, `BCheckBox`,
 `BChip`, `BBadge`, `BTabBar`/`BTabButton`, `BSegmented`, `BBreadcrumb`, `BCard`, `BListItem`,
 `BSectionHeader`, `BKbd`, `BText`, `BDialog` (bottom sheet on narrow windows),
 `BConfirmDialog`, `BMenu`/`BMenuItem`/`BMenuSeparator`, `BToast` (+ `BToastHost`; the message is
