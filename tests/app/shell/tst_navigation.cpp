@@ -1178,6 +1178,11 @@ private Q_SLOTS:
         QVERIFY(model->run(u"page.mode"_s));
         QCOMPARE(sourceUi.size(), 2);
         QCOMPARE(sourceUi.last().first().toString(), u"toggleNoteMode"_s);
+        // A page property: the editor's add row (docs/UI.md "Page properties"), right after the mode.
+        QVERIFY(model->run(u"page.addProperty"_s));
+        QCOMPARE(sourceUi.size(), 3);
+        QCOMPARE(sourceUi.last().first().toString(), u"addProperty"_s);
+        QCOMPARE(ids.indexOf(u"page.addProperty"_s), ids.indexOf(u"page.mode"_s) + 1);
         // Copying links (docs/SYNTAX.md §2): the editor of the page or day copies them.
         for (const auto &[command, action] :
              {std::pair{u"page.copyLink"_s, u"copyLink:page"_s}, std::pair{u"block.copyRef"_s, u"copyLink:blockRef"_s},
@@ -1206,12 +1211,14 @@ private Q_SLOTS:
         }
         QVERIFY(commandNamed(u"page.copyLink"_s).value(u"enabled"_s).toBool());
         QVERIFY(commandNamed(u"page.source"_s).value(u"enabled"_s).toBool()); // the way back
+        QVERIFY(!commandNamed(u"page.addProperty"_s).value(u"enabled"_s).toBool()); // the panel is hidden
         app->setSourceModeShown(false);
         for (const QString &command : {u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s})
             QVERIFY(commandNamed(command).value(u"enabled"_s).toBool());
         QVERIFY(model->run(u"go.tasks"_s));
         QVERIFY(!model->run(u"page.source"_s)); // no editor there
         QVERIFY(!model->run(u"page.mode"_s));
+        QVERIFY(!model->run(u"page.addProperty"_s));
         for (const QString &command :
              {u"page.copyLink"_s, u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s}) {
             QVERIFY(!model->run(command));
@@ -1251,6 +1258,7 @@ private Q_SLOTS:
         };
         QVERIFY(!modeEnabled());
         QVERIFY(!model->run(u"block.copyRef"_s)); // a picture has no blocks
+        QVERIFY(!model->run(u"page.addProperty"_s)); // nor properties
         app->openPage(p);
         QVERIFY(modeEnabled());
 

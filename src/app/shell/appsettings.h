@@ -83,6 +83,10 @@ class AppSettings : public QObject {
                        editorLineSpacingChanged FINAL)
     /// Show the whole file as Markdown source by default (Ctrl+E switches per page).
     Q_PROPERTY(bool editorSourceMode READ editorSourceMode WRITE setEditorSourceMode NOTIFY editorSourceModeChanged FINAL)
+    /// The page properties panel ("Właściwości") opens expanded (its header's tap switches it;
+    /// folded by default: the journal stream stays dense).
+    Q_PROPERTY(bool propertiesExpanded READ propertiesExpanded WRITE setPropertiesExpanded NOTIFY
+                       propertiesExpandedChanged FINAL)
     /// Show pictures from the internet in notes without asking (`![x](https://…)`; off: each
     /// waits for "Pokaż" — a synced or imported note cannot make the device fetch anything).
     Q_PROPERTY(
@@ -200,6 +204,8 @@ public:
     void setEditorWidth(int px);
     bool editorSourceMode() const;
     void setEditorSourceMode(bool on);
+    bool propertiesExpanded() const;
+    void setPropertiesExpanded(bool on);
     bool webPicturesShown() const;
     void setWebPicturesShown(bool on);
     QString exportWebPictures() const;
@@ -311,6 +317,7 @@ Q_SIGNALS:
     void editorFontSizeChanged();
     void editorWidthChanged();
     void editorSourceModeChanged();
+    void propertiesExpandedChanged();
     void webPicturesShownChanged();
     void exportWebPicturesChanged();
     void currentVaultChanged();

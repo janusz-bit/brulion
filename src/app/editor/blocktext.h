@@ -12,6 +12,7 @@
 #pragma once
 
 #include "markdown/blockdocument.h"
+#include "markdown/pageprops.h"
 #include "markdown/tokenedit.h"
 #include "markdown/tokens.h"
 #include "types.h"
@@ -135,10 +136,19 @@ QString plainTextOf(const markdown::BlockEntry &entry, int maxLength = 80);
 /// `query` role: { source, filters: [{ key, value, negated }], terms: [text] }.
 QVariantMap queryInfo(QStringView source);
 
-/// `properties` role of frontmatter blocks: [{ key, value }] (YAML frontmatter or `key:: value`
-/// page properties; lists joined with ", "). The note mode key `brulion` of YAML frontmatter
-/// (markdown/notemode.h) is left out: the page header's mode toggle shows it.
+/// One page property for QML (markdown::PageProperty): { key, value (one line to show; lists
+/// joined with ", "), type (markdown::propertyTypeName), source ("yaml" | "logseq"), raw (the
+/// typed value: text, number, bool, date text, the list of items), items, empty, editable,
+/// multiline, linkDate }.
+QVariantMap pagePropertyMap(const markdown::PageProperty &property);
+/// `properties` role of frontmatter blocks: pagePropertyMap() of each property of the YAML
+/// frontmatter or `key:: value` page properties in `body` (markdown::readPageProperties()). The
+/// note mode key `brulion` of YAML frontmatter (markdown/notemode.h) is left out: the page
+/// header's mode toggle shows it.
 QVariantList frontmatterProperties(const QString &body);
+/// `propertiesInfo` role of frontmatter blocks: { source ("yaml" | "logseq"), editable (keys
+/// can be set and added safely), problem ("" | "notMapping" | "indented"), canAdd }.
+QVariantMap frontmatterPropertiesInfo(const QString &body);
 /// The YAML frontmatter `body` (with its `---` lines) holds nothing but the note mode key
 /// `brulion` — one line at column 0, blank lines aside (a comment or other text keeps the block
 /// visible) — a block the editor does not show (BlockListModel `noteModeOnly`).

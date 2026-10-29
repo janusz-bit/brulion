@@ -68,6 +68,9 @@ public:
     QVariantList suggestPages(const QString &prefix, int limit = 20) const override;
     QVariantList suggestBlocks(const QString &text, int limit = 20) const override;
     QVariantList suggestTags(const QString &prefix, int limit = 20) const override;
+    /// The real index's page-property keys and values (as the shell's Workspace).
+    QVariantList propertyKeys() const override;
+    QVariantList propertyValues(const QString &key, const QString &prefix, int limit = 20) const override;
     QString resolveLink(const QString &target, const QString &fromPath) const override;
     /// The real index's shortest target (VaultIndex::linkTarget(), as the shell's Workspace).
     QString linkTarget(const QString &path, const QString &fromPath) const override;

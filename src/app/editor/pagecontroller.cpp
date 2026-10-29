@@ -214,9 +214,18 @@ PageController::PageController(QObject *parent) : QObject(parent), m_model(new B
     connect(m_model, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &from) {
         if (from.row() <= std::max(1, m_titleRow))
             updateTitleRow();
+        if (from.row() <= 1)
+            updatePageProperties();
     });
     connect(this, &PageController::zoomChanged, this, &PageController::updateTitleRow);
     connect(this, &PageController::pathChanged, this, &PageController::updateTitleRow);
+    // The page's properties (pageProperties) follow every change of the first blocks too.
+    connect(m_model, &QAbstractItemModel::modelReset, this, &PageController::updatePageProperties);
+    connect(m_model, &QAbstractItemModel::rowsInserted, this, &PageController::updatePageProperties);
+    connect(m_model, &QAbstractItemModel::rowsRemoved, this, &PageController::updatePageProperties);
+    connect(m_model, &QAbstractItemModel::rowsMoved, this, &PageController::updatePageProperties);
+    connect(this, &PageController::zoomChanged, this, &PageController::updatePageProperties);
+    connect(this, &PageController::sourceModeChanged, this, &PageController::updatePageProperties);
     // Leaving the foreground (Android may then kill the process without running destructors)
     // and quitting flush the page; the QML tear-down after the event loop may come too late
     // (hosts owned elsewhere can be gone by then).
@@ -273,6 +282,7 @@ void PageController::setHost(EditorHost *host)
     if (m_host) {
         connect(m_host, &EditorHost::fileChanged, this, &PageController::onFileChanged);
         connect(m_host, &EditorHost::indexChanged, m_model, &BlockListModel::invalidateRendering);
+        connect(m_host, &EditorHost::indexChanged, this, [this] { m_notebookTypes.reset(); });
         connect(m_host, &EditorHost::webPictureChanged, this, &PageController::onWebPictureChanged);
         connect(m_host, &QObject::destroyed, this, [this] { m_host = nullptr; });
     }

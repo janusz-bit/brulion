@@ -534,9 +534,20 @@ private Q_SLOTS:
         QCOMPARE(yaml[0].toMap().value(u"key"_s).toString(), u"tytuł"_s);
         QCOMPARE(yaml[0].toMap().value(u"value"_s).toString(), u"Remont łazienki"_s);
         QCOMPARE(yaml[1].toMap().value(u"value"_s).toString(), u"projekt, dom"_s);
+        // Typed (markdown::readPageProperties()): the panel's fields.
+        QCOMPARE(yaml[0].toMap().value(u"type"_s).toString(), u"text"_s);
+        QCOMPARE(yaml[1].toMap().value(u"type"_s).toString(), u"tags"_s);
+        QCOMPARE(yaml[1].toMap().value(u"items"_s).toStringList(), QStringList({u"projekt"_s, u"dom"_s}));
+        QCOMPARE(yaml[1].toMap().value(u"source"_s).toString(), u"yaml"_s);
+        QVERIFY(yaml[1].toMap().value(u"editable"_s).toBool());
         const QVariantList logseq = frontmatterProperties(u"typ:: plan\nautor:: [[Lem]]"_s);
         QCOMPARE(logseq.size(), 2);
         QCOMPARE(logseq[1].toMap().value(u"value"_s).toString(), u"[[Lem]]"_s);
+        QCOMPARE(logseq[1].toMap().value(u"type"_s).toString(), u"list"_s);
+        QCOMPARE(logseq[1].toMap().value(u"source"_s).toString(), u"logseq"_s);
+        QCOMPARE(frontmatterPropertiesInfo(u"typ:: plan"_s).value(u"source"_s).toString(), u"logseq"_s);
+        QCOMPARE(frontmatterPropertiesInfo(u"---\nżółw\n---"_s).value(u"problem"_s).toString(), u"notMapping"_s);
+        QVERIFY(frontmatterPropertiesInfo(u"zwykły akapit"_s).isEmpty());
         // The note mode key is the page header's toggle, not a property (YAML only: a Logseq
         // `brulion::` line is an ordinary property).
         const QVariantList mode = frontmatterProperties(u"---\nbrulion: document\nautor: Łucja\n---"_s);

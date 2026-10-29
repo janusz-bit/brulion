@@ -195,6 +195,9 @@ public:
     Q_INVOKABLE QVariantList suggestPages(const QString &prefix, int limit = 20) const override;
     Q_INVOKABLE QVariantList suggestBlocks(const QString &text, int limit = 20) const override;
     Q_INVOKABLE QVariantList suggestTags(const QString &prefix, int limit = 20) const override;
+    /// Page-property keys and values in use (VaultIndex::propertyKeys() / propertyValues()).
+    QVariantList propertyKeys() const override;
+    QVariantList propertyValues(const QString &key, const QString &prefix, int limit = 20) const override;
     Q_INVOKABLE QString resolveLink(const QString &target, const QString &fromPath) const override;
     /// The shortest [[target]] reaching `path` from `fromPath` (VaultIndex::linkTarget(): "Dom",
     /// "Projekty/Dom" when the title alone names another page); "" when unknown.

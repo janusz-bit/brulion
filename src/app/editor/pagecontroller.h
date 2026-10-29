@@ -51,10 +51,17 @@
 // document mode changes a few commands: Enter on an empty list item and Backspace at its start
 // leave the list (leaveList()), Tab never makes a list item of a paragraph, new blocks after text
 // are paragraphs, and there is no zoom and no folding (folds are kept for the outline mode).
+//
+// Page properties (docs/UI.md "Page properties"): `pageProperties` describes the page's YAML
+// frontmatter and leading `key:: value` lines as typed fields for the properties panel and the
+// page header; setPageProperty() and the others edit one property each (markdown/pageprops.h:
+// only that property's lines change), every edit one undo step (in source mode an edit of the
+// source text, like setMode()).
 #pragma once
 
 #include "blocklistmodel.h"
 #include "lazyhtmlmimedata.h"
+#include "markdown/pageprops.h"
 #include "markdown/tokenedit.h"
 
 #include <QDateTime>
@@ -169,6 +176,14 @@ class PageController : public QObject {
     /// and to blocks that already have an id, are copied either way.
     Q_PROPERTY(
             bool allowNewBlockIds READ allowNewBlockIds WRITE setAllowNewBlockIds NOTIFY allowNewBlockIdsChanged FINAL)
+    /// The page's properties (see "Page properties" in the file comment): { items: [{ key, source
+    /// ("yaml" | "logseq"), type, value (one line), raw (the typed value), items, empty, editable,
+    /// multiline, linkDate }], tags: [{ name, source, property }], aliases: [{ name, source,
+    /// property }] (the page's tags and aliases from its properties, for the page header), canAdd,
+    /// addTarget ("yaml" | "logseq": where a new property goes), hasYaml, hasLogseq, editable (the
+    /// YAML block can be edited safely), problem ("" | "notMapping" | "indented"), visibleRow (the
+    /// first shown properties row; -1: none — the editor's draft row adds the first property) }.
+    Q_PROPERTY(QVariantMap pageProperties READ pageProperties NOTIFY pagePropertiesChanged FINAL)
 
 public:
     explicit PageController(QObject *parent = nullptr);
@@ -285,6 +300,37 @@ public:
     /// mode came from that default follows it. The content is not resolved again — a page never
     /// flips because of what was written since it was opened.
     Q_INVOKABLE void refreshMode();
+
+    // --- Page properties (docs/UI.md "Page properties") ------------------------------------------------
+    QVariantMap pageProperties() const { return m_pageProperties; }
+    /// Set property `key` to `value` written as `type` (a markdown::propertyTypeName) — added when
+    /// the page has no such key. `source` "yaml" | "logseq", "" — where the key is, else where new
+    /// properties go (pageProperties.addTarget). One undo step. Returns { ok (changed or already
+    /// so), status (markdown::propertyEditStatusName), reason (a sentence for a toast or a field's
+    /// error; "" when ok) }.
+    Q_INVOKABLE QVariantMap setPageProperty(const QString &source, const QString &key, const QVariant &value,
+                                            const QString &type);
+    Q_INVOKABLE QVariantMap removePageProperty(const QString &source, const QString &key);
+    Q_INVOKABLE QVariantMap renamePageProperty(const QString &source, const QString &oldKey, const QString &newKey);
+    /// The type menu: the value converted to `type` (markdown::convertPropertyValue); a value that
+    /// cannot be kept is cleared and the result says { lost: true } (the panel's toast offers
+    /// "Cofnij").
+    Q_INVOKABLE QVariantMap setPagePropertyType(const QString &source, const QString &key, const QString &type);
+    /// The page header's tags and aliases: `kind` "tags" | "aliases" (markdown::addPageListItem).
+    Q_INVOKABLE QVariantMap addPageListItem(const QString &kind, const QString &item);
+    Q_INVOKABLE QVariantMap removePageListItem(const QString &kind, const QString &item);
+    /// Key suggestions: the notebook's property keys (EditorHost::propertyKeys()) whose folded
+    /// text starts with / contains `prefix`, without the page's own keys and `brulion`:
+    /// [{ key, count, type }].
+    Q_INVOKABLE QVariantList suggestPropertyKeys(const QString &prefix, int limit = 12) const;
+    /// Value suggestions for property `key`: after "[[" pages (written "[[<link target>]]"); tags
+    /// for tags / tag; none for aliases; else the values the notebook has for the key
+    /// (EditorHost::propertyValues()). Values the property holds already are left out:
+    /// [{ value, count, kind: "value" | "page" | "tag", title? }].
+    Q_INVOKABLE QVariantList suggestPropertyValues(const QString &key, const QString &prefix, int limit = 12) const;
+    /// The type `key` has in the notebook ("" unknown) — the type of an empty value. Cached until
+    /// the host's index changes.
+    Q_INVOKABLE QString notebookPropertyType(const QString &key) const;
 
     // --- Editing ---------------------------------------------------------------------------------
     Q_INVOKABLE void startEditing(int row, int cursor = -1);
@@ -761,6 +807,7 @@ Q_SIGNALS:
     void titleRowChanged();
     void modeChanged();
     void allowNewBlockIdsChanged();
+    void pagePropertiesChanged();
     /// An attachment could not be read or stored (file name for the message).
     void attachmentFailed(const QString &name);
     /// downloadWebPictures() finished: `stored` pictures are attachments now, `failed` names the
@@ -873,6 +920,13 @@ private:
     /// copy instead — before the page's text goes (another page, another host, destruction).
     void flush();
     void updateTitleRow();
+    /// Recompute `pageProperties` from the leading frontmatter rows (or the source text in source
+    /// mode) when their text changed; `visibleRow` always.
+    void updatePageProperties();
+    /// Run a pure property edit on the page's text (the source text in source mode) as one undo
+    /// step.
+    markdown::PropertyEditStatus applyPropertyEdit(
+            const std::function<markdown::PropertyEditResult(const QString &)> &edit);
     /// The text written to the file: text() with the lone opening fences of text blocks that
     /// would run on over the blocks after them closed (loneFenceClosed(), loneFenceRunsOn()) —
     /// "```js" being typed is saved as a closed, empty code block — and without the space the
@@ -965,6 +1019,12 @@ private:
     NoteMode m_keylessMode = NoteMode::Outline;
     int m_keylessSource = -1;
     bool m_allowNewBlockIds = true;
+    QVariantMap m_pageProperties;
+    QString m_pagePropertiesText; ///< the text pageProperties was read from
+    bool m_pagePropertiesRead = false;
+    /// Folded key -> type of the notebook's page properties (notebookPropertyType()); reset when
+    /// the host's index changes.
+    mutable std::optional<QHash<QString, QString>> m_notebookTypes;
 
     // Command bookkeeping.
     int m_commandDepth = 0;

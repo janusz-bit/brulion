@@ -60,6 +60,21 @@ public:
     /// write, without '#'), count (tagged blocks), kind ("tag": in use | "page": a page no tag
     /// names yet), path?, title?, folder? (the page it names) } — tags in use first.
     virtual QVariantList suggestTags(const QString &prefix, int limit = 20) const = 0;
+    /// Page-property keys of the notebook (the properties panel's key suggestions; the type an
+    /// empty value takes): list of { key, count (notes with it), type (markdown::propertyTypeName
+    /// of its most common non-empty values; "" when only empty values were seen) }, most used
+    /// first (VaultIndex::propertyKeys()). Default: none.
+    virtual QVariantList propertyKeys() const { return {}; }
+    /// Values written for page property `key` (case-insensitive): list of { value, count }, most
+    /// used first; with `prefix` those starting with it, then those containing it (diacritics
+    /// ignored; VaultIndex::propertyValues()). Default: none.
+    virtual QVariantList propertyValues(const QString &key, const QString &prefix, int limit = 20) const
+    {
+        Q_UNUSED(key);
+        Q_UNUSED(prefix);
+        Q_UNUSED(limit);
+        return {};
+    }
     /// Resolve a wiki-link target seen from `fromPath`; "" when unresolved.
     virtual QString resolveLink(const QString &target, const QString &fromPath) const = 0;
     /// The shortest wiki-link target that reaches `path` from `fromPath` ("Dom", or "Projekty/Dom"

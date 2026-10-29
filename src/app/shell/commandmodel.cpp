@@ -204,7 +204,8 @@ static QString linkAction(const QString &id)
     return {};
 }
 
-/// buildCommands() with the note mode command right after "Markdown source", available where that
+/// buildCommands() with the note mode command right after "Markdown source" (then "Add page
+/// property"), available where that
 /// is (an editor shows a page or a day) except on a picture attachment, which is no note: document
 /// (Obsidian-like) / outline (Logseq-like), written into the note (docs/UI.md "Note modes"); and
 /// the event log after the sync center.
@@ -223,9 +224,17 @@ static QList<Command> allCommands(const AppController *app)
                 u"file-text"_s,
                 {},
                 inEditor});
-    // Copying links, after the note mode: where it is available.
+    // A page property (the properties panel's add row, docs/UI.md "Page properties"), after the
+    // note mode; not in source mode (the panel is hidden there).
     const auto mode = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"page.mode"; });
     qsizetype at = mode == out.cend() ? out.size() : std::distance(out.cbegin(), mode) + 1;
+    out.insert(at++, {u"page.addProperty"_s,
+                      CommandModel::tr("Add page property"),
+                      CommandModel::tr("Status, date, tags, aliases… in the page's properties"),
+                      u"plus"_s,
+                      u"Ctrl+;"_s,
+                      inEditor && !app->sourceModeShown()});
+    // Copying links, after the page property: where it is available.
     for (const Command &c : linkCommands(inEditor, app->sourceModeShown()))
         out.insert(at++, c);
     // Pictures from the internet on the page into the notebook (uiAction "saveWebPictures": the
@@ -300,6 +309,8 @@ bool CommandModel::run(const QString &id)
         m_app->requestUiAction(u"toggleSourceMode"_s);
     else if (id == u"page.mode")
         m_app->requestUiAction(u"toggleNoteMode"_s);
+    else if (id == u"page.addProperty")
+        m_app->requestUiAction(u"addProperty"_s);
     else if (id == u"page.saveWebPictures")
         m_app->requestUiAction(u"saveWebPictures"_s);
     else if (const QString action = linkAction(id); !action.isEmpty())

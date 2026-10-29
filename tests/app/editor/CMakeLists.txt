@@ -43,6 +43,10 @@ brulion_add_test(tst_editor_queryresults
 brulion_add_test(tst_editor_notemode
     SOURCES tst_editor_notemode.cpp
     LIBS brulion_editor brulion_core_markdown)
+# Page properties as typed fields: PageController's edits, suggestions, the properties roles.
+brulion_add_test(tst_editor_pageprops
+    SOURCES tst_editor_pageprops.cpp
+    LIBS brulion_editor brulion_core_markdown)
 # The size of embedded pictures read from their headers / an SVG's root (picturesize.h).
 brulion_add_test(tst_editor_picturesize
     SOURCES tst_editor_picturesize.cpp
