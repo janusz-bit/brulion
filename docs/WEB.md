@@ -469,11 +469,12 @@ dotykowym z fokusem w polu Qt, gdy widoczny obszar jest co najmniej 120 px niżs
 widziany przy tej szerokości (obrót telefonu zaczyna od nowa; pasek adresu przeglądarki, 56 px, to
 nie klawiatura). Fokus przechodzący między elementami Qt (Enter: następny blok) nie chowa jej, dopóki
 odczyty się nie ustalą; ustalony odczyt bez fokusu w polu Qt chowa ją (edycja skończona — na
-podzielonym ekranie strona zostaje niższa bez klawiatury). Telefon obrócony przy otwartej klawiaturze
-trafia na szerokość, której pierwsze wysokości już ją zawierają: tam klawiatura liczy się jako
-widoczna, a te wysokości nie jako najwyższe, dopóki strona nie urośnie o 120 px (klawiatura zeszła)
-albo edycja się nie skończy. `animating` trwa, dopóki odczyty się nie ustalą: kursor przewija się
-w widok dopiero potem. `KeyboardInsets` (docs/UI.md „On-screen keyboard”) podnosi o zakrycie widok, pasek
+podzielonym ekranie strona zostaje niższa bez klawiatury). Telefon obrócony przy otwartej
+klawiaturze (sprawdzone na emulatorze): Chrome i Brave chowają klawiaturę, a blok zostaje
+edytowany — pierwsza wysokość w poziomie jest pełna; Firefox zostawia klawiaturę, ale najpierw
+podaje stronę w poziomie bez niej (301 px), potem z nią (62 px). W obu przypadkach najwyższa
+wysokość przy nowej szerokości to strona bez klawiatury. `animating` trwa, dopóki odczyty się nie
+ustalą: kursor przewija się w widok dopiero potem. `KeyboardInsets` (docs/UI.md „On-screen keyboard”) podnosi o zakrycie widok, pasek
 narzędzi edycji, okna wysuwane od dołu, menu i komunikaty — tak samo jak na Androidzie. Bez
 `visualViewport` (stare przeglądarki) nic nie jest zgłaszane, a Qt nie zna klawiatury
 (`keyboardRectangle` w przeglądarce jest pusty).
@@ -495,7 +496,10 @@ w nim klawiatura zaczynała od wielkiej litery pierwsze słowo wpisane w środku
 zostaje polem tekstowym.
 
 Znane ograniczenia: przeglądarka, która pomija `interactive-widget`, a ma błąd Brave, dalej
-zostawi pas (nie da się go wykryć). Nowa karta w Brave dostaje na chwilę widok jak przy schowanym
+zostawi pas (nie da się go wykryć). Przeglądarka, która po obrocie telefonu od razu poda stronę
+z klawiaturą (żadna z trzech sprawdzonych), zapamięta ją jako najwyższą przy tej szerokości:
+klawiatura liczy się wtedy jako schowana, dopóki raz nie zejdzie (pasek narzędzi i tak zostaje na
+dole okna, czyli na klawiaturze). Nowa karta w Brave dostaje na chwilę widok jak przy schowanym
 pasku ([brave-browser#59940](https://github.com/brave/brave-browser/issues/59940)) — to błąd
 Brave. iOS Safari — tylko „best effort”, bez automatycznego testu na iOS: ścieżka
 `visualViewport` z przypiętym polem, sprawdzana przez `scripts/wasm-smoke.mjs --keyboard`
@@ -515,8 +519,11 @@ IME z `dumpsys window`) nie może być purpurowych wierszy (pasa; dopuszczalne 3
 wierszy paska — co najwyżej nad paskiem autouzupełniania przeglądarki (≤ 72 dp) — a według
 aplikacji pasek kończy się na dole okna Qt, które wypełnia stronę. Słowo wpisane klawiszami
 klawiatury trafia do bloku, a klawisz akcji klawiatury to Enter, który dzieli blok
-(`focusText` w wyniku testu). Po „Wstecz” (klawiatura schowana) nie zostaje nic purpurowego, a pasek
-zostaje na dole. Z `?keyboard=visual` wynik tylko się zapisuje (Brave pokazuje pas z #60074).
+(`focusText` w wyniku testu). Potem telefon obraca się w poziom przy otwartej klawiaturze: pasek
+kończy się na dole okna, a gdy klawiatura zostaje (Firefox), liczy się jako widoczna; po obrocie
+z powrotem klawiatura znów się liczy (Chrome i Brave: po stuknięciu bloku). Po „Wstecz” (klawiatura
+schowana) nie zostaje nic purpurowego, a pasek zostaje na dole. Z `?keyboard=visual` wynik tylko się
+zapisuje (Brave pokazuje pas z #60074).
 Skrypt zapisuje odczyty (`samples-<przeglądarka>-<tryb>.jsonl`), wypisuje je jako wiersze testu
 `tst_keyboardinsets` i liczy, ile razy okno Qt zmieniło wysokość przy otwarciu klawiatury.
 
@@ -524,7 +531,10 @@ Wynik z 28.10.2026 (Android 16, Pixel 6, 1080×2400, gęstość 420): w Chrome 1
 i Firefoksie 157.0.1 pasek narzędzi leży na klawiaturze (Firefox: 0 px; Chrome i Brave: na ich
 pasku autouzupełniania, 126 i 168 px, bez ani jednego piksela strony między nimi), okno Qt
 zmniejsza się raz przy otwarciu i raz przy zamknięciu; z `?keyboard=visual` Brave pokazuje pas
-124 px (#60074: zgłasza zakrycie 376 px przy 328 px rzeczywistego), Chrome i Firefox nie.
+124 px (#60074: zgłasza zakrycie 376 px przy 328 px rzeczywistego), Chrome i Firefox nie. Obrót
+(29.10.2026): Chrome i Brave chowają klawiaturę (strona w poziomie 866×308 i 865×307 px), Firefox ją
+zostawia (najpierw strona 871×301 px bez niej, po chwili 871×62 px z nią), pasek w każdej leży na
+dole okna.
 
 ## Ograniczenia techniczne
 

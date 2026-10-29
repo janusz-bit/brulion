@@ -79,7 +79,9 @@
 # server), a block tapped: the keyboard comes up and the editing toolbar sits right on it — on a
 # screenshot no magenta row (the app paints the keyboard's room so) between the IME's top and the
 # cyan toolbar (gap <= 3 px), and the browser shrank the page (interactive-widget=resizes-content);
-# Back hides the keyboard and leaves the toolbar docked, nothing magenta. Each browser runs again with
+# a word typed and Enter reach the block; the phone turned with the keyboard up and back (the toolbar
+# at the window's bottom, the keyboard counted as up where it stays: Firefox; Chrome and Brave hide
+# it); Back hides the keyboard and leaves the toolbar docked, nothing magenta. Each browser runs again with
 # ?keyboard=visual (the browser's default), for the record (Brave's brave-browser#60074: a gap).
 # The app's readings are kept (samples-<browser>-<mode>.jsonl) and printed as rows of
 # tests/app/tst_keyboardinsets.cpp; screenshots wk-*.png. docs/WEB.md "Klawiatura ekranowa".
@@ -1270,7 +1272,7 @@ def num(v, default=0):
 
 def state(report, run):
     # "count windowHeight overlap shown animating editing settled toolbarBottom contentBottom legacy
-    # containerHeight"
+    # containerHeight innerWidth"
     rs = records(report, run)
     if not rs:
         return
@@ -1279,7 +1281,7 @@ def state(report, run):
     print(len(rs), round(num(k.get("windowHeight")), 1), round(num(k.get("overlap")), 1), int(bool(k.get("shown"))),
           int(bool(k.get("animating"))), int(bool(s.get("editing"))), int(bool(s.get("settled"))),
           round(num(k.get("toolbarBottom"), -1), 1), round(num(k.get("contentBottom")), 1), round(num(k.get("legacyOverlap")), 1),
-          round(num(s.get("containerHeight")), 1))
+          round(num(s.get("containerHeight")), 1), round(num(s.get("innerWidth")), 1))
 
 def cpp(v):
     if not isinstance(v, (int, float)):
@@ -1463,7 +1465,7 @@ HTML
   adb push "$OUT/geckoview-config.yaml" /data/local/tmp/org.mozilla.firefox-geckoview-config.yaml >/dev/null || true
 
   # A run's last report: "count windowHeight overlap shown animating editing settled toolbarBottom
-  # contentBottom legacyOverlap containerHeight" (empty before the app's first one).
+  # contentBottom legacyOverlap containerHeight innerWidth" (empty before the app's first one).
   wk_state() { wk_py state "$OUT/report.jsonl" "$1"; }
   # The keyboard counted as up, settled, a block edited and its toolbar docked.
   wk_keyboard_settled() {
@@ -1478,6 +1480,18 @@ HTML
     [[ -n $s ]] && awk '{ exit !($4 == 0 && $5 == 0 && $7 == 1 && $8 >= 0) }' <<<"$s"
   }
   wk_count() { local s; s=$(wk_state "$1"); echo "${s%% *}"; }
+  # Settled in landscape (the page wider than high), a block edited.
+  wk_landscape_settled() {
+    local s
+    s=$(wk_state "$1")
+    [[ -n $s ]] && awk '{ exit !($5 == 0 && $6 == 1 && $7 == 1 && $12 > $2 && $2 > 0) }' <<<"$s"
+  }
+  wk_turn() { # <0 portrait | 1 landscape>; adb's connection may drop while the screen turns
+    adb shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || true
+    adb shell settings put system user_rotation "$1" >/dev/null 2>&1 || true
+    sleep 2
+    timeout 60 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device >/dev/null 2>&1 || true
+  }
   # First-run screens, prompts and tips of the browsers: tapped away by their buttons' names
   # (Firefox's "Set as default browser" opens the system's dialog: Cancel).
   WK_DISMISS='Accept & continue|Accept and continue|Use without an account|No thanks|No Thanks|No, thanks|NO THANKS|Not now|NOT NOW|Skip|SKIP|Got it|GOT IT|Maybe later|Not interested|Continue|Close|Dismiss|Cancel|Pomiń|Nie teraz|Nie, dziękuję|Anuluj'
@@ -1602,6 +1616,7 @@ print(last)' "$OUT/report.jsonl" "$1"
     query="selftest=keyboard&report=/__report/$run"
     [[ $mode == visual ]] && query+="&keyboard=visual"
     info "$b, interactive-widget=resizes-$mode"
+    wk_turn 0
     local opened=0
     wk_open "$b" "$run" "$query" || opened=1
     check "$run: the app starts and reports the keyboard" test "$opened" -eq 0
@@ -1667,6 +1682,32 @@ print(last)' "$OUT/report.jsonl" "$1"
         check "$run: Enter on the keyboard splits the block" wait_for 15 wk_focus_lacks "$run" hello
       fi
       app_shot "wk-$run-2-typed"
+      # The phone turned with the keyboard up, and back: a width never seen whose first heights
+      # have the keyboard in them (docs/WEB.md "Klawiatura ekranowa"). Where the keyboard stays
+      # up, the app counts it as up and the toolbar ends at the window's bottom.
+      wk_turn 1
+      check "$run: turned with the keyboard up: the app settles in landscape" wait_for 30 wk_landscape_settled "$run"
+      sleep 3
+      s=$(wk_state "$run")
+      app_shot "wk-$run-2-landscape"
+      check "$run: landscape: the toolbar at the window's bottom" \
+        awk -v s="$s" 'BEGIN { split(s, a, " "); d = a[8] - a[2]; exit !(a[8] >= 0 && d <= 1 && d >= -1) }'
+      if ime_shown; then
+        echo "    landscape, the keyboard up: $s"
+        check "$run: landscape: the keyboard counted as up" awk -v s="$s" 'BEGIN { split(s, a, " "); exit !(a[4] == 1) }'
+      else
+        echo "    landscape: $b hid the keyboard on the turn, the block still edited (report: $s)"
+      fi
+      wk_turn 0
+      if ime_shown; then
+        check "$run: turned back: the keyboard counted as up again" wait_for 30 wk_keyboard_settled "$run"
+      else
+        echo "    portrait again, the keyboard hidden: tapping the edited block"
+        adb shell input tap $((SCREEN_W / 2)) $((SCREEN_H * 30 / 100)) || true
+        check "$run: turned back: a tap brings the keyboard up again" wait_for 20 ime_shown
+        check "$run: … counted as up" wait_for 30 wk_keyboard_settled "$run"
+      fi
+      sleep 2
     else
       # resizes-visual, informational: Brave's gap (#60074: the page's room shows) or none.
       if ((magenta > 3)); then

@@ -257,8 +257,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   by `ViewportKeyboard`: the part of Qt's container the visual viewport leaves out; the page asks
   for `interactive-widget=resizes-content`, so the browser shrinks the page and Qt's window itself
   — overlap 0 — and `shown` comes from that shrink on a touch screen while Qt's keyboard field has
-  the focus (held through a focus pass until the readings settle, and on a phone turned with the
-  keyboard up); `animating` until the readings settle; docs/WEB.md "Klawiatura ekranowa") — and, as
+  the focus (held through a focus pass until the readings settle; one tallest page height per
+  width); `animating` until the readings settle; docs/WEB.md "Klawiatura ekranowa") — and, as
   the fallback,
   Qt's `QInputMethod::keyboardRectangle` mapped by `keyboardOverlap()` (native pixels on Android,
   the window's place on a split screen, clamped; malformed values give 0). `ui/keyboardsources.cpp`

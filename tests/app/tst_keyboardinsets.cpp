@@ -336,46 +336,6 @@ void TestKeyboardInsets::viewportKeyboardSequence_data()
             step(412, 380, 380, 380, 380, false, true, 0, false, false),
             step(412, 380, 380, 380, 380, false, true, 0, false, false),
     };
-    // The phone turned with the keyboard up (portrait 412×786, landscape 915×360 without it): the
-    // first landscape heights have the keyboard in them, so they are no tallest — the keyboard
-    // stays shown (also through Enter's focus pass) until Back grows the page by a keyboard; from
-    // then on landscape has its own tallest.
-    QTest::newRow("obrót z otwartą klawiaturą") << QList<Step>{
-            step(412, 786, 786, 786, 786, true, true, 0, false, false),
-            step(412, 426, 426, 426, 786, true, false, 0, true, true),
-            step(412, 426, 426, 426, 426, true, true, 0, true, false),
-            step(915, 150, 150, 150, 426, true, false, 0, true, true), // turned
-            step(915, 150, 150, 150, 150, true, true, 0, true, false),
-            step(915, 150, 150, 150, 150, false, false, 0, true, false), // Enter
-            step(915, 150, 150, 150, 150, true, false, 0, true, false),
-            step(915, 150, 150, 150, 150, true, true, 0, true, false),
-            step(915, 360, 360, 360, 150, true, false, 0, false, true), // Back
-            step(915, 360, 360, 360, 360, true, true, 0, false, false),
-            step(915, 150, 150, 150, 150, true, true, 0, true, false), // the keyboard again
-            step(412, 426, 426, 426, 426, true, true, 0, true, false), // turned back with it up
-            step(412, 786, 786, 786, 786, true, true, 0, false, false),
-    };
-    // The same where the browser reports the turned page without the keyboard first.
-    QTest::newRow("obrót z otwartą klawiaturą, najpierw bez niej") << QList<Step>{
-            step(412, 786, 786, 786, 786, true, true, 0, false, false),
-            step(412, 426, 426, 426, 426, true, true, 0, true, false),
-            step(915, 360, 360, 360, 426, true, false, 0, true, true),
-            step(915, 150, 150, 150, 360, true, false, 0, true, true),
-            step(915, 150, 150, 150, 150, true, true, 0, true, false),
-            step(915, 360, 360, 360, 150, true, false, 0, false, true), // Back
-            step(915, 360, 360, 360, 360, true, true, 0, false, false),
-    };
-    // Turned with the keyboard up, then the editing ends in landscape: hidden as the page grows,
-    // and a settled sample without the focus ends it at the latest.
-    QTest::newRow("obrót z otwartą klawiaturą, potem koniec edycji") << QList<Step>{
-            step(412, 786, 786, 786, 786, true, true, 0, false, false),
-            step(412, 426, 426, 426, 426, true, true, 0, true, false),
-            step(915, 150, 150, 150, 426, true, false, 0, true, true),
-            step(915, 150, 150, 150, 150, false, false, 0, true, true),
-            step(915, 360, 360, 360, 150, false, false, 0, false, true),
-            step(915, 360, 360, 360, 360, false, true, 0, false, false),
-            step(915, 150, 150, 150, 150, true, true, 0, true, false), // a block tapped again
-    };
     // A focus change alone (the editor taps another block) is no keyboard motion.
     QTest::newRow("sama zmiana fokusu nie animuje") << QList<Step>{
             step(412, 480, 480, 480, 480, true, true, 0, false, false),
@@ -483,6 +443,77 @@ void TestKeyboardInsets::viewportKeyboardSequence_data()
             step(414, 782, 782.38, 782.38, 782, true, false, 0, false, true, u"visual"_s, 0, true),
             step(414, 782, 782.38, 782.38, 782, true, true, 0, false, false, u"visual"_s, 0, true),
     };
+
+    // A block tapped, Enter, the phone turned with the keyboard up and back, Back (recorded the
+    // same way, 2026-10-29). Chrome and Brave hide the keyboard on the turn while the block stays
+    // edited: the landscape page has its full height, the first one at that width (no keyboard).
+    // Firefox keeps the keyboard: it reports the landscape page without it first (301 px), then
+    // with it (62 px). Turned back, Chrome and Brave bring the keyboard up again on a tap, Firefox
+    // hides it and brings it back.
+    QTest::newRow("nagranie: Chrome 133, obrót przy otwartej klawiaturze") << QList<Step>{
+            step(412, 786, 786.29, 786.29, 786, false, true, 0, false, false, u"content"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, false, 0, false, false, u"content"_s, 0, true),
+            step(412, 738, 738.29, 738.29, 738, true, false, 0, false, true, u"content"_s, 0, true),
+            step(412, 738, 738.29, 738.29, 738, true, true, 0, false, false, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, true, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, true, true, 0, true, false, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, false, false, 0, true, false, u"content"_s, 0, true),
+            step(412, 474, 474.29, 474.29, 474, false, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 474, 474.29, 474.29, 474, true, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, true, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, true, true, 0, true, false, u"content"_s, 0, true),
+            step(866, 308, 308.19, 308.19, 308, true, false, 0, false, true, u"content"_s, 0, true),
+            step(866, 308, 308.19, 308.19, 308, true, true, 0, false, false, u"content"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, false, 0, false, true, u"content"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, true, 0, false, false, u"content"_s, 0, true),
+            step(412, 738, 738.29, 738.29, 738, true, false, 0, false, true, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, true, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 426, 426.29, 426.29, 426, true, true, 0, true, false, u"content"_s, 0, true),
+            step(412, 474, 474.29, 474.29, 474, true, false, 0, true, true, u"content"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, false, 0, false, true, u"content"_s, 0, true),
+            step(412, 786, 786.29, 786.29, 786, true, true, 0, false, false, u"content"_s, 0, true),
+    };
+    QTest::newRow("nagranie: Brave 1.97.59, obrót przy otwartej klawiaturze") << QList<Step>{
+            step(411, 737, 737.52, 737.52, 738, false, true, 0, false, false, u"content"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, false, 0, false, false, u"content"_s, 0, true),
+            step(411, 673, 673.52, 673.52, 674, true, false, 0, false, true, u"content"_s, 0, true),
+            step(411, 673, 673.52, 673.52, 674, true, true, 0, false, false, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, false, 0, true, true, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, true, 0, true, false, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, false, false, 0, true, false, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, false, 0, true, false, u"content"_s, 0, true),
+            step(411, 473, 473.14, 473.14, 409, true, false, 0, true, true, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, false, 0, true, true, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, true, 0, true, false, u"content"_s, 0, true),
+            step(865, 307, 307.43, 307.43, 307, true, false, 0, false, true, u"content"_s, 0, true),
+            step(865, 307, 307.43, 307.43, 307, true, true, 0, false, false, u"content"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, false, 0, false, true, u"content"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, true, 0, false, false, u"content"_s, 0, true),
+            step(411, 721, 721.52, 721.52, 722, true, false, 0, false, true, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, false, 0, true, true, u"content"_s, 0, true),
+            step(411, 409, 409.14, 409.14, 409, true, true, 0, true, false, u"content"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, false, 0, false, true, u"content"_s, 0, true),
+            step(411, 737, 737.52, 737.52, 738, true, true, 0, false, false, u"content"_s, 0, true),
+    };
+    QTest::newRow("nagranie: Firefox 157.0.1, obrót przy otwartej klawiaturze") << QList<Step>{
+            step(414, 782, 782.38, 782.38, 782, false, true, 0, false, false, u"content"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, false, 0, false, false, u"content"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, true, 0, false, false, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, true, false, 0, true, true, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, true, true, 0, true, false, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, false, false, 0, true, false, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, true, false, 0, true, false, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, true, true, 0, true, false, u"content"_s, 0, true),
+            step(871, 301, 301.3, 301.3, 301, true, false, 0, false, true, u"content"_s, 0, true),
+            step(871, 62, 62.48, 62.48, 62, true, false, 0, true, true, u"content"_s, 0, true),
+            step(871, 62, 62.48, 62.48, 62, true, true, 0, true, false, u"content"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, false, 0, false, true, u"content"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, true, 0, false, false, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, true, false, 0, true, true, u"content"_s, 0, true),
+            step(414, 468, 468.05, 468.05, 468, true, true, 0, true, false, u"content"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, false, 0, false, true, u"content"_s, 0, true),
+            step(414, 782, 782.38, 782.38, 782, true, true, 0, false, false, u"content"_s, 0, true),
+    };
 }
 
 void TestKeyboardInsets::viewportKeyboardSequence()
@@ -513,7 +544,6 @@ void TestKeyboardInsets::viewportTallestPerWidth()
     QCOMPARE(keyboard.tallest(412), 0.0);
     keyboard.update(sample(412, 780, 780, 0, 780), 780);
     keyboard.update(sample(412, 480, 480, 0, 480), 480);
-    keyboard.update(sample(412, 780, 780, 0, 780), 780); // the keyboard hidden, then turned
     keyboard.update(sample(915, 360, 360, 0, 360), 360);
     QCOMPARE(keyboard.tallest(412), 780.0);
     QCOMPARE(keyboard.tallest(411.6), 780.0); // rounded widths
@@ -528,17 +558,6 @@ void TestKeyboardInsets::viewportTallestPerWidth()
     keyboard.update(sample(kNaN, 780, 700, 0, 780), 780);
     QCOMPARE(keyboard.tallest(kNaN), 700.0);
     QCOMPARE(keyboard.tallest(412), 780.0);
-
-    // Turned with the keyboard up: landscape heights with the keyboard in them are no tallest;
-    // the first one without it (Back) is.
-    ViewportKeyboard turned;
-    turned.update(sample(412, 786, 786, 0, 786), 786);
-    turned.update(sample(412, 426, 426, 0, 426), 426);
-    QVERIFY(turned.update(sample(915, 150, 150, 0, 150), 150).shown);
-    QCOMPARE(turned.tallest(915), 0.0);
-    QVERIFY(!turned.update(sample(915, 360, 360, 0, 360), 360).shown);
-    QCOMPARE(turned.tallest(915), 360.0);
-    QCOMPARE(turned.tallest(412), 786.0);
 }
 
 void TestKeyboardInsets::viewportSampleFeedsInsets()

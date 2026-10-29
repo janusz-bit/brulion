@@ -65,13 +65,11 @@ qreal viewportOverlap(const ViewportSample &sample, qreal windowHeight);
 /// `overlap`: viewportOverlap(). `shown`: an overlap, or — the browser shrank the page itself
 /// (interactive-widget=resizes-content) — on a touch screen with Qt's keyboard <input> focused, a
 /// visual viewport at least MinKeyboard lower than the tallest one seen at this width (one tallest
-/// per width: a rotated phone starts again). Once shown so, the focus passing between Qt's
-/// elements (Enter: the next block) does not hide it while the page stays shrunk and the samples
-/// have not settled; a settled sample without the focus ends it (the editing is over: a page
-/// shrunk for another reason, a split screen, is no keyboard). A phone turned with the keyboard
-/// up reaches a width never seen with the keyboard in its first heights: there the keyboard stays
-/// shown, and those heights do not count as the tallest, until the page grows by MinKeyboard (the
-/// keyboard went away) or a settled sample without the focus comes. `animating`: the viewports
+/// per width: a rotated phone starts again — Chrome and Brave hide the keyboard on the turn,
+/// Firefox reports the turned page without it first). Once shown so, the focus passing between
+/// Qt's elements (Enter: the next block) does not hide it while the page stays shrunk and the
+/// samples have not settled; a settled sample without the focus ends it (the editing is over: a
+/// page shrunk for another reason, a split screen, is no keyboard). `animating`: the viewports
 /// moved since the last settled sample and have not settled yet (a focus change alone does not
 /// count). Feeding the same sample twice gives the same state.
 class ViewportKeyboard {
@@ -97,10 +95,6 @@ private:
     bool m_hasSettled = false;
     bool m_moving = false; // an unsettled sample moved away from m_settled
     bool m_shrunk = false; // shown from the page's shrink (the last sample)
-    // Turned with the keyboard up: the width whose heights do not count yet, the lowest seen there.
-    bool m_carried = false;
-    int m_carriedWidth = 0;
-    qreal m_carriedLowest = 0;
 };
 
 class KeyboardInsets : public QObject {

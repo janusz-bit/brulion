@@ -94,35 +94,14 @@ ViewportKeyboard::State ViewportKeyboard::update(const ViewportSample &sample, q
     const bool usable = finite(sample.height) && sample.height > 0 && finite(sample.scale) && sample.scale > 0
                         && sample.scale <= kMaxScale;
     if (usable) {
-        const int width = widthKey(sample.innerWidth);
-        // Shown from the shrink so far: Qt's <input> focused, or the focus passing between Qt's
-        // elements (Enter: the next block) before the samples settle.
-        const bool held = sample.editing || (m_shrunk && !sample.settled);
-        // The phone turned with the keyboard up: the first heights at a width never seen have the
-        // keyboard in them. It stays shown there until the page grows by a keyboard (it went
-        // away) or the editing is over; only then do this width's heights count.
-        if (m_carried && m_carriedWidth != width)
-            m_carried = false;
-        if (!m_carried && m_shrunk && sample.touch && held && !m_tallest.contains(width)) {
-            m_carried = true;
-            m_carriedWidth = width;
-            m_carriedLowest = sample.height;
-        }
-        if (m_carried) {
-            m_carriedLowest = std::min(m_carriedLowest, sample.height);
-            if (sample.height - m_carriedLowest >= MinKeyboard || !held)
-                m_carried = false;
-            else
-                state.shown = true;
-        }
-        if (!m_carried) {
-            qreal &tallest = m_tallest[width];
-            tallest = std::max(tallest, sample.height);
-            // A settled sample without the focus ends it (the editing is over; a split screen
-            // keeps the page shrunk with no keyboard).
-            if (sample.touch && held && tallest - sample.height >= MinKeyboard)
-                state.shown = true;
-        }
+        qreal &tallest = m_tallest[widthKey(sample.innerWidth)];
+        tallest = std::max(tallest, sample.height);
+        // Qt's <input> focused starts it; a focus passing between Qt's elements (Enter: the next
+        // block) does not end it while the page stays shrunk and the samples have not settled. A
+        // settled sample without the focus does (the editing is over; a split screen keeps the
+        // page shrunk with no keyboard).
+        if (sample.touch && (sample.editing || (m_shrunk && !sample.settled)) && tallest - sample.height >= MinKeyboard)
+            state.shown = true;
     }
     m_shrunk = state.shown;
     if (state.overlap > 0)
