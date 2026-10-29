@@ -183,6 +183,8 @@ ColumnLayout {
         Layout.fillHeight: true
         Layout.minimumHeight: 200
         visible: resolverObject.loaded && resolverObject.notesOnly
+        // (A phone shows the changed lines without scrolling.)
+        context: Theme.compact ? 1 : 3
         oldText: visible ? resolverObject.oursNotes : ""
         newText: visible ? resolverObject.theirsNotes : ""
         oldLabel: qsTr("This device")
