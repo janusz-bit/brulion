@@ -116,7 +116,7 @@ Item {
         adding = true
         Qt.callLater(() => {
             if (panel && addLoader.item)
-                addLoader.item.forceActiveFocus()
+                (addLoader.item as Item).forceActiveFocus()
         })
     }
     function closeAdd() {
@@ -247,7 +247,7 @@ Item {
         y: panel.rowsHeight
         width: panel.width
         visible: panel.canAdd
-        height: panel.adding ? Math.max(panel.rowHeight, addLoader.item ? addLoader.item.implicitHeight + Theme.space1 : 0)
+        height: panel.adding ? Math.max(panel.rowHeight, addLoader.item ? (addLoader.item as Item).implicitHeight + Theme.space1 : 0)
                              : panel.rowHeight
 
         T.AbstractButton {

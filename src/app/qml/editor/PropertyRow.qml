@@ -202,8 +202,8 @@ FocusScope {
         case "list":
         case "tags":
         case "aliases":
-            if (valueLoader.item)
-                valueLoader.item.openAdd()
+            if (valueLoader.item as PropertyListValue)
+                (valueLoader.item as PropertyListValue).openAdd()
             break
         case "unsupported":
             break
@@ -263,7 +263,8 @@ FocusScope {
     /// A field of the row has the keyboard (its keys are its own; the ones it leaves are not the
     /// row's either: ← at a field's start must not start renaming).
     readonly property bool fieldOpen: editingValue || renaming
-                                      || (valueLoader.item !== null && valueLoader.item.adding === true)
+                                      || ((valueLoader.item as PropertyListValue) !== null
+                                          && (valueLoader.item as PropertyListValue).adding)
     Keys.onPressed: (event) => {
         if (row.fieldOpen)
             return
@@ -432,7 +433,7 @@ FocusScope {
         Item {
             id: textBox
             readonly property real lineHeight: row.rowHeight - 2 * Theme.space1
-            implicitHeight: row.editingValue && fieldLoader.item ? fieldLoader.item.implicitHeight
+            implicitHeight: row.editingValue && fieldLoader.item ? (fieldLoader.item as Item).implicitHeight
                                                                   : Math.max(lineHeight, display.implicitHeight)
             Text {
                 id: display
@@ -552,7 +553,7 @@ FocusScope {
         Item {
             id: numberBox
             readonly property real lineHeight: row.rowHeight - 2 * Theme.space1
-            implicitHeight: row.editingValue && numberLoader.item ? numberLoader.item.implicitHeight : lineHeight
+            implicitHeight: row.editingValue && numberLoader.item ? (numberLoader.item as Item).implicitHeight : lineHeight
             Text {
                 objectName: "propertyValue"
                 visible: !row.editingValue

@@ -48,12 +48,27 @@ BTextField {
         if (popupLoader.item) {
             const popup = popupLoader.item as T.Popup
             if (suggestions.length > 0 && activeFocus) {
-                popupLoader.item.place()
+                placePopup()
                 popup.open()
             } else {
                 popup.close()
             }
         }
+    }
+    /// The list under the field, above it when there is no room (the keyboard, the window's bottom).
+    function placePopup() {
+        const popup = popupLoader.item as T.Popup
+        const overlay = popup ? popup.parent : null
+        if (!overlay)
+            return
+        const p = field.mapToItem(overlay, 0, 0)
+        const fieldTop = p.y + field.topInset
+        const fieldBottom = p.y + field.height - field.bottomInset
+        const bottomLimit = overlay.height - KeyboardInsets.overlap - Theme.space2
+        const h = popup.implicitHeight
+        popup.x = Math.max(Theme.space2, Math.min(p.x, overlay.width - popup.width - Theme.space2))
+        popup.y = fieldBottom + 4 + h <= bottomLimit || fieldTop - 4 - h < Theme.space2
+                ? Math.min(fieldBottom + 4, bottomLimit - h) : fieldTop - 4 - h
     }
     function valueOf(i) {
         const s = suggestions[i]
@@ -125,23 +140,10 @@ BTextField {
             width: Math.max(field.width, Math.min(320, parent ? parent.width - 2 * Theme.space2 : 320))
             implicitHeight: Math.min(list.contentHeight, field.rowHeight * (Theme.touchUi ? 4 : 7)) + topPadding + bottomPadding
 
-            /// Under the field, above it when there is no room (the keyboard, the window's bottom).
-            function place() {
-                if (!parent)
-                    return
-                const p = field.mapToItem(parent, 0, 0)
-                const fieldTop = p.y + field.topInset
-                const fieldBottom = p.y + field.height - field.bottomInset
-                const bottomLimit = parent.height - KeyboardInsets.overlap - Theme.space2
-                const h = implicitHeight
-                x = Math.max(Theme.space2, Math.min(p.x, parent.width - width - Theme.space2))
-                y = fieldBottom + 4 + h <= bottomLimit || fieldTop - 4 - h < Theme.space2
-                    ? Math.min(fieldBottom + 4, bottomLimit - h) : fieldTop - 4 - h
-            }
-            onImplicitHeightChanged: if (visible) place()
+            onImplicitHeightChanged: if (visible) field.placePopup()
             Connections {
                 target: popup.visible ? KeyboardInsets : null
-                function onOverlapChanged() { popup.place() }
+                function onOverlapChanged() { field.placePopup() }
             }
 
             background: Item {

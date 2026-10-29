@@ -85,7 +85,7 @@ Item {
         if (readOnly)
             return
         adding = true
-        Qt.callLater(() => { if (root.field) root.field.forceActiveFocus() })
+        Qt.callLater(() => { if (root && root.field) (root.field as Item).forceActiveFocus() })
     }
 
     Flow {
@@ -150,7 +150,7 @@ Item {
             active: root.adding
             visible: active
             width: active ? Math.min(Math.max(160, chips.width / 2), chips.width) : 0
-            height: active && item ? item.implicitHeight : 0
+            height: active && item ? (item as Item).implicitHeight : 0
             sourceComponent: BSuggestField {
                 id: addField
                 objectName: "propertyListField"
