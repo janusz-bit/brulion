@@ -873,22 +873,22 @@ struct Reader::SearchDecoder::Private {
         auto &totals = A::totals(out);
         docs.reserve(docCount);
         for (qsizetype i = 0; i < docCount && !in.failed(); ++i) {
-            A::Doc d;
-            d.id = in.str();
-            d.contentKey = in.u64();
-            for (quint32 &n : d.length) {
+            A::Doc doc;
+            doc.id = in.str();
+            doc.contentKey = in.u64();
+            for (quint32 &n : doc.length) {
                 const quint64 v = in.varint();
                 if (v > std::numeric_limits<quint32>::max())
                     return fail();
                 n = quint32(v);
             }
-            d.used = true;
-            if (d.id.isNull() || byId.contains(d.id))
+            doc.used = true;
+            if (doc.id.isNull() || byId.contains(doc.id))
                 return fail();
             for (int f = 0; f < SearchIndex::FieldCount; ++f)
-                totals[f] += d.length[f];
-            byId.insert(d.id, int(docs.size()));
-            docs.append(std::move(d));
+                totals[f] += doc.length[f];
+            byId.insert(doc.id, int(docs.size()));
+            docs.append(std::move(doc));
         }
         termsLeft = in.count(3);
         return in.failed() ? fail() : false;
@@ -952,8 +952,8 @@ struct Reader::SearchDecoder::Private {
             done = true;
             if (!in.atEnd())
                 return fail();
-            for (SearchIndexAccess::Doc &d : SearchIndexAccess::docs(out))
-                d.terms.squeeze();
+            for (SearchIndexAccess::Doc &doc : SearchIndexAccess::docs(out))
+                doc.terms.squeeze();
         }
         return done;
     }
