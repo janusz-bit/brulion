@@ -901,7 +901,16 @@
 <context>
     <name>ShellShareDialog</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="26"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3155"/>
+        <source>%n file(s) to save in the notebook</source>
+        <translation>
+            <numerusform>%n file to save in the notebook</numerusform>
+            <numerusform>%n files to save in the notebook</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="33"/>
         <source>%n file(s) shared</source>
         <translation>
             <numerusform>%n file shared</numerusform>
@@ -1298,7 +1307,7 @@
 <context>
     <name>brulion::shell::AppController</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="284"/>
+        <location filename="../src/app/shell/appshare.cpp" line="362"/>
         <source>Saved %n page(s); not saved, a page with this name exists: %1</source>
         <translation>
             <numerusform>Saved %n page; not saved, a page with this name exists: %1</numerusform>
@@ -1306,7 +1315,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="288"/>
+        <location filename="../src/app/shell/appshare.cpp" line="366"/>
         <source>Saved %n page(s)</source>
         <translation>
             <numerusform>Saved %n page</numerusform>
