@@ -19,6 +19,8 @@
 #include <QSet>
 #include <QTest>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 using namespace brulion::drawing;
 
@@ -540,6 +542,120 @@ private Q_SLOTS:
         QCOMPARE(back->drawing.strokes.size(), file->drawing.strokes.size() + 2);
         QCOMPARE(back->drawing.strokes.at(back->drawing.strokes.size() - 2).id, u"tam"_s);
         QCOMPARE(back->drawing.strokes.last().id, u"tu"_s);
+    }
+
+    // ---- The sync center: the Markdown around a plugin file's scene -------------------------------
+
+    void keepsMarkdownOf_data()
+    {
+        // `into` is the original (written with the merge), `other` the conflict copy — both from
+        // obsidian_mixed.excalidraw.md: two text entries, an element link, an embedded file.
+        QTest::addColumn<QByteArray>("into");
+        QTest::addColumn<QByteArray>("other");
+        QTest::addColumn<bool>("keeps");
+        const QByteArray base = fixture(u"obsidian_mixed.excalidraw.md"_s);
+        const std::optional<DrawingFile> file = readDrawingFile(base);
+        QVERIFY(file);
+        QVERIFY(base.contains("Zażółć gęślą jaźń ^Zt8xQw1a"));
+        const auto edited = [&](const QByteArray &bytes, const char *from, const char *to) {
+            QByteArray out = bytes;
+            out.replace(from, to);
+            return out;
+        };
+        const auto withText = [&](const QString &id, const QString &text, int raise) {
+            Drawing d = file->drawing;
+            for (Stroke &s : d.strokes) {
+                if (s.id == id) {
+                    s.text = s.originalText = text;
+                    s.version += raise;
+                }
+            }
+            return writeDrawingFile(*file, d, Now);
+        };
+        Drawing drawn = file->drawing;
+        drawn.strokes.append(line(u"kreska-ż"_s));
+        const QByteArray withLine = writeDrawingFile(*file, drawn, Now);
+
+        QTest::newRow("the same file") << base << base << true;
+        QTest::newRow("a line drawn there") << base << withLine << true;
+        QTest::newRow("a line drawn here") << withLine << base << true;
+        QTest::newRow("the back of the card changed there")
+                << base << edited(withLine, "Notatka z tyłu:", "Notatka z tyłu (z laptopa, ąę):") << false;
+        QTest::newRow("the back of the card changed here")
+                << edited(base, "Notatka z tyłu:", "Notatka z tyłu (tutaj):") << base << false;
+        QTest::newRow("the frontmatter changed there")
+                << base << edited(base, "tags: [excalidraw]", "tags: [excalidraw, szkic]") << false;
+        QTest::newRow("an element link changed there")
+                << base << edited(base, "[[Plan ogrodu]]", "[[Plan ogródka]]") << false;
+        QTest::newRow("an embedded file added there")
+                << base << edited(base, "## Embedded Files\n", "## Embedded Files\nffff0000ffff0000: [[Zdjęcie.png]]\n")
+                << false;
+        QTest::newRow("CRLF there") << base << edited(base, "\n", "\r\n") << false;
+        // Text entries follow their elements.
+        const QByteArray newerThere = withText(u"Zt8xQw1a"_s, u"Źdźbło trawy"_s, 1);
+        QVERIFY(newerThere.contains("Źdźbło trawy ^Zt8xQw1a"));
+        QTest::newRow("a text changed there") << base << newerThere << true;
+        QTest::newRow("a text changed here") << newerThere << base << true;
+        QTest::newRow("a text edited by hand there (the same version)")
+                << base << edited(base, "Zażółć gęślą jaźń ^Zt8xQw1a", "Zażółć [[gęślą]] jaźń ^Zt8xQw1a") << false;
+        QTest::newRow("a text edited by hand here")
+                << edited(base, "Zażółć gęślą jaźń ^Zt8xQw1a", "Zażółć [[gęślą]] jaźń ^Zt8xQw1a") << base << false;
+        // A newer version of the text with only its entry changed (a link added): the writer keeps
+        // the original's entry, so the copy's is lost.
+        Drawing raised = file->drawing;
+        for (Stroke &s : raised.strokes) {
+            if (s.id == u"Zt8xQw1a")
+                ++s.version;
+        }
+        const QByteArray linked = edited(writeDrawingFile(*file, raised, Now), "Zażółć gęślą jaźń ^Zt8xQw1a",
+                                         "Zażółć [[gęślą]] jaźń ^Zt8xQw1a");
+        QVERIFY(linked.contains("[[gęślą]]"));
+        QTest::newRow("only a link added there") << base << linked << false;
+        // A text element only the copy has, with its entry (ids of 8 characters, as the plugin's):
+        // its text is in the scene as well.
+        Drawing texted = file->drawing;
+        Stroke t;
+        t.type = ElementType::Text;
+        t.id = u"nowyTkst"_s;
+        t.text = t.originalText = u"Nowy tekst ąę"_s;
+        t.box = QRectF(40, 400, 160, 25);
+        texted.strokes.append(t);
+        const QByteArray newText = edited(writeDrawingFile(*file, texted, Now), "## Element Links",
+                                          "Nowy tekst ąę ^nowyTkst\n\n## Element Links");
+        const std::optional<DrawingFile> withNewText = readDrawingFile(newText);
+        QVERIFY(withNewText);
+        QVERIFY(std::any_of(withNewText->markdown->textEntries.cbegin(), withNewText->markdown->textEntries.cend(),
+                            [](const ExcalidrawMarkdown::TextEntry &e) { return e.id == u"nowyTkst"; }));
+        QTest::newRow("a text new there") << base << newText << true;
+        // Other formats have nothing around their scene.
+        QTest::newRow("an SVG copy") << base << svgOf(u"a"_s) << true;
+        QTest::newRow("an SVG original, a plugin copy") << svgOf(u"a"_s) << base << false;
+        QTest::newRow("two SVGs") << svgOf(u"a"_s) << svgOf(u"b"_s) << true;
+    }
+    void keepsMarkdownOf()
+    {
+        QFETCH(QByteArray, into);
+        QFETCH(QByteArray, other);
+        QFETCH(bool, keeps);
+        const std::optional<DrawingFile> a = readDrawingFile(into);
+        const std::optional<DrawingFile> b = readDrawingFile(other);
+        QVERIFY(a);
+        QVERIFY(b);
+        QCOMPARE(brulion::drawing::keepsMarkdownOf(*a, *b), keeps);
+    }
+
+    void markdownAroundScene()
+    {
+        const QByteArray base = fixture(u"obsidian_mixed.excalidraw.md"_s);
+        const std::optional<DrawingFile> file = readDrawingFile(base);
+        QVERIFY(file);
+        const QByteArray around = brulion::drawing::markdownAroundScene(*file);
+        QVERIFY(around.startsWith(base.first(base.indexOf("## Drawing"))));
+        QVERIFY(around.contains("Notatka z tyłu: Zażółć gęślą jaźń"));
+        QVERIFY(around.contains("```compressed-json\n```"));
+        QCOMPARE(around, base.first(file->markdown->sceneFrom) + base.sliced(file->markdown->sceneTo));
+        QCOMPARE(brulion::drawing::markdownAroundScene(*readDrawingFile(svgOf(u"a"_s))), QByteArray());
+        QCOMPARE(brulion::drawing::markdownAroundScene(*readDrawingFile(excalidrawOf(u"a"_s))), QByteArray());
     }
 
     void randomMergesKeepTheirInvariants()

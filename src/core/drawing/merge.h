@@ -15,6 +15,7 @@
 #pragma once
 
 #include "drawing/drawing.h"
+#include "drawing/drawingfile.h"
 
 #include <QByteArray>
 #include <QByteArrayView>
@@ -78,6 +79,22 @@ bool sameDrawing(const Drawing &a, const Drawing &b);
 /// defaults. (A conflict copy that is an older version of the drawing: keeping the original loses
 /// nothing.)
 bool containsDrawing(const Drawing &outer, const Drawing &inner);
+
+/// The Markdown around an Excalidraw plugin file's scene (drawingfile.h DrawingFile::markdown):
+/// the file with its scene block emptied (the fence lines stay) — the frontmatter, the back of the
+/// card, the text entries, element links, embedded files, `%%`; "" for the other formats (an SVG
+/// and a `.excalidraw` scene have nothing around it). For showing how two versions' notes differ.
+QByteArray markdownAroundScene(const DrawingFile &file);
+/// Writing a merge of `other`'s drawing into `into`'s file (writeDrawingFile(into, …): the sync
+/// center's "Scal rysunki" — `into` the original) keeps everything of `other`'s Markdown around its
+/// scene: the frontmatter, the back of the card, element links, embedded files and `%%` are the
+/// same byte for byte, and each "## Text Elements" entry of `other` is `into`'s as well — or
+/// follows its element (an element only `other` has: its text is in the scene's `rawText`; one
+/// `into` holds in a higher version: other's entry is older; one `other` holds in a higher version
+/// with another text: the merge writes that one's text). An entry that differs for an element of
+/// the same version (an edit by hand), or of a higher version with the same text (only its links
+/// changed: the writer keeps into's entry), is lost. True when `other` is no plugin file.
+bool keepsMarkdownOf(const DrawingFile &into, const DrawingFile &other);
 
 /// Nextcloud's merge of a drawing file changed on both devices (docs/SYNTAX.md §2 "Drawings"):
 /// `local` and `remote` merged element by element against `base`, the version both had last

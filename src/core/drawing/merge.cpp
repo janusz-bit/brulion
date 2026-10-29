@@ -4,7 +4,10 @@
 #include "drawing/excalidraw.h"
 
 #include <QJsonDocument>
+#include <QList>
 #include <QSet>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -72,6 +75,42 @@ QByteArray aroundScene(const DrawingFile &file)
         return {};
     const QByteArray &b = file.markdown->bytes;
     return b.first(file.markdown->sceneFrom) + b.sliced(file.markdown->sceneTo);
+}
+
+/// aroundScene() without the "## Text Elements" entries (each from its text to its line breaks):
+/// what follows no element of the scene.
+QByteArray notesOf(const ExcalidrawMarkdown &m)
+{
+    struct Cut {
+        qsizetype from = 0;
+        qsizetype to = 0;
+    };
+    QList<Cut> cuts{ { m.sceneFrom, m.sceneTo } };
+    for (const ExcalidrawMarkdown::TextEntry &e : m.textEntries)
+        cuts.append({ e.from, e.end });
+    std::sort(cuts.begin(), cuts.end(), [](const Cut &a, const Cut &b) { return a.from < b.from; });
+    QByteArray out;
+    qsizetype at = 0;
+    for (const Cut &c : std::as_const(cuts)) {
+        if (c.from < at || c.to < c.from || c.to > m.bytes.size())
+            continue; // (overlapping: never for a layout read from a file)
+        out += QByteArrayView(m.bytes).sliced(at, c.from - at);
+        at = c.to;
+    }
+    out += QByteArrayView(m.bytes).sliced(at);
+    return out;
+}
+
+/// The elements with an id, by id (the first of an id seen twice).
+QHash<QString, const Stroke *> byId(const Drawing &d)
+{
+    QHash<QString, const Stroke *> out;
+    out.reserve(d.strokes.size());
+    for (const Stroke &s : d.strokes) {
+        if (!s.id.isEmpty() && !out.contains(s.id))
+            out.insert(s.id, &s);
+    }
+    return out;
 }
 
 } // namespace
@@ -215,6 +254,43 @@ bool containsDrawing(const Drawing &outer, const Drawing &inner)
         if (it == at.constEnd() || (*it)->version < s.version
             || ((*it)->version == s.version && contentOf(**it) != contentOf(s)))
             return false;
+    }
+    return true;
+}
+
+QByteArray markdownAroundScene(const DrawingFile &file)
+{
+    return aroundScene(file);
+}
+
+bool keepsMarkdownOf(const DrawingFile &into, const DrawingFile &other)
+{
+    if (!other.markdown)
+        return true;
+    if (!into.markdown || notesOf(*into.markdown) != notesOf(*other.markdown))
+        return false;
+    QHash<QString, QByteArrayView> entries;
+    const QByteArray &mine = into.markdown->bytes;
+    for (const ExcalidrawMarkdown::TextEntry &e : into.markdown->textEntries) {
+        if (!entries.contains(e.id) && e.from <= e.to && e.to <= mine.size())
+            entries.insert(e.id, QByteArrayView(mine).sliced(e.from, e.to - e.from));
+    }
+    const QHash<QString, const Stroke *> here = byId(into.drawing);
+    const QHash<QString, const Stroke *> there = byId(other.drawing);
+    const QByteArray &theirs = other.markdown->bytes;
+    for (const ExcalidrawMarkdown::TextEntry &e : other.markdown->textEntries) {
+        if (e.from > e.to || e.to > theirs.size())
+            continue;
+        const auto entry = entries.constFind(e.id);
+        if (entry != entries.constEnd() && *entry == QByteArrayView(theirs).sliced(e.from, e.to - e.from))
+            continue;
+        const Stroke *m = here.value(e.id);
+        const Stroke *t = there.value(e.id);
+        if (!m || !t || m->version > t->version)
+            continue; // only other has the element (its text in the scene), or into's is newer
+        if (t->version > m->version && (t->text != m->text || t->originalText != m->originalText))
+            continue; // other's is newer, with another text: the merge writes other's
+        return false;
     }
     return true;
 }
