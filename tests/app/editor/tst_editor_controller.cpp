@@ -1249,7 +1249,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
 
     // Enter in the middle of a zoomed list item: its tail becomes the zoom root's first child,
     // inside the zoom — also when it had no children (a split makes the next sibling then) or is
-    // folded (the zoom root's children are shown whatever its fold). The zoom stays.
+    // folded (the zoom root's children are shown whatever its fold). The zoom stays, and undo /
+    // redo keep it although the zoomed block's own text changed.
     void zoomRootListItemEnterInTheMiddle_data()
     {
         QTest::addColumn<QString>("content");
@@ -1274,6 +1275,11 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
                                                          << u"- wstęp\n- ąę \n\t- źć"_s << 2 << u"źć"_s;
         QTest::newRow("CRLF") << u"- ąę źć\r\n- b\r\n"_s << false << 0 << 3
                               << u"- ąę \r\n\t- źć\r\n- b\r\n"_s << 1 << u"źć"_s;
+        // At the end and at the start: a new empty first child (as before).
+        QTest::newRow("punkt, Enter na końcu") << u"- a\n\t- a1 ąę\n- b\n"_s << false << 1 << 5
+                                               << u"- a\n\t- a1 ąę\n\t\t- \n- b\n"_s << 2 << QString();
+        QTest::newRow("punkt, Enter na początku") << u"- a\n\t- a1 ąę\n- b\n"_s << false << 1 << 0
+                                                  << u"- a\n\t- a1 ąę\n\t\t- \n- b\n"_s << 2 << QString();
     }
 
     void zoomRootListItemEnterInTheMiddle()

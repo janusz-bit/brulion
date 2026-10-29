@@ -1320,6 +1320,20 @@ QVariantMap PageController::split(int row, int cursor)
         return result(row, cursor);
     const int len = int(shape.editText.size());
     cursor = cursor < 0 ? len : snapToCharacter(shape.editText, cursor);
+    // Enter made in a zoom records the zoomed row of both versions (Focus::zoom): undo and redo
+    // bring that zoom back also when the zoomed block's own text changed (a block whose source
+    // changed loses the zoom in BlockListModel::replaceContent) and when the step ended the zoom.
+    const int zoom = zoomBlock();
+    const auto finish = [&](Focus f) {
+        if (zoom >= 0) {
+            if (m_commandDepth == 1)
+                m_commandFocusBefore.zoom = zoom; // the zoomed row of the text before this step
+            f.zoom = zoomBlock();
+        }
+        endCommand(f);
+        setFocus(f, true);
+        return f;
+    };
 
     // "```calc" + Enter opens a code block (any fence length and info string Markdown accepts).
     // Not after a task marker: "- [ ] ```js" is a task's text, not a fence.
@@ -1331,9 +1345,7 @@ QVariantMap PageController::split(int row, int cursor)
             applyOp([&](BlockDocument &d) {
                 return d.setBody(row, bodyWithEditText(entry, opening + u"\n\n"_s + closing));
             });
-            const Focus f{row, 0};
-            endCommand(f);
-            setFocus(f, true);
+            const Focus f = finish({row, 0});
             return result(f.row, f.cursor);
         }
     }
@@ -1346,15 +1358,12 @@ QVariantMap PageController::split(int row, int cursor)
                 bodyWithEditText(entry, shape.editText.left(cursor) + u'\n' + shape.editText.mid(cursor));
         beginCommand();
         applyOp([&](BlockDocument &d) { return d.setBody(row, updated); });
-        const Focus f{row, cursor + 1};
-        endCommand(f);
-        setFocus(f, true);
+        const Focus f = finish({row, cursor + 1});
         return result(f.row, m_cursor);
     }
 
     // Document mode: Enter on an empty list item leaves the list (Obsidian) — a nested item moves
     // one level out, a top-level one becomes a paragraph.
-    const int zoom = zoomBlock();
     if (len == 0 && entry.kind == BlockKind::ListItem && documentMode()) {
         const QVariantMap left = leaveList(row);
         if (left.value(u"row"_s).toInt() >= 0)
@@ -1388,21 +1397,16 @@ QVariantMap PageController::split(int row, int cursor)
             r.focus = m_model->rowOfUid(uid);
         }
     }
-    Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
+    const Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
     // Never leave the caret in a hidden block. A zoomed heading or paragraph has no children
     // (BlockDocument: only list items nest), so the block Enter made below it (at its end, in its
     // middle, on an empty one) cannot be inside the zoom: the zoom ends, the page shows it, and
-    // Enter has done what it does on the page. Undo zooms back in (Focus::zoom). At its start
-    // the empty paragraph goes above, out of sight, and the caret stays in the zoom root.
-    if (zoom >= 0 && validRow(f.row) && !m_model->isRowVisible(f.row)) {
-        if (m_commandDepth == 1)
-            m_commandFocusBefore.zoom = zoom; // the zoomed row of the text before this step
+    // Enter has done what it does on the page; undo zooms back in. At its start the empty
+    // paragraph goes above, out of sight, and the caret stays in the zoom root.
+    if (zoom >= 0 && validRow(f.row) && !m_model->isRowVisible(f.row))
         reveal(f.row); // leaves the zoom (zoomChanged); a heading or paragraph has no folds to open
-        f.zoom = zoomBlock();
-    }
-    endCommand(f);
-    setFocus(f, true);
-    return result(f.row, f.cursor);
+    const Focus done = finish(f);
+    return result(done.row, done.cursor);
 }
 
 QVariantMap PageController::mergeWithPrevious(int row)

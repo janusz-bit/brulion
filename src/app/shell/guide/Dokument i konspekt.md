@@ -36,7 +36,7 @@ Blokiem jest każdy punkt listy, a poza listami — każdy akapit, nagłówek, t
 | Ctrl+C / Ctrl+X / Ctrl+V | kopiuj / wytnij / wklej — zaznaczone bloki albo tekst w bloku |
 | Ctrl+Enter | zmiana statusu zadania |
 
-W konspekcie kliknij kropkę bloku, żeby się do niego **przybliżyć** — widzisz tylko ten blok i jego dzieci. W dokumencie Enter na pustym punkcie listy kończy listę, a Tab działa tylko na punktach listy.
+W konspekcie kliknij kropkę bloku, żeby się do niego **przybliżyć** — widzisz tylko ten blok i jego dzieci. Enter w przybliżonym punkcie listy dodaje nowy podpunkt, który zostaje widoczny. Nagłówek i akapit nie mają dzieci: Enter w przybliżonym nagłówku albo akapicie (poza jego początkiem) kończy przybliżenie i dodaje nowy blok pod nim — Ctrl+Z wraca do przybliżenia. W dokumencie Enter na pustym punkcie listy kończy listę, a Tab działa tylko na punktach listy.
 
 **Bloki kodu:** wpisz `` ``` `` z nazwą języka (np. `` ```js ``) i naciśnij Enter. W bloku kodu widzisz sam kod — linie ogrodzenia oraz identyfikator bloku (`^id`) pod nim są ukryte. Linia `` ``` `` wpisana w kodzie zostaje kodem: Brulion sam wydłuża ogrodzenie. Gdy zaczniesz kod linią `` ``` `` w akapicie albo punkcie listy, Brulion dopisze linię zamykającą na końcu bloku, więc kod nie obejmie kolejnych bloków. Samą linię otwierającą (np. `` ```js `` bez Entera) Brulion zamyka, gdy przejdziesz do innego bloku — zostaje pusty blok kodu. Enter i wklejanie między tymi liniami działają jak w bloku kodu.
 

@@ -788,7 +788,8 @@ private:
         int selectionFocus = -1;
         QList<int> selectionPicks = {};
         /// The zoomed row of this version (-1: the whole page), restored by undo / redo — set only
-        /// by a step that changed the zoom (Enter in a zoomed heading or paragraph ends it).
+        /// by Enter made in a zoom (split(): a zoomed heading or paragraph ends it, a zoomed block
+        /// whose own text changed would lose it).
         int zoom = KeepZoom;
     };
 
