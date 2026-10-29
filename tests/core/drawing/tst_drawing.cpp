@@ -1273,13 +1273,14 @@ private Q_SLOTS:
         QTest::newRow("> in attributes") << quoted + body << quoted << body;
         const QByteArray crlf = "<?xml version=\"1.0\"?>\r\n<svg\r\n  xmlns=\"http://www.w3.org/2000/svg\"\r\n  "
                                 "width=\"100\"\r\n  height=\"60\">";
-        QTest::newRow("CRLF") << crlf + "\r\n<rect width=\"5\" height=\"5\"/>\r\n</svg>\r\n" << crlf
-                              << QByteArray("\r\n<rect width=\"5\" height=\"5\"/>\r\n</svg>\r\n");
+        QTest::newRow("CRLF") << crlf + "\r\n<rect width=\"5\" height=\"5\"/>\r\n</svg>\r\n"
+                              << crlf << QByteArray("\r\n<rect width=\"5\" height=\"5\"/>\r\n</svg>\r\n");
         const QByteArray bare = "<svg xmlns=\"http://www.w3.org/2000/svg\">";
-        QTest::newRow("no size (an export without it)") << bare + "<rect/></svg>" << bare << QByteArray("<rect/></svg>");
+        QTest::newRow("no size (an export without it)")
+                << bare + "<rect/></svg>" << bare << QByteArray("<rect/></svg>");
         const QByteArray prefixed = "<svg:svg xmlns:svg=\"http://www.w3.org/2000/svg\" width=\"9\">";
-        QTest::newRow("namespace prefix") << prefixed + "<svg:rect/></svg:svg>" << prefixed
-                                          << QByteArray("<svg:rect/></svg:svg>");
+        QTest::newRow("namespace prefix")
+                << prefixed + "<svg:rect/></svg:svg>" << prefixed << QByteArray("<svg:rect/></svg:svg>");
         // An entity in the root's attributes: the tag still ends where its '>' is.
         const QByteArray entity = "<!DOCTYPE svg [<!ENTITY nazwa \"Szkic grządek\">]>\n<svg "
                                   "xmlns=\"http://www.w3.org/2000/svg\" aria-label=\"&nazwa;\" width=\"9\">";
@@ -1288,9 +1289,10 @@ private Q_SLOTS:
         const QByteArray excalidraw = "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 9 9\" "
                                       "width=\"9\" height=\"9\">";
         QTest::newRow("a scene already")
-                << excalidraw + "<!-- svg-source:excalidraw --><metadata>"
-                           "<!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->"
-                           "<!-- payload-start -->"
+                << excalidraw
+                           + "<!-- svg-source:excalidraw --><metadata>"
+                             "<!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->"
+                             "<!-- payload-start -->"
                            + encodePayload(R"({"type":"excalidraw","version":2,"elements":[]})")
                            + "<!-- payload-end --></metadata><rect/></svg>"
                 << excalidraw << QByteArray("<!-- svg-source:excalidraw --><metadata></metadata><rect/></svg>");
@@ -1309,8 +1311,12 @@ private Q_SLOTS:
         QFETCH(QByteArray, rest);
         Drawing d;
         d.strokes = {wavyStroke(u"źdźbło"_s, 10, 12, 20, true), wavyStroke(u"łodyga"_s, 4, 30, 9)};
-        d.foreign.append(QJsonObject{{u"type"_s, u"frame"_s}, {u"id"_s, u"ramka-ż"_s}, {u"x"_s, 0}, {u"y"_s, 0},
-                                     {u"width"_s, 50}, {u"height"_s, 40}});
+        d.foreign.append(QJsonObject{{u"type"_s, u"frame"_s},
+                                     {u"id"_s, u"ramka-ż"_s},
+                                     {u"x"_s, 0},
+                                     {u"y"_s, 0},
+                                     {u"width"_s, 50},
+                                     {u"height"_s, 40}});
         const std::optional<QByteArray> out = brulion::drawing::svgWithScene(picture, d);
         QVERIFY(out);
         // The picture's bytes before and after the scene, as they were.

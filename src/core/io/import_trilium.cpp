@@ -1060,8 +1060,7 @@ private:
     /// indices, `legacyPicture` the picture old Trilium kept in the content (`svg`). nullopt: no
     /// JSON object with an `elements` array (a damaged or protected note), more than a scene may
     /// hold (drawing::MaxSceneBytes, MaxSceneContainers) or no Excalidraw scene.
-    std::optional<drawing::Drawing> canvasScene(int i, bool foldPictures, QList<int> *folded,
-                                                QByteArray *legacyPicture)
+    std::optional<drawing::Drawing> canvasScene(int i, bool foldPictures, QList<int> *folded, QByteArray *legacyPicture)
     {
         const Note &n = m_notes[i];
         const InputFile *f = file(n.dataSource);
@@ -1113,11 +1112,12 @@ private:
                 if (!picture || !mime.startsWith(u"image/"_s) || isExportImage(n.type, a.title) || a.title.isEmpty()
                     || !used.contains(a.title) || files.contains(a.title))
                     continue;
-                files.insert(a.title, QJsonObject{{u"mimeType"_s, mime},
-                                                  {u"id"_s, a.title},
-                                                  {u"dataURL"_s, QString(u"data:"_s + mime + u";base64,"_s
-                                                                                 + QString::fromLatin1(picture->data.toBase64()))},
-                                                  {u"created"_s, 0}});
+                files.insert(a.title,
+                             QJsonObject{{u"mimeType"_s, mime},
+                                         {u"id"_s, a.title},
+                                         {u"dataURL"_s, QString(u"data:"_s + mime + u";base64,"_s
+                                                                + QString::fromLatin1(picture->data.toBase64()))},
+                                         {u"created"_s, 0}});
                 if (folded)
                     folded->append(k);
             }
