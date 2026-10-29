@@ -1,0 +1,7 @@
+---
+excalidraw-plugin: parsed
+---
+# Text Elements
+# Drawing
+{"type":"excalidraw","version":2,"source":"https://github.com/zsviczian/obsidian-excalidraw-plugin/releases/tag/2.2.5","elements":[{"id":"Qk8_3vL1nYbXc0Rr2mT9a","type":"freedraw","x":412.5,"y":230.25,"width":120.5,"height":40.75,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"transparent","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roughness":1,"opacity":100,"groupIds":[],"frameId":null,"index":"a0","roundness":null,"seed":1438920917,"version":37,"versionNonce":1786524155,"isDeleted":false,"boundElements":null,"updated":1761568000000,"link":null,"locked":false,"points":[[0.0,0.0],[5.25,5.89],[10.5,11.13],[15.75,15.15],[21.0,17.49],[26.25,17.92],[31.5,16.37],[36.75,13.02],[42.0,8.23],[47.25,2.54],[52.5,-3.43],[57.75,-9.02],[63.0,-13.62],[68.25,-16.72],[73.5,-17.98],[78.75,-17.26],[84.0,-14.64],[89.25,-10.41],[94.5,-5.03],[99.75,0.9],[105.0,6.73],[110.25,11.83],[115.5,15.61],[120.75,17.69]],"pressures":[0.2,0.23,0.26,0.29,0.32,0.35,0.38,0.41,0.44,0.47,0.5,0.53,0.56,0.59,0.62,0.65,0.68,0.71,0.74,0.77,0.8,0.83,0.86,0.89],"simulatePressure":false,"lastCommittedPoint":[120.75,0]}],"appState":{"theme":"light","viewBackgroundColor":"#ffffff","currentItemStrokeColor":"#1e1e1e","gridSize":null,"scrollX":0,"scrollY":0,"zoom":{"value":1}},"files":{}}
+%%

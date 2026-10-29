@@ -610,7 +610,7 @@ QJsonObject elementJson(const Stroke &s, const QHash<QString, ElementType> *type
     return e;
 }
 
-std::optional<Drawing> parseScene(QByteArrayView json)
+std::optional<QJsonObject> sceneRoot(QByteArrayView json)
 {
     if (json.size() > MaxSceneBytes)
         return std::nullopt;
@@ -625,7 +625,16 @@ std::optional<Drawing> parseScene(QByteArrayView json)
     const QJsonDocument doc = QJsonDocument::fromJson(json.toByteArray(), &error);
     if (error.error != QJsonParseError::NoError || !doc.isObject())
         return std::nullopt;
-    const QJsonObject root = doc.object();
+    QJsonObject root = doc.object();
+    if (root.value(u"type"_s).toString() != u"excalidraw")
+        return std::nullopt;
+    if (root.contains(u"elements"_s) && !root.value(u"elements"_s).isArray())
+        return std::nullopt;
+    return root;
+}
+
+std::optional<Drawing> sceneFromObject(const QJsonObject &root)
+{
     if (root.value(u"type"_s).toString() != u"excalidraw")
         return std::nullopt;
     if (root.contains(u"elements"_s) && !root.value(u"elements"_s).isArray())
@@ -656,7 +665,13 @@ std::optional<Drawing> parseScene(QByteArrayView json)
     return d;
 }
 
-QByteArray sceneJson(const Drawing &drawing)
+std::optional<Drawing> parseScene(QByteArrayView json)
+{
+    const std::optional<QJsonObject> root = sceneRoot(json);
+    return root ? sceneFromObject(*root) : std::nullopt;
+}
+
+QJsonObject sceneObject(const Drawing &drawing)
 {
     QJsonObject root = drawing.scene;
     root.insert(u"type"_s, u"excalidraw"_s);
@@ -722,7 +737,12 @@ QByteArray sceneJson(const Drawing &drawing)
             files.insert(it.key(), it.value());
     }
     root.insert(u"files"_s, files);
-    return QJsonDocument(root).toJson(QJsonDocument::Compact);
+    return root;
+}
+
+QByteArray sceneJson(const Drawing &drawing)
+{
+    return QJsonDocument(sceneObject(drawing)).toJson(QJsonDocument::Compact);
 }
 
 QByteArray encodePayload(QByteArrayView sceneJson)

@@ -43,6 +43,14 @@ inline constexpr QStringView SceneSource = u"https://github.com/janusz-bit/bruli
 /// CoordinateLimit) go to Drawing::foreign; deleted elements are dropped (as Excalidraw's own
 /// export does). nullopt: no Excalidraw scene, or one beyond MaxSceneBytes or MaxSceneContainers.
 std::optional<Drawing> parseScene(QByteArrayView json);
+/// The first half of parseScene(): the scene's root object (`type` "excalidraw", `elements` an
+/// array when present), within MaxSceneBytes and MaxSceneContainers; nullopt otherwise.
+std::optional<QJsonObject> sceneRoot(QByteArrayView json);
+/// The second half: the drawing in a scene's root object (deleted elements dropped).
+std::optional<Drawing> sceneFromObject(const QJsonObject &root);
+/// The scene sceneJson() writes, as an object (the Excalidraw plugin's files and `.excalidraw`
+/// files write it with their own layout: excalidrawmd.h stringifyJson()).
+QJsonObject sceneObject(const Drawing &drawing);
 /// The scene's JSON (UTF-8, compact): the elements in their order (each one read from a scene and
 /// not changed since as it was read, the others as Excalidraw writes them: elementJson()), the
 /// foreign elements after them, the appState with the paper, the background and the theme
