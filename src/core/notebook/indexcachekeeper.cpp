@@ -157,12 +157,12 @@ struct IndexCacheKeeper::Private {
             report(writeIndexCacheFile(path, bytes), size);
             return;
         }
-        pool.start([shared = shared, file = path, bytes = std::move(bytes), size] {
+        pool.start([keeper = shared, file = path, bytes = std::move(bytes), size] {
             const QString error = writeIndexCacheFile(file, bytes);
-            std::lock_guard lock(shared->mutex);
-            if (shared->cancelled || !shared->receiver)
+            std::lock_guard lock(keeper->mutex);
+            if (keeper->cancelled || !keeper->receiver)
                 return;
-            IndexCacheKeeper *receiver = shared->receiver;
+            IndexCacheKeeper *receiver = keeper->receiver;
             QMetaObject::invokeMethod(
                     receiver, [receiver, error, size] { receiver->d->report(error, size); }, Qt::QueuedConnection);
         });
