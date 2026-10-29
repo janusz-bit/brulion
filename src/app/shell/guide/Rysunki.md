@@ -81,6 +81,7 @@ Plik rysunku to obraz SVG z ukrytą w środku sceną Excalidraw:
 - **Obsidian**, **Logseq**, przeglądarki i menedżery plików pokazują go jako zwykły obraz;
 - **excalidraw.com** otwiera go do edycji (przeciągnij plik na stronę) — kształty, strzałki i tekst z Brulionu są tam zwykłymi elementami Excalidraw;
 - rysunek z Excalidraw wyeksportowany jako SVG z opcją **Embed scene** Brulion też otworzy i możesz go dalej edytować: pismo odręczne, kształty, strzałki, tekst i wklejone obrazy. Brulion rysuje je gładko — „ręczny” wygląd z Excalidraw zostaje w pliku, ale w Brulionie kreski są proste — a tekst pokazuje swoją czcionką, więc może wyjść odrobinę poza swoje pole. Strzałek łamanych Brulion nie układa na nowo, tylko przesuwa;
+- rysunki (*canvas*) z **Trilium** import zapisuje jako takie same pliki SVG: obraz narysowany przez Trilium ze sceną Excalidraw w środku i obrazami wklejonymi do rysunku — otworzysz je w edytorze rysunków jak każdy inny rysunek (zobacz [[Import i eksport|Import i eksport]]);
 - rysunek z **ramkami** albo **osadzonymi stronami internetowymi** Brulion tylko pokaże (zmienisz go w excalidraw.com), żeby niczego nie zgubić. W ciemnym motywie taki rysunek też ciemnieje, jak w ciemnym trybie Excalidraw, a wklejone do niego zdjęcia i emoji zachowują swoje kolory.
 
 Pliki **`.excalidraw`** (excalidraw.com: „Save to disk”, wtyczki Excalidraw dla Logseq i Obsidiana w trybie zgodności) Brulion też otwiera i edytuje — zapisuje je dalej jako `.excalidraw`.

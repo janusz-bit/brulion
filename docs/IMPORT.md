@@ -331,7 +331,7 @@ Wskazówki:
 | klon (ta sama notatka w kilku miejscach) | importowany raz, w pierwszym miejscu drzewa; w pozostałych miejscach — link na liście elementów podrzędnych rodzica |
 | notatka kodu | strona z blokiem kodu w jej języku (```` ```python ````); notatka typu Markdown — jej treść |
 | diagram Mermaid | blok ```` ```mermaid ```` ze źródłem i link do obrazu SVG wyrenderowanego przez Trilium (taki SVG ma etykiety w HTML i style CSS, których Brulion nie potrafi narysować); obraz, który da się pokazać, jest osadzony nad źródłem |
-| canvas (Excalidraw) | strona z obrazem SVG i plikiem `.excalidraw` w załącznikach |
+| canvas (Excalidraw) | strona z rysunkiem (zob. **Rysunki** wyżej): jeden plik SVG w załącznikach (`assets/<folder importu>/<ścieżka>/<tytuł>.svg`) — obraz narysowany przez Trilium ze sceną Excalidraw w środku. Brulion otwiera go w edytorze rysunków (pismo odręczne, kształty, strzałki, tekst i obrazy; rysunek z ramką albo osadzoną stroną internetową tylko pokazuje), excalidraw.com też, a inne programy pokazują obraz z Trilium. Obrazy wklejone do rysunku w Trilium są w nim (gdy razem przekroczyłyby ok. 32 MB, zostają obok jako pliki, z ostrzeżeniem). Bez obrazu z Trilium (starsze wersje, pusty rysunek, sam PNG) Brulion rysuje obraz sam. Notatka, której treść nie jest sceną Excalidraw (uszkodzona), i rysunek z osadzoną stroną bez obrazu z Trilium — jak dawniej: obraz i plik `.excalidraw` |
 | mapa myśli | lista zagnieżdżona, link do obrazu (jeśli jest) i plik `.json` |
 | mapa relacji | lista linków do notatek z mapy |
 | strona WWW (*web view*) | link do jej adresu |
