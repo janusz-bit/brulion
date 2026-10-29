@@ -902,7 +902,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3155"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3353"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -921,7 +921,17 @@
 <context>
     <name>SyncConflictResolver</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="241"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="251"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="259"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="271"/>
+        <source>%n element(s)</source>
+        <translation>
+            <numerusform>%n element</numerusform>
+            <numerusform>%n elements</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="419"/>
         <source>Changes made on one side only are merged already. Decide the %n place(s) changed on both sides.</source>
         <translation>
             <numerusform>Changes made on one side only are merged already. Decide the %n place changed on both sides.</numerusform>
@@ -1307,7 +1317,7 @@
 <context>
     <name>brulion::shell::AppController</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="362"/>
+        <location filename="../src/app/shell/appshare.cpp" line="401"/>
         <source>Saved %n page(s); not saved, a page with this name exists: %1</source>
         <translation>
             <numerusform>Saved %n page; not saved, a page with this name exists: %1</numerusform>
@@ -1315,7 +1325,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="366"/>
+        <location filename="../src/app/shell/appshare.cpp" line="405"/>
         <source>Saved %n page(s)</source>
         <translation>
             <numerusform>Saved %n page</numerusform>
@@ -1337,7 +1347,7 @@
 <context>
     <name>brulion::shell::WorkspaceSync</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="496"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="497"/>
         <source>%n file(s) would be deleted. Confirm in the sync center.</source>
         <translation>
             <numerusform>%n file would be deleted. Confirm in the sync center.</numerusform>
@@ -1345,7 +1355,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="500"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="501"/>
         <source>%n file(s) could not be synced.</source>
         <translation>
             <numerusform>%n file could not be synced.</numerusform>
@@ -1353,7 +1363,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="808"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="809"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Up to date with %n device.</numerusform>

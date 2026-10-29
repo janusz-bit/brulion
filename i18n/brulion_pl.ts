@@ -252,7 +252,7 @@
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="105"/>
         <location filename="../src/app/qml/shell/AppShell.qml" line="174"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2219"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2221"/>
         <source>All pages</source>
         <translation>Wszystkie strony</translation>
     </message>
@@ -1192,14 +1192,15 @@
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="519"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2287"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2289"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2308"/>
         <source>Heading “%1” is not on this page</source>
         <translation>Nagłówka „%1” nie ma na tej stronie</translation>
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="541"/>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="2614"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2340"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2342"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
@@ -2566,14 +2567,14 @@
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="120"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="61"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2518"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2520"/>
         <source>Fit to view</source>
         <translation>Dopasuj do widoku</translation>
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="120"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="62"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2510"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2512"/>
         <source>Zoom to actual size</source>
         <translation>Pokaż naturalny rozmiar</translation>
     </message>
@@ -2612,7 +2613,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="373"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2660"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2662"/>
         <source>The start of the file: %1 of %2.</source>
         <translation>Początek pliku: %1 z %2.</translation>
     </message>
@@ -8487,7 +8488,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="125"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1802"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1804"/>
         <source>Move here</source>
         <translation>Przenieś tutaj</translation>
     </message>
@@ -8684,7 +8685,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellNewPageDialog.qml" line="38"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1844"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1846"/>
         <source>Create</source>
         <translation>Utwórz</translation>
     </message>
@@ -8863,7 +8864,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3155"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3353"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -8882,7 +8883,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3285"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3287"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -9075,7 +9076,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="648"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1425"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1427"/>
         <source>Empty folder</source>
         <translation>Pusty folder</translation>
     </message>
@@ -9307,7 +9308,7 @@
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="161"/>
         <location filename="../src/app/io/ioselftest.cpp" line="371"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2536"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2538"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -9343,7 +9344,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="211"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2545"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2547"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
@@ -9359,7 +9360,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="222"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2544"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2546"/>
         <source>Toggle note mode</source>
         <translation>Przełącz tryb notatki</translation>
     </message>
@@ -9439,7 +9440,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="114"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4773"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4772"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -9497,112 +9498,185 @@
 <context>
     <name>SyncConflictResolver</name>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="30"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="34"/>
         <source>Copy from %1</source>
         <translation>Kopia z urządzenia %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="30"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="34"/>
         <source>Copy</source>
         <translation>Kopia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="62"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="66"/>
         <source>Back to the list</source>
         <translation>Wróć do listy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="92"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="96"/>
         <source>other version from “%1”</source>
         <translation>druga wersja z „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="101"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="105"/>
         <source>Open the note</source>
         <translation>Otwórz notatkę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="116"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="113"/>
+        <source>Open the drawing</source>
+        <translation>Otwórz rysunek</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="131"/>
+        <source>The drawing was deleted on this device while it changed on another one. The other version is in the copy.</source>
+        <translation>Rysunek został usunięty na tym urządzeniu, gdy zmieniał się na innym. Druga wersja jest w kopii.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="132"/>
         <source>The note was deleted on this device while it changed on another one. The other version is in the copy.</source>
         <translation>Notatka została usunięta na tym urządzeniu, gdy zmieniała się na innym. Druga wersja jest w kopii.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="118"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="134"/>
+        <source>This drawing changed on two devices at the same time. Your version is in the drawing, the other one in a copy next to it. Nothing is lost until you decide.</source>
+        <translation>Ten rysunek zmienił się jednocześnie na dwóch urządzeniach. Twoja wersja jest w rysunku, druga w kopii obok. Nic nie zginie, dopóki nie zdecydujesz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="136"/>
         <source>This file changed on two devices at the same time. Nothing is lost until you decide.</source>
         <translation>Ten plik zmienił się jednocześnie na dwóch urządzeniach. Nic nie zginie, dopóki nie zdecydujesz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="119"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="137"/>
         <source>This note changed on two devices at the same time. Your version is in the note, the other one in a copy next to it. Nothing is lost until you decide.</source>
         <translation>Ta notatka zmieniła się jednocześnie na dwóch urządzeniach. Twoja wersja jest w notatce, druga w kopii obok. Nic nie zginie, dopóki nie zdecydujesz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="128"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="147"/>
+        <source>The copy has the same drawing</source>
+        <translation>Kopia ma ten sam rysunek</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="148"/>
+        <source>Everything in the copy is already in the drawing</source>
+        <translation>Wszystko z kopii jest już w rysunku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="149"/>
         <source>The copy is the same as the note</source>
         <translation>Kopia jest taka sama jak notatka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="129"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="150"/>
         <source>The copy is an older version of this note</source>
         <translation>Kopia to starsza wersja tej notatki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="130"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="152"/>
+        <source>Nothing differs. The copy can simply go.</source>
+        <translation>Nic się nie różni. Kopię można po prostu usunąć.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="153"/>
+        <source>Keeping yours loses nothing.</source>
+        <translation>Zachowując swoją wersję, nic nie stracisz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="154"/>
         <source>Nothing differs (line endings aside). The copy can simply go.</source>
         <translation>Nic się nie różni (poza znakami końca wiersza). Kopię można po prostu usunąć.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="131"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="155"/>
         <source>Everything in it is already contained in your version. Keeping yours loses nothing.</source>
         <translation>Cała jej treść jest już w Twojej wersji. Zachowując swoją, nic nie stracisz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="133"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="157"/>
         <source>Remove the copy</source>
         <translation>Usuń kopię</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="143"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="167"/>
         <source>Two versions of a file</source>
         <translation>Dwie wersje pliku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="144"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="168"/>
         <source>This file cannot be merged line by line. Keep one of the versions; the other goes to the trash.</source>
         <translation>Tego pliku nie da się scalić wiersz po wierszu. Zachowaj jedną z wersji; druga trafi do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="152"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="297"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="310"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="176"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="248"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="475"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="488"/>
         <source>This device</source>
         <translation>To urządzenie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="199"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="237"/>
+        <source>Two versions of a drawing</source>
+        <translation>Dwie wersje rysunku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="239"/>
+        <source>Merging keeps the elements of both versions. Elements erased on one device only come back – erase them again.</source>
+        <translation>Scalenie zachowa elementy obu wersji. Elementy starte tylko na jednym urządzeniu wrócą – zetrzyj je jeszcze raz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="240"/>
+        <source>Brulion cannot merge these drawings: one has elements it does not edit (such as frames) or cannot be read as a drawing. Keep one of the versions.</source>
+        <translation>Brulion nie scali tych rysunków: jeden ma elementy, których Brulion nie edytuje (np. ramki), albo nie da się go odczytać jako rysunku. Zachowaj jedną z wersji.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="251"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="259"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="271"/>
+        <source>%n element(s)</source>
+        <translation>
+            <numerusform>%n element</numerusform>
+            <numerusform>%n elementy</numerusform>
+            <numerusform>%n elementów</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="272"/>
+        <source>%1 in both, %2 only here, %3 only in the copy</source>
+        <translation>wspólne: %1, tylko tutaj: %2, tylko w kopii: %3</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="283"/>
+        <source>Merge drawings</source>
+        <extracomment>Polish: &quot;Scal rysunki&quot;</extracomment>
+        <translation>Scal rysunki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="377"/>
         <source>Show</source>
         <translation>Pokaż</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="201"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="282"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="299"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="379"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="460"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="477"/>
         <source>Merge</source>
         <extracomment>Polish: &quot;Scal&quot;</extracomment>
         <translation>Scal</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="202"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="380"/>
         <source>Compare</source>
         <translation>Porównaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="239"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="417"/>
         <source>The changes of both versions fit together. Check your note after merging below, then merge.</source>
         <translation>Zmiany z obu wersji do siebie pasują. Sprawdź poniżej, jak notatka będzie wyglądać po scaleniu, i scal.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="241"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="419"/>
         <source>Changes made on one side only are merged already. Decide the %n place(s) changed on both sides.</source>
         <translation>
             <numerusform>Zmiany wprowadzone tylko po jednej stronie są już scalone. Zdecyduj o %n miejscu zmienionym po obu stronach.</numerusform>
@@ -9611,70 +9685,76 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="242"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="420"/>
         <source>For every difference choose which version to keep – or both, or edit the text yourself.</source>
         <translation>Przy każdej różnicy wybierz, którą wersję zachować – albo obie, albo popraw tekst samodzielnie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="248"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="426"/>
         <source>Compared with the common version from %1 in this device&apos;s history.</source>
         <translation>Porównano ze wspólną wersją (%1) z historii tego urządzenia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="259"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="437"/>
         <source>Use the automatic merge</source>
         <translation>Użyj automatycznego scalenia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="259"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="437"/>
         <source>Decide myself</source>
         <translation>Wybierz ręcznie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="275"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="453"/>
         <source>Now</source>
         <translation>Teraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="276"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="268"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="454"/>
         <source>After merging</source>
         <translation>Po scaleniu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="327"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="505"/>
         <source>Keep it deleted</source>
         <extracomment>Polish: &quot;Zachowaj moją&quot; (keep my version of the note)</extracomment>
         <translation>Pozostaw usuniętą</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="327"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="505"/>
         <source>Keep mine</source>
         <translation>Zachowaj moją</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="333"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="511"/>
         <source>Restore from the copy</source>
         <extracomment>Polish: &quot;Zachowaj kopię&quot;</extracomment>
         <translation>Przywróć z kopii</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="333"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="345"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="511"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="525"/>
         <source>Keep the copy</source>
         <translation>Zachowaj kopię</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="341"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="519"/>
         <source>Keep the copy?</source>
         <translation>Zachować kopię?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="343"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="521"/>
+        <source>“%1” gets the drawing from the copy. Your current version stays in its history.</source>
+        <translation>„%1” otrzyma rysunek z kopii. Twoja obecna wersja zostanie w jego historii.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="523"/>
         <source>“%1” gets the content of the copy. Your current version goes to the trash.</source>
         <translation>„%1” otrzyma treść kopii. Twoja obecna wersja trafi do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="344"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="524"/>
         <source>“%1” gets the content of the copy. Your current version stays in the note&apos;s history.</source>
         <translation>„%1” otrzyma treść kopii. Twoja obecna wersja zostanie w historii notatki.</translation>
     </message>
@@ -13961,7 +14041,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="74"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4599"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4598"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
@@ -14031,47 +14111,60 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::ioviews::ConflictResolver</name>
     <message>
-        <location filename="../src/app/io/conflictresolver.cpp" line="279"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="322"/>
         <source>Kept your version of “%1”. The copy is in the trash.</source>
         <translation>Zachowano Twoją wersję „%1”. Kopia jest w koszu.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/conflictresolver.cpp" line="280"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="323"/>
         <source>The conflict copy could not be removed.</source>
         <translation>Nie udało się usunąć kopii konfliktu.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/conflictresolver.cpp" line="295"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="338"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="355"/>
         <source>“%1” has changed in the meantime. Look at both versions again before deciding.</source>
         <translation>„%1” zmienił się w międzyczasie. Przed decyzją jeszcze raz przejrzyj obie wersje.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/conflictresolver.cpp" line="310"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="368"/>
+        <source>Merged the drawing “%1”. Your previous version is in the history, the copy in the trash.</source>
+        <translation>Scalono rysunek „%1”. Poprzednia wersja jest w historii, a kopia w koszu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/conflictresolver.cpp" line="370"/>
+        <source>The merged drawing could not be saved.</source>
+        <translation>Nie udało się zapisać scalonego rysunku.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/conflictresolver.cpp" line="386"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="394"/>
         <source>“%1” now has the copy&apos;s content. Your previous version is in the history.</source>
         <translation>„%1” ma teraz treść kopii. Twoja poprzednia wersja jest w historii.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/conflictresolver.cpp" line="311"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="387"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="395"/>
         <source>The copy could not be applied.</source>
         <translation>Nie udało się zastosować kopii.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/conflictresolver.cpp" line="325"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="409"/>
         <source>“%1” now has the copy&apos;s content. Your previous version is in the trash.</source>
         <translation>„%1” ma teraz treść kopii. Twoja poprzednia wersja jest w koszu.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/conflictresolver.cpp" line="326"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="410"/>
         <source>The copy could not be applied: %1</source>
         <translation>Nie udało się zastosować kopii: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/conflictresolver.cpp" line="339"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="423"/>
         <source>Merged “%1”. Your previous version is in the history.</source>
         <translation>Scalono „%1”. Twoja poprzednia wersja jest w historii.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/conflictresolver.cpp" line="340"/>
+        <location filename="../src/app/io/conflictresolver.cpp" line="424"/>
         <source>The merged text could not be saved.</source>
         <translation>Nie udało się zapisać scalonego tekstu.</translation>
     </message>
@@ -15133,168 +15226,168 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::AppController</name>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="276"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="765"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="275"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="764"/>
         <source>The notebook folder %1 is not available.</source>
         <translation>Folder notatnika %1 jest niedostępny.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="453"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="452"/>
         <source>The command line asked to open a page of another notebook (%1).</source>
         <translation>Wiersz poleceń chciał otworzyć stronę innego notatnika (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="501"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="509"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="500"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="508"/>
         <source>The note of this reminder no longer exists.</source>
         <translation>Notatka tego przypomnienia już nie istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="649"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="648"/>
         <source>Could not change the start at sign-in.</source>
         <translation>Nie udało się zmienić uruchamiania po zalogowaniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="731"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="730"/>
         <source>Choose a folder for the notebook.</source>
         <translation>Wybierz folder na notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="913"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="912"/>
         <source>Could not open the notebook %1: %2</source>
         <translation>Nie udało się otworzyć notatnika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="929"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="928"/>
         <source>Could not update the documentation: %1</source>
         <translation>Nie udało się zaktualizować dokumentacji: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="933"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="932"/>
         <source>Could not write all sample notes: %1</source>
         <translation>Nie udało się zapisać wszystkich przykładowych notatek: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1091"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1090"/>
         <source>Brulion</source>
         <translation>Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1092"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1091"/>
         <source>Reminders work. This is how they will look.</source>
         <translation>Przypomnienia działają. Tak będą wyglądać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1110"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1109"/>
         <source>Could not schedule the notification: %1</source>
         <translation>Nie udało się zaplanować powiadomienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1112"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1111"/>
         <source>A test notification will appear in a few seconds.</source>
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1115"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1114"/>
         <source>The browser does not allow notifications for Brulion.</source>
         <translation>Przeglądarka nie zezwala Brulionowi na powiadomienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1122"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1121"/>
         <source>No system tray on this desktop: notifications cannot be shown yet.</source>
         <translation>Na tym pulpicie nie ma zasobnika systemowego: powiadomień nie da się jeszcze pokazać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1142"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1141"/>
         <source>Quick capture writes into your own notebook. Open or create one first.</source>
         <translation>Szybka notatka trafia do Twojego własnego notatnika. Najpierw go otwórz albo utwórz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1278"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1277"/>
         <source>Brulion is still running</source>
         <translation>Brulion nadal działa</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1279"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1278"/>
         <source>Reminders keep working. To quit, use “Quit” in the tray icon&apos;s menu.</source>
         <translation>Przypomnienia nadal działają. Aby zakończyć, wybierz „Zakończ” w menu ikony w zasobniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="95"/>
-        <location filename="../src/app/shell/appshare.cpp" line="268"/>
-        <location filename="../src/app/shell/appshare.cpp" line="298"/>
-        <location filename="../src/app/shell/appshare.cpp" line="312"/>
-        <location filename="../src/app/shell/appshare.cpp" line="326"/>
-        <location filename="../src/app/shell/appshare.cpp" line="348"/>
+        <location filename="../src/app/shell/appshare.cpp" line="129"/>
+        <location filename="../src/app/shell/appshare.cpp" line="307"/>
+        <location filename="../src/app/shell/appshare.cpp" line="337"/>
+        <location filename="../src/app/shell/appshare.cpp" line="351"/>
+        <location filename="../src/app/shell/appshare.cpp" line="365"/>
+        <location filename="../src/app/shell/appshare.cpp" line="387"/>
         <source>Nothing to save.</source>
         <translation>Nie ma nic do zapisania.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="157"/>
-        <location filename="../src/app/shell/appshare.cpp" line="253"/>
+        <location filename="../src/app/shell/appshare.cpp" line="198"/>
+        <location filename="../src/app/shell/appshare.cpp" line="292"/>
         <source>Shared note</source>
         <translation>Udostępniona notatka</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="172"/>
-        <location filename="../src/app/shell/appshare.cpp" line="180"/>
-        <location filename="../src/app/shell/appshare.cpp" line="272"/>
+        <location filename="../src/app/shell/appshare.cpp" line="213"/>
+        <location filename="../src/app/shell/appshare.cpp" line="221"/>
+        <location filename="../src/app/shell/appshare.cpp" line="311"/>
         <source>Open or create a notebook first to save what you shared.</source>
         <translation>Najpierw otwórz albo utwórz notatnik, żeby zapisać to, co udostępniasz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="230"/>
+        <location filename="../src/app/shell/appshare.cpp" line="269"/>
         <source>Too large to save (over %1 MB)</source>
         <translation>Za duży do zapisania (ponad %1 MB)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="232"/>
+        <location filename="../src/app/shell/appshare.cpp" line="271"/>
         <source>Not a text file</source>
         <translation>To nie jest plik tekstowy</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="234"/>
+        <location filename="../src/app/shell/appshare.cpp" line="273"/>
         <source>Too many files at once (at most %1)</source>
         <translation>Za dużo plików naraz (najwyżej %1)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="236"/>
+        <location filename="../src/app/shell/appshare.cpp" line="275"/>
         <source>Could not be read</source>
         <translation>Nie udało się odczytać</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="242"/>
+        <location filename="../src/app/shell/appshare.cpp" line="281"/>
         <source>(no name)</source>
         <translation>(bez nazwy)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="280"/>
+        <location filename="../src/app/shell/appshare.cpp" line="319"/>
         <source>None of the shared files can be saved.</source>
         <translation>Żadnego z udostępnionych plików nie da się zapisać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="304"/>
+        <location filename="../src/app/shell/appshare.cpp" line="343"/>
         <source>Could not save to today&apos;s journal.</source>
         <translation>Nie udało się zapisać w dzisiejszym dzienniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="308"/>
+        <location filename="../src/app/shell/appshare.cpp" line="347"/>
         <source>Saved in today&apos;s journal</source>
         <translation>Zapisano w dzisiejszym dzienniku</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="335"/>
-        <location filename="../src/app/shell/appshare.cpp" line="355"/>
+        <location filename="../src/app/shell/appshare.cpp" line="374"/>
+        <location filename="../src/app/shell/appshare.cpp" line="394"/>
         <source>A page with this name already exists: %1</source>
         <translation>Strona o tej nazwie już istnieje: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="347"/>
+        <location filename="../src/app/shell/appshare.cpp" line="386"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="362"/>
+        <location filename="../src/app/shell/appshare.cpp" line="401"/>
         <source>Saved %n page(s); not saved, a page with this name exists: %1</source>
         <translation>
             <numerusform>Zapisano %n stronę; pominięto, bo strona o tej nazwie już istnieje: %1</numerusform>
@@ -15303,7 +15396,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="366"/>
+        <location filename="../src/app/shell/appshare.cpp" line="405"/>
         <source>Saved %n page(s)</source>
         <translation>
             <numerusform>Zapisano %n stronę</numerusform>
@@ -15776,17 +15869,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Nie otwarto notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacehistory.cpp" line="86"/>
+        <location filename="../src/app/shell/workspacehistory.cpp" line="100"/>
         <source>Could not restore the version: %1</source>
         <translation>Nie udało się przywrócić wersji: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacehistory.cpp" line="173"/>
+        <location filename="../src/app/shell/workspacehistory.cpp" line="187"/>
         <source>Could not delete %1: %2</source>
         <translation>Nie udało się usunąć %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacehistory.cpp" line="185"/>
+        <location filename="../src/app/shell/workspacehistory.cpp" line="199"/>
         <source>Could not empty the trash: %1</source>
         <translation>Nie udało się opróżnić kosza: %1</translation>
     </message>
@@ -15920,69 +16013,69 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceSync</name>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="471"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="472"/>
         <location filename="../src/app/shell/workspacesyncruns.cpp" line="193"/>
         <source>Wrong user name or app password.</source>
         <translation>Nieprawidłowa nazwa użytkownika lub hasło aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="473"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="474"/>
         <source>The server refused access to the folder.</source>
         <translation>Serwer odmówił dostępu do folderu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="475"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="476"/>
         <source>The folder was not found on the server.</source>
         <translation>Nie znaleziono folderu na serwerze.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="477"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="478"/>
         <source>Cannot reach the server. Check the address and the connection.</source>
         <translation>Nie można połączyć się z serwerem. Sprawdź adres i połączenie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="479"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="480"/>
         <source>The server did not answer in time.</source>
         <translation>Serwer nie odpowiedział na czas.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="481"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="482"/>
         <source>This address does not lead to a WebDAV folder. Check the server address.</source>
         <translation>Ten adres nie prowadzi do folderu WebDAV. Sprawdź adres serwera.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="483"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="484"/>
         <location filename="../src/app/shell/workspacesyncruns.cpp" line="173"/>
         <source>There is no space left on the server.</source>
         <translation>Na serwerze zabrakło miejsca.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="485"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="486"/>
         <source>The server reported an error. Brulion will try again later.</source>
         <translation>Serwer zgłosił błąd. Brulion spróbuje ponownie później.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="487"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="488"/>
         <source>The server stopped answering, so the sync was stopped. Brulion will try again.</source>
         <translation>Serwer przestał odpowiadać, więc synchronizację przerwano. Brulion spróbuje ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="489"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="490"/>
         <source>Sync paused: the notebook folder looks empty although it was synced before.</source>
         <translation>Synchronizacja wstrzymana: folder notatnika wygląda na pusty, choć wcześniej był synchronizowany.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="491"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="492"/>
         <source>Sync paused: the folder on the server is empty although it was synced before.</source>
         <translation>Synchronizacja wstrzymana: folder na serwerze jest pusty, choć wcześniej był synchronizowany.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="493"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="494"/>
         <source>The notebook folder is not available (an unmounted card or drive?).</source>
         <translation>Folder notatnika jest niedostępny (odmontowana karta lub dysk?).</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="496"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="497"/>
         <source>%n file(s) would be deleted. Confirm in the sync center.</source>
         <translation>
             <numerusform>%n plik zostałby usunięty. Potwierdź w centrum synchronizacji.</numerusform>
@@ -15991,7 +16084,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="500"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="501"/>
         <source>%n file(s) could not be synced.</source>
         <translation>
             <numerusform>Nie udało się zsynchronizować %n pliku.</numerusform>
@@ -16000,151 +16093,151 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="502"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="503"/>
         <source>Sync failed.</source>
         <translation>Synchronizacja nie powiodła się.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="507"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="508"/>
         <source>Not syncing: the notebook “%1” on this device syncs with the same server folder “%2”. Choose another folder for one of them in the Nextcloud settings.</source>
         <translation>Synchronizacja wstrzymana: notatnik „%1” na tym urządzeniu synchronizuje się z tym samym folderem na serwerze („%2”). W ustawieniach Nextcloud wybierz inny folder dla jednego z nich.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="520"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="521"/>
         <source>Nextcloud is not set up completely</source>
         <translation>Nextcloud nie jest w pełni skonfigurowany</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="522"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="523"/>
         <source>No notebook open</source>
         <translation>Nie otwarto notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="527"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="528"/>
         <source>Stopping: the server is not answering…</source>
         <translation>Przerywanie: serwer nie odpowiada…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="529"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="530"/>
         <source>The server has not answered for %1…</source>
         <translation>Serwer nie odpowiada od %1…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="531"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="533"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="532"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="534"/>
         <source>Connecting…</source>
         <translation>Łączenie…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="534"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="535"/>
         <source>Checking files on the server…</source>
         <translation>Sprawdzanie plików na serwerze…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="535"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="536"/>
         <source>Checking files on this device…</source>
         <translation>Sprawdzanie plików na tym urządzeniu…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="536"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="537"/>
         <source>Comparing changes…</source>
         <translation>Porównywanie zmian…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="539"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="540"/>
         <source>Syncing… %1 of %2 checked</source>
         <translation>Synchronizacja… sprawdzono %1 z %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="540"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="542"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="544"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="541"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="543"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="545"/>
         <source>Syncing…</source>
         <translation>Synchronizowanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="541"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="542"/>
         <source>Saving the sync state…</source>
         <translation>Zapisywanie stanu synchronizacji…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="546"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="547"/>
         <source>Offline — will sync later</source>
         <translation>Offline — synchronizacja później</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="553"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="554"/>
         <source>Synced %1</source>
         <translation>Zsynchronizowano %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="553"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="554"/>
         <source>Not synced yet</source>
         <translation>Jeszcze nie zsynchronizowano</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="672"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="673"/>
         <source>Nextcloud is not set up completely: server, user and app password are needed.</source>
         <translation>Nextcloud nie jest w pełni skonfigurowany: potrzebne są serwer, użytkownik i hasło aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="692"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="693"/>
         <source>The list of files to delete has changed. Check it again.</source>
         <translation>Lista plików do usunięcia się zmieniła. Sprawdź ją ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="710"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="711"/>
         <source>Enter the server address and the user name.</source>
         <translation>Wpisz adres serwera i nazwę użytkownika.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="718"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="719"/>
         <source>Enter an app password.</source>
         <translation>Wpisz hasło aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="729"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="730"/>
         <source>Connected. The folder is ready for syncing.</source>
         <translation>Połączono. Folder jest gotowy do synchronizacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="734"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="735"/>
         <source>Connected. The folder will be created by the first sync.</source>
         <translation>Połączono. Folder utworzy pierwsza synchronizacja.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="766"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="767"/>
         <source>Shared with Syncthing. Add its API key to see the sync status.</source>
         <translation>Udostępniony w Syncthing. Dodaj klucz API, aby widzieć stan synchronizacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="798"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="835"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="799"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="836"/>
         <source>Syncthing is not running on this device.</source>
         <translation>Syncthing nie działa na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="800"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="801"/>
         <source>Syncthing reports errors in this folder.</source>
         <translation>Syncthing zgłasza błędy w tym folderze.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="802"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="803"/>
         <source>Syncthing is syncing (%1 %).</source>
         <translation>Syncthing synchronizuje (%1%).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="804"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="805"/>
         <source>Syncthing is scanning the folder.</source>
         <translation>Syncthing skanuje folder.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="806"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="807"/>
         <source>Up to date. No other device is connected right now.</source>
         <translation>Aktualne. Żadne inne urządzenie nie jest teraz połączone.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="808"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="809"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Aktualne z %n urządzeniem.</numerusform>
@@ -16153,27 +16246,28 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="810"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="811"/>
         <source>Up to date.</source>
         <translation>Aktualne.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="834"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="835"/>
         <source>Syncthing refused the API key.</source>
         <translation>Syncthing odrzucił klucz API.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="836"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="837"/>
         <source>This notebook folder is not shared in Syncthing.</source>
         <translation>Folder tego notatnika nie jest udostępniony w Syncthing.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="915"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="919"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="935"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="927"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="947"/>
         <source>Could not move the conflict copy to the trash: %1</source>
         <translation>Nie udało się przenieść kopii konfliktu do kosza: %1</translation>
     </message>
@@ -16735,12 +16829,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/app/main.cpp" line="443"/>
+        <location filename="../src/app/main.cpp" line="450"/>
         <source>Saving to the browser&apos;s storage failed: %1</source>
         <translation>Nie udało się zapisać w pamięci przeglądarki: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="469"/>
+        <location filename="../src/app/main.cpp" line="476"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
     </message>
