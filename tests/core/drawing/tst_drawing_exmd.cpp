@@ -560,9 +560,17 @@ private Q_SLOTS:
         ++text.version;
         const QByteArray out = writeExcalidrawMarkdown(read->layout, d, 1761700000000);
         QVERIFY(out.contains("## Text Elements\r\nŻółw ^Zt8xQw1a\r\n\r\n%%\r\n## Drawing\r\n```compressed-json\r\n"));
-        // Every line break still CRLF.
+        // Every line break still CRLF, also in a text of two lines.
         for (qsizetype i = out.indexOf('\n'); i >= 0; i = out.indexOf('\n', i + 1))
             QVERIFY2(i > 0 && out.at(i - 1) == '\r', qPrintable(u"at %1"_s.arg(i)));
+        text.text = text.originalText = u"Dwie\nlinie"_s;
+        ++text.version;
+        const QByteArray twoLines = writeExcalidrawMarkdown(read->layout, d, 1761700000000);
+        QVERIFY(twoLines.contains("## Text Elements\r\nDwie\r\nlinie ^Zt8xQw1a\r\n\r\n%%"));
+        const std::optional<ExcalidrawMarkdownRead> back = readExcalidrawMarkdown(twoLines);
+        QVERIFY(back);
+        QCOMPARE(back->layout.textEntries.size(), 1);
+        QCOMPARE(back->drawing.strokes.last().text, u"Dwie\nlinie"_s);
     }
 
     void notAPluginFile_data()

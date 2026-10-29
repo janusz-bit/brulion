@@ -412,10 +412,15 @@ QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawi
     };
     QList<Edit> edits;
     for (const ExcalidrawMarkdown::TextEntry &entry : layout.textEntries) {
-        if (const auto it = newText.constFind(entry.id); it != newText.constEnd())
-            edits.append({entry.from, entry.to, it->toUtf8()});
-        else if (read.contains(entry.id) && !present.contains(entry.id))
+        if (const auto it = newText.constFind(entry.id); it != newText.constEnd()) {
+            // (A text's lines in the file's line breaks.)
+            QByteArray raw = it->toUtf8();
+            if (layout.eol != "\n")
+                raw.replace("\r\n", "\n").replace("\n", layout.eol);
+            edits.append({entry.from, entry.to, raw});
+        } else if (read.contains(entry.id) && !present.contains(entry.id)) {
             edits.append({entry.from, entry.end, {}});
+        }
     }
     edits.append({layout.sceneFrom, layout.sceneTo, block});
     std::stable_sort(edits.begin(), edits.end(), [](const Edit &a, const Edit &b) { return a.from < b.from; });
