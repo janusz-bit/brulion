@@ -14,6 +14,7 @@
 // change can affect.
 #pragma once
 
+#include "index/smallsets_p.h"
 #include "types.h"
 
 #include <QHash>
@@ -60,7 +61,7 @@ bool isAttachmentExtension(QStringView ext);
 bool isPageTarget(const QString &target, TargetForm form = TargetForm::Raw);
 
 /// Shortest path, then smallest by code units; empty for an empty set.
-VaultPath pickBest(const QSet<VaultPath> &paths);
+VaultPath pickBest(const PathSet &paths);
 
 /// Incrementally maintained lookup tables for link resolution.
 class NameTable {
@@ -94,10 +95,10 @@ private:
     VaultPath lookupName(const QString &lowerPath) const;
     VaultPath lookupAlias(const QString &target) const;
 
-    using Map = QHash<QString, QSet<VaultPath>>;
+    using Map = QHash<QString, PathSet>;
     /// The files under `key` in the map `field`, the base's when this overlay did not change
     /// them; nullptr when there are none.
-    const QSet<VaultPath> *find(Map NameTable::*field, const QString &key) const;
+    const PathSet *find(Map NameTable::*field, const QString &key) const;
     /// Has the map `field` (or the base's) any key? (A fast path: may say yes for an overlay
     /// that hides every one of them.)
     bool hasAny(Map NameTable::*field) const;
@@ -112,45 +113,5 @@ private:
     /// base's).
     const NameTable *m_base = nullptr;
 };
-
-/// Add `value` to the set stored under `key`.
-template<typename K, typename V>
-void multiAdd(QHash<K, QSet<V>> &map, const K &key, const V &value)
-{
-    map[key].insert(value);
-}
-
-/// Remove `value` from the set under `key`, dropping empty sets.
-template<typename K, typename V>
-void multiRemove(QHash<K, QSet<V>> &map, const K &key, const V &value)
-{
-    const auto it = map.find(key);
-    if (it == map.end())
-        return;
-    it->remove(value);
-    if (it->isEmpty())
-        map.erase(it);
-}
-
-/// Add 1 to the count of `value` under `key`.
-template<typename K, typename V>
-void countAdd(QHash<K, QHash<V, int>> &map, const K &key, const V &value)
-{
-    ++map[key][value];
-}
-
-/// Subtract 1 from the count of `value` under `key`, dropping zero counts and empty maps.
-template<typename K, typename V>
-void countRemove(QHash<K, QHash<V, int>> &map, const K &key, const V &value)
-{
-    const auto it = map.find(key);
-    if (it == map.end())
-        return;
-    const auto inner = it->find(value);
-    if (inner != it->end() && --(*inner) <= 0)
-        it->erase(inner);
-    if (it->isEmpty())
-        map.erase(it);
-}
 
 } // namespace brulion::index_detail

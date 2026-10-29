@@ -1,6 +1,7 @@
 // Internal helpers of the index module: name collation, excerpts, edit distance, name ranking,
-// link targets.
+// link targets, the compact path sets of the lookup maps.
 #include "index/resolve_p.h"
+#include "index/smallsets_p.h"
 #include "index/suggest_p.h"
 #include "index/textutil_p.h"
 
@@ -13,6 +14,7 @@
 #include <algorithm>
 
 using namespace brulion::index_detail;
+using brulion::VaultPath;
 using namespace Qt::StringLiterals;
 
 Q_DECLARE_METATYPE(brulion::index_detail::NameRank)
@@ -575,6 +577,145 @@ private Q_SLOTS:
         QFETCH(bool, prefixOnly);
         QFETCH(bool, match);
         QCOMPARE(brulion::index_detail::globMatch(text, pattern, prefixOnly), match);
+    }
+
+    // ---- PathSet / PathCounts (smallsets_p.h) ---------------------------------------------------
+
+    // Random insert/remove sequences against QSet: the same paths in every state, across the
+    // switch from the sorted list to the set (SmallLimit) and back (SmallLimit / 2).
+    void pathSetMatchesQSet_data()
+    {
+        QTest::addColumn<int>("universe");
+        QTest::addColumn<int>("steps");
+        QTest::addColumn<quint32>("seed");
+        QTest::newRow("empty") << 0 << 0 << 1u;
+        QTest::newRow("one path") << 1 << 50 << 2u;
+        QTest::newRow("up to the limit") << int(PathSet::SmallLimit) << 400 << 3u;
+        QTest::newRow("over the limit") << int(PathSet::SmallLimit) + 1 << 600 << 4u;
+        QTest::newRow("many paths") << 300 << 5000 << 5u;
+    }
+    void pathSetMatchesQSet()
+    {
+        QFETCH(int, universe);
+        QFETCH(int, steps);
+        QFETCH(quint32, seed);
+        QRandomGenerator rng(seed);
+        auto pathOf = [](int i) {
+            // NFC and NFD spellings of the same name are distinct keys, as in a QSet.
+            return i % 3 == 0 ? u"Projekty/Łódź %1.md"_s.arg(i)
+                              : (i % 3 == 1 ? u"Żółw/%1.md"_s.arg(i) : u"Z\u0307o\u0301\u0142w/%1.md"_s.arg(i));
+        };
+        PathSet set;
+        QSet<VaultPath> reference;
+        QVERIFY(set.isEmpty());
+        // Fill everything first (the switch to the big set), then random changes.
+        auto insert = [&](const VaultPath &p) {
+            const bool fresh = !reference.contains(p);
+            reference.insert(p);
+            return set.insert(p) == fresh;
+        };
+        for (int i = 0; i < universe; ++i)
+            QVERIFY(insert(pathOf(i)));
+        for (int step = 0; step < steps; ++step) {
+            const VaultPath p = pathOf(int(rng.bounded(universe)));
+            if (rng.bounded(2) == 0)
+                QVERIFY(insert(p));
+            else
+                QCOMPARE(set.remove(p), reference.remove(p));
+            QCOMPARE(set.size(), reference.size());
+            QCOMPARE(set.contains(p), reference.contains(p));
+        }
+        QList<VaultPath> expected(reference.cbegin(), reference.cend());
+        std::sort(expected.begin(), expected.end());
+        QCOMPARE(set.sorted(), expected);
+        QList<VaultPath> iterated;
+        for (const VaultPath &p : set)
+            iterated.append(p);
+        std::sort(iterated.begin(), iterated.end());
+        QCOMPARE(iterated, expected);
+        QList<VaultPath> visited;
+        set.forEach([&](const VaultPath &p) { visited.append(p); });
+        std::sort(visited.begin(), visited.end());
+        QCOMPARE(visited, expected);
+        QCOMPARE(set.isEmpty(), reference.isEmpty());
+        // A copy is independent.
+        PathSet copy = set;
+        copy.insert(u"Nowa ścieżka.md"_s);
+        QVERIFY(!set.contains(u"Nowa ścieżka.md"_s));
+        QCOMPARE(copy.size(), set.size() + 1);
+    }
+
+    void pathSetBorders()
+    {
+        PathSet set;
+        for (int i = 0; i < PathSet::SmallLimit; ++i)
+            QVERIFY(set.insert(u"n%1.md"_s.arg(i, 3, 10, QLatin1Char('0'))));
+        QVERIFY(!set.insert(u"n000.md"_s));
+        QVERIFY(set.insert(u"n999.md"_s)); // 33: the big set
+        QCOMPARE(set.size(), PathSet::SmallLimit + 1);
+        for (int i = 0; i < PathSet::SmallLimit / 2 + 1; ++i)
+            QVERIFY(set.remove(u"n%1.md"_s.arg(i, 3, 10, QLatin1Char('0'))));
+        QCOMPARE(set.size(), PathSet::SmallLimit / 2); // back to the sorted list
+        QVERIFY(!set.remove(u"n000.md"_s));
+        QCOMPARE(set.sorted().constLast(), u"n999.md"_s);
+        QCOMPARE(set.min([](const VaultPath &a, const VaultPath &b) { return a > b; }), u"n999.md"_s);
+        QCOMPARE(PathSet().min([](const VaultPath &a, const VaultPath &b) { return a < b; }), QString());
+    }
+
+    void pathCountsMatchesQHash_data()
+    {
+        QTest::addColumn<int>("universe");
+        QTest::addColumn<int>("steps");
+        QTest::addColumn<quint32>("seed");
+        QTest::newRow("one path") << 1 << 60 << 11u;
+        QTest::newRow("around the limit") << int(PathCounts::SmallLimit) + 3 << 2000 << 12u;
+        QTest::newRow("many paths") << 200 << 6000 << 13u;
+    }
+    void pathCountsMatchesQHash()
+    {
+        QFETCH(int, universe);
+        QFETCH(int, steps);
+        QFETCH(quint32, seed);
+        QRandomGenerator rng(seed);
+        PathCounts counts;
+        QHash<VaultPath, int> reference;
+        for (int step = 0; step < steps; ++step) {
+            const VaultPath p = u"Dziennik/2026-10-%1 środa.md"_s.arg(rng.bounded(universe));
+            switch (rng.bounded(4)) {
+            case 0:
+            case 1:
+                counts.add(p);
+                ++reference[p];
+                break;
+            case 2: {
+                const bool dropped = counts.subtract(p);
+                const auto it = reference.find(p);
+                const bool expected = it != reference.end() && --*it == 0;
+                if (expected)
+                    reference.erase(it);
+                QCOMPARE(dropped, expected);
+                break;
+            }
+            default: {
+                const int n = int(rng.bounded(4)); // 0 removes
+                counts.set(p, n);
+                if (n > 0)
+                    reference.insert(p, n);
+                else
+                    reference.remove(p);
+            }
+            }
+            QCOMPARE(counts.size(), reference.size());
+            QCOMPARE(counts.value(p), reference.value(p));
+        }
+        QList<VaultPath> keys = reference.keys();
+        std::sort(keys.begin(), keys.end());
+        QCOMPARE(counts.keys(), keys);
+        QHash<VaultPath, int> iterated;
+        for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+            iterated.insert(it.key(), it.value());
+        QCOMPARE(iterated, reference);
+        QVERIFY(counts.remove(keys.isEmpty() ? u"x"_s : keys.first()) == !keys.isEmpty());
     }
 
     void targetKinds()

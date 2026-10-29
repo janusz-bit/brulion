@@ -120,12 +120,13 @@ struct VaultIndex::Private {
     std::unordered_map<VaultPath, std::unique_ptr<Entry>> entries;
     QSet<VaultPath> attachmentSet;
     index_detail::NameTable names;
-    QHash<QString, QSet<VaultPath>> sourcesByKey;     ///< link key -> notes with such links
-    QHash<VaultPath, QHash<VaultPath, int>> incoming; ///< target -> source -> link count
-    QHash<QString, QHash<VaultPath, int>> unresolved; ///< link key -> source -> count
-    QHash<QString, QSet<VaultPath>> blockOwners;      ///< block id -> notes defining it
-    QHash<QString, QSet<VaultPath>> blockRefSources;  ///< block id -> notes with ((id))
-    QHash<QString, QHash<VaultPath, int>> tagIndex;   ///< tag -> note -> occurrences
+    // Compact per-key sets (smallsets_p.h): nearly every key names one or two notes.
+    QHash<QString, index_detail::PathSet> sourcesByKey;    ///< link key -> notes with such links
+    QHash<VaultPath, index_detail::PathCounts> incoming;   ///< target -> source -> link count
+    QHash<QString, index_detail::PathCounts> unresolved;   ///< link key -> source -> count
+    QHash<QString, index_detail::PathSet> blockOwners;     ///< block id -> notes defining it
+    QHash<QString, index_detail::PathSet> blockRefSources; ///< block id -> notes with ((id))
+    QHash<QString, index_detail::PathCounts> tagIndex;     ///< tag -> note -> occurrences
 
     SearchIndex search;
     QSet<VaultPath> searchDirty;

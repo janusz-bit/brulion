@@ -166,12 +166,7 @@ VaultPath VaultIndex::Private::blockOwner(const QString &id) const
     const auto it = blockOwners.constFind(id);
     if (it == blockOwners.constEnd())
         return {};
-    VaultPath best;
-    for (const VaultPath &p : *it) {
-        if (best.isEmpty() || p < best)
-            best = p;
-    }
-    return best;
+    return it->min([](const VaultPath &a, const VaultPath &b) { return a < b; });
 }
 
 const QList<const VaultIndex::Private::Entry *> &VaultIndex::Private::sortedEntries()
@@ -299,7 +294,7 @@ void VaultIndex::Private::attachNote(std::unique_ptr<Entry> owned)
                 ++perTag[t];
         }
         for (const QString &tag : std::as_const(e.note.tags))
-            tagIndex[tag].insert(path, std::max(1, perTag.value(tag)));
+            tagIndex[tag].set(path, std::max(1, perTag.value(tag)));
     }
     resolveLinks(e);
 }
@@ -384,10 +379,10 @@ void VaultIndex::Private::relink(const QSet<QString> &keys, const VaultPath &ski
         const auto it = sourcesByKey.constFind(k);
         if (it == sourcesByKey.constEnd())
             continue;
-        for (const VaultPath &s : *it) {
+        it->forEach([&](const VaultPath &s) {
             if (s != skip)
                 sources.insert(s);
-        }
+        });
     }
     for (const VaultPath &s : std::as_const(sources)) {
         Entry *e = mutableEntry(s);

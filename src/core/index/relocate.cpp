@@ -882,8 +882,10 @@ RelocationPlanner::RelocationPlanner(const VaultIndex &index, const QList<FileMo
     // relative links).
     for (const QString &key : std::as_const(p->keys)) {
         const auto it = d->sourcesByKey.constFind(key);
-        if (it != d->sourcesByKey.cend())
-            sources.unite(*it);
+        if (it != d->sourcesByKey.cend()) {
+            for (const VaultPath &source : *it)
+                sources.insert(source);
+        }
     }
     for (const Known &k : std::as_const(known)) {
         if (k.note)
