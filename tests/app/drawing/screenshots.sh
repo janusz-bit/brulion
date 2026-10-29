@@ -4,7 +4,9 @@
 # embeds it, its picture view, a diagram of shapes, arrows, text and pictures (`shapes`), it all
 # selected with the selection's bar (`selection`), the shapes' menu (`shapemenu`), an Excalidraw
 # drawing with a frame (read-only), a new empty drawing and the menus (the colours, "Więcej", the
-# paper, the background: light or dark) — × {desktop 1280×800,
+# paper, the background: light or dark), a drawing of Obsidian's Excalidraw plugin in the editor
+# (`obsidian`), opened as a page (`obsidianpage`: its picture view) and one with a frame
+# (`obsidianframe`: read-only) — × {desktop 1280×800,
 # phone 412×915 --touch} × {light, dark} into tests/screenshots/drawing-<shot>-<size>-<theme>.png.
 # The drawings follow the app's theme ("Jak motyw"): the dark shots show them on dark paper.
 #
@@ -35,7 +37,8 @@ delay="${DELAY:-1600}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
-all_shots=(editor page picture shapes selection shapemenu readonly new style more paper theme)
+all_shots=(editor page picture shapes selection shapemenu readonly new style more paper theme obsidian obsidianpage
+           obsidianframe)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
 for f in "$bin" "$sample_test"; do
@@ -55,12 +58,16 @@ BRULION_DRAWING_SAMPLE="$vault/assets/Rysunek 2026-10-27 14.32.svg" QT_QPA_PLATF
 cp tests/data/drawing/smiley_embedded_v2.svg "$vault/assets/Schemat z Excalidraw.svg"
 cp tests/data/drawing/excalidraw_shapes.svg "$vault/assets/Diagram.svg"
 cp tests/data/drawing/excalidraw_frame.svg "$vault/assets/Ramka z Excalidraw.svg"
+mkdir -p "$vault/Excalidraw"
+cp tests/data/drawing/obsidian_mixed.excalidraw.md "$vault/Excalidraw/Szkic z Obsidiana.excalidraw.md"
+cp tests/data/drawing/obsidian_frame.excalidraw.md "$vault/Excalidraw/Ramka z Obsidiana.excalidraw.md"
 cat > "$vault/Wykład z łączności.md" <<'MD'
 # Wykład z łączności
 
 - Modulacja amplitudy — notatki z tablicy:
   - ![[Rysunek 2026-10-27 14.32.svg]]
 - Schemat od Natalii: ![[Schemat z Excalidraw.svg]]
+- Szkic z Obsidiana: ![[Szkic z Obsidiana.excalidraw]]
 - [ ] Przepisać wzory do zeszytu 📅 2026-10-29
 MD
 mkdir -p "$vault/.brulion"
@@ -80,6 +87,9 @@ shot_args() {
     more) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"more"}' ;;
     paper) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"paper"}' ;;
     theme) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"theme"}' ;;
+    obsidian) printf '%s\n' --route '{"view":"drawing","path":"Excalidraw/Szkic z Obsidiana.excalidraw.md"}' ;;
+    obsidianpage) printf '%s\n' --route '{"view":"page","path":"Excalidraw/Szkic z Obsidiana.excalidraw.md"}' ;;
+    obsidianframe) printf '%s\n' --route '{"view":"drawing","path":"Excalidraw/Ramka z Obsidiana.excalidraw.md"}' ;;
     *) return 1 ;;
   esac
 }

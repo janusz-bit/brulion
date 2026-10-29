@@ -3,7 +3,10 @@
 # (Excalidraw freehand), an Excalidraw drawing with shapes, arrows, text and pictures (edited: the
 # shapes' menu, everything selected with its bar), one with a frame (read-only), a picture that is
 # no drawing, a missing file and an empty one (a new drawing), the drawing's background menu, the
-# page embedding them and the picture view of a drawing, in the real app at desktop and phone sizes in
+# page embedding them and the picture view of a drawing; drawings of Obsidian's Excalidraw plugin
+# (`*.excalidraw.md`: an editable one, one with a frame and one in the plugin's oldest form —
+# read-only —, a plugin file without the suffix embedded as a page; a plugin file opened as a page
+# shows its drawing), in the real app at desktop and phone sizes in
 # the light and the dark theme, headless; fails when the app does not start or QML reports a
 # warning or error from the drawing editor's files, the embeds or the picture view.
 #
@@ -16,7 +19,7 @@ rm -rf "$work"
 mkdir -p "$work"
 
 vault="$work/vault"
-mkdir -p "$vault/assets" "$vault/.brulion"
+mkdir -p "$vault/assets" "$vault/.brulion" "$vault/Excalidraw"
 printf '{"attachmentsFolder":"assets"}\n' > "$vault/.brulion/config.json"
 cp "$data/excalidraw_freedraw.svg" "$vault/assets/Rysunek ćwiczenia.svg"
 cp "$data/excalidraw_shapes.svg" "$vault/assets/Schemat.svg"
@@ -24,7 +27,11 @@ cp "$data/excalidraw_frame.svg" "$vault/assets/Ramka.svg"
 printf '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#e2574c"/></svg>' \
   > "$vault/assets/logo.svg"
 : > "$vault/assets/Nowy.svg"
-printf -- '- Ćwiczenie: ![[Rysunek ćwiczenia.svg]]\n- ![[Schemat.svg]]\n- ![[Ramka.svg]]\n- ![[logo.svg]]\n' > "$vault/Zajęcia.md"
+cp "$data/obsidian_freedraw.excalidraw.md" "$vault/Excalidraw/Szkic.excalidraw.md"
+cp "$data/obsidian_frame.excalidraw.md" "$vault/Excalidraw/Ramka z Obsidiana.excalidraw.md"
+cp "$data/obsidian_legacy.excalidraw.md" "$vault/Excalidraw/Stary.excalidraw.md"
+cp "$data/obsidian_mixed.excalidraw.md" "$vault/Plan ogrodu.md"
+printf -- '- Ćwiczenie: ![[Rysunek ćwiczenia.svg]]\n- ![[Schemat.svg]]\n- ![[Ramka.svg]]\n- ![[logo.svg]]\n- ![[Szkic.excalidraw]]\n- ![[Ramka z Obsidiana.excalidraw.md]]\n- ![[Plan ogrodu]]\n' > "$vault/Zajęcia.md"
 
 routes=(
   '{"view":"drawing","path":"assets/Rysunek ćwiczenia.svg"}'
@@ -38,8 +45,13 @@ routes=(
   '{"view":"drawing","path":"assets/Rysunek ćwiczenia.svg","open":"theme"}'
   '{"view":"page","path":"Zajęcia.md"}'
   '{"view":"page","path":"assets/Rysunek ćwiczenia.svg"}'
+  '{"view":"drawing","path":"Excalidraw/Szkic.excalidraw.md"}'
+  '{"view":"drawing","path":"Excalidraw/Ramka z Obsidiana.excalidraw.md"}'
+  '{"view":"drawing","path":"Excalidraw/Stary.excalidraw.md"}'
+  '{"view":"page","path":"Excalidraw/Szkic.excalidraw.md"}'
+  '{"view":"page","path":"Plan ogrodu.md"}'
 )
-pattern='qml/(drawing/|editor/EmbedView|content/ContentPictureView|shell/(ShellRouteView|AppShell))'
+pattern='qml/(drawing/|editor/EmbedView|content/ContentPictureView|views/PageView|shell/(ShellRouteView|AppShell))'
 
 failed=0
 for theme in light dark; do
