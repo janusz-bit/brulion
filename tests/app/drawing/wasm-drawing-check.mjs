@@ -10,9 +10,14 @@
 // drawing's paper — #ffffff / #121212, the area where most of its pixels are — must hold the ink
 // in the theme's colour, #1f2430 / #caced8 (± 2), and no paper of the other theme anywhere.
 //
+// --text (drawshapes): then a click on the embed opens the drawing editor, T picks the text tool,
+// a click on the paper opens the text editor, "Zażółć gęślą jaźń" is typed key by key and Escape
+// writes it — the drawing file in IndexedDB (IDBFS) must then hold a text element with that text:
+// text input in the browser reaches the drawing.
+//
 //   python3 -m http.server 8123 --directory <a folder with dist-wasm/ as brulion/> &
 //   node tests/app/drawing/wasm-drawing-check.mjs --url http://127.0.0.1:8123/brulion/ \
-//       [--themes light,dark] [--shots <dir>] [--timeout 120]
+//       [--themes light,dark] [--shots <dir>] [--timeout 120] [--text]
 //
 // Chromium: $CHROME or chromium/chromium-browser/google-chrome on PATH; BRULION_CHROME_NO_SANDBOX=1
 // (or CI=true) where its sandbox cannot start. Exit code 0 = every check passed.
@@ -22,6 +27,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { inflateSync } from 'node:zlib';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -38,6 +44,7 @@ function parseArgs(argv) {
     else if (a === '--shots') args.shots = next();
     else if (a === '--timeout') args.timeout = Number(next());
     else if (a === '--drawing') args.drawing = next();
+    else if (a === '--text') args.text = true;
     else throw new Error(`unknown option ${a}`);
   }
   if (!args.url) throw new Error('--url is required');
@@ -131,6 +138,38 @@ function analyseScript(pngBase64, want, other) {
     }
     return { width, height, box: [left, top, right, bottom], ink, otherPaper };
   })()`;
+}
+
+/// The drawing file as the app stored it in IndexedDB (IDBFS), base64 ("" not there).
+function readDrawingScript() {
+  return `(async () => {
+    const root = '/home/web_user/Brulion';
+    return await new Promise((resolve, reject) => {
+      const req = indexedDB.open(root, 21);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const get = req.result.transaction(['FILE_DATA'], 'readonly').objectStore('FILE_DATA').get(root + '/Rysunek.svg');
+        get.onsuccess = () => {
+          req.result.close();
+          const c = get.result && get.result.contents;
+          if (!c) return resolve('');
+          let s = '';
+          for (const b of new Uint8Array(c)) s += String.fromCharCode(b);
+          resolve(btoa(s));
+        };
+        get.onerror = () => reject(get.error);
+      };
+    });
+  })()`;
+}
+
+/// The texts of the text elements of a drawing file's embedded scene (payload version 2).
+function sceneTexts(svg) {
+  const m = /<!-- payload-start -->([^<]*)<!-- payload-end -->/.exec(svg);
+  if (!m) return [];
+  const wrapper = JSON.parse(Buffer.from(m[1], 'base64').toString('latin1'));
+  const scene = JSON.parse(inflateSync(Buffer.from(wrapper.encoded, 'latin1')).toString('utf8'));
+  return (scene.elements || []).filter((e) => e.type === 'text').map((e) => e.text);
 }
 
 function findChrome() {
@@ -272,12 +311,56 @@ async function checkTheme(args, theme, problems) {
     console.log(`${ok ? 'ok' : 'FAIL'}: ${theme}: the drawing's paper ${JSON.stringify(colours[theme].paper)} at `
       + `${JSON.stringify(result.box)}, ${result.ink} ink pixels on it, ${result.otherPaper} pixels of the other paper`);
     if (!ok) problems.push(`${theme}: ${JSON.stringify(result)}`);
+    if (args.text && ok)
+      await checkText(cdp, evaluate, result, theme, args, problems);
     cdp.close();
   } finally {
     chrome.kill();
     await sleep(500);
     rmSync(profile, { recursive: true, force: true });
   }
+}
+
+/// Text written on the drawing in the browser (--text): see the header.
+async function checkText(cdp, evaluate, embed, theme, args, problems) {
+  const click = async (x, y) => {
+    for (const type of ['mousePressed', 'mouseReleased'])
+      await cdp.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+  };
+  const key = async (k, code, keyCode, text) => {
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: keyCode,
+                                               ...(text ? { text, unmodifiedText: text } : {}) });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: keyCode });
+  };
+  const [left, top, right, bottom] = embed.box;
+  await click((left + right) / 2, (top + bottom) / 2); // the embed: the drawing editor
+  await sleep(3000);
+  await key('t', 'KeyT', 84, 't'); // the text tool
+  await sleep(500);
+  await click(640, 560); // a new text on the paper
+  await sleep(1000);
+  const typed = 'Zażółć gęślą jaźń';
+  for (const ch of typed) {
+    const upper = ch.toUpperCase();
+    await key(ch, /[a-z]/i.test(ch) ? `Key${upper}` : ch === ' ' ? 'Space' : '', ch === ' ' ? 32 : upper.charCodeAt(0), ch);
+    await sleep(40);
+  }
+  await sleep(500);
+  if (args.shots)
+    writeFileSync(join(args.shots, `wasm-drawing-text-${theme}.png`),
+                  Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+  await key('Escape', 'Escape', 27); // written
+  // Saved by itself (1.2 s), then synced to IndexedDB.
+  let texts = [];
+  for (const end = Date.now() + 30000; Date.now() < end; await sleep(1000)) {
+    const file = await evaluate(readDrawingScript()).catch(() => '');
+    if (!file) continue;
+    texts = sceneTexts(Buffer.from(file, 'base64').toString('utf8'));
+    if (texts.length) break;
+  }
+  const ok = texts.includes(typed);
+  console.log(`${ok ? 'ok' : 'FAIL'}: ${theme}: text typed in the browser is in the drawing: ${JSON.stringify(texts)}`);
+  if (!ok) problems.push(`${theme}: text ${JSON.stringify(texts)}`);
 }
 
 async function main() {

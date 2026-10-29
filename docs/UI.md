@@ -1186,7 +1186,8 @@ a version written behind the vault's back merged by the save; one with a frame n
 the strokes kept in a copy), `tests/app/drawing/svg-theme-check.mjs` (a browser — Chrome over CDP —
 shows `tests/data/drawing/auto_theme.svg` dark when it prefers dark, light otherwise, and inside
 an `<img>` in the page's own colour scheme — an app's dark theme on a light system; CI) and
-`tests/app/drawing/wasm-drawing-check.mjs` (the web build: a drawing's embed light and dark).
+`tests/app/drawing/wasm-drawing-check.mjs` (the web build: a drawing's embed light and dark;
+`--text`: text typed on the drawing in the browser reaches its file).
 Screenshots: `tests/app/drawing/screenshots.sh` (the `theme` shot: the background's menu;
 `shapes`, `selection`, `shapemenu`: a diagram, it all selected with its bar, the shapes' menu).
 
