@@ -405,11 +405,18 @@ Gotowy plik eksportu (ZIP, HTML, iCalendar…) zapiszesz na dwa sposoby:
 ## Klawiatura ekranowa
 
 Pasek narzędzi edycji leży zawsze tuż nad klawiaturą ekranową — w dzienniku i na stronach, także
-gdy się przewija — a dolna nawigacja chowa się na czas pisania (docs/UI.md „On-screen
-keyboard”). Gdy klawiaturę schowa system (Wstecz, klawisz na samej klawiaturze), pasek zostaje
-na dole ekranu, nad paskiem nawigacji systemu, dopóki pisanie trwa; dotknięcie tekstu przywraca
-klawiaturę. Okna wysuwane od dołu, menu i komunikaty też zawsze leżą nad klawiaturą, a pole
-formularza (ustawienia, wybór notatnika, okna) przewija się nad nią, gdy dostaje fokus.
+gdy się przewija — a dolna nawigacja chowa się, gdy klawiatura jest otwarta (docs/UI.md
+„On-screen keyboard”). Gdy klawiaturę schowa system (Wstecz, klawisz na samej klawiaturze),
+dolna nawigacja wraca, a pasek zostaje tuż nad nią, dopóki pisanie trwa; dotknięcie tekstu
+przywraca klawiaturę, a przycisk nawigacji otwiera swój widok (pisanie się kończy). Wysuwana
+klawiatura (Android 11+, klatka po klatce) najpierw zakrywa nawigację, która chowa się dopiero
+pod nią, a chowana — odsłania ją: pasek nie opada przed wysunięciem klawiatury ani nie skacze po
+jej schowaniu (`KeyboardInsets.slidesOver`). Margines `SafeArea` od Qt bywa na Androidzie
+powiększony o klawiaturę (336 dp przy otwartej i chwilę po jej schowaniu — logi emulatora), więc
+dolna nawigacja i treść liczą pasek nawigacji systemu bez niego: margines wyższy niż 120 dp to
+klawiatura, liczy się ostatni niższy (`AppShell.navigationBar`). Okna wysuwane od dołu, menu
+i komunikaty też zawsze leżą nad klawiaturą, a pole formularza (ustawienia, wybór notatnika,
+okna) przewija się nad nią, gdy dostaje fokus.
 
 Jak to działa:
 
@@ -432,6 +439,7 @@ Jak to działa:
   i niczego nie konsumując: `OnApplyWindowInsetsListener` daje wartość końcową,
   `WindowInsetsAnimation.Callback` (Android 11+) — każdą klatkę wysuwania klawiatury, a słuchacz
   układu widoku dekoracji — stan na starszych systemach, gdzie wstawki mógł zatrzymać widok Qt.
+  Klawiatura chowana zgłasza się jako niewidoczna (`shown` false) już od pierwszej klatki.
   Liczy, ile pikseli widoku Qt zakrywa klawiatura **na ekranie**: dół widoku Qt minus górna
   krawędź klawiatury. Gdy system zmniejszył okno nad klawiaturą (Android 9–10), wychodzi 0; przy
   oknie edge-to-edge (Android 11+) — cała wysokość klawiatury. Raport idzie przez `BrulionAndroid.imeChanged` → natywne
@@ -444,8 +452,9 @@ Jak to działa:
   pasek dopiero, gdy klawiatura się zatrzyma; na Androidzie 9–10 okno zmienia rozmiar raz.
 * Diagnostyka: szczegółowy rejestr zdarzeń zapisuje ustaloną wartość („On-screen keyboard shown,
   overlap 336 px (platform)”) i to, gdzie po jej zatrzymaniu kończy się zawartość („Typing: the
-  content ends 48 px above the window's bottom (keyboard 0 px, navigation bar 48 px), editing
-  toolbar docked”); `adb shell setprop log.tag.BrulionIme DEBUG` (przed startem aplikacji)
+  content ends 84 px above the window's bottom (keyboard 0 px, navigation bar 24 px, bottom
+  navigation 84 px), editing toolbar docked” — po Wstecz: pasek na dolnej nawigacji, 60 dp nad
+  paskiem nawigacji systemu); `adb shell setprop log.tag.BrulionIme DEBUG` (przed startem aplikacji)
   wypisuje w logcat każdy raport obserwatora, także klatki wysuwania.
 
 Sprawdzone na emulatorze (`scripts/android-emulator-test.sh --keyboard`, niżej; profil Pixel 6,
@@ -492,8 +501,8 @@ Jak to działa:
   treści; szufladę otwiera tylko przesunięcie głównie poziome dłuższe niż 20 px, którego nie
   trzyma już coś innego (przewijana tabela). Uchwyty zaznaczenia tekstu to osobne okienka
   Androida nad aplikacją — pas ich nie dotyczy. Podczas pisania i zaznaczania bloków (klawiatura
-  albo zadokowany pasek edycji, gdy dolna nawigacja też się chowa) pasa nie ma: szuflada
-  przejmowała przeciąganie uchwytu początku zaznaczenia bloków, który leży przy lewej krawędzi;
+  albo zadokowany pasek edycji, także nad dolną nawigacją po schowaniu klawiatury) pasa nie ma:
+  szuflada przejmowała przeciąganie uchwytu początku zaznaczenia bloków, który leży przy lewej krawędzi;
   ☰ nadal ją otwiera. Z tego samego powodu pasa nie ma na widoku, który sam przesuwa w bok od
   lewej krawędzi (`edgeSwipe` widoku: siatki tygodnia i miesiąca w kalendarzu — przesunięcie od
   krawędzi należy do nich). Gdy szuflada jest otwarta, przesuwanie siatek jest wyłączone
@@ -1207,8 +1216,10 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   klawiaturę (`dumpsys input_method`) i porównuje górną krawędź klawiatury (źródło wstawek `ime`
   w `dumpsys window displays`) z wartością zgłoszoną przez aplikację (±2 dp); na Androidzie 11+
   sprawdza, że okno nie zmieniło rozmiaru, a wysuwanie przyszło klatka po klatce; przewija
-  dziennik palcem, chowa klawiaturę przyciskiem Wstecz i sprawdza w logu, że pasek został tuż nad
-  paskiem nawigacji systemu, potem to samo na stronie przewodnika (otwartej jak ze stuknięcia w
+  dziennik palcem, chowa klawiaturę przyciskiem Wstecz i sprawdza w logu, że wróciła dolna
+  nawigacja, a pasek został tuż na niej (i w drzewie UiAutomatora: pasek nad przyciskiem
+  „Kalendarz”), stuka tekst, żeby klawiatura wróciła (pasek znów na niej, nawigacji nie ma),
+  potem pasek na klawiaturze na stronie przewodnika (otwartej jak ze stuknięcia w
   powiadomienie), na koniec zrzut w ciemnym motywie (ikony pasków systemu). Zrzuty ekranu
   (`keyboard-*.png`) i logi w `dist-android/emulator-test/`.
 * Skrypt po zbudowaniu sprawdza: podpis (`apksigner verify`), pakiet i wszystkie wymagane

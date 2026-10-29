@@ -3348,6 +3348,14 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
                              && near(slotBottom(), window->height() - navHeight - 48) && !room->isVisible();
                   }),
                   "with a system navigation bar the toolbar still sits right on the bottom navigation above it");
+            // Qt's SafeArea counting Android's keyboard in (336 px, a moment after it went): no
+            // navigation bar is that tall — the bottom navigation keeps the last one's padding.
+            setSafeBottom(336);
+            settle(100);
+            check(waitFor([&] {
+                      return navAtBottom() && near(nav->height(), navHeight + 48) && near(slotBottom(), navTop());
+                  }),
+                  "a safe area as tall as a keyboard does not lift the bottom navigation");
             setSafeBottom(0);
             waitFor([&] { return near(slotBottom(), window->height() - navHeight); });
         } else {

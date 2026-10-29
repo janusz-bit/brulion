@@ -32,6 +32,22 @@ FocusScope {
     property bool sidebarVisible: flag(AppSettings.value("ui/sidebar/visible", true))
 
     readonly property var safe: SafeArea.margins
+    /// The system's navigation bar under the window's bottom edge (the SafeArea margin), without
+    /// the keyboard: on Android Qt's SafeArea counts the keyboard in at times — 336 px with it up,
+    /// and for a moment after it went (the emulator's logs) —, which would lift the bottom
+    /// navigation's tabs into the middle of the screen and the content with them. No navigation
+    /// bar is that tall: a margin above `navigationBarMax` keeps the last one below it. The
+    /// bottom navigation pads itself with it, the content clears it while typing.
+    readonly property real navigationBar: safe.bottom <= navigationBarMax ? safe.bottom : _lastNavigationBar
+    /// The tallest system navigation bar (logical px; Android's are 16–56 dp, a tablet's taskbar
+    /// included); as in ViewportKeyboard::MinKeyboard, anything taller is a keyboard.
+    readonly property real navigationBarMax: 120
+    property real _lastNavigationBar: 0
+    function noteNavigationBar() {
+        if (safe.bottom <= navigationBarMax)
+            _lastNavigationBar = safe.bottom
+    }
+    onSafeChanged: noteNavigationBar()
     readonly property var route: AppController.currentRoute
     /// How much of the window's bottom the on-screen keyboard covers.
     readonly property real keyboardOverlap: KeyboardInsets.overlap
@@ -60,13 +76,13 @@ FocusScope {
     /// sliding, the keyboard covers or uncovers it first); while typing without the navigation
     /// at least the system's navigation bar, which the docked toolbar must clear.
     readonly property real keyboardRoom: bottomNavShown ? Math.max(0, keyboardOverlap - bottomNavHeight)
-                                         : typing ? Math.max(keyboardOverlap, safe.bottom) : keyboardOverlap
+                                         : typing ? Math.max(keyboardOverlap, navigationBar) : keyboardOverlap
     /// What covers the window's bottom edge for toasts (Main.qml): on phones the bottom
     /// navigation with a toolbar docked on it, or with the capture button; else the keyboard and
     /// a docked toolbar while typing; else the system's navigation bar.
     readonly property real toastClearance: bottomNavShown
         ? keyboardRoom + bottomNavHeight + (toolbarDocked ? Theme.editToolbarHeight : 56 + Theme.space4)
-        : typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0) : safe.bottom + keyboardRoom
+        : typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0) : navigationBar + keyboardRoom
     /// Toasts go to the window's top (Main.qml) while text is typed on a touch screen — the
     /// on-screen keyboard up, or an editing toolbar docked while a view edits text: the caret's
     /// line is kept right above the keyboard and the toolbar, under the toasts' usual place.
@@ -114,7 +130,7 @@ FocusScope {
     readonly property string typingReport: !typing ? ""
         : "Typing: the content ends %1 px above the window's bottom (keyboard %2 px, navigation bar %3 px, bottom navigation %4 px), editing toolbar %5"
           .arg(Math.round(keyboardRoom + (bottomNavShown ? bottomNavHeight : 0))).arg(Math.round(keyboardOverlap))
-          .arg(Math.round(safe.bottom)).arg(bottomNavShown ? Math.round(bottomNavHeight) : 0)
+          .arg(Math.round(navigationBar)).arg(bottomNavShown ? Math.round(bottomNavHeight) : 0)
           .arg(toolbarDocked ? "docked" : "not docked")
     property string _loggedTyping: ""
     function logTyping() {
@@ -300,7 +316,7 @@ FocusScope {
             sourceComponent: ShellSidebar {
                 topInset: shell.safe.top
                 // (The navigation bar's part the keyboard's room leaves.)
-                bottomInset: Math.max(0, shell.safe.bottom - shell.keyboardRoom)
+                bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
                 onNewPageRequested: (folder) => shell.openNewPage(folder)
                 onNewFolderRequested: (folder) => shell.openNewFolder(folder)
                 onRenameRequested: (path, isDir) => shell.openRename(path, isDir)
@@ -356,7 +372,7 @@ FocusScope {
                 opacity: shell.bottomNavShown ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
                 Layout.fillWidth: true
-                bottomInset: shell.safe.bottom
+                bottomInset: shell.navigationBar
                 onMenuClicked: drawer.open()
             }
         }
@@ -444,7 +460,7 @@ FocusScope {
             active: Theme.narrow
             sourceComponent: ShellSidebar {
                 topInset: shell.safe.top
-                bottomInset: shell.safe.bottom
+                bottomInset: shell.navigationBar
                 onNavigated: drawer.close()
                 onNewPageRequested: (folder) => {
                     drawer.close()
@@ -616,8 +632,9 @@ FocusScope {
         onActivated: shell.openRename(shell.route.path, false)
     }
 
-    // --popup (screenshots and manual checks).
+    // The navigation bar's first margin; --popup (screenshots and manual checks).
     Component.onCompleted: {
+        noteNavigationBar()
         const popup = AppController.devPopup
         if (popup === "")
             return

@@ -43,7 +43,8 @@ components — no Material/Fusion look, so all targets look identical.
   arrows, clicking a bullet zooms into the block (breadcrumb to zoom out) — in outline mode; in
   document mode a note reads like an Obsidian page (see "Note modes" below).
 * Touch (Android, `--touch`): targets ≥ 44 px, bottom navigation, drawer, an editing toolbar
-  docked on the on-screen keyboard (the bottom navigation makes way while typing), dialogs as
+  docked on the on-screen keyboard (the bottom navigation makes way while the keyboard is up;
+  when it goes, the navigation comes back and a toolbar that stays docks right on it), dialogs as
   bottom sheets on the keyboard ("On-screen keyboard" below).
 
 ## Window layout (`qml/Main.qml`, `qml/shell/AppShell.qml`)
@@ -89,8 +90,12 @@ components — no Material/Fusion look, so all targets look identical.
   touch UI it is Qt's default (the start-drag distance); the top bar keeps ☰, back (when there is history), title, Szukaj and Więcej;
   a **bottom navigation** bar (by default Dziennik, Kalendarz, Szukaj, Zadania — four views
   chosen in Settings → Wygląd → Układ — and Menu → drawer); a floating quick-capture button
-  (hidden while editing, or by the setting). Both make way while typing: the on-screen
-  keyboard is up, or an editing toolbar is docked ("On-screen keyboard"). The Android back key /
+  (hidden while editing, or by the setting). The navigation makes way while the on-screen
+  keyboard is up — when the keyboard goes while the editing goes on, it comes back and the
+  editing toolbar docks right on it; a tap on one of its tabs then opens that view, the editing
+  ends as when leaving the page —, and for the drawing editor's tool bar, which takes its place;
+  the capture button makes way while typing: the keyboard up, or an editing toolbar docked
+  ("On-screen keyboard"). The Android back key /
   gesture walks back
   through the history; the app closes only from the home view. The drawer also lists
   **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
@@ -248,7 +253,11 @@ everything near the bottom, the same way on Android, in the browser and with a s
 * **`KeyboardInsets`** (QML singleton; `src/app/ui/keyboardinsets.h`, QtCore only, unit-tested by
   `tst_keyboardinsets`): `overlap` (logical px; 0 when the keyboard is hidden or the system already
   resized the window above it), `shown` (up or coming up), `animating` (sliding: `overlap` follows
-  it frame by frame), `simulated`, `source`. Sources by priority: a simulated keyboard
+  it frame by frame), `slidesOver` (the keyboard slides over the window and `overlap` grows with
+  it: Android's report and a simulated keyboard — not the browser, whose page is resized for the
+  keyboard, nor Qt's input method), `simulated` (and `simulate(overlap, animating, hiding)`: a
+  slide frame by frame, `hiding` one going away — `shown` false from its first frame, as Android
+  reports it), `source`. Sources by priority: a simulated keyboard
   (`--keyboard <px>`, the self-tests), the platform's own report — Android's IME insets
   (`android/src/…/ImeInsets.kt`, every frame of the slide on Android 11+, where the window is drawn
   behind the system bars and keeps its size — Qt's expanded client area, set on Android 11–14 by
@@ -268,28 +277,46 @@ everything near the bottom, the same way on Android, in the browser and with a s
   (`scripts/android-emulator-test.sh --web-keyboard`).
 * **The shell** (`AppShell`) ends its content — the sidebar, the current view and the side panel
   (a page pinned there on a wide touch window, a tablet or a phone held sideways, docks its
-  toolbar on the keyboard too) — at the keyboard's top (a strip of `overlap` under it). While
-  typing — the keyboard is up, or an editing toolbar is docked in the view or the side panel
-  (also after the system hid the keyboard, Back or the keyboard's own key, while the editing goes
-  on) — the bottom navigation and the floating capture button make way, and the content ends
-  above the system's navigation bar. Views tell the shell with `toolbarDocked` (view contract,
-  `ShellRouteView`). Once the keyboard has settled, the detailed event log notes where the
-  content ends ("Typing: the content ends 48 px above the window's bottom (keyboard 0 px,
-  navigation bar 48 px), editing toolbar docked").
+  toolbar on the keyboard too) — at the keyboard's top (a strip of `overlap` under it). The
+  phone's bottom navigation (`bottomNavShown`) makes way while the keyboard is up
+  (`keyboardUp`). When the system hides the keyboard while the editing goes on (Back or the
+  keyboard's own key) the navigation comes back and the editing toolbar, docked on the view's
+  bottom edge, sits right on it; a tap on one of its tabs navigates as ever (the page view goes,
+  the editing with it). A keyboard that slides over the window (`KeyboardInsets.slidesOver`:
+  Android 11+, frame by frame) covers the navigation before the shell lets it go — it stays
+  under the keyboard until `overlap` reaches its height — and uncovers it going away (`shown`
+  is false from the slide's first frame: the navigation is back under it, the content ends at
+  the keyboard's top until that passes the navigation's); so a toolbar docked on the navigation
+  never drops before it rises with the keyboard, nor jumps when it lands. In the browser the page
+  is resized for the keyboard in one step: the navigation goes at once and comes back at once,
+  fading in (`Theme.durationFast`; none with reduced motion) where the view already made room
+  for it, so the view and the toolbar move once. The floating capture button makes way while
+  typing — the keyboard is up, or an editing toolbar is docked in the view or the side panel —;
+  without the bottom navigation (a wide touch window) the content then ends above the system's
+  navigation bar. That bar (`AppShell.navigationBar`, which the bottom navigation pads itself
+  with) is the window's SafeArea margin — except one taller than any navigation bar (120 px, as
+  `ViewportKeyboard::MinKeyboard`): on Android Qt's SafeArea counts the keyboard in at times (336
+  px with it up, and for a moment after it went), which lifted the navigation's tabs into the
+  middle of the screen; the last margin below that counts then. A view with a bar of its own at the bottom instead (`replacesBottomNav`: the
+  drawing editor's tool bar on phones) keeps the navigation away. Views tell the shell with
+  `toolbarDocked` and `replacesBottomNav` (view contract, `ShellRouteView`). Once the keyboard
+  has settled, the detailed event log notes where the view ends ("Typing: the content ends 84 px
+  above the window's bottom (keyboard 0 px, navigation bar 24 px, bottom navigation 84 px),
+  editing toolbar docked").
 * **The touch editing toolbar** (`MobileEditToolbar`) docks on the bottom edge of a dock host that
   never scrolls (`BlockEditor.toolbarHost`): the editor itself on a page, the journal stream's
   frame for its days (a day's toolbar used to scroll with the day and sit at its bottom in the
   middle of the screen). So it sits on the keyboard, follows its slide frame by frame where the
   platform reports the slide (Android 11+; elsewhere — the browser too, where the window itself
   shrinks — it moves once; no animation of its own), and
-  stays docked at the bottom when the system hides the keyboard while
-  editing goes on; "Ukryj klawiaturę" ends the editing and takes it away. Its tools follow
+  stays docked when the system hides the keyboard while editing goes on — on phones right on the
+  bottom navigation, which comes back; "Ukryj klawiaturę" ends the editing and takes it away. Its tools follow
   `BlockEditor.toolbarMode`: `block`, `cell` (a table cell — Cofnij, Ponów, Następna komórka,
   Ukryj klawiaturę; `BlockEditor.editingTable`; after Cofnij / Ponów the same cell goes on being
   edited, and every cell tool first commits the word the keyboard is still composing),
   `source` (source mode — `[[`, `#`, `/`, the source's own Cofnij / Ponów, Ukryj klawiaturę),
   `selection` (the touch selection mode: `SelectionToolbar`, "Selecting and copying" — no keyboard,
-  the tools at the bottom above the navigation bar).
+  the tools at the bottom, on phones right on the bottom navigation).
   Taps beside the buttons stay on the bar. The slot is one Loader per editor (`editToolbarSlot`,
   created on the first use) and each mode's row is made the first time it is used, then kept
   (hidden between edits, where it was scrolled): another tool set docks the same way as another
@@ -316,12 +343,13 @@ everything near the bottom, the same way on Android, in the browser and with a s
   safe area: on Android a finger's tap there reaches the status bar, so a block menu opened
   above the toolbar used to leave its first items untappable; one taller than the room left
   scrolls). A menu opened right above the toolbar (its Więcej, its task button held down) takes
-  the keys, so the system hides the keyboard and the toolbar drops to the bottom: the menu
+  the keys, so the system hides the keyboard and the toolbar drops onto the bottom navigation
+  (to the bottom on a wide window): the menu
   follows it (`BlockEditor.followToolbarWith`), with the room the keyboard left — every item
   shown, "Usuń blok" no longer scrolled away — until something in it is pressed or scrolled
   (`BMenu.touched`): it never moves away from a finger aiming at it. Autocomplete is placed above
-  the toolbar (`BlockEditor.visibleBottom()`); toasts above the keyboard and the toolbar
-  (`AppShell.toastClearance`), except while text is typed — the keyboard up, or a toolbar
+  the toolbar (`BlockEditor.visibleBottom()`); toasts above the keyboard, the bottom navigation
+  and the toolbar (`AppShell.toastClearance`), except while text is typed — the keyboard up, or a toolbar
   docked while a view edits text (`AppShell.toastsAtTop`): then they show at the window's top,
   one at a time (`BToastHost.atTop`), since the caret's line is kept right above the keyboard and
   its toolbar, where they covered it ("Scalono…" while typing on a phone); the command palette
@@ -332,16 +360,27 @@ everything near the bottom, the same way on Android, in the browser and with a s
   source mode and a tap beside the bar's buttons, a table cell — a word being composed, undo and
   redo in the cell —, the tool rows kept between edits), the journal stream's self-test (`tst_content_journals_qml`: the
   toolbar on the keyboard, not at the day's bottom, while the list scrolls or is flicked),
-  `tst_shell_qml` (the bottom navigation, the view's end, a sheet, a toast, the docked toolbar
-  above a navigation bar — the shell's `SafeArea.additionalMargins` —, a toast while typing at the
-  top, away from the caret's line, a settings field scrolled above the keyboard, a page in the
-  side panel of a wide touch window), `tst_editor_qml_blocklinks*` (the block menu from the
+  `tst_shell_qml` (the bottom navigation, the view's end, a sheet, a toast; editing with the
+  keyboard hidden: the bottom navigation shown and the docked toolbar right on it, also over a
+  system navigation bar — the shell's `SafeArea.additionalMargins` —, the capture button away;
+  the keyboard sliding in frame by frame leaving the navigation under it until covered, sliding
+  away uncovering it, a browser's keyboard — viewport samples, the page resized — taking it at
+  once; a tap on Kalendarz while editing ending the editing; a toast while typing at the top,
+  away from the caret's line, a settings field scrolled above the keyboard, a page in the side
+  panel of a wide touch window; the drawing editor's tool bar keeping the navigation away),
+  `tst_keyboardinsets` (`slidesOver` per source, a simulated slide down),
+  `tst_editor_qml_blocklinks*` (the block menu from the
   toolbar's Więcej following the toolbar down when the keyboard goes, every item shown, and
   staying put once touched),
   `tst_appio_import_qml` (onboarding's folder field); screenshots
-  `page-editing-keyboard`, `journals-editing-keyboard`, `capture-keyboard`; on Android
-  `scripts/android-emulator-test.sh --keyboard` (and `--folders`: the toolbar's "Więcej" and the
-  block menu with a real finger), in the browser `scripts/wasm-smoke.mjs --keyboard`.
+  `page-editing-keyboard`, `journals-editing-keyboard`, `capture-keyboard` (and `page-editing`:
+  the keyboard hidden, the toolbar on the bottom navigation); on Android
+  `scripts/android-emulator-test.sh --keyboard` (Back: the navigation's tabs below the toolbar,
+  a tap on the text: the keyboard back, the toolbar on it, the tabs gone; and `--folders`: the
+  toolbar's "Więcej" and the block menu with a real finger), in the browser
+  `scripts/wasm-smoke.mjs --keyboard` and `--keyboard-phone` (the keyboard hidden: the toolbar
+  on the bottom navigation, `bottomNavTop` in the self-test's report) and
+  `scripts/android-emulator-test.sh --web-keyboard`.
 
 ## Keyboard shortcuts (desktop)
 
@@ -852,7 +891,8 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   gaps the indents and moves are shown disabled — `BMenuItem.unavailable`, the reason in a tooltip
   — and a tap says why in a toast: "Wcięcia i przenoszenie działają tylko dla bloków zaznaczonych
   bez przerw"), Gotowe. Docked in the editing toolbar's slot on touch
-  UIs (the `selection` mode of `BlockEditor.toolbarMode`; the bottom navigation makes way), a
+  UIs (the `selection` mode of `BlockEditor.toolbarMode`; on phones right on the bottom
+  navigation, no keyboard), a
   compact bar floating at the top of the view on desktops while two or more blocks are selected
   (its × clears the selection).
 * **Copying**: `copySelection()` puts the blocks' **Markdown** on the clipboard as text/plain — the
@@ -977,8 +1017,9 @@ tablet (lectures, sketches), on every platform.
     the paper, nor ends, cuts or erases the pen's stroke —, and so is a hand that stays after the
     pen lifts, until every finger has lifted. A pen that lands while fingers move the paper or
     draw ends their gesture (a finger stroke just begun is dropped) and draws.
-* **Tools** (`DrawingToolbar`; above the paper on wide windows, at the bottom on phones — the
-  bottom navigation makes way, `toolbarDocked` —, scrolling sideways when it does not fit): Cofnij,
+* **Tools** (`DrawingToolbar`; above the paper on wide windows, at the bottom on phones — in
+  the bottom navigation's place, `toolbarDocked` and `replacesBottomNav` —, scrolling sideways
+  when it does not fit): Cofnij,
   Ponów, **Pióro** (P), **Zakreślacz** (H: wide, translucent, an even width — constant pressure,
   as Excalidraw draws it alike), **Gumka** (E: removes every stroke it touches, one undo step per
   gesture, a ring follows the pointer), the current tool's colours (pen: atrament, niebieski,

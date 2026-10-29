@@ -352,7 +352,8 @@ punktu usuwa znacznik listy, jak w Obsidianie.
 Na telefonie wcięcia, przenoszenie bloków, zadania, linki, tagi, polecenia, terminy,
 przypomnienia i cofanie są w pasku narzędzi, który zawsze leży tuż nad klawiaturą — w
 dzienniku i na stronach, także przy przewijaniu, w komórkach tabel (Następna komórka) i w
-źródle Markdown; dolna nawigacja chowa się na czas pisania, a okna wysuwane od dołu, menu i
+źródle Markdown; dolna nawigacja chowa się, gdy klawiatura jest otwarta (po jej schowaniu wraca,
+a pasek leży tuż nad nią), a okna wysuwane od dołu, menu i
 pola formularzy nigdy nie trafiają pod klawiaturę (także w przeglądarce na telefonie). Widoki
 bez własnego przycisku (centrum synchronizacji, import i eksport, kosz, ustawienia) są w menu
 *Więcej* (⋮).
@@ -417,7 +418,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   without admin rights or a portable ZIP; unsigned; reminders as Windows toast notifications with
   Snooze/Done/OK, optional start at sign-in, a calendar with the day's tasks from a click on the
   tray icon — [docs/WINDOWS.md](docs/WINDOWS.md)). On phones the editing toolbar always sits right on the on-screen keyboard
-  (Android's IME insets, frame by frame on Android 11+; the browser's visualViewport).
+  (Android's IME insets, frame by frame on Android 11+; the browser's visualViewport); with the
+  keyboard closed, the bottom navigation comes back and the toolbar sits right on it.
 * Sync through **Syncthing** (it's just a folder; conflict copies are detected and merged in
   the app; an Obsidian vault synced with Syncthing opens as it is, no import needed) or **Nextcloud/WebDAV** (built-in background sync with 3-way merge and a
   mass-deletion guard; folders travel too — empty ones, deletions of emptied ones, and a folder
