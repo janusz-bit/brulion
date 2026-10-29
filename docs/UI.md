@@ -991,11 +991,11 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
 
 Route `drawing` (`{path}`): `DrawingView` on a drawing attachment (docs/SYNTAX.md §2 "Drawings":
 an SVG with an embedded Excalidraw scene, core module `drawing`). For handwritten notes on a
-tablet (lectures, sketches), on every platform.
+tablet (lectures, sketches) and diagrams (shapes, arrows, text), on every platform.
 
 * **The paper** (`DrawingCanvas`, a `QQuickPaintedItem`): the file's paper
   (`appState.viewBackgroundColor`, white), plain, lined (32 px) or squared (24 px), endless in every
-  direction; the picture written covers the strokes plus a margin. Opened: the strokes from their
+  direction; the picture written covers the elements plus a margin. Opened: the elements from their
   top left at 100 %, zoomed out to the view's width when they are wider (a phone); a zoom other
   than 100 % is shown in the corner (`#535a6a` on light paper, `#9ba1af` on dark: 6.9 / 7.2:1).
 * **Light or dark paper** ("Tło rysunku", per drawing: `DrawingCanvas.theme`, saved in the file as
@@ -1014,9 +1014,9 @@ tablet (lectures, sketches), on every platform.
   the last load or save (as the paper's pattern). No keyboard shortcut (Excalidraw's Alt+Shift+D
   switches its app's theme; this one is per drawing).
 * **Input:**
-  * a **stylus** draws with its pressure (the line widens as it presses harder; a stylus that
-    reports one pressure only draws like a mouse); its **eraser end**, or the barrel button held,
-    erases whatever tool is chosen. Qt Quick hands an item no tablet events (only pointer handlers
+  * a **stylus** works the tool — draws with its pressure (the line widens as it presses harder;
+    a stylus that reports one pressure only draws like a mouse), draws the lasso or a shape —; its
+    **eraser end**, or the barrel button held, erases whatever tool is chosen. Qt Quick hands an item no tablet events (only pointer handlers
     get them, and Qt makes mouse events of the unhandled ones only on some platforms — not on
     Android), so the canvas takes the stylus's tablet events from its window (an event filter) when
     it is the topmost item taking input under the pen: a menu, a popup, a toast or a bar over it
@@ -1025,12 +1025,16 @@ tablet (lectures, sketches), on every platform.
     and taking every button, counts only where an open popup is (`tst_drawingcanvas`
     `popupsOfQtQuickControls`). Mouse events the system makes of the pen itself (Windows) are
     recognised by their time and place and left alone;
-  * a **mouse** draws with the left button; the middle or right button — or the left one with
+  * a **mouse** works the tool with the left button (Shift: a square or a circle, lines at 15°
+    steps; with the select tool Shift adds to the selection or takes away); the middle or right
+    button — or the left one with
     Space held — moves the paper; the wheel scrolls it (Shift: sideways), Ctrl+wheel and a
     touchpad's pinch zoom at the pointer (10 %–1000 %);
-  * **fingers:** with "Rysuj palcem" one finger draws (the eraser tool: erases), else it moves the
-    paper; two fingers move and zoom — a second finger that lands while a stroke has just begun
-    makes it the gesture (the stroke is dropped). "Rysuj palcem" is on by default until a stylus
+  * **fingers:** with "Rysuj palcem" one finger works the tool (draws, erases, draws the lasso or a
+    shape, moves the selection, taps text), else it only moves the paper — a palm resting on a
+    selection never drags it; two fingers move and zoom — a second finger that lands while a
+    stroke has just begun makes it the gesture (the stroke is dropped; a lasso or a shape being
+    dragged too). A long press does nothing special. "Rysuj palcem" is on by default until a stylus
     has touched the paper on this device (AppSettings `drawing/stylusSeen`): from then on a palm
     or a finger never draws; the toggle (the tool bar on wide touch screens, Więcej on phones)
     makes it the user's choice (`drawing/finger`: `auto` | `on` | `off`);
@@ -1042,16 +1046,52 @@ tablet (lectures, sketches), on every platform.
   the bottom navigation's place, `toolbarDocked` and `replacesBottomNav` —, scrolling sideways
   when it does not fit): Cofnij,
   Ponów, **Pióro** (P), **Zakreślacz** (H: wide, translucent, an even width — constant pressure,
-  as Excalidraw draws it alike), **Gumka** (E: removes every stroke it touches, one undo step per
-  gesture, a ring follows the pointer), the current tool's colours (pen: atrament, niebieski,
-  czerwony, zielony, pomarańczowy, fioletowy; highlighter: żółty, zielony, różowy, niebieski,
-  pomarańczowy) and widths (cienka / średnia / gruba; wąska / średnia / szeroka) — on phones
-  behind one swatch, a popup above the bar —, Papier (gładki, w linie, w kratkę: an undo step),
+  as Excalidraw draws it alike), **Gumka** (E: removes every element it touches — a shape with its
+  label, never a locked one —, one undo step per gesture, a ring follows the pointer),
+  **Zaznacz** (V, a lasso icon; below), **Kształty** (one button showing the last shape — R
+  Prostokąt, O Elipsa, D Romb, L Linia, A Strzałka, remembered in `drawing/shape` —; clicked again
+  while a shape is the tool it opens their menu), **Tekst** (T; below), the current tool's colours
+  (pen, shapes and text: atrament, niebieski, czerwony, zielony, pomarańczowy, fioletowy;
+  highlighter: żółty, zielony, różowy, niebieski, pomarańczowy) and widths (cienka / średnia /
+  gruba; wąska / średnia / szeroka; text: its sizes Mały / Średni / Duży / Bardzo duży, 16 / 20 /
+  28 / 36 — an "A" at four sizes, `drawing/fontSize`) — on phones behind one swatch, a popup above
+  the bar —, Papier (gładki, w linie, w kratkę: an undo step),
   **Tło rysunku** (a sun-and-moon, sun or moon icon: Jak motyw / Jasne / Ciemne; on phones in
   Więcej: "Tło jak motyw", "Jasne tło", "Ciemne tło"), Rysuj palcem (touch screens), Pokaż cały
   rysunek (Ctrl+0; Ctrl++ / Ctrl+- zoom) and **Gotowe**
   (saved, back). Colours and widths are remembered on the device (`drawing/…`). Undo: Ctrl+Z,
-  Ctrl+Shift+Z / Ctrl+Y; the history is the session's (a reload clears it).
+  Ctrl+Shift+Z / Ctrl+Y; every gesture and action is one step (a generic diff of the elements,
+  `drawing::ElementDiff`, at most 500 steps); the history is the session's (a reload clears it).
+* **Shapes** (rectangle, ellipse, diamond, line, arrow): dragged out, shown while dragged; the
+  colour is the pen's, the stroke twice the pen's width (1 / 2 / 4, Excalidraw's thin, bold, extra
+  bold); Shift: a square or a circle, a line at 15° steps; a click (under 3 px) makes none.
+  Rectangles get Excalidraw's rounded corners, other shapes sharp; no fill. The tool stays (several
+  shapes in a row) and the new shape is not selected. New arrows are never bound to shapes.
+* **Selection** (Zaznacz, V): a lasso (dashed, in `Theme.info`, a 10 % fill) takes every element at
+  least half inside it (its points; a box's corners, edge middles and centre), a tap the topmost
+  element under it (8 px, 14 px for a finger or a pen; an unfilled shape only near its outline) —
+  with its group (`groupIds`, the outermost) and a shape's label; a tap on nothing clears it.
+  Locked elements are never taken. The selection is framed (dashed around all, thin around each
+  when there are several); a drag inside the frame moves it (one undo step; arrows bound to it
+  follow, labels go along). **DrawingSelectionBar** floats centred above the frame (below it when
+  there is no room, always inside the view), touch-sized on touch screens, while nothing is being
+  drawn, moved or written: the pen's colours (recolour; on narrow windows one swatch opening them
+  — a highlighter stays one), **Duplikuj** (Ctrl+D: copies 10 units right and down, selected),
+  **Na wierzch** (Ctrl+Shift+]), **Na spód** (Ctrl+Shift+[: above a locked backdrop), **Usuń**
+  (Delete / Backspace). Keys: Ctrl+A (everything), Escape (a lasso or a shape in progress dropped,
+  else the selection cleared), the arrows (move it 1 unit, with Shift 10), Ctrl+] / Ctrl+[ (one
+  step up / down). Another tool clears the selection; undo, redo and a merge keep the selected
+  elements that still exist.
+* **Text** (Tekst, T): a tap on the paper writes a new text there (its first line's middle at the
+  tap), a tap on a text edits it, a tap inside a shape writes its label; with the select tool a
+  double tap does the same. **DrawingTextEditor** opens on the paper in the text's font, size
+  (× zoom), colour (as the paper shows it) and alignment — as wide as the text, a label as wide as
+  its shape's inside, wrapped and centred —; Enter starts a new line; Escape, Ctrl+Enter, a press
+  on the paper beside it or (touch screens) its "Gotowe" button write it — one undo step; an
+  emptied text is deleted; a label grows its shape when it needs the room. On a phone the paper
+  moves so the text stays above the keyboard (`DrawingCanvas.ensureVisible`, `KeyboardInsets`).
+  New text: Excalidraw's Helvetica (sans in both apps) in the app's UI font, line height 1.15.
+  While text is written the canvas takes no other input and the view's keys rest.
 * **Saving:** by itself, 1.2 s after the last change, and when the route changes, the view goes
   (Back, Gotowe, another view) and the app leaves the foreground (`Workspace.writeAttachment`:
   atomic, the replaced version kept in History as for notes). A failed write is said by the
@@ -1059,30 +1099,41 @@ tablet (lectures, sketches), on every platform.
   not been reported yet (a folder watch that missed it, Android's shared storage) is taken in as
   below, never written over.
 * **Changes from elsewhere** (Syncthing, Nextcloud, another program) while the drawing is open:
-  with nothing changed here the other version is shown; else they are merged stroke by stroke
-  (`DrawingCanvas.takeExternal`: the other version, plus the strokes drawn here since the last
-  load or save, minus the ones erased here; the paper's pattern and its light or dark theirs unless
-  changed here)
-  and saved, with a toast. A stroke or an erasing gesture in progress goes on and ends on the
-  new version. A version Brulion cannot edit any more (shapes or text added in excalidraw.com) is
+  with nothing changed here the other version is shown; else they are merged element by element
+  (`DrawingCanvas.takeExternal` → core `drawing::merge` against the last load or save: the other
+  version in its order, plus the elements drawn here since — on top —, the ones changed here
+  replacing theirs, minus the ones erased here; what was deleted there stays deleted; the paper's
+  pattern and its light or dark theirs unless changed here — the same rule as the sync center's
+  "Scal rysunki")
+  and saved, with a toast. A gesture in progress goes on and ends on the new version. A version
+  Brulion cannot edit any more (a frame or an embedded page added in excalidraw.com) is
   shown as it is; what was drawn here and not saved is written to a new file beside it ("… (to
   urządzenie).svg", `Workspace.createAttachment`), with a toast naming it. The canvas's own saves
   coming back are recognised (`isKnownFile`). A rename follows the file (the route is applied one
   event-loop turn late, as in PageView); a file deleted while open is never written again ("Rysunku
   … nie ma w notatniku").
 * **Files Brulion does not edit** are shown as the picture they are, with why and "Otwórz jako
-  obraz" (the picture view): an Excalidraw drawing with shapes, arrows, text or pictures (Brulion
-  would lose them: "edytuje tylko pismo odręczne"), an SVG without a scene, a scene that cannot be
-  read, and freehand lines farther than 10⁶ units from the origin (`drawing::CoordinateLimit`:
-  the paper's lines and the file's size stay bounded; the editor's own strokes stay within it).
-  Nothing is written for them.
-* **Rendering:** the committed strokes are rendered on the GUI thread into a cached image of the
-  view (600 strokes of 60 points: ~7 ms on the laptop); while the paper moves the cached image is
-  drawn moved and scaled and rendered again once the gesture rests; the stroke being drawn is
-  drawn on top, only its area repainted. `paint()` (maybe on the render thread) draws a snapshot
-  taken in `updatePaintNode()`, while the GUI thread waits. The paper and the ink's colours come
-  from `drawingrender.h` (`paintPaper`, `toQColor(displayInk(…))`; every stroke keeps its light and
-  dark colour, so a theme switch only repaints), shared with the previews.
+  obraz" (the picture view): an Excalidraw drawing with frames or embedded web pages (or an
+  element of a kind Brulion does not know: it would lose them — "ma ramki lub osadzone strony
+  internetowe z Excalidraw"), an SVG without a scene, a scene that cannot be read, and elements
+  farther than 10⁶ units from the origin (`drawing::CoordinateLimit`: the paper's lines and the
+  file's size stay bounded; the editor's own elements stay within it). Nothing is written for
+  them. Excalidraw drawings with shapes, arrows, text and pictures are edited (docs/SYNTAX.md §2
+  "Elements": drawn clean — the hand-drawn look is kept in the file, not drawn —, text in the
+  app's fonts, elbow arrows moved rigidly).
+* **Rendering:** every element is prepared once (`drawingrender.h` `prepare`: its paths from core
+  `geometry.h` `elementShape` and its colours light and dark, kept while its version stays; a
+  freehand line moved as a whole keeps its outline, moved); the committed elements are rendered on
+  the GUI thread into a cached image of the view (600 strokes of 60 points: ~7 ms on the laptop;
+  600 shapes, arrows and texts: ~2 ms); while the paper moves the cached image is drawn moved and
+  scaled and rendered again once the gesture rests; the stroke being drawn, a shape being dragged,
+  a moved selection (hidden in the cached image meanwhile), the lasso and the selection's frame are
+  drawn on top. `paint()` (maybe on the render thread) draws a snapshot taken in
+  `updatePaintNode()`, while the GUI thread waits. The paper and the elements are painted by
+  `drawingrender.h` (`paintPaper`, `paintElement`: fills, hatching, outlines with their dashes,
+  arrowheads, text in the fonts `DrawingFonts.set(Theme.fontUi, Theme.fontMono)` names — families
+  3 and 8 monospace —, pictures decoded once from the scene's files or a grey placeholder), shared
+  with the previews.
 * **Previews** (the embeds in notes, the picture view, the notice of a file Brulion does not edit):
   the image provider `drawing` (`DrawingImageProvider`, registered in `main.cpp`):
   `image://drawing/<absolute path, percent-encoded>?v=<mtime>-<size>&dark=0|1`
@@ -1094,7 +1145,7 @@ tablet (lectures, sketches), on every platform.
   in it at one unit a pixel (smaller only when they do not fit), so the frame never changes shape
   when the picture has loaded —, fitted into the requested size, at the screen's pixel ratio. The
   paper is always opaque (`displayPaper`: a see-through `viewBackgroundColor` as over white).
-  Anything else (an Excalidraw drawing with shapes, a scene that cannot be read) is the file's own
+  Anything else (an Excalidraw drawing with a frame, a scene that cannot be read) is the file's own
   picture through Qt SVG, turned dark in a dark app colour by colour as Excalidraw's dark mode does
   (`drawing::darkSvg`: the colours of its attributes and style sheets; pasted pictures and colour
   emoji keep theirs; the per-pixel filter `darkImage` only for a file that mapping cannot read) —
@@ -1106,7 +1157,12 @@ tablet (lectures, sketches), on every platform.
   `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
 
 Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, the SVG, the dark
-colours — of another program's SVG too),
+colours — of another program's SVG too), `tst_drawing_elements` (every kind of element read —
+`excalidraw_shapes.*` —, malformed ones normalised or foreign, written back byte for byte, a
+changed one's version, new elements as excalidraw.com reads them, fractional indices, corners,
+arrowheads, hatching, hit tests, the lasso, every edit, undo diffs of random edits, the SVG of
+shapes and text, random elements), `tst_drawing_merge` (the merge: new here on top, changed here
+wins, deleted here / there, a backdrop at the bottom, an unknown base),
 `tst_drawingcanvas` (stylus, eraser end, barrel button, a popup over the paper, Windows' mouse
 events of the pen, fingers, a pinch, a palm while the pen is down, mouse buttons and the wheel,
 undo, the SVG checked with Qt's SVG renderer, loading, merging — also during a stroke, the paper,
@@ -1115,20 +1171,24 @@ while the theme changes, a see-through paper, Qt SVG ignoring the dark CSS, the 
 light, dark, an Excalidraw drawing turned dark (a pasted photo keeping its colours), a freehand
 one in the file's own frame, a scene that cannot be read (a dark one kept dark), refused ids,
 through a QML Image and its other theme loading behind the shown one — and the dark filter per
-pixel),
-`tst_drawing_qml` (the route and its notices, the background menu, embeds and the picture view in
-the real app, light and dark; nothing written by looking), `tst_editor_controller`
+pixel; shapes with the mouse, a stylus and fingers, the lasso and moving, the selection's actions,
+text and labels, erasing shapes, painting shapes and text light and dark, Qt SVG drawing them, a
+merge with shapes, text drawn in a worker thread, 600 shapes),
+`tst_drawing_qml` (the route and its notices, the background menu, a drawing of shapes with the
+shapes' menu and everything selected, a frame read-only, embeds and the picture view in the real
+app, light and dark; nothing written by looking), `tst_editor_controller`
 (`drawingSlashCommand`, `drawingEmbedsFollowTheirFile`), `tst_shell_workspace_pictures`
 (`drawingsAreSavedAndShownAgain`), the shell's self-test (`tst_shell_qml`, `_capture`: opened from
 its embed, drawn with a finger / the mouse, saved, undone; the embed in the app's other theme;
 the embed of a drawing whose file names another frame (excalidraw.com's margins) keeping its size
 when loaded and while the app's theme switches;
-a version written behind the vault's back merged by the save; one with a shape not written over,
+a version written behind the vault's back merged by the save; one with a frame not written over,
 the strokes kept in a copy), `tests/app/drawing/svg-theme-check.mjs` (a browser — Chrome over CDP —
 shows `tests/data/drawing/auto_theme.svg` dark when it prefers dark, light otherwise, and inside
 an `<img>` in the page's own colour scheme — an app's dark theme on a light system; CI) and
 `tests/app/drawing/wasm-drawing-check.mjs` (the web build: a drawing's embed light and dark).
-Screenshots: `tests/app/drawing/screenshots.sh` (the `theme` shot: the background's menu).
+Screenshots: `tests/app/drawing/screenshots.sh` (the `theme` shot: the background's menu;
+`shapes`, `selection`, `shapemenu`: a diagram, it all selected with its bar, the shapes' menu).
 
 ## Scrolling performance
 

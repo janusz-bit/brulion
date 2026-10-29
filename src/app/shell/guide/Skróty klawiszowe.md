@@ -70,3 +70,27 @@ Prawy przycisk myszy na bloku otwiera menu bloku (Kopiuj, Wytnij, Kopiuj jako te
 Menu statusu zadania otwiera też prawy przycisk myszy na polu wyboru (na telefonie: przytrzymanie). Więcej: [[Zadania|Zadania]].
 
 W dokumencie Backspace na początku punktu listy najpierw zdejmuje pole zadania, potem znacznik listy. Opis działania trybów: [[Dokument i konspekt|Dokument i konspekt]].
+
+## Rysunki
+W edytorze rysunku (gdy nie piszesz tekstu). Więcej: [[Rysunki|Rysunki]].
+
+| Skrót | Działanie |
+|---|---|
+| P / H / E | pióro / zakreślacz / gumka |
+| V | zaznaczanie (lasso) |
+| R / O / D / L / A | prostokąt / elipsa / romb / linia / strzałka |
+| T | tekst |
+| Shift (przy przeciąganiu) | kwadrat albo koło; linia i strzałka co 15° |
+| Ctrl+A | zaznacz wszystko |
+| Delete / Backspace | usuń zaznaczenie |
+| Ctrl+D | duplikuj zaznaczenie |
+| ← ↑ → ↓ (z Shift) | przesuń zaznaczenie o 1 (o 10) |
+| Ctrl+] / Ctrl+[ | zaznaczenie piętro wyżej / niżej |
+| Ctrl+Shift+] / Ctrl+Shift+[ | zaznaczenie na wierzch / na spód |
+| Esc | przerwij rysowany kształt albo lasso; odznacz |
+| Ctrl+Z / Ctrl+Shift+Z | cofnij / ponów |
+| Spacja (przytrzymana) | przesuwanie kartki |
+| Ctrl+0 | pokaż cały rysunek |
+| Ctrl++ / Ctrl+- | powiększ / pomniejsz |
+
+Pisząc tekst na rysunku: Enter — nowy wiersz, Esc albo Ctrl+Enter — koniec pisania.

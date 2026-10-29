@@ -186,20 +186,59 @@ BASE64 (one line) is base64 of the Latin-1 bytes of `{"version":"1","encoding":"
 character per byte; the scene is `{"type":"excalidraw","version":2,"source","elements","appState",
 "files"}`, every stroke a `freedraw` element (`x`, `y`, `points` relative to them, `pressures`,
 `simulatePressure`, `strokeColor`, `strokeWidth`, `opacity`; a highlighter stroke has
-`customData.brulionTool: "highlighter"`), the paper `appState.viewBackgroundColor`, the pattern
+`customData.brulionTool: "highlighter"`), shapes, lines, arrows, text and pictures Excalidraw's
+`rectangle`, `ellipse`, `diamond`, `line`, `arrow`, `text` and `image` elements (below), the paper
+`appState.viewBackgroundColor`, the pattern
 `appState.brulionBackground` (`lines`, `grid`; none: plain — Excalidraw ignores it) and the light
 or dark paper `appState.brulionTheme` (`light`, `dark`; none: as the app's theme, the default —
 Excalidraw ignores it too, its own `appState.theme` is never exported). The picture
-covers the strokes plus a 16 px margin at one scene unit a pixel (an empty drawing: 320 × 180), on
-the paper, drawn as filled outlines (perfect-freehand's, as Excalidraw draws freehand lines): every
-program shows the file as a picture (Obsidian, Logseq, browsers, file managers), excalidraw.com
-opens it as a drawing again, Brulion's editor (docs/UI.md "Drawing editor") edits it. Brulion reads
-payload versions 1 and 2, compressed or not, and `.excalidraw` JSON. An SVG is a drawing when its
-first 4 KB name the payload type (`looksLikeExcalidrawSvg`); one without the scene is a picture only.
-Brulion edits only freehand strokes: a scene with other elements (shapes, arrows, text, pictures,
-rotated or filled freehand lines, freehand lines with a point farther than 10⁶ scene units from the
-origin on either axis — `drawing::CoordinateLimit`) is shown, never written. Elements and fields Brulion does not
-model are written back as they were; deleted elements are dropped (as Excalidraw's own export does).
+covers the elements plus a 16 px margin at one scene unit a pixel (an empty drawing: 320 × 180), on
+the paper — freehand lines as filled outlines (perfect-freehand's, as Excalidraw draws them),
+shapes, lines and arrows as paths, text as `<text>` (one per line, `xml:space="preserve"`, the
+text escaped), pictures as `<image>` (only base64 PNG, JPEG, GIF, WebP and SVG data URLs from the
+scene's `files`; anything else a grey placeholder), rotated ones in `<g transform="rotate(…)">`:
+every program shows the file as a picture (Obsidian, Logseq, browsers, file managers),
+excalidraw.com opens it as a drawing again, Brulion's editor (docs/UI.md "Drawing editor") edits
+it. Brulion reads payload versions 1 and 2, compressed or not, and `.excalidraw` JSON. An SVG is a
+drawing when its first 4 KB name the payload type (`looksLikeExcalidrawSvg`); one without the scene
+is a picture only.
+
+*Elements (Elementy rysunku; `drawing.h` Stroke, `geometry.h`, `edit.h`):* Brulion draws and edits
+freehand lines (also rotated or filled), rectangles, ellipses, diamonds, lines (also curved or
+closed), arrows (with their heads: arrow, triangle, bar, dot/circle, diamond and their outlines;
+elbow arrows too), text (free, and labels of shapes and arrows: `containerId`, the shape's
+`boundElements`) and pictures (`image` with its `files` entry; a missing file shows a placeholder,
+still movable and deletable). A scene with any other element — a frame, a magic frame, an embedded
+web page (`embeddable`, `iframe`), a kind Brulion does not know, an element with a coordinate
+farther than 10⁶ scene units from the origin on either axis (`drawing::CoordinateLimit`) or with
+broken numbers — is shown, never written (read-only); a drawing whose only such elements were
+deleted is editable. Everything is drawn clean: Excalidraw's `roughness` (hand-drawn look) is kept
+in the file but not drawn; hachure, cross-hatch and zigzag fills are drawn as clean parallel lines
+(−41°, 4 × the stroke's width apart; cross-hatch also at +49°); dashed and dotted outlines as
+Excalidraw's dash patterns; rounded corners as Excalidraw rounds them. Text is drawn in the app's
+fonts — Excalidraw's monospace families (3 Cascadia, 8 Comic Shanns) in the monospace one, all
+others in the UI font, at the element's `fontSize` and `lineHeight` — so text from excalidraw.com
+may run slightly past its box; Brulion never re-wraps text it did not edit. In the dark theme
+pictures keep their colours.
+
+*Writing elements:* an element Brulion did not change is written back exactly as it was read
+(`version` unchanged); a changed one gets `version + 1`, a new `versionNonce` and `updated` (as
+Excalidraw does) and its modelled fields written over what was read — fields Brulion does not model
+(`customData`, `link`, `frameId`, `seed`, `roughness`, …) stay. New elements are written as
+excalidraw.com writes them, with `roughness: 0` (clean in excalidraw.com too): rectangles with
+`roundness {type: 3}` (adaptive), other shapes sharp, lines and arrows with `roundness {type: 2}`,
+arrows with `endArrowhead: "arrow"`, never bound to shapes (`startBinding`/`endBinding` null), text
+in `fontFamily: 2` (Helvetica: sans in both apps) with `lineHeight: 1.15`, labels centred
+(`textAlign: "center"`, `verticalAlign: "middle"`, wrapped to the shape's width less 2 × 5),
+`groupIds: []`, no `index`. Elements are written in their drawing order; Excalidraw's fractional
+`index` values are kept while they still rise in that order, and left out of every element once
+Brulion reordered elements (Excalidraw makes new ones when it opens the scene). `files` keeps only
+the pictures that image elements use. Moving an element moves its label and the ends of arrows
+bound to it (an elbow arrow keeps its right angles; Brulion does not re-route it); deleting one
+removes its label and unbinds its arrows; groups (`groupIds`) are selected, copied and reordered
+as a whole; locked elements are never selected, moved or erased. Elements and fields Brulion does
+not model are written back as they were; deleted elements are dropped (as Excalidraw's own export
+does).
 A scene beyond 32 MB (decompressed) or with more than 500 000 JSON arrays and objects (every point
 of a stroke is one — some thirty pages of dense handwriting) is not read (`drawing::MaxSceneBytes`,
 `MaxSceneContainers`): a small synced file must never inflate into gigabytes; it shows as a drawing
@@ -216,7 +255,9 @@ at most 100 %). The picture in the file follows the choice: `light` — the colo
 — the dark colours in the attributes (every program shows it dark); none (as the app) — the light
 attributes plus one `<style>` right after `</metadata>` holding nothing but an `@media
 (prefers-color-scheme: dark)` block with the dark colours by class (`p` the paper, `r` the rules,
-`k<n>` one per pen colour in first-use order, `h<n>` one per highlighter opacity), so a browser
+`k<n>` one per colour filled with ink — pen strokes, text, filled arrowheads — in first-use order,
+`s<n>` one per colour stroked — outlines, hatch lines —, `f<n>` one per shape fill colour, `h<n>`
+one per highlighter opacity), so a browser
 shows it dark when its viewer prefers dark — or, in an `<img>`, when the page's own colour scheme
 is dark (Chromium applies the `color-scheme` the `<img>` uses: Obsidian 1.14 on the desktop shows
 it dark in its dark theme even on a light system, light in its light theme). Only hex colours and
