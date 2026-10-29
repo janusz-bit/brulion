@@ -138,6 +138,63 @@ private Q_SLOTS:
         QCOMPARE(counts(p.b.sync()), Counts{});
     }
 
+    void excalidrawDrawingsAreNeverMergedLineByLine_data()
+    {
+        // An Obsidian Excalidraw plugin file with its scene as JSON ("```json"): the two devices
+        // move different elements, lines far apart — a line merge would be "clean" and might glue
+        // two scenes into broken JSON; the same text without the plugin's key merges.
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("head");
+        QTest::addColumn<bool>("drawing");
+        QTest::addColumn<bool>("crlf");
+        const QString plugin = u"---\n\nexcalidraw-plugin: parsed\ntags: [excalidraw]\n\n---\nNotatka z tyłu: "
+                               u"ąćęłńóśźż\n\n# Excalidraw Data\n\n## Text Elements\n%%\n## Drawing\n```json\n"_s;
+        QTest::newRow("plugin file") << u"Excalidraw/Szkic ćwiczeń.excalidraw.md"_s << plugin << true << false;
+        QTest::newRow("CRLF plugin file") << u"Szkic.excalidraw.md"_s << plugin << true << true;
+        QTest::newRow("a note") << u"Notatka.md"_s << u"---\ntytul: Szkic\n---\n```json\n"_s << false << false;
+    }
+
+    void excalidrawDrawingsAreNeverMergedLineByLine()
+    {
+        QFETCH(QString, path);
+        QFETCH(QString, head);
+        QFETCH(bool, drawing);
+        QFETCH(bool, crlf);
+        const auto scene = [&head, crlf](int x1, int x2) {
+            QString elements;
+            for (int i = 0; i < 2; ++i) {
+                elements += u"\t\t{\n\t\t\t\"id\": \"e%1\",\n\t\t\t\"type\": \"rectangle\",\n\t\t\t\"x\": %2,\n"
+                            u"\t\t\t\"y\": 10,\n\t\t\t\"width\": 40,\n\t\t\t\"height\": 40,\n\t\t\t\"angle\": 0,\n"
+                            u"\t\t\t\"strokeColor\": \"#1e1e1e\",\n\t\t\t\"version\": 1\n\t\t}%3\n"_s.arg(i)
+                                    .arg(i == 0 ? x1 : x2)
+                                    .arg(i == 0 ? u","_s : QString());
+            }
+            QString text = head + u"{\n\t\"type\": \"excalidraw\",\n\t\"version\": 2,\n\t\"elements\": [\n"_s + elements
+                           + u"\t],\n\t\"appState\": {},\n\t\"files\": {}\n}\n```\n%%"_s;
+            return crlf ? text.replace(u"\n"_s, u"\r\n"_s) : text;
+        };
+        Pair p({{path, scene(0, 100).toUtf8()}});
+        p.a.sync();
+        p.b.sync();
+        QVERIFY(p.a.write(path, scene(30, 100)));
+        QVERIFY(p.b.write(path, scene(0, 170)));
+        p.a.sync();
+        const SyncReport rb = p.b.sync();
+        if (!drawing) {
+            QCOMPARE(counts(rb), (Counts{.merged = 1}));
+            QCOMPARE(p.b.read(path), scene(30, 170));
+            return;
+        }
+        // Both versions kept, each a whole drawing.
+        QCOMPARE(counts(rb), (Counts{.conflicts = 1}));
+        QCOMPARE(rb.conflicts, QList<VaultPath>{path});
+        QCOMPARE(rb.conflictCopies.size(), 1);
+        QCOMPARE(p.b.read(path), scene(0, 170));
+        QCOMPARE(p.b.read(rb.conflictCopies.first()), scene(30, 100));
+        QCOMPARE(counts(p.a.sync()), (Counts{.down = 2}));
+        QCOMPARE(p.a.read(path), scene(0, 170));
+    }
+
     void anEditWinsOverADeletionInBothOrders()
     {
         Pair p({{u"x.md"_s, "x\n"}, {u"y.md"_s, "y\n"}});

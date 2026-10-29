@@ -23,5 +23,5 @@ brulion_add_core_module(sync
         request_p.h request.cpp
         syncrun_p.h syncrun.cpp syncfolders.cpp
         util_p.h util.cpp
-    DEPS util text vault log
+    DEPS util text vault log drawing
     QT Network)

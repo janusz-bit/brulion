@@ -1,6 +1,8 @@
 // One SyncEngine run: list both sides, decide per path (planSync), transfer, merge, record.
 #include "sync/syncrun_p.h"
 
+#include "drawing/excalidraw.h"
+#include "drawing/excalidrawmd.h"
 #include "log/redact.h"
 #include "log/slowscope.h"
 #include "sync/conflicts.h"
@@ -48,6 +50,19 @@ bool isJsonObject(const QString &text)
     QJsonParseError error;
     const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &error);
     return error.error == QJsonParseError::NoError && doc.isObject();
+}
+
+/// A drawing of the Obsidian Excalidraw plugin (`*.excalidraw.md`, docs/SYNTAX.md §2 "Drawings") or
+/// a `.excalidraw` scene: a line merge of two versions may glue a scene into broken JSON (the
+/// plugin's "json" block) — never merged line by line.
+bool isExcalidrawText(const VaultPath &path, const QString &text)
+{
+    const QByteArray head = QStringView(text).first(std::min<qsizetype>(text.size(), drawing::HeadBytes)).toUtf8();
+    if (path.endsWith(u".md"_s, Qt::CaseInsensitive))
+        return drawing::looksLikeExcalidrawMarkdown(head);
+    if (path.endsWith(u".excalidraw"_s, Qt::CaseInsensitive))
+        return drawing::looksLikeExcalidrawJson(head);
+    return false;
 }
 
 /// Remote folders not worth listing (ignored ones; ".brulion" holds the config).
@@ -1522,6 +1537,10 @@ std::optional<QString> SyncRun::mergeText(const VaultPath &path, const QString &
         return mergeJson3(base, local, remote);
     }
     if (!haveBase)
+        return std::nullopt;
+    // An Excalidraw drawing changed on both sides: both versions kept (a conflict copy), never a
+    // line merge of its scene.
+    if (isExcalidrawText(path, local) || isExcalidrawText(path, remote))
         return std::nullopt;
     const MergeResult result = merge3(base, local, remote);
     return result.clean ? std::optional<QString>(result.text) : std::nullopt;
