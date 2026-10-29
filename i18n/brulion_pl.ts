@@ -6228,78 +6228,78 @@
         <translation>Scalono z tą stroną zmiany z innego miejsca</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="447"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="449"/>
         <source>Version history</source>
         <translation>Historia wersji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="453"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="455"/>
         <source>Copy link %1</source>
         <translation>Kopiuj link %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="458"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="460"/>
         <source>Export page…</source>
         <translation>Eksportuj stronę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="466"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="468"/>
         <source>Rename…</source>
         <translation>Zmień nazwę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="474"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="476"/>
         <source>Move to…</source>
         <translation>Przenieś do…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="481"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="483"/>
         <source>Open in side panel</source>
         <translation>Otwórz w panelu bocznym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="486"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="488"/>
         <source>Switch to outline</source>
         <translation>Przełącz na konspekt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="486"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="488"/>
         <source>Switch to document</source>
         <translation>Przełącz na dokument</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="493"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="495"/>
         <source>Add property</source>
         <translation>Dodaj właściwość</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="500"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="502"/>
         <source>Edit as blocks</source>
         <translation>Edytuj jako bloki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="500"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="502"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="507"/>
-        <location filename="../src/app/qml/views/PageView.qml" line="531"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="509"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="533"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="528"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="530"/>
         <source>Move to trash?</source>
         <translation>Przenieść do kosza?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="529"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="531"/>
         <source>“%1” will be moved to the trash. You can restore it from there.</source>
         <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="536"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="538"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
@@ -9297,13 +9297,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4426"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4432"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="114"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4416"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4422"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -13825,7 +13825,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="74"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4243"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4248"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
