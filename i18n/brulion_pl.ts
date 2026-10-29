@@ -2565,54 +2565,54 @@
 <context>
     <name>ContentPictureView</name>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="115"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="120"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="61"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="2320"/>
         <source>Fit to view</source>
         <translation>Dopasuj do widoku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="115"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="120"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="62"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="2312"/>
         <source>Zoom to actual size</source>
         <translation>Pokaż naturalny rozmiar</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="211"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="216"/>
         <source>Edit</source>
         <translation>Edytuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="211"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="216"/>
         <source>Edit drawing</source>
         <translation>Edytuj rysunek</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="220"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="225"/>
         <source>Show as text</source>
         <translation>Pokaż jako tekst</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="220"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="225"/>
         <source>Show picture</source>
         <translation>Pokaż obraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="288"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="293"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="251"/>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="267"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="268"/>
         <source>Pictures in the %1 format cannot be shown on this device.</source>
         <translation>Obrazów w formacie %1 nie można wyświetlić na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="289"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="294"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="253"/>
         <source>Cannot load %1</source>
         <translation>Nie można wczytać %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPictureView.qml" line="368"/>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="373"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="2462"/>
         <source>The start of the file: %1 of %2.</source>
         <translation>Początek pliku: %1 z %2.</translation>
@@ -3170,132 +3170,142 @@
 <context>
     <name>DrawingView</name>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="89"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="101"/>
         <source>Ink</source>
         <translation>Atrament</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="90"/>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="100"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="102"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="112"/>
         <source>Blue</source>
         <translation>Niebieski</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="91"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="103"/>
         <source>Red</source>
         <translation>Czerwony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="92"/>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="98"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="104"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="110"/>
         <source>Green</source>
         <translation>Zielony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="93"/>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="101"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="105"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="113"/>
         <source>Orange</source>
         <translation>Pomarańczowy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="94"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="106"/>
         <source>Violet</source>
         <translation>Fioletowy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="97"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="109"/>
         <source>Yellow</source>
         <translation>Żółty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="99"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="111"/>
         <source>Pink</source>
         <translation>Różowy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="104"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="116"/>
         <source>Fine</source>
         <translation>Cienka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="105"/>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="110"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="117"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="122"/>
         <source>Medium</source>
         <translation>Średnia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="106"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="118"/>
         <source>Thick</source>
         <translation>Gruba</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="109"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="121"/>
         <source>Narrow</source>
         <translation>Wąska</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="111"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="123"/>
         <source>Wide</source>
         <translation>Szeroka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="115"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="127"/>
         <source>Small</source>
         <translation>Mały</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="116"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="128"/>
         <source>Medium</source>
         <comment>text size</comment>
         <translation>Średni</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="117"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="129"/>
         <source>Large</source>
         <translation>Duży</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="118"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="130"/>
         <source>Extra large</source>
         <translation>Bardzo duży</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="161"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="173"/>
         <source>The drawing was changed on another device: both versions are kept in it</source>
         <translation>Rysunek zmienił się na innym urządzeniu: są w nim obie wersje</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="177"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="190"/>
         <source>%1 (this device)</source>
         <translation>%1 (to urządzenie)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="180"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="193"/>
         <source>The drawing was changed elsewhere into one Brulion cannot edit. What you drew here is kept in %1</source>
         <translation>Rysunek zmieniono gdzie indziej na taki, którego Brulion nie edytuje. To, co narysowano tutaj, zapisano w pliku %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="523"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="537"/>
+        <source>This drawing is in an old format of Obsidian&apos;s Excalidraw plugin. Open it once in Obsidian to update it; Brulion shows it as it is.</source>
+        <translation>Ten rysunek ma stary format wtyczki Excalidraw dla Obsidiana. Otwórz go raz w Obsidianie, żeby go zaktualizować; Brulion pokazuje go takim, jaki jest.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="539"/>
+        <source>This drawing from Obsidian&apos;s Excalidraw plugin has frames or embedded pages, which Brulion does not edit yet. Change it in Obsidian; Brulion shows it as it is.</source>
+        <translation>Ten rysunek z wtyczki Excalidraw dla Obsidiana ma ramki albo osadzone strony, których Brulion jeszcze nie edytuje. Zmień go w Obsidianie; Brulion pokazuje go takim, jaki jest.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="540"/>
         <source>This drawing has frames or embedded web pages from Excalidraw, which Brulion does not edit. Open the file in excalidraw.com to change it.</source>
         <translation>Ten rysunek ma ramki lub osadzone strony internetowe z Excalidraw, których Brulion nie edytuje. Otwórz plik w excalidraw.com, aby go zmienić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="525"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="542"/>
         <source>This picture is not a drawing: it can only be viewed.</source>
         <translation>Ten obraz nie jest rysunkiem: można go tylko oglądać.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="527"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="544"/>
         <source>The drawing data in this file cannot be read. The picture is shown as it was saved.</source>
         <translation>Nie można odczytać danych rysunku z tego pliku. Obraz jest pokazany tak, jak został zapisany.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="529"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="546"/>
         <source>The drawing %1 is not in the notebook.</source>
         <translation>Rysunku %1 nie ma w notatniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="538"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="555"/>
         <source>Open as a picture</source>
         <translation>Otwórz jako obraz</translation>
     </message>
@@ -3592,29 +3602,29 @@
 <context>
     <name>EmbedView</name>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="269"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="270"/>
         <source>Cannot load %1</source>
         <translation>Nie można wczytać %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="225"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="226"/>
         <source>Picture from %1</source>
         <translation>Obraz z %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="243"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="244"/>
         <location filename="../src/app/qml/dev/EditorPlayground.qml" line="463"/>
         <source>Try again</source>
         <translation>Spróbuj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="243"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="244"/>
         <location filename="../src/app/qml/dev/EditorPlayground.qml" line="463"/>
         <source>Show</source>
         <translation>Pokaż</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="252"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="253"/>
         <source>Save to notebook</source>
         <translation>Zapisz w notatniku</translation>
     </message>
@@ -6324,94 +6334,94 @@
 <context>
     <name>PageView</name>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="276"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="281"/>
         <source>The note mode could not be changed: the page&apos;s properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E).</source>
         <translation>Nie udało się zmienić trybu notatki: właściwości strony mają postać, której Brulion nie potrafi bezpiecznie zmienić. Zmień je w źródle Markdown (Ctrl+E).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="282"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="287"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
     <message>
         <location filename="../src/app/qml/dev/PageScript.qml" line="110"/>
-        <location filename="../src/app/qml/views/PageView.qml" line="300"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="305"/>
         <source>Merged changes made elsewhere into this page</source>
         <translation>Scalono z tą stroną zmiany z innego miejsca</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="449"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="454"/>
         <source>Version history</source>
         <translation>Historia wersji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="455"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="460"/>
         <source>Copy link %1</source>
         <translation>Kopiuj link %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="460"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="465"/>
         <source>Export page…</source>
         <translation>Eksportuj stronę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="468"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="473"/>
         <source>Rename…</source>
         <translation>Zmień nazwę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="476"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="481"/>
         <source>Move to…</source>
         <translation>Przenieś do…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="483"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="488"/>
         <source>Open in side panel</source>
         <translation>Otwórz w panelu bocznym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="488"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="493"/>
         <source>Switch to outline</source>
         <translation>Przełącz na konspekt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="488"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="493"/>
         <source>Switch to document</source>
         <translation>Przełącz na dokument</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="495"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="500"/>
         <source>Add property</source>
         <translation>Dodaj właściwość</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="502"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="507"/>
         <source>Edit as blocks</source>
         <translation>Edytuj jako bloki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="502"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="507"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="509"/>
-        <location filename="../src/app/qml/views/PageView.qml" line="533"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="514"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="538"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="530"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="535"/>
         <source>Move to trash?</source>
         <translation>Przenieść do kosza?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="531"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="536"/>
         <source>“%1” will be moved to the trash. You can restore it from there.</source>
         <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="538"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="543"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
@@ -13855,28 +13865,28 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::editor::PageController</name>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3489"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3491"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3489"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3491"/>
         <source>Pictures (%1)</source>
         <extracomment>%1: the file name patterns of pictures, e.g. &quot;*.png *.jpg *.jpeg&quot;</extracomment>
         <translation>Obrazy (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3727"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3729"/>
         <source>Attachment</source>
         <translation>Załącznik</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3738"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3740"/>
         <source>Drawing %1</source>
         <translation>Rysunek %1</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3812"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3814"/>
         <source>Pasted image %1</source>
         <translation>Wklejony obraz %1</translation>
     </message>
@@ -15592,36 +15602,36 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::Workspace</name>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="533"/>
-        <location filename="../src/app/shell/workspace.cpp" line="549"/>
+        <location filename="../src/app/shell/workspace.cpp" line="534"/>
+        <location filename="../src/app/shell/workspace.cpp" line="550"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="695"/>
-        <location filename="../src/app/shell/workspace.cpp" line="706"/>
+        <location filename="../src/app/shell/workspace.cpp" line="712"/>
+        <location filename="../src/app/shell/workspace.cpp" line="723"/>
         <source>Could not save the drawing %1: %2</source>
         <translation>Nie można zapisać rysunku %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="970"/>
+        <location filename="../src/app/shell/workspace.cpp" line="992"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1028"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1049"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1050"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1071"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="330"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1179"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1201"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1182"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1204"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
@@ -15731,17 +15741,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1196"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1218"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1211"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1233"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1242"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1264"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
