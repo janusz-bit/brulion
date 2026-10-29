@@ -74,9 +74,18 @@ FocusScope {
     readonly property bool bottomNavShown: Theme.narrow && !keyboardUp && !routeView.viewReplacesBottomNav
     /// Room under the content: the keyboard (minus the bottom navigation, while that is shown:
     /// sliding, the keyboard covers or uncovers it first); while typing without the navigation
-    /// at least the system's navigation bar, which the docked toolbar must clear.
+    /// at least the system's navigation bar, which the docked toolbar must clear, and the
+    /// navigation's place under a keyboard that took it (`keyboardFloor`).
     readonly property real keyboardRoom: bottomNavShown ? Math.max(0, keyboardOverlap - bottomNavHeight)
-                                         : typing ? Math.max(keyboardOverlap, navigationBar) : keyboardOverlap
+                                         : typing ? Math.max(keyboardOverlap, navigationBar, keyboardFloor) : keyboardOverlap
+    /// Phones: a keyboard sliding over the window that took the bottom navigation's place but
+    /// ends below its top (a suggestion strip over a hardware keyboard, shorter than the
+    /// navigation, which stayed under it while it came) leaves the content the navigation's
+    /// room. A toolbar docked on the navigation stays where it was when such a keyboard lands —
+    /// it never drops onto it after it came — and when it goes. (A keyboard reported in one step
+    /// took the navigation at once, the toolbar moving with it then.)
+    readonly property real keyboardFloor: Theme.narrow && keyboardUp && KeyboardInsets.slidesOver && keyboardOverlap > 0
+                                          && !routeView.viewReplacesBottomNav ? bottomNavHeight : 0
     /// What covers the window's bottom edge for toasts (Main.qml): on phones the bottom
     /// navigation with a toolbar docked on it, or with the capture button; else the keyboard and
     /// a docked toolbar while typing; else the system's navigation bar.

@@ -582,7 +582,7 @@ if ((SELECTION)); then
   sleep 2
   app_shot sel-3-extended
   check "a tap in the selection mode edits nothing (no keyboard)" ime_hidden
-  # Kopiuj in the docked tools, right above the navigation bar.
+  # Kopiuj in the docked tools, right on the bottom navigation.
   check "Kopiuj copies the selection" ui_tap 'Kopiuj, Ctrl\+C' last 0
   check "the toast: two blocks copied" wait_for 6 ui_has 'Skopiowano 2 bloki'
   app_shot sel-4-copied

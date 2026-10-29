@@ -462,16 +462,22 @@ Sprawdzone na emulatorze (`scripts/android-emulator-test.sh --keyboard`, niżej;
 
 * Android 16 (API 36, nawigacja gestami): górna krawędź klawiatury na 1517 px, widok Qt do
   2400 px, obserwator zgłasza 883 px, aplikacja 336 dp (= 883 · 160 / 420); wysuwanie przyszło
-  w 8 klatkach; po Wstecz zawartość kończy się 24 dp nad dołem (pasek nawigacji gestami);
+  w 8 klatkach; po Wstecz wraca dolna nawigacja (60 dp nad paskiem nawigacji gestami, 24 dp),
+  zawartość kończy się 84 dp nad dołem, a pasek narzędzi leży na nawigacji (UiAutomator: środek
+  paska na 2109 px, przycisku Kalendarz na 2257 px); dotknięcie tekstu przywraca klawiaturę,
+  pasek wraca na nią, a przyciski nawigacji znikają;
 * Android 11 (API 30, nawigacja trzema przyciskami): okno też edge-to-edge (0–2400 px, wcześniej
   system zmniejszał je nad klawiaturą bez żadnych klatek): górna krawędź klawiatury na 1533 px,
-  obserwator zgłasza 867 px, aplikacja 330 dp; wysuwanie przyszło w 9 klatkach; po Wstecz
-  zawartość kończy się 48 dp nad dołem (pasek nawigacji); paski aplikacji leżą pod paskiem
-  stanu i nad paskiem nawigacji, ikony systemu ciemne w jasnym motywie i jasne w ciemnym.
+  obserwator zgłasza 867 px, aplikacja 330 dp; wysuwanie przyszło w 9 klatkach; paski
+  aplikacji leżą pod paskiem stanu i nad paskiem nawigacji, ikony systemu ciemne w jasnym
+  motywie i jasne w ciemnym. Ten przebieg był jeszcze sprzed powrotu dolnej nawigacji po
+  Wstecz (pasek zostawał wtedy 48 dp nad dołem, nad paskiem nawigacji); stanu po Wstecz z dolną
+  nawigacją na Androidzie 11 nie sprawdzano.
 
-Na obu pasek leży dokładnie na klawiaturze, zostaje na niej przy przewijaniu dziennika palcem,
-a po Wstecz zostaje na dole tuż nad paskiem nawigacji systemu (dolna nawigacja aplikacji wraca
-dopiero po zakończeniu pisania). Android 9–10 i prawdziwe telefony nie były sprawdzane.
+Na obu pasek leży dokładnie na klawiaturze i zostaje na niej przy przewijaniu dziennika palcem.
+Android 9–10, klawiatura niższa od dolnej nawigacji (sam pasek podpowiedzi przy klawiaturze
+fizycznej — wtedy pasek narzędzi zostaje na miejscu nawigacji, `AppShell.keyboardFloor`),
+klawiatura pływająca i prawdziwe telefony nie były sprawdzane.
 
 ## Boczne menu gestem
 

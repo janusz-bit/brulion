@@ -74,9 +74,10 @@ components — no Material/Fusion look, so all targets look identical.
   from the edge. Taps and vertical scrolls in the strip reach the content; only a mostly
   horizontal drag past the drawer's 20 px threshold opens it, not one an item already keeps (a
   scrolling Flickable); Android's text selection handles are windows of their own above the app.
-  While typing or selecting blocks (the keyboard up or an editing toolbar docked — the bottom
-  navigation makes way then too) there is no strip: the drawer took the drag of the selection's
-  start grip, which lies at the left edge (☰ still opens it, a swipe on it still closes it).
+  While typing or selecting blocks (the keyboard up or an editing toolbar docked, also on the
+  bottom navigation after the keyboard went) there is no strip: the drawer took the drag of the
+  selection's start grip, which lies at the left edge (☰ still opens it, a swipe on it still
+  closes it).
   Nor on a view that swipes sideways from the left edge itself (the view's `edgeSwipe`,
   `ShellRouteView.viewEdgeSwipe`): the calendar's week and month grids reach that edge and a
   swipe to the right there shows the previous period; the agenda keeps the strip. While the
@@ -287,11 +288,15 @@ everything near the bottom, the same way on Android, in the browser and with a s
   under the keyboard until `overlap` reaches its height — and uncovers it going away (`shown`
   is false from the slide's first frame: the navigation is back under it, the content ends at
   the keyboard's top until that passes the navigation's); so a toolbar docked on the navigation
-  never drops before it rises with the keyboard, nor jumps when it lands. In the browser the page
-  is resized for the keyboard in one step: the navigation goes at once and comes back at once,
-  fading in (`Theme.durationFast`; none with reduced motion) where the view already made room
-  for it, so the view and the toolbar move once. The floating capture button makes way while
-  typing — the keyboard is up, or an editing toolbar is docked in the view or the side panel —;
+  never drops before it rises with the keyboard, nor jumps when it lands. A sliding keyboard
+  that lands below the navigation's top (a suggestion strip over a hardware keyboard) takes its
+  place too, but the content keeps the navigation's room (`keyboardFloor`): the toolbar stays
+  where it was instead of dropping onto the keyboard after it came, and while it goes. In the
+  browser the page is resized for the keyboard in one step: the navigation goes at once and
+  comes back at once, fading in (`Theme.durationFast`; none with reduced motion) where the view
+  already made room for it, so the view and the toolbar move once. The floating capture button
+  makes way while typing — the keyboard is up, or an editing toolbar is docked in the view or
+  the side panel —;
   without the bottom navigation (a wide touch window) the content then ends above the system's
   navigation bar. That bar (`AppShell.navigationBar`, which the bottom navigation pads itself
   with) is the window's SafeArea margin — except one taller than any navigation bar (120 px, as
@@ -365,7 +370,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   keyboard hidden: the bottom navigation shown and the docked toolbar right on it, also over a
   system navigation bar — the shell's `SafeArea.additionalMargins` —, the capture button away;
   the keyboard sliding in frame by frame leaving the navigation under it until covered, sliding
-  away uncovering it, a browser's keyboard — viewport samples, the page resized — taking it at
+  away uncovering it, a keyboard shorter than the navigation leaving the toolbar where it was,
+  a browser's keyboard — viewport samples, the page resized — taking it at
   once; a tap on Kalendarz while editing ending the editing; a toast while typing at the top,
   away from the caret's line, a settings field scrolled above the keyboard, a page in the side
   panel of a wide touch window; the drawing editor's tool bar keeping the navigation away),

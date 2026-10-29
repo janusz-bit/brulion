@@ -3188,7 +3188,8 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
 ///     navigation bar under it), toasts show at the top, away from the line being written, the
 ///     capture button stays away; the keyboard sliding in leaves the navigation under it until it
 ///     covers it (the toolbar never drops first), sliding away uncovers it again, the toolbar
-///     following the keyboard's top down to the navigation; a browser's keyboard (the page resized
+///     following the keyboard's top down to the navigation; a keyboard shorter than the navigation
+///     takes its place but leaves the toolbar where it was; a browser's keyboard (the page resized
 ///     for it: no overlap, still settling) takes the navigation away at once; a tap on a navigation
 ///     tab while editing opens that view and the editing ends. A settings field that gets the
 ///     focus is scrolled above the keyboard; on a wide touch window a page in the side panel docks
@@ -3391,6 +3392,27 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         insets->setProperty("simulated", 0);
         check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()) && !room->isVisible(); }),
               "the keyboard gone: the toolbar on the bottom navigation");
+
+        // A keyboard that ends below the navigation's top (a suggestion strip over a hardware
+        // keyboard): the navigation stays under it while it slides in and makes way once it has
+        // landed, but the view keeps the navigation's room — the toolbar never drops onto the
+        // short keyboard after it came —, nor moves while it goes.
+        const qreal shortKeyboard = navHeight * 2 / 3;
+        keyboardInsets->simulate(shortKeyboard / 2, true);
+        check(waitFor([&] { return nav->isVisible() && near(slotBottom(), window->height() - navHeight); }),
+              "a short keyboard sliding in: the navigation stays, the toolbar on it");
+        keyboardInsets->simulate(shortKeyboard, false);
+        check(waitFor([&] { return !nav->isVisible() && room->isVisible() && near(room->height(), navHeight); }),
+              "a short keyboard landed: the navigation makes way, the view keeps its room");
+        settle(100);
+        check(near(slotBottom(), window->height() - navHeight),
+              "a short keyboard landed: the toolbar stays where it was, it does not drop onto the keyboard");
+        keyboardInsets->simulate(shortKeyboard / 2, true, true);
+        check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()) && !room->isVisible(); }),
+              "a short keyboard sliding away: the navigation back under it, the toolbar still on it");
+        insets->setProperty("simulated", 0);
+        check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()) && !room->isVisible(); }),
+              "the short keyboard gone: the toolbar on the bottom navigation");
 
         // A browser's keyboard: the page resized for it (interactive-widget=resizes-content), so no
         // overlap, `shown` from the page's shrink while the readings settle — the navigation goes
