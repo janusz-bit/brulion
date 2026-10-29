@@ -216,6 +216,74 @@ private Q_SLOTS:
         QVERIFY(polish.value(u"reason"_s).toString().contains(u"Logseq"_s));
     }
 
+    void addNeverOverwrites()
+    {
+        // "Dodaj właściwość" with a key the page has (any spelling, either block): refused, the
+        // value kept, no undo step.
+        const QString content = u"---\nstatus: w toku # wybrany\ntags: [projekt, dom]\n---\nstan:: x\n\n- a\n"_s;
+        Fixture f(content);
+        for (const QString &key : {u"status"_s, u"tags"_s, u"Status"_s, u"STAN"_s}) {
+            const QVariantMap r = f.page.addPageProperty(QString(), key, QVariant(), u"text"_s);
+            QVERIFY2(!r.value(u"ok"_s).toBool(), qPrintable(key));
+            QCOMPARE(status(r), u"keyExists"_s);
+            QCOMPARE(r.value(u"reason"_s).toString(), u"A property with this name exists"_s);
+            QCOMPARE(f.text(), content);
+            QVERIFY(!f.page.canUndo());
+        }
+        // A new key is written empty, one undo step.
+        const QVariantMap added = f.page.addPageProperty(u"yaml"_s, u"źródło"_s, QVariantList(), u"list"_s);
+        QVERIFY(added.value(u"ok"_s).toBool());
+        QCOMPARE(f.text(), u"---\nstatus: w toku # wybrany\ntags: [projekt, dom]\nźródło: []\n---\nstan:: x\n\n- a\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QCOMPARE(status(f.page.addPageProperty(QString(), u"brulion"_s, QVariant(), u"text"_s)), u"reserved"_s);
+    }
+
+    void addRowOfHiddenFrontmatter()
+    {
+        // The note mode's frontmatter (hidden) and shown `key::` lines: new properties go to the
+        // hidden block, which has no shown add row — the editor's draft adds them.
+        Fixture f(u"---\nbrulion: document\n---\nstatus:: w toku\n- a\n"_s);
+        QVariantMap props = f.page.pageProperties();
+        QCOMPARE(props.value(u"addTarget"_s).toString(), u"yaml"_s);
+        QCOMPARE(props.value(u"visibleRow"_s).toInt(), 1);
+        QCOMPARE(props.value(u"addRow"_s).toInt(), -1);
+        QVERIFY(f.page.addPageProperty(QString(), u"termin"_s, QVariant(), u"date"_s).value(u"ok"_s).toBool());
+        QCOMPARE(f.text(), u"---\nbrulion: document\ntermin:\n---\nstatus:: w toku\n- a\n"_s);
+        props = f.page.pageProperties();
+        QCOMPARE(props.value(u"visibleRow"_s).toInt(), 0);
+        QCOMPARE(props.value(u"addRow"_s).toInt(), 0);
+        // Only `key::` lines: their row; a shown frontmatter: its row; none: -1.
+        Fixture g(u"status:: a\n- b\n"_s);
+        QCOMPARE(g.page.pageProperties().value(u"addRow"_s).toInt(), 0);
+        Fixture h(u"---\nźródło: x\n---\nstatus:: a\n- b\n\t- c\n"_s);
+        QCOMPARE(h.page.pageProperties().value(u"addRow"_s).toInt(), 0);
+        Fixture k(u"- b\n"_s);
+        QCOMPARE(k.page.pageProperties().value(u"addRow"_s).toInt(), -1);
+        // Zoomed in: not shown.
+        h.page.zoomInto(2);
+        QCOMPARE(h.page.pageProperties().value(u"addRow"_s).toInt(), -1);
+    }
+
+    void pathAboutToChange()
+    {
+        // Before another page is read, a field still holding a typed value writes it — to the page
+        // it was typed on (then saved with it).
+        Fixture f(u"---\nstatus: w toku\n---\n- a\n"_s);
+        f.host.setFile(u"Inna.md"_s, u"---\nstatus: inny\n---\n- b\n"_s);
+        int emitted = 0;
+        QObject::connect(&f.page, &PageController::pathAboutToChange, &f.page, [&] {
+            ++emitted;
+            QCOMPARE(f.page.path(), Page);
+            QVERIFY(f.page.setPageProperty(QString(), u"status"_s, u"WYCIEK"_s, u"text"_s).value(u"ok"_s).toBool());
+        });
+        f.page.setPath(u"Inna.md"_s);
+        QCOMPARE(emitted, 1);
+        QCOMPARE(f.host.file(Page), u"---\nstatus: WYCIEK\n---\n- a\n"_s);
+        QCOMPARE(f.host.file(u"Inna.md"_s), u"---\nstatus: inny\n---\n- b\n"_s);
+        QCOMPARE(f.text(), u"---\nstatus: inny\n---\n- b\n"_s);
+    }
+
     void pagePropertiesFollow()
     {
         Fixture f(u"---\naliases: [Remont łazienki]\ntags: [dom]\n---\ntags:: projekt\n\n- a\n"_s);

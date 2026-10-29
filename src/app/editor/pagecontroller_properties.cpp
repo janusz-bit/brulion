@@ -7,6 +7,7 @@
 #include "blocktext.h"
 #include "editorhost.h"
 
+#include "markdown/frontmatter.h"
 #include "markdown/notemode.h"
 #include "markdown/properties.h"
 #include "text/text.h"
@@ -116,11 +117,14 @@ void PageController::updatePageProperties()
     QString propertyText;
     const markdown::BlockDocument &doc = m_model->document();
     int rows = 0;
+    int yamlRow = -1; // the rows of the two blocks
+    int logseqRow = -1;
     if (m_sourceMode) {
         propertyText = m_sourceText;
     } else {
         while (rows < doc.count() && doc.at(rows).kind == BlockKind::Frontmatter) {
             propertyText += doc.at(rows).body + u'\n';
+            (markdown::findFrontmatter(doc.at(rows).body) ? yamlRow : logseqRow) = rows;
             ++rows;
         }
     }
@@ -169,6 +173,10 @@ void PageController::updatePageProperties()
         }
     }
     map.insert(u"visibleRow"_s, visibleRow);
+    // The add row of the block new properties go to, when it is shown (a frontmatter holding only
+    // `brulion` is hidden: then the draft adds, also above shown `key::` lines).
+    const int addRow = map.value(u"addTarget"_s).toString() == u"logseq" ? logseqRow : yamlRow;
+    map.insert(u"addRow"_s, addRow >= 0 && !m_sourceMode && m_model->isRowVisible(addRow) ? addRow : -1);
     if (map == m_pageProperties)
         return;
     m_pageProperties = map;
@@ -210,6 +218,24 @@ QVariantMap PageController::setPageProperty(const QString &source, const QString
         resolved = sourceFor(markdown::readPageProperties(content), source, k);
         const PropertyType t = markdown::parsePropertyType(type).value_or(PropertyType::Text);
         return markdown::setPageProperty(content, resolved, k, value, t);
+    });
+    const auto fixed = markdown::fixedPropertyType(k);
+    const QString t = fixed ? markdown::propertyTypeName(*fixed) : type;
+    return editResult(status, reasonFor(status, t, markdown::checkPropertyKey(k, resolved)));
+}
+
+QVariantMap PageController::addPageProperty(const QString &source, const QString &key, const QVariant &given,
+                                            const QString &type)
+{
+    const QVariant value =
+            given.metaType() == QMetaType::fromType<QJSValue>() ? given.value<QJSValue>().toVariant() : given;
+    const QString k = key.trimmed();
+    PropertySource resolved = PropertySource::Yaml;
+    const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
+        const markdown::PageProperties props = markdown::readPageProperties(content);
+        resolved = markdown::parsePropertySource(source).value_or(props.addTarget());
+        const PropertyType t = markdown::parsePropertyType(type).value_or(PropertyType::Text);
+        return markdown::addPageProperty(content, resolved, k, value, t);
     });
     const auto fixed = markdown::fixedPropertyType(k);
     const QString t = fixed ? markdown::propertyTypeName(*fixed) : type;

@@ -295,6 +295,8 @@ void PageController::setPath(const QString &path)
 {
     if (m_path == path)
         return;
+    if (m_loaded)
+        Q_EMIT pathAboutToChange();
     flush();
     m_path = path;
     m_webDownloads.clear(); // the pictures of the other page are not stored into this one

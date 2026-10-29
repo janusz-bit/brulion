@@ -182,7 +182,9 @@ class PageController : public QObject {
     /// property }] (the page's tags and aliases from its properties, for the page header), canAdd,
     /// addTarget ("yaml" | "logseq": where a new property goes), hasYaml, hasLogseq, editable (the
     /// YAML block can be edited safely), problem ("" | "notMapping" | "indented"), visibleRow (the
-    /// first shown properties row; -1: none — the editor's draft row adds the first property) }.
+    /// first shown properties row; -1: none), addRow (the shown row of the block new properties go
+    /// to; -1: none — that block is hidden, a `brulion`-only frontmatter, or there is none: the
+    /// editor's draft row adds the property) }.
     Q_PROPERTY(QVariantMap pageProperties READ pageProperties NOTIFY pagePropertiesChanged FINAL)
 
 public:
@@ -309,6 +311,11 @@ public:
     /// so), status (markdown::propertyEditStatusName), reason (a sentence for a toast or a field's
     /// error; "" when ok) }.
     Q_INVOKABLE QVariantMap setPageProperty(const QString &source, const QString &key, const QVariant &value,
+                                            const QString &type);
+    /// "Dodaj właściwość": the new property `key` with `value` (empty: the type's empty value) —
+    /// refused { status: "keyExists" } when the page has the key already (either block, any case),
+    /// so adding never overwrites a value. `source` as in setPageProperty().
+    Q_INVOKABLE QVariantMap addPageProperty(const QString &source, const QString &key, const QVariant &value,
                                             const QString &type);
     Q_INVOKABLE QVariantMap removePageProperty(const QString &source, const QString &key);
     Q_INVOKABLE QVariantMap renamePageProperty(const QString &source, const QString &oldKey, const QString &newKey);
@@ -784,6 +791,9 @@ public:
 Q_SIGNALS:
     void hostChanged();
     void pathChanged();
+    /// setPath() is about to show another page: fields that hold a typed value write it now (to
+    /// this page), before it is saved and the other one is read.
+    void pathAboutToChange();
     void dirtyChanged();
     void loadingChanged();
     void existsChanged();
