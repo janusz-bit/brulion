@@ -31,9 +31,11 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     (dziś zastępcze prostokąty), eksport (HTML, Pandoc) takich rysunków jako obrazów (dziś
     osadzone jako strona);
   * sprawdzić ręcznie rysunki z Obsidiana na prawdziwym skarbcu (testy opierają się na plikach
-    napisanych według kodu wtyczki): otworzyć `*.excalidraw.md` w Brulionie, dorysować coś,
-    otworzyć go w Obsidianie (rysunek się wczytuje, teksty i notatki z tyłu nietknięte); zetrzeć
-    kreskę w Brulionie, gdy Obsidian ma ten rysunek otwarty (powinna zniknąć i tam);
+    napisanych według kodu wtyczki; 22 pliki z publicznych skarbców Brulion czyta i zapisuje
+    poprawnie, ale nie otwierano ich potem w Obsidianie): otworzyć `*.excalidraw.md` w Brulionie,
+    dorysować coś i przesunąć tekst z linkiem `[[…]]`, otworzyć go w Obsidianie (rysunek się
+    wczytuje, link w tekście działa, notatki z tyłu nietknięte); zetrzeć kreskę w Brulionie, gdy
+    Obsidian ma ten rysunek otwarty (powinna zniknąć i tam);
   * import z Trilium: notatka typu „canvas” jako jeden plik SVG ze sceną Excalidraw (dziś
     importer zapisuje obok siebie SVG i plik `.excalidraw`);
   * notatki na slajdach i PDF-ach z wykładu: rysowanie na obrazie w tle (strona PDF, slajd);
