@@ -990,7 +990,7 @@ private Q_SLOTS:
         QCOMPARE(n.tasks.first().text, u"Zadzwonić do mamy"_s);
         QCOMPARE(n.reminders.first().text, u"Zadzwonić do mamy"_s);
         QCOMPARE(n.blocks[1].text, u"Akapit\nwidoczny `%%kod%%`"_s);
-        QCOMPARE(n.blocks[1].raw, u"Akapit %%ukryty\nkomentarz%% widoczny `%%kod%%`"_s);
+        QCOMPARE(n.blocks[1].raw.toString(), u"Akapit %%ukryty\nkomentarz%% widoczny `%%kod%%`"_s);
     }
 
     void commentContinuingOnNextLine()

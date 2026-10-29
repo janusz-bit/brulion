@@ -28,8 +28,7 @@ bool indexable(const VaultPath &path)
 /// Do the configs differ in fields that change parsing results?
 bool parsingDiffers(const VaultConfig &a, const VaultConfig &b)
 {
-    return a.journalsFolder != b.journalsFolder || a.journalFileFormat != b.journalFileFormat
-           || a.defaultReminderTime != b.defaultReminderTime;
+    return VaultIndex::parseFingerprint(a) != VaultIndex::parseFingerprint(b);
 }
 
 bool isBlockReference(LinkKind kind)
@@ -118,6 +117,45 @@ const Entry *IndexAccess::entry(const VaultIndex &index, const VaultPath &path)
     return index.d->entry(path);
 }
 
+const SearchIndex &IndexAccess::search(const VaultIndex &index)
+{
+    return index.d->search;
+}
+
+bool IndexAccess::searchComplete(const VaultIndex &index)
+{
+    return index.d->searchDirty.isEmpty() && !index.d->searchElsewhere;
+}
+
+std::unique_ptr<Entry> makeEntry(const VaultPath &path, const QString &content, ParsedNote note)
+{
+    auto e = std::make_unique<Entry>();
+    e->path = path;
+    e->content = content.isNull() ? QStringLiteral("") : content; // null means "unknown" in content()
+    e->contentKey = VaultIndex::contentKey(e->content);
+    e->note = std::move(note);
+    const QList<Link> &links = e->note.links;
+    for (qsizetype i = 0; i < links.size(); ++i) {
+        const Link &l = links[i];
+        if (isBlockReference(l.kind)) {
+            if (!l.blockId.isEmpty())
+                e->refs.append(int(i));
+            continue;
+        }
+        if (l.kind == LinkKind::Url || (l.kind == LinkKind::Markdown && isExternalTarget(l.target)))
+            continue;
+        const QString key = l.target.trimmed().isEmpty() ? QString() : linkKey(l.target, TargetForm::Parsed);
+        e->links.append(PathLink{int(i), key, {}});
+    }
+    e->links.squeeze();
+    e->refs.squeeze();
+    e->names.append(NameCandidate{text::foldKey(e->note.title), {}});
+    for (const QString &alias : std::as_const(e->note.aliases))
+        e->names.append(NameCandidate{text::foldKey(alias), alias});
+    e->foldedPath = text::foldKey(paths::stripMarkdownExtension(path));
+    return e;
+}
+
 bool relevanceLess(const Entry &a, const Entry &b)
 {
     const auto &ja = a.note.journalDate;
@@ -166,12 +204,7 @@ VaultPath VaultIndex::Private::blockOwner(const QString &id) const
     const auto it = blockOwners.constFind(id);
     if (it == blockOwners.constEnd())
         return {};
-    VaultPath best;
-    for (const VaultPath &p : *it) {
-        if (best.isEmpty() || p < best)
-            best = p;
-    }
-    return best;
+    return it->min([](const VaultPath &a, const VaultPath &b) { return a < b; });
 }
 
 const QList<const VaultIndex::Private::Entry *> &VaultIndex::Private::sortedEntries()
@@ -237,9 +270,15 @@ bool VaultIndex::Private::removeAttachment(const VaultPath &path)
 QSet<QString> VaultIndex::Private::putNote(const VaultPath &path, const QString &content, bool updateSearch,
                                            std::optional<quint64> keepSeq)
 {
-    ParsedNote parsed = markdown::parseNote(path, content, config);
+    return putEntry(index_detail::makeEntry(path, content, markdown::parseNote(path, content, config)), updateSearch,
+                    keepSeq);
+}
+
+QSet<QString> VaultIndex::Private::putEntry(std::unique_ptr<Entry> e, bool updateSearch, std::optional<quint64> keepSeq)
+{
+    const VaultPath path = e->path;
     const std::unique_ptr<Entry> prev = detachNote(path, false);
-    std::unique_ptr<Entry> e = makeEntry(path, content, std::move(parsed), keepSeq.value_or(++seq));
+    e->seq = keepSeq.value_or(++seq);
     const QStringList aliases = e->note.aliases;
     QSet<QString> keys = prev ? QSet<QString>() : entryKeys(*e);
     attachNote(std::move(e));
@@ -252,34 +291,6 @@ QSet<QString> VaultIndex::Private::putNote(const VaultPath &path, const QString 
         }
     }
     return keys;
-}
-
-std::unique_ptr<VaultIndex::Private::Entry>
-VaultIndex::Private::makeEntry(const VaultPath &path, const QString &content, ParsedNote note, quint64 sequence) const
-{
-    auto e = std::make_unique<Entry>();
-    e->path = path;
-    e->content = content.isNull() ? QStringLiteral("") : content; // null means "unknown" in content()
-    e->note = std::move(note);
-    e->seq = sequence;
-    const QList<Link> &links = e->note.links;
-    for (qsizetype i = 0; i < links.size(); ++i) {
-        const Link &l = links[i];
-        if (isBlockReference(l.kind)) {
-            if (!l.blockId.isEmpty())
-                e->refs.append(int(i));
-            continue;
-        }
-        if (l.kind == LinkKind::Url || (l.kind == LinkKind::Markdown && isExternalTarget(l.target)))
-            continue;
-        const QString key = l.target.trimmed().isEmpty() ? QString() : linkKey(l.target, TargetForm::Parsed);
-        e->links.append(PathLink{int(i), key, {}});
-    }
-    e->names.append(NameCandidate{text::foldKey(e->note.title), {}});
-    for (const QString &alias : std::as_const(e->note.aliases))
-        e->names.append(NameCandidate{text::foldKey(alias), alias});
-    e->foldedPath = text::foldKey(paths::stripMarkdownExtension(path));
-    return e;
 }
 
 void VaultIndex::Private::attachNote(std::unique_ptr<Entry> owned)
@@ -299,7 +310,7 @@ void VaultIndex::Private::attachNote(std::unique_ptr<Entry> owned)
                 ++perTag[t];
         }
         for (const QString &tag : std::as_const(e.note.tags))
-            tagIndex[tag].insert(path, std::max(1, perTag.value(tag)));
+            tagIndex[tag].set(path, std::max(1, perTag.value(tag)));
     }
     resolveLinks(e);
 }
@@ -384,10 +395,10 @@ void VaultIndex::Private::relink(const QSet<QString> &keys, const VaultPath &ski
         const auto it = sourcesByKey.constFind(k);
         if (it == sourcesByKey.constEnd())
             continue;
-        for (const VaultPath &s : *it) {
+        it->forEach([&](const VaultPath &s) {
             if (s != skip)
                 sources.insert(s);
-        }
+        });
     }
     for (const VaultPath &s : std::as_const(sources)) {
         Entry *e = mutableEntry(s);
@@ -417,6 +428,8 @@ void VaultIndex::Private::markSearch(const VaultPath &path)
 
 void VaultIndex::Private::searchTick()
 {
+    if (searchElsewhere)
+        return; // adoptSearch() takes over (and restarts the background for what is missing)
     const qint64 quiet = lastChange.isValid() ? lastChange.elapsed() : SearchIdleMs;
     if (quiet < SearchIdleMs) {
         searchTimer->start(int(SearchIdleMs - quiet));
@@ -426,18 +439,23 @@ void VaultIndex::Private::searchTick()
     slice.start();
     for (auto it = searchDirty.begin(); it != searchDirty.end();) {
         indexSearchDoc(*it);
+        ++searchBuilt;
         it = searchDirty.erase(it);
         if (slice.elapsed() >= SearchSliceMs)
             break;
     }
-    if (!searchDirty.isEmpty())
+    if (!searchDirty.isEmpty()) {
         searchTimer->start(0);
+    } else if (searchBuilt > 1000) {
+        searchBuilt = 0;
+        search.squeeze(); // no growth slack after a bulk build (docs/PERFORMANCE.md, L8)
+    }
 }
 
 void VaultIndex::Private::indexSearchDoc(const VaultPath &path)
 {
     if (const Entry *e = entry(path))
-        search.set(path, e->note.title, e->note.aliases, e->content);
+        search.set(path, SearchIndex::prepare(e->note.title, e->note.aliases, e->content), e->contentKey);
     else
         search.remove(path);
 }
@@ -445,9 +463,14 @@ void VaultIndex::Private::indexSearchDoc(const VaultPath &path)
 void VaultIndex::Private::flushSearch()
 {
     searchTimer->stop();
+    searchBuilt += searchDirty.size();
     for (const VaultPath &p : std::as_const(searchDirty))
         indexSearchDoc(p);
     searchDirty.clear();
+    if (searchBuilt > 1000) {
+        searchBuilt = 0;
+        search.squeeze(); // no growth slack after a bulk build (docs/PERFORMANCE.md, L8)
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -561,6 +584,139 @@ void VaultIndex::clear()
     d->searchDirty.clear();
     d->search.clear();
     d->markChanged();
+}
+
+// ---------------------------------------------------------------------------------------------
+// VaultIndex: loading on other threads
+// ---------------------------------------------------------------------------------------------
+
+PreparedNote::PreparedNote() = default;
+PreparedNote::~PreparedNote() = default;
+PreparedNote::PreparedNote(PreparedNote &&) noexcept = default;
+PreparedNote &PreparedNote::operator=(PreparedNote &&) noexcept = default;
+
+bool PreparedNote::isValid() const
+{
+    return m_entry != nullptr;
+}
+
+VaultPath PreparedNote::path() const
+{
+    return m_entry ? m_entry->path : VaultPath();
+}
+
+quint64 PreparedNote::contentKey() const
+{
+    return m_entry ? m_entry->contentKey : 0;
+}
+
+const ParsedNote &PreparedNote::note() const
+{
+    static const ParsedNote empty;
+    return m_entry ? m_entry->note : empty;
+}
+
+bool VaultIndex::isIndexable(const VaultPath &path)
+{
+    return indexable(path);
+}
+
+QString VaultIndex::parseFingerprint(const VaultConfig &config)
+{
+    return config.journalsFolder + u'\x1f' + config.journalFileFormat + u'\x1f'
+           + (config.defaultReminderTime.isValid() ? config.defaultReminderTime.toString(u"HH:mm:ss.zzz"_s)
+                                                   : QString());
+}
+
+quint64 VaultIndex::contentKey(QStringView text)
+{
+    quint64 h = 0xcbf29ce484222325ULL;
+    for (const QChar c : text) {
+        const char16_t u = c.unicode();
+        h ^= quint64(u & 0xff);
+        h *= 0x100000001b3ULL;
+        h ^= quint64(u >> 8);
+        h *= 0x100000001b3ULL;
+    }
+    return h;
+}
+
+PreparedNote VaultIndex::prepare(const VaultPath &path, const QString &content, const VaultConfig &config)
+{
+    return prepareParsed(path, content, markdown::parseNote(path, content, config), config);
+}
+
+PreparedNote VaultIndex::prepareParsed(const VaultPath &path, const QString &content, ParsedNote note,
+                                       const VaultConfig &config)
+{
+    PreparedNote out;
+    out.m_entry = index_detail::makeEntry(path, content, std::move(note));
+    out.m_parseFingerprint = parseFingerprint(config);
+    return out;
+}
+
+void VaultIndex::updatePrepared(PreparedNote prepared, std::optional<quint64> sequence)
+{
+    if (!prepared.m_entry)
+        return;
+    const VaultPath path = prepared.m_entry->path;
+    if (!indexable(path))
+        return;
+    if (!paths::isMarkdown(path)) {
+        d->addAttachment(path);
+        return;
+    }
+    const QString &content = prepared.m_entry->content;
+    if (const Private::Entry *e = d->entry(path); e && e->content == content)
+        return;
+    QSet<QString> keys;
+    if (prepared.m_parseFingerprint != parseFingerprint(d->config))
+        keys = d->putNote(path, content, true, sequence); // prepared with an older config
+    else
+        keys = d->putEntry(std::move(prepared.m_entry), true, sequence);
+    d->relink(keys, path);
+    d->markChanged();
+}
+
+quint64 VaultIndex::reserveSequence(qsizetype count)
+{
+    const quint64 base = d->seq + 1;
+    d->seq += quint64(std::max<qsizetype>(0, count));
+    return base;
+}
+
+void VaultIndex::adoptSearch(SearchIndex built)
+{
+    d->searchElsewhere = false;
+    // Keep the documents of the notes as they are now; drop the others (edited, renamed or
+    // deleted since they were built, or notes not in the index).
+    const QStringList ids = built.ids();
+    for (const QString &id : ids) {
+        const Private::Entry *e = d->entry(id);
+        if (!e || built.contentKey(id) != e->contentKey || e->contentKey == 0)
+            built.remove(id);
+    }
+    built.squeeze();
+    QSet<VaultPath> dirty;
+    for (const auto &[path, e] : d->entries) {
+        if (!built.contains(path))
+            dirty.insert(path);
+    }
+    d->search = std::move(built);
+    d->searchDirty = std::move(dirty);
+    d->searchBuilt = 0;
+    if (!d->searchDirty.isEmpty()) {
+        d->lastChange.start();
+        if (!d->searchTimer->isActive())
+            d->searchTimer->start(SearchIdleMs);
+    }
+}
+
+void VaultIndex::setSearchBuiltElsewhere(bool on)
+{
+    d->searchElsewhere = on;
+    if (!on && !d->searchDirty.isEmpty() && !d->searchTimer->isActive())
+        d->searchTimer->start(SearchIdleMs);
 }
 
 void VaultIndex::beginBatch()

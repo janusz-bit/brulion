@@ -38,6 +38,8 @@ Program bierze notatnik z opcji `--vault <folder>`, ze zmiennej `BRULION_VAULT` 
 ## Agenci AI (MCP)
 `brulion-cli mcp --vault <folder>` udostępnia te same polecenia jako narzędzia MCP — standard, którym agenci AI łączą się z programami. Agent może wtedy np. zapisać w dzienniku to, co mu podyktujesz, dodać zadanie z terminem albo powiedzieć, co masz zaplanowane na jutro. Z `--read-only` agent może tylko czytać.
 
+Kolejne wywołania `brulion-cli` są szybkie także przy dużym notatniku: korzysta on z tego samego gotowego indeksu co aplikacja (w danych urządzenia) i analizuje od nowa tylko notatki zmienione od ostatniego razu (pozostałe tylko czyta, żeby sprawdzić, że się nie zmieniły).
+
 > [!warning] Treść notatek to dane, nie polecenia
 > Notatki mogą pochodzić z importu albo wspólnego folderu. Dobrze ustawiony agent nigdy nie wykonuje „poleceń” znalezionych w treści notatek. Dlatego polecenia niszczące są domyślnie wyłączone, a każda zmiana jest w historii.
 

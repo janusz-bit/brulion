@@ -15,6 +15,8 @@
 //     files() (sorted, non-ignored), markdownFiles(), folders(), exists(p), stat(p)
 //                             — answered from the cache, no disk access
 //     readText(p, &ok) (UTF-8, BOM stripped), readBinary(p, &ok)
+//     readDetached(p, absolutePath(p)) (static, any thread) + adoptRead(read) on the vault's
+//                             thread = readText() split in two (the index loader's workers)
 //     writeText(p, text, source) / writeBinary(p, bytes, source)
 //     writeTextIfUnchanged(p, text, expected, source) -> WriteOutcome (compare-and-swap)
 //     create(p, text) -> unique path ("Nowa notatka 2.md"), createFolder(p)
@@ -160,6 +162,17 @@ struct VaultScanStatus {
     friend bool operator==(const VaultScanStatus &, const VaultScanStatus &) = default;
 };
 
+/// A text file read away from the vault's thread (see Vault::readDetached()).
+struct DetachedRead {
+    VaultPath path;
+    bool ok = false;
+    std::optional<FileStat> statBefore; ///< taken right before reading
+    QByteArray bytes;
+    QString hash;  ///< FNV-1a 64 of the bytes (hex), as the vault keeps it
+    QString text;  ///< UTF-8 decoded, a BOM dropped (as readText())
+    QString error; ///< English, when !ok
+};
+
 /// Where a trashed file or folder came from.
 struct TrashInfo {
     VaultPath original;  ///< empty when it cannot be determined
@@ -224,6 +237,14 @@ public:
     /// Content of a text file (UTF-8, a leading BOM stripped). `ok` is false when it cannot
     /// be read. Reading a file that changed on disk schedules a check (changed() follows).
     QString readText(const VaultPath &path, bool *ok = nullptr);
+    /// Read the file at `absolutePath` (absolutePath(path), taken on the vault's thread) as
+    /// readText() reads it, touching no vault state: thread-safe. The vault learns of it only
+    /// through adoptRead().
+    static DetachedRead readDetached(const VaultPath &path, const QString &absolutePath);
+    /// On the vault's thread: record a detached read exactly as readText() would have (content
+    /// hash and cache, BOM; a check when the file changed since the scan or behind an unchanged
+    /// stat; on a failure a check when the file is known).
+    void adoptRead(const DetachedRead &read);
     QByteArray readBinary(const VaultPath &path, bool *ok = nullptr);
     /// Atomic write; see the semantics above. Emits Created or Modified with `source`.
     bool writeText(const VaultPath &path, const QString &content, ChangeSource source = ChangeSource::User);

@@ -3,16 +3,19 @@
 // docs/SYNTAX.md (the Markdown dialect — single source of truth for parsing/rendering).
 #pragma once
 
+#include <QAtomicInt>
 #include <QDate>
 #include <QDateTime>
 #include <QHash>
 #include <QList>
+#include <QMap>
 #include <QString>
 #include <QStringList>
 #include <QTime>
 #include <QVariant>
 
 #include <optional>
+#include <utility>
 
 namespace brulion {
 
@@ -107,7 +110,145 @@ struct Heading {
     int line = 0;
 };
 
-using Properties = QHash<QString, QVariant>;  ///< QString or QStringList values
+/// Page or block properties: lower-case key -> QString or QStringList (frontmatter values may be
+/// other QVariants). A QMap (= QVariantMap): most blocks with properties have one or two
+/// (`collapsed::`, a Logseq `id::`, a callout's type), and a QHash allocated ~2.9 KB on its first
+/// insert (docs/PERFORMANCE.md, L8). Iteration is by key (deterministic), not as written.
+using Properties = QMap<QString, QVariant>;
+
+/// An optional value on the heap, shared by copies until one of them changes it (copy on
+/// write), read like std::optional. Block::task: most blocks are no tasks, and an in-place
+/// std::optional<Task> made every Block ~200 bytes bigger (docs/PERFORMANCE.md, L8). The
+/// reference count is atomic: Blocks travel between threads (the index's workers). Non-const
+/// access (operator->, operator*, value(), emplace()) detaches a shared value first.
+template<typename T>
+class Boxed {
+public:
+    Boxed() noexcept = default;
+    Boxed(std::nullopt_t) noexcept { }
+    Boxed(const T &value) : m(new Holder(value)) { }
+    Boxed(T &&value) : m(new Holder(std::move(value))) { }
+    Boxed(const std::optional<T> &value) : m(value ? new Holder(*value) : nullptr) { }
+    Boxed(const Boxed &other) noexcept : m(other.m)
+    {
+        if (m)
+            m->ref.ref();
+    }
+    Boxed(Boxed &&other) noexcept : m(std::exchange(other.m, nullptr)) { }
+    ~Boxed() { reset(); }
+
+    Boxed &operator=(const Boxed &other) noexcept
+    {
+        Boxed copy(other);
+        std::swap(m, copy.m);
+        return *this;
+    }
+    Boxed &operator=(Boxed &&other) noexcept
+    {
+        if (this != &other) {
+            reset();
+            m = std::exchange(other.m, nullptr);
+        }
+        return *this;
+    }
+    Boxed &operator=(std::nullopt_t) noexcept
+    {
+        reset();
+        return *this;
+    }
+    Boxed &operator=(const T &value) { return *this = Boxed(value); }
+    Boxed &operator=(T &&value) { return *this = Boxed(std::move(value)); }
+    Boxed &operator=(const std::optional<T> &value) { return *this = Boxed(value); }
+
+    bool has_value() const noexcept { return m != nullptr; }
+    explicit operator bool() const noexcept { return m != nullptr; }
+
+    const T &operator*() const { return m->value; }
+    const T *operator->() const { return &m->value; }
+    const T &value() const { return m->value; }
+    T &operator*() { return detached(); }
+    T *operator->() { return &detached(); }
+    T &value() { return detached(); }
+
+    template<typename... A>
+    T &emplace(A &&...args)
+    {
+        reset();
+        m = new Holder(T(std::forward<A>(args)...));
+        return m->value;
+    }
+    void reset() noexcept
+    {
+        if (m && !m->ref.deref())
+            delete m;
+        m = nullptr;
+    }
+
+    /// A copy as std::optional (TaskRef, ReminderRef, QueryItem keep std::optional<Task>).
+    operator std::optional<T>() const { return m ? std::optional<T>(m->value) : std::nullopt; }
+
+    /// Do both hold the same object (no copy was made)? For tests.
+    bool isSharedWith(const Boxed &other) const noexcept { return m && m == other.m; }
+
+private:
+    struct Holder {
+        explicit Holder(const T &v) : value(v) { }
+        explicit Holder(T &&v) : value(std::move(v)) { }
+        QAtomicInt ref{1};
+        T value;
+    };
+    T &detached()
+    {
+        if (m->ref.loadRelaxed() != 1) {
+            Holder *copy = new Holder(m->value);
+            reset();
+            m = copy;
+        }
+        return m->value;
+    }
+
+    Holder *m = nullptr;
+};
+
+/// A block's own source lines joined with '\n' (Block::raw). Shares the note's text where those
+/// lines are one piece of it — consecutive lines each ending in "\n", the usual case: no copy —,
+/// else holds its own copy (CRLF or lone-CR endings; own lines interrupted by child blocks, e.g.
+/// "- a\n  - b\n  c": a's lines are 0 and 2). Read it as a QStringView (implicit) or toString().
+class BlockSource {
+public:
+    BlockSource() = default;
+    /// The block's own copy of its text.
+    explicit BlockSource(QString ownText) : m_text(std::move(ownText)) { }
+    /// The text document[from, to) — the document is shared, not copied.
+    BlockSource(const QString &document, qsizetype from, qsizetype to)
+        : m_text(document), m_from(int(from)), m_to(int(to))
+    { }
+
+    QStringView view() const
+    {
+        return m_to < 0 ? QStringView(m_text) : QStringView(m_text).sliced(m_from, m_to - m_from);
+    }
+    operator QStringView() const { return view(); }
+    QString toString() const { return m_to < 0 ? m_text : view().toString(); }
+    qsizetype size() const { return m_to < 0 ? m_text.size() : m_to - m_from; }
+    bool isEmpty() const { return size() == 0; }
+    bool startsWith(QStringView s) const { return view().startsWith(s); }
+
+    /// Is this a slice of the note's text (the index cache stores such raw texts as offsets)?
+    bool isSlice() const { return m_to >= 0; }
+    qsizetype from() const { return m_to < 0 ? 0 : m_from; }
+    qsizetype to() const { return m_to < 0 ? m_text.size() : m_to; }
+    /// The QString the text lives in: the whole note for a slice (tests).
+    const QString &buffer() const { return m_text; }
+
+    friend bool operator==(const BlockSource &a, const BlockSource &b) { return a.view() == b.view(); }
+    friend bool operator==(const BlockSource &a, QStringView b) { return a.view() == b; }
+
+private:
+    QString m_text; ///< the whole note (a slice) or the own copy
+    int m_from = 0; ///< slices only
+    int m_to = -1;  ///< -1: m_text is the block's own copy
+};
 
 struct Block {
     QString id;             ///< explicit block id (^abc123 or Logseq id::), empty if none
@@ -116,12 +257,12 @@ struct Block {
     int endLine = 0;        ///< last line incl. children
     int ownEndLine = 0;     ///< last line of the block's own content
     int depth = 0;          ///< outline depth, 0 = top level
-    QString raw;            ///< own source lines (without children)
+    BlockSource raw;        ///< own source lines (without children), usually a slice of the note
     QString text;           ///< content with marker/checkbox/id/properties/tokens stripped
     int headingLevel = 0;
     QString lang;           ///< fenced code language ("calc", "query", ...)
     Properties properties;
-    std::optional<Task> task;
+    Boxed<Task> task; ///< on the heap, shared by copies (most blocks are no tasks)
     QList<Reminder> reminders;
     QStringList tags;       ///< lower-case, without '#'
     QList<int> children;    ///< indices into ParsedNote::blocks
@@ -140,7 +281,9 @@ struct ParsedNote {
     QList<Heading> headings;
     QList<Task> tasks;
     QList<Reminder> reminders;
-    QHash<QString, int> blockIds; ///< block id -> index into blocks
+    /// Block id -> index into blocks. A QMap: most notes have one or two ids, and a QHash
+    /// allocates ~1.8 KB on its first insert (docs/PERFORMANCE.md, L8).
+    QMap<QString, int> blockIds;
     std::optional<QDate> journalDate;
 };
 

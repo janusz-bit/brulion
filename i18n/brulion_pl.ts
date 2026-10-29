@@ -11398,73 +11398,74 @@
     <message>
         <location filename="../src/core/vault/vault.cpp" line="674"/>
         <location filename="../src/core/vault/vault.cpp" line="681"/>
+        <location filename="../src/core/vault/vault.cpp" line="1197"/>
         <source>Cannot read %1: %2</source>
         <translation>Nie można odczytać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="752"/>
+        <location filename="../src/core/vault/vault.cpp" line="756"/>
         <source>Cannot create the folder %1: a file or link with that name exists</source>
         <translation>Nie można utworzyć folderu %1: istnieje już plik lub dowiązanie o tej nazwie</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="754"/>
-        <location filename="../src/core/vault/vault.cpp" line="1033"/>
+        <location filename="../src/core/vault/vault.cpp" line="758"/>
+        <location filename="../src/core/vault/vault.cpp" line="1037"/>
         <source>Cannot create the folder %1</source>
         <translation>Nie można utworzyć folderu %1</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="795"/>
-        <location filename="../src/core/vault/vault.cpp" line="1189"/>
+        <location filename="../src/core/vault/vault.cpp" line="799"/>
+        <location filename="../src/core/vault/vault.cpp" line="1232"/>
         <source>Cannot write: empty path</source>
         <translation>Nie można zapisać: pusta ścieżka</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="799"/>
+        <location filename="../src/core/vault/vault.cpp" line="803"/>
         <source>Cannot write %1: it is a folder</source>
         <translation>Nie można zapisać %1: to jest folder</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="803"/>
+        <location filename="../src/core/vault/vault.cpp" line="807"/>
         <source>Cannot write %1: it is a link that does not lead to a file</source>
         <translation>Nie można zapisać %1: to dowiązanie, które nie prowadzi do pliku</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="835"/>
+        <location filename="../src/core/vault/vault.cpp" line="839"/>
         <source>Cannot write %1: %2</source>
         <translation>Nie można zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="840"/>
+        <location filename="../src/core/vault/vault.cpp" line="844"/>
         <source>%1 disappeared right after it was written</source>
         <translation>%1 zniknął zaraz po zapisaniu</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="867"/>
+        <location filename="../src/core/vault/vault.cpp" line="871"/>
         <source>Cannot create a file with an empty name</source>
         <translation>Nie można utworzyć pliku bez nazwy</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1028"/>
+        <location filename="../src/core/vault/vault.cpp" line="1032"/>
         <source>No vault folder given</source>
         <translation>Nie podano folderu notatnika</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1031"/>
+        <location filename="../src/core/vault/vault.cpp" line="1035"/>
         <source>%1 is not a folder</source>
         <translation>%1 nie jest folderem</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1200"/>
+        <location filename="../src/core/vault/vault.cpp" line="1243"/>
         <source>Cannot read %1</source>
         <translation>Nie można odczytać %1</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1234"/>
+        <location filename="../src/core/vault/vault.cpp" line="1277"/>
         <source>Cannot create a folder with an empty name</source>
         <translation>Nie można utworzyć folderu bez nazwy</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1236"/>
+        <location filename="../src/core/vault/vault.cpp" line="1279"/>
         <source>Cannot create the folder %1: a file with that name exists</source>
         <translation>Nie można utworzyć folderu %1: istnieje już plik o tej nazwie</translation>
     </message>
@@ -11669,8 +11670,8 @@
     <message>
         <location filename="../src/cli/commands_app.cpp" line="206"/>
         <location filename="../src/cli/commands_pages.cpp" line="186"/>
-        <location filename="../src/cli/context.cpp" line="515"/>
-        <location filename="../src/cli/context.cpp" line="553"/>
+        <location filename="../src/cli/context.cpp" line="533"/>
+        <location filename="../src/cli/context.cpp" line="571"/>
         <source>No page %1</source>
         <translation>Nie ma strony %1</translation>
     </message>
@@ -12071,7 +12072,7 @@
     </message>
     <message>
         <location filename="../src/cli/commands_common.cpp" line="78"/>
-        <location filename="../src/cli/context.cpp" line="279"/>
+        <location filename="../src/cli/context.cpp" line="297"/>
         <source>Something went wrong</source>
         <translation>Coś poszło nie tak</translation>
     </message>
@@ -12081,118 +12082,118 @@
         <translation>Na stronie nie ma nagłówka ani bloku %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="53"/>
+        <location filename="../src/cli/commands_index.cpp" line="65"/>
         <source>Not every folder of the notebook could be read: %1</source>
         <translation>Nie udało się odczytać wszystkich folderów notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="118"/>
+        <location filename="../src/cli/commands_index.cpp" line="131"/>
         <source>Search for what?</source>
         <translation>Czego szukać?</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="168"/>
+        <location filename="../src/cli/commands_index.cpp" line="181"/>
         <source>Which tag?</source>
         <translation>Który tag?</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="248"/>
+        <location filename="../src/cli/commands_index.cpp" line="261"/>
         <source>(missing)</source>
         <translation>(brak)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="283"/>
+        <location filename="../src/cli/commands_index.cpp" line="296"/>
         <location filename="../src/cli/commands_tasks.cpp" line="364"/>
         <source>--to must follow --from, at most 400 days later</source>
         <translation>--to musi przypadać po --from, najwyżej 400 dni później</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="315"/>
+        <location filename="../src/cli/commands_index.cpp" line="328"/>
         <source>The page: a path, a name, a date or an item ref</source>
         <translation>Strona: ścieżka, nazwa, data albo odwołanie do elementu</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="317"/>
+        <location filename="../src/cli/commands_index.cpp" line="330"/>
         <source>The notebook: folder, settings, counts, scan state, whether the app runs</source>
         <translation>Notatnik: folder, ustawienia, liczby, stan skanowania, czy aplikacja działa</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="322"/>
+        <location filename="../src/cli/commands_index.cpp" line="335"/>
         <source>Run a query (docs/SYNTAX.md §10), the same results as a ```query block</source>
         <translation>Wykonaj zapytanie (docs/SYNTAX.md §10): te same wyniki co blok ```query</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="325"/>
+        <location filename="../src/cli/commands_index.cpp" line="338"/>
         <source>type:tasks status:open due:&lt;=+7d sort:due — keys also in Polish</source>
         <translation>type:tasks status:open due:&lt;=+7d sort:due — klucze także po polsku</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="328"/>
+        <location filename="../src/cli/commands_index.cpp" line="341"/>
         <source>The page page:this / ref:this mean</source>
         <translation>Strona, którą oznaczają page:this / ref:this</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="332"/>
+        <location filename="../src/cli/commands_index.cpp" line="345"/>
         <source>Full-text search, diacritic-insensitive (&quot;zolw&quot; finds &quot;żółw&quot;)</source>
         <translation>Wyszukiwanie pełnotekstowe, bez względu na znaki diakrytyczne („zolw” znajduje „żółw”)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="334"/>
+        <location filename="../src/cli/commands_index.cpp" line="347"/>
         <source>Words to find</source>
         <translation>Słowa do znalezienia</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="336"/>
+        <location filename="../src/cli/commands_index.cpp" line="349"/>
         <source>At most this many hits (default 20)</source>
         <translation>Najwyżej tyle trafień (domyślnie 20)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="338"/>
+        <location filename="../src/cli/commands_index.cpp" line="351"/>
         <source>Every tag, most used first, with the page it names</source>
         <translation>Wszystkie tagi, od najczęściej używanych, ze stroną, którą nazywają</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="339"/>
+        <location filename="../src/cli/commands_index.cpp" line="352"/>
         <source>Only tags starting with this</source>
         <translation>Tylko tagi, które się od tego zaczynają</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="342"/>
+        <location filename="../src/cli/commands_index.cpp" line="355"/>
         <source>One tag: the page it names, its sub-tags and the blocks carrying it</source>
         <translation>Jeden tag: strona, którą nazywa, jego podtagi i bloki, które go mają</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="344"/>
+        <location filename="../src/cli/commands_index.cpp" line="357"/>
         <source>The tag, with or without #</source>
         <translation>Tag, z # albo bez</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="347"/>
+        <location filename="../src/cli/commands_index.cpp" line="360"/>
         <source>What names a page: links to it and tags naming it</source>
         <translation>Co wskazuje stronę: linki do niej i tagi, które ją nazywają</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="349"/>
+        <location filename="../src/cli/commands_index.cpp" line="362"/>
         <source>The links of a page and where they lead</source>
         <translation>Linki strony i dokąd prowadzą</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="352"/>
+        <location filename="../src/cli/commands_index.cpp" line="365"/>
         <source>Plain-text mentions of a page&apos;s title in other notes</source>
         <translation>Wzmianki o tytule strony zwykłym tekstem w innych notatkach</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="356"/>
+        <location filename="../src/cli/commands_index.cpp" line="369"/>
         <source>Calendar entries: daily notes, task dates, reminders, done dates</source>
         <translation>Wpisy kalendarza: notatki dzienne, daty zadań, przypomnienia, daty wykonania</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="358"/>
+        <location filename="../src/cli/commands_index.cpp" line="371"/>
         <source>From this day (default today)</source>
         <translation>Od tego dnia (domyślnie dziś)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_index.cpp" line="359"/>
+        <location filename="../src/cli/commands_index.cpp" line="372"/>
         <source>To this day (default: a week)</source>
         <translation>Do tego dnia (domyślnie: tydzień)</translation>
     </message>
@@ -12970,134 +12971,134 @@
         <translation>Przywróć wersję (obecny tekst najpierw zostaje zachowany jako wersja)</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="122"/>
+        <location filename="../src/cli/context.cpp" line="124"/>
         <source>The app shows its documentation, not a notebook of yours: give --vault &lt;folder&gt; or set BRULION_VAULT</source>
         <translation>Aplikacja pokazuje swoją dokumentację, nie Twój notatnik: podaj --vault &lt;folder&gt; albo ustaw BRULION_VAULT</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="129"/>
+        <location filename="../src/cli/context.cpp" line="131"/>
         <source>No notebook: give --vault &lt;folder&gt;, set BRULION_VAULT, or open a notebook in the app</source>
         <translation>Brak notatnika: podaj --vault &lt;folder&gt;, ustaw BRULION_VAULT albo otwórz notatnik w aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="135"/>
+        <location filename="../src/cli/context.cpp" line="137"/>
         <source>The notebook folder %1 does not exist (brulion-cli init &lt;folder&gt; creates one)</source>
         <translation>Folder notatnika %1 nie istnieje (utworzy go brulion-cli init &lt;folder&gt;)</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="140"/>
+        <location filename="../src/cli/context.cpp" line="142"/>
         <source>%1 is not a folder</source>
         <translation>%1 nie jest folderem</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="248"/>
+        <location filename="../src/cli/context.cpp" line="266"/>
         <source>Standard input was not valid UTF-8: invalid bytes were replaced</source>
         <translation>Standardowe wejście nie było poprawnym UTF-8: błędne bajty zostały zastąpione</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="319"/>
+        <location filename="../src/cli/context.cpp" line="337"/>
         <source>A path is needed</source>
         <translation>Potrzebna jest ścieżka</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="323"/>
+        <location filename="../src/cli/context.cpp" line="341"/>
         <source>The path contains a NUL character</source>
         <translation>Ścieżka zawiera znak NUL</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="332"/>
-        <location filename="../src/cli/context.cpp" line="339"/>
+        <location filename="../src/cli/context.cpp" line="350"/>
+        <location filename="../src/cli/context.cpp" line="357"/>
         <source>%1 is outside the notebook</source>
         <translation>%1 leży poza notatnikiem</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="349"/>
+        <location filename="../src/cli/context.cpp" line="367"/>
         <source>%1 is not a note: .brulion/, .trash/ and other hidden folders are off limits</source>
         <translation>%1 nie jest notatką: .brulion/, .trash/ i inne ukryte foldery są niedostępne</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="368"/>
-        <location filename="../src/cli/context.cpp" line="381"/>
+        <location filename="../src/cli/context.cpp" line="386"/>
+        <location filename="../src/cli/context.cpp" line="399"/>
         <source>Not a date: %1</source>
         <translation>To nie jest data: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="390"/>
+        <location filename="../src/cli/context.cpp" line="408"/>
         <source>Words that are no date were ignored in %1: %2</source>
         <translation>W %1 pominięto słowa, które nie są datą: %2</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="403"/>
+        <location filename="../src/cli/context.cpp" line="421"/>
         <source>A page is needed: a path, a page name, a date or an item ref</source>
         <translation>Potrzebna jest strona: ścieżka, nazwa strony, data albo odwołanie do elementu</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="408"/>
+        <location filename="../src/cli/context.cpp" line="426"/>
         <source>Not a valid reference: %1</source>
         <translation>Niepoprawne odwołanie: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="427"/>
+        <location filename="../src/cli/context.cpp" line="445"/>
         <source>No block with the id %1</source>
         <translation>Nie ma bloku o id %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="439"/>
+        <location filename="../src/cli/context.cpp" line="457"/>
         <source>The notebook folder is not a page</source>
         <translation>Folder notatnika nie jest stroną</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="449"/>
+        <location filename="../src/cli/context.cpp" line="467"/>
         <source>%1 is an attachment, not a page</source>
         <translation>%1 to załącznik, nie strona</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="477"/>
+        <location filename="../src/cli/context.cpp" line="495"/>
         <source>%1 is the page %2; for the daily note of %3 give the date</source>
         <translation>%1 to strona %2; po notatkę dzienną z %3 podaj datę</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="496"/>
+        <location filename="../src/cli/context.cpp" line="514"/>
         <source>Several pages are called %1: give the path</source>
         <translation>Kilka stron nazywa się %1: podaj ścieżkę</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="530"/>
+        <location filename="../src/cli/context.cpp" line="548"/>
         <source>The notebook is busy: %1</source>
         <translation>Notatnik jest zajęty: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="550"/>
+        <location filename="../src/cli/context.cpp" line="568"/>
         <source>The change cannot be made</source>
         <translation>Nie można wprowadzić zmiany</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="557"/>
+        <location filename="../src/cli/context.cpp" line="575"/>
         <source>%1 changed since it was read (its hash is not the one expected): read it again</source>
         <translation>Plik %1 zmienił się od odczytu (ma inny hash niż oczekiwany): odczytaj go ponownie</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="562"/>
+        <location filename="../src/cli/context.cpp" line="580"/>
         <source>%1 kept changing while it was written (another program writes it): try again</source>
         <translation>Plik %1 zmieniał się podczas zapisu (zapisuje go inny program): spróbuj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="567"/>
+        <location filename="../src/cli/context.cpp" line="585"/>
         <source>%1 is not UTF-8: it is not changed, so no byte of it gets lost</source>
         <translation>Plik %1 nie jest w UTF-8: pozostaje bez zmian, żeby żaden jego bajt nie przepadł</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="571"/>
+        <location filename="../src/cli/context.cpp" line="589"/>
         <source>Could not write %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="611"/>
+        <location filename="../src/cli/context.cpp" line="629"/>
         <source>%1 writes notes: refused in read-only mode</source>
         <translation>Polecenie %1 zapisuje notatki: odmowa w trybie tylko do odczytu</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="616"/>
+        <location filename="../src/cli/context.cpp" line="634"/>
         <source>%1 replaces, moves or removes existing notes: run it with --allow-destructive</source>
         <translation>Polecenie %1 zastępuje, przenosi albo usuwa istniejące notatki: uruchom je z --allow-destructive</translation>
     </message>
@@ -15075,36 +15076,36 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::Workspace</name>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="450"/>
-        <location filename="../src/app/shell/workspace.cpp" line="466"/>
+        <location filename="../src/app/shell/workspace.cpp" line="533"/>
+        <location filename="../src/app/shell/workspace.cpp" line="549"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="612"/>
-        <location filename="../src/app/shell/workspace.cpp" line="623"/>
+        <location filename="../src/app/shell/workspace.cpp" line="695"/>
+        <location filename="../src/app/shell/workspace.cpp" line="706"/>
         <source>Could not save the drawing %1: %2</source>
         <translation>Nie można zapisać rysunku %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="867"/>
+        <location filename="../src/app/shell/workspace.cpp" line="950"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="925"/>
-        <location filename="../src/app/shell/workspace.cpp" line="946"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1008"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1029"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="330"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1076"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1159"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1079"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1162"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
@@ -15214,17 +15215,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1093"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1176"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1108"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1191"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1139"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1222"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
@@ -16199,7 +16200,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Nie udało się zapisać w pamięci przeglądarki: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="409"/>
+        <location filename="../src/app/main.cpp" line="416"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
     </message>

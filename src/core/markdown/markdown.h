@@ -6,7 +6,9 @@
 //
 // API overview (namespace brulion::markdown; never reads the clock — callers pass `today`/`now`):
 //
-//   parse.h        parseNote(path, content, config) -> ParsedNote   (linear; never fails)
+//   parse.h        parseNote(path, content, config) -> ParsedNote   (linear; never fails; pure, any
+//                  thread; given a QString, the blocks' raw lines are slices of it);
+//                  ParserVersion — bump it when parseNote()'s output changes (the index cache)
 //                    blocks in pre-order with parent/children indices, links, tags, tasks
 //                    (checkboxes + Logseq markers, emoji tokens, SCHEDULED/DEADLINE),
 //                    reminders (⏰, ⏰!, (@…)), block/page properties, frontmatter, headings,

@@ -35,4 +35,12 @@ scaling,bench_index,tagPageOpen,# notes after a save,1.5,small,wave 4
 scaling,bench_markdown,selectAllCopy,# blocks markdown,1.5,small,wave 4
 scaling,bench_markdown,selectAllCopy,# blocks plain text,1.5,small,wave 4
 scaling,bench_io,clipboardHtml,# blocks,1.5,small,wave 4
-max,bench_index,memory,10000 notes + search index,560,full small,MiB of heap; ratchet after L8 (target 230)
+scaling,bench_index,openFromDisk,# notes loader 4 workers,1.3,full,wave 5 (L1): the index loaded on worker threads
+scaling,bench_index,openFromDisk,# notes loader warm cache 4 workers,1.3,full,wave 5 (L2): from the index cache
+scaling,bench_index,cacheEncode,# notes,1.3,full,wave 5 (L2): the index cache written
+scaling,bench_index,cacheDecode,# notes,1.3,full,wave 5 (L2): every note and the full-text index decoded
+scaling,bench_index,openFromDisk,# notes loader 3 workers,1.5,small,wave 5 (L1)
+scaling,bench_index,openFromDisk,# notes loader warm cache 3 workers,1.5,small,wave 5 (L2)
+scaling,bench_index,cacheEncode,# notes,1.5,small,wave 5 (L2)
+scaling,bench_index,cacheDecode,# notes,1.5,small,wave 5 (L2)
+max,bench_index,memory,10000 notes + search index,233,full small,MiB of heap; L8 (wave 5): 545 -> 221.6 measured x 1.05

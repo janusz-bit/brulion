@@ -1,8 +1,11 @@
 #include "wasmstorage.h"
 
 #include <QDir>
+#include <QDirIterator>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QStandardPaths>
@@ -20,7 +23,9 @@ namespace brulion::platform {
 namespace {
 
 // Operation codes reported from JavaScript (keep in sync with the EM_JS code below).
-enum JsOp { OpLoad = 1, OpFlush = 2, OpPersist = 3 };
+enum JsOp { OpLoad = 1, OpFlush = 2, OpPersist = 3, OpCacheFailed = 4, OpEstimate = 5 };
+
+WasmStorage::Estimate g_estimate;
 
 } // namespace
 
@@ -58,10 +63,15 @@ EMSCRIPTEN_BINDINGS(brulion_wasm_storage)
 // (an empty '' is an invalid C character literal).
 //
 // State machine (Module.brulionStorage, also globalThis.brulionStorage for the HTML shell):
-//   ready  - initial FS.syncfs(true) succeeded; write-back is only ever allowed after that,
+//   ready  - the initial load of `mounts` succeeded; write-back is only ever allowed after that,
 //            otherwise the empty in-memory tree would delete the stored files.
 //   failed - mounting or loading failed: in-memory only, never write back.
-//   busy   - a syncfs is running; `again` queues one more write-back behind it.
+//   busy   - a sync is running; `again` queues one more write-back behind it.
+// Every mount is synced on its own (IDBFS.syncfs per mount, as FS.syncfs does, but with our own
+// completion): each is one IndexedDB database and one transaction, and a failure of a cache
+// mount (`cacheMounts`: files the app can rebuild) only counts in `cacheFailures` and is reported
+// as op 4 — never as a failed load or write-back, so a cache the quota cannot take neither
+// blocks the start nor keeps the page "unsaved".
 //   dirty/timer/firstChange - debounce: write back `delay` ms after the last change, but at
 //            most `maxDelay` ms after the first unsaved change.
 // Change tracking wraps the public Emscripten FS API (FS.close/write/rename/unlink/rmdir/
@@ -74,7 +84,7 @@ EMSCRIPTEN_BINDINGS(brulion_wasm_storage)
 // reloads when it is shown again.
 EM_JS_DEPS(brulion_wasm_storage, "$FS,$IDBFS,$UTF8ToString");
 
-EM_JS(void, brulion_storage_start, (const char *mountsJson, int delayMs, int maxDelayMs), {
+EM_JS(void, brulion_storage_start, (const char *mountsJson, const char *cacheMountsJson, int delayMs, int maxDelayMs), {
     var report = function(op, ok, message) {
         try {
             Module["brulionStorageEvent"](op, !!ok, message ? String(message) : "");
@@ -92,6 +102,8 @@ EM_JS(void, brulion_storage_start, (const char *mountsJson, int delayMs, int max
     };
     var st = {
         mounts: JSON.parse(UTF8ToString(mountsJson)),
+        cacheMounts: JSON.parse(UTF8ToString(cacheMountsJson)),
+        cacheFailures: 0, estimate: null,
         ready: false, failed: false, busy: false, again: false, waitingForLock: false,
         releaseLock: null, lockReleased: false, releaseAfterFlush: false, suspended: false,
         dirty: false, timer: 0, firstChange: 0, delay: delayMs, maxDelay: maxDelayMs
@@ -110,14 +122,67 @@ EM_JS(void, brulion_storage_start, (const char *mountsJson, int delayMs, int max
         }
         return "/" + out.join("/");
     };
+    var allMounts = function() { return st.mounts.concat(st.cacheMounts); };
     var covers = function(p) {
         if (typeof p !== "string" || p === "") return false;
         p = normalize(p);
-        for (var i = 0; i < st.mounts.length; ++i) {
-            var m = st.mounts[i];
+        var all = allMounts();
+        for (var i = 0; i < all.length; ++i) {
+            var m = all[i];
             if (p === m || p.indexOf(m + "/") === 0) return true;
         }
         return false;
+    };
+    var mountAt = function(path) {
+        var all = FS.getMounts(FS.root.mount);
+        for (var i = 0; i < all.length; ++i) {
+            if (all[i].mountpoint === path) return all[i];
+        }
+        return null;
+    };
+    var syncMounts = function(populate, callback) {
+        var paths = allMounts();
+        var left = paths.length;
+        var failure = null;
+        if (!left) {
+            callback(null);
+            return;
+        }
+        paths.forEach(function(path) {
+            var cache = st.cacheMounts.indexOf(path) >= 0;
+            var called = false;
+            var done = function(err) {
+                if (called) return;
+                called = true;
+                if (err && cache) {
+                    st.cacheFailures++;
+                    console.warn("Brulion: the cache in " + path + " was not " + (populate ? "loaded from" : "saved to") + " IndexedDB", err);
+                    report(4, false, JSON.stringify({ mount: path, error: describe(err) }));
+                } else if (err && !failure) {
+                    failure = err;
+                }
+                if (--left === 0) callback(failure);
+            };
+            var mount = mountAt(path);
+            if (!mount || !mount.type.syncfs) {
+                done(null);
+                return;
+            }
+            try {
+                mount.type.syncfs(mount, populate, done);
+            } catch (e) {
+                done(e);
+            }
+        });
+    };
+    var estimate = function() {
+        if (typeof navigator === "undefined" || !navigator.storage || !navigator.storage.estimate) return;
+        navigator.storage.estimate().then(function(e) {
+            st.estimate = e;
+            report(5, true, JSON.stringify({ usage: e.usage, quota: e.quota }));
+        }, function(e) {
+            console.warn("Brulion: no storage estimate", e);
+        });
     };
 
     var releaseLock = function() {
@@ -133,7 +198,7 @@ EM_JS(void, brulion_storage_start, (const char *mountsJson, int delayMs, int max
         st.busy = true;
         st.dirty = false;
         st.firstChange = 0;
-        FS.syncfs(false, function(err) {
+        syncMounts(false, function(err) {
             st.busy = false;
             if (err) {
                 st.dirty = true;
@@ -189,9 +254,10 @@ EM_JS(void, brulion_storage_start, (const char *mountsJson, int delayMs, int max
     wrap("chmod", firstPath);
 
     try {
-        for (var i = 0; i < st.mounts.length; ++i) {
-            FS.mkdirTree(st.mounts[i]);
-            FS.mount(IDBFS, {}, st.mounts[i]);
+        var toMount = allMounts();
+        for (var i = 0; i < toMount.length; ++i) {
+            FS.mkdirTree(toMount[i]);
+            FS.mount(IDBFS, {}, toMount[i]);
         }
     } catch (e) {
         st.failed = true;
@@ -227,7 +293,8 @@ EM_JS(void, brulion_storage_start, (const char *mountsJson, int delayMs, int max
 
     var load = function() {
         st.busy = true;
-        FS.syncfs(true, function(err) {
+        estimate();
+        syncMounts(true, function(err) {
             st.busy = false;
             if (err) {
                 st.failed = true;
@@ -339,6 +406,21 @@ QStringList WasmStorage::defaultMountPoints()
         {vaultRoot(), QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)});
 }
 
+QString WasmStorage::indexCacheRoot()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/index");
+}
+
+QStringList WasmStorage::defaultCacheMountPoints()
+{
+    return {indexCacheRoot()};
+}
+
+WasmStorage::Estimate WasmStorage::estimate()
+{
+    return g_estimate;
+}
+
 QStringList WasmStorage::normalizeMountPoints(const QStringList &paths)
 {
     QStringList cleaned;
@@ -364,7 +446,7 @@ QStringList WasmStorage::normalizeMountPoints(const QStringList &paths)
     return result;
 }
 
-void WasmStorage::start(const QStringList &mountPoints)
+void WasmStorage::start(const QStringList &mountPoints, const QStringList &cacheMountPoints)
 {
     if (m_started) {
         qCWarning(lcWasmStorage) << "start() called twice; ignored";
@@ -372,10 +454,36 @@ void WasmStorage::start(const QStringList &mountPoints)
     }
     m_started = true;
     m_mountPoints = normalizeMountPoints(mountPoints);
-    qCDebug(lcWasmStorage) << "mounting IndexedDB storage on" << m_mountPoints;
+    // Cache mounts must not nest in the others (nor the others in them): a cache file inside
+    // another mount would share its database and transaction again.
+    const QStringList all = normalizeMountPoints(m_mountPoints + cacheMountPoints);
+    m_cacheMountPoints.clear();
+    for (const QString &path : all) {
+        if (!m_mountPoints.contains(path))
+            m_cacheMountPoints.append(path);
+    }
+    for (const QString &path : std::as_const(m_mountPoints)) {
+        if (!all.contains(path))
+            qCWarning(lcWasmStorage) << "mount point" << path << "lies inside a cache mount";
+    }
+    qCDebug(lcWasmStorage) << "mounting IndexedDB storage on" << m_mountPoints << "and the caches"
+                           << m_cacheMountPoints;
     const QByteArray json =
         QJsonDocument(QJsonArray::fromStringList(m_mountPoints)).toJson(QJsonDocument::Compact);
-    brulion_storage_start(json.constData(), m_flushDelay, m_maxFlushDelay);
+    const QByteArray cacheJson =
+        QJsonDocument(QJsonArray::fromStringList(m_cacheMountPoints)).toJson(QJsonDocument::Compact);
+    brulion_storage_start(json.constData(), cacheJson.constData(), m_flushDelay, m_maxFlushDelay);
+}
+
+void WasmStorage::dropCacheFiles(const QString &mountPoint)
+{
+    // Removing them is a change under the mount: the next write-back deletes the stored copies.
+    QDirIterator it(mountPoint, QDir::Files | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString file = it.next();
+        if (!QFile::remove(file))
+            qCWarning(lcWasmStorage) << "cannot remove" << file;
+    }
 }
 
 bool WasmStorage::hasPendingChanges() const
@@ -444,6 +552,28 @@ void WasmStorage::handleJsEvent(int op, bool ok, const QString &message)
     case OpPersist:
         Q_EMIT persistentStorageResult(ok);
         break;
+    case OpCacheFailed: {
+        const QJsonObject failure = QJsonDocument::fromJson(message.toUtf8()).object();
+        const QString mount = failure.value(QStringLiteral("mount")).toString();
+        const QString why = failure.value(QStringLiteral("error")).toString();
+        if (!m_cacheMountPoints.contains(mount)) {
+            qCWarning(lcWasmStorage) << "failure of an unknown cache mount:" << message;
+            return;
+        }
+        qCWarning(lcWasmStorage).noquote()
+                << QStringLiteral("the cache in %1 was not saved to IndexedDB (%2): its files are removed")
+                           .arg(mount, why);
+        dropCacheFiles(mount);
+        Q_EMIT cacheNotSaved(mount, why);
+        break;
+    }
+    case OpEstimate: {
+        const QJsonObject estimate = QJsonDocument::fromJson(message.toUtf8()).object();
+        g_estimate.usage = qint64(estimate.value(QStringLiteral("usage")).toDouble(-1));
+        g_estimate.quota = qint64(estimate.value(QStringLiteral("quota")).toDouble(-1));
+        qCDebug(lcWasmStorage) << "storage estimate: usage" << g_estimate.usage << "quota" << g_estimate.quota;
+        break;
+    }
     default:
         qCWarning(lcWasmStorage) << "unknown storage event" << op;
     }

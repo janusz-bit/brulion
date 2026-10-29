@@ -4,9 +4,12 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QRandomGenerator>
 #include <QSet>
 #include <QSignalSpy>
 #include <QTest>
+
+#include <type_traits>
 
 using namespace brulion;
 using namespace Qt::StringLiterals;
@@ -94,6 +97,51 @@ private Q_SLOTS:
         s.clear();
         QCOMPARE(s.size(), 0);
         QCOMPARE(s.termCount(), 0);
+    }
+
+    // Documents point into the dictionary (no own copies of their terms): random replacements
+    // and removals, a squeeze and a move keep every search equal to that of a fresh index.
+    void searchIndexChurnMatchesFresh()
+    {
+        static_assert(!std::is_copy_constructible_v<SearchIndex>);
+        static_assert(std::is_nothrow_move_constructible_v<SearchIndex>);
+        const QStringList words = {u"żółw"_s, u"zolw"_s,   u"spotkanie"_s, u"spot"_s,     u"łódź"_s,
+                                   u"lodz"_s, u"raport"_s, u"kawa"_s,      u"ogród"_s,    u"źdźbło"_s,
+                                   u"gęś"_s,  u"jaźń"_s,   u"zebranie"_s,  u"spotkanei"_s};
+        QRandomGenerator rng(42);
+        SearchIndex churned;
+        QHash<QString, QStringList> docs; // id -> title, content
+        for (int step = 0; step < 3000; ++step) {
+            const QString id = u"Notatka %1.md"_s.arg(rng.bounded(40));
+            if (rng.bounded(5) == 0) {
+                churned.remove(id);
+                docs.remove(id);
+                continue;
+            }
+            QString content;
+            for (int w = 0, n = int(rng.bounded(12)); w < n; ++w)
+                content += words[rng.bounded(words.size())] + u' ';
+            const QString title = words[rng.bounded(words.size())];
+            churned.set(id, title, {}, content);
+            docs.insert(id, {title, content});
+            if (step % 500 == 0)
+                churned.squeeze();
+        }
+        SearchIndex fresh;
+        for (auto it = docs.cbegin(); it != docs.cend(); ++it)
+            fresh.set(it.key(), it.value()[0], {}, it.value()[1]);
+        const SearchIndex moved = std::move(churned);
+        QCOMPARE(moved.size(), fresh.size());
+        QCOMPARE(moved.termCount(), fresh.termCount());
+        for (const QString &q : {u"zolw"_s, u"żółw"_s, u"spotkanie"_s, u"spot"_s, u"spotkanei"_s, u"lodz kawa"_s}) {
+            const QList<SearchIndex::Hit> a = moved.search(q, 100);
+            const QList<SearchIndex::Hit> b = fresh.search(q, 100);
+            QCOMPARE(ids(a), ids(b));
+            for (qsizetype i = 0; i < a.size(); ++i) {
+                QCOMPARE(a[i].terms, b[i].terms);
+                QVERIFY(qFuzzyCompare(a[i].score, b[i].score));
+            }
+        }
     }
 
     void searchIndexBoostsTitleThenAliases()

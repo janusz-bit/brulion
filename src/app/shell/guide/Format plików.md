@@ -20,6 +20,7 @@ brulion/
 - Tytuł strony to nazwa pliku bez `.md`.
 - Nazwy różniące się tylko wielkością liter są jedną stroną — Brulion nigdy nie tworzy takich bliźniaków.
 - Dane robocze urządzenia (historia wersji, ślady synchronizacji, indeks) leżą poza folderem, więc Syncthing i Nextcloud ich nie ruszają.
+- Wśród nich jest gotowy indeks notatnika (`index-cache.bin`), dzięki któremu kolejne otwarcie dużego notatnika jest szybsze. Można go bezpiecznie usunąć — Brulion zbuduje go od nowa.
 - Pomijane są `.brulion/`, `.trash/`, `.git/`, `.obsidian/`, `logseq/` i pliki tymczasowe synchronizacji.
 
 ## Ściągawka składni

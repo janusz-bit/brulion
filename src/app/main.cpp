@@ -390,6 +390,13 @@ int main(int argc, char *argv[])
             controller->toast(QCoreApplication::translate("main", "Saving to the browser's storage failed: %1").arg(message),
                               u"error"_s);
     });
+    // The index cache did not fit (its own mount: notes, History and settings were saved): its
+    // files are gone, and the open notebook writes no new one. No toast — nothing is lost.
+    QObject::connect(&storage, &wasm::WasmStorage::cacheNotSaved, &app,
+                     [&controller](const QString &, const QString &message) {
+                         if (controller && controller->workspace())
+                             controller->workspace()->stopIndexCache(message);
+                     });
     QObject::connect(
         &storage, &wasm::WasmStorage::ready, &engine,
         [&storage, &controller, &createController, &startUi] {

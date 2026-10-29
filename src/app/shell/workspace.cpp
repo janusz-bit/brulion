@@ -1,5 +1,6 @@
 #include "workspace.h"
 
+#include "indexworkers.h"
 #include "picturesize.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
@@ -19,6 +20,7 @@
 
 #ifdef Q_OS_WASM
 #include "wasm/wasmshell.h"
+#include "wasm/wasmstorage.h"
 #endif
 
 #include <QBuffer>
@@ -155,6 +157,8 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     connect(m_vault.get(), &Vault::changed, this, &Workspace::onVaultChanged);
     connect(m_vault.get(), &Vault::configChanged, this, [this] {
         m_index->setConfig(m_vault->config());
+        if (m_loader)
+            m_loader->configChanged();
         m_impacts = ImpactCache(); // the settings a move rebases are the new ones
         Q_EMIT configChanged();
     });
@@ -173,14 +177,34 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
 #endif
     m_wasInactive = false;
 
-    for (const FileStat &f : m_vault->files())
-        m_indexQueue.append(f.path);
-    m_indexTotal = m_indexQueue.size();
+    notebook::WorkerPool pool;
+#ifdef BRULION_INDEX_THREADS
+    if (!m_indexPool && indexWorkerCount() > 0)
+        m_indexPool = new QThreadPool(this);
+    pool = indexWorkerPool(static_cast<QThreadPool *>(m_indexPool));
+#endif
+    notebook::IndexLoader::Options loaderOptions;
+    loaderOptions.firstFolder = m_vault->config().journalsFolder;
+    // The index cache next to History and LocalStore. In the browser it goes to a cache mount of
+    // its own (WasmStorage::indexCacheRoot(), its own IndexedDB database): a cache the quota
+    // cannot take must not abort the write-back of History, sync state and settings with it.
+    m_indexCachePath = deviceStatePath.isEmpty() || qEnvironmentVariableIsSet("BRULION_NO_INDEX_CACHE")
+                               ? QString()
+                               : QDir(deviceStatePath).filePath(u"index-cache.bin"_s);
+#ifdef Q_OS_WASM
+    if (!m_indexCachePath.isEmpty())
+        m_indexCachePath = QDir(platform::WasmStorage::indexCacheRoot())
+                                   .filePath(QFileInfo(deviceStatePath).fileName() + u"/index-cache.bin"_s);
+#endif
+    loaderOptions.cachePath = m_indexCachePath;
+    m_loader = std::make_unique<notebook::IndexLoader>(*m_vault, *m_index, std::move(pool), loaderOptions);
+    connect(m_loader.get(), &notebook::IndexLoader::resultsReady, this, &Workspace::onIndexResultsReady);
     m_indexClock.start();
+    m_loader->start(m_vault->files());
     m_trashCount = -1;
     m_reminders->attach(m_vault.get(), m_index.get());
     m_sync->attach(m_vault.get());
-    if (!m_indexQueue.isEmpty())
+    if (!m_loader->isDone())
         m_indexTimer.start();
 
     ++m_revision;
@@ -192,7 +216,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     Q_EMIT indexingChanged();
     Q_EMIT indexProgressChanged();
     Q_EMIT trashChanged();
-    if (m_indexQueue.isEmpty())
+    if (!indexing())
         indexingFinished();
     return true;
 }
@@ -209,9 +233,14 @@ void Workspace::close()
     m_indexTimer.stop();
     cancelMoveImpact(); // its planner reads the index
     m_impacts = ImpactCache();
-    const bool wasIndexing = !m_indexQueue.isEmpty();
-    m_indexQueue.clear();
-    m_indexTotal = 0;
+    const bool wasIndexing = indexing();
+    // A notebook closed before its first cache was written (the app quit right after indexing):
+    // write it now, once, so the next start does not parse everything again.
+    if (m_cacheKeeper && m_loader && !m_cacheKeeper->hasSaved() && !m_cacheKeeper->isSaving()
+        && m_loader->stats().cache != u"used" && m_cacheKeeper->isDirty())
+        m_cacheKeeper->saveNow();
+    m_cacheKeeper.reset(); // before the loader, the index and the vault
+    m_loader.reset();      // before the index and the vault (its workers stop after their file)
     m_trashCount = -1;
     m_dataUrls.clear();
     m_dataUrlSizes.clear();
@@ -299,46 +328,80 @@ void Workspace::indexFile(const QString &path)
 
 void Workspace::indexChunk()
 {
-    if (!m_index || m_indexQueue.isEmpty()) {
+    if (!m_index || !indexing()) {
         m_indexTimer.stop();
         return;
     }
-    QElapsedTimer timer;
-    timer.start();
-    {
-        VaultIndex::Batch batch(*m_index);
-        while (!m_indexQueue.isEmpty() && timer.elapsed() < kIndexBudgetMs)
-            indexFile(m_indexQueue.takeFirst());
-    }
+    const notebook::IndexLoader::Step step = m_loader->step(int(kIndexBudgetMs));
     Q_EMIT indexProgressChanged();
-    if (m_indexQueue.isEmpty()) {
+    switch (step) {
+    case notebook::IndexLoader::Step::More: break;
+    case notebook::IndexLoader::Step::Waiting: m_indexTimer.stop(); break; // onIndexResultsReady()
+    case notebook::IndexLoader::Step::Done:
         m_indexTimer.stop();
         Q_EMIT indexingChanged();
         indexingFinished();
+        break;
     }
+}
+
+void Workspace::onIndexResultsReady()
+{
+    if (indexing() && !m_indexTimer.isActive())
+        m_indexTimer.start();
 }
 
 void Workspace::finishIndexing()
 {
-    if (!m_index || m_indexQueue.isEmpty())
+    if (!m_index || !indexing())
         return;
-    {
-        VaultIndex::Batch batch(*m_index);
-        while (!m_indexQueue.isEmpty())
-            indexFile(m_indexQueue.takeFirst());
-    }
+    m_loader->finish();
     m_indexTimer.stop();
     Q_EMIT indexingChanged();
     Q_EMIT indexProgressChanged();
     indexingFinished();
 }
 
+notebook::IndexLoader::Stats Workspace::indexStats() const
+{
+    return m_loader ? m_loader->stats() : notebook::IndexLoader::Stats();
+}
+
 void Workspace::indexingFinished()
 {
     if (m_indexClock.isValid()) {
+        const notebook::IndexLoader::Stats stats = indexStats();
+        const QString how = stats.workers > 0 ? u"parsed on %1 threads"_s.arg(stats.workers) : u"parsed in slices"_s;
         qCInfo(logging::lcIndex).noquote()
-                << u"Index ready: %1 notes in %2"_s.arg(m_indexTotal).arg(logging::formatMs(m_indexClock.elapsed()));
+                << u"Index ready: %1 notes and %2 attachments in %3 (%4 from the cache, %5 %6)"_s
+                           .arg(stats.total - stats.attachments)
+                           .arg(stats.attachments)
+                           .arg(logging::formatMs(m_indexClock.elapsed()))
+                           .arg(stats.fromCache)
+                           .arg(stats.parsed)
+                           .arg(how);
         m_indexClock.invalidate();
+    }
+    // The index cache follows the index from now on (written soon when anything was parsed).
+    if (!m_indexCachePath.isEmpty() && !m_cacheKeeper && m_loader) {
+        notebook::WorkerPool pool;
+#ifdef BRULION_INDEX_THREADS
+        pool = indexWorkerPool(static_cast<QThreadPool *>(m_indexPool));
+#endif
+        notebook::IndexCacheKeeper::Policy policy = m_cachePolicy;
+#ifdef Q_OS_WASM
+        // The site's quota is shared with the notes: the cache takes at most half of what is free.
+        const platform::WasmStorage::Estimate storage = platform::WasmStorage::estimate();
+        policy.maxBytes = notebook::indexCacheBudget(storage.usage, storage.quota, QFileInfo(m_indexCachePath).size(),
+                                                     policy.maxBytes);
+#endif
+        m_cacheKeeper = std::make_unique<notebook::IndexCacheKeeper>(*m_vault, *m_index, std::move(pool),
+                                                                     m_indexCachePath, policy);
+#ifdef Q_OS_WASM
+        connect(m_cacheKeeper.get(), &notebook::IndexCacheKeeper::saved, this,
+                [] { platform::reportIndexCacheSaved(); });
+#endif
+        m_cacheKeeper->loaded(m_loader->stats());
     }
     // Every note is known now: reminders may fire and missed ones be recorded (a half-built
     // index would make reminders look deleted). A vault with paused reminders never starts its
@@ -347,8 +410,22 @@ void Workspace::indexingFinished()
         m_reminders->start();
     setReady(false);
 #ifdef Q_OS_WASM
+    {
+        const notebook::IndexLoader::Stats stats = indexStats();
+        platform::reportIndexStats(int(stats.total - stats.attachments), int(stats.fromCache));
+    }
     platform::reportIndexReady(); // for scripts/wasm-smoke.mjs and the browser benchmarks
 #endif
+}
+
+void Workspace::stopIndexCache(const QString &why)
+{
+    if (m_indexCachePath.isEmpty())
+        return;
+    qCWarning(logging::lcIndex).noquote()
+            << u"Index cache not saved (%1): none is written while this notebook is open"_s.arg(why);
+    m_cacheKeeper.reset();
+    m_indexCachePath.clear(); // indexingFinished() creates no new keeper
 }
 
 void Workspace::setReady(bool wasReady)
@@ -359,9 +436,9 @@ void Workspace::setReady(bool wasReady)
 
 qreal Workspace::indexProgress() const
 {
-    if (!m_vault || m_indexTotal <= 0 || m_indexQueue.isEmpty())
+    if (!m_vault || !indexing())
         return 1.0;
-    return std::clamp(1.0 - qreal(m_indexQueue.size()) / qreal(m_indexTotal), 0.0, 1.0);
+    return m_loader->progress();
 }
 
 void Workspace::onVaultChanged(const QList<VaultChange> &changes)
@@ -379,18 +456,24 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
             switch (c.type) {
             case ChangeType::Created:
             case ChangeType::Modified:
+                if (m_loader)
+                    m_loader->forget(c.path); // a worker's older read of it is dropped
                 indexFile(c.path);
                 break;
             case ChangeType::Deleted:
+                if (m_loader)
+                    m_loader->forget(c.path);
                 m_index->remove(c.path);
-                m_indexQueue.removeAll(c.path);
                 m_vault->store()->remove(foldStateKey(c.path));
                 break;
             case ChangeType::Renamed: {
                 QString content;
                 if (paths::isMarkdown(c.path))
                     content = m_vault->readText(c.path);
-                m_indexQueue.removeAll(c.oldPath);
+                if (m_loader) {
+                    m_loader->forget(c.oldPath);
+                    m_loader->forget(c.path);
+                }
                 if (paths::isIgnored(c.path))
                     m_index->remove(c.oldPath);
                 else

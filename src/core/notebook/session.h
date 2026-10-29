@@ -17,6 +17,7 @@
 // processes taken over) keeps two command-line processes from interleaving their steps.
 #pragma once
 
+#include "notebook/indexloader.h"
 #include "types.h"
 
 #include <QByteArray>
@@ -55,6 +56,12 @@ public:
         QString historyReason = QStringLiteral("cli");
         /// Clock of History and the trash (default: the current time).
         std::function<QDateTime()> clock;
+        /// Threads the index loader may use (none: everything on the calling thread).
+        WorkerPool workers;
+        /// Keep the index cache in "<stateDir>/index-cache.bin" (index/indexcache.h): read when
+        /// the index is loaded, written when the notebook closes after a load that parsed many
+        /// notes (and in watch mode after quiet changes). Off without a state folder.
+        bool indexCache = true;
     };
 
     enum class OpenError { None, Missing, NotAFolder, Failed };
@@ -76,6 +83,10 @@ public:
     /// date with the vault's changes from then on.
     VaultIndex &index();
     bool hasIndex() const;
+    /// How index() loaded the index (IndexLoader::Stats; empty before the first index()).
+    IndexLoader::Stats indexStats() const;
+    /// The index cache file ("" when none is kept: no state folder, or Options::indexCache off).
+    QString indexCachePath() const;
 
     /// Take the device's write lock ("<stateDir>/cli.lock", else one in the temp folder named by the
     /// vault id), waiting at most `timeoutMs`; nullptr (and `error`) when it cannot be had. The lock
@@ -131,6 +142,8 @@ public:
 
     /// Tests: called right before each write attempt (another writer may change the file there).
     void setBeforeWrite(std::function<void(const VaultPath &path, int attempt)> hook);
+    /// Tests: the smallest notebook that gets an index cache (default 200 notes).
+    void setIndexCacheMinNotes(qsizetype notes) { m_cacheMinNotes = notes; }
 
 private:
     void applyChanges(const QList<VaultChange> &changes);
@@ -139,6 +152,12 @@ private:
     std::unique_ptr<Vault> m_vault;
     std::unique_ptr<VaultIndex> m_index;
     QString m_stateDir;
+    WorkerPool m_workers;
+    IndexLoader::Stats m_indexStats;
+    bool m_indexCache = true;
+    qsizetype m_cacheMinNotes = 200;
+    bool m_watch = false;
+    std::unique_ptr<class IndexCacheKeeper> m_cacheKeeper;
     std::function<void(const VaultPath &, int)> m_beforeWrite;
 };
 

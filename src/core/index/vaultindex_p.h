@@ -44,6 +44,7 @@ struct Entry {
     QString content;
     ParsedNote note;
     quint64 seq = 0;            ///< update sequence number (higher = more recently updated)
+    quint64 contentKey = 0;     ///< VaultIndex::contentKey(content)
     QList<PathLink> links;      ///< path-based links
     QList<int> refs;            ///< indices into note.links of `((id))` / `!((id))` references
     QList<NameCandidate> names; ///< folded title, then aliases
@@ -68,13 +69,20 @@ private:
     mutable std::optional<QStringList> m_pageTags;
 };
 
-/// Access to VaultIndex internals for the module's own free functions (runQuery).
+/// Access to VaultIndex internals for the module's own free functions (runQuery, the index
+/// cache's writer).
 struct IndexAccess {
     static const Entry *entry(const VaultIndex &index, const VaultPath &path);
+    static const SearchIndex &search(const VaultIndex &index);
+    /// Is the full-text index up to date and complete (nothing pending, not built elsewhere)?
+    static bool searchComplete(const VaultIndex &index);
 };
 
 /// Journals first (newest first), then other notes by path.
 bool relevanceLess(const Entry &a, const Entry &b);
+
+/// A note's record from its text and parse (pure: any thread); `seq` 0.
+std::unique_ptr<Entry> makeEntry(const VaultPath &path, const QString &content, ParsedNote note);
 
 /// The tags a note carries as a whole page: frontmatter `tags`, the leading `tags::` block, and
 /// tags found in no ordinary block (keys, lower-case NFC).
@@ -120,15 +128,18 @@ struct VaultIndex::Private {
     std::unordered_map<VaultPath, std::unique_ptr<Entry>> entries;
     QSet<VaultPath> attachmentSet;
     index_detail::NameTable names;
-    QHash<QString, QSet<VaultPath>> sourcesByKey;     ///< link key -> notes with such links
-    QHash<VaultPath, QHash<VaultPath, int>> incoming; ///< target -> source -> link count
-    QHash<QString, QHash<VaultPath, int>> unresolved; ///< link key -> source -> count
-    QHash<QString, QSet<VaultPath>> blockOwners;      ///< block id -> notes defining it
-    QHash<QString, QSet<VaultPath>> blockRefSources;  ///< block id -> notes with ((id))
-    QHash<QString, QHash<VaultPath, int>> tagIndex;   ///< tag -> note -> occurrences
+    // Compact per-key sets (smallsets_p.h): nearly every key names one or two notes.
+    QHash<QString, index_detail::PathSet> sourcesByKey;    ///< link key -> notes with such links
+    QHash<VaultPath, index_detail::PathCounts> incoming;   ///< target -> source -> link count
+    QHash<QString, index_detail::PathCounts> unresolved;   ///< link key -> source -> count
+    QHash<QString, index_detail::PathSet> blockOwners;     ///< block id -> notes defining it
+    QHash<QString, index_detail::PathSet> blockRefSources; ///< block id -> notes with ((id))
+    QHash<QString, index_detail::PathCounts> tagIndex;     ///< tag -> note -> occurrences
 
     SearchIndex search;
     QSet<VaultPath> searchDirty;
+    qsizetype searchBuilt = 0;    ///< documents built since the last SearchIndex::squeeze()
+    bool searchElsewhere = false; ///< setSearchBuiltElsewhere()
     QTimer *searchTimer = nullptr;
     QElapsedTimer lastChange;
 
@@ -164,7 +175,8 @@ struct VaultIndex::Private {
     /// have changed (the note's names when new, aliases when they changed).
     QSet<QString> putNote(const VaultPath &path, const QString &content, bool updateSearch,
                           std::optional<quint64> keepSeq = std::nullopt);
-    std::unique_ptr<Entry> makeEntry(const VaultPath &path, const QString &content, ParsedNote note, quint64 seq) const;
+    /// putNote() of a prepared record (its seq is set here).
+    QSet<QString> putEntry(std::unique_ptr<Entry> e, bool updateSearch, std::optional<quint64> keepSeq);
     void attachNote(std::unique_ptr<Entry> e);
     /// Remove a note from every map; returns it (nullptr when unknown).
     std::unique_ptr<Entry> detachNote(const VaultPath &path, bool discardSearch);

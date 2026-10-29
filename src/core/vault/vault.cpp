@@ -632,9 +632,9 @@ bool VaultPrivate::comparesContent(const FileStat &stat) const
     return stat.size <= ContentCache::kMaxItemBytes && isTextual(stat.path);
 }
 
-void VaultPrivate::rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText)
+void VaultPrivate::rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText, const QString &hash)
 {
-    hashes.insert(path, text::fnv1a64Hex(bytes));
+    hashes.insert(path, hash.isEmpty() ? text::fnv1a64Hex(bytes) : hash);
     if (bytes.startsWith(vaultutil::utf8Bom()))
         bomPaths.insert(path);
     else
@@ -682,21 +682,25 @@ QByteArray VaultPrivate::readFile(const VaultPath &path, bool asText, bool *ok)
         return {};
     }
     *ok = true;
-    if (tracked) {
-        const auto known = files.constFind(path);
-        if (known == files.cend() || !before || !sameStat(*before, *known)) {
-            scheduleCheck(path); // changed or created behind our back: report it soon
-        } else if (const auto hash = hashes.constFind(path);
-                   hash != hashes.cend() && *hash != text::fnv1a64Hex(bytes)) {
-            // Other content behind an unchanged stat (coarse timestamps: FAT, network mounts):
-            // keep the known hash and content so the check reports it and History keeps the old.
-            staleContent.insert(path);
-            scheduleCheck(path);
-        } else {
-            rememberContent(path, bytes, asText);
-        }
-    }
+    if (tracked)
+        takeRead(path, before, bytes, asText, text::fnv1a64Hex(bytes));
     return bytes;
+}
+
+void VaultPrivate::takeRead(const VaultPath &path, const std::optional<FileStat> &before, const QByteArray &bytes,
+                            bool asText, const QString &hash)
+{
+    const auto known = files.constFind(path);
+    if (known == files.cend() || !before || !sameStat(*before, *known)) {
+        scheduleCheck(path); // changed or created behind our back: report it soon
+    } else if (const auto old = hashes.constFind(path); old != hashes.cend() && *old != hash) {
+        // Other content behind an unchanged stat (coarse timestamps: FAT, network mounts):
+        // keep the known hash and content so the check reports it and History keeps the old.
+        staleContent.insert(path);
+        scheduleCheck(path);
+    } else {
+        rememberContent(path, bytes, asText, hash);
+    }
 }
 
 void VaultPrivate::snapshotCached(const VaultPath &path, ChangeSource reason)
@@ -1158,6 +1162,45 @@ QString Vault::readText(const VaultPath &path, bool *ok)
     if (ok)
         *ok = good;
     return good ? vaultutil::decodeUtf8(bytes) : QString();
+}
+
+DetachedRead Vault::readDetached(const VaultPath &path, const QString &absolutePath)
+{
+    DetachedRead out;
+    out.path = path;
+    const QFileInfo info(absolutePath);
+    if (info.isFile())
+        out.statBefore = statOf(info, path);
+    QFile file(absolutePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        out.error = file.errorString();
+        return out;
+    }
+    out.bytes = file.readAll();
+    if (file.error() != QFileDevice::NoError) {
+        out.error = file.errorString();
+        out.bytes.clear();
+        return out;
+    }
+    out.ok = true;
+    out.hash = text::fnv1a64Hex(out.bytes);
+    out.text = vaultutil::decodeUtf8(out.bytes);
+    return out;
+}
+
+void Vault::adoptRead(const DetachedRead &read)
+{
+    const VaultPath path = paths::normalize(read.path);
+    if (!d->requireOpen() || path.isEmpty())
+        return;
+    if (!read.ok) {
+        d->fail(tr("Cannot read %1: %2").arg(path, read.error));
+        if (d->files.contains(path))
+            d->scheduleCheck(path); // gone behind our back
+        return;
+    }
+    if (vaultutil::isTracked(path))
+        d->takeRead(path, read.statBefore, read.bytes, true, read.hash);
 }
 
 QByteArray Vault::readBinary(const VaultPath &path, bool *ok)

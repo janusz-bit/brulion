@@ -12,6 +12,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QLockFile>
 #include <QSaveFile>
 #include <QTemporaryDir>
@@ -73,7 +74,7 @@ class TestNotebookSession : public QObject {
             writeBehind(dir + u'/' + it.key(), it.value());
         return dir;
     }
-    Notebook::Options options() { return {m_tmp.filePath(u"state%1"_s.arg(m_n)), false, u"cli"_s, {}}; }
+    Notebook::Options options() { return {m_tmp.filePath(u"state%1"_s.arg(m_n)), false, u"cli"_s, {}, {}}; }
 
 private Q_SLOTS:
     void missingFolderIsNotCreated()
@@ -109,6 +110,61 @@ private Q_SLOTS:
         QVERIFY(r.created);
         QCOMPARE(nb.index().backlinks(u"Ogród.md"_s).size(), 2); // the vault's change reached the index
         QCOMPARE(nb.index().search(u"zolw"_s).size(), 1);
+    }
+
+    // The index cache in the state folder: written when the notebook closes after a load that
+    // parsed, used by the next process; a note changed on disk meanwhile is parsed; without a
+    // state folder or with the cache off, no file.
+    void indexCacheAcrossNotebooks()
+    {
+        QHash<QString, QByteArray> files;
+        for (int i = 0; i < 60; ++i)
+            files.insert(u"Strony/Strona %1.md"_s.arg(i), "- [[Strona 0]] żółw #t\n");
+        files.insert(u"Zadania.md"_s, "- [ ] stare\n");
+        const QString dir = vaultDir(files);
+        const Notebook::Options o = options();
+        const QString cache = o.stateDir + u"/index-cache.bin"_s;
+        {
+            Notebook nb;
+            nb.setIndexCacheMinNotes(10);
+            QVERIFY(nb.open(dir, o));
+            QCOMPARE(nb.indexCachePath(), cache);
+            QCOMPARE(nb.index().paths().size(), 61);
+            QCOMPARE(nb.indexStats().cache, u"absent"_s);
+            QCOMPARE(nb.indexStats().parsed, 61);
+        } // closed: saved
+        QVERIFY(QFileInfo::exists(cache));
+        writeBehind(dir + u"/Zadania.md"_s, "- [ ] nowe z innego programu\n");
+        {
+            Notebook nb;
+            nb.setIndexCacheMinNotes(10);
+            QVERIFY(nb.open(dir, o));
+            QCOMPARE(nb.index().tasks().size(), 1);
+            QCOMPARE(nb.index().tasks().first().task.text, u"nowe z innego programu"_s);
+            QCOMPARE(nb.indexStats().cache, u"used"_s);
+            QCOMPARE(nb.indexStats().fromCache, 60);
+            QCOMPARE(nb.indexStats().parsed, 1);
+        }
+        // Cache off: not read, not written.
+        Notebook::Options off = o;
+        off.indexCache = false;
+        QVERIFY(QFile::remove(cache));
+        {
+            Notebook nb;
+            nb.setIndexCacheMinNotes(10);
+            QVERIFY(nb.open(dir, off));
+            QVERIFY(nb.indexCachePath().isEmpty());
+            QCOMPARE(nb.index().paths().size(), 61);
+            QCOMPARE(nb.indexStats().cache, u"disabled"_s);
+        }
+        QVERIFY(!QFileInfo::exists(cache));
+        // Small notebooks (the default minimum of 200 notes): none.
+        {
+            Notebook nb;
+            QVERIFY(nb.open(dir, o));
+            nb.index();
+        }
+        QVERIFY(!QFileInfo::exists(cache));
     }
 
     void editKeepsBytesAndHistory()
@@ -248,7 +304,7 @@ private Q_SLOTS:
         QVERIFY(b.lock(1000));
         // Without a state folder the lock is in the temp folder, named by the vault.
         Notebook c;
-        QVERIFY(c.open(dir, {QString(), false, u"cli"_s, {}}));
+        QVERIFY(c.open(dir, {QString(), false, u"cli"_s, {}, {}}));
         QVERIFY(c.lock(1000));
     }
 

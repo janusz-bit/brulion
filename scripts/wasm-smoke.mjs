@@ -5,7 +5,8 @@
 //   node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/p \
 //       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--keyboard] [--keyboard-phone] \
 //       [--two-tabs] [--lang pl-PL] \
-//       [--index-notes N] [--copy] [--screenshot shot.png] [--loader-screenshot loading.png] [--timeout 120]
+//       [--index-notes N [--cache-quota]] [--copy] [--screenshot shot.png] [--loader-screenshot loading.png] \
+//       [--timeout 120]
 //
 // Opens the page `--loads` times in one browser (reloads), each time waiting until the app
 // has replaced the loading screen. With --selftest the page runs `?selftest=storage`
@@ -35,7 +36,16 @@
 // writes a vault of N generated notes into IndexedDB before the first load (as the app's IDBFS
 // mount stores it, named the current vault): every load must then report a complete index
 // (brulionShell.indexed(), wasm/index.html) with no input at all — Qt's WebAssembly timers once
-// stalled until the mouse moved (docs/WEB.md). --copy writes a notebook with today's journal into
+// stalled until the mouse moved (docs/WEB.md); the first load (of 200 notes or more) must save the
+// index cache (brulionShell.indexCacheSaved()) and every later one take nearly every note from it
+// (brulionShell.indexStats(): indexedFromCache >= N - 1; docs/PERFORMANCE.md, L2), stored in the cache
+// mount's own IndexedDB database and in none of the others (one transaction per mount: a cache the
+// quota cannot take must not take History and settings with it). --cache-quota makes IndexedDB
+// refuse that cache once the index is ready, as a full quota does (a stub of put(): a file over
+// 64 KiB aborts its transaction and throws QuotaExceededError — DevTools' quota override,
+// Storage.overrideQuotaForOrigin, changes nothing in headless Chromium 155): the cache's write-back
+// must fail alone — counted in brulionStorage.cacheFailures, no failed write-back, no change left
+// pending, the cache gone from IndexedDB — and the reload then parses every note. --copy writes a notebook with today's journal into
 // IndexedDB the same way and copies blocks with real input: a click on the first block's text,
 // Escape (the block selected), Shift+Down (the next one with its child), Ctrl+C — the browser's
 // clipboard (navigator.clipboard, permission granted) must then hold their Markdown as text/plain
@@ -71,6 +81,7 @@ function parseArgs(argv) {
     else if (a === '--loader-screenshot') args.loaderScreenshot = next();
     else if (a === '--expect-first') args.expectFirst = Number(next());
     else if (a === '--index-notes') args.indexNotes = Number(next());
+    else if (a === '--cache-quota') args.cacheQuota = true;
     else if (a === '--copy') args.copy = true;
     else if (a === '--screenshot') args.screenshot = next();
     else if (a === '--timeout') args.timeout = Number(next());
@@ -294,10 +305,12 @@ async function main() {
   await cdp.open();
 
   const problems = [];
+  const consoleErrors = [];
   cdp.on((msg) => {
     if (msg.method === 'Runtime.consoleAPICalled') {
       const text = msg.params.args.map((a) => a.value ?? a.description ?? '').join(' ');
       console.log(`[console.${msg.params.type}] ${text}`);
+      if (msg.params.type === 'error') consoleErrors.push(text);
     } else if (msg.method === 'Runtime.exceptionThrown') {
       const d = msg.params.exceptionDetails;
       const text = d.exception?.description ?? d.text;
@@ -332,6 +345,25 @@ async function main() {
   }
   if (args.keyboard || args.keyboardPhone) {
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: viewportStub });
+  }
+  if (args.cacheQuota) {
+    // A full quota, as IndexedDB reports it: the transaction aborts with QuotaExceededError (here
+    // put() also throws it, which IDBFS reports the same way). Only files above
+    // globalThis.__brulionQuotaBytes, only while it is set.
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `(() => {
+        const put = IDBObjectStore.prototype.put;
+        IDBObjectStore.prototype.put = function (value, key) {
+          const limit = globalThis.__brulionQuotaBytes;
+          const size = value && value.contents ? value.contents.byteLength ?? value.contents.length ?? 0 : 0;
+          if (typeof limit === 'number' && size > limit) {
+            try { this.transaction.abort(); } catch (e) { /* already finished */ }
+            throw new DOMException('The quota has been exceeded (smoke test).', 'QuotaExceededError');
+          }
+          return put.call(this, value, key);
+        };
+      })();`,
+    });
   }
   // A phone: Pixel-class 1080×2400 at 2.625 (412×915 CSS px), a touch screen.
   const phone = { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true };
@@ -470,8 +502,74 @@ async function main() {
       for (const end = deadline(args.timeout); Date.now() < end && !(indexedAt > 0); await sleep(250)) {
         indexedAt = await evaluate('window.brulionShell?.indexedAt ?? null');
       }
-      console.log(`load ${load}: index of ${args.indexNotes} notes complete at ${indexedAt > 0 ? `${Math.round(indexedAt)} ms` : 'never'}`);
+      const stats = await evaluate('({ notes: window.brulionShell?.indexedNotes ?? null, fromCache: window.brulionShell?.indexedFromCache ?? null })');
+      console.log(`load ${load}: index of ${args.indexNotes} notes complete at ${indexedAt > 0 ? `${Math.round(indexedAt)} ms` : 'never'}`
+        + ` (${stats?.fromCache ?? '?'} of ${stats?.notes ?? '?'} from the index cache)`);
       if (!(indexedAt > 0)) problems.push(`load ${load}: the index did not complete within ${args.timeout} s without input`);
+      if (args.indexNotes >= 200 && load >= 2 && !args.cacheQuota && !(stats?.fromCache >= args.indexNotes - 1)) {
+        problems.push(`load ${load}: only ${stats?.fromCache} of ${args.indexNotes} notes came from the index cache`);
+      }
+      if (args.cacheQuota && load >= 2 && stats?.fromCache !== 0) {
+        problems.push(`load ${load}: ${stats?.fromCache} notes came from an index cache the quota should have refused`);
+      }
+      if (args.cacheQuota && load === 1) {
+        // Before the cache is saved (5 s after "ready"): files over 64 KiB no longer fit.
+        await evaluate('globalThis.__brulionQuotaBytes = 64 * 1024');
+        console.log(`load ${load}: IndexedDB refuses files over 64 KiB from now on`);
+      }
+      if (args.indexNotes >= 200 && load < args.loads) {
+        // The cache is saved a few seconds after the index is ready (still without input), then
+        // written back to IndexedDB like any file (at most 3 s later).
+        let savedAt;
+        for (const end = deadline(args.timeout); Date.now() < end && !(savedAt > 0); await sleep(250)) {
+          savedAt = await evaluate('window.brulionShell?.indexCacheSavedAt ?? null');
+        }
+        console.log(`load ${load}: index cache saved at ${savedAt > 0 ? `${Math.round(savedAt)} ms` : 'never'}`);
+        if (!(savedAt > 0)) problems.push(`load ${load}: the index cache was not saved within ${args.timeout} s`);
+        await sleep(4000);
+        if (args.cacheQuota) {
+          // The cache mount's write-back failed alone and left nothing pending.
+          let storage;
+          for (const end = deadline(30); Date.now() < end; await sleep(250)) {
+            storage = await evaluate('({ failures: brulionStorage.cacheFailures, pending: brulionStorage.pending(), dirty: brulionStorage.dirty })');
+            if (storage?.failures > 0 && !storage.pending) break;
+          }
+          console.log(`load ${load}: with the small quota ${JSON.stringify(storage)}`);
+          if (!(storage?.failures > 0)) problems.push(`load ${load}: the index cache's write-back did not fail under the small quota`);
+          if (storage?.pending) problems.push(`load ${load}: changes left pending after the cache's write-back failed`);
+          const failedFlush = consoleErrors.filter((t) => t.includes('saving to IndexedDB failed'));
+          if (failedFlush.length) problems.push(`load ${load}: a write-back failed besides the cache: ${failedFlush[0]}`);
+          await evaluate('globalThis.__brulionQuotaBytes = undefined');
+        }
+        // The cache lives in its own database, the cache mount's (IDBFS: one per mount point).
+        const where = await evaluate(`(async () => {
+          const st = window.brulionStorage;
+          const keys = (name) => new Promise((resolve) => {
+            const req = indexedDB.open(name);
+            req.onerror = () => resolve(null);
+            req.onsuccess = () => {
+              const db = req.result;
+              if (!db.objectStoreNames.contains('FILE_DATA')) { db.close(); resolve([]); return; }
+              const all = db.transaction(['FILE_DATA'], 'readonly').objectStore('FILE_DATA').getAllKeys();
+              all.onsuccess = () => { db.close(); resolve(all.result.map(String)); };
+              all.onerror = () => { db.close(); resolve(null); };
+            };
+          });
+          const names = new Set((await indexedDB.databases()).map((d) => d.name));
+          const out = {};
+          for (const m of st.mounts.concat(st.cacheMounts)) {
+            out[m] = names.has(m) ? ((await keys(m)) ?? []).filter((k) => k.endsWith('/index-cache.bin')).length : null;
+          }
+          return { cacheMounts: st.cacheMounts, caches: out };
+        })()`, true);
+        console.log(`load ${load}: index cache files per IndexedDB database ${JSON.stringify(where)}`);
+        const inCache = (where?.cacheMounts ?? []).reduce((n, m) => n + (where.caches[m] ?? 0), 0);
+        const elsewhere = Object.entries(where?.caches ?? {}).filter(([m, n]) => !where.cacheMounts.includes(m) && n > 0);
+        if (!where?.cacheMounts?.length) problems.push(`load ${load}: no cache mount`);
+        if (elsewhere.length) problems.push(`load ${load}: an index cache stored with ${elsewhere[0][0]}`);
+        if (!args.cacheQuota && inCache !== 1) problems.push(`load ${load}: ${inCache} index caches in the cache mount, expected 1`);
+        if (args.cacheQuota && inCache !== 0) problems.push(`load ${load}: the refused index cache is still stored`);
+      }
     }
   }
 

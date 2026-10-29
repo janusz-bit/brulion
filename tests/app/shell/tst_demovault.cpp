@@ -396,7 +396,7 @@ private Q_SLOTS:
                 QList<Heading> headings;
                 for (const Block &b : target->blocks) {
                     if (b.kind == BlockKind::Heading)
-                        headings.append(Heading{b.headingLevel, b.raw.section(u'\n', 0, 0), b.line});
+                        headings.append(Heading{b.headingLevel, b.raw.toString().section(u'\n', 0, 0), b.line});
                 }
                 QVERIFY2(markdown::findHeading(headings, link.heading) >= 0,
                          qPrintable(f.path + u": "_s + link.target + u'#' + link.heading));
@@ -466,11 +466,11 @@ private Q_SLOTS:
         for (const Block &b : note.blocks) {
             if (b.kind == BlockKind::Frontmatter)
                 continue; // the guide's own tags, aliases and note mode
-            QVERIFY2(b.properties.isEmpty(), qPrintable(b.raw));
-            QString text = b.raw; // code spans masked, as the renderer does before formulas
-            for (const auto &m : codeSpan.globalMatch(b.raw))
+            QVERIFY2(b.properties.isEmpty(), qPrintable(b.raw.toString()));
+            QString text = b.raw.toString(); // code spans masked, as the renderer does before formulas
+            for (const auto &m : codeSpan.globalMatchView(b.raw.view()))
                 text.replace(m.capturedStart(), m.capturedLength(), QString(m.capturedLength(), u' '));
-            QVERIFY2(markdown::findMathSpans(text).isEmpty(), qPrintable(b.raw));
+            QVERIFY2(markdown::findMathSpans(text).isEmpty(), qPrintable(b.raw.toString()));
         }
     }
 

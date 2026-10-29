@@ -14,6 +14,9 @@ namespace brulion::markdown::detail {
 /// frontmatter's).
 ParsedNote parseNoteWith(const VaultPath &path, QStringView content, const VaultConfig &config,
                          StructureOptions options, QList<NoteTag> *tags = nullptr);
+/// The same on a QString: the blocks' raw texts share it.
+ParsedNote parseNoteWith(const VaultPath &path, const QString &content, const VaultConfig &config,
+                         StructureOptions options, QList<NoteTag> *tags = nullptr);
 
 /// The items of the `tags::` / `tag::` property value `value` that are no `#tag` the inline scan
 /// finds (`hashAt`: whether a '#' at that document offset starts one) and no `[[link]]`:

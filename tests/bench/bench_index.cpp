@@ -13,13 +13,30 @@
 #include "notebook/pages.h"
 #include "vault/vault.h"
 
+#include <QFileInfo>
 #include <QRegularExpression>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QThreadPool>
+
+// The index loader (L1) and the index cache (L2) — the same bench sources build on trees without
+// them (bench.sh compare needs equal sources): their rows are skipped there.
+#if __has_include("notebook/indexloader.h")
+#include "notebook/indexloader.h"
+#define BENCH_HAS_LOADER 1
+#endif
+#if __has_include("index/indexcache.h")
+#include "index/indexcache.h"
+#include "notebook/indexcachekeeper.h"
+#define BENCH_HAS_CACHE 1
+#endif
 
 #include <algorithm>
+#include <limits>
 #include <map>
 #include <memory>
+#include <vector>
 
 using namespace brulion;
 using namespace Qt::StringLiterals;
@@ -99,6 +116,7 @@ class BenchIndex : public QObject {
 
     std::map<int, std::unique_ptr<Fixture>> m_fixtures;
     std::map<int, std::unique_ptr<QTemporaryDir>> m_disk;
+    std::map<int, std::unique_ptr<QTemporaryDir>> m_cacheDirs; ///< cacheFile(notes), removed at exit
     std::map<int, std::unique_ptr<Fixture>> m_relocation; ///< relocationVault(), no search index
     std::unique_ptr<QTemporaryDir> m_moveDir;             ///< relocationVault(5000) on disk
     std::unique_ptr<Vault> m_moveVault;
@@ -155,6 +173,36 @@ class BenchIndex : public QObject {
         return d->path();
     }
 
+#ifdef BENCH_HAS_CACHE
+    /// The index cache of diskVault(notes) (written once per process, not timed), in a temporary
+    /// folder of its own: outside the vault (not one of its files) and removed at exit.
+    QString cacheFile(int notes)
+    {
+        auto &dir = m_cacheDirs[notes];
+        if (!dir)
+            dir = bench::makeTempDir();
+        const QString path = dir->filePath(u"index-cache.bin"_s);
+        if (!QFileInfo::exists(path)) {
+            Vault vault(diskVault(notes), QString());
+            if (!vault.open())
+                qFatal("cannot open the benchmark vault");
+            VaultIndex idx(vault.config());
+            notebook::IndexLoader loader(vault, idx, {}, {});
+            loader.start(vault.files());
+            loader.finish();
+            idx.flushSearch();
+            notebook::IndexCacheKeeper::Policy policy;
+            policy.minNotes = 0;
+            notebook::IndexCacheKeeper keeper(vault, idx, {}, path, policy);
+            if (!keeper.saveNow())
+                qFatal("cannot write the index cache");
+            qInfo("[bench] index cache %d notes: %lld bytes (vault %lld bytes)", notes,
+                  qlonglong(QFileInfo(path).size()), qlonglong(bench::totalBytes(files(notes))));
+        }
+        return path;
+    }
+#endif
+
     static void addSizeRows(std::initializer_list<int> full, std::initializer_list<int> small)
     {
         QTest::addColumn<int>("notes");
@@ -165,7 +213,7 @@ class BenchIndex : public QObject {
 private Q_SLOTS:
     void initTestCase()
     {
-        // In-line sizes of the parsed model (every Block carries an optional<Task> in place).
+        // In-line sizes of the parsed model.
         qInfo("[bench] sizeof: ParsedNote %zu, Block %zu, Task %zu, Reminder %zu, Link %zu, DateSpec %zu, QString %zu",
               sizeof(ParsedNote), sizeof(Block), sizeof(Task), sizeof(Reminder), sizeof(Link), sizeof(DateSpec),
               sizeof(QString));
@@ -229,6 +277,10 @@ private Q_SLOTS:
             QTest::newRow(qPrintable(u"%1 notes parsed"_s.arg(n))) << n << 1;
             QTest::newRow(qPrintable(u"%1 notes + search index"_s.arg(n))) << n << 2;
         }
+        // From the disk with the loader (vault, texts, index and full-text index): parsed, and
+        // taken from the index cache — the same heap within a few percent.
+        QTest::newRow("10000 notes loaded from disk") << 10000 << 3;
+        QTest::newRow("10000 notes loaded from the index cache") << 10000 << 4;
     }
     void memory()
     {
@@ -237,6 +289,29 @@ private Q_SLOTS:
         const QList<bench::VaultFile> &all = files(notes);
         if (bench::heapBytes() < 0)
             QSKIP("no malloc statistics on this platform");
+        if (what >= 3) {
+#ifdef BENCH_HAS_CACHE
+            const QString root = diskVault(notes);
+            const QString cache = what == 4 ? cacheFile(notes) : QString();
+            const qint64 start = bench::heapBytes();
+            {
+                Vault vault(root, QString());
+                QVERIFY(vault.open());
+                VaultIndex idx(vault.config());
+                notebook::IndexLoader::Options options;
+                options.cachePath = cache;
+                notebook::IndexLoader loader(vault, idx, {}, options);
+                loader.start(vault.files());
+                loader.finish();
+                idx.flushSearch();
+                QCOMPARE(loader.stats().fromCache, what == 4 ? qsizetype(notes) : 0);
+                QTest::setBenchmarkResult(qreal(bench::heapBytes() - start), QTest::BytesAllocated);
+            }
+            return;
+#else
+            QSKIP("no index cache in this tree");
+#endif
+        }
         const qint64 before = bench::heapBytes();
         if (what == 0) {
             const VaultConfig config;
@@ -251,6 +326,28 @@ private Q_SLOTS:
             qInfo("[bench] %d notes: %lld blocks, %lld bytes of ParsedNote heap (%lld per note, %lld per block)", notes,
                   qlonglong(blocks), qlonglong(bytes), qlonglong(bytes / notes),
                   qlonglong(bytes / qMax<qsizetype>(1, blocks)));
+            // What the model holds (docs/PERFORMANCE.md "Wave 5", L8): the same on every tree.
+            qsizetype tasks = 0, withProperties = 0, withId = 0, links = 0, refs = 0, rawChars = 0, textChars = 0;
+            QSet<QString> tags;
+            for (const ParsedNote &n : std::as_const(parsed)) {
+                for (const Block &b : n.blocks) {
+                    tasks += b.task ? 1 : 0;
+                    withProperties += b.properties.isEmpty() ? 0 : 1;
+                    withId += b.id.isEmpty() ? 0 : 1;
+                    rawChars += QStringView(b.raw).size();
+                    textChars += b.text.size();
+                }
+                for (const Link &l : n.links) {
+                    ++links;
+                    refs += l.kind == LinkKind::BlockRef || l.kind == LinkKind::BlockEmbed ? 1 : 0;
+                }
+                for (const QString &t : n.tags)
+                    tags.insert(t);
+            }
+            qInfo("[bench] %d notes model: %lld blocks, %lld tasks, %lld with properties, %lld with an id, %lld links "
+                  "(%lld block refs), %lld distinct tags, %lld raw + %lld text characters",
+                  notes, qlonglong(blocks), qlonglong(tasks), qlonglong(withProperties), qlonglong(withId),
+                  qlonglong(links), qlonglong(refs), qlonglong(tags.size()), qlonglong(rawChars), qlonglong(textChars));
             QTest::setBenchmarkResult(qreal(bytes), QTest::BytesAllocated);
             return;
         }
@@ -267,15 +364,26 @@ private Q_SLOTS:
         }
     }
 
-    // The app's open path: Vault::open() (scan), readText() of every note, VaultIndex::update().
+    // The app's open path: Vault::open() (scan), readText() of every note, VaultIndex::update();
+    // and with the index loader (notebook::IndexLoader, L1): reading, parsing and the full-text
+    // index on worker threads (QThreadPool, 1 or 4 parse workers + 1 for the search), merged on
+    // this thread — "loader inline" is the single-threaded loader (WebAssembly). Timed until
+    // finish() returns: every note merged and the full-text index adopted.
     void openFromDisk_data()
     {
         QTest::addColumn<int>("notes");
         QTest::addColumn<int>("phase");
+        const int workers = bench::smallProfile() ? 3 : 4;
         for (int n : bench::sizes({1000, 10000, 50000}, {1000, 10000})) {
             QTest::newRow(qPrintable(u"%1 notes scan"_s.arg(n))) << n << 0;
             QTest::newRow(qPrintable(u"%1 notes scan+read"_s.arg(n))) << n << 1;
             QTest::newRow(qPrintable(u"%1 notes scan+read+index"_s.arg(n))) << n << 2;
+            QTest::newRow(qPrintable(u"%1 notes loader inline"_s.arg(n))) << n << 3;
+            QTest::newRow(qPrintable(u"%1 notes loader 1 worker"_s.arg(n))) << n << 4;
+            QTest::newRow(qPrintable(u"%1 notes loader %2 workers"_s.arg(n).arg(workers))) << n << 4 + workers;
+            QTest::newRow(qPrintable(u"%1 notes loader warm cache inline"_s.arg(n))) << n << 20;
+            QTest::newRow(qPrintable(u"%1 notes loader warm cache %2 workers"_s.arg(n).arg(workers)))
+                    << n << 20 + workers;
         }
     }
     void openFromDisk()
@@ -283,6 +391,42 @@ private Q_SLOTS:
         QFETCH(int, notes);
         QFETCH(int, phase);
         const QString root = diskVault(notes);
+        if (phase >= 3) {
+#ifdef BENCH_HAS_LOADER
+            const bool warm = phase >= 20;
+#ifdef BENCH_HAS_CACHE
+            const QString cache = warm ? cacheFile(notes) : QString();
+#else
+            const QString cache;
+            if (warm)
+                QSKIP("no index cache in this tree");
+#endif
+            const int threads = warm ? phase - 20 : (phase == 3 ? 0 : (phase == 4 ? 1 : phase - 4)); // N workers
+            QThreadPool pool;
+            pool.setMaxThreadCount(threads + 1);
+            notebook::WorkerPool workers;
+            if (threads > 0)
+                workers = {threads, [&pool](std::function<void()> job) { pool.start(std::move(job)); }};
+            QElapsedTimer t;
+            t.start();
+            Vault vault(root, QString());
+            QVERIFY(vault.open());
+            VaultIndex idx;
+            notebook::IndexLoader::Options options;
+            options.firstFolder = vault.config().journalsFolder;
+            options.cachePath = cache;
+            notebook::IndexLoader loader(vault, idx, workers, options);
+            loader.start(vault.files());
+            loader.finish();
+            bench::reportMs(t);
+            QCOMPARE(idx.paths().size(), qsizetype(notes));
+            QCOMPARE(loader.stats().fromCache, warm ? qsizetype(notes) : 0);
+            QCOMPARE(idx.pendingSearchDocuments(), threads > 0 || warm ? 0 : notes);
+            return;
+#else
+            QSKIP("no index loader in this tree");
+#endif
+        }
         QElapsedTimer t;
         t.start();
         Vault vault(root, QString());
@@ -304,6 +448,80 @@ private Q_SLOTS:
             bench::reportMs(t);
         }
         QCOMPARE(count, qsizetype(notes));
+    }
+
+    // VaultIndex::prepare() of every note on one thread (what the loader's workers share out):
+    // the loader's parallel efficiency is prepare / (loader N workers x N).
+    void prepare_data() { addSizeRows({1000, 10000}, {1000, 10000}); }
+    void prepare()
+    {
+        QFETCH(int, notes);
+#ifdef BENCH_HAS_LOADER
+        const QList<bench::VaultFile> &all = files(notes);
+        const VaultConfig config;
+        std::vector<PreparedNote> prepared; // move-only
+        prepared.reserve(size_t(all.size()));
+        bench::timeOnce([]{}, [&] {
+            for (const bench::VaultFile &f : all)
+                prepared.push_back(VaultIndex::prepare(f.path, f.content, config));
+        });
+        QCOMPARE(qsizetype(prepared.size()), qsizetype(notes));
+#else
+        Q_UNUSED(notes);
+        QSKIP("no VaultIndex::prepare() in this tree");
+#endif
+    }
+
+    // The index cache: encoding a whole index with its full-text index (the keeper's work on
+    // the GUI thread, in slices there), and decoding every note and the full-text index on one
+    // thread (what a warm load shares out to the workers).
+    void cacheEncode_data() { addSizeRows({1000, 10000, 50000}, {1000, 10000}); }
+    void cacheEncode()
+    {
+        QFETCH(int, notes);
+#ifdef BENCH_HAS_CACHE
+        VaultIndex &idx = index(notes);
+        const auto identity = indexcache::Identity::current(idx.config(), u"bench"_s);
+        const auto stat = [](const VaultPath &p) -> std::optional<FileStat> { return FileStat{p, false, 1, 1}; };
+        QByteArray out;
+        bench::timeOnce([]{}, [&] { out = indexcache::encode(idx, identity, stat); });
+        QVERIFY(out.size() > notes * 100);
+        qInfo("[bench] index cache %d notes: %lld bytes", notes, qlonglong(out.size()));
+#else
+        Q_UNUSED(notes);
+        QSKIP("no index cache in this tree");
+#endif
+    }
+
+    void cacheDecode_data() { addSizeRows({1000, 10000, 50000}, {1000, 10000}); }
+    void cacheDecode()
+    {
+        QFETCH(int, notes);
+#ifdef BENCH_HAS_CACHE
+        VaultIndex &idx = index(notes);
+        const auto identity = indexcache::Identity::current(idx.config(), u"bench"_s);
+        QHash<VaultPath, qint64> sizes;
+        for (const bench::VaultFile &f : files(notes))
+            sizes.insert(f.path, f.content.toUtf8().size());
+        const QByteArray bytes = indexcache::encode(idx, identity, [&](const VaultPath &p) -> std::optional<FileStat> {
+            return FileStat{p, false, sizes.value(p), 1};
+        });
+        qsizetype decoded = 0;
+        bench::timeOnce([]{}, [&] {
+            const auto reader = indexcache::Reader::open(bytes, identity);
+            for (const bench::VaultFile &f : files(notes)) {
+                if (const indexcache::Record *r = reader->find(f.path))
+                    decoded += reader->decodeNote(*r, f.path, f.content, idx.config()) ? 1 : 0;
+            }
+            indexcache::Reader::SearchDecoder search = reader->searchDecoder();
+            search.step(std::numeric_limits<int>::max());
+            QVERIFY(!search.failed());
+        });
+        QCOMPARE(decoded, qsizetype(notes));
+#else
+        Q_UNUSED(notes);
+        QSKIP("no index cache in this tree");
+#endif
     }
 
     // ---- incremental updates ------------------------------------------------------------------

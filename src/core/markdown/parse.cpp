@@ -468,11 +468,32 @@ Block blockShell(const Structure &st, const Node &node)
     block.endLine = node.endLine;
     block.ownEndLine = node.ownEndLine;
     block.depth = node.depth;
-    QStringList raw;
-    raw.reserve(node.own.size());
-    for (const OwnLine &l : node.own)
-        raw.append(st.lines[l.view.line].text);
-    block.raw = raw.join(u'\n');
+    // Own lines that are one piece of the note (consecutive, each but the last ending in "\n"):
+    // a slice of its text; else a copy joined with '\n' (docs/PERFORMANCE.md, L8).
+    bool slice = !node.own.isEmpty();
+    for (qsizetype k = 0; slice && k + 1 < node.own.size(); ++k) {
+        const int line = node.own[k].view.line;
+        slice = node.own[k + 1].view.line == line + 1 && st.lines[line].eol == u"\n";
+    }
+    if (slice) {
+        const text::Line &first = st.lines[node.own.first().view.line];
+        const text::Line &last = st.lines[node.own.last().view.line];
+        block.raw = BlockSource(st.content, first.start, last.start + last.text.size());
+    } else {
+        QStringList raw;
+        raw.reserve(node.own.size());
+        for (const OwnLine &l : node.own)
+            raw.append(st.lines[l.view.line].text);
+        block.raw = BlockSource(raw.join(u'\n'));
+    }
+#ifndef QT_NO_DEBUG
+    {
+        QStringList joined;
+        for (const OwnLine &l : node.own)
+            joined.append(st.lines[l.view.line].text);
+        Q_ASSERT(block.raw.view() == joined.join(u'\n'));
+    }
+#endif
     block.headingLevel = node.headingLevel;
     block.lang = node.lang;
     if (!node.calloutType.isEmpty()) {
@@ -763,13 +784,24 @@ QVariant firstOf(const Properties &props, const QString &a, const QString &b)
 
 ParsedNote parseNote(const VaultPath &path, QStringView content, const VaultConfig &config)
 {
+    return detail::parseNoteWith(path, content.toString(), config, StructureOptions());
+}
+
+ParsedNote parseNote(const VaultPath &path, const QString &content, const VaultConfig &config)
+{
     return detail::parseNoteWith(path, content, config, StructureOptions());
 }
 
 ParsedNote detail::parseNoteWith(const VaultPath &path, QStringView content, const VaultConfig &config,
                                  StructureOptions options, QList<NoteTag> *tagSites)
 {
-    const Structure st = parseStructure(content.toString(), options);
+    return parseNoteWith(path, content.toString(), config, options, tagSites);
+}
+
+ParsedNote detail::parseNoteWith(const VaultPath &path, const QString &content, const VaultConfig &config,
+                                 StructureOptions options, QList<NoteTag> *tagSites)
+{
+    const Structure st = parseStructure(content, options);
     Ctx ctx;
     ctx.st = &st;
     ctx.tags = tagSites;
@@ -788,7 +820,9 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, QStringView content, con
 
     QList<int> blockOfNode(st.nodes.size(), -1);
     QStringList allTags;
-    for (const auto &[n, parentNode] : preOrder(st)) {
+    const QList<std::pair<int, int>> order = preOrder(st);
+    note.blocks.reserve(order.size()); // exactly: no growth slack (docs/PERFORMANCE.md, L8)
+    for (const auto &[n, parentNode] : order) {
         const Node &node = st.nodes[n];
         Block block = buildBlock(node, ctx);
         const int index = int(note.blocks.size());
@@ -831,6 +865,18 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, QStringView content, con
     std::stable_sort(note.links.begin(), note.links.end(),
                      [](const Link &a, const Link &b) { return a.from < b.from; });
     note.journalDate = journalDateFromPath(path, config);
+
+    // No growth slack in what the index keeps (docs/PERFORMANCE.md, L8).
+    note.links.squeeze();
+    note.headings.squeeze();
+    note.tasks.squeeze();
+    note.reminders.squeeze();
+    for (Block &b : note.blocks) {
+        if (b.children.capacity() > b.children.size())
+            b.children.squeeze();
+        if (b.reminders.capacity() > b.reminders.size())
+            b.reminders.squeeze();
+    }
     return note;
 }
 

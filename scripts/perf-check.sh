@@ -54,10 +54,14 @@ guards_full=(
   "bench_markdown:blockDocOps:5000 blocks keystroke"
   "bench_vault:localStoreFlush:10000 synced files"
   "bench_sync:syncNoChanges:10000 files"
+  "bench_index:openFromDisk:10000 notes loader 4 workers"
+  "bench_index:openFromDisk:10000 notes loader warm cache 4 workers"
 )
 guards_small=(
   "${guards_full[@]:0:9}"
   "bench_sync:syncNoChanges:5000 files"
+  "bench_index:openFromDisk:10000 notes loader 3 workers"
+  "bench_index:openFromDisk:10000 notes loader warm cache 3 workers"
 )
 
 detect_machine() {

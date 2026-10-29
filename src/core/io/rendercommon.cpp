@@ -315,7 +315,7 @@ QString visibleText(const Link &link, QStringView source)
 
 bool isOrderedItem(const Block &b)
 {
-    const QStringView first = QStringView(b.raw).trimmed();
+    const QStringView first = b.raw.view().trimmed();
     qsizetype i = 0;
     while (i < first.size() && first[i].isDigit())
         ++i;

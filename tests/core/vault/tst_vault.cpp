@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 
+#include <thread>
 #include <utility>
 
 using namespace vaulttest;
@@ -398,6 +399,95 @@ private Q_SLOTS:
         QCOMPARE(f.changes(), (QStringList{u"modify:a.md@user"_s, u"modify:a.md@external"_s, u"modify:a.md@user"_s}));
         QCOMPARE(f.historyContents(u"a.md"_s), (QStringList{u"z Syncthinga"_s, u"v1"_s, u"v0"_s}));
         QCOMPARE(f.historyReasons(u"a.md"_s), (QStringList{u"user"_s, u"external"_s, u"user"_s}));
+    }
+
+    // readDetached() + adoptRead() (the index loader's workers): readText() split in two, with
+    // exactly its bookkeeping — known content (an external overwrite is snapshotted), a check
+    // when the file changed since the scan or behind an unchanged stat, failures.
+    void detachedReadIsReadText_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<QString>("text");
+        QTest::newRow("plain") << u"Żółw.md"_s << "- żółw\n"_ba << u"- żółw\n"_s;
+        QTest::newRow("BOM") << u"bom.md"_s << "\xEF\xBB\xBF- a\r\n"_ba << u"- a\r\n"_s;
+        QTest::newRow("empty") << u"pusta.md"_s << QByteArray() << QString();
+        QTest::newRow("invalid UTF-8") << u"zły.md"_s << "- \xff\xfe z\n"_ba << QString::fromUtf8("- \xff\xfe z\n");
+        QTest::newRow("folder") << u"Dziennik/2026-10-28 środa.md"_s << "- dziś\n"_ba << u"- dziś\n"_s;
+    }
+    void detachedReadIsReadText()
+    {
+        QFETCH(QString, path);
+        QFETCH(QByteArray, bytes);
+        QFETCH(QString, text);
+        Fixture f;
+        f.write(path, bytes);
+        QVERIFY(f.open());
+        DetachedRead read;
+        const QString abs = f.vault->absolutePath(path);
+        std::thread worker([&] { read = Vault::readDetached(path, abs); });
+        worker.join();
+        QVERIFY(read.ok);
+        QCOMPARE(read.path, path);
+        QCOMPARE(read.bytes, bytes);
+        QCOMPARE(read.text, text);
+        QVERIFY(read.statBefore.has_value());
+        QCOMPARE(read.statBefore->size, bytes.size());
+        f.vault->adoptRead(read);
+        f.vault->processPendingEvents();
+        QCOMPARE(f.spy->count(), 0); // nothing changed since the scan
+        // The vault knows the content now: an external overwrite is taken in with a snapshot.
+        f.write(path, "- nowa treść\n");
+        QCOMPARE(f.vault->rescan().size(), 1);
+        QCOMPARE(f.historyContents(path),
+                 QStringList{QString::fromUtf8(bytes.startsWith("\xEF\xBB\xBF") ? bytes.mid(3) : bytes)});
+    }
+
+    void detachedReadOfAChangedFile()
+    {
+        Fixture f;
+        f.write(u"a.md"_s, "v0\n");
+        const qint64 mtime = nextFakeMtime();
+        f.write(u"b.md"_s, "aaaa", mtime);
+        QVERIFY(f.open());
+        // Changed between the scan and the read: reported.
+        f.write(u"a.md"_s, "v1 dłuższe\n");
+        DetachedRead a = Vault::readDetached(u"a.md"_s, f.vault->absolutePath(u"a.md"_s));
+        QCOMPARE(a.text, u"v1 dłuższe\n"_s);
+        f.vault->adoptRead(a);
+        // Same stat, other bytes (coarse timestamps): known first, then the other content reported.
+        QCOMPARE(f.text(u"b.md"_s), u"aaaa"_s);
+        f.write(u"b.md"_s, "bbbb", mtime);
+        f.vault->adoptRead(Vault::readDetached(u"b.md"_s, f.vault->absolutePath(u"b.md"_s)));
+        f.vault->processPendingEvents();
+        QCOMPARE(sorted(f.changes()), (QStringList{u"modify:a.md@external"_s, u"modify:b.md@external"_s}));
+        QCOMPARE(f.historyContents(u"b.md"_s), QStringList{u"aaaa"_s});
+        // A failed read of a file deleted meanwhile: a check reports the deletion.
+        f.write(u"c.md"_s, "c");
+        QCOMPARE(f.vault->rescan().size(), 1);
+        const QString abs = f.vault->absolutePath(u"c.md"_s);
+        QVERIFY(QFile::remove(abs));
+        const DetachedRead c = Vault::readDetached(u"c.md"_s, abs);
+        QVERIFY(!c.ok);
+        QVERIFY(!c.error.isEmpty());
+        f.vault->adoptRead(c);
+        f.vault->processPendingEvents();
+        QVERIFY(f.changes().contains(u"delete:c.md@external"_s));
+    }
+
+    void detachedReadOfAnNfdName()
+    {
+        Fixture f;
+        f.write(u"Z\u0307o\u0301\u0142w.md"_s, "- żółw\n"); // written NFD (macOS)
+        QVERIFY(f.open());
+        QVERIFY(f.vault->exists(u"Żółw.md"_s));
+        // The vault's (NFC) path, read under the real name absolutePath() gives.
+        const DetachedRead read = Vault::readDetached(u"Żółw.md"_s, f.vault->absolutePath(u"Żółw.md"_s));
+        QVERIFY(read.ok);
+        QCOMPARE(read.text, u"- żółw\n"_s);
+        f.vault->adoptRead(read);
+        f.vault->processPendingEvents();
+        QCOMPARE(f.spy->count(), 0);
     }
 
     // writeTextIfUnchanged(): the compare-and-swap of the editor's saves and brulion-cli's edits.

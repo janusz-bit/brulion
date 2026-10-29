@@ -31,6 +31,13 @@ struct WasmStorageJs;
 ///   blocked site data), `ready()` is still emitted, `isBackedByIndexedDb()` is false and the
 ///   files live only in memory for this page session.
 ///
+/// * Cache mounts (`cacheMountPoints()`, by default `indexCacheRoot()`) hold files the app can
+///   rebuild (the index cache). Each mount is its own IndexedDB database written back in its own
+///   transaction, so a cache the browser's quota cannot take never takes History, sync state or
+///   settings down with it: a cache mount that fails is no storage error (no `error()`, nothing
+///   left pending); its files are deleted from memory — the next write-back removes the stored
+///   copies too, freeing their space — and `cacheNotSaved()` tells the app to stop writing them.
+///
 /// One instance per process (the mounts are global). The JavaScript side keeps running after a
 /// crash of the WebAssembly instance, so the HTML shell can still save the in-memory files.
 class WasmStorage : public QObject
@@ -46,13 +53,20 @@ public:
     /// `vaultRoot()` and the writable `QStandardPaths::AppDataLocation` (history, sync state,
     /// local settings). Call after the application name/organisation are set.
     static QStringList defaultMountPoints();
+    /// The folder of the index caches (`<QStandardPaths::CacheLocation>/index`), a cache mount.
+    static QString indexCacheRoot();
+    /// `indexCacheRoot()`.
+    static QStringList defaultCacheMountPoints();
     /// Absolute, cleaned, de-duplicated paths without nesting (a path inside another one is
     /// dropped — IDBFS mounts must not nest). "/" and relative paths are rejected.
     static QStringList normalizeMountPoints(const QStringList &paths);
 
-    /// Mounts IDBFS on `mountPoints` and starts loading them from IndexedDB; emits `ready()`.
+    /// Mounts IDBFS on `mountPoints` and the cache mounts `cacheMountPoints` (a cache mount
+    /// nested in another mount is dropped) and starts loading them from IndexedDB; emits
+    /// `ready()` once `mountPoints` are loaded (a cache mount that cannot load stays empty).
     /// Only the first call has an effect.
-    void start(const QStringList &mountPoints = defaultMountPoints());
+    void start(const QStringList &mountPoints = defaultMountPoints(),
+               const QStringList &cacheMountPoints = defaultCacheMountPoints());
 
     bool isStarted() const { return m_started; }
     /// The initial load has finished (successfully or not); `ready()` was emitted.
@@ -60,7 +74,16 @@ public:
     /// Changes are being written to IndexedDB (false before `ready()` and when loading failed).
     bool isBackedByIndexedDb() const { return m_backed; }
     QStringList mountPoints() const { return m_mountPoints; }
+    QStringList cacheMountPoints() const { return m_cacheMountPoints; }
     QString lastError() const { return m_lastError; }
+
+    /// `navigator.storage.estimate()` of this site, asked when loading started (bytes; -1 until
+    /// the browser answered or where it cannot tell). Process-wide, for the index cache's budget.
+    struct Estimate {
+        qint64 usage = -1;
+        qint64 quota = -1;
+    };
+    static Estimate estimate();
 
     /// Changes not yet written to IndexedDB (dirty, debounce pending or write-back running).
     Q_INVOKABLE bool hasPendingChanges() const;
@@ -89,14 +112,19 @@ Q_SIGNALS:
     void flushed(bool ok);
     /// Loading or saving failed (technical message, e.g. a quota error).
     void error(const QString &message);
+    /// The cache mount `mountPoint` could not be written back (`message`, e.g. a quota error):
+    /// its files were deleted; do not write new ones in this session.
+    void cacheNotSaved(const QString &mountPoint, const QString &message);
     void persistentStorageResult(bool persisted);
 
 private:
     friend struct WasmStorageJs;
     void handleJsEvent(int op, bool ok, const QString &message);
     void pushDelays();
+    void dropCacheFiles(const QString &mountPoint);
 
     QStringList m_mountPoints;
+    QStringList m_cacheMountPoints;
     QString m_lastError;
     int m_flushDelay = 400;
     int m_maxFlushDelay = 3000;

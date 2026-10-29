@@ -148,6 +148,138 @@ private Q_SLOTS:
         QVERIFY(!ws.reminders()->isRunning());
     }
 
+    // The index cache across opens (docs/PERFORMANCE.md, L2): saved after the first load, used by
+    // the next one except for the note changed on disk meanwhile; a corrupt file is ignored and
+    // written again.
+    void indexCacheAcrossOpens()
+    {
+        const QString root = newRoot();
+        const QString state = root + u"-state"_s;
+        for (int i = 0; i < 30; ++i)
+            writeRaw(root + u"/Strony/Strona %1.md"_s.arg(i), "- [[Strona 0]] #źródło zażółć gęślą jaźń\n");
+        writeRaw(root + u"/Zadania.md"_s, "- [ ] stare zadanie\n");
+        brulion::notebook::IndexCacheKeeper::Policy policy;
+        policy.firstSaveQuietMs = 10;
+        policy.minNotes = 10;
+        const QString cache = state + u"/index-cache.bin"_s;
+        {
+            Workspace ws;
+            ws.setClock([this] { return m_now; });
+            ws.setIndexCachePolicy(policy);
+            QVERIFY(ws.open(root, state));
+            QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+            QCOMPARE(ws.indexStats().cache, u"absent"_s);
+            QVERIFY(ws.indexCacheKeeper());
+            QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(cache), 10000); // saved soon after the load
+        }
+        writeRaw(root + u"/Zadania.md"_s, "- [ ] nowe zadanie z dysku\n");
+        {
+            Workspace ws;
+            ws.setClock([this] { return m_now; });
+            ws.setIndexCachePolicy(policy);
+            QVERIFY(ws.open(root, state));
+            QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+            QCOMPARE(ws.indexStats().cache, u"used"_s);
+            QCOMPARE(ws.indexStats().fromCache, 30);
+            QCOMPARE(ws.indexStats().parsed, 1);
+            const QList<brulion::TaskRef> tasks = ws.index()->tasks();
+            QCOMPARE(tasks.size(), 1);
+            QCOMPARE(tasks.first().task.text, u"nowe zadanie z dysku"_s);
+            QCOMPARE(ws.search(u"zazolc"_s).size(), 30);
+        }
+        QByteArray corrupt;
+        {
+            QFile f(cache);
+            QVERIFY(f.open(QIODevice::ReadWrite));
+            QVERIFY(f.seek(f.size() - 60));
+            QCOMPARE(f.write("zepsute"), 7);
+            QVERIFY(f.seek(0));
+            corrupt = f.readAll();
+        }
+        auto cacheBytes = [&] {
+            QFile f(cache);
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        };
+        {
+            Workspace ws;
+            ws.setClock([this] { return m_now; });
+            ws.setIndexCachePolicy(policy);
+            QVERIFY(ws.open(root, state));
+            QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+            QVERIFY(ws.indexStats().cache.startsWith(u"invalid: "_s));
+            QCOMPARE(ws.indexStats().parsed, 31);
+            QTRY_VERIFY_WITH_TIMEOUT(cacheBytes() != corrupt, 10000); // written again
+        }
+        {
+            Workspace ws;
+            ws.setIndexCachePolicy(policy);
+            QVERIFY(ws.open(root, state));
+            QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+            QCOMPARE(ws.indexStats().fromCache, 31);
+        }
+    }
+
+    // Closed right after indexing, before the first save: the cache is written at close (once).
+    void indexCacheSavedAtClose()
+    {
+        const QString root = newRoot();
+        const QString state = root + u"-state"_s;
+        for (int i = 0; i < 15; ++i)
+            writeRaw(root + u"/Strona %1.md"_s.arg(i), "- żółw\n");
+        brulion::notebook::IndexCacheKeeper::Policy policy;
+        policy.firstSaveQuietMs = 600000;
+        policy.minNotes = 10;
+        {
+            Workspace ws;
+            ws.setIndexCachePolicy(policy);
+            QVERIFY(ws.open(root, state));
+            QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+            QVERIFY(!QFileInfo::exists(state + u"/index-cache.bin"_s));
+        }
+        QVERIFY(QFileInfo::exists(state + u"/index-cache.bin"_s));
+        Workspace ws;
+        ws.setIndexCachePolicy(policy);
+        QVERIFY(ws.open(root, state));
+        QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+        QCOMPARE(ws.indexStats().fromCache, 15);
+    }
+
+    // The storage refused the cache (the browser's quota, WasmStorage::cacheNotSaved()): the open
+    // notebook writes none any more — neither after changes nor at close —, the next one does.
+    void indexCacheStopped()
+    {
+        const QString root = newRoot();
+        const QString state = root + u"-state"_s;
+        for (int i = 0; i < 15; ++i)
+            writeRaw(root + u"/Strona %1.md"_s.arg(i), "- źdźbło\n");
+        brulion::notebook::IndexCacheKeeper::Policy policy;
+        policy.firstSaveQuietMs = 600000;
+        policy.minNotes = 10;
+        const QString cache = state + u"/index-cache.bin"_s;
+        {
+            Workspace ws;
+            ws.setIndexCachePolicy(policy);
+            ws.stopIndexCache(u"nothing open"_s); // no notebook: nothing to stop
+            QVERIFY(ws.open(root, state));
+            QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+            QVERIFY(ws.indexCacheKeeper());
+            ws.stopIndexCache(u"QuotaExceededError"_s);
+            QVERIFY(!ws.indexCacheKeeper());
+            writeRaw(root + u"/Nowa.md"_s, "- nowa\n");
+            QVERIFY(!ws.vault()->rescan().isEmpty());
+            QTRY_VERIFY_WITH_TIMEOUT(ws.index()->contains(u"Nowa.md"_s), 10000);
+            ws.close();
+            QVERIFY(!QFileInfo::exists(cache));
+        }
+        Workspace ws;
+        ws.setIndexCachePolicy(policy);
+        QVERIFY(ws.open(root, state));
+        QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+        QVERIFY(ws.indexCacheKeeper());
+        ws.close();
+        QVERIFY(QFileInfo::exists(cache));
+    }
+
     // ---- Quick capture ----------------------------------------------------------------------------
 
     void quickCaptureWritesTheJournal()

@@ -23,7 +23,7 @@ void publishSelfTestResult(const char *name, const QJsonObject &result);
 
 /// Proves that browser storage survives a page reload. Call after `WasmStorage::ready()`.
 ///
-/// In every mounted directory it increments the counter in the hidden file `.brulion-selftest`
+/// In every mounted directory (cache mounts too) it increments the counter in the hidden file `.brulion-selftest`
 /// (atomic `QSaveFile` write), waits for the automatic write-back to IndexedDB (no explicit
 /// flush: this also checks the change tracking) and publishes `window.brulionSelfTest`
 /// `{backed, flushed, counters: [{path, previous, now, written}], …}`. Reloading the page must

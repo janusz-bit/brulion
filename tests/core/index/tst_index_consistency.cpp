@@ -1,11 +1,18 @@
 // Incremental maintenance: after every update / remove / rename of a deterministic random
-// sequence, everything VaultIndex derives must equal a fresh index built from the same files.
+// sequence, everything VaultIndex derives must equal a fresh index built from the same files —
+// also when notes are prepared on other threads (VaultIndex::prepare() + updatePrepared(), the
+// index loader's path) and when a full-text index built elsewhere is adopted (adoptSearch()).
 #include "index/index.h"
+#include "indexcompare.h"
+#include "markdown/parse.h"
 
 #include <QRandomGenerator>
 #include <QTest>
 
+#include <thread>
+
 using namespace brulion;
+using namespace brulion::testing;
 using namespace Qt::StringLiterals;
 
 namespace {
@@ -90,90 +97,6 @@ QString trickyContent(QRandomGenerator &rng)
     for (int i = 0; i < n; ++i)
         out += TrickyLines[rng.bounded(int(TrickyLines.size()))] + u'\n';
     return out;
-}
-
-QStringList describeBacklinks(const QList<Backlink> &links)
-{
-    QStringList out;
-    for (const Backlink &b : links)
-        out.append(u"%1@%2#%3"_s.arg(b.path).arg(b.link.from).arg(b.blockIndex));
-    return out;
-}
-
-QStringList describeOutgoing(const QList<ResolvedLink> &links)
-{
-    QStringList out;
-    for (const ResolvedLink &l : links)
-        out.append(u"%1->%2"_s.arg(l.link.from).arg(l.target));
-    return out;
-}
-
-QStringList describeTags(const QList<TagCount> &tags)
-{
-    QStringList out;
-    for (const TagCount &t : tags)
-        out.append(u"%1(%2)=%3:%4"_s.arg(t.tag, t.display).arg(t.count).arg(t.paths.join(u',')));
-    return out;
-}
-
-QStringList describeMissing(const QList<MissingPage> &missing)
-{
-    QStringList out;
-    for (const MissingPage &m : missing)
-        out.append(m.name + u':' + m.sources.join(u','));
-    return out;
-}
-
-QStringList describeGraph(const GraphData &g)
-{
-    QStringList out;
-    for (const GraphNode &n : g.nodes)
-        out.append(u"%1|%2|%3|%4%5"_s.arg(n.id, n.title).arg(n.degree).arg(int(n.isTag)).arg(int(n.isMissing)));
-    for (const GraphEdge &e : g.edges)
-        out.append(e.source + u"->"_s + e.target);
-    out.sort();
-    return out;
-}
-
-QStringList describeSearch(const QList<SearchHit> &hits)
-{
-    QStringList out;
-    for (const SearchHit &h : hits)
-        out.append(u"%1:%2:%3"_s.arg(h.path).arg(h.line).arg(h.excerpt));
-    return out;
-}
-
-/// Compare everything derived by `a` and `b` (which must hold the same files).
-void compareIndexes(const VaultIndex &a, const VaultIndex &b, const QString &step)
-{
-    const QByteArray ctx = step.toUtf8();
-    QVERIFY2(a.paths() == b.paths(), ctx.constData());
-    QVERIFY2(a.attachments() == b.attachments(), ctx.constData());
-    const QList<VaultPath> all = a.paths() + a.attachments();
-    for (const VaultPath &p : all) {
-        QCOMPARE(describeOutgoing(a.outgoingLinks(p)), describeOutgoing(b.outgoingLinks(p)));
-        QCOMPARE(describeBacklinks(a.backlinks(p)), describeBacklinks(b.backlinks(p)));
-        QCOMPARE(a.linksTo(p), b.linksTo(p));
-        QCOMPARE(a.unlinkedReferences(p).size(), b.unlinkedReferences(p).size());
-    }
-    QCOMPARE(describeMissing(a.missingPages()), describeMissing(b.missingPages()));
-    QCOMPARE(describeTags(a.tags()), describeTags(b.tags()));
-    QCOMPARE(a.tasks().size(), b.tasks().size());
-    QCOMPARE(a.reminders().size(), b.reminders().size());
-    QCOMPARE(a.journals(), b.journals());
-    for (const QString &id : {u"id1"_s, u"id2"_s}) {
-        const std::optional<BlockRef> ra = a.blockById(id);
-        const std::optional<BlockRef> rb = b.blockById(id);
-        QCOMPARE(ra.has_value(), rb.has_value());
-        if (ra)
-            QCOMPARE(*ra, *rb);
-    }
-    for (const QString &t : {u"A"_s, u"a"_s, u"b"_s, u"C"_s, u"D"_s, u"E"_s, u"Ż"_s, u"img.png"_s, u"Brak"_s, u"x/A"_s,
-                             u"sub/A"_s, u"W"_s, u"q"_s, u"c"_s})
-        QCOMPARE(a.resolveLink(t, u"x/Q.md"_s), b.resolveLink(t, u"x/Q.md"_s));
-    QCOMPARE(describeGraph(a.graph(true, true)), describeGraph(b.graph(true, true)));
-    for (const QString &q : {u"zolw"_s, u"zadanie"_s, u"tekst inne"_s, u"nagl"_s})
-        QCOMPARE(describeSearch(a.search(q)), describeSearch(b.search(q)));
 }
 
 } // namespace
@@ -278,6 +201,145 @@ private Q_SLOTS:
             if (QTest::currentTestFailed())
                 return;
         }
+    }
+
+    // Every other update prepared on another thread and merged with updatePrepared(): the same
+    // index as update() alone (and as a fresh one) after every step.
+    void preparedUpdatesMatchFreshIndex_data()
+    {
+        QTest::addColumn<quint32>("seed");
+        for (const quint32 seed : {5u, 99u, 31337u})
+            QTest::newRow(qPrintable(u"seed %1"_s.arg(seed))) << seed;
+    }
+    void preparedUpdatesMatchFreshIndex()
+    {
+        QFETCH(quint32, seed);
+        QRandomGenerator rng(seed);
+        VaultIndex index;
+        QHash<QString, QString> files;
+        auto isNote = [](const QString &p) { return p.endsWith(u".md"_s) || p.endsWith(u".markdown"_s); };
+        for (int step = 0; step < 160; ++step) {
+            const QString path = TrickyPaths[rng.bounded(int(TrickyPaths.size()))];
+            const int op = rng.bounded(100);
+            QString what;
+            if (op < 70) {
+                const QString content = isNote(path) ? trickyContent(rng) : QString();
+                files.insert(path, content);
+                if (step % 2 == 0 && isNote(path)) {
+                    PreparedNote prepared;
+                    const VaultConfig config = index.config();
+                    std::thread worker([&] { prepared = VaultIndex::prepare(path, content, config); });
+                    worker.join();
+                    QVERIFY(prepared.isValid());
+                    QCOMPARE(prepared.path(), path);
+                    QCOMPARE(prepared.contentKey(), VaultIndex::contentKey(content));
+                    index.updatePrepared(std::move(prepared));
+                    what = u"prepared "_s + path;
+                } else {
+                    index.update(path, content);
+                    what = u"update "_s + path;
+                }
+            } else {
+                files.remove(path);
+                index.remove(path);
+                what = u"remove "_s + path;
+            }
+            VaultIndex fresh;
+            QStringList sorted = files.keys();
+            sorted.sort();
+            for (const QString &p : std::as_const(sorted))
+                fresh.update(p, files.value(p));
+            compareIndexes(index, fresh, u"prepared step %1: %2"_s.arg(step).arg(what));
+            if (QTest::currentTestFailed())
+                return;
+        }
+    }
+
+    void updatePreparedRules()
+    {
+        VaultIndex index;
+        index.update(u"A.md"_s, u"- [[B]] #żółw"_s);
+        const int version = index.version();
+        // Unchanged content: a no-op, as update().
+        index.updatePrepared(VaultIndex::prepare(u"A.md"_s, u"- [[B]] #żółw"_s, index.config()));
+        QCOMPARE(index.version(), version);
+        // Prepared with another config (journal folder): parsed again with the index's.
+        VaultConfig other;
+        other.journalsFolder = u"dziennik"_s;
+        index.updatePrepared(VaultIndex::prepare(u"dziennik/2026-10-28.md"_s, u"- dzień"_s, other));
+        QVERIFY(!index.note(u"dziennik/2026-10-28.md"_s)->journalDate.has_value());
+        VaultIndex journals(other);
+        journals.updatePrepared(VaultIndex::prepare(u"dziennik/2026-10-28.md"_s, u"- dzień"_s, VaultConfig()));
+        QCOMPARE(journals.note(u"dziennik/2026-10-28.md"_s)->journalDate, std::optional<QDate>(QDate(2026, 10, 28)));
+        // Not indexable / attachments.
+        index.updatePrepared(VaultIndex::prepare(u".trash/X.md"_s, u"- x"_s, index.config()));
+        QVERIFY(!index.note(u".trash/X.md"_s));
+        index.updatePrepared(
+                VaultIndex::prepare(u"X.sync-conflict-20261028-120000-ABCDEFG.md"_s, u"- x"_s, index.config()));
+        QCOMPARE(index.paths(), QList<VaultPath>({u"A.md"_s, u"dziennik/2026-10-28.md"_s}));
+        index.updatePrepared(PreparedNote()); // invalid: nothing
+        QCOMPARE(index.paths().size(), 2);
+        // Fingerprints: the fields parsing depends on.
+        VaultConfig c;
+        const QString base = VaultIndex::parseFingerprint(c);
+        c.newPagesFolder = u"nowe"_s;
+        QCOMPARE(VaultIndex::parseFingerprint(c), base);
+        c.defaultReminderTime = QTime(7, 30);
+        QVERIFY(VaultIndex::parseFingerprint(c) != base);
+        QVERIFY(VaultIndex::contentKey(u"żółw"_s) != VaultIndex::contentKey(u"zolw"_s));
+        QCOMPARE(VaultIndex::contentKey(u""_s), Q_UINT64_C(0xcbf29ce484222325));
+    }
+
+    // Recency (suggestPages("")): notes merged in any order with reserved sequence numbers
+    // rank as when loaded one by one in path order; an edit made meanwhile is newer.
+    void reservedSequencesKeepPathOrder()
+    {
+        const QStringList notes = {u"a.md"_s, u"b.md"_s, u"c.md"_s, u"journals/2026-10-27.md"_s,
+                                   u"journals/2026-10-28.md"_s};
+        VaultIndex serial;
+        for (const QString &p : notes)
+            serial.update(p, u"- "_s + p);
+        VaultIndex loaded;
+        const quint64 base = loaded.reserveSequence(notes.size());
+        for (qsizetype i = notes.size() - 1; i >= 0; --i) // merged backwards
+            loaded.updatePrepared(VaultIndex::prepare(notes[i], u"- "_s + notes[i], loaded.config()),
+                                  base + quint64(i));
+        QCOMPARE(describeRecency(loaded), describeRecency(serial));
+        loaded.update(u"a.md"_s, u"- zmieniona"_s);
+        QCOMPARE(describeRecency(loaded).first(), u"a.md"_s);
+    }
+
+    // A full-text index built elsewhere: documents of notes as they are now are kept, others
+    // (edited since, deleted, never indexed) dropped and rebuilt; search equals a fresh index's.
+    void adoptSearchValidates()
+    {
+        QHash<QString, QString> files = {{u"Żółw.md"_s, u"- spotkanie z żółwiem"_s},
+                                         {u"Zmieniona.md"_s, u"- stara treść spotkanie"_s},
+                                         {u"Usunięta.md"_s, u"- spotkanie usunięte"_s},
+                                         {u"Bez dokumentu.md"_s, u"- żółw bez dokumentu"_s}};
+        SearchIndex built;
+        for (auto it = files.cbegin(); it != files.cend(); ++it) {
+            if (it.key() == u"Bez dokumentu.md")
+                continue;
+            const ParsedNote n = markdown::parseNote(it.key(), it.value());
+            built.set(it.key(), SearchIndex::prepare(n.title, n.aliases, it.value()),
+                      VaultIndex::contentKey(it.value()));
+        }
+        built.set(u"Obca.md"_s, SearchIndex::prepare(u"Obca"_s, {}, u"spotkanie"_s), 1);
+        files.insert(u"Zmieniona.md"_s, u"- nowa treść spotkanei"_s);
+        files.remove(u"Usunięta.md"_s);
+        VaultIndex index;
+        index.setSearchBuiltElsewhere(true);
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+            index.update(it.key(), it.value());
+        index.adoptSearch(std::move(built));
+        QCOMPARE(index.pendingSearchDocuments(), 2); // the edited note and the one without a document
+        VaultIndex fresh;
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+            fresh.update(it.key(), it.value());
+        for (const QString &q : {u"zolw"_s, u"żółw"_s, u"spotkanie"_s, u"spot"_s, u"spotkanei"_s, u"stara"_s})
+            QCOMPARE(describeSearch(index.search(q)), describeSearch(fresh.search(q)));
+        QCOMPARE(index.pendingSearchDocuments(), 0);
     }
 
     void configChangeMatchesFreshIndex()

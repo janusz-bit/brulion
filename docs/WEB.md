@@ -186,8 +186,10 @@ Pozostałe opcje:
   wygenerowanymi notatkami (tak jak przechowuje je montaż IDBFS, z `settings.ini` wskazującym
   go jako bieżący); każde wczytanie musi potem zgłosić kompletny indeks
   (`brulionShell.indexed()`, czas w `brulionShell.indexedAt`) **bez żadnego wejścia** (myszy,
-  klawiatury) — test regresji zatrzymanych timerów (niżej, „Ograniczenia techniczne”). CI
-  uruchamia go z 3000 notatek.
+  klawiatury) — test regresji zatrzymanych timerów (niżej, „Ograniczenia techniczne”). Od 200
+  notatek pierwsze wczytanie musi też zapisać gotowy indeks (`brulionShell.indexCacheSavedAt`),
+  a każde kolejne wziąć z niego prawie wszystkie notatki (`brulionShell.indexStats()`:
+  `indexedFromCache` ≥ N − 1). CI uruchamia go z 3000 notatek.
 * `--copy` — kopiowanie bloków prawdziwym wejściem: przed wczytaniem zapisuje do IndexedDB (jak
   `--index-notes`) notatnik z dzisiejszym dziennikiem (trzy bloki, drugi z dzieckiem, polskie
   znaki, pogrubienie, link), potem klika tekst pierwszego bloku, wciska Escape (blok zaznaczony),
@@ -277,16 +279,48 @@ server {
 ## Dane w przeglądarce
 
 System plików Emscriptena żyje w pamięci. `WasmStorage` (`src/platform/wasm/wasmstorage.h`)
-montuje na nim IDBFS (lustro w IndexedDB) w dwóch katalogach:
+montuje na nim IDBFS (lustro w IndexedDB) w trzech katalogach:
 
 * `/home/web_user/Brulion` — skarbiec (vault) wersji przeglądarkowej,
 * katalog danych aplikacji (`QStandardPaths::AppDataLocation`,
   `/home/web_user/.local/share/Brulion/Brulion`) — historia wersji, stan synchronizacji,
-  lokalne ustawienia.
+  lokalne ustawienia,
+* katalog pamięci podręcznej (`WasmStorage::indexCacheRoot()`, `QStandardPaths::CacheLocation`
+  + `/index`, czyli `/home/web_user/.cache/Brulion/Brulion/index`) — gotowy indeks notatnika
+  (`<id notatnika>/index-cache.bin`, docs/PERFORMANCE.md L2): przy kolejnej wizycie notatki,
+  których tekst się nie zmienił, nie są parsowane od nowa (pliki są nadal czytane z pamięci).
+
+Indeks w przeglądarce buduje się jednowątkowo (`wasm_singlethread`: `IndexLoader` bez puli
+wątków, po kawałku w wątku GUI, jak wcześniej); przy pierwszej wizycie indeks pełnotekstowy
+dobudowuje się po kawałku już po „gotowym” indeksie, przy kolejnych przychodzi z pamięci
+podręcznej. Zapis pamięci podręcznej (kodowanie po 8 ms, ok. 5 s po gotowym indeksie) jest
+**montażem pamięci podręcznej** (*cache mount*): osobną bazą IndexedDB zapisywaną we własnej
+transakcji. IDBFS zapisuje każdy montaż jedną transakcją, a `QuotaExceededError` przerywa całą
+transakcję — gdyby indeks leżał w danych aplikacji, plik, którego limit miejsca nie mieści,
+zatrzymałby zapis historii wersji, stanu synchronizacji i ustawień przy każdej kolejnej próbie.
+Teraz nieudany zapis montażu pamięci podręcznej:
+
+* nie jest błędem zapisu (bez komunikatu „Saving to the browser's storage failed”, nic nie
+  zostaje „niezapisane”, `beforeunload` nie pyta), tylko zwiększa `brulionStorage.cacheFailures`,
+* usuwa pliki tego montażu z pamięci (następny zapis usuwa też ich stare kopie z IndexedDB,
+  zwalniając miejsce) — `WasmStorage::cacheNotSaved()`,
+* zatrzymuje zapisywanie indeksu do końca pracy z notatnikiem (`Workspace::stopIndexCache()`,
+  w rejestrze zdarzeń jedna linia „Index cache not saved”).
+
+Do tego indeks nie zajmie więcej niż połowę wolnego miejsca: `navigator.storage.estimate()`
+z chwili wczytywania (`WasmStorage::estimate()`) wyznacza `IndexCacheKeeper::Policy::maxBytes`
+(`notebook::indexCacheBudget()`: rozmiar poprzedniego pliku + połowa wolnego miejsca, najwyżej
+256 MB); większy indeks nie jest zapisywany. Wczytanie, którego montaż pamięci podręcznej się
+nie powiedzie, nie blokuje startu (ten montaż zostaje pusty).
+`scripts/wasm-smoke.mjs --index-notes N` sprawdza, że indeks leży tylko w swojej bazie, a
+`--cache-quota` (zmniejszony limit przez DevTools, `Storage.overrideQuotaForOrigin`) — że jego
+nieudany zapis niczego poza nim nie zatrzymuje.
 
 Każdy montaż to osobna baza IndexedDB nazwana ścieżką. Przebieg:
 
-1. Start: montowanie i wczytanie z IndexedDB (`FS.syncfs(true)`, asynchronicznie). Dopiero
+1. Start: montowanie i wczytanie z IndexedDB (`syncfs` IDBFS każdego montażu osobno — tak jak
+   robi to `FS.syncfs`, ale z własnym zakończeniem, żeby montaż pamięci podręcznej mógł zawieść
+   sam —, asynchronicznie). Dopiero
    po sygnale `ready()` aplikacja otwiera skarbiec (`main.cpp`); ekran ładowania pokazuje
    wtedy „Wczytywanie notatek…”.
 2. Każda zmiana w tych katalogach (zamknięcie zapisywanego pliku, zmiana nazwy, usunięcie,

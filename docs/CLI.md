@@ -59,7 +59,13 @@ The folder must exist: `brulion-cli init <folder>` is the only command that crea
 mistyped path never becomes an empty notebook). Device state — the version history and the lock —
 lives where the app keeps it for that folder (`~/.local/share/Brulion/Brulion/vaults/<id>`), so on
 one computer the app's history shows the command line's changes; `--state-dir` chooses another,
-`--no-history` none.
+`--no-history` none. The index cache lives there too (`index-cache.bin`, docs/PERFORMANCE.md L2):
+a command that needs the index still reads every note (to compare its size and content key) but
+parses only the notes changed since the cache was written (by the app or an earlier command), on
+worker threads; a command that had to parse many notes (no usable cache, or ≥ max(50, 2 %) of
+them) writes the cache when it exits — notebooks of 200 notes or more only. Environment: `BRULION_NO_INDEX_CACHE=1` neither reads nor writes it,
+`BRULION_INDEX_THREADS=<n>` sets the parse workers (`0`: on the main thread; default
+clamp(cores − 1, 1, 4)).
 
 ### Global options
 
@@ -72,7 +78,7 @@ one computer the app's history shows the command line's changes; `--state-dir` c
 | `--compact` | JSON on one line |
 | `--dry-run` | compute changes, write nothing; the result has a unified `diff` (a daily note that does not exist yet: with its template). `page create`: the new page's text; `page rename`/`move`, `folder rename`/`move`: `changes` — `{path, newPath, diff}` of every note whose links or tags would be rewritten; `page`/`folder delete`: the `files` that would go to the trash (a page: its text as a diff) |
 | `--diff` | also give the diff of written changes |
-| `--read-only` | refuse every command that writes (exit 7) |
+| `--read-only` | refuse every command that writes (exit 7); the device's index cache (device state, not the notebook) may still be updated |
 | `--allow-destructive` | allow the destructive commands (see the table) |
 | `--now "YYYY-MM-DD HH:mm"` | a fixed clock, local time (tests, reproducible runs) |
 | `--lang pl\|en` | language of written dates and templates (`{{weekday}}`, quick capture); default: the app's language (as the app picks it when it was never chosen: English on an English system, else Polish) |
@@ -172,7 +178,7 @@ Never compute a hash yourself.
 <!-- commands -->
 | Command | Arguments | What it does | Writes |
 |---|---|---|---|
-| `info` | | the notebook: folder, settings (`configFromObsidian`: those taken from `.obsidian/`), counts, scan state, `gui.running` | |
+| `info` | | the notebook: folder, settings (`configFromObsidian`: those taken from `.obsidian/`), counts, scan state, `gui.running`, how the index was loaded (`index`: `notes`, `attachments`, `fromCache`, `parsed`, `workers`, `ms`, `cache` — `absent`, `used`, `disabled`, `invalid: …`, `none` without a state folder) | |
 | `page list` | `[--folder F] [--sort title\|path\|modified] [--limit N]` | the pages | |
 | `page read <ref>` | `[--blocks] [--backlinks]` | text, `hash`, frontmatter, tags, aliases, mode; blocks with refs | |
 | `page create <title>` | `[--folder F] [--mode outline\|document] [--content T \| --stdin]` | a new page; a name differing only in letter case is that page (`existing`) | yes |
@@ -303,9 +309,12 @@ client asks for them; one constant in `src/cli/mcp.cpp`).
   only with `--app-control` (`brulion_app_open`, `brulion_app_today` and `brulion_app_capture` are
   always there). `brulion_app_screenshot` returns the picture too (an `image` content item, PNG).
   Meta commands (help, schema, completion, mcp, init) and the `task done`… aliases are no tools.
-* The notebook stays open, watched and indexed: calls after the first are fast (on a Raspberry Pi,
-  indexing 10 000 notes takes about 15 s once). Files other programs write are seen before the
-  next call.
+* The notebook stays open, watched and indexed: calls after the first are fast. The first one
+  loads the index from the device's index cache (shared with the app) and parses only the notes
+  changed since, on worker threads (10 000 notes on the laptop: ≈ 0.3 s from the cache, ≈ 0.35 s
+  all parsed; on a Raspberry Pi parsing took about 15 s before the worker threads and the cache
+  and is not measured since). The server keeps the cache up to date after quiet changes. Files
+  other programs write are seen before the next call.
 
 Claude Code (`.mcp.json`):
 

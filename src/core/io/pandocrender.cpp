@@ -444,7 +444,7 @@ QString PandocRenderer::metaSpans(const Block &block) const
     bool recurrence = false;
     // The tokens as written in the block's own lines (tasks and other blocks alike; reminders
     // come from the parsed block, with the default time filled in).
-    const QString raw = block.raw;
+    const QString raw = block.raw.toString();
     for (const markdown::Token &t : markdown::findTokens(markdown::maskInlineCode(raw))) {
         if (t.kind == markdown::TokenKind::Reminder || t.kind == markdown::TokenKind::ReminderCompat)
             continue;
@@ -519,7 +519,7 @@ QString PandocRenderer::renderListItem(const ParsedNote &note, int index) const
     const Block &b = note.blocks[index];
     QString marker = u"-"_s;
     if (isOrderedItem(b)) {
-        const QString first = b.raw.trimmed();
+        const QString first = b.raw.view().trimmed().toString();
         qsizetype d = 0;
         while (d < first.size() && first[d].isDigit())
             ++d;

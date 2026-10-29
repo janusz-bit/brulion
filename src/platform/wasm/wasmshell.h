@@ -26,6 +26,13 @@ void hideShellLoadingScreen();
 /// keeps the time in `brulionShell.indexedAt` for scripts/wasm-smoke.mjs and the benchmarks).
 void reportIndexReady();
 
+/// How the index was loaded (`brulionShell.indexStats(notes, fromCache)`: indexedNotes,
+/// indexedFromCache) — before reportIndexReady().
+void reportIndexStats(int notes, int fromCache);
+
+/// The index cache was saved (`brulionShell.indexCacheSaved()`: indexCacheSavedAt).
+void reportIndexCacheSaved();
+
 /// One reading of the browser's viewports, in CSS pixels (= Qt's logical pixels, wasm/index.html).
 /// Numbers the browser did not give are NaN. KeyboardInsets computes the keyboard from it
 /// (src/app/ui/keyboardinsets.h, ViewportKeyboard).
