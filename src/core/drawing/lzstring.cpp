@@ -1,5 +1,6 @@
 #include "drawing/lzstring.h"
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -182,7 +183,7 @@ QString compressToBase64(QStringView input)
     // A code unit's code (−1 none yet) and whether its literal is still to be written.
     std::vector<int> unitCode(65536, -1);
     std::vector<bool> toCreate(65536, false);
-    PhraseTable phrases(input.size() / 4 + 64);
+    PhraseTable phrases(std::min<qsizetype>(input.size() / 4, 1 << 20) + 64);
     int enlargeIn = 2; // (the first entry does not count)
     int dictSize = 3;
     int numBits = 2;
@@ -277,10 +278,12 @@ std::optional<QString> decompressFromBase64(QStringView input, qsizetype maxUnit
         qsizetype offset = 0;
         qsizetype length = 0;
     };
+    // (Reserved for a usual scene — a few phrases a character, some four units of text a
+    // character —, grown beyond: a large or hostile file allocates only what it really fills.)
     std::vector<Run> dictionary(3);
-    dictionary.reserve(std::size_t(length) + 4);
+    dictionary.reserve(std::size_t(std::min<qsizetype>(length, 1 << 20)) + 4);
     std::vector<char16_t> out;
-    out.reserve(std::size_t(std::min<qsizetype>(maxUnits, length * 2 + 16)));
+    out.reserve(std::size_t(std::min<qsizetype>({maxUnits, length * 4 + 16, qsizetype(1) << 22})));
     int enlargeIn = 4;
     int numBits = 3;
 
