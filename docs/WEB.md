@@ -208,9 +208,13 @@ jasnym, a potem ciemnym; po starcie aplikacji zrzut ekranu dekoduje w osobnej ka
 WebGL Qt nie da się odczytać) i sprawdza, że papier rysunku ma kolor motywu (#ffffff / #121212)
 z tuszem w jego kolorze (#1f2430 / #caced8). To dowód, że dostawca obrazów `drawing` działa
 w wątku GUI przeglądarki i czyta pliki z IDBFS (2026-10-28, laptop; CI go nie uruchamia).
+Z `--text` skrypt potem klika rysunek (otwiera się edytor rysunku), naciska T (narzędzie tekstu),
+klika w kartkę, wpisuje klawisz po klawiszu „Zażółć gęślą jaźń” i naciska Esc; plik rysunku
+w IndexedDB musi potem mieć element tekstowy z tym tekstem — wpisywanie tekstu na rysunku działa
+w przeglądarce (2026-10-29, laptop: oba motywy).
 
 ```sh
-node tests/app/drawing/wasm-drawing-check.mjs --url http://127.0.0.1:8123/brulion/ [--shots katalog]
+node tests/app/drawing/wasm-drawing-check.mjs --url http://127.0.0.1:8123/brulion/ [--shots katalog] [--text]
 ```
 
 Sterowania działającą aplikacją przez agentów AI (`brulion --remote-control`, `brulion-cli app …`,
@@ -661,7 +665,7 @@ trafiają do bloku bez zmian we wszystkich trzech (sprawdzone ręcznie skryptem,
 | `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), test trwałości (`wasmselftest.h`) |
 | `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |
 | `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + złożenie strony, test w Chromium |
-| `tests/app/drawing/wasm-drawing-check.mjs` | rysunek w notatce w jasnym i ciemnym motywie, w Chromium |
+| `tests/app/drawing/wasm-drawing-check.mjs` | rysunek w notatce w jasnym i ciemnym motywie, w Chromium; z `--text` tekst wpisany na rysunku |
 
 Ikony po zmianie logo:
 

@@ -2,6 +2,7 @@
 
 #include "drawingrender.h"
 
+#include "drawing/geometry.h"
 #include "drawing/palette.h"
 #include "drawing/stroke.h"
 #include "drawing/svgwrite.h"
@@ -16,7 +17,9 @@
 #include <QTabletEvent>
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -24,30 +27,16 @@ namespace brulion::drawingview {
 
 namespace {
 
-/// The shortest distance between the segments ab and cd.
-double segmentDistance(QPointF a, QPointF b, QPointF c, QPointF d)
-{
-    const auto pointSegment = [](QPointF p, QPointF s, QPointF e) {
-        const QPointF se = e - s;
-        const double len2 = QPointF::dotProduct(se, se);
-        double t = len2 > 0 ? QPointF::dotProduct(p - s, se) / len2 : 0;
-        t = std::clamp(t, 0.0, 1.0);
-        const QPointF q = s + se * t;
-        return std::hypot(p.x() - q.x(), p.y() - q.y());
-    };
-    // Crossing segments.
-    const auto cross = [](QPointF o, QPointF p, QPointF q) {
-        return (p.x() - o.x()) * (q.y() - o.y()) - (p.y() - o.y()) * (q.x() - o.x());
-    };
-    const double d1 = cross(c, d, a), d2 = cross(c, d, b), d3 = cross(a, b, c), d4 = cross(a, b, d);
-    if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)))
-        return 0;
-    return std::min({pointSegment(a, c, d), pointSegment(b, c, d), pointSegment(c, a, b), pointSegment(d, a, b)});
-}
-
 drawing::Background backgroundOf(const QString &name)
 {
     return drawing::backgroundFromName(name);
+}
+
+const QStringList &tools()
+{
+    static const QStringList all{u"pen"_s,     u"highlighter"_s, u"eraser"_s, u"select"_s, u"rectangle"_s,
+                                 u"ellipse"_s, u"diamond"_s,     u"line"_s,   u"arrow"_s,  u"text"_s};
+    return all;
 }
 
 } // namespace
@@ -62,6 +51,11 @@ DrawingCanvas::DrawingCanvas(QQuickItem *parent) : QQuickPaintedItem(parent)
     m_settle.setSingleShot(true);
     m_settle.setInterval(160);
     connect(&m_settle, &QTimer::timeout, this, &DrawingCanvas::endViewGesture);
+    // The selection's frame on screen moves with the view.
+    connect(this, &DrawingCanvas::viewChanged, this, [this] {
+        if (!m_selected.isEmpty())
+            Q_EMIT selectionChanged();
+    });
     m_clock = [] { return QDateTime::currentMSecsSinceEpoch(); };
     m_doc.paper = m_paperLight.name();
     // Tablet events pass the window first: the canvas takes the stylus's (see the header). (An
@@ -91,13 +85,46 @@ DrawingCanvas::~DrawingCanvas()
 
 void DrawingCanvas::setTool(const QString &tool)
 {
-    const QString t = tool == u"highlighter" || tool == u"eraser" ? tool : u"pen"_s;
+    const QString t = tools().contains(tool) ? tool : u"pen"_s;
     if (t == m_tool)
         return;
+    if (busy())
+        cancelToolGesture();
     m_tool = t;
     m_hover = QPointF(-1, -1);
+    // (The selection belongs to the select tool: another tool draws on.)
+    if (t != u"select")
+        clearSelection();
+    setCursor(m_panMode ? Qt::OpenHandCursor
+              : t == u"select" ? Qt::ArrowCursor
+              : t == u"text"   ? Qt::IBeamCursor
+                               : Qt::CrossCursor);
     update();
     Q_EMIT toolChanged();
+}
+
+bool DrawingCanvas::isShapeTool() const
+{
+    return m_tool == u"rectangle" || m_tool == u"ellipse" || m_tool == u"diamond" || m_tool == u"line"
+           || m_tool == u"arrow";
+}
+
+void DrawingCanvas::setFontSize(qreal size)
+{
+    size = std::clamp(size, 1.0, 1000.0);
+    if (!std::isfinite(size) || qFuzzyCompare(size, m_fontSize))
+        return;
+    m_fontSize = size;
+    Q_EMIT fontSizeChanged();
+}
+
+void DrawingCanvas::setSelectionColor(const QColor &color)
+{
+    if (!color.isValid() || color == m_selectionColor)
+        return;
+    m_selectionColor = color;
+    update();
+    Q_EMIT selectionColorChanged();
 }
 
 void DrawingCanvas::setColor(const QColor &color)
@@ -200,7 +227,10 @@ void DrawingCanvas::setPanMode(bool on)
     if (on == m_panMode)
         return;
     m_panMode = on;
-    setCursor(on ? Qt::OpenHandCursor : Qt::CrossCursor);
+    setCursor(on ? Qt::OpenHandCursor
+              : m_tool == u"select" ? Qt::ArrowCursor
+              : m_tool == u"text"   ? Qt::IBeamCursor
+                                    : Qt::CrossCursor);
     Q_EMIT panModeChanged();
 }
 
@@ -231,41 +261,52 @@ void DrawingCanvas::setCenterY(qreal y)
 
 // --- The drawing ------------------------------------------------------------------------------
 
-DrawingCanvas::Item DrawingCanvas::makeItem(drawing::Stroke stroke)
+void DrawingCanvas::syncPrepared()
 {
-    Item item;
-    item.path = strokePath(stroke);
-    item.bounds = item.path.boundingRect();
-    item.light = toQColor(drawing::displayInk(stroke, false));
-    item.dark = toQColor(drawing::displayInk(stroke, true));
-    item.stroke = std::move(stroke);
-    return item;
-}
-
-QList<drawing::Stroke> DrawingCanvas::strokes() const
-{
-    QList<drawing::Stroke> out;
-    out.reserve(m_items.size());
-    for (const Item &item : m_items)
-        out.append(item.stroke);
-    return out;
-}
-
-drawing::Drawing DrawingCanvas::currentDrawing() const
-{
-    drawing::Drawing doc = m_doc;
-    doc.strokes = strokes();
-    return doc;
+    // Reused while the element's key, version, versionNonce and `updated` stay (another device's
+    // edit of the same version differs in them); elements sharing all of them (a duplicated id)
+    // take the prepared ones of their kind in order.
+    const auto stampOf = [](const QString &key, int version, int nonce, qint64 updated) {
+        return key + QChar(0x1f) + QString::number(version) + QChar(0x1f) + QString::number(nonce) + QChar(0x1f)
+               + QString::number(updated);
+    };
+    QHash<QString, QList<qsizetype>> old;
+    old.reserve(m_prepared.size());
+    for (qsizetype i = 0; i < m_prepared.size(); ++i) {
+        const Prepared &p = m_prepared.at(i);
+        old[stampOf(p.key, p.version, p.nonce, p.updated)].append(i);
+    }
+    QList<Prepared> previous = std::move(m_prepared);
+    m_prepared.clear();
+    m_prepared.reserve(m_doc.strokes.size());
+    QList<qsizetype> fresh;
+    qsizetype reusedHatch = 0;
+    for (const drawing::Stroke &s : std::as_const(m_doc.strokes)) {
+        const QString key = s.id.isEmpty() ? drawing::mergeKey(s) : s.id;
+        const auto it = old.find(stampOf(key, s.version, s.versionNonce, s.updated));
+        if (it != old.end() && !it->isEmpty()) {
+            m_prepared.append(std::move(previous[it->takeFirst()]));
+            reusedHatch += m_prepared.last().hatch.size();
+        } else {
+            fresh.append(m_prepared.size());
+            m_prepared.append(Prepared());
+        }
+    }
+    // The drawing's hatch lines stay within drawing::DrawingHatchLines (what is kept counts first).
+    qsizetype budget = std::max<qsizetype>(0, drawing::DrawingHatchLines - reusedHatch);
+    for (const qsizetype i : std::as_const(fresh)) {
+        m_prepared[i] = prepare(m_doc.strokes.at(i), std::min(drawing::MaxHatchLines, budget));
+        budget -= m_prepared.at(i).hatch.size();
+    }
 }
 
 void DrawingCanvas::setDocument(drawing::Drawing doc)
 {
-    m_items.clear();
-    m_items.reserve(doc.strokes.size());
-    for (drawing::Stroke &s : doc.strokes)
-        m_items.append(makeItem(std::move(s)));
-    doc.strokes.clear();
+    const bool sameFiles = doc.files == m_doc.files;
     m_doc = std::move(doc);
+    if (!sameFiles)
+        m_pictures.clear();
+    syncPrepared();
     m_paperLight = toQColor(drawing::displayPaper(m_doc.paper, false));
     m_paperDark = toQColor(drawing::displayPaper(m_doc.paper, true));
     m_erasing.clear();
@@ -275,6 +316,9 @@ void DrawingCanvas::setDocument(drawing::Drawing doc)
 QString DrawingCanvas::load(const QByteArray &bytes)
 {
     cancelStroke();
+    if (busy())
+        cancelToolGesture();
+    endTextEdit();
     QString status;
     drawing::Drawing doc;
     if (!bytes.isEmpty()) {
@@ -288,13 +332,11 @@ QString DrawingCanvas::load(const QByteArray &bytes)
             doc = std::move(*read);
     }
     m_editable = status.isEmpty();
+    m_prepared.clear();
     setDocument(m_editable ? std::move(doc) : drawing::Drawing());
-    m_baseIds.clear();
-    for (const Item &item : std::as_const(m_items))
-        m_baseIds.insert(item.stroke.id);
-    m_baseBackground = m_doc.background;
-    m_baseTheme = m_doc.theme;
+    m_base = drawing::mergeBase(m_doc);
     m_known = bytes;
+    setSelection({});
     const bool hadHistory = canUndo() || canRedo();
     m_undo.clear();
     m_redo.clear();
@@ -316,47 +358,17 @@ bool DrawingCanvas::takeExternal(const QByteArray &bytes)
     std::optional<drawing::Drawing> theirs = drawing::readDrawing(bytes);
     if (!theirs || !drawing::editable(*theirs) || !m_editable)
         return false;
-    // A stroke being drawn goes on (it is added when it ends, on top of the new strokes); the
-    // strokes an erasing gesture has touched so far stay touched, found again by their ids.
-    QSet<QString> erasingIds;
-    for (const int i : std::as_const(m_erasing))
-        erasingIds.insert(m_items.at(i).stroke.id);
-    const drawing::Background theirBackground = theirs->background;
-    const drawing::PaperTheme theirTheme = theirs->theme;
-    QSet<QString> theirIds;
-    for (const drawing::Stroke &s : std::as_const(theirs->strokes))
-        theirIds.insert(s.id);
-    if (m_modified) {
-        // Merged by stroke id against the last load or save: theirs, plus what was drawn here,
-        // minus what was erased here; the background theirs unless it was changed here.
-        QSet<QString> ours;
-        for (const Item &item : std::as_const(m_items))
-            ours.insert(item.stroke.id);
-        const QSet<QString> erasedHere = QSet<QString>(m_baseIds).subtract(ours);
-        QList<drawing::Stroke> merged;
-        for (drawing::Stroke &s : theirs->strokes) {
-            if (!erasedHere.contains(s.id))
-                merged.append(std::move(s));
-        }
-        for (const Item &item : std::as_const(m_items)) {
-            if (!m_baseIds.contains(item.stroke.id) && !theirIds.contains(item.stroke.id))
-                merged.append(item.stroke);
-        }
-        theirs->strokes = std::move(merged);
-        if (m_doc.background != m_baseBackground)
-            theirs->background = m_doc.background;
-        if (m_doc.theme != m_baseTheme)
-            theirs->theme = m_doc.theme;
-    }
-    m_baseBackground = theirBackground;
-    m_baseTheme = theirTheme;
+    // A gesture in progress goes on (a stroke is added when it ends, on top of the new elements);
+    // the elements an erasing gesture has touched so far stay touched (by their keys).
+    const drawing::MergeBase taken = drawing::mergeBase(*theirs);
+    if (m_modified)
+        *theirs = drawing::merge(m_base, m_doc, std::move(*theirs));
+    const QSet<QString> erasing = m_erasing;
     setDocument(std::move(*theirs));
-    for (qsizetype i = 0; i < m_items.size(); ++i) {
-        if (erasingIds.contains(m_items.at(i).stroke.id))
-            m_erasing.insert(int(i));
-    }
-    m_baseIds = theirIds;
+    m_erasing = erasing;
+    m_base = taken;
     m_known = bytes;
+    pruneSelection();
     if (canUndo() || canRedo()) {
         m_undo.clear();
         m_redo.clear();
@@ -375,18 +387,14 @@ QByteArray DrawingCanvas::svg() const
 {
     if (!m_editable)
         return {};
-    return drawing::toSvg(currentDrawing());
+    return drawing::toSvg(m_doc);
 }
 
 void DrawingCanvas::markSaved(const QByteArray &written)
 {
     if (!written.isEmpty())
         m_known = written;
-    m_baseIds.clear();
-    for (const Item &item : std::as_const(m_items))
-        m_baseIds.insert(item.stroke.id);
-    m_baseBackground = m_doc.background;
-    m_baseTheme = m_doc.theme;
+    m_base = drawing::mergeBase(m_doc);
     setModified(false);
 }
 
@@ -402,13 +410,17 @@ void DrawingCanvas::changed()
 {
     setModified(true);
     Q_EMIT contentChanged();
+    if (!m_selected.isEmpty())
+        Q_EMIT selectionChanged(); // (its frame)
 }
 
 QRectF DrawingCanvas::contentBounds() const
 {
     QRectF out;
-    for (const Item &item : m_items)
-        out = out.isNull() ? item.bounds : out.united(item.bounds);
+    for (const Prepared &p : m_prepared) {
+        if (!p.bounds.isNull())
+            out = out.isNull() ? p.bounds : out.united(p.bounds);
+    }
     return out;
 }
 
@@ -449,20 +461,11 @@ void DrawingCanvas::apply(const Op &op, bool forward)
         renderMaybeChanged(wasDark);
         break;
     }
-    case Op::Add:
-    case Op::Remove: {
-        const bool insert = (op.kind == Op::Add) == forward;
-        if (insert) {
-            for (const auto &[index, item] : op.items)
-                m_items.insert(std::clamp<qsizetype>(index, 0, m_items.size()), item);
-        } else {
-            for (auto it = op.items.crbegin(); it != op.items.crend(); ++it) {
-                if (it->first >= 0 && it->first < m_items.size())
-                    m_items.removeAt(it->first);
-            }
-        }
+    case Op::Elements:
+        drawing::applyDiff(m_doc.strokes, op.diff, forward);
+        syncPrepared();
+        pruneSelection();
         break;
-    }
     }
     invalidateCache();
 }
@@ -600,6 +603,8 @@ void DrawingCanvas::geometryChange(const QRectF &newGeometry, const QRectF &oldG
         m_center += QPointF(newGeometry.width() - oldGeometry.width(), newGeometry.height() - oldGeometry.height())
                     / (2 * m_zoom);
     invalidateCache();
+    if (!m_selected.isEmpty())
+        Q_EMIT selectionChanged();
 }
 
 void DrawingCanvas::itemChange(ItemChange change, const ItemChangeData &value)
@@ -643,20 +648,22 @@ void DrawingCanvas::renderCache()
     // The paper, its lines or grid at the scene's multiples of the spacing, as the SVG has them.
     paintPaper(p, m_doc, shownDark, sceneToItem(), QSizeF(width(), height()), dpr);
     p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::TextAntialiasing);
     const QRectF visible(toScene(QPointF(0, 0)), toScene(QPointF(width(), height())));
     p.setPen(Qt::NoPen);
     p.setTransform(sceneToItem(), true);
-    for (qsizetype i = 0; i < m_items.size(); ++i) {
-        const Item &item = m_items.at(i);
-        if (m_erasing.contains(int(i)) || !item.bounds.intersects(visible))
+    const QSet<QString> hidden = hiddenKeys();
+    for (qsizetype i = 0; i < m_prepared.size(); ++i) {
+        const Prepared &prepared = m_prepared.at(i);
+        if (!prepared.bounds.intersects(visible) || (!hidden.isEmpty() && hidden.contains(prepared.key)))
             continue;
-        p.fillPath(item.path, shownDark ? item.dark : item.light);
+        paintElement(p, m_doc.strokes.at(i), prepared, shownDark, m_doc.files, m_pictures);
     }
     p.end();
     m_lastRenderMs = double(timer.nsecsElapsed()) / 1e6;
 }
 
-void DrawingCanvas::drawItemIntoCache(const Item &item)
+void DrawingCanvas::drawIntoCache(qsizetype index)
 {
     if (!m_cacheValid || m_cache.isNull() || m_cacheZoom != m_zoom || m_cacheCenter != m_center) {
         invalidateCache();
@@ -666,7 +673,17 @@ void DrawingCanvas::drawItemIntoCache(const Item &item)
     p.setRenderHint(QPainter::Antialiasing);
     p.setPen(Qt::NoPen);
     p.setTransform(sceneToItem(), true);
-    p.fillPath(item.path, inkOf(item));
+    paintElement(p, m_doc.strokes.at(index), m_prepared.at(index), dark(), m_doc.files, m_pictures);
+}
+
+QSet<QString> DrawingCanvas::hiddenKeys() const
+{
+    QSet<QString> hidden = m_erasing;
+    if (m_gesture == Gesture::Move)
+        hidden.unite(m_selected);
+    if (!m_textEditKey.isEmpty())
+        hidden.insert(m_textEditKey);
+    return hidden;
 }
 
 void DrawingCanvas::updateLive()
@@ -716,6 +733,34 @@ void DrawingCanvas::prepareSnapshot()
         s.eraser = m_gesture == Gesture::Erase ? m_lastItemPos : m_hover;
         s.eraserRadius = EraserRadius;
     }
+    // On top: a moved selection, a shape being dragged.
+    s.overlay = sceneToItem();
+    if (m_gesture == Gesture::Move) {
+        QTransform moved;
+        moved.translate(m_moveDelta.x(), m_moveDelta.y());
+        s.overlay = s.overlay * moved;
+        for (qsizetype i = 0; i < m_doc.strokes.size(); ++i) {
+            if (m_selected.contains(m_prepared.at(i).key))
+                s.elements.append({m_doc.strokes.at(i), m_prepared.at(i)});
+        }
+    } else if (m_gesture == Gesture::Shape && m_liveShapeShown) {
+        s.elements.append({m_liveShape, prepare(m_liveShape)});
+    }
+    if (!s.elements.isEmpty()) {
+        s.files = m_doc.files;
+        s.pictures = m_pictures;
+    }
+    s.selectionColor = m_selectionColor;
+    if (m_gesture == Gesture::Lasso)
+        s.lasso = m_lasso;
+    if (!m_selected.isEmpty() && m_gesture != Gesture::Lasso) {
+        const QTransform t = s.overlay;
+        for (qsizetype i = 0; i < m_doc.strokes.size(); ++i) {
+            if (m_selected.contains(m_prepared.at(i).key) && m_prepared.at(i).key != m_textEditKey)
+                s.selected.append(t.mapRect(m_prepared.at(i).bounds));
+        }
+        s.selection = selectionRect();
+    }
     m_snapshot = std::move(s);
 }
 
@@ -734,8 +779,37 @@ void DrawingCanvas::paintSnapshot(QPainter *painter, const QSizeF &size) const
         painter->restore();
     }
     painter->setRenderHint(QPainter::Antialiasing);
+    if (!s.elements.isEmpty()) {
+        painter->save();
+        painter->setTransform(s.overlay, true);
+        PictureCache pictures = s.pictures;
+        for (const auto &[element, prepared] : s.elements)
+            paintElement(*painter, element, prepared, s.dark, s.files, pictures);
+        painter->restore();
+    }
     if (!s.live.isEmpty())
         painter->fillPath(s.live, s.liveColor);
+    if (!s.selection.isEmpty()) {
+        // The selection's frame: dashed around all, thin around each when there are several.
+        QColor faint = s.selectionColor;
+        faint.setAlphaF(0.45);
+        painter->setBrush(Qt::NoBrush);
+        if (s.selected.size() > 1) {
+            painter->setPen(QPen(faint, 1));
+            for (const QRectF &r : s.selected)
+                painter->drawRect(r.adjusted(-2, -2, 2, 2));
+        }
+        QPen frame(s.selectionColor, 1.5, Qt::DashLine);
+        painter->setPen(frame);
+        painter->drawRect(s.selection);
+    }
+    if (s.lasso.size() > 1) {
+        QColor fill = s.selectionColor;
+        fill.setAlphaF(0.1);
+        painter->setBrush(fill);
+        painter->setPen(QPen(s.selectionColor, 1.5, Qt::DashLine, Qt::RoundCap, Qt::RoundJoin));
+        painter->drawPolygon(s.lasso);
+    }
     if (s.eraser.x() >= 0) {
         // A ring that shows on the paper of either theme.
         painter->setPen(QPen(s.dark ? QColor(220, 224, 232, 160) : QColor(31, 36, 48, 150), 1));
@@ -830,7 +904,7 @@ bool DrawingCanvas::handleTablet(QTabletEvent *event)
     const QPointF pos = mapFromScene(event->position());
     const bool eraser =
             event->pointerType() == QPointingDevice::PointerType::Eraser || (event->buttons() & Qt::RightButton);
-    const Pointer p{true, eraser, std::clamp(double(event->pressure()), 0.0, 1.0)};
+    const Pointer p{true, eraser, false, std::clamp(double(event->pressure()), 0.0, 1.0), event->modifiers()};
     const auto remember = [this, event] {
         m_lastTabletTime = event->timestamp();
         m_lastTabletGlobal = event->globalPosition();
@@ -852,14 +926,17 @@ bool DrawingCanvas::handleTablet(QTabletEvent *event)
         }
         remember();
         noteStylus();
+        if (m_textEditing) {
+            // A press beside the text being written: QML commits it.
+            Q_EMIT textCommitRequested();
+            return true;
+        }
         m_tabletGesture = true;
         m_hover = QPointF(-1, -1);
         if (m_panMode || !m_editable)
             beginPan(pos);
-        else if (p.eraser || m_tool == u"eraser")
-            beginErase(pos);
         else
-            beginStroke(pos, p);
+            beginToolGesture(pos, p);
         return true;
     case QEvent::TabletMove:
         if (!m_tabletGesture) {
@@ -871,12 +948,7 @@ bool DrawingCanvas::handleTablet(QTabletEvent *event)
             return false;
         }
         remember();
-        switch (m_gesture) {
-        case Gesture::Draw: extendStroke(pos, p); break;
-        case Gesture::Erase: eraseTo(pos); break;
-        case Gesture::Pan: panTo(pos); break;
-        default: break;
-        }
+        moveToolGesture(pos, p);
         return true;
     case QEvent::TabletRelease:
         if (!m_tabletGesture)
@@ -885,22 +957,7 @@ bool DrawingCanvas::handleTablet(QTabletEvent *event)
         if (event->buttons() != Qt::NoButton)
             return true; // a button let go, the tip still down
         m_tabletGesture = false;
-        switch (m_gesture) {
-        case Gesture::Draw:
-            extendStroke(pos, p);
-            finishStroke();
-            break;
-        case Gesture::Erase:
-            eraseTo(pos);
-            finishErase();
-            break;
-        case Gesture::Pan:
-        case Gesture::Pinch:
-            setGesture(Gesture::None);
-            endViewGesture();
-            break;
-        case Gesture::None: break;
-        }
+        endToolGesture(pos, p);
         return true;
     default: break;
     }
@@ -924,7 +981,10 @@ DrawingCanvas::Pointer DrawingCanvas::pointerOf(const QPointerEvent *event) cons
         p.stylus = device->type() == QInputDevice::DeviceType::Stylus
                    || device->type() == QInputDevice::DeviceType::Airbrush;
         p.eraser = device->pointerType() == QPointingDevice::PointerType::Eraser;
+        p.touch = device->type() == QInputDevice::DeviceType::TouchScreen;
     }
+    if (const auto *mouse = dynamic_cast<const QSinglePointEvent *>(event))
+        p.modifiers = mouse->modifiers();
     return p;
 }
 
@@ -962,13 +1022,19 @@ void DrawingCanvas::mousePressEvent(QMouseEvent *event)
         noteStylus();
     const QPointF pos = event->position();
     const Qt::MouseButton button = event->button();
+    if (m_textEditing && button == Qt::LeftButton) {
+        // A press beside the text being written: QML commits it.
+        Q_EMIT textCommitRequested();
+        event->accept();
+        return;
+    }
     if (button == Qt::MiddleButton || (button == Qt::RightButton && !p.stylus)
         || (button == Qt::LeftButton && (m_panMode || !m_editable))) {
         beginPan(pos);
-    } else if (button == Qt::RightButton || (button == Qt::LeftButton && (p.eraser || m_tool == u"eraser"))) {
-        beginErase(pos); // the stylus's barrel button, its eraser end, the eraser tool
+    } else if (button == Qt::RightButton) {
+        beginErase(pos); // the stylus's barrel button
     } else if (button == Qt::LeftButton) {
-        beginStroke(pos, p);
+        beginToolGesture(pos, p); // (its eraser end, the eraser tool: erasing)
     } else {
         event->ignore();
         return;
@@ -981,13 +1047,7 @@ void DrawingCanvas::mouseMoveEvent(QMouseEvent *event)
     event->accept();
     if (m_ignoreMouse || m_tabletGesture)
         return;
-    const QPointF pos = event->position();
-    switch (m_gesture) {
-    case Gesture::Draw: extendStroke(pos, pointerOf(event)); break;
-    case Gesture::Erase: eraseTo(pos); break;
-    case Gesture::Pan: panTo(pos); break;
-    default: break;
-    }
+    moveToolGesture(event->position(), pointerOf(event));
 }
 
 void DrawingCanvas::mouseReleaseEvent(QMouseEvent *event)
@@ -1000,23 +1060,7 @@ void DrawingCanvas::mouseReleaseEvent(QMouseEvent *event)
     }
     if (event->buttons() != Qt::NoButton && m_gesture != Gesture::None)
         return; // another button let go; the gesture's own is still held
-    const QPointF pos = event->position();
-    switch (m_gesture) {
-    case Gesture::Draw:
-        extendStroke(pos, pointerOf(event));
-        finishStroke();
-        break;
-    case Gesture::Erase:
-        eraseTo(pos);
-        finishErase();
-        break;
-    case Gesture::Pan:
-    case Gesture::Pinch:
-        setGesture(Gesture::None);
-        endViewGesture();
-        break;
-    case Gesture::None: break;
-    }
+    endToolGesture(event->position(), pointerOf(event));
 }
 
 void DrawingCanvas::mouseUngrabEvent()
@@ -1032,6 +1076,10 @@ void DrawingCanvas::mouseUngrabEvent()
         setGesture(Gesture::None);
         endViewGesture();
         break;
+    case Gesture::Lasso:
+    case Gesture::Move:
+    case Gesture::Shape:
+    case Gesture::Tap: cancelToolGesture(); break;
     case Gesture::None: break;
     }
 }
@@ -1102,6 +1150,10 @@ void DrawingCanvas::yieldTouchToPen()
         setGesture(Gesture::None);
         endViewGesture();
         break;
+    case Gesture::Lasso:
+    case Gesture::Move:
+    case Gesture::Shape:
+    case Gesture::Tap: cancelToolGesture(); break;
     case Gesture::None: break;
     }
     m_touchGesture = false;
@@ -1142,6 +1194,8 @@ void DrawingCanvas::touchEvent(QTouchEvent *event)
                 finishStroke();
         } else if (m_gesture == Gesture::Erase) {
             finishErase();
+        } else if (m_gesture != Gesture::Pinch && m_gesture != Gesture::Pan && m_gesture != Gesture::None) {
+            cancelToolGesture(); // a lasso, a shape, a move: the fingers zoom instead
         }
         const QPointF a = down.at(0)->position();
         const QPointF b = down.at(1)->position();
@@ -1164,42 +1218,26 @@ void DrawingCanvas::touchEvent(QTouchEvent *event)
             beginPan(pt.position()); // a finger lifted: the other one moves on
             break;
         case Gesture::None:
-            if (m_fingerDraws && !m_panMode && m_editable) {
+            if (m_textEditing) {
+                Q_EMIT textCommitRequested();
+                m_ignoreTouch = true;
+            } else if (m_fingerDraws && !m_panMode && m_editable) {
                 m_touchDrawId = pt.id();
-                if (m_tool == u"eraser")
-                    beginErase(pt.position());
-                else
-                    beginStroke(pt.position(), Pointer{});
+                beginToolGesture(pt.position(), touchPointer());
             } else {
                 beginPan(pt.position());
             }
             break;
-        case Gesture::Draw:
-            if (pt.id() == m_touchDrawId)
-                extendStroke(pt.position(), Pointer{});
-            break;
-        case Gesture::Erase: eraseTo(pt.position()); break;
         case Gesture::Pan: panTo(pt.position()); break;
+        default:
+            if (pt.id() == m_touchDrawId || m_gesture == Gesture::Erase)
+                moveToolGesture(pt.position(), touchPointer());
+            break;
         }
     } else {
         // Every finger lifted.
         const QPointF pos = event->points().isEmpty() ? m_lastItemPos : event->points().first().position();
-        switch (m_gesture) {
-        case Gesture::Draw:
-            extendStroke(pos, Pointer{});
-            finishStroke();
-            break;
-        case Gesture::Erase:
-            eraseTo(pos);
-            finishErase();
-            break;
-        case Gesture::Pan:
-        case Gesture::Pinch:
-            setGesture(Gesture::None);
-            endViewGesture();
-            break;
-        case Gesture::None: break;
-        }
+        endToolGesture(pos, touchPointer());
         m_touchDrawId = -1;
     }
     event->accept();
@@ -1282,12 +1320,13 @@ void DrawingCanvas::finishStroke()
     s.versionNonce = int(QRandomGenerator::global()->bounded(1, 2147483647));
     s.version = 1;
     s.updated = m_clock ? m_clock() : 0;
-    Item item = makeItem(std::move(s));
+    // The fast path: one element on top, drawn into the cached image as it is.
     Op op;
-    op.kind = Op::Add;
-    op.items.append({int(m_items.size()), item});
-    m_items.append(item);
-    drawItemIntoCache(item);
+    op.kind = Op::Elements;
+    op.diff.added.append({m_doc.strokes.size(), s});
+    m_prepared.append(prepare(s));
+    m_doc.strokes.append(std::move(s));
+    drawIntoCache(m_doc.strokes.size() - 1);
     update();
     push(std::move(op));
 }
@@ -1320,24 +1359,21 @@ void DrawingCanvas::eraseTo(QPointF itemPos)
     const double r = EraserRadius / m_zoom;
     const QRectF sweep = QRectF(a, b).normalized().adjusted(-r, -r, r, r);
     bool erased = false;
-    for (qsizetype i = 0; i < m_items.size(); ++i) {
-        if (m_erasing.contains(int(i)))
+    for (qsizetype i = 0; i < m_prepared.size(); ++i) {
+        const Prepared &prepared = m_prepared.at(i);
+        if (m_erasing.contains(prepared.key) || !prepared.bounds.intersects(sweep))
             continue;
-        const Item &item = m_items.at(i);
-        if (!item.bounds.intersects(sweep))
+        const drawing::Stroke &e = m_doc.strokes.at(i);
+        if (!drawing::touchesSegment(e, a, b, r) || drawing::isLocked(m_doc, e))
             continue;
-        const double reach = r + item.stroke.width * 4.25 * 0.5;
-        const QList<drawing::StrokePoint> &pts = item.stroke.points;
-        bool hit = false;
-        for (qsizetype k = 0; k < pts.size() && !hit; ++k) {
-            const QPointF p(pts.at(k).x, pts.at(k).y);
-            const QPointF q = k + 1 < pts.size() ? QPointF(pts.at(k + 1).x, pts.at(k + 1).y) : p;
-            hit = segmentDistance(a, b, p, q) <= reach;
+        m_erasing.insert(prepared.key);
+        // A shape goes with its label.
+        for (qsizetype k = 0; k < m_doc.strokes.size(); ++k) {
+            const drawing::Stroke &label = m_doc.strokes.at(k);
+            if (!e.id.isEmpty() && label.type == drawing::ElementType::Text && label.containerId == e.id)
+                m_erasing.insert(m_prepared.at(k).key);
         }
-        if (hit) {
-            m_erasing.insert(int(i));
-            erased = true;
-        }
+        erased = true;
     }
     m_lastItemPos = itemPos;
     if (erased)
@@ -1355,15 +1391,22 @@ void DrawingCanvas::finishErase()
         update();
         return;
     }
-    QList<int> indices(m_erasing.cbegin(), m_erasing.cend());
-    std::sort(indices.begin(), indices.end());
-    m_erasing.clear();
-    Op op;
-    op.kind = Op::Remove;
-    for (const int i : std::as_const(indices))
-        op.items.append({i, m_items.at(i)});
-    apply(op, true);
-    push(std::move(op));
+    const QSet<QString> keys = std::exchange(m_erasing, {});
+    editElements([&keys, this](drawing::Drawing &doc) {
+        // By id (references to them cleaned); elements without one by their keys.
+        QSet<QString> ids;
+        QList<drawing::Stroke> kept;
+        for (const drawing::Stroke &e : std::as_const(doc.strokes)) {
+            const bool gone = keys.contains(e.id.isEmpty() ? drawing::mergeKey(e) : e.id);
+            if (gone && !e.id.isEmpty())
+                ids.insert(e.id);
+            if (!gone || !e.id.isEmpty())
+                kept.append(e);
+        }
+        doc.strokes = std::move(kept);
+        drawing::deleteElements(doc, ids, stamp());
+    });
+    invalidateCache();
 }
 
 void DrawingCanvas::beginPan(QPointF itemPos)

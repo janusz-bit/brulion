@@ -10,11 +10,16 @@
 //   <rect …paper…/> <path …lines or grid…/> <path d="…" fill="#1f2430"/> …
 //   </svg>
 //
-// The picture covers the strokes plus a margin (an empty drawing: EmptyWidth × EmptyHeight,
+// The picture covers the elements plus a margin (an empty drawing: EmptyWidth × EmptyHeight,
 // pictureRect()); integer width and height on the root (the editor sizes an embed from the root
-// alone, picturesize.h). Only rect and path elements with plain attributes (no fonts or
-// foreignObject): the attributes are the picture, and Qt's SVG renderer (SVG Tiny 1.2) draws
-// exactly what browsers draw from them.
+// alone, picturesize.h). Every element in drawing order from geometry.h's elementShape(): paths
+// (fills, hatch lines, outlines with their dashes, arrowheads), `<text>` per line of a text element
+// (font-family by Excalidraw's family, fontFamilyCss(); the text XML-escaped,
+// xml:space="preserve"), `<image>` for pictures (only base64 data URLs of PNG, JPEG, GIF, WebP or
+// SVG from the scene's files; anything else a grey placeholder), `<g transform="rotate(…)">` for
+// rotated elements and `<g opacity>` for see-through ones. Plain attributes (no foreignObject):
+// the attributes are the picture, and Qt's SVG renderer (SVG Tiny 1.2) draws what browsers draw
+// from them (text in the fonts it has).
 //
 // The picture follows the drawing's theme (Drawing::theme, palette.h): Light — the colours as
 // drawn; Dark — the dark theme's colours in the attributes (every program shows it dark); Auto —
@@ -24,13 +29,15 @@
 // media rules only for a medium it is given, and drops a style sheet with a media feature query
 // whole): Brulion draws its previews itself (the app's DrawingImageProvider). Only colours and
 // numbers of our own formatting go into the CSS, never text from a scene; the classes on the
-// elements: `p` the paper, `r` the rules, `k<n>` a pen stroke (one per colour, first use first),
-// `h<n>` a highlighter stroke (one per opacity in the dark).
+// elements: `p` the paper, `r` the rules, `k<n>` what is filled with ink — a pen stroke, text, a
+// filled arrowhead — (one per colour, first use first), `s<n>` what is stroked (outlines, hatch
+// lines), `f<n>` a shape's fill, `h<n>` a highlighter stroke (one per opacity in the dark).
 #pragma once
 
 #include "drawing/drawing.h"
 
 #include <QByteArray>
+#include <QJsonObject>
 
 namespace brulion::drawing {
 
@@ -40,15 +47,28 @@ inline constexpr double SvgMargin = 16;
 inline constexpr int EmptyWidth = 320;
 inline constexpr int EmptyHeight = 180;
 
-/// The file of a drawing (UTF-8, ASCII in practice). Foreign elements are kept in the scene but
-/// not drawn: write only editable() drawings.
+/// The file of a drawing (UTF-8). Foreign elements are kept in the scene but not drawn: write only
+/// editable() drawings.
 QByteArray toSvg(const Drawing &drawing);
-/// The scene area the picture shows (its root's width and height): the strokes' bounds plus
-/// SvgMargin, out to whole units — 0, 0, EmptyWidth × EmptyHeight for a drawing without strokes.
+/// The scene area the picture shows (its root's width and height): the elements' bounds plus
+/// SvgMargin, out to whole units — 0, 0, EmptyWidth × EmptyHeight for a drawing without elements.
 QRectF pictureRect(const Drawing &drawing);
 
 /// A colour as written into an SVG attribute: "#rgb", "#rrggbb" or "#rrggbbaa" (from a scene of
 /// anywhere: anything else would be markup) or `fallback`.
 QString safeColor(const QString &color, const QString &fallback);
+/// The data URL of the picture `fileId` in a scene's files when it is one Brulion draws: a base64
+/// PNG, JPEG, GIF, WebP or SVG ("" anything else — a picture's placeholder is drawn instead).
+QString safeDataUrl(const QJsonObject &files, const QString &fileId);
+/// The CSS font-family of Excalidraw's font family (1 Virgil, 2 Helvetica, 3 Cascadia,
+/// 5 Excalifont, 6 Nunito, 7 Lilita One, 8 Comic Shanns, 9 Liberation Sans; others sans-serif) —
+/// constants, never text from a scene.
+QString fontFamilyCss(int family);
+/// Excalidraw's monospace families (3 Cascadia, 8 Comic Shanns): Brulion draws them in its
+/// monospace font, all others in its UI font.
+bool isMonospaceFamily(int family);
+/// The placeholder of a picture without its file: a light grey box with a darker edge.
+inline constexpr QStringView ImagePlaceholderFill = u"#e9ecef";
+inline constexpr QStringView ImagePlaceholderEdge = u"#adb5bd";
 
 } // namespace brulion::drawing

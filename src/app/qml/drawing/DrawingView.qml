@@ -6,32 +6,42 @@ import Brulion
 // DrawingView — route "drawing" ({path}): the drawing editor (docs/UI.md "Drawing editor") on a
 // drawing attachment (docs/SYNTAX.md §2 "Drawings": an SVG with an embedded Excalidraw scene).
 //
-//  * The paper (DrawingCanvas: a stylus draws with its pressure, its eraser end erases; a mouse
-//    draws; one finger draws or moves the paper — "Rysuj palcem", on by default until a stylus has
-//    been seen on this device —, two fingers move and zoom) and the tool bar (DrawingToolbar:
-//    above the paper, at the bottom on phones). Keys: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, P / H / E
-//    (pen, highlighter, eraser), Space held (move the paper), Ctrl+0 (the whole drawing),
-//    Ctrl++ / Ctrl+- (zoom).
+//  * The paper (DrawingCanvas: a stylus works the tool with its pressure, its eraser end erases; a
+//    mouse works it; one finger works it or moves the paper — "Rysuj palcem", on by default until
+//    a stylus has been seen on this device —, two fingers move and zoom) and the tool bar
+//    (DrawingToolbar: above the paper, at the bottom on phones). Tools: the pen, the highlighter,
+//    the eraser, the selection (a lasso or a tap; DrawingSelectionBar over the selection), shapes
+//    (rectangle, ellipse, diamond, line, arrow), text (DrawingTextEditor writes it). Keys (none
+//    while a text is written): Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, P / H / E (pen, highlighter,
+//    eraser), V (select), R / O / D / L / A (rectangle, ellipse, diamond, line, arrow), T (text),
+//    Delete / Backspace (the selection), Ctrl+D (duplicate), Ctrl+A (select all), Escape (a shape
+//    or a lasso in progress dropped, else the selection cleared), the arrows (move the selection
+//    1, with Shift 10), Ctrl+] / Ctrl+[ (one step up / down), Ctrl+Shift+] / Ctrl+Shift+[ (to the
+//    front / back), Space held (move the paper), Ctrl+0 (the whole drawing), Ctrl++ / Ctrl+-
+//    (zoom).
 //  * Saved by itself: 1.2 s after the last change, when the route changes, the view goes and the
-//    app leaves the foreground (Workspace.writeAttachment). The tools' colours and widths, finger
-//    drawing and whether a stylus was seen are remembered on the device (AppSettings
-//    "drawing/…").
+//    app leaves the foreground (Workspace.writeAttachment). A text being written is written first
+//    by those but never by the 1.2 s timer, which waits until its editor closes (committing it
+//    would close the editor mid-word and give the next keys to the tools). The tools' colours and widths, finger
+//    drawing, the last shape, the text's size and whether a stylus was seen are remembered on the
+//    device (AppSettings "drawing/…").
 //  * A change of the file from elsewhere (Syncthing, Nextcloud) while it is open is taken in: as
 //    it is when nothing changed here, else merged stroke by stroke (DrawingCanvas.takeExternal)
 //    and saved; the canvas's own saves coming back are recognised (isKnownFile). Every save
 //    first reads the file: a change not reported yet is taken in the same way, never written
-//    over. A version Brulion cannot edit (shapes, text) is shown as it is; what was drawn here
-//    and not saved is kept in a new file beside it ("… (to urządzenie).svg").
+//    over. A version Brulion cannot edit (frames, embedded pages) is shown as it is; what was drawn
+//    here and not saved is kept in a new file beside it ("… (to urządzenie).svg").
 //  * A file Brulion cannot edit is shown as the picture it is, with why: an Excalidraw drawing
-//    with shapes or text ("readonly"), a picture without a scene, a scene that cannot be read; a
-//    missing file says so. Renames follow the file (the route applied one event-loop turn late, as
+//    with frames or embedded web pages ("readonly"), a picture without a scene, a scene that
+//    cannot be read; a missing file says so. Renames follow the file (the route applied one event-loop turn late, as
 //    in PageView); a deleted file is never written again.
 //  * The paper is light or dark as the drawing chooses ("Tło rysunku": as the app — the default —,
 //    light, dark; DrawingCanvas.theme, saved in the file, an undo step) and follows the app's
 //    theme at once (DrawingCanvas.appDark: Theme.dark). The previews of the drawing elsewhere
 //    follow it too (Workspace.drawingUrl), the notice's picture below as well.
 // route.open (screenshots): "style" (the colours and widths) and "more" on phones, "paper" (the
-// paper's menu) on wide windows, "theme" (the background's menu; on phones "Więcej").
+// paper's menu) on wide windows, "theme" (the background's menu; on phones "Więcej"), "shape"
+// (the shapes' menu), "select" (everything selected: the selection bar).
 // View contract (ShellRouteView): `title` (the file's name), `editing` (no capture button over the
 // paper), `toolbarDocked` and `replacesBottomNav` (phones: the tool bar at the bottom — the
 // bottom navigation makes way; no keyboard involved, unlike an editor's toolbar),
@@ -67,6 +77,9 @@ FocusScope {
     property real penWidth: Number(AppSettings.value("drawing/penWidth", 1)) || 1
     property string highlighterColor: AppSettings.value("drawing/highlighterColor", "#ffd43b")
     property real highlighterWidth: Number(AppSettings.value("drawing/highlighterWidth", 5)) || 5
+    /// The shape tool the shape button stands for.
+    property string shapeTool: AppSettings.value("drawing/shape", "rectangle")
+    property real fontSize: Number(AppSettings.value("drawing/fontSize", 20)) || 20
     /// "auto" (a finger draws until a stylus has been seen), "on", "off".
     property string fingerMode: AppSettings.value("drawing/finger", "auto")
     property bool stylusKnown: flag(AppSettings.value("drawing/stylusSeen", false))
@@ -97,14 +110,24 @@ FocusScope {
         { value: 5, label: qsTr("Medium") },
         { value: 8, label: qsTr("Wide") }
     ]
+    /// Excalidraw's text sizes.
+    readonly property var fontSizes: [
+        { value: 16, label: qsTr("Small") },
+        { value: 20, label: qsTr("Medium", "text size") },
+        { value: 28, label: qsTr("Large") },
+        { value: 36, label: qsTr("Extra large") }
+    ]
 
     function flag(value) {
         return value === true || value === "true"
     }
 
-    /// Write the drawing when it changed (true: nothing to write, or written).
+    /// Write the drawing when it changed (true: nothing to write, or written); a text being written
+    /// is committed first.
     function save() {
         saveTimer.stop()
+        if (textEditor)
+            textEditor.commit() // (a text being written goes in first)
         if (root.loadedPath === "" || root.status !== "" || !canvas.modified)
             return true
         // What the file holds now, on disk: another program may have written it a moment ago,
@@ -129,8 +152,8 @@ FocusScope {
 
     /// Another program's version of the open, editable file: taken in — merged with what was
     /// drawn here (DrawingCanvas.takeExternal) — or, when it is no drawing Brulion can edit any
-    /// more (shapes or text added in excalidraw.com), shown as it is, with what was drawn here
-    /// and not yet saved kept in a copy beside it. True when the paper still edits the file.
+    /// more (a frame or an embedded page added in excalidraw.com), shown as it is, with what was
+    /// drawn here and not yet saved kept in a copy beside it. True when the paper still edits it.
     function takeIn(bytes) {
         const merged = canvas.modified
         if (canvas.takeExternal(bytes)) {
@@ -186,12 +209,20 @@ FocusScope {
                     bar.openBackground()
                 else if (open === "theme")
                     bar.openTheme()
+                else if (open === "shape")
+                    bar.openShapes()
+                else if (open === "select") {
+                    canvas.tool = "select"
+                    canvas.selectAll()
+                }
             })
     }
 
     function applyTool() {
+        // (Shapes and text in the pen's colour; shapes twice the pen's width.)
         canvas.color = canvas.tool === "highlighter" ? root.highlighterColor : root.penColor
         canvas.penWidth = canvas.tool === "highlighter" ? root.highlighterWidth : root.penWidth
+        canvas.fontSize = root.fontSize
     }
 
     function chooseColor(color) {
@@ -202,9 +233,25 @@ FocusScope {
             root.penColor = color
             AppSettings.setValue("drawing/penColor", color)
         }
-        if (canvas.tool === "eraser")
+        if (canvas.tool === "eraser" || canvas.tool === "select")
             canvas.tool = "pen"
         root.applyTool()
+    }
+
+    function chooseFontSize(size) {
+        root.fontSize = size
+        AppSettings.setValue("drawing/fontSize", size)
+        root.applyTool()
+    }
+
+    function chooseShape(tool) {
+        root.shapeTool = tool
+        AppSettings.setValue("drawing/shape", tool)
+    }
+
+    function useShape(tool) {
+        canvas.tool = tool
+        root.chooseShape(tool)
     }
 
     function chooseWidth(width) {
@@ -248,7 +295,13 @@ FocusScope {
             root.applyRoute()
         })
     }
-    Component.onCompleted: applyRoute()
+    // Text on drawings in the app's fonts (the previews' too).
+    readonly property string _fonts: Theme.fontUi + "\n" + Theme.fontMono
+    on_FontsChanged: DrawingFonts.set(Theme.fontUi, Theme.fontMono)
+    Component.onCompleted: {
+        DrawingFonts.set(Theme.fontUi, Theme.fontMono)
+        applyRoute()
+    }
     Component.onDestruction: {
         alive = false
         save()
@@ -257,7 +310,8 @@ FocusScope {
     Timer {
         id: saveTimer
         interval: 1200
-        onTriggered: root.save()
+        // (Not while a text is written: the editor's close restarts it.)
+        onTriggered: if (!canvas.textEditing) root.save()
     }
 
     Connections {
@@ -294,7 +348,12 @@ FocusScope {
     }
 
     Keys.onPressed: (event) => {
+        if (canvas.textEditing)
+            return // (the text editor has the keys)
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+        const shift = (event.modifiers & Qt.ShiftModifier) !== 0
+        const plain = event.modifiers === Qt.NoModifier
+        const arrows = { [Qt.Key_Left]: [-1, 0], [Qt.Key_Right]: [1, 0], [Qt.Key_Up]: [0, -1], [Qt.Key_Down]: [0, 1] }
         if (event.matches(StandardKey.Undo)) {
             canvas.undo()
         } else if (event.matches(StandardKey.Redo) || (ctrl && event.key === Qt.Key_Y)) {
@@ -314,6 +373,37 @@ FocusScope {
             canvas.tool = "highlighter"
         } else if (event.modifiers === Qt.NoModifier && event.key === Qt.Key_E) {
             canvas.tool = "eraser"
+        } else if (plain && event.key === Qt.Key_V) {
+            canvas.tool = "select"
+        } else if (plain && event.key === Qt.Key_R) {
+            root.useShape("rectangle")
+        } else if (plain && event.key === Qt.Key_O) {
+            root.useShape("ellipse")
+        } else if (plain && event.key === Qt.Key_D) {
+            root.useShape("diamond")
+        } else if (plain && event.key === Qt.Key_L) {
+            root.useShape("line")
+        } else if (plain && event.key === Qt.Key_A) {
+            root.useShape("arrow")
+        } else if (plain && event.key === Qt.Key_T) {
+            canvas.tool = "text"
+        } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && canvas.selectionCount > 0) {
+            canvas.deleteSelection()
+        } else if (ctrl && !shift && event.key === Qt.Key_D) {
+            canvas.duplicateSelection()
+        } else if (event.matches(StandardKey.SelectAll)) {
+            canvas.tool = "select"
+            canvas.selectAll()
+        } else if (event.key === Qt.Key_Escape && (canvas.busy || canvas.selectionCount > 0)) {
+            if (!canvas.cancelGesture())
+                canvas.clearSelection()
+        } else if (arrows[event.key] !== undefined && canvas.selectionCount > 0 && !ctrl) {
+            const step = shift ? 10 : 1
+            canvas.nudgeSelection(arrows[event.key][0] * step, arrows[event.key][1] * step)
+        } else if (ctrl && (event.key === Qt.Key_BracketRight || event.key === Qt.Key_BraceRight)) {
+            canvas.reorderSelection(shift || event.key === Qt.Key_BraceRight ? "front" : "forward")
+        } else if (ctrl && (event.key === Qt.Key_BracketLeft || event.key === Qt.Key_BraceLeft)) {
+            canvas.reorderSelection(shift || event.key === Qt.Key_BraceLeft ? "back" : "backward")
         } else {
             return
         }
@@ -344,9 +434,13 @@ FocusScope {
             canvas: canvas
             colors: canvas.tool === "highlighter" ? root.highlighterColors : root.penColors
             widths: canvas.tool === "highlighter" ? root.highlighterWidths : root.penWidths
+            fontSizes: root.fontSizes
+            shapeTool: root.shapeTool
             fingerDraws: root.fingerDraws
             onColorChosen: (color) => root.chooseColor(color)
             onWidthChosen: (width) => root.chooseWidth(width)
+            onFontSizeChosen: (size) => root.chooseFontSize(size)
+            onShapeChosen: (tool) => root.chooseShape(tool)
             onFingerToggled: root.toggleFinger()
             onFitRequested: canvas.fitAll()
             onDone: root.done()
@@ -363,8 +457,10 @@ FocusScope {
                 visible: root.status === ""
                 fingerDraws: root.fingerDraws
                 appDark: Theme.dark
+                selectionColor: Theme.info
                 onToolChanged: root.applyTool()
                 onContentChanged: if (canvas.modified) saveTimer.restart()
+                onTextEditingChanged: if (!canvas.textEditing && canvas.modified) saveTimer.restart()
                 onStylusSeenChanged: {
                     if (canvas.stylusSeen && !root.stylusKnown) {
                         root.stylusKnown = true
@@ -372,6 +468,22 @@ FocusScope {
                     }
                 }
                 Component.onCompleted: root.applyTool()
+            }
+
+            // The selection's actions, above the selected elements.
+            DrawingSelectionBar {
+                id: selectionBar
+                anchors.fill: parent
+                canvas: canvas
+                colors: root.penColors
+            }
+
+            // Text being written on the paper.
+            DrawingTextEditor {
+                id: textEditor
+                anchors.fill: parent
+                canvas: canvas
+                onClosed: root.forceActiveFocus()
             }
 
             // A file Brulion cannot edit: the picture it is, and why.
@@ -408,7 +520,7 @@ FocusScope {
                         text: {
                             switch (root.status) {
                             case "readonly":
-                                return qsTr("This drawing comes from Excalidraw and has shapes, text or pictures: Brulion edits only handwriting. Open the file in excalidraw.com to change it.")
+                                return qsTr("This drawing has frames or embedded web pages from Excalidraw, which Brulion does not edit. Open the file in excalidraw.com to change it.")
                             case "notDrawing":
                                 return qsTr("This picture is not a drawing: it can only be viewed.")
                             case "corrupt":
@@ -441,7 +553,7 @@ FocusScope {
                         fillMode: Image.PreserveAspectFit
                         // (Logical pixels: Qt renders SVG and image providers at the screen's ratio.)
                         sourceSize: Qt.size(Math.ceil(width), 0)
-                        // A drawing as the app's theme shows it (an Excalidraw drawing with shapes
+                        // A drawing as the app's theme shows it (an Excalidraw drawing with frames
                         // turned dark like Excalidraw does); any other picture as it is.
                         source: !notice.visible || root.status === "missing" || root.loadedPath === "" ? ""
                                 : root.status !== "notDrawing" && Workspace.isDrawing(root.loadedPath)
@@ -476,9 +588,13 @@ FocusScope {
             canvas: canvas
             colors: canvas.tool === "highlighter" ? root.highlighterColors : root.penColors
             widths: canvas.tool === "highlighter" ? root.highlighterWidths : root.penWidths
+            fontSizes: root.fontSizes
+            shapeTool: root.shapeTool
             fingerDraws: root.fingerDraws
             onColorChosen: (color) => root.chooseColor(color)
             onWidthChosen: (width) => root.chooseWidth(width)
+            onFontSizeChosen: (size) => root.chooseFontSize(size)
+            onShapeChosen: (tool) => root.chooseShape(tool)
             onFingerToggled: root.toggleFinger()
             onFitRequested: canvas.fitAll()
             onDone: root.done()

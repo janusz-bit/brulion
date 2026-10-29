@@ -2688,9 +2688,28 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     // keyboard involved: it stays away while the drawing is edited).
     QQuickItem *nav = window->findChild<QQuickItem *>(u"shellBottomNav"_s);
     const bool phone = window->width() < 900;
-    if (phone)
+    if (phone) {
         check(nav && waitFor([&] { return !nav->isVisible(); }),
               "the drawing's tool bar at the bottom: the bottom navigation makes way");
+        // A phone held upright: every tool, the swatch, "Więcej" and Gotowe on screen (two lines),
+        // none behind the bar's edge.
+        QStringList hidden;
+        const auto allShown = [&] {
+            hidden.clear();
+            for (const QString &name : {u"drawingUndo"_s, u"drawingRedo"_s, u"drawingPen"_s, u"drawingHighlighter"_s,
+                                        u"drawingEraser"_s, u"drawingSelect"_s, u"drawingShape"_s, u"drawingText"_s,
+                                        u"drawingStyle"_s, u"drawingMore"_s, u"drawingDone"_s}) {
+                QQuickItem *item =
+                        uidriver::topmost(window, [&name](QQuickItem *i) { return i->objectName() == name; });
+                if (!item || !uidriver::shown(item) || !uidriver::onScreen(window, item))
+                    hidden.append(name);
+            }
+            return hidden.isEmpty();
+        };
+        if (!waitFor(allShown))
+            qWarning("selftest: off screen on the drawing's tool bar: %s", qPrintable(hidden.join(u", "_s)));
+        check(hidden.isEmpty(), "the drawing's tool bar shows all its buttons on a phone");
+    }
     settle(100);
     const QPointF from = pointIn(canvas, 0.25, 0.4);
     const QPointF to = pointIn(canvas, 0.7, 0.45);
@@ -2715,6 +2734,105 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     check(waitFor([&] { return strokesInFile() == 0; }, 5000), "the undo is saved too");
     QMetaObject::invokeMethod(canvas, "redo");
     check(waitFor([&] { return strokesInFile() == 1; }, 5000), "the redo is saved");
+
+    // Shapes, the selection and text (drawshapes): a rectangle dragged out, selected and deleted
+    // from the selection's bar, undone; on the desktop with the keys, text written on the paper.
+    const auto tap = [&](QPointF at) {
+        if (touch)
+            touchTap(window, at);
+        else
+            mouseClick(window, at);
+    };
+    const auto button = [&](const QString &name) {
+        return uidriver::topmost(window, [&name](QQuickItem *item) { return item->objectName() == name; });
+    };
+    const QPointF corner = pointIn(canvas, 0.3, 0.6);
+    const QPointF far = pointIn(canvas, 0.6, 0.75);
+    if (touch) {
+        if (QQuickItem *shape = button(u"drawingShape"_s))
+            touchTap(window, pointIn(shape));
+    } else {
+        sendKey(window, Qt::Key_R, Qt::NoModifier, u"r"_s);
+    }
+    check(waitFor([&] { return canvas->property("tool").toString() == u"rectangle"; }), "the rectangle tool");
+    if (touch)
+        touchDrag(window, corner, far - corner);
+    else
+        mouseDrag(window, corner, far);
+    const auto elementTypes = [&] {
+        QStringList types;
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
+        for (const drawing::Stroke &e : d ? d->strokes : QList<drawing::Stroke>())
+            types.append(drawing::elementTypeName(e.type));
+        return types;
+    };
+    check(waitFor([&] { return elementTypes() == QStringList{u"freedraw"_s, u"rectangle"_s}; }, 5000),
+          "a rectangle dragged out is saved as Excalidraw's rectangle");
+    if (touch) {
+        if (QQuickItem *select = button(u"drawingSelect"_s))
+            touchTap(window, pointIn(select));
+    } else {
+        sendKey(window, Qt::Key_V, Qt::NoModifier, u"v"_s);
+    }
+    check(waitFor([&] { return canvas->property("tool").toString() == u"select"; }), "the select tool");
+    tap(pointIn(canvas, 0.45, 0.6)); // on the rectangle's top edge: it alone
+    check(waitFor([&] { return canvas->property("selectionCount").toInt() == 1; }), "a tap selects the rectangle");
+    check(waitFor([&] {
+              QQuickItem *bar = button(u"drawingSelectionBar"_s);
+              return bar && bar->isVisible();
+          }),
+          "the selection's bar is shown");
+    if (QQuickItem *remove = button(u"drawingSelectionDelete"_s))
+        tap(pointIn(remove));
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 1; }), "Usuń on the bar deletes it");
+    QMetaObject::invokeMethod(canvas, "undo");
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 2; }), "and Cofnij brings it back");
+    if (!touch) {
+        sendKey(window, Qt::Key_A, Qt::ControlModifier);
+        check(waitFor([&] { return canvas->property("selectionCount").toInt() == 2; }), "Ctrl+A selects everything");
+        sendKey(window, Qt::Key_Escape);
+        check(waitFor([&] { return canvas->property("selectionCount").toInt() == 0; }), "Escape clears it");
+        // A change just now (the 1.2 s save timer runs): the text written meanwhile is never cut
+        // short by that save — the editor stays open and keeps the keys while the user pauses.
+        QMetaObject::invokeMethod(canvas, "undo");
+        QMetaObject::invokeMethod(canvas, "redo");
+        sendKey(window, Qt::Key_T, Qt::NoModifier, u"t"_s);
+        mouseClick(window, pointIn(canvas, 0.3, 0.2));
+        QQuickItem *editor = nullptr;
+        check(waitFor([&] {
+                  editor = button(u"drawingTextEditor"_s);
+                  return editor && editor->hasActiveFocus();
+              }),
+              "a click with the text tool opens the text editor");
+        const auto type = [&](const QString &text) {
+            for (const QChar c : text)
+                sendKey(window, c == u'Ć' ? Qt::Key_unknown : Qt::Key(c.toUpper().unicode()), Qt::NoModifier,
+                        QString(c));
+        };
+        type(u"Ć"_s);
+        settle(1800);
+        check(editor && editor->hasActiveFocus() && canvas->property("textEditing").toBool()
+                      && canvas->property("tool").toString() == u"text",
+              "the save timer leaves a text being written alone");
+        type(u"ma"_s);
+        sendKey(window, Qt::Key_Escape);
+        const auto texts = [&] {
+            QStringList out;
+            const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
+            for (const drawing::Stroke &e : d ? d->strokes : QList<drawing::Stroke>()) {
+                if (e.type == drawing::ElementType::Text)
+                    out.append(e.text);
+            }
+            return out;
+        };
+        check(waitFor([&] { return texts() == QStringList{u"Ćma"_s}; }, 5000), "text written on the paper is saved");
+        check(editor && !editor->hasActiveFocus(), "the keys go back to the drawing");
+        QMetaObject::invokeMethod(canvas, "undo");
+    }
+    QMetaObject::invokeMethod(canvas, "undo");
+    canvas->setProperty("tool", u"pen"_s);
+    check(waitFor([&] { return strokesInFile() == 1 && canvas->property("strokeCount").toInt() == 1; }, 5000),
+          "back to the stroke alone");
 
     // Another device's version on disk the vault has not reported yet (a missed folder watch,
     // Android's shared storage): the save reads the file first and merges, never writes over it.
@@ -2755,18 +2873,18 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
               "the save merges a version not reported yet: both devices' strokes are in the file");
     }
 
-    // A version Brulion cannot edit (a rectangle added in excalidraw.com): shown as it is, never
+    // A version Brulion cannot edit (a frame added in excalidraw.com): shown as it is, never
     // written over; what was drawn here is kept in a new file beside it.
     drawing::Drawing shapes = drawing::readDrawing(workspace->readAttachment(path)).value_or(drawing::Drawing());
-    shapes.foreign.append(QJsonObject{{u"type"_s, u"rectangle"_s}, {u"id"_s, u"prostokąt"_s}, {u"x"_s, 10},
-                                      {u"y"_s, 10}, {u"width"_s, 50}, {u"height"_s, 40}});
+    shapes.foreign.append(QJsonObject{{u"type"_s, u"frame"_s}, {u"id"_s, u"ramka"_s}, {u"x"_s, 10},
+                                      {u"y"_s, 10}, {u"width"_s, 50}, {u"height"_s, 40}, {u"name"_s, u"Ramka"_s}});
     const QByteArray shapesBytes = drawing::toSvg(shapes);
     drawStroke(0.8);
     check(waitFor([&] { return canvas->property("strokeCount").toInt() == 4; }) && writeBehind(shapes),
-          "a stroke drawn here, an Excalidraw version with a shape written behind the vault's back");
+          "a stroke drawn here, an Excalidraw version with a frame written behind the vault's back");
     if (view)
         QMetaObject::invokeMethod(view, "save", Q_RETURN_ARG(QVariant, saved));
-    check(workspace->readAttachment(path) == shapesBytes, "the version with the shape is not written over");
+    check(workspace->readAttachment(path) == shapesBytes, "the version with the frame is not written over");
     check(view && view->property("status").toString() == u"readonly"_s, "and the editor shows it as it is");
     {
         const QString folder = paths::dirname(path);

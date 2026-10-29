@@ -11,9 +11,10 @@
 // A drawing Brulion draws (drawing::editable) is painted by drawingrender.h (renderDrawing) — the
 // whole picture, in the frame of the size the file's SVG root names (what the embeds, the picture
 // view and the notice are sized by, editor::pictureSize: Brulion writes its pictureRect there, a
-// file Excalidraw wrote has its own margins; the strokes centred in it at one unit a pixel, smaller
-// only when they do not fit), fitted into the requested size; anything else in such a file (an
-// Excalidraw drawing with shapes or text, a scene that cannot be read) is the file's own picture
+// file Excalidraw wrote has its own margins; the elements centred in it at one unit a pixel, smaller
+// only when they do not fit — shapes, text and pictures too), fitted into the requested size;
+// anything else in such a file (an Excalidraw drawing with frames or embedded web pages, a scene
+// that cannot be read) is the file's own picture
 // through Qt's SVG renderer, in the dark theme with its colours mapped one by one as Excalidraw's
 // dark mode does (drawing::darkSvg: pictures and emoji in it keep theirs; the per-pixel filter
 // darkImage when it is not well-formed) — unless that picture is dark already (its edge, the paper,

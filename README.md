@@ -135,14 +135,17 @@
   macierze, układy równań. Plik zachowuje źródło LaTeX, a eksport HTML pokazuje gotowy wzór.
 * **Rysunki.** Polecenie `/Rysunek` (albo *Rysunek* na pasku nad klawiaturą) wstawia do notatki
   rysunek odręczny i otwiera go do rysowania: rysik z naciskiem (drugi koniec rysika ściera),
-  zakreślacz, gumka, kolory i grubości, papier gładki, w linie albo w kratkę, cofanie. Tło
+  zakreślacz, gumka, kształty (prostokąt, elipsa, romb, linia, strzałka), tekst i etykiety
+  w kształtach, zaznaczanie lassem (przesuwanie, kopiowanie, kolor, na wierzch i na spód,
+  usuwanie), kolory i grubości, papier gładki, w linie albo w kratkę, cofanie. Tło
   rysunku jasne, ciemne albo „jak motyw” — wtedy rysunek ciemnieje i jaśnieje od razu razem z
   motywem, w edytorze i w podglądach w notatkach (kolory jak w ciemnym trybie Excalidraw). Palec
   przesuwa i powiększa kartkę, gdy rysujesz rysikiem (albo rysuje — „Rysuj palcem”), myszką
   rysujesz na komputerze. Rysunek to zwykły plik SVG w załącznikach notatnika (`![[Rysunek ….svg]]`)
   z wbudowaną sceną Excalidraw: Obsidian i przeglądarki pokazują go jako obraz (rysunek „jak
-  motyw” ciemny w Obsidianie z ciemnym motywem), excalidraw.com otwiera do edycji, a Syncthing
-  synchronizuje jak każdy plik.
+  motyw” ciemny w Obsidianie z ciemnym motywem), excalidraw.com otwiera do edycji (a rysunki
+  z excalidraw.com z kształtami i tekstem edytujesz w Brulionie), a Syncthing synchronizuje jak
+  każdy plik.
 * **Zapytania.** Blok ` ```query ` pokazuje na żywo np. wszystkie otwarte zadania z tagiem
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
@@ -479,14 +482,16 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   installed font for the interface, notes and code, line spacing, a compact density on the
   desktop, and which sidebar entries and phone navigation buttons are shown.
 * Handwritten drawings in notes (`/Rysunek`): a stylus with pressure (its eraser end erases), a
-  highlighter, an eraser, colours and widths, plain, lined or squared paper, undo; a light or a
+  highlighter, an eraser, shapes (rectangle, ellipse, diamond, line, arrow), text and labels in
+  shapes, lasso selection (move, duplicate, recolour, bring to front / send to back, delete),
+  colours and widths, plain, lined or squared paper, undo; a light or a
   dark background per drawing, or "Like the app" — it then turns dark and light with the app at
   once, in the editor and in the previews in notes (colours as in Excalidraw's dark mode); fingers
   move and zoom the paper while you draw with a stylus (or draw — "Draw with finger"), a mouse
   draws on the desktop. A drawing is a plain SVG attachment (`![[Rysunek ….svg]]`) with an
   embedded Excalidraw scene: Obsidian and browsers show it as a picture (a "Like the app" drawing
-  dark in Obsidian's dark theme), excalidraw.com opens it for editing, Syncthing syncs it like any
-  file.
+  dark in Obsidian's dark theme), excalidraw.com opens it for editing (and Excalidraw drawings
+  with shapes and text are edited in Brulion), Syncthing syncs it like any file.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Something not working? Settings → Application → **Event log** shows what the app and the sync
   did (live sync progress and the history of runs are in the sync center); share or save it

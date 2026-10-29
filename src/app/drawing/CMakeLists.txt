@@ -1,6 +1,7 @@
 # brulion_drawing — the drawing editor's paper (docs/UI.md "Drawing editor"): DrawingCanvas, a
 # QQuickPaintedItem that shows a drawing of the core module `drawing` and draws (stylus pressure,
-# mouse, fingers), erases, undoes and moves around it; the painting it shares with the previews of
+# mouse, fingers), erases, selects with a lasso, moves, makes shapes and text (the tools:
+# drawingcanvas_tools.cpp), undoes and moves around it; the painting it shares with the previews of
 # drawings (drawingrender.h: the paper, the strokes in the light or the dark theme, Excalidraw's
 # dark filter) and DrawingImageProvider, the QML image provider "drawing" of those previews (Qt
 # SVG for files Brulion does not draw itself; the file's own size by the editor's picture size
@@ -8,7 +9,7 @@
 # tests/app/drawing links it without the app; the app's QML module registers the canvas through
 # drawingqml.h and main.cpp the image provider.
 qt_add_library(brulion_drawing STATIC
-    drawingcanvas.h drawingcanvas.cpp
+    drawingcanvas.h drawingcanvas.cpp drawingcanvas_tools.cpp
     drawingrender.h drawingrender.cpp
     drawingimageprovider.h drawingimageprovider.cpp
 )

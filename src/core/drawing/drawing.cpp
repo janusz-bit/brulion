@@ -1,7 +1,7 @@
 #include "drawing/drawing.h"
 
 #include "drawing/excalidraw.h"
-#include "drawing/stroke.h"
+#include "drawing/geometry.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,30 +12,61 @@ namespace brulion::drawing {
 
 QRectF strokeBounds(const Stroke &stroke)
 {
-    const QList<QPointF> outline = strokeOutline(stroke);
-    if (outline.isEmpty())
-        return {};
-    double minX = outline.first().x(), maxX = minX;
-    double minY = outline.first().y(), maxY = minY;
-    for (const QPointF &p : outline) {
-        minX = std::min(minX, p.x());
-        maxX = std::max(maxX, p.x());
-        minY = std::min(minY, p.y());
-        maxY = std::max(maxY, p.y());
-    }
-    return QRectF(QPointF(minX, minY), QPointF(maxX, maxY));
+    return elementBounds(stroke);
 }
 
 QRectF bounds(const Drawing &drawing)
 {
     QRectF out;
     for (const Stroke &s : drawing.strokes) {
-        const QRectF b = strokeBounds(s);
+        const QRectF b = elementBounds(s);
         if (b.isNull())
             continue;
         out = out.isNull() ? b : out.united(b);
     }
     return out;
+}
+
+bool isShape(ElementType type)
+{
+    return type == ElementType::Rectangle || type == ElementType::Ellipse || type == ElementType::Diamond;
+}
+
+bool isLinear(ElementType type)
+{
+    return type == ElementType::Line || type == ElementType::Arrow;
+}
+
+bool hasPoints(ElementType type)
+{
+    return type == ElementType::Freedraw || isLinear(type);
+}
+
+QString elementTypeName(ElementType type)
+{
+    switch (type) {
+    case ElementType::Freedraw: return u"freedraw"_s;
+    case ElementType::Rectangle: return u"rectangle"_s;
+    case ElementType::Ellipse: return u"ellipse"_s;
+    case ElementType::Diamond: return u"diamond"_s;
+    case ElementType::Line: return u"line"_s;
+    case ElementType::Arrow: return u"arrow"_s;
+    case ElementType::Text: return u"text"_s;
+    case ElementType::Image: return u"image"_s;
+    }
+    return u"freedraw"_s;
+}
+
+std::optional<ElementType> elementTypeFromName(QStringView name)
+{
+    static const ElementType all[] = {ElementType::Freedraw, ElementType::Rectangle, ElementType::Ellipse,
+                                      ElementType::Diamond,  ElementType::Line,      ElementType::Arrow,
+                                      ElementType::Text,     ElementType::Image};
+    for (const ElementType t : all) {
+        if (name == elementTypeName(t))
+            return t;
+    }
+    return std::nullopt;
 }
 
 bool editable(const Drawing &drawing)

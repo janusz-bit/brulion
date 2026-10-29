@@ -16,12 +16,17 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     `https://` (komunikat o mieszanej treści), brak zapytania wstępnego (preflight) w Firefoksie,
     eksport z kopiami.
 * **Rysunki — dalsze kroki.** Edytor rysunków (`/Rysunek`, docs/UI.md „Drawing editor”) ma
-  pismo odręczne, zakreślacz, gumkę i papier. Do zrobienia:
+  pismo odręczne, zakreślacz, gumkę, papier, kształty, strzałki, tekst i zaznaczanie lassem.
+  Do zrobienia:
   * kopie konfliktowe Syncthinga (`*.sync-conflict-….svg`): „Scal rysunki” w centrum
     synchronizacji, łączące linie obu wersji po ich identyfikatorach (jak przy zmianie z innego
     urządzenia przy otwartym rysunku);
-  * kształty, strzałki, tekst i zaznaczanie lassem (dziś rysunek z Excalidraw z takimi
-    elementami Brulion tylko pokazuje);
+  * sprawdzić ręcznie zaznaczanie lassem rysikiem na tablecie (Natalia) i polskie znaki z
+    klawiatury ekranowej w tekście na rysunku na prawdziwym telefonie (pisanie z klawiatury
+    sprawdza `scripts/android-emulator-test.sh --drawing`, zgodność z excalidraw.com w obie strony
+    `tests/app/drawing/excalidraw-roundtrip.sh`, wymaga internetu);
+  * zmiana rozmiaru i obracanie zaznaczenia (uchwyty na ramce), zaznaczanie prostokątem;
+  * kopiowanie elementów między Brulionem a excalidraw.com przez schowek;
   * pliki `*.excalidraw.md` wtyczki Excalidraw dla Obsidiana (LZ-String w Markdownie);
   * import z Trilium: notatka typu „canvas” jako jeden plik SVG ze sceną Excalidraw (dziś
     importer zapisuje obok siebie SVG i plik `.excalidraw`);

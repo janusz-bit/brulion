@@ -146,8 +146,8 @@ QImage DrawingImageProvider::picture(const QByteArray &bytes, bool appDark, cons
         return renderDrawing(*d, fitted(QSizeF(size), requested), drawing::rendersDark(d->theme, appDark),
                              framed ? frameAround(rect, own) : rect);
     }
-    // Shapes, text, pictures (an Excalidraw drawing), a scene that cannot be read: the file's own
-    // picture, in the dark with Excalidraw's dark colours.
+    // Frames, embedded pages (an Excalidraw drawing Brulion does not edit), a scene that cannot be
+    // read: the file's own picture, in the dark with Excalidraw's dark colours.
     QSvgRenderer svg(bytes);
     if (!svg.isValid())
         return {};

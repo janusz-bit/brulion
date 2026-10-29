@@ -19,6 +19,7 @@
 
 #include <QByteArray>
 #include <QByteArrayView>
+#include <QHash>
 
 #include <optional>
 
@@ -37,18 +38,38 @@ inline constexpr qsizetype MaxSceneContainers = 500'000;
 /// The scene's `source` Brulion writes.
 inline constexpr QStringView SceneSource = u"https://github.com/janusz-bit/brulion";
 
-/// The drawing in a scene's JSON (UTF-8). Elements of other types, and `freedraw` elements Brulion
-/// cannot draw as they are (rotated, filled, broken points), go to Drawing::foreign; deleted
-/// elements are dropped (as Excalidraw's own export does). nullopt: no Excalidraw scene, or one
-/// beyond MaxSceneBytes or MaxSceneContainers.
+/// The drawing in a scene's JSON (UTF-8). Elements of other kinds (frames, embedded pages,
+/// unknown ones) and elements Brulion cannot draw as they are (broken numbers or points, beyond
+/// CoordinateLimit) go to Drawing::foreign; deleted elements are dropped (as Excalidraw's own
+/// export does). nullopt: no Excalidraw scene, or one beyond MaxSceneBytes or MaxSceneContainers.
 std::optional<Drawing> parseScene(QByteArrayView json);
-/// The scene's JSON (UTF-8, compact): the strokes (each stroke read from a scene as it was, new
-/// ones as Excalidraw writes them), the foreign elements after them, the appState with the paper,
-/// the background and the theme (`brulionTheme`, left out for Auto), the files and the other keys
-/// as they were read.
+/// The scene's JSON (UTF-8, compact): the elements in their order (each one read from a scene and
+/// not changed since as it was read, the others as Excalidraw writes them: elementJson()), the
+/// foreign elements after them, the appState with the paper, the background and the theme
+/// (`brulionTheme`, left out for Auto), the files the pictures use and the other keys as they
+/// were read. Excalidraw's fractional `index` values are kept while they still rise in the
+/// written order, else left out of every element (Excalidraw makes new ones when it opens the
+/// scene).
 QByteArray sceneJson(const Drawing &drawing);
 /// A new stroke as an Excalidraw `freedraw` element (stroke.element is ignored).
 QJsonObject strokeElement(const Stroke &stroke);
+/// An Excalidraw element (as excalidraw.com reads it) Brulion draws, or nullopt: the element then
+/// stays foreign. Its numbers are checked and clamped (sizes not negative, opacity 0–100,
+/// strokeWidth 0.05–200, fontSize 1–1000, lineHeight 0.5–5); `element` keeps it as read.
+std::optional<Stroke> elementFromJson(const QJsonObject &e);
+/// The element as the scene stores it: `e.element` itself while `e.version` (and its id) are the
+/// ones read; else `e.element` (or, for an element made in Brulion, Excalidraw's template of its
+/// kind: roughness 0, no bindings, no index) with every field Brulion models written over.
+/// `types` (id → kind) names the kinds of the elements in boundElements (bound ones it lacks are
+/// left out).
+QJsonObject elementJson(const Stroke &e, const QHash<QString, ElementType> *types = nullptr);
+/// The scene names of the fill, stroke, arrowhead and alignment styles, and back.
+QString fillStyleName(FillStyle style);
+QString strokeStyleName(StrokeStyle style);
+/// (None: "".)
+QString arrowheadName(Arrowhead head);
+QString textAlignName(TextAlign align);
+QString verticalAlignName(VerticalAlign align);
 
 /// The SVG payload of a scene: the base64 between the payload markers (version 2, compressed).
 QByteArray encodePayload(QByteArrayView sceneJson);

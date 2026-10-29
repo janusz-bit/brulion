@@ -366,12 +366,16 @@ private Q_SLOTS:
         QTest::addColumn<int>("strokes");
         QTest::addColumn<int>("foreign");
         QTest::addColumn<QString>("paper");
-        QTest::newRow("excalidraw.com v2 (text)") << u"smiley_embedded_v2.svg"_s << 0 << 1 << u"#ffffff"_s;
-        QTest::newRow("excalidraw.com v1 (text)") << u"test_embedded_v1.svg"_s << 0 << 1 << u"#ffffff"_s;
+        // (Text, shapes and pictures are elements Brulion draws and edits; a frame is not.)
+        QTest::newRow("excalidraw.com v2 (text)") << u"smiley_embedded_v2.svg"_s << 1 << 0 << u"#ffffff"_s;
+        QTest::newRow("excalidraw.com v1 (text)") << u"test_embedded_v1.svg"_s << 1 << 0 << u"#ffffff"_s;
         QTest::newRow("freehand only") << u"excalidraw_freedraw.svg"_s << 2 << 0 << u"#ffffff"_s;
         QTest::newRow("freehand, uncompressed") << u"excalidraw_freedraw_uncompressed.svg"_s << 2 << 0 << u"#ffffff"_s;
-        QTest::newRow("mixed svg") << u"excalidraw_mixed.svg"_s << 1 << 2 << u"#ffffff"_s;
-        QTest::newRow("mixed .excalidraw") << u"excalidraw_mixed.excalidraw"_s << 1 << 2 << u"#ffffff"_s;
+        QTest::newRow("mixed svg") << u"excalidraw_mixed.svg"_s << 3 << 0 << u"#ffffff"_s;
+        QTest::newRow("mixed .excalidraw") << u"excalidraw_mixed.excalidraw"_s << 3 << 0 << u"#ffffff"_s;
+        QTest::newRow("shapes svg") << u"excalidraw_shapes.svg"_s << 16 << 0 << u"#ffffff"_s;
+        QTest::newRow("shapes .excalidraw") << u"excalidraw_shapes.excalidraw"_s << 16 << 0 << u"#ffffff"_s;
+        QTest::newRow("a frame") << u"excalidraw_frame.svg"_s << 1 << 1 << u"#ffffff"_s;
     }
     void fixtures()
     {
@@ -425,15 +429,19 @@ private Q_SLOTS:
         QCOMPARE(again->strokes.size(), d->strokes.size());
         QCOMPARE(again->strokes.at(0).element, d->strokes.at(0).element);
         QCOMPARE(again->strokes.at(0).element.value(u"index"_s).toString(), u"a0"_s);
-        QCOMPARE(again->foreign, d->foreign);
-        QCOMPARE(again->foreign.at(1).toObject().value(u"text"_s).toString(), u"Zażółć gęślą jaźń"_s);
+        for (qsizetype i = 0; i < d->strokes.size(); ++i)
+            QCOMPARE(again->strokes.at(i).element, d->strokes.at(i).element);
+        QCOMPARE(again->strokes.at(2).element.value(u"text"_s).toString(), u"Zażółć gęślą jaźń"_s);
+        QCOMPARE(again->strokes.at(2).text, u"Zażółć gęślą jaźń"_s);
+        QCOMPARE(again->strokes.at(1).element.value(u"index"_s).toString(), u"a1"_s);
         QCOMPARE(again->appState.value(u"gridStep"_s).toInt(), 5);
         QCOMPARE(again->scene.value(u"source"_s).toString(), u"https://excalidraw.com"_s);
         QCOMPARE(sceneJson(*again), json);
         // Through Brulion's SVG too.
         const std::optional<Drawing> viaSvg = readDrawing(toSvg(*d));
         QVERIFY(viaSvg);
-        QCOMPARE(viaSvg->foreign, d->foreign);
+        QCOMPARE(viaSvg->strokes.size(), d->strokes.size());
+        QCOMPARE(viaSvg->strokes.at(1).element, d->strokes.at(1).element);
         QCOMPARE(viaSvg->strokes.at(0).element, d->strokes.at(0).element);
         const std::optional<Drawing> freehand = readDrawing(fixture(u"excalidraw_freedraw.svg"_s));
         QVERIFY(freehand);
@@ -444,16 +452,20 @@ private Q_SLOTS:
 
     void foreignElements_data()
     {
+        // `stroke`: an element Brulion draws and edits (else foreign: the drawing is read-only).
         QTest::addColumn<QByteArray>("element");
         QTest::addColumn<bool>("stroke");
         QTest::newRow("freedraw") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"points\":[[0,0],[3,4]]}")
                                   << true;
         QTest::newRow("rotated") << QByteArray(
                 "{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"angle\":0.5,\"points\":[[0,0],[3,4]]}")
-                                 << false;
+                                 << true;
         QTest::newRow("filled") << QByteArray(
                 "{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"backgroundColor\":\"#ffc9c9\",\"points\":[[0,0]]}")
-                                << false;
+                                << true;
+        QTest::newRow("angle of text") << QByteArray(
+                "{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"angle\":\"pół\",\"points\":[[0,0],[3,4]]}")
+                                       << false;
         QTest::newRow("no points") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"points\":[]}") << false;
         QTest::newRow("point of text") << QByteArray(
                 "{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"points\":[[\"a\",\"b\"]]}")
@@ -477,8 +489,18 @@ private Q_SLOTS:
                 "{\"type\":\"freedraw\",\"x\":-1e6,\"y\":0,\"points\":[[0,0],[2e6,1e6]]}")
                                       << true;
         QTest::newRow("rectangle") << QByteArray("{\"type\":\"rectangle\",\"x\":1,\"y\":2,\"width\":3,\"height\":4}")
-                                   << false;
-        QTest::newRow("image") << QByteArray("{\"type\":\"image\",\"x\":1,\"y\":2,\"fileId\":\"abc\"}") << false;
+                                   << true;
+        QTest::newRow("image") << QByteArray("{\"type\":\"image\",\"x\":1,\"y\":2,\"fileId\":\"abc\"}") << true;
+        QTest::newRow("text") << QByteArray("{\"type\":\"text\",\"x\":1,\"y\":2,\"text\":\"źdźbło\"}") << true;
+        QTest::newRow("frame") << QByteArray("{\"type\":\"frame\",\"x\":1,\"y\":2,\"width\":3,\"height\":4}")
+                               << false;
+        QTest::newRow("magic frame") << QByteArray("{\"type\":\"magicframe\",\"x\":1,\"y\":2}") << false;
+        QTest::newRow("embedded page") << QByteArray("{\"type\":\"embeddable\",\"x\":1,\"y\":2,\"link\":\"x\"}")
+                                       << false;
+        QTest::newRow("iframe") << QByteArray("{\"type\":\"iframe\",\"x\":1,\"y\":2}") << false;
+        QTest::newRow("a kind of the future") << QByteArray("{\"type\":\"kółko\",\"x\":1,\"y\":2}") << false;
+        QTest::newRow("rectangle far away")
+                << QByteArray("{\"type\":\"rectangle\",\"x\":0,\"y\":0,\"width\":2e6,\"height\":4}") << false;
         QTest::newRow("not an object") << QByteArray("42") << false;
     }
     void foreignElements()
@@ -518,7 +540,7 @@ private Q_SLOTS:
         QByteArray bytes = "\xEF\xBB\xBF\r\n" + fixture(u"excalidraw_mixed.excalidraw"_s);
         const std::optional<Drawing> d = readDrawing(bytes);
         QVERIFY(d);
-        QCOMPARE(d->strokes.size(), 1);
+        QCOMPARE(d->strokes.size(), 3);
     }
 
     void headCheck_data()
@@ -1231,8 +1253,11 @@ private Q_SLOTS:
         Drawing d;
         d.strokes = {wavyStroke(u"a"_s, 0, 0, 30), wavyStroke(u"b"_s, 5, 9, 12, true)};
         const QByteArray svg = toSvg(d);
+        // (Shapes, arrows, text and pictures too: Excalidraw's file and Brulion's of it.)
+        const QByteArray shapes = fixture(u"excalidraw_shapes.excalidraw"_s);
+        const QByteArray shapesSvg = toSvg(*readDrawing(shapes));
         for (int i = 0; i < 300; ++i) {
-            QByteArray bytes = svg;
+            QByteArray bytes = i % 3 == 1 ? shapes : i % 3 == 2 ? shapesSvg : svg;
             const int damage = 1 + int(random.bounded(8));
             for (int k = 0; k < damage; ++k)
                 bytes[qsizetype(random.bounded(quint32(bytes.size())))] = char(random.bounded(256));

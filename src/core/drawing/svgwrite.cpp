@@ -1,11 +1,15 @@
 #include "drawing/svgwrite.h"
 
 #include "drawing/excalidraw.h"
+#include "drawing/geometry.h"
 #include "drawing/palette.h"
 #include "drawing/stroke.h"
 
+#include <QJsonObject>
+
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 using namespace Qt::StringLiterals;
 
@@ -41,6 +45,80 @@ QRectF pictureRect(const Drawing &drawing)
     return QRectF(left, top, int(std::clamp(right - left, 1.0, 1e9)), int(std::clamp(bottom - top, 1.0, 1e9)));
 }
 
+namespace {
+
+/// Text for an SVG text node or attribute: & < > " ' escaped; characters XML forbids (controls
+/// but tab, lone surrogates, U+FFFE/U+FFFF) left out.
+QString xmlText(const QString &text)
+{
+    QString out;
+    out.reserve(text.size() + 8);
+    for (qsizetype i = 0; i < text.size(); ++i) {
+        const QChar c = text.at(i);
+        const char16_t u = c.unicode();
+        if (c.isHighSurrogate() && i + 1 < text.size() && text.at(i + 1).isLowSurrogate()) {
+            out += c;
+            out += text.at(++i);
+            continue;
+        }
+        if (c.isSurrogate() || u == 0xfffe || u == 0xffff || (u < 0x20 && u != u'\t'))
+            continue;
+        switch (u) {
+        case u'&': out += u"&amp;"_s; break;
+        case u'<': out += u"&lt;"_s; break;
+        case u'>': out += u"&gt;"_s; break;
+        case u'"': out += u"&quot;"_s; break;
+        case u'\'': out += u"&apos;"_s; break;
+        default: out += c;
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+QString safeDataUrl(const QJsonObject &files, const QString &fileId)
+{
+    if (fileId.isEmpty())
+        return {};
+    const QString url = files.value(fileId).toObject().value(u"dataURL"_s).toString();
+    static const QStringList types = {u"png"_s, u"jpeg"_s, u"gif"_s, u"webp"_s, u"svg+xml"_s};
+    for (const QString &type : types) {
+        const QString prefix = u"data:image/"_s + type + u";base64,"_s;
+        if (!url.startsWith(prefix))
+            continue;
+        for (qsizetype i = prefix.size(); i < url.size(); ++i) {
+            const char16_t u = url.at(i).unicode();
+            if (!((u >= u'A' && u <= u'Z') || (u >= u'a' && u <= u'z') || (u >= u'0' && u <= u'9') || u == u'+'
+                  || u == u'/' || u == u'='))
+                return {};
+        }
+        return url.size() > prefix.size() ? url : QString();
+    }
+    return {};
+}
+
+QString fontFamilyCss(int family)
+{
+    switch (family) {
+    case 1: return u"Virgil, Excalifont, sans-serif"_s;
+    case 2: return u"Helvetica, Arial, sans-serif"_s;
+    case 3: return u"Cascadia, monospace"_s;
+    case 5: return u"Excalifont, Virgil, sans-serif"_s;
+    case 6: return u"Nunito, sans-serif"_s;
+    case 7: return u"Lilita One, sans-serif"_s;
+    case 8: return u"Comic Shanns, monospace"_s;
+    case 9: return u"Liberation Sans, Arial, sans-serif"_s;
+    default: break;
+    }
+    return u"sans-serif"_s;
+}
+
+bool isMonospaceFamily(int family)
+{
+    return family == 3 || family == 8;
+}
+
 QByteArray toSvg(const Drawing &drawing)
 {
     const QRectF picture = pictureRect(drawing);
@@ -58,9 +136,12 @@ QByteArray toSvg(const Drawing &drawing)
     const bool dark = drawing.theme == PaperTheme::Dark;
     const bool autoTheme = drawing.theme == PaperTheme::Auto;
 
+    const bool images = std::any_of(drawing.strokes.cbegin(), drawing.strokes.cend(),
+                                    [](const Stroke &s) { return s.type == ElementType::Image; });
     QString svg;
-    svg += u"<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 "_s + w + u' ' + h
-           + u"\" width=\""_s + w + u"\" height=\""_s + h + u"\">\n"_s;
+    svg += u"<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\""_s
+           + (images ? u" xmlns:xlink=\"http://www.w3.org/1999/xlink\""_s : QString()) + u" viewBox=\"0 0 "_s + w
+           + u' ' + h + u"\" width=\""_s + w + u"\" height=\""_s + h + u"\">\n"_s;
     svg += u"<!-- svg-source:excalidraw -->\n"_s;
     svg += u"<metadata><!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->"
            "<!-- payload-start -->"_s
@@ -108,42 +189,161 @@ QByteArray toSvg(const Drawing &drawing)
         }
     }
 
-    // Auto: one class per pen colour (first use first), one per highlighter opacity in the dark.
+    // Auto: one class per colour (first use first) for what is filled with ink (`k`), stroked
+    // (`s`) and filled with a shape's colour (`f`); one per highlighter opacity in the dark (`h`).
     QStringList inkClasses;
+    QStringList strokeClasses;
+    QStringList fillClasses;
     QList<int> highlighterClasses;
+    const auto classOf = [&](QStringList &classes, const QString &prefix, const QString &color,
+                             const QString &property) -> QString {
+        if (!autoTheme)
+            return QString();
+        qsizetype n = classes.indexOf(color);
+        if (n < 0) {
+            n = classes.size();
+            classes.append(color);
+            css += u'.' + prefix + QString::number(n) + u'{' + property + u':' + darkColor(color, color) + u'}';
+        }
+        return prefix + QString::number(n);
+    };
+    const auto shown = [dark](const QString &color) { return dark ? darkColor(color, color) : color; };
+    const auto classAttr = [](const QString &classes) -> QString {
+        const QString c = classes.trimmed();
+        return c.isEmpty() ? QString() : u" class=\""_s + c + u'"';
+    };
+    // (The drawing's hatch lines counted: geometry.h DrawingHatchLines.)
+    qsizetype hatchBudget = DrawingHatchLines;
     for (const Stroke &s : drawing.strokes) {
-        const QString d = outlineToSvgPath(strokeOutline(s), dx, dy);
-        if (d.isEmpty())
-            continue;
         const QString color = safeColor(s.color, FallbackInk.toString());
+        const QString fillColor = s.fill.trimmed() == u"transparent" ? QString() : safeColor(s.fill, QString());
         const int opacity = std::clamp(s.opacity, 0, 100);
-        const Ink ink = displayInk(s, true);
-        body += u"<path d=\""_s + d + u"\" fill=\""_s + (dark ? ink.color : color) + u'"';
-        const int shown = dark ? ink.opacity : opacity;
-        if (shown < 100)
-            body += u" fill-opacity=\""_s + formatNumber(shown / 100.0) + u'"';
-        if (autoTheme) {
-            if (s.tool == Tool::Highlighter) {
-                // The colour as drawn; a little stronger.
-                qsizetype n = highlighterClasses.indexOf(ink.opacity);
-                if (n < 0) {
-                    n = highlighterClasses.size();
-                    highlighterClasses.append(ink.opacity);
-                    css += u".h"_s + QString::number(n) + u"{fill-opacity:"_s + formatNumber(ink.opacity / 100.0)
-                           + u'}';
+        const QPointF center = elementCenter(s);
+        const bool rotated = s.angle != 0 && std::isfinite(s.angle);
+        const QString rotation = rotated ? u"rotate("_s + formatNumber(s.angle * 180 / std::numbers::pi) + u' '
+                                                   + formatNumber(center.x() + dx) + u' '
+                                                   + formatNumber(center.y() + dy) + u')'
+                                         : QString();
+        QString part;
+        if (s.type == ElementType::Freedraw) {
+            const QString d = outlineToSvgPath(strokeOutline(s), dx, dy);
+            if (d.isEmpty())
+                continue;
+            if (!fillColor.isEmpty() && s.points.size() >= 3) {
+                const ElementShape shape = elementShape(s, false);
+                part += u"<path d=\""_s + pathToSvg(shape.area, dx, dy) + u"\" fill=\""_s + shown(fillColor) + u'"';
+                if (opacity < 100)
+                    part += u" fill-opacity=\""_s + formatNumber(opacity / 100.0) + u'"';
+                part += classAttr(classOf(fillClasses, u"f"_s, fillColor, u"fill"_s)) + u"/>\n"_s;
+            }
+            const Ink ink = displayInk(s, true);
+            part += u"<path d=\""_s + d + u"\" fill=\""_s + (dark ? ink.color : color) + u'"';
+            const int shownOpacity = dark ? ink.opacity : opacity;
+            if (shownOpacity < 100)
+                part += u" fill-opacity=\""_s + formatNumber(shownOpacity / 100.0) + u'"';
+            if (autoTheme) {
+                if (s.tool == Tool::Highlighter) {
+                    // The colour as drawn; a little stronger.
+                    qsizetype n = highlighterClasses.indexOf(ink.opacity);
+                    if (n < 0) {
+                        n = highlighterClasses.size();
+                        highlighterClasses.append(ink.opacity);
+                        css += u".h"_s + QString::number(n) + u"{fill-opacity:"_s + formatNumber(ink.opacity / 100.0)
+                               + u'}';
+                    }
+                    part += withClass(u"h"_s + QString::number(n));
+                } else {
+                    qsizetype n = inkClasses.indexOf(color);
+                    if (n < 0) {
+                        n = inkClasses.size();
+                        inkClasses.append(color);
+                        css += u".k"_s + QString::number(n) + u"{fill:"_s + ink.color + u'}';
+                    }
+                    part += withClass(u"k"_s + QString::number(n));
                 }
-                body += withClass(u"h"_s + QString::number(n));
+            }
+            part += u"/>\n"_s;
+            body += rotated ? u"<g transform=\""_s + rotation + u"\">\n"_s + part + u"</g>\n"_s : part;
+            continue;
+        }
+        const ElementShape shape = elementShape(s, false, std::min(MaxHatchLines, hatchBudget));
+        hatchBudget -= shape.hatch.size();
+        const QString strokeWidth = formatNumber(std::max(0.05, s.width));
+        const QList<double> dashes = dashPattern(s);
+        QString dashAttr;
+        if (!dashes.isEmpty()) {
+            QStringList values;
+            for (const double v : dashes)
+                values.append(formatNumber(v));
+            dashAttr = u" stroke-dasharray=\""_s + values.join(u' ') + u'"';
+        }
+        if (!shape.area.isEmpty() && !fillColor.isEmpty()) {
+            part += u"<path d=\""_s + pathToSvg(shape.area, dx, dy) + u"\" fill=\""_s + shown(fillColor) + u'"'
+                    + classAttr(classOf(fillClasses, u"f"_s, fillColor, u"fill"_s)) + u"/>\n"_s;
+        }
+        if (!shape.hatch.isEmpty() && !fillColor.isEmpty()) {
+            QString d;
+            for (const QLineF &l : shape.hatch)
+                d += u'M' + formatNumber(l.x1() + dx) + u',' + formatNumber(l.y1() + dy) + u'L'
+                     + formatNumber(l.x2() + dx) + u',' + formatNumber(l.y2() + dy);
+            part += u"<path d=\""_s + d + u"\" fill=\"none\" stroke=\""_s + shown(fillColor) + u"\" stroke-width=\""_s
+                    + formatNumber(std::max(0.05, shape.hatchWidth)) + u"\" stroke-linecap=\"round\""_s
+                    + classAttr(classOf(strokeClasses, u"s"_s, fillColor, u"stroke"_s)) + u"/>\n"_s;
+        }
+        if (!shape.outline.isEmpty()) {
+            part += u"<path d=\""_s + pathToSvg(shape.outline, dx, dy) + u"\" fill=\"none\" stroke=\""_s + shown(color)
+                    + u"\" stroke-width=\""_s + strokeWidth + u'"' + dashAttr
+                    + u" stroke-linecap=\"round\" stroke-linejoin=\"round\""_s
+                    + classAttr(classOf(strokeClasses, u"s"_s, color, u"stroke"_s)) + u"/>\n"_s;
+        }
+        for (qsizetype i = 0; i < shape.heads.size(); ++i) {
+            const bool full = shape.headFilled.value(i);
+            part += u"<path d=\""_s + pathToSvg(shape.heads.at(i), dx, dy) + u"\" fill=\""_s
+                    + (full ? shown(color) : u"none"_s) + u"\" stroke=\""_s + shown(color) + u"\" stroke-width=\""_s
+                    + strokeWidth + u"\" stroke-linecap=\"round\" stroke-linejoin=\"round\""_s
+                    + classAttr((full ? classOf(inkClasses, u"k"_s, color, u"fill"_s) + u' ' : QString())
+                                + classOf(strokeClasses, u"s"_s, color, u"stroke"_s))
+                    + u"/>\n"_s;
+        }
+        if (s.type == ElementType::Text) {
+            const QString anchor = s.textAlign == TextAlign::Center  ? u" text-anchor=\"middle\""_s
+                                   : s.textAlign == TextAlign::Right ? u" text-anchor=\"end\""_s
+                                                                     : QString();
+            const QString cls = classAttr(classOf(inkClasses, u"k"_s, color, u"fill"_s));
+            for (const TextLine &line : textLines(s)) {
+                if (line.text.isEmpty())
+                    continue;
+                part += u"<text x=\""_s + formatNumber(line.baseline.x() + dx) + u"\" y=\""_s
+                        + formatNumber(line.baseline.y() + dy) + u"\" font-family=\""_s + fontFamilyCss(s.fontFamily)
+                        + u"\" font-size=\""_s + formatNumber(s.fontSize) + u"\" fill=\""_s + shown(color) + u'"'
+                        + anchor + u" xml:space=\"preserve\""_s + cls + u'>' + xmlText(line.text) + u"</text>\n"_s;
+            }
+        } else if (s.type == ElementType::Image) {
+            const QString box = u"x=\""_s + formatNumber(s.box.x() + dx) + u"\" y=\""_s + formatNumber(s.box.y() + dy)
+                                + u"\" width=\""_s + formatNumber(s.box.width()) + u"\" height=\""_s
+                                + formatNumber(s.box.height()) + u'"';
+            const QString url = safeDataUrl(drawing.files, s.fileId);
+            if (!url.isEmpty()) {
+                part += u"<image "_s + box + u" preserveAspectRatio=\"none\" xlink:href=\""_s + url + u"\"/>\n"_s;
             } else {
-                qsizetype n = inkClasses.indexOf(color);
-                if (n < 0) {
-                    n = inkClasses.size();
-                    inkClasses.append(color);
-                    css += u".k"_s + QString::number(n) + u"{fill:"_s + ink.color + u'}';
-                }
-                body += withClass(u"k"_s + QString::number(n));
+                const QString grey = ImagePlaceholderFill.toString();
+                const QString edge = ImagePlaceholderEdge.toString();
+                part += u"<rect "_s + box + u" fill=\""_s + shown(grey) + u"\" stroke=\""_s + shown(edge)
+                        + u"\" stroke-width=\"1\""_s
+                        + classAttr(classOf(fillClasses, u"f"_s, grey, u"fill"_s) + u' '
+                                    + classOf(strokeClasses, u"s"_s, edge, u"stroke"_s))
+                        + u"/>\n"_s;
             }
         }
-        body += u"/>\n"_s;
+        if (part.isEmpty())
+            continue;
+        if (rotated || opacity < 100) {
+            body += u"<g"_s + (rotated ? u" transform=\""_s + rotation + u'"' : QString())
+                    + (opacity < 100 ? u" opacity=\""_s + formatNumber(opacity / 100.0) + u'"' : QString()) + u">\n"_s
+                    + part + u"</g>\n"_s;
+        } else {
+            body += part;
+        }
     }
     // Nothing but the @media block: Qt's SVG renderer drops such a style sheet whole (svgwrite.h).
     if (autoTheme && !css.isEmpty())
