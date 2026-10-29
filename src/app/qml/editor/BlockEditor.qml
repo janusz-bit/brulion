@@ -1722,7 +1722,9 @@ FocusScope {
         }
         // autoHeight: every row is in the range the list fills at once (synchronously, or with
         // the incubation of the item holding the editor) — none waits for the asynchronous cache.
-        displayMarginEnd: editor.autoHeight ? 1000000 : 0
+        // A title drawn above the page's properties (titleFirst) lies below them in the list: it
+        // is shown also while the expanded panel puts its row out of the view.
+        displayMarginEnd: editor.autoHeight ? 1000000 : editor.titleFirst ? Math.ceil(editor.propertiesHeight) : 0
         boundsBehavior: Flickable.StopAtBounds
         keyNavigationEnabled: false
         // No current item: a ListView gives its current item the focus whenever that item changes

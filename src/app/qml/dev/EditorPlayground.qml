@@ -3406,7 +3406,7 @@ ApplicationWindow {
             // layout comes with --touch / a narrow --size).
             host.setFile("Projekty/Remont garażu.md", "---\nstatus: w toku\nkoszt: 1200\ngotowe: false\n"
                 + "termin: 2026-10-28\nkiedy: 2026-10-30T09:30\ntags: [projekt, dom]\naliases: [Łazienka]\n"
-                + "autorzy:\n  - \"[[Jan Kowalski]]\"\n  - Anna\nopis: Płytki z [[Castorama]], #pilne\n"
+                + "autorzy:\n  - \"[[Jan Kowalski]]\"\n  - Anna\nopis: \"Płytki z [[Castorama]] #pilne\"\n"
                 + "pusta:\n---\n# Remont garażu\n\n- Kupić płytki\n- Zamówić hydraulika\n")
             editor.setPropertiesExpanded(true)
             page.path = "Projekty/Remont garażu.md"

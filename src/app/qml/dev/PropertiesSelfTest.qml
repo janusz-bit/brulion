@@ -122,7 +122,10 @@ QtObject {
                     const button = inRow("status", "propertyTypeButton")
                     check(button.height >= Theme.touchTarget && button.width >= Theme.touchTarget,
                           "the type icon is a 44 px target: " + button.width + "×" + button.height)
-                    check(row("status").height >= 2 * Theme.touchTarget, "a stacked row holds the key and the value")
+                    check(row("status").height >= Theme.touchTarget + 28
+                          && inRow("status", "propertyValue").mapToItem(row("status"), 0, 0).y >= 28,
+                          "a stacked row holds the key over the value")
+                    check(inRow("gotowe", "propertyCheckBox").height >= Theme.touchTarget, "the checkbox is a 44 px target")
                     check(window.findItem(p, "propertiesAdd").height >= Theme.touchTarget, "“Dodaj właściwość” is a 44 px target")
                 }
                 // ---- text: real keys, only that line changes -----------------------------------------

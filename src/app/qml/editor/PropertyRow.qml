@@ -50,9 +50,12 @@ FocusScope {
     }
     readonly property bool stacked: panel.stacked
     readonly property real rowHeight: panel.rowHeight
+    /// The key's line: the row's height beside the value; above it (stacked) a label's line —
+    /// the type icon's 44 px target reaches beyond it on the left, where the value does not go.
+    readonly property real keyLineHeight: stacked ? (Theme.touchUi ? 32 : 28) : rowHeight
     readonly property real iconWidth: Theme.touchUi ? Theme.touchTarget : 24
     readonly property real valueX: stacked ? 0 : iconWidth + panel.keyWidth + Theme.space2
-    readonly property real valueY: stacked ? rowHeight : 0
+    readonly property real valueY: stacked ? keyLineHeight : 0
     readonly property real valueWidth: Math.max(60, width - valueX - Theme.space1)
 
     /// The value is being edited in a field (text, number) / the key is being renamed.
@@ -320,9 +323,9 @@ FocusScope {
     T.AbstractButton {
         id: typeButton
         objectName: "propertyTypeButton"
-        y: (row.rowHeight - height) / 2
+        y: (row.keyLineHeight - height) / 2
         width: row.iconWidth
-        height: Math.min(row.rowHeight, Theme.touchUi ? Theme.touchTarget : 24)
+        height: Theme.touchUi ? Theme.touchTarget : Math.min(row.rowHeight, 24)
         focusPolicy: Qt.NoFocus
         hoverEnabled: !Theme.touchUi
         Accessible.role: Accessible.Button
@@ -348,7 +351,7 @@ FocusScope {
         objectName: "propertyKey"
         visible: !row.renaming
         x: row.iconWidth + Theme.space1
-        y: (row.rowHeight - height) / 2
+        y: (row.keyLineHeight - height) / 2
         width: row.stacked ? row.width - x - Theme.space2 : row.panel.keyWidth - Theme.space1
         text: row.key
         textFormat: Text.PlainText
@@ -368,7 +371,7 @@ FocusScope {
         active: row.renaming
         visible: active
         x: row.iconWidth
-        y: (row.rowHeight - (Theme.touchUi ? Theme.touchTarget : Theme.controlHeightSm)) / 2
+        y: (row.keyLineHeight - (Theme.touchUi ? Theme.touchTarget : Theme.controlHeightSm)) / 2
         width: row.stacked ? row.width - x : row.panel.keyWidth + row.valueWidth
         z: 2
         sourceComponent: BSuggestField {
@@ -623,17 +626,48 @@ FocusScope {
         id: checkboxValue
         Item {
             implicitHeight: row.rowHeight - 2 * Theme.space1
-            BCheckBox {
+            // A box like BCheckBox's, centred on the value's line (BCheckBox lines its box up with
+            // a label this row does not have); the hit area is the line's height, 44 px on touch.
+            T.AbstractButton {
+                id: check
                 objectName: "propertyCheckBox"
                 anchors.verticalCenter: parent.verticalCenter
+                width: Theme.touchUi ? Theme.touchTarget : 28
+                height: Math.max(parent.height, Theme.touchUi ? Theme.touchTarget : 0)
                 enabled: row.editable
-                focusPolicy: Qt.NoFocus
+                checkable: false
                 checked: row.present && row.property.raw === true
-                text: ""
+                focusPolicy: Qt.NoFocus
+                hoverEnabled: !Theme.touchUi
+                Accessible.role: Accessible.CheckBox
                 Accessible.name: row.key
-                onToggled: {
-                    row.setValue(checked)
+                Accessible.checked: checked
+                onClicked: {
+                    row.setValue(!check.checked)
                     row.focusRow()
+                }
+                background: Item {}
+                contentItem: Item {
+                    Rectangle {
+                        readonly property int boxSize: Theme.touchUi ? 22 : 18
+                        x: 2
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: boxSize
+                        height: boxSize
+                        radius: Theme.radiusSm - 1
+                        color: check.checked ? Theme.link : Theme.bgElevated
+                        border.width: check.checked ? 0 : 1.5
+                        border.color: check.hovered ? Theme.fgMuted : Theme.borderControl
+                        antialiasing: true
+                        opacity: check.enabled ? 1 : 0.5
+                        BIcon {
+                            anchors.centerIn: parent
+                            name: "check"
+                            size: parent.boxSize - 4
+                            color: Theme.dark ? Theme.bg : "#ffffff"
+                            visible: check.checked
+                        }
+                    }
                 }
             }
         }
