@@ -624,7 +624,8 @@ bool VaultIndex::isIndexable(const VaultPath &path)
 QString VaultIndex::parseFingerprint(const VaultConfig &config)
 {
     return config.journalsFolder + u'\x1f' + config.journalFileFormat + u'\x1f'
-           + (config.defaultReminderTime.isValid() ? config.defaultReminderTime.toString(u"HH:mm:ss.zzz"_s) : QString());
+           + (config.defaultReminderTime.isValid() ? config.defaultReminderTime.toString(u"HH:mm:ss.zzz"_s)
+                                                   : QString());
 }
 
 quint64 VaultIndex::contentKey(QStringView text)

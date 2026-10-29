@@ -4,9 +4,9 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QRandomGenerator>
 #include <QSet>
 #include <QSignalSpy>
-#include <QRandomGenerator>
 #include <QTest>
 
 #include <type_traits>
@@ -105,9 +105,9 @@ private Q_SLOTS:
     {
         static_assert(!std::is_copy_constructible_v<SearchIndex>);
         static_assert(std::is_nothrow_move_constructible_v<SearchIndex>);
-        const QStringList words = {u"żółw"_s,  u"zolw"_s,   u"spotkanie"_s, u"spot"_s,     u"łódź"_s,
-                                   u"lodz"_s,  u"raport"_s, u"kawa"_s,      u"ogród"_s,    u"źdźbło"_s,
-                                   u"gęś"_s,   u"jaźń"_s,   u"zebranie"_s,  u"spotkanei"_s};
+        const QStringList words = {u"żółw"_s, u"zolw"_s,   u"spotkanie"_s, u"spot"_s,     u"łódź"_s,
+                                   u"lodz"_s, u"raport"_s, u"kawa"_s,      u"ogród"_s,    u"źdźbło"_s,
+                                   u"gęś"_s,  u"jaźń"_s,   u"zebranie"_s,  u"spotkanei"_s};
         QRandomGenerator rng(42);
         SearchIndex churned;
         QHash<QString, QStringList> docs; // id -> title, content

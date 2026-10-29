@@ -3,6 +3,7 @@
 // docs/SYNTAX.md (the Markdown dialect — single source of truth for parsing/rendering).
 #pragma once
 
+#include <QAtomicInt>
 #include <QDate>
 #include <QDateTime>
 #include <QHash>
@@ -11,7 +12,6 @@
 #include <QString>
 #include <QStringList>
 #include <QTime>
-#include <QAtomicInt>
 #include <QVariant>
 
 #include <optional>
@@ -210,7 +210,6 @@ private:
     Holder *m = nullptr;
 };
 
-
 /// A block's own source lines joined with '\n' (Block::raw). Shares the note's text where those
 /// lines are one piece of it — consecutive lines each ending in "\n", the usual case: no copy —,
 /// else holds its own copy (CRLF or lone-CR endings; own lines interrupted by child blocks, e.g.
@@ -263,7 +262,7 @@ struct Block {
     int headingLevel = 0;
     QString lang;           ///< fenced code language ("calc", "query", ...)
     Properties properties;
-    Boxed<Task> task;       ///< on the heap, shared by copies (most blocks are no tasks)
+    Boxed<Task> task; ///< on the heap, shared by copies (most blocks are no tasks)
     QList<Reminder> reminders;
     QStringList tags;       ///< lower-case, without '#'
     QList<int> children;    ///< indices into ParsedNote::blocks

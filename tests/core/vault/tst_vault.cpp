@@ -439,7 +439,8 @@ private Q_SLOTS:
         // The vault knows the content now: an external overwrite is taken in with a snapshot.
         f.write(path, "- nowa treść\n");
         QCOMPARE(f.vault->rescan().size(), 1);
-        QCOMPARE(f.historyContents(path), QStringList{QString::fromUtf8(bytes.startsWith("\xEF\xBB\xBF") ? bytes.mid(3) : bytes)});
+        QCOMPARE(f.historyContents(path),
+                 QStringList{QString::fromUtf8(bytes.startsWith("\xEF\xBB\xBF") ? bytes.mid(3) : bytes)});
     }
 
     void detachedReadOfAChangedFile()

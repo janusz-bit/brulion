@@ -146,8 +146,7 @@ public:
     bool isTextual(const VaultPath &path) const;
     bool comparesContent(const FileStat &stat) const;
     /// `hash`: text::fnv1a64Hex(bytes) when the caller has it already.
-    void rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText = false,
-                         const QString &hash = {});
+    void rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText = false, const QString &hash = {});
     QByteArray readDisk(const VaultPath &path, bool *ok) const;
     QByteArray readFile(const VaultPath &path, bool asText, bool *ok);
     /// The bookkeeping after reading a tracked file (readFile(), Vault::adoptRead()).

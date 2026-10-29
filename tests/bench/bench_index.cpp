@@ -377,7 +377,8 @@ private Q_SLOTS:
             QTest::newRow(qPrintable(u"%1 notes loader 1 worker"_s.arg(n))) << n << 4;
             QTest::newRow(qPrintable(u"%1 notes loader %2 workers"_s.arg(n).arg(workers))) << n << 4 + workers;
             QTest::newRow(qPrintable(u"%1 notes loader warm cache inline"_s.arg(n))) << n << 20;
-            QTest::newRow(qPrintable(u"%1 notes loader warm cache %2 workers"_s.arg(n).arg(workers))) << n << 20 + workers;
+            QTest::newRow(qPrintable(u"%1 notes loader warm cache %2 workers"_s.arg(n).arg(workers)))
+                    << n << 20 + workers;
         }
     }
     void openFromDisk()
@@ -455,11 +456,10 @@ private Q_SLOTS:
         const VaultConfig config;
         std::vector<PreparedNote> prepared; // move-only
         prepared.reserve(size_t(all.size()));
-        bench::timeOnce([] {},
-                        [&] {
-                            for (const bench::VaultFile &f : all)
-                                prepared.push_back(VaultIndex::prepare(f.path, f.content, config));
-                        });
+        bench::timeOnce([]{}, [&] {
+            for (const bench::VaultFile &f : all)
+                prepared.push_back(VaultIndex::prepare(f.path, f.content, config));
+        });
         QCOMPARE(qsizetype(prepared.size()), qsizetype(notes));
 #else
         Q_UNUSED(notes);
@@ -479,7 +479,7 @@ private Q_SLOTS:
         const auto identity = indexcache::Identity::current(idx.config(), u"bench"_s);
         const auto stat = [](const VaultPath &p) -> std::optional<FileStat> { return FileStat{p, false, 1, 1}; };
         QByteArray out;
-        bench::timeOnce([] {}, [&] { out = indexcache::encode(idx, identity, stat); });
+        bench::timeOnce([]{}, [&] { out = indexcache::encode(idx, identity, stat); });
         QVERIFY(out.size() > notes * 100);
         qInfo("[bench] index cache %d notes: %lld bytes", notes, qlonglong(out.size()));
 #else
@@ -502,17 +502,16 @@ private Q_SLOTS:
             return FileStat{p, false, sizes.value(p), 1};
         });
         qsizetype decoded = 0;
-        bench::timeOnce([] {},
-                        [&] {
-                            const auto reader = indexcache::Reader::open(bytes, identity);
-                            for (const bench::VaultFile &f : files(notes)) {
-                                if (const indexcache::Record *r = reader->find(f.path))
-                                    decoded += reader->decodeNote(*r, f.path, f.content, idx.config()) ? 1 : 0;
-                            }
-                            indexcache::Reader::SearchDecoder search = reader->searchDecoder();
-                            search.step(std::numeric_limits<int>::max());
-                            QVERIFY(!search.failed());
-                        });
+        bench::timeOnce([]{}, [&] {
+            const auto reader = indexcache::Reader::open(bytes, identity);
+            for (const bench::VaultFile &f : files(notes)) {
+                if (const indexcache::Record *r = reader->find(f.path))
+                    decoded += reader->decodeNote(*r, f.path, f.content, idx.config()) ? 1 : 0;
+            }
+            indexcache::Reader::SearchDecoder search = reader->searchDecoder();
+            search.step(std::numeric_limits<int>::max());
+            QVERIFY(!search.failed());
+        });
         QCOMPARE(decoded, qsizetype(notes));
 #else
         Q_UNUSED(notes);

@@ -37,8 +37,8 @@ public:
 
     /// A tokenised document (prepare()), ready for set().
     struct Document {
-        FieldCounts length{};                           ///< tokens per field
-        QList<std::pair<QString, FieldCounts>> terms;   ///< distinct terms (any order) with frequencies
+        FieldCounts length{};                         ///< tokens per field
+        QList<std::pair<QString, FieldCounts>> terms; ///< distinct terms (any order) with frequencies
     };
 
     /// One search result.

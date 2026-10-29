@@ -274,7 +274,8 @@ private Q_SLOTS:
         // Not indexable / attachments.
         index.updatePrepared(VaultIndex::prepare(u".trash/X.md"_s, u"- x"_s, index.config()));
         QVERIFY(!index.note(u".trash/X.md"_s));
-        index.updatePrepared(VaultIndex::prepare(u"X.sync-conflict-20261028-120000-ABCDEFG.md"_s, u"- x"_s, index.config()));
+        index.updatePrepared(
+                VaultIndex::prepare(u"X.sync-conflict-20261028-120000-ABCDEFG.md"_s, u"- x"_s, index.config()));
         QCOMPARE(index.paths(), QList<VaultPath>({u"A.md"_s, u"dziennik/2026-10-28.md"_s}));
         index.updatePrepared(PreparedNote()); // invalid: nothing
         QCOMPARE(index.paths().size(), 2);
@@ -293,14 +294,16 @@ private Q_SLOTS:
     // rank as when loaded one by one in path order; an edit made meanwhile is newer.
     void reservedSequencesKeepPathOrder()
     {
-        const QStringList notes = {u"a.md"_s, u"b.md"_s, u"c.md"_s, u"journals/2026-10-27.md"_s, u"journals/2026-10-28.md"_s};
+        const QStringList notes = {u"a.md"_s, u"b.md"_s, u"c.md"_s, u"journals/2026-10-27.md"_s,
+                                   u"journals/2026-10-28.md"_s};
         VaultIndex serial;
         for (const QString &p : notes)
             serial.update(p, u"- "_s + p);
         VaultIndex loaded;
         const quint64 base = loaded.reserveSequence(notes.size());
         for (qsizetype i = notes.size() - 1; i >= 0; --i) // merged backwards
-            loaded.updatePrepared(VaultIndex::prepare(notes[i], u"- "_s + notes[i], loaded.config()), base + quint64(i));
+            loaded.updatePrepared(VaultIndex::prepare(notes[i], u"- "_s + notes[i], loaded.config()),
+                                  base + quint64(i));
         QCOMPARE(describeRecency(loaded), describeRecency(serial));
         loaded.update(u"a.md"_s, u"- zmieniona"_s);
         QCOMPARE(describeRecency(loaded).first(), u"a.md"_s);
@@ -311,15 +314,16 @@ private Q_SLOTS:
     void adoptSearchValidates()
     {
         QHash<QString, QString> files = {{u"Żółw.md"_s, u"- spotkanie z żółwiem"_s},
-                                          {u"Zmieniona.md"_s, u"- stara treść spotkanie"_s},
-                                          {u"Usunięta.md"_s, u"- spotkanie usunięte"_s},
-                                          {u"Bez dokumentu.md"_s, u"- żółw bez dokumentu"_s}};
+                                         {u"Zmieniona.md"_s, u"- stara treść spotkanie"_s},
+                                         {u"Usunięta.md"_s, u"- spotkanie usunięte"_s},
+                                         {u"Bez dokumentu.md"_s, u"- żółw bez dokumentu"_s}};
         SearchIndex built;
         for (auto it = files.cbegin(); it != files.cend(); ++it) {
             if (it.key() == u"Bez dokumentu.md")
                 continue;
             const ParsedNote n = markdown::parseNote(it.key(), it.value());
-            built.set(it.key(), SearchIndex::prepare(n.title, n.aliases, it.value()), VaultIndex::contentKey(it.value()));
+            built.set(it.key(), SearchIndex::prepare(n.title, n.aliases, it.value()),
+                      VaultIndex::contentKey(it.value()));
         }
         built.set(u"Obca.md"_s, SearchIndex::prepare(u"Obca"_s, {}, u"spotkanie"_s), 1);
         files.insert(u"Zmieniona.md"_s, u"- nowa treść spotkanei"_s);
