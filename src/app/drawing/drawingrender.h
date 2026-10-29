@@ -62,10 +62,13 @@ drawing::TextMetrics textMetrics();
 /// An element's paths ready to paint (scene coordinates, its rotation applied: drawing::
 /// elementShape()) and its colours in either theme.
 struct Prepared {
-    /// drawing::mergeKey() and the version it was made of (DrawingCanvas reuses it while the
-    /// element's version stays).
+    /// drawing::mergeKey() and the version, versionNonce and `updated` it was made of
+    /// (DrawingCanvas reuses it while the element's stay: another device's edit of the same version
+    /// has another nonce).
     QString key;
     int version = 0;
+    int nonce = 0;
+    qint64 updated = 0;
     QPainterPath area;
     QPainterPath ink;
     QPainterPath outline;
@@ -83,8 +86,10 @@ struct Prepared {
 };
 /// A core path as a QPainterPath.
 QPainterPath toPainterPath(const drawing::Path &path);
-/// The element prepared for painting.
-Prepared prepare(const drawing::Stroke &element);
+/// The element prepared for painting, with at most `hatchLines` hatch lines (drawing::elementShape:
+/// 0 — a hatched fill drawn solid; callers count a drawing's lines against
+/// drawing::DrawingHatchLines).
+Prepared prepare(const drawing::Stroke &element, qsizetype hatchLines = drawing::MaxHatchLines);
 /// The picture of an image element: decoded from its data URL in `files` (null when it has none
 /// Brulion draws: drawing::safeDataUrl()).
 QImage decodePicture(const QJsonObject &files, const QString &fileId);

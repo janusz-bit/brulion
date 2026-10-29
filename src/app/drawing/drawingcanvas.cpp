@@ -263,23 +263,40 @@ void DrawingCanvas::setCenterY(qreal y)
 
 void DrawingCanvas::syncPrepared()
 {
-    QHash<QString, qsizetype> old;
+    // Reused while the element's key, version, versionNonce and `updated` stay (another device's
+    // edit of the same version differs in them); elements sharing all of them (a duplicated id)
+    // take the prepared ones of their kind in order.
+    const auto stampOf = [](const QString &key, int version, int nonce, qint64 updated) {
+        return key + QChar(0x1f) + QString::number(version) + QChar(0x1f) + QString::number(nonce) + QChar(0x1f)
+               + QString::number(updated);
+    };
+    QHash<QString, QList<qsizetype>> old;
     old.reserve(m_prepared.size());
-    for (qsizetype i = 0; i < m_prepared.size(); ++i)
-        old.insert(m_prepared.at(i).key + QChar(0x1f) + QString::number(m_prepared.at(i).version), i);
+    for (qsizetype i = 0; i < m_prepared.size(); ++i) {
+        const Prepared &p = m_prepared.at(i);
+        old[stampOf(p.key, p.version, p.nonce, p.updated)].append(i);
+    }
     QList<Prepared> previous = std::move(m_prepared);
     m_prepared.clear();
     m_prepared.reserve(m_doc.strokes.size());
+    QList<qsizetype> fresh;
+    qsizetype reusedHatch = 0;
     for (const drawing::Stroke &s : std::as_const(m_doc.strokes)) {
         const QString key = s.id.isEmpty() ? drawing::mergeKey(s) : s.id;
-        const qsizetype i = old.value(key + QChar(0x1f) + QString::number(s.version), -1);
-        if (i >= 0 && !previous.at(i).key.isNull()) {
-            m_prepared.append(std::move(previous[i]));
-            previous[i].key = QString(); // (a duplicate is prepared anew)
-            old.remove(key + QChar(0x1f) + QString::number(s.version));
+        const auto it = old.find(stampOf(key, s.version, s.versionNonce, s.updated));
+        if (it != old.end() && !it->isEmpty()) {
+            m_prepared.append(std::move(previous[it->takeFirst()]));
+            reusedHatch += m_prepared.last().hatch.size();
         } else {
-            m_prepared.append(prepare(s));
+            fresh.append(m_prepared.size());
+            m_prepared.append(Prepared());
         }
+    }
+    // The drawing's hatch lines stay within drawing::DrawingHatchLines (what is kept counts first).
+    qsizetype budget = std::max<qsizetype>(0, drawing::DrawingHatchLines - reusedHatch);
+    for (const qsizetype i : std::as_const(fresh)) {
+        m_prepared[i] = prepare(m_doc.strokes.at(i), std::min(drawing::MaxHatchLines, budget));
+        budget -= m_prepared.at(i).hatch.size();
     }
 }
 
@@ -1347,7 +1364,7 @@ void DrawingCanvas::eraseTo(QPointF itemPos)
         if (m_erasing.contains(prepared.key) || !prepared.bounds.intersects(sweep))
             continue;
         const drawing::Stroke &e = m_doc.strokes.at(i);
-        if (!drawing::touchesSegment(e, a, b, r))
+        if (!drawing::touchesSegment(e, a, b, r) || drawing::isLocked(m_doc, e))
             continue;
         m_erasing.insert(prepared.key);
         // A shape goes with its label.

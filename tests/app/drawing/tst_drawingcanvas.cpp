@@ -2175,6 +2175,188 @@ private Q_SLOTS:
         QVERIFY(pixelsLike(image, QRect(100, 300, 160, 42), QColor(u"#1f2430"_s), 60) > 40);
     }
 
+    void preparedFollowsTheElements()
+    {
+        using namespace brulion::drawing;
+        const auto square = [](const QString &id, double x, int version, int nonce) {
+            Stroke s;
+            s.type = ElementType::Rectangle;
+            s.id = id;
+            s.box = QRectF(x, x, 10, 10);
+            s.version = version;
+            s.versionNonce = nonce;
+            return s;
+        };
+        // Two elements of one id (a broken file) are each drawn where they are, also after an edit
+        // of another element.
+        Drawing twins;
+        twins.strokes = {square(u"bliźniak"_s, 0, 1, 7), square(u"bliźniak"_s, 500, 1, 7), square(u"c"_s, 200, 1, 3)};
+        QCOMPARE(canvas->load(toSvg(twins)), QString());
+        QCOMPARE(canvas->strokeCount(), 3);
+        QCOMPARE(canvas->contentBounds(), bounds(canvas->currentDrawing()));
+        canvas->select({u"c"_s});
+        canvas->nudgeSelection(5, 0);
+        QCOMPARE(canvas->contentBounds(), bounds(canvas->currentDrawing()));
+        QVERIFY(canvas->contentBounds().contains(QPointF(5, 5)));
+        QVERIFY(canvas->contentBounds().contains(QPointF(505, 505)));
+        // Another device's edit of the same version (another nonce) taken in: drawn where it is now.
+        Drawing here;
+        here.strokes = {square(u"x"_s, 0, 2, 11)};
+        Drawing there;
+        there.strokes = {square(u"x"_s, 300, 2, 22)};
+        QCOMPARE(canvas->load(toSvg(here)), QString());
+        QVERIFY(canvas->takeExternal(toSvg(there)));
+        QCOMPARE(canvas->currentDrawing().strokes.first().box.topLeft(), QPointF(300, 300));
+        QCOMPARE(canvas->contentBounds(), bounds(canvas->currentDrawing()));
+        QVERIFY(!canvas->contentBounds().contains(QPointF(5, 5)));
+        // …and hit where it is shown.
+        canvas->setZoom(1);
+        canvas->setCenterX(400);
+        canvas->setCenterY(300);
+        canvas->setTool(u"select"_s);
+        QTest::mouseClick(window.get(), Qt::LeftButton, {}, canvas->toItem(QPointF(300, 305)).toPoint());
+        QCOMPARE(canvas->selection(), QStringList{u"x"_s});
+    }
+
+    void unchangedTextIsNoEdit()
+    {
+        // Text from excalidraw.com opened in the editor and closed unchanged: nothing is changed or
+        // wrapped again in Brulion's fonts, no undo step, nothing to save.
+        using namespace brulion::drawing;
+        Drawing d;
+        Stroke t;
+        t.type = ElementType::Text;
+        t.id = u"napis"_s;
+        t.box = QRectF(100, 100, 123.45, 25);
+        t.text = u"Zażółć gęślą"_s;
+        t.originalText = t.text;
+        t.fontFamily = 5;
+        t.version = 3;
+        Stroke r;
+        r.type = ElementType::Rectangle;
+        r.id = u"ramka"_s;
+        r.box = QRectF(100, 300, 80, 40);
+        r.boundIds = {u"etykieta"_s};
+        Stroke l = t;
+        l.id = u"etykieta"_s;
+        l.containerId = r.id;
+        l.text = u"Ala ma kota\ni psa"_s; // (as Excalidraw wrapped it in Virgil)
+        l.originalText = u"Ala ma kota i psa"_s;
+        l.box = QRectF(105, 302, 70, 36);
+        l.textAlign = TextAlign::Center;
+        l.verticalAlign = VerticalAlign::Middle;
+        d.strokes = {t, r, l};
+        QCOMPARE(canvas->load(toSvg(d)), QString());
+        const Drawing before = canvas->currentDrawing();
+        QSignalSpy requests(canvas, &DrawingCanvas::textEditRequested);
+        for (const QString &id : {u"napis"_s, u"etykieta"_s}) {
+            canvas->editText(id);
+            QCOMPARE(requests.size(), 1);
+            const QVariantMap request = requests.takeFirst().at(0).toMap();
+            canvas->commitText(request, request.value(u"text"_s).toString());
+            QVERIFY(!canvas->textEditing());
+        }
+        QVERIFY(!canvas->modified());
+        QVERIFY(!canvas->canUndo());
+        const Drawing after = canvas->currentDrawing();
+        for (qsizetype i = 0; i < before.strokes.size(); ++i) {
+            QCOMPARE(after.strokes.at(i).version, before.strokes.at(i).version);
+            QCOMPARE(after.strokes.at(i).box, before.strokes.at(i).box);
+            QCOMPARE(after.strokes.at(i).text, before.strokes.at(i).text);
+        }
+        // A label's editor is as wide as the label wraps in its shape.
+        canvas->editText(u"etykieta"_s);
+        QCOMPARE(requests.size(), 1);
+        const QVariantMap request = requests.takeFirst().at(0).toMap();
+        QCOMPARE(request.value(u"width"_s).toDouble(), 70.0);
+        QCOMPARE(request.value(u"text"_s).toString(), u"Ala ma kota i psa"_s);
+        canvas->cancelText();
+    }
+
+    void lockedShapesKeepTheirLabels()
+    {
+        // A locked backdrop with a label: neither the eraser nor the text tool touches the label.
+        using namespace brulion::drawing;
+        Drawing d;
+        Stroke r;
+        r.type = ElementType::Rectangle;
+        r.id = u"tlo"_s;
+        r.box = QRectF(100, 100, 200, 100);
+        r.locked = true;
+        r.boundIds = {u"podpis"_s};
+        Stroke l;
+        l.type = ElementType::Text;
+        l.id = u"podpis"_s;
+        l.containerId = r.id;
+        l.box = QRectF(170, 138, 60, 24);
+        l.text = u"Tło"_s;
+        l.originalText = l.text;
+        l.textAlign = TextAlign::Center;
+        l.verticalAlign = VerticalAlign::Middle;
+        d.strokes = {r, l};
+        QCOMPARE(canvas->load(toSvg(d)), QString());
+        canvas->setZoom(1);
+        canvas->setCenterX(400); // (scene = item coordinates)
+        canvas->setCenterY(300);
+        canvas->setTool(u"eraser"_s);
+        mouseStroke(window.get(), {160, 150}, {240, 150}, 6);
+        QCOMPARE(strokeIds(canvas), (QStringList{u"tlo"_s, u"podpis"_s}));
+        QVERIFY(!canvas->modified());
+        // The text tool on it: a new text there, not the label.
+        QSignalSpy requests(canvas, &DrawingCanvas::textEditRequested);
+        canvas->setTool(u"text"_s);
+        QTest::mouseClick(window.get(), Qt::LeftButton, {}, QPoint(200, 150));
+        QCOMPARE(requests.size(), 1);
+        const QVariantMap request = requests.takeFirst().at(0).toMap();
+        QCOMPARE(request.value(u"id"_s).toString(), QString());
+        QCOMPARE(request.value(u"containerId"_s).toString(), QString());
+        canvas->cancelText();
+        // A double click with the select tool: nothing to edit, nothing selected.
+        canvas->setTool(u"select"_s);
+        QTest::mouseClick(window.get(), Qt::LeftButton, {}, QPoint(200, 150));
+        QTest::mouseClick(window.get(), Qt::LeftButton, {}, QPoint(200, 150));
+        QCOMPARE(requests.size(), 0);
+        QCOMPARE(canvas->selectionCount(), 0);
+        QVERIFY(!canvas->modified());
+    }
+
+    void hugeHatchedScenesStayBounded()
+    {
+        // A small file of many huge hair-thin cross-hatched squares (a hostile scene): the editor
+        // and the preview prepare at most DrawingHatchLines hatch lines, quickly.
+        using namespace brulion::drawing;
+        Drawing d;
+        for (int i = 0; i < 300; ++i) {
+            Stroke s;
+            s.type = ElementType::Rectangle;
+            s.id = u"k%1"_s.arg(i);
+            s.box = QRectF(0, 0, 55000, 55000);
+            s.width = 0.05;
+            s.fill = u"#ffc9c9"_s;
+            s.fillStyle = FillStyle::CrossHatch;
+            d.strokes.append(s);
+        }
+        const QByteArray file = toSvg(d);
+        QVERIFY(file.size() < 16 * 1024 * 1024);
+        QElapsedTimer t;
+        t.start();
+        QCOMPARE(canvas->load(file), QString());
+        QImage image(800, 600, QImage::Format_ARGB32_Premultiplied);
+        QPainter p(&image);
+        canvas->render(&p, QSizeF(800, 600));
+        p.end();
+        const qint64 editorMs = t.elapsed();
+        t.restart();
+        const QImage preview = brulion::drawingview::renderDrawing(canvas->currentDrawing(), QSize(400, 400), false);
+        const qint64 previewMs = t.elapsed();
+        QVERIFY(!preview.isNull());
+        qInfo("300 huge hatched squares: editor %lld ms, preview %lld ms", editorMs, previewMs);
+        QVERIFY(editorMs < 15000 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(previewMs < 15000 * BRULION_TEST_SLOWDOWN);
+        // The squares beyond the lines' budget are filled: the fill shows.
+        QVERIFY(pixelsLike(image, QRect(300, 200, 200, 200), QColor(u"#ffc9c9"_s), 10) > 1000);
+    }
+
     void manyShapesRenderQuickly()
     {
         using namespace brulion::drawing;

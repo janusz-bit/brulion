@@ -140,11 +140,13 @@ QPainterPath toPainterPath(const drawing::Path &path)
     return out;
 }
 
-Prepared prepare(const drawing::Stroke &e)
+Prepared prepare(const drawing::Stroke &e, qsizetype hatchLines)
 {
     Prepared p;
     p.key = drawing::mergeKey(e);
     p.version = e.version;
+    p.nonce = e.versionNonce;
+    p.updated = e.updated;
     if (e.type == drawing::ElementType::Freedraw) {
         // The outline as the SVG has it (quadratic curves through the midpoints), rotated.
         p.ink = strokePath(e);
@@ -169,7 +171,7 @@ Prepared prepare(const drawing::Stroke &e)
         p.light = toQColor(drawing::displayInk(e, false));
         p.dark = toQColor(drawing::displayInk(e, true));
     } else {
-        const drawing::ElementShape shape = drawing::elementShape(e);
+        const drawing::ElementShape shape = drawing::elementShape(e, true, hatchLines);
         p.area = toPainterPath(shape.area);
         p.outline = toPainterPath(shape.outline);
         p.hatch = shape.hatch;
@@ -374,8 +376,10 @@ QImage renderDrawing(const drawing::Drawing &drawing, QSize pixels, bool dark, c
     p.setTransform(t);
     const QRectF visible = picture.adjusted(-1, -1, 1, 1);
     PictureCache pictures;
+    qsizetype hatchBudget = drawing::DrawingHatchLines;
     for (const drawing::Stroke &s : drawing.strokes) {
-        const Prepared prepared = prepare(s);
+        const Prepared prepared = prepare(s, std::min(drawing::MaxHatchLines, hatchBudget));
+        hatchBudget -= prepared.hatch.size();
         if (!prepared.bounds.intersects(visible))
             continue;
         paintElement(p, s, prepared, dark, drawing.files, pictures);

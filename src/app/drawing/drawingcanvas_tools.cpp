@@ -417,13 +417,16 @@ void DrawingCanvas::finishMove(QPointF itemPos, const Pointer &p)
             const drawing::Stroke &b = before.at(i);
             Prepared &prepared = m_prepared[i];
             if (a.type != drawing::ElementType::Freedraw || a.version == b.version || a.id != b.id
-                || a.points.size() != b.points.size() || a.points.isEmpty() || prepared.version != b.version)
+                || a.points.size() != b.points.size() || a.points.isEmpty() || prepared.version != b.version
+                || prepared.nonce != b.versionNonce || prepared.updated != b.updated)
                 continue;
             const QPointF shift(a.points.first().x - b.points.first().x, a.points.first().y - b.points.first().y);
             prepared.ink.translate(shift);
             prepared.area.translate(shift);
             prepared.bounds.translate(shift);
             prepared.version = a.version;
+            prepared.nonce = a.versionNonce;
+            prepared.updated = a.updated;
         }
     });
     if (!moved)
@@ -441,7 +444,7 @@ qsizetype DrawingCanvas::elementAt(QPointF itemPos, const Pointer &p) const
             continue;
         if (!m_prepared.at(i).bounds.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(scene))
             continue;
-        if (drawing::hitTest(e, scene, tolerance))
+        if (drawing::hitTest(e, scene, tolerance) && !drawing::isLocked(m_doc, e))
             return i;
     }
     return -1;
@@ -562,12 +565,14 @@ void DrawingCanvas::requestTextEdit(qsizetype index, QPointF scene)
     const auto shown = [this](const QString &stored) { return displayColor(QColor(stored)); };
     QVariantMap r;
     const auto label = [&](const drawing::Stroke &shape, const drawing::Stroke *text) {
+        // As wide as the label wraps in its shape (narrower in an ellipse or a diamond), centred.
+        const double width = std::max(1.0, drawing::labelMaxWidth(shape));
         r.insert(u"id"_s, text ? text->id : QString());
         r.insert(u"containerId"_s, shape.id);
-        r.insert(u"sceneX"_s, shape.box.left() + drawing::LabelPadding);
+        r.insert(u"sceneX"_s, shape.box.center().x() - width / 2);
         r.insert(u"sceneY"_s, shape.box.center().y());
-        r.insert(u"width"_s, std::max(1.0, shape.box.width() - 2 * drawing::LabelPadding));
-        r.insert(u"text"_s, text ? (text->originalText.isEmpty() ? text->text : text->originalText) : QString());
+        r.insert(u"width"_s, width);
+        r.insert(u"text"_s, text ? drawing::editableText(*text) : QString());
         r.insert(u"fontSize"_s, text ? text->fontSize : m_fontSize);
         r.insert(u"fontFamily"_s, textFontFamily(text ? text->fontFamily : 2));
         r.insert(u"color"_s, shown(text ? text->color : m_color.name(QColor::HexRgb)));
@@ -602,7 +607,7 @@ void DrawingCanvas::requestTextEdit(qsizetype index, QPointF scene)
                 r.insert(u"sceneX"_s, e.box.left());
                 r.insert(u"sceneY"_s, e.box.top());
                 r.insert(u"width"_s, e.autoResize ? 0.0 : e.box.width());
-                r.insert(u"text"_s, e.autoResize || e.originalText.isEmpty() ? e.text : e.originalText);
+                r.insert(u"text"_s, drawing::editableText(e));
                 r.insert(u"fontSize"_s, e.fontSize);
                 r.insert(u"fontFamily"_s, textFontFamily(e.fontFamily));
                 r.insert(u"color"_s, shown(e.color));
