@@ -21,6 +21,10 @@ urządzeniu (porównanie z `82d0357`).
   Na komputerze i telefonie wyszukiwanie jest kompletne od razu, gdy indeks jest gotowy — nie
   dobudowuje się już w tle z krótką przerwą w działaniu interfejsu; w przeglądarce tak jest przy
   kolejnych wizytach (z zapisanego indeksu), a przy pierwszej dobudowuje się po kawałku jak dotąd.
+  W przeglądarce pierwsze wczytanie bez zapisanego indeksu trwa nieco dłużej niż wcześniej (1000
+  notatek: 1,3 zamiast 1,1 s — dziennik wczytuje się jako pierwszy, a widok odświeża się w
+  trakcie), kolejne
+  tyle co dawniej, ale już z kompletnym wyszukiwaniem.
 * **Duże notatki nie zamrażają już aplikacji.** Po starcie i po każdym autozapisie bardzo dużej
   notatki (od ok. 200 KB, np. długi dziennik w jednym pliku albo zaimportowana książka) Brulion
   przestawał reagować: na komputerze na 0,9–1,6 s, na słabszym telefonie nawet na 13–20 s.
@@ -454,9 +458,34 @@ documents are still built in 8 ms slices after "ready", and a search before they
 the rest at once, as before wave 5.
 
 Not measured in this wave (no quiet window on the Raspberry Pi — another agent built there —, the
-emulator and the browser need their own builds of both trees): the Pi, the Android emulator
-(PSS at 5 000 notes) and the headless-browser numbers below in Budgets are the previous ones,
-except where noted. `scripts/wasm-smoke.mjs --loads 2 --index-notes 3000` (wasm.yml) checks that
+emulator needs Android builds of both trees): the Pi and the Android emulator (PSS at 5 000 notes)
+numbers below in Budgets are the previous ones, except where noted.
+
+**Browser** (measured after the review, laptop, headless Chromium 155 + SwiftShader,
+`wasm-bench.mjs` with the 1 000-note `web1k` vault in IndexedDB, MinSizeRel builds of `82d0357`
+and of this branch, two alternating rounds; medians of 5 repeat visits at 1×, 3 at ×4 CPU, the
+two rounds side by side; "cold" = no index cache, "warm" = `--wait-cache`, all 1 000 notes from it):
+
+| 1 000 notes | before | after, cold | after, warm |
+|---|---:|---:|---:|
+| index ready, repeat visit | 1116 / 1117 ms | 1280 / 1315 ms (+16 %) | 1099 / 1128 ms (±0) |
+| settled (main thread quiet) | 1498 / 1513 ms | 1625 / 1645 ms (+8 %) | 1295 / 1252 ms (−15 %) |
+| main thread busy | 1223 / 1096 ms | 1150 / 1172 ms | 974 / 1131 ms |
+| ×4 CPU: index ready | 5292 / 5147 ms | 5786 / 5735 ms (+11 %) | 4767 / 4690 ms (−9 %) |
+| ×4 CPU: settled | 5900 / 5779 ms | 6368 / 6237 ms (+8 %) | 4875 / 4776 ms (−17 %) |
+| ×4 CPU: long tasks in total / longest | 3458 / 722 ms | 2343 / 927 ms | 2365 / 942 ms |
+| ×4 CPU: WebGL draw calls / frames while loading | 2337 / 81 | 5765 / 105 | 3733 / 68 |
+| first visit (cold): index ready, 1× / ×4 CPU | 1419–1506 / 5952–6593 ms | 1643–1657 / 7293–7437 ms | – |
+| wasm linear memory | 104 MB | 86 MB (−17 %) | 86 MB |
+
+The cold load in the browser got slower to "ready" although the main thread does about the same
+work (+0–3 %): the journals are merged first, so the visible journal fills in early and the UI
+draws 30 % (×4 CPU: 2.5×) more while the rest loads, and that time is taken from the slices
+(first draw unchanged at ~0.6 s; when the journal's content shows was not measured). The
+warm load (every later visit once the cache is written, ~5 s after "ready") is as fast as the old
+cold one at 1× and faster at ×4 CPU, with the full-text index included. Cutting the redraws while
+loading is part of L1b. (wasm-bench closes the page ~1.5 s after it settles, before the cache is
+saved: without `--wait-cache` its repeat visits are cold.) `scripts/wasm-smoke.mjs --loads 2 --index-notes 3000` (wasm.yml) checks that
 the browser's second load takes the notes from the cache; on a GitHub runner (headless Chromium,
 no throttling, times from the navigation): index of 3000 notes complete at 4.99 s on the first
 load (cold, in slices on the GUI thread), the cache saved at 10.1 s, and on the reload complete at
@@ -470,7 +499,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | budget | target | desktop | phone | web |
 |---|---|---|---|---|
 | start → first content | desktop < 1 s, phone < 2 s | ✅ 0.40 s (10k), 0.39 s demo | ✅ Pi demo 1.25 s, 10k 1.57 s | ✅ repeat 0.61 s, ×4 CPU 1.64 s; ❌ first visit at 20 Mbit/s 7.7 s |
-| index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 0.96 s, 0.83 s from the index cache (wave 5; was 1.89 s) | ❌ Pi 15 s before wave 5, not measured since (L1b) | ✅ 1k 1.2 s (×4 CPU 4.3 s; before wave 5) |
+| index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 0.96 s, 0.83 s from the index cache (wave 5; was 1.89 s) | ❌ Pi 15 s before wave 5, not measured since (L1b) | ✅ 1k cold 1.3 s, warm 1.1 s (×4 CPU 5.8 / 4.7 s; was 1.1 / 5.2 s in the same session) |
 | GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b, L18) | – |
 | keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page; ⚠️ 5000-block outline p95 23 ms | ✅ small page; ⚠️ outline p95 42 ms | – |
 | Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 25 / 46 ms | ✅ Enter 38 ms; ❌ undo 214 ms (L5) | – |
@@ -480,7 +509,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | Graph | settled < 1 s | ✅ 0.77 s | ❌ Pi 2.6 s (was 44 s; L16); emulator 1.5 s | – |
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ❌ 131 ms (L3) | ❌ Pi 0.95 s (L3) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
-| memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 104 MB of linear memory at 1k |
+| memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 86 MB of linear memory at 1k (was 104 MB) |
 | download | APK < 40 MB, web < 10 MB | – | ✅ 28.5 MB download (84.9 MB installed) | ❌ 13.7 MB gzip (9.4 MB brotli, not served) |
 
 ### Next steps
@@ -489,7 +518,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 
 | # | change | expected |
 |---|---|---|
-| L1b | cheaper merge of prepared notes on the GUI thread: link lookup keys (`cleanTarget`, NFC, lower case) and the name table's keys computed by the loader's workers; measure the Pi (L1/L2 of wave 5 not measured there yet) | laptop 10k index ready 0.96 / 0.83 s → 0.6 s; Pi ≤ 6 s cold, ≤ 3 s warm |
+| L1b | cheaper merge of prepared notes on the GUI thread: link lookup keys (`cleanTarget`, NFC, lower case) and the name table's keys computed by the loader's workers; fewer redraws while loading (the browser's cold load: +11–16 % to "ready", 30 %–2.5× more draws since journals come first); measure the Pi and the Android emulator (L1/L2 of wave 5 not measured there yet) | laptop 10k index ready 0.96 / 0.83 s → 0.6 s; Pi ≤ 6 s cold, ≤ 3 s warm |
 | L3 | incremental derived lists (Tasks, Calendar, reminders, query blocks) | after a save 131 ms → < 30 ms (Pi 0.95 s → < 0.2 s) |
 | L4 | `BlockDocument` fast path for body-only edits | keystroke core 1.3 ms → < 0.3 ms |
 | L5 | delta undo/redo | Pi undo 214 ms → < 50 ms |

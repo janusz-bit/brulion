@@ -52,8 +52,9 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 ## Wydajność
 
 Szczegóły w docs/PERFORMANCE.md, „Next steps”:
-* szybsze łączenie gotowych notatek w indeks w wątku interfejsu i pomiar indeksowania na Raspberry
-  Pi i telefonie (L1b);
+* szybsze łączenie gotowych notatek w indeks w wątku interfejsu, mniej odświeżania widoku w trakcie
+  wczytywania (w przeglądarce pierwsze wczytanie bez gotowego indeksu jest o 11–16 % dłuższe niż
+  przed falą 5) i pomiar indeksowania na Raspberry Pi i telefonie (L1b);
 * przyrostowe listy zadań, kalendarza i przypomnień (L3);
 * szybsze cofanie (L5);
 * natywne okna wyboru plików (L9: APK −15 MB, wersja webowa −5 MB);

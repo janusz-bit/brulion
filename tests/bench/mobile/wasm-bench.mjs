@@ -31,6 +31,10 @@
 //   --idbfs          after the last load settles: IDBFS write-back timings (FS.syncfs(false)) for
 //                    one changed note and for every note touched, then one more load measuring
 //                    the IDBFS read (stage storage → ui)
+//   --wait-cache S   after the first repeat-visit load, wait (at most S s) until the app saved its
+//                    index cache (brulionShell.indexCacheSavedAt, ~5 s after the index is ready)
+//                    and 4 s more for the IDBFS write-back, so the repeat visits take their notes
+//                    from it (indexed_from_cache); without it they close sooner and parse (cold)
 //   --idle S         CPU time of the renderer and draws while the settled app is left alone
 //   --idle-input     during --idle, move the mouse every 100 ms (diagnostic)
 // Output: <out>/<label>-loads.jsonl (one JSON per load), <out>/<label>-summary.json (+ table on
@@ -59,6 +63,7 @@ function parseArgs(argv) {
     else if (k === '--vault') a.vault = v();
     else if (k === '--idbfs') a.idbfs = true;
     else if (k === '--idle') a.idle = Number(v());
+    else if (k === '--wait-cache') a.waitCache = Number(v());
     else if (k === '--port') a.port = Number(v());
     else if (k === '--timeout') a.timeout = Number(v());
     else if (k === '--cpu-throttle') a.cpuThrottle = Number(v());
@@ -449,6 +454,8 @@ async function measureLoad(args, b, url, n, kind) {
       // Set by the shell when the app has indexed every note (src/platform/wasm/wasmshell.cpp;
       // builds before it lack it, and before N13 their index stalled until input anyway).
       indexedAt: window.brulionShell && window.brulionShell.indexedAt > 0 ? window.brulionShell.indexedAt : null,
+      // How many notes came from the index cache (builds since wave 5; null before).
+      indexedFromCache: window.brulionShell ? window.brulionShell.indexedFromCache ?? null : null,
       wasmHeap: mem ? mem.buffer.byteLength : (mod && mod.HEAP8 ? mod.HEAP8.length : null),
       jsHeap: performance.memory ? { used: performance.memory.usedJSHeapSize, total: performance.memory.totalJSHeapSize } : null,
       details: document.getElementById('details')?.textContent || '' };
@@ -480,6 +487,7 @@ function metricsOf(r) {
     compile_end_ms: r.t.compileEnd, module_ready_ms: r.t.moduleReady, storage_stage_ms: stage('storage'),
     ui_stage_ms: stage('ui'), idbfs_load_ms: stage('ui') && stage('storage') ? stage('ui') - stage('storage') : undefined,
     shell_done_ms: r.t.done, first_draw_ms: r.firstDraw ?? undefined, index_ready_ms: r.indexedAt ?? undefined,
+    indexed_from_cache: r.indexedFromCache ?? undefined,
     last_draw_or_longtask_ms: r.settled,
     settled_ms: r.busyEnd || undefined, main_thread_busy_ms: r.busyTotalMs ?? undefined, draws: r.draws, frames: r.frames,
     longtasks: r.longtasks.length, longtask_total_ms: r.longtasks.reduce((s, [, d]) => s + d, 0),
@@ -555,6 +563,14 @@ async function main() {
     keep = await launch(args, profile);
     await seed(keep);
     record(await measureLoad(args, keep, url, ++n, 'repeat-first'));
+    if (args.waitCache) {
+      let saved = null;
+      for (const end = Date.now() + args.waitCache * 1000; Date.now() < end && !(saved > 0); await sleep(250)) {
+        saved = await evaluate(keep.cdp, 'window.brulionShell ? window.brulionShell.indexCacheSavedAt ?? null : null');
+      }
+      console.log(`index cache saved at ${saved > 0 ? `${Math.round(saved)} ms` : 'never'}`);
+      await sleep(4000);
+    }
     const reps = args.visits === 'first' ? 0 : args.loads;
     for (let i = 0; i < reps; i++) {
       // A new browser on the same profile: service worker cache + V8 code cache, no memory cache.
