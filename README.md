@@ -226,7 +226,8 @@ Albo bez instalowania: `nix run github:janusz-bit/brulion`.
 **Syncthing (polecane do pracy offline):** wskaż w Brulionie folder synchronizowany przez
 Syncthing (na Androidzie: Syncthing-Fork, np. `/storage/emulated/0/Brulion`, i nadaj
 aplikacji „Dostęp do wszystkich plików”). Brulion zapisuje pliki atomowo, wykrywa kopie
-konfliktów Syncthinga (`*.sync-conflict-*`) i pozwala je scalić. Opcjonalnie pokazuje stan
+konfliktów Syncthinga (`*.sync-conflict-*`) i pozwala je scalić — notatki wiersz po wierszu,
+rysunki element po elemencie („Scal rysunki”). Opcjonalnie pokazuje stan
 synchronizacji z API Syncthinga.
 
 **Masz już skarbiec Obsidiana w Syncthingu?** Nie importuj go i nie włączaj dla niego
@@ -436,7 +437,7 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   (Android's IME insets, frame by frame on Android 11+; the browser's visualViewport); with the
   keyboard closed, the bottom navigation comes back and the toolbar sits right on it.
 * Sync through **Syncthing** (it's just a folder; conflict copies are detected and merged in
-  the app; an Obsidian vault synced with Syncthing opens as it is, no import needed) or **Nextcloud/WebDAV** (built-in background sync with 3-way merge and a
+  the app — drawings element by element; an Obsidian vault synced with Syncthing opens as it is, no import needed) or **Nextcloud/WebDAV** (built-in background sync with 3-way merge and a
   mass-deletion guard; folders travel too — empty ones, deletions of emptied ones, and a folder
   or page renamed in the app is moved on the server in one WebDAV MOVE (also when you keep
   typing in it right away), never mistaken for a mass deletion; one renamed on another device or in the Nextcloud web UI is renamed here too,
