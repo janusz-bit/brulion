@@ -4,7 +4,7 @@
 //
 //   node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/p \
 //       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--keyboard] [--keyboard-phone] \
-//       [--two-tabs] [--lang pl-PL] \
+//       [--two-tabs] [--share] [--lang pl-PL] \
 //       [--index-notes N [--cache-quota]] [--copy] [--screenshot shot.png] [--loader-screenshot loading.png] \
 //       [--timeout 120]
 //
@@ -34,7 +34,13 @@
 // bottom navigation back with the toolbar docked right on it, and Qt's containers never stay
 // scrolled.
 // --two-tabs opens a second tab,
-// which must wait ("open in another tab") until the first one leaves the app. --index-notes N
+// which must wait ("open in another tab") until the first one leaves the app. --share checks the
+// share target (docs/WEB.md "Udostępnianie do Brulionu"): the manifest offers it (GET ./ with
+// share-title, share-text and share-url, no errors), a launch with a shared title and text
+// (?selftest=share: the app publishes the share dialog's data) opens the share dialog with
+// "[Title](link) — text" and leaves the address bar without the share parameters, and a second
+// tab launched with a share while Brulion runs in the first one hands it over (that tab never
+// loads the app, says so and asks to be closed; the first one shows the dialog with the text). --index-notes N
 // writes a vault of N generated notes into IndexedDB before the first load (as the app's IDBFS
 // mount stores it, named the current vault): every load must then report a complete index
 // (brulionShell.indexed(), wasm/index.html) with no input at all — Qt's WebAssembly timers once
@@ -79,6 +85,7 @@ function parseArgs(argv) {
     else if (a === '--keyboard') args.keyboard = true;
     else if (a === '--keyboard-phone') args.keyboardPhone = true;
     else if (a === '--two-tabs') args.twoTabs = true;
+    else if (a === '--share') args.share = true;
     else if (a === '--lang') args.lang = next();
     else if (a === '--loader-screenshot') args.loaderScreenshot = next();
     else if (a === '--expect-first') args.expectFirst = Number(next());
@@ -865,6 +872,90 @@ async function main() {
       }).catch((e) => ({ error: String(e) }));
       console.log(`locks: ${JSON.stringify(locks.result?.value ?? locks)}`);
       problems.push(`second tab did not start after the first navigated away: ${JSON.stringify(taken)}`);
+    }
+    tab2.close();
+    await fetch(`http://127.0.0.1:${port}/json/close/${info.id}`).catch(() => {});
+  }
+
+  if (args.share) {
+    // A cold start from the share sheet (Chrome's GET launch: spaces as "+" or "%20").
+    await cdp.send('Page.navigate', { url: 'about:blank' });
+    await sleep(1000);
+    const coldUrl = new URL(args.url);
+    coldUrl.search = '?selftest=share&share-title=Przepis%20na%20%C5%BCurek'
+      + '&share-text=Zobacz+to+https%3A%2F%2Fkuchnia.pl%2F%C5%BCurek';
+    await cdp.send('Page.navigate', { url: coldUrl.href });
+    let cold;
+    for (const end = deadline(args.timeout); Date.now() < end; await sleep(250)) {
+      cold = await evaluate(`({ result: window.brulionShareSelfTest ?? null, search: location.search,
+                                hidden: document.getElementById('loader')?.hidden ?? false })`);
+      if (cold?.result?.dialog && cold.hidden) break;
+    }
+    console.log(`share: a launch with a share ${JSON.stringify(cold)}`);
+    const coldText = '[Przepis na żurek](https://kuchnia.pl/żurek) — Zobacz to';
+    const r = cold?.result;
+    if (r?.kind !== 'text' || r.text !== coldText || r.title !== 'Przepis na żurek' || !r.dialog) {
+      problems.push(`share: the launch did not open the share dialog with ${JSON.stringify(coldText)}: ${JSON.stringify(r)}`);
+    }
+    if (cold?.search !== '?selftest=share') problems.push(`share: the address bar keeps the share: ${cold?.search}`);
+    // The manifest as Chrome reads it.
+    const manifest = await cdp.send('Page.getAppManifest').catch((e) => ({ failed: String(e) }));
+    let target;
+    try {
+      target = JSON.parse(manifest.data ?? '').share_target;
+    } catch {
+      target = undefined;
+    }
+    console.log(`share: manifest share_target ${JSON.stringify(target)}, errors ${JSON.stringify(manifest.errors ?? manifest.failed)}`);
+    if (manifest.failed || (manifest.errors ?? []).some((e) => e.critical)) {
+      problems.push(`share: the manifest has errors: ${JSON.stringify(manifest.errors ?? manifest.failed)}`);
+    }
+    if (target?.action !== './' || target?.method !== 'GET' || target?.params?.title !== 'share-title'
+      || target?.params?.text !== 'share-text' || target?.params?.url !== 'share-url') {
+      problems.push(`share: no share target for GET ./?share-title=…&share-text=…&share-url=…: ${JSON.stringify(target)}`);
+    }
+    if (args.screenshot) {
+      await sleep(500);
+      await shoot(args.screenshot.replace(/\.png$/, '-share.png'));
+    }
+
+    // A share launched in another tab while Brulion runs here: handed over, never a second app.
+    await evaluate('window.brulionShareSelfTest = null');
+    const info = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
+    const tab2 = new Cdp(info.webSocketDebuggerUrl);
+    await tab2.open();
+    await tab2.send('Runtime.enable');
+    await tab2.send('Page.enable');
+    // The shell closes the tab after its message: note the call instead, to read the page.
+    await tab2.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: 'window.close = function () { window.__brulionCloseCalled = true; };',
+    });
+    const forwardUrl = new URL(args.url);
+    forwardUrl.search = '?share-text=Za%C5%BC%C3%B3%C5%82%C4%87+g%C4%99%C5%9Bl%C4%85+ja%C5%BA%C5%84';
+    await tab2.send('Page.navigate', { url: forwardUrl.href });
+    const evaluate2 = async (expression) => {
+      const res = await tab2.send('Runtime.evaluate', { expression, returnByValue: true });
+      return res.exceptionDetails ? undefined : res.result.value;
+    };
+    let forwarded;
+    for (const end = deadline(30); Date.now() < end; await sleep(250)) {
+      forwarded = await evaluate2(`({ forwarded: window.brulionShareForwarded === true,
+        app: typeof window.brulion_entry, closeCalled: window.__brulionCloseCalled === true,
+        title: document.getElementById('title')?.textContent ?? '', search: location.search })`);
+      if (forwarded?.forwarded && forwarded.closeCalled) break;
+    }
+    let received;
+    for (const end = deadline(30); Date.now() < end; await sleep(250)) {
+      received = await evaluate('window.brulionShareSelfTest ?? null');
+      if (received?.dialog && received.text === 'Zażółć gęślą jaźń') break;
+    }
+    console.log(`share: the second tab ${JSON.stringify(forwarded)}; the first one ${JSON.stringify(received)}`);
+    if (!forwarded?.forwarded) problems.push(`share: the second tab did not hand the share over: ${JSON.stringify(forwarded)}`);
+    if (forwarded?.app !== 'undefined') problems.push('share: the second tab loaded the app');
+    if (!forwarded?.closeCalled) problems.push('share: the second tab did not ask to be closed');
+    if (forwarded?.search !== '') problems.push(`share: the second tab's address keeps the share: ${forwarded?.search}`);
+    if (received?.text !== 'Zażółć gęślą jaźń' || !received?.dialog) {
+      problems.push(`share: the first tab did not show the handed-over share: ${JSON.stringify(received)}`);
     }
     tab2.close();
     await fetch(`http://127.0.0.1:${port}/json/close/${info.id}`).catch(() => {});

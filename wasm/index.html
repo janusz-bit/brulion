@@ -4,7 +4,8 @@
   AGPL-3.0-or-later; source: https://github.com/janusz-bit/brulion
 
   Custom shell based on Qt's wasm_shell.html: loading screen, download progress, error and
-  exit screens, service worker registration (offline PWA). scripts/wasm-build.sh fills in the
+  exit screens, service worker registration (offline PWA), the share target's launch (handed to
+  the app, or to Brulion already open in another tab). scripts/wasm-build.sh fills in the
   @BRULION_…@ placeholders. All URLs are relative, so the site works under any base path
   (GitHub Pages: /brulion/).
 -->
@@ -175,7 +176,9 @@
           tryAnyway: 'Try anyway',
           crashed: 'Brulion stopped working. Notes saved so far are safe.',
           exited: 'Brulion has exited.',
-          reload: 'Restart'
+          reload: 'Restart',
+          shared: 'Sent to Brulion open in another tab.',
+          sharedHint: 'You can close this tab.'
         } : {
           title: 'Wczytywanie Brulionu…',
           download: 'Pobieranie aplikacji…',
@@ -189,7 +192,9 @@
           tryAnyway: 'Spróbuj mimo to',
           crashed: 'Brulion przestał działać. Zapisane notatki są bezpieczne.',
           exited: 'Brulion zakończył działanie.',
-          reload: 'Uruchom ponownie'
+          reload: 'Uruchom ponownie',
+          shared: 'Przekazano do Brulionu otwartego w innej karcie.',
+          sharedHint: 'Możesz zamknąć tę kartę.'
         };
         if (english) document.documentElement.lang = 'en';
 
@@ -403,16 +408,115 @@
           });
         }
 
+        // "Udostępnij → Brulion" in the browser version installed as an app (docs/WEB.md): the share
+        // target's launch (manifest.webmanifest "share_target": GET ./?share-title=…&share-text=…
+        // &share-url=…). Its parameters with a value, re-encoded ('' when none); the app reads them
+        // (--share-query, src/core/notebook/share.h). They leave the address bar at once, so a
+        // reload does not share again (other parameters stay).
+        var SHARE_KEYS = ['share-title', 'share-text', 'share-url'];
+        function takeShareQuery() {
+          var params;
+          try {
+            params = new URLSearchParams(location.search);
+          } catch (e) {
+            return '';
+          }
+          var share = new URLSearchParams();
+          var found = false;
+          SHARE_KEYS.forEach(function (key) {
+            if (!params.has(key)) return;
+            found = true;
+            var value = params.get(key);
+            if (value) share.append(key, value);
+            params.delete(key);
+          });
+          if (!found) return '';
+          try {
+            var rest = params.toString();
+            history.replaceState(history.state, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+          } catch (e) {
+            // the address bar keeps them: a reload shares again
+          }
+          return share.toString();
+        }
+        var shareQuery = takeShareQuery();
+
+        // Brulion runs in another tab of this browser — it holds the storage's Web Lock
+        // "brulion-storage:…" (src/platform/wasm/wasmstorage.cpp) —: hand it the share over the
+        // channel src/platform/wasm/wasmshare.cpp listens on (keep the name and the messages in
+        // sync), instead of starting a second app that would wait for the lock. True once that tab
+        // took it (within 4 s); false when no tab holds the lock or none answers (a frozen tab, an
+        // older version): this tab starts as usual.
+        var SHARE_CHANNEL = 'brulion-share:' + new URL('.', location.href).pathname;
+        function forwardShare(query) {
+          return new Promise(function (resolve) {
+            if (typeof BroadcastChannel === 'undefined') {
+              resolve(false);
+              return;
+            }
+            var held = navigator.locks && navigator.locks.query
+              ? navigator.locks.query().then(function (state) {
+                return ((state && state.held) || []).some(function (lock) {
+                  return typeof lock.name === 'string' && lock.name.indexOf('brulion-storage:') === 0;
+                });
+              }, function () { return true; })
+              : Promise.resolve(true);
+            held.then(function (someone) {
+              if (!someone) {
+                resolve(false);
+                return;
+              }
+              var id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+              var channel;
+              try {
+                channel = new BroadcastChannel(SHARE_CHANNEL);
+              } catch (e) {
+                resolve(false);
+                return;
+              }
+              var timer = 0;
+              var finish = function (taken) {
+                clearTimeout(timer);
+                channel.close();
+                resolve(taken);
+              };
+              timer = setTimeout(function () { finish(false); }, 4000);
+              channel.onmessage = function (event) {
+                var d = event.data;
+                if (d && d.type === 'taken' && d.id === id) finish(true);
+              };
+              channel.postMessage({ type: 'share', id: id, query: query });
+            });
+          });
+        }
+        // The share went to the other tab: say so here (this tab never loads the app) and close it
+        // when the browser lets a script do that (the share sheet's own window).
+        function showForwarded() {
+          window.brulionShareForwarded = true;
+          loaderDone = true;
+          bar.hidden = true;
+          title.textContent = T.shared;
+          setStatus(T.sharedHint);
+          setTimeout(function () {
+            try {
+              window.close();
+            } catch (e) {
+              // stays open with the message
+            }
+          }, 1500);
+        }
+
         function start() {
           setStatus(T.download);
           var params = new URLSearchParams(location.search);
-          // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify,glyphs,keyboard
+          // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify,glyphs,keyboard,share
           var args = [];
           (params.get('selftest') || '').split(',').forEach(function (name) {
-            if (name === 'storage' || name === 'notify' || name === 'glyphs' || name === 'keyboard') {
+            if (name === 'storage' || name === 'notify' || name === 'glyphs' || name === 'keyboard' || name === 'share') {
               args.push('--selftest-' + name);
             }
           });
+          if (shareQuery) args.push('--share-query', shareQuery);
 
           // Start the big download first; the small scripts load in parallel.
           var wasmModule = compileWasm('brulion.wasm' + assetQuery);
@@ -459,19 +563,30 @@
             });
         }
 
-        if (typeof WebAssembly !== 'object') {
-          showProblem(T.noWasm, '', []);
-        } else if (!hasWebGl2()) {
-          showProblem(T.noWebgl, '', [{ label: T.tryAnyway, secondary: true, action: function () {
-            actions.hidden = true;
-            details.hidden = true;
-            bar.hidden = false;
-            loader.setAttribute('role', 'status');
-            title.textContent = T.title;
+        function launch() {
+          if (typeof WebAssembly !== 'object') {
+            showProblem(T.noWasm, '', []);
+          } else if (!hasWebGl2()) {
+            showProblem(T.noWebgl, '', [{ label: T.tryAnyway, secondary: true, action: function () {
+              actions.hidden = true;
+              details.hidden = true;
+              bar.hidden = false;
+              loader.setAttribute('role', 'status');
+              title.textContent = T.title;
+              start();
+            } }]);
+          } else {
             start();
-          } }]);
+          }
+        }
+
+        if (shareQuery) {
+          forwardShare(shareQuery).then(function (taken) {
+            if (taken) showForwarded();
+            else launch();
+          });
         } else {
-          start();
+          launch();
         }
       })();
     </script>
