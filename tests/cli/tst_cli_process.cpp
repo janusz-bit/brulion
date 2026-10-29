@@ -303,6 +303,37 @@ private Q_SLOTS:
         QCOMPARE(r.code, 0);
     }
 
+    // The index cache in the device state folder (shared with the app): the first `info` parses
+    // and leaves the cache, the second reads every note from it; BRULION_NO_INDEX_CACHE turns it off.
+    void indexCacheAcrossCalls()
+    {
+        QHash<QString, QByteArray> files;
+        for (int i = 0; i < 210; ++i)
+            files.insert(u"Strony/Strona %1.md"_s.arg(i), "- [[Strona 0]] żółw #t\n");
+        const QString dir = vault(files);
+        Run r = run(dir, {u"info"_s});
+        QCOMPARE(r.code, 0);
+        QJsonObject index = r.result().value(u"index"_s).toObject();
+        QCOMPARE(index.value(u"notes"_s).toInt(), 210);
+        QCOMPARE(index.value(u"parsed"_s).toInt(), 210);
+        QCOMPARE(index.value(u"cache"_s).toString(), u"absent"_s);
+        QVERIFY(index.value(u"workers"_s).toInt() >= 1);
+        QVERIFY(QFileInfo::exists(stateDirOf(dir) + u"/index-cache.bin"_s));
+        r = run(dir, {u"info"_s});
+        index = r.result().value(u"index"_s).toObject();
+        QCOMPARE(index.value(u"cache"_s).toString(), u"used"_s);
+        QCOMPARE(index.value(u"fromCache"_s).toInt(), 210);
+        QCOMPARE(index.value(u"parsed"_s).toInt(), 0);
+        QProcessEnvironment env = environment();
+        env.insert(u"BRULION_NO_INDEX_CACHE"_s, u"1"_s);
+        env.insert(u"BRULION_INDEX_THREADS"_s, u"0"_s);
+        r = cli({u"--vault"_s, dir, u"info"_s}, {}, env);
+        index = r.result().value(u"index"_s).toObject();
+        QCOMPARE(index.value(u"cache"_s).toString(), u"disabled"_s);
+        QCOMPARE(index.value(u"workers"_s).toInt(), 0);
+        QCOMPARE(index.value(u"parsed"_s).toInt(), 210);
+    }
+
     void notebookFromTheEnvironmentAndTheAppSettings()
     {
         const QString dir = vault({{u"Dom.md"_s, "- dom\n"}});

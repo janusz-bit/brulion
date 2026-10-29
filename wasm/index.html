@@ -273,6 +273,14 @@
           // The vault's index is complete (search, links, tasks, reminders). The time
           // (performance.now()) is read by scripts/wasm-smoke.mjs and the browser benchmarks.
           indexed: function () { shellBridge.indexedAt = performance.now(); },
+          // How the index was loaded: notes indexed and of them taken from the index cache
+          // (IndexedDB; scripts/wasm-smoke.mjs checks that a reload uses it).
+          indexStats: function (notes, fromCache) {
+            shellBridge.indexedNotes = notes;
+            shellBridge.indexedFromCache = fromCache;
+          },
+          // The index cache was written (its write-back to IndexedDB follows as for any file).
+          indexCacheSaved: function () { shellBridge.indexCacheSavedAt = performance.now(); },
           // How the on-screen keyboard resizes the page: "content" or "visual" (above).
           keyboardMode: window.brulionKeyboardMode || 'content',
           // A self-test result (src/platform/wasm/wasmselftest.cpp): to the test's server.

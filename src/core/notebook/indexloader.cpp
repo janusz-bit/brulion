@@ -1,16 +1,20 @@
 #include "notebook/indexloader.h"
 
+#include "index/indexcache.h"
 #include "index/searchindex.h"
 #include "index/vaultindex.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 
 #include <QElapsedTimer>
+#include <QFile>
+#include <QFileInfo>
 #include <QMetaObject>
 #include <QSet>
 
 #include <algorithm>
 #include <atomic>
+#include <limits>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -68,7 +72,18 @@ struct LoaderShared {
     bool posted = false;             ///< a wake-up for the owner is on its way
     VaultConfig config;
 
+    // The index cache (opened by the first job that needs it, or inline).
+    QString cachePath;
+    indexcache::Identity cacheIdentity;
+    VaultConfig cacheConfig; ///< the config the cache's identity was taken with
+    bool cacheOpening = false;
+    bool cacheOpened = false;
+    std::shared_ptr<const indexcache::Reader> cache;
+    QString cacheStatus = QStringLiteral("none");
+    qsizetype recordsRejected = 0;
+
     bool buildSearch = false;
+    bool searchFromCache = false;
     std::deque<SearchJob> searchQueue;
     bool searchStarted = false;
     bool searchClosed = false;   ///< every document is queued
@@ -87,6 +102,9 @@ struct IndexLoader::Private {
     bool started = false;
     bool done = false;
     bool searchAdopted = false;
+    /// Inline mode: the cache's full-text index, decoded in steps after the notes.
+    std::optional<indexcache::Reader::SearchDecoder> inlineSearch;
+    bool inlineSearchSet = false;
     QList<VaultPath> attachments;
     qsizetype nextAttachment = 0;
     qsizetype mergedNotes = 0;
@@ -113,16 +131,81 @@ struct IndexLoader::Private {
         QMetaObject::invokeMethod(receiver, [receiver] { receiver->d->onPosted(); }, Qt::QueuedConnection);
     }
 
+    /// Open the index cache once (the first caller does it, the others wait for it).
+    static void ensureCache(LoaderShared &shared)
+    {
+        {
+            std::unique_lock lock(shared.mutex);
+            if (shared.cacheOpened || shared.cachePath.isEmpty())
+                return;
+            if (shared.cacheOpening) {
+                shared.workersCv.wait(lock, [&] { return shared.cacheOpened || shared.cancelled; });
+                return;
+            }
+            shared.cacheOpening = true;
+        }
+        QString status;
+        std::shared_ptr<const indexcache::Reader> reader;
+        QFile file(shared.cachePath);
+        if (!QFileInfo::exists(shared.cachePath)) {
+            status = u"absent"_s;
+        } else if (!QFileInfo(shared.cachePath).isFile() || !file.open(QIODevice::ReadOnly)) {
+            status = u"invalid: cannot read"_s;
+        } else {
+            QString why;
+            reader = indexcache::Reader::open(file.readAll(), shared.cacheIdentity, &why);
+            status = reader ? u"used"_s : u"invalid: "_s + why;
+        }
+        std::lock_guard lock(shared.mutex);
+        shared.searchFromCache = reader && reader->hasSearch();
+        shared.cache = std::move(reader);
+        shared.cacheStatus = status;
+        shared.cacheOpened = true;
+        shared.workersCv.notify_all();
+    }
+
+    /// The note of `item` from the cache, when it has a valid record for this text.
+    static std::optional<ParsedNote> fromCache(LoaderShared &shared, const Item &item, const DetachedRead &read,
+                                               const QString &text)
+    {
+        std::shared_ptr<const indexcache::Reader> cache;
+        {
+            std::lock_guard lock(shared.mutex);
+            cache = shared.cache;
+        }
+        if (!cache)
+            return std::nullopt;
+        const indexcache::Record *record = cache->find(item.path);
+        if (!record || record->length <= 0 || record->fileSize != read.bytes.size()
+            || record->contentKey != VaultIndex::contentKey(text))
+            return std::nullopt;
+        std::optional<ParsedNote> note = cache->decodeNote(*record, item.path, text, shared.cacheConfig);
+        if (!note) {
+            std::lock_guard lock(shared.mutex);
+            ++shared.recordsRejected;
+        }
+        return note;
+    }
+
     /// Read and prepare note `i` (pure apart from reading the file).
     static Result process(LoaderShared &shared, qsizetype i, const VaultConfig &config)
     {
+        ensureCache(shared);
         const Item &item = shared.items.at(i);
         Result r;
         r.item = i;
         r.read = Vault::readDetached(item.path, item.absolute);
         if (r.read.ok) {
-            r.prepared = VaultIndex::prepare(item.path, r.read.text, config);
-            if (shared.buildSearch) {
+            if (std::optional<ParsedNote> cached = fromCache(shared, item, r.read, r.read.text)) {
+                // Prepared with the config the cache was written for: a config changed since
+                // makes updatePrepared() parse it again.
+                r.prepared = VaultIndex::prepareParsed(item.path, r.read.text, std::move(*cached), shared.cacheConfig);
+                r.fromCache = true;
+            } else {
+                r.prepared = VaultIndex::prepare(item.path, r.read.text, config);
+            }
+            // Documents of notes from the cache come with its search section (if it has one).
+            if (shared.buildSearch && (!r.fromCache || !shared.searchFromCache)) {
                 const ParsedNote &note = r.prepared.note();
                 SearchJob job{item.path, SearchIndex::prepare(note.title, note.aliases, r.read.text),
                               r.prepared.contentKey()};
@@ -179,6 +262,20 @@ struct IndexLoader::Private {
             s.searchStarted = true;
         }
         SearchIndex built;
+        // Start from the cache's full-text index (its documents are checked by content key
+        // when adopted); the workers send the documents of the notes they parse.
+        ensureCache(s);
+        std::shared_ptr<const indexcache::Reader> cache;
+        {
+            std::lock_guard lock(s.mutex);
+            cache = s.searchFromCache ? s.cache : nullptr;
+        }
+        if (cache) {
+            indexcache::Reader::SearchDecoder decoder = cache->searchDecoder();
+            decoder.step(std::numeric_limits<int>::max());
+            built = decoder.take();
+            cache.reset();
+        }
         for (;;) {
             std::deque<SearchJob> batch;
             {
@@ -281,6 +378,35 @@ struct IndexLoader::Private {
 
     bool notesMerged() const { return mergedNotes >= noteCount(); }
 
+    /// Inline mode, once the cache is open: take its full-text index (decoded in steps).
+    void setupInlineSearch()
+    {
+        if (inlineSearchSet || threaded())
+            return;
+        if (!s->cachePath.isEmpty() && !s->cacheOpened)
+            return; // not opened yet
+        inlineSearchSet = true;
+        if (s->searchFromCache && s->cache) {
+            inlineSearch.emplace(s->cache->searchDecoder());
+            index.setSearchBuiltElsewhere(true);
+        }
+    }
+
+    /// Decode the cache's full-text index for about `budgetMs`; true when there is nothing (more)
+    /// to decode (then it is adopted).
+    bool inlineSearchStep(int budgetMs)
+    {
+        if (!inlineSearch)
+            return true;
+        if (!inlineSearch->step(budgetMs))
+            return false;
+        SearchIndex built = inlineSearch->take(); // empty when it failed: everything is rebuilt
+        inlineSearch.reset();
+        searchAdopted = true;
+        index.adoptSearch(std::move(built));
+        return true;
+    }
+
     void closeSearchIfDone()
     {
         if (!notesMerged() || !s->buildSearch)
@@ -310,12 +436,23 @@ struct IndexLoader::Private {
 
     void checkDone()
     {
-        if (done || nextAttachment < attachments.size() || !notesMerged())
+        if (done || nextAttachment < attachments.size() || !notesMerged() || inlineSearch)
             return;
         done = true;
         stats.elapsedMs = clock.elapsed();
+        {
+            std::lock_guard lock(s->mutex);
+            stats.cache = s->cacheStatus;
+            stats.recordsRejected = s->recordsRejected;
+            stats.searchFromCache = s->searchFromCache;
+        }
         closeSearchIfDone();
         adoptSearchIfReady();
+        {
+            // The cache's bytes are not needed any more (a search builder holds its own copy).
+            std::lock_guard lock(s->mutex);
+            s->cache.reset();
+        }
         Q_EMIT q->finished();
     }
 };
@@ -374,6 +511,11 @@ void IndexLoader::start(const QList<FileStat> &files)
     std::reverse(firstItems.begin(), firstItems.end());
     d->s->items = firstItems + rest;
     d->s->config = d->index.config();
+    d->s->cachePath = d->options.cachePath;
+    d->s->cacheConfig = d->index.config();
+    d->s->cacheIdentity = indexcache::Identity::current(d->index.config(), d->vault.id());
+    if (d->s->items.isEmpty())
+        d->s->cachePath.clear(); // nothing to take from it
     d->stats.total = d->s->items.size() + d->attachments.size();
     d->stats.attachments = d->attachments.size();
     if (d->threaded() && !d->s->items.isEmpty()) {
@@ -407,9 +549,14 @@ IndexLoader::Step IndexLoader::step(int budgetMs)
                 if (i >= d->noteCount())
                     break;
                 d->merge(Private::process(*d->s, i, d->index.config()));
+                d->setupInlineSearch();
             }
             if (timer.elapsed() >= budgetMs)
                 break;
+        }
+        if (d->notesMerged()) {
+            d->setupInlineSearch();
+            d->inlineSearchStep(std::max<int>(1, budgetMs - int(timer.elapsed())));
         }
     }
     d->checkDone();
@@ -442,6 +589,8 @@ void IndexLoader::finish()
             std::unique_lock lock(d->s->mutex);
             d->s->ownerCv.wait(lock, [&] { return !d->s->results.empty() || d->s->cancelled; });
         }
+        d->setupInlineSearch();
+        d->inlineSearchStep(std::numeric_limits<int>::max());
     }
     // The full-text index: wait for the builder (it is behind by the last documents only); if it
     // never got a thread, the index builds its documents itself.

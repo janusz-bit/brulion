@@ -41,6 +41,7 @@
 #pragma once
 
 #include "editorhost.h"
+#include "notebook/indexcachekeeper.h"
 #include "notebook/indexloader.h"
 #include "notebook/pages.h"
 #include "queryhost.h"
@@ -159,6 +160,12 @@ public:
     VaultIndex *index() const { return m_index.get(); }
     /// How the index was loaded after open() (tests, the event log).
     notebook::IndexLoader::Stats indexStats() const;
+    /// The index cache's saving policy for notebooks opened from now on (tests; the default keeps
+    /// no cache under 200 notes and saves 5 s after a load, 60 s after the last change).
+    void setIndexCachePolicy(const notebook::IndexCacheKeeper::Policy &policy) { m_cachePolicy = policy; }
+    /// Keeps the open notebook's index cache (nullptr: none — no device state folder,
+    /// BRULION_NO_INDEX_CACHE, or the index is still loading).
+    notebook::IndexCacheKeeper *indexCacheKeeper() const { return m_cacheKeeper.get(); }
 
     /// Build the rest of the index now (normally done in chunks in the background): before what
     /// needs every note known — a rename, a route to a block, a new block id — and in tests.
@@ -554,6 +561,10 @@ private:
     QObject *m_indexPool = nullptr;
     /// Loads the index after open(): parses on worker threads, merges in slices (m_indexTimer).
     std::unique_ptr<notebook::IndexLoader> m_loader;
+    /// Keeps the index cache on the device once the index is loaded (docs/PERFORMANCE.md, L2).
+    std::unique_ptr<notebook::IndexCacheKeeper> m_cacheKeeper;
+    notebook::IndexCacheKeeper::Policy m_cachePolicy;
+    QString m_indexCachePath; ///< "" when the notebook keeps none
     QTimer m_indexTimer;
     QElapsedTimer m_indexClock; ///< since open() (the event log's "Index ready" line)
     int m_revision = 0;

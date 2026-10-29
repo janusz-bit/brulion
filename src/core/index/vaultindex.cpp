@@ -117,6 +117,16 @@ const Entry *IndexAccess::entry(const VaultIndex &index, const VaultPath &path)
     return index.d->entry(path);
 }
 
+const SearchIndex &IndexAccess::search(const VaultIndex &index)
+{
+    return index.d->search;
+}
+
+bool IndexAccess::searchComplete(const VaultIndex &index)
+{
+    return index.d->searchDirty.isEmpty() && !index.d->searchElsewhere;
+}
+
 std::unique_ptr<Entry> makeEntry(const VaultPath &path, const QString &content, ParsedNote note)
 {
     auto e = std::make_unique<Entry>();

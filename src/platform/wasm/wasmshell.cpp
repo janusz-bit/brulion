@@ -27,6 +27,16 @@ EM_JS(void, brulion_shell_indexed, (), {
     if (shell && shell.indexed) shell.indexed();
 });
 
+EM_JS(void, brulion_shell_index_stats, (int notes, int fromCache), {
+    var shell = globalThis["brulionShell"];
+    if (shell && shell.indexStats) shell.indexStats(notes, fromCache);
+});
+
+EM_JS(void, brulion_shell_index_cache_saved, (), {
+    var shell = globalThis["brulionShell"];
+    if (shell && shell.indexCacheSaved) shell.indexCacheSaved();
+});
+
 EM_JS(int, brulion_shell_page_scheme, (), {
     var location = globalThis["location"];
     var protocol = location ? String(location.protocol) : "";
@@ -204,6 +214,16 @@ void hideShellLoadingScreen()
 void reportIndexReady()
 {
     brulion_shell_indexed();
+}
+
+void reportIndexStats(int notes, int fromCache)
+{
+    brulion_shell_index_stats(notes, fromCache);
+}
+
+void reportIndexCacheSaved()
+{
+    brulion_shell_index_cache_saved();
 }
 
 QString pageScheme()

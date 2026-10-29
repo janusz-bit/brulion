@@ -171,10 +171,10 @@ notebook::Notebook *Context::notebook(std::optional<Error> *error)
     // clamp(cores - 1, 1, 4) parse workers and one for the full-text index; BRULION_INDEX_THREADS
     // overrides (0 = on this thread).
     bool forced = false;
-    const int threads = std::clamp(qEnvironmentVariableIsSet("BRULION_INDEX_THREADS")
-                                           ? qEnvironmentVariableIntValue("BRULION_INDEX_THREADS", &forced)
-                                           : QThread::idealThreadCount() - 1,
-                                   forced ? 0 : 1, forced ? 64 : 4);
+    const int wanted = qEnvironmentVariableIntValue("BRULION_INDEX_THREADS", &forced);
+    const int threads = forced ? std::clamp(wanted, 0, 64) : std::clamp(QThread::idealThreadCount() - 1, 1, 4);
+    // The index cache in the device state folder, shared with the app (docs/PERFORMANCE.md, L2).
+    options.indexCache = !qEnvironmentVariableIsSet("BRULION_NO_INDEX_CACHE");
     if (threads > 0) {
         if (!m_indexPool)
             m_indexPool = std::make_unique<QThreadPool>();

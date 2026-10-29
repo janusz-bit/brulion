@@ -69,9 +69,13 @@ private:
     mutable std::optional<QStringList> m_pageTags;
 };
 
-/// Access to VaultIndex internals for the module's own free functions (runQuery).
+/// Access to VaultIndex internals for the module's own free functions (runQuery, the index
+/// cache's writer).
 struct IndexAccess {
     static const Entry *entry(const VaultIndex &index, const VaultPath &path);
+    static const SearchIndex &search(const VaultIndex &index);
+    /// Is the full-text index up to date and complete (nothing pending, not built elsewhere)?
+    static bool searchComplete(const VaultIndex &index);
 };
 
 /// Journals first (newest first), then other notes by path.

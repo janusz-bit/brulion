@@ -184,6 +184,11 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
 #endif
     notebook::IndexLoader::Options loaderOptions;
     loaderOptions.firstFolder = m_vault->config().journalsFolder;
+    // The index cache next to History and LocalStore (persisted in IndexedDB on the web).
+    m_indexCachePath = deviceStatePath.isEmpty() || qEnvironmentVariableIsSet("BRULION_NO_INDEX_CACHE")
+                               ? QString()
+                               : QDir(deviceStatePath).filePath(u"index-cache.bin"_s);
+    loaderOptions.cachePath = m_indexCachePath;
     m_loader = std::make_unique<notebook::IndexLoader>(*m_vault, *m_index, std::move(pool), loaderOptions);
     connect(m_loader.get(), &notebook::IndexLoader::resultsReady, this, &Workspace::onIndexResultsReady);
     m_indexClock.start();
@@ -221,7 +226,8 @@ void Workspace::close()
     cancelMoveImpact(); // its planner reads the index
     m_impacts = ImpactCache();
     const bool wasIndexing = indexing();
-    m_loader.reset(); // before the index and the vault (its workers stop after their file)
+    m_cacheKeeper.reset(); // before the loader, the index and the vault
+    m_loader.reset();      // before the index and the vault (its workers stop after their file)
     m_trashCount = -1;
     m_dataUrls.clear();
     m_dataUrlSizes.clear();
@@ -363,6 +369,20 @@ void Workspace::indexingFinished()
                            .arg(how);
         m_indexClock.invalidate();
     }
+    // The index cache follows the index from now on (written soon when anything was parsed).
+    if (!m_indexCachePath.isEmpty() && !m_cacheKeeper && m_loader) {
+        notebook::WorkerPool pool;
+#ifdef BRULION_INDEX_THREADS
+        pool = indexWorkerPool(static_cast<QThreadPool *>(m_indexPool));
+#endif
+        m_cacheKeeper = std::make_unique<notebook::IndexCacheKeeper>(*m_vault, *m_index, std::move(pool),
+                                                                     m_indexCachePath, m_cachePolicy);
+#ifdef Q_OS_WASM
+        connect(m_cacheKeeper.get(), &notebook::IndexCacheKeeper::saved, this,
+                [] { platform::reportIndexCacheSaved(); });
+#endif
+        m_cacheKeeper->loaded(m_loader->stats());
+    }
     // Every note is known now: reminders may fire and missed ones be recorded (a half-built
     // index would make reminders look deleted). A vault with paused reminders never starts its
     // scheduler: an empty schedule() would cancel what the previous notebook armed.
@@ -370,6 +390,10 @@ void Workspace::indexingFinished()
         m_reminders->start();
     setReady(false);
 #ifdef Q_OS_WASM
+    {
+        const notebook::IndexLoader::Stats stats = indexStats();
+        platform::reportIndexStats(int(stats.total - stats.attachments), int(stats.fromCache));
+    }
     platform::reportIndexReady(); // for scripts/wasm-smoke.mjs and the browser benchmarks
 #endif
 }

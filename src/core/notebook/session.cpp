@@ -1,6 +1,7 @@
 #include "notebook/session.h"
 
 #include "index/vaultindex.h"
+#include "notebook/indexcachekeeper.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -9,6 +10,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLockFile>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -37,6 +40,23 @@ Notebook::~Notebook()
 {
     if (m_vault)
         m_vault->stopWatching();
+    // A command that loaded the index by parsing many notes leaves the cache for the next one
+    // (repeated calls of an agent do not rewrite it every time).
+    if (m_cacheKeeper && m_index) {
+        const qsizetype notes = m_indexStats.total - m_indexStats.attachments;
+        const bool noCache = m_indexStats.cache != u"used";
+        const bool manyParsed = m_indexStats.parsed >= std::max<qsizetype>(50, notes / 50);
+        if (noCache || manyParsed || m_cacheKeeper->isDirty())
+            m_cacheKeeper->saveNow();
+    }
+    m_cacheKeeper.reset();
+}
+
+QString Notebook::indexCachePath() const
+{
+    if (!m_indexCache || m_stateDir.isEmpty())
+        return {};
+    return QDir(m_stateDir).filePath(u"index-cache.bin"_s);
 }
 
 bool Notebook::open(const QString &rawRoot, const Options &options, QString *error, OpenError *kind)
@@ -72,11 +92,15 @@ bool Notebook::open(const QString &rawRoot, const Options &options, QString *err
         vault->startWatching();
         vault->setRescanInterval(120 * 1000);
     }
+    m_cacheKeeper.reset();
     m_index.reset();
     m_vault = std::move(vault);
     m_stateDir = options.stateDir;
     m_workers = options.workers;
     m_indexStats = {};
+    m_indexCache = options.indexCache;
+    m_watch = options.watch;
+    m_cacheKeeper.reset();
     QObject::connect(m_vault.get(), &Vault::changed, m_vault.get(),
                      [this](const QList<VaultChange> &changes) { applyChanges(changes); });
     QObject::connect(m_vault.get(), &Vault::configChanged, m_vault.get(), [this] {
@@ -130,10 +154,21 @@ VaultIndex &Notebook::index()
         m_index = std::make_unique<VaultIndex>(m_vault->config());
         IndexLoader::Options options;
         options.firstFolder = m_vault->config().journalsFolder;
+        options.cachePath = indexCachePath();
         IndexLoader loader(*m_vault, *m_index, m_workers, options);
         loader.start(m_vault->files());
         loader.finish();
         m_indexStats = loader.stats();
+        if (!m_indexCache && !m_stateDir.isEmpty())
+            m_indexStats.cache = u"disabled"_s;
+        if (!options.cachePath.isEmpty()) {
+            IndexCacheKeeper::Policy policy;
+            policy.minNotes = m_cacheMinNotes;
+            m_cacheKeeper = std::make_unique<IndexCacheKeeper>(*m_vault, *m_index, m_workers, options.cachePath, policy);
+            // Watch mode (MCP): saved after quiet changes like the app; else at close.
+            if (m_watch)
+                m_cacheKeeper->loaded(m_indexStats);
+        }
     }
     return *m_index;
 }
