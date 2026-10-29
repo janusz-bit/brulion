@@ -308,16 +308,73 @@ void TestKeyboardInsets::viewportKeyboardSequence_data()
             step(412, 480, 480, 480, 480, false, true, 0, false, false),
     };
     // Enter splits a block: Qt's focus passes through its focus helper (editing false for a
-    // moment) while the page stays shrunk — the keyboard stays shown; once the focus is gone and
-    // the page grows back, it is hidden.
+    // moment, before the samples settle) while the page stays shrunk — the keyboard stays shown.
+    // The focus gone for good (a settled sample without it) hides it, also before the page grows
+    // back.
     QTest::newRow("fokus przechodzi do następnego bloku (Enter)") << QList<Step>{
             step(412, 786, 786.29, 786.29, 786, true, true, 0, false, false),
             step(412, 474, 474.29, 474.29, 474, true, true, 0, true, false),
             step(412, 474, 474.29, 474.29, 474, false, false, 0, true, false),
             step(412, 474, 474.29, 474.29, 474, true, false, 0, true, false),
-            step(412, 474, 474.29, 474.29, 474, false, true, 0, true, false),
+            step(412, 474, 474.29, 474.29, 474, true, true, 0, true, false),
+            step(412, 474, 474.29, 474.29, 474, false, false, 0, true, false),
+            step(412, 474, 474.29, 474.29, 474, false, true, 0, false, false),
             step(412, 786, 786.29, 786.29, 786, false, false, 0, false, true),
             step(412, 474, 474.29, 474.29, 474, false, true, 0, false, false), // not editing: not ours
+    };
+    // A split screen at the same width (the page 406 px lower than full screen, no keyboard): a
+    // block edited counts as typing, but once the editing is over (a settled sample without
+    // Qt's focus) the keyboard is hidden for good although the page stays that low.
+    QTest::newRow("podzielony ekran: edycja się kończy") << QList<Step>{
+            step(412, 786, 786, 786, 786, false, true, 0, false, false),
+            step(412, 380, 380, 380, 786, false, false, 0, false, true),
+            step(412, 380, 380, 380, 380, false, true, 0, false, false),
+            step(412, 380, 380, 380, 380, true, false, 0, true, false), // a block tapped
+            step(412, 160, 160, 160, 380, true, false, 0, true, true),  // the keyboard
+            step(412, 160, 160, 160, 160, true, true, 0, true, false),
+            step(412, 380, 380, 380, 160, false, false, 0, true, true), // the editing ends
+            step(412, 380, 380, 380, 380, false, true, 0, false, false),
+            step(412, 380, 380, 380, 380, false, true, 0, false, false),
+    };
+    // The phone turned with the keyboard up (portrait 412×786, landscape 915×360 without it): the
+    // first landscape heights have the keyboard in them, so they are no tallest — the keyboard
+    // stays shown (also through Enter's focus pass) until Back grows the page by a keyboard; from
+    // then on landscape has its own tallest.
+    QTest::newRow("obrót z otwartą klawiaturą") << QList<Step>{
+            step(412, 786, 786, 786, 786, true, true, 0, false, false),
+            step(412, 426, 426, 426, 786, true, false, 0, true, true),
+            step(412, 426, 426, 426, 426, true, true, 0, true, false),
+            step(915, 150, 150, 150, 426, true, false, 0, true, true), // turned
+            step(915, 150, 150, 150, 150, true, true, 0, true, false),
+            step(915, 150, 150, 150, 150, false, false, 0, true, false), // Enter
+            step(915, 150, 150, 150, 150, true, false, 0, true, false),
+            step(915, 150, 150, 150, 150, true, true, 0, true, false),
+            step(915, 360, 360, 360, 150, true, false, 0, false, true), // Back
+            step(915, 360, 360, 360, 360, true, true, 0, false, false),
+            step(915, 150, 150, 150, 150, true, true, 0, true, false), // the keyboard again
+            step(412, 426, 426, 426, 426, true, true, 0, true, false), // turned back with it up
+            step(412, 786, 786, 786, 786, true, true, 0, false, false),
+    };
+    // The same where the browser reports the turned page without the keyboard first.
+    QTest::newRow("obrót z otwartą klawiaturą, najpierw bez niej") << QList<Step>{
+            step(412, 786, 786, 786, 786, true, true, 0, false, false),
+            step(412, 426, 426, 426, 426, true, true, 0, true, false),
+            step(915, 360, 360, 360, 426, true, false, 0, true, true),
+            step(915, 150, 150, 150, 360, true, false, 0, true, true),
+            step(915, 150, 150, 150, 150, true, true, 0, true, false),
+            step(915, 360, 360, 360, 150, true, false, 0, false, true), // Back
+            step(915, 360, 360, 360, 360, true, true, 0, false, false),
+    };
+    // Turned with the keyboard up, then the editing ends in landscape: hidden as the page grows,
+    // and a settled sample without the focus ends it at the latest.
+    QTest::newRow("obrót z otwartą klawiaturą, potem koniec edycji") << QList<Step>{
+            step(412, 786, 786, 786, 786, true, true, 0, false, false),
+            step(412, 426, 426, 426, 426, true, true, 0, true, false),
+            step(915, 150, 150, 150, 426, true, false, 0, true, true),
+            step(915, 150, 150, 150, 150, false, false, 0, true, true),
+            step(915, 360, 360, 360, 150, false, false, 0, false, true),
+            step(915, 360, 360, 360, 360, false, true, 0, false, false),
+            step(915, 150, 150, 150, 150, true, true, 0, true, false), // a block tapped again
     };
     // A focus change alone (the editor taps another block) is no keyboard motion.
     QTest::newRow("sama zmiana fokusu nie animuje") << QList<Step>{
@@ -456,6 +513,7 @@ void TestKeyboardInsets::viewportTallestPerWidth()
     QCOMPARE(keyboard.tallest(412), 0.0);
     keyboard.update(sample(412, 780, 780, 0, 780), 780);
     keyboard.update(sample(412, 480, 480, 0, 480), 480);
+    keyboard.update(sample(412, 780, 780, 0, 780), 780); // the keyboard hidden, then turned
     keyboard.update(sample(915, 360, 360, 0, 360), 360);
     QCOMPARE(keyboard.tallest(412), 780.0);
     QCOMPARE(keyboard.tallest(411.6), 780.0); // rounded widths
@@ -470,6 +528,17 @@ void TestKeyboardInsets::viewportTallestPerWidth()
     keyboard.update(sample(kNaN, 780, 700, 0, 780), 780);
     QCOMPARE(keyboard.tallest(kNaN), 700.0);
     QCOMPARE(keyboard.tallest(412), 780.0);
+
+    // Turned with the keyboard up: landscape heights with the keyboard in them are no tallest;
+    // the first one without it (Back) is.
+    ViewportKeyboard turned;
+    turned.update(sample(412, 786, 786, 0, 786), 786);
+    turned.update(sample(412, 426, 426, 0, 426), 426);
+    QVERIFY(turned.update(sample(915, 150, 150, 0, 150), 150).shown);
+    QCOMPARE(turned.tallest(915), 0.0);
+    QVERIFY(!turned.update(sample(915, 360, 360, 0, 360), 360).shown);
+    QCOMPARE(turned.tallest(915), 360.0);
+    QCOMPARE(turned.tallest(412), 786.0);
 }
 
 void TestKeyboardInsets::viewportSampleFeedsInsets()
