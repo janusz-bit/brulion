@@ -556,8 +556,9 @@ private Q_SLOTS:
         IndexLoader loader(vault, index, {}, {});
         QSignalSpy finished(&loader, &IndexLoader::finished);
         loader.start(vault.files());
+        QVERIFY(loader.isDone()); // at once: Workspace::ready() right after open()
+        QCOMPARE(finished.count(), 1);
         QCOMPARE(loader.step(10), IndexLoader::Step::Done);
-        QVERIFY(loader.isDone());
         QCOMPARE(finished.count(), 1);
         QCOMPARE(loader.progress(), 1.0);
     }

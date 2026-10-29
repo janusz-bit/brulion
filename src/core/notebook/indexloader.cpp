@@ -527,6 +527,7 @@ void IndexLoader::start(const QList<FileStat> &files)
         for (int k = 0; k < workers; ++k)
             d->pool.start([shared] { Private::runWorker(shared); });
     }
+    d->checkDone(); // nothing to load: done at once (an empty notebook is ready right away)
 }
 
 IndexLoader::Step IndexLoader::step(int budgetMs)
