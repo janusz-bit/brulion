@@ -317,10 +317,9 @@ FocusScope {
         objectName: "journalDayEditor"
         y: emptyPrompt.active ? emptyPrompt.y + emptyPrompt.height : headerRow.height
         width: day.width
-        // As tall as the blocks: the journal list scrolls, not this editor (the touch toolbar is
-        // docked on the stream's frame, not in the day). An empty day shows the prompt instead
-        // (the editor stays for its geometry, which the heading and the prompt use).
-        height: day.empty && page.editingRow < 0 ? 0 : editor.listView.contentHeight + editor.listView.y
+        // As tall as the blocks (day.fitEditorHeight(), below): the journal list scrolls, not this
+        // editor (the touch toolbar is docked on the stream's frame, not in the day).
+        Component.onCompleted: day.fitEditorHeight()
         autoHeight: true
         scroller: day.scroller
         toolbarHost: day.toolbarHost
@@ -351,10 +350,40 @@ FocusScope {
         documentInset: Workspace.config.journalMode === "document" ? 0 : outlineGutter
     }
 
+    // The editor is as tall as its blocks; an empty day shows the prompt instead (the editor
+    // stays for its geometry, which the heading and the prompt use). Set, not bound: setting the
+    // height can move the editor's list back into its bounds, which lays its rows out again and
+    // changes their height within that same change (Ctrl+Z zooming back into a block, seen on
+    // Windows) — a binding reported a loop there and kept the stale height; this sets it again
+    // until it holds.
+    property bool _fitting: false
+    property bool _refit: false
+    function fitEditorHeight() {
+        if (_fitting) {
+            _refit = true
+            return
+        }
+        _fitting = true
+        for (let i = 0; i < 4; ++i) {
+            _refit = false
+            editor.height = empty && page.editingRow < 0 ? 0 : editor.listView.contentHeight + editor.listView.y
+            if (!_refit)
+                break
+        }
+        _fitting = false
+    }
+    onEmptyChanged: fitEditorHeight()
+    Connections {
+        target: page
+        function onEditingRowChanged() { day.fitEditorHeight() }
+    }
+
     // The embedded editor's list is exactly as tall as its content: what still scrolls it
     // (positioning a row) scrolls the journal list instead.
     Connections {
         target: editor.listView
+        function onContentHeightChanged() { day.fitEditorHeight() }
+        function onYChanged() { day.fitEditorHeight() }
         function onContentYChanged() {
             const lv = editor.listView
             const delta = lv.contentY - lv.originY
