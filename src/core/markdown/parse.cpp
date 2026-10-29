@@ -788,7 +788,9 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, QStringView content, con
 
     QList<int> blockOfNode(st.nodes.size(), -1);
     QStringList allTags;
-    for (const auto &[n, parentNode] : preOrder(st)) {
+    const QList<std::pair<int, int>> order = preOrder(st);
+    note.blocks.reserve(order.size()); // exactly: no growth slack (docs/PERFORMANCE.md, L8)
+    for (const auto &[n, parentNode] : order) {
         const Node &node = st.nodes[n];
         Block block = buildBlock(node, ctx);
         const int index = int(note.blocks.size());
@@ -831,6 +833,18 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, QStringView content, con
     std::stable_sort(note.links.begin(), note.links.end(),
                      [](const Link &a, const Link &b) { return a.from < b.from; });
     note.journalDate = journalDateFromPath(path, config);
+
+    // No growth slack in what the index keeps (docs/PERFORMANCE.md, L8).
+    note.links.squeeze();
+    note.headings.squeeze();
+    note.tasks.squeeze();
+    note.reminders.squeeze();
+    for (Block &b : note.blocks) {
+        if (b.children.capacity() > b.children.size())
+            b.children.squeeze();
+        if (b.reminders.capacity() > b.reminders.size())
+            b.reminders.squeeze();
+    }
     return note;
 }
 
