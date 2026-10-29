@@ -26,7 +26,9 @@ import Brulion
 //     selection mode; the stream holds still while the finger extends it, scrolls at the frame's
 //     edge and the selection goes on into the next day — StreamSelection —, the selection tools
 //     dock on the frame, Kopiuj with the days' links), another day's selection ending it, Back; a
-//     mouse drag from a block into the next ones, the stream scrolled at its edge.
+//     mouse drag from a block into the next ones, the stream scrolled at its edge;
+//   * Enter at the end of a zoomed paragraph at the bottom of a long day: the zoom ends, the stream
+//     keeps the new block at the grown day's bottom in view; Ctrl+Z zooms back in, still in view.
 // Prints "SELFTEST PASS|FAIL <what>" lines and quits with the number of failures as exit code.
 Item {
     id: test
@@ -52,6 +54,9 @@ Item {
     property var events: null
     property int dragStep: 0
     property int linkRow: -1
+    /// The zoomed paragraph of the long day and the day's text before it was added.
+    property int zoomRow: -1
+    property string dayText: ""
 
     function check(ok, what) {
         if (!ok)
@@ -493,6 +498,54 @@ Item {
                 test.check(c.selectionAnchorRow === 0 && c.selectedRow === c.lastVisibleRow() && c.editingRow < 0,
                            "the drag ends with the day's blocks selected, nothing edited")
                 c.clearSelection()
+            },
+            // ---- Enter at the end of a zoomed paragraph at the bottom of a long day -------------------
+            // A paragraph has no children: the zoom ends, the day grows back to all its blocks, and
+            // the stream keeps the new block below the paragraph (at the day's bottom) in view; Ctrl+Z
+            // zooms back in, the paragraph still in view (BlockEditor's onZoomChanged, `scroller`).
+            () => test.list.positionViewAtIndex(test.linkRow, ListView.Beginning),
+            () => test.dayAt(test.linkRow) !== null && test.dayAt(test.linkRow).controller.loaded,
+            () => {
+                test.tracked = test.dayAt(test.linkRow)
+                const c = test.tracked.controller
+                test.dayText = c.sourceText
+                test.zoomRow = c.insertMarkdown(c.lastVisibleRow(), "Akapit na końcu dnia ąę")
+                test.check(test.zoomRow > 40 && c.blocks.get(test.zoomRow).view === "text"
+                           && c.blocks.get(test.zoomRow).plainText === "Akapit na końcu dnia ąę",
+                           "a paragraph at the long day's bottom: " + test.zoomRow)
+                c.zoomInto(test.zoomRow)
+                test.tracked.editor.startEditing(test.zoomRow, -1)
+            },
+            () => test.editing(test.tracked) && test.tracked.controller.zoomBlock === test.zoomRow,
+            () => {
+                const ed = test.tracked.editor
+                ed.handleEditorKey({ key: Qt.Key_Return, modifiers: Qt.NoModifier }, ed.activeEditor)
+            },
+            ...test.idle(3),
+            () => {
+                const c = test.tracked.controller
+                const item = test.tracked.editor.listView.itemAtIndex(c.editingRow)
+                const top = item ? item.mapToItem(test.list, 0, 0).y : -1e9
+                test.check(c.zoomBlock < 0 && c.editingRow === test.zoomRow + 1 && test.editing(test.tracked),
+                           "Enter at the end of a zoomed paragraph in a day ends the zoom and edits the new block: zoom "
+                           + c.zoomBlock + ", row " + c.editingRow)
+                test.check(item !== null && top >= 0 && top + item.height <= test.list.height,
+                           "the stream keeps the new block at the grown day's bottom in view: " + top + " of " + test.list.height)
+                const ed = test.tracked.editor
+                ed.handleEditorKey({ key: Qt.Key_Z, modifiers: Qt.ControlModifier }, ed.activeEditor)
+            },
+            ...test.idle(3),
+            () => {
+                const c = test.tracked.controller
+                const item = test.tracked.editor.listView.itemAtIndex(test.zoomRow)
+                const top = item ? item.mapToItem(test.list, 0, 0).y : -1e9
+                test.check(c.zoomBlock === test.zoomRow && c.editingRow === test.zoomRow && test.editing(test.tracked)
+                           && item !== null && top >= 0 && top + item.height <= test.list.height,
+                           "Ctrl+Z zooms back into the paragraph, in the stream's view: " + top + " (zoom " + c.zoomBlock + ")")
+                c.undo() // the paragraph added
+                c.zoomTo(-1)
+                c.stopEditing()
+                test.check(c.sourceText === test.dayText, "undo leaves the long day as it was")
             },
             () => test.list.positionViewAtBeginning(),
             // ---- Midnight while editing --------------------------------------------------------------

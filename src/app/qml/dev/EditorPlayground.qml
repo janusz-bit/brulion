@@ -396,6 +396,8 @@ ApplicationWindow {
     /// Repeats of a step waiting for something asynchronous (a picture loading).
     property int waits: 0
     property var crumbsProbe: null
+    /// Real mouse clicks of the self-test (QtTest's TestEvent, made when first needed).
+    property var zoomEvents: null
     function check(ok, what) {
         if (!ok)
             failures += 1
@@ -448,6 +450,19 @@ ApplicationWindow {
               && (show.text === (failed ? qsTranslate("EmbedView", "Try again") : qsTranslate("EmbedView", "Show")))
               && (show.width + save.width + Theme.space2 > holder.width || show.y === save.y),
               what + "its buttons are side by side: " + (show && save ? show.y + " / " + save.y : "-"))
+    }
+    /// The first item under `item` (itself included) for which `pred` holds, or null.
+    function findWhere(item, pred) {
+        if (!item)
+            return null
+        if (pred(item))
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = findWhere(item.children[i], pred)
+            if (found)
+                return found
+        }
+        return null
     }
     function findItem(item, name) {
         if (!item)
@@ -812,6 +827,58 @@ ApplicationWindow {
                         + ", zoom " + page.zoomBlock + ", row " + page.editingRow + ", editor row "
                         + (editor.activeEditor ? editor.activeEditor.row : -1)
                         + ", contentY " + editor.listView.contentY + " (origin " + editor.listView.originY + ")"),
+            // The breadcrumb's arrow clicked with the mouse while a child of a folded zoom root is
+            // edited (Enter in the zoom made it; the zoom root's children are shown whatever its
+            // fold): the zoom ends, the fold opens over the child, which stays edited, in view,
+            // and gets the keys typed next.
+            () => {
+                page.stopEditing()
+                window.textBefore = page.sourceText
+                window.zoomTextRow = rowOf("Wiersz 145")
+                page.zoomInto(window.zoomTextRow)
+                editor.startEditing(window.zoomTextRow, -1)
+            },
+            () => key(Qt.Key_Return),
+            () => typeKeys("Dziecko ąę"),
+            () => page.setFolded(window.zoomTextRow, true),
+            () => check(page.zoomBlock === window.zoomTextRow && info(window.zoomTextRow).collapsed
+                        && page.editingRow === window.zoomTextRow + 1 && info(window.zoomTextRow + 1).visible
+                        && info(window.zoomTextRow + 1).plainText === "Dziecko ąę",
+                        "a child of a folded zoom root is edited: zoom " + page.zoomBlock + ", row " + page.editingRow),
+            () => {
+                if (!window.zoomEvents)
+                    window.zoomEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "zoomEvents")
+                const arrow = findWhere(editor.listView.headerItem, item => item.iconName === "arrow-left" && item.visible)
+                check(arrow !== null, "the breadcrumb's arrow is there")
+                if (!arrow)
+                    return
+                // A finger on touch UIs, else the mouse.
+                const x = arrow.width / 2
+                const y = arrow.height / 2
+                if (Theme.touchUi) {
+                    window.zoomEvents.touchEvent(arrow).press(0, arrow, x, y).commit()
+                    window.zoomEvents.touchEvent(arrow).release(0, arrow, x, y).commit()
+                } else {
+                    window.zoomEvents.mouseClick(arrow, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+                }
+            },
+            () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && info(page.editingRow).visible
+                        && !info(window.zoomTextRow).collapsed && rowInView(page.editingRow)
+                        && editor.activeEditor !== null && editor.activeEditor.row === page.editingRow,
+                        "the breadcrumb's arrow clicked: the zoom ends, the edited child stays shown and in view: zoom "
+                        + page.zoomBlock + ", row " + page.editingRow + ", shown " + info(window.zoomTextRow + 1).visible),
+            () => EditorInput.sendKey(window.activeFocusItem, 0, 0, "ż"),
+            () => check(info(window.zoomTextRow + 1).plainText === "Dziecko ąęż" && editor.activeEditor !== null
+                        && editor.activeEditor.activeFocus,
+                        "a key typed after the click goes into the edited child: " + info(window.zoomTextRow + 1).plainText
+                        + " (focus " + window.activeFocusItem + ")"),
+            () => {
+                for (let i = 0; i < 6 && page.sourceText !== window.textBefore; ++i)
+                    page.undo()
+                check(page.sourceText === window.textBefore, "undo takes the child away again")
+                page.zoomTo(-1)
+                page.stopEditing()
+            },
             // ---- Table cells: typed text is in the document before the cell is left -------------
             // With a mouse, a table takes no room below its grid until it is selected or edited
             // (the "+ Row / + Column" buttons): its height never changes under a resting pointer.

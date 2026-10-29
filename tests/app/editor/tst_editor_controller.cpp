@@ -1372,6 +1372,234 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(typed.visible(), QList<bool>(3, true));
     }
 
+    // Undo / redo never leave the caret in a hidden block. Enter made in a zoom brings its zoom
+    // back; the step next to it, made on the page after the breadcrumb, then ends that zoom again
+    // (the zoom a step leaves as it is stays only while it shows the restored caret).
+    void zoomUndoRedoNeverHideTheCaret()
+    {
+        const auto caretShown = [](const Fixture &f) {
+            const int row = f.page.editingRow();
+            return row >= 0 && f.role(row, "visible").toBool() && f.role(row, "isEditing").toBool();
+        };
+        // Redo: Enter in a zoom, the breadcrumb, typing on the page; undo both, redo both.
+        Fixture f(u"- a\n- b\n\nAkapit C ąę\n"_s);
+        f.page.zoomInto(0);
+        f.page.startEditing(0, -1);
+        f.page.split(0, 1);
+        QCOMPARE(f.text(), u"- a\n\t- \n- b\n\nAkapit C ąę\n"_s);
+        f.page.zoomTo(-1);
+        f.page.startEditing(3, -1);
+        f.page.setEditText(3, u"Akapit C ąęż"_s, 12);
+        f.page.undo(); // the typing
+        QCOMPARE(f.page.zoomBlock(), -1);
+        QCOMPARE(f.page.editingRow(), 3);
+        QVERIFY(caretShown(f));
+        f.page.undo(); // Enter: back in its zoom
+        QCOMPARE(f.text(), u"- a\n- b\n\nAkapit C ąę\n"_s);
+        QCOMPARE(f.page.zoomBlock(), 0);
+        QCOMPARE(f.page.editingRow(), 0);
+        QVERIFY(caretShown(f));
+        f.page.redo(); // Enter again, in its zoom
+        QCOMPARE(f.page.zoomBlock(), 0);
+        QCOMPARE(f.page.editingRow(), 1);
+        QVERIFY(caretShown(f));
+        QSignalSpy zoomSpy(&f.page, &PageController::zoomChanged);
+        f.page.redo(); // the typing on the page: the zoom on "a" ends
+        QCOMPARE(f.text(), u"- a\n\t- \n- b\n\nAkapit C ąęż\n"_s);
+        QCOMPARE(f.page.editingRow(), 3);
+        QCOMPARE(f.page.zoomBlock(), -1);
+        QVERIFY(caretShown(f));
+        QCOMPARE(f.visible(), QList<bool>(4, true));
+        QVERIFY(!zoomSpy.isEmpty());
+        QCOMPARE(f.page.cursorPosition(), 12);
+        f.page.setEditText(3, u"Akapit C ąężź"_s, 13);
+        QCOMPARE(f.text(), u"- a\n\t- \n- b\n\nAkapit C ąężź\n"_s);
+
+        // Undo: typing on the page, Enter in a zoom, the breadcrumb; undo both.
+        Fixture g(u"- L\n\nAkapit P\n"_s);
+        g.page.startEditing(1, -1);
+        g.page.setEditText(1, u"Akapit P źdźbło"_s, 15);
+        g.page.zoomInto(0);
+        g.page.startEditing(0, -1);
+        g.page.split(0, 1);
+        QCOMPARE(g.text(), u"- L\n\t- \n\nAkapit P źdźbło\n"_s);
+        g.page.zoomTo(-1);
+        g.page.undo(); // Enter: back in its zoom
+        QCOMPARE(g.page.zoomBlock(), 0);
+        QCOMPARE(g.page.editingRow(), 0);
+        QVERIFY(caretShown(g));
+        g.page.undo(); // the typing on the page: the zoom ends
+        QCOMPARE(g.text(), u"- L\n\nAkapit P\n"_s);
+        QCOMPARE(g.page.editingRow(), 1);
+        QCOMPARE(g.page.zoomBlock(), -1);
+        QVERIFY(caretShown(g));
+        g.page.redo();
+        QCOMPARE(g.page.editingRow(), 1);
+        QCOMPARE(g.page.zoomBlock(), -1);
+        QVERIFY(caretShown(g));
+
+        // Without Enter: typing on the page, a zoom elsewhere, undo.
+        Fixture h(u"- a\n\t- a1\n- b\n"_s);
+        h.page.startEditing(2, -1);
+        h.page.setEditText(2, u"b ść"_s, 4);
+        h.page.stopEditing();
+        h.page.zoomInto(0);
+        h.page.undo();
+        QCOMPARE(h.text(), u"- a\n\t- a1\n- b\n"_s);
+        QCOMPARE(h.page.editingRow(), 2);
+        QCOMPARE(h.page.zoomBlock(), -1);
+        QVERIFY(caretShown(h));
+
+        // A zoom that holds the block stays: undo inside it.
+        Fixture inside(u"- a\n\t- a1\n- b\n"_s);
+        inside.page.startEditing(1, -1);
+        inside.page.setEditText(1, u"a1 żółw"_s, 7);
+        inside.page.zoomInto(0);
+        inside.page.undo();
+        QCOMPARE(inside.page.zoomBlock(), 0);
+        QCOMPARE(inside.page.editingRow(), 1);
+        QVERIFY(caretShown(inside));
+
+        // A fold made after the step: undo opens it (as editing a hidden block does).
+        Fixture folded(u"- a\n\t- a1\n- b\n"_s);
+        folded.page.startEditing(1, -1);
+        folded.page.setEditText(1, u"a1 ść"_s, 5);
+        folded.page.setFolded(0, true);
+        QCOMPARE(folded.page.editingRow(), 0); // the caret left the folded subtree
+        folded.page.undo();
+        QCOMPARE(folded.text(), u"- a\n\t- a1\n- b\n"_s);
+        QCOMPARE(folded.page.editingRow(), 1);
+        QVERIFY(caretShown(folded));
+        QCOMPARE(folded.page.foldState(), QVariantList());
+    }
+
+    // The same for a block selection undo / redo brings back: a zoom that hides it ends.
+    void zoomUndoRedoNeverHideTheSelection()
+    {
+        Fixture f(u"- a\n- b\n\nAkapit C\n\nAkapit D ąę\n"_s);
+        f.page.zoomInto(0);
+        f.page.startEditing(0, -1);
+        f.page.split(0, 1);
+        QCOMPARE(f.text(), u"- a\n\t- \n- b\n\nAkapit C\n\nAkapit D ąę\n"_s);
+        f.page.zoomTo(-1);
+        f.page.stopEditing();
+        f.page.selectRange(4, 4);
+        QCOMPARE(f.edit(4), u"Akapit D ąę"_s);
+        f.page.deleteSelection();
+        const QString deleted = f.text();
+        QVERIFY(!deleted.contains(u"Akapit D"_s));
+        QCOMPARE(f.page.selectedRow(), 3);
+        f.page.undo(); // the deletion: the paragraph is back, selected
+        QCOMPARE(f.page.selectedRow(), 4);
+        QCOMPARE(f.page.selectionCount(), 1);
+        f.page.undo(); // Enter: back in its zoom
+        QCOMPARE(f.page.zoomBlock(), 0);
+        f.page.redo(); // Enter again, in its zoom
+        QCOMPARE(f.page.zoomBlock(), 0);
+        QCOMPARE(f.page.editingRow(), 1);
+        f.page.redo(); // the deletion made on the page: "Akapit C" selected, shown
+        QCOMPARE(f.text(), deleted);
+        QCOMPARE(f.page.editingRow(), -1);
+        QCOMPARE(f.page.zoomBlock(), -1);
+        QCOMPARE(f.page.selectedRow(), 3);
+        QCOMPARE(f.page.selectionCount(), 1);
+        QVERIFY(f.role(3, "visible").toBool());
+
+        // Undo: a deletion on the page, Enter in a zoom; undo both.
+        Fixture g(u"- a\n- b\n\nAkapit C\n\nAkapit D ąę\n"_s);
+        g.page.selectRange(3, 3);
+        g.page.deleteSelection();
+        g.page.zoomInto(0);
+        g.page.startEditing(0, -1);
+        g.page.split(0, 1);
+        g.page.undo();
+        QCOMPARE(g.page.zoomBlock(), 0);
+        g.page.undo(); // the deletion: "Akapit D ąę" selected again, the zoom ends
+        QCOMPARE(g.text(), u"- a\n- b\n\nAkapit C\n\nAkapit D ąę\n"_s);
+        QCOMPARE(g.page.zoomBlock(), -1);
+        QCOMPARE(g.page.selectedRow(), 3);
+        QCOMPARE(g.page.selectionCount(), 1);
+        QVERIFY(g.role(3, "visible").toBool());
+    }
+
+    // Zooming out (the breadcrumb's arrow or one of its entries) keeps the edited block shown: the
+    // zoom root's children are shown whatever its fold, so leaving a folded zoom root (or one
+    // below a fold) opens the folds over the block. A zoom that does not hold it stops editing.
+    void zoomOutKeepsTheEditedBlockShown_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QList<int>>("folds");    // rows folded before zooming
+        QTest::addColumn<int>("zoom");            // the row zoomed into
+        QTest::addColumn<int>("edit");            // the row edited in it
+        QTest::addColumn<int>("enterAt");         // >= 0: Enter in the zoom root there instead
+        QTest::addColumn<int>("target");          // -2: zoomOut(), else zoomTo(target)
+        QTest::addColumn<int>("zoomAfter");
+        QTest::addColumn<int>("editingAfter");
+        QTest::addColumn<QVariantList>("foldsAfter"); // lines
+
+        QTest::newRow("zwinięty korzeń, strzałka") << u"- ab\n\t- dziecko ąę\n- c\n"_s << QList<int>{0} << 0 << 1
+                                                    << -1 << -2 << -1 << 1 << QVariantList();
+        QTest::newRow("zwinięty korzeń, okruszek strony") << u"- ab\n\t- dziecko ąę\n- c\n"_s << QList<int>{0} << 0
+                                                          << 1 << -1 << -1 << -1 << 1 << QVariantList();
+        QTest::newRow("Enter w środku zwiniętego korzenia") << u"- ab\n\t- dziecko\n- c\n"_s << QList<int>{0} << 0
+                                                            << -1 << 1 << -2 << -1 << 1 << QVariantList();
+        QTest::newRow("zwinięty rodzic korzenia, okruszek strony")
+                << u"- p\n\t- q\n\t\t- r źdźbło\n- c\n"_s << QList<int>{1, 0} << 1 << 2 << -1 << -1 << -1 << 2
+                << QVariantList();
+        QTest::newRow("o poziom wyżej: rodzic zostaje zwinięty")
+                << u"- p\n\t- q\n\t\t- r źdźbło\n- c\n"_s << QList<int>{1, 0} << 1 << 2 << -1 << -2 << 0 << 2
+                << QVariantList{0};
+        QTest::newRow("bez zwinięć") << u"- a\n\t- a1 ść\n- b\n"_s << QList<int>{} << 0 << 1 << -1 << -2 << -1 << 1
+                                     << QVariantList();
+        QTest::newRow("przybliżenie bez edytowanego bloku")
+                << u"- a\n\t- a1\n- b\n\t- b1\n"_s << QList<int>{} << 0 << 1 << -1 << 2 << 2 << -1 << QVariantList();
+        QTest::newRow("zwinięcie poza blokiem zostaje") << u"- a\n\t- a1 ść\n- b\n\t- b1\n"_s << QList<int>{2} << 0
+                                                        << 1 << -1 << -2 << -1 << 1 << QVariantList{2};
+    }
+
+    void zoomOutKeepsTheEditedBlockShown()
+    {
+        QFETCH(QString, content);
+        QFETCH(QList<int>, folds);
+        QFETCH(int, zoom);
+        QFETCH(int, edit);
+        QFETCH(int, enterAt);
+        QFETCH(int, target);
+        QFETCH(int, zoomAfter);
+        QFETCH(int, editingAfter);
+        QFETCH(QVariantList, foldsAfter);
+        Fixture f(content);
+        for (const int row : folds)
+            f.page.setFolded(row, true);
+        f.page.zoomInto(zoom);
+        QCOMPARE(f.page.zoomBlock(), zoom);
+        if (enterAt >= 0) {
+            f.page.startEditing(zoom, enterAt);
+            f.page.split(zoom, enterAt);
+            QCOMPARE(f.page.zoomBlock(), zoom);
+        } else {
+            f.page.startEditing(edit, -1);
+            QCOMPARE(f.page.zoomBlock(), zoom); // shown in the zoom: editing it keeps the zoom
+        }
+        const int edited = f.page.editingRow();
+        QVERIFY(f.role(edited, "visible").toBool());
+        const QString text = f.text();
+        QSignalSpy zoomSpy(&f.page, &PageController::zoomChanged);
+        if (target == -2)
+            f.page.zoomOut();
+        else
+            f.page.zoomTo(target);
+        QCOMPARE(f.page.zoomBlock(), zoomAfter);
+        QCOMPARE(zoomSpy.size(), 1);
+        QCOMPARE(f.page.editingRow(), editingAfter);
+        if (editingAfter >= 0) {
+            QVERIFY(f.role(editingAfter, "visible").toBool());
+            QVERIFY(f.role(editingAfter, "isEditing").toBool());
+        }
+        QCOMPARE(f.page.foldState(), foldsAfter);
+        QCOMPARE(f.text(), text); // view state only: no edit
+    }
+
     void zoomFollowsUndo()
     {
         Fixture f(u"- a\n\t- a1\n- b\n"_s);

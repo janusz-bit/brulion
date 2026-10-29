@@ -996,7 +996,22 @@ void PageController::restore(const QString &snapshot, const Focus &focus, const 
     // after it. Other steps leave the zoom as it is. A document has no zoom.
     if (focus.zoom != Focus::KeepZoom)
         m_model->setZoomUid(validRow(focus.zoom) && !documentMode() ? m_model->uidAt(focus.zoom) : 0);
-    if (focus.row < 0 && validRow(focus.selectionAnchor) && validRow(focus.selectionFocus)) {
+    // Never a caret or a block selection in a hidden block: a zoom that does not hold the restored
+    // block ends — one chosen after the step (the breadcrumb, then Undo), or the zoom brought back
+    // above for an Enter next to a step made on the page — and the folds over it open, as when a
+    // hidden block is edited (startEditing()).
+    const bool selects = focus.row < 0 && validRow(focus.selectionAnchor) && validRow(focus.selectionFocus);
+    if (validRow(focus.row)) {
+        reveal(focus.row);
+    } else if (selects) {
+        reveal(focus.selectionFocus);
+        reveal(focus.selectionAnchor);
+        for (const int row : focus.selectionPicks)
+            reveal(row);
+    } else {
+        reveal(editingRow()); // the block edited now stays edited
+    }
+    if (selects) {
         // The block selection of that version (an undone deletion selects its blocks again) —
         // with no block edited: the two never go together (another block edited meanwhile stops).
         m_anchorUid = m_model->uidAt(focus.selectionAnchor);
@@ -1923,11 +1938,40 @@ void PageController::zoomOut()
 
 void PageController::zoomTo(int row)
 {
+    setZoomRow(row);
+    // The block being edited stays shown. The zoom root's children are shown whatever its fold:
+    // leaving a folded zoom root (or a zoom below a fold) opens the folds over the block, as when
+    // a hidden block is edited; a zoom that does not hold the block stops editing (zoomInto()).
+    const int editing = editingRow();
+    bool unfolded = false;
+    if (editing >= 0 && !m_model->isRowVisible(editing)) {
+        const BlockDocument &doc = m_model->document();
+        const int zoom = zoomBlock();
+        const markdown::RowRange range = zoom >= 0 ? doc.subtreeRange(zoom) : markdown::RowRange{0, doc.count()};
+        if (editing >= range.first && editing <= range.last()) {
+            for (int p = doc.parent(editing); p >= 0 && p != zoom; p = doc.parent(p)) {
+                if (m_model->isCollapsed(p)) {
+                    m_model->setCollapsed(p, false);
+                    unfolded = true;
+                }
+            }
+        }
+        if (!m_model->isRowVisible(editing))
+            stopEditing();
+    }
+    Q_EMIT zoomChanged();
+    if (unfolded) {
+        updateSelection();
+        Q_EMIT foldStateChanged();
+    }
+}
+
+void PageController::setZoomRow(int row)
+{
     const quint64 uid = validRow(row) ? m_model->uidAt(row) : 0;
     if (uid != m_model->zoomUid())
         clearSelection(); // its rows may be outside the zoom
     m_model->setZoomUid(uid);
-    Q_EMIT zoomChanged();
 }
 
 void PageController::toggleFold(int row)
@@ -1993,8 +2037,11 @@ void PageController::reveal(int row)
     const int zoom = zoomBlock();
     if (zoom >= 0) {
         const markdown::RowRange range = doc.subtreeRange(zoom);
-        if (row < range.first || row > range.last())
-            zoomTo(-1);
+        if (row < range.first || row > range.last()) {
+            // (Not zoomTo(): the block edited until now need not stay shown, `row` is shown next.)
+            setZoomRow(-1);
+            Q_EMIT zoomChanged();
+        }
     }
     for (int p = doc.parent(row); p >= 0; p = doc.parent(p)) {
         if (m_model->isCollapsed(p))

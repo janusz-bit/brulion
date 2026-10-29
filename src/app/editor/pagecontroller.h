@@ -352,7 +352,8 @@ public:
     // --- Zoom and folding -------------------------------------------------------------------------
     Q_INVOKABLE void zoomInto(int row);
     Q_INVOKABLE void zoomOut();
-    /// Zoom to the breadcrumb entry `row` (-1: whole page).
+    /// Zoom to the breadcrumb entry `row` (-1: whole page). The block being edited stays shown
+    /// (the folds over it open); a zoom that does not hold it stops editing.
     Q_INVOKABLE void zoomTo(int row);
     Q_INVOKABLE void toggleFold(int row);
     Q_INVOKABLE void setFolded(int row, bool folded);
@@ -778,7 +779,8 @@ private:
     friend class EditCommand;
     struct Focus {
         /// `zoom` of a version whose step left the zoom as it was: undo / redo keep the zoom of
-        /// the moment (it follows its block, BlockListModel::replaceContent).
+        /// the moment (it follows its block, BlockListModel::replaceContent) while it shows the
+        /// restored caret or selection (restore()).
         static constexpr int KeepZoom = -2;
         int row = -1;
         int cursor = -1;
@@ -807,6 +809,8 @@ private:
     bool inCommand() const { return m_commandDepth > 0; }
     /// setTaskStatus() inside the current command (also the task slash commands).
     void applyTaskStatus(int row, const QString &status);
+    /// Zoom to `row` (-1: the whole page) — zoomTo() without keeping the edited block shown.
+    void setZoomRow(int row);
     /// Restore a text snapshot (undo/redo), its empty paragraphs and focus.
     void restore(const QString &text, const Focus &focus, const QList<markdown::BlankBlock> &blankBlocks);
     /// The document's empty paragraphs (an undo step keeps them: the text has none).
