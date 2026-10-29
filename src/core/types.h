@@ -211,6 +211,46 @@ private:
 };
 
 
+/// A block's own source lines joined with '\n' (Block::raw). Shares the note's text where those
+/// lines are one piece of it — consecutive lines each ending in "\n", the usual case: no copy —,
+/// else holds its own copy (CRLF or lone-CR endings; own lines interrupted by child blocks, e.g.
+/// "- a\n  - b\n  c": a's lines are 0 and 2). Read it as a QStringView (implicit) or toString().
+class BlockSource {
+public:
+    BlockSource() = default;
+    /// The block's own copy of its text.
+    explicit BlockSource(QString ownText) : m_text(std::move(ownText)) { }
+    /// The text document[from, to) — the document is shared, not copied.
+    BlockSource(const QString &document, qsizetype from, qsizetype to)
+        : m_text(document), m_from(int(from)), m_to(int(to))
+    { }
+
+    QStringView view() const
+    {
+        return m_to < 0 ? QStringView(m_text) : QStringView(m_text).sliced(m_from, m_to - m_from);
+    }
+    operator QStringView() const { return view(); }
+    QString toString() const { return m_to < 0 ? m_text : view().toString(); }
+    qsizetype size() const { return m_to < 0 ? m_text.size() : m_to - m_from; }
+    bool isEmpty() const { return size() == 0; }
+    bool startsWith(QStringView s) const { return view().startsWith(s); }
+
+    /// Is this a slice of the note's text (the index cache stores such raw texts as offsets)?
+    bool isSlice() const { return m_to >= 0; }
+    qsizetype from() const { return m_to < 0 ? 0 : m_from; }
+    qsizetype to() const { return m_to < 0 ? m_text.size() : m_to; }
+    /// The QString the text lives in: the whole note for a slice (tests).
+    const QString &buffer() const { return m_text; }
+
+    friend bool operator==(const BlockSource &a, const BlockSource &b) { return a.view() == b.view(); }
+    friend bool operator==(const BlockSource &a, QStringView b) { return a.view() == b; }
+
+private:
+    QString m_text; ///< the whole note (a slice) or the own copy
+    int m_from = 0; ///< slices only
+    int m_to = -1;  ///< -1: m_text is the block's own copy
+};
+
 struct Block {
     QString id;             ///< explicit block id (^abc123 or Logseq id::), empty if none
     BlockKind kind = BlockKind::Paragraph;
@@ -218,7 +258,7 @@ struct Block {
     int endLine = 0;        ///< last line incl. children
     int ownEndLine = 0;     ///< last line of the block's own content
     int depth = 0;          ///< outline depth, 0 = top level
-    QString raw;            ///< own source lines (without children)
+    BlockSource raw;        ///< own source lines (without children), usually a slice of the note
     QString text;           ///< content with marker/checkbox/id/properties/tokens stripped
     int headingLevel = 0;
     QString lang;           ///< fenced code language ("calc", "query", ...)

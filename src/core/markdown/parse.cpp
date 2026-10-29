@@ -468,11 +468,32 @@ Block blockShell(const Structure &st, const Node &node)
     block.endLine = node.endLine;
     block.ownEndLine = node.ownEndLine;
     block.depth = node.depth;
-    QStringList raw;
-    raw.reserve(node.own.size());
-    for (const OwnLine &l : node.own)
-        raw.append(st.lines[l.view.line].text);
-    block.raw = raw.join(u'\n');
+    // Own lines that are one piece of the note (consecutive, each but the last ending in "\n"):
+    // a slice of its text; else a copy joined with '\n' (docs/PERFORMANCE.md, L8).
+    bool slice = !node.own.isEmpty();
+    for (qsizetype k = 0; slice && k + 1 < node.own.size(); ++k) {
+        const int line = node.own[k].view.line;
+        slice = node.own[k + 1].view.line == line + 1 && st.lines[line].eol == u"\n";
+    }
+    if (slice) {
+        const text::Line &first = st.lines[node.own.first().view.line];
+        const text::Line &last = st.lines[node.own.last().view.line];
+        block.raw = BlockSource(st.content, first.start, last.start + last.text.size());
+    } else {
+        QStringList raw;
+        raw.reserve(node.own.size());
+        for (const OwnLine &l : node.own)
+            raw.append(st.lines[l.view.line].text);
+        block.raw = BlockSource(raw.join(u'\n'));
+    }
+#ifndef QT_NO_DEBUG
+    {
+        QStringList joined;
+        for (const OwnLine &l : node.own)
+            joined.append(st.lines[l.view.line].text);
+        Q_ASSERT(block.raw.view() == joined.join(u'\n'));
+    }
+#endif
     block.headingLevel = node.headingLevel;
     block.lang = node.lang;
     if (!node.calloutType.isEmpty()) {
@@ -763,13 +784,24 @@ QVariant firstOf(const Properties &props, const QString &a, const QString &b)
 
 ParsedNote parseNote(const VaultPath &path, QStringView content, const VaultConfig &config)
 {
+    return detail::parseNoteWith(path, content.toString(), config, StructureOptions());
+}
+
+ParsedNote parseNote(const VaultPath &path, const QString &content, const VaultConfig &config)
+{
     return detail::parseNoteWith(path, content, config, StructureOptions());
 }
 
 ParsedNote detail::parseNoteWith(const VaultPath &path, QStringView content, const VaultConfig &config,
                                  StructureOptions options, QList<NoteTag> *tagSites)
 {
-    const Structure st = parseStructure(content.toString(), options);
+    return parseNoteWith(path, content.toString(), config, options, tagSites);
+}
+
+ParsedNote detail::parseNoteWith(const VaultPath &path, const QString &content, const VaultConfig &config,
+                                 StructureOptions options, QList<NoteTag> *tagSites)
+{
+    const Structure st = parseStructure(content, options);
     Ctx ctx;
     ctx.st = &st;
     ctx.tags = tagSites;

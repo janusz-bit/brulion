@@ -73,6 +73,74 @@ private Q_SLOTS:
         }
     }
 
+    // ---- BlockSource (Block::raw) -------------------------------------------------------------
+
+    void blockSourceSlices_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("block");
+        QTest::addColumn<QString>("raw");
+        QTest::addColumn<bool>("slice");
+        QTest::newRow("LF lines") << u"- pierwszy\n  ciąg dalszy\n- drugi\n"_s << 0 << u"- pierwszy\n  ciąg dalszy"_s << true;
+        QTest::newRow("last line without LF") << u"- a\n- żółw"_s << 1 << u"- żółw"_s << true;
+        QTest::newRow("CRLF") << u"- pierwszy\r\n  ciąg\r\n"_s << 0 << u"- pierwszy\n  ciąg"_s << false;
+        QTest::newRow("CRLF one line") << u"- jeden\r\n- dwa\r\n"_s << 0 << u"- jeden"_s << true;
+        QTest::newRow("lone CR") << u"Akapit\rdalej\r"_s << 0 << u"Akapit\ndalej"_s << false;
+        QTest::newRow("non-consecutive own lines")
+                << u"- rodzic\n  - dziecko\n  ciąg dalszy rodzica\n"_s << 0 << u"- rodzic\n  ciąg dalszy rodzica"_s << false;
+        QTest::newRow("quote") << u"> cytat\n> dalej\n"_s << 0 << u"> cytat\n> dalej"_s << true;
+        QTest::newRow("callout") << u"> [!note] Uwaga\n> treść\n"_s << 1 << u"> treść"_s << true;
+        QTest::newRow("BOM first line") << u"﻿# Tytuł\nAkapit\n"_s << 0 << u"﻿# Tytuł"_s << true;
+        QTest::newRow("code fence") << u"```\nkod\n\nkod\n```\n"_s << 0 << u"```\nkod\n\nkod\n```"_s << true;
+        QTest::newRow("frontmatter") << u"---\ntytuł: Łódź\n---\ntekst\n"_s << 0 << u"---\ntytuł: Łódź\n---"_s << true;
+    }
+    void blockSourceSlices()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, block);
+        QFETCH(QString, raw);
+        QFETCH(bool, slice);
+        const ParsedNote note = markdown::parseNote(u"Notatka.md"_s, content);
+        QVERIFY(block < note.blocks.size());
+        const BlockSource &source = note.blocks[block].raw;
+        QCOMPARE(source.toString(), raw);
+        QCOMPARE(source.view(), QStringView(raw));
+        QCOMPARE(source.size(), raw.size());
+        QCOMPARE(source.isSlice(), slice);
+        if (slice) {
+            // The slice shares the caller's text: no copy of the note.
+            QCOMPARE(source.buffer().constData(), content.constData());
+            QCOMPARE(QStringView(content).sliced(source.from(), source.to() - source.from()), QStringView(raw));
+        }
+        // Parsed from a view: valid slices of the parser's own copy.
+        const ParsedNote fromView = markdown::parseNote(u"Notatka.md"_s, QStringView(content));
+        QCOMPARE(fromView.blocks[block].raw.toString(), raw);
+        QVERIFY(fromView.blocks[block].raw.buffer().constData() != content.constData() || !slice);
+        // Every block of every corpus note: raw is its own lines joined with '\n'.
+        QVERIFY(source == QStringView(raw));
+        QVERIFY(source == BlockSource(raw));
+    }
+
+    void blockSourceCopies()
+    {
+        BlockSource empty;
+        QVERIFY(empty.isEmpty());
+        QVERIFY(!empty.isSlice());
+        QCOMPARE(empty.toString(), QString());
+        const QString doc = u"- jeden\n- dwa\n"_s;
+        const BlockSource slice(doc, 8, 13);
+        QCOMPARE(slice.toString(), u"- dwa"_s);
+        QVERIFY(slice.startsWith(u"- d"));
+        const BlockSource copy = slice;
+        QCOMPARE(copy.buffer().constData(), doc.constData());
+        QVERIFY(copy == slice);
+        const BlockSource own(u"- dwa"_s);
+        QVERIFY(own == slice);
+        QVERIFY(!own.isSlice());
+        QCOMPARE(own.from(), 0);
+        QCOMPARE(own.to(), 5);
+    }
+
     // ---- Boxed<Task> --------------------------------------------------------------------------
 
     void boxedTask()

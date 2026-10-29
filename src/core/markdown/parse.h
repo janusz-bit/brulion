@@ -22,6 +22,9 @@ namespace brulion::markdown {
 /// Headings lists the top-level headings only (not those inside callouts or quotes). Property
 /// keys are lower-cased; a callout block also gets "callouttype" (and "calloutfold": "+"/"-").
 ParsedNote parseNote(const VaultPath &path, QStringView content, const VaultConfig &config = VaultConfig());
+/// The same; the blocks' raw texts (Block::raw, BlockSource) share `content` instead of a copy of
+/// it (the index keeps the note's text anyway).
+ParsedNote parseNote(const VaultPath &path, const QString &content, const VaultConfig &config = VaultConfig());
 
 /// Index (into note.blocks) of the innermost block whose line range contains `line`, or -1.
 int blockAtLine(const ParsedNote &note, int line);
