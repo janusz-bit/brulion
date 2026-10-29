@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <climits>
 #include <cmath>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 

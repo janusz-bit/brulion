@@ -19,6 +19,7 @@
 #include <QXmlStreamReader>
 
 #include <cmath>
+#include <memory>
 #include <numbers>
 
 using namespace Qt::StringLiterals;
