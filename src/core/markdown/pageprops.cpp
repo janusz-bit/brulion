@@ -83,9 +83,8 @@ bool isLogseqKey(QStringView key)
 {
     if (key.isEmpty())
         return false;
-    return std::all_of(key.begin(), key.end(), [](QChar c) {
-        return isAsciiLetter(c) || isAsciiDigit(c) || c == u'_' || c == u'-';
-    });
+    return std::all_of(key.begin(), key.end(),
+                       [](QChar c) { return isAsciiLetter(c) || isAsciiDigit(c) || c == u'_' || c == u'-'; });
 }
 
 QString numberText(const QVariant &v)
@@ -397,8 +396,7 @@ QStringList yamlNames(const QVariant &value, PropertyType kind)
 bool yamlReadsAs(const QVariant &read, const Intended &t)
 {
     switch (t.type) {
-    case PropertyType::List:
-        return isListVariant(read) && yamlListItems(read) == t.items;
+    case PropertyType::List: return isListVariant(read) && yamlListItems(read) == t.items;
     case PropertyType::Tags:
     case PropertyType::Aliases:
         if (t.items.isEmpty())
@@ -557,9 +555,9 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
                       const QString &eol, const QString &lastEol)
 {
     QString keyPart = yamlString(key) + u':';
-    QString comment;           // a `# comment` of the key line
+    QString comment;             // a `# comment` of the key line
     QString commentGap = u" "_s; // blanks before it
-    QStringView rest;          // the key line's value text (without the comment)
+    QStringView rest;            // the key line's value text (without the comment)
     QStringView firstLine;
     if (old) {
         firstLine = doc.lines[old->first].text;
@@ -597,8 +595,8 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
                 out.append({keyPart + u' ' + yamlQuoted(s), eol});
             }
         } else {
-            const QString value = t.type == PropertyType::Number ? numberText(t.scalar)
-                                                                 : yamlScalar(t.scalar).value_or(QString());
+            const QString value =
+                    t.type == PropertyType::Number ? numberText(t.scalar) : yamlScalar(t.scalar).value_or(QString());
             out.append({withComment(keyPart + u' ' + value, true), eol});
         }
         out.last().eol = lastEol;
@@ -737,15 +735,14 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
 }
 
 /// Replace (or add) entry `key` of a frontmatter with `t`; verified. nullopt: not safely possible.
-std::optional<QString> writeYamlEntry(const QString &content, const YamlDoc &doc, const QString &key,
-                                      const Intended &t)
+std::optional<QString> writeYamlEntry(const QString &content, const YamlDoc &doc, const QString &key, const Intended &t)
 {
     const QList<FrontmatterEntry> entries = entriesOf(doc, key);
     QString edited;
     if (!entries.isEmpty()) {
         const FrontmatterEntry &first = entries.first();
-        const QString text = yamlEntryText(doc, &first, key, t, doc.lines[first.first].eol,
-                                           doc.lines[first.last - 1].eol);
+        const QString text =
+                yamlEntryText(doc, &first, key, t, doc.lines[first.first].eol, doc.lines[first.last - 1].eol);
         edited = rebuildLines(doc.lines, entries, first.first, text);
     } else {
         const QString eol = doc.lines[doc.fm.endLine - 1].eol;
@@ -986,8 +983,8 @@ bool pageHasKey(const PageProperties &props, const QString &key, std::optional<P
                 const QString &exceptKey = {})
 {
     for (const PageProperty &p : props.items) {
-        if (except && p.source == *except && (p.source == PropertySource::Logseq ? sameName(p.key, exceptKey)
-                                                                                 : p.key == exceptKey))
+        if (except && p.source == *except
+            && (p.source == PropertySource::Logseq ? sameName(p.key, exceptKey) : p.key == exceptKey))
             continue;
         if (sameName(p.key, key))
             return true;
@@ -1252,9 +1249,9 @@ QString propertyTypeName(PropertyType t)
 
 std::optional<PropertyType> parsePropertyType(QStringView name)
 {
-    for (const PropertyType t : {PropertyType::Text, PropertyType::Number, PropertyType::Checkbox, PropertyType::Date,
-                                 PropertyType::DateTime, PropertyType::List, PropertyType::Tags,
-                                 PropertyType::Aliases, PropertyType::Unsupported}) {
+    for (const PropertyType t :
+         {PropertyType::Text, PropertyType::Number, PropertyType::Checkbox, PropertyType::Date, PropertyType::DateTime,
+          PropertyType::List, PropertyType::Tags, PropertyType::Aliases, PropertyType::Unsupported}) {
         if (name.compare(propertyTypeName(t), Qt::CaseInsensitive) == 0)
             return t;
     }
@@ -1565,7 +1562,8 @@ PropertyEditResult renamePageProperty(const QString &content, PropertySource sou
     const QVariant value = doc.data.value(oldKey);
     const QString edited = rebuildLines(doc.lines, entries, kept.first, renamed);
     const bool ok = verifyYaml(content, doc.fm, edited, {oldKey, newKey}, [&](const QVariantMap &data) {
-        return !data.contains(oldKey) && data.contains(newKey) && canonicalYaml(data.value(newKey)) == canonicalYaml(value);
+        return !data.contains(oldKey) && data.contains(newKey)
+               && canonicalYaml(data.value(newKey)) == canonicalYaml(value);
     });
     return ok ? changed(edited) : unchanged(content, PropertyEditStatus::Unsafe);
 }
@@ -1632,10 +1630,11 @@ PropertyEditResult removePageListItem(const QString &content, PropertyType kind,
                 items.append(s);
         }
         const PropertyEditResult r = items.isEmpty()
-                ? removePageProperty(current, holder->source, holder->key)
-                : setPageProperty(current, holder->source, holder->key, items, kind);
+                                             ? removePageProperty(current, holder->source, holder->key)
+                                             : setPageProperty(current, holder->source, holder->key, items, kind);
         if (r.status != PropertyEditStatus::Changed)
-            return unchanged(content, r.status == PropertyEditStatus::Unchanged ? PropertyEditStatus::Unsafe : r.status);
+            return unchanged(content,
+                             r.status == PropertyEditStatus::Unchanged ? PropertyEditStatus::Unsafe : r.status);
         current = r.content;
         any = true;
     }

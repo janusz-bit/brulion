@@ -447,8 +447,8 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content,
         const auto yaml = [](const QString &body) { return body.trimmed().startsWith(u"---"); };
         if (yaml(o.body) != yaml(n.body))
             continue;
-        const bool matched = std::any_of(pairs.cbegin(), pairs.cend(),
-                                         [k](const auto &p) { return p.first == k || p.second == k; });
+        const bool matched =
+                std::any_of(pairs.cbegin(), pairs.cend(), [k](const auto &p) { return p.first == k || p.second == k; });
         if (matched)
             continue;
         QList<std::pair<int, int>> paired = pairs;

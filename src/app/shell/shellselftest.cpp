@@ -4163,18 +4163,23 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                 settle(300);
                 const QString before = app->workspace()->readFile(guide);
                 QQuickItem *chip = shownNamed(editor, u"headerTag_przewodnik"_s);
-                check(chip != nullptr && before.contains(u"\ntags: [przewodnik]\n"_s), "the guide's tag chip is in its header");
+                check(chip != nullptr && before.contains(u"\ntags: [przewodnik]\n"_s),
+                      "the guide's tag chip is in its header");
                 if (chip) {
                     if (touch)
                         touchTap(window, pointIn(chip), 1000);
                     else
                         mouseClick(window, pointIn(chip), Qt::RightButton);
                     check(waitFor([&] { return openMenus(window) == 1; }),
-                          touch ? "a long press on the tag chip opens its menu" : "a right-click on the tag chip opens its menu");
+                          touch ? "a long press on the tag chip opens its menu"
+                                : "a right-click on the tag chip opens its menu");
                     if (QQuickItem *remove = shownItem(u"headerChipRemove"_s)) {
                         tapOrClick(window, pointIn(remove), touch);
-                        check(waitFor([&] { return saveNow() && app->workspace()->readFile(guide)
-                                                == QString(before).replace(u"tags: [przewodnik]\n"_s, QString()); }),
+                        check(waitFor([&] {
+                                  return saveNow()
+                                         && app->workspace()->readFile(guide)
+                                                    == QString(before).replace(u"tags: [przewodnik]\n"_s, QString());
+                              }),
                               "“Usuń z tej strony” removes the tag: only that line changes");
                         check(waitFor([&] { return !shownNamed(editor, u"headerTag_przewodnik"_s); }),
                               "the chip is gone from the header");
@@ -4200,9 +4205,12 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                               "“Dodaj alias” opens a field in the header");
                         typeText(u"Żółw"_s);
                         sendKey(window, Qt::Key_Return);
-                        check(waitFor([&] { return saveNow() && app->workspace()->readFile(guide)
-                                                == QString(before).replace(u"aliases: [Przewodnik, Start]"_s,
-                                                                           u"aliases: [Przewodnik, Start, Żółw]"_s); }),
+                        check(waitFor([&] {
+                                  return saveNow()
+                                         && app->workspace()->readFile(guide)
+                                                    == QString(before).replace(u"aliases: [Przewodnik, Start]"_s,
+                                                                               u"aliases: [Przewodnik, Start, Żółw]"_s);
+                              }),
                               "the alias typed there is written into `aliases:`");
                         sendKey(window, Qt::Key_Escape);
                         undoNow();

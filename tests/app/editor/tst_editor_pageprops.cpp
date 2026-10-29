@@ -141,7 +141,7 @@ private Q_SLOTS:
         const QVariantMap r = f.page.setPageProperty(QString(), u"b"_s, u"Łódź"_s, u"text"_s);
         QVERIFY(r.value(u"ok"_s).toBool());
         QCOMPARE(f.page.sourceText(), u"---\na: 1\nb: Łódź\n---\nTreść\n"_s);
-        QCOMPARE(f.item(u"b"_s).value(u"value"_s).toString(), u"Łódź"_s); // the header follows
+        QCOMPARE(f.item(u"b"_s).value(u"value"_s).toString(), u"Łódź"_s);   // the header follows
         QCOMPARE(f.host.file(Page), u"---\na: 1\nb: Łódź\n---\nTreść\n"_s); // saved (no delay here)
         QVERIFY(f.page.addPageListItem(u"tags"_s, u"#remont"_s).value(u"ok"_s).toBool());
         QCOMPARE(f.page.sourceText(), u"---\na: 1\nb: Łódź\ntags:\n  - remont\n---\nTreść\n"_s);

@@ -62,14 +62,14 @@ PropertyType inferPropertyType(const QString &key, const QVariant &value, Proper
 QStringList propertyValueTexts(const QString &key, const QVariant &value, PropertySource source);
 
 struct PageProperty {
-    QString key;     ///< as written (YAML key unquoted)
+    QString key; ///< as written (YAML key unquoted)
     PropertySource source = PropertySource::Yaml;
     PropertyType type = PropertyType::Text;
-    QVariant value;  ///< typed: QString (text; date "YYYY-MM-DD"; datetime as written), qlonglong /
-                     ///< double, bool, QStringList (List / Tags / Aliases); invalid when empty
+    QVariant value;    ///< typed: QString (text; date "YYYY-MM-DD"; datetime as written), qlonglong /
+                       ///< double, bool, QStringList (List / Tags / Aliases); invalid when empty
     QStringList items; ///< List: items as written ("[[Dom]]" kept); Tags / Aliases: names without
                        ///< '#' (namesFrom() rules)
-    QString text;    ///< one line for display and previews ("a, b"; "{…}" for a map)
+    QString text;      ///< one line for display and previews ("a, b"; "{…}" for a map)
     bool empty = false;
     bool editable = true;   ///< false: Unsupported, or the block cannot be edited safely
     bool multiline = false; ///< a text with line breaks

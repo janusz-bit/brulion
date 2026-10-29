@@ -925,8 +925,8 @@ private:
     void updatePageProperties();
     /// Run a pure property edit on the page's text (the source text in source mode) as one undo
     /// step.
-    markdown::PropertyEditStatus applyPropertyEdit(
-            const std::function<markdown::PropertyEditResult(const QString &)> &edit);
+    markdown::PropertyEditStatus
+    applyPropertyEdit(const std::function<markdown::PropertyEditResult(const QString &)> &edit);
     /// The text written to the file: text() with the lone opening fences of text blocks that
     /// would run on over the blocks after them closed (loneFenceClosed(), loneFenceRunsOn()) —
     /// "```js" being typed is saved as a closed, empty code block — and without the space the

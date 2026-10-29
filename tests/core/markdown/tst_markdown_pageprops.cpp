@@ -144,13 +144,15 @@ private Q_SLOTS:
         QFETCH(QString, value);
         QFETCH(QString, type);
         const PropertySource s = sourceOf(source);
-        const QVariant v = s == PropertySource::Yaml ? parseYaml(QString(u"k: "_s + value)).value(u"k"_s) : QVariant(value);
+        const QVariant v =
+                s == PropertySource::Yaml ? parseYaml(QString(u"k: "_s + value)).value(u"k"_s) : QVariant(value);
         QCOMPARE(propertyTypeName(inferPropertyType(key, v, s)), type);
     }
 
     void emptyFallback()
     {
-        QCOMPARE(inferPropertyType(u"x"_s, QVariant(), PropertySource::Yaml, PropertyType::Number), PropertyType::Number);
+        QCOMPARE(inferPropertyType(u"x"_s, QVariant(), PropertySource::Yaml, PropertyType::Number),
+                 PropertyType::Number);
         QCOMPARE(inferPropertyType(u"x"_s, QString(), PropertySource::Logseq, PropertyType::Date), PropertyType::Date);
         QCOMPARE(inferPropertyType(u"aliases"_s, QVariant(), PropertySource::Yaml, PropertyType::Date),
                  PropertyType::Aliases);
@@ -159,8 +161,8 @@ private Q_SLOTS:
     void names()
     {
         for (const PropertyType t : {PropertyType::Text, PropertyType::Number, PropertyType::Checkbox,
-                                     PropertyType::Date, PropertyType::DateTime, PropertyType::List,
-                                     PropertyType::Tags, PropertyType::Aliases, PropertyType::Unsupported})
+                                     PropertyType::Date, PropertyType::DateTime, PropertyType::List, PropertyType::Tags,
+                                     PropertyType::Aliases, PropertyType::Unsupported})
             QCOMPARE(parsePropertyType(propertyTypeName(t)), t);
         QCOMPARE(parsePropertyType(u"DATE"), PropertyType::Date);
         QVERIFY(!parsePropertyType(u"kolor"));
@@ -192,14 +194,15 @@ private Q_SLOTS:
         QTest::newRow("bom crlf yaml") << u"\uFEFF---\r\na: x\r\n---\r\nB"_s << u"yaml[0-2] | a=text:x@1"_s;
         QTest::newRow("dots") << u"---\na: 1\n...\nB"_s << u"yaml[0-2] | a=number:1@1"_s;
         QTest::newRow("comments") << u"---\n# komentarz\na: x # c\n---\n"_s << u"yaml[0-3] | a=text:x@2"_s;
-        QTest::newRow("duplicates") << u"---\na: 1\nb: 2\na: 3\n---\n"_s << u"yaml[0-4] | a=number:3@1 | b=number:2@2"_s;
+        QTest::newRow("duplicates") << u"---\na: 1\nb: 2\na: 3\n---\n"_s
+                                    << u"yaml[0-4] | a=number:3@1 | b=number:2@2"_s;
         QTest::newRow("indented root") << u"---\n  a: 1\n  b: 2\n---\n"_s
                                        << u"yaml[0-3,indented,ro] | a=number:1!ro@-1 | b=number:2!ro@-1"_s;
         QTest::newRow("horizontal rules") << u"---\nżółw\n---\n"_s << u"yaml[0-2,notMapping,ro]"_s;
         QTest::newRow("unclosed") << u"---\nżółw\n"_s << QString();
         QTest::newRow("comment before logseq") << u"%%komentarz%%\ntags:: a\n"_s << u"logseq[1-1] | ~tags=tags:a@1"_s;
-        QTest::newRow("comment in value") << u"status:: w toku %%notatka%%\n"_s
-                                          << u"logseq[0-0] | ~status=text:w toku@0"_s;
+        QTest::newRow("comment in value")
+                << u"status:: w toku %%notatka%%\n"_s << u"logseq[0-0] | ~status=text:w toku@0"_s;
         QTest::newRow("polish key") << u"---\nźródło: Wikipedia\n---\n"_s << u"yaml[0-2] | źródło=text:Wikipedia@1"_s;
         QTest::newRow("multi-line") << u"---\nopis: |\n  a\n  b\n---\n"_s << u"yaml[0-4] | opis=text:a b!ml@1"_s;
         QTest::newRow("map") << u"---\nmeta:\n  a: 1\n---\n"_s << u"yaml[0-3] | meta=unsupported:{…}!ro@1"_s;
@@ -208,8 +211,8 @@ private Q_SLOTS:
         QTest::newRow("only the note mode") << u"---\nbrulion: document\n---\n"_s << u"yaml[0-2]"_s;
         QTest::newRow("shortest double") << u"---\nx: 2.50\n---\n"_s << u"yaml[0-2] | x=number:2.5@1"_s;
         QTest::newRow("logseq empty") << u"status::\n"_s << u"logseq[0-0] | ~status=text:!e@0"_s;
-        QTest::newRow("logseq checkbox number") << u"done:: TRUE\nn:: -0.5\n"_s
-                                                << u"logseq[0-1] | ~done=checkbox:TRUE@0 | ~n=number:-0.5@1"_s;
+        QTest::newRow("logseq checkbox number")
+                << u"done:: TRUE\nn:: -0.5\n"_s << u"logseq[0-1] | ~done=checkbox:TRUE@0 | ~n=number:-0.5@1"_s;
         QTest::newRow("row body without newline") << u"---\na: [x, y]\n---"_s << u"yaml[0-2] | a=list:x, y@1"_s;
         QTest::newRow("no properties") << u"# Tytuł\n\n- a\n"_s << QString();
     }
@@ -273,11 +276,11 @@ private Q_SLOTS:
         yaml("quoted key", u"---\n\"klucz: z dwukropkiem\": x\n---\n"_s, u"klucz: z dwukropkiem"_s, u"wartość"_s,
              u"text"_s, u"---\n\"klucz: z dwukropkiem\": wartość\n---\n"_s);
         yaml("y is a boolean elsewhere", u"---\na: x\n---\n"_s, u"a"_s, u"y"_s, u"text"_s, u"---\na: \"y\"\n---\n"_s);
-        yaml("polish key and value", u"---\nźródło: Wikipedia\n---\n"_s, u"źródło"_s, u"Zażółć gęślą jaźń"_s,
-             u"text"_s, u"---\nźródło: Zażółć gęślą jaźń\n---\n"_s);
+        yaml("polish key and value", u"---\nźródło: Wikipedia\n---\n"_s, u"źródło"_s, u"Zażółć gęślą jaźń"_s, u"text"_s,
+             u"---\nźródło: Zażółć gęślą jaźń\n---\n"_s);
         yaml("null value", u"---\na:\nb: 1\n---\n"_s, u"a"_s, u"x"_s, u"text"_s, u"---\na: x\nb: 1\n---\n"_s);
-        yaml("block scalar replaced", u"---\nopis: |\n  stary\n  tekst\nb: 1\n---\n"_s, u"opis"_s, u"nowy"_s,
-             u"text"_s, u"---\nopis: nowy\nb: 1\n---\n"_s);
+        yaml("block scalar replaced", u"---\nopis: |\n  stary\n  tekst\nb: 1\n---\n"_s, u"opis"_s, u"nowy"_s, u"text"_s,
+             u"---\nopis: nowy\nb: 1\n---\n"_s);
         yaml("duplicates dropped", u"---\na: 1\nb: 2\na: 3\n---\n"_s, u"a"_s, ll(4), u"number"_s,
              u"---\na: 4\nb: 2\n---\n"_s);
         yaml("crlf replace", u"---\r\na: 1\r\n---\r\nB\r\n"_s, u"a"_s, ll(2), u"number"_s,
@@ -338,8 +341,8 @@ private Q_SLOTS:
         yaml("not a date", u"---\nt: x\n---\n"_s, u"t"_s, u"28.10.2026"_s, u"date"_s, QString(), u"invalidValue"_s);
         yaml("datetime new", u"---\nt: x\n---\n"_s, u"t"_s, u"2026-10-28 09:30"_s, u"datetime"_s,
              u"---\nt: 2026-10-28T09:30\n---\n"_s);
-        yaml("datetime keeps space", u"---\nt: 2026-10-27 08:00\n---\n"_s, u"t"_s, u"2026-10-28T09:30"_s,
-             u"datetime"_s, u"---\nt: 2026-10-28 09:30\n---\n"_s);
+        yaml("datetime keeps space", u"---\nt: 2026-10-27 08:00\n---\n"_s, u"t"_s, u"2026-10-28T09:30"_s, u"datetime"_s,
+             u"---\nt: 2026-10-28 09:30\n---\n"_s);
         yaml("datetime keeps seconds", u"---\nt: 2026-10-27T08:00:15\n---\n"_s, u"t"_s, u"2026-10-28 09:30"_s,
              u"datetime"_s, u"---\nt: 2026-10-28T09:30:00\n---\n"_s);
         // Lists keep their style.
@@ -353,12 +356,12 @@ private Q_SLOTS:
              list({u"[[Dom]]"_s, u"[[Ogród]]"_s}), u"list"_s, u"---\nrel:\n  - [[Dom]]\n  - \"[[Ogród]]\"\n---\n"_s);
         yaml("block list dash spacing", u"---\nl:\n  -   x\n---\n"_s, u"l"_s, list({u"x"_s, u"w"_s}), u"list"_s,
              u"---\nl:\n  -   x\n  -   w\n---\n"_s);
-        yaml("flow list stays flow", u"---\nlista: [a, \"b\"]\n---\n"_s, u"lista"_s,
-             list({u"a"_s, u"b"_s, u"c, d"_s}), u"list"_s, u"---\nlista: [a, \"b\", \"c, d\"]\n---\n"_s);
+        yaml("flow list stays flow", u"---\nlista: [a, \"b\"]\n---\n"_s, u"lista"_s, list({u"a"_s, u"b"_s, u"c, d"_s}),
+             u"list"_s, u"---\nlista: [a, \"b\", \"c, d\"]\n---\n"_s);
         yaml("flow list over lines", u"---\nlista: [a,\n  b]\nc: 1\n---\n"_s, u"lista"_s,
              list({u"a"_s, u"b"_s, u"c"_s}), u"list"_s, u"---\nlista: [a, b, c]\nc: 1\n---\n"_s);
-        yaml("scalar tags become a block list", u"---\ntags: a, b\n---\n"_s, u"tags"_s,
-             list({u"a"_s, u"b"_s, u"c"_s}), u"tags"_s, u"---\ntags:\n  - a\n  - b\n  - c\n---\n"_s);
+        yaml("scalar tags become a block list", u"---\ntags: a, b\n---\n"_s, u"tags"_s, list({u"a"_s, u"b"_s, u"c"_s}),
+             u"tags"_s, u"---\ntags:\n  - a\n  - b\n  - c\n---\n"_s);
         yaml("new list follows block style", u"---\nx:\n- a\n---\n"_s, u"l"_s, list({u"w"_s}), u"list"_s,
              u"---\nx:\n- a\nl:\n- w\n---\n"_s);
         yaml("empty list", u"---\nlista: [a]\n---\n"_s, u"lista"_s, QStringList(), u"list"_s,
@@ -557,8 +560,7 @@ private Q_SLOTS:
         row("add to flow", u"---\ntags: [a, b]\n---\n"_s, t, true, u"c"_s, u"---\ntags: [a, b, c]\n---\n"_s);
         row("add to block", u"---\ntags:\n  - a\n---\n"_s, t, true, u"#b"_s, u"---\ntags:\n  - a\n  - b\n---\n"_s);
         row("add singular key", u"---\ntag: a\n---\n"_s, t, true, u"b"_s, u"---\ntag:\n  - a\n  - b\n---\n"_s);
-        row("add missing key", u"---\ntitle: x\n---\n"_s, t, true, u"dom"_s,
-            u"---\ntitle: x\ntags:\n  - dom\n---\n"_s);
+        row("add missing key", u"---\ntitle: x\n---\n"_s, t, true, u"dom"_s, u"---\ntitle: x\ntags:\n  - dom\n---\n"_s);
         row("add logseq", u"tags:: a\n\n- x\n"_s, t, true, u"b"_s, u"tags:: a, b\n\n- x\n"_s);
         row("add alias to logseq page", u"tags:: a\n"_s, a, true, u"Dom"_s, u"tags:: a\naliases:: Dom\n"_s);
         row("add without properties", u"# Tytuł\n"_s, t, true, u"x"_s, u"---\ntags:\n  - x\n---\n# Tytuł\n"_s);
@@ -612,15 +614,16 @@ private Q_SLOTS:
         QTest::newRow("tak") << QVariant(u"Tak"_s) << u"text"_s << u"checkbox"_s << true << QVariant(true);
         QTest::newRow("nie") << QVariant(u"nie"_s) << u"text"_s << u"checkbox"_s << true << QVariant(false);
         QTest::newRow("maybe") << QVariant(u"może"_s) << u"text"_s << u"checkbox"_s << false << QVariant();
-        QTest::newRow("checkbox to text") << QVariant(true) << u"checkbox"_s << u"text"_s << true << QVariant(u"true"_s);
+        QTest::newRow("checkbox to text")
+                << QVariant(true) << u"checkbox"_s << u"text"_s << true << QVariant(u"true"_s);
         QTest::newRow("text to date") << QVariant(u"2026-10-28"_s) << u"text"_s << u"date"_s << true
                                       << QVariant(u"2026-10-28"_s);
-        QTest::newRow("datetime text to date") << QVariant(u"2026-10-28T09:30"_s) << u"text"_s << u"date"_s << true
-                                               << QVariant(u"2026-10-28"_s);
-        QTest::newRow("date to datetime") << QVariant(u"2026-10-28"_s) << u"date"_s << u"datetime"_s << true
-                                          << QVariant(u"2026-10-28T00:00"_s);
-        QTest::newRow("datetime to date") << QVariant(u"2026-10-28 09:30"_s) << u"datetime"_s << u"date"_s << true
-                                          << QVariant(u"2026-10-28"_s);
+        QTest::newRow("datetime text to date")
+                << QVariant(u"2026-10-28T09:30"_s) << u"text"_s << u"date"_s << true << QVariant(u"2026-10-28"_s);
+        QTest::newRow("date to datetime")
+                << QVariant(u"2026-10-28"_s) << u"date"_s << u"datetime"_s << true << QVariant(u"2026-10-28T00:00"_s);
+        QTest::newRow("datetime to date")
+                << QVariant(u"2026-10-28 09:30"_s) << u"datetime"_s << u"date"_s << true << QVariant(u"2026-10-28"_s);
         QTest::newRow("text to date fails") << QVariant(u"jutro"_s) << u"text"_s << u"date"_s << false << QVariant();
         QTest::newRow("empty stays empty") << QVariant() << u"text"_s << u"number"_s << true << QVariant();
         QTest::newRow("empty to list") << QVariant() << u"text"_s << u"list"_s << true << QVariant(QStringList());

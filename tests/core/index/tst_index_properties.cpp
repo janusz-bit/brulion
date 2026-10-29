@@ -58,8 +58,8 @@ private Q_SLOTS:
         build(index);
         const QList<PropertyKeyInfo> keys = index.propertyKeys();
         // Most used first (ties by name); `brulion` and block properties (koszt::, callouts) left out.
-        QCOMPARE(keysOf(keys), QStringList({u"status"_s, u"termin"_s, u"liczba"_s, u"rel"_s, u"tags"_s, u"ocena"_s,
-                                            u"pusta"_s}));
+        QCOMPARE(keysOf(keys),
+                 QStringList({u"status"_s, u"termin"_s, u"liczba"_s, u"rel"_s, u"tags"_s, u"ocena"_s, u"pusta"_s}));
         const PropertyKeyInfo *status = keyInfo(keys, u"status"_s);
         QVERIFY(status);
         QCOMPARE(status->count, 4); // Status / status merged, the most used spelling
@@ -68,7 +68,7 @@ private Q_SLOTS:
         QCOMPARE(keyInfo(keys, u"tags"_s)->type, u"tags"_s);
         QCOMPARE(keyInfo(keys, u"rel"_s)->type, u"list"_s);
         QCOMPARE(keyInfo(keys, u"rel"_s)->count, 2);
-        QCOMPARE(keyInfo(keys, u"ocena"_s)->type, u"number"_s); // Logseq
+        QCOMPARE(keyInfo(keys, u"ocena"_s)->type, u"number"_s);  // Logseq
         QCOMPARE(keyInfo(keys, u"liczba"_s)->type, u"number"_s); // one empty, one number
         QCOMPARE(keyInfo(keys, u"pusta"_s)->type, QString());    // only empty values
         QVERIFY(!keyInfo(keys, u"brulion"_s));
@@ -88,11 +88,11 @@ private Q_SLOTS:
         rel.sort();
         QCOMPARE(rel, QStringList({u"Dom=1"_s, u"[[Ogród]]=1"_s}));
         // One entry per value, case-insensitively: the most used spelling (ties: the first seen).
-        QCOMPARE(valuesOf(index.propertyValues(u"tags"_s)),
-                 QStringList({u"Żółw=2"_s, u"dom=1"_s, u"ogród=1"_s}));
+        QCOMPARE(valuesOf(index.propertyValues(u"tags"_s)), QStringList({u"Żółw=2"_s, u"dom=1"_s, u"ogród=1"_s}));
         // A prefix without diacritics: starts with first, then contains; the limit.
         QCOMPARE(valuesOf(index.propertyValues(u"tags"_s, u"zol"_s)), QStringList({u"Żółw=2"_s}));
-        QCOMPARE(valuesOf(index.propertyValues(u"tags"_s, u"o"_s)), QStringList({u"ogród=1"_s, u"Żółw=2"_s, u"dom=1"_s}));
+        QCOMPARE(valuesOf(index.propertyValues(u"tags"_s, u"o"_s)),
+                 QStringList({u"ogród=1"_s, u"Żółw=2"_s, u"dom=1"_s}));
         QCOMPARE(valuesOf(index.propertyValues(u"tags"_s, u"o"_s, 1)), QStringList({u"ogród=1"_s}));
         QCOMPARE(valuesOf(index.propertyValues(u"termin"_s)),
                  QStringList({u"2026-10-28=1"_s, u"2026-11-02=1"_s, u"jutro=1"_s}));

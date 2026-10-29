@@ -113,22 +113,22 @@ void PageController::updatePageProperties()
 {
     // The leading frontmatter rows (YAML, then `key::` lines) are the page's properties; in source
     // mode the source text (called after an edit made there and when the mode changes).
-    QString text;
+    QString propertyText;
     const markdown::BlockDocument &doc = m_model->document();
     int rows = 0;
     if (m_sourceMode) {
-        text = m_sourceText;
+        propertyText = m_sourceText;
     } else {
         while (rows < doc.count() && doc.at(rows).kind == BlockKind::Frontmatter) {
-            text += doc.at(rows).body + u'\n';
+            propertyText += doc.at(rows).body + u'\n';
             ++rows;
         }
     }
     QVariantMap map = m_pageProperties;
-    if (!m_pagePropertiesRead || text != m_pagePropertiesText) {
+    if (!m_pagePropertiesRead || propertyText != m_pagePropertiesText) {
         m_pagePropertiesRead = true;
-        m_pagePropertiesText = text;
-        const markdown::PageProperties props = markdown::readPageProperties(text);
+        m_pagePropertiesText = propertyText;
+        const markdown::PageProperties props = markdown::readPageProperties(propertyText);
         QVariantList items;
         QVariantList tags;
         QVariantList aliases;
@@ -175,8 +175,8 @@ void PageController::updatePageProperties()
     Q_EMIT pagePropertiesChanged();
 }
 
-PropertyEditStatus PageController::applyPropertyEdit(
-        const std::function<markdown::PropertyEditResult(const QString &)> &edit)
+PropertyEditStatus
+PageController::applyPropertyEdit(const std::function<markdown::PropertyEditResult(const QString &)> &edit)
 {
     if (!m_loaded)
         return PropertyEditStatus::NotFound;
@@ -202,7 +202,8 @@ QVariantMap PageController::setPageProperty(const QString &source, const QString
                                             const QString &type)
 {
     // A JS array from QML arrives as a QJSValue: the list it holds.
-    const QVariant value = given.metaType() == QMetaType::fromType<QJSValue>() ? given.value<QJSValue>().toVariant() : given;
+    const QVariant value =
+            given.metaType() == QMetaType::fromType<QJSValue>() ? given.value<QJSValue>().toVariant() : given;
     const QString k = key.trimmed();
     PropertySource resolved = PropertySource::Yaml;
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
@@ -218,7 +219,8 @@ QVariantMap PageController::setPageProperty(const QString &source, const QString
 QVariantMap PageController::removePageProperty(const QString &source, const QString &key)
 {
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
-        return markdown::removePageProperty(content, sourceFor(markdown::readPageProperties(content), source, key), key);
+        return markdown::removePageProperty(content, sourceFor(markdown::readPageProperties(content), source, key),
+                                            key);
     });
     return editResult(status, reasonFor(status, {}, {}));
 }
