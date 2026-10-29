@@ -145,7 +145,9 @@
   z wbudowaną sceną Excalidraw: Obsidian i przeglądarki pokazują go jako obraz (rysunek „jak
   motyw” ciemny w Obsidianie z ciemnym motywem), excalidraw.com otwiera do edycji (a rysunki
   z excalidraw.com z kształtami i tekstem edytujesz w Brulionie), a Syncthing synchronizuje jak
-  każdy plik.
+  każdy plik. Rysunki wtyczki Excalidraw dla Obsidiana (`*.excalidraw.md`) i pliki `.excalidraw`
+  Brulion też pokazuje w notatkach i edytuje, a zapisuje je w ich własnym formacie — Obsidian
+  otworzy je dalej, z notatkami „z tyłu” rysunku i linkami w tekstach.
 * **Zapytania.** Blok ` ```query ` pokazuje na żywo np. wszystkie otwarte zadania z tagiem
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
@@ -398,7 +400,9 @@ Wydajność (liczby na komputerze, telefonie i w przeglądarce, benchmarki, stra
 [AGPL-3.0-or-later](LICENSE). Ikony: [Lucide](https://lucide.dev) (ISC). Kompresja ZIP:
 [miniz](https://github.com/richgel999/miniz) (MIT). Kształt linii w rysunkach: algorytm
 [perfect-freehand](https://github.com/steveruiz/perfect-freehand) (MIT, © Stephen Ruiz Ltd), przeniesiony
-do C++ w `src/core/drawing/stroke.cpp`. Emoji i symbole tam, gdzie system nie ma
+do C++ w `src/core/drawing/stroke.cpp`. Rysunki wtyczki Excalidraw dla Obsidiana: kompresja
+[lz-string](https://github.com/pieroxy/lz-string) (MIT, © 2013 Pieroxy), przeniesiona do C++
+w `src/core/drawing/lzstring.cpp`. Emoji i symbole tam, gdzie system nie ma
 czcionki z nimi (przeglądarka, część Linuksów): fragmenty [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji)
 i Noto Sans Math (SIL OFL 1.1, [assets/fonts](assets/fonts/README.md)).
 
@@ -491,7 +495,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   draws on the desktop. A drawing is a plain SVG attachment (`![[Rysunek ….svg]]`) with an
   embedded Excalidraw scene: Obsidian and browsers show it as a picture (a "Like the app" drawing
   dark in Obsidian's dark theme), excalidraw.com opens it for editing (and Excalidraw drawings
-  with shapes and text are edited in Brulion), Syncthing syncs it like any file.
+  with shapes and text are edited in Brulion), Syncthing syncs it like any file. Drawings of the
+  Obsidian Excalidraw plugin (`*.excalidraw.md`) and `.excalidraw` files are shown in notes and
+  edited too, and saved back in their own format — Obsidian still opens them, with the notes on
+  the back of the drawing and the links in its texts.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Something not working? Settings → Application → **Event log** shows what the app and the sync
   did (live sync progress and the history of runs are in the sync center); share or save it
@@ -506,7 +513,8 @@ installer or ZIP — a test version —, or <https://janusz-bit.github.io/brulio
 unsigned; sign with `nix run .#brulion-android-sign -- result/*.apk`). Developer docs (in
 English): [architecture](docs/ARCHITECTURE.md), [Markdown dialect](docs/SYNTAX.md),
 [UI](docs/UI.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), the stroke
-outline of drawings ported from perfect-freehand (MIT, © Stephen Ruiz Ltd), emoji and
+outline of drawings ported from perfect-freehand (MIT, © Stephen Ruiz Ltd), the compression of
+Obsidian Excalidraw plugin drawings ported from lz-string (MIT, © 2013 Pieroxy), emoji and
 symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`).
 
 Performance (numbers per platform, budgets, how to benchmark, regression guards): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).

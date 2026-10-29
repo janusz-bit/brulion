@@ -275,8 +275,11 @@ sheet with a media feature query), so it draws the light picture.
 
 *Other drawing files (Inne pliki rysunków; `drawing/drawingfile.h`):* Brulion's drawing editor
 also edits **`.excalidraw` scene files** (excalidraw.com's "Save to disk", the Obsidian plugin's
-compatibility mode, Logseq's Excalidraw plugin: the scene's JSON, `{` first) — written back as
-Excalidraw writes them, JSON with two spaces and a line break at the end — and **drawings of the
+compatibility mode, Logseq's Excalidraw plugin: the scene's JSON, `{` first, `"excalidraw"` within
+its first 4 KB) — written back as Excalidraw's serializeAsJSON writes them, JSON with two spaces,
+`type`, `version`, `source`, `elements`, `appState`, `files` in that order (so `"type":
+"excalidraw"` opens the file however large the scene) and a line break at the end; erased elements
+simply leave the file (the plugin reloads a changed `.excalidraw` file whole) — and **drawings of the
 Obsidian Excalidraw plugin** (`Szkic.excalidraw.md`, `drawing/excalidrawmd.h`): Markdown whose
 frontmatter has the key `excalidraw-plugin` (`parsed` or `raw`; any file name — the plugin's
 setting without `.excalidraw` in the name too), with the scene in a code block under `## Drawing`:
@@ -315,9 +318,11 @@ block — is shown, never written. The block is found as the plugin finds it (th
 "```compressed-json" block is anywhere), CRLF files too. The plugin reads a text element's text
 from its `## Text Elements` entry (`raw text ^id`, its Markdown with links) before the scene's.
 Brulion rewrites **only** the block — in the file's own encoding and line breaks — and the
-entries of text elements it changed (their new text, also the element's `rawText`; a link in such
-a text becomes plain text) or removed (the entry goes); a new text element gets no entry (the
-plugin adds it with its own id). Every other byte stays as it was: frontmatter, the warning line,
+entries of text elements whose text it changed (their new text, also the element's `rawText`; a
+link in such a text becomes plain text) or removed (the entry goes); a text only moved,
+recoloured, reordered or carried by its shape keeps its entry and `rawText` — its links and
+transclusions — as the file has them (compared by the text it shows, `originalText`, never by
+`version`); a new text element gets no entry (the plugin adds it with its own id). Every other byte stays as it was: frontmatter, the warning line,
 the back of the card, `## Element Links`, `## Embedded Files`, `%%` markers, `# Markdown Images`.
 Elements read from the file and erased in Brulion are written as deleted ones (`isDeleted: true`,
 `version + 1`, `updated`: the plugin showing the drawing while the file changes removes only such
@@ -330,7 +335,9 @@ quoting a `## Drawing` block is a note). The index keeps such a file a page (its
 searchable, the tag `excalidraw` lists the drawings); opened as a page it shows its drawing (the
 picture view: "Edytuj rysunek", "Pokaż jako tekst"), never the block editor. Brulion creates new
 drawings as SVG only. Sync (Nextcloud) never merges such a file line by line: changed on both
-devices, both versions are kept (a conflict copy).
+devices, both versions are kept (a conflict copy); a side whose text is still the last synced one
+(a new ETag only: a client uploaded the same bytes again) is no change there — the other side's
+version wins without a conflict copy. (`.excalidraw` files sync as binary files: never merged.)
 
 *Embeds of drawings:* `![[Szkic.excalidraw]]` (the link resolves to `Szkic.excalidraw` or, when
 there is none, the note `Szkic.excalidraw.md`), `![[Szkic.excalidraw.md]]` and a page embed

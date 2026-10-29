@@ -1196,8 +1196,10 @@ Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, 
 colours — of another program's SVG too), `tst_drawing_exmd` (LZ-String against lz-string's own
 vectors and the fixture generator's port, malformed and random input; the plugin's files —
 compressed, json, CRLF, commented text, a frame, the oldest form — read, written back with every
-byte around the block kept, deleted elements, text entries following edits, the one API of drawing
-files, the `.excalidraw` layout), `tst_drawing_elements` (every kind of element read —
+byte around the block kept, deleted elements, text entries following edits — a text only moved,
+recoloured or carried by its shape keeps its Markdown (links, transclusions), also across saves —,
+crafted files read in linear time, the one API of drawing files, the `.excalidraw` layout — type
+first, still a drawing beyond 4 KB), `tst_drawing_elements` (every kind of element read —
 `excalidraw_shapes.*` —, malformed ones normalised or foreign, written back byte for byte, a
 changed one's version, new elements as excalidraw.com reads them, fractional indices, corners,
 arrowheads, hatching, hit tests, the lasso, every edit, undo diffs of random edits, the SVG of
@@ -1214,8 +1216,8 @@ through a QML Image and its other theme loading behind the shown one — and the
 pixel; shapes with the mouse, a stylus and fingers, the lasso and moving, the selection's actions,
 text and labels, erasing shapes, painting shapes and text light and dark, Qt SVG drawing them, a
 merge with shapes, text drawn in a worker thread, 600 shapes; plugin files loaded, saved in their
-format, a stroke erased after a save marked deleted, another device's file merged into theirs, the
-oldest form and a frame read-only, a `.excalidraw` saved as one; the previews of plugin files and
+format, a stroke erased after a save marked deleted, a text's link kept when moved and its edit
+kept in later saves, another device's file merged into theirs, the oldest form and a frame read-only, a `.excalidraw` saved as one; the previews of plugin files and
 the plugin's export standing in),
 `tst_drawing_qml` (the route and its notices, the background menu, a drawing of shapes with the
 shapes' menu and everything selected, a frame read-only, embeds and the picture view in the real
