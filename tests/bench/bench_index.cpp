@@ -116,6 +116,7 @@ class BenchIndex : public QObject {
 
     std::map<int, std::unique_ptr<Fixture>> m_fixtures;
     std::map<int, std::unique_ptr<QTemporaryDir>> m_disk;
+    std::map<int, std::unique_ptr<QTemporaryDir>> m_cacheDirs; ///< cacheFile(notes), removed at exit
     std::map<int, std::unique_ptr<Fixture>> m_relocation; ///< relocationVault(), no search index
     std::unique_ptr<QTemporaryDir> m_moveDir;             ///< relocationVault(5000) on disk
     std::unique_ptr<Vault> m_moveVault;
@@ -173,10 +174,14 @@ class BenchIndex : public QObject {
     }
 
 #ifdef BENCH_HAS_CACHE
-    /// The index cache of diskVault(notes) (written once per process, not timed).
+    /// The index cache of diskVault(notes) (written once per process, not timed), in a temporary
+    /// folder of its own: outside the vault (not one of its files) and removed at exit.
     QString cacheFile(int notes)
     {
-        const QString path = diskVault(notes) + u"-index-cache.bin"_s;
+        auto &dir = m_cacheDirs[notes];
+        if (!dir)
+            dir = bench::makeTempDir();
+        const QString path = dir->filePath(u"index-cache.bin"_s);
         if (!QFileInfo::exists(path)) {
             Vault vault(diskVault(notes), QString());
             if (!vault.open())
