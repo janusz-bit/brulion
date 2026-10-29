@@ -259,10 +259,10 @@ private Q_SLOTS:
         QTest::newRow("verb with json") << QByteArray(R"(open {"route":{"view":"journal"}})") << true
                                         << QByteArray("open");
         QTest::newRow("future verb") << QByteArray("state-get {}") << true << QByteArray("state-get");
-        QTest::newRow("share") << QString(u"share {\"share\":{\"files\":[{\"path\":\"/home/ą/Łódź.md\"}]}}"_s).toUtf8() << true
-                               << QByteArray("share");
-        QTest::newRow("activate with a token") << QByteArray(R"(activate {"activationToken":"x"})") << true
-                                               << QByteArray("activate");
+        QTest::newRow("share") << QString(u"share {\"share\":{\"files\":[{\"path\":\"/home/ą/Łódź.md\"}]}}"_s).toUtf8()
+                               << true << QByteArray("share");
+        QTest::newRow("activate with a token")
+                << QByteArray(R"(activate {"activationToken":"x"})") << true << QByteArray("activate");
         QTest::newRow("empty") << QByteArray("  ") << false << QByteArray();
         QTest::newRow("upper case") << QByteArray("OPEN") << false << QByteArray();
         QTest::newRow("not an object") << QByteArray("open [1,2]") << false << QByteArray();

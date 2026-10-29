@@ -439,9 +439,9 @@ private Q_SLOTS:
     {
         auto app = openApp(u"bez rozszerzenia"_s);
         const QByteArray png = QByteArray::fromHex("89504e470d0a1a0a0000000d4948445200000001000000010806000000");
-        const QString dir = outsideFolder(u"bez-rozszerzen"_s, {{u"notatka"_s, "Zakupy: mleko, chleb\nąę\n"},
-                                                               {u"obraz"_s, png},
-                                                               {u"obraz.png"_s, png}});
+        const QString dir =
+                outsideFolder(u"bez-rozszerzen"_s,
+                              {{u"notatka"_s, "Zakupy: mleko, chleb\nąę\n"}, {u"obraz"_s, png}, {u"obraz.png"_s, png}});
         app->receiveShare(openedShare({u"notatka"_s, u"obraz"_s, u"obraz.png"_s}, dir));
         const QVariantList files = app->pendingShare().value(u"files"_s).toList();
         QCOMPARE(files.size(), 3);

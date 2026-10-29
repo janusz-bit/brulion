@@ -530,7 +530,7 @@ private:
     int m_pendingNoteLine = -1;
     /// A shared file as read when the share came (appshare.cpp).
     struct ShareFile {
-        QString path;    ///< the file read ("" when there was none)
+        QString path; ///< the file read ("" when there was none)
         QString name;
         QString title;   ///< its page title (notebook::sharedPageTitle)
         QString content; ///< decoded text ("" when `error`)
@@ -549,8 +549,8 @@ private:
     bool m_devOnboarding = false;
     QVariantMap m_devRoute;
     QString m_devPopup;
-    QByteArray m_startShare;      ///< --share, or the --open files as share JSON (received by start())
-    QString m_startShareQuery;    ///< --share-query (received by start())
+    QByteArray m_startShare;   ///< --share, or the --open files as share JSON (received by start())
+    QString m_startShareQuery; ///< --share-query (received by start())
     bool m_startCapture = false;
     bool m_startToday = false;
     QVariantMap m_routeAfterOpen; ///< openVaultAt()

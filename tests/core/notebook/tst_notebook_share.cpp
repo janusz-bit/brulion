@@ -315,15 +315,15 @@ private Q_SLOTS:
         QTest::addColumn<QString>("text");
         QTest::addColumn<QString>("url");
         // The previous app's case (archive/web-v1 share-target.test.ts), with this app's names.
-        QTest::newRow("title, text and url") << u"share-title=Artyku%C5%82&share-text=Ciekawe&share-url=https%3A%2F%2Fa.pl"_s
-                                             << u"Artykuł"_s << u"Ciekawe"_s << u"https://a.pl"_s;
+        QTest::newRow("title, text and url")
+                << u"share-title=Artyku%C5%82&share-text=Ciekawe&share-url=https%3A%2F%2Fa.pl"_s << u"Artykuł"_s
+                << u"Ciekawe"_s << u"https://a.pl"_s;
         QTest::newRow("raw utf-8") << u"share-text=Zażółć gęślą jaźń"_s << QString() << u"Zażółć gęślą jaźń"_s
                                    << QString();
-        QTest::newRow("encoded utf-8")
-                << u"share-text=Za%C5%BC%C3%B3%C5%82%C4%87+g%C4%99%C5%9Bl%C4%85+ja%C5%BA%C5%84"_s << QString()
-                << u"Zażółć gęślą jaźń"_s << QString();
-        QTest::newRow("upper-case escapes") << u"share-text=%C5%81%c3%b3d%C5%BA"_s << QString() << u"Łódź"_s
-                                            << QString();
+        QTest::newRow("encoded utf-8") << u"share-text=Za%C5%BC%C3%B3%C5%82%C4%87+g%C4%99%C5%9Bl%C4%85+ja%C5%BA%C5%84"_s
+                                       << QString() << u"Zażółć gęślą jaźń"_s << QString();
+        QTest::newRow("upper-case escapes")
+                << u"share-text=%C5%81%c3%b3d%C5%BA"_s << QString() << u"Łódź"_s << QString();
         QTest::newRow("leading question mark") << u"?share-title=Tytu%C5%82"_s << u"Tytuł"_s << QString() << QString();
         QTest::newRow("plus and an encoded plus") << u"share-text=a+b%2Bc"_s << QString() << u"a b+c"_s << QString();
         QTest::newRow("percent without hex digits")
@@ -336,9 +336,10 @@ private Q_SLOTS:
                 << u"share-text=Ala+%26+kot+%3D+2"_s << QString() << u"Ala & kot = 2"_s << QString();
         QTest::newRow("unknown keys left out")
                 << u"share-text=x&nosw&v=3&selftest=share&title=y&text=z"_s << QString() << u"x"_s << QString();
-        QTest::newRow("repeated key: the first") << u"share-text=pierwszy&share-text=drugi"_s << QString()
-                                                 << u"pierwszy"_s << QString();
-        QTest::newRow("keys are case-sensitive") << u"Share-Text=x&SHARE-URL=y"_s << QString() << QString() << QString();
+        QTest::newRow("repeated key: the first")
+                << u"share-text=pierwszy&share-text=drugi"_s << QString() << u"pierwszy"_s << QString();
+        QTest::newRow("keys are case-sensitive")
+                << u"Share-Text=x&SHARE-URL=y"_s << QString() << QString() << QString();
         QTest::newRow("encoded key") << u"share%2Dtext=x"_s << QString() << u"x"_s << QString();
         QTest::newRow("key without a value") << u"share-text"_s << QString() << QString() << QString();
         QTest::newRow("empty values") << u"share-title=&share-text=&share-url="_s << QString() << QString()
@@ -347,8 +348,8 @@ private Q_SLOTS:
         QTest::newRow("equals only") << u"="_s << QString() << QString() << QString();
         QTest::newRow("percent only") << u"%"_s << QString() << QString() << QString();
         QTest::newRow("empty") << QString() << QString() << QString() << QString();
-        QTest::newRow("value with equals signs") << u"share-url=https://a.pl/?q=1&share-title=T"_s << u"T"_s
-                                                 << QString() << u"https://a.pl/?q=1"_s;
+        QTest::newRow("value with equals signs")
+                << u"share-url=https://a.pl/?q=1&share-title=T"_s << u"T"_s << QString() << u"https://a.pl/?q=1"_s;
     }
     void fromQuery()
     {
@@ -448,14 +449,13 @@ private Q_SLOTS:
                 << QStringList{u"brulion"_s, u"--vault"_s, u"/v"_s, u"--open"_s, u"a.md"_s, u"--capture"_s}
                 << QStringList{u"brulion"_s, u"--vault"_s, u"/v"_s} << QStringList{u"a.md"_s, u"--capture"_s};
         QTest::newRow("a second --open is a file")
-                << QStringList{u"brulion"_s, u"--open"_s, u"Żółw.md"_s, u"--open"_s}
-                << QStringList{u"brulion"_s} << QStringList{u"Żółw.md"_s, u"--open"_s};
+                << QStringList{u"brulion"_s, u"--open"_s, u"Żółw.md"_s, u"--open"_s} << QStringList{u"brulion"_s}
+                << QStringList{u"Żółw.md"_s, u"--open"_s};
         QTest::newRow("no --open: positional arguments stay options")
-                << QStringList{u"brulion"_s, u"a.md"_s, u"--today"_s} << QStringList{u"brulion"_s, u"a.md"_s, u"--today"_s}
-                << QStringList();
-        QTest::newRow("--open=x is no separator")
-                << QStringList{u"brulion"_s, u"--open=a.md"_s} << QStringList{u"brulion"_s, u"--open=a.md"_s}
-                << QStringList();
+                << QStringList{u"brulion"_s, u"a.md"_s, u"--today"_s}
+                << QStringList{u"brulion"_s, u"a.md"_s, u"--today"_s} << QStringList();
+        QTest::newRow("--open=x is no separator") << QStringList{u"brulion"_s, u"--open=a.md"_s}
+                                                  << QStringList{u"brulion"_s, u"--open=a.md"_s} << QStringList();
         QTest::newRow("empty") << QStringList() << QStringList() << QStringList();
     }
     void splitOpenArguments()
@@ -472,7 +472,7 @@ private Q_SLOTS:
     {
         // "<wd>" is the working directory (a temporary folder: absolute on every system).
         QTest::addColumn<QStringList>("arguments");
-        QTest::addColumn<QStringList>("paths");  // "" for an entry without a path
+        QTest::addColumn<QStringList>("paths"); // "" for an entry without a path
         QTest::addColumn<QStringList>("names");
         QTest::addColumn<QStringList>("errors");
         QTest::newRow("relative") << QStringList{u"Lista zakupów.md"_s} << QStringList{u"<wd>/Lista zakupów.md"_s}
@@ -486,13 +486,14 @@ private Q_SLOTS:
         QTest::newRow("file url, percent-encoded")
                 << QStringList{u"file://<wd>/Za%C5%BC%C3%B3%C5%82%C4%87.md"_s} << QStringList{u"<wd>/Zażółć.md"_s}
                 << QStringList{u"Zażółć.md"_s} << QStringList{QString()};
-        QTest::newRow("file url, raw letters") << QStringList{u"file://<wd>/gęś.txt"_s} << QStringList{u"<wd>/gęś.txt"_s}
-                                               << QStringList{u"gęś.txt"_s} << QStringList{QString()};
+        QTest::newRow("file url, raw letters")
+                << QStringList{u"file://<wd>/gęś.txt"_s} << QStringList{u"<wd>/gęś.txt"_s} << QStringList{u"gęś.txt"_s}
+                << QStringList{QString()};
         QTest::newRow("web address") << QStringList{u"https://example.com/notatki/a.md"_s} << QStringList{QString()}
                                      << QStringList{u"a.md"_s} << QStringList{u"unreadable"_s};
-        QTest::newRow("another computer's file") << QStringList{u"smb://serwer/udział/Żółw.md"_s}
-                                                 << QStringList{QString()} << QStringList{u"Żółw.md"_s}
-                                                 << QStringList{u"unreadable"_s};
+        QTest::newRow("another computer's file")
+                << QStringList{u"smb://serwer/udział/Żółw.md"_s} << QStringList{QString()} << QStringList{u"Żółw.md"_s}
+                << QStringList{u"unreadable"_s};
         QTest::newRow("a colon in a name is a path")
                 << QStringList{u"notatka:ważna.md"_s} << QStringList{u"<wd>/notatka:ważna.md"_s}
                 << QStringList{u"notatka:ważna.md"_s} << QStringList{QString()};
@@ -601,9 +602,9 @@ private Q_SLOTS:
         QCOMPARE(notebook::mergeOpenedShares(waiting, newer).dir, QString());
         // Entries without a path (another computer's file, a file over the cap) are listed once
         // by name and reason.
-        merged = notebook::mergeOpenedShares(notebook::openedFilesShare({u"smb://s/a.md"_s}, u"/"_s),
-                                             notebook::openedFilesShare({u"smb://s/a.md"_s, u"smb://s/b.md"_s},
-                                                                        u"/"_s));
+        merged =
+                notebook::mergeOpenedShares(notebook::openedFilesShare({u"smb://s/a.md"_s}, u"/"_s),
+                                            notebook::openedFilesShare({u"smb://s/a.md"_s, u"smb://s/b.md"_s}, u"/"_s));
         QCOMPARE(merged.files.size(), 2);
         QCOMPARE(merged.files.at(1).name, u"b.md"_s);
     }
@@ -631,11 +632,9 @@ private Q_SLOTS:
         QTest::newRow("brulion's folder") << u"/v/.brulion/x.md"_s << u"/v"_s << false << QString();
         QTest::newRow("logseq") << u"/v/logseq/custom.md"_s << u"/v"_s << false << QString();
         QTest::newRow("a hidden folder") << u"/v/a/.ukryty/x.md"_s << u"/v"_s << false << QString();
-        QTest::newRow("a syncthing temporary file")
-                << u"/v/~syncthing~a.md.tmp"_s << u"/v"_s << false << QString();
-        QTest::newRow("a conflict copy is a page")
-                << u"/v/a.sync-conflict-20261028-101010-ABCDEFG.md"_s << u"/v"_s << false
-                << u"a.sync-conflict-20261028-101010-ABCDEFG.md"_s;
+        QTest::newRow("a syncthing temporary file") << u"/v/~syncthing~a.md.tmp"_s << u"/v"_s << false << QString();
+        QTest::newRow("a conflict copy is a page") << u"/v/a.sync-conflict-20261028-101010-ABCDEFG.md"_s << u"/v"_s
+                                                   << false << u"a.sync-conflict-20261028-101010-ABCDEFG.md"_s;
         QTest::newRow("not clean") << u"/v/a/../b.md"_s << u"/v"_s << false << QString();
         QTest::newRow("double slash") << u"/v//b.md"_s << u"/v"_s << false << QString();
         QTest::newRow("letter case of the folder") << u"/V/a.md"_s << u"/v"_s << false << QString();

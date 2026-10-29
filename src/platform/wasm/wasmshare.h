@@ -24,8 +24,7 @@ struct WasmShareJs;
 /// listen() installs the channel's listener; main() calls it before the storage asks for its lock,
 /// so whenever the lock is held someone answers. Queries arriving before a WasmShare exists (the
 /// notes still loading) are kept — at most 8 — and emitted by the first one created.
-class WasmShare : public QObject
-{
+class WasmShare : public QObject {
     Q_OBJECT
 
 public:

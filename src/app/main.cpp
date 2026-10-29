@@ -129,7 +129,8 @@ int main(int argc, char *argv[])
     // `--open <file>…` (the desktop entry's `Exec=brulion --open %F`, Windows' "Otwórz za pomocą"):
     // every argument after it is a file to offer in the share dialog, never an option — the
     // options are the arguments before it (notebook/share.h).
-    const brulion::notebook::OpenArguments launch = brulion::notebook::splitOpenArguments(QCoreApplication::arguments());
+    const brulion::notebook::OpenArguments launch =
+            brulion::notebook::splitOpenArguments(QCoreApplication::arguments());
     const QStringList args = launch.options;
     // Dev/test options from the command line (component gallery, screenshots, forced theme
     // and language): src/app/ui/devtools.h. Without options it changes nothing.

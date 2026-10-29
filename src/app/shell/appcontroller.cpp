@@ -142,8 +142,7 @@ AppController::AppController(const Options &options, QObject *parent)
     m_startToday = args.contains(u"--today"_s);
     m_devPopup = argValue(args, u"--popup"_s);
     // Files opened with Brulion (--open: a file manager's "Otwórz za pomocą"), else --share.
-    if (const notebook::SharedContent opened =
-                notebook::openedFilesShare(options.openFiles, options.workingDirectory);
+    if (const notebook::SharedContent opened = notebook::openedFilesShare(options.openFiles, options.workingDirectory);
         !opened.files.isEmpty())
         m_startShare = QJsonDocument(notebook::sharedContentToJson(opened)).toJson(QJsonDocument::Compact);
     else

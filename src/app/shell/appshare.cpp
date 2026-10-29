@@ -189,10 +189,10 @@ void AppController::applyPendingShare()
         QList<ShareFile> keptFiles;
         for (qsizetype i = 0; i < m_shareFiles.size(); ++i) {
             const ShareFile &file = m_shareFiles.at(i);
-            const QString page = file.path.isEmpty() || root.isEmpty()
-                                         ? QString()
-                                         : notebook::pageForOpenedFile(QFileInfo(file.path).canonicalFilePath(),
-                                                                       root, FileNameCase);
+            const QString page =
+                    file.path.isEmpty() || root.isEmpty()
+                            ? QString()
+                            : notebook::pageForOpenedFile(QFileInfo(file.path).canonicalFilePath(), root, FileNameCase);
             if (!page.isEmpty()) {
                 if (first.isEmpty())
                     first = page;

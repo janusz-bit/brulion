@@ -42,9 +42,9 @@
 #include <QQmlExpression>
 #include <QQuickItem>
 #include <QQuickWindow>
-#include <QTemporaryDir>
 #include <QRegularExpression>
 #include <QScreen>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QUrlQuery>
 #include <QWheelEvent>
