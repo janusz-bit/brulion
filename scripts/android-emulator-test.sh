@@ -232,7 +232,8 @@ if [[ -e /etc/NIXOS ]] && command -v steam-run >/dev/null; then emulator=(steam-
 # standard ones. It inherited a lock its caller held (`flock ~/work/emulator.lock …`) and kept it
 # after the test — every later emulator test waited for it.
 (
-  for fd in $(ls /proc/"$BASHPID"/fd); do
+  for fd in /proc/"$BASHPID"/fd/*; do
+    fd=${fd##*/}
     if ((fd > 2)); then eval "exec $fd>&-" 2>/dev/null || true; fi
   done
   exec "$SDK/platform-tools/adb" start-server

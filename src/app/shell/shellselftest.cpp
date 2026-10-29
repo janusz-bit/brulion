@@ -3277,8 +3277,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         return waitFor([&] {
             for (QQuickItem *e : window->findChildren<QQuickItem *>(u"pageEditor"_s)) {
                 auto *c = e->property("controller").value<QObject *>();
-                if (c && c->property("path").toString() == guide && c->property("loaded").toBool()
-                    && e->isVisible()) {
+                if (c && c->property("path").toString() == guide && c->property("loaded").toBool() && e->isVisible()) {
                     editor = e;
                     page = c;
                 }
@@ -3308,7 +3307,8 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
                       && near(shellItem->property("toastClearance").toReal(),
                               nav->height() + theme->property("editToolbarHeight").toReal()),
               "toasts would clear the bottom navigation and the toolbar on it");
-        std::fprintf(stderr, "selftest: keyboard hidden: the toolbar ends at %.0f, the navigation starts at %.0f (window %d)\n",
+        std::fprintf(stderr,
+                     "selftest: keyboard hidden: the toolbar ends at %.0f, the navigation starts at %.0f (window %d)\n",
                      slotBottom(), navTop(), window->height());
         // A toast while typing ("Scalono…", a sync): at the top, never over the line being
         // written (the caret is kept right above the toolbar, where the toasts used to be).
@@ -3376,7 +3376,9 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         check(waitFor([&] { return !nav->isVisible() && near(slotBottom(), window->height() - navHeight - 40); }),
               "past the navigation's top: the navigation is covered, the toolbar rides on the keyboard");
         keyboardInsets->simulate(keyboard, false);
-        check(waitFor([&] { return !nav->isVisible() && near(slotBottom(), top) && near(room->mapToScene(QPointF(0, 0)).y(), top); }),
+        check(waitFor([&] {
+                  return !nav->isVisible() && near(slotBottom(), top) && near(room->mapToScene(QPointF(0, 0)).y(), top);
+              }),
               "the keyboard up: the toolbar on it, the navigation away");
         // … and goes away again (Back): shown no more from its first frame, the navigation is
         // shown under it, the toolbar follows the keyboard's top down to the navigation.
@@ -3443,9 +3445,8 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
             tapOrClick(window, pointIn(calendarTab), QCoreApplication::arguments().contains(u"--touch"_s));
         check(waitFor([&] {
                   return app->currentRoute().value(u"view"_s).toString() == u"calendar"
-                         && !findShown(window->contentItem(), [](QQuickItem *item) {
-                                return item->objectName() == u"editToolbarSlot";
-                            })
+                         && !findShown(window->contentItem(),
+                                       [](QQuickItem *item) { return item->objectName() == u"editToolbarSlot"; })
                          && navAtBottom();
               }),
               "a tap on Kalendarz while editing opens the calendar: the editing and its toolbar end");

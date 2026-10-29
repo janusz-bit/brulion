@@ -440,9 +440,9 @@ FocusScope {
         // While typing or selecting blocks (the keyboard up or an editing toolbar docked, also
         // on the bottom navigation after the keyboard went) there is no strip: the drawer took
         // the drag of the selection's start grip, which lies at the left edge (its MouseArea's
-        // preventStealing did not stop it). Nor on a view that swipes sideways from that edge itself (`edgeSwipe`:
-        // the calendar's week and month grids, to the previous period): a swipe there is the
-        // view's. The ☰ button still opens it, a swipe on it still closes it. The strip follows
+        // preventStealing did not stop it). Nor on a view that swipes sideways from that edge
+        // itself (`edgeSwipe`: the calendar's week and month grids, to the previous period): a
+        // swipe there is the view's. The ☰ button still opens it, a swipe on it still closes it. The strip follows
         // the UI mode, not the pointer: a mouse in a touch UI gets it too.
         dragMargin: !Theme.touchUi ? Application.styleHints.startDragDistance
                     : shell.typing || routeView.viewEdgeSwipe ? 0
