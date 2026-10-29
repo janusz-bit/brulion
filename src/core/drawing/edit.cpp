@@ -79,19 +79,6 @@ QPointF polylineMiddle(const QList<StrokePoint> &points)
     return QPointF(points.first().x, points.first().y);
 }
 
-/// The ids of the elements whose container is `id` (labels).
-QStringList labelsOf(const Drawing &d, const QString &id)
-{
-    QStringList out;
-    if (id.isEmpty())
-        return out;
-    for (const Stroke &e : d.strokes) {
-        if (e.type == ElementType::Text && e.containerId == id)
-            out.append(e.id);
-    }
-    return out;
-}
-
 QHash<QString, qsizetype> indexById(const Drawing &d)
 {
     QHash<QString, qsizetype> index;
@@ -133,9 +120,12 @@ QStringList selectionClosure(const Drawing &d, const QStringList &ids)
 {
     const QHash<QString, qsizetype> index = indexById(d);
     QHash<QString, QStringList> groups;
+    QHash<QString, QStringList> labels;
     for (const Stroke &e : d.strokes) {
         for (const QString &g : e.groupIds)
             groups[g].append(e.id);
+        if (e.type == ElementType::Text && !e.containerId.isEmpty())
+            labels[e.containerId].append(e.id);
     }
     QSet<QString> taken;
     QStringList queue = ids;
@@ -148,14 +138,17 @@ QStringList selectionClosure(const Drawing &d, const QStringList &ids)
         if (lockedIn(d, index, e))
             continue;
         taken.insert(id);
-        if (!e.groupIds.isEmpty())
+        if (!e.groupIds.isEmpty() && !taken.contains(e.groupIds.last() + QChar(0x1f))) {
+            taken.insert(e.groupIds.last() + QChar(0x1f)); // (each group's members queued once)
             queue.append(groups.value(e.groupIds.last()));
+        }
         for (const QString &b : e.boundIds) {
             const qsizetype k = index.value(b, -1);
             if (k >= 0 && d.strokes.at(k).type == ElementType::Text && d.strokes.at(k).containerId == e.id)
                 queue.append(b);
         }
-        queue.append(labelsOf(d, e.id));
+        if (!e.id.isEmpty())
+            queue.append(labels.value(e.id));
         if (!e.containerId.isEmpty() && index.contains(e.containerId))
             queue.append(e.containerId);
     }
