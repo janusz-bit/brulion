@@ -922,7 +922,8 @@ bool WorkspaceSync::resolveConflict(const QString &original, const QString &copy
     return discardConflictCopy(copy);
 }
 
-bool WorkspaceSync::resolveConflictBytes(const QString &original, const QString &copy, const QByteArray &bytes)
+bool WorkspaceSync::resolveConflictBytes(const QString &original, const QString &copy, const QByteArray &bytes,
+                                         bool removeCopy)
 {
     const std::optional<QVariantMap> conflict = conflictFor(copy);
     const QString o = paths::normalize(original);
@@ -931,11 +932,12 @@ bool WorkspaceSync::resolveConflictBytes(const QString &original, const QString 
         return false;
     bool ok = false;
     const QByteArray current = m_vault->readBinary(o, &ok);
-    if ((!ok || current != bytes) && !writeBytesKeepingHistory(*m_vault, o, bytes)) {
-        Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(paths::pageTitle(o), m_vault->errorString()));
+    QString error;
+    if ((!ok || current != bytes) && !writeBytesKeepingHistory(*m_vault, o, bytes, ChangeSource::User, &error)) {
+        Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(paths::pageTitle(o), error));
         return false;
     }
-    return discardConflictCopy(copy);
+    return !removeCopy || discardConflictCopy(copy);
 }
 
 bool WorkspaceSync::discardConflictCopy(const QString &copy)

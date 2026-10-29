@@ -288,8 +288,10 @@ public:
     Q_INVOKABLE bool resolveConflict(const QString &original, const QString &copy, const QString &mergedText);
     /// Write `bytes` into `original` (what they replace kept in History, unthrottled; nothing
     /// written when they are there already) and move the conflict copy `copy` to the trash — a
-    /// merged drawing, the copy's drawing. False (errorOccurred()) when either step fails.
-    bool resolveConflictBytes(const QString &original, const QString &copy, const QByteArray &bytes);
+    /// merged drawing, the copy's drawing; `removeCopy` false: the copy stays (a merged drawing
+    /// whose copy has notes still to carry over). False (errorOccurred()) when either step fails.
+    bool resolveConflictBytes(const QString &original, const QString &copy, const QByteArray &bytes,
+                              bool removeCopy = true);
     /// Keep the original as it is: move the conflict copy to the trash.
     Q_INVOKABLE bool discardConflictCopy(const QString &copy);
 

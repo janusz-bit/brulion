@@ -80,9 +80,12 @@ bool writeTextKeepingHistory(Vault &vault, const QString &path, const QString &c
                              ChangeSource source = ChangeSource::User);
 /// The same for bytes (Vault::writeBinary): a drawing written over its previous version (the sync
 /// center's merge of a conflict copy) — the version replaced stays in History, which keeps
-/// snapshots of text files (an SVG, `*.excalidraw.md`, `.excalidraw`).
+/// snapshots of text files (an SVG, `*.excalidraw.md`, `.excalidraw`), whatever its size (the
+/// vault snapshots only what it holds in memory; a drawing with pasted photos may be larger).
+/// Nothing is written when that version cannot be recorded. False with `error` (History's or the
+/// vault's errorString()).
 bool writeBytesKeepingHistory(Vault &vault, const QString &path, const QByteArray &bytes,
-                              ChangeSource source = ChangeSource::User);
+                              ChangeSource source = ChangeSource::User, QString *error = nullptr);
 
 class Workspace : public EditorHost, public QueryHost {
     Q_OBJECT

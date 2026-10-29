@@ -194,6 +194,9 @@ void ConflictResolver::reload()
     m_theirsBytes.clear();
     m_mergedBytes.clear();
     m_drawingCounts.clear();
+    m_notesDiffer = m_notesOnly = false;
+    m_oursNotes.clear();
+    m_theirsNotes.clear();
     Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
     if (!vault || m_copy.isEmpty()) {
         Q_EMIT changed();
@@ -283,10 +286,21 @@ void ConflictResolver::loadDrawings(const QString &original, const QString &copy
     const std::optional<drawing::DrawingFile> other = drawing::readDrawingFile(m_theirsBytes);
     if (!mine || !other)
         return; // a picture, a broken scene: keep one of them
+    // An Obsidian plugin file is a note as well: the Markdown around its scene (frontmatter, the
+    // back of the card, links) counts — a merge writes the original's, so the copy's must be in it.
+    const bool keepsNotes = drawing::keepsMarkdownOf(*mine, *other);
     if (!m_identical)
-        m_identical = drawing::sameDrawing(mine->drawing, other->drawing);
-    m_copyIsOlder = !m_identical && drawing::containsDrawing(mine->drawing, other->drawing);
-    if (mine->format != other->format || !mine->writable || !drawing::editable(mine->drawing)
+        m_identical = drawing::sameDrawing(mine->drawing, other->drawing) && keepsNotes
+                && drawing::keepsMarkdownOf(*other, *mine);
+    const bool contained = !m_identical && drawing::containsDrawing(mine->drawing, other->drawing);
+    m_copyIsOlder = contained && keepsNotes;
+    m_notesDiffer = !m_identical && !keepsNotes;
+    m_notesOnly = m_notesDiffer && contained;
+    if (m_notesDiffer) {
+        m_oursNotes = QString::fromUtf8(drawing::markdownAroundScene(*mine));
+        m_theirsNotes = QString::fromUtf8(drawing::markdownAroundScene(*other));
+    }
+    if (m_notesOnly || mine->format != other->format || !mine->writable || !drawing::editable(mine->drawing)
         || !drawing::editable(other->drawing))
         return;
     // No common version is known (a Syncthing copy): a union. The original is the primary side —
@@ -364,6 +378,16 @@ bool ConflictResolver::mergeDrawings()
         return false;
     const QString original = m_conflict.value(u"original"_s).toString();
     const QString title = m_conflict.value(u"title"_s).toString();
+    if (m_notesDiffer) {
+        // The copy's notes would be lost with it: it stays until they are carried over.
+        if (!m_workspace->sync()->resolveConflictBytes(original, m_copy, m_mergedBytes, false)) {
+            Q_EMIT failed(tr("The merged drawing could not be saved."));
+            return false;
+        }
+        reload();
+        Q_EMIT updated(tr("Merged the drawing “%1”. The copy stays: its notes differ from yours.").arg(title));
+        return true;
+    }
     const bool ok = m_workspace->sync()->resolveConflictBytes(original, m_copy, m_mergedBytes);
     finish(ok, ok ? tr("Merged the drawing “%1”. Your previous version is in the history, the copy in the trash.")
                             .arg(title)

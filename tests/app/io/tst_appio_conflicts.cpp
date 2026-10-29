@@ -7,7 +7,9 @@
 // Drawings ("Scal rysunki"): the union of both versions' elements written into the original (its
 // previous version in the history, the copy in the trash) — Syncthing's and Brulion's copies, the
 // Obsidian Excalidraw plugin's files (the Markdown around the scene kept), an identical or older
-// copy, a drawing Brulion does not edit (keep one), a decision made on a version that changed.
+// copy, a drawing Brulion does not edit (keep one), a decision made on a version that changed, a
+// plugin file whose notes around the drawing differ (never "the same" or "older"; merged, its copy
+// stays), a drawing too large for the vault's memory still kept in the history.
 #include "conflictresolver.h"
 #include "workspace.h"
 #include "workspacesync.h"
@@ -15,6 +17,7 @@
 #include "drawing/drawingfile.h"
 #include "drawing/svgwrite.h"
 #include "sync/merge.h"
+#include "vault/history.h"
 #include "vault/vault.h"
 
 #include <QDir>
@@ -592,6 +595,142 @@ private Q_SLOTS:
         // The frontmatter and the back of the card byte for byte.
         QVERIFY(merged.startsWith(base.first(base.indexOf("## Drawing"))));
         QVERIFY(!ws->exists(copy));
+    }
+
+    void pluginDrawingOnlyTheNotesDiffer_data()
+    {
+        // The copy adds nothing to the drawing, but its notes around it (the back of the card)
+        // were changed in Obsidian on the other device: neither "the same" nor "older" — removing
+        // it would lose those notes without a word.
+        QTest::addColumn<bool>("drawnHere");
+        QTest::newRow("the same drawing") << false;
+        QTest::newRow("a line more here") << true;
+    }
+    void pluginDrawingOnlyTheNotesDiffer()
+    {
+        QFETCH(bool, drawnHere);
+        const QString original = u"Excalidraw/Szkic.excalidraw.md"_s;
+        const QString copy = u"Excalidraw/Szkic.excalidraw.sync-conflict-20261014-093000-ABCDEFG.md"_s;
+        const QByteArray base = fixture(u"obsidian_freedraw.excalidraw.md"_s);
+        const std::optional<brulion::drawing::DrawingFile> file = brulion::drawing::readDrawingFile(base);
+        QVERIFY(file);
+        brulion::drawing::Drawing mine = file->drawing;
+        if (drawnHere)
+            mine.strokes.append(line(u"tutaj"_s));
+        QByteArray noted = base;
+        noted.replace("Notatka z tyłu: Zażółć gęślą jaźń", "Notatka z tyłu: WAŻNE zmiany z laptopa, ąę");
+        QVERIFY(noted != base);
+        auto ws = open({ { original, brulion::drawing::writeDrawingFile(*file, mine, 1761650000000) }, { copy, noted } });
+        QTRY_COMPARE(ws->sync()->conflictCount(), 1);
+        ConflictResolver r;
+        r.setWorkspace(ws.get());
+        r.setCopy(copy);
+        QVERIFY(r.isDrawing());
+        QVERIFY(!r.identical());
+        QVERIFY(!r.copyIsOlder());
+        QVERIFY(r.notesDiffer());
+        QVERIFY(r.notesOnly());
+        QVERIFY(!r.canMergeDrawings());
+        QVERIFY(!r.mergeDrawings());
+        QVERIFY(r.oursNotes().contains(u"Notatka z tyłu: Zażółć gęślą jaźń"_s));
+        QVERIFY(r.theirsNotes().contains(u"Notatka z tyłu: WAŻNE zmiany z laptopa, ąę"_s));
+        QVERIFY(!r.theirsNotes().contains(u"N4KAkARALgngDgUwgLgAQQQDwMYEMA2AlgCYBOuA7hADTgQBuCpAzoQPYB2KqATLZMzYBXUtiRoIACyhQ4zZAHoFAc"_s));
+        // Told, the user removes the copy (it goes to the trash).
+        QVERIFY(r.keepMine());
+        QVERIFY(!ws->exists(copy));
+        QCOMPARE(idsOf(ws->vault()->readBinary(original)), idsOf(brulion::drawing::writeDrawingFile(*file, mine)));
+    }
+
+    void pluginDrawingNotesDifferMergeKeepsTheCopy()
+    {
+        // Both devices drew a line, and the other one changed the back of the card as well (what
+        // Nextcloud leaves as a conflict copy instead of merging): "Scal rysunki" merges the
+        // elements into the original and keeps the copy, whose notes would be lost with it.
+        const QString original = u"Excalidraw/Szkic.excalidraw.md"_s;
+        const QString copy = u"Excalidraw/Szkic.excalidraw.sync-conflict-20261014-093000-ABCDEFG.md"_s;
+        const QByteArray base = fixture(u"obsidian_freedraw.excalidraw.md"_s);
+        const std::optional<brulion::drawing::DrawingFile> file = brulion::drawing::readDrawingFile(base);
+        QVERIFY(file);
+        brulion::drawing::Drawing mine = file->drawing;
+        mine.strokes.append(line(u"tutaj"_s));
+        brulion::drawing::Drawing theirs = file->drawing;
+        theirs.strokes.append(line(u"tam-ż"_s));
+        const QByteArray ours = brulion::drawing::writeDrawingFile(*file, mine, 1761650000000);
+        QByteArray copied = brulion::drawing::writeDrawingFile(*file, theirs, 1761650000000);
+        copied.replace("Notatka z tyłu: Zażółć gęślą jaźń", "Notatka z tyłu: WAŻNE zmiany z laptopa");
+        auto ws = open({ { original, ours }, { copy, copied } });
+        QTRY_COMPARE(ws->sync()->conflictCount(), 1);
+        ConflictResolver r;
+        r.setWorkspace(ws.get());
+        r.setCopy(copy);
+        QVERIFY(r.isDrawing());
+        QVERIFY(r.notesDiffer());
+        QVERIFY(!r.notesOnly());
+        QVERIFY(!r.identical());
+        QVERIFY(!r.copyIsOlder());
+        QVERIFY(r.canMergeDrawings());
+        QSignalSpy resolved(&r, &ConflictResolver::resolved);
+        QSignalSpy updated(&r, &ConflictResolver::updated);
+        QVERIFY(r.mergeDrawings());
+        QCOMPARE(resolved.size(), 0);
+        QCOMPARE(updated.size(), 1);
+        // The elements of both in the original, its own notes; the copy with its notes still there.
+        const QByteArray merged = ws->vault()->readBinary(original);
+        QStringList expected;
+        for (const brulion::drawing::Stroke &s : file->drawing.strokes)
+            expected.append(s.id);
+        expected << u"tutaj"_s << u"tam-ż"_s;
+        QCOMPARE(idsOf(merged), expected);
+        QVERIFY(merged.contains("Notatka z tyłu: Zażółć gęślą jaźń"));
+        QVERIFY(ws->exists(copy));
+        QCOMPARE(ws->vault()->readBinary(copy), copied);
+        QCOMPARE(ws->sync()->conflictCount(), 1);
+        const QVariantList versions = ws->history(original);
+        QVERIFY(!versions.isEmpty());
+        QCOMPARE(ws->historyText(versions.first().toMap().value(u"id"_s).toString()), QString::fromUtf8(ours));
+        // Reloaded: only the notes differ now; the copy goes when the user says so.
+        QVERIFY(r.loaded());
+        QVERIFY(r.notesOnly());
+        QVERIFY(!r.canMergeDrawings());
+        QVERIFY(r.theirsNotes().contains(u"WAŻNE zmiany z laptopa"_s));
+        QVERIFY(r.keepMine());
+        QCOMPARE(resolved.size(), 1);
+        QVERIFY(!ws->exists(copy));
+    }
+
+    void largeDrawingKeptInHistory_data()
+    {
+        QTest::addColumn<bool>("merge");
+        QTest::newRow("keep the copy") << false;
+        QTest::newRow("merge drawings") << true;
+    }
+    void largeDrawingKeptInHistory()
+    {
+        // A drawing with pasted photos beyond what the vault holds in memory (16 MB): the version
+        // replaced is in the history all the same, as the dialog and the toast say.
+        QFETCH(bool, merge);
+        QByteArray original = drawingFile({ u"a"_s, u"b"_s });
+        const QByteArray padding = QByteArray("<!-- ") + QByteArray(17 * 1024 * 1024, 'x') + QByteArray(" --></svg>");
+        original.replace("</svg>", padding);
+        QVERIFY(original.size() > 17 * 1024 * 1024);
+        const QByteArray copied = drawingFile({ u"a"_s, u"c"_s });
+        auto ws = open({ { Sketch, original }, { SketchCopy, copied } });
+        QTRY_COMPARE(ws->sync()->conflictCount(), 1);
+        ConflictResolver r;
+        r.setWorkspace(ws.get());
+        r.setCopy(SketchCopy);
+        QVERIFY(r.isDrawing());
+        QCOMPARE(r.canMergeDrawings(), true);
+        QVERIFY(merge ? r.mergeDrawings() : r.keepCopy());
+        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)),
+                 merge ? (QStringList{ u"a"_s, u"b"_s, u"c"_s }) : (QStringList{ u"a"_s, u"c"_s }));
+        QVERIFY(!ws->exists(SketchCopy));
+        const QVariantList versions = ws->history(Sketch);
+        QCOMPARE(versions.size(), 1);
+        bool ok = false;
+        const QByteArray kept = ws->vault()->history()->readBytes(versions.first().toMap().value(u"id"_s).toString(), &ok);
+        QVERIFY(ok);
+        QVERIFY(kept == original);
     }
 
     void listMarksDrawings()

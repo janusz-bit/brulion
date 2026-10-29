@@ -21,9 +21,18 @@
 //                      Markdown around the scene, plus the elements only the copy has (on top);
 //                      for an element both have, the higher version (a tie: the original's)
 //   drawingCounts      { ours, theirs, common, onlyOurs, onlyTheirs, merged } (elements)
-//   identical          the same elements (another program wrote the picture around them)
+//   identical          the same elements (another program wrote the picture around them) and,
+//                      for Obsidian Excalidraw plugin files, the same Markdown around the scene
 //   copyIsOlder        the original has every element of the copy (drawing::containsDrawing)
-//   mergeDrawings()    mergedBytes replace the original, the copy goes
+//                      and every note of it (below)
+//   notesDiffer        plugin files: the copy's Markdown around its scene (frontmatter, the back
+//                      of the card, links, embedded files, text entries) would not survive in the
+//                      original's (drawing::keepsMarkdownOf) — oursNotes / theirsNotes show both
+//                      (drawing::markdownAroundScene); notesOnly: nothing else differs (the copy's
+//                      elements are all in the original): only "remove the copy" or "keep one"
+//   mergeDrawings()    mergedBytes replace the original, the copy goes — but while notesDiffer
+//                      the copy stays (updated(), not resolved()): its notes are carried over by
+//                      hand, then it is removed (notesOnly)
 //
 //   keepMine()         the original stays, the copy goes to the trash
 //   keepCopy()         the copy's content replaces the original, the copy goes (binary files: the
@@ -80,6 +89,11 @@ class ConflictResolver : public QObject {
     Q_PROPERTY(QByteArray theirsBytes READ theirsBytes NOTIFY changed FINAL)
     Q_PROPERTY(QByteArray mergedBytes READ mergedBytes NOTIFY changed FINAL)
     Q_PROPERTY(QVariantMap drawingCounts READ drawingCounts NOTIFY changed FINAL)
+    /// Plugin files whose Markdown around the scene a merge would lose (see above).
+    Q_PROPERTY(bool notesDiffer READ notesDiffer NOTIFY changed FINAL)
+    Q_PROPERTY(bool notesOnly READ notesOnly NOTIFY changed FINAL)
+    Q_PROPERTY(QString oursNotes READ oursNotes NOTIFY changed FINAL)
+    Q_PROPERTY(QString theirsNotes READ theirsNotes NOTIFY changed FINAL)
     Q_PROPERTY(QString ours READ ours NOTIFY changed FINAL)
     Q_PROPERTY(QString theirs READ theirs NOTIFY changed FINAL)
     Q_PROPERTY(QString base READ base NOTIFY changed FINAL)
@@ -111,6 +125,10 @@ public:
     QByteArray theirsBytes() const { return m_theirsBytes; }
     QByteArray mergedBytes() const { return m_mergedBytes; }
     QVariantMap drawingCounts() const { return m_drawingCounts; }
+    bool notesDiffer() const { return m_notesDiffer; }
+    bool notesOnly() const { return m_notesOnly; }
+    QString oursNotes() const { return m_oursNotes; }
+    QString theirsNotes() const { return m_theirsNotes; }
     QString ours() const { return m_ours; }
     QString theirs() const { return m_theirs; }
     QString base() const { return m_base; }
@@ -130,7 +148,8 @@ public:
     Q_INVOKABLE bool keepMine();
     Q_INVOKABLE bool keepCopy();
     Q_INVOKABLE bool applyMerged(const QString &text);
-    /// Write mergedBytes into the original and move the copy to the trash (canMergeDrawings).
+    /// Write mergedBytes into the original and move the copy to the trash (canMergeDrawings) —
+    /// unless notesDiffer: then the copy stays, reloaded (updated()).
     Q_INVOKABLE bool mergeDrawings();
 
 Q_SIGNALS:
@@ -139,6 +158,8 @@ Q_SIGNALS:
     /// The conflict is gone (translated message for a toast).
     void resolved(const QString &message);
     void failed(const QString &message);
+    /// The original changed, the conflict stays (translated message for a toast).
+    void updated(const QString &message);
 
 private:
     void finish(bool ok, const QString &message);
@@ -170,6 +191,10 @@ private:
     QByteArray m_theirsBytes;
     QByteArray m_mergedBytes;
     QVariantMap m_drawingCounts;
+    bool m_notesDiffer = false;
+    bool m_notesOnly = false;
+    QString m_oursNotes;
+    QString m_theirsNotes;
 };
 
 } // namespace brulion::ioviews

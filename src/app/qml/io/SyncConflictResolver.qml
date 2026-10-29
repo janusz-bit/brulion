@@ -13,7 +13,9 @@ import Brulion
 //   * "Porównaj" shows both versions side by side (BDiffView);
 //   * a drawing (never merged line by line): previews of both versions and of their merge
 //     (read-only DrawingCanvas items; a drawing Brulion does not draw as its picture), the
-//     elements of each and "Scal rysunki" — the union of both, written into the drawing;
+//     elements of each and "Scal rysunki" — the union of both, written into the drawing; an
+//     Obsidian plugin file whose notes around the drawing differ keeps its copy after merging,
+//     and then shows how the notes differ (BDiffView) and "remove the copy";
 //   * always: "Zachowaj moją" (the copy goes to the trash) and "Zachowaj kopię" (its content
 //     replaces the note; the old text stays in the history). Binary files: only these two.
 //
@@ -53,6 +55,7 @@ ColumnLayout {
             view.closed()
         }
         onFailed: (message) => AppController.toast(message, "error")
+        onUpdated: (message) => AppController.toast(message, "success")
     }
 
     // ---- Header ----------------------------------------------------------------------------------
@@ -123,7 +126,7 @@ ColumnLayout {
     BText {
         Layout.fillWidth: true
         visible: resolverObject.loaded && (!Theme.compact || view.conflict.originalExists === false
-                                           || (!resolverObject.text && !drawingScroll.visible))
+                                           || (!resolverObject.text && !drawingScroll.visible && !notesView.visible))
         variant: "muted"
         wrapMode: Text.Wrap
         text: view.conflict.originalExists === false
@@ -159,6 +162,31 @@ ColumnLayout {
             variant: "primary"
             onClicked: resolverObject.keepMine()
         }
+    }
+
+    // An Obsidian plugin drawing: the copy adds nothing to the drawing, but its notes differ.
+    IoCard {
+        visible: resolverObject.loaded && resolverObject.notesOnly
+        tone: "warning"
+        iconName: "file-text"
+        title: qsTr("Only the notes around the drawing differ")
+        subtitle: qsTr("Everything drawn in the copy is already in your drawing, but the notes around it (Obsidian's frontmatter, the back of the drawing, links) differ. Carry over what you need in Obsidian, then remove the copy.")
+        BButton {
+            text: qsTr("Remove the copy")
+            iconName: "trash-2"
+            onClicked: resolverObject.keepMine()
+        }
+    }
+    BDiffView {
+        id: notesView
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        Layout.minimumHeight: 200
+        visible: resolverObject.loaded && resolverObject.notesOnly
+        oldText: visible ? resolverObject.oursNotes : ""
+        newText: visible ? resolverObject.theirsNotes : ""
+        oldLabel: qsTr("This device")
+        newLabel: view.otherLabel
     }
 
     IoCard {
@@ -221,7 +249,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         visible: resolverObject.loaded && resolverObject.drawing && !resolverObject.identical
-                 && !resolverObject.copyIsOlder && view.conflict.originalExists !== false
+                 && !resolverObject.copyIsOlder && !resolverObject.notesOnly && view.conflict.originalExists !== false
         contentWidth: width
         contentHeight: drawingCard.implicitHeight
         clip: true
@@ -235,7 +263,9 @@ ColumnLayout {
             width: drawingScroll.width
             iconName: "pen-tool"
             title: qsTr("Two versions of a drawing")
-            subtitle: mergeable
+            subtitle: mergeable && resolverObject.notesDiffer
+                      ? qsTr("Merging keeps the elements of both versions in your drawing (elements erased on one device only come back). The notes around the drawing (Obsidian) differ as well: yours stay, and so does the copy until you carry its notes over.")
+                      : mergeable
                       ? qsTr("Merging keeps the elements of both versions. Elements erased on one device only come back – erase them again.")
                       : qsTr("Brulion cannot merge these drawings: one has elements it does not edit (such as frames) or cannot be read as a drawing. Keep one of the versions.")
             GridLayout {
@@ -492,7 +522,7 @@ ColumnLayout {
     // Binary files and the simple cases take no room below; text views and drawings fill it.
     Item {
         Layout.fillHeight: true
-        visible: !view.textConflict && !drawingScroll.visible
+        visible: !view.textConflict && !drawingScroll.visible && !notesView.visible
     }
 
     // ---- Always ----------------------------------------------------------------------------------
