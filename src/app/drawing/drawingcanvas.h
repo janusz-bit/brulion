@@ -9,7 +9,8 @@
 //   const bytes = canvas.fileBytes(); Workspace.writeAttachment(path, bytes); canvas.markSaved(bytes)
 //
 // A preview (`interactive: false`: the sync center's conflict of two drawings and their merge)
-// only shows a drawing: no input reaches it, it never takes the pen from its window.
+// only shows a drawing, all of it (fitAll()): no input reaches it, it never takes the pen from its
+// window.
 //
 // Files (core drawing/drawingfile.h): Brulion's SVG, a `.excalidraw` scene and an Obsidian
 // Excalidraw plugin file (`*.excalidraw.md`) — each written back in its own format (`format`,
@@ -124,7 +125,8 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(bool panMode READ panMode WRITE setPanMode NOTIFY panModeChanged FINAL)
     /// Takes input (default). False: a preview (the sync center's conflict of drawings) — no mouse,
     /// touch, stylus, wheel or pinch reaches it (they go to what lies behind: a list scrolls),
-    /// nothing is drawn or moved there; QML shows what it wants with load() and fitAll().
+    /// nothing is drawn or moved there; the whole drawing is in view (fitAll()) after load() and
+    /// whenever the item's size changes.
     Q_PROPERTY(bool interactive READ interactive WRITE setInteractive NOTIFY interactiveChanged FINAL)
     /// The view: zoom (1 = one scene unit per pixel) and the scene point at the item's centre.
     Q_PROPERTY(qreal zoom READ zoom WRITE setZoom NOTIFY viewChanged FINAL)

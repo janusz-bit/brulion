@@ -18,9 +18,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Rysunki — dalsze kroki.** Edytor rysunków (`/Rysunek`, docs/UI.md „Drawing editor”) ma
   pismo odręczne, zakreślacz, gumkę, papier, kształty, strzałki, tekst i zaznaczanie lassem.
   Do zrobienia:
-  * kopie konfliktowe Syncthinga (`*.sync-conflict-….svg`): „Scal rysunki” w centrum
-    synchronizacji, łączące linie obu wersji po ich identyfikatorach (jak przy zmianie z innego
-    urządzenia przy otwartym rysunku);
   * sprawdzić ręcznie zaznaczanie lassem rysikiem na tablecie (Natalia) i polskie znaki z
     klawiatury ekranowej w tekście na rysunku na prawdziwym telefonie (pisanie z klawiatury
     sprawdza `scripts/android-emulator-test.sh --drawing`, zgodność z excalidraw.com w obie strony

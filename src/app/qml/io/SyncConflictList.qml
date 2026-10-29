@@ -41,7 +41,7 @@ ListView {
         required property var modelData
         required property int index
         width: ListView.view.width
-        iconName: modelData.text ? "file-diff" : "file"
+        iconName: modelData.drawing ? "pen-tool" : modelData.text ? "file-diff" : "file"
         text: modelData.title
         subtitle: list.describe(modelData)
         selected: modelData.copy === list.currentCopy

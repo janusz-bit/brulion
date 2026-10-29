@@ -53,7 +53,8 @@ cache (docs/ARCHITECTURE.md); `tst_markdown_model`'s golden digest fails until y
   `.stfolder`, `.stversions/`, `node_modules/`, temp files (`~syncthing~*.tmp`,
   `.syncthing.*.tmp`, `.~lock.*#`, `*.part`). Syncthing conflict copies
   (`Name.sync-conflict-20261014-101010-ABCDEF.md`) are **not** indexed as pages but are
-  surfaced in the Sync Center as conflicts to merge.
+  surfaced in the Sync Center as conflicts to merge (conflict copies of drawings,
+  `Rysunek.sync-conflict-….svg`, element by element: §2 "Two versions").
 
 ### `.brulion/config.json`
 
@@ -252,6 +253,19 @@ of a stroke is one — some thirty pages of dense handwriting) is not read (`dra
 `MaxSceneContainers`): a small synced file must never inflate into gigabytes; it shows as a drawing
 that cannot be read.
 
+*Two versions (Dwie wersje rysunku; `drawing/merge.h`):* a drawing is never merged line by line
+(the payload is one line both devices change; glued halves are a broken file). Two versions are
+merged element by element, by the element's `id` (one without an id by its content) and `version`
+(every editor raises it with each change): against the version both had — the editor's last load
+or save when another device's version arrives, the merge base Nextcloud's sync keeps — elements
+new on either side are kept (this device's on top), changed ones take the changed side, erased
+ones go; with no common version — a conflict copy Syncthing or Nextcloud left, merged in the sync
+center ("Scal rysunki") — a union: every element of both, the higher `version` of one both have,
+the original's order, paper, pattern and theme (elements erased on one device only come back).
+Nextcloud keeps both versions (a conflict copy) of a drawing it cannot merge: an element Brulion
+does not edit, a scene that cannot be read, no common version (two drawings made apart under one
+name), an element whose content changed with the same `version` (an edit by hand).
+
 *Light and dark (Jasne i ciemne tło):* colours are stored as drawn, in light-theme terms, whatever
 the paper (as Excalidraw does). The dark paper shows them through **Excalidraw's dark mode
 mapping** (`drawing/palette.h`, a port of `applyDarkModeFilter`: the CSS filter `invert(93%)
@@ -335,9 +349,12 @@ quoting a `## Drawing` block is a note). The index keeps such a file a page (its
 searchable, the tag `excalidraw` lists the drawings); opened as a page it shows its drawing (the
 picture view: "Edytuj rysunek", "Pokaż jako tekst"), never the block editor. Brulion creates new
 drawings as SVG only. Sync (Nextcloud) never merges such a file line by line: changed on both
-devices, both versions are kept (a conflict copy); a side whose text is still the last synced one
-(a new ETag only: a client uploaded the same bytes again) is no change there — the other side's
-version wins without a conflict copy. (`.excalidraw` files sync as binary files: never merged.)
+devices, it is merged element by element as any drawing ("Two versions" above) — the Markdown
+around the scene (frontmatter, the back of the card, text entries) the server's, or this device's
+when only this device changed it; changed on both sides, both versions are kept (a conflict copy);
+a side whose text is still the last synced one (a new ETag only: a client uploaded the same bytes
+again) is no change there — the other side's version wins. (`.excalidraw` files sync as binary
+files: a conflict copy, merged in the sync center.)
 
 *Embeds of drawings:* `![[Szkic.excalidraw]]` (the link resolves to `Szkic.excalidraw` or, when
 there is none, the note `Szkic.excalidraw.md`), `![[Szkic.excalidraw.md]]` and a page embed

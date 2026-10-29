@@ -796,8 +796,21 @@ private Q_SLOTS:
         QVERIFY(!canvas->interactive());
         QCOMPARE(canvas->acceptedMouseButtons(), Qt::MouseButtons(Qt::NoButton));
         QVERIFY(!canvas->acceptTouchEvents());
+        // The whole drawing in view, whatever the size (no fitAll() needed).
         canvas->setSize(QSizeF(300, 160));
-        canvas->fitAll();
+        const auto inView = [this] {
+            const QRectF b = canvas->contentBounds();
+            const QPointF a = canvas->toItem(b.topLeft());
+            const QPointF z = canvas->toItem(b.bottomRight());
+            return a.x() >= -0.5 && a.y() >= -0.5 && z.x() <= canvas->width() + 0.5 && z.y() <= canvas->height() + 0.5;
+        };
+        QVERIFY(inView());
+        QVERIFY(canvas->zoom() < 1);
+        canvas->setSize(QSizeF(120, 300));
+        QVERIFY(inView());
+        canvas->setSize(QSizeF(300, 160));
+        QCOMPARE(canvas->load(strokesFile({u"a"_s, u"b"_s, u"c"_s})), QString());
+        QVERIFY(inView());
         const QPointF center(canvas->centerX(), canvas->centerY());
         const qreal zoom = canvas->zoom();
         mouseStroke(window.get(), {20, 20}, {280, 140}, 10);
@@ -820,11 +833,7 @@ private Q_SLOTS:
         QVERIFY(!canvas->stylusSeen());
         QCOMPARE(QPointF(canvas->centerX(), canvas->centerY()), center);
         QCOMPARE(canvas->zoom(), zoom);
-        // fitAll() shows the whole drawing inside the item.
-        const QRectF b = canvas->contentBounds();
-        const QPointF a = canvas->toItem(b.topLeft());
-        const QPointF z = canvas->toItem(b.bottomRight());
-        QVERIFY(a.x() >= -0.5 && a.y() >= -0.5 && z.x() <= 300.5 && z.y() <= 160.5);
+        QVERIFY(inView());
         // Interactive again: the mouse draws.
         canvas->setInteractive(true);
         QCOMPARE(interactive.size(), 2);

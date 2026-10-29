@@ -259,6 +259,8 @@ void DrawingCanvas::setInteractive(bool on)
     setAcceptedMouseButtons(on ? Qt::LeftButton | Qt::RightButton | Qt::MiddleButton : Qt::NoButton);
     setAcceptTouchEvents(on);
     setAcceptHoverEvents(on);
+    if (!on)
+        fitAll();
     update();
     Q_EMIT interactiveChanged();
 }
@@ -385,6 +387,8 @@ QString DrawingCanvas::load(const QByteArray &bytes)
     setModified(false);
     m_viewSet = false;
     placeView();
+    if (!m_interactive)
+        fitAll(); // a preview shows the whole drawing
     Q_EMIT loadedChanged();
     Q_EMIT backgroundChanged();
     Q_EMIT themeChanged();
@@ -663,7 +667,9 @@ void DrawingCanvas::geometryChange(const QRectF &newGeometry, const QRectF &oldG
     QQuickPaintedItem::geometryChange(newGeometry, oldGeometry);
     if (newGeometry.size() == oldGeometry.size())
         return;
-    if (!m_viewSet)
+    if (!m_interactive)
+        fitAll(); // a preview shows the whole drawing
+    else if (!m_viewSet)
         placeView();
     else if (oldGeometry.width() > 0 && oldGeometry.height() > 0)
         // The scene point at the top left stays there (a phone's keyboard, a resized window).

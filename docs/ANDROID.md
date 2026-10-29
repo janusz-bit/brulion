@@ -61,7 +61,8 @@ Wskazówki do Syncthing:
   szablon). Dane urządzenia (historia zmian, indeksy — także gotowy indeks notatnika
   `index-cache.bin`, który przyspiesza kolejne otwarcie i który można bezpiecznie usunąć) Brulion
   trzyma poza folderem, więc nie powodują konfliktów.
-* Konflikty Syncthing (`*.sync-conflict-*.md`) Brulion wykrywa i proponuje scalenie.
+* Konflikty Syncthing notatek i rysunków (`*.sync-conflict-*.md`, `*.sync-conflict-*.svg`) Brulion
+  wykrywa i proponuje scalenie (rysunki: **Scal rysunki**, linie i elementy obu wersji).
 * Wersjonowanie plików w Syncthing („Proste” lub „Przedziałowe”) jest dobrym, dodatkowym
   zabezpieczeniem.
 
