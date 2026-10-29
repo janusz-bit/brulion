@@ -1,6 +1,7 @@
 // The SVG file of a drawing: a picture every program shows, with the Excalidraw scene embedded
 // as excalidraw.com's "Embed scene" export does (excalidraw.h), so Brulion and excalidraw.com
-// open it as a drawing again.
+// open it as a drawing again. Brulion draws the picture itself (toSvg); svgWithScene() embeds a
+// scene in a picture another program drew of it (an import keeps Trilium's own picture).
 //
 //   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 W H" width="W" height="H">
 //   <!-- svg-source:excalidraw -->
@@ -37,7 +38,10 @@
 #include "drawing/drawing.h"
 
 #include <QByteArray>
+#include <QByteArrayView>
 #include <QJsonObject>
+
+#include <optional>
 
 namespace brulion::drawing {
 
@@ -53,6 +57,24 @@ QByteArray toSvg(const Drawing &drawing);
 /// The scene area the picture shows (its root's width and height): the elements' bounds plus
 /// SvgMargin, out to whole units — 0, 0, EmptyWidth × EmptyHeight for a drawing without elements.
 QRectF pictureRect(const Drawing &drawing);
+
+/// `picture` — an SVG another program drew of the scene (Trilium's canvas export, excalidraw.com's
+/// export without "Embed scene") — with `drawing`'s scene embedded as excalidraw.com's "Embed
+/// scene" does, right after the root's start tag:
+///
+///   \n<!-- svg-source:excalidraw -->\n<metadata><!-- payload-type:application/vnd.excalidraw+json
+///   --><!-- payload-version:2 --><!-- payload-start -->BASE64<!-- payload-end --></metadata>\n
+///
+/// (the `svg-source` comment only when the picture has none). Every other byte stays as it was (a
+/// BOM, the prolog, the picture's own style sheets and fonts) but a scene the picture had already:
+/// removed from `<!-- payload-type:` to `<!-- payload-end -->`, one scene per file. Brulion and
+/// excalidraw.com then open the file as a drawing, every program shows the picture; Brulion writes
+/// its own picture (toSvg) when it saves an edit. nullopt — use toSvg() — when the picture has no
+/// well-formed prolog and root `<svg …>` start tag (QXmlStreamReader; only the head is read), the
+/// root is empty (`<svg/>`, `width` or `height` 0: a picture of an empty scene), its start tag ends
+/// beyond HeadBytes − 512 (looksLikeExcalidrawSvg() must see the payload in the file's head), the
+/// prolog names a payload or the picture keeps a payload marker that is no whole payload.
+std::optional<QByteArray> svgWithScene(QByteArrayView picture, const Drawing &drawing);
 
 /// A colour as written into an SVG attribute: "#rgb", "#rrggbb" or "#rrggbbaa" (from a scene of
 /// anywhere: anything else would be markup) or `fallback`.
