@@ -41,7 +41,9 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   przy zamkniętym i otwartym Brulionie); Eksplorator Windows („Otwórz za pomocą → Brulion” na
   `.md` i `.txt`, kilka plików naraz, okno na wierzchu, program domyślny bez zmian); menedżer
   plików na Linuksie (GNOME Pliki, Dolphin: „Otwórz za pomocą”, okno wychodzi na wierzch pod
-  Waylandem); AppImage zintegrowany przez Gear Lever albo AppImageLauncher.
+  Waylandem, dwuklik na `.md` otwiera dalej dotychczasowy program; Cinnamon/Xfce pod X11: kursor
+  nie kręci się po otwarciu pliku w działającym Brulionie); AppImage zintegrowany przez Gear Lever
+  albo AppImageLauncher.
 * **Dopracowanie interfejsu — porównanie z Obsidianem.** Przejść ekran po ekranie (edytor
   w trybie dokumentu i konspektu, pasek boczny, wyszukiwarka, kalendarz, ustawienia; telefon
   i komputer) z Obsidianem obok i spisać różnice w układzie, odstępach, typografii, kolorach,

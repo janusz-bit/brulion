@@ -9,7 +9,13 @@ Exec=brulion --open %F
 Icon=io.github.januszbit.brulion
 Terminal=false
 Categories=Office;Utility;
-MimeType=text/markdown;text/x-markdown;text/plain;
+# "Otwórz za pomocą → Brulion" (docs/NIXOS.md): text/plain only — Markdown is a kind of it, so .md
+# files list Brulion too. Declaring text/markdown itself would make Brulion GNOME's default for .md
+# files, which has none of its own (GIO prefers an app of the exact type to the parent's default).
+MimeType=text/plain;
+# Launchers then hand over an activation token (Wayland), which a second launch forwards: the
+# running Brulion comes to the front.
+StartupNotify=true
 Keywords=notes;markdown;outliner;journal;diary;calendar;reminders;tasks;todo;wiki;
 Keywords[pl]=notatki;markdown;konspekt;dziennik;kalendarz;przypomnienia;zadania;notes;wiki;
 StartupWMClass=brulion

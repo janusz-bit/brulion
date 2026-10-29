@@ -286,7 +286,8 @@ Exec=brulion --open %F
 Icon=io.github.januszbit.brulion
 Terminal=false
 Categories=Office;Utility;
-MimeType=text/markdown;text/x-markdown;text/plain;
+MimeType=text/plain;
+StartupNotify=true
 Keywords=notes;markdown;outliner;journal;calendar;reminders;notatki;dziennik;kalendarz;przypomnienia;
 StartupWMClass=brulion
 EOF
@@ -346,11 +347,14 @@ for plugin in platforms/libqxcb.so platforms/libqwayland.so platforms/libqoffscr
   [[ -f $check_dir/squashfs-root/usr/plugins/$plugin ]] || die "plugin $plugin missing from the AppImage"
 done
 # "Otwórz za pomocą → Brulion" for Markdown and text files: the desktop entry AppImage integration
-# tools (Gear Lever, AppImageLauncher, appimaged) install keeps the files' types and --open %F.
+# tools (Gear Lever, AppImageLauncher, appimaged) install keeps the files' types and --open %F —
+# text/plain only (text/markdown would make Brulion GNOME's default for .md files) — and
+# StartupNotify (the launcher's activation token: the running Brulion comes to the front).
 entry=$(find "$check_dir/squashfs-root" -maxdepth 1 -name '*.desktop' -print -quit)
 [[ -n $entry ]] || die "no desktop entry at the top of the AppImage"
 grep -q -- '^Exec=.* --open %F$' "$entry" || die "the AppImage's desktop entry does not open files (Exec … --open %F)"
-grep -q '^MimeType=.*text/markdown;' "$entry" || die "the AppImage's desktop entry lists no Markdown files (MimeType)"
+grep -qx 'MimeType=text/plain;' "$entry" || die "the AppImage's desktop entry lists other types than text files (MimeType=text/plain;)"
+grep -qx 'StartupNotify=true' "$entry" || die "the AppImage's desktop entry has no StartupNotify=true"
 (cd "$check_dir/squashfs-root/usr/plugins" && printf 'plugins: %s\n' "$(echo *)")
 # Start it headless: it must still be running after 10 s, without QML or plugin errors.
 set +e

@@ -113,7 +113,10 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   Android the app's files dir + `/logs`, the browser none: memory only) and `deviceDescription()`
   for the event log; `allowForegroundActivation()` — Windows: `AllowSetForegroundWindow` before a
   second launch hands its files or request to the running Brulion, so its window comes to the
-  front (nothing elsewhere).
+  front (nothing elsewhere); `endStartupNotification(id)` — X11: such a launch ends the
+  launcher's startup notification (`StartupNotify=true`) itself, through Qt's xcb plugin, which
+  says "remove" once the process shows a window — a 1×1 tooltip window off the screen (nothing
+  elsewhere).
 * **Windows, pure parts everywhere** (tests/platform): `autostart.h` — "Start when you sign in":
   `Autostart` over two injected `QSettings` (production: `HKCU\…\CurrentVersion\Run` and Task
   Manager's `…\Explorer\StartupApproved\Run`; tests: INI files), the value `Brulion` =

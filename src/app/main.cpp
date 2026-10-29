@@ -95,8 +95,11 @@ int main(int argc, char *argv[])
     brulion::ui::DevTools::applyEarlyArguments(argc, argv); // --scale (before the app exists)
 #ifdef BRULION_DESKTOP_INTEGRATION
     // Wayland: the launcher's activation token, for the running Brulion a second launch hands its
-    // files or its request to (read before Qt could take it for a window of this process).
+    // files or its request to (read before Qt could take it for a window of this process). X11:
+    // the launcher's startup notification, which such a launch ends itself (Qt's xcb plugin takes
+    // the variable when the application object is made).
     const QByteArray launchToken = qgetenv("XDG_ACTIVATION_TOKEN");
+    const QByteArray startupId = qgetenv("DESKTOP_STARTUP_ID");
 #endif
 #ifdef BRULION_DESKTOP_INTEGRATION
     QApplication app(argc, argv);
@@ -165,6 +168,7 @@ int main(int argc, char *argv[])
                 std::fprintf(stderr, "Brulion is already running: --remote-control applies to a new run only. Turn "
                                      "remote control on in its settings (Settings → Application → For developers) or "
                                      "quit it first.\n");
+            brulion::platform::endStartupNotification(startupId);
             return 0;
         }
         if (singleInstance->listen()) {
@@ -182,8 +186,10 @@ int main(int argc, char *argv[])
             // once it listens. Should it not answer, run anyway rather than not at all.
             for (int attempt = 0; attempt < 20; ++attempt) {
                 QThread::msleep(100);
-                if (singleInstance->sendToPrimary(message, 200))
+                if (singleInstance->sendToPrimary(message, 200)) {
+                    brulion::platform::endStartupNotification(startupId);
                     return 0;
+                }
             }
             singleInstanceProblem = u"another Brulion holds %1.lock but does not answer"_s.arg(singleInstance->key());
             singleInstance.reset();
