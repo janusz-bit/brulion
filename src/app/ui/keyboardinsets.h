@@ -5,10 +5,11 @@
 //
 // Sources, by priority:
 //   1. `simulated` — DevTools `--keyboard <px>`, tests and screenshots (simulate()).
-//   2. the platform's own report (setPlatformState): Android's IME insets (android/src/…/
+//   2. the platform's own report: Android's IME insets (setPlatformState; android/src/…/
 //      ImeInsets.kt via AndroidBridge::imeChanged, frame by frame while the keyboard slides on
-//      Android 11+), the browser's visualViewport (src/platform/wasm/wasmshell.h). From its first
-//      report on, the platform wins over Qt's own rectangle.
+//      Android 11+), the browser's viewports (setViewportSample; src/platform/wasm/wasmshell.h,
+//      computed by ViewportKeyboard below). From its first report on, the platform wins over
+//      Qt's own rectangle.
 //   3. Qt's QInputMethod::keyboardRectangle (setInputMethodState), mapped with keyboardOverlap():
 //      a fallback for platforms or devices that report nothing else.
 // The values are idempotent: a window the system already resized above the keyboard gets 0.
@@ -17,6 +18,7 @@
 // platform and Qt's input method to the instance main() creates.
 #pragma once
 
+#include <QHash>
 #include <QObject>
 #include <QRect>
 #include <QRectF>
@@ -32,6 +34,68 @@ namespace brulion::ui {
 /// A hidden keyboard, an empty, negative or non-finite rectangle, a keyboard below the window
 /// (the system resized the window above it) or beside it give 0.
 qreal keyboardOverlap(const QRectF &keyboard, bool nativePixels, qreal dpr, const QRect &window, bool visible);
+
+/// One reading of the browser's viewports in logical (CSS) pixels — the browser build reports
+/// them (src/platform/wasm/wasmshell.h, BrowserViewport) on every change while the keyboard
+/// moves, and once more when the values stay put (`settled`).
+struct ViewportSample {
+    qreal innerWidth = 0;      ///< window.innerWidth (one tallest height per width: rotation)
+    qreal innerHeight = 0;     ///< window.innerHeight (may lag a frame behind while the page resizes)
+    qreal height = 0;          ///< visualViewport.height
+    qreal offsetTop = 0;       ///< visualViewport.offsetTop (from the layout viewport's top)
+    qreal scale = 1;           ///< visualViewport.scale (pinch zoom)
+    qreal containerHeight = 0; ///< Qt's container (#screen), fixed at the layout viewport's top; 0 unknown
+    bool touch = false;        ///< a coarse pointer (phone, tablet)
+    bool editing = false;      ///< Qt's hidden keyboard <input> has the focus (text is edited)
+    bool settled = true;       ///< the values stayed put for a few animation frames
+    QString mode;              ///< the page's interactive-widget: "content", "visual" or "" (unknown)
+};
+
+/// How much of Qt's container the visual viewport leaves out at the bottom:
+/// containerHeight − (offsetTop + height), clamped to 0 … the container's height. The container's
+/// height is `containerHeight`, else `windowHeight` (Qt's window), else innerHeight. 0 for a
+/// pinch-zoomed page (scale > 1.01), malformed values (not finite, height <= 0) and below
+/// ViewportKeyboard::MinOverlap (rounding); a negative offsetTop (overscroll) counts as 0.
+/// Measured against the container (one layout snapshot with the visual viewport), not
+/// innerHeight: a page the browser shrank itself for the keyboard
+/// (interactive-widget=resizes-content) gives 0 at once, also while innerHeight is stale.
+qreal viewportOverlap(const ViewportSample &sample, qreal windowHeight);
+
+/// The browser's keyboard from successive viewport samples (docs/WEB.md "Klawiatura ekranowa").
+/// `overlap`: viewportOverlap(). `shown`: an overlap, or — the browser shrank the page itself
+/// (interactive-widget=resizes-content) — on a touch screen with Qt's keyboard <input> focused, a
+/// visual viewport at least MinKeyboard lower than the tallest one seen at this width (one tallest
+/// per width: a rotated phone starts again — Chrome and Brave hide the keyboard on the turn,
+/// Firefox reports the turned page without it first). Once shown so, the focus passing between
+/// Qt's elements (Enter: the next block) does not hide it while the page stays shrunk and the
+/// samples have not settled; a settled sample without the focus ends it (the editing is over: a
+/// page shrunk for another reason, a split screen, is no keyboard). `animating`: the viewports
+/// moved since the last settled sample and have not settled yet (a focus change alone does not
+/// count). Feeding the same sample twice gives the same state.
+class ViewportKeyboard {
+public:
+    struct State {
+        qreal overlap = 0;
+        bool shown = false;
+        bool animating = false;
+        bool operator==(const State &) const = default;
+    };
+    /// Below this the container and the visual viewport only differ by rounding.
+    static constexpr qreal MinOverlap = 2;
+    /// A smaller shrink is the browser's own bars (an address bar of 56 px), not a keyboard.
+    static constexpr qreal MinKeyboard = 120;
+
+    State update(const ViewportSample &sample, qreal windowHeight);
+    /// The tallest visual viewport seen at this width (0: none yet).
+    qreal tallest(qreal innerWidth) const;
+
+private:
+    QHash<int, qreal> m_tallest; // qRound(innerWidth) → the tallest visualViewport.height
+    ViewportSample m_settled;    // the last settled sample (geometry only)
+    bool m_hasSettled = false;
+    bool m_moving = false; // an unsettled sample moved away from m_settled
+    bool m_shrunk = false; // shown from the page's shrink (the last sample)
+};
 
 class KeyboardInsets : public QObject {
     Q_OBJECT
@@ -49,6 +113,9 @@ class KeyboardInsets : public QObject {
     Q_PROPERTY(qreal simulated READ simulated WRITE setSimulated NOTIFY simulatedChanged FINAL)
     /// Where the values come from: "none", "inputMethod", "platform" or "simulated".
     Q_PROPERTY(QString source READ sourceName NOTIFY sourceChanged FINAL)
+    /// Self-tests (the browser's `?selftest=keyboard`): the keyboard's room and the docked editing
+    /// toolbar are drawn in marker colours, so a screenshot shows where each one ends.
+    Q_PROPERTY(bool marked READ marked NOTIFY markedChanged FINAL)
 
 public:
     enum class Source { None, InputMethod, Platform, Simulated };
@@ -75,6 +142,15 @@ public:
     /// The platform's report in logical pixels (see above). Not finite or negative overlaps
     /// count as 0; overlaps are clamped to the window's height when it is known.
     void setPlatformState(qreal overlap, bool shown, bool animating);
+    /// The browser's viewports (the platform's report there), computed by ViewportKeyboard. The
+    /// sample is kept: a new window height evaluates it again (without a container height the
+    /// window's height is the container's).
+    void setViewportSample(const ViewportSample &sample);
+    /// The last viewport sample (setViewportSample), default-constructed before the first one.
+    const ViewportSample &viewportSample() const { return m_viewportSample; }
+
+    bool marked() const { return m_marked; }
+    void setMarked(bool marked);
     /// Qt's input method, already mapped with keyboardOverlap() (the fallback).
     void setInputMethodState(qreal overlap, bool shown);
     /// The window's logical height: overlaps are clamped to it (0 = unknown, no clamping).
@@ -92,6 +168,7 @@ Q_SIGNALS:
     void animatingChanged();
     void simulatedChanged();
     void sourceChanged();
+    void markedChanged();
 
 private:
     struct State {
@@ -100,12 +177,17 @@ private:
         bool animating = false;
     };
     qreal clampOverlap(qreal overlap) const;
+    void applyPlatform(qreal overlap, bool shown, bool animating, const QString &how);
     void update();
 
     State m_platform;
     State m_inputMethod;
     State m_current;
     bool m_hasPlatform = false;
+    ViewportKeyboard m_viewportKeyboard;
+    ViewportSample m_viewportSample;
+    bool m_hasViewportSample = false;
+    bool m_marked = false;
     qreal m_simulated = -1;
     bool m_simulatedAnimating = false;
     qreal m_windowHeight = 0;

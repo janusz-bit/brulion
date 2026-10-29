@@ -23,11 +23,22 @@ using namespace Qt::StringLiterals;
 // JavaScript in EM_JS: semicolons everywhere, double quotes only (see wasmstorage.cpp).
 EM_JS_DEPS(brulion_wasm_selftest, "$UTF8ToString");
 
+// The shell's brulionShell.selftest(key, text) also sends it to the test's server when the page
+// was opened with ?report=<path> (browsers driven without DevTools: scripts/android-emulator-test.sh
+// --web-keyboard).
 EM_JS(void, brulion_selftest_publish, (const char *name, const char *json), {
     var key = UTF8ToString(name);
     var text = UTF8ToString(json);
     globalThis[key] = JSON.parse(text);
     console.log("BRULION_SELFTEST " + key + " " + text);
+    var shell = globalThis["brulionShell"];
+    if (shell && shell.selftest) {
+        try {
+            shell.selftest(key, text);
+        } catch (e) {
+            console.error(e);
+        }
+    }
 });
 
 namespace brulion::platform {

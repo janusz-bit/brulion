@@ -177,7 +177,8 @@ jobs:
     name: Web
     needs: draft
     # wasm.yml's Pages deployment job needs these, although it does not run for releases (the
-    # pages job below deploys the release's site once the release is published).
+    # pages job below deploys the release's site once the release is published). Its Android
+    # emulator check of the browsers' keyboards does not run either (skip-emulator).
     permissions:
       contents: read
       pages: write
@@ -186,6 +187,7 @@ jobs:
     with:
       deploy: false
       pages-artifact: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
+      skip-emulator: true
 
   publish:
     name: Publish the release

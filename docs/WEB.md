@@ -107,6 +107,16 @@ Parametry adresu (do debugowania):
 * `?nosw` — nie rejestruj service workera.
 * `?selftest=storage`, `?selftest=notify`, `?selftest=glyphs`, `?selftest=keyboard`,
   `?selftest=storage,notify` — testy (niżej).
+* `?keyboard=visual` — klawiatura ekranowa zmniejsza tylko widoczny obszar, nie stronę
+  (domyślne zachowanie przeglądarek, `interactive-widget=resizes-visual`; niżej, „Klawiatura
+  ekranowa”) — do testów i diagnozy.
+* `?report=/__report/<nazwa>` — wyniki testów (`?selftest=…`) idą też żądaniem POST pod tę
+  ścieżkę tej samej witryny (`{name, json, t}`, bez ciasteczek; serwer testowy
+  `scripts/web-test-server.py`) — dla przeglądarek bez DevTools, np. na emulatorze Androida.
+  Inne ścieżki i adresy, które parser adresów zamienia na inną witrynę (np. `/%09/host`: tabulator
+  i znaki nowej linii parser usuwa, zostaje `//host`), są pomijane — sprawdza to
+  `scripts/wasm-smoke.mjs --keyboard`. Wynik `?selftest=keyboard` zawiera początek tekstu
+  edytowanego pola (`focusText`), nigdy pola hasła.
 
 Ścieżkę GitHub Pages da się sprawdzić lokalnie, kopiując `dist-wasm/` do `site/brulion/` i
 serwując `site/` (`http://127.0.0.1:8000/brulion/`).
@@ -145,12 +155,28 @@ Pozostałe opcje:
   kwadraty przed i po instalacji). CI uruchamia go przy pierwszym teście.
 * `--keyboard` — podstawia stronie własny `window.visualViewport` (przed jej skryptami) i
   uruchamia `?selftest=keyboard`: aplikacja przy każdej zmianie publikuje
-  `window.brulionKeyboardSelfTest` (`{overlap, shown, animating, source}`), a skrypt „otwiera”
-  klawiaturę 300 px, 250 px przy stronie przewiniętej o 20 px (jak robi iOS), podaje wartość
-  błędną (NaN → 0), powiększa stronę gestem (`scale` 2: to nie klawiatura, 0), przewija stronę
-  o 40 px (aplikacja musi ją przewinąć z powrotem na górę) i chowa klawiaturę — za każdym razem
-  aplikacja musi zgłosić właściwą wysokość (niżej, „Klawiatura ekranowa”). Ze `--screenshot`
-  dochodzi zrzut `…-keyboard.png`. CI uruchamia go przy pierwszym teście.
+  `window.brulionKeyboardSelfTest` (`{overlap, shown, animating, source, mode, sample, …}`),
+  a skrypt „otwiera” klawiaturę 300 px, 250 px przy stronie przewiniętej o 20 px (jak robi iOS),
+  podaje wartość błędną (NaN → 0), powiększa stronę gestem (`scale` 2: to nie klawiatura, 0),
+  przewija stronę o 40 px (aplikacja musi ją przewinąć z powrotem na górę) i chowa klawiaturę —
+  za każdym razem aplikacja musi zgłosić właściwą wysokość (niżej, „Klawiatura ekranowa”).
+  Wcześniej sprawdza samą powłokę (skrypty aplikacji wstrzymane, więc magazyn i liczniki testu
+  zostają nietknięte): z `?report=/__report/smoke` wynik idzie POST-em tylko pod ten adres tej
+  samej witryny, a z `/%09/`, `/%0A/`, `/%0D/`, `//`, `/\`, pełnym adresem innej witryny
+  i innymi ścieżkami — nigdzie. Ze `--screenshot` dochodzi zrzut `…-keyboard.png`. CI uruchamia go
+  przy pierwszym teście.
+* `--keyboard-phone` — to samo na udawanym telefonie (412×915 pikseli CSS, gęstość 2,625, ekran
+  dotykowy) z dzisiejszym dziennikiem zapisanym do IndexedDB (jak `--copy`) i blokiem edytowanym
+  stuknięciem nisko na ekranie: strona prosi o `interactive-widget=resizes-content` (a z
+  `?keyboard=visual` o `resizes-visual`), ukryte pole klawiatury Qt zostaje w lewym górnym rogu
+  okna, klawiatura zmniejszająca tylko widoczny obszar (300 px; 180 px przy widoku przesuniętym
+  o 120 px) podnosi pasek narzędzi dokładnie na swoją górną krawędź, a strona zmniejszona przez
+  przeglądarkę (ekran udawanego telefonu niższy o 300 px) daje zero zakrycia, klawiatura liczy się
+  jako widoczna, a pasek kończy się na dole okna — także przy nieaktualnym `innerHeight` (stary
+  wzór liczyłby klawiaturę drugi raz); kontenery Qt nie zostają przewinięte. Położenie paska
+  i treści aplikacja podaje w `brulionKeyboardSelfTest` (`windowHeight`, `contentBottom`,
+  `toolbarBottom`). Ze `--screenshot` dochodzą zrzuty `…-edit.png`, `…-visual.png`,
+  `…-content.png`. CI uruchamia go przy pierwszym teście.
 * `--two-tabs` — otwiera drugą kartę: musi czekać z komunikatem „Brulion jest otwarty w innej
   karcie…”, a po opuszczeniu aplikacji w pierwszej karcie przejąć dane.
 * `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
@@ -419,23 +445,111 @@ i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 01
 
 ## Klawiatura ekranowa (telefon)
 
-Chrome i Firefox na Androidzie przy otwartej klawiaturze nie zmieniają rozmiaru strony (domyślne
-`interactive-widget=resizes-visual`, którego `wasm/index.html` nie zmienia): zmniejsza się tylko
-widoczny obszar, `window.visualViewport`. Ekran Qt (`#screen`) zostaje więc w pełnym rozmiarze —
-zmiana rozmiaru ekranu Qt przy każdym otwarciu klawiatury przebudowywałaby całe okno —, a powłoka
-(`watchVisualViewport` w `src/platform/wasm/wasmshell.cpp`) przy każdym zdarzeniu `resize` /
-`scroll` widoku zgłasza aplikacji, ile dołu strony zakrywa klawiatura:
-`innerHeight − visualViewport.height − visualViewport.offsetTop` (piksele CSS to piksele
-logiczne Qt; strona powiększona gestem — `visualViewport.scale` > 1, np. touchpad na komputerze —
-to nie klawiatura: 0). `KeyboardInsets` (docs/UI.md „On-screen keyboard”) podnosi o tyle widok, pasek
+Pasek narzędzi edycji ma leżeć dokładnie na klawiaturze ekranowej. Strona prosi przeglądarkę
+o `interactive-widget=resizes-content` (`wasm/index.html`): otwarta klawiatura zmniejsza całą
+stronę, a z nią ekran Qt (`#screen`) i okno aplikacji, więc pasek przy dolnej krawędzi okna leży
+na klawiaturze, a aplikacja niczego nie podnosi (zakrycie 0). Domyślne zachowanie przeglądarek
+(`resizes-visual`: strona zostaje, zmniejsza się tylko widoczny obszar, `window.visualViewport`)
+nie działa w Brave: Brave na Androidzie chowa przy klawiaturze swój dolny pasek, ale
+`visualViewport.height` dalej go odejmuje
+([brave-browser#60074](https://github.com/brave/brave-browser/issues/60074); na Pixelu
+412×915: widoczne 433,9 px, `visualViewport.height` 385,9 px) — aplikacja podnosiła pasek o ok.
+48 px za wysoko i między nim a klawiaturą zostawał pusty pas. Żadne API strony nie pokazuje
+prawdziwej wartości; rozmiar strony, który przeglądarka ustala sama, jest dobry. Kosztem jest
+przeliczenie układu okna przy otwarciu i zamknięciu klawiatury (na emulatorze: jedna zmiana
+wysokości okna Qt w każdą stronę; w Chrome i Brave jeszcze jedna, gdy przed klawiaturą pojawia się
+pasek autouzupełniania przeglądarki, niżej). `resizes-content`
+obsługują Chrome ≥ 108, Brave, Edge, Samsung Internet i Firefox ≥ 132; iOS Safari i starsze
+przeglądarki je pomijają.
+
+Gdzie przeglądarka zmniejsza tylko widoczny obszar (iOS Safari, starsze przeglądarki,
+`?keyboard=visual`), aplikacja podnosi treść o część ekranu Qt, której widoczny obszar nie
+obejmuje: wysokość kontenera `#screen` − (`visualViewport.offsetTop` + `visualViewport.height`).
+Liczy się względem kontenera Qt, nie `innerHeight` (Chromium w trakcie zmiany rozmiaru strony podaje
+nieaktualne `innerHeight`: stary wzór `innerHeight − height − offsetTop` liczył wtedy klawiaturę
+drugi raz). Strona powiększona gestem (`visualViewport.scale` > 1,01, np. touchpad na komputerze),
+wartości błędne (NaN, wysokość 0 po obrocie) i różnice poniżej 2 px (zaokrąglenia) to nie klawiatura.
+
+Powłoka (`watchVisualViewport` w `src/platform/wasm/wasmshell.cpp`) przy zdarzeniach
+`visualViewport` (`resize`, `scroll`), `resize` okna, zmianie fokusu i zmianie rozmiaru
+kontenera Qt (`ResizeObserver`) przekazuje surowe odczyty (`innerHeight`, `visualViewport`,
+wysokość kontenera, ekran dotykowy, fokus w polu klawiatury Qt) co klatkę animacji, aż wartości
+przez 6 klatek się nie zmienią (ostatni odczyt: „ustalony”); liczy C++ (`ViewportKeyboard`
+w `src/app/ui/keyboardinsets.h`, testy `tst_keyboardinsets` z sekwencjami nagranymi
+w przeglądarkach). Klawiatura liczy się jako widoczna (`shown`: dolna nawigacja chowa się,
+komunikaty idą na górę) przy zakryciu albo — gdy przeglądarka zmniejszyła stronę — na ekranie
+dotykowym z fokusem w polu Qt, gdy widoczny obszar jest co najmniej 120 px niższy niż najwyższy
+widziany przy tej szerokości (obrót telefonu zaczyna od nowa; pasek adresu przeglądarki, 56 px, to
+nie klawiatura). Fokus przechodzący między elementami Qt (Enter: następny blok) nie chowa jej, dopóki
+odczyty się nie ustalą; ustalony odczyt bez fokusu w polu Qt chowa ją (edycja skończona — na
+podzielonym ekranie strona zostaje niższa bez klawiatury). Telefon obrócony przy otwartej
+klawiaturze (sprawdzone na emulatorze): Chrome i Brave chowają klawiaturę, a blok zostaje
+edytowany — pierwsza wysokość w poziomie jest pełna; Firefox zostawia klawiaturę, ale najpierw
+podaje stronę w poziomie bez niej (301 px), potem z nią (62 px). W obu przypadkach najwyższa
+wysokość przy nowej szerokości to strona bez klawiatury. `animating` trwa, dopóki odczyty się nie
+ustalą: kursor przewija się w widok dopiero potem. `KeyboardInsets` (docs/UI.md „On-screen keyboard”) podnosi o zakrycie widok, pasek
 narzędzi edycji, okna wysuwane od dołu, menu i komunikaty — tak samo jak na Androidzie. Bez
 `visualViewport` (stare przeglądarki) nic nie jest zgłaszane, a Qt nie zna klawiatury
 (`keyboardRectangle` w przeglądarce jest pusty).
 
-iOS Safari — tylko „best effort”, nie sprawdzone na urządzeniu: przy klawiaturze przewija stronę
-do pola tekstowego, przez które Qt odbiera pisanie; powłoka przewija ją z powrotem na górę
-(`scrollTo(0, 0)`) i uwzględnia `offsetTop`, ale to może się z przeglądarką przepychać. Test:
-`scripts/wasm-smoke.mjs --keyboard` (wyżej).
+Ukryte pole tekstowe, przez które Qt odbiera pisanie (`.qt-window-input-element`), Qt stawia
+w lewym górnym rogu edytowanego tekstu; po stuknięciu bloku nisko na ekranie przeglądarka
+przesuwała do niego widok (Chrome: górny pasek aplikacji uciekał z ekranu, iOS przewijał stronę),
+a pod oknem zmniejszonym przez klawiaturę przewijała kontenery Qt. Na ekranach dotykowych powłoka
+przypina je w lewym górnym rogu okna (styl w otwartym shadow root `#qt-shadow-container`), a
+przewinięte kontenery Qt wraca na 0; stronę przewiniętą przez iOS przewija z powrotem na górę.
+Okna kandydatów klawiatur CJK pojawiają się przez to w rogu okna.
+
+Chrome i Brave nad klawiaturą każdego pola tekstowego stawiają własny pasek autouzupełniania
+(hasła, karty, adresy; 48 px w Chrome, 64 px w Brave — pas z trzema ikonami po prawej): pasek
+narzędzi Brulionu leży wtedy na nim, a ten na klawiaturze. To część przeglądarki, nie strony
+(`visualViewport` i rozmiar strony go nie obejmują). Na emulatorze sprawdzone: `autocomplete="off"`,
+nazwy i etykiety pola go nie chowają; chowa go tylko pole wyszukiwania (`type="search"`), ale
+w nim klawiatura zaczynała od wielkiej litery pierwsze słowo wpisane w środku zdania — więc pole Qt
+zostaje polem tekstowym.
+
+Znane ograniczenia: przeglądarka, która pomija `interactive-widget`, a ma błąd Brave, dalej
+zostawi pas (nie da się go wykryć). Przeglądarka, która po obrocie telefonu od razu poda stronę
+z klawiaturą (żadna z trzech sprawdzonych), zapamięta ją jako najwyższą przy tej szerokości:
+klawiatura liczy się wtedy jako schowana, dopóki raz nie zejdzie (pasek narzędzi i tak zostaje na
+dole okna, czyli na klawiaturze). Nowa karta w Brave dostaje na chwilę widok jak przy schowanym
+pasku ([brave-browser#59940](https://github.com/brave/brave-browser/issues/59940)) — to błąd
+Brave. iOS Safari — tylko „best effort”, bez automatycznego testu na iOS: ścieżka
+`visualViewport` z przypiętym polem, sprawdzana przez `scripts/wasm-smoke.mjs --keyboard`
+i `--keyboard-phone` (wyżej).
+
+Test w prawdziwych przeglądarkach: `scripts/android-emulator-test.sh --web-keyboard dist-wasm`
+(emulator Androida 16 z KVM, Pixel 6; job `keyboard-android` w `.github/workflows/wasm.yml`).
+Serwuje witrynę pod `/brulion/` (`scripts/web-test-server.py`; w emulatorze `http://10.0.2.2`,
+które przeglądarki traktują jak bezpieczny kontekst: Chrome i Brave przez
+`--unsafely-treat-insecure-origin-as-secure`, Firefox przez `dom.securecontext.allowlist`),
+w Chrome z obrazu systemu, Brave 1.97.59 (wersja z #60074) i Firefoksie 157.0.1 (przypięte APK
+z sumami SHA-256) zapisuje dziennik 40 polskich bloków, otwiera
+`?selftest=keyboard&report=…` (oraz z `&keyboard=visual`), stuka blok i czeka na klawiaturę.
+Aplikacja w tym teście maluje miejsce klawiatury na purpurowo, a pasek narzędzi na
+turkusowo (`KeyboardInsets.marked`): na zrzucie ekranu nad górną krawędzią klawiatury (ramka
+IME z `dumpsys window`) nie może być purpurowych wierszy (pasa; dopuszczalne 3 px), tylko ≥ 20
+wierszy paska — co najwyżej nad paskiem autouzupełniania przeglądarki (≤ 72 dp) — a według
+aplikacji pasek kończy się na dole okna Qt, które wypełnia stronę. Słowo wpisane klawiszami
+klawiatury trafia do bloku, a klawisz akcji klawiatury to Enter, który dzieli blok
+(`focusText` w wyniku testu). Potem telefon obraca się w poziom przy otwartej klawiaturze: pasek
+kończy się na dole okna, a gdy klawiatura zostaje (Firefox), liczy się jako widoczna; po obrocie
+z powrotem klawiatura znów się liczy (Chrome i Brave: po stuknięciu bloku). Po „Wstecz” (klawiatura
+schowana) nie zostaje nic purpurowego, a pasek zostaje na dole. Z `?keyboard=visual` wynik tylko się
+zapisuje (Brave pokazuje pas z #60074).
+Skrypt zapisuje odczyty (`samples-<przeglądarka>-<tryb>.jsonl`), wypisuje je jako wiersze testu
+`tst_keyboardinsets` i liczy, ile razy okno Qt zmieniło wysokość przy otwarciu klawiatury.
+
+Wynik z 28.10.2026 (Android 16, Pixel 6, 1080×2400, gęstość 420): w Chrome 133, Brave 1.97.59
+i Firefoksie 157.0.1 pasek narzędzi leży na klawiaturze (Firefox: 0 px; Chrome i Brave: na ich
+pasku autouzupełniania, 126 i 168 px, bez ani jednego piksela strony między nimi), okno Qt
+zmniejsza się raz przy otwarciu i raz przy zamknięciu; z `?keyboard=visual` Brave pokazuje pas
+124 px (#60074: zgłasza zakrycie 376 px przy 328 px rzeczywistego), Chrome i Firefox nie. Obrót
+(29.10.2026): Chrome i Brave chowają klawiaturę (strona w poziomie 866×308 i 865×307 px), Firefox ją
+zostawia (najpierw strona 871×301 px bez niej, po chwili 871×62 px z nią), pasek w każdej leży na
+dole okna. Znaki spoza ASCII wpisane klawiaturą (à, ß, ç, ñ — przytrzymanie klawisza w angielskim
+układzie Gboard; polskiego układu obraz emulatora nie ma, a jego pobranie wymaga ustawień Gboard)
+trafiają do bloku bez zmian we wszystkich trzech (sprawdzone ręcznie skryptem, nie w teście).
 
 ## Ograniczenia techniczne
 
@@ -503,7 +617,7 @@ do pola tekstowego, przez które Qt odbiera pisanie; powłoka przewija ją z pow
 |---|---|
 | `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | powłoka HTML, service worker, manifest |
 | `wasm/icons/` | ikony PWA; PNG wygenerowane z `assets/logo.svg` i `wasm/icons/maskable.svg` (odstęp bezpieczny dla ikon maskowalnych) oraz `badge.svg` (monochromatyczna plakietka powiadomień) |
-| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, most do ekranu ładowania i `visualViewport` (klawiatura ekranowa; `wasmshell.h`), test trwałości (`wasmselftest.h`) |
+| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), test trwałości (`wasmselftest.h`) |
 | `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |
 | `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + złożenie strony, test w Chromium |
 | `tests/app/drawing/wasm-drawing-check.mjs` | rysunek w notatce w jasnym i ciemnym motywie, w Chromium |

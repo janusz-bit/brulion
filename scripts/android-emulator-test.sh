@@ -71,6 +71,20 @@
 # (`[x]` and `✅ <the day of the tap>`); the second one's tapped with the app's process gone leaves
 # the note as it is until the next start, which writes it. Screenshots (dn-*.png); the same
 # debuggable APK.
+# With --web-keyboard SITE_DIR instead: the web build (scripts/wasm-build.sh -> dist-wasm) in Android's
+# browsers — Chrome (in the google_apis image), Brave 1.97.59 and Firefox 157.0.1 (pinned APKs,
+# SHA-256 checked, cached in ~/.cache/brulion-web-browsers): the site served from the host under
+# /brulion/ (scripts/web-test-server.py; http://10.0.2.2 in the emulator, a secure context), today's
+# journal written into IndexedDB, the app opened with ?selftest=keyboard (its results POSTed to the
+# server), a block tapped: the keyboard comes up and the editing toolbar sits right on it — on a
+# screenshot no magenta row (the app paints the keyboard's room so) between the IME's top and the
+# cyan toolbar (gap <= 3 px), and the browser shrank the page (interactive-widget=resizes-content);
+# a word typed and Enter reach the block; the phone turned with the keyboard up and back (the toolbar
+# at the window's bottom, the keyboard counted as up where it stays: Firefox; Chrome and Brave hide
+# it); Back hides the keyboard and leaves the toolbar docked, nothing magenta. Each browser runs again with
+# ?keyboard=visual (the browser's default), for the record (Brave's brave-browser#60074: a gap).
+# The app's readings are kept (samples-<browser>-<mode>.jsonl) and printed as rows of
+# tests/app/tst_keyboardinsets.cpp; screenshots wk-*.png. docs/WEB.md "Klawiatura ekranowa".
 # --selection, --folders, --share, --widgets, --web-pictures and --done find what they tap by its accessible name (UiAutomator reads Qt's
 # accessibility tree; the keyboard's keys from its dump of every window),
 # so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).
@@ -83,6 +97,7 @@
 #        scripts/android-emulator-test.sh --widgets [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-pictures [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --done [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --web-keyboard [SITE_DIR]   (default dist-wasm)
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
 #   ANDROID_SDK_ROOT         Android SDK (default ~/.cache/brulion-android-sdk); the emulator and
@@ -94,6 +109,9 @@
 #   BRULION_EMULATOR_OUT     logs and screenshots (default dist-android/emulator-test)
 #   BRULION_WEBPICTURE_HTTPS --web-pictures: the public https picture (default: Google's logo)
 #   BRULION_WEBPICTURE_PORT  --web-pictures: the host's port of the http picture (default 8765)
+#   BRULION_WEB_PORT         --web-keyboard: the host's port of the site (default 8123)
+#   BRULION_WEB_BROWSERS     --web-keyboard: the browsers tested (default "chrome brave firefox")
+#   BRULION_WEB_BROWSERS_CACHE --web-keyboard: the browsers' APKs (~/.cache/brulion-web-browsers)
 # On NixOS the emulator runs under steam-run (its bundled libraries expect an FHS system).
 set -euo pipefail
 
@@ -128,6 +146,7 @@ SHARE=0
 WIDGETS=0
 WEBPICTURES=0
 DONE=0
+WEBKEYBOARD=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
   shift
@@ -149,11 +168,20 @@ elif [[ ${1:-} == --done ]]; then
 elif [[ ${1:-} == --web-pictures ]]; then
   WEBPICTURES=1
   shift
+elif [[ ${1:-} == --web-keyboard ]]; then
+  WEBKEYBOARD=1
+  shift
 fi
-APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
-SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
-[[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
+if ((WEBKEYBOARD)); then
+  SITE_DIR=${1:-dist-wasm}
+  [[ -f $SITE_DIR/index.html && -f $SITE_DIR/brulion.wasm ]] || die "$SITE_DIR is not the web build (scripts/wasm-build.sh)"
+  SITE_DIR=$(cd -- "$SITE_DIR" && pwd)
+else
+  APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
+  SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
+  [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
+fi
 
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
 IMAGE=${BRULION_EMULATOR_IMAGE:-system-images;android-36;google_apis;x86_64}
@@ -1203,6 +1231,552 @@ PY
   echo "    the journal:"
   wp_cat | sed 's/^/      /'
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- the web build's editing toolbar on the keyboard in Android's browsers (--web-keyboard) ----------
+
+if ((WEBKEYBOARD)); then
+  info "Web keyboard: $SITE_DIR on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  WK_PORT=${BRULION_WEB_PORT:-8123}
+  WK_CACHE=${BRULION_WEB_BROWSERS_CACHE:-$HOME/.cache/brulion-web-browsers}
+  # Pinned browsers: Brave of brave-browser#60074 (its visualViewport leaves out the bottom
+  # toolbar it hides for the keyboard), a stable Firefox (x86_64 builds); Chrome comes with the
+  # google_apis image.
+  BRAVE_VERSION=1.97.59
+  BRAVE_SHA256=03ba680494a9abd6a5b68fed7bd6f3ebc1b6e06f9d702dcff2a61bb8ae3ec7de
+  FENIX_VERSION=157.0.1
+  FENIX_SHA256=a6f397305508603cb0548dca8c321c412bc6eda7765f417fd142f61c9918e29c
+  # Helpers in Python (standard library): the report's records of a run, the raw screenshot's rows.
+  WK_PY=$(
+    cat <<'PY'
+import json, struct, sys
+
+def records(report, run):
+    out = []
+    with open(report, encoding="utf-8") as f:
+        for line in f:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            body = r.get("body")
+            if r.get("path") == "/__report/" + run and isinstance(body, dict) and body.get("name") == "brulionKeyboardSelfTest":
+                out.append(body.get("json") or {})
+    return out
+
+def num(v, default=0):
+    return v if isinstance(v, (int, float)) else default
+
+def state(report, run):
+    # "count windowHeight overlap shown animating editing settled toolbarBottom contentBottom legacy
+    # containerHeight innerWidth"
+    rs = records(report, run)
+    if not rs:
+        return
+    k = rs[-1]
+    s = k.get("sample") or {}
+    print(len(rs), round(num(k.get("windowHeight")), 1), round(num(k.get("overlap")), 1), int(bool(k.get("shown"))),
+          int(bool(k.get("animating"))), int(bool(s.get("editing"))), int(bool(s.get("settled"))),
+          round(num(k.get("toolbarBottom"), -1), 1), round(num(k.get("contentBottom")), 1), round(num(k.get("legacyOverlap")), 1),
+          round(num(s.get("containerHeight")), 1), round(num(s.get("innerWidth")), 1))
+
+def cpp(v):
+    if not isinstance(v, (int, float)):
+        return "kNaN"
+    return ("%.2f" % v).rstrip("0").rstrip(".") if v != int(v) else str(int(v))
+
+def samples(report, run, start, out):
+    # The run's samples from record `start` on (and the one before: the page before the tap), as
+    # JSON lines and as rows for tests/app/tst_keyboardinsets.cpp (one per change; none before the
+    # browser's first reading); the Qt window's heights on the way.
+    rs = records(report, run)
+    picked = rs[max(0, int(start) - 1):]
+    last, rows, heights = None, [], []
+    with open(out, "w", encoding="utf-8") as f:
+        for k in picked:
+            s = k.get("sample") or {}
+            key = json.dumps([s, k.get("overlap"), k.get("shown"), k.get("animating")], sort_keys=True)
+            wh = num(k.get("windowHeight"))
+            if not heights or heights[-1] != wh:
+                heights.append(wh)
+            if key == last or not s or not k.get("mode"):
+                continue
+            last = key
+            f.write(json.dumps(k, ensure_ascii=False) + "\n")
+            mode = k.get("mode") or ""
+            row = "step(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, u\"%s\"_s, %s, %s)," % (
+                cpp(s.get("innerWidth")), cpp(s.get("innerHeight")), cpp(s.get("height")), cpp(s.get("containerHeight")),
+                cpp(k.get("windowHeight")), str(bool(s.get("editing"))).lower(), str(bool(s.get("settled"))).lower(),
+                cpp(k.get("overlap")), str(bool(k.get("shown"))).lower(), str(bool(k.get("animating"))).lower(), mode,
+                cpp(s.get("offsetTop")), str(bool(s.get("touch"))).lower())
+            if num(s.get("scale"), 1) != 1:
+                row += " // scale %s" % s.get("scale")
+            rows.append(row)
+    print("    Qt's window heights: " + " -> ".join(cpp(h) for h in heights))
+    for row in rows:
+        print("      " + row)
+
+def screen(raw, top):
+    # Rows up from just above `top` (the keyboard's top, or the screen's bottom): the rows that
+    # are not the cyan toolbar (the gap: the keyboard's room — magenta — and the browser's own
+    # bars), then the toolbar's rows; also the magenta rows anywhere. A row is magenta or cyan
+    # when most of it is.
+    data = open(raw, "rb").read()
+    if len(data) < 16:
+        print("-1 -1 -1 -1")
+        return
+    w, h = struct.unpack_from("<II", data, 0)
+    off = len(data) - w * h * 4
+    if w <= 0 or h <= 0 or off < 12:
+        print("-1 -1 -1 -1")
+        return
+    def kind(y):
+        row = data[off + y * w * 4: off + (y + 1) * w * 4]
+        m = c = n = 0
+        for x in range(0, w, 3):
+            r, g, b = row[x * 4], row[x * 4 + 1], row[x * 4 + 2]
+            n += 1
+            if r > 200 and g < 70 and b > 200:
+                m += 1
+            elif r < 70 and g > 200 and b > 200:
+                c += 1
+        return "m" if m * 2 > n else "c" if c * 2 > n else "."
+    kinds = [kind(y) for y in range(h)]
+    y = min(int(top), h) - 1
+    gap = magenta = 0
+    while y >= 0 and kinds[y] != "c" and gap < h:
+        magenta += kinds[y] == "m"
+        gap += 1
+        y -= 1
+    rows = 0
+    while y >= 0 and kinds[y] == "c":
+        rows += 1
+        y -= 1
+    print(gap if y >= -1 and rows else -1, magenta, rows, kinds.count("m"))
+
+{"state": state, "samples": samples, "screen": screen}[sys.argv[1]](*sys.argv[2:])
+PY
+  )
+  wk_py() { python3 -c "$WK_PY" "$@"; }
+
+  # The site under /brulion/ (as on GitHub Pages) and a page that writes today's journal into
+  # IndexedDB the way the app's IDBFS mount stores it (as scripts/wasm-smoke.mjs does), then
+  # opens the app with its own query.
+  www=$(mktemp -d)
+  ln -s "$SITE_DIR" "$www/brulion"
+  cat >"$www/seed.html" <<'HTML'
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brulion: test journal</title>
+<p id="status">Zapisywanie dziennika…</p>
+<script>
+(async () => {
+  const root = '/home/web_user/Brulion';
+  const appData = '/home/web_user/.local/share/Brulion/Brulion';
+  const enc = new TextEncoder();
+  const timestamp = new Date();
+  const now = new Date();
+  const day = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  let journal = '';
+  for (let i = 1; i <= 40; i++) {
+    journal += '- Blok ' + i + ': zażółć gęślą jaźń, źródło łódź ćwiczenia — notatka o spotkaniu i ogrodzie, pomysł na wtorek\n';
+  }
+  const put = (dbName, rows) => new Promise((resolve, reject) => {
+    const req = indexedDB.open(dbName, 21);
+    req.onupgradeneeded = () => req.result.createObjectStore('FILE_DATA').createIndex('timestamp', 'timestamp', { unique: false });
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const tx = req.result.transaction(['FILE_DATA'], 'readwrite');
+      for (const [key, value] of rows) tx.objectStore('FILE_DATA').put(value, key);
+      tx.oncomplete = () => { req.result.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    };
+  });
+  await put(root, [
+    [root + '/journals', { timestamp, mode: 16877 }],
+    [root + '/journals/' + day + '.md', { timestamp, mode: 33188, contents: enc.encode(journal) }],
+  ]);
+  await put(appData, [[appData + '/settings.ini', { timestamp, mode: 33188, contents: enc.encode('[vaults]\ncurrent=' + root + '\n') }]]);
+  if (location.search) location.replace('/brulion/' + location.search);
+  else fetch('/__report/first-start', { method: 'POST', body: '{}' }).catch(() => {});
+})().catch((e) => { document.getElementById('status').textContent = 'Błąd: ' + e; });
+</script>
+HTML
+  : >"$OUT/report.jsonl"
+  python3 "$ROOT/scripts/web-test-server.py" "$www" "$WK_PORT" "$OUT/report.jsonl" >"$OUT/web-server.log" 2>&1 &
+  http_pid=$!
+  for _ in $(seq 1 20); do
+    grep -q listening "$OUT/web-server.log" 2>/dev/null && break
+    sleep 0.5
+  done
+  grep -q listening "$OUT/web-server.log" || die "the web server did not start on port $WK_PORT (BRULION_WEB_PORT): $(cat "$OUT/web-server.log")"
+  # The host's server at the emulator's alias of the host's loopback, 10.0.2.2 (not `adb
+  # reverse`: adb's connection to the emulator drops now and then and takes the forwarding with
+  # it). The browsers treat it as a secure context (the service worker, Web Locks): Chrome and
+  # Brave by their command line, Firefox (GeckoView) by its configuration file — both read on a
+  # debuggable system image for the debug app.
+  WK_ORIGIN=http://10.0.2.2:$WK_PORT
+
+  # The browsers: [name] = package. Chrome and Brave read a command line (their first-run screens
+  # off) from /data/local/tmp on a debuggable system image (set-debug-app); anything left (Brave's
+  # and Firefox's welcome screens, prompts) is tapped away.
+  declare -A WK_PKG=([chrome]=com.android.chrome [brave]=com.brave.browser [firefox]=org.mozilla.firefox)
+  wk_apk() { # <file in the cache> <url> <sha256>: a browser's APK, downloaded once
+    local file=$WK_CACHE/$1
+    mkdir -p "$WK_CACHE"
+    if [[ ! -f $file ]]; then
+      echo "    downloading $2" >&2
+      curl -fsSL --retry 3 -o "$file.part" "$2" && mv "$file.part" "$file"
+    fi
+    [[ -f $file ]] && sha256sum "$file" | grep -q "^$3 " && echo "$file"
+  }
+  installed() { adb shell pm list packages "$1" | tr -d '\r' | grep -qx "package:$1"; }
+  browsers=()
+  for b in ${BRULION_WEB_BROWSERS:-chrome brave firefox}; do
+    pkg=${WK_PKG[$b]:-}
+    [[ -n $pkg ]] || die "unknown browser $b (BRULION_WEB_BROWSERS: chrome brave firefox)"
+    apk=""
+    case $b in
+      brave) apk=$(wk_apk "BraveMonox64-$BRAVE_VERSION.apk" \
+        "https://github.com/brave/brave-browser/releases/download/v$BRAVE_VERSION/BraveMonox64.apk" "$BRAVE_SHA256") ||
+        die "Brave $BRAVE_VERSION: download failed or wrong checksum" ;;
+      firefox) apk=$(wk_apk "fenix-$FENIX_VERSION.multi.android-x86_64.apk" \
+        "https://archive.mozilla.org/pub/fenix/releases/$FENIX_VERSION/android/fenix-$FENIX_VERSION-android-x86_64/fenix-$FENIX_VERSION.multi.android-x86_64.apk" \
+        "$FENIX_SHA256") || die "Firefox $FENIX_VERSION: download failed or wrong checksum" ;;
+    esac
+    if [[ -n $apk ]]; then
+      echo "    installing $b ($(basename -- "$apk"))"
+      adb install -r -g "$apk" >/dev/null || die "$b did not install"
+    fi
+    check "$b is installed ($pkg)" installed "$pkg" || continue
+    adb shell pm grant "$pkg" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
+    adb shell am set-debug-app --persistent "$pkg" >/dev/null 2>&1 || true
+    echo "    $b $(adb shell dumpsys package "$pkg" | tr -d '\r' | sed -nE 's/^ *versionName=//p' | head -n 1)"
+    browsers+=("$b")
+  done
+  for f in chrome-command-line brave-command-line; do
+    adb shell "echo '_ --disable-fre --no-default-browser-check --no-first-run --disable-signin-promo --unsafely-treat-insecure-origin-as-secure=$WK_ORIGIN' > /data/local/tmp/$f" || true
+  done
+  printf 'prefs:\n  dom.securecontext.allowlist: "10.0.2.2"\n' >"$OUT/geckoview-config.yaml"
+  adb push "$OUT/geckoview-config.yaml" /data/local/tmp/org.mozilla.firefox-geckoview-config.yaml >/dev/null || true
+
+  # A run's last report: "count windowHeight overlap shown animating editing settled toolbarBottom
+  # contentBottom legacyOverlap containerHeight innerWidth" (empty before the app's first one).
+  wk_state() { wk_py state "$OUT/report.jsonl" "$1"; }
+  # The keyboard counted as up, settled, a block edited and its toolbar docked.
+  wk_keyboard_settled() {
+    local s
+    s=$(wk_state "$1")
+    [[ -n $s ]] && awk '{ exit !($4 == 1 && $5 == 0 && $6 == 1 && $7 == 1 && $8 >= 0) }' <<<"$s"
+  }
+  # The keyboard hidden, settled, the toolbar still docked.
+  wk_hidden_settled() {
+    local s
+    s=$(wk_state "$1")
+    [[ -n $s ]] && awk '{ exit !($4 == 0 && $5 == 0 && $7 == 1 && $8 >= 0) }' <<<"$s"
+  }
+  wk_count() { local s; s=$(wk_state "$1"); echo "${s%% *}"; }
+  # A page this wide (CSS px) is the turned screen's: 1.3 times the upright screen's width (a page
+  # upright with the keyboard up can be wider than high: Brave, 411×409).
+  WK_WIDE=$((SCREEN_W * 160 * 13 / (DENSITY * 10)))
+  # Settled in landscape, a block edited.
+  wk_landscape_settled() {
+    local s
+    s=$(wk_state "$1")
+    [[ -n $s ]] && awk -v wide="$WK_WIDE" '{ exit !($5 == 0 && $6 == 1 && $7 == 1 && $12 >= wide && $2 > 0) }' <<<"$s"
+  }
+  # adb's connection to the emulator back (it drops now and then, also while the screen turns).
+  wk_adb_ready() {
+    local _
+    for _ in $(seq 1 30); do
+      "$SDK/platform-tools/adb" -s "$SERIAL" shell true >/dev/null 2>&1 && return 0
+      sleep 2
+      timeout 30 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device >/dev/null 2>&1 || true
+    done
+    return 1
+  }
+  wk_turn() { # <0 portrait | 1 landscape>: the screen's rotation set (and read back)
+    local _ now=""
+    for _ in 1 2 3 4 5; do
+      wk_adb_ready || true
+      adb shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || true
+      adb shell settings put system user_rotation "$1" >/dev/null 2>&1 || true
+      sleep 3
+      wk_adb_ready || true
+      now=$(adb shell settings get system user_rotation 2>/dev/null | tr -d '\r' || true)
+      [[ $now == "$1" ]] && return 0
+    done
+    echo "    the screen did not turn to rotation $1 (user_rotation ${now:-?})"
+    return 1
+  }
+  # The run's page upright (the last report).
+  wk_upright() {
+    local s
+    s=$(wk_state "$1")
+    [[ -n $s ]] && awk -v wide="$WK_WIDE" '{ exit !($12 > 0 && $12 < wide) }' <<<"$s"
+  }
+  # First-run screens, prompts and tips of the browsers: tapped away by their buttons' names
+  # (Firefox's "Set as default browser" opens the system's dialog: Cancel).
+  WK_DISMISS='Accept & continue|Accept and continue|Use without an account|No thanks|No Thanks|No, thanks|NO THANKS|Not now|NOT NOW|Skip|SKIP|Got it|GOT IT|Maybe later|Not interested|Continue|Close|Dismiss|Cancel|Pomiń|Nie teraz|Nie, dziękuję|Anuluj'
+  # A browser's first start: its welcome screens tapped away on a page that does not start the
+  # app (seed.html without a query reports itself and stays), then the browser stopped.
+  wk_first_start() { # <browser>
+    local pkg=${WK_PKG[$1]} i xy last="" quiet=0
+    adb shell am start -a android.intent.action.VIEW -d "'$WK_ORIGIN/seed.html'" -p "$pkg" >/dev/null
+    for i in $(seq 1 30); do
+      sleep 3
+      xy=$(ui_find_all "$WK_DISMISS" | head -n 1 || true)
+      if [[ -n $xy && $xy != "$last" ]]; then
+        echo "    tapping away a first-run screen of $1 at $xy"
+        adb shell input tap "$xy"
+        last=$xy
+        quiet=0
+        continue
+      fi
+      grep -q "\"/__report/first-start\"" "$OUT/report.jsonl" && ((++quiet >= 2)) && break
+    done
+    app_shot "wk-$1-0-first-start"
+    adb shell am force-stop "$pkg"
+  }
+  # The app up in a page opened after `base` reports of the run (an earlier page's do not count).
+  wk_ready_since() { # <run> <base>
+    local s
+    s=$(wk_state "$1")
+    [[ -n $s ]] && awk -v base="$2" '{ exit !($1 > base && $2 > 0) }' <<<"$s"
+  }
+  wk_open() { # <browser> <run> <query>: the seeded journal, then the app (first-run screens tapped away)
+    local pkg=${WK_PKG[$1]} url="$WK_ORIGIN/seed.html?$3" i xy last="" base count seen stall=0 sent=1
+    base=$(wk_count "$2")
+    base=${base:-0}
+    seen=$base
+    adb shell am force-stop "$pkg"
+    adb shell am start -a android.intent.action.VIEW -d "'$url'" -p "$pkg" >/dev/null
+    for i in $(seq 1 60); do
+      sleep 3
+      wk_ready_since "$2" "$base" && return 0
+      xy=$(ui_find_all "$WK_DISMISS" | head -n 1 || true)
+      # The same place twice: not a dialog's button (a heading on the browser's home page).
+      if [[ -n $xy && $xy != "$last" ]]; then
+        echo "    tapping away a browser's screen at $xy"
+        adb shell input tap "$xy"
+        last=$xy
+        stall=0
+        continue
+      fi
+      # Nothing to tap and no report for a minute (the app's tab left behind a welcome screen,
+      # or stalled): the browser started again (a tab still loading in the background would keep
+      # the app's storage lock).
+      count=$(wk_count "$2")
+      count=${count:-0}
+      if ((count != seen)); then
+        seen=$count
+        stall=0
+      elif ((++stall >= 20 && sent < 3)); then
+        echo "    starting $1 again ($i)"
+        adb shell am force-stop "$pkg"
+        base=$count
+        adb shell am start -a android.intent.action.VIEW -d "'$url'" -p "$pkg" >/dev/null
+        last=""
+        stall=0
+        sent=$((sent + 1))
+      fi
+    done
+    wk_ready_since "$2" "$base"
+  }
+  wk_capture() { # <file>: the screen's raw pixels (header + RGBA), gzipped on the device: 10 MB
+    # through `adb exec-out` broke adb's connection to the emulator. Tried again if adb drops out.
+    local _
+    for _ in 1 2 3; do
+      if adb exec-out 'screencap | gzip -1' >"$1.gz" 2>/dev/null && gzip -dc "$1.gz" >"$1" 2>/dev/null && [[ -s $1 ]]; then
+        rm -f "$1.gz"
+        return 0
+      fi
+      sleep 2
+      adb wait-for-device
+    done
+    rm -f "$1.gz"
+    return 1
+  }
+  # The keyboard's key whose name matches the ERE: "x y name" (UiAutomator's dump of every window).
+  ime_key() {
+    adb shell rm -f /sdcard/brulion-ime.xml
+    adb shell uiautomator dump --windows /sdcard/brulion-ime.xml >/dev/null 2>&1 || true
+    adb exec-out cat /sdcard/brulion-ime.xml 2>/dev/null | sed 's/<node /\n<node /g' | grep 'inputmethod' |
+      sed -nE "s/.*content-desc=\"($1)\".*bounds=\"\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]\".*/\2 \3 \4 \5 \1/p" |
+      awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2), $5 }' | head -n 1 || true
+  }
+  wk_focus_text() { # the focused editor's text in the run's last report
+    python3 -c 'import json, sys
+last = ""
+for line in open(sys.argv[1], encoding="utf-8"):
+    try:
+        r = json.loads(line)
+    except ValueError:
+        continue
+    b = r.get("body")
+    if r.get("path") == "/__report/" + sys.argv[2] and isinstance(b, dict) and isinstance(b.get("json"), dict):
+        last = b["json"].get("focusText", last)
+print(last)' "$OUT/report.jsonl" "$1"
+  }
+  wk_focus_has() { local t; t=$(wk_focus_text "$1"); [[ ${t,,} == *"$2"* ]]; } # <run> <lower-case text>
+  wk_focus_lacks() { ! wk_focus_has "$@"; }
+  wk_ime_top() { # the keyboard's top (ime_top), tried again if adb drops out
+    local top _
+    for _ in 1 2 3; do
+      top=$(ime_top 2>/dev/null || true)
+      [[ -n $top ]] && break
+      sleep 2
+      adb wait-for-device
+    done
+    echo "$top"
+  }
+  wk_screen_line() { # <name> <gap> <magenta> <rows> <magenta anywhere>
+    echo "    $1: ${2} px between the keyboard's top and the toolbar (${3} px of them the keyboard's room), the toolbar ${4} px tall; magenta rows on screen: $5"
+  }
+
+  wk_run() { # <browser> <mode: content|visual>
+    local b=$1 mode=$2 run="$1-$2" query start ime gap magenta rows anywhere s legacy
+    query="selftest=keyboard&report=/__report/$run"
+    [[ $mode == visual ]] && query+="&keyboard=visual"
+    info "$b, interactive-widget=resizes-$mode"
+    wk_turn 0 || true
+    local opened=0
+    wk_open "$b" "$run" "$query" || opened=1
+    check "$run: the app starts and reports the keyboard" test "$opened" -eq 0
+    if ((opened)); then
+      app_shot "wk-$run-0-failed"
+      ui_dump
+      cp "$OUT/ui.xml" "$OUT/wk-$run-0-failed.xml" 2>/dev/null || true
+      return
+    fi
+    if ! wk_upright "$run"; then
+      echo "    the page is not upright: the screen turned back"
+      wk_turn 0 || true
+      wait_for 30 wk_upright "$run" || true
+    fi
+    sleep 8 # the journal's first frames
+    # A browser's prompt over the page (Firefox asks for a survey now and then): tapped away.
+    local _ xy
+    for _ in 1 2 3; do
+      xy=$(ui_find_all "$WK_DISMISS" | head -n 1 || true)
+      [[ -n $xy ]] || break
+      echo "    tapping away a browser's prompt at $xy"
+      adb shell input tap "$xy"
+      sleep 3
+    done
+    app_shot "wk-$run-1-journal"
+    start=$(wk_count "$run")
+    adb shell input tap $((SCREEN_W / 2)) $((SCREEN_H * 45 / 100))
+    check "$run: a tap on a block brings up the keyboard" wait_for 20 ime_shown
+    check "$run: the app reports the keyboard up, settled, the block edited, the toolbar docked" \
+      wait_for 30 wk_keyboard_settled "$run"
+    sleep 2
+    ime=$(wk_ime_top)
+    wk_capture "$OUT/wk-$run-2-keyboard.raw" || true
+    app_shot "wk-$run-2-keyboard"
+    s=$(wk_state "$run")
+    echo "    report: $s (count windowHeight overlap shown animating editing settled toolbarBottom contentBottom legacyOverlap containerHeight)"
+    read -r gap magenta rows anywhere < <(wk_py screen "$OUT/wk-$run-2-keyboard.raw" "${ime:-$SCREEN_H}") ||
+      gap=-1 magenta=-1 rows=-1 anywhere=-1
+    echo "    the keyboard's top at ${ime:-?} px"
+    wk_screen_line "on screen" "$gap" "$magenta" "$rows" "$anywhere"
+    legacy=$(awk '{ print $10 }' <<<"$s")
+    if [[ $mode == content ]]; then
+      # Nothing of the page under the toolbar: no magenta row on screen, the toolbar ends at Qt's
+      # window's bottom and the window fills the page. Rows that are neither are the browser's
+      # own: Chrome's and Brave's autofill bar (passwords, cards, addresses: 48 and 64 dp) sits
+      # over the keyboard for every text field.
+      echo "    the browser's own bar between them: $((gap - magenta)) px"
+      check "$run: the toolbar sits on the keyboard (no room of the page under it, toolbar >= 20 px, the browser's bar <= 72 dp)" \
+        test "$gap" -ge 0 -a "$magenta" -le 3 -a "$rows" -ge 20 -a $((gap - magenta)) -le $((72 * DENSITY / 160))
+      check "$run: the toolbar ends at the page's bottom (report)" \
+        awk -v s="$s" 'BEGIN { split(s, a, " "); d1 = a[8] - a[2]; d2 = a[2] - a[11];
+          exit !(d1 <= 1 && d1 >= -1 && d2 <= 1 && d2 >= -1) }'
+      check "$run: the browser shrank the page (overlap 0, the keyboard shown)" \
+        awk -v s="$s" 'BEGIN { split(s, a, " "); exit !(a[3] == 0 && a[4] == 1) }'
+      echo "    the old formula (innerHeight - height - offsetTop) gives $legacy px"
+      # Typing reaches the edited block (the word committed by the space after it), the keyboard's
+      # action key is Enter, not Search (Qt's field stays a plain text field, wasm/index.html;
+      # docs/WEB.md "Klawiatura ekranowa"), and it splits the block at the caret: the block
+      # edited next has the text after the caret, without the word.
+      local key
+      type_on_keyboard " hello " || true
+      check "$run: a word typed on the keyboard reaches the block" wait_for 15 wk_focus_has "$run" hello
+      key=$(ime_key 'Enter|Return|Search|Go|Done|Next|Send|Szukaj|Dalej|Gotowe|Wyślij')
+      echo "    the keyboard's action key: ${key:-not found}"
+      check "$run: the keyboard's action key is Enter (not Search)" test "${key##* }" = Enter
+      if [[ -n $key ]]; then
+        adb shell input tap "${key% *}"
+        check "$run: Enter on the keyboard splits the block" wait_for 15 wk_focus_lacks "$run" hello
+      fi
+      app_shot "wk-$run-2-typed"
+      # The phone turned with the keyboard up, and back: a width never seen whose first heights
+      # have the keyboard in them (docs/WEB.md "Klawiatura ekranowa"). Where the keyboard stays
+      # up, the app counts it as up and the toolbar ends at the window's bottom.
+      wk_turn 1 || true
+      check "$run: turned with the keyboard up: the app settles in landscape" wait_for 30 wk_landscape_settled "$run"
+      sleep 3
+      s=$(wk_state "$run")
+      app_shot "wk-$run-2-landscape"
+      check "$run: landscape: the toolbar at the window's bottom" \
+        awk -v s="$s" 'BEGIN { split(s, a, " "); d = a[8] - a[2]; exit !(a[8] >= 0 && d <= 1 && d >= -1) }'
+      # The keyboard up by the input method's state or its visible window (either one may lag).
+      if ime_shown || [[ -n $(ime_top 2>/dev/null || true) ]]; then
+        echo "    landscape, the keyboard up: $s"
+        check "$run: landscape: the keyboard counted as up" awk -v s="$s" 'BEGIN { split(s, a, " "); exit !(a[4] == 1) }'
+      else
+        echo "    landscape: $b hid the keyboard on the turn, the block still edited (report: $s)"
+      fi
+      wk_turn 0 || true
+      check "$run: turned back upright" wait_for 30 wk_upright "$run"
+      sleep 2
+      if ime_shown; then
+        check "$run: turned back: the keyboard counted as up again" wait_for 30 wk_keyboard_settled "$run"
+      else
+        echo "    portrait again, the keyboard hidden: tapping the edited block"
+        adb shell input tap $((SCREEN_W / 2)) $((SCREEN_H * 30 / 100)) || true
+        check "$run: turned back: a tap brings the keyboard up again" wait_for 20 ime_shown
+        check "$run: … counted as up" wait_for 30 wk_keyboard_settled "$run"
+      fi
+      sleep 2
+    else
+      # resizes-visual, informational: Brave's gap (#60074: the page's room shows) or none.
+      if ((magenta > 3)); then
+        echo "    resizes-visual: a gap of $magenta px of the page under the toolbar (brave-browser#60074 when this is Brave)"
+      else
+        echo "    resizes-visual: no gap in $b (if this is Brave: brave-browser#60074 is fixed upstream)"
+      fi
+    fi
+    # Back: the keyboard goes, the block stays edited and its toolbar docked at the bottom.
+    adb shell input keyevent 4
+    check "$run: Back hides the keyboard" wait_for 15 ime_hidden
+    check "$run: the app reports the keyboard hidden, the toolbar still docked" wait_for 30 wk_hidden_settled "$run"
+    sleep 2
+    wk_capture "$OUT/wk-$run-3-back.raw" || true
+    app_shot "wk-$run-3-back"
+    read -r gap magenta rows anywhere < <(wk_py screen "$OUT/wk-$run-3-back.raw" "$SCREEN_H") ||
+      gap=-1 magenta=-1 rows=-1 anywhere=-1
+    wk_screen_line "after Back (from the screen's bottom)" "$gap" "$magenta" "$rows" "$anywhere"
+    check "$run: no keyboard's room left after Back, the toolbar on screen" test "$anywhere" -eq 0 -a "$rows" -ge 20
+    echo "    report: $(wk_state "$run")"
+    echo "    samples from the tap to Back (tests/app/tst_keyboardinsets.cpp rows):"
+    wk_py samples "$OUT/report.jsonl" "$run" "$start" "$OUT/samples-$run.jsonl"
+    rm -f "$OUT/wk-$run-"*.raw
+    adb shell am force-stop "${WK_PKG[$b]}"
+  }
+
+  for b in "${browsers[@]}"; do
+    wk_first_start "$b"
+    wk_run "$b" content
+    wk_run "$b" visual
+  done
+  adb reverse --remove-all >/dev/null 2>&1 || true
+  info "Result"
+  echo "report: $OUT/report.jsonl; samples: $OUT/samples-*.jsonl; screenshots: $OUT/wk-*.png"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"
   exit 0

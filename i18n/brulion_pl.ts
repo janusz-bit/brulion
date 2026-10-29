@@ -287,78 +287,78 @@
         <translation>Ustawienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="477"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="478"/>
         <source>Added to today&apos;s journal</source>
         <translation>Dodano do dzisiejszego dziennika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="478"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="479"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="512"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="513"/>
         <source>This is the journals folder: new daily notes will create it again.</source>
         <translation>To folder dziennika: nowe notatki dzienne utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="513"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="514"/>
         <source>It holds the journals folder “%1”: new daily notes will create it again.</source>
         <translation>Zawiera folder dziennika „%1”: nowe notatki dzienne utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="515"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="516"/>
         <source>This is the templates folder: its templates will no longer be offered.</source>
         <translation>To folder szablonów: jego szablony nie będą już proponowane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="516"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="517"/>
         <source>It holds the templates folder “%1”: its templates will no longer be offered.</source>
         <translation>Zawiera folder szablonów „%1”: jego szablony nie będą już proponowane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="518"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="519"/>
         <source>This is the attachments folder: the pictures and files in it go too.</source>
         <translation>To folder załączników: obrazy i pliki z niego też trafią do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="519"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="520"/>
         <source>It holds the attachments folder “%1”: the pictures and files in it go too.</source>
         <translation>Zawiera folder załączników „%1”: obrazy i pliki z niego też trafią do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="521"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="522"/>
         <source>This is the folder for new pages: new pages will create it again.</source>
         <translation>To folder nowych stron: nowe strony utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="522"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="523"/>
         <source>It holds the folder for new pages “%1”: new pages will create it again.</source>
         <translation>Zawiera folder nowych stron „%1”: nowe strony utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="524"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="525"/>
         <source>This is the journal template: new daily notes will start empty.</source>
         <translation>To szablon dziennika: nowe notatki dzienne będą zaczynać się puste.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="525"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="526"/>
         <source>It holds the journal template “%1”: new daily notes will start empty.</source>
         <translation>Zawiera szablon dziennika „%1”: nowe notatki dzienne będą zaczynać się puste.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="530"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="531"/>
         <source>Move to trash?</source>
         <translation>Przenieść do kosza?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="534"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="539"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="535"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="540"/>
         <source>“%1” will be moved to the trash. You can restore it from there.</source>
         <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="536"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="537"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>Folder „%1” i %n strona w nim trafią do kosza.</numerusform>
@@ -367,23 +367,23 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="537"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="538"/>
         <source>You can restore them from there.</source>
         <translation>Możesz je stamtąd przywrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="542"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="543"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="547"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="548"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="207"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="548"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="549"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
@@ -5379,122 +5379,122 @@
 <context>
     <name>MobileEditToolbar</name>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="51"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="52"/>
         <source>Editing tools</source>
         <translation>Narzędzia edycji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="267"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="268"/>
         <source>Bulleted list</source>
         <translation>Lista punktowana</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="137"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="138"/>
         <source>Outdent</source>
         <translation>Zmniejsz wcięcie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="143"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="144"/>
         <source>Indent</source>
         <translation>Zwiększ wcięcie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="149"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="150"/>
         <source>Move up</source>
         <translation>Przenieś w górę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="154"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="155"/>
         <source>Move down</source>
         <translation>Przenieś w dół</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="165"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="166"/>
         <source>Task</source>
         <translation>Zadanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="174"/>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="395"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="175"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="396"/>
         <source>Link to page</source>
         <translation>Link do strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="179"/>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="402"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="180"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="403"/>
         <source>Tag</source>
         <translation>Tag</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="184"/>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="409"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="185"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="410"/>
         <source>Commands</source>
         <translation>Polecenia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="278"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="279"/>
         <source>Due date</source>
         <translation>Termin</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="283"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="284"/>
         <source>Reminder</source>
         <translation>Przypomnienie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="288"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="289"/>
         <source>Insert picture</source>
         <translation>Wstaw obraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="297"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="298"/>
         <source>Drawing</source>
         <translation>Rysunek</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="306"/>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="349"/>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="417"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="307"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="350"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="418"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="312"/>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="356"/>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="424"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="313"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="357"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="425"/>
         <source>Redo</source>
         <translation>Ponów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="320"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="321"/>
         <source>Select</source>
         <translation>Zaznacz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="329"/>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="373"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="330"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="374"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="335"/>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="380"/>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="432"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="336"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="381"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="433"/>
         <source>Hide keyboard</source>
         <translation>Ukryj klawiaturę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="364"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="365"/>
         <source>Next cell</source>
         <translation>Następna komórka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="464"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="465"/>
         <source>More editing tools</source>
         <translation>Więcej narzędzi edycji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="464"/>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="465"/>
         <source>First editing tools</source>
         <translation>Podstawowe narzędzia edycji</translation>
     </message>

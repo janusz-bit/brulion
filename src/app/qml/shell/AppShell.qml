@@ -359,7 +359,8 @@ FocusScope {
         anchors.bottom: parent.bottom
         height: shell.keyboardRoom
         visible: shell.keyboardRoom > 0
-        color: Theme.bgElevated
+        // Magenta in the browser's keyboard self-test: a screenshot shows any gap above the keyboard.
+        color: KeyboardInsets.marked ? "#ff00ff" : Theme.bgElevated
     }
 
     ShellCaptureButton {

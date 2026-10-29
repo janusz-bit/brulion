@@ -65,9 +65,3 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
 * **Enter na końcu przybliżonego nagłówka lub akapitu** (konspekt, „Przybliż” na bloku, który
   nie jest punktem listy) wstawia nowy punkt listy poza przybliżeniem: kursor trafia do
   niewidocznego bloku (`PageController::split`, gałąź `row == zoom && cursor == len`).
-
-* **Wersja w przeglądarce na telefonie: pasek narzędzi edytora nie przylega do klawiatury.**
-  Po otwarciu klawiatury ekranowej (Brave/Android, `janusz-bit.github.io/brulion/`) pasek
-  formatowania (wcięcia, przenoszenie, zadanie, link, `#`, `/`, data) zostaje wyżej, a między
-  nim a klawiaturą jest pusty pas; powinien siedzieć tuż nad klawiaturą. Sprawdzić obsługę
-  wysokości widocznego obszaru (`visualViewport`) w wersji WebAssembly.

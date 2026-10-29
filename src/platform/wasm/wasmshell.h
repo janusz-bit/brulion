@@ -26,12 +26,30 @@ void hideShellLoadingScreen();
 /// keeps the time in `brulionShell.indexedAt` for scripts/wasm-smoke.mjs and the benchmarks).
 void reportIndexReady();
 
-/// Calls `callback` with how much of the page's bottom the on-screen keyboard covers, in CSS
-/// pixels (= Qt's logical pixels): the browser's visualViewport, `innerHeight - height -
-/// offsetTop` (Chrome and Firefox on Android keep the page's size and shrink the visual viewport
-/// for the keyboard; iOS Safari also scrolls the page, which is put back). Called once at once and
-/// on every change, in Qt's event loop. Without visualViewport (old browsers) nothing is reported.
-void watchVisualViewport(std::function<void(double overlap)> callback);
+/// One reading of the browser's viewports, in CSS pixels (= Qt's logical pixels, wasm/index.html).
+/// Numbers the browser did not give are NaN. KeyboardInsets computes the keyboard from it
+/// (src/app/ui/keyboardinsets.h, ViewportKeyboard).
+struct BrowserViewport {
+    double innerWidth = 0;      ///< window.innerWidth
+    double innerHeight = 0;     ///< window.innerHeight
+    double height = 0;          ///< window.visualViewport.height
+    double offsetTop = 0;       ///< window.visualViewport.offsetTop
+    double scale = 1;           ///< window.visualViewport.scale
+    double containerHeight = 0; ///< Qt's container element (#screen): its layout height
+    bool touch = false;         ///< a coarse pointer (phone, tablet)
+    bool editing = false;       ///< Qt's hidden keyboard <input> has the focus
+    bool settled = true;        ///< unchanged for 6 animation frames (or the last of 60 frames)
+    QString mode;               ///< brulionShell.keyboardMode: "content", "visual" or "" (another page)
+};
+
+/// Calls `callback` (in Qt's event loop) with a reading of the browser's viewports at once and
+/// whenever one changes: on visualViewport resize and scroll, window resize, focus changes, a
+/// resize of Qt's container, and every animation frame after any of them until the values stay
+/// put (the last call: `settled`). The page asks the browser to shrink itself for the on-screen
+/// keyboard (interactive-widget=resizes-content, wasm/index.html); browsers that ignore it (iOS
+/// Safari, older ones) shrink only the visual viewport, and a page iOS scrolled is put back at the
+/// top. Without visualViewport (old browsers) nothing is reported. docs/WEB.md "Klawiatura ekranowa".
+void watchVisualViewport(std::function<void(const BrowserViewport &viewport)> callback);
 
 /// The scheme of the page the app runs on: "https", "http", or "" (another one, unknown). A
 /// page opened over https cannot fetch anything over http (mixed content).
