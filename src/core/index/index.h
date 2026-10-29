@@ -57,10 +57,23 @@
 //                  now, defaultLimit}) -> QueryResult{type, items (QueryItem{path, blockIndex,
 //                  task?, reminder?}), groups{key, label, items}, total}
 //
-// Not thread-safe: use a VaultIndex from one thread. Results are snapshots (copies); pointers
-// from note() stay valid until the next change.
+//   loading elsewhere (notebook::IndexLoader): VaultIndex::prepare(path, content, config) /
+//                  prepareParsed() -> PreparedNote (any thread), updatePrepared(prepared,
+//                  sequence), reserveSequence(n), adoptSearch(SearchIndex) (documents kept by
+//                  content key), setSearchBuiltElsewhere(on), contentKey(text), parseFingerprint;
+//                  SearchIndex::prepare(title, aliases, content) -> Document, set(id, doc, key)
+//   indexcache.h   the index cache on the device (docs/PERFORMANCE.md L2): Identity::current(config,
+//                  vaultId), Reader::open(bytes, identity, &why) -> find(path) -> Record{size,
+//                  contentKey, …}, decodeNote(record, path, content, config) (any thread),
+//                  searchDecoder() (in steps); Writer(index, identity, stat).step(ms, &bytes)
+//                  (slices; Aborted when the index changes), encode(index, identity, stat)
+//
+// Not thread-safe: use a VaultIndex from one thread (the static prepare functions and the cache's
+// decoder excepted). Results are snapshots (copies); pointers from note() stay valid until the
+// next change.
 #pragma once
 
+#include "index/indexcache.h"
 #include "index/query.h"
 #include "index/searchindex.h"
 #include "index/vaultindex.h"

@@ -23,13 +23,23 @@
 //                blockLinks(content, line, page, isTaken) -> {id, ref ((id)), wikiLink
 //                [[Page#^id]], embed, headingLink} — the links the editor copies;
 //                copiedLink(url, from, …) -> {text, path}: a link menu's "Kopiuj link"
+//   indexloader.h IndexLoader(vault, index, WorkerPool{threads, start}, {cachePath, firstFolder}):
+//                start(files), step(budgetMs) -> Done | More | Waiting (+ resultsReady()), finish(),
+//                forget(path), configChanged(), stats() — reads and parses on the pool's threads
+//                (or takes notes from the index cache), merges in slices on the owner's thread;
+//                inline without threads (WebAssembly)
+//   indexcachekeeper.h IndexCacheKeeper(vault, index, pool, path, Policy): loaded(stats),
+//                saveNow(), saved(bytes, ms) / saveFailed(error) — <device state>/index-cache.bin
+//                written in slices after a load that parsed and after quiet changes
 //   itemref.h    ItemRef "Dom.md#L12@3f9a01bc" / "Dom.md#^id" / "^id" / "((id))": parse, format,
 //                lineHash, resolve(content, ref) -> Ok | Moved | Stale | NotFound
 //   json.h       QJsonObject of tasks, reminders, blocks, query results, search hits, calendar
 //                items, notifications and the vault config (the keys of the app's maps and of
 //                the JSON export); status / priority / kind names and their Polish words
-//   session.h    Notebook: open(root, {stateDir, watch, historyReason}) without creating a missing
-//                folder, a lazily built VaultIndex kept up to date, lock() (the device's writers),
+//   session.h    Notebook: open(root, {stateDir, watch, historyReason, workers, indexCache}) without
+//                creating a missing folder, a lazily built VaultIndex kept up to date (loaded with
+//                IndexLoader, its cache written at exit after a load that parsed many notes),
+//                indexStats(), lock() (the device's writers),
 //                edit(path, intent, {expectHash, dryRun, mayCreate, initialText}) — compare-and-swap writes
 //                with retries and History; deviceStatePath(appData, root), contentHash()
 //   share.h      what another app shares ("Udostępnij → Brulion"): sharedContentFromJson (the
@@ -40,6 +50,8 @@
 #pragma once
 
 #include "notebook/capture.h"
+#include "notebook/indexcachekeeper.h"
+#include "notebook/indexloader.h"
 #include "notebook/itemref.h"
 #include "notebook/journals.h"
 #include "notebook/json.h"

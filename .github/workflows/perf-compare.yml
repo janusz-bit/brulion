@@ -1,0 +1,108 @@
+# Before/after timings of the core benchmarks on GitHub's runners (run by hand only: Actions ->
+# Performance comparison -> Run workflow, or
+#   gh workflow run perf-compare.yml --ref <branch> -f base=<ref> [-f suites="bench_index bench_markdown"] [-f reps=5]
+# ). The checked-out branch is "head", `base` another ref of this repository. Both trees are built
+# in Release inside `nix develop` (the flake's Qt and compiler: the toolchain of the laptop and the
+# Raspberry Pi) with the SAME benchmark sources — head's tests/bench, tests/CMakeLists.txt and
+# scripts/bench.sh are copied into the base tree (bench.sh refuses binaries built from other bench
+# sources; rows the base cannot build are skipped there, see bench_index's __has_include) —, run
+# alternately base/head in two rounds (the second in reverse order) and compared with
+# `bench.sh compare` per round. Shared runners are noisy: read the timings as relative changes
+# and trust only changes beyond the noise column; memory rows are exact. Results: the job summary
+# and an artifact per architecture. docs/PERFORMANCE.md, "How to run the benchmarks".
+name: Performance comparison
+
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Base ref (branch, tag or commit) to compare the checked-out branch with"
+        required: true
+      suites:
+        description: "Suites or suite:function selections (bench.sh syntax)"
+        default: "bench_index bench_markdown"
+      reps:
+        description: "Repetitions per suite and round"
+        default: "5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-compare-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    name: Base vs head (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          path: head
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: Base tree with head's benchmark sources
+        env:
+          BASE: ${{ inputs.base }}
+        run: |
+          git -C head worktree add --detach "$GITHUB_WORKSPACE/base" "$BASE"
+          rm -rf base/tests/bench
+          cp -r head/tests/bench base/tests/bench
+          cp head/tests/CMakeLists.txt base/tests/CMakeLists.txt
+          cp head/scripts/bench.sh base/scripts/bench.sh
+          echo "base: $(git -C base rev-parse --short HEAD), head: $(git -C head rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build both trees (Release benchmarks)
+        env:
+          SUITES: ${{ inputs.suites }}
+        run: |
+          for tree in base head; do
+            (cd "$tree" && nix develop "path:$GITHUB_WORKSPACE/head" -c env JOBS="$(nproc)" scripts/bench.sh -B -b "$GITHUB_WORKSPACE/build-$tree")
+          done
+
+      - name: Run alternately (two rounds)
+        env:
+          SUITES: ${{ inputs.suites }}
+          REPS: ${{ inputs.reps }}
+        run: |
+          read -r -a suites <<< "$SUITES"
+          run() { # tree round
+            (cd "$1" && nix develop "path:$GITHUB_WORKSPACE/head" -c scripts/bench.sh -n -b "$GITHUB_WORKSPACE/build-$1" \
+              -r "$REPS" -o "$GITHUB_WORKSPACE/results/round$2-$1" "${suites[@]}") || echo "::warning::$1 round $2 had failures"
+          }
+          run base 1; run head 1
+          run head 2; run base 2
+
+      - name: Compare
+        run: |
+          {
+            for round in 1 2; do
+              echo "### Round $round (${{ matrix.arch }})"
+              echo
+              echo '```'
+              # bench.sh changes into its own tree: absolute result paths.
+              head/scripts/bench.sh compare "$GITHUB_WORKSPACE/results/round$round-base" \
+                "$GITHUB_WORKSPACE/results/round$round-head" --all || true
+              echo '```'
+              echo
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-compare-${{ matrix.arch }}
+          path: results
+          retention-days: 30

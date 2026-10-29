@@ -63,6 +63,12 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   before 1 s without one); `indexing_*` / `after_ready_*` stalls between those marks.
   `--start first` = a fresh XDG home (first start), `warm` = the same home again, `cold` = also
   the page cache of the binary, every mapped library / font and the vault dropped.
+  Index cache (docs/PERFORMANCE.md, L2): a `first` start has no device state, so its index is
+  loaded cold (every note parsed on the worker threads); `warm` and `cold` starts reuse the home of
+  the warm-up run, whose index cache (`index-cache.bin`, written ~5 s after the index or at the
+  latest when the app closes) makes their index warm. `--env BRULION_NO_INDEX_CACHE=1` measures a
+  cold index on warm starts, `--env BRULION_INDEX_THREADS=<n>` the parse workers (`0`: in slices on
+  the GUI thread, the browser's way). Trees from before wave 5 parse everything on every start.
 * `open-page`: `sync` (time inside `AppController.navigate()`), `content` (the page's first
   block exists), `frame` (the frame showing it), `settled`; `1` = first open, `2` = again after
   going home.

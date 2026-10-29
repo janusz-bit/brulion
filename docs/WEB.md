@@ -186,8 +186,10 @@ Pozostałe opcje:
   wygenerowanymi notatkami (tak jak przechowuje je montaż IDBFS, z `settings.ini` wskazującym
   go jako bieżący); każde wczytanie musi potem zgłosić kompletny indeks
   (`brulionShell.indexed()`, czas w `brulionShell.indexedAt`) **bez żadnego wejścia** (myszy,
-  klawiatury) — test regresji zatrzymanych timerów (niżej, „Ograniczenia techniczne”). CI
-  uruchamia go z 3000 notatek.
+  klawiatury) — test regresji zatrzymanych timerów (niżej, „Ograniczenia techniczne”). Od 200
+  notatek pierwsze wczytanie musi też zapisać gotowy indeks (`brulionShell.indexCacheSavedAt`),
+  a każde kolejne wziąć z niego prawie wszystkie notatki (`brulionShell.indexStats()`:
+  `indexedFromCache` ≥ N − 1). CI uruchamia go z 3000 notatek.
 * `--copy` — kopiowanie bloków prawdziwym wejściem: przed wczytaniem zapisuje do IndexedDB (jak
   `--index-notes`) notatnik z dzisiejszym dziennikiem (trzy bloki, drugi z dzieckiem, polskie
   znaki, pogrubienie, link), potem klika tekst pierwszego bloku, wciska Escape (blok zaznaczony),
@@ -282,7 +284,13 @@ montuje na nim IDBFS (lustro w IndexedDB) w dwóch katalogach:
 * `/home/web_user/Brulion` — skarbiec (vault) wersji przeglądarkowej,
 * katalog danych aplikacji (`QStandardPaths::AppDataLocation`,
   `/home/web_user/.local/share/Brulion/Brulion`) — historia wersji, stan synchronizacji,
-  lokalne ustawienia.
+  lokalne ustawienia i gotowy indeks notatnika (`vaults/<id>/index-cache.bin`, docs/PERFORMANCE.md
+  L2): przy kolejnej wizycie notatki, których tekst się nie zmienił, nie są parsowane od nowa.
+  Indeks w przeglądarce buduje się jednowątkowo (`wasm_singlethread`: `IndexLoader` bez puli
+  wątków, po kawałku w wątku GUI, jak wcześniej); zapis pamięci podręcznej (kodowanie po 8 ms,
+  ok. 5 s po gotowym indeksie) trafia do IndexedDB jak każdy inny plik. Gdy zapis się nie uda
+  (limit miejsca, tryb prywatny), w rejestrze zdarzeń jest jedna linia „Index cache not
+  saved”, a stara pamięć podręczna, sprawdzana notatka po notatce, zostaje.
 
 Każdy montaż to osobna baza IndexedDB nazwana ścieżką. Przebieg:
 

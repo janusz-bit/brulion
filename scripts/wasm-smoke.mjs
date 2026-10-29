@@ -35,7 +35,9 @@
 // writes a vault of N generated notes into IndexedDB before the first load (as the app's IDBFS
 // mount stores it, named the current vault): every load must then report a complete index
 // (brulionShell.indexed(), wasm/index.html) with no input at all — Qt's WebAssembly timers once
-// stalled until the mouse moved (docs/WEB.md). --copy writes a notebook with today's journal into
+// stalled until the mouse moved (docs/WEB.md); the first load (of 200 notes or more) must save the
+// index cache (brulionShell.indexCacheSaved()) and every later one take nearly every note from it
+// (brulionShell.indexStats(): indexedFromCache >= N - 1; docs/PERFORMANCE.md, L2). --copy writes a notebook with today's journal into
 // IndexedDB the same way and copies blocks with real input: a click on the first block's text,
 // Escape (the block selected), Shift+Down (the next one with its child), Ctrl+C — the browser's
 // clipboard (navigator.clipboard, permission granted) must then hold their Markdown as text/plain
@@ -470,8 +472,24 @@ async function main() {
       for (const end = deadline(args.timeout); Date.now() < end && !(indexedAt > 0); await sleep(250)) {
         indexedAt = await evaluate('window.brulionShell?.indexedAt ?? null');
       }
-      console.log(`load ${load}: index of ${args.indexNotes} notes complete at ${indexedAt > 0 ? `${Math.round(indexedAt)} ms` : 'never'}`);
+      const stats = await evaluate('({ notes: window.brulionShell?.indexedNotes ?? null, fromCache: window.brulionShell?.indexedFromCache ?? null })');
+      console.log(`load ${load}: index of ${args.indexNotes} notes complete at ${indexedAt > 0 ? `${Math.round(indexedAt)} ms` : 'never'}`
+        + ` (${stats?.fromCache ?? '?'} of ${stats?.notes ?? '?'} from the index cache)`);
       if (!(indexedAt > 0)) problems.push(`load ${load}: the index did not complete within ${args.timeout} s without input`);
+      if (args.indexNotes >= 200 && load >= 2 && !(stats?.fromCache >= args.indexNotes - 1)) {
+        problems.push(`load ${load}: only ${stats?.fromCache} of ${args.indexNotes} notes came from the index cache`);
+      }
+      if (args.indexNotes >= 200 && load < args.loads) {
+        // The cache is saved a few seconds after the index is ready (still without input), then
+        // written back to IndexedDB like any file (at most 3 s later).
+        let savedAt;
+        for (const end = deadline(args.timeout); Date.now() < end && !(savedAt > 0); await sleep(250)) {
+          savedAt = await evaluate('window.brulionShell?.indexCacheSavedAt ?? null');
+        }
+        console.log(`load ${load}: index cache saved at ${savedAt > 0 ? `${Math.round(savedAt)} ms` : 'never'}`);
+        if (!(savedAt > 0)) problems.push(`load ${load}: the index cache was not saved within ${args.timeout} s`);
+        await sleep(4000);
+      }
     }
   }
 

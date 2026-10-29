@@ -58,8 +58,9 @@ Syncthing nie ma dostępu — wtedy synchronizuj przez Nextcloud.
 Wskazówki do Syncthing:
 
 * W folderze warto mieć plik `.stignore` pomijający pliki tymczasowe (Brulion ma gotowy
-  szablon). Dane urządzenia (historia zmian, indeksy) Brulion trzyma poza folderem, więc nie
-  powodują konfliktów.
+  szablon). Dane urządzenia (historia zmian, indeksy — także gotowy indeks notatnika
+  `index-cache.bin`, który przyspiesza kolejne otwarcie i który można bezpiecznie usunąć) Brulion
+  trzyma poza folderem, więc nie powodują konfliktów.
 * Konflikty Syncthing (`*.sync-conflict-*.md`) Brulion wykrywa i proponuje scalenie.
 * Wersjonowanie plików w Syncthing („Proste” lub „Przedziałowe”) jest dobrym, dodatkowym
   zabezpieczeniem.

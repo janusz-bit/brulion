@@ -6,6 +6,9 @@ plugin) and readable by Logseq**. Anything Brulion writes must stay readable as 
 Markdown in any other editor.
 
 This file is the single source of truth for parsers, renderers, importers and exporters.
+Contributors: a change of what `markdown::parseNote()` returns for any input needs a bump of
+`markdown::ParserVersion` (`src/core/markdown/parse.h`) — devices keep parsed notes in their index
+cache (docs/ARCHITECTURE.md); `tst_markdown_model`'s golden digest fails until you do.
 
 ---
 

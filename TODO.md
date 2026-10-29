@@ -52,11 +52,10 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 ## Wydajność
 
 Szczegóły w docs/PERFORMANCE.md, „Next steps”:
-* indeksowanie w wątkach roboczych (L1);
-* pamięć podręczna indeksu na dysku (L2);
+* szybsze łączenie gotowych notatek w indeks w wątku interfejsu i pomiar indeksowania na Raspberry
+  Pi i telefonie (L1b);
 * przyrostowe listy zadań, kalendarza i przypomnień (L3);
 * szybsze cofanie (L5);
-* mniejsze zużycie pamięci przez indeks (L8);
 * natywne okna wyboru plików (L9: APK −15 MB, wersja webowa −5 MB);
 * wykres powiązań na wątku roboczym (L16).
 

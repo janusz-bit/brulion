@@ -3,12 +3,22 @@
 Stan na 2026-10-18: obecny kod (gałąź `main` z pakietem optymalizacji z października 2026)
 porównany z wydaniem **v0.1.1** (`f61a2a4`) i z **d1141c0** (ostatni commit przed
 optymalizacjami). Wszystkie trzy wersje zmierzono w tych samych warunkach i tymi samymi
-benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsku, niżej).
+benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsku, niżej). Uzupełnione
+2026-10-29 o falę 5: pamięć indeksu, indeksowanie na kilku rdzeniach i gotowy indeks zapisany na
+urządzeniu (porównanie z `82d0357`).
 
 ## Podsumowanie dla użytkowników
 
 ### Co się poprawiło
 
+* **Duże notatniki otwierają się dwa razy szybciej i zajmują o jedną trzecią mniej pamięci**
+  (2026-10-29). Notatki indeksują się na kilku rdzeniach naraz, a gotowy indeks zostaje zapisany
+  na urządzeniu, więc przy kolejnym otwarciu Brulion czyta od nowa tylko notatki zmienione od
+  ostatniego razu. Notatnik z 10 000 notatek na komputerze jest w pełni zaindeksowany po 0,96 s
+  przy pierwszym otwarciu i po 0,83 s przy kolejnych (wcześniej ok. 1,8–1,9 s), a sam indeks
+  zajmuje 60 % mniej pamięci (cała aplikacja z tym notatnikiem: 340 zamiast 510 MB).
+  Wyszukiwanie jest kompletne od razu, gdy indeks jest gotowy — nie dobudowuje się już w tle
+  z krótką przerwą w działaniu interfejsu.
 * **Duże notatki nie zamrażają już aplikacji.** Po starcie i po każdym autozapisie bardzo dużej
   notatki (od ok. 200 KB, np. długi dziennik w jednym pliku albo zaimportowana książka) Brulion
   przestawał reagować: na komputerze na 0,9–1,6 s, na słabszym telefonie nawet na 13–20 s.
@@ -44,7 +54,8 @@ benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsk
 ### Jak jest teraz
 
 **Na komputerze** (laptop z 2023 r., notatnik 10 000 notatek): okno po 0,2 s, treść po 0,4 s,
-cały notatnik zaindeksowany po ok. 2 s (w tym czasie można już czytać i pisać). Strona z 5000
+cały notatnik zaindeksowany po ok. 1 s, przy kolejnym otwarciu po 0,8 s (w tym czasie można już
+czytać i pisać). Strona z 5000
 bloków otwiera się w ok. 0,1 s, wyszukiwanie zwraca wyniki w kilka–kilkanaście milisekund,
 Zadania/Kalendarz/Agenda otwierają się w 0,13–0,17 s. Bezczynny Brulion zużywa ok. 0,1 %
 procesora i nie rysuje klatek.
@@ -52,18 +63,23 @@ procesora i nie rysuje klatek.
 **Na telefonie** (mierzone na Raspberry Pi 4, który odpowiada słabszemu telefonowi, i na
 emulatorze Androida): zwykłe notatniki działają płynnie — start z przykładowym notatnikiem ok.
 1,3 s, pisanie na zwykłej stronie bez opóźnień. Duży notatnik (10 000 notatek) pokazuje treść po
-ok. 1,6 s, ale indeksuje się ok. 15 s (wyszukiwanie w tym czasie najpierw dokańcza indeks,
-więc pierwsze wyniki mogą chwilę potrwać).
+ok. 1,6 s, ale indeksował się ok. 15 s; od fali 5 robi to na kilku rdzeniach, a przy kolejnym
+otwarciu bierze gotowy indeks z urządzenia (nowego czasu na Raspberry Pi i telefonie jeszcze nie
+zmierzyliśmy).
 
 **W przeglądarce**: pierwsza wizyta pobiera ok. 14 MB (później strona działa z pamięci
 podręcznej i offline), powrót do strony z 1000 notatek rysuje pierwszą klatkę po ok. 0,6 s.
 
 ### Znane wolne miejsca
 
-* **Indeksowanie dużych notatników na telefonie** — ok. 15 s dla 10 000 notatek (praca
-  w tle, w krótkich kawałkach; w tym czasie interfejs czasem przycina się na ok. 0,5 s).
-* **Pamięć** — notatnik 10 000 notatek zajmuje ok. 430–500 MB. Na telefonach z 3–4 GB RAM
-  system może częściej zamykać Brulion w tle (notatki są zawsze zapisane na dysku).
+* **Indeksowanie dużych notatników na telefonie** — było ok. 15 s dla 10 000 notatek; teraz
+  notatki parsują się na kilku rdzeniach, a łączenie ich w indeks (w wątku interfejsu, po
+  kawałku) zostało najdłuższą częścią — nowego czasu na telefonie jeszcze nie zmierzyliśmy.
+  Pierwsze otwarcie po aktualizacji Brulionu jest zawsze „na zimno” (gotowy indeks z poprzedniej
+  wersji nie jest używany).
+* **Pamięć** — notatnik 10 000 notatek zajmuje na komputerze ok. 340 MB (wcześniej ok.
+  500 MB). Na telefonach z 3–4 GB RAM system może zamykać Brulion w tle (notatki są zawsze
+  zapisane na dysku).
 * **Po każdym zapisie** listy zadań, kalendarz, przypomnienia i bloki zapytań przeliczają się od
   nowa: przy 10 000 notatkach to ok. 0,13 s pracy na komputerze i ok. 1 s na telefonie.
 * **Cofanie (Ctrl+Z) na bardzo długiej stronie** trwa na telefonie ok. 0,2 s; Kalendarz
@@ -331,6 +347,103 @@ browser and Windows take the clipboard's data at once (Windows: `OleSetClipboard
 formats, and Qt's CF_HTML converter asks for `html()` to offer its format), so they still render
 it while copying.
 
+### Wave 5: index memory (L8), parallel indexing (L1), index cache (L2) (2026-10-29)
+
+Three steps on the index, each committed and measured on its own (laptop, Release, P-cores,
+`-q 3`, 5 repetitions; base = `sweep2` at `82d0357`, the same `tests/bench` sources on both trees —
+rows the base cannot build are skipped there, `__has_include` in `bench_index.cpp`).
+
+**L8 — memory.** The heap of the index of the 10 000-note bench vault (22.9 MB of Markdown;
+`bench_index:memory`, glibc malloc statistics, exact) step by step:
+
+| step (commit) | ParsedNote only | index | + full-text index |
+|---|---:|---:|---:|
+| base | 352.2 MB | 447.9 MB | 571.7 MB (545.2 MiB) |
+| index maps: per-key path sets as sorted lists ≤ 32 paths (`smallsets_p.h`) | 352.2 | 382.1 | 505.9 |
+| `Block::task` on the heap (`Boxed<Task>`, Block 440 → 232 bytes) | 287.6 | 317.5 | 441.2 |
+| no growth slack (blocks reserved exactly, lists squeezed) | 256.9 | 286.8 | 410.4 |
+| `ParsedNote::blockIds` a `QMap` | 246.1 | 276.0 | 399.7 |
+| `Properties` a `QMap` | 214.9 | 244.8 | 368.5 |
+| `Block::raw` a slice of the note's text (`BlockSource`) | 165.7 | 195.5 | 319.3 |
+| full-text documents point into the dictionary, posting lists squeezed | 165.7 | 195.6 | 232.3 |
+| **after (final tree)** | **165.7 (158.0 MiB)** | **194.5 (185.5 MiB)** | **231.3 (220.6 MiB), −59.5 %** |
+
+50 000 notes: 2681.7 → 1094.9 MiB (−59.2 %). The model's counts (the `memory` row's info line,
+equal on both trees): 244 795 blocks, 44 919 tasks, 11 413 blocks with properties, 18 064 with an
+id, 65 815 links (6 104 block refs), 21.5 M characters of raw and 19.2 M of block text. Where it
+went (heaptrack on the base, peak of the 50 000-note rows): the `QList<Block>` storage with its
+growth (Blocks of 440 bytes, an in-place `std::optional<Task>` in each), the `raw` and `text`
+joins (234 and 200 MB), the full-text index's per-document term copies (183 MB of strings +
+157 MB of lists), `ParsedNote::tasks` and `links` growth (65 + 54 MB), and nearly empty 48-entry
+QHash/QSet spans (a QSet<QString> with one element ≈ 1.4 KB) for every link key, block id, tag and
+name of the index, every `blockIds` and every block's `Properties` (`collapsed::`, a Logseq `id::`).
+`QMap` was taken for `Properties` and `blockIds` instead of the planned own compact classes: the
+same saving within 1 MB, no new API (iteration is by key now, deterministic — QHash's was random).
+Times did not suffer: `buildInMemory` 10 000 notes 836 → 797 ms (−4.6 %), `parseTypical` −5 to
+−12 %, `firstSearch` 465 → 475 ms (+2 %, within the noise).
+
+**L1 — parse on worker threads.** `notebook::IndexLoader` reads (`Vault::readDetached`),
+decodes and parses the notes (`VaultIndex::prepare`) on a `WorkerPool`, builds the full-text index
+on one more thread (`SearchIndex::prepare`/`set`, adopted with per-document content keys) and merges
+the notes on the owner's thread in slices (`updatePrepared`, the vault's bookkeeping by
+`adoptRead`). The app's pool: clamp(cores − 1, 1, 4) low-priority workers + 1; WebAssembly keeps
+the slices on the GUI thread. `openFromDisk` = scan + read + index, until every note is merged
+(the loader rows: also the full-text index built and adopted):
+
+| | 1 000 notes | 10 000 notes | 50 000 notes |
+|---|---:|---:|---:|
+| before: one thread (`readText` + `update`, the app's old path, no full-text index) | 91 ms | 965 ms | 5045 ms |
+| loader inline (no threads: WebAssembly) | 93 ms | 979 ms | 5065 ms |
+| loader, 1 worker | 79 ms | 793 ms | 4126 ms |
+| loader, 4 workers (+ full-text index) | 34 ms | 352 ms | 1834 ms |
+| `VaultIndex::prepare` of every note on one thread | 62 ms | 621 ms | – |
+
+The owner's merge (resolving and relinking every note's links, the tag and block maps, the vault's
+read bookkeeping) is now the larger part: 4 workers give 2.7× of the serial path, not 4×.
+
+**L2 — the index cache.** `<device state>/index-cache.bin` (`index/indexcache.h`): every note's
+parse (block texts and raw lines stored as offsets into the note where they are one piece of
+it), the full-text index, a directory checked per note by path, byte size and the content key of
+the text just read; identity = format, `markdown::ParserVersion`, `SearchIndex::FormatVersion`, Qt
+and app versions, the config's parse fingerprint, the vault id. 10 000 notes: 18.9 MB (0.82× the
+vault), encoded in 122 ms (in 8 ms slices on the GUI thread), all notes and the full-text index
+decoded in 129 ms on one thread (k 1.03 / 1.06 between 10 000 and 50 000).
+
+| `openFromDisk` from the cache | 1 000 notes | 10 000 notes | 50 000 notes |
+|---|---:|---:|---:|
+| inline (WebAssembly) | 51 ms | 552–578 ms (−41 % of the cold inline load) | 3136 ms |
+| 4 workers | 22 ms | 272–284 ms | 1604 ms |
+
+Every file is still read and hashed (exact invalidation, the vault's bookkeeping unchanged), so a
+warm load saves parsing and tokenising, not reading. Heap after a load from the disk with the
+loader (vault, texts, index, full-text index): parsed 305.5 MiB, from the cache 307.2 MiB (+0.6 %).
+
+**App** (laptop, Xvfb + llvmpipe, Release `-O3 -g`, the 10 000-note bench vault of
+`make-bench-vault.py`; `first` = a fresh profile, i.e. no index cache; `warm` = the same profile
+again, i.e. the cache written by the warm-up run; 3 runs of `first`, 5 of `warm`, medians, base and head alternated, the second of two rounds on a quiet laptop):
+
+| | before: first / warm | after: first (cold index) / warm (from the cache) |
+|---|---:|---:|
+| index ready (`Workspace.ready`, from the process start) | 1891 / 1723 ms | **964 / 831 ms** (−49 / −52 %) |
+| longest GUI stall while indexing | 29 / 29 ms | 28 / 32 ms |
+| longest GUI stall after ready (the first full-text build) | 54 / 54 ms | **0 / 0 ms** |
+| frames per second while indexing | 39 / 40 | 47 / 48 |
+| malloc heap when settled | 512 / 504 MB | **340 / 332 MB** (−34 %) |
+| RSS when settled | 664 / 647 MB | 504 / 490 MB |
+| CPU time until settled (all threads) | 4.49 / 4.35 s | 4.48 / 3.56 s |
+| first frame / first content | 317 / 591 ms, 184 / 449 ms | unchanged |
+
+The targets were 0.9 s cold and 0.6 s warm: the merge on the GUI thread (12 ms slices between
+frames) is now what the index waits for — next step below (L1b). The full-text index no longer
+costs the GUI anything: it is built on its own thread (or read from the cache) and adopted at once,
+so the first search after "ready" finds a complete index.
+
+Not measured in this wave (no quiet window on the Raspberry Pi — another agent built there —, the
+emulator and the browser need their own builds of both trees): the Pi, the Android emulator
+(PSS at 5 000 notes) and the headless-browser numbers below in Budgets are the previous ones,
+except where noted. `scripts/wasm-smoke.mjs --loads 2 --index-notes 3000` (wasm.yml) checks that
+the browser's second load takes the notes from the cache.
+
 ### Budgets
 
 Desktop = the laptop above, phone = Pi 4 (floor) and the emulator (optimistic), web = headless
@@ -339,8 +452,8 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | budget | target | desktop | phone | web |
 |---|---|---|---|---|
 | start → first content | desktop < 1 s, phone < 2 s | ✅ 0.40 s (10k), 0.39 s demo | ✅ Pi demo 1.25 s, 10k 1.57 s | ✅ repeat 0.61 s, ×4 CPU 1.64 s; ❌ first visit at 20 Mbit/s 7.7 s |
-| index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 1.93 s | ❌ Pi 15 s (L1, L2) | ✅ 1k 1.2 s (×4 CPU 4.3 s) |
-| GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 31 ms indexing; ⚠️ 59 ms after ready | ❌ Pi 0.54 / 0.45 s (L1, L18) | – |
+| index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 0.96 s, 0.83 s from the index cache (wave 5; was 1.89 s) | ❌ Pi 15 s before wave 5, not measured since (L1b) | ✅ 1k 1.2 s (×4 CPU 4.3 s; before wave 5) |
+| GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b, L18) | – |
 | keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page; ⚠️ 5000-block outline p95 23 ms | ✅ small page; ⚠️ outline p95 42 ms | – |
 | Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 25 / 46 ms | ✅ Enter 38 ms; ❌ undo 214 ms (L5) | – |
 | autosave stall | < 50 ms desktop, < 100 ms phone | ✅ small page 41 ms; ❌ 500 KB page 88 ms | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
@@ -349,7 +462,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | Graph | settled < 1 s | ✅ 0.77 s | ❌ Pi 2.6 s (was 44 s; L16); emulator 1.5 s | – |
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ❌ 131 ms (L3) | ❌ Pi 0.95 s (L3) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
-| memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ❌ 495 MB (L8) | ❌ emulator PSS 359 MB at 5k (< 300 MB wanted) | ✅ 104 MB of linear memory at 1k |
+| memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 104 MB of linear memory at 1k |
 | download | APK < 40 MB, web < 10 MB | – | ✅ 28.5 MB download (84.9 MB installed) | ❌ 13.7 MB gzip (9.4 MB brotli, not served) |
 
 ### Next steps
@@ -358,20 +471,19 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 
 | # | change | expected |
 |---|---|---|
-| L1 | parse notes on worker threads while indexing, merge into `VaultIndex` in batches | Pi 10k index 15 s → ~5 s, no indexing stall > 50 ms |
-| L2 | persistent parsed-index + postings cache keyed by path, size, mtime, hash, parser version | warm start ≈ the scan; non-blocking first search |
+| L1b | cheaper merge of prepared notes on the GUI thread: link lookup keys (`cleanTarget`, NFC, lower case) and the name table's keys computed by the loader's workers; measure the Pi (L1/L2 of wave 5 not measured there yet) | laptop 10k index ready 0.96 / 0.83 s → 0.6 s; Pi ≤ 6 s cold, ≤ 3 s warm |
 | L3 | incremental derived lists (Tasks, Calendar, reminders, query blocks) | after a save 131 ms → < 30 ms (Pi 0.95 s → < 0.2 s) |
 | L4 | `BlockDocument` fast path for body-only edits | keystroke core 1.3 ms → < 0.3 ms |
 | L5 | delta undo/redo | Pi undo 214 ms → < 50 ms |
 | L7 | cheaper page opening (header summary and linked references from the index) | Pi open 653 ms → ~400 ms |
-| L8 | `ParsedNote` memory diet (`Block::raw` as offsets, `Task` out of line) | heap −40 % (10k ≈ 300 MB) |
 | L9 | native file pickers instead of QtQuick.Dialogs (its per-style QML pulls in every style) | APK −15 MB, wasm −5 MB |
 | L10 | lazy cold views and dialogs, `BIcon` without a `Loader` | Pi demo first content −0.3 s |
 | L16 | graph layout on a worker, scene-graph rendering | smooth graph on phones |
 | L12 | sync: size + mtime quick check for unchanged text files | no-change sync ≥ 3× faster (laptop 10k 419 ms, Pi 5k 1.35 s) |
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 
-Also open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip
+Done in wave 5 (2026-10-29, above): L1 (parse on worker threads), L2 (the index cache), L8 (the
+memory diet). Also open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip
 only) and the ~90 ms later content on a desktop first start (above).
 
 ### How to run the benchmarks
@@ -416,6 +528,16 @@ hash).
 * To compare two source trees, give both the same `tests/bench` sources (the hash in `env.txt`
   must match), build each in its own directory and run the suites alternately under the same
   conditions (same `-c`/`-q`), then `compare` the two result dirs.
+
+* **Index loading** (wave 5): the app and brulion-cli read the index cache from the device state
+  folder; `BRULION_NO_INDEX_CACHE=1` neither reads nor writes it (a cold index on every start),
+  `BRULION_INDEX_THREADS=<n>` sets the parse workers (`0`: in slices on the GUI thread, the
+  browser's way). The core rows are `bench_index:openFromDisk` "loader …" and "loader warm cache
+  …" (the cache written in the row's setup), `cacheEncode`, `cacheDecode`, `prepare`.
+* **Before/after on GitHub's runners** (x86_64 and arm64, the flake's toolchain, both trees with
+  head's bench sources, two alternating rounds): `gh workflow run perf-compare.yml --ref <branch>
+  -f base=<ref> [-f suites="bench_index bench_markdown"] [-f reps=5]` — the comparison lands in
+  the job summary and an artifact. Shared runners are noisy: relative changes only.
 
 **App (the real binary, `tests/bench/app/`).** An `LD_PRELOAD` probe records frames, GUI stalls,
 memory and CPU and drives scenarios (startup, open-page, typing, search, switcher, views,
@@ -478,18 +600,23 @@ sync with the arrays in the script):
 | first search | `bench_index:firstSearch` 10000 notes | full-text index build (N1) |
 | query | `bench_index:query` 10000 notes tag praca | query blocks |
 | suggestions | `bench_index:suggestBlocks` 'kawa ogród', `suggestPages` 'stro' (10000 notes) | `((` and `[[` popups, quick switcher (N7) |
-| index memory | `bench_index:memory` 10000 notes + search index | ≈ 25 B of heap per Markdown byte today (L8) |
+| index memory | `bench_index:memory` 10000 notes + search index | ≈ 10 B of heap per Markdown byte since wave 5 (L8) |
 | after a save | `bench_reminders:afterEdit` mixed vault 10000 notes, all consumers | every save's fan-out (L3) |
 | keystroke | `bench_markdown:blockDocOps` 5000 blocks keystroke | typing on long pages (L4) |
 | UI state store | `bench_vault:localStoreFlush` 10000 synced files | N9 |
 | sync | `bench_sync:syncNoChanges` 10000 files (Pi: 5000) | L12 |
+| open vault, threads | `bench_index:openFromDisk` 10000 notes loader 4 workers (Pi: 3) | L1 (wave 5) |
+| open vault, cache | `bench_index:openFromDisk` 10000 notes loader warm cache 4 workers (Pi: 3) | L2 (wave 5) |
 
 Scaling limits (`limits.csv`): `foldKey` / `foldKeyWithMap` polish k ≤ 1.2 (N1),
 `searchLargeNote` k ≤ 1.3 (N1), `parsePathological` inline HTML and one paragraph of `<`
 k ≤ 1.3 (N6), `unlinkedLongLine` k ≤ 1.3 (N6), `htmlToMarkdown` flat and nested lists k ≤ 1.3
 (N10), and from wave 4 `planRelocation` folder rename and page rename, `tagPageOpen` after a save,
-`selectAllCopy` Markdown and plain text, `clipboardHtml` k ≤ 1.3 (measured k 0.98–1.10) — 1.5 for
-all of them in the Pi's small profile; index heap at 10 000 notes ≤ 560 MiB.
+`selectAllCopy` Markdown and plain text, `clipboardHtml` k ≤ 1.3 (measured k 0.98–1.10), from wave
+5 `openFromDisk` loader 4 workers and loader warm cache 4 workers, `cacheEncode`, `cacheDecode`
+k ≤ 1.3 — 1.5 for all of them in the Pi's small profile (3 workers); index heap at 10 000 notes
+≤ 233 MiB (wave 5: 220.6 MiB measured; it was ≤ 560 MiB before). The Pi baseline has no loader
+rows yet (record them with `-u` in a quiet window).
 
 App-level guards (startup, typing, open-page, views, idle) are not automated: run
 `bench-matrix.sh` before a release and compare with the tables above (same rule: medians of 5
@@ -520,6 +647,11 @@ speed varies far more than the 10 % a regression check needs. The Pi (small prof
 steps, 1 MB L2 cache) shows k up to 1.27 for linear code, hence its limit of 1.5.
 
 ### Pitfalls (learned the hard way)
+
+* **Cold vs warm index** (wave 5): a second run of the same notebook reads the index cache. App
+  runs with `--start warm`/`cold` reuse the profile of their warm-up run and so its cache (written
+  ~5 s after the index, or at the latest when the app closes); `--start first` is the cold index.
+  Compare like with like, and set `BRULION_NO_INDEX_CACHE=1` for a cold index on warm starts.
 
 * **Stale benchmark binaries.** `rsync -a` keeps source mtimes; a changed file that is older than
   the build used not to be recompiled (the "23 ms per keystroke on the Pi" was such a binary).

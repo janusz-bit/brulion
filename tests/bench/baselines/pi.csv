@@ -10,7 +10,7 @@ bench_index,firstSearch,10000 notes,ms,2551.22,11.7
 bench_index,query,10000 notes tag praca,ms,1082,35.6
 bench_index,suggestBlocks,10000 notes 'kawa ogród',ms,80,5.0
 bench_index,suggestPages,10000 notes 'stro',ms,28,5.4
-bench_index,memory,10000 notes + search index,MiB,221.553,0.0
+bench_index,memory,10000 notes + search index,MiB,220.591,0.0
 bench_reminders,afterEdit,"mixed vault 10000 notes, update + all consumers",ms,963,21.3
 bench_markdown,blockDocOps,5000 blocks keystroke,ms,8.125,9.2
 bench_vault,localStoreFlush,10000 synced files,ms,953,34.2
