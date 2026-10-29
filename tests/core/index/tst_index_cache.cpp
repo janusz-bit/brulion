@@ -12,6 +12,7 @@
 #include "markdown/parse.h"
 #include "notecorpus.h"
 #include "notedump.h"
+#include "text/text.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -136,6 +137,61 @@ private Q_SLOTS:
         QVERIFY(!indexcache::detail::decodeNote(QByteArray(*body + '\0'), path, content, VaultConfig()));
         if (!body->isEmpty())
             QVERIFY(!indexcache::detail::decodeNote(body->chopped(1), path, content, VaultConfig()));
+    }
+
+    // A record decoded for another text of the same length (what a content-key collision —
+    // accidental or forged by a sync peer — would hand decodeNote()): no line number it yields
+    // lies past the end of that text. Texts with as many lines decode (only the key tells them
+    // apart), texts with fewer lines are refused.
+    void recordOfAnotherText_data()
+    {
+        QTest::addColumn<QString>("written");
+        QTest::addColumn<QString>("other");
+        QTest::addColumn<bool>("decodes");
+        // `text` filled up with 'ż' to the length of `like`.
+        const auto pad = [](QString text, const QString &like) {
+            text.resize(like.size(), u'ż');
+            return text;
+        };
+        // Lines 0–3 used, a line break at the end (line 4 is empty).
+        const QString note =
+                u"# Zażółć gęślą jaźń\n- [ ] zadanie ⏰ 2026-10-29 09:00\n- link [[Łódź]]\n  - dziecko\n"_s;
+        QTest::newRow("one line") << note << pad(u"# Zażółć gęślą jaźń "_s, note) << false;
+        QTest::newRow("no line breaks at all") << note << QString(note.size(), u'ą') << false;
+        QTest::newRow("empty lines only") << note << pad(u"\n\n"_s, note) << false;
+        QTest::newRow("CR LF is one break") << note << pad(u"a\r\nb\r\n"_s, note) << false;
+        QTest::newRow("lone CR is a break") << note << pad(u"a\rb\rc\rd"_s, note) << true;
+        QTest::newRow("the same lines, other words")
+                << note << pad(u"# Ćma\n- źdźbło\n- łąka\n  - ś\n"_s, note) << true;
+        const QString task = u"- a\n- b\n- [ ] c ⏰ 2026-10-29 09:00"_s;
+        QTest::newRow("a task on the last line") << task << pad(u"- a\n- b "_s, task) << false;
+        QTest::newRow("a task, as many lines") << task << pad(u"- x\n- y\n"_s, task) << true;
+    }
+    void recordOfAnotherText()
+    {
+        QFETCH(QString, written);
+        QFETCH(QString, other);
+        QFETCH(bool, decodes);
+        QCOMPARE(other.size(), written.size());
+        const ParsedNote parsed = markdown::parseNote(u"a.md"_s, written);
+        const std::optional<QByteArray> body = indexcache::detail::encodeNote(parsed, written);
+        QVERIFY(body);
+        QVERIFY(indexcache::detail::decodeNote(*body, u"a.md"_s, written, VaultConfig()));
+        const std::optional<ParsedNote> decoded =
+                indexcache::detail::decodeNote(*body, u"a.md"_s, other, VaultConfig());
+        QCOMPARE(decoded.has_value(), decodes);
+        if (!decoded)
+            return;
+        const int lines = int(text::splitLines(other).size());
+        for (const Block &b : decoded->blocks) {
+            QVERIFY(b.line >= 0 && b.endLine < lines && b.ownEndLine < lines);
+            if (b.task)
+                QVERIFY(b.task->line < lines);
+            for (const Reminder &r : b.reminders)
+                QVERIFY(r.line < lines);
+        }
+        for (const Link &l : decoded->links)
+            QVERIFY(l.line < lines && l.to <= other.size());
     }
 
     // A frontmatter value the format cannot hold: no record (the note is parsed on load).

@@ -7,7 +7,10 @@
 // the current one — any update of the app parses everything once —, and every note's record is
 // used only for the same path with the same byte size and the same VaultIndex::contentKey() of
 // the text just read (the file is always read: a touched file is a hit, a same-size,
-// same-modification-time edit a miss). Full-text documents carry their note's content key too
+// same-modification-time edit a miss). The 64-bit key is no proof against a crafted collision (a
+// sync peer controls both texts): decoding also refuses a record with a line number past the
+// text's last line or an offset past its end, so a wrong record can mislabel only that note,
+// never point outside it. Full-text documents carry their note's content key too
 // (VaultIndex::adoptSearch()). Corrupt input never crashes nor allocates more than the file holds:
 // a bad header, footer or directory ignores the whole file (Reader::open() says why), a bad record
 // only its note (parsed instead). Someone who can write the app's data folder can inject a fake

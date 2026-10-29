@@ -683,11 +683,44 @@ std::optional<QByteArray> encodeNote(const ParsedNote &note, const QString &cont
     return body;
 }
 
+namespace {
+
+/// The index of the last line of `content` as text::splitLines() (and so the parser) counts them:
+/// "\n", "\r\n" and a lone "\r" end a line.
+int lastLineIndex(QStringView content)
+{
+    // One branch-free pass (the compiler vectorizes it); "\r\n" pairs are subtracted only for
+    // notes that have a "\r" at all.
+    const char16_t *const begin = content.utf16();
+    const char16_t *const end = begin + content.size();
+    qsizetype lf = 0;
+    qsizetype cr = 0;
+    for (const char16_t *p = begin; p != end; ++p) {
+        lf += *p == u'\n';
+        cr += *p == u'\r';
+    }
+    qsizetype ends = lf + cr;
+    if (cr > 0) {
+        for (const char16_t *p = begin; p + 1 < end; ++p) {
+            if (p[0] == u'\r' && p[1] == u'\n')
+                --ends;
+        }
+    }
+    return int(std::min<qsizetype>(ends, std::numeric_limits<int>::max()));
+}
+
+} // namespace
+
 std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path, const QString &content,
                                      const VaultConfig &config)
 {
     In in(body);
     ParsedNote note;
+    // Every line number must exist in this text: a record that passed the size and content-key
+    // check but was written for another text (a 64-bit key can collide — a sync peer could even
+    // forge one) never points past the note's end.
+    const int lastLine = lastLineIndex(content);
+    const auto badLine = [lastLine](int line) { return line < 0 || line > lastLine; };
     note.path = path;
     note.title = paths::pageTitle(path);
     note.frontmatter = readMap(in);
@@ -704,7 +737,8 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
         b.endLine = in.intValue();
         b.ownEndLine = in.intValue();
         b.depth = in.intValue();
-        if (b.line < 0 || b.endLine < b.line || b.ownEndLine < b.line || b.depth < 0)
+        if (b.line < 0 || b.endLine < b.line || b.ownEndLine < b.line || b.depth < 0 || badLine(b.endLine)
+            || badLine(b.ownEndLine))
             in.fail();
         switch (in.u8()) {
         case 0: {
@@ -736,8 +770,11 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
             b.properties = note.properties;
         else
             b.properties = readMap(in);
-        if (in.boolean())
+        if (in.boolean()) {
             b.task = readTask(in);
+            if (badLine(b.task->line))
+                return std::nullopt;
+        }
         const qsizetype reminders = in.count(5);
         b.reminders.reserve(reminders);
         for (qsizetype r = 0; r < reminders && !in.failed(); ++r) {
@@ -747,6 +784,8 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
             rem.recurrence = in.str();
             rem.text = in.boolean() ? b.text : in.str();
             rem.line = in.intValue();
+            if (badLine(rem.line))
+                return std::nullopt;
             b.reminders.append(std::move(rem));
         }
         b.tags = readStrings(in);
@@ -777,7 +816,7 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
         l.line = in.intValue();
         l.from = in.intValue();
         l.to = in.intValue();
-        if (l.line < 0 || l.from < 0 || l.from > l.to || l.to > content.size())
+        if (badLine(l.line) || l.from < 0 || l.from > l.to || l.to > content.size())
             return std::nullopt;
         note.links.append(std::move(l));
     }
