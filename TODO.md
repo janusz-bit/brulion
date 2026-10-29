@@ -42,6 +42,12 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   pola według typu wartości (tekst, liczba, data, lista, znaczniki, aliasy), podpowiedzi
   istniejących kluczy z notatnika, zachowanie reszty frontmattera bajt w bajt (docs/SYNTAX.md
   „Page properties”, docs/UI.md).
+* **Podgląd PDF** — PDF w notatniku (`![[doc.pdf]]`, docs/SYNTAX.md) jest dziś w bloku tylko
+  kafelkiem pliku (`EmbedView`). Do zrobienia: w osadzeniu miniatura pierwszej strony, a po
+  kliknięciu przeglądarka PDF w aplikacji (przewijanie stron, powiększanie, wyszukiwanie
+  w tekście, „Otwórz w innej aplikacji”), jak widok zdjęcia dla obrazów; na telefonie,
+  komputerze i w przeglądarce (sprawdzić moduł Qt PDF, `QtQuick.Pdf`, także w WebAssembly).
+  Podstawa dla rysowania na PDF-ach z wykładu (punkt „Rysunki — dalsze kroki”).
 
 ## Windows
 
