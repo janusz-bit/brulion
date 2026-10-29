@@ -14,7 +14,8 @@
 //   Conflicts  Syncthing ".sync-conflict-" and Brulion ".conflict-" copies (sync::findConflicts),
 //              kept up to date on vault changes; resolveConflict() writes the merged text into
 //              the original (its old text stays in History, also within History's throttle) and
-//              moves the copy to the trash.
+//              moves the copy to the trash; resolveConflictBytes() the same with bytes (a merged
+//              drawing).
 //   Secrets    the stored app password is only ever sent to the server and user it was saved
 //              for (sameNextcloudAccount()); nothing here logs URLs with credentials or keys.
 //
@@ -31,7 +32,10 @@
 //                  globalBytes, connected (-1 unknown), errors, folderId, folderLabel, error,
 //                  text }
 //   conflicts    [{ original, copy, title, time ("YYYY-MM-DDTHH:mm:ss"), when, device,
-//                  source: "syncthing" | "brulion", text (a text file that can be merged) }]
+//                  source: "syncthing" | "brulion", text (a text file that can be merged),
+//                  drawing (the copy or the original is a drawing — an SVG with an Excalidraw
+//                  scene, `*.excalidraw.md`, `.excalidraw`: merged by its elements, never by
+//                  lines) }]
 //   live         the running sync, updated at most 4 times a second (and once a second for the
 //                elapsed time) — {} when idle (workspacesyncruns.cpp):
 //                { running, number, trigger, triggerText, phase ("connecting" | "listing" |
@@ -282,6 +286,10 @@ public:
     Q_INVOKABLE QVariantMap conflictDetails(const QString &copy);
     /// Write `mergedText` into `original` and move the conflict copy `copy` to the trash.
     Q_INVOKABLE bool resolveConflict(const QString &original, const QString &copy, const QString &mergedText);
+    /// Write `bytes` into `original` (what they replace kept in History, unthrottled; nothing
+    /// written when they are there already) and move the conflict copy `copy` to the trash — a
+    /// merged drawing, the copy's drawing. False (errorOccurred()) when either step fails.
+    bool resolveConflictBytes(const QString &original, const QString &copy, const QByteArray &bytes);
     /// Keep the original as it is: move the conflict copy to the trash.
     Q_INVOKABLE bool discardConflictCopy(const QString &copy);
 

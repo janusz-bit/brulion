@@ -48,6 +48,20 @@ bool writeTextKeepingHistory(Vault &vault, const QString &path, const QString &c
     return written;
 }
 
+bool writeBytesKeepingHistory(Vault &vault, const QString &path, const QByteArray &bytes, ChangeSource source)
+{
+    History *h = vault.history();
+    if (!h)
+        return vault.writeBinary(path, bytes, source);
+    const HistoryPolicy policy = h->policy();
+    HistoryPolicy unthrottled = policy;
+    unthrottled.throttleSeconds = 0;
+    h->setPolicy(unthrottled);
+    const bool written = vault.writeBinary(path, bytes, source);
+    h->setPolicy(policy);
+    return written;
+}
+
 QVariantList Workspace::history(const QString &path) const
 {
     QVariantList out;

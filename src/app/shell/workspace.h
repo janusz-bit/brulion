@@ -78,6 +78,11 @@ namespace brulion::shell {
 /// (vault.errorString()).
 bool writeTextKeepingHistory(Vault &vault, const QString &path, const QString &content,
                              ChangeSource source = ChangeSource::User);
+/// The same for bytes (Vault::writeBinary): a drawing written over its previous version (the sync
+/// center's merge of a conflict copy) — the version replaced stays in History, which keeps
+/// snapshots of text files (an SVG, `*.excalidraw.md`, `.excalidraw`).
+bool writeBytesKeepingHistory(Vault &vault, const QString &path, const QByteArray &bytes,
+                              ChangeSource source = ChangeSource::User);
 
 class Workspace : public EditorHost, public QueryHost {
     Q_OBJECT
