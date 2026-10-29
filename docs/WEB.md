@@ -110,9 +110,13 @@ Parametry adresu (do debugowania):
 * `?keyboard=visual` — klawiatura ekranowa zmniejsza tylko widoczny obszar, nie stronę
   (domyślne zachowanie przeglądarek, `interactive-widget=resizes-visual`; niżej, „Klawiatura
   ekranowa”) — do testów i diagnozy.
-* `?report=/ścieżka` — wyniki testów (`?selftest=…`) idą też żądaniem POST pod tę ścieżkę tej
-  samej witryny (`{name, json, t}`; serwer testowy `scripts/web-test-server.py`) — dla
-  przeglądarek bez DevTools, np. na emulatorze Androida.
+* `?report=/__report/<nazwa>` — wyniki testów (`?selftest=…`) idą też żądaniem POST pod tę
+  ścieżkę tej samej witryny (`{name, json, t}`, bez ciasteczek; serwer testowy
+  `scripts/web-test-server.py`) — dla przeglądarek bez DevTools, np. na emulatorze Androida.
+  Inne ścieżki i adresy, które parser adresów zamienia na inną witrynę (np. `/%09/host`: tabulator
+  i znaki nowej linii parser usuwa, zostaje `//host`), są pomijane — sprawdza to
+  `scripts/wasm-smoke.mjs --keyboard`. Wynik `?selftest=keyboard` zawiera początek tekstu
+  edytowanego pola (`focusText`), nigdy pola hasła.
 
 Ścieżkę GitHub Pages da się sprawdzić lokalnie, kopiując `dist-wasm/` do `site/brulion/` i
 serwując `site/` (`http://127.0.0.1:8000/brulion/`).
@@ -155,8 +159,12 @@ Pozostałe opcje:
   a skrypt „otwiera” klawiaturę 300 px, 250 px przy stronie przewiniętej o 20 px (jak robi iOS),
   podaje wartość błędną (NaN → 0), powiększa stronę gestem (`scale` 2: to nie klawiatura, 0),
   przewija stronę o 40 px (aplikacja musi ją przewinąć z powrotem na górę) i chowa klawiaturę —
-  za każdym razem aplikacja musi zgłosić właściwą wysokość (niżej, „Klawiatura ekranowa”). Ze
-  `--screenshot` dochodzi zrzut `…-keyboard.png`. CI uruchamia go przy pierwszym teście.
+  za każdym razem aplikacja musi zgłosić właściwą wysokość (niżej, „Klawiatura ekranowa”).
+  Wcześniej sprawdza samą powłokę (skrypty aplikacji wstrzymane, więc magazyn i liczniki testu
+  zostają nietknięte): z `?report=/__report/smoke` wynik idzie POST-em tylko pod ten adres tej
+  samej witryny, a z `/%09/`, `/%0A/`, `/%0D/`, `//`, `/\`, pełnym adresem innej witryny
+  i innymi ścieżkami — nigdzie. Ze `--screenshot` dochodzi zrzut `…-keyboard.png`. CI uruchamia go
+  przy pierwszym teście.
 * `--keyboard-phone` — to samo na udawanym telefonie (412×915 pikseli CSS, gęstość 2,625, ekran
   dotykowy) z dzisiejszym dziennikiem zapisanym do IndexedDB (jak `--copy`) i blokiem edytowanym
   stuknięciem nisko na ekranie: strona prosi o `interactive-widget=resizes-content` (a z
@@ -459,8 +467,13 @@ w przeglądarkach). Klawiatura liczy się jako widoczna (`shown`: dolna nawigacj
 komunikaty idą na górę) przy zakryciu albo — gdy przeglądarka zmniejszyła stronę — na ekranie
 dotykowym z fokusem w polu Qt, gdy widoczny obszar jest co najmniej 120 px niższy niż najwyższy
 widziany przy tej szerokości (obrót telefonu zaczyna od nowa; pasek adresu przeglądarki, 56 px, to
-nie klawiatura). `animating` trwa, dopóki odczyty się nie ustalą: kursor przewija się w widok
-dopiero potem. `KeyboardInsets` (docs/UI.md „On-screen keyboard”) podnosi o zakrycie widok, pasek
+nie klawiatura). Fokus przechodzący między elementami Qt (Enter: następny blok) nie chowa jej, dopóki
+odczyty się nie ustalą; ustalony odczyt bez fokusu w polu Qt chowa ją (edycja skończona — na
+podzielonym ekranie strona zostaje niższa bez klawiatury). Telefon obrócony przy otwartej klawiaturze
+trafia na szerokość, której pierwsze wysokości już ją zawierają: tam klawiatura liczy się jako
+widoczna, a te wysokości nie jako najwyższe, dopóki strona nie urośnie o 120 px (klawiatura zeszła)
+albo edycja się nie skończy. `animating` trwa, dopóki odczyty się nie ustalą: kursor przewija się
+w widok dopiero potem. `KeyboardInsets` (docs/UI.md „On-screen keyboard”) podnosi o zakrycie widok, pasek
 narzędzi edycji, okna wysuwane od dołu, menu i komunikaty — tak samo jak na Androidzie. Bez
 `visualViewport` (stare przeglądarki) nic nie jest zgłaszane, a Qt nie zna klawiatury
 (`keyboardRectangle` w przeglądarce jest pusty).

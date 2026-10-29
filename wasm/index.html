@@ -248,11 +248,20 @@
             });
           });
         }
-        // ?report=<path on this site>: the app's self-test results are also POSTed there (a test
+        // ?report=/__report[/<name>]: the app's self-test results are also POSTed there (a test
         // server, scripts/web-test-server.py: browsers on the Android emulator have no DevTools).
-        var reportPath = (function () {
+        // Only that path of this site: resolved as fetch() resolves it (the URL parser drops tabs
+        // and line breaks, so "/<tab>/host" is another site's address) and checked afterwards.
+        var reportUrl = (function () {
           var path = new URLSearchParams(location.search).get('report') || '';
-          return /^\/(?![\/\\])/.test(path) ? path : '';
+          if (path.charAt(0) !== '/') return '';
+          try {
+            var url = new URL(path, location.href);
+            return url.origin === location.origin && /^\/__report(\/[\w.-]*)?$/.test(url.pathname) && !url.search
+              ? url.href : '';
+          } catch (e) {
+            return '';
+          }
         })();
         var shellBridge = {
           stage: function (name) {
@@ -268,11 +277,11 @@
           keyboardMode: window.brulionKeyboardMode || 'content',
           // A self-test result (src/platform/wasm/wasmselftest.cpp): to the test's server.
           selftest: function (name, json) {
-            if (!reportPath || !window.fetch) return;
+            if (!reportUrl || !window.fetch) return;
             var body = '{"name":' + JSON.stringify(String(name)) + ',"t":' + performance.now().toFixed(1)
               + ',"json":' + json + '}';
-            fetch(reportPath, { method: 'POST', body: body, keepalive: true,
-                                headers: { 'Content-Type': 'text/plain;charset=UTF-8' } }).catch(function () {});
+            fetch(reportUrl, { method: 'POST', body: body, keepalive: true, credentials: 'omit',
+                               headers: { 'Content-Type': 'text/plain;charset=UTF-8' } }).catch(function () {});
           }
         };
         window.brulionShell = shellBridge;

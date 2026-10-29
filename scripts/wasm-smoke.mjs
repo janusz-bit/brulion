@@ -20,7 +20,9 @@
 // (a phone browser's on-screen keyboard shrinks it) and runs ?selftest=keyboard: the app must
 // report how much of the page the keyboard covers (KeyboardInsets, src/app/ui/keyboardsources.h)
 // as the stub changes, 0 for malformed values and for a pinch-zoomed page, and put a page the
-// browser scrolled (iOS) back at the top. --keyboard-phone does the same on an emulated phone
+// browser scrolled (iOS) back at the top; before that the shell alone (the app held back) must send
+// self-test results only to ?report=/__report… on the page's own site, never to an address the URL
+// parser makes another site's ("/<tab>/host", "//host"). --keyboard-phone does the same on an emulated phone
 // (412×915 CSS px, DPR 2.625, touch) with today's journal written into IndexedDB and a block
 // edited with a tap: the page asks for interactive-widget=resizes-content (and resizes-visual with
 // ?keyboard=visual), Qt's hidden keyboard <input> stays pinned in the window's corner, a keyboard
@@ -355,6 +357,54 @@ async function main() {
       .catch(() => undefined);
     console.log(`vault of ${args.indexNotes || 0} notes${journal ? ' and today\'s journal' : ''} written into IndexedDB (${written} entries)`);
     if (!written) problems.push('could not write the test vault into IndexedDB');
+  }
+
+  if (args.keyboard) {
+    // ?report= (wasm/index.html): self-test results go only to /__report on the page's own site.
+    // Addresses the URL parser turns into another site's — a tab or a line break after the first
+    // slash (the parser drops them: "/<tab>/host/x" is //host/x), "//host", a backslash, a full
+    // URL — and other paths of the site are ignored. The shell alone is tested: its scripts are
+    // held back (the app does not start, so the storage and its self-test counters stay as they
+    // are) and its brulionShell.selftest() is called directly.
+    const posts = [];
+    cdp.on((msg) => {
+      if (msg.method === 'Network.requestWillBeSent' && msg.params.request.method === 'POST') {
+        posts.push(msg.params.request.url);
+      } else if (msg.method === 'Fetch.requestPaused') {
+        cdp.send('Fetch.failRequest', { requestId: msg.params.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
+      }
+    });
+    await cdp.send('Network.setBypassServiceWorker', { bypass: true });
+    await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*brulion.js*' }, { urlPattern: '*brulion.wasm*' }] });
+    const elsewhere = '127.0.0.2:9/leak';
+    const reportCases = [
+      ['/\t/' + elsewhere, null], ['/\n/' + elsewhere, null], ['/\r/' + elsewhere, null], ['//' + elsewhere, null],
+      ['/\\' + elsewhere, null], ['http://' + elsewhere, null], ['/__report/../leak', null], ['/leak', null],
+      ['/__report/smoke', `${url.origin}/__report/smoke`],
+    ];
+    for (const [report, expected] of reportCases) {
+      const pageUrl = new URL(url.href);
+      pageUrl.search = '';
+      pageUrl.searchParams.set('nosw', '');
+      pageUrl.searchParams.set('report', report);
+      await cdp.send('Page.navigate', { url: pageUrl.href });
+      let ready = false;
+      for (const end = deadline(15); Date.now() < end && !ready; await sleep(100)) {
+        ready = await evaluate(`location.href === ${JSON.stringify(pageUrl.href)}
+                                && typeof window.brulionShell?.selftest === 'function'`);
+      }
+      posts.length = 0;
+      await evaluate(`window.brulionShell.selftest('brulionReportProbe', '{"probe":true}')`);
+      await sleep(700);
+      const sent = [...posts];
+      console.log(`report: ?report=${JSON.stringify(report)}: POSTs ${JSON.stringify(sent)}`);
+      if (!ready) problems.push(`report: the shell did not load for ?report=${JSON.stringify(report)}`);
+      else if (expected === null ? sent.length > 0 : sent.length === 0 || sent.some((u) => u !== expected)) {
+        problems.push(`report: ?report=${JSON.stringify(report)} sent ${JSON.stringify(sent)}, expected ${expected ?? 'nothing'}`);
+      }
+    }
+    await cdp.send('Fetch.disable');
+    await cdp.send('Network.setBypassServiceWorker', { bypass: false });
   }
 
   const results = [];

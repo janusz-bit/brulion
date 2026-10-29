@@ -86,7 +86,7 @@ QQuickItem *visibleItem(QQuickItem *item, QStringView name)
 // scripts/android-emulator-test.sh --web-keyboard): the keyboard's state, the browser's last
 // sample, the old formula (innerHeight − height − offsetTop, for the record), where the shell's
 // content and the docked editing toolbar end in the window (logical px) and the focused editor's
-// text (its first 120 characters).
+// text (its first 120 characters; not a password field's).
 QJsonObject keyboardSelfTestResult(const KeyboardInsets *insets, QQuickWindow *window)
 {
     const ViewportSample &s = insets->viewportSample();
@@ -119,10 +119,15 @@ QJsonObject keyboardSelfTestResult(const KeyboardInsets *insets, QQuickWindow *w
         if (QQuickItem *toolbar = visibleItem(window->contentItem(), u"editToolbarSlot"))
             toolbarBottom = toolbar->mapToScene(QPointF(0, toolbar->height())).y();
         result.insert(u"dpr"_s, window->devicePixelRatio());
-        // What the keyboard types into (an editor's text): typing and Enter reach the app.
+        // What the keyboard types into (an editor's text): typing and Enter reach the app. Never
+        // a password's (a field that hides its text or marks it sensitive).
         if (QQuickItem *focus = window->activeFocusItem()) {
             const QVariant text = focus->property("text");
-            if (text.metaType() == QMetaType::fromType<QString>())
+            const QVariant echoMode = focus->property("echoMode");
+            const auto hints = Qt::InputMethodHints(focus->inputMethodQuery(Qt::ImHints).toInt());
+            const bool secret = (echoMode.isValid() && echoMode.toInt() != 0)
+                                || hints.testAnyFlags(Qt::ImhHiddenText | Qt::ImhSensitiveData);
+            if (!secret && text.metaType() == QMetaType::fromType<QString>())
                 result.insert(u"focusText"_s, text.toString().left(120));
         }
     }

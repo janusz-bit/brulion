@@ -6,7 +6,8 @@
 // `?selftest=storage,notify,glyphs,keyboard` into the app arguments `--selftest-storage
 // --selftest-notify --selftest-glyphs --selftest-keyboard` (the last: src/app/ui/keyboardsources.h).
 // Results are published as JavaScript globals (and console lines `BRULION_SELFTEST …`; with
-// `?report=<same-origin path>` the shell also POSTs each one there: {name, json, t}).
+// `?report=/__report[/<name>]` the shell also POSTs each one to that path of the same site:
+// {name, json, t}).
 // No flow touches notes.
 
 #include <QJsonObject>
