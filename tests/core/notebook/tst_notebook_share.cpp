@@ -1,14 +1,22 @@
 // Shares from other apps (notebook/share.h, "Udostępnij → Brulion"): the platform's JSON read
-// defensively, one capture text from a title, a text and a link (the previous app's share target
-// cases), which files are accepted (text types only, size cap, NUL bytes), decoding (UTF-8 with and
-// without a BOM, UTF-16, windows-1250/1252, line endings kept), a new page's title and content,
-// and the journal block of a shared file.
+// defensively and written back (round trip), one capture text from a title, a text and a link (the
+// previous app's share target cases), the browser's share target query (form encoding, malformed
+// escapes, invalid UTF-8, unknown and repeated keys, the length cap), files opened with Brulion on a
+// desktop (`--open`: the command line split, relative paths, file URLs, other URLs, duplicates, the
+// caps, two opens merged) and which of them are pages of the open notebook, which files are
+// accepted (text types only, size cap, NUL bytes), decoding (UTF-8 with and without a BOM, UTF-16,
+// windows-1250/1252, line endings kept), a new page's title and content, and the journal block of
+// a shared file.
 #include "notebook/share.h"
 
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTemporaryDir>
 #include <QTest>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 using namespace brulion;
@@ -298,6 +306,354 @@ private Q_SLOTS:
         const SharedContent share = sharedContentFromJson(QByteArray("{\"files\":[{\"name\":\"a.md\"}]}"));
         QCOMPARE(share.files.size(), 1);
         QCOMPARE(share.files.first().error, u"unreadable"_s);
+    }
+
+    void fromQuery_data()
+    {
+        QTest::addColumn<QString>("query");
+        QTest::addColumn<QString>("subject");
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("url");
+        // The previous app's case (archive/web-v1 share-target.test.ts), with this app's names.
+        QTest::newRow("title, text and url") << u"share-title=Artyku%C5%82&share-text=Ciekawe&share-url=https%3A%2F%2Fa.pl"_s
+                                             << u"Artykuł"_s << u"Ciekawe"_s << u"https://a.pl"_s;
+        QTest::newRow("raw utf-8") << u"share-text=Zażółć gęślą jaźń"_s << QString() << u"Zażółć gęślą jaźń"_s
+                                   << QString();
+        QTest::newRow("encoded utf-8")
+                << u"share-text=Za%C5%BC%C3%B3%C5%82%C4%87+g%C4%99%C5%9Bl%C4%85+ja%C5%BA%C5%84"_s << QString()
+                << u"Zażółć gęślą jaźń"_s << QString();
+        QTest::newRow("upper-case escapes") << u"share-text=%C5%81%c3%b3d%C5%BA"_s << QString() << u"Łódź"_s
+                                            << QString();
+        QTest::newRow("leading question mark") << u"?share-title=Tytu%C5%82"_s << u"Tytuł"_s << QString() << QString();
+        QTest::newRow("plus and an encoded plus") << u"share-text=a+b%2Bc"_s << QString() << u"a b+c"_s << QString();
+        QTest::newRow("percent without hex digits")
+                << u"share-text=100%+pewne%zz"_s << QString() << u"100% pewne%zz"_s << QString();
+        QTest::newRow("percent at the end") << u"share-text=50%"_s << QString() << u"50%"_s << QString();
+        QTest::newRow("truncated sequence") << u"share-text=%C5"_s << QString() << u"\uFFFD"_s << QString();
+        QTest::newRow("invalid utf-8") << u"share-text=%E2%28%A1"_s << QString() << u"\uFFFD(\uFFFD"_s << QString();
+        QTest::newRow("line breaks kept") << u"share-text=a%0D%0Ab"_s << QString() << u"a\r\nb"_s << QString();
+        QTest::newRow("encoded ampersand and equals")
+                << u"share-text=Ala+%26+kot+%3D+2"_s << QString() << u"Ala & kot = 2"_s << QString();
+        QTest::newRow("unknown keys left out")
+                << u"share-text=x&nosw&v=3&selftest=share&title=y&text=z"_s << QString() << u"x"_s << QString();
+        QTest::newRow("repeated key: the first") << u"share-text=pierwszy&share-text=drugi"_s << QString()
+                                                 << u"pierwszy"_s << QString();
+        QTest::newRow("keys are case-sensitive") << u"Share-Text=x&SHARE-URL=y"_s << QString() << QString() << QString();
+        QTest::newRow("encoded key") << u"share%2Dtext=x"_s << QString() << u"x"_s << QString();
+        QTest::newRow("key without a value") << u"share-text"_s << QString() << QString() << QString();
+        QTest::newRow("empty values") << u"share-title=&share-text=&share-url="_s << QString() << QString()
+                                      << QString();
+        QTest::newRow("ampersands only") << u"&&&"_s << QString() << QString() << QString();
+        QTest::newRow("equals only") << u"="_s << QString() << QString() << QString();
+        QTest::newRow("percent only") << u"%"_s << QString() << QString() << QString();
+        QTest::newRow("empty") << QString() << QString() << QString() << QString();
+        QTest::newRow("value with equals signs") << u"share-url=https://a.pl/?q=1&share-title=T"_s << u"T"_s
+                                                 << QString() << u"https://a.pl/?q=1"_s;
+    }
+    void fromQuery()
+    {
+        QFETCH(QString, query);
+        QFETCH(QString, subject);
+        QFETCH(QString, text);
+        QFETCH(QString, url);
+        const SharedContent share = sharedContentFromQuery(query);
+        QCOMPARE(share.subject, subject);
+        QCOMPARE(share.text, text);
+        QCOMPARE(share.url, url);
+        QVERIFY(share.files.isEmpty());
+        QCOMPARE(share.source, QString());
+        QCOMPARE(share.dir, QString());
+        QCOMPARE(share.isEmpty(), subject.isEmpty() && text.isEmpty() && url.isEmpty());
+    }
+
+    void fromQueryLongText()
+    {
+        // Cut to SharedTextMaxChars characters ("ą" is one UTF-16 unit).
+        QString query = u"share-text="_s;
+        query += QString(SharedTextMaxChars + 1, u'ą');
+        QCOMPARE(sharedContentFromQuery(query).text.size(), SharedTextMaxChars);
+        // Never between the halves of a surrogate pair: an emoji across the limit goes as a whole.
+        QString emoji = u"share-text="_s + QString(SharedTextMaxChars - 1, u'a') + u"😀b"_s;
+        const QString cut = sharedContentFromQuery(emoji).text;
+        QCOMPARE(cut.size(), SharedTextMaxChars - 1);
+        QVERIFY(!cut.back().isHighSurrogate());
+        // An emoji that fits ends the text whole.
+        emoji = u"share-text="_s + QString(SharedTextMaxChars - 2, u'a') + u"😀b"_s;
+        QCOMPARE(sharedContentFromQuery(emoji).text.right(2), u"😀"_s);
+    }
+
+    void fromQueryComposes()
+    {
+        // Chrome on Android: a page's title, the link in the text.
+        const SharedContent share = sharedContentFromQuery(
+                u"share-title=Przepis+na+%C5%BCurek&share-text=Zobacz+to+https%3A%2F%2Fkuchnia.pl%2F%C5%BCurek"_s);
+        QCOMPARE(notebook::composeSharedText(share.subject, share.text, share.url),
+                 u"[Przepis na żurek](https://kuchnia.pl/żurek) — Zobacz to"_s);
+        const SharedContent link =
+                sharedContentFromQuery(u"share-title=%C5%81%C3%B3d%C5%BA&share-url=https%3A%2F%2Fl.pl%2Fx"_s);
+        QCOMPARE(notebook::composeSharedText(link.subject, link.text, link.url), u"[Łódź](https://l.pl/x)"_s);
+    }
+
+    void toJsonRoundTrip()
+    {
+        SharedContent share;
+        share.subject = u"Artykuł o Łodzi"_s;
+        share.text = u"Zażółć gęślą jaźń\r\ndruga linia"_s;
+        share.url = u"https://pl.wikipedia.org/wiki/Łódź"_s;
+        share.dir = u"/dane/share-in/1792000000000-1"_s;
+        share.source = u"open"_s;
+        share.files = {
+                SharedFile{u"/home/ala/Lista zakupów.md"_s, u"Lista zakupów.md"_s, u"text/markdown"_s, 120, QString()},
+                SharedFile{QString(), u"duży.txt"_s, QString(), 9'999'999, u"tooLarge"_s},
+                SharedFile{u"/home/ala/b.txt"_s, QString(), QString(), -1, QString()},
+                SharedFile{QString(), u"21.md"_s, QString(), -1, u"tooMany"_s},
+        };
+        const QJsonObject json = sharedContentToJson(share);
+        QVERIFY(!json.value(u"files"_s).toArray().at(2).toObject().contains(u"size"_s)); // -1 left out
+        QVERIFY(!json.value(u"files"_s).toArray().at(2).toObject().contains(u"name"_s)); // "" left out
+        const SharedContent back = sharedContentFromJson(json);
+        QCOMPARE(back.subject, share.subject);
+        QCOMPARE(back.text, share.text);
+        QCOMPARE(back.url, share.url);
+        QCOMPARE(back.dir, share.dir);
+        QCOMPARE(back.source, share.source);
+        QCOMPARE(back.files.size(), share.files.size());
+        for (qsizetype i = 0; i < share.files.size(); ++i) {
+            QCOMPARE(back.files.at(i).path, share.files.at(i).path);
+            QCOMPARE(back.files.at(i).name, share.files.at(i).name);
+            QCOMPARE(back.files.at(i).mime, share.files.at(i).mime);
+            QCOMPARE(back.files.at(i).size, share.files.at(i).size);
+            QCOMPARE(back.files.at(i).error, share.files.at(i).error);
+        }
+        // Also through the bytes a second launch sends.
+        const QByteArray bytes = QJsonDocument(json).toJson(QJsonDocument::Compact);
+        QCOMPARE(sharedContentFromJson(bytes).files.first().name, u"Lista zakupów.md"_s);
+        // An empty share is an empty object.
+        QCOMPARE(sharedContentToJson(SharedContent{}), QJsonObject());
+        // Only "open" is a source.
+        for (const QJsonValue &source : {QJsonValue(u"web"_s), QJsonValue(42), QJsonValue(u"OPEN"_s), QJsonValue()}) {
+            QCOMPARE(sharedContentFromJson(QJsonObject{{u"text"_s, u"t"_s}, {u"source"_s, source}}).source, QString());
+        }
+    }
+
+    void splitOpenArguments_data()
+    {
+        QTest::addColumn<QStringList>("arguments");
+        QTest::addColumn<QStringList>("options");
+        QTest::addColumn<QStringList>("files");
+        QTest::newRow("program only") << QStringList{u"brulion"_s} << QStringList{u"brulion"_s} << QStringList();
+        QTest::newRow("open without files")
+                << QStringList{u"brulion"_s, u"--open"_s} << QStringList{u"brulion"_s} << QStringList();
+        QTest::newRow("options, then files")
+                << QStringList{u"brulion"_s, u"--vault"_s, u"/v"_s, u"--open"_s, u"a.md"_s, u"--capture"_s}
+                << QStringList{u"brulion"_s, u"--vault"_s, u"/v"_s} << QStringList{u"a.md"_s, u"--capture"_s};
+        QTest::newRow("a second --open is a file")
+                << QStringList{u"brulion"_s, u"--open"_s, u"Żółw.md"_s, u"--open"_s}
+                << QStringList{u"brulion"_s} << QStringList{u"Żółw.md"_s, u"--open"_s};
+        QTest::newRow("no --open: positional arguments stay options")
+                << QStringList{u"brulion"_s, u"a.md"_s, u"--today"_s} << QStringList{u"brulion"_s, u"a.md"_s, u"--today"_s}
+                << QStringList();
+        QTest::newRow("--open=x is no separator")
+                << QStringList{u"brulion"_s, u"--open=a.md"_s} << QStringList{u"brulion"_s, u"--open=a.md"_s}
+                << QStringList();
+        QTest::newRow("empty") << QStringList() << QStringList() << QStringList();
+    }
+    void splitOpenArguments()
+    {
+        QFETCH(QStringList, arguments);
+        QFETCH(QStringList, options);
+        QFETCH(QStringList, files);
+        const OpenArguments split = notebook::splitOpenArguments(arguments);
+        QCOMPARE(split.options, options);
+        QCOMPARE(split.files, files);
+    }
+
+    void openedFilesShare_data()
+    {
+        // "<wd>" is the working directory (a temporary folder: absolute on every system).
+        QTest::addColumn<QStringList>("arguments");
+        QTest::addColumn<QStringList>("paths");  // "" for an entry without a path
+        QTest::addColumn<QStringList>("names");
+        QTest::addColumn<QStringList>("errors");
+        QTest::newRow("relative") << QStringList{u"Lista zakupów.md"_s} << QStringList{u"<wd>/Lista zakupów.md"_s}
+                                  << QStringList{u"Lista zakupów.md"_s} << QStringList{QString()};
+        QTest::newRow("parent folder") << QStringList{u"../a.md"_s} << QStringList{u"<up>/a.md"_s}
+                                       << QStringList{u"a.md"_s} << QStringList{QString()};
+        QTest::newRow("cleaned") << QStringList{u"x/./y//z.txt"_s} << QStringList{u"<wd>/x/y/z.txt"_s}
+                                 << QStringList{u"z.txt"_s} << QStringList{QString()};
+        QTest::newRow("absolute") << QStringList{u"<wd>/Notatki/Łódź.md"_s} << QStringList{u"<wd>/Notatki/Łódź.md"_s}
+                                  << QStringList{u"Łódź.md"_s} << QStringList{QString()};
+        QTest::newRow("file url, percent-encoded")
+                << QStringList{u"file://<wd>/Za%C5%BC%C3%B3%C5%82%C4%87.md"_s} << QStringList{u"<wd>/Zażółć.md"_s}
+                << QStringList{u"Zażółć.md"_s} << QStringList{QString()};
+        QTest::newRow("file url, raw letters") << QStringList{u"file://<wd>/gęś.txt"_s} << QStringList{u"<wd>/gęś.txt"_s}
+                                               << QStringList{u"gęś.txt"_s} << QStringList{QString()};
+        QTest::newRow("web address") << QStringList{u"https://example.com/notatki/a.md"_s} << QStringList{QString()}
+                                     << QStringList{u"a.md"_s} << QStringList{u"unreadable"_s};
+        QTest::newRow("another computer's file") << QStringList{u"smb://serwer/udział/Żółw.md"_s}
+                                                 << QStringList{QString()} << QStringList{u"Żółw.md"_s}
+                                                 << QStringList{u"unreadable"_s};
+        QTest::newRow("a colon in a name is a path")
+                << QStringList{u"notatka:ważna.md"_s} << QStringList{u"<wd>/notatka:ważna.md"_s}
+                << QStringList{u"notatka:ważna.md"_s} << QStringList{QString()};
+        QTest::newRow("empty skipped") << QStringList{QString(), u"a.md"_s, QString()} << QStringList{u"<wd>/a.md"_s}
+                                       << QStringList{u"a.md"_s} << QStringList{QString()};
+        QTest::newRow("the same file twice")
+                << QStringList{u"a.md"_s, u"<wd>/a.md"_s, u"./a.md"_s, u"file://<wd>/a.md"_s}
+                << QStringList{u"<wd>/a.md"_s} << QStringList{u"a.md"_s} << QStringList{QString()};
+        QTest::newRow("a name with a line break and quotes")
+                << QStringList{u"dwie\nlinie \"cytat\".md"_s} << QStringList{u"<wd>/dwie\nlinie \"cytat\".md"_s}
+                << QStringList{u"dwie\nlinie \"cytat\".md"_s} << QStringList{QString()};
+        QTest::newRow("an option-like name") << QStringList{u"--capture"_s} << QStringList{u"<wd>/--capture"_s}
+                                             << QStringList{u"--capture"_s} << QStringList{QString()};
+        QTest::newRow("none") << QStringList() << QStringList() << QStringList() << QStringList();
+    }
+    void openedFilesShare()
+    {
+        QFETCH(QStringList, arguments);
+        QFETCH(QStringList, paths);
+        QFETCH(QStringList, names);
+        QFETCH(QStringList, errors);
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString wd = QDir(tmp.path()).filePath(u"praca"_s);
+        const QString up = QDir::cleanPath(tmp.path());
+        const auto expand = [&](QString s) {
+            QString root = wd;
+            // A file URL's path starts with "/" (file:///C:/… on Windows).
+            if (s.startsWith(u"file://<wd>"_s) && !root.startsWith(u'/'))
+                root.prepend(u'/');
+            return s.replace(u"<wd>"_s, s.startsWith(u"file:"_s) ? root : wd).replace(u"<up>"_s, up);
+        };
+        QStringList args;
+        for (const QString &a : arguments)
+            args.append(expand(a));
+        const SharedContent share = notebook::openedFilesShare(args, wd);
+        QCOMPARE(share.source, u"open"_s);
+        QCOMPARE(share.dir, QString());
+        QVERIFY(share.subject.isEmpty() && share.text.isEmpty() && share.url.isEmpty());
+        QCOMPARE(share.files.size(), paths.size());
+        for (qsizetype i = 0; i < paths.size(); ++i) {
+            QCOMPARE(share.files.at(i).path, expand(paths.at(i)));
+            QCOMPARE(share.files.at(i).name, names.at(i));
+            QCOMPARE(share.files.at(i).error, errors.at(i));
+            QCOMPARE(share.files.at(i).mime, QString());
+            QCOMPARE(share.files.at(i).size, qint64(-1));
+        }
+        // What a second launch sends reads back the same.
+        const SharedContent back = sharedContentFromJson(sharedContentToJson(share));
+        QCOMPARE(back.files.size(), share.files.size());
+        QCOMPARE(back.source, u"open"_s);
+    }
+
+    void openedFilesShareCaps()
+    {
+        QStringList args;
+        for (int i = 0; i < 150; ++i)
+            args.append(u"/notatki/%1.md"_s.arg(i));
+        const SharedContent share = notebook::openedFilesShare(args, u"/"_s);
+        QCOMPARE(share.files.size(), SharedEntriesMax);
+        for (int i = 0; i < SharedFilesMax; ++i)
+            QCOMPARE(share.files.at(i).error, QString());
+        QCOMPARE(share.files.at(SharedFilesMax).error, u"tooMany"_s);
+        QCOMPARE(share.files.at(SharedFilesMax).path, QString());
+        QCOMPARE(share.files.at(SharedFilesMax).name, u"20.md"_s);
+        QCOMPARE(share.files.last().name, u"99.md"_s);
+    }
+
+    void mergeOpenedShares()
+    {
+        SharedContent waiting = notebook::openedFilesShare({u"/n/a.md"_s, u"/n/b.md"_s}, u"/"_s);
+        SharedContent newer = notebook::openedFilesShare({u"/n/b.md"_s, u"/n/c.md"_s}, u"/"_s);
+        SharedContent merged = notebook::mergeOpenedShares(waiting, newer);
+        QCOMPARE(merged.source, u"open"_s);
+        QCOMPARE(merged.dir, QString());
+        QCOMPARE(merged.files.size(), 3);
+        QCOMPARE(merged.files.at(0).path, u"/n/a.md"_s);
+        QCOMPARE(merged.files.at(1).path, u"/n/b.md"_s);
+        QCOMPARE(merged.files.at(2).path, u"/n/c.md"_s);
+
+        // The caps again: 15 + 15 -> 20 readable, 10 "tooMany".
+        QStringList first;
+        QStringList second;
+        for (int i = 0; i < 15; ++i) {
+            first.append(u"/n/pierwszy-%1.md"_s.arg(i));
+            second.append(u"/n/drugi-%1.md"_s.arg(i));
+        }
+        merged = notebook::mergeOpenedShares(notebook::openedFilesShare(first, u"/"_s),
+                                             notebook::openedFilesShare(second, u"/"_s));
+        QCOMPARE(merged.files.size(), 30);
+        QCOMPARE(int(std::count_if(merged.files.cbegin(), merged.files.cend(),
+                                   [](const SharedFile &f) { return f.error.isEmpty(); })),
+                 SharedFilesMax);
+        QCOMPARE(merged.files.at(20).error, u"tooMany"_s);
+        QCOMPARE(merged.files.at(20).name, u"drugi-5.md"_s);
+
+        // Text from the newer share when it has some, else the waiting one's.
+        waiting.subject = u"Stary"_s;
+        QCOMPARE(notebook::mergeOpenedShares(waiting, newer).subject, u"Stary"_s);
+        newer.text = u"Nowy tekst ą"_s;
+        merged = notebook::mergeOpenedShares(waiting, newer);
+        QCOMPARE(merged.subject, QString());
+        QCOMPARE(merged.text, u"Nowy tekst ą"_s);
+        // A dir of either is never kept.
+        waiting.dir = u"/dane/share-in/1"_s;
+        QCOMPARE(notebook::mergeOpenedShares(waiting, newer).dir, QString());
+        // Entries without a path (another computer's file, a file over the cap) are listed once
+        // by name and reason.
+        merged = notebook::mergeOpenedShares(notebook::openedFilesShare({u"smb://s/a.md"_s}, u"/"_s),
+                                             notebook::openedFilesShare({u"smb://s/a.md"_s, u"smb://s/b.md"_s},
+                                                                        u"/"_s));
+        QCOMPARE(merged.files.size(), 2);
+        QCOMPARE(merged.files.at(1).name, u"b.md"_s);
+    }
+
+    void pageForOpenedFile_data()
+    {
+        QTest::addColumn<QString>("file");
+        QTest::addColumn<QString>("root");
+        QTest::addColumn<bool>("ignoreCase");
+        QTest::addColumn<QString>("page");
+        QTest::newRow("in a folder") << u"/v/Projekty/Plan.md"_s << u"/v"_s << false << u"Projekty/Plan.md"_s;
+        QTest::newRow("at the root, polish") << u"/v/Żółw.md"_s << u"/v"_s << false << u"Żółw.md"_s;
+        QTest::newRow("root with a slash") << u"/v/a.md"_s << u"/v/"_s << false << u"a.md"_s;
+        QTest::newRow("markdown extension") << u"/v/a.markdown"_s << u"/v"_s << false << u"a.markdown"_s;
+        QTest::newRow("upper-case extension") << u"/v/A.MD"_s << u"/v"_s << false << u"A.MD"_s;
+        QTest::newRow("journal") << u"/v/journals/2026-10-14.md"_s << u"/v"_s << false << u"journals/2026-10-14.md"_s;
+        QTest::newRow("a sibling folder") << u"/v2/a.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("the folder itself") << u"/v"_s << u"/v"_s << false << QString();
+        QTest::newRow("the folder with a slash") << u"/v/"_s << u"/v"_s << false << QString();
+        QTest::newRow("outside") << u"/home/ala/a.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("a text file") << u"/v/notatka.txt"_s << u"/v"_s << false << QString();
+        QTest::newRow("no extension") << u"/v/README"_s << u"/v"_s << false << QString();
+        QTest::newRow("obsidian settings") << u"/v/.obsidian/x.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("trash") << u"/v/.trash/x.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("brulion's folder") << u"/v/.brulion/x.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("logseq") << u"/v/logseq/custom.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("a hidden folder") << u"/v/a/.ukryty/x.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("a syncthing temporary file")
+                << u"/v/~syncthing~a.md.tmp"_s << u"/v"_s << false << QString();
+        QTest::newRow("a conflict copy is a page")
+                << u"/v/a.sync-conflict-20261028-101010-ABCDEFG.md"_s << u"/v"_s << false
+                << u"a.sync-conflict-20261028-101010-ABCDEFG.md"_s;
+        QTest::newRow("not clean") << u"/v/a/../b.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("double slash") << u"/v//b.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("letter case of the folder") << u"/V/a.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("letter case ignored")
+                << u"C:/Users/ala/NOTATKI/Plan.md"_s << u"C:/Users/ala/Notatki"_s << true << u"Plan.md"_s;
+        QTest::newRow("windows sibling") << u"C:/Notatki2/a.md"_s << u"C:/Notatki"_s << true << QString();
+        QTest::newRow("root of a drive") << u"D:/a.md"_s << u"D:/"_s << true << u"a.md"_s;
+        QTest::newRow("the system root") << u"/a.md"_s << u"/"_s << false << u"a.md"_s;
+        QTest::newRow("empty file") << QString() << u"/v"_s << false << QString();
+        QTest::newRow("empty root") << u"/v/a.md"_s << QString() << false << QString();
+    }
+    void pageForOpenedFile()
+    {
+        QFETCH(QString, file);
+        QFETCH(QString, root);
+        QFETCH(bool, ignoreCase);
+        QFETCH(QString, page);
+        QCOMPARE(notebook::pageForOpenedFile(file, root, ignoreCase ? Qt::CaseInsensitive : Qt::CaseSensitive), page);
     }
 
     void fromJsonTooManyFiles()

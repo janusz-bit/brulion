@@ -3,11 +3,14 @@
 #include "text/decode.h"
 #include "util/paths.h"
 
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QRegularExpression>
+#include <QSet>
 #include <QStringList>
+#include <QUrl>
 
 using namespace Qt::StringLiterals;
 
@@ -15,14 +18,100 @@ namespace brulion::notebook {
 
 namespace {
 
-/// Hard cap on the entries a share lists (the platform copies at most SharedFilesMax files; a
-/// forged share must not make the dialog list thousands).
-constexpr int SharedEntriesMax = 100;
-
 QString stringValue(const QJsonObject &object, const QString &key)
 {
     const QJsonValue value = object.value(key);
     return value.isString() ? value.toString() : QString();
+}
+
+/// Add `file` to `files` under the caps every share has (sharedContentFromJson,
+/// openedFilesShare, mergeOpenedShares): an entry with nothing in it is skipped, a file without
+/// a path is "unreadable", readable files after the first SharedFilesMax are "tooMany" (counted
+/// in `accepted`). False once SharedEntriesMax entries are listed (nothing added).
+bool appendFile(QList<SharedFile> &files, SharedFile file, int &accepted)
+{
+    if (files.size() >= SharedEntriesMax)
+        return false;
+    if (file.path.isEmpty() && file.name.isEmpty() && file.error.isEmpty())
+        return true;
+    if (file.error.isEmpty() && file.path.isEmpty())
+        file.error = u"unreadable"_s;
+    if (file.error.isEmpty() && ++accepted > SharedFilesMax) {
+        file.error = u"tooMany"_s;
+        file.path.clear();
+    }
+    files.append(file);
+    return true;
+}
+
+/// `text` cut to SharedTextMaxChars, never between the two halves of a surrogate pair.
+QString limitSharedText(const QString &text)
+{
+    if (text.size() <= SharedTextMaxChars)
+        return text;
+    qsizetype keep = SharedTextMaxChars;
+    if (text.at(keep - 1).isHighSurrogate())
+        --keep;
+    return text.left(keep);
+}
+
+int hexValue(QChar c)
+{
+    const char16_t u = c.unicode();
+    if (u >= u'0' && u <= u'9')
+        return u - u'0';
+    if (u >= u'a' && u <= u'f')
+        return u - u'a' + 10;
+    if (u >= u'A' && u <= u'F')
+        return u - u'A' + 10;
+    return -1;
+}
+
+/// One name or value of an application/x-www-form-urlencoded query: "+" is a space, "%XX" a
+/// byte, the rest its UTF-8; the bytes read as UTF-8 (invalid sequences: U+FFFD). A "%" without
+/// two hex digits after it stays as it is. (QUrlQuery keeps "+" and decodes differently.)
+QString formDecode(QStringView value)
+{
+    QByteArray bytes;
+    bytes.reserve(value.size());
+    qsizetype run = 0; // start of the characters not yet converted
+    const auto flush = [&](qsizetype end) {
+        if (end > run)
+            bytes += value.sliced(run, end - run).toUtf8();
+    };
+    for (qsizetype i = 0; i < value.size(); ++i) {
+        const QChar c = value.at(i);
+        if (c == u'+') {
+            flush(i);
+            bytes += ' ';
+            run = i + 1;
+        } else if (c == u'%' && i + 2 < value.size() && hexValue(value.at(i + 1)) >= 0
+                   && hexValue(value.at(i + 2)) >= 0) {
+            flush(i);
+            bytes += char(hexValue(value.at(i + 1)) * 16 + hexValue(value.at(i + 2)));
+            i += 2;
+            run = i + 1;
+        }
+    }
+    flush(value.size());
+    return QString::fromUtf8(bytes);
+}
+
+/// A command line argument that is a URL rather than a path: "file:" (any form), or a scheme with
+/// "://" ("smb://", "sftp://", "https://"). "C:/x.md" and a Linux name with a colon are paths.
+bool isUrlArgument(const QString &argument)
+{
+    static const QRegularExpression withAuthority(u"^[A-Za-z][A-Za-z0-9+.-]+://"_s);
+    return argument.startsWith(u"file:"_s, Qt::CaseInsensitive) || withAuthority.match(argument).hasMatch();
+}
+
+/// The last segment of `path` ("/a/b.md" -> "b.md").
+QString lastSegment(const QString &path)
+{
+    QString trimmed = path;
+    while (trimmed.size() > 1 && trimmed.endsWith(u'/'))
+        trimmed.chop(1);
+    return trimmed.mid(trimmed.lastIndexOf(u'/') + 1);
 }
 
 /// Text extensions a shared file may have (lower case, without the dot).
@@ -151,6 +240,8 @@ SharedContent sharedContentFromJson(const QJsonObject &object)
     share.text = stringValue(object, u"text"_s);
     share.url = stringValue(object, u"url"_s);
     share.dir = stringValue(object, u"dir"_s);
+    if (stringValue(object, u"source"_s) == u"open")
+        share.source = u"open"_s;
     const QJsonValue files = object.value(u"files"_s);
     if (!files.isArray())
         return share;
@@ -170,17 +261,169 @@ SharedContent sharedContentFromJson(const QJsonObject &object)
         if (file.size < -1)
             file.size = -1;
         file.error = stringValue(entry, u"error"_s);
-        if (file.path.isEmpty() && file.name.isEmpty() && file.error.isEmpty())
-            continue;
-        if (file.error.isEmpty() && file.path.isEmpty())
-            file.error = u"unreadable"_s;
-        if (file.error.isEmpty() && ++accepted > SharedFilesMax) {
-            file.error = u"tooMany"_s;
-            file.path.clear();
-        }
-        share.files.append(file);
+        appendFile(share.files, file, accepted);
     }
     return share;
+}
+
+QJsonObject sharedContentToJson(const SharedContent &share)
+{
+    QJsonObject object;
+    const auto put = [](QJsonObject &target, const QString &key, const QString &value) {
+        if (!value.isEmpty())
+            target.insert(key, value);
+    };
+    put(object, u"subject"_s, share.subject);
+    put(object, u"text"_s, share.text);
+    put(object, u"url"_s, share.url);
+    put(object, u"dir"_s, share.dir);
+    put(object, u"source"_s, share.source);
+    QJsonArray files;
+    for (const SharedFile &file : share.files) {
+        QJsonObject entry;
+        put(entry, u"path"_s, file.path);
+        put(entry, u"name"_s, file.name);
+        put(entry, u"mime"_s, file.mime);
+        if (file.size >= 0)
+            entry.insert(u"size"_s, double(file.size));
+        put(entry, u"error"_s, file.error);
+        files.append(entry);
+    }
+    if (!files.isEmpty())
+        object.insert(u"files"_s, files);
+    return object;
+}
+
+SharedContent sharedContentFromQuery(QStringView query)
+{
+    SharedContent share;
+    if (query.startsWith(u'?'))
+        query = query.sliced(1);
+    bool title = false;
+    bool text = false;
+    bool url = false;
+    for (const QStringView part : query.tokenize(u'&')) {
+        const qsizetype equals = part.indexOf(u'=');
+        if (equals < 0)
+            continue; // a name alone: no value
+        const QString key = formDecode(part.first(equals));
+        const auto take = [&](bool &seen, QString &field) {
+            if (seen)
+                return; // a repeated key keeps its first value
+            seen = true;
+            field = limitSharedText(formDecode(part.sliced(equals + 1)));
+        };
+        if (key == u"share-title")
+            take(title, share.subject);
+        else if (key == u"share-text")
+            take(text, share.text);
+        else if (key == u"share-url")
+            take(url, share.url);
+    }
+    return share;
+}
+
+OpenArguments splitOpenArguments(const QStringList &arguments)
+{
+    const qsizetype open = arguments.indexOf(u"--open"_s);
+    if (open < 0)
+        return {arguments, {}};
+    return {arguments.first(open), arguments.sliced(open + 1)};
+}
+
+SharedContent openedFilesShare(const QStringList &arguments, const QString &workingDirectory)
+{
+    SharedContent share;
+    share.source = u"open"_s;
+    const QDir base(workingDirectory.isEmpty() ? QDir::currentPath() : workingDirectory);
+    QSet<QString> seen;
+    int accepted = 0;
+    for (const QString &argument : arguments) {
+        if (argument.isEmpty())
+            continue;
+        SharedFile file;
+        QString key;
+        QString path;
+        if (isUrlArgument(argument)) {
+            const QUrl url(argument);
+            if (url.isLocalFile()) {
+                path = url.toLocalFile();
+            } else {
+                // A file of another computer (smb://, sftp://, a web address): none Brulion reads.
+                file.name = lastSegment(url.path());
+                if (file.name.isEmpty())
+                    file.name = argument;
+                file.error = u"unreadable"_s;
+                key = argument;
+            }
+        } else {
+            path = QDir::fromNativeSeparators(argument);
+        }
+        if (!path.isEmpty()) {
+            if (QDir::isRelativePath(path))
+                path = base.absoluteFilePath(path);
+            path = QDir::cleanPath(QDir::fromNativeSeparators(path));
+            file.path = path;
+            file.name = lastSegment(path);
+            key = path;
+        }
+        if (key.isEmpty() || seen.contains(key))
+            continue;
+        seen.insert(key);
+        if (!appendFile(share.files, file, accepted))
+            break;
+    }
+    return share;
+}
+
+SharedContent mergeOpenedShares(const SharedContent &waiting, const SharedContent &newer)
+{
+    SharedContent merged;
+    merged.source = u"open"_s;
+    const bool newerText = !newer.subject.isEmpty() || !newer.text.isEmpty() || !newer.url.isEmpty();
+    const SharedContent &text = newerText ? newer : waiting;
+    merged.subject = text.subject;
+    merged.text = text.text;
+    merged.url = text.url;
+    // The same file once: by its path, or — an entry without one (another computer's file, one over
+    // the cap) — by its name and reason.
+    QSet<QString> seen;
+    int accepted = 0;
+    for (const SharedContent *share : {&waiting, &newer}) {
+        for (const SharedFile &file : share->files) {
+            const QString key = !file.path.isEmpty() ? u"p:"_s + file.path : u"e:%1:%2"_s.arg(file.error, file.name);
+            if (seen.contains(key))
+                continue;
+            seen.insert(key);
+            if (!appendFile(merged.files, file, accepted))
+                return merged;
+        }
+    }
+    return merged;
+}
+
+QString pageForOpenedFile(const QString &file, const QString &vaultRoot, Qt::CaseSensitivity rootCase)
+{
+    if (file.isEmpty() || vaultRoot.isEmpty())
+        return {};
+    QString root = vaultRoot;
+    while (root.size() > 1 && root.endsWith(u'/'))
+        root.chop(1);
+    const QString prefix = root.endsWith(u'/') ? root : root + u'/';
+    if (file.size() <= prefix.size() || !file.startsWith(prefix, rootCase))
+        return {};
+    const QString page = file.mid(prefix.size());
+    const QStringList segments = page.split(u'/');
+    for (qsizetype i = 0; i < segments.size(); ++i) {
+        const QString &segment = segments.at(i);
+        if (segment.isEmpty() || segment == u"." || segment == u"..")
+            return {}; // not a clean path
+        if (i + 1 < segments.size() && segment.startsWith(u'.'))
+            return {}; // a folder the notebook hides
+    }
+    if (!paths::isMarkdown(page) || paths::isIgnored(page))
+        return {};
+    return page;
 }
 
 SharedContent sharedContentFromJson(const QByteArray &json)

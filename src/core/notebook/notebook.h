@@ -42,9 +42,13 @@
 //                indexStats(), lock() (the device's writers),
 //                edit(path, intent, {expectHash, dryRun, mayCreate, initialText}) — compare-and-swap writes
 //                with retries and History; deviceStatePath(appData, root), contentHash()
-//   share.h      what another app shares ("Udostępnij → Brulion"): sharedContentFromJson (the
-//                platform's JSON), composeSharedText(subject, text, url) ("[Tytuł](url) — tekst"),
-//                checkSharedFile / looksBinary (text types only, SharedFileMaxBytes), decodeSharedBytes,
+//   share.h      what another app shares ("Udostępnij → Brulion", the web share target, files
+//                opened with Brulion on a desktop): sharedContentFromJson / sharedContentToJson (the
+//                platform's JSON), sharedContentFromQuery (the share target's query),
+//                splitOpenArguments / openedFilesShare / mergeOpenedShares (`--open` files),
+//                pageForOpenedFile (a file that is a page of the open notebook),
+//                composeSharedText(subject, text, url) ("[Tytuł](url) — tekst"), checkSharedFile /
+//                looksBinary (text types only, SharedFileMaxBytes), decodeSharedBytes,
 //                sharedPageTitle / sharedPageContent (a new page) and sharedFileBlock (one
 //                journal block per file)
 #pragma once
