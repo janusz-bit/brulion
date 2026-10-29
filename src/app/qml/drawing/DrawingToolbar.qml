@@ -11,8 +11,10 @@ import Brulion
 // palcem" on touch screens, "Pokaż cały rysunek" and Gotowe.
 // Wide windows: everything in one row above the paper. `compact` (phones; at the bottom, in
 // reach of the thumb): the colours and widths behind one swatch (a popup above the bar), the
-// paper, its background, finger drawing and fitting in "Więcej"; the row scrolls sideways when it
-// still does not fit. The swatches show the colours as the paper shows them (on dark paper the
+// paper, its background, finger drawing and fitting in "Więcej"; when one row cannot hold it all
+// (`twoRows`: a phone held upright) the tools and the swatch get a line of their own above undo,
+// redo, "Więcej" and Gotowe — nothing hides off the edge. A row that still does not fit scrolls
+// sideways. The swatches show the colours as the paper shows them (on dark paper the
 // pen's colours mapped as the strokes are, DrawingCanvas.displayColor); what is chosen and saved
 // is the colour as drawn on light paper.
 // The buttons take no keyboard focus: Space is the view's (held: move the paper).
@@ -32,6 +34,17 @@ Rectangle {
     property bool fingerDraws: false
     /// The bar lies at the bottom of the view (compact): its hairline on top.
     property bool atBottom: compact
+
+    /// A button's width (touch-sized on touch screens).
+    readonly property int slot: Math.max(Theme.controlHeight, Theme.touchUi ? Theme.touchTarget : 0)
+    /// What one compact row needs: ten buttons (undo, redo, the pen, the highlighter, the eraser,
+    /// the selection, the shapes, text, the swatch — counted while hidden too, so the bar keeps its
+    /// shape when the tool changes — and "Więcej"), two separators, Gotowe and the margins.
+    readonly property real oneRowWidth: 10 * slot + 2 + doneButton.implicitWidth + 3 * Theme.space2
+    /// Compact and too narrow for one row: two lines (see the header).
+    readonly property bool twoRows: compact && width > 0 && width < oneRowWidth
+    readonly property int lineHeight: twoRows ? slot + 6 : Theme.touchUi ? 56 : 46
+    readonly property int groupSpacing: compact ? 0 : 2
 
     signal colorChosen(string color)
     signal widthChosen(real width)
@@ -87,7 +100,7 @@ Rectangle {
         return bar.canvas.dark ? bar.canvas.displayColor(color, bar.canvas.tool === "highlighter") : color
     }
 
-    implicitHeight: Theme.touchUi ? 56 : 46
+    implicitHeight: twoRows ? 2 * lineHeight : lineHeight
     color: Theme.bgElevated
 
     Rectangle {
@@ -182,227 +195,265 @@ Rectangle {
         id: flick
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.right: doneButton.left
+        anchors.right: bar.twoRows ? parent.right : doneButton.left
         anchors.leftMargin: Theme.space2
         anchors.rightMargin: Theme.space2
-        contentWidth: Math.max(width, row.implicitWidth)
+        height: bar.lineHeight
+        contentWidth: Math.max(width, content.width)
         contentHeight: height
         flickableDirection: Flickable.HorizontalFlick
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentWidth > width
         clip: true
 
-        Row {
-            id: row
+        // One row: undo and redo, the tools, the rest. Two lines: the tools alone (centred), the
+        // others on the lower line.
+        Item {
+            id: content
+            x: bar.twoRows ? (flick.contentWidth - width) / 2 : 0
             height: flick.height
-            spacing: bar.compact ? 0 : 2
+            width: bar.twoRows ? toolRow.width
+                               : leadRow.width + toolRow.width + tailRow.width + 2 * bar.groupSpacing
 
-            BIconButton {
-                objectName: "drawingUndo"
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "undo-2"
-                label: qsTr("Undo")
-                shortcut: "Ctrl+Z"
-                focusPolicy: Qt.NoFocus
-                enabled: bar.canvas.canUndo
-                onClicked: bar.canvas.undo()
-            }
-            BIconButton {
-                objectName: "drawingRedo"
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "redo-2"
-                label: qsTr("Redo")
-                shortcut: "Ctrl+Shift+Z"
-                focusPolicy: Qt.NoFocus
-                enabled: bar.canvas.canRedo
-                onClicked: bar.canvas.redo()
-            }
-            Separator {}
-            BIconButton {
-                objectName: "drawingPen"
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "pencil"
-                label: qsTr("Pen")
-                shortcut: "P"
-                focusPolicy: Qt.NoFocus
-                checkable: true
-                checked: bar.canvas.tool === "pen"
-                onClicked: bar.canvas.tool = "pen"
-            }
-            BIconButton {
-                objectName: "drawingHighlighter"
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "highlighter"
-                label: qsTr("Highlighter")
-                shortcut: "H"
-                focusPolicy: Qt.NoFocus
-                checkable: true
-                checked: bar.canvas.tool === "highlighter"
-                onClicked: bar.canvas.tool = "highlighter"
-            }
-            BIconButton {
-                objectName: "drawingEraser"
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "eraser"
-                label: qsTr("Eraser")
-                shortcut: "E"
-                focusPolicy: Qt.NoFocus
-                checkable: true
-                checked: bar.canvas.tool === "eraser"
-                onClicked: bar.canvas.tool = "eraser"
-            }
-            BIconButton {
-                objectName: "drawingSelect"
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "lasso"
-                label: qsTr("Select")
-                shortcut: "V"
-                focusPolicy: Qt.NoFocus
-                checkable: true
-                checked: bar.canvas.tool === "select"
-                onClicked: bar.canvas.tool = "select"
-            }
-            // The last shape; clicked while a shape is the tool: the shapes' menu.
-            BIconButton {
-                id: shapeButton
-                objectName: "drawingShape"
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: bar.shapeIcon(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
-                label: qsTr("Shapes") + " — " + bar.shapeLabel(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
-                shortcut: bar.shapeKey(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
-                focusPolicy: Qt.NoFocus
-                // (Not toggled by a click: a click on the active shape opens the menu.)
-                checked: bar.shapeActive
-                onClicked: {
-                    if (bar.shapeActive)
-                        bar.openShapes()
-                    else
-                        bar.chooseShape(bar.shapeTool)
-                }
-            }
-            BIconButton {
-                objectName: "drawingText"
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "type"
-                label: qsTr("Text")
-                shortcut: "T"
-                focusPolicy: Qt.NoFocus
-                checkable: true
-                checked: bar.textTool
-                onClicked: bar.canvas.tool = "text"
-            }
-            Separator { visible: bar.drawingTool }
+            Row {
+                id: leadRow
+                parent: bar.twoRows ? lowerLine : content
+                x: bar.twoRows ? Theme.space2 : 0
+                height: parent ? parent.height : 0
+                spacing: bar.groupSpacing
 
-            // Wide: the colours and widths in the row.
-            Repeater {
-                model: !bar.compact && bar.drawingTool ? bar.colors : []
-                delegate: BColorSwatch {
-                    required property var modelData
-                    // (parent is null while the tool's change takes the delegate away)
-                    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                    color: bar.shown(modelData.color)
-                    label: modelData.label
-                    size: 22
+                BIconButton {
+                    objectName: "drawingUndo"
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "undo-2"
+                    label: qsTr("Undo")
+                    shortcut: "Ctrl+Z"
                     focusPolicy: Qt.NoFocus
-                    selected: Qt.colorEqual(bar.canvas.color, modelData.color)
-                    onClicked: bar.colorChosen(modelData.color)
+                    enabled: bar.canvas.canUndo
+                    onClicked: bar.canvas.undo()
                 }
-            }
-            Separator { visible: !bar.compact && bar.drawingTool }
-            Repeater {
-                model: !bar.compact && bar.drawingTool && !bar.textTool ? bar.widths : []
-                delegate: WidthButton {
-                    required property var modelData
-                    // (parent is null while the tool's change takes the delegate away)
-                    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                    value: modelData.value
-                    label: modelData.label
-                    selected: Math.abs(bar.canvas.penWidth - modelData.value) < 0.01
-                    onClicked: bar.widthChosen(modelData.value)
+                BIconButton {
+                    objectName: "drawingRedo"
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "redo-2"
+                    label: qsTr("Redo")
+                    shortcut: "Ctrl+Shift+Z"
+                    focusPolicy: Qt.NoFocus
+                    enabled: bar.canvas.canRedo
+                    onClicked: bar.canvas.redo()
                 }
+                Separator { visible: !bar.twoRows }
             }
-            Repeater {
-                model: !bar.compact && bar.textTool ? bar.fontSizes : []
-                delegate: TextSizeButton {
-                    required property var modelData
-                    objectName: "drawingTextSize" + modelData.value
-                    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                    value: modelData.value
-                    label: modelData.label
-                    selected: Math.abs(bar.canvas.fontSize - modelData.value) < 0.01
-                    onClicked: bar.fontSizeChosen(modelData.value)
-                }
-            }
-            // Compact: one swatch for both.
-            BColorSwatch {
-                id: styleButton
-                objectName: "drawingStyle"
-                visible: bar.compact && bar.drawingTool
-                anchors.verticalCenter: parent.verticalCenter
-                color: bar.shown(bar.canvas.color)
-                label: bar.textTool ? qsTr("Colour and size") : qsTr("Colour and thickness")
-                size: 26
-                focusPolicy: Qt.NoFocus
-                onClicked: stylePopup.open()
-            }
-            Separator { visible: !bar.compact }
 
-            // The paper.
-            BIconButton {
-                id: backgroundButton
-                objectName: "drawingBackground"
-                visible: !bar.compact
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: bar.backgroundIcon(bar.canvas.background)
-                label: qsTr("Paper")
-                focusPolicy: Qt.NoFocus
-                onClicked: backgroundMenu.popup(backgroundButton, 0, backgroundButton.height)
+            Row {
+                id: toolRow
+                x: bar.twoRows ? 0 : leadRow.width + bar.groupSpacing
+                height: content.height
+                spacing: bar.groupSpacing
+
+                BIconButton {
+                    objectName: "drawingPen"
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "pencil"
+                    label: qsTr("Pen")
+                    shortcut: "P"
+                    focusPolicy: Qt.NoFocus
+                    checkable: true
+                    checked: bar.canvas.tool === "pen"
+                    onClicked: bar.canvas.tool = "pen"
+                }
+                BIconButton {
+                    objectName: "drawingHighlighter"
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "highlighter"
+                    label: qsTr("Highlighter")
+                    shortcut: "H"
+                    focusPolicy: Qt.NoFocus
+                    checkable: true
+                    checked: bar.canvas.tool === "highlighter"
+                    onClicked: bar.canvas.tool = "highlighter"
+                }
+                BIconButton {
+                    objectName: "drawingEraser"
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "eraser"
+                    label: qsTr("Eraser")
+                    shortcut: "E"
+                    focusPolicy: Qt.NoFocus
+                    checkable: true
+                    checked: bar.canvas.tool === "eraser"
+                    onClicked: bar.canvas.tool = "eraser"
+                }
+                BIconButton {
+                    objectName: "drawingSelect"
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "lasso"
+                    label: qsTr("Select")
+                    shortcut: "V"
+                    focusPolicy: Qt.NoFocus
+                    checkable: true
+                    checked: bar.canvas.tool === "select"
+                    onClicked: bar.canvas.tool = "select"
+                }
+                // The last shape; clicked while a shape is the tool: the shapes' menu.
+                BIconButton {
+                    id: shapeButton
+                    objectName: "drawingShape"
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: bar.shapeIcon(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
+                    label: qsTr("Shapes") + " — " + bar.shapeLabel(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
+                    shortcut: bar.shapeKey(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
+                    focusPolicy: Qt.NoFocus
+                    // (Not toggled by a click: a click on the active shape opens the menu.)
+                    checked: bar.shapeActive
+                    onClicked: {
+                        if (bar.shapeActive)
+                            bar.openShapes()
+                        else
+                            bar.chooseShape(bar.shapeTool)
+                    }
+                }
+                BIconButton {
+                    objectName: "drawingText"
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "type"
+                    label: qsTr("Text")
+                    shortcut: "T"
+                    focusPolicy: Qt.NoFocus
+                    checkable: true
+                    checked: bar.textTool
+                    onClicked: bar.canvas.tool = "text"
+                }
+                Separator { visible: bar.drawingTool }
+
+                // Wide: the colours and widths in the row.
+                Repeater {
+                    model: !bar.compact && bar.drawingTool ? bar.colors : []
+                    delegate: BColorSwatch {
+                        required property var modelData
+                        // (parent is null while the tool's change takes the delegate away)
+                        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+                        color: bar.shown(modelData.color)
+                        label: modelData.label
+                        size: 22
+                        focusPolicy: Qt.NoFocus
+                        selected: Qt.colorEqual(bar.canvas.color, modelData.color)
+                        onClicked: bar.colorChosen(modelData.color)
+                    }
+                }
+                Separator { visible: !bar.compact && bar.drawingTool }
+                Repeater {
+                    model: !bar.compact && bar.drawingTool && !bar.textTool ? bar.widths : []
+                    delegate: WidthButton {
+                        required property var modelData
+                        // (parent is null while the tool's change takes the delegate away)
+                        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+                        value: modelData.value
+                        label: modelData.label
+                        selected: Math.abs(bar.canvas.penWidth - modelData.value) < 0.01
+                        onClicked: bar.widthChosen(modelData.value)
+                    }
+                }
+                Repeater {
+                    model: !bar.compact && bar.textTool ? bar.fontSizes : []
+                    delegate: TextSizeButton {
+                        required property var modelData
+                        objectName: "drawingTextSize" + modelData.value
+                        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+                        value: modelData.value
+                        label: modelData.label
+                        selected: Math.abs(bar.canvas.fontSize - modelData.value) < 0.01
+                        onClicked: bar.fontSizeChosen(modelData.value)
+                    }
+                }
+                // Compact: one swatch for both.
+                BColorSwatch {
+                    id: styleButton
+                    objectName: "drawingStyle"
+                    visible: bar.compact && bar.drawingTool
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: bar.shown(bar.canvas.color)
+                    label: bar.textTool ? qsTr("Colour and size") : qsTr("Colour and thickness")
+                    size: 26
+                    focusPolicy: Qt.NoFocus
+                    onClicked: stylePopup.open()
+                }
             }
-            // Light or dark paper: as the app, light, dark.
-            BIconButton {
-                id: themeButton
-                objectName: "drawingTheme"
-                visible: !bar.compact
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: bar.themeIcon(bar.canvas.theme)
-                label: qsTr("Drawing background")
-                focusPolicy: Qt.NoFocus
-                enabled: bar.canvas.editable
-                onClicked: themeMenu.popup(themeButton, 0, themeButton.height)
-            }
-            BIconButton {
-                objectName: "drawingFinger"
-                visible: !bar.compact && Theme.touchUi
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "pointer"
-                label: qsTr("Draw with finger")
-                focusPolicy: Qt.NoFocus
-                checkable: true
-                checked: bar.fingerDraws
-                onClicked: bar.fingerToggled()
-            }
-            BIconButton {
-                objectName: "drawingFit"
-                visible: !bar.compact
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "maximize"
-                label: qsTr("Show the whole drawing")
-                shortcut: "Ctrl+0"
-                focusPolicy: Qt.NoFocus
-                onClicked: bar.fitRequested()
-            }
-            BIconButton {
-                id: moreButton
-                objectName: "drawingMore"
-                visible: bar.compact
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "ellipsis"
-                label: qsTr("More")
-                focusPolicy: Qt.NoFocus
-                onClicked: moreMenu.popup(moreButton, 0, -moreMenu.implicitHeight)
+
+            Row {
+                id: tailRow
+                parent: bar.twoRows ? lowerLine : content
+                x: bar.twoRows ? doneButton.x - Theme.space2 - width : toolRow.x + toolRow.width + bar.groupSpacing
+                height: parent ? parent.height : 0
+                spacing: bar.groupSpacing
+
+                Separator { visible: !bar.compact }
+
+                // The paper.
+                BIconButton {
+                    id: backgroundButton
+                    objectName: "drawingBackground"
+                    visible: !bar.compact
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: bar.backgroundIcon(bar.canvas.background)
+                    label: qsTr("Paper")
+                    focusPolicy: Qt.NoFocus
+                    onClicked: backgroundMenu.popup(backgroundButton, 0, backgroundButton.height)
+                }
+                // Light or dark paper: as the app, light, dark.
+                BIconButton {
+                    id: themeButton
+                    objectName: "drawingTheme"
+                    visible: !bar.compact
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: bar.themeIcon(bar.canvas.theme)
+                    label: qsTr("Drawing background")
+                    focusPolicy: Qt.NoFocus
+                    enabled: bar.canvas.editable
+                    onClicked: themeMenu.popup(themeButton, 0, themeButton.height)
+                }
+                BIconButton {
+                    objectName: "drawingFinger"
+                    visible: !bar.compact && Theme.touchUi
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "pointer"
+                    label: qsTr("Draw with finger")
+                    focusPolicy: Qt.NoFocus
+                    checkable: true
+                    checked: bar.fingerDraws
+                    onClicked: bar.fingerToggled()
+                }
+                BIconButton {
+                    objectName: "drawingFit"
+                    visible: !bar.compact
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "maximize"
+                    label: qsTr("Show the whole drawing")
+                    shortcut: "Ctrl+0"
+                    focusPolicy: Qt.NoFocus
+                    onClicked: bar.fitRequested()
+                }
+                BIconButton {
+                    id: moreButton
+                    objectName: "drawingMore"
+                    visible: bar.compact
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "ellipsis"
+                    label: qsTr("More")
+                    focusPolicy: Qt.NoFocus
+                    onClicked: moreMenu.popup(moreButton, 0, -moreMenu.implicitHeight)
+                }
             }
         }
+    }
+
+    /// Two lines: the lower one (undo, redo, "Więcej", Gotowe).
+    Item {
+        id: lowerLine
+        visible: bar.twoRows
+        y: bar.lineHeight
+        width: bar.width
+        height: bar.lineHeight
     }
 
     BButton {
@@ -410,7 +461,7 @@ Rectangle {
         objectName: "drawingDone"
         anchors.right: parent.right
         anchors.rightMargin: Theme.space2
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenter: bar.twoRows ? lowerLine.verticalCenter : parent.verticalCenter
         size: "small"
         variant: "primary"
         iconName: "check"

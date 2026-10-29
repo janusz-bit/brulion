@@ -2688,9 +2688,28 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     // keyboard involved: it stays away while the drawing is edited).
     QQuickItem *nav = window->findChild<QQuickItem *>(u"shellBottomNav"_s);
     const bool phone = window->width() < 900;
-    if (phone)
+    if (phone) {
         check(nav && waitFor([&] { return !nav->isVisible(); }),
               "the drawing's tool bar at the bottom: the bottom navigation makes way");
+        // A phone held upright: every tool, the swatch, "Więcej" and Gotowe on screen (two lines),
+        // none behind the bar's edge.
+        QStringList hidden;
+        const auto allShown = [&] {
+            hidden.clear();
+            for (const QString &name :
+                 {u"drawingUndo"_s, u"drawingRedo"_s, u"drawingPen"_s, u"drawingHighlighter"_s, u"drawingEraser"_s,
+                  u"drawingSelect"_s, u"drawingShape"_s, u"drawingText"_s, u"drawingStyle"_s, u"drawingMore"_s,
+                  u"drawingDone"_s}) {
+                QQuickItem *item = uidriver::topmost(window, [&name](QQuickItem *i) { return i->objectName() == name; });
+                if (!item || !uidriver::shown(item) || !uidriver::onScreen(window, item))
+                    hidden.append(name);
+            }
+            return hidden.isEmpty();
+        };
+        if (!waitFor(allShown))
+            qWarning("selftest: off screen on the drawing's tool bar: %s", qPrintable(hidden.join(u", "_s)));
+        check(hidden.isEmpty(), "the drawing's tool bar shows all its buttons on a phone");
+    }
     settle(100);
     const QPointF from = pointIn(canvas, 0.25, 0.4);
     const QPointF to = pointIn(canvas, 0.7, 0.45);
@@ -2773,6 +2792,10 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         check(waitFor([&] { return canvas->property("selectionCount").toInt() == 2; }), "Ctrl+A selects everything");
         sendKey(window, Qt::Key_Escape);
         check(waitFor([&] { return canvas->property("selectionCount").toInt() == 0; }), "Escape clears it");
+        // A change just now (the 1.2 s save timer runs): the text written meanwhile is never cut
+        // short by that save — the editor stays open and keeps the keys while the user pauses.
+        QMetaObject::invokeMethod(canvas, "undo");
+        QMetaObject::invokeMethod(canvas, "redo");
         sendKey(window, Qt::Key_T, Qt::NoModifier, u"t"_s);
         mouseClick(window, pointIn(canvas, 0.3, 0.2));
         QQuickItem *editor = nullptr;
@@ -2781,8 +2804,16 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
                   return editor && editor->hasActiveFocus();
               }),
               "a click with the text tool opens the text editor");
-        for (const QChar c : u"Ćma"_s)
-            sendKey(window, c == u'Ć' ? Qt::Key_unknown : Qt::Key(c.toUpper().unicode()), Qt::NoModifier, QString(c));
+        const auto type = [&](const QString &text) {
+            for (const QChar c : text)
+                sendKey(window, c == u'Ć' ? Qt::Key_unknown : Qt::Key(c.toUpper().unicode()), Qt::NoModifier, QString(c));
+        };
+        type(u"Ć"_s);
+        settle(1800);
+        check(editor && editor->hasActiveFocus() && canvas->property("textEditing").toBool()
+                  && canvas->property("tool").toString() == u"text",
+              "the save timer leaves a text being written alone");
+        type(u"ma"_s);
         sendKey(window, Qt::Key_Escape);
         const auto texts = [&] {
             QStringList out;

@@ -20,7 +20,9 @@ import Brulion
 //    front / back), Space held (move the paper), Ctrl+0 (the whole drawing), Ctrl++ / Ctrl+-
 //    (zoom).
 //  * Saved by itself: 1.2 s after the last change, when the route changes, the view goes and the
-//    app leaves the foreground (Workspace.writeAttachment). The tools' colours and widths, finger
+//    app leaves the foreground (Workspace.writeAttachment). A text being written is written first
+//    by those but never by the 1.2 s timer, which waits until its editor closes (committing it
+//    would close the editor mid-word and give the next keys to the tools). The tools' colours and widths, finger
 //    drawing, the last shape, the text's size and whether a stylus was seen are remembered on the
 //    device (AppSettings "drawing/…").
 //  * A change of the file from elsewhere (Syncthing, Nextcloud) while it is open is taken in: as
@@ -111,7 +113,7 @@ FocusScope {
     /// Excalidraw's text sizes.
     readonly property var fontSizes: [
         { value: 16, label: qsTr("Small") },
-        { value: 20, label: qsTr("Medium") },
+        { value: 20, label: qsTr("Medium", "text size") },
         { value: 28, label: qsTr("Large") },
         { value: 36, label: qsTr("Extra large") }
     ]
@@ -120,7 +122,8 @@ FocusScope {
         return value === true || value === "true"
     }
 
-    /// Write the drawing when it changed (true: nothing to write, or written).
+    /// Write the drawing when it changed (true: nothing to write, or written); a text being written
+    /// is committed first.
     function save() {
         saveTimer.stop()
         if (textEditor)
@@ -307,7 +310,8 @@ FocusScope {
     Timer {
         id: saveTimer
         interval: 1200
-        onTriggered: root.save()
+        // (Not while a text is written: the editor's close restarts it.)
+        onTriggered: if (!canvas.textEditing) root.save()
     }
 
     Connections {
@@ -456,6 +460,7 @@ FocusScope {
                 selectionColor: Theme.info
                 onToolChanged: root.applyTool()
                 onContentChanged: if (canvas.modified) saveTimer.restart()
+                onTextEditingChanged: if (!canvas.textEditing && canvas.modified) saveTimer.restart()
                 onStylusSeenChanged: {
                     if (canvas.stylusSeen && !root.stylusKnown) {
                         root.stylusKnown = true
