@@ -269,9 +269,10 @@ FocusScope {
         o[key] = type
         propertyTypeOverride = o
     }
-    /// "Dodaj właściwość" (Ctrl+;, the page menu, the palette): the add row of the shown
-    /// properties (zoomed out first), or — a page without shown properties — the draft above the
-    /// blocks.
+    /// "Dodaj właściwość" (Ctrl+;, the page menu, the palette): the add row of the shown block new
+    /// properties go to (zoomed out first), or — that block is not shown (a page without
+    /// properties, a frontmatter holding only the note mode, also above shown `key::` lines) —
+    /// the draft above the blocks.
     function addProperty() {
         if (!controller || controller.sourceMode || !controller.loaded)
             return
@@ -281,7 +282,7 @@ FocusScope {
         if (controller.editingRow >= 0)
             controller.stopEditing()
         const props = controller.pageProperties
-        const row = props.visibleRow
+        const row = props.addRow
         if (row >= 0) {
             setPropertiesExpanded(true)
             propertyFocus = { part: "add", source: props.addTarget }
@@ -1574,7 +1575,7 @@ FocusScope {
         }
         // The draft's property is there (or another program wrote one): the panel shows it.
         function onPagePropertiesChanged() {
-            if (editor.propertyDraft && editor.controller.pageProperties.visibleRow >= 0)
+            if (editor.propertyDraft && editor.controller.pageProperties.addRow >= 0)
                 editor.later(() => editor.propertyDraft = false)
         }
         function onLoadingChanged() {

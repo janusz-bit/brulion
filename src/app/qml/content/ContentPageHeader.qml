@@ -490,12 +490,23 @@ Item {
                         chips.adding = ""
                         chips.addError = ""
                     }
-                    onActiveFocusChanged: {
-                        if (activeFocus || done)
+                    /// Leaving the field (a tap elsewhere, another page shown): what it holds is
+                    /// added and it closes; what cannot be added is said in a toast.
+                    function leave() {
+                        if (done)
                             return
-                        add(text)
+                        done = true
+                        if (preeditText !== "")
+                            EditorInput.commitPreedit(chipField)
+                        if (!add(text))
+                            AppController.toast(chips.addError, "error")
                         chips.adding = ""
                         chips.addError = ""
+                    }
+                    onActiveFocusChanged: if (!activeFocus) leave()
+                    Connections {
+                        target: header.controller
+                        function onPathAboutToChange() { chipField.leave() }
                     }
                 }
             }

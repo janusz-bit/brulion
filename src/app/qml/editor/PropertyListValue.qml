@@ -7,7 +7,8 @@ import Brulion
 // carry a bookmark — each with × (removes it, one undo step), then a "+" that turns into a
 // BSuggestField: Enter or "," adds what is typed (a pasted "a, b, c" adds three) and the field
 // stays for the next one; Backspace in the empty field removes the last chip; Ctrl+Z there undoes;
-// Escape closes it. Suggestions: tags for tags, the notebook's values of the key and, after "[[",
+// Escape closes it. What cannot be added (an alias with `|`, a tag that is none) is said under
+// the field; leaving the field then says it in a toast (the field closes). Suggestions: tags for tags, the notebook's values of the key and, after "[[",
 // pages; none for aliases. Heights by bindings, as TasksRow's chips (docs/UI.md "Scrolling
 // performance"): a row created expanded has its final height at once.
 Item {
@@ -75,6 +76,14 @@ Item {
         if (parts.length === 0)
             return true
         return row.setValue(root.items.concat(parts))
+    }
+    /// Add what the field holds and close it (the field lost the keyboard, the page changes): what
+    /// cannot be added is said in a toast.
+    function addAndClose(text) {
+        if (text.trim() !== "" && !add(text))
+            row.noticeError()
+        row.error = ""
+        adding = false
     }
     function removeAt(i) {
         const next = root.items.slice()
@@ -156,6 +165,7 @@ Item {
                 objectName: "propertyListField"
                 size: "small"
                 placeholderText: root.type === "tags" ? qsTr("Tag") : root.type === "aliases" ? qsTr("Alias") : qsTr("Item")
+                errorText: root.row.error
                 inputMethodHints: Qt.ImhNoAutoUppercase
                 provider: root.type === "aliases" ? null : (typed) => {
                     const held = root.items.map(s => s.toLowerCase())
@@ -172,9 +182,16 @@ Item {
                         return
                     }
                     // Leaving the field adds what is typed (as Enter), then closes it.
-                    if (addField.text.trim() !== "")
-                        root.add(addField.text)
-                    root.adding = false
+                    if (root.adding)
+                        root.addAndClose(addField.text)
+                }
+                Connections {
+                    target: root.row
+                    function onLeaving() {
+                        if (addField.preeditText !== "")
+                            EditorInput.commitPreedit(addField)
+                        root.addAndClose(addField.text)
+                    }
                 }
                 onPicked: (value) => {
                     if (root.add(String(value)))
@@ -191,12 +208,14 @@ Item {
                 }
                 onCancelled: {
                     addField.text = ""
+                    root.row.error = ""
                     root.adding = false
                     root.row.focusRow()
                 }
                 // "," adds the item before it (Obsidian, Logseq); Backspace in the empty field
                 // takes the last chip; Ctrl+Z in it undoes the last change of the page.
                 onTextEdited: {
+                    root.row.error = ""
                     const t = addField.text
                     if (t.endsWith(",") && root.splitItems(t.slice(0, -1)).length > 0 && t.indexOf("[[") < 0) {
                         if (root.add(t.slice(0, -1)))

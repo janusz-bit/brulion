@@ -4221,6 +4221,37 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     }
                 }
                 closeMenus(window);
+                // An alias no link can use, then a tap elsewhere: nothing written, the field closes
+                // and a toast says why (Enter says it under the field).
+                plus = shownNamed(editor, u"pageHeaderAdd"_s);
+                if (plus) {
+                    tapOrClick(window, pointIn(plus), touch);
+                    check(waitFor([&] { return openMenus(window) == 1; }), "“+” opens its menu again");
+                    if (QQuickItem *alias = shownItem(u"headerAddAlias"_s)) {
+                        tapOrClick(window, pointIn(alias), touch);
+                        check(waitFor([&] {
+                                  const QQuickItem *f = window->activeFocusItem();
+                                  return f && f->objectName() == u"pageHeaderField";
+                              }),
+                              "“Dodaj alias” opens the field again");
+                        QString toast;
+                        const QMetaObject::Connection toasts =
+                                QObject::connect(app, &AppController::toastRequested, app,
+                                                 [&toast](const QString &text) { toast = text; });
+                        typeText(u"Dom|ż"_s);
+                        editor->forceActiveFocus();
+                        const QString reason = QCoreApplication::translate(
+                                "brulion::editor::PageController", "An alias with this character cannot be used in a link");
+                        check(waitFor([&] { return toast == reason; }),
+                              "an alias no link can use, left by a tap elsewhere: a toast says why");
+                        QObject::disconnect(toasts);
+                        check(waitFor([&] { return !shownNamed(editor, u"pageHeaderField"_s); }), "the field closed");
+                        check(saveNow() && app->workspace()->readFile(guide) == before, "nothing was written");
+                    } else {
+                        check(false, "the menu has “Dodaj alias” again");
+                    }
+                }
+                closeMenus(window);
                 app->requestUiAction(u"addProperty"_s);
                 check(waitFor([&] {
                           const QQuickItem *f = window->activeFocusItem();

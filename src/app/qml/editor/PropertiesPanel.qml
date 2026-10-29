@@ -125,7 +125,8 @@ Item {
         if (draft)
             editor.propertyDraft = false
     }
-    /// Write the new key (an empty value of its notebook type) and give its value the focus.
+    /// Write the new key (an empty value of its notebook type) and give its value the focus. A key
+    /// the page has already (any spelling) is refused in the field: adding never overwrites.
     function addKey(key) {
         const k = String(key).trim()
         if (k === "") {
@@ -139,7 +140,7 @@ Item {
         const notebook = ctl.notebookPropertyType(k)
         const type = notebook !== "" && notebook !== "unsupported" ? notebook : "text"
         const empty = type === "list" || type === "tags" || type === "aliases" ? [] : type === "checkbox" ? false : null
-        const r = ctl.setPageProperty(isDraft ? "" : source, k, empty, type)
+        const r = ctl.addPageProperty(isDraft ? "" : source, k, empty, type)
         if (!r.ok) {
             addError = r.reason
             return

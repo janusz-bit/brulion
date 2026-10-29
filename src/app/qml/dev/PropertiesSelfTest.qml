@@ -12,9 +12,14 @@ import Brulion
 // a list item added with Enter and taken away with Backspace in the empty field, a chip's ×;
 // renaming through the row's menu (an existing name refused); a type changed in the menu's "Typ"
 // (text → list); a removal undone from the toast's "Cofnij"; a property added from the key
-// suggestions (another page's key) with its value typed at once; and on a page without
-// properties "Dodaj właściwość" (Ctrl+;) — the draft above the blocks writes the frontmatter. On a
-// phone the rows stack the key over the value and every control is a 44 px target.
+// suggestions (another page's key) with its value typed at once — a key the page has is refused,
+// its value kept —; a field keeps what is typed while the notebook changes, and writes it before
+// another page is shown; on a page without properties "Dodaj właściwość" (Ctrl+;) — the draft
+// above the blocks writes the frontmatter, also when only a hidden note-mode frontmatter and
+// `key::` lines are there; values opened and left unchanged keep their form (`|` text, `1.50`);
+// a Logseq text becomes a list of links; an alias no link can use is refused under the field and
+// in a toast; a map's row menu offers "Edytuj jako tekst". On a phone the rows stack the key over
+// the value and every control is a 44 px target.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -25,6 +30,13 @@ QtObject {
     required property FakeEditorHost host
 
     property var events: null
+    /// The host's index changes seen (the rows' roles are rebuilt on each).
+    property int indexChanges: 0
+    property Connections indexWatch: Connections {
+        target: test.host
+        function onIndexChanged() { test.indexChanges += 1 }
+    }
+    property int indexBefore: 0
     property Item frontmatter: null
     property string original: ""
     readonly property string path: "Projekty/Remont garażu.md"
@@ -49,6 +61,33 @@ QtObject {
     function panel() { return window.findItem(view(), "propertiesPanel") }
     function row(key) { return window.findItem(panel(), "propertyRow_" + key) }
     function inRow(key, name) { return window.findItem(row(key), name) }
+    /// The same for the properties block at row `blockRow` (a page with YAML and `key::` lines).
+    function panelAt(blockRow) { return window.findItem(window.findItem(window.delegateAt(blockRow), "frontmatterView"), "propertiesPanel") }
+    function inRowAt(blockRow, key, name) { return window.findItem(window.findItem(panelAt(blockRow), "propertyRow_" + key), name) }
+    function menuOpenAt(blockRow) {
+        const p = panelAt(blockRow)
+        return p !== null && p.menu !== null && p.menu.opened
+    }
+    /// The "Typ" item of the row menu `m`.
+    function typeItem(m) {
+        for (let i = 0; i < m.count; ++i) {
+            const it = m.itemAt(i)
+            if (it && it.subMenu && it.subMenu.objectName === "propertyTypeMenu")
+                return it
+        }
+        return null
+    }
+    readonly property string notePath: "Notatka.md"
+    readonly property string noteContent: "---\n"
+        + "notatka: |\n  linia 1\n  linia 2\n"
+        + "aliases: [Dom]\n"
+        + "meta:\n  a: 1\n"
+        + "---\n"
+        + "ilosc:: 1.50\n"
+        + "autorzy:: a, b\n\n"
+        + "- tekst\n"
+    readonly property string hiddenPath: "Logseq.md"
+    readonly property string hiddenContent: "---\nbrulion: document\n---\nstatus:: w toku\n- a\n"
     function focused(item) { return item !== null && item.activeFocus }
     /// Type `s` into `item` with real key events (it has the keyboard).
     function type(item, s) {
@@ -56,6 +95,14 @@ QtObject {
             EditorInput.sendKey(item, 0, 0, s.charAt(i))
     }
     function key(item, k, modifiers) { EditorInput.sendKey(item, k, modifiers || 0, "") }
+    /// The keyboard to a text input outside the editor (a tap elsewhere): fields lose the focus.
+    property Item probe: null
+    function focusElsewhere() {
+        if (!probe)
+            probe = Qt.createQmlObject('import QtQuick; TextInput { width: 10; height: 10 }', window.contentItem,
+                                       "propertiesFocusProbe")
+        probe.forceActiveFocus()
+    }
     /// The file differs from `before` only in the lines starting with `prefixes`.
     function onlyLinesChanged(before, prefixes) {
         const a = before.split("\n").filter(l => !prefixes.some(p => l.startsWith(p)))
@@ -96,6 +143,8 @@ QtObject {
                 host.setFile(path, content)
                 host.setFile("Ogród.md", "---\nźródło: Wikipedia\nstatus: gotowe\n---\n- grządki\n")
                 host.setFile("Bez właściwości.md", "- pierwszy\n- drugi\n")
+                host.setFile(notePath, noteContent)
+                host.setFile(hiddenPath, hiddenContent)
                 editor.setPropertiesExpanded(false)
                 page.path = path
             },
@@ -288,8 +337,68 @@ QtObject {
                 key(field, Qt.Key_Return)
             },
             wait(() => line("źródło:") === "źródło: Wikipedia", () => "the value: " + line("źródło:")),
+            // ---- adding a key the page has: refused, its value kept ---------------------------------------------
+            () => {
+                original = text()
+                window.tapItem(window.findItem(panel(), "propertiesAdd"))
+            },
+            wait(() => focused(window.findItem(panel(), "propertiesKeyField")), "the key's field again"),
+            () => {
+                const f = window.findItem(panel(), "propertiesKeyField")
+                type(f, "status")
+                key(f, Qt.Key_Return)
+            },
+            () => {
+                const f = window.findItem(panel(), "propertiesKeyField")
+                check(f !== null && focused(f) && f.errorText !== "",
+                      "a key the page has is refused in the field: " + (f ? f.errorText : "closed"))
+                check(text() === original, "its value is kept: " + line("status:"))
+                f.selectAll()
+                type(f, "TAGS")
+                key(f, Qt.Key_Return)
+            },
+            () => {
+                const f = window.findItem(panel(), "propertiesKeyField")
+                check(f !== null && f.errorText !== "" && text() === original, "in any spelling: the tags are kept")
+                key(f, Qt.Key_Escape)
+            },
+            wait(() => window.findItem(panel(), "propertiesKeyField") === null, "Escape closes the add field"),
+            // ---- a field keeps what is typed while the notebook changes ------------------------------------------
+            () => window.tapItem(inRow("status", "propertyValue")),
+            wait(() => focused(inRow("status", "propertyValueField")), "the text's field"),
+            () => {
+                const field = inRow("status", "propertyValueField")
+                field.selectAll()
+                type(field, "WYC")
+                // Another page changes (sync, another pane): the notebook's index and the rows' roles.
+                indexBefore = indexChanges
+                host.externalWrite("Ogród.md", "---\nźródło: Wikipedia\nstatus: gotowe\netap: nowy\n---\n- grządki\n")
+            },
+            wait(() => indexChanges > indexBefore && page.notebookPropertyType("etap") === "text",
+                 "the notebook knows the other page's change"),
+            () => {
+                const field = inRow("status", "propertyValueField")
+                check(field !== null && focused(field) && field.text === "WYC",
+                      "the field keeps what is typed: " + (field ? field.text : "closed"))
+                key(field, Qt.Key_Escape)
+            },
+            wait(() => inRow("status", "propertyValueField") === null && text() === original,
+                 "Escape leaves the value as it was"),
+            // ---- another page shown while a field holds a value: it is written first --------------------------
+            () => window.tapItem(inRow("status", "propertyValue")),
+            wait(() => focused(inRow("status", "propertyValueField")), "the text's field once more"),
+            () => {
+                const field = inRow("status", "propertyValueField")
+                field.selectAll()
+                type(field, "WYCIEK")
+                page.path = "Bez właściwości.md"
+            },
+            wait(() => page.loaded && page.path === "Bez właściwości.md", "another page"),
+            () => check(window.fileLineOf(host.file(path), "status:") === "status: WYCIEK # wybrany"
+                        && host.file("Bez właściwości.md") === "- pierwszy\n- drugi\n",
+                        "the typed value went to its page before the other one was shown: "
+                        + window.fileLineOf(host.file(path), "status:")),
             // ---- a page without properties: the draft above the blocks ----------------------------------------
-            () => page.path = "Bez właściwości.md",
             wait(() => page.loaded && page.path === "Bez właściwości.md" && page.pageProperties.visibleRow < 0,
                  "a page without properties"),
             () => editor.addProperty(),
@@ -309,7 +418,109 @@ QtObject {
                 page.undo()
             },
             wait(() => text() === "- pierwszy\n- drugi\n", "one undo step takes it back"),
+            // ---- a hidden note-mode frontmatter and shown `key::` lines: the draft adds to the frontmatter --
+            () => page.path = hiddenPath,
+            wait(() => page.loaded && page.path === hiddenPath && page.pageProperties.visibleRow === 1
+                       && page.pageProperties.addRow === -1, "a page with only `key::` lines shown"),
+            () => editor.addProperty(),
+            wait(() => focused(window.findItem(editor.listView.headerItem, "propertiesKeyField")),
+                 "“Dodaj właściwość” opens the draft (the frontmatter new keys go to is hidden)"),
             () => {
+                const f = window.findItem(editor.listView.headerItem, "propertiesKeyField")
+                type(f, "etap")
+                key(f, Qt.Key_Return)
+            },
+            wait(() => text() === "---\nbrulion: document\netap:\n---\nstatus:: w toku\n- a\n"
+                       && focused(inRowAt(0, "etap", "propertyValueField")),
+                 () => "the key goes into the frontmatter, now shown; its value has the keyboard: " + JSON.stringify(text())),
+            () => {
+                check(editor.propertyFocus === null && !editor.propertyDraft, "no request is left over")
+                key(inRowAt(0, "etap", "propertyValueField"), Qt.Key_Escape)
+                page.undo()
+            },
+            wait(() => text() === hiddenContent, "one undo step takes it back"),
+            // ---- values left unchanged keep their form; a Logseq text as a list; a bad alias; a map --------
+            () => page.path = notePath,
+            wait(() => page.loaded && page.path === notePath && inRowAt(0, "notatka", "propertyValue") !== null
+                       && inRowAt(1, "ilosc", "propertyValue") !== null, "a page with both kinds of properties"),
+            () => window.tapItem(inRowAt(0, "notatka", "propertyValue")),
+            wait(() => focused(inRowAt(0, "notatka", "propertyValueArea")), "a text of several lines opens a text area"),
+            () => {
+                const area = inRowAt(0, "notatka", "propertyValueArea")
+                check(area.text === "linia 1\nlinia 2\n", "the area holds the text: " + JSON.stringify(area.text))
+                focusElsewhere()
+            },
+            wait(() => inRowAt(0, "notatka", "propertyValueArea") === null, "leaving the area closes it"),
+            () => {
+                check(text() === noteContent, "left unchanged, the `|` text keeps its form: " + JSON.stringify(text()))
+                check(!page.canUndo, "no undo step")
+                window.tapItem(inRowAt(1, "ilosc", "propertyValue"))
+            },
+            wait(() => focused(inRowAt(1, "ilosc", "propertyNumberField")), "the `key::` number's field"),
+            () => {
+                const field = inRowAt(1, "ilosc", "propertyNumberField")
+                check(field.text === "1.50", "the field holds the number as written: " + field.text)
+                key(field, Qt.Key_Return)
+            },
+            wait(() => inRowAt(1, "ilosc", "propertyNumberField") === null, "Enter closes the field"),
+            () => {
+                check(text() === noteContent, "Enter without a change keeps `ilosc:: 1.50`: " + JSON.stringify(text()))
+                window.tapItem(inRowAt(1, "autorzy", "propertyTypeButton"))
+            },
+            wait(() => menuOpenAt(1), "the menu of `autorzy::`"),
+            () => {
+                const sub = typeItem(panelAt(1).menu)
+                check(sub !== null && sub.enabled, "the menu has “Typ”")
+                window.tapItem(sub)
+            },
+            wait(() => panelAt(1).menu.typeMenu.opened, "“Typ” opens its submenu"),
+            () => window.tapItem(window.menuItemNamed(panelAt(1).menu.typeMenu, "propertyType_list")),
+            wait(() => line("autorzy::") === "autorzy:: [[a]], [[b]]",
+                 () => "a Logseq text becomes a list of links: " + line("autorzy::")),
+            () => {
+                check(inRowAt(1, "autorzy", "propertyChip_1") !== null, "shown as chips")
+                window.tapItem(inRowAt(0, "aliases", "propertyListAdd"))
+            },
+            wait(() => focused(inRowAt(0, "aliases", "propertyListField")), "the aliases' field"),
+            () => {
+                original = text()
+                const field = inRowAt(0, "aliases", "propertyListField")
+                type(field, "a|b")
+                key(field, Qt.Key_Return)
+            },
+            () => {
+                const field = inRowAt(0, "aliases", "propertyListField")
+                check(field !== null && focused(field) && field.errorText !== "" && field.text === "a|b",
+                      "an alias no link can use is refused under the field: " + (field ? field.errorText : "closed"))
+                check(text() === original, "nothing written")
+                window.lastNotice = ""
+                focusElsewhere()
+            },
+            wait(() => inRowAt(0, "aliases", "propertyListField") === null && window.lastNotice !== "",
+                 () => "leaving the field closes it, a toast says why: " + window.lastNotice),
+            () => {
+                check(text() === original, "still nothing written")
+                window.tapItem(inRowAt(0, "meta", "propertyTypeButton"))
+            },
+            wait(() => menuOpenAt(0), "the menu of a map's row"),
+            () => {
+                const item = window.menuItemNamed(panelAt(0).menu, "propertyEditAsText")
+                check(item !== null && item.visible && item.enabled, "a map's row menu offers “Edytuj jako tekst”")
+                const rename = window.menuItemNamed(panelAt(0).menu, "propertyRename")
+                check(rename !== null && !rename.enabled, "renaming is not offered for it")
+                window.tapItem(item)
+            },
+            wait(() => page.editingRow === 0, "“Edytuj jako tekst” edits the frontmatter's text"),
+            () => {
+                page.stopEditing()
+                check(text() === original, "opening the text changes nothing")
+                const item = window.menuItemNamed(panelAt(1).menu, "propertyEditAsText")
+                check(item === null || !item.visible, "editable rows do not offer it")
+            },
+            () => {
+                if (probe)
+                    probe.destroy()
+                probe = null
                 editor.setPropertiesExpanded(false)
                 page.path = host.samplePath
             }

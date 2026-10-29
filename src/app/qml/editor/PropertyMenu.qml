@@ -6,7 +6,9 @@ import Brulion
 // right-click or a long press on the row, the Menu key / Shift+F10): "Typ" (text, number,
 // checkbox, date, date and time, list — the value converted; one that cannot be kept is cleared
 // with "Cofnij" in the toast; tags and aliases keep theirs), "Zmień nazwę" (F2), "Kopiuj wartość",
-// "Usuń" (Ctrl+Backspace; "Cofnij" in the toast). One menu per panel, created when first needed.
+// "Usuń" (Ctrl+Backspace; "Cofnij" in the toast); a row the fields cannot edit (a map, a nested
+// list, a block Brulion cannot edit safely) offers "Edytuj jako tekst" (the block's raw text in
+// its inline editor). One menu per panel, created when first needed.
 BMenu {
     id: menu
 
@@ -84,6 +86,14 @@ BMenu {
             checked: menu.row !== null && menu.row.type === "list"
             onTriggered: menu.choose(typeList, "list")
         }
+    }
+    BMenuItem {
+        objectName: "propertyEditAsText"
+        visible: menu.row !== null && !menu.editable
+        height: visible ? implicitHeight : 0
+        text: qsTr("Edit as text")
+        iconName: "code"
+        onTriggered: if (menu.row) menu.row.editor.startEditing(menu.row.blockRow, -1)
     }
     BMenuItem {
         objectName: "propertyRename"

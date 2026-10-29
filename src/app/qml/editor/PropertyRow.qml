@@ -18,7 +18,11 @@ import Brulion
 // renames, Ctrl+Backspace / Delete removes, the Menu key / Shift+F10 opens the menu, Alt+↓ goes
 // to the first block, Ctrl+Z / Ctrl+Shift+Z undo and redo the page's last step, Escape back to the
 // editor. An open field commits on Enter and when it
-// loses the focus (also when the row goes away), Escape leaves it unchanged.
+// loses the focus (also when the row goes away, and before the editor shows another page:
+// PageController.pathAboutToChange), Escape leaves it unchanged. A field holds what is typed: it
+// starts with the value of the moment it opened (no binding — the notebook changing re-renders the
+// rows) and writes only what differs from it, so a value left as it was keeps its form (`|`
+// text, `1.50`).
 FocusScope {
     id: row
     objectName: "propertyRow_" + key
@@ -61,8 +65,17 @@ FocusScope {
     /// The value is being edited in a field (text, number) / the key is being renamed.
     property bool editingValue: false
     property bool renaming: false
-    /// A refused edit's reason (shown under the field).
+    /// A refused edit's reason (shown under the field) and status (a status other than
+    /// "invalidValue" was said in a toast already).
     property string error: ""
+    property string errorStatus: ""
+    /// A field closes with a refused value: its reason in a toast (unless one said it already).
+    function noticeError() {
+        if (error !== "" && errorStatus === "invalidValue")
+            editor.notice(error, "error")
+    }
+    /// The editor is about to show another page: an open field writes what it holds now.
+    signal leaving()
 
     implicitHeight: stacked ? valueY + Math.max(valueLoader.implicitHeight, rowHeight)
                             : Math.max(rowHeight, valueLoader.implicitHeight + 2 * Theme.space1)
@@ -106,6 +119,7 @@ FocusScope {
             return false
         const r = controller.setPageProperty(source, key, value, type)
         error = r.ok ? "" : r.reason
+        errorStatus = r.ok ? "" : r.status
         if (!r.ok && r.status !== "invalidValue")
             editor.notice(r.reason, "error")
         return r.ok
@@ -258,6 +272,10 @@ FocusScope {
         target: row.editor
         function onPropertyFocusChanged() { row.takeFocusRequest() }
     }
+    Connections {
+        target: row.controller
+        function onPathAboutToChange() { row.leaving() }
+    }
     onActiveFocusChanged: if (activeFocus && !editingValue && !renaming) fieldFocused(row)
 
     /// A field of the row has the keyboard (its keys are its own; the ones it leaves are not the
@@ -405,6 +423,16 @@ FocusScope {
                 if (!row.rename(text))
                     row.renaming = false
             }
+            Connections {
+                target: row
+                function onLeaving() {
+                    if (renameField.done)
+                        return
+                    renameField.done = true
+                    if (!row.rename(renameField.text))
+                        row.editor.notice(row.error, "error")
+                }
+            }
         }
     }
 
@@ -477,26 +505,30 @@ FocusScope {
                     id: valueField
                     objectName: "propertyValueField"
                     size: "small"
-                    text: row.present && !row.empty ? String(row.property.raw) : ""
                     errorText: row.error
                     accessibleName: qsTr("Value of “%1”").arg(row.key)
                     provider: (typed) => row.controller.suggestPropertyValues(row.key, typed, 8).map(
                                   v => ({ title: String(v.value), icon: v.kind === "page" ? "file-text" : "",
                                           subtitle: v.kind === "page" ? qsTr("page") : "", value: v.value }))
+                    /// The value when the field opened (what it starts with).
+                    property string initial: ""
                     property bool done: false
                     function commit(value) {
                         if (done)
                             return
                         done = true
-                        row.setValue(value)
+                        if (value !== initial)
+                            row.setValue(value)
                         row.editingValue = false
                     }
                     Component.onCompleted: {
+                        initial = row.present && !row.empty ? String(row.property.raw) : ""
+                        text = initial
                         forceActiveFocus()
                         cursorPosition = length
                         row.fieldFocused(valueField)
                     }
-                    Component.onDestruction: if (!done && text !== (row.present && !row.empty ? String(row.property.raw) : "")) { done = true; row.setValue(text) }
+                    Component.onDestruction: if (!done && text !== initial) { done = true; row.setValue(text) }
                     onPicked: (value) => { commit(String(value)); row.focusRow() }
                     onCommitted: (text) => { commit(text); row.focusRow() }
                     onCancelled: {
@@ -505,6 +537,14 @@ FocusScope {
                         row.focusRow()
                     }
                     onActiveFocusChanged: if (!activeFocus) commit(text)
+                    Connections {
+                        target: row
+                        function onLeaving() {
+                            if (valueField.preeditText !== "")
+                                EditorInput.commitPreedit(valueField)
+                            valueField.commit(valueField.text)
+                        }
+                    }
                 }
             }
             Component {
@@ -512,25 +552,37 @@ FocusScope {
                 BTextArea {
                     id: valueArea
                     objectName: "propertyValueArea"
-                    text: row.present && !row.empty ? String(row.property.raw) : ""
                     errorText: row.error
                     wrapMode: TextEdit.Wrap
                     accessibleName: qsTr("Value of “%1”").arg(row.key)
+                    /// The value when the area opened (what it starts with).
+                    property string initial: ""
                     property bool done: false
                     function commit() {
                         if (done)
                             return
                         done = true
-                        row.setValue(text)
+                        if (text !== initial)
+                            row.setValue(text)
                         row.editingValue = false
                     }
                     Component.onCompleted: {
+                        initial = row.present && !row.empty ? String(row.property.raw) : ""
+                        text = initial
                         forceActiveFocus()
                         cursorPosition = length
                         row.fieldFocused(valueArea)
                     }
-                    Component.onDestruction: if (!done && text !== String(row.property ? row.property.raw : "")) { done = true; row.setValue(text) }
+                    Component.onDestruction: if (!done && text !== initial) { done = true; row.setValue(text) }
                     onActiveFocusChanged: if (!activeFocus) commit()
+                    Connections {
+                        target: row
+                        function onLeaving() {
+                            if (valueArea.preeditText !== "")
+                                EditorInput.commitPreedit(valueArea)
+                            valueArea.commit()
+                        }
+                    }
                     Keys.onPressed: (event) => {
                         if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ControlModifier)) {
                             commit()
@@ -580,27 +632,42 @@ FocusScope {
                     id: numberField
                     objectName: "propertyNumberField"
                     size: "small"
-                    text: row.present && !row.empty ? row.property.value : ""
                     errorText: row.error
                     inputMethodHints: Qt.ImhFormattedNumbersOnly
                     accessibleName: qsTr("Value of “%1”").arg(row.key)
+                    /// The number as written when the field opened (what it starts with).
+                    property string initial: ""
                     property bool done: false
                     /// Write it; the field stays open with the error when it is no number.
                     function commit() {
                         if (done)
                             return true
-                        if (!row.setValue(text))
+                        if (text !== initial && !row.setValue(text))
                             return false
                         done = true
+                        row.error = ""
                         row.editingValue = false
                         return true
                     }
                     Component.onCompleted: {
+                        initial = row.present && !row.empty ? String(row.property.value) : ""
+                        text = initial
                         forceActiveFocus()
                         selectAll()
                         row.fieldFocused(numberField)
                     }
-                    Component.onDestruction: if (!done && text !== (row.present && !row.empty ? row.property.value : "")) row.setValue(text)
+                    Component.onDestruction: if (!done && text !== initial) row.setValue(text)
+                    Connections {
+                        target: row
+                        function onLeaving() {
+                            if (numberField.preeditText !== "")
+                                EditorInput.commitPreedit(numberField)
+                            if (!numberField.commit()) {
+                                numberField.done = true
+                                row.noticeError()
+                            }
+                        }
+                    }
                     onAccepted: if (commit()) row.focusRow()
                     onEscapePressed: {
                         done = true
@@ -615,7 +682,7 @@ FocusScope {
                             // Not a number: nothing written, the field closes (the error was said).
                             done = true
                             row.editingValue = false
-                            row.editor.notice(row.error, "error")
+                            row.noticeError()
                         }
                     }
                 }
