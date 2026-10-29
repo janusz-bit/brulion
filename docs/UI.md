@@ -296,9 +296,10 @@ everything near the bottom, the same way on Android, in the browser and with a s
   navigation bar. That bar (`AppShell.navigationBar`, which the bottom navigation pads itself
   with) is the window's SafeArea margin — except one taller than any navigation bar (120 px, as
   `ViewportKeyboard::MinKeyboard`): on Android Qt's SafeArea counts the keyboard in at times (336
-  px with it up, and for a moment after it went), which lifted the navigation's tabs into the
-  middle of the screen; the last margin below that counts then. A view with a bar of its own at the bottom instead (`replacesBottomNav`: the
-  drawing editor's tool bar on phones) keeps the navigation away. Views tell the shell with
+  px with it up, and for a moment after it went), which would lift the navigation's tabs into
+  the middle of the screen; the last margin below that counts then. A view with a bar of its own
+  at the bottom instead (`replacesBottomNav`: the drawing editor's tool bar on phones) keeps the
+  navigation away. Views tell the shell with
   `toolbarDocked` and `replacesBottomNav` (view contract, `ShellRouteView`). Once the keyboard
   has settled, the detailed event log notes where the view ends ("Typing: the content ends 84 px
   above the window's bottom (keyboard 0 px, navigation bar 24 px, bottom navigation 84 px),
