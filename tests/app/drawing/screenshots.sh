@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Screenshots of the drawing editor in the real app: a page of handwritten lecture notes (written
 # by tst_drawingcanvas handwritingSample, BRULION_DRAWING_SAMPLE) in the editor, the page that
-# embeds it, its picture view, an Excalidraw drawing with shapes (read-only) and a new empty drawing
-# — × {desktop 1280×800, phone 412×915 --touch} × {light, dark} into
-# tests/screenshots/drawing-<shot>-<size>-<theme>.png.
+# embeds it, its picture view, an Excalidraw drawing with shapes (read-only), a new empty drawing and
+# the menus (the colours, "Więcej", the paper, the background: light or dark) — × {desktop 1280×800,
+# phone 412×915 --touch} × {light, dark} into tests/screenshots/drawing-<shot>-<size>-<theme>.png.
+# The drawings follow the app's theme ("Jak motyw"): the dark shots show them on dark paper.
 #
 # Every run gets a fresh, temporary XDG home and notebook and the fixed clock --now.
 #
@@ -32,7 +33,7 @@ delay="${DELAY:-1600}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
-all_shots=(editor page picture readonly new style more paper)
+all_shots=(editor page picture readonly new style more paper theme)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
 for f in "$bin" "$sample_test"; do
@@ -71,6 +72,7 @@ shot_args() {
     style) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"style"}' ;;
     more) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"more"}' ;;
     paper) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"paper"}' ;;
+    theme) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"theme"}' ;;
     *) return 1 ;;
   esac
 }
@@ -93,9 +95,10 @@ for shot in "${shots[@]}"; do
       *) echo "screenshots: unknown size $size" >&2; exit 2 ;;
     esac
     for theme in "${themes[@]}"; do
-      # The colours behind one swatch and "Więcej" exist on phones, the paper's button on wide windows.
+      # The colours behind one swatch and "Więcej" exist on phones, the paper's and the background's
+      # buttons on wide windows (on phones the background is in "Więcej").
       [[ ( "$shot" == style || "$shot" == more ) && "$size" == desktop ]] && continue
-      [[ "$shot" == paper && "$size" != desktop ]] && continue
+      [[ ( "$shot" == paper || "$shot" == theme ) && "$size" != desktop ]] && continue
       file="$out/drawing-${shot}-${size}-${theme}${suffix}.png"
       home="$(mktemp -d)"
       copy="$home/Studia"

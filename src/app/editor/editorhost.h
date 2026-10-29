@@ -100,6 +100,15 @@ public:
     // --- Assets ------------------------------------------------------------------------------
     /// URL the UI can load an attachment from (file:// on desktop/Android, blob/data on WASM).
     virtual QUrl assetUrl(const QString &path) const = 0;
+    /// The URL a drawing's preview loads from, as the app's theme (`dark`) shows it — a drawing
+    /// set to light or dark paper looks so whatever the app's theme. Default: assetUrl(), the
+    /// file's own picture (tests, the playground); Workspace: the "drawing" image provider
+    /// (src/app/drawing/drawingimageprovider.h).
+    virtual QUrl drawingUrl(const QString &path, bool dark) const
+    {
+        Q_UNUSED(dark);
+        return assetUrl(path);
+    }
     /// A picture attachment's pixel size when the host has it at hand (the browser: assetUrl()
     /// read the file for its data: URL); invalid otherwise — the editor then reads a local file's
     /// header itself (picturesize.h).

@@ -1273,8 +1273,14 @@ void BlockListModel::ensureEmbeds(int row) const
             size = localPictureSize(url.toLocalFile());
         if (!size.isValid())
             size = QSize(0, 0);
-        // A drawing (docs/SYNTAX.md §2 "Drawings"): a click opens the drawing editor at `path`.
+        // A drawing (docs/SYNTAX.md §2 "Drawings"): a click opens the drawing editor at `path`;
+        // its preview in the light and the dark theme (EmbedView picks one by the app's theme).
         const bool drawing = em.image && m_host && path.endsWith(u".svg"_s, Qt::CaseInsensitive) && m_host->isDrawing(path);
+        QUrl darkUrl;
+        if (drawing) {
+            url = m_host->drawingUrl(path, false);
+            darkUrl = m_host->drawingUrl(path, true);
+        }
         st.embeds.append(QVariantMap{{u"target"_s, em.target},
                                      {u"alt"_s, em.alt},
                                      {u"image"_s, em.image},
@@ -1284,6 +1290,7 @@ void BlockListModel::ensureEmbeds(int row) const
                                      {u"name"_s, paths::basename(em.target)},
                                      {u"path"_s, path},
                                      {u"drawing"_s, drawing},
+                                     {u"darkUrl"_s, darkUrl},
                                      {u"width"_s, size.width()},
                                      {u"height"_s, size.height()}});
     }

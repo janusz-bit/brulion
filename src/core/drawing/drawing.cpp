@@ -75,6 +75,25 @@ Background backgroundFromName(QStringView name)
     return Background::Plain;
 }
 
+QString paperThemeName(PaperTheme theme)
+{
+    switch (theme) {
+    case PaperTheme::Light: return u"light"_s;
+    case PaperTheme::Dark: return u"dark"_s;
+    case PaperTheme::Auto: break;
+    }
+    return u"auto"_s;
+}
+
+PaperTheme paperThemeFromName(QStringView name)
+{
+    if (name == u"light")
+        return PaperTheme::Light;
+    if (name == u"dark")
+        return PaperTheme::Dark;
+    return PaperTheme::Auto;
+}
+
 std::optional<Drawing> readDrawing(QByteArrayView bytes, ReadError *error)
 {
     const auto fail = [error](ReadError why) -> std::optional<Drawing> {

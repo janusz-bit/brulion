@@ -8,6 +8,7 @@
 
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
+#include "drawingimageprovider.h" // the previews of drawings, light or dark (src/app/drawing)
 #include "localnetwork.h" // QML loads nothing from the network (src/app/ui)
 #include "logcontroller.h" // the event log page's controller (src/app/diag)
 #include "workspace.h"
@@ -271,6 +272,8 @@ int main(int argc, char *argv[])
 #endif
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
+    // image://drawing/…: the previews of drawings in the light or the dark theme (Workspace::drawingUrl).
+    engine.addImageProvider(u"drawing"_s, new brulion::drawingview::DrawingImageProvider);
     devTools.attach(&engine); // --size, --screenshot
     brulion::ui::connectKeyboardSources(&keyboardInsets, &engine);
     brulion::ui::connectGestureSources(&gestureInsets, &engine);

@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Window
 import Brulion
 
 // DrawingView — route "drawing" ({path}): the drawing editor (docs/UI.md "Drawing editor") on a
@@ -27,8 +26,12 @@ import Brulion
 //    with shapes or text ("readonly"), a picture without a scene, a scene that cannot be read; a
 //    missing file says so. Renames follow the file (the route applied one event-loop turn late, as
 //    in PageView); a deleted file is never written again.
+//  * The paper is light or dark as the drawing chooses ("Tło rysunku": as the app — the default —,
+//    light, dark; DrawingCanvas.theme, saved in the file, an undo step) and follows the app's
+//    theme at once (DrawingCanvas.appDark: Theme.dark). The previews of the drawing elsewhere
+//    follow it too (Workspace.drawingUrl), the notice's picture below as well.
 // route.open (screenshots): "style" (the colours and widths) and "more" on phones, "paper" (the
-// paper's menu) on wide windows.
+// paper's menu) on wide windows, "theme" (the background's menu; on phones "Więcej").
 // View contract (ShellRouteView): `title` (the file's name), `editing` (no capture button over the
 // paper), `toolbarDocked` (phones: the tool bar at the bottom — the bottom navigation makes way),
 // `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
@@ -168,7 +171,7 @@ FocusScope {
             return
         root.save()
         root.load(root.routePath)
-        // route.open (screenshots): "style" | "more" (phones), "paper" (wide windows).
+        // route.open (screenshots): "style" | "more" (phones), "paper" (wide windows), "theme".
         const open = root.route && root.route.open ? root.route.open : ""
         if (open !== "" && root.status === "")
             Qt.callLater(() => {
@@ -179,6 +182,8 @@ FocusScope {
                     bar.openMore()
                 else if (open === "paper")
                     bar.openBackground()
+                else if (open === "theme")
+                    bar.openTheme()
             })
     }
 
@@ -355,6 +360,7 @@ FocusScope {
                 anchors.fill: parent
                 visible: root.status === ""
                 fingerDraws: root.fingerDraws
+                appDark: Theme.dark
                 onToolChanged: root.applyTool()
                 onContentChanged: if (canvas.modified) saveTimer.restart()
                 onStylusSeenChanged: {
@@ -424,14 +430,22 @@ FocusScope {
                         /// The picture's own size (its SVG root), shown at most as wide as the view.
                         readonly property size natural: root.loadedPath !== "" && notice.visible
                                                         ? Workspace.pictureSize(root.loadedPath) : Qt.size(0, 0)
-                        visible: root.status !== "missing" && status === Image.Ready
+                        // (Also while the app's other theme loads: the shown picture stays.)
+                        visible: root.status !== "missing"
+                                 && (status === Image.Ready || (status === Image.Loading && implicitWidth > 0))
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: Math.min(parent.width, natural.width > 0 ? natural.width : parent.width)
                         height: natural.width > 0 ? width * natural.height / natural.width : implicitHeight
                         fillMode: Image.PreserveAspectFit
-                        sourceSize: Qt.size(Math.ceil(width * Screen.devicePixelRatio), 0)
-                        source: notice.visible && root.status !== "missing" && root.loadedPath !== ""
-                                ? Workspace.assetUrl(root.loadedPath) : ""
+                        // (Logical pixels: Qt renders SVG and image providers at the screen's ratio.)
+                        sourceSize: Qt.size(Math.ceil(width), 0)
+                        // A drawing as the app's theme shows it (an Excalidraw drawing with shapes
+                        // turned dark like Excalidraw does); any other picture as it is.
+                        source: !notice.visible || root.status === "missing" || root.loadedPath === "" ? ""
+                                : root.status !== "notDrawing" && Workspace.isDrawing(root.loadedPath)
+                                  ? Workspace.drawingUrl(root.loadedPath, Theme.dark)
+                                  : Workspace.assetUrl(root.loadedPath)
+                        retainWhileLoading: true
                         asynchronous: true
                     }
                 }
@@ -446,7 +460,8 @@ FocusScope {
                 anchors.margins: Theme.space3
                 text: Math.round(canvas.zoom * 100) + " %"
                 variant: "caption"
-                color: "#535a6a" // on the paper (white in every theme)
+                // On the paper (light or dark as the drawing is shown): 6.9:1 / 7.2:1.
+                color: canvas.dark ? "#9ba1af" : "#535a6a"
             }
         }
 

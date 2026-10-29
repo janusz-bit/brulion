@@ -43,10 +43,12 @@
 #include <QRegularExpression>
 #include <QScreen>
 #include <QTimer>
+#include <QUrlQuery>
 #include <QWheelEvent>
 #include <QWindow>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <functional>
 
@@ -2612,7 +2614,9 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
 /// editor; a stroke drawn with real input — a finger on the phone run ("Rysuj palcem" is on until a
 /// stylus is seen), the mouse on the desktop — is saved by itself, its undo kept (the save coming
 /// back is the editor's own, not a change to merge); an undo (the bar's button / Ctrl+Z) is saved
-/// too; back on the page, the embed loads the drawing saved again (its URL's version).
+/// too; back on the page, the embed loads the drawing saved again (its URL's version). The embed is
+/// the drawing image provider's picture in the app's theme: switching the app to the other theme
+/// loads the other one at once; the editor's paper follows the app's theme too.
 void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -2625,12 +2629,15 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
         return d ? int(d->strokes.size()) : -1;
     };
+    // (image://drawing/<the file's path, percent-encoded>?v=…&dark=…: Workspace::drawingUrl.)
     const auto embedImage = [window]() -> QQuickItem * {
         return uidriver::topmost(window, [](QQuickItem *item) {
-            return item->objectName() == u"embedImage" && item->property("source").toUrl().path().endsWith(u".svg"_s)
-                   && item->property("source").toUrl().fileName() == u"Szkic z wykładu.svg";
+            const QUrl url = item->property("source").toUrl();
+            return item->objectName() == u"embedImage" && url.scheme() == u"image" && url.host() == u"drawing"
+                   && QUrl::fromPercentEncoding(url.path().toUtf8()).endsWith(u"/Szkic z wykładu.svg"_s);
         });
     };
+    const auto darkQuery = [](const QUrl &url) { return QUrlQuery(url).queryItemValue(u"dark"_s) == u"1"; };
     app->openPage(page);
     check(waitFor([&] { return embedImage() && embedImage()->property("status").toInt() == 1; }, 5000),
           "the drawing's embed is shown");
@@ -2642,6 +2649,25 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     check(uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"embedDrawingBadge"; })
                   != nullptr,
           "a drawing's embed has the pen in its corner");
+    {
+        // The app's theme switched: the embed shows the drawing in the other one at once.
+        AppSettings *settings = app->settings();
+        const QString mode = settings->themeMode();
+        const bool wasDark = darkQuery(before);
+        const auto embedShows = [&](bool dark) {
+            QQuickItem *again = embedImage();
+            return again && darkQuery(again->property("source").toUrl()) == dark
+                   && again->property("status").toInt() == 1;
+        };
+        settings->setThemeMode(wasDark ? u"light"_s : u"dark"_s);
+        check(waitFor([&] { return embedShows(!wasDark); }, 5000),
+              "the app's other theme shows the drawing's embed in that theme");
+        settings->setThemeMode(mode);
+        check(waitFor([&] { return embedShows(wasDark); }, 5000), "and back");
+        image = embedImage();
+        if (!image)
+            return;
+    }
     tapOrClick(window, pointIn(image), touch);
     check(waitFor([&] { return app->currentRoute().value(u"view"_s).toString() == u"drawing"; }),
           "a tap / click on the drawing opens the drawing editor");
@@ -2655,6 +2681,8 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         check(false, "the drawing editor shows its paper");
         return;
     }
+    check(canvas->property("dark").toBool() == darkQuery(before) && canvas->property("theme").toString() == u"auto",
+          "a new drawing's paper follows the app's theme");
     settle(100);
     const QPointF from = pointIn(canvas, 0.25, 0.4);
     const QPointF to = pointIn(canvas, 0.7, 0.45);
@@ -2753,6 +2781,80 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
           },
                   5000),
           "back on the page, the embed shows the drawing saved again");
+    app->goHome();
+}
+
+/// 5j. A drawing another program wrote (excalidraw.com frames its strokes with its own margins):
+/// its embed has the shape of the file's own size from the start, the picture of the drawing image
+/// provider the same — nothing below it moves when it has loaded — and keeps it while the app's
+/// theme switches (the picture of the other theme loads behind the shown one).
+void checkDrawingFrame(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *workspace = app->workspace();
+    drawing::Drawing d;
+    drawing::Stroke s;
+    s.id = u"kreskaŻółwia"_s;
+    s.points = {{40, 60, 0.5}, {120, 90, 0.5}, {240, 70, 0.5}};
+    d.strokes = {s};
+    QByteArray bytes = drawing::toSvg(d);
+    const QRectF rect = drawing::pictureRect(d);
+    const int w = int(rect.width());
+    const int h = int(rect.height());
+    // The root of another program: the same scene in a wider frame.
+    const int ownWidth = w + 96;
+    const QByteArray root = "viewBox=\"0 0 " + QByteArray::number(w) + ' ' + QByteArray::number(h) + "\" width=\""
+                            + QByteArray::number(w) + "\" height=\"" + QByteArray::number(h) + '"';
+    const QByteArray other = "viewBox=\"0 0 " + QByteArray::number(ownWidth) + ' ' + QByteArray::number(h)
+                             + "\" width=\"" + QByteArray::number(ownWidth) + "\" height=\"" + QByteArray::number(h)
+                             + '"';
+    check(bytes.contains(root), "a drawing's root names its picture's size");
+    bytes.replace(root, other);
+    const QString path = workspace->saveAttachment(u"Rysunek z innego programu.svg"_s, bytes);
+    const QString page = u"Szkic z excalidraw.com.md"_s;
+    check(!path.isEmpty() && workspace->writeFile(page, u"Przed rysunkiem\n\n![[Rysunek z innego programu.svg]]\n"_s),
+          "a page embeds a drawing whose file names another frame");
+    const auto embedImage = [window]() -> QQuickItem * {
+        return uidriver::topmost(window, [](QQuickItem *item) {
+            const QUrl url = item->property("source").toUrl();
+            return item->objectName() == u"embedImage" && url.scheme() == u"image"
+                   && QUrl::fromPercentEncoding(url.path().toUtf8()).endsWith(u"/Rysunek z innego programu.svg"_s);
+        });
+    };
+    app->openPage(page);
+    check(waitFor([&] { return embedImage() && embedImage()->property("status").toInt() == 1; }, 5000),
+          "the embed of a drawing from another program is shown");
+    QQuickItem *image = embedImage();
+    QQuickItem *frame = image ? image->parentItem() : nullptr;
+    if (!frame || frame->objectName() != u"embedPicture") {
+        check(false, "the drawing's picture has its frame");
+        return;
+    }
+    settle(100);
+    const QSizeF shown = frame->size();
+    const double own = double(ownWidth) / h;
+    const double picture =
+            image->property("implicitWidth").toDouble() / std::max(1.0, image->property("implicitHeight").toDouble());
+    std::fprintf(stderr, "selftest: the frame %.0f x %.0f, the file %d x %d, the picture %.3f\n", shown.width(),
+                 shown.height(), ownWidth, h, picture);
+    check(std::abs(shown.width() / shown.height() - own) < 0.02 * own && std::abs(picture - own) < 0.02 * own,
+          "the embed and its picture have the shape of the file's own size");
+    AppSettings *settings = app->settings();
+    const QString mode = settings->themeMode();
+    const bool wasDark = QUrlQuery(image->property("source").toUrl()).queryItemValue(u"dark"_s) == u"1";
+    bool moved = false;
+    const auto showsTheme = [&](bool dark) {
+        QQuickItem *again = embedImage();
+        if (!again || !again->parentItem())
+            return false;
+        moved = moved || again->parentItem()->size() != shown;
+        return QUrlQuery(again->property("source").toUrl()).queryItemValue(u"dark"_s) == (dark ? u"1"_s : u"0"_s)
+               && again->property("status").toInt() == 1;
+    };
+    settings->setThemeMode(wasDark ? u"light"_s : u"dark"_s);
+    const bool switched = waitFor([&] { return showsTheme(!wasDark); }, 5000);
+    settings->setThemeMode(mode);
+    const bool back = waitFor([&] { return showsTheme(wasDark); }, 5000);
+    check(switched && back && !moved, "the embed keeps its size while the app's theme switches");
     app->goHome();
 }
 
@@ -3960,6 +4062,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             checkPictureView(window, app, check, controllerFor);
             // 5i. A drawing: opened from its embed, drawn with real input, saved by itself.
             checkDrawing(window, app, check);
+            // 5j. A drawing another program wrote: its embed's frame never moves.
+            checkDrawingFrame(window, app, check);
             // 5e. The default reminder time set on a clock in the settings.
             checkSettingsClock(window, app, check);
             // 5f. The on-screen keyboard (phones).

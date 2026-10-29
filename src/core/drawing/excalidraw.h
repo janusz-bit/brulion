@@ -43,8 +43,9 @@ inline constexpr QStringView SceneSource = u"https://github.com/janusz-bit/bruli
 /// beyond MaxSceneBytes or MaxSceneContainers.
 std::optional<Drawing> parseScene(QByteArrayView json);
 /// The scene's JSON (UTF-8, compact): the strokes (each stroke read from a scene as it was, new
-/// ones as Excalidraw writes them), the foreign elements after them, the appState with the paper
-/// and the background, the files and the other keys as they were read.
+/// ones as Excalidraw writes them), the foreign elements after them, the appState with the paper,
+/// the background and the theme (`brulionTheme`, left out for Auto), the files and the other keys
+/// as they were read.
 QByteArray sceneJson(const Drawing &drawing);
 /// A new stroke as an Excalidraw `freedraw` element (stroke.element is ignored).
 QJsonObject strokeElement(const Stroke &stroke);
