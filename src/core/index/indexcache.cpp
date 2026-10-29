@@ -647,8 +647,8 @@ std::optional<QByteArray> encodeNote(const ParsedNote &note, const QString &cont
         o.zigzag(b.headingLevel);
         o.str(b.lang);
         // The YAML frontmatter block shares the page's properties.
-        const bool pageProperties = b.kind == BlockKind::Frontmatter && !b.properties.isEmpty()
-                                    && b.properties == note.properties;
+        const bool pageProperties =
+                b.kind == BlockKind::Frontmatter && !b.properties.isEmpty() && b.properties == note.properties;
         o.boolean(pageProperties);
         if (!pageProperties && !writeMap(o, b.properties))
             return std::nullopt;
@@ -723,8 +723,7 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
         case 1: {
             const quint64 at = in.varint();
             const quint64 length = in.varint();
-            if (!b.raw.isSlice() || length == 0 || at > quint64(b.raw.size())
-                || length > quint64(b.raw.size()) - at)
+            if (!b.raw.isSlice() || length == 0 || at > quint64(b.raw.size()) || length > quint64(b.raw.size()) - at)
                 return std::nullopt;
             b.text = b.raw.view().sliced(qsizetype(at), qsizetype(length)).toString();
             break;

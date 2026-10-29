@@ -81,13 +81,14 @@ private Q_SLOTS:
         QTest::addColumn<int>("block");
         QTest::addColumn<QString>("raw");
         QTest::addColumn<bool>("slice");
-        QTest::newRow("LF lines") << u"- pierwszy\n  ciąg dalszy\n- drugi\n"_s << 0 << u"- pierwszy\n  ciąg dalszy"_s << true;
+        QTest::newRow("LF lines") << u"- pierwszy\n  ciąg dalszy\n- drugi\n"_s << 0 << u"- pierwszy\n  ciąg dalszy"_s
+                                  << true;
         QTest::newRow("last line without LF") << u"- a\n- żółw"_s << 1 << u"- żółw"_s << true;
         QTest::newRow("CRLF") << u"- pierwszy\r\n  ciąg\r\n"_s << 0 << u"- pierwszy\n  ciąg"_s << false;
         QTest::newRow("CRLF one line") << u"- jeden\r\n- dwa\r\n"_s << 0 << u"- jeden"_s << true;
         QTest::newRow("lone CR") << u"Akapit\rdalej\r"_s << 0 << u"Akapit\ndalej"_s << false;
-        QTest::newRow("non-consecutive own lines")
-                << u"- rodzic\n  - dziecko\n  ciąg dalszy rodzica\n"_s << 0 << u"- rodzic\n  ciąg dalszy rodzica"_s << false;
+        QTest::newRow("non-consecutive own lines") << u"- rodzic\n  - dziecko\n  ciąg dalszy rodzica\n"_s << 0
+                                                   << u"- rodzic\n  ciąg dalszy rodzica"_s << false;
         QTest::newRow("quote") << u"> cytat\n> dalej\n"_s << 0 << u"> cytat\n> dalej"_s << true;
         QTest::newRow("callout") << u"> [!note] Uwaga\n> treść\n"_s << 1 << u"> treść"_s << true;
         QTest::newRow("BOM first line") << u"﻿# Tytuł\nAkapit\n"_s << 0 << u"﻿# Tytuł"_s << true;

@@ -67,11 +67,11 @@ struct Identity {
 /// A note in a cache file's directory.
 struct Record {
     VaultPath path;
-    qint64 fileSize = 0;     ///< bytes of the file when it was indexed
-    qint64 mtime = 0;        ///< ms since the epoch (diagnostics only)
-    quint64 contentKey = 0;  ///< VaultIndex::contentKey() of its text
-    qint64 offset = 0;       ///< of the record's body in the file
-    qint64 length = 0;       ///< 0: no record (a value the format cannot hold: parsed on load)
+    qint64 fileSize = 0;    ///< bytes of the file when it was indexed
+    qint64 mtime = 0;       ///< ms since the epoch (diagnostics only)
+    quint64 contentKey = 0; ///< VaultIndex::contentKey() of its text
+    qint64 offset = 0;      ///< of the record's body in the file
+    qint64 length = 0;      ///< 0: no record (a value the format cannot hold: parsed on load)
 };
 
 /// An opened cache file (immutable: any thread may decode from it).

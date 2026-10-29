@@ -43,19 +43,19 @@ class IndexLoader : public QObject {
 
 public:
     struct Options {
-        QString cachePath;           ///< index cache to read (indexcache.h); "" = none
-        QString firstFolder;         ///< merged first, newest first (the journals folder)
-        int maxPending = 256;        ///< prepared notes waiting for a merge before workers pause
+        QString cachePath;    ///< index cache to read (indexcache.h); "" = none
+        QString firstFolder;  ///< merged first, newest first (the journals folder)
+        int maxPending = 256; ///< prepared notes waiting for a merge before workers pause
         qint64 maxPendingBytes = 64LL << 20;
     };
     struct Stats {
-        qsizetype total = 0;       ///< files to index (notes + attachments)
-        qsizetype merged = 0;      ///< of them in the index
-        qsizetype fromCache = 0;   ///< notes taken from the index cache (no parsing)
-        qsizetype parsed = 0;      ///< notes parsed
+        qsizetype total = 0;     ///< files to index (notes + attachments)
+        qsizetype merged = 0;    ///< of them in the index
+        qsizetype fromCache = 0; ///< notes taken from the index cache (no parsing)
+        qsizetype parsed = 0;    ///< notes parsed
         qsizetype attachments = 0;
-        qsizetype dropped = 0;     ///< results dropped: the file changed meanwhile (forget())
-        qsizetype readFailed = 0;  ///< worker reads that failed (read again on the owner's thread)
+        qsizetype dropped = 0;         ///< results dropped: the file changed meanwhile (forget())
+        qsizetype readFailed = 0;      ///< worker reads that failed (read again on the owner's thread)
         qsizetype recordsRejected = 0; ///< cache records that failed validation (parsed instead)
         int workers = 0;
         /// "none" (no cache path), "used", "absent", "disabled", "invalid: <reason>"

@@ -14,9 +14,9 @@
 
 #include <algorithm>
 #include <atomic>
-#include <limits>
 #include <condition_variable>
 #include <deque>
+#include <limits>
 #include <mutex>
 #include <optional>
 
@@ -29,8 +29,8 @@ namespace {
 /// A note to load.
 struct Item {
     VaultPath path;
-    QString absolute;      ///< Vault::absolutePath(), taken on the owner's thread
-    quint64 sequence = 0;  ///< VaultIndex::reserveSequence() base + position in path order
+    QString absolute;     ///< Vault::absolutePath(), taken on the owner's thread
+    quint64 sequence = 0; ///< VaultIndex::reserveSequence() base + position in path order
 };
 
 /// A note read and prepared by a worker (or by the owner itself).
@@ -86,7 +86,7 @@ struct LoaderShared {
     bool searchFromCache = false;
     std::deque<SearchJob> searchQueue;
     bool searchStarted = false;
-    bool searchClosed = false;   ///< every document is queued
+    bool searchClosed = false;    ///< every document is queued
     bool searchAbandoned = false; ///< the owner builds the search itself after all
     std::optional<SearchIndex> searchResult;
 };

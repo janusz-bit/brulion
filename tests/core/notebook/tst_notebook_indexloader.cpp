@@ -68,9 +68,9 @@ void writeTrickyVault(const QString &root, int generated)
     for (int i = 0; i < generated; ++i) {
         const QByteArray n = QByteArray::number(i);
         writeFile(root, u"Strony/Strona %1.md"_s.arg(i),
-                  "- Strona " + n + " [[Strona " + QByteArray::number((i * 7) % generated) + "]] #t" +
-                          QByteArray::number(i % 5) + "\n  - dziecko ((id1))\n- [ ] zadanie " + n + " 📅 2026-11-0" +
-                          QByteArray::number(1 + i % 9) + "\n");
+                  "- Strona " + n + " [[Strona " + QByteArray::number((i * 7) % generated) + "]] #t"
+                          + QByteArray::number(i % 5) + "\n  - dziecko ((id1))\n- [ ] zadanie " + n + " 📅 2026-11-0"
+                          + QByteArray::number(1 + i % 9) + "\n");
     }
 }
 
@@ -470,7 +470,8 @@ private Q_SLOTS:
         QThreadPool qt;
         qt.setMaxThreadCount(3);
         {
-            IndexLoader loader(vault, index, WorkerPool{2, [&qt](std::function<void()> j) { qt.start(std::move(j)); }}, {});
+            IndexLoader loader(vault, index, WorkerPool{2, [&qt](std::function<void()> j) { qt.start(std::move(j)); }},
+                               {});
             loader.start(vault.files());
             loader.finish();
         }

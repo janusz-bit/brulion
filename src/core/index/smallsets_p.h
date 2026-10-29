@@ -360,8 +360,8 @@ private:
         m_big = {};
     }
 
-    QList<Item> m_small;          ///< sorted by path while m_big is empty
-    QHash<VaultPath, int> m_big;  ///< every path once there were more than SmallLimit
+    QList<Item> m_small;         ///< sorted by path while m_big is empty
+    QHash<VaultPath, int> m_big; ///< every path once there were more than SmallLimit
 };
 
 /// Add `value` to the set stored under `key`.

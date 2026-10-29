@@ -81,8 +81,7 @@ const QList<std::tuple<VaultPath, QString, QString>> &corpusDumps()
 
 /// The notes of `reader` (those whose record overlaps [from, to), all by default) decoded for
 /// their text: -1 when one decodes to something else than its parse, else how many decoded.
-int checkDecodedNotes(const indexcache::Reader &reader, qint64 from = 0,
-                      qint64 to = std::numeric_limits<qint64>::max())
+int checkDecodedNotes(const indexcache::Reader &reader, qint64 from = 0, qint64 to = std::numeric_limits<qint64>::max())
 {
     int decoded = 0;
     for (const auto &[path, content, dump] : corpusDumps()) {
@@ -121,8 +120,7 @@ private Q_SLOTS:
         const ParsedNote parsed = markdown::parseNote(path, content);
         const std::optional<QByteArray> body = indexcache::detail::encodeNote(parsed, content);
         QVERIFY(body.has_value());
-        const std::optional<ParsedNote> decoded =
-                indexcache::detail::decodeNote(*body, path, content, VaultConfig());
+        const std::optional<ParsedNote> decoded = indexcache::detail::decodeNote(*body, path, content, VaultConfig());
         QVERIFY(decoded.has_value());
         QCOMPARE(dumpNote(*decoded), dumpNote(parsed));
         // Shared as parseNote() shares them: reminder texts with their block's, slices with the note.
@@ -173,7 +171,8 @@ private Q_SLOTS:
         adopted.setSearchBuiltElsewhere(true);
         adopted.adoptSearch(decoder.take());
         QCOMPARE(adopted.pendingSearchDocuments(), 0);
-        for (const QString &q : {u"zolw"_s, u"żółw"_s, u"spotkanie"_s, u"zadanie"_s, u"notatka 12"_s, u"lodz"_s, u"slowo"_s})
+        for (const QString &q :
+             {u"zolw"_s, u"żółw"_s, u"spotkanie"_s, u"zadanie"_s, u"notatka 12"_s, u"lodz"_s, u"slowo"_s})
             QCOMPARE(describeSearch(adopted.search(q)), describeSearch(index->search(q)));
     }
 

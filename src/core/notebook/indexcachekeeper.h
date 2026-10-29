@@ -24,7 +24,7 @@ public:
         int quietMs = 60000;         ///< after the last change of the index
         qsizetype minNotes = 200;    ///< no cache for smaller notebooks (the guide, samples)
         qint64 maxBytes = 256LL << 20;
-        int sliceMs = 8;             ///< encoding time per event-loop turn
+        int sliceMs = 8; ///< encoding time per event-loop turn
     };
 
     /// `path`: the cache file (<device state folder>/index-cache.bin). The vault and the index

@@ -67,10 +67,8 @@ inline QString variant(const QVariant &v, int depth = 0)
     const int type = v.typeId();
     QString out = QString::number(type) + u':';
     switch (type) {
-    case QMetaType::UnknownType:
-        return out;
-    case QMetaType::QStringList:
-        return out + list(v.toStringList());
+    case QMetaType::UnknownType: return out;
+    case QMetaType::QStringList: return out + list(v.toStringList());
     case QMetaType::QVariantList: {
         QStringList parts;
         for (const QVariant &e : v.toList())
@@ -84,12 +82,9 @@ inline QString variant(const QVariant &v, int depth = 0)
             parts.append(str(it.key()) + u'=' + variant(it.value(), depth + 1));
         return out + u'{' + parts.join(u',') + u'}';
     }
-    case QMetaType::Double:
-        return out + QString::number(v.toDouble(), 'g', 17);
-    case QMetaType::QString:
-        return out + str(v.toString());
-    default:
-        return out + str(v.toString());
+    case QMetaType::Double: return out + QString::number(v.toDouble(), 'g', 17);
+    case QMetaType::QString: return out + str(v.toString());
+    default: return out + str(v.toString());
     }
 }
 
@@ -124,29 +119,29 @@ inline QString optDate(const std::optional<QDate> &d)
 inline QString task(const Task &t)
 {
     return QStringLiteral("task{%1 %2 %3 L%4 due=%5 sch=%6 start=%7 cr=%8 done=%9 canc=%10 rec=%11 prio=%12}")
-            .arg(int(t.status))
-            .arg(str(t.marker), str(t.text))
-            .arg(t.line)
-            .arg(spec(t.due), spec(t.scheduled), spec(t.start), optDate(t.created), optDate(t.doneDate),
-                 optDate(t.cancelledDate), str(t.recurrence))
-            .arg(int(t.priority));
+                                  .arg(int(t.status))
+                                  .arg(str(t.marker), str(t.text))
+                                  .arg(t.line)
+                                  .arg(spec(t.due), spec(t.scheduled), spec(t.start), optDate(t.created),
+                                       optDate(t.doneDate), optDate(t.cancelledDate), str(t.recurrence))
+                                  .arg(int(t.priority));
 }
 
 inline QString reminder(const Reminder &r)
 {
-    return QStringLiteral("rem{%1 alarm=%2 rec=%3 %4 L%5}")
-            .arg(spec(r.at), r.alarm ? QStringLiteral("1") : QStringLiteral("0"), str(r.recurrence), str(r.text))
-            .arg(r.line);
+    return QStringLiteral("rem{%1 alarm=%2 rec=%3 %4 L%5}") .arg(
+            spec(r.at),
+            r.alarm ? QStringLiteral("1") : QStringLiteral("0"), str(r.recurrence), str(r.text)).arg(r.line);
 }
 
 inline QString link(const Link &l)
 {
     return QStringLiteral("link{%1 %2 %3 %4 %5 L%6 %7-%8}")
-            .arg(int(l.kind))
-            .arg(str(l.target), str(l.display), str(l.heading), str(l.blockId))
-            .arg(l.line)
-            .arg(l.from)
-            .arg(l.to);
+                                  .arg(int(l.kind))
+                                  .arg(str(l.target), str(l.display), str(l.heading), str(l.blockId))
+                                  .arg(l.line)
+                                  .arg(l.from)
+                                  .arg(l.to);
 }
 
 } // namespace dump_detail
@@ -156,29 +151,32 @@ inline QString dumpNote(const ParsedNote &note)
 {
     using namespace dump_detail;
     QStringList out;
-    out << QStringLiteral("path ") + str(note.path) << QStringLiteral("title ") + str(note.title)
-        << QStringLiteral("frontmatter ") + variant(QVariant(note.frontmatter)) << QStringLiteral("properties ") + properties(note.properties)
-        << QStringLiteral("aliases ") + list(note.aliases) << QStringLiteral("tags ") + list(note.tags)
-        << QStringLiteral("journal ") + optDate(note.journalDate);
+    out << QStringLiteral("path ") + str(note.path) << QStringLiteral("title ") + str(note.title) << QStringLiteral("frontmatter ") + variant(QVariant(note.frontmatter))
+            << QStringLiteral("properties ") + properties(note.properties) << QStringLiteral("aliases ") + list(note.aliases)
+                       << QStringLiteral("tags ") + list(note.tags)
+                                         << QStringLiteral("journal ") + optDate(note.journalDate);
     for (qsizetype i = 0; i < note.blocks.size(); ++i) {
         const Block &b = note.blocks[i];
         QString line = QStringLiteral("block %1 id=%2 kind=%3 L%4-%5 own=%6 depth=%7 h=%8 lang=%9")
-                               .arg(i)
-                               .arg(str(b.id))
-                               .arg(int(b.kind))
-                               .arg(b.line)
-                               .arg(b.endLine)
-                               .arg(b.ownEndLine)
-                               .arg(b.depth)
-                               .arg(b.headingLevel)
-                               .arg(str(b.lang));
+                                              .arg(i)
+                                              .arg(str(b.id))
+                                              .arg(int(b.kind))
+                                              .arg(b.line)
+                                              .arg(b.endLine)
+                                              .arg(b.ownEndLine)
+                                              .arg(b.depth)
+                                              .arg(b.headingLevel)
+                                              .arg(str(b.lang));
         const QStringView raw(b.raw);
-        line += QStringLiteral(" raw=") + str(raw) + QStringLiteral(" text=") + str(b.text) + QStringLiteral(" props=") + properties(b.properties);
+        line += QStringLiteral(" raw=") + str(raw)
+                               + QStringLiteral(" text=") + str(b.text)
+                                                + QStringLiteral(" props=") + properties(b.properties);
         line += QStringLiteral(" task=") + (b.task ? task(*b.task) : QStringLiteral("-"));
         for (const Reminder &r : b.reminders)
             line += u' ' + reminder(r);
-        line += QStringLiteral(" tags=") + list(b.tags) + QStringLiteral(" children=") + ints(b.children)
-                + QStringLiteral(" parent=") + QString::number(b.parent);
+        line += QStringLiteral(" tags=") + list(b.tags)
+                               + QStringLiteral(" children=") + ints(b.children)
+                                                + QStringLiteral(" parent=") + QString::number(b.parent);
         out << line;
     }
     for (const Link &l : note.links)

@@ -53,8 +53,8 @@ void writeVault(const QString &root, int notes)
     for (int i = 0; i < notes; ++i) {
         const QByteArray n = QByteArray::number(i);
         writeFile(root, u"Strony/Strona %1.md"_s.arg(i),
-                  "- Strona " + n + " o żółwiu [[Strona " + QByteArray::number((i * 3) % notes) + "]] #t" +
-                          QByteArray::number(i % 4) + "\n  - ((id1)) spotkanie " + n + "\n");
+                  "- Strona " + n + " o żółwiu [[Strona " + QByteArray::number((i * 3) % notes) + "]] #t"
+                          + QByteArray::number(i % 4) + "\n  - ((id1)) spotkanie " + n + "\n");
     }
 }
 
@@ -255,8 +255,9 @@ private Q_SLOTS:
         policy.quietMs = 50;
         policy.minNotes = 10;
         pool.setMaxThreadCount(2);
-        IndexCacheKeeper keeper(*l.vault, *l.index, WorkerPool{1, [&pool](std::function<void()> j) { pool.start(std::move(j)); }},
-                                cache, policy);
+        IndexCacheKeeper keeper(*l.vault, *l.index,
+                                WorkerPool{1, [&pool](std::function<void()> j) { pool.start(std::move(j)); }}, cache,
+                                policy);
         QSignalSpy saved(&keeper, &IndexCacheKeeper::saved);
         keeper.loaded(l.stats);
         QVERIFY(keeper.isDirty());
