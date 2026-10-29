@@ -54,6 +54,13 @@ std::optional<PropertyType> fixedPropertyType(QStringView key);
 PropertyType inferPropertyType(const QString &key, const QVariant &value, PropertySource source,
                                PropertyType empty = PropertyType::Text);
 
+/// The values a page property holds, as text, for statistics and suggestions: a scalar's text
+/// (numbers in their shortest form, booleans "true" / "false"), list items one by one (an
+/// unquoted YAML [[Page]] as "[[Page]]"), the names of tags and aliases; nothing for an empty or
+/// unsupported value. `value` as parseNote() keeps it: YAML from ParsedNote::frontmatter, Logseq
+/// from ParsedNote::properties (a QString, or the names of a list).
+QStringList propertyValueTexts(const QString &key, const QVariant &value, PropertySource source);
+
 struct PageProperty {
     QString key;     ///< as written (YAML key unquoted)
     PropertySource source = PropertySource::Yaml;

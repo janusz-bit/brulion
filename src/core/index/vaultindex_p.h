@@ -116,6 +116,9 @@ struct IndexCaches {
     std::optional<QList<MissingPage>> missing;
     std::optional<index_detail::TagTargets> tagTargets; ///< one resolve per tag in use, lazily
     std::optional<QList<VaultPath>> queryNotes;         ///< notes with a ```query block, by path
+    std::optional<QList<PropertyKeyInfo>> propertyKeys; ///< VaultIndex::propertyKeys()
+    /// Folded key -> all values of the page property, sorted (VaultIndex::propertyValues()).
+    QHash<QString, QList<PropertyValueCount>> propertyValues;
 };
 
 struct VaultIndex::Private {

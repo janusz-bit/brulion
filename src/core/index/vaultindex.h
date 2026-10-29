@@ -142,6 +142,21 @@ struct TagSuggestion {
     VaultPath path;    ///< the page the tag names ("" when none)
 };
 
+/// A page-property key in use (VaultIndex::propertyKeys()).
+struct PropertyKeyInfo {
+    QString key;   ///< the spelling most notes use (YAML keys as written; Logseq keys lower-case)
+    int count = 0; ///< notes with the key as a page property
+    /// markdown::propertyTypeName() of the most common type of its non-empty values ("text",
+    /// "number", "date", "list", …); "" when only empty values were seen.
+    QString type;
+};
+
+/// A value of a page property in use (VaultIndex::propertyValues()).
+struct PropertyValueCount {
+    QString value; ///< the spelling most notes use
+    int count = 0; ///< notes holding the value
+};
+
 /// A link target that does not exist (yet).
 struct MissingPage {
     QString name;             ///< target as first written (fragment stripped, NFC)
@@ -487,6 +502,16 @@ public:
     /// whose tag is in use is offered as that tag), then the tags that contain `prefix`. One entry
     /// per tag key (case-insensitive, NFC, not diacritic-insensitive: #lodz is not Łódź).
     QList<TagSuggestion> suggestTags(const QString &prefix, int limit = 20) const;
+    /// The page-property keys of all notes (YAML frontmatter and leading `key:: value` lines; the
+    /// note mode key `brulion` and block properties left out), keys equal case-insensitively
+    /// (NFC) merged, most used first, then by key. Cached until the next change.
+    QList<PropertyKeyInfo> propertyKeys() const;
+    /// The values written for page property `key` (case-insensitive): scalars as text, list items
+    /// one by one (markdown::propertyValueTexts()), one entry per value (case-insensitive, NFC; the
+    /// most used spelling), most used first (ties alphabetically); with `prefix` those whose
+    /// folded text starts with it, then those containing it (diacritics ignored: "zol" finds
+    /// "Żółw"). At most `limit`. Cached per key until the next change.
+    QList<PropertyValueCount> propertyValues(const QString &key, const QString &prefix = {}, int limit = 20) const;
 
     // ---- graph ----------------------------------------------------------------------------------
 

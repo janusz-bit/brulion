@@ -1349,6 +1349,34 @@ PropertyType inferPropertyType(const QString &key, const QVariant &value, Proper
     return PropertyType::Text;
 }
 
+QStringList propertyValueTexts(const QString &key, const QVariant &value, PropertySource source)
+{
+    const PropertyType type = inferPropertyType(key, value, source, PropertyType::Text);
+    if (isEmptyVariant(value) || type == PropertyType::Unsupported)
+        return {};
+    if (source == PropertySource::Logseq) {
+        if (isListVariant(value) || type == PropertyType::Tags || type == PropertyType::Aliases) {
+            QStringList out = isListVariant(value) ? value.toStringList()
+                                                   : parsePropertyValue(key.toLower(), value.toString()).toStringList();
+            out.removeAll(QString());
+            return out;
+        }
+        const QString raw = value.toString().trimmed();
+        return raw.isEmpty() ? QStringList() : QStringList{raw};
+    }
+    switch (type) {
+    case PropertyType::List: return yamlListItems(value);
+    case PropertyType::Tags:
+    case PropertyType::Aliases: return yamlNames(value, type);
+    case PropertyType::Number: return {numberText(value)};
+    case PropertyType::Checkbox: return {value.toBool() ? u"true"_s : u"false"_s};
+    default: {
+        const QString s = value.toString().trimmed();
+        return s.isEmpty() ? QStringList() : QStringList{s};
+    }
+    }
+}
+
 // ---- reading ------------------------------------------------------------------------------------
 
 PropertySource PageProperties::addTarget() const

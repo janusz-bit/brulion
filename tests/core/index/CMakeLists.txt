@@ -1,6 +1,6 @@
 # Tests of the index module (brulion_core_index), one executable per area. fixture.h holds the
 # shared sample vault.
-foreach(_t internals resolve relocate vault search query consistency perf)
+foreach(_t internals resolve relocate vault search query consistency properties perf)
     brulion_add_test(tst_index_${_t} SOURCES tst_index_${_t}.cpp fixture.h LIBS brulion_core_index)
 endforeach()
 # The index cache's codec: round trips of the frozen corpus and of the guide's live notes.
