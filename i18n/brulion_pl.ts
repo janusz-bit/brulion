@@ -2889,27 +2889,27 @@
 <context>
     <name>DrawingSelectionBar</name>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="87"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="92"/>
         <source>Colour</source>
         <translation>Kolor</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="97"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="102"/>
         <source>Duplicate</source>
         <translation>Duplikuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="106"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="111"/>
         <source>Bring to front</source>
         <translation>Na wierzch</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="115"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="120"/>
         <source>Send to back</source>
         <translation>Na spód</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="124"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="129"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
@@ -2917,12 +2917,12 @@
 <context>
     <name>DrawingTextEditor</name>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingTextEditor.qml" line="116"/>
+        <location filename="../src/app/qml/drawing/DrawingTextEditor.qml" line="128"/>
         <source>Text</source>
         <translation>Tekst</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingTextEditor.qml" line="136"/>
+        <location filename="../src/app/qml/drawing/DrawingTextEditor.qml" line="148"/>
         <source>Done</source>
         <translation>Gotowe</translation>
     </message>
@@ -8429,7 +8429,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3241"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3327"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -8565,7 +8565,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="28"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2969"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3055"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -9106,13 +9106,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4304"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4390"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="114"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4294"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4380"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
