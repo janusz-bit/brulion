@@ -18,7 +18,9 @@
 #include <optional>
 
 // The codec writes every field of these types: a new field must be added to encodeNote() /
-// decodeNote(), to tests/common/notedump.h and FormatVersion bumped.
+// decodeNote(), to tests/common/notedump.h and FormatVersion bumped. (Checked with the 64-bit
+// Itanium layout of GCC and Clang — Linux, Android, macOS; MSVC lays some types out otherwise.)
+#if !defined(_MSC_VER)
 static_assert(sizeof(void *) != 8 || sizeof(brulion::Block) == 232,
               "a field was added to Block: update the index cache codec, tests/common/notedump.h and bump "
               "indexcache::FormatVersion");
@@ -34,6 +36,7 @@ static_assert(sizeof(void *) != 8 || sizeof(brulion::Reminder) == 80,
 static_assert(sizeof(void *) != 8 || sizeof(brulion::Link) == 120,
               "a field was added to Link: update the index cache codec, tests/common/notedump.h and bump "
               "indexcache::FormatVersion");
+#endif
 
 namespace brulion {
 
