@@ -9,7 +9,8 @@
 // Obsidian Excalidraw plugin's files (the Markdown around the scene kept), an identical or older
 // copy, a drawing Brulion does not edit (keep one), a decision made on a version that changed, a
 // plugin file whose notes around the drawing differ (never "the same" or "older"; merged, its copy
-// stays), a drawing too large for the vault's memory still kept in the history.
+// stays), a drawing too large for the vault's memory still kept in the history; with
+// tests/app/io/syncthing-conflict.sh, the conflict copies real Syncthing instances left.
 #include "conflictresolver.h"
 #include "workspace.h"
 #include "workspacesync.h"
@@ -21,6 +22,7 @@
 #include "vault/vault.h"
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -731,6 +733,58 @@ private Q_SLOTS:
         const QByteArray kept = ws->vault()->history()->readBytes(versions.first().toMap().value(u"id"_s).toString(), &ok);
         QVERIFY(ok);
         QVERIFY(kept == original);
+    }
+
+    void realSyncthingConflicts()
+    {
+        // tests/app/io/syncthing-conflict.sh: a folder where two real Syncthing instances left their
+        // own conflict copies of a Brulion drawing and of an Obsidian one, both changed on both
+        // devices. Each is recognised, merged ("Scal rysunki": the elements of both versions) and
+        // its copy goes to the trash.
+        const QString dir = qEnvironmentVariable("BRULION_SYNCTHING_CONFLICT_DIR");
+        if (dir.isEmpty())
+            QSKIP("run by tests/app/io/syncthing-conflict.sh (two Syncthing instances)");
+        QHash<QString, QByteArray> files;
+        QDirIterator it(dir, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            const QString path = QDir(dir).relativeFilePath(it.next());
+            if (path.startsWith(u".st"_s))
+                continue; // (.stfolder, .stversions)
+            QFile f(it.filePath());
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            files.insert(path, f.readAll());
+        }
+        qInfo().noquote() << "files:" << QStringList(files.keyBegin(), files.keyEnd()).join(u", "_s);
+        auto ws = open(files);
+        QTRY_COMPARE(ws->sync()->conflictCount(), 2);
+        const QVariantList conflicts = ws->sync()->conflicts();
+        for (const QVariant &v : conflicts) {
+            const QVariantMap c = v.toMap();
+            const QString copy = c.value(u"copy"_s).toString();
+            const QString original = c.value(u"original"_s).toString();
+            QVERIFY2(copy.contains(u".sync-conflict-"_s), qPrintable(copy));
+            QCOMPARE(c.value(u"source"_s).toString(), u"syncthing"_s);
+            QVERIFY(c.value(u"drawing"_s).toBool());
+            ConflictResolver r;
+            r.setWorkspace(ws.get());
+            r.setCopy(copy);
+            QVERIFY(r.isDrawing());
+            QVERIFY(!r.identical());
+            QVERIFY(!r.copyIsOlder());
+            QVERIFY(!r.notesDiffer());
+            QVERIFY(r.canMergeDrawings());
+            QStringList both = idsOf(files.value(original)) + idsOf(files.value(copy));
+            both.removeDuplicates();
+            both.sort();
+            QVERIFY(r.mergeDrawings());
+            QStringList merged = idsOf(ws->vault()->readBinary(original));
+            QCOMPARE(merged.size(), both.size());
+            merged.sort();
+            QCOMPARE(merged, both);
+            QVERIFY(!ws->exists(copy));
+            qInfo().noquote() << "merged" << original << "with" << copy << "->" << merged.join(u' ');
+        }
+        QCOMPARE(ws->sync()->conflictCount(), 0);
     }
 
     void listMarksDrawings()
