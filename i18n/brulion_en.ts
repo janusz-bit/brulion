@@ -577,7 +577,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_trilium.cpp" line="1580"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1759"/>
         <source>%n file(s) of the selection are not part of the Trilium export and were not imported. Import each Trilium export on its own.</source>
         <translation>
             <numerusform>%n file of the selection is not part of the Trilium export and was not imported. Import each Trilium export on its own.</numerusform>
@@ -585,7 +585,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_trilium.cpp" line="1584"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1763"/>
         <source>%n protected note(s) could not be imported: Trilium exports their content only while a protected session is open.</source>
         <translation>
             <numerusform>%n protected note could not be imported: Trilium exports its content only while a protected session is open.</numerusform>
@@ -593,7 +593,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_trilium.cpp" line="1588"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1767"/>
         <source>%n Trilium note(s) of a kind Brulion does not have (saved searches, note maps, rendered notes, launchers) were skipped: %1</source>
         <translation>
             <numerusform>%n Trilium note of a kind Brulion does not have (saved searches, note maps, rendered notes, launchers) was skipped: %1</numerusform>
@@ -902,7 +902,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3155"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3353"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1307,7 +1307,7 @@
 <context>
     <name>brulion::shell::AppController</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="362"/>
+        <location filename="../src/app/shell/appshare.cpp" line="401"/>
         <source>Saved %n page(s); not saved, a page with this name exists: %1</source>
         <translation>
             <numerusform>Saved %n page; not saved, a page with this name exists: %1</numerusform>
@@ -1315,7 +1315,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="366"/>
+        <location filename="../src/app/shell/appshare.cpp" line="405"/>
         <source>Saved %n page(s)</source>
         <translation>
             <numerusform>Saved %n page</numerusform>

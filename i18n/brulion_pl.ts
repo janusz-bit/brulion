@@ -252,7 +252,7 @@
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="105"/>
         <location filename="../src/app/qml/shell/AppShell.qml" line="174"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2219"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2221"/>
         <source>All pages</source>
         <translation>Wszystkie strony</translation>
     </message>
@@ -1192,14 +1192,15 @@
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="519"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2287"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2289"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2308"/>
         <source>Heading “%1” is not on this page</source>
         <translation>Nagłówka „%1” nie ma na tej stronie</translation>
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="541"/>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="2614"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2340"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2342"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
@@ -2566,14 +2567,14 @@
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="120"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="61"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2518"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2520"/>
         <source>Fit to view</source>
         <translation>Dopasuj do widoku</translation>
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="120"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="62"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2510"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2512"/>
         <source>Zoom to actual size</source>
         <translation>Pokaż naturalny rozmiar</translation>
     </message>
@@ -2612,7 +2613,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="373"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2660"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2662"/>
         <source>The start of the file: %1 of %2.</source>
         <translation>Początek pliku: %1 z %2.</translation>
     </message>
@@ -4761,7 +4762,7 @@
         <location filename="../src/core/io/import_evernote.cpp" line="314"/>
         <location filename="../src/core/io/import_joplin.cpp" line="209"/>
         <location filename="../src/core/io/import_roam.cpp" line="216"/>
-        <location filename="../src/core/io/import_trilium.cpp" line="920"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="932"/>
         <source>Untitled</source>
         <translation>Bez tytułu</translation>
     </message>
@@ -4774,7 +4775,7 @@
         <location filename="../src/core/io/import_evernote.cpp" line="350"/>
         <location filename="../src/core/io/import_keep.cpp" line="163"/>
         <location filename="../src/core/io/import_joplin.cpp" line="318"/>
-        <location filename="../src/core/io/import_trilium.cpp" line="1596"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1775"/>
         <source>Some attachments referenced by notes are missing in the export.</source>
         <translation>W eksporcie brakuje niektórych załączników, do których odwołują się notatki.</translation>
     </message>
@@ -4945,48 +4946,53 @@
         <translation>Zadania (CSV)</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="517"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="529"/>
         <source>The Trilium export is too large to be read.</source>
         <translation>Eksport z Trilium jest za duży, by go wczytać.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="526"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="538"/>
         <source>the list of notes is missing</source>
         <translation>brakuje listy notatek</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="527"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="539"/>
         <source>The Trilium export cannot be read: “!!!meta.json” is damaged (%1). Nothing was imported.</source>
         <translation>Nie można odczytać eksportu z Trilium: plik „!!!meta.json” jest uszkodzony (%1). Niczego nie zaimportowano.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="546"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="558"/>
         <source>This is Trilium&apos;s export for web publishing. Export the notes again with the format “HTML” or “Markdown” and import that ZIP file.</source>
         <translation>To eksport Trilium do publikacji w sieci. Wyeksportuj notatki jeszcze raz w formacie „HTML” albo „Markdown” i zaimportuj ten plik ZIP.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="552"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="564"/>
         <source>The Trilium export has a format version Brulion does not know (%1); the notes were imported as well as possible.</source>
         <translation>Eksport z Trilium ma wersję formatu, której Brulion nie zna (%1); notatki zaimportowano najlepiej, jak się dało.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="570"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="582"/>
         <source>The Trilium export is too large; only a part of it was imported.</source>
         <translation>Eksport z Trilium jest za duży; zaimportowano tylko jego część.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1237"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1183"/>
+        <source>The pictures of the drawing “%1” are too large to keep inside it; they were saved next to it.</source>
+        <translation>Obrazy z rysunku „%1” są za duże, żeby zapisać je w rysunku — zostały obok jako pliki.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="1411"/>
         <source>“%1” is too large to convert; it was saved as an attachment.</source>
         <translation>Notatka „%1” jest za duża do przekształcenia; zapisano ją jako załącznik.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1563"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1742"/>
         <source>“%1”</source>
         <comment>a quoted note title in a list</comment>
         <translation>„%1”</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_trilium.cpp" line="1580"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1759"/>
         <source>%n file(s) of the selection are not part of the Trilium export and were not imported. Import each Trilium export on its own.</source>
         <translation>
             <numerusform>%n z wybranych plików nie należy do eksportu z Trilium i nie został zaimportowany. Importuj każdy eksport z Trilium osobno.</numerusform>
@@ -4995,7 +5001,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_trilium.cpp" line="1584"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1763"/>
         <source>%n protected note(s) could not be imported: Trilium exports their content only while a protected session is open.</source>
         <translation>
             <numerusform>%n chroniona notatka nie została zaimportowana: Trilium eksportuje treść chronionych notatek tylko przy otwartej sesji chronionej.</numerusform>
@@ -5004,7 +5010,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_trilium.cpp" line="1588"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1767"/>
         <source>%n Trilium note(s) of a kind Brulion does not have (saved searches, note maps, rendered notes, launchers) were skipped: %1</source>
         <translation>
             <numerusform>Pominięto %n notatkę Trilium, której rodzaju Brulion nie ma (zapisane wyszukiwania, mapy notatek, notatki renderowane, skróty): %1</numerusform>
@@ -5013,22 +5019,22 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1593"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1772"/>
         <source>Some links point to notes that are not in the export (another part of the tree, an excluded or a protected note); only their text was kept.</source>
         <translation>Niektóre linki prowadzą do notatek spoza eksportu (z innej części drzewa, wykluczonych albo chronionych); zachowano tylko ich tekst.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1598"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1777"/>
         <source>Some notes of the Trilium export have no file in it; they were imported without content.</source>
         <translation>Niektóre notatki z eksportu Trilium nie mają w nim swojego pliku; zaimportowano je bez treści.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1601"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1780"/>
         <source>The note tree is nested too deeply for file paths; the deepest notes were put into the folder of an ancestor.</source>
         <translation>Drzewo notatek jest zbyt głębokie dla ścieżek plików; najgłębiej położone notatki trafiły do folderu jednego z przodków.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1649"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1828"/>
         <source>This is no Trilium export: “!!!meta.json” is missing. Export the notes in Trilium with the format “HTML” or “Markdown” and choose the ZIP file.</source>
         <translation>To nie jest eksport z Trilium: brakuje pliku „!!!meta.json”. Wyeksportuj notatki w Trilium w formacie „HTML” albo „Markdown” i wybierz plik ZIP.</translation>
     </message>
@@ -8487,7 +8493,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="125"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1802"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1804"/>
         <source>Move here</source>
         <translation>Przenieś tutaj</translation>
     </message>
@@ -8684,7 +8690,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellNewPageDialog.qml" line="38"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1844"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1846"/>
         <source>Create</source>
         <translation>Utwórz</translation>
     </message>
@@ -8863,7 +8869,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3155"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3353"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -8882,7 +8888,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3285"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3287"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -9075,7 +9081,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="648"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1425"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1427"/>
         <source>Empty folder</source>
         <translation>Pusty folder</translation>
     </message>
@@ -9307,7 +9313,7 @@
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="161"/>
         <location filename="../src/app/io/ioselftest.cpp" line="371"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2536"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2538"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -9343,7 +9349,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="211"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2545"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2547"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
@@ -9359,7 +9365,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="222"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2544"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2546"/>
         <source>Toggle note mode</source>
         <translation>Przełącz tryb notatki</translation>
     </message>
@@ -9439,7 +9445,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="114"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4773"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4772"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -13961,7 +13967,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="74"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4599"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4598"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
@@ -15133,168 +15139,168 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::AppController</name>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="276"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="765"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="275"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="764"/>
         <source>The notebook folder %1 is not available.</source>
         <translation>Folder notatnika %1 jest niedostępny.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="453"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="452"/>
         <source>The command line asked to open a page of another notebook (%1).</source>
         <translation>Wiersz poleceń chciał otworzyć stronę innego notatnika (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="501"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="509"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="500"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="508"/>
         <source>The note of this reminder no longer exists.</source>
         <translation>Notatka tego przypomnienia już nie istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="649"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="648"/>
         <source>Could not change the start at sign-in.</source>
         <translation>Nie udało się zmienić uruchamiania po zalogowaniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="731"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="730"/>
         <source>Choose a folder for the notebook.</source>
         <translation>Wybierz folder na notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="913"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="912"/>
         <source>Could not open the notebook %1: %2</source>
         <translation>Nie udało się otworzyć notatnika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="929"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="928"/>
         <source>Could not update the documentation: %1</source>
         <translation>Nie udało się zaktualizować dokumentacji: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="933"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="932"/>
         <source>Could not write all sample notes: %1</source>
         <translation>Nie udało się zapisać wszystkich przykładowych notatek: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1091"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1090"/>
         <source>Brulion</source>
         <translation>Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1092"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1091"/>
         <source>Reminders work. This is how they will look.</source>
         <translation>Przypomnienia działają. Tak będą wyglądać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1110"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1109"/>
         <source>Could not schedule the notification: %1</source>
         <translation>Nie udało się zaplanować powiadomienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1112"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1111"/>
         <source>A test notification will appear in a few seconds.</source>
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1115"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1114"/>
         <source>The browser does not allow notifications for Brulion.</source>
         <translation>Przeglądarka nie zezwala Brulionowi na powiadomienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1122"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1121"/>
         <source>No system tray on this desktop: notifications cannot be shown yet.</source>
         <translation>Na tym pulpicie nie ma zasobnika systemowego: powiadomień nie da się jeszcze pokazać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1142"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1141"/>
         <source>Quick capture writes into your own notebook. Open or create one first.</source>
         <translation>Szybka notatka trafia do Twojego własnego notatnika. Najpierw go otwórz albo utwórz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1278"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1277"/>
         <source>Brulion is still running</source>
         <translation>Brulion nadal działa</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1279"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1278"/>
         <source>Reminders keep working. To quit, use “Quit” in the tray icon&apos;s menu.</source>
         <translation>Przypomnienia nadal działają. Aby zakończyć, wybierz „Zakończ” w menu ikony w zasobniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="95"/>
-        <location filename="../src/app/shell/appshare.cpp" line="268"/>
-        <location filename="../src/app/shell/appshare.cpp" line="298"/>
-        <location filename="../src/app/shell/appshare.cpp" line="312"/>
-        <location filename="../src/app/shell/appshare.cpp" line="326"/>
-        <location filename="../src/app/shell/appshare.cpp" line="348"/>
+        <location filename="../src/app/shell/appshare.cpp" line="129"/>
+        <location filename="../src/app/shell/appshare.cpp" line="307"/>
+        <location filename="../src/app/shell/appshare.cpp" line="337"/>
+        <location filename="../src/app/shell/appshare.cpp" line="351"/>
+        <location filename="../src/app/shell/appshare.cpp" line="365"/>
+        <location filename="../src/app/shell/appshare.cpp" line="387"/>
         <source>Nothing to save.</source>
         <translation>Nie ma nic do zapisania.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="157"/>
-        <location filename="../src/app/shell/appshare.cpp" line="253"/>
+        <location filename="../src/app/shell/appshare.cpp" line="198"/>
+        <location filename="../src/app/shell/appshare.cpp" line="292"/>
         <source>Shared note</source>
         <translation>Udostępniona notatka</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="172"/>
-        <location filename="../src/app/shell/appshare.cpp" line="180"/>
-        <location filename="../src/app/shell/appshare.cpp" line="272"/>
+        <location filename="../src/app/shell/appshare.cpp" line="213"/>
+        <location filename="../src/app/shell/appshare.cpp" line="221"/>
+        <location filename="../src/app/shell/appshare.cpp" line="311"/>
         <source>Open or create a notebook first to save what you shared.</source>
         <translation>Najpierw otwórz albo utwórz notatnik, żeby zapisać to, co udostępniasz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="230"/>
+        <location filename="../src/app/shell/appshare.cpp" line="269"/>
         <source>Too large to save (over %1 MB)</source>
         <translation>Za duży do zapisania (ponad %1 MB)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="232"/>
+        <location filename="../src/app/shell/appshare.cpp" line="271"/>
         <source>Not a text file</source>
         <translation>To nie jest plik tekstowy</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="234"/>
+        <location filename="../src/app/shell/appshare.cpp" line="273"/>
         <source>Too many files at once (at most %1)</source>
         <translation>Za dużo plików naraz (najwyżej %1)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="236"/>
+        <location filename="../src/app/shell/appshare.cpp" line="275"/>
         <source>Could not be read</source>
         <translation>Nie udało się odczytać</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="242"/>
+        <location filename="../src/app/shell/appshare.cpp" line="281"/>
         <source>(no name)</source>
         <translation>(bez nazwy)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="280"/>
+        <location filename="../src/app/shell/appshare.cpp" line="319"/>
         <source>None of the shared files can be saved.</source>
         <translation>Żadnego z udostępnionych plików nie da się zapisać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="304"/>
+        <location filename="../src/app/shell/appshare.cpp" line="343"/>
         <source>Could not save to today&apos;s journal.</source>
         <translation>Nie udało się zapisać w dzisiejszym dzienniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="308"/>
+        <location filename="../src/app/shell/appshare.cpp" line="347"/>
         <source>Saved in today&apos;s journal</source>
         <translation>Zapisano w dzisiejszym dzienniku</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="335"/>
-        <location filename="../src/app/shell/appshare.cpp" line="355"/>
+        <location filename="../src/app/shell/appshare.cpp" line="374"/>
+        <location filename="../src/app/shell/appshare.cpp" line="394"/>
         <source>A page with this name already exists: %1</source>
         <translation>Strona o tej nazwie już istnieje: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="347"/>
+        <location filename="../src/app/shell/appshare.cpp" line="386"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="362"/>
+        <location filename="../src/app/shell/appshare.cpp" line="401"/>
         <source>Saved %n page(s); not saved, a page with this name exists: %1</source>
         <translation>
             <numerusform>Zapisano %n stronę; pominięto, bo strona o tej nazwie już istnieje: %1</numerusform>
@@ -15303,7 +15309,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="366"/>
+        <location filename="../src/app/shell/appshare.cpp" line="405"/>
         <source>Saved %n page(s)</source>
         <translation>
             <numerusform>Zapisano %n stronę</numerusform>
@@ -16735,12 +16741,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/app/main.cpp" line="443"/>
+        <location filename="../src/app/main.cpp" line="450"/>
         <source>Saving to the browser&apos;s storage failed: %1</source>
         <translation>Nie udało się zapisać w pamięci przeglądarki: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="469"/>
+        <location filename="../src/app/main.cpp" line="476"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
     </message>
