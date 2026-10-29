@@ -37,6 +37,7 @@
 #include <qpa/qwindowsysteminterface.h>
 
 #include <memory>
+#include <tuple>
 
 using namespace Qt::StringLiterals;
 using brulion::drawingview::DrawingCanvas;
@@ -2355,6 +2356,86 @@ private Q_SLOTS:
         QVERIFY(previewMs < 15000 * BRULION_TEST_SLOWDOWN);
         // The squares beyond the lines' budget are filled: the fill shows.
         QVERIFY(pixelsLike(image, QRect(300, 200, 200, 200), QColor(u"#ffc9c9"_s), 10) > 1000);
+    }
+
+    void shapesSample()
+    {
+        // A diagram drawn with the editor's own tools as a user draws it: shapes, a line, an
+        // arrow, free text, labels in a rectangle and an ellipse, a pen stroke, a duplicate, a
+        // recoloured and a moved shape. `BRULION_DRAWING_SHAPES_SAMPLE=<file>` writes it there
+        // (tests/app/drawing/excalidraw-roundtrip.mjs takes it to excalidraw.com and back).
+        canvas->setZoom(1);
+        canvas->setCenterX(400); // (scene = item coordinates)
+        canvas->setCenterY(300);
+        QSignalSpy requests(canvas, &DrawingCanvas::textEditRequested);
+        const auto write = [&](QPoint at, const QString &text) {
+            canvas->setTool(u"text"_s);
+            QTest::mouseClick(window.get(), Qt::LeftButton, {}, at);
+            QVERIFY(requests.size() == 1);
+            canvas->commitText(requests.takeFirst().at(0).toMap(), text);
+        };
+        const QList<std::tuple<QString, QPoint, QPoint>> shapes{
+                {u"rectangle"_s, {60, 60}, {260, 160}}, {u"ellipse"_s, {320, 60}, {500, 170}},
+                {u"diamond"_s, {560, 50}, {700, 190}},  {u"line"_s, {60, 240}, {260, 300}},
+                {u"arrow"_s, {260, 110}, {320, 115}},   {u"arrow"_s, {320, 250}, {560, 330}}};
+        for (const auto &[tool, from, to] : shapes) {
+            canvas->setTool(tool);
+            mouseStroke(window.get(), from, to, 8);
+        }
+        write(QPoint(160, 110), u"Zażółć gęślą jaźń"_s);
+        write(QPoint(410, 115), u"Elipsa z dłuższym napisem"_s);
+        write(QPoint(60, 400), u"Notatka: ąćęłńóśźż 🙂\nDruga linia"_s);
+        canvas->setTool(u"pen"_s);
+        mouseStroke(window.get(), {60, 480}, {400, 520}, 12);
+        const auto idOf = [this](brulion::drawing::ElementType type) {
+            for (const auto &e : canvas->currentDrawing().strokes) {
+                if (e.type == type)
+                    return e.id;
+            }
+            return QString();
+        };
+        canvas->select({idOf(brulion::drawing::ElementType::Diamond)});
+        canvas->duplicateSelection();
+        canvas->select({idOf(brulion::drawing::ElementType::Ellipse)}); // (with its label)
+        canvas->recolorSelection(QColor(u"#2f6fdd"_s));
+        canvas->select({idOf(brulion::drawing::ElementType::Line)});
+        canvas->nudgeSelection(0, 20);
+        canvas->clearSelection();
+        const QByteArray svg = canvas->svg();
+        // 6 shapes, 2 labels, a text, a pen stroke, a copy.
+        QCOMPARE(canvas->strokeCount(), 11);
+        QCOMPARE(canvas->load(svg), QString());
+        QCOMPARE(canvas->strokeCount(), 11);
+        if (const QByteArray out = qgetenv("BRULION_DRAWING_SHAPES_SAMPLE"); !out.isEmpty()) {
+            QFile f(QString::fromLocal8Bit(out));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(svg);
+        }
+    }
+
+    void excalidrawsVersionIsEditable()
+    {
+        // `BRULION_DRAWING_CHECK=<file>`: a scene as excalidraw.com keeps it (exported by
+        // excalidraw-roundtrip.mjs) opens editable, and its file written again opens too.
+        const QByteArray in = qgetenv("BRULION_DRAWING_CHECK");
+        if (in.isEmpty())
+            QSKIP("BRULION_DRAWING_CHECK not set");
+        QFile f(QString::fromLocal8Bit(in));
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(canvas->load(f.readAll()), QString());
+        const int n = canvas->strokeCount();
+        QVERIFY(n > 0);
+        canvas->select({canvas->currentDrawing().strokes.first().id});
+        canvas->nudgeSelection(5, 5); // (an edit: the scene written from the model too)
+        const QByteArray again = canvas->svg();
+        QCOMPARE(canvas->load(again), QString());
+        QCOMPARE(canvas->strokeCount(), n);
+        if (const QByteArray out = qgetenv("BRULION_DRAWING_CHECK_OUT"); !out.isEmpty()) {
+            QFile o(QString::fromLocal8Bit(out));
+            QVERIFY(o.open(QIODevice::WriteOnly));
+            o.write(again);
+        }
+        qInfo("%d elements editable", n);
     }
 
     void manyShapesRenderQuickly()

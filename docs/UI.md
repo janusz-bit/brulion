@@ -1193,12 +1193,17 @@ the embed of a drawing whose file names another frame (excalidraw.com's margins)
 when loaded and while the app's theme switches;
 a rectangle dragged out (R / the shape button), selected with a tap, deleted from the selection's
 bar and undone, Ctrl+A and Escape, text written with the text tool and its keys given back (the
-desktop run); a version written behind the vault's back merged by the save; one with a frame not
+desktop run) — with a pause longer than the save timer mid-word: the editor stays open and keeps
+the keys —; on the phone every button of the tool bar on screen; a version written behind the vault's back merged by the save; one with a frame not
 written over, the strokes kept in a copy), `tests/app/drawing/svg-theme-check.mjs` (a browser — Chrome over CDP —
 shows `tests/data/drawing/auto_theme.svg` dark when it prefers dark, light otherwise, and inside
 an `<img>` in the page's own colour scheme — an app's dark theme on a light system; CI) and
 `tests/app/drawing/wasm-drawing-check.mjs` (the web build: a drawing's embed light and dark;
-`--text`: text typed on the drawing in the browser reaches its file).
+`--text`: text typed on the drawing in the browser reaches its file) and
+`tests/app/drawing/excalidraw-roundtrip.sh` (online, no ctest: a diagram drawn with the editor's
+tools — `tst_drawingcanvas shapesSample` — dropped on the real excalidraw.com, which must keep
+every element as written (`excalidraw-roundtrip.mjs`); its scene as excalidraw.com stores it opened
+editable in Brulion, edited, written and taken to excalidraw.com again).
 Screenshots: `tests/app/drawing/screenshots.sh` (the `theme` shot: the background's menu;
 `shapes`, `selection`, `shapemenu`: a diagram, it all selected with its bar, the shapes' menu).
 
