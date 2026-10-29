@@ -1416,7 +1416,8 @@ private Q_SLOTS:
                 + gif + "','created':5}},'appState':{}}");
         const ImportResult r = importZip(canvasExport(
                 scene, {canvasPicture(CanvasPicture), canvasAttachment(u"x2"_s, fileId, u"image/png"_s, png),
-                        // The scene's own picture f1 wins: this one is an attachment as before.
+                        // The scene has f1 already: its own wins, the attachment (the same
+                        // picture) is not kept again.
                         canvasAttachment(u"x3"_s, u"f1"_s, u"image/png"_s, png),
                         // Not a picture of the scene: attachments as before.
                         canvasAttachment(u"x4"_s, u"zdjęcie.png"_s, u"image/png"_s, png),
@@ -1424,11 +1425,9 @@ private Q_SLOTS:
         dump(u"canvas pictures"_s, r);
         QCOMPARE(iotest::pathsOf(r),
                  sorted({u"Trilium/Szkic ćwiczeń.md"_s, u"assets/Trilium/Szkic ćwiczeń.svg"_s,
-                         u"assets/Trilium/Szkic ćwiczeń/f1.png"_s, u"assets/Trilium/Szkic ćwiczeń/notatki.txt"_s,
-                         u"assets/Trilium/Szkic ćwiczeń/zdjęcie.png"_s}));
+                         u"assets/Trilium/Szkic ćwiczeń/notatki.txt"_s, u"assets/Trilium/Szkic ćwiczeń/zdjęcie.png"_s}));
         QCOMPARE(iotest::textAt(r, u"Trilium/Szkic ćwiczeń.md"_s),
-                 u"![[assets/Trilium/Szkic ćwiczeń.svg]]\n\n![[assets/Trilium/Szkic ćwiczeń/f1.png]]\n"
-                 u"![[assets/Trilium/Szkic ćwiczeń/zdjęcie.png]]\n"
+                 u"![[assets/Trilium/Szkic ćwiczeń.svg]]\n\n![[assets/Trilium/Szkic ćwiczeń/zdjęcie.png]]\n"
                  u"[[assets/Trilium/Szkic ćwiczeń/notatki.txt|notatki.txt]]\n"_s);
         QVERIFY(r.warnings.isEmpty());
         const QByteArray svg = iotest::fileAt(r, u"assets/Trilium/Szkic ćwiczeń.svg"_s)->data;

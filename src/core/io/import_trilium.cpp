@@ -1056,10 +1056,11 @@ private:
     /// made an object by `id` — and, with `foldPictures`, the pictures of the scene's image
     /// elements that Trilium (0.61 and later) keeps as image attachments of the note, titled with
     /// their `fileId`, added to `files` as excalidraw.com keeps them (`{mimeType, id, dataURL,
-    /// created: 0}`; a file the scene has already wins). `folded` receives those attachments'
-    /// indices, `legacyPicture` the picture old Trilium kept in the content (`svg`). nullopt: no
-    /// JSON object with an `elements` array (a damaged or protected note), more than a scene may
-    /// hold (drawing::MaxSceneBytes, MaxSceneContainers) or no Excalidraw scene.
+    /// created: 0}`; a file the scene has already wins — the attachment is the same picture).
+    /// `folded` receives those attachments' indices, `legacyPicture` the picture old Trilium kept
+    /// in the content (`svg`). nullopt: no JSON object with an `elements` array (a damaged or
+    /// protected note), more than a scene may hold (drawing::MaxSceneBytes, MaxSceneContainers)
+    /// or no Excalidraw scene.
     std::optional<drawing::Drawing> canvasScene(int i, bool foldPictures, QList<int> *folded, QByteArray *legacyPicture)
     {
         const Note &n = m_notes[i];
@@ -1110,14 +1111,16 @@ private:
                 const QString mime = a.mime.toLower();
                 const InputFile *picture = file(a.source);
                 if (!picture || !mime.startsWith(u"image/"_s) || isExportImage(n.type, a.title) || a.title.isEmpty()
-                    || !used.contains(a.title) || files.contains(a.title))
+                    || !used.contains(a.title))
                     continue;
-                files.insert(a.title,
-                             QJsonObject{{u"mimeType"_s, mime},
-                                         {u"id"_s, a.title},
-                                         {u"dataURL"_s, QString(u"data:"_s + mime + u";base64,"_s
-                                                                + QString::fromLatin1(picture->data.toBase64()))},
-                                         {u"created"_s, 0}});
+                if (!files.contains(a.title)) {
+                    files.insert(a.title,
+                                 QJsonObject{{u"mimeType"_s, mime},
+                                             {u"id"_s, a.title},
+                                             {u"dataURL"_s, QString(u"data:"_s + mime + u";base64,"_s
+                                                                    + QString::fromLatin1(picture->data.toBase64()))},
+                                             {u"created"_s, 0}});
+                }
                 if (folded)
                     folded->append(k);
             }
