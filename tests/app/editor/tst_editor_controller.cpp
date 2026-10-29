@@ -1124,6 +1124,248 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(f.text().contains(rootText + u" ż\n"_s));
     }
 
+    // Enter at the end or in the middle of a zoomed heading or paragraph: it has no children (only
+    // list items nest), so the block Enter makes below it cannot be inside the zoom. The zoom ends
+    // and Enter does exactly what it does on the page (the same text, the caret in the new block,
+    // never in a hidden one); undo restores the text and the zoom, redo ends it again.
+    void zoomRootTextBlockEnterLeavesZoom_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<int>("cursor"); // -1: the end of the edit text
+
+        QTest::newRow("nagłówek, Enter na końcu") << u"# Nagłówek\n\n- a\n"_s << 0 << -1;
+        QTest::newRow("akapit, Enter na końcu") << u"Akapit źdźbła\n\n- a\n"_s << 0 << -1;
+        QTest::newRow("nagłówek, Enter w środku") << u"# Nagłówek\n\n- a\n"_s << 0 << 5;
+        QTest::newRow("akapit, Enter w środku") << u"Akapit źdźbła\n\n- a\n"_s << 0 << 7;
+        QTest::newRow("nagłówek między listami") << u"- a\n\t- a1\n\n## Środek ąę\n\n- b\n"_s << 2 << -1;
+        QTest::newRow("akapit po frontmatterze") << u"---\ntags: [x]\n---\nZażółć gęślą jaźń\n\n- punkt\n"_s << 1 << -1;
+        QTest::newRow("CRLF") << u"Akapit ćma\r\n\r\n- a\r\n"_s << 0 << -1;
+        QTest::newRow("CRLF, Enter w środku") << u"# Ćma nocą\r\n\r\n- a\r\n"_s << 0 << 5;
+        QTest::newRow("akapit z łamaniem wiersza") << u"Wiersz pierwszy\nwiersz drugi ż\n\n- a\n"_s << 0 << -1;
+        QTest::newRow("akapit z łamaniem, Enter po pierwszym wierszu")
+                << u"Wiersz pierwszy\nwiersz drugi ż\n\n- a\n"_s << 0 << 15;
+        QTest::newRow("nagłówek z identyfikatorem bloku") << u"## Plan ^plan1\n\n- a\n"_s << 0 << -1;
+        QTest::newRow("ostatni blok bez końca wiersza") << u"- a\n\nKoniec źródła"_s << 1 << -1;
+        QTest::newRow("jedyny blok strony") << u"Tylko akapit ąę\n"_s << 0 << -1;
+        QTest::newRow("nie nagłówek: #bez spacji") << u"#Tag na początku\n"_s << 0 << -1;
+        QTest::newRow("nagłówek H7 (akapit)") << u"####### za dużo krzyżyków\n"_s << 0 << -1;
+    }
+
+    void zoomRootTextBlockEnterLeavesZoom()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, row);
+        QFETCH(int, cursor);
+        Fixture plain(content);
+        Fixture zoomed(content);
+        const QString view = zoomed.role(row, "view").toString();
+        QVERIFY2(view == u"text"_s || view == u"heading"_s, qPrintable(view));
+        zoomed.page.zoomInto(row);
+        QCOMPARE(zoomed.page.zoomBlock(), row);
+        const int at = cursor < 0 ? int(zoomed.edit(row).size()) : cursor;
+        plain.page.startEditing(row, at);
+        zoomed.page.startEditing(row, at);
+        QCOMPARE(zoomed.page.zoomBlock(), row); // the zoom root is shown: editing it keeps the zoom
+        QSignalSpy zoomSpy(&zoomed.page, &PageController::zoomChanged);
+
+        const QVariantMap expected = plain.page.split(row, at);
+        const QVariantMap r = zoomed.page.split(row, at);
+        const QString after = plain.text();
+        QVERIFY(after != content);
+        QCOMPARE(zoomed.text(), after);
+        QCOMPARE(r, expected);
+        if (content.contains(u"\r\n"_s))
+            QCOMPARE(after.count(u'\n'), after.count(u"\r\n"_s)); // CRLF kept, no bare line feed
+        const int focusRow = r.value(u"row"_s).toInt();
+        QVERIFY(focusRow > row); // the new block below
+        QCOMPARE(zoomed.page.zoomBlock(), -1);
+        QVERIFY(!zoomSpy.isEmpty());
+        QVERIFY(!zoomed.role(row, "isZoomRoot").toBool());
+        QCOMPARE(zoomed.visible(), QList<bool>(zoomed.count(), true));
+        QCOMPARE(zoomed.page.breadcrumb(), QVariantList());
+        QCOMPARE(zoomed.page.editingRow(), focusRow);
+        QCOMPARE(zoomed.page.cursorPosition(), r.value(u"cursor"_s).toInt());
+        QVERIFY(zoomed.role(focusRow, "visible").toBool());
+        QVERIFY(zoomed.role(focusRow, "isEditing").toBool());
+        QCOMPARE(zoomed.edit(focusRow), plain.edit(focusRow));
+
+        // Undo: the text and the zoom, the caret where Enter was pressed.
+        zoomed.page.undo();
+        QCOMPARE(zoomed.text(), content);
+        QCOMPARE(zoomed.page.zoomBlock(), row);
+        QVERIFY(zoomed.role(row, "isZoomRoot").toBool());
+        QVERIFY(zoomed.role(row, "visible").toBool());
+        QCOMPARE(zoomed.page.editingRow(), row);
+        QCOMPARE(zoomed.page.cursorPosition(), at);
+        // Redo: the zoom ends again, the caret in the new block.
+        zoomed.page.redo();
+        QCOMPARE(zoomed.text(), after);
+        QCOMPARE(zoomed.page.zoomBlock(), -1);
+        QCOMPARE(zoomed.visible(), QList<bool>(zoomed.count(), true));
+        QCOMPARE(zoomed.page.editingRow(), focusRow);
+        QCOMPARE(zoomed.page.cursorPosition(), r.value(u"cursor"_s).toInt());
+        // Undo once more: back in the zoom; typing goes into the shown zoom root.
+        zoomed.page.undo();
+        QCOMPARE(zoomed.page.zoomBlock(), row);
+        const QString rootText = zoomed.edit(row);
+        zoomed.page.setEditText(row, rootText + u"ż"_s, int(rootText.size()) + 1);
+        QCOMPARE(zoomed.page.zoomBlock(), row);
+        QCOMPARE(zoomed.edit(row), rootText + u"ż"_s);
+    }
+
+    // Enter on an empty zoomed paragraph (a blank block): the new block is below it, out of the
+    // zoom — the zoom ends as for any other zoomed paragraph.
+    void zoomRootEmptyParagraphEnter()
+    {
+        const QString content = u"Akapit ąę\n\n- a\n"_s;
+        Fixture plain(content);
+        Fixture zoomed(content);
+        for (Fixture *f : {&plain, &zoomed}) {
+            f->page.startEditing(0, -1);
+            const QVariantMap made = f->page.split(0, 9);
+            QCOMPARE(made.value(u"row"_s).toInt(), 1);
+            QCOMPARE(f->edit(1), QString());
+        }
+        const QString blank = zoomed.text();
+        zoomed.page.zoomInto(1);
+        QCOMPARE(zoomed.page.zoomBlock(), 1);
+        QCOMPARE(zoomed.page.editingRow(), 1);
+        const QVariantMap expected = plain.page.split(1, 0);
+        const QVariantMap r = zoomed.page.split(1, 0);
+        QCOMPARE(zoomed.text(), plain.text());
+        QCOMPARE(r, expected);
+        const int focusRow = r.value(u"row"_s).toInt();
+        QCOMPARE(focusRow, 2);
+        QCOMPARE(zoomed.page.zoomBlock(), -1);
+        QCOMPARE(zoomed.page.editingRow(), focusRow);
+        QCOMPARE(zoomed.visible(), QList<bool>(zoomed.count(), true));
+        zoomed.page.undo();
+        QCOMPARE(zoomed.text(), blank);
+        QCOMPARE(zoomed.page.zoomBlock(), 1);
+        QCOMPARE(zoomed.page.editingRow(), 1);
+        QCOMPARE(zoomed.edit(1), QString());
+    }
+
+    // Enter in the middle of a zoomed list item: its tail becomes the zoom root's first child,
+    // inside the zoom — also when it had no children (a split makes the next sibling then) or is
+    // folded (the zoom root's children are shown whatever its fold). The zoom stays.
+    void zoomRootListItemEnterInTheMiddle_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<bool>("fold");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<int>("cursor");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<int>("focusRow");
+        QTest::addColumn<QString>("focusEdit");
+
+        QTest::newRow("punkt bez dzieci") << u"- a\n\t- a1 źdźbło\n- b\n"_s << false << 1 << 3
+                                          << u"- a\n\t- a1 \n\t\t- źdźbło\n- b\n"_s << 2 << u"źdźbło"_s;
+        QTest::newRow("zadanie bez dzieci") << u"- [ ] kup mleko ść\n- b\n"_s << false << 0 << 4
+                                            << u"- [ ] kup \n\t- [ ] mleko ść\n- b\n"_s << 1 << u"mleko ść"_s;
+        QTest::newRow("zwinięty punkt z dziećmi") << u"- ab\n\t- dziecko\n"_s << true << 0 << 1
+                                                  << u"- a\n\t- b\n\t- dziecko\n"_s << 1 << u"b"_s;
+        QTest::newRow("punkt z dziećmi (bez zmian)") << u"- ab\n\t- dziecko\n"_s << false << 0 << 1
+                                                     << u"- a\n\t- b\n\t- dziecko\n"_s << 1 << u"b"_s;
+        QTest::newRow("punkt numerowany bez dzieci") << u"1. pierwszy drugi\n2. trzeci\n"_s << false << 0 << 9
+                                                     << u"1. pierwszy \n\t1. drugi\n2. trzeci\n"_s << 1 << u"drugi"_s;
+        QTest::newRow("ostatni punkt bez końca wiersza") << u"- wstęp\n- ąę źć"_s << false << 1 << 3
+                                                         << u"- wstęp\n- ąę \n\t- źć"_s << 2 << u"źć"_s;
+        QTest::newRow("CRLF") << u"- ąę źć\r\n- b\r\n"_s << false << 0 << 3
+                              << u"- ąę \r\n\t- źć\r\n- b\r\n"_s << 1 << u"źć"_s;
+    }
+
+    void zoomRootListItemEnterInTheMiddle()
+    {
+        QFETCH(QString, content);
+        QFETCH(bool, fold);
+        QFETCH(int, row);
+        QFETCH(int, cursor);
+        QFETCH(QString, expected);
+        QFETCH(int, focusRow);
+        QFETCH(QString, focusEdit);
+        Fixture f(content);
+        if (fold)
+            f.page.setFolded(row, true);
+        const QString status = f.role(row, "taskStatus").toString();
+        f.page.zoomInto(row);
+        f.page.startEditing(row, cursor);
+        const QVariantMap r = f.page.split(row, cursor);
+        QCOMPARE(f.text(), expected);
+        QCOMPARE(r.value(u"row"_s).toInt(), focusRow);
+        QCOMPARE(f.page.editingRow(), focusRow);
+        QCOMPARE(f.edit(focusRow), focusEdit);
+        QCOMPARE(f.page.cursorPosition(), 0);
+        QCOMPARE(f.page.zoomBlock(), row); // the zoom stays
+        QVERIFY(f.role(focusRow, "visible").toBool());
+        QCOMPARE(f.model()->document().parent(focusRow), row);
+        QCOMPARE(f.role(row, "taskStatus").toString(), status);
+        QCOMPARE(f.role(focusRow, "taskStatus").toString(), status); // a task goes on as a task
+        // One undo step.
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QCOMPARE(f.page.zoomBlock(), row);
+        QCOMPARE(f.page.editingRow(), row);
+        QCOMPARE(f.page.cursorPosition(), cursor);
+        f.page.redo();
+        QCOMPARE(f.text(), expected);
+        QCOMPARE(f.page.editingRow(), focusRow);
+        QCOMPARE(f.page.zoomBlock(), row);
+    }
+
+    // Enter that edits the zoomed block in place keeps the zoom: "```js" + Enter opens a code
+    // block in it; a quote does not split.
+    void zoomRootEnterKeepsZoomForInPlaceEdits()
+    {
+        Fixture fence(u"- a\n\n```js\n"_s);
+        QCOMPARE(fence.role(1, "view").toString(), u"text"_s);
+        fence.page.zoomInto(1);
+        fence.page.startEditing(1, -1);
+        const QVariantMap r = fence.page.split(1, 5);
+        QCOMPARE(fence.text(), u"- a\n\n```js\n\n```\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 1);
+        QCOMPARE(fence.page.zoomBlock(), 1);
+        QCOMPARE(fence.page.editingRow(), 1);
+        QCOMPARE(fence.role(1, "view").toString(), u"code"_s);
+        fence.page.undo();
+        QCOMPARE(fence.text(), u"- a\n\n```js\n"_s);
+        QCOMPARE(fence.page.zoomBlock(), 1);
+
+        Fixture quote(u"> cytat ąę\n\n- a\n"_s);
+        quote.page.zoomInto(0);
+        quote.page.startEditing(0, 3);
+        quote.page.split(0, 3);
+        QCOMPARE(quote.text(), u"> cytat ąę\n\n- a\n"_s);
+        QCOMPARE(quote.page.zoomBlock(), 0);
+    }
+
+    // Undo / redo of the other steps leave the zoom as it is (it follows its block): only a step
+    // that ended a zoom brings it back.
+    void zoomUndoOfOtherSteps()
+    {
+        Fixture f(u"# Nagłówek\n\n- a\n- b\n"_s);
+        f.page.split(1, 1); // a new item below "a", on the whole page (no block edited before)
+        QCOMPARE(f.text(), u"# Nagłówek\n\n- a\n- \n- b\n"_s);
+        f.page.stopEditing();
+        f.page.zoomInto(3);
+        f.page.undo();
+        QCOMPARE(f.text(), u"# Nagłówek\n\n- a\n- b\n"_s);
+        QCOMPARE(f.page.zoomBlock(), 2); // still "- b", not the page the split was made on
+        QVERIFY(f.role(2, "isZoomRoot").toBool());
+
+        Fixture typed(u"- a\n\t- a1\n- b\n"_s);
+        typed.page.zoomInto(0);
+        typed.page.startEditing(1, -1);
+        typed.page.setEditText(1, u"a1 ąę"_s, 5);
+        typed.page.stopEditing();
+        typed.page.zoomTo(-1);
+        typed.page.undo();
+        QCOMPARE(typed.text(), u"- a\n\t- a1\n- b\n"_s);
+        QCOMPARE(typed.page.zoomBlock(), -1); // not the zoom the typing was done in
+        QCOMPARE(typed.visible(), QList<bool>(3, true));
+    }
+
     void zoomFollowsUndo()
     {
         Fixture f(u"- a\n\t- a1\n- b\n"_s);

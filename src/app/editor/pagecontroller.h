@@ -777,6 +777,9 @@ Q_SIGNALS:
 private:
     friend class EditCommand;
     struct Focus {
+        /// `zoom` of a version whose step left the zoom as it was: undo / redo keep the zoom of
+        /// the moment (it follows its block, BlockListModel::replaceContent).
+        static constexpr int KeepZoom = -2;
         int row = -1;
         int cursor = -1;
         /// The block selection (anchor, focus rows; the picked rows of one with gaps), restored
@@ -784,6 +787,9 @@ private:
         int selectionAnchor = -1;
         int selectionFocus = -1;
         QList<int> selectionPicks = {};
+        /// The zoomed row of this version (-1: the whole page), restored by undo / redo — set only
+        /// by a step that changed the zoom (Enter in a zoomed heading or paragraph ends it).
+        int zoom = KeepZoom;
     };
 
     void onFileChanged(const QString &path);

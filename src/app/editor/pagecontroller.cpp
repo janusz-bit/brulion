@@ -991,6 +991,10 @@ void PageController::restore(const QString &snapshot, const Focus &focus, const 
     const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot, blankBlocks);
     m_restoring = false;
     remapBlocks(mapping);
+    // A step that ended a zoom (Enter in a zoomed heading or paragraph): undo zooms back in, redo
+    // ends it again. A document has no zoom.
+    if (focus.zoom != Focus::KeepZoom)
+        m_model->setZoomUid(validRow(focus.zoom) && !documentMode() ? m_model->uidAt(focus.zoom) : 0);
     if (focus.row < 0 && validRow(focus.selectionAnchor) && validRow(focus.selectionFocus)) {
         // The block selection of that version (an undone deletion selects its blocks again) —
         // with no block edited: the two never go together (another block edited meanwhile stops).
@@ -1364,20 +1368,38 @@ QVariantMap PageController::split(int row, int cursor)
             return result(editingRow(), 0);
     }
 
+    // A zoomed list item keeps what Enter makes inside the zoom: a new first child at its end or
+    // start (an item above the zoom root would be outside the zoom, out of sight), its tail as the
+    // first child in the middle (the zoom root's children are shown whatever its fold).
+    const bool listRoot = row == zoom && entry.kind == BlockKind::ListItem;
     beginCommand();
     EditResult r;
-    if (row == zoom && (cursor == len || (cursor == 0 && entry.kind == BlockKind::ListItem))) {
-        // The zoomed block: a new first child keeps the caret inside the zoom (at the start of a
-        // list item too: an item above the zoom root would be outside the zoom, out of sight). A
-        // zoomed heading or paragraph splits as usual: the empty paragraph above stays hidden and
-        // the caret stays in the zoom root.
+    if (listRoot && (cursor == len || cursor == 0)) {
         r = applyOp([&](BlockDocument &d) { return d.insertAfter(row, QString(), entry.depth + 1); });
     } else {
-        const bool collapsed = m_model->isCollapsed(row);
+        const bool collapsed = !listRoot && m_model->isCollapsed(row);
         const int bodyCursor = toBodyCursor(row, cursor);
         r = applyOp([&](BlockDocument &d) { return d.split(row, bodyCursor, collapsed); });
+        if (listRoot && r.changed() && r.focus > row && m_model->document().parent(r.focus) != row) {
+            // No children: the tail became the next sibling, outside the zoom — its first child
+            // instead (its body, so the caret after a continued task marker, stays as it is).
+            const quint64 uid = m_model->uidAt(r.focus);
+            applyOp([&](BlockDocument &d) { return d.indent(m_model->rowOfUid(uid)); });
+            r.focus = m_model->rowOfUid(uid);
+        }
     }
-    const Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
+    Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
+    // Never leave the caret in a hidden block. A zoomed heading or paragraph has no children
+    // (BlockDocument: only list items nest), so the block Enter made below it (at its end, in its
+    // middle, on an empty one) cannot be inside the zoom: the zoom ends, the page shows it, and
+    // Enter has done what it does on the page. Undo zooms back in (Focus::zoom). At its start
+    // the empty paragraph goes above, out of sight, and the caret stays in the zoom root.
+    if (zoom >= 0 && validRow(f.row) && !m_model->isRowVisible(f.row)) {
+        if (m_commandDepth == 1)
+            m_commandFocusBefore.zoom = zoom; // the zoomed row of the text before this step
+        reveal(f.row); // leaves the zoom (zoomChanged); a heading or paragraph has no folds to open
+        f.zoom = zoomBlock();
+    }
     endCommand(f);
     setFocus(f, true);
     return result(f.row, f.cursor);

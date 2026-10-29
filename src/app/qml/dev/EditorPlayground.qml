@@ -385,6 +385,8 @@ ApplicationWindow {
     property int countBefore: 0
     property int realRow: -1
     property int farRow: -1
+    /// The paragraph zoomed into for Enter at its end.
+    property int zoomTextRow: -1
     property string textBefore: ""
     property real headerBefore: 0
     property real tableBefore: 0
@@ -647,6 +649,45 @@ ApplicationWindow {
                         && editor.listView.headerItem.height === window.headerBefore,
                         "zooming out leaves no room for the breadcrumb: "
                         + (editor.listView.headerItem ? editor.listView.headerItem.height : -1) + " (was " + window.headerBefore + ")"),
+            // Enter at the end of a zoomed paragraph: a paragraph has no children, so the zoom
+            // ends and the new block below it is edited — never a caret in a hidden block. Ctrl+Z
+            // zooms back in, Ctrl+Shift+Z ends the zoom again.
+            () => {
+                window.textBefore = page.sourceText
+                window.zoomTextRow = rowOf("Plan remontu")
+                page.zoomInto(window.zoomTextRow)
+                editor.startEditing(window.zoomTextRow, -1)
+            },
+            () => check(window.zoomTextRow > 0 && page.zoomBlock === window.zoomTextRow
+                        && page.editingRow === window.zoomTextRow && editor.activeEditor !== null
+                        && editor.activeEditor.activeFocus, "a zoomed paragraph is edited: " + window.zoomTextRow),
+            () => key(Qt.Key_Return),
+            () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && info(page.editingRow).visible
+                        && editor.activeEditor !== null && editor.activeEditor.activeFocus
+                        && editor.activeEditor.row === page.editingRow
+                        && editor.listView.itemAtIndex(page.editingRow) !== null,
+                        "Enter at the end of a zoomed paragraph ends the zoom and edits the new block below it: zoom "
+                        + page.zoomBlock + ", row " + page.editingRow + " (paragraph " + window.zoomTextRow + ")"),
+            () => key(Qt.Key_Z, Qt.ControlModifier),
+            () => check(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
+                        && page.sourceText === window.textBefore && editor.activeEditor !== null
+                        && editor.activeEditor.activeFocus,
+                        "Ctrl+Z zooms back into the paragraph: zoom " + page.zoomBlock + ", row " + page.editingRow),
+            () => key(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier),
+            () => check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && editor.activeEditor !== null
+                        && editor.activeEditor.activeFocus && editor.activeEditor.row === window.zoomTextRow + 1,
+                        "Ctrl+Shift+Z ends the zoom again: zoom " + page.zoomBlock + ", row " + page.editingRow),
+            () => typeKeys("Źdźbło"),
+            () => check(info(window.zoomTextRow + 1).plainText === "Źdźbło" && page.zoomBlock < 0,
+                        "typing goes into the new block: " + info(window.zoomTextRow + 1).plainText),
+            () => key(Qt.Key_Z, Qt.ControlModifier), // the typing
+            () => key(Qt.Key_Z, Qt.ControlModifier), // Enter
+            () => {
+                check(page.sourceText === window.textBefore && page.zoomBlock === window.zoomTextRow,
+                      "two Ctrl+Z undo the typing and Enter, back in the zoom: zoom " + page.zoomBlock)
+                page.zoomTo(-1)
+                page.stopEditing()
+            },
             () => { window.pasteRow = page.insertBlockAfter(rowOf("Ekipa może"), ""); window.countBefore = page.blocks.count },
             () => { const e = editor.activeEditor; e.insert(e.cursorPosition, "- [ ] pierwsze\n- drugie") },
             () => {
