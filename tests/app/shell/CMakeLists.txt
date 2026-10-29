@@ -29,8 +29,10 @@ brulion_add_test(tst_shell_workspace_pictures SOURCES tst_workspace_pictures.cpp
 # edge swipe (also beyond a simulated gesture-navigation zone), All
 # pages, tasks, editor bullets; the desktop run: left and right clicks), folders (the open page
 # revealed in the tree — wholly in the list's visible part, also when the window got shorter while
-# the drawer was closed; the new folder and "Pokaż w drzewie" too —, "Przenieś do…" from a row's
-# "⋯" / right-click menu, a root folder from the
+# the drawer was closed; the new folder and "Pokaż w drzewie" too —; a click on a row in view
+# leaves the tree where it was; touchpad, wheel and arrow-key scrolling stays across a resize;
+# the desktop sidebar shown again after its header grew starts at the top), "Przenieś do…" from
+# a row's "⋯" / right-click menu, a root folder from the
 # "Strony" header, the desktop run's mouse drag and drop with Escape, All pages' folder rows and
 # breadcrumb), the block editor inside the shell (real keys, source mode, a link to a missing
 # page) and closing the notebook from the UI. Exit code = failures.
