@@ -1430,19 +1430,28 @@ verified by parsing the result).
   title, natural language "jutro", the clock for a date and time, "Wyczyść"). Lists, tags and
   aliases are chips (× removes; a `[[Page]]` item and a tag open their page) with "+": a field
   where Enter or "," adds (a pasted "a, b, c" adds three) and stays open, Backspace in the empty
-  field takes the last chip, Ctrl+Z there undoes. Fields commit on Enter and when they lose the
-  focus (also when the row goes away), Escape leaves them unchanged.
+  field takes the last chip, Ctrl+Z there undoes; what cannot be added (an alias with `|`, a tag
+  that is none) is said under the field, and in a toast when the field is left. Fields commit on
+  Enter and when they lose the focus (also when the row goes away, and before the editor shows
+  another page: `PageController.pathAboutToChange`), Escape leaves them unchanged. A field starts
+  with the value of the moment it opened — not a binding: the notebook changing (sync, another
+  pane, the page's own save) re-renders the rows and must not replace what is typed — and writes
+  only what differs from it, so a value opened and left as it was keeps its form (a `|` text,
+  `ilosc:: 1.50`).
 * The row's menu (its type icon, a right-click or a long press on the row, the Menu key /
   Shift+F10): "Typ" (Tekst, Liczba, Pole wyboru, Data, Data i godzina, Lista; tags and aliases keep
   theirs — a value that cannot be converted is cleared with "Cofnij" in the toast; an empty value's
   type is remembered for the session, `BlockEditor.propertyTypeOverride`, a list is written `[]`),
   "Zmień nazwę" (the key becomes a field with key suggestions; an existing name, `brulion` and a
   key a `key::` line cannot hold are refused with a sentence under the field), "Kopiuj wartość",
-  "Usuń" ("Cofnij" in the toast).
+  "Usuń" ("Cofnij" in the toast); a row the fields cannot edit (a map, a nested list, a block
+  Brulion cannot edit safely) offers "Edytuj jako tekst" instead.
 * "+ Dodaj właściwość": a field with the notebook's keys (key, its type's icon, "12 stron";
   `PageController.suggestPropertyKeys`, without the page's own keys and `brulion`). Choosing or
   entering a key writes it at once with an empty value of its type in the notebook (`key:`,
-  `key: []`, `key: false`) and puts the keyboard on its value; Escape drops it, nothing written.
+  `key: []`, `key: false`; `PageController.addPageProperty`) and puts the keyboard on its value;
+  a key the page has already (in either block, in any case) is refused under the field — adding
+  never overwrites a value; Escape drops it, nothing written.
   The type of an empty value is the key's most common type in the notebook
   (`PageController.notebookPropertyType`, from `VaultIndex::propertyKeys()`).
 * A block Brulion cannot edit safely (an indented mapping, plain text between `---` lines) shows
@@ -1462,10 +1471,11 @@ verified by parsing the result).
 **Adding the first property** (`BlockEditor.addProperty()`: the page menu's "Dodaj właściwość",
 Ctrl+;, the palette's "Dodaj właściwość strony" — uiAction `addProperty`, handled by `PageView` and
 for the journal stream's active day by `JournalsView` —, the phone menu): zoomed in, the page is
-zoomed out first; with properties shown, the panel opens at its add row (`propertyFocus` { part:
-"add" }); a page without shown properties (also one whose frontmatter holds only the hidden note
-mode) gets a draft add row above its blocks (`propertyDraft`, a `PropertiesPanel` with `draft` in
-the list header). The first key writes a new frontmatter (or into the hidden block, or a `key::`
+zoomed out first; when the block new properties go to is shown (`pageProperties.addRow`), that
+panel opens at its add row (`propertyFocus` { part: "add", source }); otherwise — a page without
+properties, or one whose frontmatter holds only the hidden note mode, also when `key::` lines are
+shown below it — a draft add row comes above its blocks (`propertyDraft`, a `PropertiesPanel` with
+`draft` in the list header). The first key writes a new frontmatter (or into the hidden block, or a `key::`
 line on a page that has only those) and the real panel takes over, its value focused
 (`propertyFocus` survives the new row's creation).
 
@@ -1476,17 +1486,21 @@ index's summary. A right-click or a long press on a chip from a property opens i
 (`removePageListItem`: from every property holding it; the last one takes the property away;
 "Cofnij" in the toast). The row ends with "+" (when properties can be added): "Dodaj tag", "Dodaj
 alias" (a field at the end of the row — tags suggested —, Enter adds and stays open, Escape
-closes) and "Dodaj właściwość…".
+closes; leaving it adds what it holds, a refusal said in a toast) and "Dodaj właściwość…". The
+header is the editor list's header, so in source mode (Ctrl+E: the list is hidden) neither the
+chips nor "+" are shown — the source text is edited directly there.
 
 **C++** (`PageController`, `src/app/editor/pagecontroller_properties.cpp`): `pageProperties`
-{ items, tags, aliases, canAdd, addTarget, hasYaml, hasLogseq, editable, problem, visibleRow }
-(read from the leading frontmatter rows, again only when their text changed; in source mode from
-the source text), `setPageProperty`, `removePageProperty`, `renamePageProperty`,
+{ items, tags, aliases, canAdd, addTarget, hasYaml, hasLogseq, editable, problem, visibleRow,
+addRow } (read from the leading frontmatter rows, again only when their text changed; in source
+mode from the source text), `setPageProperty`, `addPageProperty`, `removePageProperty`,
+`renamePageProperty`,
 `setPagePropertyType` ({ lost } when the value could not be kept), `addPageListItem`,
 `removePageListItem` — each one undo step through `applyText` (in source mode an edit of the
 source text, like `setMode`), returning { ok, status, reason } —, `suggestPropertyKeys`,
 `suggestPropertyValues`, `notebookPropertyType` over `EditorHost::propertyKeys()` /
-`propertyValues()` (`Workspace` and `FakeEditorHost`: `VaultIndex`). `BlockListModel`: the
+`propertyValues()` (`Workspace` and `FakeEditorHost`: `VaultIndex`); the signal
+`pathAboutToChange` (before `setPath` saves and reads another page). `BlockListModel`: the
 `properties` role is typed and cached per row (`pagePropertyMap`: key, value, type, source, raw,
 items, empty, editable, multiline, linkDate, html, itemsHtml), `propertiesInfo` { source, editable,
 problem, canAdd }; `replaceContent` keeps a leading frontmatter row whose text changed (same index,

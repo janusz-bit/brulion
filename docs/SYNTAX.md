@@ -447,7 +447,12 @@ refused otherwise, nothing written):
 
 * the first entry of the key is replaced in place, later duplicates are dropped (a duplicate is
   never added); the **key part** of the line (`"klucz: z dwukropkiem":`, `key :`) and a trailing
-  `# comment` of a one-line value stay as written; new lines take the entry's line ending;
+  `# comment` of a one-line value stay as written, and so do indented `# comment` lines under a
+  value written on its key line (unless the new value is a block scalar, which would read them as
+  its text); new lines take the entry's line ending;
+* a value committed as it was is not rewritten: a text equal to the stored one once its ends are
+  trimmed (as a field trims what is typed) keeps its form — a `|` block scalar its last line
+  break, a quoted `" a "` its quotes;
 * **lists keep their style**: a block list keeps its indentation and dash spacing, and items that
   did not change keep their lines verbatim (quotes, comments); a flow list `[a, b]` stays one flow
   line (items with `,[]{}` quoted); a scalar list (`tags: a, b`) or a new key becomes a block list
@@ -457,15 +462,21 @@ refused otherwise, nothing written):
 * removing the last key removes the block (unless the body would then start a frontmatter of its
   own); renaming changes only the key part of the entry's first line;
 * `brulion` (the note mode) is never added, renamed to or listed — the header's mode toggle
-  stands for it; a key equal to another one (case-insensitive) is refused;
+  stands for it; a key equal to another one (case-insensitive) is refused, and adding a key the
+  page has already (in either block, in any case) is refused too — adding never overwrites a
+  value;
 * frontmatter that is not a mapping (plain text between `---` lines), whose keys are not at the
   start of their lines (an indented mapping) or that does not parse back is shown read-only.
 
 **Rules for `key:: value` lines**: only the value (or the key) of the line changes; new keys go
-after the last property line; removing the last one also removes the blank lines after the block.
-Keys must be `[A-Za-z0-9_-]+` (a `źródło::` line would be no property). A list keeps its items as
-written (`[[A]]`, `#b`), new items are `[[item]]`; tags and aliases keep `#` when the line used it,
-an item with a comma is written `[[a, b]]`; a date written `[[2026-10-28]]` stays a link.
+after the last property line; removing the last one also removes the blank lines after the block
+— unless the page would then start with a frontmatter of its own (a `---` line, as a rule, right
+after them): then the blank lines stay, or one empty line stands in for the block. A value that
+reads the same is not rewritten (`ilosc:: 1.50` set to 1.5, `done:: TRUE` set to true). Keys must
+be `[A-Za-z0-9_-]+` (a `źródło::` line would be no property). A list is links and tags: its items
+stay as written (`[[A]]`, `#b`), any other item becomes `[[item]]` (a text `a, b` made a list is
+`[[a]], [[b]]`); tags and aliases keep `#` when the line used it, an item with a comma is written
+`[[a, b]]`; a date written `[[2026-10-28]]` stays a link.
 
 **Page header**: adding a tag or an alias puts it into the property holding them (YAML `tags` /
 `tag` resp. `aliases` / `alias`, else the `key::` lines), creating `tags` / `aliases` where new
