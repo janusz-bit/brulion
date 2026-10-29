@@ -175,7 +175,8 @@ Pozostałe opcje:
   jako widoczna, a pasek kończy się na dole okna — także przy nieaktualnym `innerHeight` (stary
   wzór liczyłby klawiaturę drugi raz); kontenery Qt nie zostają przewinięte. Położenie paska
   i treści aplikacja podaje w `brulionKeyboardSelfTest` (`windowHeight`, `contentBottom`,
-  `toolbarBottom`). Ze `--screenshot` dochodzą zrzuty `…-edit.png`, `…-visual.png`,
+  `toolbarBottom`, `bottomNavTop`); gdy strona znów urośnie (klawiatura schowana Wstecz), wraca
+  dolna nawigacja, a pasek leży tuż na niej. Ze `--screenshot` dochodzą zrzuty `…-edit.png`, `…-visual.png`,
   `…-content.png`. CI uruchamia go przy pierwszym teście.
 * `--two-tabs` — otwiera drugą kartę: musi czekać z komunikatem „Brulion jest otwarty w innej
   karcie…”, a po opuszczeniu aplikacji w pierwszej karcie przejąć dane.
@@ -510,8 +511,11 @@ kontenera Qt (`ResizeObserver`) przekazuje surowe odczyty (`innerHeight`, `visua
 wysokość kontenera, ekran dotykowy, fokus w polu klawiatury Qt) co klatkę animacji, aż wartości
 przez 6 klatek się nie zmienią (ostatni odczyt: „ustalony”); liczy C++ (`ViewportKeyboard`
 w `src/app/ui/keyboardinsets.h`, testy `tst_keyboardinsets` z sekwencjami nagranymi
-w przeglądarkach). Klawiatura liczy się jako widoczna (`shown`: dolna nawigacja chowa się,
-komunikaty idą na górę) przy zakryciu albo — gdy przeglądarka zmniejszyła stronę — na ekranie
+w przeglądarkach). Klawiatura liczy się jako widoczna (`shown`: dolna nawigacja chowa się od
+razu — strona zmienia rozmiar w jednym kroku, więc nawigacja nie czeka pod wysuwaną klawiaturą
+jak na Androidzie, `KeyboardInsets.slidesOver` jest tu fałszywe —, komunikaty idą na górę;
+schowana klawiatura przywraca nawigację, a pasek edycji, gdy pisanie trwa, leży na niej) przy
+zakryciu albo — gdy przeglądarka zmniejszyła stronę — na ekranie
 dotykowym z fokusem w polu Qt, gdy widoczny obszar jest co najmniej 120 px niższy niż najwyższy
 widziany przy tej szerokości (obrót telefonu zaczyna od nowa; pasek adresu przeglądarki, 56 px, to
 nie klawiatura). Fokus przechodzący między elementami Qt (Enter: następny blok) nie chowa jej, dopóki
@@ -569,7 +573,8 @@ klawiatury trafia do bloku, a klawisz akcji klawiatury to Enter, który dzieli b
 (`focusText` w wyniku testu). Potem telefon obraca się w poziom przy otwartej klawiaturze: pasek
 kończy się na dole okna, a gdy klawiatura zostaje (Firefox), liczy się jako widoczna; po obrocie
 z powrotem klawiatura znów się liczy (Chrome i Brave: po stuknięciu bloku). Po „Wstecz” (klawiatura
-schowana) nie zostaje nic purpurowego, a pasek zostaje na dole. Z `?keyboard=visual` wynik tylko się
+schowana) nie zostaje nic purpurowego, wraca dolna nawigacja, a pasek leży tuż na niej (`toolbarBottom` =
+`bottomNavTop` w wyniku testu). Z `?keyboard=visual` wynik tylko się
 zapisuje (Brave pokazuje pas z #60074).
 Skrypt zapisuje odczyty (`samples-<przeglądarka>-<tryb>.jsonl`), wypisuje je jako wiersze testu
 `tst_keyboardinsets` i liczy, ile razy okno Qt zmieniło wysokość przy otwarciu klawiatury.

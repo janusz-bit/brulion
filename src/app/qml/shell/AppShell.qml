@@ -19,10 +19,11 @@ import Brulion
 // themselves with the SafeArea margins.
 // On-screen keyboard (docs/UI.md "On-screen keyboard"): the content — sidebar, view and side
 // panel — ends at the keyboard's top (KeyboardInsets.overlap, a strip under it), so the editing
-// toolbar a view docks on its bottom edge sits on the keyboard, in the side panel too; while the
-// keyboard is up or a toolbar is docked (also after the system hid the keyboard, while editing
-// goes on) the bottom navigation and the capture button make way, and the content ends above the
-// system's navigation bar.
+// toolbar a view docks on its bottom edge sits on the keyboard, in the side panel too. While the
+// keyboard is up the bottom navigation makes way; when it goes (Back, the keyboard's own key)
+// the navigation comes back and a toolbar that stays — the editing goes on — docks right above
+// it. The capture button makes way while typing (the keyboard up or a toolbar docked); a bar a
+// view has at the bottom instead of the navigation (the drawing's tools) takes its place.
 FocusScope {
     id: shell
 
@@ -31,6 +32,22 @@ FocusScope {
     property bool sidebarVisible: flag(AppSettings.value("ui/sidebar/visible", true))
 
     readonly property var safe: SafeArea.margins
+    /// The system's navigation bar under the window's bottom edge (the SafeArea margin), without
+    /// the keyboard: on Android Qt's SafeArea counts the keyboard in at times — 336 px with it up,
+    /// and for a moment after it went (the emulator's logs) —, which would lift the bottom
+    /// navigation's tabs into the middle of the screen and the content with them. No navigation
+    /// bar is that tall: a margin above `navigationBarMax` keeps the last one below it. The
+    /// bottom navigation pads itself with it, the content clears it while typing.
+    readonly property real navigationBar: safe.bottom <= navigationBarMax ? safe.bottom : _lastNavigationBar
+    /// The tallest system navigation bar (logical px; Android's are 16–56 dp, a tablet's taskbar
+    /// included); as in ViewportKeyboard::MinKeyboard, anything taller is a keyboard.
+    readonly property real navigationBarMax: 120
+    property real _lastNavigationBar: 0
+    function noteNavigationBar() {
+        if (safe.bottom <= navigationBarMax)
+            _lastNavigationBar = safe.bottom
+    }
+    onSafeChanged: noteNavigationBar()
     readonly property var route: AppController.currentRoute
     /// How much of the window's bottom the on-screen keyboard covers.
     readonly property real keyboardOverlap: KeyboardInsets.overlap
@@ -42,15 +59,39 @@ FocusScope {
     readonly property bool toolbarDocked: routeView.viewToolbarDocked || sidePanel.toolbarDocked
     /// Typing: the keyboard is up, or a toolbar stays docked after the system hid it.
     readonly property bool typing: KeyboardInsets.shown || toolbarDocked
-    /// Room under the content: the keyboard (minus the bottom navigation, when that is still
-    /// shown); while typing at least the system's navigation bar, which the docked toolbar must
-    /// clear.
-    readonly property real keyboardRoom: bottomNav.visible ? Math.max(0, keyboardOverlap - bottomNav.height)
-                                         : typing ? Math.max(keyboardOverlap, safe.bottom) : keyboardOverlap
-    /// What covers the window's bottom edge for toasts (Main.qml): the keyboard and a docked
-    /// toolbar while typing; else the bottom navigation and the capture button on phones.
-    readonly property real toastClearance: typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0)
-                                           : Theme.narrow ? bottomNav.height + 56 + Theme.space4 : safe.bottom + keyboardRoom
+    /// The bottom navigation's height (with the system's navigation bar under it), shown or not.
+    readonly property real bottomNavHeight: bottomNav.implicitHeight
+    /// The keyboard takes the bottom navigation's place: it is up — but while it still slides in
+    /// over the window below the navigation's top (KeyboardInsets.slidesOver: Android 11+, a
+    /// simulated keyboard) the navigation stays under it until covered, so a toolbar docked on
+    /// the navigation never drops before it rises with the keyboard. (The browser resizes the
+    /// page for it: the navigation goes at once.)
+    readonly property bool keyboardUp: KeyboardInsets.shown
+        && !(KeyboardInsets.animating && KeyboardInsets.slidesOver && keyboardOverlap < bottomNavHeight)
+    /// Phones: the bottom navigation shows unless the keyboard is up or the view has a bar of
+    /// its own at the bottom instead (the drawing's tools). An editing toolbar that stays after
+    /// the keyboard went (the editing goes on) docks right above it.
+    readonly property bool bottomNavShown: Theme.narrow && !keyboardUp && !routeView.viewReplacesBottomNav
+    /// Room under the content: the keyboard (minus the bottom navigation, while that is shown:
+    /// sliding, the keyboard covers or uncovers it first); while typing without the navigation
+    /// at least the system's navigation bar, which the docked toolbar must clear, and the
+    /// navigation's place under a keyboard that took it (`keyboardFloor`).
+    readonly property real keyboardRoom: bottomNavShown ? Math.max(0, keyboardOverlap - bottomNavHeight)
+                                         : typing ? Math.max(keyboardOverlap, navigationBar, keyboardFloor) : keyboardOverlap
+    /// Phones: a keyboard sliding over the window that took the bottom navigation's place but
+    /// ends below its top (a suggestion strip over a hardware keyboard, shorter than the
+    /// navigation, which stayed under it while it came) leaves the content the navigation's
+    /// room. A toolbar docked on the navigation stays where it was when such a keyboard lands —
+    /// it never drops onto it after it came — and when it goes. (A keyboard reported in one step
+    /// took the navigation at once, the toolbar moving with it then.)
+    readonly property real keyboardFloor: Theme.narrow && keyboardUp && KeyboardInsets.slidesOver && keyboardOverlap > 0
+                                          && !routeView.viewReplacesBottomNav ? bottomNavHeight : 0
+    /// What covers the window's bottom edge for toasts (Main.qml): on phones the bottom
+    /// navigation with a toolbar docked on it, or with the capture button; else the keyboard and
+    /// a docked toolbar while typing; else the system's navigation bar.
+    readonly property real toastClearance: bottomNavShown
+        ? keyboardRoom + bottomNavHeight + (toolbarDocked ? Theme.editToolbarHeight : 56 + Theme.space4)
+        : typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0) : navigationBar + keyboardRoom
     /// Toasts go to the window's top (Main.qml) while text is typed on a touch screen — the
     /// on-screen keyboard up, or an editing toolbar docked while a view edits text: the caret's
     /// line is kept right above the keyboard and the toolbar, under the toasts' usual place.
@@ -87,17 +128,18 @@ FocusScope {
         return value === true || value === "true"
     }
 
-    // The detailed event log notes where the content ends while typing, once the keyboard has
-    // settled (scripts/android-emulator-test.sh --keyboard checks a docked toolbar above the
-    // system's navigation bar with it).
+    // The detailed event log notes where the view ends while typing, once the keyboard has
+    // settled (scripts/android-emulator-test.sh --keyboard checks a docked toolbar on the
+    // keyboard's top, and on the bottom navigation after Back, with it).
     LoggingCategory {
         id: platformLog
         name: "brulion.platform"
         defaultLogLevel: LoggingCategory.Info
     }
     readonly property string typingReport: !typing ? ""
-        : "Typing: the content ends %1 px above the window's bottom (keyboard %2 px, navigation bar %3 px), editing toolbar %4"
-          .arg(Math.round(keyboardRoom)).arg(Math.round(keyboardOverlap)).arg(Math.round(safe.bottom))
+        : "Typing: the content ends %1 px above the window's bottom (keyboard %2 px, navigation bar %3 px, bottom navigation %4 px), editing toolbar %5"
+          .arg(Math.round(keyboardRoom + (bottomNavShown ? bottomNavHeight : 0))).arg(Math.round(keyboardOverlap))
+          .arg(Math.round(navigationBar)).arg(bottomNavShown ? Math.round(bottomNavHeight) : 0)
           .arg(toolbarDocked ? "docked" : "not docked")
     property string _loggedTyping: ""
     function logTyping() {
@@ -283,7 +325,7 @@ FocusScope {
             sourceComponent: ShellSidebar {
                 topInset: shell.safe.top
                 // (The navigation bar's part the keyboard's room leaves.)
-                bottomInset: Math.max(0, shell.safe.bottom - shell.keyboardRoom)
+                bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
                 onNewPageRequested: (folder) => shell.openNewPage(folder)
                 onNewFolderRequested: (folder) => shell.openNewFolder(folder)
                 onRenameRequested: (path, isDir) => shell.openRename(path, isDir)
@@ -332,9 +374,14 @@ FocusScope {
             ShellBottomNav {
                 id: bottomNav
                 objectName: "shellBottomNav"
-                visible: Theme.narrow && !shell.typing
+                visible: shell.bottomNavShown
+                // Back after the keyboard (in one step where the platform reports no slide, the
+                // browser): it fades in where it already has its room, so the view and a toolbar
+                // docked on it move once. Under a keyboard sliding away the fade is covered.
+                opacity: shell.bottomNavShown ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
                 Layout.fillWidth: true
-                bottomInset: shell.safe.bottom
+                bottomInset: shell.navigationBar
                 onMenuClicked: drawer.open()
             }
         }
@@ -351,7 +398,8 @@ FocusScope {
     }
 
     // The keyboard's room (it covers this part of the window); under a docked toolbar when the
-    // keyboard is hidden: the navigation bar's strip.
+    // keyboard is hidden and the bottom navigation is not shown (a wide touch window): the
+    // navigation bar's strip.
     Rectangle {
         objectName: "shellKeyboardRoom"
         anchors.left: parent.left
@@ -377,7 +425,8 @@ FocusScope {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: Theme.space4 + shell.safe.right
-        anchors.bottomMargin: bottomNav.height + Theme.space4
+        // Above the bottom navigation (and a keyboard still sliding away under it).
+        anchors.bottomMargin: shell.keyboardRoom + shell.bottomNavHeight + Theme.space4
         onClicked: shell.openCapture()
     }
 
@@ -397,12 +446,12 @@ FocusScope {
         // the drawer takes only a mostly horizontal drag past its threshold (20 px, more than a
         // Flickable's), not one an item already keeps (a scrolling Flickable). Android's text
         // selection handles are windows of their own above the app: the strip never sees them.
-        // While typing or selecting blocks (the keyboard up or an editing toolbar docked: the
-        // bottom navigation makes way too) there is no strip: the drawer took the drag of the
-        // selection's start grip, which lies at the left edge (its MouseArea's preventStealing
-        // did not stop it). Nor on a view that swipes sideways from that edge itself (`edgeSwipe`:
-        // the calendar's week and month grids, to the previous period): a swipe there is the
-        // view's. The ☰ button still opens it, a swipe on it still closes it. The strip follows
+        // While typing or selecting blocks (the keyboard up or an editing toolbar docked, also
+        // on the bottom navigation after the keyboard went) there is no strip: the drawer took
+        // the drag of the selection's start grip, which lies at the left edge (its MouseArea's
+        // preventStealing did not stop it). Nor on a view that swipes sideways from that edge
+        // itself (`edgeSwipe`: the calendar's week and month grids, to the previous period): a
+        // swipe there is the view's. The ☰ button still opens it, a swipe on it still closes it. The strip follows
         // the UI mode, not the pointer: a mouse in a touch UI gets it too.
         dragMargin: !Theme.touchUi ? Application.styleHints.startDragDistance
                     : shell.typing || routeView.viewEdgeSwipe ? 0
@@ -420,7 +469,7 @@ FocusScope {
             active: Theme.narrow
             sourceComponent: ShellSidebar {
                 topInset: shell.safe.top
-                bottomInset: shell.safe.bottom
+                bottomInset: shell.navigationBar
                 onNavigated: drawer.close()
                 onNewPageRequested: (folder) => {
                     drawer.close()
@@ -592,8 +641,9 @@ FocusScope {
         onActivated: shell.openRename(shell.route.path, false)
     }
 
-    // --popup (screenshots and manual checks).
+    // The navigation bar's first margin; --popup (screenshots and manual checks).
     Component.onCompleted: {
+        noteNavigationBar()
         const popup = AppController.devPopup
         if (popup === "")
             return

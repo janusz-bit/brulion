@@ -17,8 +17,10 @@
 # "Klawiatura ekranowa") — the sample notebook's journal stream and a page, a block edited with a
 # finger, the system's keyboard up: the toolbar sits right on its top edge (the IME window's frame
 # from dumpsys against the app's KeyboardInsets log and the screenshot), follows its slide frame
-# by frame on Android 11+ (the window keeps its size), stays there while the journal scrolls, stays
-# docked right above the system's navigation bar when Back hides the keyboard (the shell's log);
+# by frame on Android 11+ (the window keeps its size), stays there while the journal scrolls; when
+# Back hides the keyboard the bottom navigation comes back and the toolbar stays docked right on it
+# (the shell's log, UiAutomator's tabs); a tap on the text brings the keyboard back, the toolbar
+# on it and the navigation away again;
 # a last screenshot in the dark theme (the system bars' icons). Needs a DEBUGGABLE APK (Qt passes
 # app arguments and environment only to those):
 #   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_BUILD_TYPE=Debug scripts/android-build.sh
@@ -81,7 +83,8 @@
 # cyan toolbar (gap <= 3 px), and the browser shrank the page (interactive-widget=resizes-content);
 # a word typed and Enter reach the block; the phone turned with the keyboard up and back (the toolbar
 # at the window's bottom, the keyboard counted as up where it stays: Firefox; Chrome and Brave hide
-# it); Back hides the keyboard and leaves the toolbar docked, nothing magenta. Each browser runs again with
+# it); Back hides the keyboard and leaves the toolbar docked right on the bottom navigation, which
+# comes back, nothing magenta. Each browser runs again with
 # ?keyboard=visual (the browser's default), for the record (Brave's brave-browser#60074: a gap).
 # The app's readings are kept (samples-<browser>-<mode>.jsonl) and printed as rows of
 # tests/app/tst_keyboardinsets.cpp; screenshots wk-*.png. docs/WEB.md "Klawiatura ekranowa".
@@ -225,6 +228,16 @@ adb() { "$SDK/platform-tools/adb" -s "$SERIAL" "$@"; }
 emulator=("$SDK/emulator/emulator")
 if [[ -e /etc/NIXOS ]] && command -v steam-run >/dev/null; then emulator=(steam-run "${emulator[@]}"); fi
 
+# The adb server outlives the test: started here with none of the test's open files but the
+# standard ones. It inherited a lock its caller held (`flock ~/work/emulator.lock …`) and kept it
+# after the test — every later emulator test waited for it.
+(
+  for fd in /proc/"$BASHPID"/fd/*; do
+    fd=${fd##*/}
+    if ((fd > 2)); then eval "exec $fd>&-" 2>/dev/null || true; fi
+  done
+  exec "$SDK/platform-tools/adb" start-server
+) </dev/null >/dev/null 2>&1 || true
 info "Starting the emulator ($AVD, $SERIAL)"
 # Software rendering through ANGLE: swiftshader_indirect leaves black stripes on Qt Quick
 # buttons, so its screenshots would show a broken UI.
@@ -331,18 +344,33 @@ keyboard_matches() {
 }
 keyboard_reported_hidden() { adb logcat -d | grep 'On-screen keyboard' | tail -n 1 | grep -q 'hidden, overlap 0'; }
 # The shell's last settled layout while typing (AppShell.qml, logical px): "Typing: the content
-# ends <room> px above the window's bottom (keyboard <k> px, navigation bar <s> px), editing
-# toolbar docked". With the keyboard hidden by the system the toolbar stays docked right above the
-# navigation bar: the content ends exactly that far above the bottom.
+# ends <end> px above the window's bottom (keyboard <k> px, navigation bar <s> px, bottom
+# navigation <n> px), editing toolbar docked". With the keyboard hidden by the system the bottom
+# navigation is back (60 px over the navigation bar) and the toolbar stays docked right on it: the
+# view ends exactly that far above the bottom. With the keyboard up the navigation is away (0) and
+# the view ends at the keyboard's top.
 typing_report() {
-  adb logcat -d | grep -oE "Typing: the content ends [0-9]+ px above the window's bottom \(keyboard [0-9]+ px, navigation bar [0-9]+ px\), editing toolbar (docked|not docked)" |
+  adb logcat -d | grep -oE "Typing: the content ends [0-9]+ px above the window's bottom \(keyboard [0-9]+ px, navigation bar [0-9]+ px, bottom navigation [0-9]+ px\), editing toolbar (docked|not docked)" |
     tail -n 1
 }
-toolbar_above_navigation_bar() {
+toolbar_on_bottom_navigation() {
   local report
   report=$(typing_report)
-  [[ $report =~ ends\ ([0-9]+)\ px.*keyboard\ 0\ px,\ navigation\ bar\ ([0-9]+)\ px.*toolbar\ docked$ ]] &&
-    ((BASH_REMATCH[1] == BASH_REMATCH[2]))
+  [[ $report =~ ends\ ([0-9]+)\ px.*keyboard\ 0\ px,\ navigation\ bar\ ([0-9]+)\ px,\ bottom\ navigation\ ([0-9]+)\ px.*toolbar\ docked$ ]] &&
+    ((BASH_REMATCH[3] > BASH_REMATCH[2] && BASH_REMATCH[1] == BASH_REMATCH[3]))
+}
+toolbar_above_tabs() { # the toolbar's centre above the bottom navigation's Kalendarz (UiAutomator)
+  local bar tab
+  bar=$(ui_y 'Narzędzia edycji')
+  tab=$(ui_y 'Kalendarz')
+  echo "    toolbar at y=${bar:-?}, Kalendarz at y=${tab:-?} (px)"
+  [[ -n $bar && -n $tab ]] && ((bar < tab))
+}
+toolbar_on_keyboard_report() {
+  local report
+  report=$(typing_report)
+  [[ $report =~ ends\ ([0-9]+)\ px.*keyboard\ ([0-9]+)\ px,.*bottom\ navigation\ 0\ px.*toolbar\ docked$ ]] &&
+    ((BASH_REMATCH[2] > 0 && BASH_REMATCH[1] == BASH_REMATCH[2]))
 }
 app_shot() { adb exec-out screencap -p >"$OUT/$1.png" || true; }
 start_app() { # <app arguments> [more am start arguments]
@@ -461,15 +489,26 @@ if ((KEYBOARD)); then
   sleep 2
   app_shot keyboard-journal-scrolled
   check "scrolling the journal leaves the keyboard up" ime_shown
-  # Back hides the keyboard; the toolbar stays docked at the bottom while editing goes on.
+  # Back hides the keyboard: the bottom navigation comes back, the toolbar stays docked right on
+  # it while editing goes on.
   adb shell input keyevent 4
   check "Back hides the keyboard" wait_for 10 ime_hidden
   sleep 2
   app_shot keyboard-journal-hidden
   check "the app reports it hidden" wait_for 10 keyboard_reported_hidden
-  check "the toolbar stays docked right above the system's navigation bar, editing goes on" \
-    wait_for 10 toolbar_above_navigation_bar
+  check "the toolbar stays docked right on the bottom navigation, editing goes on" \
+    wait_for 10 toolbar_on_bottom_navigation
   echo "    $(typing_report)"
+  check "the bottom navigation's tabs are on screen, the editing toolbar above them" toolbar_above_tabs
+  # A tap on the edited text brings the keyboard back: the toolbar on it, the navigation away.
+  adb shell input tap $((SCREEN_W * 24 / 100)) $((SCREEN_H * 25 / 100))
+  check "a tap on the text brings the keyboard back" wait_for 15 ime_shown
+  sleep 3
+  app_shot keyboard-journal-again
+  check "the app's view ends at the keyboard's top again" keyboard_matches
+  check "the toolbar on the keyboard, the bottom navigation away" wait_for 10 toolbar_on_keyboard_report
+  echo "    $(typing_report)"
+  check "the navigation's tabs are gone" ui_lacks 'Kalendarz'
   # A page: the guide (opened as by a tapped notification), its first paragraph tapped.
   start_app '--demo --locale pl' --es "$EXTRA.PATH" "'Witaj w Brulionie.md'" --ei "$EXTRA.LINE" 0
   app_shot keyboard-page-start
@@ -543,7 +582,7 @@ if ((SELECTION)); then
   sleep 2
   app_shot sel-3-extended
   check "a tap in the selection mode edits nothing (no keyboard)" ime_hidden
-  # Kopiuj in the docked tools, right above the navigation bar.
+  # Kopiuj in the docked tools, right on the bottom navigation.
   check "Kopiuj copies the selection" ui_tap 'Kopiuj, Ctrl\+C' last 0
   check "the toast: two blocks copied" wait_for 6 ui_has 'Skopiowano 2 bloki'
   app_shot sel-4-copied
@@ -1272,7 +1311,7 @@ def num(v, default=0):
 
 def state(report, run):
     # "count windowHeight overlap shown animating editing settled toolbarBottom contentBottom legacy
-    # containerHeight innerWidth"
+    # containerHeight innerWidth bottomNavTop"
     rs = records(report, run)
     if not rs:
         return
@@ -1281,7 +1320,8 @@ def state(report, run):
     print(len(rs), round(num(k.get("windowHeight")), 1), round(num(k.get("overlap")), 1), int(bool(k.get("shown"))),
           int(bool(k.get("animating"))), int(bool(s.get("editing"))), int(bool(s.get("settled"))),
           round(num(k.get("toolbarBottom"), -1), 1), round(num(k.get("contentBottom")), 1), round(num(k.get("legacyOverlap")), 1),
-          round(num(s.get("containerHeight")), 1), round(num(s.get("innerWidth")), 1))
+          round(num(s.get("containerHeight")), 1), round(num(s.get("innerWidth")), 1),
+          round(num(k.get("bottomNavTop"), -1), 1))
 
 def cpp(v):
     if not isinstance(v, (int, float)):
@@ -1478,6 +1518,12 @@ HTML
     local s
     s=$(wk_state "$1")
     [[ -n $s ]] && awk '{ exit !($4 == 0 && $5 == 0 && $7 == 1 && $8 >= 0) }' <<<"$s"
+  }
+  # The bottom navigation shown and the docked toolbar ending right on its top (±1 px).
+  wk_toolbar_on_nav() {
+    local s
+    s=$(wk_state "$1")
+    [[ -n $s ]] && awk '{ d = $8 - $13; if (d < 0) d = -d; exit !($13 > 0 && $8 >= 0 && d <= 1) }' <<<"$s"
   }
   wk_count() { local s; s=$(wk_state "$1"); echo "${s%% *}"; }
   # A page this wide (CSS px) is the turned screen's: 1.3 times the upright screen's width (a page
@@ -1751,10 +1797,12 @@ print(last)' "$OUT/report.jsonl" "$1"
         echo "    resizes-visual: no gap in $b (if this is Brave: brave-browser#60074 is fixed upstream)"
       fi
     fi
-    # Back: the keyboard goes, the block stays edited and its toolbar docked at the bottom.
+    # Back: the keyboard goes, the block stays edited and its toolbar docked on the bottom
+    # navigation, which comes back.
     adb shell input keyevent 4
     check "$run: Back hides the keyboard" wait_for 15 ime_hidden
     check "$run: the app reports the keyboard hidden, the toolbar still docked" wait_for 30 wk_hidden_settled "$run"
+    check "$run: the bottom navigation is back, the toolbar docked right on it" wait_for 10 wk_toolbar_on_nav "$run"
     sleep 2
     wk_capture "$OUT/wk-$run-3-back.raw" || true
     app_shot "wk-$run-3-back"

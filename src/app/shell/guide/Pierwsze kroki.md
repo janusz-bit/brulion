@@ -17,10 +17,10 @@ Przy pierwszym uruchomieniu wybierasz folder, tworzysz nowy notatnik albo otwier
 Strona dnia powstaje dopiero przy pierwszej zmianie — samo zaglądanie niczego nie tworzy.
 
 ## Pisanie na telefonie
-Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na każdej stronie, także gdy przewijasz. Ma wcięcia, przenoszenie bloków, zadanie, link `[[`, tag `#`, polecenia `/`, termin, przypomnienie, obraz, cofanie i ponawianie oraz **Więcej** (⋯) — menu bloku, np. z kopiowaniem odnośnika do niego; gdy przycisków jest więcej, niż mieści się na ekranie, przesuń pasek palcem w bok. Dolna nawigacja i przycisk szybkiej notatki chowają się na czas pisania.
+Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na każdej stronie, także gdy przewijasz. Ma wcięcia, przenoszenie bloków, zadanie, link `[[`, tag `#`, polecenia `/`, termin, przypomnienie, obraz, cofanie i ponawianie oraz **Więcej** (⋯) — menu bloku, np. z kopiowaniem odnośnika do niego; gdy przycisków jest więcej, niż mieści się na ekranie, przesuń pasek palcem w bok. Dolna nawigacja chowa się, gdy klawiatura jest otwarta, a przycisk szybkiej notatki — na czas pisania.
 
 - **Ukryj klawiaturę** (ostatni przycisk paska) kończy pisanie: chowa klawiaturę i pasek, a dolna nawigacja wraca.
-- Gdy klawiaturę schowasz przyciskiem Wstecz albo klawiszem na samej klawiaturze, pasek zostaje na dole ekranu z wszystkimi narzędziami — dotknij tekstu, a klawiatura wróci.
+- Gdy klawiaturę schowasz przyciskiem Wstecz albo klawiszem na samej klawiaturze, wraca dolna nawigacja (Dziennik, Kalendarz, Zadania…), a pasek zostaje tuż nad nią z wszystkimi narzędziami — dotknij tekstu, a klawiatura wróci. Przycisk nawigacji kończy pisanie i otwiera swój widok.
 - W komórce tabeli pasek ma Cofnij, Ponów, **Następna komórka** i Ukryj klawiaturę; w źródle Markdown (Więcej → Źródło Markdown) — `[[`, `#`, `/`, Cofnij, Ponów i Ukryj klawiaturę.
 - Okna wyświetlane od dołu (szybka notatka, przypomnienie, zmiana nazwy), podpowiedzi przy pisaniu i pola formularzy (np. w ustawieniach) też zawsze leżą nad klawiaturą.
 

@@ -62,8 +62,8 @@ FocusScope {
     /// A block (or the source) is being edited, or a picture fills the view: the shell hides
     /// its floating capture button (it would float over the photo).
     readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute
-    /// The editor's touch toolbar is docked at the bottom (on the keyboard): the shell hides its
-    /// bottom navigation.
+    /// The editor's touch toolbar is docked at the bottom (on the keyboard, or on the phone's
+    /// bottom navigation once the keyboard went): the shell hides its capture button.
     readonly property bool toolbarDocked: editor.toolbarVisible
     /// The page is shown as Markdown source (the shell turns the palette's block commands off).
     readonly property bool sourceMode: page.sourceMode && !root.pictureRoute

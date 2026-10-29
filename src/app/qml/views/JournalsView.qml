@@ -37,7 +37,7 @@ FocusScope {
     readonly property string title: single ? DatesHelper.formatLong(date) : ""
     readonly property bool editing: single ? (pageView !== null && pageView.editing)
                                            : (activeDay !== null && activeDay.editing)
-    /// A touch toolbar is docked at the bottom (the shell hides its bottom navigation).
+    /// A touch toolbar is docked at the bottom (the shell hides its capture button).
     readonly property bool toolbarDocked: single ? (pageView !== null && pageView.toolbarDocked)
                                                  : (activeDay !== null && activeDay.editor.toolbarVisible)
     /// One day as a page in source mode (the stream opens a day as a page for that).
