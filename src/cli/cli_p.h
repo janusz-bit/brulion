@@ -16,6 +16,7 @@
 #include <QList>
 #include <QString>
 #include <QStringList>
+#include <QThreadPool>
 
 #include <functional>
 #include <memory>
@@ -217,6 +218,8 @@ public:
     void closeNotebook();
 
 private:
+    /// The index loader's threads (declared before the notebook: it outlives it).
+    std::unique_ptr<QThreadPool> m_indexPool;
     std::unique_ptr<notebook::Notebook> m_notebook;
     QString m_root;
     QString m_source;

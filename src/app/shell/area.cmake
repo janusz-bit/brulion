@@ -46,6 +46,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/commandmodel.h ${_brulion_shell_dir}/commandmodel.cpp
     ${_brulion_shell_dir}/demovault.h ${_brulion_shell_dir}/demovault.cpp
     ${_brulion_shell_dir}/foldertreemodel.h ${_brulion_shell_dir}/foldertreemodel.cpp
+    ${_brulion_shell_dir}/indexworkers.h
     ${_brulion_shell_dir}/navigation.h ${_brulion_shell_dir}/navigation.cpp
     ${_brulion_shell_dir}/traypopup.h ${_brulion_shell_dir}/traypopup.cpp
     ${_brulion_shell_dir}/workspace.h ${_brulion_shell_dir}/workspace.cpp

@@ -17,6 +17,7 @@
 // processes taken over) keeps two command-line processes from interleaving their steps.
 #pragma once
 
+#include "notebook/indexloader.h"
 #include "types.h"
 
 #include <QByteArray>
@@ -55,6 +56,8 @@ public:
         QString historyReason = QStringLiteral("cli");
         /// Clock of History and the trash (default: the current time).
         std::function<QDateTime()> clock;
+        /// Threads the index loader may use (none: everything on the calling thread).
+        WorkerPool workers;
     };
 
     enum class OpenError { None, Missing, NotAFolder, Failed };
@@ -76,6 +79,8 @@ public:
     /// date with the vault's changes from then on.
     VaultIndex &index();
     bool hasIndex() const;
+    /// How index() loaded the index (IndexLoader::Stats; empty before the first index()).
+    IndexLoader::Stats indexStats() const;
 
     /// Take the device's write lock ("<stateDir>/cli.lock", else one in the temp folder named by the
     /// vault id), waiting at most `timeoutMs`; nullptr (and `error`) when it cannot be had. The lock
@@ -139,6 +144,8 @@ private:
     std::unique_ptr<Vault> m_vault;
     std::unique_ptr<VaultIndex> m_index;
     QString m_stateDir;
+    WorkerPool m_workers;
+    IndexLoader::Stats m_indexStats;
     std::function<void(const VaultPath &, int)> m_beforeWrite;
 };
 

@@ -9,7 +9,9 @@
 // exact ones, and documents containing more query terms as typed (exactly or by prefix) always
 // rank above those found only through typo tolerance. Every term must match (AND); when that
 // finds nothing for a multi-term query, any term may match (OR). Not thread-safe; incremental
-// (set/remove one document at a time).
+// (set/remove one document at a time). prepare() is pure and runs on any thread: the index loader
+// tokenises documents on worker threads (notebook::IndexLoader) and builds a SearchIndex on one
+// of them, which VaultIndex::adoptSearch() takes over.
 #pragma once
 
 #include <QHash>
@@ -25,6 +27,20 @@ namespace brulion {
 
 class SearchIndex {
 public:
+    /// Bump when tokenize(), the folding or the fields change: the index cache (indexcache.h)
+    /// stores search sections of this format only.
+    static constexpr quint32 FormatVersion = 1;
+
+    enum Field { Title = 0, Aliases = 1, Content = 2, FieldCount = 3 };
+    /// Per field (title, aliases, content): term frequencies or lengths.
+    using FieldCounts = std::array<quint32, FieldCount>;
+
+    /// A tokenised document (prepare()), ready for set().
+    struct Document {
+        FieldCounts length{};                           ///< tokens per field
+        QList<std::pair<QString, FieldCounts>> terms;   ///< distinct terms, sorted, with frequencies
+    };
+
     /// One search result.
     struct Hit {
         QString id;
@@ -47,6 +63,15 @@ public:
 
     /// Add or replace the document `id`.
     void set(const QString &id, QStringView title, const QStringList &aliases, QStringView content);
+    /// The same with a document prepared elsewhere; `contentKey` (VaultIndex::contentKey() of the
+    /// note's text, 0 = unknown) tells VaultIndex::adoptSearch() whether it is still current.
+    void set(const QString &id, Document doc, quint64 contentKey = 0);
+    /// Tokenise a document (pure: any thread).
+    static Document prepare(QStringView title, const QStringList &aliases, QStringView content);
+    /// The content key the document `id` was set with; 0 when unknown or not set.
+    quint64 contentKey(const QString &id) const;
+    /// Ids of every document (any order).
+    QStringList ids() const;
     /// Forget the document `id` (no-op when unknown).
     void remove(const QString &id);
     void clear();
@@ -66,8 +91,7 @@ public:
     static QStringList tokenize(QStringView text);
 
 private:
-    enum Field { Title = 0, Aliases = 1, Content = 2, FieldCount = 3 };
-    using FieldCounts = std::array<quint32, FieldCount>;
+    friend struct SearchIndexAccess; // the index cache's codec (indexcache.cpp)
 
     struct Posting {
         int doc = 0;
@@ -81,6 +105,7 @@ private:
         /// Distinct terms of the document: keys of m_postings (a key lives while a posting list
         /// of a document refers to it; nodes of a std::map never move).
         QList<const QString *> terms;
+        quint64 contentKey = 0;
         bool used = false;
     };
 

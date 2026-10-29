@@ -32,6 +32,18 @@ QString scanStateName(VaultScanStatus::State state)
     return {};
 }
 
+/// How the index was loaded (notebook::IndexLoader::Stats).
+QJsonObject indexJson(const notebook::IndexLoader::Stats &s)
+{
+    return QJsonObject{{u"notes"_s, qint64(s.total - s.attachments)},
+                       {u"attachments"_s, qint64(s.attachments)},
+                       {u"fromCache"_s, qint64(s.fromCache)},
+                       {u"parsed"_s, qint64(s.parsed)},
+                       {u"workers"_s, s.workers},
+                       {u"ms"_s, s.elapsedMs},
+                       {u"cache"_s, s.cache}};
+}
+
 Result info(Call &call)
 {
     notebook::Notebook *nb = call.nb();
@@ -70,6 +82,7 @@ Result info(Call &call)
                                             {u"openTasks"_s, openTasks},
                                             {u"tags"_s, int(index.tags().size())}}},
                   {u"scan"_s, scanJson},
+                  {u"index"_s, indexJson(nb->indexStats())},
                   {u"gui"_s, QJsonObject{{u"running"_s, app.isPrimaryRunning()}, {u"sameNotebook"_s, appNotebook}}}};
     return call.ok(o);
 }

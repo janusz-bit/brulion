@@ -66,7 +66,44 @@ QStringList SearchIndex::tokenize(QStringView text)
     return out;
 }
 
+SearchIndex::Document SearchIndex::prepare(QStringView title, const QStringList &aliases, QStringView content)
+{
+    Document out;
+    QHash<QString, FieldCounts> counts;
+    auto addField = [&](QStringView fieldText, Field field) {
+        const QString folded = text::foldKey(fieldText);
+        forEachToken(folded, [&](QStringView token) {
+            ++counts[token.toString()][field];
+            ++out.length[field];
+        });
+    };
+    addField(title, Title);
+    addField(aliases.join(u'\n'), Aliases);
+    addField(content, Content);
+    out.terms.reserve(counts.size());
+    for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+        out.terms.append({it.key(), it.value()});
+    std::sort(out.terms.begin(), out.terms.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+    return out;
+}
+
 void SearchIndex::set(const QString &id, QStringView title, const QStringList &aliases, QStringView content)
+{
+    set(id, prepare(title, aliases, content));
+}
+
+quint64 SearchIndex::contentKey(const QString &id) const
+{
+    const auto it = m_byId.constFind(id);
+    return it == m_byId.constEnd() ? 0 : m_docs[*it].contentKey;
+}
+
+QStringList SearchIndex::ids() const
+{
+    return m_byId.keys();
+}
+
+void SearchIndex::set(const QString &id, Document document, quint64 contentKey)
 {
     remove(id);
     int doc = 0;
@@ -79,24 +116,14 @@ void SearchIndex::set(const QString &id, QStringView title, const QStringList &a
     Doc &d = m_docs[doc];
     d.id = id;
     d.used = true;
+    d.contentKey = contentKey;
+    d.length = document.length;
 
-    QHash<QString, FieldCounts> counts;
-    auto addField = [&](QStringView fieldText, Field field) {
-        const QString folded = text::foldKey(fieldText);
-        forEachToken(folded, [&](QStringView token) {
-            ++counts[token.toString()][field];
-            ++d.length[field];
-        });
-    };
-    addField(title, Title);
-    addField(aliases.join(u'\n'), Aliases);
-    addField(content, Content);
-
-    d.terms.reserve(counts.size());
-    for (auto it = counts.cbegin(); it != counts.cend(); ++it) {
-        const auto entry = m_postings.try_emplace(it.key()).first;
+    d.terms.reserve(document.terms.size());
+    for (const auto &[term, tf] : std::as_const(document.terms)) {
+        const auto entry = m_postings.try_emplace(term).first;
         PostingList &list = entry->second;
-        const Posting posting{doc, it.value()};
+        const Posting posting{doc, tf};
         if (list.isEmpty() || list.constLast().doc < doc) {
             list.append(posting);
         } else {

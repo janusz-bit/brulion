@@ -10,6 +10,7 @@ brulion_add_core_module(notebook
     SOURCES
         notebook.h
         capture.h capture.cpp
+        indexloader.h indexloader.cpp
         itemref.h itemref.cpp
         journals.h journals.cpp
         json.h json.cpp

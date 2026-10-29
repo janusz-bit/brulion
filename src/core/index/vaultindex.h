@@ -18,7 +18,34 @@ namespace brulion {
 
 namespace index_detail {
 struct IndexAccess;
-}
+struct Entry;
+} // namespace index_detail
+
+class SearchIndex;
+
+/// A note prepared away from the index's thread (VaultIndex::prepare()): its text, ParsedNote and
+/// derived lookup keys, ready for VaultIndex::updatePrepared(). Move-only.
+class PreparedNote {
+public:
+    PreparedNote();
+    ~PreparedNote();
+    PreparedNote(PreparedNote &&) noexcept;
+    PreparedNote &operator=(PreparedNote &&) noexcept;
+    PreparedNote(const PreparedNote &) = delete;
+    PreparedNote &operator=(const PreparedNote &) = delete;
+
+    bool isValid() const;
+    VaultPath path() const;
+    /// VaultIndex::contentKey() of the text.
+    quint64 contentKey() const;
+    /// The parsed note (invalid PreparedNote: an empty one).
+    const ParsedNote &note() const;
+
+private:
+    friend class VaultIndex;
+    std::unique_ptr<index_detail::Entry> m_entry;
+    QString m_parseFingerprint;
+};
 
 /// A link from another note (see VaultIndex::backlinks()).
 struct Backlink {
@@ -249,7 +276,10 @@ private:
 /// changed() is coalesced: emitted once per event-loop turn after any number of changes (zero
 /// timer), or right away by the endBatch() that closes the outermost batch. version() grows
 /// with every change. Query results are snapshots; pointers returned by note() stay valid until
-/// the next change of the index. Not thread-safe: use it from one thread.
+/// the next change of the index. Not thread-safe: use it from one thread — except the static
+/// functions (prepare(), contentKey(), …), which are pure and run on any thread: the index
+/// loader (notebook::IndexLoader) parses notes on worker threads and merges them here with
+/// updatePrepared().
 class VaultIndex : public QObject {
     Q_OBJECT
 
@@ -280,6 +310,39 @@ public:
     void rename(const VaultPath &oldPath, const VaultPath &newPath, const QString &content);
     /// Forget everything.
     void clear();
+
+    // ---- loading on other threads (notebook::IndexLoader) -------------------------------------
+
+    /// Can `path` be indexed at all: not empty, not ignored (paths::isIgnored), not a sync
+    /// conflict copy? (update() skips the others.)
+    static bool isIndexable(const VaultPath &path);
+    /// The config fields parsing depends on (journalsFolder, journalFileFormat,
+    /// defaultReminderTime) as one string: notes parsed with another one are parsed again.
+    static QString parseFingerprint(const VaultConfig &config);
+    /// FNV-1a 64 over the text's UTF-16 code units (little-endian): what the index cache and the
+    /// search documents are validated with.
+    static quint64 contentKey(QStringView text);
+    /// Parse note `path` (a Markdown path) on any thread: ParsedNote and lookup keys.
+    static PreparedNote prepare(const VaultPath &path, const QString &content, const VaultConfig &config);
+    /// The same from a ParsedNote parsed elsewhere (the index cache: no parsing).
+    static PreparedNote prepareParsed(const VaultPath &path, const QString &content, ParsedNote note,
+                                      const VaultConfig &config);
+    /// update() with a prepared note: no parsing here — unless it was prepared with another
+    /// parseFingerprint() than config()'s (then it is parsed again). Unchanged content is a no-op
+    /// as in update(). `sequence`: from reserveSequence() (recency in suggestPages("") and
+    /// suggestBlocks("")); default: the newest.
+    void updatePrepared(PreparedNote prepared, std::optional<quint64> sequence = std::nullopt);
+    /// Reserve `count` update sequence numbers for a bulk load (the note at position i of the
+    /// sorted path list gets base + i, whatever the merge order; edits made meanwhile stay
+    /// newer). Returns base.
+    quint64 reserveSequence(qsizetype count);
+    /// A full-text index built away from this thread: kept are the documents whose content key
+    /// equals their note's current one; the others are dropped and their notes (and notes without
+    /// a document) rebuilt in the background as after an edit. Ends setSearchBuiltElsewhere().
+    void adoptSearch(SearchIndex built);
+    /// While on, the background full-text updates wait (an index loader builds them elsewhere);
+    /// search() and flushSearch() still build what is missing on the spot.
+    void setSearchBuiltElsewhere(bool on);
 
     /// Group changes: changed() is held back until the matching endBatch(), which emits it once
     /// (if anything changed). Batches nest.

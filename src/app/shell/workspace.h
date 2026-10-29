@@ -41,6 +41,7 @@
 #pragma once
 
 #include "editorhost.h"
+#include "notebook/indexloader.h"
 #include "notebook/pages.h"
 #include "queryhost.h"
 #include "types.h"
@@ -138,7 +139,7 @@ public:
     QString name() const;
     bool isSyncthingFolder() const;
     bool indexAvailable() const { return true; }
-    bool indexing() const { return !m_indexQueue.isEmpty(); }
+    bool indexing() const { return m_loader && !m_loader->isDone(); }
     qreal indexProgress() const;
     bool ready() const { return isOpen() && !indexing(); }
     WorkspaceReminders *reminders() const { return m_reminders; }
@@ -156,6 +157,8 @@ public:
 
     Vault *vault() const { return m_vault.get(); }
     VaultIndex *index() const { return m_index.get(); }
+    /// How the index was loaded after open() (tests, the event log).
+    notebook::IndexLoader::Stats indexStats() const;
 
     /// Build the rest of the index now (normally done in chunks in the background): before what
     /// needs every note known — a rename, a route to a block, a new block id — and in tests.
@@ -503,6 +506,8 @@ private:
     void onVaultChanged(const QList<brulion::VaultChange> &changes);
     void indexChunk();
     void indexFile(const QString &path);
+    /// The loader's results are ready: merge them (indexChunk()).
+    void onIndexResultsReady();
     QStringList storedList(const QString &key) const;
     void storeList(const QString &key, const QStringList &list);
     void forgetPath(const QString &path);
@@ -544,8 +549,11 @@ private:
     struct PendingImpact;
     std::shared_ptr<PendingImpact> m_pendingImpact; ///< requestMoveImpact() in progress
     QTimer m_impactTimer;
-    QStringList m_indexQueue;
-    qsizetype m_indexTotal = 0;
+    /// The index loader's QThreadPool (indexworkers.h; none on WebAssembly), a child: deleted
+    /// after the loader.
+    QObject *m_indexPool = nullptr;
+    /// Loads the index after open(): parses on worker threads, merges in slices (m_indexTimer).
+    std::unique_ptr<notebook::IndexLoader> m_loader;
     QTimer m_indexTimer;
     QElapsedTimer m_indexClock; ///< since open() (the event log's "Index ready" line)
     int m_revision = 0;

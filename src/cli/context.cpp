@@ -18,7 +18,9 @@
 #include <QLockFile>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QThread>
 
+#include <algorithm>
 #include <cstdio>
 
 using namespace Qt::StringLiterals;
@@ -165,6 +167,22 @@ notebook::Notebook *Context::notebook(std::optional<Error> *error)
     options.stateDir = stateDir();
     options.watch = serving;
     options.historyReason = u"cli"_s;
+    // The index is read on worker threads (docs/PERFORMANCE.md, L1): as the app,
+    // clamp(cores - 1, 1, 4) parse workers and one for the full-text index; BRULION_INDEX_THREADS
+    // overrides (0 = on this thread).
+    bool forced = false;
+    const int threads = std::clamp(qEnvironmentVariableIsSet("BRULION_INDEX_THREADS")
+                                           ? qEnvironmentVariableIntValue("BRULION_INDEX_THREADS", &forced)
+                                           : QThread::idealThreadCount() - 1,
+                                   forced ? 0 : 1, forced ? 64 : 4);
+    if (threads > 0) {
+        if (!m_indexPool)
+            m_indexPool = std::make_unique<QThreadPool>();
+        m_indexPool->setMaxThreadCount(threads + 1);
+        QThreadPool *pool = m_indexPool.get();
+        options.workers.threads = threads;
+        options.workers.start = [pool](std::function<void()> job) { pool->start(std::move(job)); };
+    }
     if (!globals.now.isEmpty()) {
         const QDateTime fixed = now();
         options.clock = [fixed] { return fixed; };

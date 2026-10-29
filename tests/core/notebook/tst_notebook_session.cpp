@@ -73,7 +73,7 @@ class TestNotebookSession : public QObject {
             writeBehind(dir + u'/' + it.key(), it.value());
         return dir;
     }
-    Notebook::Options options() { return {m_tmp.filePath(u"state%1"_s.arg(m_n)), false, u"cli"_s, {}}; }
+    Notebook::Options options() { return {m_tmp.filePath(u"state%1"_s.arg(m_n)), false, u"cli"_s, {}, {}}; }
 
 private Q_SLOTS:
     void missingFolderIsNotCreated()
@@ -248,7 +248,7 @@ private Q_SLOTS:
         QVERIFY(b.lock(1000));
         // Without a state folder the lock is in the temp folder, named by the vault.
         Notebook c;
-        QVERIFY(c.open(dir, {QString(), false, u"cli"_s, {}}));
+        QVERIFY(c.open(dir, {QString(), false, u"cli"_s, {}, {}}));
         QVERIFY(c.lock(1000));
     }
 

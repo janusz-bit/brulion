@@ -75,6 +75,8 @@ bool Notebook::open(const QString &rawRoot, const Options &options, QString *err
     m_index.reset();
     m_vault = std::move(vault);
     m_stateDir = options.stateDir;
+    m_workers = options.workers;
+    m_indexStats = {};
     QObject::connect(m_vault.get(), &Vault::changed, m_vault.get(),
                      [this](const QList<VaultChange> &changes) { applyChanges(changes); });
     QObject::connect(m_vault.get(), &Vault::configChanged, m_vault.get(), [this] {
@@ -126,11 +128,19 @@ VaultIndex &Notebook::index()
     Q_ASSERT(m_vault);
     if (!m_index) {
         m_index = std::make_unique<VaultIndex>(m_vault->config());
-        VaultIndex::Batch batch(*m_index);
-        for (const FileStat &f : m_vault->files())
-            indexFile(f.path);
+        IndexLoader::Options options;
+        options.firstFolder = m_vault->config().journalsFolder;
+        IndexLoader loader(*m_vault, *m_index, m_workers, options);
+        loader.start(m_vault->files());
+        loader.finish();
+        m_indexStats = loader.stats();
     }
     return *m_index;
+}
+
+IndexLoader::Stats Notebook::indexStats() const
+{
+    return m_indexStats;
 }
 
 bool Notebook::hasIndex() const

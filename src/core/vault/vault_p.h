@@ -145,9 +145,14 @@ public:
     // --- content (vault.cpp)
     bool isTextual(const VaultPath &path) const;
     bool comparesContent(const FileStat &stat) const;
-    void rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText = false);
+    /// `hash`: text::fnv1a64Hex(bytes) when the caller has it already.
+    void rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText = false,
+                         const QString &hash = {});
     QByteArray readDisk(const VaultPath &path, bool *ok) const;
     QByteArray readFile(const VaultPath &path, bool asText, bool *ok);
+    /// The bookkeeping after reading a tracked file (readFile(), Vault::adoptRead()).
+    void takeRead(const VaultPath &path, const std::optional<FileStat> &before, const QByteArray &bytes, bool asText,
+                  const QString &hash);
     void snapshotCached(const VaultPath &path, ChangeSource reason);
     void snapshotCached(const VaultPath &path, const QString &reason);
     bool usesBom(const VaultPath &path) const;

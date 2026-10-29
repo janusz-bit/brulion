@@ -44,6 +44,7 @@ struct Entry {
     QString content;
     ParsedNote note;
     quint64 seq = 0;            ///< update sequence number (higher = more recently updated)
+    quint64 contentKey = 0;     ///< VaultIndex::contentKey(content)
     QList<PathLink> links;      ///< path-based links
     QList<int> refs;            ///< indices into note.links of `((id))` / `!((id))` references
     QList<NameCandidate> names; ///< folded title, then aliases
@@ -75,6 +76,9 @@ struct IndexAccess {
 
 /// Journals first (newest first), then other notes by path.
 bool relevanceLess(const Entry &a, const Entry &b);
+
+/// A note's record from its text and parse (pure: any thread); `seq` 0.
+std::unique_ptr<Entry> makeEntry(const VaultPath &path, const QString &content, ParsedNote note);
 
 /// The tags a note carries as a whole page: frontmatter `tags`, the leading `tags::` block, and
 /// tags found in no ordinary block (keys, lower-case NFC).
@@ -131,6 +135,7 @@ struct VaultIndex::Private {
     SearchIndex search;
     QSet<VaultPath> searchDirty;
     qsizetype searchBuilt = 0; ///< documents built since the last SearchIndex::squeeze()
+    bool searchElsewhere = false; ///< setSearchBuiltElsewhere()
     QTimer *searchTimer = nullptr;
     QElapsedTimer lastChange;
 
@@ -166,7 +171,8 @@ struct VaultIndex::Private {
     /// have changed (the note's names when new, aliases when they changed).
     QSet<QString> putNote(const VaultPath &path, const QString &content, bool updateSearch,
                           std::optional<quint64> keepSeq = std::nullopt);
-    std::unique_ptr<Entry> makeEntry(const VaultPath &path, const QString &content, ParsedNote note, quint64 seq) const;
+    /// putNote() of a prepared record (its seq is set here).
+    QSet<QString> putEntry(std::unique_ptr<Entry> e, bool updateSearch, std::optional<quint64> keepSeq);
     void attachNote(std::unique_ptr<Entry> e);
     /// Remove a note from every map; returns it (nullptr when unknown).
     std::unique_ptr<Entry> detachNote(const VaultPath &path, bool discardSearch);
