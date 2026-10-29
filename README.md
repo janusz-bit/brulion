@@ -174,7 +174,8 @@
   też — gdy mu na to pozwolisz w ustawieniach — sterować działającą aplikacją: zobaczyć, co
   pokazuje, kliknąć, pisać i zrobić zrzut ekranu. Więcej niżej i w [docs/CLI.md](docs/CLI.md).
 * **Kompatybilność.** Składnia zadań zgodna z wtyczką Obsidian Tasks, właściwości `klucz::
-  wartość` jak w Logseq/Dataview — szczegóły w [docs/SYNTAX.md](docs/SYNTAX.md).
+  wartość` jak w Logseq/Dataview i nagłówek YAML jak w Obsidianie — edytowane w polach panelu
+  „Właściwości” bez zmiany reszty nagłówka — szczegóły w [docs/SYNTAX.md](docs/SYNTAX.md).
 * **Historia wersji i kosz.** Zanim notatka zostanie nadpisana, jej poprzednia wersja trafia
   do historii na urządzeniu (przy pisaniu najwyżej co 5 minut, zawsze przed zmianami
   z synchronizacji i importu). Każdą wersję możesz porównać i przywrócić, a usunięte strony

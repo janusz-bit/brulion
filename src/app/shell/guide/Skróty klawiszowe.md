@@ -21,6 +21,7 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | F2 | zmiana nazwy strony |
 | Ctrl+, | ustawienia |
 | Ctrl+E | tryb źródła Markdown |
+| Ctrl+; | dodaj właściwość strony |
 | Ctrl+Enter | w oknach: zatwierdź |
 
 ## Edycja bloków
@@ -41,6 +42,19 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | Shift+↑ / Shift+↓ | zaznacz tekst; na pierwszej / ostatniej linii, gdy zaznaczenie dojdzie do brzegu bloku: zaznacz ten blok i poprzedni / następny |
 | Esc | zamknij podpowiedzi, potem zakończ edycję i zaznacz blok |
 | / | menu poleceń |
+
+## Panel Właściwości
+| Skrót | Działanie |
+|---|---|
+| ↑ / ↓ | poprzednia / następna właściwość |
+| → albo Enter | zmień wartość |
+| ← albo F2 | zmień nazwę |
+| Delete albo Ctrl+Backspace | usuń właściwość |
+| Ctrl+; | dodaj właściwość |
+| Alt+↓ | do pierwszego bloku pod panelem |
+| Esc | wyjdź z pola (wartość zostaje bez zmian), potem wróć do edytora |
+
+Więcej: [[Tagi i właściwości#Edycja w panelu Właściwości|Edycja właściwości]].
 
 ## Zaznaczone bloki
 Po Esc, Shift+strzałkach, Ctrl+A, Shift+kliknięciu albo przeciągnięciu myszą z bloku na blok zaznaczone są całe bloki razem z dziećmi (także zwiniętymi). Zaznaczenie widać jako jeden pasek. Ctrl+kliknięcie dobiera pojedynczy blok albo go wyjmuje — także z przerwami między zaznaczonymi blokami.

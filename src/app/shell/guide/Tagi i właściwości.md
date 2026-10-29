@@ -38,7 +38,27 @@ brulion: outline
 - `brulion` — tryb notatki ([[Dokument i konspekt|dokument albo konspekt]]),
 - dowolne własne klucze, np. `status` — Brulion pokazuje je w panelu **Właściwości** nad treścią.
 
-Inne programy widzą te same wpisy jako zwykłe właściwości.
+Inne programy widzą te same wpisy jako zwykłe właściwości. Zamiast nagłówka YAML możesz też zacząć stronę od linii `klucz:: wartość` (styl Logseq).
+
+### Edycja w panelu Właściwości
+Właściwości zmieniasz bez pisania YAML-a: kliknij nagłówek **Właściwości** nad treścią, żeby rozwinąć panel (zostaje rozwinięty, aż go zwiniesz). Każda właściwość ma pole według typu wartości:
+
+- **tekst** — kliknij wartość, żeby ją zmienić; linki `[[strona]]` i `#tagi` w tekście działają. Wpisz `[[`, a Brulion podpowie strony,
+- **liczba** — przyjmuje też „3,5” i „1 200” (zapisze `3.5` i `1200`),
+- **pole wyboru** — `true` albo `false`, jedno kliknięcie,
+- **data** i **data i godzina** — okno z kalendarzem; możesz wpisać „jutro”, „w piątek 9:00”,
+- **lista**, **tagi** i **aliasy** — etykiety z ×; „+” dodaje następną (Enter albo przecinek), Backspace w pustym polu usuwa ostatnią.
+
+Typu nie trzeba ustawiać: Brulion rozpoznaje go po wartości, a pusta wartość dostaje typ, jaki ten klucz ma najczęściej na innych stronach notatnika.
+
+Nową właściwość dodasz przyciskiem **Dodaj właściwość** na dole panelu, w menu strony albo skrótem **Ctrl+;** (także na stronie, która nie ma jeszcze żadnych właściwości). Podpowiedzi pokazują klucze używane w całym notatniku i to, na ilu stronach. Ikona typu przy właściwości (albo prawy przycisk, na telefonie przytrzymanie) otwiera menu: **Typ** (zmiana typu — gdy wartości nie da się zamienić, zostaje wyczyszczona i możesz to cofnąć), **Zmień nazwę**, **Kopiuj wartość** i **Usuń**. Każdą zmianę cofniesz (Ctrl+Z albo „Cofnij” w komunikacie).
+
+Klawiatura w panelu: strzałki ↑ i ↓ przechodzą między właściwościami, → albo Enter zmienia wartość, ← albo F2 zmienia nazwę, Delete usuwa, Alt+↓ przechodzi do pierwszego bloku, Esc wraca do edytora.
+
+Brulion zmienia tylko tę jedną właściwość — reszta nagłówka (komentarze, kolejność, cudzysłowy, zakończenia linii) zostaje bez zmian. Działa to tak samo w nagłówku YAML, jak w liniach `klucz:: wartość`; w tych drugich klucz może mieć tylko litery a–z, cyfry, `-` i `_`. Nagłówek, którego nie da się bezpiecznie zmienić w polach (na przykład wcięty), panel pokazuje tylko do odczytu — zmienisz go przyciskiem **Edytuj jako tekst**.
+
+### Tagi i aliasy w nagłówku strony
+Tagi i aliasy strony stoją też pod jej tytułem. Prawy przycisk na etykiecie (na telefonie przytrzymanie) otwiera menu: tag możesz otworzyć albo usunąć z tej strony, alias skopiować albo usunąć. Przycisk „+” na końcu dodaje tag albo alias bez otwierania panelu.
 
 ## Właściwości bloków
 W stylu Logseq/Dataview: linia `klucz:: wartość` bezpośrednio w bloku.

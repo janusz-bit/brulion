@@ -37,11 +37,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   i komputer) z Obsidianem obok i spisać różnice w układzie, odstępach, typografii, kolorach,
   animacjach i drobnych zachowaniach (kursor, zaznaczanie, menu, skróty). Z listy różnic
   wybrać te, które poprawiają odbiór interfejsu, i poprawić je w QML (docs/UI.md).
-* **Edytowanie właściwości strony** — dodawanie, zmiana i usuwanie właściwości (frontmatter YAML
-  i `klucz:: wartość`) w panelu „Właściwości” i w nagłówku strony, bez edycji surowego tekstu:
-  pola według typu wartości (tekst, liczba, data, lista, znaczniki, aliasy), podpowiedzi
-  istniejących kluczy z notatnika, zachowanie reszty frontmattera bajt w bajt (docs/SYNTAX.md
-  „Page properties”, docs/UI.md).
 
 ## Windows
 

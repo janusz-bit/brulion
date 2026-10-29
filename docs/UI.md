@@ -406,6 +406,7 @@ everything near the bottom, the same way on Android, in the browser and with a s
 | F2 | rename the current page |
 | Ctrl+, | settings |
 | Ctrl+E | Markdown source mode of the page / journal |
+| Ctrl+; | add a page property (the properties panel's add row; "Page properties") |
 | Ctrl+Enter | (in dialogs) accept |
 
 Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageController`):
@@ -440,7 +441,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 |---|---|---|
 | `journals` (home) | `JournalsView` — the stream of daily notes, "Przejdź do dnia…", missed reminders banner (`ContentMissedBanner`: Otwórz, Drzemka, Zrobione — a task's reminder only: `reminders.complete(id)` marks the task done in the note like the status menu, the shell's toast "„…” — zrobione" confirms it; no undo step in an open editor, as with the snooze — and dismiss) | `date?` |
 | `journal` | `JournalsView`, one day (opened "jako strona") | `date`, `path?` |
-| `page` | `PageView` — page header (tags, properties, note mode toggle, favourite, page menu; for a page named by a tag in use the tag strip: "Widok tagu", "Zadania z tym tagiem", its sub-tags as chips — with a rename at once), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "cała strona" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions. A page not written yet opens ready to type, except one opened from a `#tag` (`fromTag`, set by `Workspace::resolveRoute`) on a touch UI: the keyboard would cover the tagged blocks listed below, so the header's "Zacznij pisać" or a tap under it starts typing. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it | `path`, `line?`, `blockId?`, `heading?`, `open?`, `fromTag?` |
+| `page` | `PageView` — page header (tags and aliases as chips, edited there: "Page properties"; note mode toggle, favourite, page menu with "Dodaj właściwość"; for a page named by a tag in use the tag strip: "Widok tagu", "Zadania z tym tagiem", its sub-tags as chips — with a rename at once), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "cała strona" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions. A page not written yet opens ready to type, except one opened from a `#tag` (`fromTag`, set by `Workspace::resolveRoute`) on a touch UI: the keyboard would cover the tagged blocks listed below, so the header's "Zacznij pisać" or a tap under it starts typing. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it | `path`, `line?`, `blockId?`, `heading?`, `open?`, `fromTag?` |
 | `calendar` | `CalendarView` — Miesiąc / Tydzień / Agenda, the day panel, add dialog | `date?`, `mode?` |
 | `tasks` | `TasksView` — quick add, filters, sections (Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione), "Pokaż jako zapytanie"; a click on a task's `#tag` filters the list, Ctrl+click opens the tag's page, a long press or right-click its menu (Filtruj po tagu, Otwórz stronę tagu, Widok tagu, Otwórz w panelu bocznym, Kopiuj tag); a right-click or long press on a chip: its token's menu ("Token and link menus") | `query?` |
 | `graph` | `GraphView` — whole / local graph (depth 1–2), toggles for tags (the "#tag" nodes of tags that name no page; a tag naming a page is an edge to it), missing pages, journals, templates | `path?`, `depth?`, `select?` |
@@ -1188,7 +1189,8 @@ frames; a slow phone, a loaded machine or a fast flick overtakes it), so such a 
 content jump now and then, not every time. Hence:
 
 * bindings instead of Layouts in `ContentJournalDay`, `QueryBlockView`, `TransclusionView`,
-  `EmbedView`, `FrontmatterView` (folded), `PlanningItemRow`, `CalendarAgendaList`, `TasksRow`
+  `EmbedView`, `FrontmatterView` (folded, and expanded: `PropertiesPanel` sums its rows,
+  `PropertyListValue` lays out its chips like `TasksRow`), `PlanningItemRow`, `CalendarAgendaList`, `TasksRow`
   (its chips' line breaks), `TableBlockView`'s buttons and `BChip` itself — Tasks and the agenda
   reuse their rows (`reuseItems`), and a reused row whose chips took their new widths a polish
   later wrapped onto another line after it was placed. (In Qt 6.11 a Repeater inside a delegate
@@ -1396,6 +1398,105 @@ journal days (`make-vault.py`); before = v0.1.1 with the probe added.
   its distance" shows what the fling did, and its TouchFlick line counts corrections and caught
   flings. In observe mode it judges touch drags only (a mouse or a stylus moves the content
   through Qt's mouse path).
+
+## Page properties
+
+The page's properties — the YAML frontmatter and the leading `key:: value` lines (docs/SYNTAX.md
+§4 "Editing page properties") — are edited as typed fields in the editor's **properties panel**
+(*Właściwości*) and, for tags and aliases, in the page header; nobody has to touch the raw text
+(it stays one menu item away: "Edytuj jako tekst"). Each change is one undo step of the page
+(Ctrl+Z, a toast's "Cofnij") and rewrites only the lines of that property — comments, order,
+quoting and line endings of the rest stay as they were (`markdown/pageprops.h`, every YAML edit
+verified by parsing the result).
+
+**The panel** (`qml/editor/FrontmatterView.qml` → `PropertiesPanel.qml` → `PropertyRow.qml`,
+`PropertyListValue.qml`, `PropertyMenu.qml`, all for the leading frontmatter row's delegate):
+
+* Folded (the default: the journal stream stays dense): "Właściwości", the count and a one-line
+  preview of the values ("status: w toku · koszt: 1200"). The header's tap switches it; whether
+  it is open is a device setting (`AppSettings.propertiesExpanded`, key
+  `editor/propertiesExpanded`; `BlockEditor.propertiesExpanded` bound by `PageView` and the
+  journal days, `propertiesExpandedToggled` writes it), so a page stays open while it is edited,
+  undone or synced. Expanded, the header has "+" (add, Ctrl+;) and "⋯" ("Edytuj jako tekst": the
+  raw text in the block's inline editor, "Zwiń").
+* A row: the type icon (Text `type`, Number `sigma`, Checkbox `square-check-big`, Date `calendar`,
+  Date and time `calendar-clock`, List `list`, Tags `tags`, Aliases `bookmark`, other `code`), the
+  key and the value's editor by type. Text is shown rendered (`[[links]]`, `#tags`, URLs work —
+  the `properties` role's `html`, escaped by the `InlineRenderer`); a click beside a link opens a
+  `BSuggestField` with the raw text (the notebook's values of the key as suggestions, after `[[`
+  pages); a text of several lines gets a text area (Ctrl+Enter or leaving it commits). Numbers
+  take "3,5" and "1 200" (an invalid one: the field's error, nothing written). A checkbox writes
+  each toggle. Dates open the editor's date dialog (`EditorDialogs.pickPropertyDate`: the key as
+  title, natural language "jutro", the clock for a date and time, "Wyczyść"). Lists, tags and
+  aliases are chips (× removes; a `[[Page]]` item and a tag open their page) with "+": a field
+  where Enter or "," adds (a pasted "a, b, c" adds three) and stays open, Backspace in the empty
+  field takes the last chip, Ctrl+Z there undoes. Fields commit on Enter and when they lose the
+  focus (also when the row goes away), Escape leaves them unchanged.
+* The row's menu (its type icon, a right-click or a long press on the row, the Menu key /
+  Shift+F10): "Typ" (Tekst, Liczba, Pole wyboru, Data, Data i godzina, Lista; tags and aliases keep
+  theirs — a value that cannot be converted is cleared with "Cofnij" in the toast; an empty value's
+  type is remembered for the session, `BlockEditor.propertyTypeOverride`, a list is written `[]`),
+  "Zmień nazwę" (the key becomes a field with key suggestions; an existing name, `brulion` and a
+  key a `key::` line cannot hold are refused with a sentence under the field), "Kopiuj wartość",
+  "Usuń" ("Cofnij" in the toast).
+* "+ Dodaj właściwość": a field with the notebook's keys (key, its type's icon, "12 stron";
+  `PageController.suggestPropertyKeys`, without the page's own keys and `brulion`). Choosing or
+  entering a key writes it at once with an empty value of its type in the notebook (`key:`,
+  `key: []`, `key: false`) and puts the keyboard on its value; Escape drops it, nothing written.
+  The type of an empty value is the key's most common type in the notebook
+  (`PageController.notebookPropertyType`, from `VaultIndex::propertyKeys()`).
+* A block Brulion cannot edit safely (an indented mapping, plain text between `---` lines) shows
+  its values read-only: "Tych właściwości nie da się bezpiecznie zmieniać w polach." with
+  "Edytuj jako tekst".
+* Layout: a wide panel puts the keys in a column (as wide as the widest key, 96 px to 30 % of the
+  panel; rows 32 px, 28 dense); a narrow one (`Theme.compact` or under 480 px: phones) stacks the
+  key over the value, every control a 44 px target. Heights are bindings (rule 1 of "Scrolling
+  performance": the rows' heights summed, the chips' lines computed), rows live in a `ListModel` by
+  key so an edit keeps them (a focused field too).
+* Keyboard: rows take the focus (Tab); ↓ / ↑ move between them (past the last: the add row), → or
+  Enter edits the value, ← or F2 renames, Delete or Ctrl+Backspace removes, Alt+↓ goes to the first
+  block, Ctrl+; adds, Ctrl+Z / Ctrl+Shift+Z undo and redo, Escape returns to the editor. A field
+  with the keyboard ends block editing and is kept above the on-screen keyboard
+  (`BlockEditor.editingProperty` in `ensureEditVisible()`); the touch toolbar stays away.
+
+**Adding the first property** (`BlockEditor.addProperty()`: the page menu's "Dodaj właściwość",
+Ctrl+;, the palette's "Dodaj właściwość strony" — uiAction `addProperty`, handled by `PageView` and
+for the journal stream's active day by `JournalsView` —, the phone menu): zoomed in, the page is
+zoomed out first; with properties shown, the panel opens at its add row (`propertyFocus` { part:
+"add" }); a page without shown properties (also one whose frontmatter holds only the hidden note
+mode) gets a draft add row above its blocks (`propertyDraft`, a `PropertiesPanel` with `draft` in
+the list header). The first key writes a new frontmatter (or into the hidden block, or a `key::`
+line on a page that has only those) and the real panel takes over, its value focused
+(`propertyFocus` survives the new row's creation).
+
+**The page header** (`ContentPageHeader`): the aliases and tags come from
+`PageController.pageProperties` once the page is loaded (an edit shows at once), else from the
+index's summary. A right-click or a long press on a chip from a property opens its menu — a tag:
+"Otwórz stronę tagu", "Usuń z tej strony"; an alias (also a tap): "Kopiuj", "Usuń alias"
+(`removePageListItem`: from every property holding it; the last one takes the property away;
+"Cofnij" in the toast). The row ends with "+" (when properties can be added): "Dodaj tag", "Dodaj
+alias" (a field at the end of the row — tags suggested —, Enter adds and stays open, Escape
+closes) and "Dodaj właściwość…".
+
+**C++** (`PageController`, `src/app/editor/pagecontroller_properties.cpp`): `pageProperties`
+{ items, tags, aliases, canAdd, addTarget, hasYaml, hasLogseq, editable, problem, visibleRow }
+(read from the leading frontmatter rows, again only when their text changed; in source mode from
+the source text), `setPageProperty`, `removePageProperty`, `renamePageProperty`,
+`setPagePropertyType` ({ lost } when the value could not be kept), `addPageListItem`,
+`removePageListItem` — each one undo step through `applyText` (in source mode an edit of the
+source text, like `setMode`), returning { ok, status, reason } —, `suggestPropertyKeys`,
+`suggestPropertyValues`, `notebookPropertyType` over `EditorHost::propertyKeys()` /
+`propertyValues()` (`Workspace` and `FakeEditorHost`: `VaultIndex`). `BlockListModel`: the
+`properties` role is typed and cached per row (`pagePropertyMap`: key, value, type, source, raw,
+items, empty, editable, multiline, linkDate, html, itemsHtml), `propertiesInfo` { source, editable,
+problem, canAdd }; `replaceContent` keeps a leading frontmatter row whose text changed (same index,
+same form) as the same row with a `dataChanged` — the panel's delegate survives property edits,
+the note mode, undo and other devices' changes.
+
+**Tests**: `tst_markdown_pageprops` (types, reading, the writing rules byte for byte, random
+input), `tst_index_properties`, `tst_editor_pageprops` (undo steps, the row kept, source mode,
+refusals, suggestions, the roles), QML `tst_editor_qml_properties` / `_touch` (real input, see
+"Dev tools"), the shell self-test (the header's chips and the palette command).
 
 ## Note modes: outline and document
 
@@ -1786,12 +1887,12 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | Option | Effect |
 |---|---|
 | `--gallery [--section <id>]` | the component gallery (`qml/dev/Gallery.qml`) instead of the app; popups of the section open by themselves |
-| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs, a block put at the start of a page by a real Enter or Alt+Up, undone with real Ctrl+Z and redone with Ctrl+Shift+Z, Enter at the end of a zoomed paragraph ending the zoom with the new block edited and in view, Ctrl+Z zooming back in, Ctrl+Shift+Z out again, the breadcrumb's arrow clicked while a child of a folded zoom root is edited), `blocklinks` — links to blocks and headings with real input: the block menu from right-clicks on a heading's text, a paragraph, a callout, a calc block and a page title drawn above the page's properties (none from the properties), a bullet's right-click / long press and the touch toolbar's "Więcej" (above the bar; a table cell's too), a finger's long press on text selecting the block (no menu), each "Kopiuj odnośnik" item read back from the clipboard with its toast, Ctrl+Shift+C editing / selected / nothing selected / in a table cell, the palette after a cell lost the keyboard, copied links followed (scrolled, selected, flashed — again after scrolling away), a missing heading (ctest `tst_editor_qml_blocklinks`, `_touch`); states `copylink`, `copylink-document` (the menu with its submenu open on a heading), `copylink-toolbar`, `copylink-table` (with `--touch`: the menu from the toolbar's "Więcej" of a block, of a table cell), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox (the result's and the embed's menu staying open while their note changes elsewhere, the status written on the task's line now), Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `selectiontest` — selecting and copying blocks with real input (`qml/dev/SelectionSelfTest.qml`): Esc and Shift+↓ then Ctrl+C, Shift+↑ / Shift+↓ from an edited block, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, the toast's Cofnij (clicked; one whose deletion was undone already undoes nothing), Alt+↓ and Tab on a range, Ctrl+V over a selection, in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu, the block menu of a selected and another block, the floating tools, a mouse drag over a document's paragraphs (no scrolling) and to the view's edge (autoscroll), the band after scrolling away, the floating tools' Więcej (no indents for a document's paragraphs); with `--touch` a long press, taps, the end grip, Usuń and a tap on the toast's Cofnij, a long press dragged to the edge, Back, the toolbar's and the bullet menu's "Zaznacz" — the clipboard read back (ctest `tst_editor_qml_selection`, `_touch`), states `date-menu`, `date-menu-reminder` (a 📅 / ⏰ chip's menu), `recurrence-menu` (a 🔁 rule's), `link-menu` (a #tag's), `datechips` — the token menus with real input (`qml/dev/DateChipSelfTest.qml`): a right-click / long press on a 📅 and a ⏰ chip (no block menu, nothing selected or toggled), Dzień później, Dziś, Zmień datę… (the dialog on the chip's date, a date and time written), Usuń datę, Godzinę później, Alarm, the reminder dialog, each undone; a plain click / tap on the chip still edits; a priority set lower, a 🔁 rule set to Codziennie, the reminder's Priorytet submenu, a `[[day]]` link a day later (each undone), the link menus of a `#tag` and a `[[link]]` (Kopiuj read back from the clipboard) (ctest `tst_editor_qml_datechips`, `_touch`), `refreshtest` — views following what they depend on (`qml/dev/RefreshSelfTest.qml`): a query's results replaced by as many rows of another height, an embedded section changed in its own note, a date picker's today marker after midnight, the reminder dialog's weekday names, rule and date picker after a language change, a calculation's results after the window narrowed until the text wraps again (the width depends on the fonts), the view staying down the page when the page's header changes its height (ctest `tst_editor_qml_refresh`, `_touch`); states `selection` (a range; desktop: the floating tools, `--touch`: the docked tools and grips), `selection-document`, `selection-menu` (the block menu of a selected block), `text-menu` (the edited text's menu), `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
+| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs, a block put at the start of a page by a real Enter or Alt+Up, undone with real Ctrl+Z and redone with Ctrl+Shift+Z, Enter at the end of a zoomed paragraph ending the zoom with the new block edited and in view, Ctrl+Z zooming back in, Ctrl+Shift+Z out again, the breadcrumb's arrow clicked while a child of a folded zoom root is edited), `blocklinks` — links to blocks and headings with real input: the block menu from right-clicks on a heading's text, a paragraph, a callout, a calc block and a page title drawn above the page's properties (none from the properties), a bullet's right-click / long press and the touch toolbar's "Więcej" (above the bar; a table cell's too), a finger's long press on text selecting the block (no menu), each "Kopiuj odnośnik" item read back from the clipboard with its toast, Ctrl+Shift+C editing / selected / nothing selected / in a table cell, the palette after a cell lost the keyboard, copied links followed (scrolled, selected, flashed — again after scrolling away), a missing heading (ctest `tst_editor_qml_blocklinks`, `_touch`); states `copylink`, `copylink-document` (the menu with its submenu open on a heading), `copylink-toolbar`, `copylink-table` (with `--touch`: the menu from the toolbar's "Więcej" of a block, of a table cell), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox (the result's and the embed's menu staying open while their note changes elsewhere, the status written on the task's line now), Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `selectiontest` — selecting and copying blocks with real input (`qml/dev/SelectionSelfTest.qml`): Esc and Shift+↓ then Ctrl+C, Shift+↑ / Shift+↓ from an edited block, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, the toast's Cofnij (clicked; one whose deletion was undone already undoes nothing), Alt+↓ and Tab on a range, Ctrl+V over a selection, in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu, the block menu of a selected and another block, the floating tools, a mouse drag over a document's paragraphs (no scrolling) and to the view's edge (autoscroll), the band after scrolling away, the floating tools' Więcej (no indents for a document's paragraphs); with `--touch` a long press, taps, the end grip, Usuń and a tap on the toast's Cofnij, a long press dragged to the edge, Back, the toolbar's and the bullet menu's "Zaznacz" — the clipboard read back (ctest `tst_editor_qml_selection`, `_touch`), states `date-menu`, `date-menu-reminder` (a 📅 / ⏰ chip's menu), `recurrence-menu` (a 🔁 rule's), `link-menu` (a #tag's), `datechips` — the token menus with real input (`qml/dev/DateChipSelfTest.qml`): a right-click / long press on a 📅 and a ⏰ chip (no block menu, nothing selected or toggled), Dzień później, Dziś, Zmień datę… (the dialog on the chip's date, a date and time written), Usuń datę, Godzinę później, Alarm, the reminder dialog, each undone; a plain click / tap on the chip still edits; a priority set lower, a 🔁 rule set to Codziennie, the reminder's Priorytet submenu, a `[[day]]` link a day later (each undone), the link menus of a `#tag` and a `[[link]]` (Kopiuj read back from the clipboard) (ctest `tst_editor_qml_datechips`, `_touch`), `propstest` — the page properties panel with real input (`qml/dev/PropertiesSelfTest.qml`; "Page properties") (ctest `tst_editor_qml_properties`, `_touch`), states `properties`, `properties-phone` (the panel expanded on a page with every type), `refreshtest` — views following what they depend on (`qml/dev/RefreshSelfTest.qml`): a query's results replaced by as many rows of another height, an embedded section changed in its own note, a date picker's today marker after midnight, the reminder dialog's weekday names, rule and date picker after a language change, a calculation's results after the window narrowed until the text wraps again (the width depends on the fonts), the view staying down the page when the page's header changes its height (ctest `tst_editor_qml_refresh`, `_touch`); states `selection` (a range; desktop: the floating tools, `--touch`: the docked tools and grips), `selection-document`, `selection-menu` (the block menu of a selected block), `text-menu` (the edited text's menu), `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
 | `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--share <json>` | receive a share as Android's `ShareActivity` hands it over — `{"subject", "text", "url", "files": [{"path", "name", "mime"}]}` (`src/core/notebook/share.h`) — and open the share dialog once the notebook is ready (`AppController::receiveShare`; screenshots, manual checks, ctest `tst_shell_share`) |
 | `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer` |
-| `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `select-range:<first>..<last>` — on touch UIs in the selection mode —, `mode-tooltip`, …) |
+| `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `select-range:<first>..<last>` — on touch UIs in the selection mode —, `mode-tooltip`, `properties` — the page's properties panel expanded, nothing focused, the view at the top: the `ui` benchmark's screen —, …) |
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--accent <name\|#rrggbb>`, `--surface paper\|white\|slate\|black`, `--density compact\|comfortable` | the appearance settings for this run (screenshots; the settings themselves stay): accent preset or custom colour, light or dark background, density |
