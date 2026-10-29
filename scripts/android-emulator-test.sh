@@ -466,7 +466,9 @@ drawer_in_view() { # <ERE>: the first item so named lies wholly in the drawer's 
 }
 drawer_show() { # <ERE>: a finger drags the drawer's list until the item so named lies wholly in it
   # (towards its middle: the slow drag's little fling cannot take it out again). An item not on
-  # the screen at all is further down the list.
+  # the screen at all is further down the list. After each drag the drawer is closed and opened
+  # again (Back, ☰): on Android 11 the accessibility tree had no nodes for the rows the drag
+  # brought into the list and kept others at their old places until the drawer showed again.
   local _ view top bottom item y1 y2 x from to delta
   x=$((SCREEN_W * 30 / 100)) # (on the rows' text, left of their "⋯")
   for _ in 1 2 3 4 5 6 7 8; do
@@ -482,6 +484,7 @@ drawer_show() { # <ERE>: a finger drags the drawer's list until the item so name
       ((y1 >= top && y2 <= bottom)) && return 0
       delta=$(((y1 + y2) / 2 - (top + bottom) / 2))
     else
+      y1="" y2=""
       delta=$(((bottom - top) / 2))
     fi
     # Dragged up (delta > 0) from near the footer, down from near the notebook's row, never
@@ -490,8 +493,12 @@ drawer_show() { # <ERE>: a finger drags the drawer's list until the item so name
     to=$((from - delta))
     ((to < top + 30)) && to=$((top + 30))
     ((to > bottom - 30)) && to=$((bottom - 30))
+    echo "    (the drawer's list ${top}-$bottom, the item ${y1:-?}-${y2:-?}: dragged $from → $to)"
     adb shell input swipe "$x" "$from" "$x" "$to" 1200
     sleep 1
+    adb shell input keyevent 4
+    sleep 2
+    ui_tap 'Menu' first 1 || return 1
   done
   echo "    not brought into the drawer's list: $1"
   return 1
