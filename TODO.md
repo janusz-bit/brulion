@@ -21,9 +21,10 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * kopie konfliktowe Syncthinga (`*.sync-conflict-….svg`): „Scal rysunki” w centrum
     synchronizacji, łączące linie obu wersji po ich identyfikatorach (jak przy zmianie z innego
     urządzenia przy otwartym rysunku);
-  * sprawdzić ręcznie zaznaczanie lassem rysikiem na tablecie (Natalia) i pisanie tekstu na
-    rysunku klawiaturą ekranową telefonu (polskie znaki, autokorekta); zgodność z excalidraw.com w
-    obie strony sprawdza `tests/app/drawing/excalidraw-roundtrip.sh` (wymaga internetu);
+  * sprawdzić ręcznie zaznaczanie lassem rysikiem na tablecie (Natalia) i polskie znaki z
+    klawiatury ekranowej w tekście na rysunku na prawdziwym telefonie (pisanie z klawiatury
+    sprawdza `scripts/android-emulator-test.sh --drawing`, zgodność z excalidraw.com w obie strony
+    `tests/app/drawing/excalidraw-roundtrip.sh`, wymaga internetu);
   * zmiana rozmiaru i obracanie zaznaczenia (uchwyty na ramce), zaznaczanie prostokątem;
   * kopiowanie elementów między Brulionem a excalidraw.com przez schowek;
   * pliki `*.excalidraw.md` wtyczki Excalidraw dla Obsidiana (LZ-String w Markdownie);

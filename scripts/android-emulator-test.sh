@@ -73,6 +73,15 @@
 # (`[x]` and `✅ <the day of the tap>`); the second one's tapped with the app's process gone leaves
 # the note as it is until the next start, which writes it. Screenshots (dn-*.png); the same
 # debuggable APK.
+# With --drawing instead: text on a drawing with the on-screen keyboard (docs/UI.md "Drawing
+# editor") — a notebook whose journal embeds a drawing (tests/data/drawing/auto_theme.svg): a tap
+# on the embed opens the drawing editor, the bar at the bottom has "Tekst" on screen (a phone held
+# upright: two lines), a tap on the paper opens the text's editor and the keyboard, words typed on
+# the keyboard's keys with a pause longer than the 1.2 s save timer between them (the editor and
+# the keyboard stay), the editor's ✓ writes the text — the drawing's file then holds it as a text
+# element — and the keyboard goes; a second text started at once after the first one is written
+# (while the save timer runs) stays open as well and is written too. Screenshots (dr-*.png); the
+# same debuggable APK.
 # With --web-keyboard SITE_DIR instead: the web build (scripts/wasm-build.sh -> dist-wasm) in Android's
 # browsers — Chrome (in the google_apis image), Brave 1.97.59 and Firefox 157.0.1 (pinned APKs,
 # SHA-256 checked, cached in ~/.cache/brulion-web-browsers): the site served from the host under
@@ -149,6 +158,7 @@ SHARE=0
 WIDGETS=0
 WEBPICTURES=0
 DONE=0
+DRAWING=0
 WEBKEYBOARD=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
@@ -168,6 +178,9 @@ elif [[ ${1:-} == --widgets ]]; then
 elif [[ ${1:-} == --done ]]; then
   DONE=1
   shift
+elif [[ ${1:-} == --drawing ]]; then
+  DRAWING=1
+  shift
 elif [[ ${1:-} == --web-pictures ]]; then
   WEBPICTURES=1
   shift
@@ -183,7 +196,8 @@ else
   APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || DRAWING)) || [[ -f $SELFTEST_APK ]] ||
+    die "$SELFTEST_APK not found"
 fi
 
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
@@ -1081,6 +1095,79 @@ if ((WIDGETS)); then
   info "Result"
   echo "    the journal of $today:"
   vault_cat "$journal" | tail -n 5 | sed 's/^/      /'
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- text on a drawing with the on-screen keyboard (--drawing) ------------------------------------
+
+if ((DRAWING)); then
+  info "Text on a drawing: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  DR_VAULT=files/Rysunki
+  today=$(adb shell date +%F | tr -d '\r')
+  printf -- '- Szkic z wykładu\n  ![[Rysunek.svg]]\n' >"$OUT/journal.md"
+  adb push "$OUT/journal.md" /data/local/tmp/brulion-journal.md >/dev/null
+  adb push tests/data/drawing/auto_theme.svg /data/local/tmp/brulion-drawing.svg >/dev/null
+  adb shell run-as "$PKG" mkdir -p "$DR_VAULT/journals" "$DR_VAULT/assets"
+  adb shell run-as "$PKG" cp /data/local/tmp/brulion-journal.md "$DR_VAULT/journals/$today.md"
+  adb shell run-as "$PKG" cp /data/local/tmp/brulion-drawing.svg "$DR_VAULT/assets/Rysunek.svg"
+  # The texts of the drawing's text elements (its embedded scene), one a line, in lower case.
+  dr_texts() {
+    adb shell run-as "$PKG" base64 "$DR_VAULT/assets/Rysunek.svg" 2>/dev/null | tr -d '\r\n' | base64 -d >"$OUT/drawing.svg" || true
+    node -e '
+      const svg = require("fs").readFileSync(process.argv[1], "latin1");
+      const m = /<!-- payload-start -->\s*([^<]*?)\s*<!-- payload-end -->/.exec(svg);
+      if (!m) process.exit(0);
+      const w = JSON.parse(Buffer.from(m[1], "base64").toString("latin1"));
+      const bytes = Buffer.from(w.encoded, "latin1");
+      const scene = JSON.parse((w.compressed ? require("zlib").inflateSync(bytes) : bytes).toString("utf8"));
+      for (const e of scene.elements) if (e.type === "text") console.log(e.text.toLowerCase());' "$OUT/drawing.svg"
+  }
+  dr_has() { dr_texts | grep -qxF -- "$1"; } # <the whole text, lower case>
+  dr_paper() { adb shell input tap $((SCREEN_W / 2)) $((SCREEN_H * $1 / 100)); } # <% of the height>
+  editor_open() { ui_has 'Gotowe' && [[ $(ui_find_all 'Gotowe' | wc -l) -ge 2 ]]; } # (its ✓ and the bar's)
+  start_app "--vault /data/user/0/$PKG/$DR_VAULT --locale pl --route journals"
+  check "the app is running" running
+  app_shot dr-1-journal
+  check "a tap on the drawing's embed opens the drawing editor" ui_tap 'Rysunek(\.svg)?' first 4
+  check "… its bar has Tekst on screen" wait_for 15 ui_has 'Tekst(, T)?'
+  check "… and Więcej and Gotowe" ui_has 'Więcej'
+  app_shot dr-2-editor
+  ui_tap 'Tekst(, T)?' first 1
+  dr_paper 45
+  check "a tap on the paper with Tekst opens the text's editor and the keyboard" wait_for 10 ime_shown
+  sleep 1
+  type_on_keyboard 'Draw the'
+  # A pause longer than the save timer (1.2 s) mid-text: the editor and the keyboard stay.
+  sleep 3
+  check "… the editor stays open while the user pauses" editor_open
+  check "… and so does the keyboard" ime_shown
+  type_on_keyboard ' plan'
+  sleep 1
+  app_shot dr-3-typing
+  check "its ✓ writes the text" ui_tap 'Gotowe' first 0
+  # At once a second text (the save timer runs: the first one was just written), high on the paper
+  # (the keyboard is still going: Android shrinks the window under it).
+  dr_paper 30
+  sleep 3
+  check "a second text started at once stays open" editor_open
+  check "… with the keyboard" ime_shown
+  type_on_keyboard 'Second note'
+  ui_tap 'Gotowe' first 1
+  check "the keyboard goes once the text is written" wait_for 8 ime_hidden
+  check "the drawing's file holds the first text" wait_for 10 dr_has 'draw the plan'
+  check "… and the second" dr_has 'second note'
+  app_shot dr-4-written
+  echo "    the drawing's texts:"
+  dr_texts | sed 's/^/      /'
+
+  adb logcat -d >"$OUT/drawing-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/drawing-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/drawing-logcat.txt'"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"

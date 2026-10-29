@@ -937,7 +937,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--web-pictures`: obrazy z internetu; `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--web-pictures`: obrazy z internetu; `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
@@ -1174,6 +1174,18 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   `- [x] … ⏰ … ✅ <dzień stuknięcia>`, powiadomienie znika; drugie po zabiciu procesu — notatka
   bez zmian, stuknięcie w kolejce, następny start zapisuje `[x]` z `✅`, reszta notatki nietknięta.
   Zrzuty `dn-*.png`. Sprawdzone 2026-10-28 (Android 16, Pixel 6).
+* Tekst na rysunku z klawiatury ekranowej (ten sam APK debugowalny; `node` na hoście):
+  ```sh
+  scripts/android-emulator-test.sh --drawing
+  ```
+  Notatnik w pamięci aplikacji, którego dzisiejszy dziennik wstawia rysunek: stuknięcie w rysunek
+  otwiera edytor rysunku; na telefonie trzymanym pionowo pasek ma **Tekst**, kółko koloru,
+  **Więcej** i **Gotowe** na ekranie (dwa wiersze); **Tekst** i stuknięcie w kartkę otwierają pole
+  tekstu i klawiaturę (Gboard); słowa wpisane klawiszami klawiatury z przerwą dłuższą niż zapis po
+  1,2 s — pole i klawiatura zostają; ✓ zapisuje tekst (w pliku rysunku element tekstowy z tym
+  tekstem), klawiatura znika; drugi tekst zaczęty zaraz po pierwszym (gdy zapis po 1,2 s jeszcze
+  czeka) też zostaje otwarty i zapisuje się. Zrzuty `dr-*.png`. Sprawdzone 2026-10-29 (Android 16,
+  Pixel 6, Gboard po angielsku — polskich znaków z klawiatury ekranowej test nie wpisuje).
 * Obrazy z internetu (ten sam APK debugowalny; potrzebny dostęp emulatora do internetu
   i `python3` na hoście):
   ```sh
