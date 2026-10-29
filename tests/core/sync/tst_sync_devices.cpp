@@ -195,6 +195,45 @@ private Q_SLOTS:
         QCOMPARE(p.a.read(path), scene(0, 170));
     }
 
+    void anExcalidrawDrawingUploadedAgainUnchangedIsNoConflict_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("before");
+        QTest::addColumn<QString>("after");
+        const QString plugin = u"---\nexcalidraw-plugin: parsed\n---\nNotatka z tyłu: ąćęłńóśźż\n# Excalidraw Data\n"
+                               u"## Text Elements\n%%\n## Drawing\n```json\n{\n\t\"type\": \"excalidraw\",\n"
+                               u"\t\"elements\": [%1]\n}\n```\n%%"_s;
+        const QString element = u"{\"id\": \"e1\", \"type\": \"rectangle\", \"x\": 10, \"y\": 10, \"version\": 2}"_s;
+        // (A `.excalidraw` file syncs as a binary file: never merged, no base kept.)
+        QTest::newRow("plugin file") << u"Excalidraw/Szkic ćwiczeń.excalidraw.md"_s << plugin.arg(QString())
+                                     << plugin.arg(element);
+        QTest::newRow("CRLF plugin file")
+                << u"Szkic źdźbła.excalidraw.md"_s << QString(plugin).replace(u"\n"_s, u"\r\n"_s).arg(QString())
+                << QString(plugin).replace(u"\n"_s, u"\r\n"_s).arg(element);
+    }
+
+    void anExcalidrawDrawingUploadedAgainUnchangedIsNoConflict()
+    {
+        // The server's copy of a drawing got a new ETag with the same bytes (another client
+        // uploaded it again) while this device changed the drawing: no change there, so this
+        // device's version goes up — no conflict copy.
+        QFETCH(QString, path);
+        QFETCH(QString, before);
+        QFETCH(QString, after);
+        Pair p({{path, before.toUtf8()}});
+        p.a.sync();
+        p.b.sync();
+        QVERIFY(p.b.write(path, after));
+        p.server.touchEtag(kFolder + u'/' + path);
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(counts(rb), (Counts{.up = 1}));
+        QVERIFY(rb.conflictCopies.isEmpty());
+        QCOMPARE(p.server.text(kFolder + u'/' + path), std::optional<QString>(after));
+        QCOMPARE(counts(p.a.sync()), (Counts{.down = 1}));
+        QCOMPARE(p.a.read(path), after);
+        QVERIFY(conflictCopies(p.a).isEmpty());
+    }
+
     void anEditWinsOverADeletionInBothOrders()
     {
         Pair p({{u"x.md"_s, "x\n"}, {u"y.md"_s, "y\n"}});
