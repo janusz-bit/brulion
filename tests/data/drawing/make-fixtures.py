@@ -4,6 +4,9 @@ independently of Brulion's C++ (packages/excalidraw/data/encode.ts and scene/exp
 JSON.stringify(scene, null, 2) → pako.deflate → a byte string in {"version":"1","encoding":
 "bstring","compressed":true,"encoded":…} → JSON.stringify → btoa → the SVG's payload comments).
 
+excalidraw_shapes.* hold every kind of element Brulion draws; excalidraw_frame.svg a frame (an
+element Brulion does not edit: the drawing is shown read-only).
+
 smiley_embedded_v2.svg and test_embedded_v1.svg are Excalidraw's own test fixtures
 (excalidraw/excalidraw, packages/excalidraw/tests/fixtures, MIT licence), unchanged.
 
@@ -53,14 +56,97 @@ TEXT = element("text_00000000000000001", "text", 420, 410, text="Zażółć gę�
                verticalAlign="top", containerId=None, autoResize=True, lineHeight=1.25)
 
 
-def scene(elements):
+BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+
+def scene(elements, files=None):
+    # Excalidraw's fractional indices, rising in the array's order ("a0", "a1", …).
+    elements = [dict(e, index="a" + BASE62[i]) for i, e in enumerate(elements)]
     return {
         "type": "excalidraw", "version": 2, "source": "https://excalidraw.com",
         "elements": elements,
         "appState": {"gridSize": 20, "gridStep": 5, "gridModeEnabled": False,
                      "viewBackgroundColor": "#ffffff"},
-        "files": {},
+        "files": files or {},
     }
+
+
+def png_2x2():
+    """A 2 × 2 RGB PNG (red, green / blue, white)."""
+    import struct
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xffffffff)
+
+    raw = b"\x00\xff\x00\x00\x00\xff\x00" + b"\x00\x00\x00\xff\xff\xff\xff"
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+
+
+def shape(id_, type_, x, y, w, h, **extra):
+    return element(id_, type_, x, y, width=w, height=h, **extra)
+
+
+def linear(id_, type_, x, y, points, **extra):
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    e = element(id_, type_, x, y, width=max(xs) - min(xs), height=max(ys) - min(ys), points=points,
+                lastCommittedPoint=None, startBinding=None, endBinding=None, startArrowhead=None,
+                endArrowhead=None)
+    e.update(extra)
+    return e
+
+
+def text(id_, x, y, w, h, value, **extra):
+    e = element(id_, "text", x, y, width=w, height=h, text=value, originalText=value, fontSize=20,
+                fontFamily=5, textAlign="left", verticalAlign="top", containerId=None, autoResize=True,
+                lineHeight=1.25)
+    e.update(extra)
+    return e
+
+
+# Every kind of element Brulion draws (tst_drawing_elements readElements): shapes with a label,
+# fills and dashes, lines and arrows with bindings, an elbow arrow, rotation, text, a group,
+# pictures, filled and rotated freehand lines.
+SHAPES = [
+    shape("prostokat", "rectangle", 40, 40, 200, 100, roundness={"type": 3},
+          boundElements=[{"id": "etykieta", "type": "text"}, {"id": "strzalka", "type": "arrow"}]),
+    text("etykieta", 52.5, 77.5, 175, 25, "Zażółć gęślą jaźń", containerId="prostokat",
+         textAlign="center", verticalAlign="middle"),
+    shape("elipsa", "ellipse", 300, 40, 160, 100, backgroundColor="#a5d8ff", fillStyle="hachure",
+          strokeStyle="dashed"),
+    shape("romb", "diamond", 520, 40, 120, 120, roundness={"type": 2},
+          boundElements=[{"id": "strzalka", "type": "arrow"}]),
+    linear("linia", "line", 40, 220, [[0, 0], [80, -40], [160, 0]], roundness={"type": 2},
+           strokeStyle="dotted"),
+    linear("strzalka", "arrow", 240, 90, [[0, 0], [280, 10]], endArrowhead="arrow",
+           startBinding={"elementId": "prostokat", "focus": 0, "gap": 1},
+           endBinding={"elementId": "romb", "focus": 0.1, "gap": 2},
+           boundElements=[{"id": "podpis", "type": "text"}], elbowed=False),
+    text("podpis", 350, 80, 60, 25, "tak", containerId="strzalka", textAlign="center",
+         verticalAlign="middle"),
+    linear("lokiec", "arrow", 300, 200, [[0, 0], [100, 0], [100, 80]], endArrowhead="triangle",
+           elbowed=True),
+    shape("obrocony", "rectangle", 460, 220, 120, 60, angle=0.5),
+    text("tekst", 40, 320, 220, 50, "Dwie linie: ąćęłńóśźż\nI emoji 🙂", fontFamily=2),
+    shape("grupa1", "rectangle", 300, 320, 40, 40, groupIds=["grupaA"]),
+    shape("grupa2", "ellipse", 360, 320, 40, 40, groupIds=["grupaA"]),
+    element("obrazek", "image", 440, 320, width=40, height=40, fileId="plik-png", status="saved",
+            scale=[1, 1]),
+    element("bez-pliku", "image", 500, 320, width=40, height=40, fileId="brak", status="saved",
+            scale=[1, 1]),
+    element("wypelniona", "freedraw", 40, 420, width=60, height=40,
+            points=[[0, 0], [60, 0], [30, 40], [0, 0]], pressures=[], simulatePressure=True,
+            backgroundColor="#ffc9c9", lastCommittedPoint=None),
+    element("obrocona", "freedraw", 160, 420, width=80, height=20, angle=1.0,
+            points=wave(12, 7, 10), pressures=[], simulatePressure=True, lastCommittedPoint=None),
+]
+SHAPE_FILES = {
+    "plik-png": {"id": "plik-png", "mimeType": "image/png", "created": 1761568000000,
+                 "dataURL": "data:image/png;base64," + base64.b64encode(png_2x2()).decode("ascii")},
+}
+FRAME = element("ramka", "frame", 0, 0, width=300, height=200, name="Ramka")
 
 
 def payload(scene_text, compressed=True):
@@ -96,3 +182,7 @@ write("excalidraw_freedraw.svg", svg(freedraw_scene))
 write("excalidraw_freedraw_uncompressed.svg", svg(freedraw_scene, compressed=False))
 write("excalidraw_mixed.svg", svg(mixed_scene))
 write("excalidraw_mixed.excalidraw", mixed_scene)
+shapes_scene = json.dumps(scene(SHAPES, SHAPE_FILES), indent=2, ensure_ascii=False)
+write("excalidraw_shapes.svg", svg(shapes_scene))
+write("excalidraw_shapes.excalidraw", shapes_scene)
+write("excalidraw_frame.svg", svg(json.dumps(scene([RECTANGLE, FRAME]), indent=2, ensure_ascii=False)))
