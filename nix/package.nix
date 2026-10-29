@@ -105,6 +105,9 @@ stdenv.mkDerivation (finalAttrs: {
     test -f $out/share/icons/hicolor/scalable/apps/$id.svg
     test -f $out/share/icons/hicolor/256x256/apps/$id.png
     desktop-file-validate $out/share/applications/$id.desktop
+    # "Otwórz za pomocą → Brulion" for Markdown and text files (docs/NIXOS.md).
+    grep -qx 'Exec=brulion --open %F' $out/share/applications/$id.desktop
+    grep -q '^MimeType=.*text/markdown;' $out/share/applications/$id.desktop
     appstreamcli validate --no-net --explain $out/share/metainfo/$id.metainfo.xml
     appstreamcli validate-tree --no-net --explain $out
     runHook postInstallCheck

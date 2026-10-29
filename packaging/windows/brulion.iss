@@ -15,7 +15,14 @@
 ; uninstaller removes that key. Start at sign-in: the task "autostart" (offered, checked, on the
 ; first install only) writes the value "Brulion" of HKCU\...\CurrentVersion\Run, the same the
 ; app's switch (Settings -> Application) writes (src/platform/autostart.h); an update leaves it as
-; the user set it; the uninstaller removes it when it starts this installation's brulion.exe. UTF-8 with a BOM: the Polish texts below.
+; the user set it; the uninstaller removes it when it starts this installation's brulion.exe.
+;
+; "Otwórz za pomocą → Brulion" (docs/WINDOWS.md): always registered for .md, .markdown and .txt —
+; the ProgID JanuszBit.Brulion.Note (its command `"…\brulion.exe" --open "%1"`), its name in each
+; type's OpenWithProgids and Applications\brulion.exe with its SupportedTypes, under
+; HKCU\Software\Classes (HKLM with /ALLUSERS). Offered, never the default: no type's default value
+; or UserChoice is written. The uninstaller removes exactly these (a type's key only when nothing
+; else is left in it). The portable ZIP registers nothing. UTF-8 with a BOM: the Polish texts below.
 
 #ifndef AppVersion
   #error Pass /DAppVersion=<x.y.z> (scripts/windows-build.ps1 does)
@@ -62,6 +69,8 @@ WizardStyle=modern
 ShowLanguageDialog=auto
 ; A running Brulion is asked to close before its files are replaced or removed.
 CloseApplications=yes
+; Explorer learns of the "Open with" registration (and of its removal) at once.
+ChangesAssociations=yes
 RestartApplications=no
 
 [Languages]
@@ -71,6 +80,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 polish.AutostartTask=Uruchamiaj Brulion po zalogowaniu (ukryty w zasobniku, żeby przypomnienia dzwoniły)
 english.AutostartTask=Start Brulion when I sign in (hidden in the tray, so reminders ring)
+polish.NoteTypeName=Notatka (Brulion)
+english.NoteTypeName=Note (Brulion)
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -92,6 +103,24 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"; ValueType: none; ValueName: "Brulion"; Flags: deletevalue dontcreatekey; Tasks: autostart
 ; The app writes it at every start (the toasts' name and icon); removed with the app.
 Root: HKCU; Subkey: "Software\Classes\AppUserModelId\JanuszBit.Brulion"; Flags: uninsdeletekey dontcreatekey
+; "Otwórz za pomocą → Brulion" for .md, .markdown and .txt (docs/WINDOWS.md): offered, never the
+; default — no type's default value or UserChoice is written. Explorer starts one brulion.exe per
+; selected file: the running one collects them in one share dialog (--open, main.cpp).
+Root: HKA; Subkey: "Software\Classes\JanuszBit.Brulion.Note"; ValueType: string; ValueName: ""; ValueData: "{cm:NoteTypeName}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\JanuszBit.Brulion.Note\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\brulion.exe"",0"
+Root: HKA; Subkey: "Software\Classes\JanuszBit.Brulion.Note\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\brulion.exe"" --open ""%1"""
+Root: HKA; Subkey: "Software\Classes\.md"; Flags: uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\.md\OpenWithProgids"; ValueType: string; ValueName: "JanuszBit.Brulion.Note"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\.markdown"; Flags: uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\.markdown\OpenWithProgids"; ValueType: string; ValueName: "JanuszBit.Brulion.Note"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\.txt"; Flags: uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\.txt\OpenWithProgids"; ValueType: string; ValueName: "JanuszBit.Brulion.Note"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\Applications\brulion.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "Brulion"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\brulion.exe\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\brulion.exe"",0"
+Root: HKA; Subkey: "Software\Classes\Applications\brulion.exe\SupportedTypes"; ValueType: string; ValueName: ".md"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\brulion.exe\SupportedTypes"; ValueType: string; ValueName: ".markdown"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\brulion.exe\SupportedTypes"; ValueType: string; ValueName: ".txt"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\brulion.exe\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\brulion.exe"" --open ""%1"""
 
 [Icons]
 Name: "{autoprograms}\Brulion"; Filename: "{app}\brulion.exe"; WorkingDir: "{app}"; AppUserModelID: "JanuszBit.Brulion"

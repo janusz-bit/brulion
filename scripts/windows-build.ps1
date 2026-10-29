@@ -16,10 +16,12 @@ Steps (all by default, in this order; -Steps picks some):
            and the installer installed silently for the current user (with the task "autostart":
            the Run value must start the installed brulion.exe --hidden), each started headless
            (brulion-cli --version, the shell self-test of the real app in a separate profile,
-           which registers its AppUserModelID for the toasts with the icon next to the program),
-           then installed again as a silent update with the Run value removed (it must stay
-           removed), then uninstalled silently — the profile's settings and notes must still be
-           there, the Run value must be gone.
+           which registers its AppUserModelID for the toasts with the icon next to the program);
+           the installer offers Brulion in "Open with" for .md, .markdown and .txt (the ZIP
+           registers nothing) without changing their default program; then installed again as a
+           silent update with the Run value removed (it must stay removed), then uninstalled
+           silently — the profile's settings and notes must still be there, the Run value and the
+           "Open with" registration must be gone.
 
 CI: .github/workflows/windows.yml (windows-2022, Qt from aqt through jurplel/install-qt-action,
 MSVC from ilammy/msvc-dev-cmd). Locally, in PowerShell from the repository root, with Visual Studio
@@ -246,6 +248,63 @@ function Assert-AppIdentity([string] $Dir, [string] $Label) {
     Remove-Item -Recurse -Force $AumidKey
 }
 
+# "Otwórz za pomocą → Brulion" (packaging/windows/brulion.iss, docs/WINDOWS.md): the installer's
+# ProgID, each type's OpenWithProgids and Applications\brulion.exe; never a type's default.
+$Classes = 'HKCU:\Software\Classes'
+$NoteProgId = 'JanuszBit.Brulion.Note'
+$OpenWithTypes = @('.md', '.markdown', '.txt')
+$FileExts = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts'
+
+# The default value of a key ($null when the key or the value is missing).
+function Get-DefaultValue([string] $Key) {
+    $item = Get-Item -LiteralPath $Key -ErrorAction SilentlyContinue
+    if (-not $item) { return $null }
+    return $item.GetValue('')
+}
+
+# The value names of a key (none when it is missing).
+function Get-ValueNames([string] $Key) {
+    $item = Get-Item -LiteralPath $Key -ErrorAction SilentlyContinue
+    if (-not $item) { return @() }
+    return @($item.GetValueNames())
+}
+
+# What decides the program a type opens with: its default value and the user's choice.
+function Get-TypeDefaults {
+    $defaults = @{}
+    foreach ($type in $OpenWithTypes) {
+        $defaults[$type] = "default='$(Get-DefaultValue "$Classes\$type")' choice='$(Get-ItemProperty -LiteralPath "$FileExts\$type\UserChoice" -Name 'ProgId' -ErrorAction SilentlyContinue | ForEach-Object { $_.ProgId })'"
+    }
+    return $defaults
+}
+
+function Assert-OpenWith([string] $Dir, [string] $Label, [hashtable] $DefaultsBefore) {
+    $expected = "`"$(Join-Path $Dir 'brulion.exe')`" --open `"%1`""
+    foreach ($key in "$Classes\$NoteProgId\shell\open\command", "$Classes\Applications\brulion.exe\shell\open\command") {
+        $command = Get-DefaultValue $key
+        if ($command -ne $expected) { Fail "$Label`: $key is '$command', not '$expected'" }
+    }
+    foreach ($type in $OpenWithTypes) {
+        if ((Get-ValueNames "$Classes\$type\OpenWithProgids") -notcontains $NoteProgId) { Fail "$Label`: $type does not offer Brulion (OpenWithProgids)" }
+        if ((Get-ValueNames "$Classes\Applications\brulion.exe\SupportedTypes") -notcontains $type) { Fail "$Label`: Applications\brulion.exe does not list $type" }
+    }
+    $after = Get-TypeDefaults
+    foreach ($type in $OpenWithTypes) {
+        if ($after[$type] -ne $DefaultsBefore[$type]) { Fail "$Label`: the default program of $type changed: $($DefaultsBefore[$type]) -> $($after[$type])" }
+    }
+    Write-Host "$Label`: Open with -> $expected for $($OpenWithTypes -join ', '); defaults unchanged"
+}
+
+# Nothing of the registration is left (a type's key itself may stay: it may hold other programs).
+function Assert-NoOpenWith([string] $Label) {
+    foreach ($key in "$Classes\$NoteProgId", "$Classes\Applications\brulion.exe") {
+        if (Test-Path -LiteralPath $key) { Fail "$Label`: $key exists" }
+    }
+    foreach ($type in $OpenWithTypes) {
+        if ((Get-ValueNames "$Classes\$type\OpenWithProgids") -contains $NoteProgId) { Fail "$Label`: $type still offers Brulion" }
+    }
+}
+
 function Invoke-Packaged([string] $Dir, [string] $Label) {
     $exe = Join-Path $Dir 'brulion.exe'
     $cli = Join-Path $Dir 'brulion-cli.exe'
@@ -333,6 +392,8 @@ if ($Steps -contains 'check') {
     Assert-AppIdentity (Join-Path $work 'zip\Brulion') 'ZIP'
     # A separate profile never writes the Run key.
     if (Get-RunValue) { Fail "The ZIP's run wrote a start at sign-in entry: $(Get-RunValue)" }
+    Assert-NoOpenWith 'ZIP'
+    $typeDefaults = Get-TypeDefaults
 
     # Installer: per user, silent; then the installed copy; then the uninstaller.
     $installDir = Join-Path $env:LOCALAPPDATA 'Programs\Brulion'
@@ -349,6 +410,7 @@ if ($Steps -contains 'check') {
     Write-Host "Start at sign-in: $(Get-RunValue)"
     Invoke-Packaged $installDir 'Installed'
     Assert-AppIdentity $installDir 'Installed'
+    Assert-OpenWith $installDir 'Installed' $typeDefaults
 
     # An update: autostart turned off (as the app's switch does) stays off — the task is offered on
     # the first install only (UsePreviousTasks would select it again).
@@ -359,6 +421,7 @@ if ($Steps -contains 'check') {
     if ($update.ExitCode -ne 0) { Get-Content "$work\update.log" | Write-Host; Fail "The update exited with $($update.ExitCode)" }
     if (Get-RunValue) { Get-Content "$work\update.log" | Write-Host; Fail "The update turned the start at sign-in on again: $(Get-RunValue)" }
     Write-Host 'Update: the start at sign-in stays off'
+    Assert-OpenWith $installDir 'Update' $typeDefaults
     # On again for the uninstaller's check below.
     Set-ItemProperty -Path $RunKey -Name 'Brulion' -Value $expectedRun
 
@@ -374,6 +437,8 @@ if ($Steps -contains 'check') {
     if (Test-Path (Join-Path $installDir 'brulion.exe')) { Fail "The uninstaller left $installDir\brulion.exe" }
     if (Test-Path $shortcut) { Fail "The uninstaller left the Start menu shortcut" }
     if (Get-RunValue) { Fail "The uninstaller left the start at sign-in entry: $(Get-RunValue)" }
+    Assert-NoOpenWith 'Uninstalled'
+    Write-Host 'Uninstalled: the Open with registration is gone'
     # The user's settings and notes are never the uninstaller's.
     if (-not (Test-Path $settings)) { Fail "The uninstaller removed the settings $settings" }
     Write-Host "Uninstalled; the profile's settings stay ($settings)"
