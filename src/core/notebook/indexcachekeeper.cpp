@@ -14,6 +14,7 @@
 #include <QSaveFile>
 #include <QTimer>
 
+#include <algorithm>
 #include <mutex>
 #include <utility>
 
@@ -37,6 +38,14 @@ QString writeIndexCacheFile(const QString &path, const QByteArray &bytes)
     if (!file.commit())
         return file.errorString();
     return {};
+}
+
+qint64 indexCacheBudget(qint64 usage, qint64 quota, qint64 replaced, qint64 cap)
+{
+    if (usage < 0 || quota <= 0)
+        return cap;
+    const qint64 free = std::max<qint64>(0, quota - usage);
+    return std::min(cap, std::max<qint64>(0, replaced) + free / 2);
 }
 
 namespace {

@@ -60,4 +60,10 @@ private:
 /// Write `bytes` to `path` atomically (QSaveFile; the folder is created). "" or the error.
 QString writeIndexCacheFile(const QString &path, const QByteArray &bytes);
 
+/// The largest index cache worth writing where storage has a quota (the browser's IndexedDB,
+/// docs/WEB.md): the cache file it replaces (`replaced` bytes) plus half of what is still free, so
+/// notes, History and settings keep the other half — never more than `cap`. Unknown `usage` or
+/// `quota` (< 0, quota 0): `cap`. For Policy::maxBytes.
+qint64 indexCacheBudget(qint64 usage, qint64 quota, qint64 replaced, qint64 cap);
+
 } // namespace brulion::notebook

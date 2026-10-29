@@ -166,6 +166,9 @@ public:
     /// Keeps the open notebook's index cache (nullptr: none — no device state folder,
     /// BRULION_NO_INDEX_CACHE, or the index is still loading).
     notebook::IndexCacheKeeper *indexCacheKeeper() const { return m_cacheKeeper.get(); }
+    /// The index cache file cannot be kept (`why`; the browser's storage refused it, see
+    /// WasmStorage::cacheNotSaved()): the open notebook writes none any more.
+    void stopIndexCache(const QString &why);
 
     /// Build the rest of the index now (normally done in chunks in the background): before what
     /// needs every note known — a rename, a route to a block, a new block id — and in tests.

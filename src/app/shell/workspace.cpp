@@ -20,6 +20,7 @@
 
 #ifdef Q_OS_WASM
 #include "wasm/wasmshell.h"
+#include "wasm/wasmstorage.h"
 #endif
 
 #include <QBuffer>
@@ -184,10 +185,17 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
 #endif
     notebook::IndexLoader::Options loaderOptions;
     loaderOptions.firstFolder = m_vault->config().journalsFolder;
-    // The index cache next to History and LocalStore (persisted in IndexedDB on the web).
+    // The index cache next to History and LocalStore. In the browser it goes to a cache mount of
+    // its own (WasmStorage::indexCacheRoot(), its own IndexedDB database): a cache the quota
+    // cannot take must not abort the write-back of History, sync state and settings with it.
     m_indexCachePath = deviceStatePath.isEmpty() || qEnvironmentVariableIsSet("BRULION_NO_INDEX_CACHE")
                                ? QString()
                                : QDir(deviceStatePath).filePath(u"index-cache.bin"_s);
+#ifdef Q_OS_WASM
+    if (!m_indexCachePath.isEmpty())
+        m_indexCachePath = QDir(platform::WasmStorage::indexCacheRoot())
+                                   .filePath(QFileInfo(deviceStatePath).fileName() + u"/index-cache.bin"_s);
+#endif
     loaderOptions.cachePath = m_indexCachePath;
     m_loader = std::make_unique<notebook::IndexLoader>(*m_vault, *m_index, std::move(pool), loaderOptions);
     connect(m_loader.get(), &notebook::IndexLoader::resultsReady, this, &Workspace::onIndexResultsReady);
@@ -380,8 +388,15 @@ void Workspace::indexingFinished()
 #ifdef BRULION_INDEX_THREADS
         pool = indexWorkerPool(static_cast<QThreadPool *>(m_indexPool));
 #endif
+        notebook::IndexCacheKeeper::Policy policy = m_cachePolicy;
+#ifdef Q_OS_WASM
+        // The site's quota is shared with the notes: the cache takes at most half of what is free.
+        const platform::WasmStorage::Estimate storage = platform::WasmStorage::estimate();
+        policy.maxBytes = notebook::indexCacheBudget(storage.usage, storage.quota, QFileInfo(m_indexCachePath).size(),
+                                                     policy.maxBytes);
+#endif
         m_cacheKeeper = std::make_unique<notebook::IndexCacheKeeper>(*m_vault, *m_index, std::move(pool),
-                                                                     m_indexCachePath, m_cachePolicy);
+                                                                     m_indexCachePath, policy);
 #ifdef Q_OS_WASM
         connect(m_cacheKeeper.get(), &notebook::IndexCacheKeeper::saved, this,
                 [] { platform::reportIndexCacheSaved(); });
@@ -401,6 +416,16 @@ void Workspace::indexingFinished()
     }
     platform::reportIndexReady(); // for scripts/wasm-smoke.mjs and the browser benchmarks
 #endif
+}
+
+void Workspace::stopIndexCache(const QString &why)
+{
+    if (m_indexCachePath.isEmpty())
+        return;
+    qCWarning(logging::lcIndex).noquote()
+            << u"Index cache not saved (%1): none is written while this notebook is open"_s.arg(why);
+    m_cacheKeeper.reset();
+    m_indexCachePath.clear(); // indexingFinished() creates no new keeper
 }
 
 void Workspace::setReady(bool wasReady)

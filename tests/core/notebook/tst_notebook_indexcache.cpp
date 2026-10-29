@@ -4,7 +4,8 @@
 // same-size same-time edit a miss), another journal configuration or a corrupt file makes the
 // whole cache unused; the full-text index comes from the cache (or is rebuilt when the cache had
 // none); the keeper saves after a load that parsed, after quiet changes, never for small notebooks
-// nor above its size limit, and reports a folder it cannot write.
+// nor above its size limit (indexCacheBudget() where storage has a quota), and reports a folder it
+// cannot write.
 #include "notebook/indexcachekeeper.h"
 #include "notebook/indexloader.h"
 
@@ -311,6 +312,54 @@ private Q_SLOTS:
         QVERIFY(!keeper.saveNow());
         QCOMPARE(failed.count(), 1);
         QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    }
+
+    // Where storage has a quota (the browser): the old cache plus half of what is free, capped.
+    void budget_data()
+    {
+        QTest::addColumn<qint64>("usage");
+        QTest::addColumn<qint64>("quota");
+        QTest::addColumn<qint64>("replaced");
+        QTest::addColumn<qint64>("expected");
+        const qint64 cap = 256LL << 20;
+        const qint64 mb = 1LL << 20;
+        QTest::newRow("unknown usage") << qint64(-1) << 100 * mb << qint64(0) << cap;
+        QTest::newRow("unknown quota") << 10 * mb << qint64(-1) << qint64(0) << cap;
+        QTest::newRow("quota 0") << 10 * mb << qint64(0) << 5 * mb << cap;
+        QTest::newRow("plenty of room: capped") << 50 * mb << 300'000 * mb << qint64(0) << cap;
+        QTest::newRow("half of what is free") << 60 * mb << 100 * mb << qint64(0) << 20 * mb;
+        QTest::newRow("plus the old cache") << 60 * mb << 100 * mb << 8 * mb << 28 * mb;
+        QTest::newRow("full: only the old one's size") << 100 * mb << 100 * mb << 8 * mb << 8 * mb;
+        QTest::newRow("over the quota") << 120 * mb << 100 * mb << qint64(0) << qint64(0);
+        QTest::newRow("a missing old file") << 60 * mb << 100 * mb << qint64(-1) << 20 * mb;
+    }
+    void budget()
+    {
+        QFETCH(qint64, usage);
+        QFETCH(qint64, quota);
+        QFETCH(qint64, replaced);
+        QFETCH(qint64, expected);
+        QCOMPARE(indexCacheBudget(usage, quota, replaced, 256LL << 20), expected);
+    }
+
+    // A budget below the encoded size: nothing is written, the old file stays.
+    void keeperKeepsWithinItsBudget()
+    {
+        QTemporaryDir tmp;
+        const QString root = tmp.path() + u"/Notatnik żółwia"_s;
+        writeVault(root, 30);
+        QThreadPool pool;
+        Loaded l = load(root, QString(), 0, pool);
+        IndexCacheKeeper::Policy policy;
+        policy.minNotes = 1;
+        policy.maxBytes = indexCacheBudget(1000, 2000, 0, 256LL << 20); // 500 bytes
+        const QString cache = tmp.path() + u"/stan/index-cache.bin"_s;
+        IndexCacheKeeper keeper(*l.vault, *l.index, {}, cache, policy);
+        QSignalSpy failed(&keeper, &IndexCacheKeeper::saveFailed);
+        QVERIFY(!keeper.saveNow());
+        QCOMPARE(failed.count(), 1);
+        QVERIFY(failed.at(0).at(0).toString().startsWith(u"larger than"_s));
+        QVERIFY(!QFileInfo::exists(cache));
     }
 };
 

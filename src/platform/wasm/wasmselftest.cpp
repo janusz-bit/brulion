@@ -55,12 +55,13 @@ void runStorageSelfTest(WasmStorage *storage)
         {u"vaultRoot"_s, WasmStorage::vaultRoot()},
         {u"appData"_s, QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)},
         {u"mounts"_s, QJsonArray::fromStringList(storage->mountPoints())},
+        {u"cacheMounts"_s, QJsonArray::fromStringList(storage->cacheMountPoints())},
         {u"backed"_s, storage->isBackedByIndexedDb()},
     };
 
     QJsonArray counters;
     bool written = true;
-    for (const QString &mount : storage->mountPoints()) {
+    for (const QString &mount : storage->mountPoints() + storage->cacheMountPoints()) {
         const QString path = mount + u"/.brulion-selftest"_s;
         int previous = 0;
         QFile in(path);
