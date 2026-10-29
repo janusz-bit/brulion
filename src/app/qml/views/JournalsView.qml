@@ -48,8 +48,8 @@ FocusScope {
 
     PageTools { id: tools; workspace: Workspace }
 
-    // The palette's "Przełącz tryb notatki" and its link commands ("copyLink:<kind>") in the
-    // journal stream: the day being written in (today until another day gets the caret). One day
+    // The palette's "Przełącz tryb notatki", "Dodaj właściwość strony" and its link commands
+    // ("copyLink:<kind>") in the journal stream: the day being written in (today until another day gets the caret). One day
     // as a page: its PageView does it.
     Connections {
         target: AppController
@@ -64,11 +64,23 @@ FocusScope {
                 root.activeDay.editor.downloadWebPictures("")
                 return
             }
+            if (action === "addProperty") {
+                root.activeDay.editor.addProperty()
+                return
+            }
             if (action !== "toggleNoteMode")
                 return
             if (!root.activeDay.controller.toggleMode())
                 AppController.toast(qsTr("The note mode could not be changed: the page's properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E)."), "error")
         }
+    }
+
+    // Ctrl+; in the stream: a property of the day being written in (one day as a page: its PageView).
+    Shortcut {
+        sequence: "Ctrl+;"
+        enabled: !root.single && !root.inSidePanel && root.visible && root.activeDay !== null
+                 && !root.activeDay.controller.sourceMode
+        onActivated: root.activeDay.editor.addProperty()
     }
 
     // ---- One day ---------------------------------------------------------------------------------

@@ -11,6 +11,7 @@
 #include "markdown/properties.h"
 #include "text/text.h"
 
+#include <QJSValue>
 #include <QSet>
 
 using namespace Qt::StringLiterals;
@@ -197,9 +198,11 @@ PropertyEditStatus PageController::applyPropertyEdit(
     return r.status;
 }
 
-QVariantMap PageController::setPageProperty(const QString &source, const QString &key, const QVariant &value,
+QVariantMap PageController::setPageProperty(const QString &source, const QString &key, const QVariant &given,
                                             const QString &type)
 {
+    // A JS array from QML arrives as a QJSValue: the list it holds.
+    const QVariant value = given.metaType() == QMetaType::fromType<QJSValue>() ? given.value<QJSValue>().toVariant() : given;
     const QString k = key.trimmed();
     PropertySource resolved = PropertySource::Yaml;
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {

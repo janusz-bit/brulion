@@ -128,6 +128,22 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 ENVIRONMENT "${_playground_env}"
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
+        # The page properties panel (`--editor-script propstest`, qml/dev/PropertiesSelfTest.qml):
+        # its header tapped open, typed fields with real keys (text, number "3,5", checkbox, a date
+        # from the dialog's "jutro", list items with Enter / Backspace / ×), the row's menu (rename,
+        # type, remove + "Cofnij"), a key from the suggestions, the first property of a page without
+        # any; a phone (--touch): stacked rows, 44 px targets.
+        foreach(_props "tst_editor_qml_properties;1280x800;" "tst_editor_qml_properties_touch;412x915;--touch")
+            list(GET _props 0 _props_test)
+            list(GET _props 1 _props_size)
+            list(GET _props 2 _props_touch)
+            add_test(NAME ${_props_test}
+                COMMAND brulion --editor --editor-script propstest --no-single-instance
+                    --size ${_props_size} ${_props_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_props_test} PROPERTIES
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+        endforeach()
         # Links to blocks and headings (`--editor-script blocklinks`): the block menu's "Kopiuj
         # odnośnik" from right-clicks on text and frames (desktop; also a title drawn above the
         # page's properties), a bullet's right-click / long press and the touch toolbar's "Więcej"

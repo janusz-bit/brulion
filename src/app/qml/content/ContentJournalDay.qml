@@ -305,6 +305,11 @@ FocusScope {
     }
 
     // ---- The day's blocks -----------------------------------------------------------------------
+    Binding {
+        target: editor
+        property: "propertiesExpanded"
+        value: AppSettings.propertiesExpanded
+    }
     BlockEditor {
         id: editor
         objectName: "journalDayEditor"
@@ -328,6 +333,8 @@ FocusScope {
                                                   : AppController.toast(text, kind)
         listView.interactive: false
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
+        // The properties panel open or folded: a device setting, shared with pages.
+        onPropertiesExpandedToggled: (expanded) => AppSettings.propertiesExpanded = expanded
         horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8
         bottomSpace: Theme.space3
         // Document days: headings stay below the date (the size of other days' dates).

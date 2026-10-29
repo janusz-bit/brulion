@@ -1,126 +1,191 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Layouts
 import Brulion
 
 // FrontmatterView — page properties (YAML frontmatter or Logseq `key:: value` lines at the top)
-// as a collapsed "Properties" panel: a header with the number of properties; expanded, a
-// key/value list. "Edit" (or Enter when selected) edits the raw YAML in place.
+// as the "Właściwości" panel (docs/UI.md "Page properties"). Folded: a header with the number of
+// properties and a one-line preview of their values ("status: w toku · termin: 2026-10-28").
+// Expanded (a device setting, BlockEditor.propertiesExpanded — the header's tap switches it, so
+// a page that is edited or synced keeps it open): the properties as typed fields
+// (PropertiesPanel), with "+" (add a property) and "⋯" ("Edytuj jako tekst": the raw text in the
+// block's inline editor, "Zwiń") in the header. The panel's height is a binding (docs/UI.md
+// "Scrolling performance"): a block created expanded has its final height at once.
 Rectangle {
     id: root
+    objectName: "frontmatterView"
 
     property BlockDelegate block
-    property bool expanded: false
+    readonly property BlockEditor editor: block.editor
+    readonly property bool expanded: editor.propertiesExpanded && !block.editing
+    readonly property bool open: expanded || block.editing
     readonly property var properties: block.model.properties || []
+    readonly property var info: block.model.propertiesInfo || ({})
     readonly property real firstLineCenter: header.height / 2
+    readonly property real innerPad: Theme.space2
+    /// The folded header's preview of the values.
+    readonly property string preview: {
+        const parts = []
+        for (const p of properties) {
+            if (parts.join(" · ").length > 160)
+                break
+            parts.push(p.key + ": " + (p.empty ? "–" : p.value))
+        }
+        return parts.join(" · ")
+    }
 
-    // Folded (as it is created): the header's own height, not the ColumnLayout's, which arrives
-    // only with its next polish — the block has its final height when the editor's list creates
-    // it (docs/UI.md "Scrolling performance").
-    implicitHeight: root.expanded || root.block.editing ? column.implicitHeight : header.implicitHeight
+    // Folded (as it is created): the header's own height. Expanded: the header and the panel
+    // (an inactive Loader keeps the size of the item it had: counted only while active).
+    implicitHeight: header.height + (block.editing ? editorLoader.implicitHeight + Theme.space3
+                                     : expanded && panelLoader.active ? panelLoader.implicitHeight + Theme.space2 : 0)
     height: implicitHeight
     radius: Theme.radius
-    color: root.expanded || root.block.editing ? Theme.bgSunken : "transparent"
-    border.width: root.expanded || root.block.editing ? 1 : 0
+    color: root.open ? Theme.bgSunken : "transparent"
+    border.width: root.open ? 1 : 0
     border.color: root.block.editing ? Theme.alpha(Theme.focusRing, 0.5) : Theme.borderSubtle
 
-    ColumnLayout {
-        id: column
+    function toggle() {
+        if (block.editing) {
+            editor.stopEditing(true)
+            return
+        }
+        editor.setPropertiesExpanded(!editor.propertiesExpanded)
+    }
+    function openHeaderMenu() {
+        if (!headerMenu)
+            headerMenu = headerMenuComponent.createObject(root) as BMenu
+        headerMenu.bottomMargin = editor.menuBottomMargin()
+        headerMenu.popup(moreButton, moreButton.width - headerMenu.width, moreButton.height)
+    }
+    property BMenu headerMenu: null
+
+    Item {
+        id: header
+        objectName: "propertiesHeader"
         width: parent.width
-        spacing: 0
+        height: Theme.touchUi ? 44 : 32
 
-        Item {
-            id: header
-            Layout.fillWidth: true
-            implicitHeight: Theme.touchUi ? 40 : 32
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: Theme.space2
-                anchors.rightMargin: Theme.space1
-                spacing: Theme.space2
-                BIcon {
-                    name: "chevron-right"
-                    size: Theme.iconSizeSm
-                    color: Theme.fgMuted
-                    rotation: root.expanded || root.block.editing ? 90 : 0
-                    Behavior on rotation { NumberAnimation { duration: Theme.durationFast } }
-                }
-                Text {
-                    text: qsTr("Properties")
-                    font.family: Theme.fontUi
-                    font.pixelSize: Theme.textSm
-                    font.weight: Theme.weightMedium
-                    color: Theme.fgMuted
-                }
-                BBadge {
-                    count: root.properties.length
-                }
-                Item { Layout.fillWidth: true }
-                BIconButton {
-                    visible: !root.block.editing && (root.expanded || Theme.touchUi)
-                    size: "small"
-                    iconName: "pencil"
-                    label: qsTr("Edit properties")
-                    focusPolicy: Qt.NoFocus
-                    onClicked: root.block.editor.startEditing(root.block.index, -1)
-                }
-            }
-            TapHandler {
-                onTapped: {
-                    if (root.block.editing)
-                        root.block.editor.stopEditing(true)
-                    else
-                        root.expanded = !root.expanded
-                }
-            }
-            Accessible.role: Accessible.Button
-            Accessible.name: qsTr("Properties")
-        }
+        TapHandler { onTapped: root.toggle() }
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Properties")
+        Accessible.description: root.expanded ? qsTr("Collapse") : root.preview
 
-        // Key / value list.
-        GridLayout {
-            Layout.fillWidth: true
-            Layout.leftMargin: Theme.space8
-            Layout.rightMargin: Theme.space3
-            Layout.bottomMargin: Theme.space3
-            visible: root.expanded && !root.block.editing
-            columns: 2
-            columnSpacing: Theme.space4
-            rowSpacing: Theme.space1
-            Repeater {
-                // Two cells per property: the key (muted) and its value.
-                model: root.expanded ? root.properties.length * 2 : 0
-                delegate: Text {
-                    required property int index
-                    readonly property var property: root.properties[Math.floor(index / 2)]
-                    readonly property bool isKey: index % 2 === 0
-                    Layout.alignment: Qt.AlignTop
-                    Layout.fillWidth: !isKey
-                    text: property ? (isKey ? property.key : property.value) : ""
-                    textFormat: Text.PlainText
-                    font.family: Theme.fontUi
-                    font.pixelSize: Theme.textSm
-                    color: isKey ? Theme.fgMuted : Theme.fg
-                    wrapMode: isKey ? Text.NoWrap : Text.Wrap
-                }
-            }
+        BIcon {
+            id: chevron
+            x: Theme.space2
+            anchors.verticalCenter: parent.verticalCenter
+            name: "chevron-right"
+            size: Theme.iconSizeSm
+            color: Theme.fgMuted
+            rotation: root.open ? 90 : 0
+            Behavior on rotation { NumberAnimation { duration: Theme.durationFast } }
         }
-        Loader {
-            id: editorLoader
-            Layout.fillWidth: true
-            Layout.leftMargin: Theme.space8
-            Layout.rightMargin: Theme.space3
-            Layout.bottomMargin: Theme.space3
-            active: root.block.editing
-            visible: active
-            sourceComponent: InlineEditor {
-                width: editorLoader.width
-                block: root.block
-                multiline: true
-                highlightMode: "code"
-                font.family: Theme.fontMono
-                font.pixelSize: Theme.textSm
-                lineHeightPx: Theme.lineHeightPx(Theme.textSm, 1.5)
+        Text {
+            id: title
+            x: chevron.x + chevron.width + Theme.space2
+            anchors.verticalCenter: parent.verticalCenter
+            text: qsTr("Properties")
+            font.family: Theme.fontUi
+            font.pixelSize: Theme.textSm
+            font.weight: Theme.weightMedium
+            color: Theme.fgMuted
+        }
+        BBadge {
+            id: badge
+            x: title.x + title.width + Theme.space2
+            anchors.verticalCenter: parent.verticalCenter
+            count: root.properties.length
+        }
+        Text {
+            id: previewText
+            objectName: "propertiesPreview"
+            visible: !root.open && text !== ""
+            x: badge.x + badge.width + Theme.space3
+            width: Math.max(0, header.width - x - Theme.space2)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.preview
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            maximumLineCount: 1
+            font.family: Theme.fontUi
+            font.pixelSize: Theme.textSm
+            color: Theme.fgFaint
+        }
+        BIconButton {
+            id: addButton
+            objectName: "propertiesHeaderAdd"
+            visible: root.expanded && root.info.canAdd !== false && root.info.editable !== false
+            anchors.right: moreButton.left
+            anchors.verticalCenter: parent.verticalCenter
+            size: "small"
+            iconName: "plus"
+            label: qsTr("Add property")
+            shortcut: "Ctrl+;"
+            focusPolicy: Qt.NoFocus
+            onClicked: if (panelLoader.item) (panelLoader.item as PropertiesPanel).openAdd()
+        }
+        BIconButton {
+            id: moreButton
+            objectName: "propertiesHeaderMore"
+            visible: root.open
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.space1
+            anchors.verticalCenter: parent.verticalCenter
+            size: "small"
+            iconName: "ellipsis"
+            label: qsTr("More")
+            focusPolicy: Qt.NoFocus
+            onClicked: root.openHeaderMenu()
+        }
+    }
+
+    Loader {
+        id: panelLoader
+        x: Theme.space1
+        y: header.height
+        width: parent.width - Theme.space1 - Theme.space2
+        active: root.expanded
+        visible: active
+        sourceComponent: PropertiesPanel {
+            objectName: "propertiesPanel"
+            editor: root.editor
+            controller: root.block.controller
+            blockRow: root.block.index
+            properties: root.properties
+            info: root.info
+        }
+    }
+    Loader {
+        id: editorLoader
+        x: Theme.space8
+        y: header.height
+        width: parent.width - Theme.space8 - Theme.space3
+        active: root.block.editing
+        visible: active
+        sourceComponent: InlineEditor {
+            width: editorLoader.width
+            block: root.block
+            multiline: true
+            highlightMode: "code"
+            font.family: Theme.fontMono
+            font.pixelSize: Theme.textSm
+            lineHeightPx: Theme.lineHeightPx(Theme.textSm, 1.5)
+        }
+    }
+
+    Component {
+        id: headerMenuComponent
+        BMenu {
+            BMenuItem {
+                objectName: "propertiesEditAsText"
+                text: qsTr("Edit as text")
+                iconName: "code"
+                enabled: !root.block.editing
+                onTriggered: root.editor.startEditing(root.block.index, -1)
+            }
+            BMenuItem {
+                text: root.block.editing ? qsTr("Done") : qsTr("Collapse")
+                iconName: "chevrons-down-up"
+                onTriggered: root.toggle()
             }
         }
     }

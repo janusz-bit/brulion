@@ -17,6 +17,8 @@ import Brulion
 //                                   elsewhere (a query result, an embed, a table cell, Tasks, the
 //                                   calendar — there without an editor or controller): the choice
 //                                   goes to apply(action, a, b) (DateChipMenu's actions)
+//   pickPropertyDate(apply, title, at, withTime)  a page property's date (PropertyRow): the same
+//                                   dialog titled with the property's name, "Wyczyść" to empty it
 //   pickJournalDate(row, cursor)    Data…: a [[journal day]] link at the caret
 //   pickTemplate(row)               Szablon…: insert a template from the templates folder
 //   pickImage(row, cursor)          Obraz…: pictures from the system's file picker (desktop,
@@ -165,6 +167,7 @@ Item {
         picker.timeRequired = false
         picker.showMonthOf(picker.selectedDate)
         dateDialog.removable = current !== ""
+        dateDialog.removeText = qsTr("Remove")
         dateDialog.open()
     }
     function pickDateAt(r, f, t, kind, at) {
@@ -173,6 +176,27 @@ Item {
         to = t
         mode = "range"
         openDateDialog(kind, at)
+    }
+    /// The date dialog for a page property (PropertyRow): the property's name as the title, a
+    /// date or a date and time (`withTime`), "Wyczyść" for an empty value — apply("set", value) /
+    /// ("remove"). `at`: the value now ("YYYY-MM-DD[ HH:mm]"; "" — empty: today in the calendar).
+    function pickPropertyDate(fn, title, at, withTime) {
+        apply = fn
+        mode = "apply"
+        const parts = DatesHelper.splitSpec(at)
+        const dateDialog = datePopup()
+        const picker = dateDialog.picker
+        picker.clearTyped()
+        dateDialog.title = title
+        dateDialog.iconName = withTime ? "calendar-clock" : "calendar"
+        picker.selectedDate = parts.ok ? parts.date : DatesHelper.today
+        picker.time = parts.ok && withTime ? parts.time : ""
+        picker.withTime = withTime
+        picker.timeRequired = false
+        picker.showMonthOf(picker.selectedDate)
+        dateDialog.removable = at !== ""
+        dateDialog.removeText = qsTr("Clear")
+        dateDialog.open()
     }
     /// The date dialog for a date token (or day link) elsewhere: apply("set", value) / ("remove").
     function pickDateWith(fn, kind, at) {
@@ -198,6 +222,7 @@ Item {
         picker.timeRequired = kind === "reminder"
         picker.showMonthOf(picker.selectedDate)
         dateDialog.removable = !day
+        dateDialog.removeText = qsTr("Remove")
         dateDialog.open()
     }
     function pickJournalDate(r, c) {
@@ -374,6 +399,7 @@ Item {
         BDialog {
             id: dateDialog
             property bool removable: false
+            property string removeText: qsTr("Remove")
             readonly property alias picker: picker
             parent: T.Overlay.overlay
             preferredWidth: Theme.dialogWidthSm + 40
@@ -382,8 +408,9 @@ Item {
             acceptEnabled: (picker.selectedDate !== "" || picker.natural.ok) && !picker.timeInvalid
             footerLeading: [
                 BButton {
+                    objectName: "dateDialogRemove"
                     visible: dateDialog.removable
-                    text: qsTr("Remove")
+                    text: dateDialog.removeText
                     iconName: "trash-2"
                     variant: "ghost"
                     textColor: Theme.dangerText

@@ -74,6 +74,7 @@ set(BRULION_UI_QML
     qml/components/BShadow.qml
     qml/components/BSpinner.qml
     qml/components/BSplitHandle.qml
+    qml/components/BSuggestField.qml
     qml/components/BSwitch.qml
     qml/components/BTabBar.qml
     qml/components/BTabButton.qml

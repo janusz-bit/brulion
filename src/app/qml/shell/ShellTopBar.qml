@@ -224,6 +224,16 @@ Rectangle {
             onTriggered: AppController.requestUiAction("toggleNoteMode")
         }
         BMenuItem {
+            // The properties panel's add row of the page shown (the day being written in).
+            objectName: "menuAddProperty"
+            visible: bar.inEditor && !bar.picture
+            height: visible ? implicitHeight : 0
+            text: qsTr("Add property")
+            iconName: "plus"
+            enabled: !AppController.sourceModeShown
+            onTriggered: AppController.requestUiAction("addProperty")
+        }
+        BMenuItem {
             visible: bar.onPage && !Theme.narrow
             height: visible ? implicitHeight : 0
             text: qsTr("Open in side panel")
