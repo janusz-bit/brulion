@@ -368,7 +368,9 @@ FocusScope {
                                                   : AppController.toast(text, kind)
         focus: true
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
-        // The properties panel open or folded: a device setting (the panel's header switches it).
+        // The properties panel open or folded: a device setting (the panel's header switches it);
+        // bound here for the rows made with the editor, then by the Binding below.
+        propertiesExpanded: AppSettings.propertiesExpanded
         onPropertiesExpandedToggled: (expanded) => AppSettings.propertiesExpanded = expanded
         // The side panel is narrow: phone-like margins there.
         horizontalPadding: Theme.compact || root.inSidePanel ? Theme.space3 : Theme.space8

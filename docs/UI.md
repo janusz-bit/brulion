@@ -1190,7 +1190,11 @@ content jump now and then, not every time. Hence:
 
 * bindings instead of Layouts in `ContentJournalDay`, `QueryBlockView`, `TransclusionView`,
   `EmbedView`, `FrontmatterView` (folded, and expanded: `PropertiesPanel` sums its rows,
-  `PropertyListValue` lays out its chips like `TasksRow`), `PlanningItemRow`, `CalendarAgendaList`, `TasksRow`
+  `PropertyListValue` lays out its chips like `TasksRow`; a journal day's editor binds
+  `propertiesExpanded` to the setting itself — a `Binding` element applies only once the day is
+  complete, after its editor made its rows, and a day the stream created folded opened a moment
+  later, 240–556 px; `tst_scroll_jumps_qml` scrolls days with properties, one case with the panel
+  expanded), `PlanningItemRow`, `CalendarAgendaList`, `TasksRow`
   (its chips' line breaks), `TableBlockView`'s buttons and `BChip` itself — Tasks and the agenda
   reuse their rows (`reuseItems`), and a reused row whose chips took their new widths a polish
   later wrapped onto another line after it was placed. (In Qt 6.11 a Repeater inside a delegate
