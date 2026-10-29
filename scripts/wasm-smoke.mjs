@@ -37,7 +37,8 @@
 // which must wait ("open in another tab") until the first one leaves the app. --share checks the
 // share target (docs/WEB.md "Udostępnianie do Brulionu"): the manifest offers it (GET ./ with
 // share-title, share-text and share-url, no errors), a launch with a shared title and text
-// (?selftest=share: the app publishes the share dialog's data) opens the share dialog with
+// (?selftest=share: the app publishes the share dialog's data; a notebook with today's journal
+// written into IndexedDB as for --copy) opens the share dialog with
 // "[Title](link) — text" and leaves the address bar without the share parameters, and a second
 // tab launched with a share while Brulion runs in the first one hands it over (that tab never
 // loads the app, says so and asks to be closed; the first one shows the dialog with the text). --index-notes N
@@ -386,14 +387,16 @@ async function main() {
     console.log(`screenshot: ${file}`);
   };
 
-  if (args.indexNotes > 0 || args.copy || args.keyboardPhone) {
+  if (args.indexNotes > 0 || args.copy || args.keyboardPhone || args.share) {
     // Any document of the site's origin can write its IndexedDB; the logo does not start the app.
     const logo = new URL('icons/logo.svg', url).href;
     await cdp.send('Page.navigate', { url: logo });
     for (const end = deadline(30); Date.now() < end; await sleep(250)) {
       if ((await evaluate('location.href + " " + document.readyState').catch(() => '')) === `${logo} complete`) break;
     }
-    const journal = args.copy ? copyJournal : args.keyboardPhone ? phoneJournal : null;
+    // --share: a notebook to save into (without one the share waits for onboarding).
+    const journal = args.copy ? copyJournal : args.keyboardPhone ? phoneJournal
+      : args.share ? '- Dziennik na udostępnienia\n' : null;
     const written = await evaluate(seedVaultScript(args.indexNotes || 0, journal), true)
       .catch(() => undefined);
     console.log(`vault of ${args.indexNotes || 0} notes${journal ? ' and today\'s journal' : ''} written into IndexedDB (${written} entries)`);
@@ -907,7 +910,7 @@ async function main() {
       target = undefined;
     }
     console.log(`share: manifest share_target ${JSON.stringify(target)}, errors ${JSON.stringify(manifest.errors ?? manifest.failed)}`);
-    if (manifest.failed || (manifest.errors ?? []).some((e) => e.critical)) {
+    if (manifest.failed || (manifest.errors ?? []).length) {
       problems.push(`share: the manifest has errors: ${JSON.stringify(manifest.errors ?? manifest.failed)}`);
     }
     if (target?.action !== './' || target?.method !== 'GET' || target?.params?.title !== 'share-title'
