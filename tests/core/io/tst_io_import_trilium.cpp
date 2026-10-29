@@ -20,6 +20,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QSet>
 #include <QTest>
@@ -1270,10 +1271,14 @@ private Q_SLOTS:
                                u"[[assets/Trilium/Szkic ćwiczeń.excalidraw|Szkic ćwiczeń.excalidraw]]\n"_s;
         const QStringList strokeIds = {u"k1"_s, u"k2"_s};
         const QByteArray png = "\x89PNG\r\n\x1a\nGrządka";
-        // A web page embedded in the canvas: Brulion shows the drawing, never edits it.
+        // A web page embedded in the canvas, below the strokes (Excalidraw's fractional indices):
+        // Brulion shows the drawing, never edits it.
         QByteArray webPage = CanvasStrokes;
         webPage.replace(json("'elements':["), json("'elements':[{'id':'w1','type':'embeddable','x':0,'y':80,"
-                                                   "'width':120,'height':60,'link':'https://example.org/żółw'},"));
+                                                   "'width':120,'height':60,'link':'https://example.org/żółw',"
+                                                   "'index':'a0'},"));
+        webPage.replace(json("{'id':'k1',"), json("{'id':'k1','index':'a1',"));
+        webPage.replace(json("{'id':'k2',"), json("{'id':'k2','index':'a2',"));
         QByteArray htmlPicture = CanvasPicture;
         htmlPicture.replace("</svg>", "<foreignObject width='120' height='60'><div "
                                       "xmlns='http://www.w3.org/1999/xhtml'>example.org</div></foreignObject></svg>");
@@ -1392,8 +1397,23 @@ private Q_SLOTS:
         QCOMPARE(json.value(u"version"_s).toInt(), 2);
         QVERIFY(!json.contains(u"_meta"_s) && !json.contains(u"svg"_s));
         QVERIFY(json.value(u"files"_s).isObject());
-        if (!ids.isEmpty()) {
-            const QJsonObject k1 = json.value(u"elements"_s).toArray().first().toObject();
+        // The elements in Trilium's order (what is drawn over what); a drawing Brulion only shows
+        // keeps them exactly (the fractional indices too).
+        const QJsonArray given = QJsonDocument::fromJson(scene).object().value(u"elements"_s).toArray();
+        const QJsonArray elements = json.value(u"elements"_s).toArray();
+        const auto idsOf = [](const QJsonArray &array) {
+            QStringList out;
+            for (const QJsonValue &v : array)
+                out.append(v.toObject().value(u"id"_s).toString());
+            return out;
+        };
+        QCOMPARE(idsOf(elements), idsOf(given));
+        if (!editable)
+            QCOMPARE(elements, given);
+        for (const QJsonValue &v : elements) {
+            const QJsonObject k1 = v.toObject();
+            if (k1.value(u"id"_s).toString() != u"k1")
+                continue;
             QCOMPARE(k1.value(u"customData"_s).toObject().value(u"notatka"_s).toString(), u"źdźbło żyta"_s);
             QCOMPARE(k1.value(u"pressures"_s).toArray().size(), 3);
         }
@@ -1445,6 +1465,56 @@ private Q_SLOTS:
         const std::optional<drawing::Drawing> d = drawing::readDrawing(svg);
         QVERIFY(d && drawing::editable(*d));
         QVERIFY(!drawing::safeDataUrl(d->files, fileId).isEmpty());
+    }
+
+    void canvasPictureShownByAnotherNote()
+    {
+        // A picture pasted into the canvas that a text note shows too: in the scene, and still a
+        // file of its own for that note (not the whole drawing in its place) — also when the
+        // drawing is one Brulion only links.
+        const QString fileId = u"f00d"_s + QString(36, u'5');
+        const QByteArray png = "\x89PNG\r\n\x1a\nIHDR zdjęcie łąki";
+        const QByteArray scene =
+                json("{'type':'excalidraw','version':2,'elements':[{'id':'i1','type':'image','x':0,'y':0,"
+                     "'width':40,'height':40,'fileId':'"
+                     + fileId.toLatin1() + "'}],'files':{},'appState':{}}");
+        QByteArray webPage = scene;
+        webPage.replace(json("'elements':["), json("'elements':[{'id':'w1','type':'embeddable','x':0,'y':80,"
+                                                   "'width':120,'height':60,'link':'https://example.org/'},"));
+        QByteArray htmlPicture = CanvasPicture;
+        htmlPicture.replace("</svg>", "<foreignObject><div>example.org</div></foreignObject></svg>");
+        const QString picture = u"assets/Trilium/Szkic ćwiczeń/"_s + fileId + u".png"_s;
+        const Meta text{u"t1"_s, u"Opis"_s, u"Opis.html"_s, {}, {}};
+        const QString image = u"<p><img src=\"Szkic ćwiczeń_"_s + fileId + u".png\"></p>"_s;
+        struct Case {
+            QByteArray scene;
+            QByteArray trilium; ///< Trilium's picture
+            QString shown;      ///< the canvas's page
+        };
+        const QList<Case> cases = {
+                {scene, CanvasPicture, u"![[assets/Trilium/Szkic ćwiczeń.svg]]\n"_s},
+                {webPage, htmlPicture, u"[[assets/Trilium/Szkic ćwiczeń.svg|Szkic ćwiczeń.svg]]\n"_s},
+        };
+        for (const Case &c : cases) {
+            QList<FileEntry> entries = canvasExport(
+                    c.scene, {canvasPicture(c.trilium), canvasAttachment(u"x2"_s, fileId, u"image/png"_s, png)},
+                    {text});
+            entries.append({u"Opis.html"_s, page(u"Opis"_s, image)});
+            const ImportResult r = importZip(entries);
+            dump(u"canvas picture shown by another note"_s, r);
+            QVERIFY2(r.warnings.isEmpty(), qPrintable(r.warnings.join(u'\n')));
+            QCOMPARE(iotest::pathsOf(r), sorted({u"Trilium/Opis.md"_s, u"Trilium/Szkic ćwiczeń.md"_s,
+                                                 u"assets/Trilium/Szkic ćwiczeń.svg"_s, picture}));
+            QCOMPARE(iotest::textAt(r, u"Trilium/Opis.md"_s), u"![["_s + picture + u"]]\n"_s);
+            QCOMPARE(iotest::fileAt(r, picture)->data, png);
+            // (Shown by Opis: not listed under the drawing.)
+            QCOMPARE(iotest::textAt(r, u"Trilium/Szkic ćwiczeń.md"_s), c.shown);
+            const QJsonObject files = embeddedScene(iotest::fileAt(r, u"assets/Trilium/Szkic ćwiczeń.svg"_s)->data)
+                                              .value(u"files"_s)
+                                              .toObject();
+            QCOMPARE(files.value(fileId).toObject().value(u"dataURL"_s).toString(),
+                     u"data:image/png;base64,"_s + QString::fromLatin1(png.toBase64()));
+        }
     }
 
     void canvasFilesOfOldTrilium()
@@ -1516,33 +1586,85 @@ private Q_SLOTS:
         }
     }
 
+    void canvasPicturesTooLarge_data()
+    {
+        // The pictures pasted into the canvas (one image element and attachment each, titled
+        // with its fileId; `shared`: every attachment names the same file of the export).
+        QTest::addColumn<QList<QByteArray>>("pictures");
+        QTest::addColumn<bool>("shared");
+        // Its data URL alone is more than a scene may hold: not even encoded.
+        QTest::newRow("a picture larger than a scene")
+                << QList<QByteArray>{QByteArray(drawing::MaxSceneBytes / 4 * 3 + 1, '\0')} << false;
+        // The scene would be read, its payload (base64 of the compressed scene: some twice the
+        // pictures' bytes for photos) not: the drawing read back tells.
+        QList<QByteArray> photos;
+        QRandomGenerator random(20261029);
+        for (int k = 0; k < 2; ++k) {
+            QList<quint32> words(9 * 1024 * 1024 / 4);
+            random.fillRange(words.data(), words.size());
+            photos.append(QByteArray(reinterpret_cast<const char *>(words.constData()), words.size() * 4));
+        }
+        QTest::newRow("photos whose payload is too large") << photos << false;
+        // One file of the export named by many attachments: each would be a picture of its own in
+        // the scene — refused before any is encoded (the import's memory stays bounded).
+        QTest::newRow("one file named by many pictures") << QList<QByteArray>(40, QByteArray(1024 * 1024, 'x')) << true;
+    }
+
     void canvasPicturesTooLarge()
     {
-        // Pictures that would make the scene larger than Brulion reads (drawing::MaxSceneBytes)
+        // Pictures that would make the drawing larger than Brulion reads (drawing::MaxSceneBytes)
         // stay files next to the drawing, with a warning.
-        const QString fileId = u"b16"_s + QString(37, u'0');
-        const QByteArray scene = json("{'type':'excalidraw','version':2,'elements':[{'id':'i1','type':'image','x':0,"
-                                      "'y':0,'width':40,'height':40,'fileId':'"
-                                      + fileId.toLatin1() + "'}],'files':{},'appState':{}}");
-        const QByteArray huge(drawing::MaxSceneBytes / 4 * 3 + 1, '\0');
+        QFETCH(QList<QByteArray>, pictures);
+        QFETCH(bool, shared);
+        QByteArray elements;
+        QList<ExportFile> files{canvasPicture(CanvasPicture)};
+        QStringList ids;
+        QStringList stored{u"Trilium/Szkic ćwiczeń.md"_s, u"assets/Trilium/Szkic ćwiczeń.svg"_s};
+        QString page = u"![[assets/Trilium/Szkic ćwiczeń.svg]]\n\n"_s;
+        for (qsizetype k = 0; k < pictures.size(); ++k) {
+            const QString fileId = u"b16"_s + QString::number(k).rightJustified(37, u'0');
+            ids.append(u"i"_s + QString::number(k));
+            elements += (elements.isEmpty() ? "" : ",")
+                        + json("{'id':'" + ids.last().toLatin1()
+                               + "','type':'image','x':0,'y':0,'width':40,"
+                                 "'height':40,'fileId':'"
+                               + fileId.toLatin1() + "'}");
+            ExportFile f = canvasAttachment(u"x"_s + QString::number(k), fileId, u"image/png"_s, pictures.at(k));
+            if (shared) {
+                f.name = u"Szkic ćwiczeń_zdjęcie.png"_s;
+                f.meta.insert(u"dataFileName"_s, f.name);
+            }
+            files.append(f);
+            const QString picture = u"assets/Trilium/Szkic ćwiczeń/"_s + fileId + u".png"_s;
+            stored.append(picture);
+            page += (k == 0 ? u""_s : u"\n"_s) + u"![["_s + picture + u"]]"_s;
+        }
+        page += u'\n';
+        const QByteArray scene =
+                json("{'type':'excalidraw','version':2,'elements':[") + elements + json("],'files':{},'appState':{}}");
+        QList<FileEntry> entries = canvasExport(scene, files);
+        QSet<QString> names;
+        entries.removeIf([&](const FileEntry &e) {
+            if (names.contains(e.path))
+                return true;
+            names.insert(e.path);
+            return false;
+        });
         // Unpacked (a ZIP of it would take long to make).
-        const ImportResult r = importFiles(canvasExport(
-                scene, {canvasPicture(CanvasPicture), canvasAttachment(u"x2"_s, fileId, u"image/png"_s, huge)}));
+        const ImportResult r = importFiles(entries);
         QCOMPARE(r.warnings.size(), 1);
         QVERIFY2(hasWarning(r, u"pictures of the drawing “Szkic ćwiczeń” are too large"_s),
                  qPrintable(r.warnings.first()));
-        const QString picture = u"assets/Trilium/Szkic ćwiczeń/"_s + fileId + u".png"_s;
-        QCOMPARE(iotest::pathsOf(r),
-                 sorted({u"Trilium/Szkic ćwiczeń.md"_s, u"assets/Trilium/Szkic ćwiczeń.svg"_s, picture}));
-        QCOMPARE(iotest::fileAt(r, picture)->data.size(), huge.size());
-        QCOMPARE(iotest::textAt(r, u"Trilium/Szkic ćwiczeń.md"_s),
-                 u"![[assets/Trilium/Szkic ćwiczeń.svg]]\n\n![["_s + picture + u"]]\n"_s);
+        QCOMPARE(iotest::pathsOf(r), sorted(stored));
+        for (qsizetype k = 0; k < pictures.size(); ++k)
+            QCOMPARE(iotest::fileAt(r, stored.at(k + 2))->data, pictures.at(k));
+        QCOMPARE(iotest::textAt(r, u"Trilium/Szkic ćwiczeń.md"_s), page);
         const QByteArray svg = iotest::fileAt(r, u"assets/Trilium/Szkic ćwiczeń.svg"_s)->data;
         QVERIFY(svg.startsWith(CanvasPictureRoot));
         const std::optional<drawing::Drawing> d = drawing::readDrawing(svg);
         QVERIFY(d);
-        QVERIFY(d->files.isEmpty()); // the picture's element without its file: a placeholder
-        QCOMPARE(elementIds(*d), QStringList({u"i1"_s}));
+        QVERIFY(d->files.isEmpty()); // the pictures' elements without their files: placeholders
+        QCOMPARE(elementIds(*d), ids);
     }
 
     void importTwiceIsDeterministic()

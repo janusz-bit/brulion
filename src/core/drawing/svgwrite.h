@@ -66,15 +66,19 @@ QRectF pictureRect(const Drawing &drawing);
 ///   --><!-- payload-version:2 --><!-- payload-start -->BASE64<!-- payload-end --></metadata>\n
 ///
 /// (the `svg-source` comment only when the picture has none). Every other byte stays as it was (a
-/// BOM, the prolog, the picture's own style sheets and fonts) but a scene the picture had already:
-/// removed from `<!-- payload-type:` to `<!-- payload-end -->`, one scene per file. Brulion and
-/// excalidraw.com then open the file as a drawing, every program shows the picture; Brulion writes
-/// its own picture (toSvg) when it saves an edit. nullopt — use toSvg() — when the picture has no
-/// well-formed prolog and root `<svg …>` start tag (QXmlStreamReader; only the head is read), the
-/// root is empty (`<svg/>`, `width` or `height` 0: a picture of an empty scene), its start tag ends
-/// beyond HeadBytes − 512 (looksLikeExcalidrawSvg() must see the payload in the file's head), the
-/// prolog names a payload or the picture keeps a payload marker that is no whole payload.
+/// BOM, the prolog, the picture's own style sheets and fonts) but a scene the picture had already,
+/// as Excalidraw writes one (those comments and the base64 between them, nothing else), removed:
+/// one scene per file. Brulion and excalidraw.com then open the file as a drawing, every program
+/// shows the picture; Brulion writes its own picture (toSvg) when it saves an edit. nullopt — use
+/// toSvg() — when the picture has no well-formed prolog and root `<svg …>` start tag
+/// (QXmlStreamReader; only the head is read), the root is empty (`<svg/>`, `width` or `height` 0:
+/// a picture of an empty scene), its start tag ends beyond HeadBytes − 512
+/// (looksLikeExcalidrawSvg() must see the payload in the file's head), the prolog names a payload
+/// or the picture has the Excalidraw payload's type in any other place or shape.
 std::optional<QByteArray> svgWithScene(QByteArrayView picture, const Drawing &drawing);
+/// The same with the scene's JSON as given (UTF-8; e.g. a scene Brulion only shows, which the
+/// Drawing model would write with its foreign elements moved above the others).
+std::optional<QByteArray> svgWithScene(QByteArrayView picture, QByteArrayView sceneJson);
 
 /// A colour as written into an SVG attribute: "#rgb", "#rrggbb" or "#rrggbbaa" (from a scene of
 /// anywhere: anything else would be markup) or `fallback`.

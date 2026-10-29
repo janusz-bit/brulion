@@ -59,6 +59,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMap>
 #include <QRegularExpression>
 #include <QSet>
 #include <QUrl>
@@ -1050,18 +1051,33 @@ private:
         }
     }
 
+    /// A canvas note's scene (canvasScene()).
+    struct CanvasScene {
+        drawing::Drawing drawing;
+        /// The scene as Trilium stored it (made a scene as canvasScene() says), with the
+        /// pictures folded into it.
+        QJsonObject object;
+        /// The picture old Trilium kept in the content (`svg`; empty: none).
+        QByteArray legacyPicture;
+        /// The image attachments whose pictures are in `files` now (their indices).
+        QSet<int> folded;
+        /// The pictures were not folded: together they are more than a scene may hold.
+        bool picturesTooLarge = false;
+    };
+
     /// The scene of canvas note `i`: its content (an Excalidraw scene's JSON) as Brulion reads a
     /// scene — `type` "excalidraw" and `version` 2 added when missing (zadam/trilium before 0.61),
     /// Trilium's own keys `_meta` and `svg` left out, `files` given as an array (some versions)
     /// made an object by `id` — and, with `foldPictures`, the pictures of the scene's image
     /// elements that Trilium (0.61 and later) keeps as image attachments of the note, titled with
     /// their `fileId`, added to `files` as excalidraw.com keeps them (`{mimeType, id, dataURL,
-    /// created: 0}`; a file the scene has already wins — the attachment is the same picture).
-    /// `folded` receives those attachments' indices, `legacyPicture` the picture old Trilium kept
-    /// in the content (`svg`). nullopt: no JSON object with an `elements` array (a damaged or
-    /// protected note), more than a scene may hold (drawing::MaxSceneBytes, MaxSceneContainers)
-    /// or no Excalidraw scene.
-    std::optional<drawing::Drawing> canvasScene(int i, bool foldPictures, QList<int> *folded, QByteArray *legacyPicture)
+    /// created: 0}`; a file the scene has already wins — the attachment is the same picture). None
+    /// is folded when their data URLs alone are more than a scene may hold (MaxSceneBytes: Brulion
+    /// could not read the drawing back) — known before any is encoded, so the work stays bounded
+    /// however often an export names one large file. nullopt: no JSON object with an `elements`
+    /// array (a damaged or protected note), more than a scene may hold (drawing::MaxSceneBytes,
+    /// MaxSceneContainers) or no Excalidraw scene.
+    std::optional<CanvasScene> canvasScene(int i, bool foldPictures)
     {
         const Note &n = m_notes[i];
         const InputFile *f = file(n.dataSource);
@@ -1077,20 +1093,25 @@ private:
         const QJsonDocument doc = QJsonDocument::fromJson(f->data, &error);
         if (error.error != QJsonParseError::NoError || !doc.isObject())
             return std::nullopt;
-        QJsonObject scene = doc.object();
+        CanvasScene out;
+        QJsonObject &scene = out.object;
+        scene = doc.object();
         if (!scene.value(u"elements"_s).isArray())
             return std::nullopt;
         if (!scene.contains(u"type"_s))
             scene.insert(u"type"_s, u"excalidraw"_s);
         if (!scene.contains(u"version"_s))
             scene.insert(u"version"_s, 2);
-        if (legacyPicture)
-            *legacyPicture = scene.value(u"svg"_s).toString().toUtf8();
+        out.legacyPicture = scene.value(u"svg"_s).toString().toUtf8();
         scene.remove(u"_meta"_s);
         scene.remove(u"svg"_s);
-        QJsonObject files;
+        // The files by id, made a QJsonObject once at the end (inserting keys out of order one by
+        // one would move the object's sorted keys every time).
+        QMap<QString, QJsonValue> files;
         if (const QJsonValue given = scene.value(u"files"_s); given.isObject()) {
-            files = given.toObject();
+            const QJsonObject object = given.toObject();
+            for (auto it = object.constBegin(); it != object.constEnd(); ++it)
+                files.insert(files.cend(), it.key(), it.value());
         } else {
             for (const QJsonValue &v : given.toArray()) {
                 const QJsonObject entry = v.toObject();
@@ -1106,36 +1127,65 @@ private:
                 if (e.value(u"type"_s).toString() == u"image" && !e.value(u"isDeleted"_s).toBool())
                     used.insert(e.value(u"fileId"_s).toString());
             }
+            // The attachments to fold (by index): the first one of a fileId the scene has no file
+            // for brings its picture, the others are the same picture.
+            QList<std::pair<int, const InputFile *>> pictures;
+            QSet<QString> taken;
+            qsizetype dataUrlBytes = 0;
             for (int k = 0; k < n.attachments.size(); ++k) {
                 const Attachment &a = n.attachments[k];
-                const QString mime = a.mime.toLower();
                 const InputFile *picture = file(a.source);
-                if (!picture || !mime.startsWith(u"image/"_s) || isExportImage(n.type, a.title) || a.title.isEmpty()
-                    || !used.contains(a.title))
+                if (!picture || !a.mime.startsWith(u"image/"_s, Qt::CaseInsensitive) || isExportImage(n.type, a.title)
+                    || a.title.isEmpty() || !used.contains(a.title))
                     continue;
-                if (!files.contains(a.title)) {
-                    files.insert(a.title,
-                                 QJsonObject{{u"mimeType"_s, mime},
-                                             {u"id"_s, a.title},
-                                             {u"dataURL"_s, QString(u"data:"_s + mime + u";base64,"_s
-                                                                    + QString::fromLatin1(picture->data.toBase64()))},
-                                             {u"created"_s, 0}});
+                if (!files.contains(a.title) && !taken.contains(a.title)) {
+                    taken.insert(a.title);
+                    dataUrlBytes += 13 + a.mime.size() + (picture->data.size() + 2) / 3 * 4; // data:…;base64,…
+                    if (dataUrlBytes > drawing::MaxSceneBytes) {
+                        out.picturesTooLarge = true;
+                        pictures.clear();
+                        break;
+                    }
+                    pictures.append({k, picture});
+                } else {
+                    pictures.append({k, nullptr});
                 }
-                if (folded)
-                    folded->append(k);
+            }
+            for (const auto &[k, picture] : std::as_const(pictures)) {
+                out.folded.insert(k);
+                if (!picture)
+                    continue;
+                const Attachment &a = n.attachments[k];
+                const QString mime = a.mime.toLower();
+                files.insert(a.title,
+                             QJsonObject{{u"mimeType"_s, mime},
+                                         {u"id"_s, a.title},
+                                         {u"dataURL"_s, QString(u"data:"_s + mime + u";base64,"_s
+                                                                + QString::fromLatin1(picture->data.toBase64()))},
+                                         {u"created"_s, 0}});
             }
         }
-        scene.insert(u"files"_s, files);
-        return drawing::sceneFromObject(scene);
+        QJsonObject filesObject;
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+            filesObject.insert(it.key(), it.value()); // (in order: appended)
+        scene.insert(u"files"_s, filesObject);
+        std::optional<drawing::Drawing> d = drawing::sceneFromObject(scene);
+        if (!d)
+            return std::nullopt;
+        out.drawing = std::move(*d);
+        return out;
     }
 
     /// Store canvas note `i`'s drawing (Note::drawing): Trilium's SVG picture of it
     /// (`canvas-export.svg`, else old Trilium's picture in the content) with the scene embedded
     /// (drawing::svgWithScene); when there is none or it is no usable picture (a PNG, an empty
     /// drawing's `width="0"`), the drawing as Brulion draws it (drawing::toSvg) — only when Brulion
-    /// draws every element (editable()), else its picture would miss some. Nothing (the note is
-    /// imported as before: its picture and the source as `.excalidraw`) when the content is no
-    /// scene. The export images and the pictures folded into the scene then point at the drawing.
+    /// draws every element (editable()), else its picture would miss some. A drawing Brulion only
+    /// shows keeps the scene as Trilium stored it (the order of its elements: the Drawing model
+    /// writes foreign elements last). Nothing (the note is imported as before: its picture and the
+    /// source as `.excalidraw`) when the content is no scene. The export images and the pictures
+    /// folded into the scene then point at the drawing; a folded picture another note shows is
+    /// stored as before too (that note shows the picture, not the whole drawing).
     void placeCanvas(int i, const QString &parentFolder)
     {
         Note &n = m_notes[i];
@@ -1151,45 +1201,50 @@ private:
         struct Made {
             QByteArray file;
             bool renderable = true;
+            QSet<int> folded;
+            bool picturesTooLarge = false;
         };
-        const auto make = [&](bool foldPictures, QList<int> *folded) -> std::optional<Made> {
-            QByteArray legacy;
-            const std::optional<drawing::Drawing> scene = canvasScene(i, foldPictures, folded, &legacy);
+        const auto make = [&](bool foldPictures) -> std::optional<Made> {
+            const std::optional<CanvasScene> scene = canvasScene(i, foldPictures);
             if (!scene)
                 return std::nullopt;
-            const bool editable = drawing::editable(*scene);
-            const QByteArray &picture = exportSvg.isEmpty() ? legacy : exportSvg;
+            const bool editable = drawing::editable(scene->drawing);
+            const QByteArray &picture = exportSvg.isEmpty() ? scene->legacyPicture : exportSvg;
             if (!picture.isEmpty()) {
-                if (std::optional<QByteArray> svg = drawing::svgWithScene(picture, *scene)) {
+                const QByteArray json = editable ? drawing::sceneJson(scene->drawing)
+                                                 : QJsonDocument(scene->object).toJson(QJsonDocument::Compact);
+                if (std::optional<QByteArray> svg = drawing::svgWithScene(picture, json)) {
                     // Brulion draws an editable drawing itself; another one is Trilium's picture
                     // through Qt's SVG renderer (HTML labels it cannot draw: linked).
                     return Made{std::move(*svg),
-                                editable || isRenderableExport(n.type, u"canvas-export.svg"_s, picture)};
+                                editable || isRenderableExport(n.type, u"canvas-export.svg"_s, picture), scene->folded,
+                                scene->picturesTooLarge};
                 }
             }
             if (!editable)
                 return std::nullopt;
-            return Made{drawing::toSvg(*scene), true};
+            return Made{drawing::toSvg(scene->drawing), true, scene->folded, scene->picturesTooLarge};
         };
         // Brulion must read its drawing back: a scene beyond drawing::MaxSceneBytes (large
         // pictures pasted into the canvas) keeps its pictures as files next to it.
-        QList<int> folded;
-        std::optional<Made> made = make(true, &folded);
+        std::optional<Made> made = make(true);
         if (made && !drawing::readDrawing(made->file)) {
+            const bool foldedAny = !made->folded.isEmpty();
             made.reset();
-            if (!folded.isEmpty()) {
-                folded.clear();
-                made = make(false, nullptr);
+            if (foldedAny) {
+                made = make(false);
                 if (made && !drawing::readDrawing(made->file))
                     made.reset();
                 if (made)
-                    m_ctx.warn(IoMessages::tr("The pictures of the drawing “%1” are too large to keep inside it; "
-                                              "they were saved next to it.")
-                                       .arg(displayName(n)));
+                    made->picturesTooLarge = true;
             }
         }
         if (!made)
             return;
+        if (made->picturesTooLarge)
+            m_ctx.warn(IoMessages::tr("The pictures of the drawing “%1” are too large to keep inside it; "
+                                      "they were saved next to it.")
+                               .arg(displayName(n)));
         // Where its picture was stored before: links into the import keep their shape.
         n.drawing = m_ctx.addAttachment(paths::join(parentFolder, n.name + u".svg"_s), made->file);
         n.drawingRenderable = made->renderable;
@@ -1201,9 +1256,10 @@ private:
                 a.inDrawing = true;
                 a.path = n.drawing;
                 a.renderable = n.drawingRenderable;
-            } else if (folded.contains(k)) {
+            } else if (made->folded.contains(k) && !a.referenced) {
                 a.inDrawing = true;
                 a.path = n.drawing;
+                a.renderable = n.drawingRenderable;
                 a.referenced = true; // not listed under the drawing
             }
         }
