@@ -20,9 +20,11 @@ import Brulion
 // name no room).
 // A picture whose format this device cannot decode (WebP or AVIF without Qt's image plugins:
 // Workspace.canDecodePicture) is named so instead of a load error.
-// A drawing (Workspace.isDrawing) has "Edytuj rysunek" in the bar (the drawing editor, route
-// "drawing"); the picture follows the file when it is saved again, and the app's theme (light or
-// dark paper, as the drawing chooses: Workspace.drawingUrl, the drawing image provider).
+// A drawing (Workspace.isDrawing: an SVG with a scene, a `.excalidraw` scene, an Obsidian
+// Excalidraw plugin file opened as a page — PageView.drawingPage) has "Edytuj rysunek" in the bar
+// (the drawing editor, route "drawing"); the picture follows the file when it is saved again, and
+// the app's theme (light or dark paper, as the drawing chooses: Workspace.drawingUrl, the drawing
+// image provider).
 // The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
 // never read whole for it), again whenever the file changes (sync, another program).
 //
@@ -62,9 +64,10 @@ Item {
         const i = root.path.lastIndexOf("/")
         return i < 0 ? root.path : root.path.slice(i + 1)
     }
-    readonly property bool scalable: /\.svg$/i.test(root.fileName)
-    /// This device can decode the picture's format (see above).
-    readonly property bool decodable: root.path !== "" && Workspace.canDecodePicture(root.path)
+    /// Drawn to fill the view: an SVG, a drawing (its preview, drawn at any size).
+    readonly property bool scalable: root.drawing || /\.svg$/i.test(root.fileName)
+    /// This device can decode the picture's format (see above); a drawing's preview always.
+    readonly property bool decodable: root.drawing || (root.path !== "" && Workspace.canDecodePicture(root.path))
     /// "WEBP" for assets/łąka.webp (the message for a format this device cannot show).
     readonly property string formatName: {
         const i = root.fileName.lastIndexOf(".")
@@ -76,8 +79,9 @@ Item {
     readonly property url source: !root.decodable || root.fileRevision < 0 ? ""
                                   : root.drawing ? Workspace.drawingUrl(root.path, Theme.dark)
                                   : Workspace.assetUrl(root.path)
-    /// A drawing (docs/SYNTAX.md §2 "Drawings"): the bar offers the drawing editor.
-    readonly property bool drawing: root.scalable && root.fileRevision >= 0 && Workspace.isDrawing(root.path)
+    /// A drawing (docs/SYNTAX.md §2 "Drawings": an SVG with a scene, a `.excalidraw` scene, an
+    /// Obsidian Excalidraw plugin file): the bar offers the drawing editor.
+    readonly property bool drawing: root.path !== "" && root.fileRevision >= 0 && Workspace.isDrawing(root.path)
 
     Connections {
         target: Workspace
@@ -86,8 +90,9 @@ Item {
                 root.fileRevision++
         }
     }
-    /// The picture's pixels from its header (≤ 0: not in the header — the loaded picture's then).
-    readonly property size headerSize: Workspace.pictureSize(root.path)
+    /// The picture's pixels from its header (≤ 0: not in the header — the loaded picture's then);
+    /// a drawing's preview size (again when the file changes).
+    readonly property size headerSize: root.fileRevision >= 0 ? Workspace.pictureSize(root.path) : Qt.size(0, 0)
     readonly property bool headerKnown: headerSize.width > 0 && headerSize.height > 0
     /// The picture's own pixels in the pixels view (the loaded size when the header has none).
     readonly property size shownSize: headerKnown ? headerSize
@@ -166,7 +171,7 @@ Item {
             spacing: Theme.space3
 
             BIcon {
-                name: "image"
+                name: root.drawing ? "pen-tool" : "image"
                 size: Theme.iconSize
                 color: Theme.fgMuted
                 Layout.alignment: Qt.AlignVCenter

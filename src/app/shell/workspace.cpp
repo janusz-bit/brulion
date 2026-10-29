@@ -6,6 +6,7 @@
 #include "workspacesync.h"
 
 #include "dates/dates.h"
+#include "drawing/excalidrawmd.h"
 #include "index/vaultindex.h"
 #include "log/categories.h"
 #include "log/slowscope.h"
@@ -664,8 +665,24 @@ bool Workspace::isDrawing(const QString &rawPath) const
         return false;
     // The vault's own file (also in the browser: IDBFS is a folder of files there too).
     const QString path = paths::normalize(rawPath);
-    return path.endsWith(u".svg"_s, Qt::CaseInsensitive) && m_vault->exists(path)
-           && editor::localFileIsDrawing(m_vault->absolutePath(path));
+    const bool markdown = path.endsWith(u".md"_s, Qt::CaseInsensitive);
+    if (!markdown && !path.endsWith(u".svg"_s, Qt::CaseInsensitive)
+        && !path.endsWith(u".excalidraw"_s, Qt::CaseInsensitive))
+        return false;
+    if (markdown && m_index) {
+        // An Obsidian Excalidraw plugin file: the note's frontmatter has the plugin's key — the
+        // index knows without reading the file (bindings ask this for every page opened).
+        if (const ParsedNote *note = m_index->note(path))
+            return note->frontmatter.contains(drawing::ExcalidrawPluginKey.toString());
+    }
+    return m_vault->exists(path) && editor::localFileIsDrawing(m_vault->absolutePath(path));
+}
+
+QSize Workspace::drawingSize(const QString &path) const
+{
+    if (!m_vault || path.isEmpty())
+        return {};
+    return editor::localDrawingSize(m_vault->absolutePath(paths::normalize(path)));
 }
 
 QByteArray Workspace::readAttachment(const QString &path) const
@@ -942,6 +959,11 @@ QSize Workspace::pictureSize(const QString &path) const
     const QSize pixels = assetPixelSize(path); // WebAssembly: the data URL's bytes (cached above)
     if (pixels.isValid() && !pixels.isEmpty())
         return pixels;
+    // A `.excalidraw` scene or an Obsidian Excalidraw plugin file: its preview's size (the drawing
+    // image provider draws it so; an SVG drawing has its root's size, as any picture).
+    if ((path.endsWith(u".md"_s, Qt::CaseInsensitive) || path.endsWith(u".excalidraw"_s, Qt::CaseInsensitive))
+        && isDrawing(path))
+        return drawingSize(path);
     const QUrl url = assetUrl(path); // desktop / Android: the file on disk
     return url.isLocalFile() ? editor::localPictureSize(url.toLocalFile()) : QSize();
 }

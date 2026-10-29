@@ -321,15 +321,26 @@ QString DrawingCanvas::load(const QByteArray &bytes)
     endTextEdit();
     QString status;
     drawing::Drawing doc;
+    // A new drawing is an SVG (Brulion's own).
+    m_format = drawing::FileFormat::Svg;
+    m_formatKnown = bytes.isEmpty();
+    m_markdown.reset();
+    m_writable = true;
     if (!bytes.isEmpty()) {
         drawing::ReadError error = drawing::ReadError::None;
-        std::optional<drawing::Drawing> read = drawing::readDrawing(bytes, &error);
-        if (!read)
+        std::optional<drawing::DrawingFile> read = drawing::readDrawingFile(bytes, &error);
+        if (!read) {
             status = error == drawing::ReadError::Corrupt ? u"corrupt"_s : u"notDrawing"_s;
-        else if (!drawing::editable(*read))
-            status = u"readonly"_s;
-        else
-            doc = std::move(*read);
+        } else {
+            m_format = read->format;
+            m_formatKnown = true;
+            m_markdown = read->markdown;
+            m_writable = read->writable;
+            if (!read->writable || !drawing::editable(read->drawing))
+                status = u"readonly"_s;
+            else
+                doc = std::move(read->drawing);
+        }
     }
     m_editable = status.isEmpty();
     m_prepared.clear();
@@ -355,9 +366,17 @@ QString DrawingCanvas::load(const QByteArray &bytes)
 
 bool DrawingCanvas::takeExternal(const QByteArray &bytes)
 {
-    std::optional<drawing::Drawing> theirs = drawing::readDrawing(bytes);
-    if (!theirs || !drawing::editable(*theirs) || !m_editable)
+    std::optional<drawing::DrawingFile> file = drawing::readDrawingFile(bytes);
+    if (!file || !file->writable || !drawing::editable(file->drawing) || !m_editable)
         return false;
+    // Their file: its format and its Markdown around the scene (the other device's back of the
+    // card and text entries); the merged scene goes into it.
+    const bool formatChanged = !m_formatKnown || m_format != file->format;
+    m_format = file->format;
+    m_formatKnown = true;
+    m_markdown = file->markdown;
+    m_writable = true;
+    std::optional<drawing::Drawing> theirs = std::move(file->drawing);
     // A gesture in progress goes on (a stroke is added when it ends, on top of the new elements);
     // the elements an erasing gesture has touched so far stay touched (by their keys).
     const drawing::MergeBase taken = drawing::mergeBase(*theirs);
@@ -376,11 +395,23 @@ bool DrawingCanvas::takeExternal(const QByteArray &bytes)
     }
     if (m_gesture == Gesture::Draw)
         updateLive(); // (in the colours of the theme taken in)
+    if (formatChanged)
+        Q_EMIT loadedChanged();
     Q_EMIT backgroundChanged();
     Q_EMIT themeChanged();
     Q_EMIT renderChanged();
     Q_EMIT contentChanged();
     return true;
+}
+
+QByteArray DrawingCanvas::fileBytes() const
+{
+    if (!m_editable || !m_writable)
+        return {};
+    drawing::DrawingFile file;
+    file.format = m_format;
+    file.markdown = m_markdown;
+    return drawing::writeDrawingFile(file, m_doc, m_clock ? m_clock() : QDateTime::currentMSecsSinceEpoch());
 }
 
 QByteArray DrawingCanvas::svg() const
@@ -392,8 +423,15 @@ QByteArray DrawingCanvas::svg() const
 
 void DrawingCanvas::markSaved(const QByteArray &written)
 {
-    if (!written.isEmpty())
+    if (!written.isEmpty()) {
         m_known = written;
+        // The plugin file as written is the layout of the next save: elements of this save erased
+        // later get their tombstones, text written now counts as read.
+        if (m_formatKnown && m_format == drawing::FileFormat::ExcalidrawMarkdown) {
+            if (std::optional<drawing::ExcalidrawMarkdownRead> read = drawing::readExcalidrawMarkdown(written))
+                m_markdown = std::make_shared<const drawing::ExcalidrawMarkdown>(std::move(read->layout));
+        }
+    }
     m_base = drawing::mergeBase(m_doc);
     setModified(false);
 }

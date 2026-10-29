@@ -13,6 +13,7 @@
 
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QSet>
 #include <QUrl>
 
 #include <algorithm>
@@ -1280,7 +1281,18 @@ void BlockListModel::ensureEmbeds(int row) const
     if (!showsEmbeds(view))
         return;
     st.onlyEmbeds = view == BlockView::Text && (e.body.contains(u"![") || e.body.contains(u"!((")) && onlyEmbeds(e.body, true);
-    const QList<Embed> embeds = embedsOf(e.body);
+    QList<Embed> embeds = embedsOf(e.body);
+    // Page embeds of Obsidian Excalidraw plugin drawings (`![[Plan]]`, the plugin's files without
+    // ".excalidraw" in their name): their drawings, after the attachments.
+    QSet<qsizetype> pageDrawings;
+    if (m_host && e.body.contains(u"![["_s)) {
+        for (const Transclusion &t : transclusionsOf(e.body)) {
+            if (!drawingPageOf(t).isEmpty()) {
+                pageDrawings.insert(embeds.size());
+                embeds.append({t.target, t.display, false, false});
+            }
+        }
+    }
     if (embeds.isEmpty())
         return;
     QString attachments = u"assets"_s;
@@ -1289,7 +1301,8 @@ void BlockListModel::ensureEmbeds(int row) const
         if (!folder.isEmpty())
             attachments = folder;
     }
-    for (const Embed &em : embeds) {
+    for (qsizetype k = 0; k < embeds.size(); ++k) {
+        const Embed &em = embeds.at(k);
         if (em.web) {
             st.embeds.append(webEmbed(em));
             continue;
@@ -1318,19 +1331,26 @@ void BlockListModel::ensureEmbeds(int row) const
         }
         if (decodable && !size.isValid() && url.isLocalFile())
             size = localPictureSize(url.toLocalFile());
-        if (!size.isValid())
-            size = QSize(0, 0);
-        // A drawing (docs/SYNTAX.md §2 "Drawings"): a click opens the drawing editor at `path`;
-        // its preview in the light and the dark theme (EmbedView picks one by the app's theme).
-        const bool drawing = em.image && m_host && path.endsWith(u".svg"_s, Qt::CaseInsensitive) && m_host->isDrawing(path);
+        // A drawing (docs/SYNTAX.md §2 "Drawings": an SVG, a `.excalidraw` scene, an Obsidian
+        // Excalidraw plugin file — `![[x.excalidraw]]` resolves to `x.excalidraw.md` when there is
+        // no `x.excalidraw`): a click opens the drawing editor at `path`; its preview in the light
+        // and the dark theme (EmbedView picks one by the app's theme), sized as the provider draws
+        // it (an SVG by its root, the others by their scene: EditorHost::drawingSize).
+        const bool drawing = m_host && (em.image || isDrawingTarget(em.target) || pageDrawings.contains(k))
+                             && m_host->isDrawing(path);
         QUrl darkUrl;
         if (drawing) {
             url = m_host->drawingUrl(path, false);
             darkUrl = m_host->drawingUrl(path, true);
+            decodable = true;
+            if (!path.endsWith(u".svg"_s, Qt::CaseInsensitive))
+                size = m_host->drawingSize(path);
         }
+        if (!size.isValid())
+            size = QSize(0, 0);
         st.embeds.append(QVariantMap{{u"target"_s, em.target},
                                      {u"alt"_s, em.alt},
-                                     {u"image"_s, em.image},
+                                     {u"image"_s, em.image || drawing},
                                      {u"decodable"_s, decodable},
                                      {u"format"_s, em.image ? pictureFormatName(em.target) : QString()},
                                      {u"url"_s, url},
@@ -1341,6 +1361,14 @@ void BlockListModel::ensureEmbeds(int row) const
                                      {u"width"_s, size.width()},
                                      {u"height"_s, size.height()}});
     }
+}
+
+QString BlockListModel::drawingPageOf(const Transclusion &t) const
+{
+    if (!m_host || t.kind != Transclusion::Kind::Page || t.blockRef || t.target.isEmpty())
+        return {};
+    const QString path = m_host->resolveLink(t.target, m_path);
+    return !path.isEmpty() && path != m_path && paths::isMarkdown(path) && m_host->isDrawing(path) ? path : QString();
 }
 
 void BlockListModel::attachmentChanged(const QString &path)

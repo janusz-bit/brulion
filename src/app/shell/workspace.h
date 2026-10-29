@@ -290,9 +290,13 @@ public:
     /// Qt's image plugins, which Android, the browser and some desktops lack); false for files
     /// that are no picture. The picture view and the editor's embeds name a format it cannot show.
     Q_INVOKABLE bool canDecodePicture(const QString &path) const override;
-    /// The attachment is a drawing (an SVG whose start names an embedded Excalidraw scene,
-    /// docs/SYNTAX.md §2 "Drawings"): its embed and its picture view open the drawing editor.
+    /// The file is a drawing (docs/SYNTAX.md §2 "Drawings"): an SVG whose start names an embedded
+    /// Excalidraw scene, a `.excalidraw` scene, an Obsidian Excalidraw plugin file (a note whose
+    /// frontmatter has `excalidraw-plugin` — from the index, without reading the file): its embed
+    /// and its picture view open the drawing editor; such a note opens as its drawing (PageView).
     Q_INVOKABLE bool isDrawing(const QString &path) const override;
+    /// The size of a `.excalidraw` or plugin drawing's preview (editor::localDrawingSize).
+    QSize drawingSize(const QString &path) const override;
     /// An attachment's bytes (the drawing editor); empty when missing or unreadable.
     Q_INVOKABLE QByteArray readAttachment(const QString &path) const;
     /// Write an existing attachment again (the drawing editor's saves): atomic, what it replaces
@@ -305,7 +309,8 @@ public:
     /// The path used; "" (and errorOccurred) when it could not be written.
     Q_INVOKABLE QString createAttachment(const QString &path, const QByteArray &data);
     /// The picture's pixels from its header ("assets/a.png" -> 4000 × 3000; -1 × -1 when the
-    /// header has none): the picture view's own-pixels size, without decoding the picture.
+    /// header has none): the picture view's own-pixels size, without decoding the picture; a
+    /// `.excalidraw` or plugin drawing's preview size (drawingSize()).
     Q_INVOKABLE QSize pictureSize(const QString &path) const;
     /// Is `path` a daily note? Returns its date "YYYY-MM-DD" or "".
     Q_INVOKABLE QString journalDate(const QString &path) const;

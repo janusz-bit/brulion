@@ -827,8 +827,10 @@ void PageController::showFile(EditorHost *host, const QString &path)
 
 void PageController::onFileChanged(const QString &path)
 {
-    if (path != m_path && m_model && !paths::isMarkdown(path))
-        m_model->attachmentChanged(path); // a drawing saved again: its embeds load it again
+    // A drawing saved again (an Obsidian Excalidraw plugin drawing is a Markdown file): its embeds
+    // load it again.
+    if (path != m_path && m_model && (!paths::isMarkdown(path) || (m_host && m_host->isDrawing(path))))
+        m_model->attachmentChanged(path);
     if (path != m_path || !m_host || !m_loaded)
         return;
     bool ok = false;

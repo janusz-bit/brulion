@@ -6,7 +6,11 @@
 //                   fingerDraws: !stylusSeen; appDark: Theme.dark
 //                   onContentChanged: saveTimer.restart() }
 //   canvas.load(Workspace.readAttachment(path)) → "" | "readonly" | "notDrawing" | "corrupt"
-//   const bytes = canvas.svg(); Workspace.writeAttachment(path, bytes); canvas.markSaved(bytes)
+//   const bytes = canvas.fileBytes(); Workspace.writeAttachment(path, bytes); canvas.markSaved(bytes)
+//
+// Files (core drawing/drawingfile.h): Brulion's SVG, a `.excalidraw` scene and an Obsidian
+// Excalidraw plugin file (`*.excalidraw.md`) — each written back in its own format (`format`,
+// fileBytes(): the plugin file's Markdown around the scene kept as it was).
 //
 // Tools (`tool`): "pen", "highlighter" (freehand lines), "eraser" (whole elements it touches, a
 // shape with its label), "select" (a lasso: elements at least half inside it — or a tap: the
@@ -59,6 +63,7 @@
 #include "drawingrender.h"
 
 #include "drawing/drawing.h"
+#include "drawing/drawingfile.h"
 #include "drawing/edit.h"
 #include "drawing/merge.h"
 
@@ -124,6 +129,11 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged FINAL)
     /// The loaded drawing can be edited (only elements Brulion draws, read).
     Q_PROPERTY(bool editable READ editable NOTIFY loadedChanged FINAL)
+    /// The file's format: "svg", "excalidraw" (a `.excalidraw` scene), "excalidrawMd" (an Obsidian
+    /// Excalidraw plugin file); "" when nothing was read. fileBytes() writes it.
+    Q_PROPERTY(QString format READ format NOTIFY loadedChanged FINAL)
+    /// The file is in a form Brulion only shows (the Excalidraw plugin's oldest one).
+    Q_PROPERTY(bool legacy READ legacy NOTIFY loadedChanged FINAL)
     /// How many elements the drawing has.
     Q_PROPERTY(int strokeCount READ strokeCount NOTIFY contentChanged FINAL)
     /// A stroke, an erasing gesture, a lasso, a move or a shape is in progress.
@@ -190,6 +200,8 @@ public:
     bool canRedo() const { return !m_redo.isEmpty(); }
     bool modified() const { return m_modified; }
     bool editable() const { return m_editable; }
+    QString format() const { return m_formatKnown ? drawing::formatName(m_format) : QString(); }
+    bool legacy() const { return m_formatKnown && !m_writable; }
     int strokeCount() const { return int(m_doc.strokes.size()); }
     bool busy() const
     {
@@ -200,9 +212,10 @@ public:
     double lastRenderMs() const { return m_lastRenderMs; }
 
     /// Show the drawing in `bytes` (Brulion's SVG, excalidraw.com's "Embed scene" SVG, a
-    /// .excalidraw file; empty: a new drawing). "" when it can be edited; else nothing is shown
-    /// and nothing can be drawn — "readonly" (frames, embedded web pages … from Excalidraw, which
-    /// Brulion would lose: QML shows the file as a picture), "notDrawing" (no scene: a picture),
+    /// .excalidraw file, an Obsidian Excalidraw plugin file; empty: a new drawing — an SVG). ""
+    /// when it can be edited; else nothing is shown and nothing can be drawn — "readonly" (frames,
+    /// embedded web pages … from Excalidraw, which Brulion would lose, or the Excalidraw plugin's
+    /// oldest form: QML shows the file as a picture), "notDrawing" (no scene: a picture),
     /// "corrupt" (a scene that cannot be read). Clears the undo history, the selection and
     /// `modified`; the view shows the elements from their top left at zoom 1, zoomed out to the
     /// view's width when they are wider.
@@ -211,14 +224,20 @@ public:
     /// with no changes here it replaces the drawing; else the elements are merged (drawing::merge
     /// against the last load or save) — the other version, plus what was drawn or changed here,
     /// minus what was erased here (`modified` stays), the paper's pattern and theme theirs unless
-    /// changed here. False when `bytes` holds no editable drawing (nothing changes then). The undo
+    /// changed here; an Excalidraw plugin file's Markdown theirs (their back of the card, their
+    /// text entries). False when `bytes` holds no editable drawing (nothing changes then). The undo
     /// history is cleared; the selected elements that still exist stay selected. A gesture in
     /// progress goes on and ends on the new drawing.
     Q_INVOKABLE bool takeExternal(const QByteArray &bytes);
-    /// The file to write (core drawing::toSvg). Empty while not editable.
+    /// The file to write, in the format read (core drawing::writeDrawingFile: an SVG, a
+    /// `.excalidraw` scene, the Excalidraw plugin's Markdown with the scene in it; tombstones of
+    /// the plugin's elements stamped with the clock). Empty while not editable.
+    Q_INVOKABLE QByteArray fileBytes() const;
+    /// The drawing as Brulion's SVG, whatever the file's format (tests, "export as SVG"). Empty
+    /// while not editable.
     Q_INVOKABLE QByteArray svg() const;
-    /// The drawing was written as `written` (svg()): `modified` is false, takeExternal() merges
-    /// against this state.
+    /// The drawing was written as `written` (fileBytes()): `modified` is false, takeExternal()
+    /// merges against this state.
     Q_INVOKABLE void markSaved(const QByteArray &written = QByteArray());
     /// `bytes` are the file as this canvas last loaded, took in or wrote it (the echo of its own
     /// save, which needs no merge).
@@ -445,6 +464,12 @@ private:
     QColor m_paperDark = QColor(u"#121212");
     bool m_appDark = false;
     bool m_editable = true;
+    /// The file's format and, for an Excalidraw plugin file, its Markdown around the scene (the
+    /// last loaded or taken in); m_writable false: shown only.
+    drawing::FileFormat m_format = drawing::FileFormat::Svg;
+    bool m_formatKnown = false;
+    std::shared_ptr<const drawing::ExcalidrawMarkdown> m_markdown;
+    bool m_writable = true;
     bool m_modified = false;
     /// The drawing at the last load or save (takeExternal() merges against it).
     drawing::MergeBase m_base;

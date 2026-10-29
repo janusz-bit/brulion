@@ -103,10 +103,18 @@ bool isAttachmentTarget(QStringView target)
     if (dot < 0)
         return false;
     const QStringView ext = target.sliced(dot);
-    return !ext.contains(u'/') && ext.compare(u".md", Qt::CaseInsensitive) != 0;
+    // An Obsidian Excalidraw plugin drawing is shown as its drawing, not as a page.
+    return !ext.contains(u'/')
+           && (ext.compare(u".md", Qt::CaseInsensitive) != 0 || target.endsWith(u".excalidraw.md", Qt::CaseInsensitive));
 }
 
 } // namespace
+
+bool isDrawingTarget(QStringView target)
+{
+    return target.endsWith(u".svg", Qt::CaseInsensitive) || target.endsWith(u".excalidraw", Qt::CaseInsensitive)
+           || target.endsWith(u".excalidraw.md", Qt::CaseInsensitive);
+}
 
 QString viewName(BlockView view)
 {

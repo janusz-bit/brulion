@@ -179,7 +179,7 @@ FocusScope {
         case "history": return qsTr("History of %1").arg(pageLabel(r.path))
         case "trash": return qsTr("Trash")
         case "settings": return qsTr("Settings")
-        case "drawing": return Workspace.pageTitle(r.path || "").replace(/\.svg$/i, "")
+        case "drawing": return Workspace.pageTitle(r.path || "").replace(/\.(svg|excalidraw)$/i, "")
         }
         return "Brulion"
     }

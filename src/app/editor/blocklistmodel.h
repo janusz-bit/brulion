@@ -31,9 +31,11 @@
 //                results and errors escaped), `plain` its visible text (column widths)
 //   embeds       [{ target, alt, image, url, path, drawing, darkUrl, width, height }] attachment
 //                embeds (url from EditorHost::assetUrl; path: the attachment's vault path; drawing:
-//                an SVG drawing, EditorHost::isDrawing — then url and darkUrl are its preview in the
-//                light and the dark theme, EditorHost::drawingUrl; width × height: a local picture's
-//                pixel size, 0 × 0 unknown)
+//                a drawing, EditorHost::isDrawing — an SVG, `![[x.excalidraw]]`, an Obsidian
+//                Excalidraw plugin file `![[x.excalidraw.md]]` or a page embed `![[Plan]]` of one;
+//                then url and darkUrl are its preview in the light and the dark theme,
+//                EditorHost::drawingUrl, and image is true; width × height: a local picture's
+//                pixel size, a drawing's preview size, 0 × 0 unknown)
 //   onlyEmbeds   the block consists of embeds only — attachments, pages, sections, blocks (html is "")
 //   transclusions  page / section / block embeds (`![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]`,
 //                `!((id))`) with their content rendered read-only: [{ kind: "page" | "heading" |
@@ -306,6 +308,10 @@ private:
     /// The embeds role entry of a picture from the internet (EditorHost::webPicture).
     QVariantMap webEmbed(const Embed &em) const;
     void ensureTransclusions(int row) const;
+    /// The vault path of the drawing a page embed `![[Plan]]` (no heading, no block) shows: a note
+    /// that is an Obsidian Excalidraw plugin drawing (EditorHost::isDrawing) — an attachment
+    /// embed then, not a transclusion; "" for any other.
+    QString drawingPageOf(const Transclusion &t) const;
     /// The `properties` / `propertiesInfo` roles of a frontmatter row (cached by its text).
     void ensureProperties(int row) const;
     void rebuildIndex();
