@@ -658,7 +658,8 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
         // One line; the items as written where they did not change.
         QString text = rest.toString();
         bool commentsInside = false;
-        for (int i = old->first + 1; i < old->last; ++i) {
+        // (A list on its key line with comment lines under it: those stay, the list is that line.)
+        for (int i = old->first + 1; i < old->last && keptComments.isEmpty(); ++i) {
             const QStringView l = QStringView(doc.lines[i].text).trimmed();
             if (yamlCommentStart(l) < l.size())
                 commentsInside = true;

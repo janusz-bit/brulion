@@ -349,8 +349,8 @@ private Q_SLOTS:
              u"number"_s, u"---\nkoszt:\n  # netto\n---\n"_s);
         yaml("comment line kept under a new list", u"---\nl: a\n  # uwaga\nb: 1\n---\n"_s, u"l"_s,
              list({u"a"_s, u"b"_s}), u"list"_s, u"---\nl:\n  - a\n  - b\n  # uwaga\nb: 1\n---\n"_s);
-        yaml("comment line kept under a flow list", u"---\nl: [a]\n  # uwaga\n---\n"_s, u"l"_s, list({u"a"_s, u"b"_s}),
-             u"list"_s, u"---\nl: [a, b]\n  # uwaga\n---\n"_s);
+        yaml("comment line kept under a flow list", u"---\nl: [\"a\"] # c\n  # uwaga\n---\n"_s, u"l"_s,
+             list({u"a"_s, u"b"_s}), u"list"_s, u"---\nl: [\"a\", b] # c\n  # uwaga\n---\n"_s);
         yaml("block scalar lines are no comments", u"---\nopis: |\n  # nagłówek\n  tekst\n---\n"_s, u"opis"_s,
              u"nowy"_s, u"text"_s, u"---\nopis: nowy\n---\n"_s);
         // Under a new block scalar a comment line would read as its text: it goes with the old value.
