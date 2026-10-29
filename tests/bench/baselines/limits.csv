@@ -35,4 +35,4 @@ scaling,bench_index,tagPageOpen,# notes after a save,1.5,small,wave 4
 scaling,bench_markdown,selectAllCopy,# blocks markdown,1.5,small,wave 4
 scaling,bench_markdown,selectAllCopy,# blocks plain text,1.5,small,wave 4
 scaling,bench_io,clipboardHtml,# blocks,1.5,small,wave 4
-max,bench_index,memory,10000 notes + search index,560,full small,MiB of heap; ratchet after L8 (target 230)
+max,bench_index,memory,10000 notes + search index,233,full small,MiB of heap; L8 (wave 5): 545 -> 221.6 measured x 1.05
