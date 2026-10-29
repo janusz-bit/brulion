@@ -30,7 +30,9 @@
 //   toSvg(drawing), pictureRect(drawing)       the file Brulion writes (svgwrite.h)
 //   elementShape(), hitTest(), lassoSelects()  the look and the hit tests of elements (geometry.h)
 //   moveElements(), duplicateElements(), …     the edits of elements; undo diffs (edit.h)
-//   merge(), mergeBase(), mergeKey()           two versions of a drawing merged (merge.h)
+//   merge(), mergeBase(), mergeKey()           two versions of a drawing merged element by element
+//   mergeCounts(), sameDrawing(),              (merge.h): the open editor, the sync center's
+//   containsDrawing(), mergeDrawingFiles()     conflict copies, Nextcloud's sync of a drawing file
 //   darkColor(), displayInk(), displayPaper()  the colours of the dark theme (palette.h)
 //   strokeOutline(stroke), outlineToSvgPath()  the outline of a freehand line (stroke.h)
 //   parseScene(), sceneJson(), svgPayload(),   the Excalidraw format (excalidraw.h)
