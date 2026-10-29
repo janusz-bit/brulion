@@ -94,7 +94,8 @@ void SearchIndex::set(const QString &id, QStringView title, const QStringList &a
 
     d.terms.reserve(counts.size());
     for (auto it = counts.cbegin(); it != counts.cend(); ++it) {
-        PostingList &list = m_postings[it.key()];
+        const auto entry = m_postings.try_emplace(it.key()).first;
+        PostingList &list = entry->second;
         const Posting posting{doc, it.value()};
         if (list.isEmpty() || list.constLast().doc < doc) {
             list.append(posting);
@@ -103,7 +104,7 @@ void SearchIndex::set(const QString &id, QStringView title, const QStringList &a
                                               [](const Posting &p, int value) { return p.doc < value; });
             list.insert(pos, posting);
         }
-        d.terms.append(it.key());
+        d.terms.append(&entry->first);
     }
     for (int f = 0; f < FieldCount; ++f)
         m_totalLength[f] += d.length[f];
@@ -118,8 +119,8 @@ void SearchIndex::remove(const QString &id)
     const int doc = *found;
     m_byId.erase(found);
     Doc &d = m_docs[doc];
-    for (const QString &term : std::as_const(d.terms)) {
-        const auto it = m_postings.find(term);
+    for (const QString *term : std::as_const(d.terms)) {
+        const auto it = m_postings.find(*term);
         if (it == m_postings.end())
             continue;
         PostingList &list = it->second;
@@ -143,6 +144,15 @@ void SearchIndex::clear()
     m_free.clear();
     m_byId.clear();
     m_totalLength = {};
+}
+
+void SearchIndex::squeeze()
+{
+    for (auto &[term, list] : m_postings) {
+        if (list.capacity() > list.size())
+            list.squeeze();
+    }
+    m_docs.squeeze();
 }
 
 QList<SearchIndex::Expansion> SearchIndex::expand(const QString &term, bool prefix) const

@@ -38,11 +38,20 @@ public:
     /// Query terms beyond this many (a pasted paragraph) are ignored.
     static constexpr qsizetype MaxQueryTerms = 32;
 
+    SearchIndex() = default;
+    // Move-only: documents point into the dictionary (Doc::terms).
+    SearchIndex(const SearchIndex &) = delete;
+    SearchIndex &operator=(const SearchIndex &) = delete;
+    SearchIndex(SearchIndex &&) noexcept = default;
+    SearchIndex &operator=(SearchIndex &&) noexcept = default;
+
     /// Add or replace the document `id`.
     void set(const QString &id, QStringView title, const QStringList &aliases, QStringView content);
     /// Forget the document `id` (no-op when unknown).
     void remove(const QString &id);
     void clear();
+    /// Drop the growth slack of the posting lists (after a bulk build).
+    void squeeze();
 
     bool contains(const QString &id) const { return m_byId.contains(id); }
     /// Number of indexed documents.
@@ -69,7 +78,9 @@ private:
     struct Doc {
         QString id;
         FieldCounts length{};
-        QStringList terms; ///< distinct terms of the document
+        /// Distinct terms of the document: keys of m_postings (a key lives while a posting list
+        /// of a document refers to it; nodes of a std::map never move).
+        QList<const QString *> terms;
         bool used = false;
     };
 

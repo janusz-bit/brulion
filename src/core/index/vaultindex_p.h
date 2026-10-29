@@ -130,6 +130,7 @@ struct VaultIndex::Private {
 
     SearchIndex search;
     QSet<VaultPath> searchDirty;
+    qsizetype searchBuilt = 0; ///< documents built since the last SearchIndex::squeeze()
     QTimer *searchTimer = nullptr;
     QElapsedTimer lastChange;
 

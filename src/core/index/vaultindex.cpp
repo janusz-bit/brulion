@@ -421,12 +421,17 @@ void VaultIndex::Private::searchTick()
     slice.start();
     for (auto it = searchDirty.begin(); it != searchDirty.end();) {
         indexSearchDoc(*it);
+        ++searchBuilt;
         it = searchDirty.erase(it);
         if (slice.elapsed() >= SearchSliceMs)
             break;
     }
-    if (!searchDirty.isEmpty())
+    if (!searchDirty.isEmpty()) {
         searchTimer->start(0);
+    } else if (searchBuilt > 1000) {
+        searchBuilt = 0;
+        search.squeeze(); // no growth slack after a bulk build (docs/PERFORMANCE.md, L8)
+    }
 }
 
 void VaultIndex::Private::indexSearchDoc(const VaultPath &path)
@@ -440,9 +445,14 @@ void VaultIndex::Private::indexSearchDoc(const VaultPath &path)
 void VaultIndex::Private::flushSearch()
 {
     searchTimer->stop();
+    searchBuilt += searchDirty.size();
     for (const VaultPath &p : std::as_const(searchDirty))
         indexSearchDoc(p);
     searchDirty.clear();
+    if (searchBuilt > 1000) {
+        searchBuilt = 0;
+        search.squeeze(); // no growth slack after a bulk build (docs/PERFORMANCE.md, L8)
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
