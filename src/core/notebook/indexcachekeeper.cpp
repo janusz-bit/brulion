@@ -67,6 +67,7 @@ struct IndexCacheKeeper::Private {
     bool dirty = false;
     bool writing = false;
     bool failureLogged = false;
+    bool savedOnce = false;
     int searchWaits = 0;
 
     Private(IndexCacheKeeper *owner, Vault &v, VaultIndex &i, WorkerPool p, QString file, Policy pol)
@@ -169,6 +170,7 @@ struct IndexCacheKeeper::Private {
             Q_EMIT q->saveFailed(error);
             return;
         }
+        savedOnce = true;
         const qint64 ms = clock.isValid() ? clock.elapsed() : 0;
         qCInfo(logging::lcIndex).noquote() << u"Index cache saved: %1 notes, %2 in %3"_s.arg(index.paths().size())
                                                       .arg(logging::formatBytes(size), logging::formatMs(ms));
@@ -227,6 +229,11 @@ bool IndexCacheKeeper::saveNow()
 bool IndexCacheKeeper::isDirty() const
 {
     return d->dirty;
+}
+
+bool IndexCacheKeeper::hasSaved() const
+{
+    return d->savedOnce;
 }
 
 bool IndexCacheKeeper::isSaving() const

@@ -219,6 +219,31 @@ private Q_SLOTS:
         }
     }
 
+    // Closed right after indexing, before the first save: the cache is written at close (once).
+    void indexCacheSavedAtClose()
+    {
+        const QString root = newRoot();
+        const QString state = root + u"-state"_s;
+        for (int i = 0; i < 15; ++i)
+            writeRaw(root + u"/Strona %1.md"_s.arg(i), "- żółw\n");
+        brulion::notebook::IndexCacheKeeper::Policy policy;
+        policy.firstSaveQuietMs = 600000;
+        policy.minNotes = 10;
+        {
+            Workspace ws;
+            ws.setIndexCachePolicy(policy);
+            QVERIFY(ws.open(root, state));
+            QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+            QVERIFY(!QFileInfo::exists(state + u"/index-cache.bin"_s));
+        }
+        QVERIFY(QFileInfo::exists(state + u"/index-cache.bin"_s));
+        Workspace ws;
+        ws.setIndexCachePolicy(policy);
+        QVERIFY(ws.open(root, state));
+        QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+        QCOMPARE(ws.indexStats().fromCache, 15);
+    }
+
     // ---- Quick capture ----------------------------------------------------------------------------
 
     void quickCaptureWritesTheJournal()

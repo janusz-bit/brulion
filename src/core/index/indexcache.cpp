@@ -525,6 +525,24 @@ Task readTask(In &in)
 
 // ---- notes ----------------------------------------------------------------------------------------
 
+/// A block's text: 0 = its own string (str), 1 = found in the note's text at the block's raw
+/// lines (varint offset from the raw's start, varint length) — most texts are, so the cache
+/// holds them as two small numbers and decoding copies them out of the note.
+void writeText(Out &o, const QString &text, const BlockSource &raw, const QString &content)
+{
+    if (!text.isEmpty() && raw.isSlice() && raw.to() <= content.size()) {
+        const qsizetype at = QStringView(content).sliced(raw.from(), raw.to() - raw.from()).indexOf(text);
+        if (at >= 0) {
+            o.u8(1);
+            o.varint(quint64(at));
+            o.varint(quint64(text.size()));
+            return;
+        }
+    }
+    o.u8(0);
+    o.str(text);
+}
+
 /// A block's raw text: 0 = a slice of the note's text (from, to), 1 = its own string.
 void writeRaw(Out &o, const BlockSource &raw)
 {
@@ -605,7 +623,6 @@ namespace detail {
 
 std::optional<QByteArray> encodeNote(const ParsedNote &note, const QString &content)
 {
-    Q_UNUSED(content);
     QByteArray body;
     Out o(body);
     if (!writeMap(o, note.frontmatter))
@@ -623,7 +640,7 @@ std::optional<QByteArray> encodeNote(const ParsedNote &note, const QString &cont
         o.zigzag(b.ownEndLine);
         o.zigzag(b.depth);
         writeRaw(o, b.raw);
-        o.str(b.text);
+        writeText(o, b.text, b.raw, content);
         o.zigzag(b.headingLevel);
         o.str(b.lang);
         // The YAML frontmatter block shares the page's properties.
@@ -698,7 +715,19 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
         case 1: b.raw = BlockSource(in.str()); break;
         default: return std::nullopt;
         }
-        b.text = in.str();
+        switch (in.u8()) {
+        case 0: b.text = in.str(); break;
+        case 1: {
+            const quint64 at = in.varint();
+            const quint64 length = in.varint();
+            if (!b.raw.isSlice() || length == 0 || at > quint64(b.raw.size())
+                || length > quint64(b.raw.size()) - at)
+                return std::nullopt;
+            b.text = b.raw.view().sliced(qsizetype(at), qsizetype(length)).toString();
+            break;
+        }
+        default: return std::nullopt;
+        }
         b.headingLevel = in.intValue();
         b.lang = in.str();
         if (in.boolean())

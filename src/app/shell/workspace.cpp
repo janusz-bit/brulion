@@ -226,6 +226,11 @@ void Workspace::close()
     cancelMoveImpact(); // its planner reads the index
     m_impacts = ImpactCache();
     const bool wasIndexing = indexing();
+    // A notebook closed before its first cache was written (the app quit right after indexing):
+    // write it now, once, so the next start does not parse everything again.
+    if (m_cacheKeeper && m_loader && !m_cacheKeeper->hasSaved() && !m_cacheKeeper->isSaving()
+        && m_loader->stats().cache != u"used" && m_cacheKeeper->isDirty())
+        m_cacheKeeper->saveNow();
     m_cacheKeeper.reset(); // before the loader, the index and the vault
     m_loader.reset();      // before the index and the vault (its workers stop after their file)
     m_trashCount = -1;

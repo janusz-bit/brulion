@@ -40,6 +40,8 @@ public:
     bool saveNow();
     /// Changes not saved yet.
     bool isDirty() const;
+    /// The file was written by this keeper (since it was created).
+    bool hasSaved() const;
     /// An encoding or a write is under way.
     bool isSaving() const;
     QString path() const;

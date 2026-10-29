@@ -83,7 +83,6 @@ SearchIndex::Document SearchIndex::prepare(QStringView title, const QStringList 
     out.terms.reserve(counts.size());
     for (auto it = counts.cbegin(); it != counts.cend(); ++it)
         out.terms.append({it.key(), it.value()});
-    std::sort(out.terms.begin(), out.terms.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
     return out;
 }
 
