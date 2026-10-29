@@ -20,7 +20,9 @@ import Brulion
 // the sync footer — until the user scrolls the list: it is placed again whenever the list's
 // geometry changes, since a closed drawer lays itself out only when it opens (its system-bar
 // padding, a keyboard that goes, sections that grew meanwhile), so a row placed while it was
-// closed or still opening could end up under the footer. With a mouse or touchpad (never a finger: the list flicks and
+// closed or still opening could end up under the footer. A row revealed while it is in view (a
+// click on it) leaves the list where it is: it never moves under the pointer. With a mouse or
+// touchpad (never a finger: the list flicks and
 // press-and-hold stay as they are) a row is dragged onto a folder (a closed one opens after
 // 600 ms; the list scrolls near its edges) or onto the "Strony" header (the notebook's root) to
 // move it there (`dropMoveRequested()`); the ghost names the target and what the move rewrites
@@ -125,7 +127,8 @@ Rectangle {
         if (tree.reveal(path) < 0)
             return
         revealedPath = path
-        Qt.callLater(placeList)
+        if (!keepIfInView())
+            Qt.callLater(placeRevealed)
     }
     function revealRoute() {
         if (currentPath !== "")
@@ -133,17 +136,42 @@ Rectangle {
         else
             revealedPath = "" // (a route with no file in the tree: the list stays as it is)
     }
-    /// The list's position after its geometry changed or a row was revealed: at the top (the
-    /// navigation in sight) unless the user scrolled it, then the revealed row fully in view —
-    /// with the least scrolling, so the navigation stays in sight where the row allows it. Only
-    /// while shown: a closed drawer's list still has the size it had (it is laid out again as it
-    /// opens, and placed again then).
-    function placeList() {
+    /// The revealed row lies wholly in the list's visible part as the list is laid out now (its
+    /// own row: a model change not laid out yet leaves another row at its index): the list stays
+    /// where it is, kept there (`list.scrolledAway`) — a click on a row the list was scrolled to
+    /// must not move the row from under the pointer (to the bottom edge, where the list placed
+    /// from its top would show it: the next click hit another row).
+    function keepIfInView() {
+        if (!list || revealedPath === "" || list.model !== tree || list.height <= 0)
+            return false
+        const item = list.itemAtIndex(tree.indexOf(revealedPath)) // (a tree row: its `path`)
+        if (!item || item.path !== revealedPath || item.y < list.contentY - 0.5
+                || item.y + item.height > list.contentY + list.height + 0.5)
+            return false
+        list.scrolledAway = !list.atYBeginning
+        return true
+    }
+    /// A row just revealed, once the list is laid out (folders opened above it): in view it
+    /// stays, else the list is placed. Hidden (a closed drawer): placed as it shows.
+    function placeRevealed() {
         if (!list || !sidebar.visible)
             return
-        if (!list.userScrolled)
+        list.forceLayout()
+        if (!keepIfInView())
+            placeList()
+    }
+    /// The list's position after its geometry changed (the drawer opening, a keyboard, the window,
+    /// a section of its header that grew) or a row revealed out of view: at the top (the
+    /// navigation in sight) unless it is kept scrolled away, then the revealed row fully in view —
+    /// with the least scrolling, so the navigation stays in sight where the row allows it. The
+    /// row only while shown: a closed drawer's list still has the size it had (it is laid out
+    /// again as it opens, and placed again then). Never while the user moves it.
+    function placeList() {
+        if (!list || list.moving)
+            return
+        if (!list.scrolledAway)
             list.positionViewAtBeginning()
-        if (revealedPath === "" || list.model !== tree)
+        if (!sidebar.visible || revealedPath === "" || list.model !== tree)
             return
         const row = tree.indexOf(revealedPath)
         if (row >= 0)
@@ -272,8 +300,9 @@ Rectangle {
         }
     }
     Component.onCompleted: if (revealCurrent) Qt.callLater(revealRoute)
-    // Shown (the drawer opens): its list is laid out again — the revealed row placed again.
-    onVisibleChanged: if (visible && revealedPath !== "") Qt.callLater(placeList)
+    // Shown (the drawer opens, the window's sidebar comes back): its list is laid out again —
+    // placed again (the header may have grown meanwhile: the navigation stays in sight).
+    onVisibleChanged: if (visible) Qt.callLater(placeList)
 
     Timer {
         id: expandTimer
@@ -295,6 +324,7 @@ Rectangle {
         onTriggered: {
             const max = Math.max(0, list.contentHeight + list.originY - list.height)
             list.contentY = Math.max(list.originY, Math.min(list.originY + max, list.contentY + direction * 12))
+            list.keepPlace() // (the user's scrolling too)
             // Other rows are under the still pointer now: they are the target (and open).
             sidebar.dragTo(sidebar.dragScenePos)
         }
@@ -392,17 +422,32 @@ Rectangle {
                 onPressedChanged: {
                     sidebar.revealedPath = ""
                     if (!pressed)
-                        list.userScrolled = !list.atYBeginning
+                        list.keepPlace()
                 }
             }
-            /// The user scrolled down into the list (a flick, a drag or the scroll bar, that did
-            /// not end at the top).
-            property bool userScrolled: false
+            /// The list stays scrolled away from its top where it is when its geometry changes: the
+            /// user scrolled it (a flick, a drag, the wheel, the scroll bar, the arrow keys, a row
+            /// dragged to its edge) or a row was revealed where the list showed it — not ending at
+            /// the top. Otherwise it is placed from its top (`placeList()`).
+            property bool scrolledAway: false
+            function keepPlace() {
+                scrolledAway = !atYBeginning
+            }
             // The user scrolls: the revealed row is no longer kept in view.
             onMovementStarted: sidebar.revealedPath = ""
-            onMovementEnded: userScrolled = !atYBeginning
-            // Laid out again (the drawer opening, a keyboard, the window): the revealed row too.
-            onHeightChanged: if (sidebar.revealedPath !== "") Qt.callLater(sidebar.placeList)
+            onMovementEnded: keepPlace()
+            // The arrow keys walk the rows (keyNavigationEnabled), scrolling to the current one:
+            // the user's scrolling too. (Not accepted: the list moves on; where it ends up is
+            // read after that.)
+            Keys.onPressed: (event) => {
+                if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+                    sidebar.revealedPath = ""
+                    Qt.callLater(list.keepPlace)
+                }
+                event.accepted = false
+            }
+            // Laid out again (the drawer opening, a keyboard, the window): placed again.
+            onHeightChanged: Qt.callLater(sidebar.placeList)
 
             header: Column {
                 width: list.width - list.leftMargin - list.rightMargin
@@ -410,8 +455,9 @@ Rectangle {
                 // A ListView keeps its rows in place when the header grows (a page added to
                 // Recent), which scrolled the navigation up out of sight: the drawer then opened
                 // on "Tasks" with "Journals" and "Calendar" hidden. Stay at the top instead (the
-                // revealed row still in view: it moved down with the rows).
-                onHeightChanged: if (!list.userScrolled || sidebar.revealedPath !== "") Qt.callLater(sidebar.placeList)
+                // revealed row still in view: it moved down with the rows) — unless the list is
+                // kept scrolled away: the rows stay where they are.
+                onHeightChanged: Qt.callLater(sidebar.placeList)
 
                 // ---- Navigation --------------------------------------------------------
                 Column {
