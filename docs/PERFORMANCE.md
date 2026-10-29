@@ -13,12 +13,14 @@ urządzeniu (porównanie z `82d0357`).
 
 * **Duże notatniki otwierają się dwa razy szybciej i zajmują o jedną trzecią mniej pamięci**
   (2026-10-29). Notatki indeksują się na kilku rdzeniach naraz, a gotowy indeks zostaje zapisany
-  na urządzeniu, więc przy kolejnym otwarciu Brulion czyta od nowa tylko notatki zmienione od
-  ostatniego razu. Notatnik z 10 000 notatek na komputerze jest w pełni zaindeksowany po 0,96 s
-  przy pierwszym otwarciu i po 0,83 s przy kolejnych (wcześniej ok. 1,8–1,9 s), a sam indeks
-  zajmuje 60 % mniej pamięci (cała aplikacja z tym notatnikiem: 340 zamiast 510 MB).
-  Wyszukiwanie jest kompletne od razu, gdy indeks jest gotowy — nie dobudowuje się już w tle
-  z krótką przerwą w działaniu interfejsu.
+  na urządzeniu, więc przy kolejnym otwarciu Brulion analizuje od nowa tylko notatki zmienione
+  od ostatniego razu (pliki nadal czyta, żeby to sprawdzić). Notatnik z 10 000 notatek na
+  komputerze jest w pełni zaindeksowany po 0,96 s przy pierwszym otwarciu i po 0,83 s przy
+  kolejnych (wcześniej ok. 1,8–1,9 s), a sam indeks zajmuje 60 % mniej pamięci (cała aplikacja
+  z tym notatnikiem: 340 zamiast 510 MB).
+  Na komputerze i telefonie wyszukiwanie jest kompletne od razu, gdy indeks jest gotowy — nie
+  dobudowuje się już w tle z krótką przerwą w działaniu interfejsu; w przeglądarce tak jest przy
+  kolejnych wizytach (z zapisanego indeksu), a przy pierwszej dobudowuje się po kawałku jak dotąd.
 * **Duże notatki nie zamrażają już aplikacji.** Po starcie i po każdym autozapisie bardzo dużej
   notatki (od ok. 200 KB, np. długi dziennik w jednym pliku albo zaimportowana książka) Brulion
   przestawał reagować: na komputerze na 0,9–1,6 s, na słabszym telefonie nawet na 13–20 s.
@@ -401,11 +403,13 @@ the slices on the GUI thread. `openFromDisk` = scan + read + index, until every 
 The owner's merge (resolving and relinking every note's links, the tag and block maps, the vault's
 read bookkeeping) is now the larger part: 4 workers give 2.7× of the serial path, not 4×.
 
-**L2 — the index cache.** `<device state>/index-cache.bin` (`index/indexcache.h`): every note's
-parse (block texts and raw lines stored as offsets into the note where they are one piece of
-it), the full-text index, a directory checked per note by path, byte size and the content key of
-the text just read; identity = format, `markdown::ParserVersion`, `SearchIndex::FormatVersion`, Qt
-and app versions, the config's parse fingerprint, the vault id. 10 000 notes: 18.9 MB (0.82× the
+**L2 — the index cache.** `<device state>/index-cache.bin` (`index/indexcache.h`; in the browser a
+cache mount of its own, docs/WEB.md: a quota failure there loses only the cache, and
+`indexCacheBudget()` keeps it within half of the free quota): every note's parse (block texts and
+raw lines stored as offsets into the note where they are one piece of it), the full-text index, a
+directory checked per note by path, byte size and the content key of the text just read; identity
+= format, `markdown::ParserVersion`, `SearchIndex::FormatVersion`, Qt and app versions, the
+config's parse fingerprint, the vault id. 10 000 notes: 18.9 MB (0.82× the
 vault), encoded in 122 ms (in 8 ms slices on the GUI thread), all notes and the full-text index
 decoded in 129 ms on one thread (k 1.03 / 1.06 between 10 000 and 50 000).
 
@@ -417,6 +421,14 @@ decoded in 129 ms on one thread (k 1.03 / 1.06 between 10 000 and 50 000).
 Every file is still read and hashed (exact invalidation, the vault's bookkeeping unchanged), so a
 warm load saves parsing and tokenising, not reading. Heap after a load from the disk with the
 loader (vault, texts, index, full-text index): parsed 305.5 MiB, from the cache 307.2 MiB (+0.6 %).
+
+Since the review, decoding also checks every line number of a record against the text's line
+count (a record that passed the size and 64-bit content-key check but belongs to another text
+must not point past the note's end; one branch-free pass over the text). Laptop, Release, `-c 0-11
+-q 3`, `a5f6c57` against the fix, two alternating rounds of 5 runs (medians): `cacheDecode` 10 000
+notes 133.5 / 135.3 → 139.4 / 133.9 ms, 50 000 notes 815 / 818 → 841 / 801 ms; `openFromDisk`
+warm cache with 4 workers 292 / 288 → 290 / 270 ms, inline 567 / 531 → 573 / 538 ms — within the
+noise (a first, per-character version cost +7 % in `cacheDecode`).
 
 **App** (laptop, Xvfb + llvmpipe, Release `-O3 -g`, the 10 000-note bench vault of
 `make-bench-vault.py`; `first` = a fresh profile, i.e. no index cache; `warm` = the same profile
@@ -436,7 +448,10 @@ again, i.e. the cache written by the warm-up run; 3 runs of `first`, 5 of `warm`
 The targets were 0.9 s cold and 0.6 s warm: the merge on the GUI thread (12 ms slices between
 frames) is now what the index waits for — next step below (L1b). The full-text index no longer
 costs the GUI anything: it is built on its own thread (or read from the cache) and adopted at once,
-so the first search after "ready" finds a complete index.
+so the first search after "ready" finds a complete index. Not so in the browser on a first visit
+(and in any inline load whose cache has no full-text section): there is no thread for it, so the
+documents are still built in 8 ms slices after "ready", and a search before they are done builds
+the rest at once, as before wave 5.
 
 Not measured in this wave (no quiet window on the Raspberry Pi — another agent built there —, the
 emulator and the browser need their own builds of both trees): the Pi, the Android emulator

@@ -60,10 +60,10 @@ mistyped path never becomes an empty notebook). Device state — the version his
 lives where the app keeps it for that folder (`~/.local/share/Brulion/Brulion/vaults/<id>`), so on
 one computer the app's history shows the command line's changes; `--state-dir` chooses another,
 `--no-history` none. The index cache lives there too (`index-cache.bin`, docs/PERFORMANCE.md L2):
-a command that needs the index reads only the notes changed since the cache was written (by the
-app or an earlier command) and parses them on worker threads; a command that had to parse many
-notes (no usable cache, or ≥ max(50, 2 %) of them) writes the cache when it exits — notebooks of
-200 notes or more only. Environment: `BRULION_NO_INDEX_CACHE=1` neither reads nor writes it,
+a command that needs the index still reads every note (to compare its size and content key) but
+parses only the notes changed since the cache was written (by the app or an earlier command), on
+worker threads; a command that had to parse many notes (no usable cache, or ≥ max(50, 2 %) of
+them) writes the cache when it exits — notebooks of 200 notes or more only. Environment: `BRULION_NO_INDEX_CACHE=1` neither reads nor writes it,
 `BRULION_INDEX_THREADS=<n>` sets the parse workers (`0`: on the main thread; default
 clamp(cores − 1, 1, 4)).
 
