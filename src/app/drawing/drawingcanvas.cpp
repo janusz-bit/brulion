@@ -50,6 +50,11 @@ DrawingCanvas::DrawingCanvas(QQuickItem *parent) : QQuickPaintedItem(parent)
     m_settle.setSingleShot(true);
     m_settle.setInterval(160);
     connect(&m_settle, &QTimer::timeout, this, &DrawingCanvas::endViewGesture);
+    // The selection's frame on screen moves with the view.
+    connect(this, &DrawingCanvas::viewChanged, this, [this] {
+        if (!m_selected.isEmpty())
+            Q_EMIT selectionChanged();
+    });
     m_clock = [] { return QDateTime::currentMSecsSinceEpoch(); };
     m_doc.paper = m_paperLight.name();
     // Tablet events pass the window first: the canvas takes the stylus's (see the header). (An
@@ -556,8 +561,6 @@ void DrawingCanvas::viewMoved(bool byUser)
         updateLive();
     update();
     Q_EMIT viewChanged();
-    if (!m_selected.isEmpty())
-        Q_EMIT selectionChanged(); // (its frame on screen)
     if (byUser)
         Q_EMIT userMovedView();
 }
@@ -582,6 +585,8 @@ void DrawingCanvas::geometryChange(const QRectF &newGeometry, const QRectF &oldG
         m_center += QPointF(newGeometry.width() - oldGeometry.width(), newGeometry.height() - oldGeometry.height())
                     / (2 * m_zoom);
     invalidateCache();
+    if (!m_selected.isEmpty())
+        Q_EMIT selectionChanged();
 }
 
 void DrawingCanvas::itemChange(ItemChange change, const ItemChangeData &value)

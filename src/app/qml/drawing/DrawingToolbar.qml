@@ -4,9 +4,11 @@ import QtQuick.Templates as T
 import Brulion
 
 // DrawingToolbar — the drawing editor's tools (DrawingView; docs/UI.md "Drawing editor"): undo,
-// redo, the pen, the highlighter and the eraser, the current tool's colours and widths, the
-// paper (plain, lines, grid), its light or dark background ("Tło rysunku": as the app, light,
-// dark), "Rysuj palcem" on touch screens, "Pokaż cały rysunek" and Gotowe.
+// redo, the pen, the highlighter, the eraser, the selection (lasso), the shapes (one button showing
+// the last of rectangle, ellipse, diamond, line and arrow; a second click opens their menu) and
+// text, the current tool's colours and widths (text: its sizes S, M, L, XL), the paper (plain,
+// lines, grid), its light or dark background ("Tło rysunku": as the app, light, dark), "Rysuj
+// palcem" on touch screens, "Pokaż cały rysunek" and Gotowe.
 // Wide windows: everything in one row above the paper. `compact` (phones; at the bottom, in
 // reach of the thumb): the colours and widths behind one swatch (a popup above the bar), the
 // paper, its background, finger drawing and fitting in "Więcej"; the row scrolls sideways when it
@@ -22,6 +24,10 @@ Rectangle {
     /// The current tool's colours: [{ color, label }], and its widths: [{ value, label }].
     property var colors: []
     property var widths: []
+    /// The text's sizes: [{ value, label }].
+    property var fontSizes: []
+    /// The shape tool the shape button stands for ("rectangle", "ellipse", "diamond", "line", "arrow").
+    property string shapeTool: "rectangle"
     /// One finger draws (touch screens).
     property bool fingerDraws: false
     /// The bar lies at the bottom of the view (compact): its hairline on top.
@@ -29,15 +35,22 @@ Rectangle {
 
     signal colorChosen(string color)
     signal widthChosen(real width)
+    signal fontSizeChosen(real size)
+    /// A shape tool chosen in the shapes' menu (the button then stands for it).
+    signal shapeChosen(string tool)
     signal fingerToggled()
     signal fitRequested()
     signal done()
 
-    readonly property bool drawingTool: canvas.tool !== "eraser"
+    /// A tool that has a colour (everything but the eraser and the selection).
+    readonly property bool drawingTool: canvas.tool !== "eraser" && canvas.tool !== "select"
+    readonly property bool textTool: canvas.tool === "text"
+    readonly property bool shapeActive: ["rectangle", "ellipse", "diamond", "line", "arrow"].indexOf(canvas.tool) >= 0
 
     /// Open the colours and widths (compact), the "Więcej" menu (compact), the paper's menu or
     /// the background's (the "Więcej" menu on phones) — route.open, screenshots.
     function openStyle() { stylePopup.open() }
+    function openShapes() { shapeMenu.popup(shapeButton, 0, bar.atBottom ? -shapeMenu.implicitHeight : shapeButton.height) }
     function openMore() { moreMenu.popup(moreButton, 0, -moreMenu.implicitHeight) }
     function openBackground() { backgroundMenu.popup(backgroundButton, 0, backgroundButton.height) }
     function openTheme() {
@@ -45,6 +58,22 @@ Rectangle {
             bar.openMore()
         else
             themeMenu.popup(themeButton, 0, themeButton.height)
+    }
+
+    function shapeIcon(tool) {
+        return tool === "ellipse" ? "circle" : tool === "diamond" ? "diamond" : tool === "line" ? "slash"
+             : tool === "arrow" ? "move-up-right" : "square"
+    }
+    function shapeLabel(tool) {
+        return tool === "ellipse" ? qsTr("Ellipse") : tool === "diamond" ? qsTr("Diamond") : tool === "line" ? qsTr("Line")
+             : tool === "arrow" ? qsTr("Arrow") : qsTr("Rectangle")
+    }
+    function shapeKey(tool) {
+        return tool === "ellipse" ? "O" : tool === "diamond" ? "D" : tool === "line" ? "L" : tool === "arrow" ? "A" : "R"
+    }
+    function chooseShape(tool) {
+        bar.canvas.tool = tool
+        bar.shapeChosen(tool)
     }
 
     function backgroundIcon(name) {
@@ -103,6 +132,42 @@ Rectangle {
         BToolTip {
             visible: widthButton.hovered
             text: widthButton.label
+        }
+    }
+
+    /// A text size: "A" as large as the text would look.
+    component TextSizeButton: T.AbstractButton {
+        id: sizeButton
+        required property real value
+        required property string label
+        property bool selected: false
+        implicitWidth: Math.max(Theme.controlHeight, Theme.touchUi ? Theme.touchTarget : 0)
+        implicitHeight: implicitWidth
+        focusPolicy: Qt.NoFocus
+        hoverEnabled: !Theme.touchUi
+        Accessible.role: Accessible.RadioButton
+        Accessible.name: label
+        Accessible.checked: selected
+        background: Rectangle {
+            anchors.centerIn: parent
+            width: Theme.controlHeight
+            height: width
+            radius: Theme.radius
+            color: sizeButton.selected ? Theme.bgSelected : sizeButton.hovered ? Theme.bgHover : "transparent"
+        }
+        contentItem: Item {
+            Text {
+                anchors.centerIn: parent
+                text: "A"
+                font.family: Theme.fontUi
+                // 16 → 11 px … 36 → 22 px: the sizes told apart within the button.
+                font.pixelSize: Math.round(6 + sizeButton.value * 0.45)
+                color: Theme.fg
+            }
+        }
+        BToolTip {
+            visible: sizeButton.hovered
+            text: sizeButton.label
         }
     }
 
@@ -187,6 +252,46 @@ Rectangle {
                 checked: bar.canvas.tool === "eraser"
                 onClicked: bar.canvas.tool = "eraser"
             }
+            BIconButton {
+                objectName: "drawingSelect"
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "lasso"
+                label: qsTr("Select")
+                shortcut: "V"
+                focusPolicy: Qt.NoFocus
+                checkable: true
+                checked: bar.canvas.tool === "select"
+                onClicked: bar.canvas.tool = "select"
+            }
+            // The last shape; clicked while a shape is the tool: the shapes' menu.
+            BIconButton {
+                id: shapeButton
+                objectName: "drawingShape"
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: bar.shapeIcon(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
+                label: qsTr("Shapes") + " — " + bar.shapeLabel(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
+                shortcut: bar.shapeKey(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
+                focusPolicy: Qt.NoFocus
+                // (Not toggled by a click: a click on the active shape opens the menu.)
+                checked: bar.shapeActive
+                onClicked: {
+                    if (bar.shapeActive)
+                        bar.openShapes()
+                    else
+                        bar.chooseShape(bar.shapeTool)
+                }
+            }
+            BIconButton {
+                objectName: "drawingText"
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "type"
+                label: qsTr("Text")
+                shortcut: "T"
+                focusPolicy: Qt.NoFocus
+                checkable: true
+                checked: bar.textTool
+                onClicked: bar.canvas.tool = "text"
+            }
             Separator { visible: bar.drawingTool }
 
             // Wide: the colours and widths in the row.
@@ -194,7 +299,8 @@ Rectangle {
                 model: !bar.compact && bar.drawingTool ? bar.colors : []
                 delegate: BColorSwatch {
                     required property var modelData
-                    anchors.verticalCenter: parent.verticalCenter
+                    // (parent is null while the tool's change takes the delegate away)
+                    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
                     color: bar.shown(modelData.color)
                     label: modelData.label
                     size: 22
@@ -205,14 +311,27 @@ Rectangle {
             }
             Separator { visible: !bar.compact && bar.drawingTool }
             Repeater {
-                model: !bar.compact && bar.drawingTool ? bar.widths : []
+                model: !bar.compact && bar.drawingTool && !bar.textTool ? bar.widths : []
                 delegate: WidthButton {
                     required property var modelData
-                    anchors.verticalCenter: parent.verticalCenter
+                    // (parent is null while the tool's change takes the delegate away)
+                    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
                     value: modelData.value
                     label: modelData.label
                     selected: Math.abs(bar.canvas.penWidth - modelData.value) < 0.01
                     onClicked: bar.widthChosen(modelData.value)
+                }
+            }
+            Repeater {
+                model: !bar.compact && bar.textTool ? bar.fontSizes : []
+                delegate: TextSizeButton {
+                    required property var modelData
+                    objectName: "drawingTextSize" + modelData.value
+                    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+                    value: modelData.value
+                    label: modelData.label
+                    selected: Math.abs(bar.canvas.fontSize - modelData.value) < 0.01
+                    onClicked: bar.fontSizeChosen(modelData.value)
                 }
             }
             // Compact: one swatch for both.
@@ -222,7 +341,7 @@ Rectangle {
                 visible: bar.compact && bar.drawingTool
                 anchors.verticalCenter: parent.verticalCenter
                 color: bar.shown(bar.canvas.color)
-                label: qsTr("Colour and thickness")
+                label: bar.textTool ? qsTr("Colour and size") : qsTr("Colour and thickness")
                 size: 26
                 focusPolicy: Qt.NoFocus
                 onClicked: stylePopup.open()
@@ -298,6 +417,46 @@ Rectangle {
         text: qsTr("Done")
         focusPolicy: Qt.NoFocus
         onClicked: bar.done()
+    }
+
+    BMenu {
+        id: shapeMenu
+        objectName: "drawingShapeMenu"
+        BMenuItem {
+            objectName: "drawingShapeRectangle"
+            text: qsTr("Rectangle")
+            iconName: "square"
+            shortcut: "R"
+            onTriggered: bar.chooseShape("rectangle")
+        }
+        BMenuItem {
+            objectName: "drawingShapeEllipse"
+            text: qsTr("Ellipse")
+            iconName: "circle"
+            shortcut: "O"
+            onTriggered: bar.chooseShape("ellipse")
+        }
+        BMenuItem {
+            objectName: "drawingShapeDiamond"
+            text: qsTr("Diamond")
+            iconName: "diamond"
+            shortcut: "D"
+            onTriggered: bar.chooseShape("diamond")
+        }
+        BMenuItem {
+            objectName: "drawingShapeLine"
+            text: qsTr("Line")
+            iconName: "slash"
+            shortcut: "L"
+            onTriggered: bar.chooseShape("line")
+        }
+        BMenuItem {
+            objectName: "drawingShapeArrow"
+            text: qsTr("Arrow")
+            iconName: "move-up-right"
+            shortcut: "A"
+            onTriggered: bar.chooseShape("arrow")
+        }
     }
 
     BMenu {
@@ -464,7 +623,7 @@ Rectangle {
             Row {
                 spacing: 2
                 Repeater {
-                    model: bar.widths
+                    model: bar.textTool ? [] : bar.widths
                     delegate: WidthButton {
                         required property var modelData
                         value: modelData.value
@@ -472,6 +631,19 @@ Rectangle {
                         selected: Math.abs(bar.canvas.penWidth - modelData.value) < 0.01
                         onClicked: {
                             bar.widthChosen(modelData.value)
+                            stylePopup.close()
+                        }
+                    }
+                }
+                Repeater {
+                    model: bar.textTool ? bar.fontSizes : []
+                    delegate: TextSizeButton {
+                        required property var modelData
+                        value: modelData.value
+                        label: modelData.label
+                        selected: Math.abs(bar.canvas.fontSize - modelData.value) < 0.01
+                        onClicked: {
+                            bar.fontSizeChosen(modelData.value)
                             stylePopup.close()
                         }
                     }

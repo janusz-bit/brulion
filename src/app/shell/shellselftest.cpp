@@ -2755,18 +2755,18 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
               "the save merges a version not reported yet: both devices' strokes are in the file");
     }
 
-    // A version Brulion cannot edit (a rectangle added in excalidraw.com): shown as it is, never
+    // A version Brulion cannot edit (a frame added in excalidraw.com): shown as it is, never
     // written over; what was drawn here is kept in a new file beside it.
     drawing::Drawing shapes = drawing::readDrawing(workspace->readAttachment(path)).value_or(drawing::Drawing());
-    shapes.foreign.append(QJsonObject{{u"type"_s, u"rectangle"_s}, {u"id"_s, u"prostokąt"_s}, {u"x"_s, 10},
-                                      {u"y"_s, 10}, {u"width"_s, 50}, {u"height"_s, 40}});
+    shapes.foreign.append(QJsonObject{{u"type"_s, u"frame"_s}, {u"id"_s, u"ramka"_s}, {u"x"_s, 10},
+                                      {u"y"_s, 10}, {u"width"_s, 50}, {u"height"_s, 40}, {u"name"_s, u"Ramka"_s}});
     const QByteArray shapesBytes = drawing::toSvg(shapes);
     drawStroke(0.8);
     check(waitFor([&] { return canvas->property("strokeCount").toInt() == 4; }) && writeBehind(shapes),
-          "a stroke drawn here, an Excalidraw version with a shape written behind the vault's back");
+          "a stroke drawn here, an Excalidraw version with a frame written behind the vault's back");
     if (view)
         QMetaObject::invokeMethod(view, "save", Q_RETURN_ARG(QVariant, saved));
-    check(workspace->readAttachment(path) == shapesBytes, "the version with the shape is not written over");
+    check(workspace->readAttachment(path) == shapesBytes, "the version with the frame is not written over");
     check(view && view->property("status").toString() == u"readonly"_s, "and the editor shows it as it is");
     {
         const QString folder = paths::dirname(path);

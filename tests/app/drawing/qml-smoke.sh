@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # QML smoke test of the drawing editor (ctest tst_drawing_qml): the route "drawing" on a drawing
-# (Excalidraw freehand), an Excalidraw drawing with shapes (read-only), a picture that is no
-# drawing, a missing file and an empty one (a new drawing), the drawing's background menu, the page
-# embedding them and the picture view of a drawing, in the real app at desktop and phone sizes in
+# (Excalidraw freehand), an Excalidraw drawing with shapes, arrows, text and pictures (edited: the
+# shapes' menu, everything selected with its bar), one with a frame (read-only), a picture that is
+# no drawing, a missing file and an empty one (a new drawing), the drawing's background menu, the
+# page embedding them and the picture view of a drawing, in the real app at desktop and phone sizes in
 # the light and the dark theme, headless; fails when the app does not start or QML reports a
 # warning or error from the drawing editor's files, the embeds or the picture view.
 #
@@ -18,15 +19,19 @@ vault="$work/vault"
 mkdir -p "$vault/assets" "$vault/.brulion"
 printf '{"attachmentsFolder":"assets"}\n' > "$vault/.brulion/config.json"
 cp "$data/excalidraw_freedraw.svg" "$vault/assets/Rysunek ćwiczenia.svg"
-cp "$data/excalidraw_mixed.svg" "$vault/assets/Schemat.svg"
+cp "$data/excalidraw_shapes.svg" "$vault/assets/Schemat.svg"
+cp "$data/excalidraw_frame.svg" "$vault/assets/Ramka.svg"
 printf '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#e2574c"/></svg>' \
   > "$vault/assets/logo.svg"
 : > "$vault/assets/Nowy.svg"
-printf -- '- Ćwiczenie: ![[Rysunek ćwiczenia.svg]]\n- ![[Schemat.svg]]\n- ![[logo.svg]]\n' > "$vault/Zajęcia.md"
+printf -- '- Ćwiczenie: ![[Rysunek ćwiczenia.svg]]\n- ![[Schemat.svg]]\n- ![[Ramka.svg]]\n- ![[logo.svg]]\n' > "$vault/Zajęcia.md"
 
 routes=(
   '{"view":"drawing","path":"assets/Rysunek ćwiczenia.svg"}'
   '{"view":"drawing","path":"assets/Schemat.svg"}'
+  '{"view":"drawing","path":"assets/Schemat.svg","open":"shape"}'
+  '{"view":"drawing","path":"assets/Schemat.svg","open":"select"}'
+  '{"view":"drawing","path":"assets/Ramka.svg"}'
   '{"view":"drawing","path":"assets/logo.svg"}'
   '{"view":"drawing","path":"assets/Brak.svg"}'
   '{"view":"drawing","path":"assets/Nowy.svg"}'
