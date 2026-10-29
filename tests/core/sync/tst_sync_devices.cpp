@@ -1,10 +1,16 @@
 // Two devices syncing through one WebDAV server: edits, deletions, concurrent journal appends,
-// real conflicts (text and binary), first sync with content on both sides, the vault config,
-// line endings, parallel transfers, files that are not UTF-8, failing conflict uploads, renames.
+// real conflicts (text and binary), drawings changed on both devices (merged element by element,
+// both versions kept when they cannot be), first sync with content on both sides, the vault
+// config, line endings, parallel transfers, files that are not UTF-8, failing conflict uploads,
+// renames.
 #include "synctest.h"
 
+#include "drawing/drawingfile.h"
+#include "drawing/svgwrite.h"
 #include "vault/vaultconfig.h"
 
+#include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
@@ -50,6 +56,42 @@ QStringList conflictCopies(const Device &d)
 QJsonObject jsonOf(const QString &text)
 {
     return QJsonDocument::fromJson(text.toUtf8()).object();
+}
+
+/// A drawing of freehand lines as Brulion writes it: one line per id, at a height of its own (the
+/// same id is the same line in every version); `foreign`: elements Brulion does not draw.
+QString drawingSvg(const QStringList &ids, const QJsonArray &foreign = {})
+{
+    brulion::drawing::Drawing d;
+    for (const QString &id : ids) {
+        brulion::drawing::Stroke s;
+        s.id = id;
+        const double y = 50 + 40 * (id.back().unicode() % 12);
+        s.points = {{100, y, 0.5}, {200, y + 10, 0.5}, {300, y, 0.5}};
+        d.strokes.append(s);
+    }
+    d.foreign = foreign;
+    return QString::fromUtf8(brulion::drawing::toSvg(d));
+}
+
+/// The ids of the elements of the drawing in `text` ("<no drawing>" when it holds none).
+QStringList drawingIds(const QString &text)
+{
+    const std::optional<brulion::drawing::DrawingFile> file = brulion::drawing::readDrawingFile(text.toUtf8());
+    if (!file)
+        return {u"<no drawing>"_s};
+    QStringList ids;
+    for (const brulion::drawing::Stroke &s : file->drawing.strokes)
+        ids.append(s.id);
+    return ids;
+}
+
+QByteArray fixture(const QString &name)
+{
+    QFile f(QStringLiteral(BRULION_TEST_DATA "/drawing/") + name);
+    if (!f.open(QIODevice::ReadOnly))
+        qFatal("missing fixture %s", qPrintable(name));
+    return f.readAll();
 }
 
 // "Zażółć gęślą\n" in Windows-1250 (common for CSV files exported by Excel in Poland).
@@ -138,35 +180,46 @@ private Q_SLOTS:
         QCOMPARE(counts(p.b.sync()), Counts{});
     }
 
-    void excalidrawDrawingsAreNeverMergedLineByLine_data()
+    void excalidrawDrawingsMergeElementByElement_data()
     {
         // An Obsidian Excalidraw plugin file with its scene as JSON ("```json"): the two devices
         // move different elements, lines far apart — a line merge would be "clean" and might glue
-        // two scenes into broken JSON; the same text without the plugin's key merges.
+        // two scenes into broken JSON: merged element by element instead (each move raises the
+        // element's version, as every editor does). Moved without a new version (by hand): no
+        // merge by versions, both versions kept. The same text without the plugin's key merges
+        // line by line.
         QTest::addColumn<QString>("path");
         QTest::addColumn<QString>("head");
         QTest::addColumn<bool>("drawing");
         QTest::addColumn<bool>("crlf");
+        QTest::addColumn<bool>("versioned");
         const QString plugin = u"---\n\nexcalidraw-plugin: parsed\ntags: [excalidraw]\n\n---\nNotatka z tyłu: "
                                u"ąćęłńóśźż\n\n# Excalidraw Data\n\n## Text Elements\n%%\n## Drawing\n```json\n"_s;
-        QTest::newRow("plugin file") << u"Excalidraw/Szkic ćwiczeń.excalidraw.md"_s << plugin << true << false;
-        QTest::newRow("CRLF plugin file") << u"Szkic.excalidraw.md"_s << plugin << true << true;
-        QTest::newRow("a note") << u"Notatka.md"_s << u"---\ntytul: Szkic\n---\n```json\n"_s << false << false;
+        QTest::newRow("plugin file") << u"Excalidraw/Szkic ćwiczeń.excalidraw.md"_s << plugin << true << false << true;
+        QTest::newRow("CRLF plugin file") << u"Szkic.excalidraw.md"_s << plugin << true << true << true;
+        QTest::newRow("plugin file edited by hand") << u"Szkic źdźbła.excalidraw.md"_s << plugin << true << false
+                                                    << false;
+        QTest::newRow("a note") << u"Notatka.md"_s << u"---\ntytul: Szkic\n---\n```json\n"_s << false << false
+                                << true;
     }
 
-    void excalidrawDrawingsAreNeverMergedLineByLine()
+    void excalidrawDrawingsMergeElementByElement()
     {
         QFETCH(QString, path);
         QFETCH(QString, head);
         QFETCH(bool, drawing);
         QFETCH(bool, crlf);
-        const auto scene = [&head, crlf](int x1, int x2) {
+        QFETCH(bool, versioned);
+        const auto scene = [&head, crlf, versioned](int x1, int x2) {
             QString elements;
             for (int i = 0; i < 2; ++i) {
+                const int x = i == 0 ? x1 : x2;
+                const int version = versioned && x != (i == 0 ? 0 : 100) ? 2 : 1;
                 elements += u"\t\t{\n\t\t\t\"id\": \"e%1\",\n\t\t\t\"type\": \"rectangle\",\n\t\t\t\"x\": %2,\n"
                             u"\t\t\t\"y\": 10,\n\t\t\t\"width\": 40,\n\t\t\t\"height\": 40,\n\t\t\t\"angle\": 0,\n"
-                            u"\t\t\t\"strokeColor\": \"#1e1e1e\",\n\t\t\t\"version\": 1\n\t\t}%3\n"_s.arg(i)
-                                    .arg(i == 0 ? x1 : x2)
+                            u"\t\t\t\"strokeColor\": \"#1e1e1e\",\n\t\t\t\"version\": %3\n\t\t}%4\n"_s.arg(i)
+                                    .arg(x)
+                                    .arg(version)
                                     .arg(i == 0 ? u","_s : QString());
             }
             QString text = head + u"{\n\t\"type\": \"excalidraw\",\n\t\"version\": 2,\n\t\"elements\": [\n"_s + elements
@@ -185,14 +238,158 @@ private Q_SLOTS:
             QCOMPARE(p.b.read(path), scene(30, 170));
             return;
         }
-        // Both versions kept, each a whole drawing.
+        if (!versioned) {
+            // Both versions kept, each a whole drawing.
+            QCOMPARE(counts(rb), (Counts{.conflicts = 1}));
+            QCOMPARE(rb.conflicts, QList<VaultPath>{path});
+            QCOMPARE(rb.conflictCopies.size(), 1);
+            QCOMPARE(p.b.read(path), scene(0, 170));
+            QCOMPARE(p.b.read(rb.conflictCopies.first()), scene(30, 100));
+            QCOMPARE(counts(p.a.sync()), (Counts{.down = 2}));
+            QCOMPARE(p.a.read(path), scene(0, 170));
+            return;
+        }
+        // Both moves in one drawing, the Markdown around the scene as it was, no conflict copy.
+        QCOMPARE(counts(rb), (Counts{.merged = 1}));
+        QVERIFY(rb.conflictCopies.isEmpty());
+        const QString merged = p.b.read(path);
+        const std::optional<brulion::drawing::DrawingFile> file = brulion::drawing::readDrawingFile(merged.toUtf8());
+        QVERIFY(file);
+        QCOMPARE(file->format, brulion::drawing::FileFormat::ExcalidrawMarkdown);
+        QCOMPARE(file->drawing.strokes.size(), 2);
+        QCOMPARE(file->drawing.strokes.at(0).box.x(), 30.0);
+        QCOMPARE(file->drawing.strokes.at(1).box.x(), 170.0);
+        const QString before = crlf ? QString(head).replace(u"\n"_s, u"\r\n"_s) : head;
+        QVERIFY(merged.startsWith(before));
+        QVERIFY(conflictCopies(p.b).isEmpty());
+        QCOMPARE(counts(p.a.sync()), (Counts{.down = 1}));
+        QCOMPARE(p.a.read(path), merged);
+        QCOMPARE(counts(p.a.sync()), Counts{});
+        QCOMPARE(counts(p.b.sync()), Counts{});
+    }
+
+    void drawingsChangedOnBothDevicesMergeByStroke()
+    {
+        // Brulion's SVG drawing: a line drawn on each device. A line merge would cut and glue the
+        // scene's payload line (a broken drawing); merged line by line of the drawing instead.
+        const QString path = u"assets/Rysunek ćwiczeń.svg"_s;
+        Pair p({{path, drawingSvg({u"s1"_s}).toUtf8()}});
+        p.a.sync();
+        p.b.sync();
+        QVERIFY(p.a.write(path, drawingSvg({u"s1"_s, u"s2"_s})));
+        QVERIFY(p.b.write(path, drawingSvg({u"s1"_s, u"s3"_s})));
+        QCOMPARE(counts(p.a.sync()), (Counts{.up = 1}));
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(counts(rb), (Counts{.merged = 1}));
+        QVERIFY(rb.conflictCopies.isEmpty());
+        // The server's order, this device's new line on top.
+        QCOMPARE(drawingIds(p.b.read(path)), (QStringList{u"s1"_s, u"s2"_s, u"s3"_s}));
+        QCOMPARE(p.server.text(kFolder + u'/' + path), std::optional<QString>(p.b.read(path)));
+        QCOMPARE(counts(p.a.sync()), (Counts{.down = 1}));
+        QCOMPARE(p.a.read(path), p.b.read(path));
+        QVERIFY(conflictCopies(p.a).isEmpty());
+        QVERIFY(conflictCopies(p.b).isEmpty());
+        QCOMPARE(counts(p.a.sync()), Counts{});
+        QCOMPARE(counts(p.b.sync()), Counts{});
+    }
+
+    void drawingErasedOnOneDeviceStaysErased()
+    {
+        const QString path = u"assets/Szkic.svg"_s;
+        Pair p({{path, drawingSvg({u"s1"_s, u"s2"_s}).toUtf8()}});
+        p.a.sync();
+        p.b.sync();
+        QVERIFY(p.a.write(path, drawingSvg({u"s2"_s})));
+        QVERIFY(p.b.write(path, drawingSvg({u"s1"_s, u"s2"_s, u"s3"_s})));
+        p.a.sync();
+        QCOMPARE(counts(p.b.sync()), (Counts{.merged = 1}));
+        QCOMPARE(drawingIds(p.b.read(path)), (QStringList{u"s2"_s, u"s3"_s}));
+        p.a.sync();
+        QCOMPARE(drawingIds(p.a.read(path)), (QStringList{u"s2"_s, u"s3"_s}));
+        // And the other way round: erased on the device that syncs second.
+        QVERIFY(p.a.write(path, drawingSvg({u"s2"_s, u"s3"_s, u"s4"_s})));
+        QVERIFY(p.b.write(path, drawingSvg({u"s3"_s})));
+        p.a.sync();
+        QCOMPARE(counts(p.b.sync()), (Counts{.merged = 1}));
+        QCOMPARE(drawingIds(p.b.read(path)), (QStringList{u"s3"_s, u"s4"_s}));
+    }
+
+    void drawingWithAFrameChangedOnBothDevicesKeepsBothVersions()
+    {
+        // One version has a frame from excalidraw.com (an element Brulion does not draw): no merge,
+        // both versions kept as for any conflict — the sync center shows them.
+        const QString path = u"assets/Plan.svg"_s;
+        Pair p({{path, drawingSvg({u"s1"_s}).toUtf8()}});
+        p.a.sync();
+        p.b.sync();
+        const QJsonArray frame{QJsonObject{{u"id"_s, u"ramka"_s}, {u"type"_s, u"frame"_s}, {u"x"_s, 0}, {u"y"_s, 0},
+                                           {u"width"_s, 300}, {u"height"_s, 200}, {u"name"_s, u"Ramka"_s}}};
+        const QString framed = drawingSvg({u"s1"_s, u"s2"_s}, frame);
+        QVERIFY(p.a.write(path, framed));
+        QVERIFY(p.b.write(path, drawingSvg({u"s1"_s, u"s3"_s})));
+        p.a.sync();
+        const SyncReport rb = p.b.sync();
         QCOMPARE(counts(rb), (Counts{.conflicts = 1}));
-        QCOMPARE(rb.conflicts, QList<VaultPath>{path});
-        QCOMPARE(rb.conflictCopies.size(), 1);
-        QCOMPARE(p.b.read(path), scene(0, 170));
-        QCOMPARE(p.b.read(rb.conflictCopies.first()), scene(30, 100));
+        const QString copy = u"assets/Plan.conflict-telefon-"_s + kStamp + u".svg"_s;
+        QCOMPARE(rb.conflictCopies, QList<VaultPath>{copy});
+        QCOMPARE(drawingIds(p.b.read(path)), (QStringList{u"s1"_s, u"s3"_s}));
+        QCOMPARE(p.b.read(copy), framed);
         QCOMPARE(counts(p.a.sync()), (Counts{.down = 2}));
-        QCOMPARE(p.a.read(path), scene(0, 170));
+    }
+
+    void twoNewDrawingsWithTheSameNameKeepBoth()
+    {
+        // Two drawings made apart under one name (names go by the minute): no common version —
+        // never mixed automatically, both kept.
+        const QString path = u"assets/Rysunek 2026-10-14 10.00.svg"_s;
+        Pair p({{path, drawingSvg({u"laptop1"_s}).toUtf8()}}, {{path, drawingSvg({u"telefon1"_s}).toUtf8()}});
+        QCOMPARE(counts(p.a.sync()), (Counts{.up = 1}));
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(counts(rb), (Counts{.conflicts = 1}));
+        QCOMPARE(rb.conflictCopies.size(), 1);
+        QCOMPARE(drawingIds(p.b.read(path)), QStringList{u"telefon1"_s});
+        QCOMPARE(drawingIds(p.b.read(rb.conflictCopies.first())), QStringList{u"laptop1"_s});
+    }
+
+    void pluginDrawingChangedOnBothDevicesMergesByStroke()
+    {
+        // The Obsidian Excalidraw plugin's file ("```json", a back of the card): a line drawn in
+        // Brulion on one device, one erased on the other.
+        const QString path = u"Excalidraw/Szkic ćwiczeń.excalidraw.md"_s;
+        const QByteArray original = fixture(u"obsidian_json.excalidraw.md"_s);
+        const std::optional<brulion::drawing::DrawingFile> file = brulion::drawing::readDrawingFile(original);
+        QVERIFY(file);
+        QCOMPARE(file->drawing.strokes.size(), 2);
+        const QString kept = file->drawing.strokes.first().id;
+        Pair p({{path, original}});
+        p.a.sync();
+        p.b.sync();
+        brulion::drawing::Drawing drawn = file->drawing;
+        brulion::drawing::Stroke line;
+        line.id = u"nowa-łódź"_s;
+        line.points = {{10, 10, 0.5}, {90, 30, 0.5}};
+        drawn.strokes.append(line);
+        brulion::drawing::Drawing erased = file->drawing;
+        erased.strokes.removeLast();
+        QVERIFY(p.a.write(path, QString::fromUtf8(brulion::drawing::writeDrawingFile(*file, drawn, 1761650000000))));
+        QVERIFY(p.b.write(path, QString::fromUtf8(brulion::drawing::writeDrawingFile(*file, erased, 1761650000000))));
+        p.a.sync();
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(counts(rb), (Counts{.merged = 1}));
+        QVERIFY(conflictCopies(p.b).isEmpty());
+        const QString merged = p.b.read(path);
+        QCOMPARE(drawingIds(merged), (QStringList{kept, u"nowa-łódź"_s}));
+        // A valid "```json" block in the plugin's file; the back of the card byte for byte.
+        const QByteArray bytes = merged.toUtf8();
+        const qsizetype from = bytes.indexOf("```json\n") + 8;
+        const qsizetype to = bytes.indexOf("\n```", from);
+        QVERIFY(from > 8 && to > from);
+        QJsonParseError error;
+        QVERIFY(QJsonDocument::fromJson(bytes.sliced(from, to - from), &error).isObject());
+        QCOMPARE(error.error, QJsonParseError::NoError);
+        QVERIFY(bytes.startsWith(original.first(original.indexOf("## Drawing"))));
+        p.a.sync();
+        QCOMPARE(p.a.read(path), merged);
     }
 
     void anExcalidrawDrawingUploadedAgainUnchangedIsNoConflict_data()
