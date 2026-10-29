@@ -20,7 +20,9 @@ działa”).
 * **Instalator:** uruchom `Brulion-<wersja>-windows-x86_64-setup.exe`. Program trafia do
   `%LOCALAPPDATA%\Programs\Brulion`, skrót do menu Start, ikona na pulpicie na życzenie (zadanie
   „Utwórz ikonę na pulpicie”) i — tylko przy pierwszej instalacji, zaznaczone — „Uruchamiaj Brulion
-  po zalogowaniu” (niżej, „Autostart”). Język instalatora: polski albo angielski (według systemu).
+  po zalogowaniu” (niżej, „Autostart”). Brulion pojawia się też w **Otwórz za pomocą** dla plików
+  `.md`, `.markdown` i `.txt`, bez zmiany programu domyślnego (niżej, „Otwórz za pomocą”). Język
+  instalatora: polski albo angielski (według systemu).
   Nowa wersja instaluje się na poprzednią (ten sam `AppId`); uruchomiony Brulion zostanie poproszony
   o zamknięcie.
 * **SmartScreen:** pliki nie są podpisane certyfikatem, więc Windows ostrzega przy pierwszym
@@ -30,13 +32,14 @@ działa”).
   nie instaluje; notatki i ustawienia są w tych samych miejscach co przy instalatorze (niżej), nie
   w folderze programu.
 * **Odinstalowanie:** Ustawienia → Aplikacje → Brulion → Odinstaluj (albo `unins000.exe` w folderze
-  programu). Usuwa tylko pliki programu, skróty, wpis autostartu tej instalacji i rejestrację
-  powiadomień — **notatki, ustawienia i rejestr zdarzeń zostają**.
+  programu). Usuwa tylko pliki programu, skróty, wpis autostartu tej instalacji, rejestrację
+  powiadomień i „Otwórz za pomocą” — **notatki, ustawienia i rejestr zdarzeń zostają**.
 * Instalacja bez okien (np. skrypt): `Brulion-<wersja>-windows-x86_64-setup.exe /VERYSILENT
   /SUPPRESSMSGBOXES /CURRENTUSER` (z autostartem: `/TASKS=autostart`, bez: `/TASKS=""`),
   odinstalowanie: `unins000.exe /VERYSILENT /SUPPRESSMSGBOXES`. Administrator może zainstalować dla
-  wszystkich (`/ALLUSERS`, do `C:\Program Files\Brulion`); autostart i rejestracja powiadomień są
-  wtedy i tak wpisami użytkownika, który instaluje (każdy inny włącza autostart w ustawieniach).
+  wszystkich (`/ALLUSERS`, do `C:\Program Files\Brulion`; „Otwórz za pomocą” wtedy dla wszystkich);
+  autostart i rejestracja powiadomień są wtedy i tak wpisami użytkownika, który instaluje (każdy
+  inny włącza autostart w ustawieniach).
 
 ## Gdzie są dane
 
@@ -53,6 +56,7 @@ działa”).
 | Jedna kopia programu (single instance) | potok nazwany `\\.\pipe\<%TEMP%>/brulion-<skrót>` i plik blokady `%TEMP%\brulion-<skrót>.lock` |
 | Rejestracja powiadomień (nazwa i ikona toastów) | rejestr: `HKCU\Software\Classes\AppUserModelId\JanuszBit.Brulion` (`DisplayName`, `IconUri` → `brulion.ico` obok programu) |
 | Autostart | rejestr: wartość `Brulion` w `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`; wyłączenie w Menedżerze zadań: `…\Explorer\StartupApproved\Run\Brulion` |
+| „Otwórz za pomocą” (instalator) | rejestr: `HKCU\Software\Classes\JanuszBit.Brulion.Note`, wartości `JanuszBit.Brulion.Note` w `…\Classes\.md`, `.markdown`, `.txt` `\OpenWithProgids`, `…\Classes\Applications\brulion.exe` (niżej, „Otwórz za pomocą”) |
 
 `%APPDATA%` to zwykle `C:\Users\<użytkownik>\AppData\Roaming`, `%LOCALAPPDATA%` —
 `…\AppData\Local`, `%TEMP%` — `…\AppData\Local\Temp`.
@@ -62,6 +66,40 @@ znaków) zamienia organizację „Brulion” na „Brulion-<nazwa>” — ustawi
 jednej kopii są wtedy osobne (`%APPDATA%\Brulion-<nazwa>\…`). Tak samo dla `brulion.exe`
 i `brulion-cli.exe`. Służy testom (na Windows zmienne `XDG_*` z testów linuksowych nic nie
 zmieniają) i do wypróbowania czegoś bez ruszania własnego profilu; działa też na Linuksie.
+
+## Otwórz za pomocą
+
+Instalator dodaje Brulion do **Otwórz za pomocą** dla plików `.md`, `.markdown` i `.txt`: prawy
+przycisk na pliku w Eksploratorze → **Otwórz za pomocą** → **Brulion** (albo **Wybierz inną
+aplikację**, jeśli go tam jeszcze nie ma). Otwiera się okno **Zapisz w Brulionie** — to samo co
+„Udostępnij → Brulion” na Androidzie: plik trafia do **dzisiejszego dziennika** (jako blok) albo
+jako **nowa strona** (tytuł z nazwy pliku, treść bez zmian). Brulion zapisuje **kopię** w otwartym
+notatniku, a sam plik zostaje na miejscu, nietknięty; **Anuluj** niczego nie zapisuje. Plik, który
+już jest stroną otwartego notatnika, po prostu się otwiera. Kilka zaznaczonych plików trafia do
+jednego okna (Windows uruchamia Brulion osobno dla każdego pliku, a działająca kopia je zbiera).
+
+* **Program domyślny się nie zmienia.** Instalator tylko proponuje Brulion: nie zapisuje
+  domyślnego programu typu ani wyboru użytkownika (`UserChoice`). Po instalacji Windows może raz
+  zapytać, jak otwierać pliki `.txt` — wybierz dotychczasowy program (np. **Notatnik**), a wszystko
+  zostanie jak było. Brulion jako domyślny ustawisz sam: **Otwórz za pomocą → Wybierz inną
+  aplikację → Brulion → Zawsze**.
+* **Wersja przenośna (ZIP)** niczego nie rejestruje: tam zostaje **Wybierz inną aplikację →
+  Wybierz aplikację na tym komputerze** i `brulion.exe` (Windows wywoła go wtedy bez `--open`, więc
+  Brulion tylko się otworzy) — albo instalator.
+* Bez otwartego notatnika (pierwsze uruchomienie) Brulion najpierw prosi o otwarcie albo
+  utworzenie notatnika; plik czeka.
+
+Co zapisuje instalator (dla bieżącego użytkownika w `HKCU\Software\Classes`, z `/ALLUSERS`
+w `HKLM\Software\Classes`; odinstalowanie usuwa dokładnie to):
+
+| Klucz | Zawartość |
+|---|---|
+| `JanuszBit.Brulion.Note` | typ „Notatka (Brulion)”: ikona i polecenie `"…\brulion.exe" --open "%1"` |
+| `.md\OpenWithProgids`, `.markdown\OpenWithProgids`, `.txt\OpenWithProgids` | wartość `JanuszBit.Brulion.Note` (pusta) — Brulion na liście „Otwórz za pomocą” |
+| `Applications\brulion.exe` | `FriendlyAppName` „Brulion”, `SupportedTypes` (`.md`, `.markdown`, `.txt`), to samo polecenie |
+
+`--open` w wierszu poleceń: `brulion.exe --open "C:\ścieżka\notatka.md" …` — wszystko po `--open`
+to pliki (także nazwa zaczynająca się od `-`); ścieżki względne liczą się od bieżącego folderu.
 
 ## Powiadomienia
 
@@ -314,3 +352,12 @@ potoków są wspólne dla całego komputera, więc jak `SO_PEERCRED` na Linuksie
 proces po drugiej stronie (`GetNamedPipeClientProcessId`/`GetNamedPipeServerProcessId`) i SID jego
 użytkownika (`src/ipc/controlprotocol.cpp`, `peerUid()`): potoku, który inny użytkownik założył
 pierwszy pod tą nazwą, Brulion nie używa.
+
+Drugie uruchomienie z plikami (`brulion.exe --open "%1"` z „Otwórz za pomocą”) zamienia ich ścieżki
+na bezwzględne (od swojego bieżącego folderu) i wysyła działającej kopii komunikat `share`
+(`src/ipc/appmessage.h`), a przed wysłaniem pozwala jej wyjść na pierwszy plan
+(`AllowSetForegroundWindow`, `platform::allowForegroundActivation()`): okno Brulionu przychodzi
+na wierzch, a nie tylko miga na pasku zadań. Kilka plików zaznaczonych naraz to kilka uruchomień —
+pierwsze, gdy Brulion nie działa, staje się główną kopią, pozostałe czekają, aż zacznie słuchać,
+a pliki trafiają do jednego okna. Brulion starszy niż 0.5.1, gdy jeszcze działa, komunikatu
+`share` nie zna i go pomija — wtedy pomaga zamknięcie go i ponowne „Otwórz za pomocą”.

@@ -332,6 +332,12 @@ they go through its single-instance socket (`src/ipc/appmessage.h`, one-way): th
 here and the app opens pages of the notebook it shows (a ref of another notebook gives the app a
 notice and the command a warning). Without a running app: exit 5 with `{"gui": {"running": false}}`.
 
+The same socket carries a second launch of the app: `brulion --today`, `--capture`, a plain
+`brulion` (`activate`) and `brulion --open <file>…` — files opened with Brulion from a file manager
+("Otwórz za pomocą"), sent as `share` with their absolute paths: the running app offers them in its
+share dialog (copies, the files stay unchanged; a page of the open notebook opens). Each carries the
+launcher's Wayland activation token, so the window comes to the front.
+
 The single-instance socket (`$XDG_RUNTIME_DIR/brulion-<hash>`, owner-only) is, like the remote
 control's, only ever in a folder of the user's own that nobody else can change: without a private
 runtime folder (no `$XDG_RUNTIME_DIR`, and Qt's `/tmp/runtime-<user>` taken by someone else) the

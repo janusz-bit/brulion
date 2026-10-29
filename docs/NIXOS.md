@@ -128,6 +128,31 @@ nix run github:janusz-bit/brulion
   `share/metainfo/io.github.januszbit.brulion.metainfo.xml`, ikona
   `share/icons/hicolor/{scalable,256x256}/apps/io.github.januszbit.brulion.{svg,png}`.
 
+### Otwórz za pomocą
+
+Wpis pulpitu z pakietu (`Exec=brulion --open %F`, `MimeType=text/markdown;text/x-markdown;text/plain;`)
+dodaje Brulion do **Otwórz za pomocą** w menedżerze plików (GNOME Pliki, Dolphin, Thunar, Nemo…)
+dla plików Markdown i tekstowych — nic nie trzeba konfigurować. Otwiera się okno **Zapisz
+w Brulionie**, to samo co „Udostępnij → Brulion” na Androidzie: plik trafia do dzisiejszego
+dziennika albo jako nowa strona, przy czym Brulion zapisuje **kopię**, a sam plik zostaje na
+miejscu bez zmian. Plik, który już jest stroną otwartego notatnika, po prostu się otwiera. Kilka
+plików naraz trafia do jednego okna; gdy Brulion już działa, dostaje je działająca kopia i wychodzi
+na wierzch (pod Waylandem z tokenem aktywacji menedżera plików; gdy go nie ma, GNOME może tylko
+pokazać „Brulion jest gotowy”).
+
+Programem domyślnym Brulion nie zostaje sam; jeśli chcesz, ustaw go:
+
+```sh
+xdg-mime default io.github.januszbit.brulion.desktop text/markdown
+```
+
+`text/plain` sprawia, że Brulion jest na liście także dla innych plików tekstowych (np. kodu
+źródłowego) — tylko na liście, nic się nie zmienia, dopóki go nie wybierzesz. Z wiersza poleceń:
+`brulion --open notatka.md …` (wszystko po `--open` to pliki; `brulion --open` bez plików
+uruchamia Brulion jak zwykle). **AppImage** ma ten sam wpis w środku: narzędzia, które integrują
+AppImage z menu (Gear Lever, AppImageLauncher, appimaged), instalują go z typami plików, więc
+„Otwórz za pomocą” działa też z AppImage.
+
 ### Notatki i Syncthing
 
 Notatki to zwykłe pliki `.md` w wybranym folderze. Synchronizacja z telefonem i innymi
