@@ -144,10 +144,11 @@ components — no Material/Fusion look, so all targets look identical.
   through `WasmShare` to `AppController.receiveShareQuery`), a desktop's "Otwórz za pomocą →
   Brulion" (`--open <file>…`, a second launch's `share` message: `pendingShare.source` "open" —
   the subtitle says "%n plik(i) do zapisania w notatniku" and the hint `shareCopyHint` that a copy
-  is saved and the file stays unchanged; a file that already is a page of the open notebook opens
-  as that page instead, the dialog lists only the others; opened files arriving while the dialog
-  waits are added to it, any other share replaces it), or `--share` — go to today's
-  journal or to new pages; `AppController.pendingShare` / `saveShare` / `dismissShare`; a
+  is saved and the file stays unchanged; a file that already is a page of the open notebook — also
+  in a folder linked into it, a page that is a link, in a folder starting with "." — opens as that
+  page instead, the dialog lists only the others; opened files arriving while the dialog waits are
+  added to it, a file opened again is read again, any other share replaces it), or `--share` — go
+  to today's journal or to new pages; `AppController.pendingShare` / `saveShare` / `dismissShare`; a
   segmented "Dzisiejszy dziennik" / "Nowa strona" (text: the journal by default, one file: a new
   page titled after the file, several: one journal block each), the page title field for a single
   page, the text editable before saving — never through quick capture's date parsing —, files
