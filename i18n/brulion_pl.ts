@@ -252,7 +252,7 @@
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="105"/>
         <location filename="../src/app/qml/shell/AppShell.qml" line="174"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2079"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2219"/>
         <source>All pages</source>
         <translation>Wszystkie strony</translation>
     </message>
@@ -1192,15 +1192,15 @@
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="519"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2147"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2166"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2287"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2306"/>
         <source>Heading “%1” is not on this page</source>
         <translation>Nagłówka „%1” nie ma na tej stronie</translation>
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="541"/>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="2614"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2200"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2340"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
@@ -2567,14 +2567,14 @@
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="115"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="61"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2378"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2518"/>
         <source>Fit to view</source>
         <translation>Dopasuj do widoku</translation>
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="115"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="62"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2370"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2510"/>
         <source>Zoom to actual size</source>
         <translation>Pokaż naturalny rozmiar</translation>
     </message>
@@ -2613,7 +2613,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="368"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2520"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2660"/>
         <source>The start of the file: %1 of %2.</source>
         <translation>Początek pliku: %1 z %2.</translation>
     </message>
@@ -8727,7 +8727,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3417"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3557"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -8863,7 +8863,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="28"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3145"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3285"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -8959,214 +8959,214 @@
 <context>
     <name>ShellSidebar</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="360"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="390"/>
         <source>Switch notebook</source>
         <translation>Przełącz notatnik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="796"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="842"/>
         <source>Brulion documentation</source>
         <translation>Dokumentacja Brulionu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="809"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="855"/>
         <source>Open another notebook…</source>
         <translation>Otwórz inny notatnik…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="255"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="283"/>
         <source>Sidebar</source>
         <translation>Pasek boczny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="156"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="184"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="366"/>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="929"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="396"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="975"/>
         <source>New page</source>
         <translation>Nowa strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="425"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="471"/>
         <source>Journals</source>
         <translation>Dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="426"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="472"/>
         <source>Calendar</source>
         <translation>Kalendarz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="427"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="473"/>
         <source>Tasks</source>
         <translation>Zadania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="428"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="474"/>
         <source>All pages</source>
         <translation>Wszystkie strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="429"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="475"/>
         <source>Tags</source>
         <translation>Tagi</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="430"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="476"/>
         <source>Graph</source>
         <translation>Graf</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="431"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="477"/>
         <source>Search</source>
         <translation>Szukaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="467"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="513"/>
         <source>Favorites</source>
         <translation>Ulubione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="485"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="531"/>
         <source>Pages you star appear here.</source>
         <translation>Tu pojawiają się strony oznaczone gwiazdką.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="517"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="563"/>
         <source>Recent</source>
         <translation>Ostatnie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="551"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="597"/>
         <source>Pages</source>
         <translation>Strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="557"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="603"/>
         <source>New page or folder</source>
         <translation>Nowa strona lub folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="602"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="648"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="1425"/>
         <source>Empty folder</source>
         <translation>Pusty folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="608"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="654"/>
         <source>expanded folder</source>
         <translation>folder rozwinięty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="608"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="654"/>
         <source>collapsed folder</source>
         <translation>folder zwinięty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="651"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="697"/>
         <source>More: %1</source>
         <translation>Więcej: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="735"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="781"/>
         <source>%1 → %2</source>
         <translation>%1 → %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="736"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="782"/>
         <source>Notebook root</source>
         <translation>Główny folder notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="831"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="877"/>
         <source>New page here</source>
         <translation>Nowa strona tutaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="839"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="885"/>
         <source>New folder…</source>
         <translation>Nowy folder…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="851"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="897"/>
         <source>Show folder pages</source>
         <translation>Pokaż strony folderu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="859"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="905"/>
         <source>Search in folder</source>
         <translation>Szukaj w folderze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="866"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="912"/>
         <source>Open in side panel</source>
         <translation>Otwórz w panelu bocznym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="873"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="919"/>
         <source>Remove from favorites</source>
         <translation>Usuń z ulubionych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="873"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="919"/>
         <source>Add to favorites</source>
         <translation>Dodaj do ulubionych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="879"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="925"/>
         <source>Move to…</source>
         <translation>Przenieś do…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="887"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="933"/>
         <source>Copy link</source>
         <translation>Kopiuj link</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="895"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="941"/>
         <source>Export folder…</source>
         <translation>Eksportuj folder…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="901"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="947"/>
         <source>Rename…</source>
         <translation>Zmień nazwę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="908"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="954"/>
         <source>Page history</source>
         <translation>Historia strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="915"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="961"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="936"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="982"/>
         <source>New folder</source>
         <translation>Nowy folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="943"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="989"/>
         <source>Collapse all</source>
         <translation>Zwiń wszystkie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="949"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="995"/>
         <source>Show attachments</source>
         <translation>Pokaż załączniki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="962"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1008"/>
         <source>Show the open page</source>
         <translation>Pokazuj otwartą stronę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="455"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="501"/>
         <source>Import notes</source>
         <translation>Importuj notatki</translation>
     </message>
@@ -9283,7 +9283,7 @@
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="161"/>
         <location filename="../src/app/io/ioselftest.cpp" line="371"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2396"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2536"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -9319,7 +9319,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="211"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2405"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2545"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
@@ -9335,7 +9335,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="222"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2404"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2544"/>
         <source>Toggle note mode</source>
         <translation>Przełącz tryb notatki</translation>
     </message>
@@ -9409,13 +9409,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4608"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4748"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="114"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4598"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4738"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -13937,7 +13937,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="74"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4424"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4564"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
