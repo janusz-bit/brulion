@@ -197,7 +197,7 @@ QString compressToBase64(QStringView input)
             ++numBits;
         }
     };
-    const auto emit = [&] {
+    const auto writePhrase = [&] {
         if (wSingle && toCreate[wUnit]) {
             if (wUnit < 256) {
                 out.write(0, numBits);
@@ -233,14 +233,14 @@ QString compressToBase64(QStringView input)
             wSingle = false;
             continue;
         }
-        emit();
+        writePhrase();
         phrases.insert(key, dictSize++);
         w = unitCode[c];
         wSingle = true;
         wUnit = c;
     }
     if (w >= 0)
-        emit();
+        writePhrase();
     out.write(2, numBits); // the end mark
     QString result = out.finish();
     switch (result.size() % 4) {
