@@ -632,7 +632,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   it when a later `$$` line would close it, so the items between never become formula text when
   the page is read again), callout, embeds/transclusions
   (`![[…]]`, `!((…))`), images, headings, horizontal rule, properties / frontmatter
-  ("Właściwości" panel).
+  ("Właściwości" panel: typed fields, "Page properties" below).
 * Chips inside rendered text: 📅 due (red when overdue), ⏳ scheduled, ⏰ reminders (amber,
   bell for alarms), 🔁 recurrence in Polish words. Clicking a ⏰ chip opens the reminder dialog
   (edit / snooze / delete); a click on another date chip, a 🔁 chip or a priority edits the text
