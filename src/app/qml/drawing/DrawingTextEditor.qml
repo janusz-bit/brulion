@@ -52,16 +52,21 @@ Item {
             return
         const r = root.request
         const text = edit.text + edit.preeditText
-        root.request = null
+        root.release()
         root.canvas.commitText(r, text)
         root.closed()
     }
     function cancel() {
         if (!root.active)
             return
-        root.request = null
+        root.release()
         root.canvas.cancelText()
         root.closed()
+    }
+    /// Closed: the hidden editor keeps no focus (its scope would hand the keys back to it).
+    function release() {
+        root.request = null
+        edit.focus = false
     }
     /// The text on screen above the keyboard.
     function keepInView() {
@@ -83,7 +88,7 @@ Item {
         function onTextEditingChanged() {
             // The canvas ended it (another drawing loaded): nothing to write.
             if (!root.canvas.textEditing && root.active) {
-                root.request = null
+                root.release()
                 root.closed()
             }
         }

@@ -1182,8 +1182,10 @@ app, light and dark; nothing written by looking), `tst_editor_controller`
 its embed, drawn with a finger / the mouse, saved, undone; the embed in the app's other theme;
 the embed of a drawing whose file names another frame (excalidraw.com's margins) keeping its size
 when loaded and while the app's theme switches;
-a version written behind the vault's back merged by the save; one with a frame not written over,
-the strokes kept in a copy), `tests/app/drawing/svg-theme-check.mjs` (a browser — Chrome over CDP —
+a rectangle dragged out (R / the shape button), selected with a tap, deleted from the selection's
+bar and undone, Ctrl+A and Escape, text written with the text tool and its keys given back (the
+desktop run); a version written behind the vault's back merged by the save; one with a frame not
+written over, the strokes kept in a copy), `tests/app/drawing/svg-theme-check.mjs` (a browser — Chrome over CDP —
 shows `tests/data/drawing/auto_theme.svg` dark when it prefers dark, light otherwise, and inside
 an `<img>` in the page's own colour scheme — an app's dark theme on a light system; CI) and
 `tests/app/drawing/wasm-drawing-check.mjs` (the web build: a drawing's embed light and dark;

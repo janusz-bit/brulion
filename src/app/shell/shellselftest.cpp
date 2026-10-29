@@ -2716,6 +2716,92 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     QMetaObject::invokeMethod(canvas, "redo");
     check(waitFor([&] { return strokesInFile() == 1; }, 5000), "the redo is saved");
 
+    // Shapes, the selection and text (drawshapes): a rectangle dragged out, selected and deleted
+    // from the selection's bar, undone; on the desktop with the keys, text written on the paper.
+    const auto tap = [&](QPointF at) {
+        if (touch)
+            touchTap(window, at);
+        else
+            mouseClick(window, at);
+    };
+    const auto button = [&](const QString &name) {
+        return uidriver::topmost(window, [&name](QQuickItem *item) { return item->objectName() == name; });
+    };
+    const QPointF corner = pointIn(canvas, 0.3, 0.6);
+    const QPointF far = pointIn(canvas, 0.6, 0.75);
+    if (touch) {
+        if (QQuickItem *shape = button(u"drawingShape"_s))
+            touchTap(window, pointIn(shape));
+    } else {
+        sendKey(window, Qt::Key_R, Qt::NoModifier, u"r"_s);
+    }
+    check(waitFor([&] { return canvas->property("tool").toString() == u"rectangle"; }), "the rectangle tool");
+    if (touch)
+        touchDrag(window, corner, far - corner);
+    else
+        mouseDrag(window, corner, far);
+    const auto elementTypes = [&] {
+        QStringList types;
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
+        for (const drawing::Stroke &e : d ? d->strokes : QList<drawing::Stroke>())
+            types.append(drawing::elementTypeName(e.type));
+        return types;
+    };
+    check(waitFor([&] { return elementTypes() == QStringList{u"freedraw"_s, u"rectangle"_s}; }, 5000),
+          "a rectangle dragged out is saved as Excalidraw's rectangle");
+    if (touch) {
+        if (QQuickItem *select = button(u"drawingSelect"_s))
+            touchTap(window, pointIn(select));
+    } else {
+        sendKey(window, Qt::Key_V, Qt::NoModifier, u"v"_s);
+    }
+    check(waitFor([&] { return canvas->property("tool").toString() == u"select"; }), "the select tool");
+    tap(pointIn(canvas, 0.45, 0.6)); // on the rectangle's top edge: it alone
+    check(waitFor([&] { return canvas->property("selectionCount").toInt() == 1; }), "a tap selects the rectangle");
+    check(waitFor([&] {
+              QQuickItem *bar = button(u"drawingSelectionBar"_s);
+              return bar && bar->isVisible();
+          }),
+          "the selection's bar is shown");
+    if (QQuickItem *remove = button(u"drawingSelectionDelete"_s))
+        tap(pointIn(remove));
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 1; }), "Usuń on the bar deletes it");
+    QMetaObject::invokeMethod(canvas, "undo");
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 2; }), "and Cofnij brings it back");
+    if (!touch) {
+        sendKey(window, Qt::Key_A, Qt::ControlModifier);
+        check(waitFor([&] { return canvas->property("selectionCount").toInt() == 2; }), "Ctrl+A selects everything");
+        sendKey(window, Qt::Key_Escape);
+        check(waitFor([&] { return canvas->property("selectionCount").toInt() == 0; }), "Escape clears it");
+        sendKey(window, Qt::Key_T, Qt::NoModifier, u"t"_s);
+        mouseClick(window, pointIn(canvas, 0.3, 0.2));
+        QQuickItem *editor = nullptr;
+        check(waitFor([&] {
+                  editor = button(u"drawingTextEditor"_s);
+                  return editor && editor->hasActiveFocus();
+              }),
+              "a click with the text tool opens the text editor");
+        for (const QChar c : u"Ćma"_s)
+            sendKey(window, c == u'Ć' ? Qt::Key_unknown : Qt::Key(c.toUpper().unicode()), Qt::NoModifier, QString(c));
+        sendKey(window, Qt::Key_Escape);
+        const auto texts = [&] {
+            QStringList out;
+            const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
+            for (const drawing::Stroke &e : d ? d->strokes : QList<drawing::Stroke>()) {
+                if (e.type == drawing::ElementType::Text)
+                    out.append(e.text);
+            }
+            return out;
+        };
+        check(waitFor([&] { return texts() == QStringList{u"Ćma"_s}; }, 5000), "text written on the paper is saved");
+        check(editor && !editor->hasActiveFocus(), "the keys go back to the drawing");
+        QMetaObject::invokeMethod(canvas, "undo");
+    }
+    QMetaObject::invokeMethod(canvas, "undo");
+    canvas->setProperty("tool", u"pen"_s);
+    check(waitFor([&] { return strokesInFile() == 1 && canvas->property("strokeCount").toInt() == 1; }, 5000),
+          "back to the stroke alone");
+
     // Another device's version on disk the vault has not reported yet (a missed folder watch,
     // Android's shared storage): the save reads the file first and merges, never writes over it.
     QQuickItem *view = canvas;
