@@ -19,6 +19,11 @@ Item {
 
     readonly property bool shown: canvas.visible && canvas.selectionCount > 0 && !canvas.busy && !canvas.textEditing
 
+    /// A stored colour as the paper shows it now (re-evaluated when the paper turns dark).
+    function displayed(color) {
+        return root.canvas.dark ? root.canvas.displayColor(color) : color
+    }
+
     visible: shown
 
     component Separator: Rectangle {
@@ -71,7 +76,7 @@ Item {
                     required property var modelData
                     objectName: "drawingSelectionColor" + modelData.color.slice(1)
                     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                    color: root.canvas.displayColor(modelData.color)
+                    color: root.displayed(modelData.color)
                     label: modelData.label
                     size: 22
                     focusPolicy: Qt.NoFocus
@@ -83,7 +88,7 @@ Item {
                 objectName: "drawingSelectionColour"
                 visible: Theme.compact
                 anchors.verticalCenter: parent.verticalCenter
-                color: root.canvas.displayColor(root.canvas.color)
+                color: root.displayed(root.canvas.color)
                 label: qsTr("Colour")
                 size: 26
                 focusPolicy: Qt.NoFocus
@@ -164,7 +169,7 @@ Item {
                 model: root.colors
                 delegate: BColorSwatch {
                     required property var modelData
-                    color: root.canvas.displayColor(modelData.color)
+                    color: root.displayed(modelData.color)
                     label: modelData.label
                     focusPolicy: Qt.NoFocus
                     onClicked: {

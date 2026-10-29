@@ -149,8 +149,8 @@ FocusScope {
 
     /// Another program's version of the open, editable file: taken in — merged with what was
     /// drawn here (DrawingCanvas.takeExternal) — or, when it is no drawing Brulion can edit any
-    /// more (shapes or text added in excalidraw.com), shown as it is, with what was drawn here
-    /// and not yet saved kept in a copy beside it. True when the paper still edits the file.
+    /// more (a frame or an embedded page added in excalidraw.com), shown as it is, with what was
+    /// drawn here and not yet saved kept in a copy beside it. True when the paper still edits it.
     function takeIn(bytes) {
         const merged = canvas.modified
         if (canvas.takeExternal(bytes)) {
@@ -548,7 +548,7 @@ FocusScope {
                         fillMode: Image.PreserveAspectFit
                         // (Logical pixels: Qt renders SVG and image providers at the screen's ratio.)
                         sourceSize: Qt.size(Math.ceil(width), 0)
-                        // A drawing as the app's theme shows it (an Excalidraw drawing with shapes
+                        // A drawing as the app's theme shows it (an Excalidraw drawing with frames
                         // turned dark like Excalidraw does); any other picture as it is.
                         source: !notice.visible || root.status === "missing" || root.loadedPath === "" ? ""
                                 : root.status !== "notDrawing" && Workspace.isDrawing(root.loadedPath)

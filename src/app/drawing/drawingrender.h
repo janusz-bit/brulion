@@ -107,7 +107,7 @@ void paintPaper(QPainter &painter, const drawing::Drawing &drawing, bool dark, c
 QImage renderDrawing(const drawing::Drawing &drawing, QSize pixels, bool dark, const QRectF &frame = QRectF());
 /// Excalidraw's dark filter (drawing::darkRgba: invert 93 %, hue-rotate 180°) on every pixel, the
 /// alpha kept: how the dark theme shows a picture Brulion does not draw itself (an Excalidraw
-/// drawing with shapes) when drawing::darkSvg cannot map its colours one by one.
+/// drawing with frames) when drawing::darkSvg cannot map its colours one by one.
 QImage darkImage(const QImage &light);
 
 } // namespace brulion::drawingview

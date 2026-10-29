@@ -106,8 +106,9 @@ folderach się pojawiają albo znikają (np. z synchronizacji na nowym urządzen
   tekst lub stronę; pliki `.canvas` nie są stronami.
 * **Rysunki** Brulionu (`/Rysunek`) to pliki SVG z wbudowaną sceną Excalidraw: Obsidian pokazuje
   je jako obrazy, a excalidraw.com otwiera do edycji. Rysunek z Excalidraw zapisany jako SVG
-  z opcją *Embed scene* („Osadź scenę”) Brulion otwiera w edytorze rysunków — pismo odręczne
-  zmienia, a rysunek z kształtami, strzałkami albo tekstem tylko pokazuje. Pliki
+  z opcją *Embed scene* („Osadź scenę”) Brulion otwiera w edytorze rysunków — pismo odręczne,
+  kształty, strzałki, tekst i obrazy zmienia, a rysunek z ramkami albo osadzonymi stronami
+  internetowymi tylko pokazuje. Pliki
   `*.excalidraw.md` wtyczki Excalidraw dla Obsidiana zostają tekstem (docs/SYNTAX.md §2
   „Drawings”).
 * **Ulubione** (zakładki Obsidiana z `.obsidian/bookmarks.json` nie są czytane) i **zwinięcia
