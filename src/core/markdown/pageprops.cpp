@@ -336,15 +336,18 @@ std::optional<Intended> intendedValue(const QVariant &value, PropertyType type, 
             out.scalar = formatDateText(*d);
             return out;
         }
-        const auto before = isEmptyVariant(old) ? std::nullopt : parseDateText(old.toString().trimmed());
+        // A plain DateText (no time when there was no old date) rather than a std::optional read
+        // twice: GCC 12/13 at -O3 reports a false -Wmaybe-uninitialized on the optional's payload.
+        const DateText before =
+                isEmptyVariant(old) ? DateText{} : parseDateText(old.toString().trimmed()).value_or(DateText{});
         const bool typedSeconds = d->hasTime && d->seconds;
         if (!d->hasTime) {
             d->hasTime = true;
             d->time = QTime(0, 0);
         }
         // New values: Obsidian's form (`T`); an existing datetime keeps its separator and seconds.
-        d->separator = before && before->hasTime ? before->separator : QChar(u'T');
-        d->seconds = typedSeconds || (before && before->hasTime && before->seconds);
+        d->separator = before.hasTime ? before.separator : QChar(u'T');
+        d->seconds = typedSeconds || (before.hasTime && before.seconds);
         out.scalar = formatDateText(*d);
         return out;
     }

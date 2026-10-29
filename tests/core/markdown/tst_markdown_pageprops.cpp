@@ -24,7 +24,7 @@ PropertySource sourceOf(const QString &name)
 QString describe(const PageProperties &p)
 {
     QStringList parts;
-    const auto block = [](const QString &name, const PagePropertyBlock &b) {
+    const auto block = [](const QString &name, const PagePropertyBlock &b) -> QString {
         QString s = name + u'[' + QString::number(b.firstLine) + u'-' + QString::number(b.lastLine);
         if (!b.problem.isEmpty())
             s += u',' + b.problem;

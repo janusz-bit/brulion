@@ -1246,7 +1246,7 @@ bool isYamlMapping(QStringView yaml)
     if (!parseYaml(yaml).isEmpty())
         return true;
     for (const text::Line &l : text::splitLines(yaml)) {
-        const QStringView t = l.text.trimmed();
+        const QStringView t = QStringView(l.text).trimmed();
         if (!t.isEmpty() && !t.startsWith(u'#'))
             return false;
     }
