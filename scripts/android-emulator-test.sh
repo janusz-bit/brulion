@@ -1653,9 +1653,9 @@ print(last)' "$OUT/report.jsonl" "$1"
         awk -v s="$s" 'BEGIN { split(s, a, " "); exit !(a[3] == 0 && a[4] == 1) }'
       echo "    the old formula (innerHeight - height - offsetTop) gives $legacy px"
       # Typing reaches the edited block (the word committed by the space after it), the keyboard's
-      # Enter key (not a search key: Qt's field is a search field on touch screens,
-      # enterkeyhint=enter) splits the block at the caret: the block edited next has the text
-      # after the caret, without the word.
+      # action key is Enter, not Search (Qt's field stays a plain text field, wasm/index.html;
+      # docs/WEB.md "Klawiatura ekranowa"), and it splits the block at the caret: the block
+      # edited next has the text after the caret, without the word.
       local key
       type_on_keyboard " hello " || true
       check "$run: a word typed on the keyboard reaches the block" wait_for 15 wk_focus_has "$run" hello
