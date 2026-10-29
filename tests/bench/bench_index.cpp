@@ -14,6 +14,7 @@
 #include "vault/vault.h"
 
 #include <QRegularExpression>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -165,7 +166,7 @@ class BenchIndex : public QObject {
 private Q_SLOTS:
     void initTestCase()
     {
-        // In-line sizes of the parsed model (every Block carries an optional<Task> in place).
+        // In-line sizes of the parsed model.
         qInfo("[bench] sizeof: ParsedNote %zu, Block %zu, Task %zu, Reminder %zu, Link %zu, DateSpec %zu, QString %zu",
               sizeof(ParsedNote), sizeof(Block), sizeof(Task), sizeof(Reminder), sizeof(Link), sizeof(DateSpec),
               sizeof(QString));
@@ -251,6 +252,28 @@ private Q_SLOTS:
             qInfo("[bench] %d notes: %lld blocks, %lld bytes of ParsedNote heap (%lld per note, %lld per block)", notes,
                   qlonglong(blocks), qlonglong(bytes), qlonglong(bytes / notes),
                   qlonglong(bytes / qMax<qsizetype>(1, blocks)));
+            // What the model holds (docs/PERFORMANCE.md "Wave 5", L8): the same on every tree.
+            qsizetype tasks = 0, withProperties = 0, withId = 0, links = 0, refs = 0, rawChars = 0, textChars = 0;
+            QSet<QString> tags;
+            for (const ParsedNote &n : std::as_const(parsed)) {
+                for (const Block &b : n.blocks) {
+                    tasks += b.task ? 1 : 0;
+                    withProperties += b.properties.isEmpty() ? 0 : 1;
+                    withId += b.id.isEmpty() ? 0 : 1;
+                    rawChars += QStringView(b.raw).size();
+                    textChars += b.text.size();
+                }
+                for (const Link &l : n.links) {
+                    ++links;
+                    refs += l.kind == LinkKind::BlockRef || l.kind == LinkKind::BlockEmbed ? 1 : 0;
+                }
+                for (const QString &t : n.tags)
+                    tags.insert(t);
+            }
+            qInfo("[bench] %d notes model: %lld blocks, %lld tasks, %lld with properties, %lld with an id, %lld links "
+                  "(%lld block refs), %lld distinct tags, %lld raw + %lld text characters",
+                  notes, qlonglong(blocks), qlonglong(tasks), qlonglong(withProperties), qlonglong(withId),
+                  qlonglong(links), qlonglong(refs), qlonglong(tags.size()), qlonglong(rawChars), qlonglong(textChars));
             QTest::setBenchmarkResult(qreal(bytes), QTest::BytesAllocated);
             return;
         }
