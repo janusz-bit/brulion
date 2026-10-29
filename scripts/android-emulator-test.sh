@@ -1486,11 +1486,35 @@ HTML
     s=$(wk_state "$1")
     [[ -n $s ]] && awk '{ exit !($5 == 0 && $6 == 1 && $7 == 1 && $12 > $2 && $2 > 0) }' <<<"$s"
   }
-  wk_turn() { # <0 portrait | 1 landscape>; adb's connection may drop while the screen turns
-    adb shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || true
-    adb shell settings put system user_rotation "$1" >/dev/null 2>&1 || true
-    sleep 2
-    timeout 60 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device >/dev/null 2>&1 || true
+  # adb's connection to the emulator back (it drops now and then, also while the screen turns).
+  wk_adb_ready() {
+    local _
+    for _ in $(seq 1 30); do
+      "$SDK/platform-tools/adb" -s "$SERIAL" shell true >/dev/null 2>&1 && return 0
+      sleep 2
+      timeout 30 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device >/dev/null 2>&1 || true
+    done
+    return 1
+  }
+  wk_turn() { # <0 portrait | 1 landscape>: the screen's rotation set (and read back)
+    local _ now=""
+    for _ in 1 2 3 4 5; do
+      wk_adb_ready || true
+      adb shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || true
+      adb shell settings put system user_rotation "$1" >/dev/null 2>&1 || true
+      sleep 3
+      wk_adb_ready || true
+      now=$(adb shell settings get system user_rotation 2>/dev/null | tr -d '\r' || true)
+      [[ $now == "$1" ]] && return 0
+    done
+    echo "    the screen did not turn to rotation $1 (user_rotation ${now:-?})"
+    return 1
+  }
+  # The run's page upright (the last report: narrower than high).
+  wk_upright() {
+    local s
+    s=$(wk_state "$1")
+    [[ -n $s ]] && awk '{ exit !($12 > 0 && $12 < $2) }' <<<"$s"
   }
   # First-run screens, prompts and tips of the browsers: tapped away by their buttons' names
   # (Firefox's "Set as default browser" opens the system's dialog: Cancel).
@@ -1616,7 +1640,7 @@ print(last)' "$OUT/report.jsonl" "$1"
     query="selftest=keyboard&report=/__report/$run"
     [[ $mode == visual ]] && query+="&keyboard=visual"
     info "$b, interactive-widget=resizes-$mode"
-    wk_turn 0
+    wk_turn 0 || true
     local opened=0
     wk_open "$b" "$run" "$query" || opened=1
     check "$run: the app starts and reports the keyboard" test "$opened" -eq 0
@@ -1625,6 +1649,11 @@ print(last)' "$OUT/report.jsonl" "$1"
       ui_dump
       cp "$OUT/ui.xml" "$OUT/wk-$run-0-failed.xml" 2>/dev/null || true
       return
+    fi
+    if ! wk_upright "$run"; then
+      echo "    the page is not upright: the screen turned back"
+      wk_turn 0 || true
+      wait_for 30 wk_upright "$run" || true
     fi
     sleep 8 # the journal's first frames
     # A browser's prompt over the page (Firefox asks for a survey now and then): tapped away.
@@ -1685,20 +1714,23 @@ print(last)' "$OUT/report.jsonl" "$1"
       # The phone turned with the keyboard up, and back: a width never seen whose first heights
       # have the keyboard in them (docs/WEB.md "Klawiatura ekranowa"). Where the keyboard stays
       # up, the app counts it as up and the toolbar ends at the window's bottom.
-      wk_turn 1
+      wk_turn 1 || true
       check "$run: turned with the keyboard up: the app settles in landscape" wait_for 30 wk_landscape_settled "$run"
       sleep 3
       s=$(wk_state "$run")
       app_shot "wk-$run-2-landscape"
       check "$run: landscape: the toolbar at the window's bottom" \
         awk -v s="$s" 'BEGIN { split(s, a, " "); d = a[8] - a[2]; exit !(a[8] >= 0 && d <= 1 && d >= -1) }'
-      if ime_shown; then
+      # The keyboard up by the input method's state or its visible window (either one may lag).
+      if ime_shown || [[ -n $(ime_top 2>/dev/null || true) ]]; then
         echo "    landscape, the keyboard up: $s"
         check "$run: landscape: the keyboard counted as up" awk -v s="$s" 'BEGIN { split(s, a, " "); exit !(a[4] == 1) }'
       else
         echo "    landscape: $b hid the keyboard on the turn, the block still edited (report: $s)"
       fi
-      wk_turn 0
+      wk_turn 0 || true
+      check "$run: turned back upright" wait_for 30 wk_upright "$run"
+      sleep 2
       if ime_shown; then
         check "$run: turned back: the keyboard counted as up again" wait_for 30 wk_keyboard_settled "$run"
       else
