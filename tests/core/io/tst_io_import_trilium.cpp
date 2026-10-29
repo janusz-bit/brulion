@@ -1,7 +1,12 @@
 // Trilium importer: real exports (fixtures/trilium, made by Trilium servers 0.106, 0.99 and 0.63 —
 // see the README there), synthetic exports built in the test (hostile and damaged ones included)
-// and the content conversion (CKEditor HTML, Turndown Markdown) on its own.
+// and the content conversion (CKEditor HTML, Turndown Markdown) on its own; canvas notes as one
+// drawing (an SVG with the Excalidraw scene, core drawing).
 #include "iotest.h"
+
+#include "drawing/drawing.h"
+#include "drawing/excalidraw.h"
+#include "drawing/svgwrite.h"
 
 #include "io/importer.h"
 #include "io/trilium_p.h"
@@ -195,6 +200,100 @@ QJsonObject attachment(const QString &id, const QString &title, const QString &m
                        {u"dataFileName"_s, file}};
 }
 
+/// JSON written with single quotes (readable in C++ strings): every ' becomes ".
+QByteArray json(const QByteArray &text)
+{
+    return QByteArray(text).replace('\'', '"');
+}
+
+/// A file of a synthetic export with its attachment's meta.
+struct ExportFile {
+    QJsonObject meta;
+    QString name;
+    QByteArray data;
+};
+
+/// A synthetic export of the canvas note `title` (id "c1", content `scene`) with its attachments,
+/// and other notes after it.
+QList<FileEntry> canvasExport(const QByteArray &scene, const QList<ExportFile> &files, const std::vector<Meta> &others = {},
+                              const QString &title = u"Szkic ćwiczeń"_s)
+{
+    Meta canvas{u"c1"_s, title, title + u".json"_s, {}, {}, {}, u"canvas"_s, u"application/json"_s};
+    QList<FileEntry> entries;
+    for (const ExportFile &f : files) {
+        canvas.attachments.append(f.meta);
+        entries.append({f.name, f.data});
+    }
+    std::vector<Meta> top{canvas};
+    top.insert(top.end(), others.begin(), others.end());
+    entries.prepend({u"!!!meta.json"_s, metaJson(top)});
+    entries.append({canvas.data, scene});
+    return entries;
+}
+
+/// Trilium's picture of the canvas `title`: the attachment "canvas-export.svg" (or ".png").
+ExportFile canvasPicture(const QByteArray &bytes, const QString &title = u"Szkic ćwiczeń"_s,
+                         const QString &extension = u"svg"_s)
+{
+    const QString file = title + u"_canvas-export."_s + extension;
+    return {attachment(u"x1"_s, u"canvas-export."_s + extension,
+                       extension == u"svg" ? u"image/svg+xml"_s : u"image/png"_s, file),
+            file, bytes};
+}
+
+/// An image attachment `title` of the canvas "Szkic ćwiczeń".
+ExportFile canvasAttachment(const QString &id, const QString &title, const QString &mime, const QByteArray &bytes)
+{
+    const QString file = u"Szkic ćwiczeń_"_s + title + (title.contains(u'.') ? QString() : u".png"_s);
+    return {attachment(id, title, mime, file), file, bytes};
+}
+
+/// The scene embedded in a drawing's SVG, as JSON.
+QJsonObject embeddedScene(const QByteArray &svg)
+{
+    const std::optional<QByteArray> json = drawing::svgPayload(svg);
+    return json ? QJsonDocument::fromJson(*json).object() : QJsonObject();
+}
+
+/// The ids of a drawing's elements: those Brulion draws, then the foreign ones.
+QStringList elementIds(const drawing::Drawing &d)
+{
+    QStringList ids;
+    for (const drawing::Stroke &s : d.strokes)
+        ids.append(s.id);
+    for (const QJsonValue &v : d.foreign)
+        ids.append(v.toObject().value(u"id"_s).toString());
+    return ids;
+}
+
+/// A canvas of two freehand lines as Trilium stores it (one with the pen's pressures and a note
+/// of its own in customData), and Trilium's picture of it (TriliumNext: its own class and the
+/// dark filter for browsers, Excalidraw's font).
+const QByteArray CanvasStrokes = json(
+        "{'type':'excalidraw','version':2,'source':'https://triliumnotes.org','elements':["
+        "{'id':'k1','type':'freedraw','x':10,'y':20,'width':40,'height':10,'angle':0,'strokeColor':'#1e1e1e',"
+        "'backgroundColor':'transparent','fillStyle':'solid','strokeWidth':2,'strokeStyle':'solid','roughness':1,"
+        "'opacity':100,'groupIds':[],'frameId':null,'roundness':null,'seed':1,'version':3,'versionNonce':5,"
+        "'isDeleted':false,'boundElements':null,'updated':1761568000000,'link':null,'locked':false,"
+        "'points':[[0,0],[20,5],[40,10]],'pressures':[0.3,0.5,0.7],'simulatePressure':false,"
+        "'lastCommittedPoint':null,'customData':{'notatka':'źdźbło żyta'}},"
+        "{'id':'k2','type':'freedraw','x':60,'y':20,'width':0,'height':30,'angle':0,'strokeColor':'#e03131',"
+        "'backgroundColor':'transparent','fillStyle':'solid','strokeWidth':1,'strokeStyle':'solid','roughness':1,"
+        "'opacity':100,'groupIds':[],'roundness':null,'seed':2,'version':2,'versionNonce':6,'isDeleted':false,"
+        "'boundElements':null,'updated':1761568000000,'link':null,'locked':false,'points':[[0,0],[0,15],[0,30]],"
+        "'pressures':[],'simulatePressure':true}],'files':{},"
+        "'appState':{'scrollX':0,'scrollY':0,'zoom':{'value':1},'gridModeEnabled':false,"
+        "'viewBackgroundColor':'transparent'}}");
+const QByteArray CanvasPictureRoot = "<svg version='1.1' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 120' "
+                                     "width='240' height='120' class='trilium-drawing-picture'>";
+const QByteArray CanvasPicture =
+        CanvasPictureRoot
+        + "<!-- svg-source:excalidraw --><style>@media (prefers-color-scheme: dark){svg.trilium-drawing-picture"
+          "{filter:invert(93%) hue-rotate(180deg)}}</style><defs><style class='style-fonts'>@font-face{"
+          "font-family:Excalifont;src:url(data:font/woff2;base64,d09GMgABAAAAAA)}</style></defs>"
+          "<rect x='0' y='0' width='240' height='120' fill='#ffffff'/><path d='M10 20 L50 30' "
+          "stroke='#1e1e1e'/><path d='M60 20 L60 50' stroke='#e03131'/></svg>";
+
 /// The conversion of one text note with references resolved by name: `X.html` -> [[X]].
 trilium::Resolver testResolver()
 {
@@ -295,7 +394,6 @@ private Q_SLOTS:
                          u"assets/Trilium/Projekty/Diagram przepływu.svg"_s,
                          u"assets/Trilium/Projekty/Ogród plan budżet/lista zakupów.txt"_s,
                          u"assets/Trilium/Projekty/Ogród plan budżet/zdjęcie grządki.png"_s,
-                         u"assets/Trilium/Projekty/Szkic grządek.excalidraw"_s,
                          u"assets/Trilium/Projekty/Szkic grządek.svg"_s,
                          u"assets/Trilium/Projekty/kropka.png"_s,
                          u"assets/Trilium/Projekty/umowa.pdf"_s,
@@ -313,8 +411,21 @@ private Q_SLOTS:
                  iotest::entryData(zip, u"root/Projekty/kropka.png"_s));
         QCOMPARE(iotest::fileAt(r, u"assets/Trilium/Projekty/Ogród plan budżet/zdjęcie grządki.png"_s)->data,
                  iotest::entryData(zip, u"root/Projekty/Ogród planbudżet_zdjęcie grządki.png"_s));
-        QCOMPARE(iotest::fileAt(r, u"assets/Trilium/Projekty/Szkic grządek.excalidraw"_s)->data,
-                 iotest::entryData(zip, u"root/Projekty/Szkic grządek.json"_s));
+        // The canvas: one drawing — Trilium's picture with the scene inside.
+        const QByteArray canvas = iotest::fileAt(r, u"assets/Trilium/Projekty/Szkic grządek.svg"_s)->data;
+        const QByteArray picture = iotest::entryData(zip, u"root/Projekty/Szkic grządek_canvas-export.svg"_s);
+        QVERIFY(canvas.startsWith(picture.first(picture.indexOf('>') + 1)));
+        QVERIFY(canvas.contains("<rect x=\"5\" y=\"5\" width=\"90\""));
+        QVERIFY(canvas.endsWith(picture.sliced(picture.indexOf('>') + 1)));
+        QVERIFY(drawing::looksLikeExcalidrawSvg(canvas.first(std::min(canvas.size(), drawing::HeadBytes))));
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(canvas);
+        QVERIFY(d);
+        QVERIFY(drawing::editable(*d));
+        QCOMPARE(d->strokes.size(), 2);
+        QCOMPARE(d->strokes.at(0).id, u"r1"_s);
+        QCOMPARE(d->strokes.at(0).type, drawing::ElementType::Rectangle);
+        QCOMPARE(d->strokes.at(1).id, u"t1"_s);
+        QCOMPARE(d->strokes.at(1).text, u"Grządka"_s);
         // Daily notes are appended to existing ones.
         QVERIFY(iotest::fileAt(r, u"journals/2026-10-16.md"_s)->append);
     }
@@ -372,9 +483,7 @@ private Q_SLOTS:
                 u"**pogrubienie**.\n\n- [ ] zadanie w Markdown\n- [x] zrobione\n"_s);
             row("mermaid", u"Trilium/Projekty/Diagram przepływu.md"_s,
                 u"![[assets/Trilium/Projekty/Diagram przepływu.svg]]\n\n```mermaid\ngraph LR\n    A[Siew] --> B[Zbiór]\n```\n"_s);
-            row("canvas", u"Trilium/Projekty/Szkic grządek.md"_s,
-                u"![[assets/Trilium/Projekty/Szkic grządek.svg]]\n\n"
-                u"[[assets/Trilium/Projekty/Szkic grządek.excalidraw|Szkic grządek.excalidraw]]\n"_s);
+            row("canvas", u"Trilium/Projekty/Szkic grządek.md"_s, u"![[assets/Trilium/Projekty/Szkic grządek.svg]]\n"_s);
             row("mind map", u"Trilium/Inne typy/Mapa myśli.md"_s,
                 u"- Ogród\n\t- Warzywa\n\t- Kwiaty\n\n[[assets/Trilium/Inne typy/Mapa myśli.json|Mapa myśli.json]]\n"_s);
             row("relation map", u"Trilium/Inne typy/Mapa relacji.md"_s,
@@ -636,6 +745,41 @@ private Q_SLOTS:
             const QString text = iotest::textAt(importFixture(f), u"Trilium/Projekty/Ogród plan budżet.md"_s);
             QCOMPARE(text.count(u"zdjęcie grządki.png"_s), 1);
             QCOMPARE(text.count(u"lista zakupów.txt|"_s), 1);
+        }
+    }
+
+    void canvasOfOlderVersions_data()
+    {
+        QTest::addColumn<QString>("fixture");
+        QTest::addColumn<bool>("picture"); // Trilium's picture of the canvas is in the export
+        // 0.99: the attachment's file name cut to 30 characters, its title intact.
+        QTest::newRow("0.99 html") << u"0.99-subtree-projekty-html.zip"_s << true;
+        QTest::newRow("0.99 markdown") << u"0.99-subtree-projekty-markdown.zip"_s << true;
+        // 0.63: no attachments, an empty scene — Brulion draws its own (empty) picture.
+        QTest::newRow("0.63 html") << u"0.63-html.zip"_s << false;
+        QTest::newRow("0.63 markdown") << u"0.63-markdown.zip"_s << false;
+    }
+
+    void canvasOfOlderVersions()
+    {
+        QFETCH(QString, fixture);
+        QFETCH(bool, picture);
+        const ImportResult r = importFixture(fixture);
+        QCOMPARE(iotest::textAt(r, u"Trilium/Projekty/Szkic grządek.md"_s),
+                 u"![[assets/Trilium/Projekty/Szkic grządek.svg]]\n"_s);
+        QVERIFY(!iotest::fileAt(r, u"assets/Trilium/Projekty/Szkic grządek.excalidraw"_s));
+        const QByteArray svg = iotest::fileAt(r, u"assets/Trilium/Projekty/Szkic grządek.svg"_s)->data;
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(svg);
+        QVERIFY(d);
+        QVERIFY(drawing::editable(*d));
+        if (picture) {
+            const QByteArray root = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"60\" ";
+            QVERIFY(svg.startsWith(root));
+            QCOMPARE(elementIds(*d), QStringList({u"r1"_s, u"t1"_s}));
+        } else {
+            QVERIFY(elementIds(*d).isEmpty());
+            QCOMPARE(svg, drawing::toSvg(*d));
+            QVERIFY(svg.contains("width=\"320\" height=\"180\""));
         }
     }
 
@@ -1089,12 +1233,336 @@ private Q_SLOTS:
         QCOMPARE(
                 iotest::textAt(r, u"Trilium/Mapa.md"_s),
                 u"- Ogród\n\t- Warzywa\n\n[[assets/Trilium/Mapa.svg|Mapa.svg]]\n\n[[assets/Trilium/Mapa.json|Mapa.json]]\n"_s);
-        // Excalidraw's SVGs render (their <style> holds only fonts).
-        QCOMPARE(iotest::textAt(r, u"Trilium/Szkic.md"_s),
-                 u"![[assets/Trilium/Szkic.svg]]\n\n[[assets/Trilium/Szkic.excalidraw|Szkic.excalidraw]]\n"_s);
+        // Excalidraw's SVGs render (their <style> holds only fonts): one drawing (without a size
+        // of its own, the picture still is one).
+        QCOMPARE(iotest::textAt(r, u"Trilium/Szkic.md"_s), u"![[assets/Trilium/Szkic.svg]]\n"_s);
+        QVERIFY(iotest::fileAt(r, u"assets/Trilium/Szkic.svg"_s)->data.startsWith(canvasSvg.first(canvasSvg.indexOf('>') + 1)));
+        QVERIFY(!iotest::fileAt(r, u"assets/Trilium/Szkic.excalidraw"_s));
         // An include-note box and an image of the diagram show its page (with the source).
         QCOMPARE(iotest::textAt(r, u"Trilium/Opis.md"_s), u"![[Trilium/Flow]]\n\n![[Trilium/Flow]]\n"_s);
         QCOMPARE(iotest::fileAt(r, u"assets/Trilium/Flow.svg"_s)->data, mermaidSvg);
+    }
+
+    void canvasBecomesOneDrawing_data()
+    {
+        // The canvas note "Szkic ćwiczeń": its content, Trilium's picture of it (an attachment
+        // "canvas-export.<ext>"; no extension: none), the page and the files the import gives; the
+        // drawing (oneDrawing: else the note is imported as before — Trilium's picture and the
+        // content as `.excalidraw`): its first bytes (empty: Brulion's own picture, toSvg),
+        // whether Brulion edits it and the ids of its elements.
+        QTest::addColumn<QByteArray>("scene");
+        QTest::addColumn<QString>("extension");
+        QTest::addColumn<QByteArray>("picture");
+        QTest::addColumn<QString>("page");
+        QTest::addColumn<QStringList>("stored");
+        QTest::addColumn<bool>("oneDrawing");
+        QTest::addColumn<QByteArray>("start");
+        QTest::addColumn<bool>("editable");
+        QTest::addColumn<QStringList>("ids");
+        const QString md = u"Trilium/Szkic ćwiczeń.md"_s;
+        const QString svg = u"assets/Trilium/Szkic ćwiczeń.svg"_s;
+        const QString source = u"assets/Trilium/Szkic ćwiczeń.excalidraw"_s;
+        const QString embedded = u"![[assets/Trilium/Szkic ćwiczeń.svg]]\n"_s;
+        const QString linked = u"[[assets/Trilium/Szkic ćwiczeń.svg|Szkic ćwiczeń.svg]]\n"_s;
+        const QString before = u"![[assets/Trilium/Szkic ćwiczeń.svg]]\n\n"
+                               u"[[assets/Trilium/Szkic ćwiczeń.excalidraw|Szkic ćwiczeń.excalidraw]]\n"_s;
+        const QStringList strokeIds = {u"k1"_s, u"k2"_s};
+        const QByteArray png = "\x89PNG\r\n\x1a\nGrządka";
+        // A web page embedded in the canvas: Brulion shows the drawing, never edits it.
+        QByteArray webPage = CanvasStrokes;
+        webPage.replace(json("'elements':["), json("'elements':[{'id':'w1','type':'embeddable','x':0,'y':80,"
+                                                   "'width':120,'height':60,'link':'https://example.org/żółw'},"));
+        QByteArray htmlPicture = CanvasPicture;
+        htmlPicture.replace("</svg>", "<foreignObject width='120' height='60'><div "
+                                      "xmlns='http://www.w3.org/1999/xhtml'>example.org</div></foreignObject></svg>");
+        // zadam/trilium before 0.61: no "type", the picture in the content.
+        const QByteArray legacyRoot = "<svg xmlns='http://www.w3.org/2000/svg' width='50' height='40'>";
+        const qsizetype k1 = CanvasStrokes.indexOf(json("{'id':'k1'"));
+        const qsizetype k2 = CanvasStrokes.indexOf(json(",{'id':'k2'"));
+        const QByteArray legacy = json("{'_meta':'This note has type `canvas`. It uses excalidraw and stores an "
+                                       "exported svg alongside.','elements':[")
+                                  + CanvasStrokes.sliced(k1, k2 - k1)
+                                  + json("],'appState':{'viewBackgroundColor':'#ffffff'},'files':{},'svg':'")
+                                  + legacyRoot + "<path d='M10 20 L50 30'/></svg>\"}";
+        const QByteArray emptyScene = json("{'type':'excalidraw','version':2,'elements':[],'files':{},'appState':{}}");
+
+        QTest::newRow("strokes and Trilium's picture")
+                << CanvasStrokes << u"svg"_s << CanvasPicture << embedded << QStringList{md, svg} << true
+                << CanvasPictureRoot << true << strokeIds;
+        QTest::newRow("no picture") << CanvasStrokes << QString() << QByteArray() << embedded
+                                    << QStringList{md, svg} << true << QByteArray() << true << strokeIds;
+        QTest::newRow("old Trilium content") << legacy << QString() << QByteArray() << embedded
+                                             << QStringList{md, svg} << true << legacyRoot << true
+                                             << QStringList{u"k1"_s};
+        QTest::newRow("old Trilium content and a picture")
+                << legacy << u"svg"_s << CanvasPicture << embedded << QStringList{md, svg} << true
+                << CanvasPictureRoot << true << QStringList{u"k1"_s};
+        // New Trilium's picture of an empty canvas.
+        QTest::newRow("empty picture") << emptyScene << u"svg"_s
+                                       << QByteArray("<svg xmlns='http://www.w3.org/2000/svg' width='0' height='0'></svg>")
+                                       << embedded << QStringList{md, svg} << true << QByteArray() << true
+                                       << QStringList();
+        // A PNG was only the picture: not imported.
+        QTest::newRow("PNG picture") << CanvasStrokes << u"png"_s << png << embedded << QStringList{md, svg}
+                                     << true << QByteArray() << true << strokeIds;
+        QTest::newRow("picture that is no SVG")
+                << CanvasStrokes << u"svg"_s << QByteArray("<html><body>Grządka</body></html>") << embedded
+                << QStringList{md, svg} << true << QByteArray() << true << strokeIds;
+        QTest::newRow("web page and Trilium's picture")
+                << webPage << u"svg"_s << CanvasPicture << embedded << QStringList{md, svg} << true
+                << CanvasPictureRoot << false << QStringList{u"k1"_s, u"k2"_s, u"w1"_s};
+        // HTML in Trilium's picture: Qt's SVG renderer cannot show it — linked; Brulion draws an
+        // editable drawing itself — embedded.
+        QTest::newRow("web page and HTML in the picture")
+                << webPage << u"svg"_s << htmlPicture << linked << QStringList{md, svg} << true << CanvasPictureRoot
+                << false << QStringList{u"k1"_s, u"k2"_s, u"w1"_s};
+        QTest::newRow("strokes and HTML in the picture")
+                << CanvasStrokes << u"svg"_s << htmlPicture << embedded << QStringList{md, svg} << true
+                << CanvasPictureRoot << true << strokeIds;
+        // Without a picture of Trilium's, Brulion's own would miss the web page: as before.
+        QTest::newRow("web page without a picture")
+                << webPage << QString() << QByteArray()
+                << u"[[assets/Trilium/Szkic ćwiczeń.excalidraw|Szkic ćwiczeń.excalidraw]]\n"_s
+                << QStringList{md, source} << false << QByteArray() << false << QStringList();
+        QTest::newRow("web page and a PNG picture")
+                << webPage << u"png"_s << png
+                << u"![[assets/Trilium/Szkic ćwiczeń.png]]\n\n"
+                   u"[[assets/Trilium/Szkic ćwiczeń.excalidraw|Szkic ćwiczeń.excalidraw]]\n"_s
+                << QStringList{md, u"assets/Trilium/Szkic ćwiczeń.png"_s, source} << false << QByteArray() << false
+                << QStringList();
+        // Content that is no scene: as before, nothing lost.
+        QTest::newRow("damaged content") << json("{'elements': 5}") << u"svg"_s << CanvasPicture << before
+                                         << QStringList{md, svg, source} << false << QByteArray() << false
+                                         << QStringList();
+        QTest::newRow("not JSON") << QByteArray("zepsute { ąę") << u"svg"_s << CanvasPicture << before
+                                  << QStringList{md, svg, source} << false << QByteArray() << false << QStringList();
+        QTest::newRow("JSON array") << QByteArray("[1, 2]") << u"svg"_s << CanvasPicture << before
+                                    << QStringList{md, svg, source} << false << QByteArray() << false << QStringList();
+        QTest::newRow("another kind of scene")
+                << json("{'type':'mermaid','elements':[]}") << u"svg"_s << CanvasPicture << before
+                << QStringList{md, svg, source} << false << QByteArray() << false << QStringList();
+    }
+
+    void canvasBecomesOneDrawing()
+    {
+        QFETCH(QByteArray, scene);
+        QFETCH(QString, extension);
+        QFETCH(QByteArray, picture);
+        QFETCH(QString, page);
+        QFETCH(QStringList, stored);
+        QFETCH(bool, oneDrawing);
+        QFETCH(QByteArray, start);
+        QFETCH(bool, editable);
+        QFETCH(QStringList, ids);
+        QList<ExportFile> files;
+        if (!extension.isEmpty())
+            files.append(canvasPicture(picture, u"Szkic ćwiczeń"_s, extension));
+        const ImportResult r = importZip(canvasExport(scene, files));
+        dump(QString::fromLatin1(QTest::currentDataTag()), r);
+        QCOMPARE(iotest::pathsOf(r), sorted(stored));
+        QCOMPARE(iotest::textAt(r, u"Trilium/Szkic ćwiczeń.md"_s), page);
+        QVERIFY2(r.warnings.isEmpty(), qPrintable(r.warnings.join(u'\n')));
+        const ImportedFile *svg = iotest::fileAt(r, u"assets/Trilium/Szkic ćwiczeń.svg"_s);
+        if (!oneDrawing) {
+            if (extension == u"svg")
+                QCOMPARE(svg->data, picture);
+            QCOMPARE(iotest::fileAt(r, u"assets/Trilium/Szkic ćwiczeń.excalidraw"_s)->data, scene);
+            return;
+        }
+        QVERIFY(svg);
+        QVERIFY(drawing::looksLikeExcalidrawSvg(svg->data.first(std::min(svg->data.size(), drawing::HeadBytes))));
+        QCOMPARE(svg->data.count("payload-type:application/vnd.excalidraw+json"), 1);
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(svg->data);
+        QVERIFY(d);
+        QCOMPARE(drawing::editable(*d), editable);
+        QCOMPARE(elementIds(*d), ids);
+        if (start.isEmpty()) {
+            QCOMPARE(svg->data, drawing::toSvg(*d));
+        } else {
+            QVERIFY(svg->data.startsWith(start));
+            if (extension == u"svg") // Trilium's picture whole after the scene
+                QVERIFY(svg->data.endsWith(picture.sliced(picture.indexOf('>') + 1)));
+        }
+        // The scene as excalidraw.com keeps it: Trilium's own keys left out, the elements as
+        // Trilium stored them.
+        const QJsonObject json = embeddedScene(svg->data);
+        QCOMPARE(json.value(u"type"_s).toString(), u"excalidraw"_s);
+        QCOMPARE(json.value(u"version"_s).toInt(), 2);
+        QVERIFY(!json.contains(u"_meta"_s) && !json.contains(u"svg"_s));
+        QVERIFY(json.value(u"files"_s).isObject());
+        if (!ids.isEmpty()) {
+            const QJsonObject k1 = json.value(u"elements"_s).toArray().first().toObject();
+            QCOMPARE(k1.value(u"customData"_s).toObject().value(u"notatka"_s).toString(), u"źdźbło żyta"_s);
+            QCOMPARE(k1.value(u"pressures"_s).toArray().size(), 3);
+        }
+    }
+
+    void canvasPicturesInsideTheScene()
+    {
+        // Trilium (0.61 and later) keeps the pictures pasted into a canvas as image attachments
+        // titled with their fileId: they go into the scene's files, as excalidraw.com keeps
+        // them, not into files of their own.
+        const QString fileId = u"f00d"_s + QString(36, u'7');
+        const QByteArray png = "\x89PNG\r\n\x1a\nIHDR zdjęcie";
+        const QByteArray gif = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+        const QByteArray scene = json(
+                "{'type':'excalidraw','version':2,'elements':[{'id':'i1','type':'image','x':0,'y':0,'width':40,"
+                "'height':40,'fileId':'"
+                + fileId.toLatin1()
+                + "','status':'saved','scale':[1,1]},{'id':'i2','type':'image','x':50,'y':0,'width':40,'height':40,"
+                  "'fileId':'f1'}],'files':{'f1':{'id':'f1','mimeType':'image/gif','dataURL':'"
+                + gif + "','created':5}},'appState':{}}");
+        const ImportResult r = importZip(canvasExport(
+                scene, {canvasPicture(CanvasPicture), canvasAttachment(u"x2"_s, fileId, u"image/png"_s, png),
+                        // The scene's own picture f1 wins: this one is an attachment as before.
+                        canvasAttachment(u"x3"_s, u"f1"_s, u"image/png"_s, png),
+                        // Not a picture of the scene: attachments as before.
+                        canvasAttachment(u"x4"_s, u"zdjęcie.png"_s, u"image/png"_s, png),
+                        canvasAttachment(u"x5"_s, u"notatki.txt"_s, u"text/plain"_s, "Notatki do szkicu: ąę")}));
+        dump(u"canvas pictures"_s, r);
+        QCOMPARE(iotest::pathsOf(r), sorted({u"Trilium/Szkic ćwiczeń.md"_s, u"assets/Trilium/Szkic ćwiczeń.svg"_s,
+                                            u"assets/Trilium/Szkic ćwiczeń/f1.png"_s,
+                                            u"assets/Trilium/Szkic ćwiczeń/notatki.txt"_s,
+                                            u"assets/Trilium/Szkic ćwiczeń/zdjęcie.png"_s}));
+        QCOMPARE(iotest::textAt(r, u"Trilium/Szkic ćwiczeń.md"_s),
+                 u"![[assets/Trilium/Szkic ćwiczeń.svg]]\n\n![[assets/Trilium/Szkic ćwiczeń/f1.png]]\n"
+                 u"![[assets/Trilium/Szkic ćwiczeń/zdjęcie.png]]\n"
+                 u"[[assets/Trilium/Szkic ćwiczeń/notatki.txt|notatki.txt]]\n"_s);
+        QVERIFY(r.warnings.isEmpty());
+        const QByteArray svg = iotest::fileAt(r, u"assets/Trilium/Szkic ćwiczeń.svg"_s)->data;
+        const QJsonObject files = embeddedScene(svg).value(u"files"_s).toObject();
+        QCOMPARE(files.size(), 2);
+        const QJsonObject folded = files.value(fileId).toObject();
+        QCOMPARE(folded.value(u"id"_s).toString(), fileId);
+        QCOMPARE(folded.value(u"mimeType"_s).toString(), u"image/png"_s);
+        QCOMPARE(folded.value(u"dataURL"_s).toString(), u"data:image/png;base64,"_s + QString::fromLatin1(png.toBase64()));
+        QCOMPARE(folded.value(u"created"_s).toInt(-1), 0);
+        QCOMPARE(files.value(u"f1"_s).toObject().value(u"dataURL"_s).toString(), QString::fromLatin1(gif));
+        QCOMPARE(files.value(u"f1"_s).toObject().value(u"created"_s).toInt(), 5);
+        // Brulion draws both pictures.
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(svg);
+        QVERIFY(d && drawing::editable(*d));
+        QVERIFY(!drawing::safeDataUrl(d->files, fileId).isEmpty());
+    }
+
+    void canvasFilesOfOldTrilium()
+    {
+        // Pictures inside the content: an object by fileId (zadam/trilium), an array (some
+        // TriliumNext versions) — an object by id in the scene.
+        const QByteArray image = json("{'id':'i1','type':'image','x':0,'y':0,'width':20,'height':20,'fileId':'f1'},"
+                                      "{'id':'i2','type':'image','x':30,'y':0,'width':20,'height':20,'fileId':'f2'}");
+        const QByteArray f1 = json("{'id':'f1','mimeType':'image/png','dataURL':'data:image/png;base64,iVBORw0KGgo=',"
+                                   "'created':1}");
+        const QByteArray f2 = json("{'id':'f2','mimeType':'image/jpeg','dataURL':'data:image/jpeg;base64,/9j/4AAQ',"
+                                   "'created':2}");
+        const QList<QByteArray> variants = {json("[" + f1 + ",{'mimeType':'image/png'}," + f2 + ",5]"),
+                                            json("{'f1':" + f1 + ",'f2':" + f2 + "}")};
+        for (const QByteArray &files : variants) {
+            const QByteArray scene =
+                    json("{'_meta':'canvas','elements':[" + image + "],'appState':{},'files':" + files + ",'svg':''}");
+            const ImportResult r = importZip(canvasExport(scene, {}));
+            QCOMPARE(iotest::pathsOf(r), sorted({u"Trilium/Szkic ćwiczeń.md"_s, u"assets/Trilium/Szkic ćwiczeń.svg"_s}));
+            const QByteArray svg = iotest::fileAt(r, u"assets/Trilium/Szkic ćwiczeń.svg"_s)->data;
+            const QJsonObject inScene = embeddedScene(svg).value(u"files"_s).toObject();
+            QCOMPARE(inScene.keys(), QStringList({u"f1"_s, u"f2"_s}));
+            QCOMPARE(inScene.value(u"f1"_s).toObject(), QJsonDocument::fromJson(f1).object());
+            QCOMPARE(inScene.value(u"f2"_s).toObject(), QJsonDocument::fromJson(f2).object());
+            const std::optional<drawing::Drawing> d = drawing::readDrawing(svg);
+            QVERIFY(d && drawing::editable(*d));
+            QCOMPARE(svg, drawing::toSvg(*d)); // an empty "svg": no picture of Trilium's
+        }
+    }
+
+    void canvasReferencedFromOtherNotes()
+    {
+        // An image of Trilium's picture and an include-note box show the drawing; a link leads to
+        // its page.
+        const Meta text{u"t1"_s, u"Opis"_s, u"Opis.html"_s, {}, {}};
+        const QString image = u"<p><img src=\"Szkic_canvas-export.svg\"></p>"_s;
+        const QString html = u"<section class=\"include-note\" data-note-id=\"c1\">&nbsp;</section><p>Zobacz "
+                             u"<a href=\"Szkic.json\">szkic</a>.</p>"_s;
+        QByteArray webPage = CanvasStrokes;
+        webPage.replace(json("'elements':["), json("'elements':[{'id':'w1','type':'embeddable','x':0,'y':80,"
+                                                   "'width':120,'height':60,'link':'https://example.org/'},"));
+        QByteArray htmlPicture = CanvasPicture;
+        htmlPicture.replace("</svg>", "<foreignObject><div>example.org</div></foreignObject></svg>");
+        struct Case {
+            const char *name;
+            QByteArray scene;
+            QByteArray picture;
+            QString shown;
+        };
+        const QList<Case> cases = {
+                {"Trilium's picture", CanvasStrokes, CanvasPicture, u"![[assets/Trilium/Szkic.svg]]"_s},
+                // (only the include box: no picture to refer to)
+                {"no picture", CanvasStrokes, QByteArray(), u"![[assets/Trilium/Szkic.svg]]"_s},
+                // A drawing Brulion can show neither way: its page.
+                {"web page and HTML in the picture", webPage, htmlPicture, u"![[Trilium/Szkic]]"_s},
+        };
+        for (const Case &c : cases) {
+            QList<ExportFile> files;
+            if (!c.picture.isEmpty())
+                files.append(canvasPicture(c.picture, u"Szkic"_s));
+            QList<FileEntry> entries = canvasExport(c.scene, files, {text}, u"Szkic"_s);
+            entries.append({u"Opis.html"_s, page(u"Opis"_s, c.picture.isEmpty() ? html : image + html)});
+            const ImportResult r = importZip(entries);
+            QVERIFY2(r.warnings.isEmpty(), c.name);
+            const QString shownImage = c.picture.isEmpty() ? QString() : c.shown + u"\n\n"_s;
+            QCOMPARE(iotest::textAt(r, u"Trilium/Opis.md"_s),
+                     shownImage + c.shown + u"\n\nZobacz [[Trilium/Szkic|szkic]].\n"_s);
+        }
+    }
+
+    void canvasPicturesTooLarge()
+    {
+        // Pictures that would make the scene larger than Brulion reads (drawing::MaxSceneBytes)
+        // stay files next to the drawing, with a warning.
+        const QString fileId = u"b16"_s + QString(37, u'0');
+        const QByteArray scene = json("{'type':'excalidraw','version':2,'elements':[{'id':'i1','type':'image','x':0,"
+                                      "'y':0,'width':40,'height':40,'fileId':'"
+                                      + fileId.toLatin1() + "'}],'files':{},'appState':{}}");
+        const QByteArray huge(drawing::MaxSceneBytes / 4 * 3 + 1, '\0');
+        // Unpacked (a ZIP of it would take long to make).
+        const ImportResult r = importFiles(canvasExport(
+                scene, {canvasPicture(CanvasPicture), canvasAttachment(u"x2"_s, fileId, u"image/png"_s, huge)}));
+        QCOMPARE(r.warnings.size(), 1);
+        QVERIFY2(hasWarning(r, u"pictures of the drawing “Szkic ćwiczeń” are too large"_s), qPrintable(r.warnings.first()));
+        const QString picture = u"assets/Trilium/Szkic ćwiczeń/"_s + fileId + u".png"_s;
+        QCOMPARE(iotest::pathsOf(r),
+                 sorted({u"Trilium/Szkic ćwiczeń.md"_s, u"assets/Trilium/Szkic ćwiczeń.svg"_s, picture}));
+        QCOMPARE(iotest::fileAt(r, picture)->data.size(), huge.size());
+        QCOMPARE(iotest::textAt(r, u"Trilium/Szkic ćwiczeń.md"_s),
+                 u"![[assets/Trilium/Szkic ćwiczeń.svg]]\n\n![["_s + picture + u"]]\n"_s);
+        const QByteArray svg = iotest::fileAt(r, u"assets/Trilium/Szkic ćwiczeń.svg"_s)->data;
+        QVERIFY(svg.startsWith(CanvasPictureRoot));
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(svg);
+        QVERIFY(d);
+        QVERIFY(d->files.isEmpty()); // the picture's element without its file: a placeholder
+        QCOMPARE(elementIds(*d), QStringList({u"i1"_s}));
+    }
+
+    void importTwiceIsDeterministic()
+    {
+        // No clock, no random numbers in the drawing: the same export gives the same bytes (an
+        // import into a vault that has them stores them once).
+        const QString fileId = u"c0ffee"_s + QString(34, u'1');
+        QByteArray scene = CanvasStrokes;
+        scene.replace(json("'elements':["), json("'elements':[{'id':'i1','type':'image','x':0,'y':0,'width':9,"
+                                                 "'height':9,'fileId':'"
+                                                 + fileId.toLatin1() + "'},"));
+        const QList<FileEntry> entries = canvasExport(
+                scene, {canvasPicture(CanvasPicture), canvasAttachment(u"x2"_s, fileId, u"image/png"_s, "\x89PNG ąę")});
+        const ImportResult a = importZip(entries);
+        const ImportResult b = importZip(entries);
+        const QString path = u"assets/Trilium/Szkic ćwiczeń.svg"_s;
+        QVERIFY(iotest::fileAt(a, path));
+        QCOMPARE(iotest::fileAt(a, path)->data, iotest::fileAt(b, path)->data);
+        const QString fixturePath = u"assets/Trilium/Projekty/Szkic grządek.svg"_s;
+        QCOMPARE(iotest::fileAt(importFixture(u"html.zip"_s), fixturePath)->data,
+                 iotest::fileAt(importFixture(u"html.zip"_s), fixturePath)->data);
+        // The HTML and the Markdown export of the same canvas: the same drawing.
+        QCOMPARE(iotest::fileAt(importFixture(u"markdown.zip"_s), fixturePath)->data,
+                 iotest::fileAt(importFixture(u"html.zip"_s), fixturePath)->data);
     }
 
     void pageTitledLikeADay()
