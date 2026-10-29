@@ -570,8 +570,9 @@ IME z `dumpsys window`) nie może być purpurowych wierszy (pasa; dopuszczalne 3
 wierszy paska — co najwyżej nad paskiem autouzupełniania przeglądarki (≤ 72 dp) — a według
 aplikacji pasek kończy się na dole okna Qt, które wypełnia stronę. Słowo wpisane klawiszami
 klawiatury trafia do bloku, a klawisz akcji klawiatury to Enter, który dzieli blok
-(`focusText` w wyniku testu). Potem telefon obraca się w poziom przy otwartej klawiaturze: pasek
-kończy się na dole okna, a gdy klawiatura zostaje (Firefox), liczy się jako widoczna; po obrocie
+(`focusText` w wyniku testu). Potem telefon obraca się w poziom przy otwartej klawiaturze: gdy
+klawiatura zostaje (Firefox), liczy się jako widoczna, a pasek kończy się na dole okna; gdy
+przeglądarka ją chowa (Chrome, Brave), wraca dolna nawigacja i pasek leży tuż na niej; po obrocie
 z powrotem klawiatura znów się liczy (Chrome i Brave: po stuknięciu bloku). Po „Wstecz” (klawiatura
 schowana) nie zostaje nic purpurowego, wraca dolna nawigacja, a pasek leży tuż na niej (`toolbarBottom` =
 `bottomNavTop` w wyniku testu). Z `?keyboard=visual` wynik tylko się
@@ -585,8 +586,9 @@ pasku autouzupełniania, 126 i 168 px, bez ani jednego piksela strony między ni
 zmniejsza się raz przy otwarciu i raz przy zamknięciu; z `?keyboard=visual` Brave pokazuje pas
 124 px (#60074: zgłasza zakrycie 376 px przy 328 px rzeczywistego), Chrome i Firefox nie. Obrót
 (29.10.2026): Chrome i Brave chowają klawiaturę (strona w poziomie 866×308 i 865×307 px), Firefox ją
-zostawia (najpierw strona 871×301 px bez niej, po chwili 871×62 px z nią), pasek w każdej leży na
-dole okna. Znaki spoza ASCII wpisane klawiaturą (à, ß, ç, ñ — przytrzymanie klawisza w angielskim
+zostawia (najpierw strona 871×301 px bez niej, po chwili 871×62 px z nią); pasek leży na dole okna
+w Firefoksie, a w Chrome i Brave na dolnej nawigacji, która wraca po schowaniu klawiatury (60 px
+nad dołem okna). Znaki spoza ASCII wpisane klawiaturą (à, ß, ç, ñ — przytrzymanie klawisza w angielskim
 układzie Gboard; polskiego układu obraz emulatora nie ma, a jego pobranie wymaga ustawień Gboard)
 trafiają do bloku bez zmian we wszystkich trzech (sprawdzone ręcznie skryptem, nie w teście).
 

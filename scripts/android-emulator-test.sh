@@ -1535,6 +1535,15 @@ HTML
     s=$(wk_state "$1")
     [[ -n $s ]] && awk -v wide="$WK_WIDE" '{ exit !($5 == 0 && $6 == 1 && $7 == 1 && $12 >= wide && $2 > 0) }' <<<"$s"
   }
+  # Landscape: with the keyboard counted as up the toolbar ends at the window's bottom; with it
+  # hidden (a browser that closes it on the turn) the bottom navigation is back and the toolbar
+  # docked right on it.
+  wk_landscape_toolbar() {
+    local s
+    s=$(wk_state "$1")
+    [[ -n $s ]] && awk '{ d = ($4 == 1 ? $8 - $2 : $8 - $13); if (d < 0) d = -d
+      exit !($8 >= 0 && d <= 1 && ($4 == 1 || $13 > 0)) }' <<<"$s"
+  }
   # adb's connection to the emulator back (it drops now and then, also while the screen turns).
   wk_adb_ready() {
     local _
@@ -1762,14 +1771,16 @@ print(last)' "$OUT/report.jsonl" "$1"
       app_shot "wk-$run-2-typed"
       # The phone turned with the keyboard up, and back: a width never seen whose first heights
       # have the keyboard in them (docs/WEB.md "Klawiatura ekranowa"). Where the keyboard stays
-      # up, the app counts it as up and the toolbar ends at the window's bottom.
+      # up, the app counts it as up and the toolbar ends at the window's bottom; where the browser
+      # hides it on the turn (Chrome, Brave), the bottom navigation comes back under the toolbar.
       wk_turn 1 || true
       check "$run: turned with the keyboard up: the app settles in landscape" wait_for 30 wk_landscape_settled "$run"
       sleep 3
       s=$(wk_state "$run")
       app_shot "wk-$run-2-landscape"
-      check "$run: landscape: the toolbar at the window's bottom" \
-        awk -v s="$s" 'BEGIN { split(s, a, " "); d = a[8] - a[2]; exit !(a[8] >= 0 && d <= 1 && d >= -1) }'
+      check "$run: landscape: the toolbar at the window's bottom (the keyboard up) or on the bottom navigation" \
+        wait_for 10 wk_landscape_toolbar "$run"
+      s=$(wk_state "$run")
       # The keyboard up by the input method's state or its visible window (either one may lag).
       if ime_shown || [[ -n $(ime_top 2>/dev/null || true) ]]; then
         echo "    landscape, the keyboard up: $s"
