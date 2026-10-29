@@ -1036,8 +1036,8 @@ private Q_SLOTS:
         const qint64 ms = timer.elapsed();
         QCOMPARE(bool(read), readable);
         QCOMPARE(int(why), int(readable ? ReadError::None : ReadError::Corrupt));
-        // (Linear: a few ms; quadratic took seconds for these.)
-        QVERIFY2(ms < 1500, qPrintable(u"%1 ms"_s.arg(ms)));
+        // (Linear: a few ms — some 200 under the sanitizers; quadratic took seconds for these.)
+        QVERIFY2(ms < 1500 * BRULION_TEST_SLOWDOWN, qPrintable(u"%1 ms"_s.arg(ms)));
     }
 
     void previewDrawingBoxes()
