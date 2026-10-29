@@ -1480,11 +1480,14 @@ HTML
     [[ -n $s ]] && awk '{ exit !($4 == 0 && $5 == 0 && $7 == 1 && $8 >= 0) }' <<<"$s"
   }
   wk_count() { local s; s=$(wk_state "$1"); echo "${s%% *}"; }
-  # Settled in landscape (the page wider than high), a block edited.
+  # A page this wide (CSS px) is the turned screen's: 1.3 times the upright screen's width (a page
+  # upright with the keyboard up can be wider than high: Brave, 411×409).
+  WK_WIDE=$((SCREEN_W * 160 * 13 / (DENSITY * 10)))
+  # Settled in landscape, a block edited.
   wk_landscape_settled() {
     local s
     s=$(wk_state "$1")
-    [[ -n $s ]] && awk '{ exit !($5 == 0 && $6 == 1 && $7 == 1 && $12 > $2 && $2 > 0) }' <<<"$s"
+    [[ -n $s ]] && awk -v wide="$WK_WIDE" '{ exit !($5 == 0 && $6 == 1 && $7 == 1 && $12 >= wide && $2 > 0) }' <<<"$s"
   }
   # adb's connection to the emulator back (it drops now and then, also while the screen turns).
   wk_adb_ready() {
@@ -1510,11 +1513,11 @@ HTML
     echo "    the screen did not turn to rotation $1 (user_rotation ${now:-?})"
     return 1
   }
-  # The run's page upright (the last report: narrower than high).
+  # The run's page upright (the last report).
   wk_upright() {
     local s
     s=$(wk_state "$1")
-    [[ -n $s ]] && awk '{ exit !($12 > 0 && $12 < $2) }' <<<"$s"
+    [[ -n $s ]] && awk -v wide="$WK_WIDE" '{ exit !($12 > 0 && $12 < wide) }' <<<"$s"
   }
   # First-run screens, prompts and tips of the browsers: tapped away by their buttons' names
   # (Firefox's "Set as default browser" opens the system's dialog: Cancel).

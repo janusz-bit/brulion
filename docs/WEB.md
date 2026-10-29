@@ -534,7 +534,9 @@ zmniejsza się raz przy otwarciu i raz przy zamknięciu; z `?keyboard=visual` Br
 124 px (#60074: zgłasza zakrycie 376 px przy 328 px rzeczywistego), Chrome i Firefox nie. Obrót
 (29.10.2026): Chrome i Brave chowają klawiaturę (strona w poziomie 866×308 i 865×307 px), Firefox ją
 zostawia (najpierw strona 871×301 px bez niej, po chwili 871×62 px z nią), pasek w każdej leży na
-dole okna.
+dole okna. Znaki spoza ASCII wpisane klawiaturą (à, ß, ç, ñ — przytrzymanie klawisza w angielskim
+układzie Gboard; polskiego układu obraz emulatora nie ma, a jego pobranie wymaga ustawień Gboard)
+trafiają do bloku bez zmian we wszystkich trzech (sprawdzone ręcznie skryptem, nie w teście).
 
 ## Ograniczenia techniczne
 
