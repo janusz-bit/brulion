@@ -4762,7 +4762,7 @@
         <location filename="../src/core/io/import_evernote.cpp" line="314"/>
         <location filename="../src/core/io/import_joplin.cpp" line="209"/>
         <location filename="../src/core/io/import_roam.cpp" line="216"/>
-        <location filename="../src/core/io/import_trilium.cpp" line="932"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="933"/>
         <source>Untitled</source>
         <translation>Bez tytułu</translation>
     </message>
@@ -4775,7 +4775,7 @@
         <location filename="../src/core/io/import_evernote.cpp" line="350"/>
         <location filename="../src/core/io/import_keep.cpp" line="163"/>
         <location filename="../src/core/io/import_joplin.cpp" line="318"/>
-        <location filename="../src/core/io/import_trilium.cpp" line="1778"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1834"/>
         <source>Some attachments referenced by notes are missing in the export.</source>
         <translation>W eksporcie brakuje niektórych załączników, do których odwołują się notatki.</translation>
     </message>
@@ -4946,53 +4946,53 @@
         <translation>Zadania (CSV)</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="529"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="530"/>
         <source>The Trilium export is too large to be read.</source>
         <translation>Eksport z Trilium jest za duży, by go wczytać.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="538"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="539"/>
         <source>the list of notes is missing</source>
         <translation>brakuje listy notatek</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="539"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="540"/>
         <source>The Trilium export cannot be read: “!!!meta.json” is damaged (%1). Nothing was imported.</source>
         <translation>Nie można odczytać eksportu z Trilium: plik „!!!meta.json” jest uszkodzony (%1). Niczego nie zaimportowano.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="558"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="559"/>
         <source>This is Trilium&apos;s export for web publishing. Export the notes again with the format “HTML” or “Markdown” and import that ZIP file.</source>
         <translation>To eksport Trilium do publikacji w sieci. Wyeksportuj notatki jeszcze raz w formacie „HTML” albo „Markdown” i zaimportuj ten plik ZIP.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="564"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="565"/>
         <source>The Trilium export has a format version Brulion does not know (%1); the notes were imported as well as possible.</source>
         <translation>Eksport z Trilium ma wersję formatu, której Brulion nie zna (%1); notatki zaimportowano najlepiej, jak się dało.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="582"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="583"/>
         <source>The Trilium export is too large; only a part of it was imported.</source>
         <translation>Eksport z Trilium jest za duży; zaimportowano tylko jego część.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1186"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1245"/>
         <source>The pictures of the drawing “%1” are too large to keep inside it; they were saved next to it.</source>
         <translation>Obrazy z rysunku „%1” są za duże, żeby zapisać je w rysunku — zostały obok jako pliki.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1414"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1470"/>
         <source>“%1” is too large to convert; it was saved as an attachment.</source>
         <translation>Notatka „%1” jest za duża do przekształcenia; zapisano ją jako załącznik.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1745"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1801"/>
         <source>“%1”</source>
         <comment>a quoted note title in a list</comment>
         <translation>„%1”</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_trilium.cpp" line="1762"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1818"/>
         <source>%n file(s) of the selection are not part of the Trilium export and were not imported. Import each Trilium export on its own.</source>
         <translation>
             <numerusform>%n z wybranych plików nie należy do eksportu z Trilium i nie został zaimportowany. Importuj każdy eksport z Trilium osobno.</numerusform>
@@ -5001,7 +5001,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_trilium.cpp" line="1766"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1822"/>
         <source>%n protected note(s) could not be imported: Trilium exports their content only while a protected session is open.</source>
         <translation>
             <numerusform>%n chroniona notatka nie została zaimportowana: Trilium eksportuje treść chronionych notatek tylko przy otwartej sesji chronionej.</numerusform>
@@ -5010,7 +5010,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_trilium.cpp" line="1770"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1826"/>
         <source>%n Trilium note(s) of a kind Brulion does not have (saved searches, note maps, rendered notes, launchers) were skipped: %1</source>
         <translation>
             <numerusform>Pominięto %n notatkę Trilium, której rodzaju Brulion nie ma (zapisane wyszukiwania, mapy notatek, notatki renderowane, skróty): %1</numerusform>
@@ -5019,22 +5019,22 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1775"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1831"/>
         <source>Some links point to notes that are not in the export (another part of the tree, an excluded or a protected note); only their text was kept.</source>
         <translation>Niektóre linki prowadzą do notatek spoza eksportu (z innej części drzewa, wykluczonych albo chronionych); zachowano tylko ich tekst.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1780"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1836"/>
         <source>Some notes of the Trilium export have no file in it; they were imported without content.</source>
         <translation>Niektóre notatki z eksportu Trilium nie mają w nim swojego pliku; zaimportowano je bez treści.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1783"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1839"/>
         <source>The note tree is nested too deeply for file paths; the deepest notes were put into the folder of an ancestor.</source>
         <translation>Drzewo notatek jest zbyt głębokie dla ścieżek plików; najgłębiej położone notatki trafiły do folderu jednego z przodków.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_trilium.cpp" line="1831"/>
+        <location filename="../src/core/io/import_trilium.cpp" line="1887"/>
         <source>This is no Trilium export: “!!!meta.json” is missing. Export the notes in Trilium with the format “HTML” or “Markdown” and choose the ZIP file.</source>
         <translation>To nie jest eksport z Trilium: brakuje pliku „!!!meta.json”. Wyeksportuj notatki w Trilium w formacie „HTML” albo „Markdown” i wybierz plik ZIP.</translation>
     </message>
