@@ -8,7 +8,10 @@
 
 #include "blocklistmodel.h"
 #include "drawing/drawing.h"
+#include "drawing/drawingfile.h"
+#include "drawing/excalidrawmd.h"
 #include "drawing/svgwrite.h"
+#include "index/vaultindex.h"
 
 #include "../minihttpserver.h"
 
@@ -260,6 +263,82 @@ private Q_SLOTS:
         QVERIFY(!QFileInfo::exists(disk));
         QTRY_VERIFY(removed.contains(QVariantList{path}));
         QVERIFY(!QFileInfo::exists(disk));
+    }
+
+    void excalidrawMarkdownIsADrawing()
+    {
+        // Obsidian's Excalidraw plugin: `Excalidraw/Szkic ćwiczeń.excalidraw.md` embedded three
+        // ways, and a plugin file without the suffix (`Plan.md`, the plugin's other naming) as a
+        // page embed `![[Plan]]` — each shown as its drawing; a note stays a note.
+        const auto fixture = [](const QString &name) {
+            QFile f(QStringLiteral(BRULION_TEST_DATA "/drawing/") + name);
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        };
+        const QString root = m_tmp.filePath(u"Obsidian"_s);
+        const QString sketch = u"Excalidraw/Szkic ćwiczeń.excalidraw.md"_s;
+        const QByteArray bytes = fixture(u"obsidian_freedraw.excalidraw.md"_s);
+        QVERIFY(!bytes.isEmpty());
+        QVERIFY(writeFile(root + u'/' + sketch, bytes));
+        QVERIFY(writeFile(root + u"/Plan.md"_s, fixture(u"obsidian_mixed.excalidraw.md"_s)));
+        QVERIFY(writeFile(root + u"/Notatka.md"_s, "# Notatka\n\nTekst ąę.\n"));
+        QVERIFY(writeFile(root + u"/Wykład.md"_s,
+                          "- ![[Szkic ćwiczeń.excalidraw]]\n- ![[Szkic ćwiczeń.excalidraw.md]]\n"
+                          "- ![[Szkic ćwiczeń.excalidraw|Szkic]]\n- ![[Plan]]\n- ![[Notatka]]\n"));
+        Workspace ws;
+        QVERIFY(ws.open(root, m_tmp.filePath(u"state-obsidian"_s)));
+        ws.finishIndexing();
+        QVERIFY(ws.isDrawing(sketch));
+        QVERIFY(ws.isDrawing(u"Plan.md"_s));
+        QVERIFY(!ws.isDrawing(u"Wykład.md"_s));
+        QVERIFY(!ws.isDrawing(u"Notatka.md"_s));
+        QVERIFY(!ws.isDrawing(u"Brak.excalidraw.md"_s));
+        // Still pages of the index: searchable, the plugin's tag lists them.
+        QVERIFY(ws.index()->note(sketch));
+        QVERIFY(ws.index()->note(sketch)->tags.contains(u"excalidraw"_s));
+        const QRectF rect = brulion::drawing::pictureRect(*brulion::drawing::readDrawing(bytes));
+        QCOMPARE(ws.drawingSize(sketch), rect.size().toSize());
+        QCOMPARE(ws.pictureSize(sketch), rect.size().toSize());
+
+        PageController page;
+        page.setSaveDelay(0);
+        page.setHost(&ws);
+        page.setPath(u"Wykład.md"_s);
+        auto *model = page.blocks();
+        const int transclusionsRole = model->roleNames().key("transclusions");
+        for (int row = 0; row < 4; ++row) {
+            const QVariantMap embed = embedOf(page, row);
+            const QString path = row == 3 ? u"Plan.md"_s : sketch;
+            QVERIFY2(embed.value(u"drawing"_s).toBool(), qPrintable(u"row %1"_s.arg(row)));
+            QVERIFY(embed.value(u"image"_s).toBool());
+            QCOMPARE(embed.value(u"path"_s).toString(), path);
+            QCOMPARE(embed.value(u"url"_s).toUrl(), ws.drawingUrl(path, false));
+            QCOMPARE(embed.value(u"darkUrl"_s).toUrl(), ws.drawingUrl(path, true));
+            QCOMPARE(QSize(embed.value(u"width"_s).toInt(), embed.value(u"height"_s).toInt()), ws.drawingSize(path));
+            QVERIFY(model->data(model->index(row), transclusionsRole).toList().isEmpty());
+        }
+        QCOMPARE(embedOf(page, 2).value(u"alt"_s).toString(), u"Szkic"_s);
+        // A note embedded: a page, as before.
+        QVERIFY(embedOf(page, 4).isEmpty());
+        QCOMPARE(model->data(model->index(4), transclusionsRole).toList().size(), 1);
+
+        // Saved again (the drawing editor): the embeds follow — a new version, a wider drawing.
+        const std::optional<brulion::drawing::DrawingFile> file = brulion::drawing::readDrawingFile(bytes);
+        QVERIFY(file);
+        brulion::drawing::Drawing wider = file->drawing;
+        brulion::drawing::Stroke s;
+        s.id = u"daleko"_s;
+        s.points = {{1500, 300, 0.5}, {1600, 320, 0.5}};
+        wider.strokes.append(s);
+        const QByteArray written = brulion::drawing::writeDrawingFile(*file, wider, 1761700000000);
+        const QUrl before = ws.drawingUrl(sketch, false);
+        QTest::qWait(20); // a later modification time
+        QVERIFY(ws.writeAttachment(sketch, written));
+        QCOMPARE(ws.readAttachment(sketch), written);
+        QTRY_VERIFY(embedOf(page, 0).value(u"width"_s).toInt() > rect.width() + 900);
+        QVERIFY(embedOf(page, 0).value(u"url"_s).toUrl() != before);
+        QVERIFY(ws.isDrawing(sketch));
+        // The index still has it as a page with the plugin's tag (its text entries searchable).
+        QTRY_VERIFY(ws.index()->note(sketch) && ws.index()->note(sketch)->tags.contains(u"excalidraw"_s));
     }
 
     void automaticFetchesLimits();

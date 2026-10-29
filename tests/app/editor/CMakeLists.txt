@@ -50,7 +50,7 @@ brulion_add_test(tst_editor_pageprops
 # The size of embedded pictures read from their headers / an SVG's root (picturesize.h).
 brulion_add_test(tst_editor_picturesize
     SOURCES tst_editor_picturesize.cpp
-    LIBS brulion_editorhost Qt6::Gui)
+    LIBS brulion_editorhost brulion_core_drawing Qt6::Gui)
 
 # The block editor in its real QML (the playground, `brulion --editor --editor-script selftest`):
 # keyboard flows (Enter, Backspace, Tab, Up/Down, Alt+Up/Down, Ctrl+Z, Ctrl+Enter, Esc,

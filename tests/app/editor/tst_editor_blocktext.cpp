@@ -607,6 +607,50 @@ private Q_SLOTS:
         QVERIFY(!onlyEmbeds(u"((abc123))"_s, true));
     }
 
+    void drawingEmbeds_data()
+    {
+        // Obsidian's Excalidraw plugin: `![[x.excalidraw]]` (the link resolves to x.excalidraw.md)
+        // and `![[x.excalidraw.md]]` are attachment embeds of its drawing; `![[x]]` stays a page.
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<QString>("embed");      // the attachment embed's target ("" none)
+        QTest::addColumn<QString>("transclude"); // the page embed's target ("" none)
+        QTest::addColumn<bool>("drawing");       // isDrawingTarget(embed)
+        QTest::newRow(".excalidraw") << u"![[Szkic ćwiczeń.excalidraw]]"_s << u"Szkic ćwiczeń.excalidraw"_s << QString()
+                                     << true;
+        QTest::newRow(".excalidraw.md") << u"![[Szkic ćwiczeń.excalidraw.md]]"_s << u"Szkic ćwiczeń.excalidraw.md"_s
+                                        << QString() << true;
+        QTest::newRow("upper case, alias") << u"![[Szkic.EXCALIDRAW.MD|Szkic]]"_s << u"Szkic.EXCALIDRAW.MD"_s << QString()
+                                           << true;
+        QTest::newRow("in a folder") << u"Rysunek: ![[Excalidraw/Plan łąki.excalidraw.md]]"_s
+                                     << u"Excalidraw/Plan łąki.excalidraw.md"_s << QString() << true;
+        QTest::newRow("an svg") << u"![[Rysunek 2026-10-27.svg]]"_s << u"Rysunek 2026-10-27.svg"_s << QString() << true;
+        QTest::newRow("a page") << u"![[Szkic]]"_s << QString() << u"Szkic"_s << false;
+        QTest::newRow("a note .md") << u"![[Notatka.md]]"_s << QString() << u"Notatka.md"_s << false;
+        QTest::newRow("a page named excalidraw") << u"![[O Excalidraw]]"_s << QString() << u"O Excalidraw"_s << false;
+        QTest::newRow("a picture") << u"![[plan.png]]"_s << u"plan.png"_s << QString() << false;
+    }
+
+    void drawingEmbeds()
+    {
+        QFETCH(QString, body);
+        QFETCH(QString, embed);
+        QFETCH(QString, transclude);
+        QFETCH(bool, drawing);
+        const QList<Embed> e = embedsOf(body);
+        QCOMPARE(e.size(), embed.isEmpty() ? 0 : 1);
+        if (!embed.isEmpty()) {
+            QCOMPARE(e.first().target, embed);
+            QCOMPARE(isDrawingTarget(e.first().target), drawing);
+            QCOMPARE(e.first().image, embed.endsWith(u".png"_s) || embed.endsWith(u".svg"_s));
+        }
+        const QList<Transclusion> t = transclusionsOf(body);
+        QCOMPARE(t.size(), transclude.isEmpty() ? 0 : 1);
+        if (!transclude.isEmpty())
+            QCOMPARE(t.first().target, transclude);
+        QVERIFY(onlyEmbeds(body, true) || !body.startsWith(u"![["_s));
+        QCOMPARE(onlyEmbeds(body), !embed.isEmpty() && body.startsWith(u"![["_s));
+    }
+
     void webPictureEmbeds()
     {
         const QList<Embed> e = embedsOf(
