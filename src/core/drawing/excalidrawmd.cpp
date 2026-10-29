@@ -246,7 +246,8 @@ std::optional<ExcalidrawMarkdownRead> readExcalidrawMarkdown(QByteArrayView byte
         }
         if (close < 0)
             continue;
-        layout.encoding = compressed ? ExcalidrawMarkdown::Encoding::CompressedJson : ExcalidrawMarkdown::Encoding::Json;
+        layout.encoding =
+                compressed ? ExcalidrawMarkdown::Encoding::CompressedJson : ExcalidrawMarkdown::Encoding::Json;
         layout.sceneFrom = from;
         layout.sceneTo = close;
         layout.eol = eol == 2 ? QByteArray("\r\n") : QByteArray("\n");
@@ -273,7 +274,8 @@ std::optional<ExcalidrawMarkdownRead> readExcalidrawMarkdown(QByteArrayView byte
             if (uchar(c) >= 0x80)
                 return fail(ReadError::Corrupt);
         }
-        const std::optional<QString> scene = lzstring::decompressFromBase64(QString::fromLatin1(content), MaxSceneBytes);
+        const std::optional<QString> scene =
+                lzstring::decompressFromBase64(QString::fromLatin1(content), MaxSceneBytes);
         if (!scene)
             return fail(ReadError::Corrupt);
         json = scene->toUtf8();

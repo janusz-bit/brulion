@@ -1575,8 +1575,8 @@ private Q_SLOTS:
                                       << u"#ffffff"_s << QString();
         QTest::newRow("plugin with a frame") << fixture(u"obsidian_frame.excalidraw.md"_s) << u"Ramka.excalidraw.md"_s
                                              << true << u"#121212"_s << QString();
-        QTest::newRow("plugin's oldest form") << fixture(u"obsidian_legacy.excalidraw.md"_s)
-                                              << u"Stary.excalidraw.md"_s << false << u"#ffffff"_s << QString();
+        QTest::newRow("plugin's oldest form") << fixture(u"obsidian_legacy.excalidraw.md"_s) << u"Stary.excalidraw.md"_s
+                                              << false << u"#ffffff"_s << QString();
         QTest::newRow("a note") << QByteArray("---\ntytul: Notatka\n---\n# Notatka ąę\n") << u"Notatka.md"_s << false
                                 << QString() << QString();
         QTest::newRow("empty file") << QByteArray() << u"Pusty.svg"_s << false << QString() << QString();
@@ -1907,8 +1907,8 @@ private Q_SLOTS:
         QTest::addColumn<QByteArray>("bytes");
         QTest::addColumn<QString>("status");
         QTest::addColumn<bool>("legacy");
-        QTest::newRow("the plugin's oldest form") << fixture(u"obsidian_legacy.excalidraw.md"_s) << u"readonly"_s
-                                                  << true;
+        QTest::newRow("the plugin's oldest form")
+                << fixture(u"obsidian_legacy.excalidraw.md"_s) << u"readonly"_s << true;
         QTest::newRow("a frame") << fixture(u"obsidian_frame.excalidraw.md"_s) << u"readonly"_s << false;
         QTest::newRow("a note") << QByteArray("---\ntytul: Notatka\n---\n# Notatka\n\nTekst ąę.\n") << u"notDrawing"_s
                                 << false;

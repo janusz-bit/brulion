@@ -225,8 +225,8 @@ QImage pictureOf(const QByteArray &bytes, const std::optional<drawing::DrawingFi
         if (!exportFile.isEmpty()) {
             QFile f(exportFile);
             if (f.open(QIODevice::ReadOnly) && f.size() <= DrawingImageProvider::MaxFileBytes) {
-                const QImage image = ownPicture(f.readAll(), drawing::rendersDark(file->drawing.theme, appDark),
-                                                requested, natural);
+                const QImage image =
+                        ownPicture(f.readAll(), drawing::rendersDark(file->drawing.theme, appDark), requested, natural);
                 if (!image.isNull())
                     return image;
             }
@@ -237,8 +237,7 @@ QImage pictureOf(const QByteArray &bytes, const std::optional<drawing::DrawingFi
     }
     // Frames, embedded pages (an Excalidraw drawing Brulion does not edit), a scene that cannot be
     // read: the file's own picture, in the dark with Excalidraw's dark colours.
-    return ownPicture(bytes, file ? drawing::rendersDark(file->drawing.theme, appDark) : appDark, requested,
-                      natural);
+    return ownPicture(bytes, file ? drawing::rendersDark(file->drawing.theme, appDark) : appDark, requested, natural);
 }
 
 } // namespace

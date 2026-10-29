@@ -105,7 +105,8 @@ bool isAttachmentTarget(QStringView target)
     const QStringView ext = target.sliced(dot);
     // An Obsidian Excalidraw plugin drawing is shown as its drawing, not as a page.
     return !ext.contains(u'/')
-           && (ext.compare(u".md", Qt::CaseInsensitive) != 0 || target.endsWith(u".excalidraw.md", Qt::CaseInsensitive));
+           && (ext.compare(u".md", Qt::CaseInsensitive) != 0
+               || target.endsWith(u".excalidraw.md", Qt::CaseInsensitive));
 }
 
 } // namespace

@@ -293,10 +293,10 @@ private Q_SLOTS:
                                      << true;
         QTest::newRow("plugin file") << u"obsidian_freedraw.excalidraw.md"_s << QByteArray()
                                      << u"Szkic ćwiczeń.excalidraw.md"_s << true;
-        QTest::newRow("plugin file, any name") << u"obsidian_mixed.excalidraw.md"_s << QByteArray() << u"Plan.md"_s
-                                               << true;
-        QTest::newRow("plugin file named .txt") << u"obsidian_mixed.excalidraw.md"_s << QByteArray() << u"Plan.txt"_s
-                                                << false;
+        QTest::newRow("plugin file, any name")
+                << u"obsidian_mixed.excalidraw.md"_s << QByteArray() << u"Plan.md"_s << true;
+        QTest::newRow("plugin file named .txt")
+                << u"obsidian_mixed.excalidraw.md"_s << QByteArray() << u"Plan.txt"_s << false;
         QTest::newRow("a note") << QString() << QByteArray("---\ntytul: Szkic\n---\n# Szkic ąę\n") << u"Szkic.md"_s
                                 << false;
         QTest::newRow("a note naming the key in its text")
@@ -347,7 +347,8 @@ private Q_SLOTS:
             QCOMPARE(f.write(data), data.size());
         };
         write(bytes);
-        const std::optional<brulion::drawing::ExcalidrawMarkdownRead> read = brulion::drawing::readExcalidrawMarkdown(bytes);
+        const std::optional<brulion::drawing::ExcalidrawMarkdownRead> read =
+                brulion::drawing::readExcalidrawMarkdown(bytes);
         QVERIFY(read);
         const QSize before = localDrawingSize(file);
         QCOMPARE(before, brulion::drawing::pictureRect(read->drawing).size().toSize());

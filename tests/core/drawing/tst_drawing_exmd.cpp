@@ -212,8 +212,8 @@ private Q_SLOTS:
             QString s;
             s.reserve(length);
             for (int i = 0; i < length; ++i)
-                s.append(QChar(char16_t(round % 3 == 2 && i % 7 == 0 ? 0xD800 + rng.bounded(0x800)
-                                                                      : rng.bounded(alphabet))));
+                s.append(QChar(
+                        char16_t(round % 3 == 2 && i % 7 == 0 ? 0xD800 + rng.bounded(0x800) : rng.bounded(alphabet))));
             const QString b64 = lzstring::compressToBase64(s);
             QCOMPARE(b64.size() % 4, 0);
             const std::optional<QString> back = lzstring::decompressFromBase64(b64);
@@ -268,12 +268,12 @@ private Q_SLOTS:
                                << QStringList{u"Zt8xQw1a"_s} << 0 << false << QByteArray("\n");
         QTest::newRow("json") << u"obsidian_json.excalidraw.md"_s << json << 2 << 0 << QStringList() << 0 << true
                               << QByteArray("\n");
-        QTest::newRow("crlf") << u"obsidian_crlf.excalidraw.md"_s << compressed << 3 << 0
-                              << QStringList{u"Zt8xQw1a"_s} << 0 << true << QByteArray("\r\n");
+        QTest::newRow("crlf") << u"obsidian_crlf.excalidraw.md"_s << compressed << 3 << 0 << QStringList{u"Zt8xQw1a"_s}
+                              << 0 << true << QByteArray("\r\n");
         QTest::newRow("commented") << u"obsidian_commented.excalidraw.md"_s << compressed << 2 << 0
                                    << QStringList{u"Zt8xQw1a"_s} << 0 << true << QByteArray("\n");
-        QTest::newRow("legacy") << u"obsidian_legacy.excalidraw.md"_s << legacy << 1 << 0 << QStringList() << 0
-                                << true << QByteArray("\n");
+        QTest::newRow("legacy") << u"obsidian_legacy.excalidraw.md"_s << legacy << 1 << 0 << QStringList() << 0 << true
+                                << QByteArray("\n");
     }
 
     void readPluginFiles()
@@ -508,7 +508,8 @@ private Q_SLOTS:
         two.text = two.originalText = u"Jedna\nDwie\nTrzy"_s;
         ++two.version;
         const QByteArray linesOut = writeExcalidrawMarkdown(read->layout, lines, now);
-        QVERIFY(linesOut.contains(QByteArray("Zażółć gęślą jaźń ^Zt8xQw1a\n\nJedna\nDwie\nTrzy ^Dw2Lin3s\n\n" + links)));
+        QVERIFY(linesOut.contains(
+                QByteArray("Zażółć gęślą jaźń ^Zt8xQw1a\n\nJedna\nDwie\nTrzy ^Dw2Lin3s\n\n" + links)));
 
         // Removed: its entry goes, a tombstone is written.
         Drawing removed = read->drawing;
@@ -581,28 +582,32 @@ private Q_SLOTS:
         const int corrupt = int(ReadError::Corrupt);
         const QByteArray block = "%%\n## Drawing\n```compressed-json\n";
         QTest::newRow("a note quoting a drawing")
-                << QByteArray("---\ntitle: Notatka\n---\n## Drawing\n```json\n{\"type\":\"excalidraw\"}\n```\n") << noScene;
-        QTest::newRow("no frontmatter")
-                << QByteArray("excalidraw-plugin: parsed\n## Drawing\n```json\n{\"type\":\"excalidraw\"}\n```\n")
+                << QByteArray("---\ntitle: Notatka\n---\n## Drawing\n```json\n{\"type\":\"excalidraw\"}\n```\n")
                 << noScene;
+        QTest::newRow("no frontmatter") << QByteArray(
+                "excalidraw-plugin: parsed\n## Drawing\n```json\n{\"type\":\"excalidraw\"}\n```\n")
+                                        << noScene;
         QTest::newRow("empty") << QByteArray() << noScene;
         QTest::newRow("the key but no block")
-                << QByteArray(PluginFrontmatter + "# Excalidraw Data\n\n## Text Elements\n%%\n## Drawing\n%%") << corrupt;
+                << QByteArray(PluginFrontmatter + "# Excalidraw Data\n\n## Text Elements\n%%\n## Drawing\n%%")
+                << corrupt;
         QTest::newRow("no drawing heading") << QByteArray(PluginFrontmatter + "Zwykły tekst ąę\n") << corrupt;
         QTest::newRow("broken base64") << QByteArray(PluginFrontmatter + block + "N4Ig!gngDg\n```\n%%") << corrupt;
         QTest::newRow("non-ASCII in base64") << QByteArray(PluginFrontmatter + block + "N4Igążć\n```\n%%") << corrupt;
         QTest::newRow("no end mark") << QByteArray(PluginFrontmatter + block + "AAAA\n```\n%%") << corrupt;
         QTest::newRow("not JSON") << QByteArray(PluginFrontmatter + block + "BYUwNmD2Q===\n```\n%%") << corrupt;
-        QTest::newRow("not a scene") << QByteArray(PluginFrontmatter + block + "N4IgLgngDgpiBcID2YAWMBOIC+Q=\n```\n%%") << corrupt;
-        QTest::newRow("no closing fence")
-                << QByteArray(PluginFrontmatter + "%%\n## Drawing\n```json\n{\"type\":\"excalidraw\",\"elements\":[]}\n") << corrupt;
+        QTest::newRow("not a scene") << QByteArray(PluginFrontmatter + block + "N4IgLgngDgpiBcID2YAWMBOIC+Q=\n```\n%%")
+                                     << corrupt;
+        QTest::newRow("no closing fence") << QByteArray(
+                PluginFrontmatter + "%%\n## Drawing\n```json\n{\"type\":\"excalidraw\",\"elements\":[]}\n")
+                                          << corrupt;
         QTest::newRow("json not a scene")
                 << QByteArray(PluginFrontmatter + "%%\n## Drawing\n```json\n{\"type\":\"other\"}\n```\n%%") << corrupt;
-        QTest::newRow("json elements not an array")
-                << QByteArray(PluginFrontmatter
-                              + "%%\n## Drawing\n```json\n{\"type\":\"excalidraw\",\"elements\":7}\n```\n%%")
-                << corrupt;
-        QTest::newRow("json without a brace") << QByteArray(PluginFrontmatter + "%%\n## Drawing\n```json\nnic\n```\n%%") << corrupt;
+        QTest::newRow("json elements not an array") << QByteArray(
+                PluginFrontmatter + "%%\n## Drawing\n```json\n{\"type\":\"excalidraw\",\"elements\":7}\n```\n%%")
+                                                    << corrupt;
+        QTest::newRow("json without a brace")
+                << QByteArray(PluginFrontmatter + "%%\n## Drawing\n```json\nnic\n```\n%%") << corrupt;
     }
 
     void notAPluginFile()
@@ -620,10 +625,11 @@ private Q_SLOTS:
     void smallestPluginFiles()
     {
         // The plugin's own empty drawing: no text, no elements; and the json form with CRLF.
-        const QByteArray compressed = PluginFrontmatter
-                                      + "# Excalidraw Data\n\n## Text Elements\n%%\n## Drawing\n```compressed-json\n"
-                                        "N4IgLgngDgpiBcIYA8DGBDANgSwCYCd0B3EAGhADcZ8BnbAewDsEAmcmTGAWxkbBoQBtALrl0UKAGUw6M"
-                                        "HHjAAvuQBm2TgIWLFQA\n```\n%%";
+        const QByteArray compressed =
+                PluginFrontmatter
+                + "# Excalidraw Data\n\n## Text Elements\n%%\n## Drawing\n```compressed-json\n"
+                  "N4IgLgngDgpiBcIYA8DGBDANgSwCYCd0B3EAGhADcZ8BnbAewDsEAmcmTGAWxkbBoQBtALrl0UKAGUw6M"
+                  "HHjAAvuQBm2TgIWLFQA\n```\n%%";
         const std::optional<ExcalidrawMarkdownRead> read = readExcalidrawMarkdown(compressed);
         QVERIFY(read);
         QVERIFY(read->drawing.strokes.isEmpty());
@@ -632,12 +638,14 @@ private Q_SLOTS:
         Drawing d = read->drawing;
         d.strokes.append(newStroke(u"pierwsza"_s));
         const QByteArray out = writeExcalidrawMarkdown(read->layout, d, 1);
-        QVERIFY(out.startsWith(QByteArray(PluginFrontmatter + "# Excalidraw Data\n\n## Text Elements\n%%\n## Drawing\n```compressed-json\n")));
+        QVERIFY(out.startsWith(QByteArray(
+                PluginFrontmatter + "# Excalidraw Data\n\n## Text Elements\n%%\n## Drawing\n```compressed-json\n")));
         QVERIFY(out.endsWith("\n```\n%%"));
         QCOMPARE(readDrawing(out)->strokes.size(), 1);
 
-        const QByteArray json = QByteArray(PluginFrontmatter + "%%\n## Drawing\n```json\n{\"type\":\"excalidraw\","
-                                                               "\"elements\":[]}  trailing garbage\n```\n%%")
+        const QByteArray json = QByteArray(PluginFrontmatter
+                                           + "%%\n## Drawing\n```json\n{\"type\":\"excalidraw\","
+                                             "\"elements\":[]}  trailing garbage\n```\n%%")
                                         .replace("\n", "\r\n");
         const std::optional<ExcalidrawMarkdownRead> crlf = readExcalidrawMarkdown(json);
         QVERIFY(crlf);
@@ -681,8 +689,8 @@ private Q_SLOTS:
         QTest::newRow("after other keys")
                 << QByteArray("---\ntitle: Szkic ćwiczeń\naliases: [a, b]\nexcalidraw-plugin: parsed\n---\n") << true
                 << false;
-        QTest::newRow("cut inside the frontmatter") << QByteArray("---\ntags: [x]\nexcalidraw-plugin: par") << true
-                                                    << false;
+        QTest::newRow("cut inside the frontmatter")
+                << QByteArray("---\ntags: [x]\nexcalidraw-plugin: par") << true << false;
         QTest::newRow("the key in the body")
                 << QByteArray("---\ntitle: x\n---\nexcalidraw-plugin: parsed\n") << false << false;
         QTest::newRow("a longer key") << QByteArray("---\nexcalidraw-plugin-x: parsed\n---\n") << false << false;
@@ -693,8 +701,8 @@ private Q_SLOTS:
         QTest::newRow("four dashes") << QByteArray("----\nexcalidraw-plugin: parsed\n---\n") << false << false;
         QTest::newRow("empty") << QByteArray() << false << false;
         QTest::newRow("scene") << QByteArray("{\n  \"type\": \"excalidraw\",\n  \"version\": 2") << false << true;
-        QTest::newRow("scene after BOM and spaces") << QByteArray("\xEF\xBB\xBF \r\n{\"type\":\"excalidraw\"}") << false
-                                                    << true;
+        QTest::newRow("scene after BOM and spaces")
+                << QByteArray("\xEF\xBB\xBF \r\n{\"type\":\"excalidraw\"}") << false << true;
         QTest::newRow("other JSON") << QByteArray("{\"type\":\"other\"}") << false << false;
         QTest::newRow("array") << QByteArray("[\"excalidraw\"]") << false << false;
         QTest::newRow("svg") << fixture(u"excalidraw_freedraw.svg"_s).left(HeadBytes) << false << false;
@@ -717,8 +725,8 @@ private Q_SLOTS:
         QTest::newRow("svg") << u"excalidraw_freedraw.svg"_s << int(FileFormat::Svg) << u"svg"_s;
         QTest::newRow("excalidraw") << u"excalidraw_freedraw.excalidraw"_s << int(FileFormat::Excalidraw)
                                     << u"excalidraw"_s;
-        QTest::newRow("shapes excalidraw") << u"excalidraw_shapes.excalidraw"_s << int(FileFormat::Excalidraw)
-                                           << u"excalidraw"_s;
+        QTest::newRow("shapes excalidraw")
+                << u"excalidraw_shapes.excalidraw"_s << int(FileFormat::Excalidraw) << u"excalidraw"_s;
         QTest::newRow("plugin") << u"obsidian_freedraw.excalidraw.md"_s << int(FileFormat::ExcalidrawMarkdown)
                                 << u"excalidrawMd"_s;
     }
@@ -781,8 +789,10 @@ private Q_SLOTS:
         QCOMPARE(plain.strokes.size(), 2);
         Drawing odd;
         odd.foreign.append(QJsonObject{{u"type"_s, u"frame"_s}, {u"x"_s, u"zero"_s}});
-        odd.foreign.append(QJsonObject{{u"type"_s, u"frame"_s}, {u"x"_s, 1e12}, {u"y"_s, 0}, {u"width"_s, 1}, {u"height"_s, 1}});
-        odd.foreign.append(QJsonObject{{u"type"_s, u"frame"_s}, {u"x"_s, 50}, {u"y"_s, 40}, {u"width"_s, -20}, {u"height"_s, 10}});
+        odd.foreign.append(
+                QJsonObject{{u"type"_s, u"frame"_s}, {u"x"_s, 1e12}, {u"y"_s, 0}, {u"width"_s, 1}, {u"height"_s, 1}});
+        odd.foreign.append(
+                QJsonObject{{u"type"_s, u"frame"_s}, {u"x"_s, 50}, {u"y"_s, 40}, {u"width"_s, -20}, {u"height"_s, 10}});
         odd.foreign.append(QJsonValue(7));
         const Drawing oddPreview = previewDrawing(odd);
         QCOMPARE(oddPreview.strokes.size(), 1);

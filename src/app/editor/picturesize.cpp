@@ -151,8 +151,8 @@ bool localFileIsDrawing(const QString &file)
             return it->drawing;
     }
     QFile f(file);
-    const bool drawing =
-            f.open(QIODevice::ReadOnly) && brulion::drawing::looksLikeDrawingFile(file, f.read(brulion::drawing::HeadBytes));
+    const bool drawing = f.open(QIODevice::ReadOnly)
+                         && brulion::drawing::looksLikeDrawingFile(file, f.read(brulion::drawing::HeadBytes));
     const QMutexLocker lock(&mutex);
     if (cache.size() > 2000)
         cache.clear();

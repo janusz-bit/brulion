@@ -619,8 +619,8 @@ private Q_SLOTS:
                                      << true;
         QTest::newRow(".excalidraw.md") << u"![[Szkic ćwiczeń.excalidraw.md]]"_s << u"Szkic ćwiczeń.excalidraw.md"_s
                                         << QString() << true;
-        QTest::newRow("upper case, alias") << u"![[Szkic.EXCALIDRAW.MD|Szkic]]"_s << u"Szkic.EXCALIDRAW.MD"_s << QString()
-                                           << true;
+        QTest::newRow("upper case, alias")
+                << u"![[Szkic.EXCALIDRAW.MD|Szkic]]"_s << u"Szkic.EXCALIDRAW.MD"_s << QString() << true;
         QTest::newRow("in a folder") << u"Rysunek: ![[Excalidraw/Plan łąki.excalidraw.md]]"_s
                                      << u"Excalidraw/Plan łąki.excalidraw.md"_s << QString() << true;
         QTest::newRow("an svg") << u"![[Rysunek 2026-10-27.svg]]"_s << u"Rysunek 2026-10-27.svg"_s << QString() << true;

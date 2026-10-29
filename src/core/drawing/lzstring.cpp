@@ -143,10 +143,7 @@ int base64Value(char16_t c)
 /// six; past the end every bit is 0 (as JavaScript reads "" there).
 class BitReader {
 public:
-    explicit BitReader(const std::vector<quint8> &values) : m_values(values)
-    {
-        m_value = valueAt(0);
-    }
+    explicit BitReader(const std::vector<quint8> &values) : m_values(values) { m_value = valueAt(0); }
 
     int read(int bits)
     {
