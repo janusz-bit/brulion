@@ -442,7 +442,10 @@ Not measured in this wave (no quiet window on the Raspberry Pi — another agent
 emulator and the browser need their own builds of both trees): the Pi, the Android emulator
 (PSS at 5 000 notes) and the headless-browser numbers below in Budgets are the previous ones,
 except where noted. `scripts/wasm-smoke.mjs --loads 2 --index-notes 3000` (wasm.yml) checks that
-the browser's second load takes the notes from the cache.
+the browser's second load takes the notes from the cache; on a GitHub runner (headless Chromium,
+no throttling, times from the navigation): index of 3000 notes complete at 4.99 s on the first
+load (cold, in slices on the GUI thread), the cache saved at 10.1 s, and on the reload complete at
+2.73 s with 3000 of 3000 notes from the cache (−45 %).
 
 ### Budgets
 
