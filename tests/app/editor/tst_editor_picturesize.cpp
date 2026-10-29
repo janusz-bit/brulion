@@ -10,11 +10,15 @@
 #include "drawing/svgwrite.h"
 
 #include <QBuffer>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <cmath>
 
 using namespace Qt::StringLiterals;
 using brulion::editor::canDecodePictureFormat;
@@ -360,6 +364,57 @@ private Q_SLOTS:
         write(brulion::drawing::writeExcalidrawMarkdown(read->layout, brulion::drawing::Drawing(), 1));
         QCOMPARE(localDrawingSize(file), QSize(brulion::drawing::EmptyWidth, brulion::drawing::EmptyHeight));
         QVERIFY(!localDrawingSize(dir.filePath(u"brak.excalidraw.md"_s)).isValid());
+    }
+
+    void largeDrawingSizeIsCached()
+    {
+        // A plugin drawing of some 1 MB of scene (dense handwriting): its size read once per
+        // version — the embeds ask on the GUI thread while the page scrolls (docs/UI.md
+        // "Scrolling performance").
+        QFile in(QStringLiteral(BRULION_TEST_DATA "/drawing/obsidian_freedraw.excalidraw.md"));
+        QVERIFY(in.open(QIODevice::ReadOnly));
+        const std::optional<brulion::drawing::ExcalidrawMarkdownRead> read =
+                brulion::drawing::readExcalidrawMarkdown(in.readAll());
+        QVERIFY(read);
+        brulion::drawing::Drawing d;
+        for (int k = 0; k < 1500; ++k) {
+            brulion::drawing::Stroke s;
+            s.id = u"kreska-"_s + QString::number(k);
+            s.simulatePressure = false;
+            for (int i = 0; i < 40; ++i)
+                s.points.append({(k % 30) * 40.0 + i * 1.5, (k / 30) * 32.0 + 8 * std::sin(i / 3.0), 0.3 + 0.01 * i});
+            brulion::drawing::normalizeStroke(s);
+            d.strokes.append(s);
+        }
+        QTemporaryDir dir;
+        const QString file = dir.filePath(u"Notatki z wykładu.excalidraw.md"_s);
+        QFile out(file);
+        QVERIFY(out.open(QIODevice::WriteOnly));
+        out.write(brulion::drawing::writeExcalidrawMarkdown(read->layout, d, 1));
+        out.close();
+        QElapsedTimer timer;
+        timer.start();
+        const QSize size = localDrawingSize(file);
+        const qint64 first = timer.nsecsElapsed();
+        timer.restart();
+        QCOMPARE(localDrawingSize(file), size);
+        const qint64 again = timer.nsecsElapsed();
+        QCOMPARE(size, brulion::drawing::pictureRect(d).size().toSize());
+        // Where the first time goes: reading the file (LZ-String, JSON), the picture's rect.
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray bytes = f.readAll();
+        timer.restart();
+        const std::optional<brulion::drawing::DrawingFile> parsed = brulion::drawing::readDrawingFile(bytes);
+        const qint64 parse = timer.nsecsElapsed();
+        QVERIFY(parsed);
+        timer.restart();
+        const QRectF rect = brulion::drawing::pictureRect(parsed->drawing);
+        const qint64 bounds = timer.nsecsElapsed();
+        QCOMPARE(rect.size().toSize(), size);
+        qInfo("%lld KB plugin file: its size %.1f ms the first time (read %.1f ms, rect %.1f ms), %.3f ms cached",
+              qlonglong(QFileInfo(file).size() / 1024), first / 1e6, parse / 1e6, bounds / 1e6, again / 1e6);
+        QVERIFY(again < first);
     }
 
     void drawingExportsStandIn()
