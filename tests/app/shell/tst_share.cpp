@@ -562,6 +562,31 @@ private Q_SLOTS:
         QCOMPARE(shareRequests(ui2), 0);
     }
 
+    void openWithoutANotebook()
+    {
+        // The start screen: a notice, the opened file waits; the notebook opened, a file of it
+        // that was opened meanwhile opens as its page and the other one is offered.
+        auto app = makeApp();
+        QSignalSpy ui(app.get(), &AppController::uiActionRequested);
+        QSignalSpy toasts(app.get(), &AppController::toastRequested);
+        app->start();
+        QCOMPARE(app->status(), u"onboarding"_s);
+        const QString dir = outsideFolder(u"bez notatnika"_s, {{u"Łąka.md"_s, "# Łąka\n"}});
+        const QString vault = m_tmp.filePath(u"później otwarty"_s);
+        QVERIFY(writeFile(vault + u"/Strona.md"_s, "# Strona\n"));
+        app->receiveShare(openedShare({dir + u"/Łąka.md"_s, vault + u"/Strona.md"_s}));
+        QCOMPARE(shareRequests(ui), 0);
+        QCOMPARE(toasts.size(), 1);
+        QCOMPARE(app->pendingShare().value(u"files"_s).toList().size(), 2);
+        app->openVault(vault);
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QTRY_COMPARE(shareRequests(ui), 1);
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"Strona.md"_s);
+        const QVariantList files = app->pendingShare().value(u"files"_s).toList();
+        QCOMPARE(files.size(), 1);
+        QCOMPARE(files.first().toMap().value(u"name"_s).toString(), u"Łąka.md"_s);
+    }
+
     void startWithoutOpenFiles()
     {
         // `brulion --open` with no files (a menu launch of `Exec=brulion --open %F`), or with
