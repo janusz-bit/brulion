@@ -46,7 +46,7 @@ Menu **Więcej** (⋮) → *Centrum synchronizacji*, albo kliknięcie stanu sync
 - Jeśli serwer długo nie odpowiada, pojawia się ostrzeżenie, a po 180 s próba jest przerywana i ponawiana — panel nie „synchronizuje” w nieskończoność.
 - Po błędzie widać odliczanie do kolejnej próby i przycisk „Spróbuj teraz”.
 - Historia ostatnich uruchomień pokazuje wynik, powód i czas; kliknięcie otwiera szczegóły.
-- **Konflikty** rysunków pokazują obie wersje i wynik scalenia jako rysunki, nigdy jako tekst. **Scal rysunki** łączy linie i kształty z obu wersji (starte tylko na jednym urządzeniu wrócą), poprzednią wersję zapisuje w historii, a kopię przenosi do kosza. Zobacz [[Rysunki#Zapisywanie i synchronizacja|Zapisywanie i synchronizacja rysunków]].
+- **Konflikty** rysunków pokazują obie wersje i wynik scalenia jako rysunki, nigdy jako tekst. **Scal rysunki** łączy linie i kształty z obu wersji (starte tylko na jednym urządzeniu wrócą), poprzednią wersję zapisuje w historii, a kopię przenosi do kosza. Kopia rysunku z Obsidiana, która ma inne notatki niż twój rysunek, zostaje po scaleniu, dopóki nie przeniesiesz z niej notatek i jej nie usuniesz. Zobacz [[Rysunki#Zapisywanie i synchronizacja|Zapisywanie i synchronizacja rysunków]].
 
 ## Rejestr zdarzeń
 Gdy coś nie działa, zajrzyj do **Rejestru zdarzeń** (*Ustawienia → Aplikacja*, albo „rejestr” w palecie poleceń). Można go filtrować i przeszukiwać, a potem skopiować lub zapisać do wysłania. Rejestr nie zawiera haseł, tokenów ani treści notatek; zostaje na urządzeniu, dopóki sam go nie udostępnisz. Przy problemach z synchronizacją włącz najpierw „Szczegółowy rejestr”, powtórz synchronizację i dopiero wtedy wyślij rejestr.

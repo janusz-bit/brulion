@@ -261,7 +261,10 @@ or save when another device's version arrives, the merge base Nextcloud's sync k
 new on either side are kept (this device's on top), changed ones take the changed side, erased
 ones go; with no common version — a conflict copy Syncthing or Nextcloud left, merged in the sync
 center ("Scal rysunki") — a union: every element of both, the higher `version` of one both have,
-the original's order, paper, pattern and theme (elements erased on one device only come back).
+the original's order, paper, pattern and theme (elements erased on one device only come back);
+an Obsidian plugin file there keeps the original's Markdown around the scene, so a copy whose
+notes (frontmatter, the back of the card, links, embedded files, a text entry edited by hand)
+would be lost stays next to the merged drawing until the user removes it.
 Nextcloud keeps both versions (a conflict copy) of a drawing it cannot merge: an element Brulion
 does not edit, a scene that cannot be read, no common version (two drawings made apart under one
 name), an element whose content changed with the same `version` (an edit by hand).

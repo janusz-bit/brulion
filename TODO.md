@@ -18,6 +18,13 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Rysunki — dalsze kroki.** Edytor rysunków (`/Rysunek`, docs/UI.md „Drawing editor”) ma
   pismo odręczne, zakreślacz, gumkę, papier, kształty, strzałki, tekst i zaznaczanie lassem.
   Do zrobienia:
+  * sprawdzić ręcznie „Scal rysunki” na prawdziwych urządzeniach: rysunek zmieniony bez sieci na
+    telefonie i na laptopie, Syncthing zostawia kopię `*.sync-conflict-….svg` (albo
+    `*.excalidraw.sync-conflict-….md` rysunku z Obsidiana) → „Scal rysunki” w centrum
+    synchronizacji na jednym z nich; to samo z prawdziwym Nextcloudem (rysunek zmieniony na dwóch
+    urządzeniach scala się sam, bez kopii). Kopie od prawdziwego Syncthinga (dwie instancje na
+    jednym komputerze) scala `tests/app/io/syncthing-conflict.sh`, Nextcloud sprawdzono tylko na
+    udawanym serwerze WebDAV (`tst_sync_devices`);
   * sprawdzić ręcznie zaznaczanie lassem rysikiem na tablecie (Natalia) i polskie znaki z
     klawiatury ekranowej w tekście na rysunku na prawdziwym telefonie (pisanie z klawiatury
     sprawdza `scripts/android-emulator-test.sh --drawing`, zgodność z excalidraw.com w obie strony

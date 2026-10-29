@@ -1784,7 +1784,8 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   entries `drawing`: the copy or the original is a drawing — an SVG with an Excalidraw scene,
   `*.excalidraw.md`, `.excalidraw` —, a pen icon in the list): never the text merge (a line merge
   would cut the scene's payload). A card "Dwie wersje rysunku" with read-only previews
-  (`DrawingCanvas { interactive: false }`: the whole drawing in view, no input, the app's theme;
+  (`DrawingCanvas { interactive: false }`: the whole drawing in view, centred both ways, no
+  input, the app's theme;
   a drawing Brulion does not draw as its picture, `Workspace.drawingUrl`) of this device's
   version, the copy and — when both are drawings Brulion edits, of one format — "Po scaleniu",
   the elements of each ("3 elementy") and "wspólne: 2, tylko tutaj: 1, tylko w kopii: 1"; on
@@ -1797,9 +1798,23 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   so). Same elements (another program wrote the picture) → "Kopia ma ten sam rysunek"; the copy
   contained in the drawing → "Wszystko z kopii jest już w rysunku" ("Usuń kopię"). A drawing
   Brulion cannot merge (a frame, a picture without a scene, a broken one) gets only "Zachowaj
-  moją" / "Zachowaj kopię" (the copy's exact bytes, the replaced version in History). A decision
-  made on versions that changed meanwhile is refused and shown again. Desktop: "Otwórz rysunek"
-  in the header. Nextcloud's own sync merges a drawing changed on both devices by itself, against
+  moją" / "Zachowaj kopię" (the copy's exact bytes, the replaced version in History). An
+  Obsidian plugin file (`*.excalidraw.md`) is a note too: its Markdown around the scene
+  (frontmatter, the back of the card, element links, embedded files, text entries) counts
+  (`drawing::keepsMarkdownOf`: the copy's must survive in the original's — text entries follow
+  their elements). When the copy's notes would be lost, nothing is "the same" or "older": "Scal
+  rysunki" (the card says so) merges the elements into the drawing and **keeps the copy**
+  (`ConflictResolver.updated`, a toast, the resolver stays open); then — or when the copy adds
+  nothing to the drawing at all — a card "Różnią się tylko notatki wokół rysunku" with a
+  `BDiffView` of both files' Markdown (the scene's block left empty, `oursNotes`/`theirsNotes`)
+  and "Usuń kopię" once the user carried over what they need in Obsidian. The replaced version
+  goes to History whatever its size (`writeBytesKeepingHistory` records it from the disk: the
+  vault snapshots only the content it holds in memory, up to 16 MB; nothing is written when it
+  cannot be recorded). A decision made on versions that changed meanwhile is refused and shown
+  again. Desktop: "Otwórz rysunek" in the header. Tests: `tst_appio_conflicts`;
+  `tests/app/io/syncthing-conflict.sh` (no ctest, needs `syncthing`: two Syncthing instances on
+  127.0.0.1 change an SVG and an Obsidian drawing while paused, their own conflict copies merged by
+  `realSyncthingConflicts` on both devices' folders). Nextcloud's own sync merges a drawing changed on both devices by itself, against
   the version both had last (`drawing::mergeDrawingFiles`); only drawings it cannot merge so
   become such copies.
 * **Retry and decisions:** a failed run shows "Kolejna próba za 25 s" (a countdown) with
@@ -2121,7 +2136,8 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
   `obsidianpage` opened as a page, `obsidianframe` with a frame: read-only).
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
   `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center (`sync-conflict-
-  drawing`: the conflict of a drawing, previews and "Scal rysunki") and import/export with prepared
+  drawing`: the conflict of a drawing, previews and "Scal rysunki"; `sync-conflict-drawing-notes`:
+  an Obsidian drawing whose copy differs only in its notes) and import/export with prepared
   notebooks; the io script also seeds a sync history and an earlier
   session of the event log (`fixtures.sh`) for `sync-nextcloud`, `sync-details`,
   `sync-details-failed`, `logs`, `logs-sync`, `settings-app` (and `sync-stalled`, not in the
