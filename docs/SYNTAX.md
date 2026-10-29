@@ -214,11 +214,15 @@ farther than 10⁶ scene units from the origin on either axis (`drawing::Coordin
 broken numbers — is shown, never written (read-only); a drawing whose only such elements were
 deleted is editable. Everything is drawn clean: Excalidraw's `roughness` (hand-drawn look) is kept
 in the file but not drawn; hachure, cross-hatch and zigzag fills are drawn as clean parallel lines
-(−41°, 4 × the stroke's width apart; cross-hatch also at +49°); dashed and dotted outlines as
+(−41°, 4 × the stroke's width apart; cross-hatch also at +49°) — at most 2000 of them a shape
+(a bigger one gets them further apart) and 200 000 a drawing (the hatched fills beyond them are
+drawn solid: `drawing::MaxHatchLines`, `DrawingHatchLines`), so a small file of huge hatched shapes
+never turns into millions of lines; dashed and dotted outlines as
 Excalidraw's dash patterns; rounded corners as Excalidraw rounds them. Text is drawn in the app's
 fonts — Excalidraw's monospace families (3 Cascadia, 8 Comic Shanns) in the monospace one, all
 others in the UI font, at the element's `fontSize` and `lineHeight` — so text from excalidraw.com
-may run slightly past its box; Brulion never re-wraps text it did not edit. In the dark theme
+may run slightly past its box; Brulion never re-wraps text it did not edit (a text opened in the
+editor and closed unchanged stays as it is). In the dark theme
 pictures keep their colours.
 
 *Writing elements:* an element Brulion did not change is written back exactly as it was read
@@ -229,14 +233,18 @@ excalidraw.com writes them, with `roughness: 0` (clean in excalidraw.com too): r
 `roundness {type: 3}` (adaptive), other shapes sharp, lines and arrows with `roundness {type: 2}`,
 arrows with `endArrowhead: "arrow"`, never bound to shapes (`startBinding`/`endBinding` null), text
 in `fontFamily: 2` (Helvetica: sans in both apps) with `lineHeight: 1.15`, labels centred
-(`textAlign: "center"`, `verticalAlign: "middle"`, wrapped to the shape's width less 2 × 5),
+(`textAlign: "center"`, `verticalAlign: "middle"`, wrapped as Excalidraw wraps them —
+getBoundTextMaxWidth: a rectangle's width, an ellipse's `round(width / 2 · √2)`, a diamond's
+`round(width / 2)`, less 2 × 5 —, the shape grown to hold them as Excalidraw grows it,
+computeContainerDimensionForBoundText),
 `groupIds: []`, no `index`. Elements are written in their drawing order; Excalidraw's fractional
 `index` values are kept while they still rise in that order, and left out of every element once
 Brulion reordered elements (Excalidraw makes new ones when it opens the scene). `files` keeps only
 the pictures that image elements use. Moving an element moves its label and the ends of arrows
 bound to it (an elbow arrow keeps its right angles; Brulion does not re-route it); deleting one
 removes its label and unbinds its arrows; groups (`groupIds`) are selected, copied and reordered
-as a whole; locked elements are never selected, moved or erased. Elements and fields Brulion does
+as a whole; locked elements — and the labels of locked shapes — are never selected, moved, erased
+or edited. Elements and fields Brulion does
 not model are written back as they were; deleted elements are dropped (as Excalidraw's own export
 does).
 A scene beyond 32 MB (decompressed) or with more than 500 000 JSON arrays and objects (every point

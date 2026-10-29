@@ -1043,11 +1043,14 @@ tablet (lectures, sketches) and diagrams (shapes, arrows, text), on every platfo
     pen lifts, until every finger has lifted. A pen that lands while fingers move the paper or
     draw ends their gesture (a finger stroke just begun is dropped) and draws.
 * **Tools** (`DrawingToolbar`; above the paper on wide windows, at the bottom on phones — in
-  the bottom navigation's place, `toolbarDocked` and `replacesBottomNav` —, scrolling sideways
-  when it does not fit): Cofnij,
+  the bottom navigation's place, `toolbarDocked` and `replacesBottomNav` —; when one row cannot
+  hold them all — a phone held upright, `twoRows` — the tools and the swatch take a line of their
+  own, centred, above Cofnij, Ponów, Więcej and Gotowe, so nothing hides past the bar's edge; a row
+  that still does not fit scrolls sideways): Cofnij,
   Ponów, **Pióro** (P), **Zakreślacz** (H: wide, translucent, an even width — constant pressure,
   as Excalidraw draws it alike), **Gumka** (E: removes every element it touches — a shape with its
-  label, never a locked one —, one undo step per gesture, a ring follows the pointer),
+  label, never a locked one nor a locked shape's label —, one undo step per gesture, a ring
+  follows the pointer),
   **Zaznacz** (V, a lasso icon; below), **Kształty** (one button showing the last shape — R
   Prostokąt, O Elipsa, D Romb, L Linia, A Strzałka, remembered in `drawing/shape` —; clicked again
   while a shape is the tool it opens their menu), **Tekst** (T; below), the current tool's colours
@@ -1071,7 +1074,7 @@ tablet (lectures, sketches) and diagrams (shapes, arrows, text), on every platfo
   least half inside it (its points; a box's corners, edge middles and centre), a tap the topmost
   element under it (8 px, 14 px for a finger or a pen; an unfilled shape only near its outline) —
   with its group (`groupIds`, the outermost) and a shape's label; a tap on nothing clears it.
-  Locked elements are never taken. The selection is framed (dashed around all, thin around each
+  Locked elements — and the labels of locked shapes — are never taken. The selection is framed (dashed around all, thin around each
   when there are several); a drag inside the frame moves it (one undo step; arrows bound to it
   follow, labels go along). **DrawingSelectionBar** floats centred above the frame (below it when
   there is no room, always inside the view), touch-sized on touch screens, while nothing is being
@@ -1086,15 +1089,21 @@ tablet (lectures, sketches) and diagrams (shapes, arrows, text), on every platfo
   tap), a tap on a text edits it, a tap inside a shape writes its label; with the select tool a
   double tap does the same. **DrawingTextEditor** opens on the paper in the text's font, size
   (× zoom), colour (as the paper shows it) and alignment — as wide as the text, a label as wide as
-  its shape's inside, wrapped and centred —; Enter starts a new line; Escape, Ctrl+Enter, a press
-  on the paper beside it or (touch screens) its "Gotowe" button write it — one undo step; an
-  emptied text is deleted; a label grows its shape when it needs the room. On a phone the paper
+  it wraps in its shape (Excalidraw's getBoundTextMaxWidth: a rectangle's width, the widest
+  rectangle inside an ellipse — width / 2 · √2 — or a diamond — width / 2 —, less 2 × 5), centred
+  —; Enter starts a new line; Escape, Ctrl+Enter, a press on the paper beside it or (touch
+  screens) its "Gotowe" button write it — one undo step; an emptied text is deleted; a label grows
+  its shape when it needs the room (as Excalidraw grows it, from its top left). A text closed as it
+  was is no edit: nothing is stamped, wrapped again in Brulion's fonts, saved or added to the undo
+  history. A locked shape's label is not edited (the text tool writes a new text there). On a phone the paper
   moves so the text stays above the keyboard (`DrawingCanvas.ensureVisible`, `KeyboardInsets`).
   New text: Excalidraw's Helvetica (sans in both apps) in the app's UI font, line height 1.15.
   While text is written the canvas takes no other input and the view's keys rest.
 * **Saving:** by itself, 1.2 s after the last change, and when the route changes, the view goes
   (Back, Gotowe, another view) and the app leaves the foreground (`Workspace.writeAttachment`:
-  atomic, the replaced version kept in History as for notes). A failed write is said by the
+  atomic, the replaced version kept in History as for notes). A text being written goes in first
+  on those saves; the 1.2 s timer never commits it — it waits until the text's editor closes (a
+  commit mid-word would close the editor and hand the next keys to the tools' shortcuts). A failed write is said by the
   shell's error toast. Every save reads the file first: a change another program made that has
   not been reported yet (a folder watch that missed it, Android's shared storage) is taken in as
   below, never written over.

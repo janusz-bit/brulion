@@ -25,6 +25,8 @@ Rysunek w notatce ma w rogu ikonę pióra. Kliknij go albo stuknij, żeby rysowa
 - **Cofnij** i **Ponów** (`Ctrl+Z`, `Ctrl+Shift+Z`) — cofają linie, kształty, tekst, starcie gumką, każdą zmianę zaznaczenia (przesunięcie, kolor, kopię, usunięcie) oraz zmianę papieru i tła.
 - **Pokaż cały rysunek** (`Ctrl+0`) i **Gotowe** — powrót do notatki.
 
+Na telefonie pasek narzędzi jest na dole ekranu. Gdy telefon trzymasz pionowo, pasek ma dwa wiersze: u góry narzędzia i kółko koloru, niżej **Cofnij**, **Ponów**, **Więcej** i **Gotowe** — wszystkie przyciski są na ekranie.
+
 ## Kształty i strzałki
 Przycisk kształtu na pasku pokazuje ostatnio używany kształt; kliknij go jeszcze raz, gdy kształt jest wybrany, a rozwinie się lista: **Prostokąt** (R), **Elipsa** (O), **Romb** (D), **Linia** (L) i **Strzałka** (A).
 - Przeciągnij po kartce — kształt rośnie razem z ruchem rysika, palca albo myszy. Z wciśniętym `Shift` prostokąt staje się kwadratem, elipsa kołem, a linia i strzałka obracają się co 15°.
@@ -34,7 +36,8 @@ Przycisk kształtu na pasku pokazuje ostatnio używany kształt; kliknij go jesz
 ## Tekst
 - Wybierz **Tekst** (T) i stuknij w kartkę — pojawia się pole do pisania. `Enter` zaczyna nowy wiersz.
 - Kliknięcie obok pola, `Esc`, `Ctrl+Enter` albo przycisk ✓ (na ekranie dotykowym) kończy pisanie. Pusty tekst znika.
-- Stuknij w istniejący tekst, żeby go poprawić. Stuknij w środek prostokąta, elipsy albo rombu, a napiszesz w nim etykietę: wyśrodkowaną i zawiniętą do szerokości kształtu. Etykieta przesuwa się i usuwa razem z kształtem.
+- Stuknij w istniejący tekst, żeby go poprawić. Stuknij w środek prostokąta, elipsy albo rombu, a napiszesz w nim etykietę: wyśrodkowaną i zawiniętą tak jak w Excalidraw — w elipsie i rombie węższą, żeby zmieściła się w środku. Gdy tekst się nie mieści, kształt rośnie. Etykieta przesuwa się i usuwa razem z kształtem.
+- Pole zamknięte bez zmian niczego w rysunku nie zmienia — tekst z Excalidraw zostaje dokładnie taki, jaki był.
 - Narzędziem **Zaznacz** to samo robi podwójne kliknięcie (albo dwa stuknięcia).
 - Na telefonie kartka przesuwa się tak, żeby pisany tekst był nad klawiaturą.
 
@@ -43,7 +46,7 @@ Wybierz **Zaznacz** (V) i obrysuj rysikiem, palcem albo myszką to, co chcesz za
 - **Przeciągnij** wewnątrz ramki zaznaczenia, żeby je przesunąć. Strzałki przyczepione do przesuwanych kształtów idą za nimi.
 - Nad zaznaczeniem pojawia się pasek: **kolory** (zmiana koloru), **Duplikuj** (`Ctrl+D`), **Na wierzch** (`Ctrl+Shift+]`), **Na spód** (`Ctrl+Shift+[`) i **Usuń** (`Delete`).
 - Klawisze: `Ctrl+A` zaznacza wszystko, strzałki przesuwają zaznaczenie (z `Shift` dziesięć razy dalej), `Ctrl+]` i `Ctrl+[` przesuwają je o jedno piętro w górę i w dół, `Esc` zdejmuje zaznaczenie.
-- Grupy z Excalidraw zaznaczają się w całości. Elementów zablokowanych w Excalidraw nie da się zaznaczyć ani zetrzeć.
+- Grupy z Excalidraw zaznaczają się w całości. Elementów zablokowanych w Excalidraw — ani napisów w zablokowanych kształtach — nie da się zaznaczyć, zetrzeć ani zmienić.
 - Gdy **Rysuj palcem** jest wyłączone, palec tylko przesuwa kartkę — dłoń oparta na zaznaczeniu go nie przesunie.
 
 ## Jasne i ciemne tło
