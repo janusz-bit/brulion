@@ -306,9 +306,11 @@ private Q_SLOTS:
 
     void flowItemsWithCommasQuoted()
     {
-        // A comma or bracket anywhere in a flow item would end it: such items are quoted.
-        const QVariantMap data{{u"items"_s, QVariantList{QVariantList{u"a, b"_s, u"c"_s, u"x]y"_s, u"ż{ó}"_s}}},
-                               {u"map"_s, QVariantList{QVariantList{QVariantMap{{u"k, l"_s, u"v"_s}}}}}};
+        // A comma or bracket anywhere in a flow item would end it: such items are quoted. (Each
+        // nested list wrapped in a QVariant: MSVC reads `QVariantList{QVariantList{…}}` as a copy.)
+        const QVariantList items{u"a, b"_s, u"c"_s, u"x]y"_s, u"ż{ó}"_s};
+        const QVariantList maps{QVariantMap{{u"k, l"_s, u"v"_s}}};
+        const QVariantMap data{{u"items"_s, QVariantList{QVariant(items)}}, {u"map"_s, QVariantList{QVariant(maps)}}};
         const QString yaml = stringifyYaml(data);
         QCOMPARE(yaml, u"items:\n  - [\"a, b\", c, \"x]y\", \"ż{ó}\"]\nmap:\n  - [{\"k, l\": v}]\n"_s);
         QCOMPARE(parseYaml(yaml), data);
