@@ -806,8 +806,15 @@ private Q_SLOTS:
         };
         QVERIFY(inView());
         QVERIFY(canvas->zoom() < 1);
+        // Centred both ways: no empty paper left below, where nothing is written in a preview.
+        const auto centred = [this] {
+            const QPointF c = canvas->toItem(canvas->contentBounds().center());
+            return qAbs(c.x() - canvas->width() / 2) < 0.5 && qAbs(c.y() - canvas->height() / 2) < 0.5;
+        };
+        QVERIFY(centred());
         canvas->setSize(QSizeF(120, 300));
         QVERIFY(inView());
+        QVERIFY(centred());
         canvas->setSize(QSizeF(300, 160));
         QCOMPARE(canvas->load(strokesFile({u"a"_s, u"b"_s, u"c"_s})), QString());
         QVERIFY(inView());

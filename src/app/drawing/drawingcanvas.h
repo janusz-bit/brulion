@@ -255,7 +255,8 @@ public:
     Q_INVOKABLE bool isKnownFile(const QByteArray &bytes) const { return !bytes.isEmpty() && bytes == m_known; }
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
-    /// The whole drawing in view (at most zoom 1), centred across, from its top.
+    /// The whole drawing in view (at most zoom 1), centred across, from its top (a preview —
+    /// `interactive` false — centred both ways).
     Q_INVOKABLE void fitAll();
     Q_INVOKABLE void zoomBy(qreal factor, qreal x = -1, qreal y = -1);
     Q_INVOKABLE void panBy(qreal dx, qreal dy);

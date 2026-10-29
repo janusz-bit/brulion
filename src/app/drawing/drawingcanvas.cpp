@@ -615,8 +615,10 @@ void DrawingCanvas::fitAll()
         const double z = std::min({(width() - 2 * margin) / std::max(1.0, b.width()),
                                    (height() - 2 * margin) / std::max(1.0, b.height()), 1.0});
         m_zoom = std::clamp(z, MinZoom, MaxZoom);
-        // Centred across, from the top down (room left over stays below, where writing goes on).
-        m_center = QPointF(b.center().x(), b.top() - margin / m_zoom + height() / (2 * m_zoom));
+        // Centred across, from the top down (room left over stays below, where writing goes on);
+        // a preview, where nothing is written, centred both ways.
+        m_center = m_interactive ? QPointF(b.center().x(), b.top() - margin / m_zoom + height() / (2 * m_zoom))
+                                 : b.center();
     }
     viewMoved(false);
 }
