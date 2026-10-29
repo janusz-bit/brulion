@@ -26,6 +26,10 @@ qt_target_qml_sources(brulion
         qml/editor/QueryBlockView.qml
         qml/editor/MathBlockView.qml
         qml/editor/FrontmatterView.qml
+        qml/editor/PropertiesPanel.qml
+        qml/editor/PropertyRow.qml
+        qml/editor/PropertyListValue.qml
+        qml/editor/PropertyMenu.qml
         qml/editor/EmbedView.qml
         qml/editor/TransclusionView.qml
         qml/editor/SuggestionPopup.qml
@@ -38,7 +42,8 @@ qt_target_qml_sources(brulion
 # Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); PageView loads a PageScript either way.
 if(BRULION_DEV_QML_ENABLED)
     qt_target_qml_sources(brulion QML_FILES qml/dev/EditorPlayground.qml qml/dev/PageScript.qml
-        qml/dev/SelectionSelfTest.qml qml/dev/RefreshSelfTest.qml qml/dev/DateChipSelfTest.qml)
+        qml/dev/SelectionSelfTest.qml qml/dev/RefreshSelfTest.qml qml/dev/DateChipSelfTest.qml
+        qml/dev/PropertiesSelfTest.qml)
 else()
     qt_target_qml_sources(brulion QML_FILES qml/stubs/PageScript.qml)
 endif()

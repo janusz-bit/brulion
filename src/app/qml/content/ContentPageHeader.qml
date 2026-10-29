@@ -7,8 +7,9 @@ import Brulion
 // the blocks): the title — editable in place (a click; Enter renames through PageView, Escape
 // cancels) — with the favourite star and the page menu, previous / next day arrows for daily
 // notes, the folder breadcrumb in the side panel (the shell's top bar shows it otherwise), and
-// the page's aliases and tags as chips (the editor shows all properties in its collapsed
-// "Właściwości" block). Next to the star: the note mode toggle (document / outline; its icon
+// the page's aliases and tags as chips — from the page's properties, editable there: a chip's menu
+// (a right-click, a long press) removes one, "+" adds a tag or an alias (the editor shows all
+// properties in its "Właściwości" panel, docs/UI.md "Page properties"). Next to the star: the note mode toggle (document / outline; its icon
 // shows the current mode, a click asks for the other one: modeToggleRequested). An empty page
 // gets a "Start writing" button; a page that does not exist yet says that typing creates it.
 // A page named by a tag that is in use (docs/SYNTAX.md §3: #tag is a link to this page) gets a
@@ -95,6 +96,97 @@ Item {
         if (editor)
             editor.forceActiveFocus()
     }
+    // ---- Tags and aliases of the page's properties (docs/UI.md "Page properties") -------------
+    property var chipMenu: null
+    property var addMenu: null
+    /// The menu of the tag or alias `name` (`kind` "tags" | "aliases") at `item`.
+    function openChipMenu(kind, name, item) {
+        if (!controller || !controller.loaded)
+            return
+        if (!chipMenu)
+            chipMenu = chipMenuComponent.createObject(header)
+        chipMenu.kind = kind
+        chipMenu.name = name
+        chipMenu.popup(item, 0, item.height)
+    }
+    function openAddMenu(item) {
+        if (!addMenu)
+            addMenu = addMenuComponent.createObject(header)
+        addMenu.popup(item, 0, item.height)
+    }
+    /// Take `name` out of the page's tags / aliases (a toast with "Cofnij").
+    function removeListItem(kind, name) {
+        const before = controller.undoToken()
+        const r = controller.removePageListItem(kind, name)
+        if (!r.ok) {
+            AppController.toast(r.reason, "error")
+            return
+        }
+        const text = kind === "tags" ? qsTr("Removed tag #%1 from this page").arg(name) : qsTr("Removed alias “%1”").arg(name)
+        const action = editor ? editor.undoAction(before) : null
+        if (action)
+            AppController.toastAction(text, "info", action.text, action.run)
+        else
+            AppController.toast(text, "info")
+    }
+    Component {
+        id: chipMenuComponent
+        BMenu {
+            id: chipMenuItem
+            property string kind
+            property string name
+            BMenuItem {
+                objectName: "headerTagOpen"
+                visible: chipMenuItem.kind === "tags"
+                height: visible ? implicitHeight : 0
+                text: qsTr("Open tag page")
+                iconName: "hash"
+                onTriggered: AppController.openTag(chipMenuItem.name)
+            }
+            BMenuItem {
+                objectName: "headerAliasCopy"
+                visible: chipMenuItem.kind === "aliases"
+                height: visible ? implicitHeight : 0
+                text: qsTr("Copy")
+                iconName: "copy"
+                onTriggered: {
+                    if (header.controller.copyText(chipMenuItem.name).ok)
+                        AppController.toast(qsTr("Copied %1").arg(chipMenuItem.name), "success")
+                }
+            }
+            BMenuItem {
+                objectName: "headerChipRemove"
+                text: chipMenuItem.kind === "tags" ? qsTr("Remove from this page") : qsTr("Remove alias")
+                iconName: "x"
+                danger: true
+                onTriggered: header.removeListItem(chipMenuItem.kind, chipMenuItem.name)
+            }
+        }
+    }
+    Component {
+        id: addMenuComponent
+        BMenu {
+            BMenuItem {
+                objectName: "headerAddTag"
+                text: qsTr("Add tag")
+                iconName: "hash"
+                onTriggered: chips.adding = "tags"
+            }
+            BMenuItem {
+                objectName: "headerAddAlias"
+                text: qsTr("Add alias")
+                iconName: "bookmark"
+                onTriggered: chips.adding = "aliases"
+            }
+            BMenuItem {
+                objectName: "headerAddProperty"
+                text: qsTr("Add property…")
+                iconName: "plus"
+                onTriggered: if (header.editor) header.editor.addProperty()
+            }
+        }
+    }
+
     /// `tag:` query of a tag key (quoted when it has a space, a comma or a quote).
     function tagQuery(key) {
         return "tag:" + (/[\s,"]/.test(key) ? "\"" + key + "\"" : key)
@@ -287,11 +379,23 @@ Item {
         }
 
         // ---- Properties summary ---------------------------------------------------------------------
+        // The page's aliases and tags: from its properties once the page is loaded (an edit shows at
+        // once), else from the index's summary. A chip from a property has a menu (a right-click, a
+        // long press; an alias's tap too): a tag's page or "Usuń z tej strony", an alias copied or
+        // removed. "+" at the end of the row adds a tag or an alias in a field there (or opens the
+        // properties panel's add row).
         Flow {
-            readonly property var aliases: header.summary.aliases || []
-            readonly property var tags: header.summary.tags || []
             id: chips
-            visible: aliases.length + tags.length > 0
+            objectName: "pageHeaderChips"
+            readonly property bool live: header.loaded && header.controller !== null
+            readonly property var aliases: live ? (header.controller.pageProperties.aliases || [])
+                                                : (header.summary.aliases || []).map(a => ({ name: a }))
+            readonly property var tags: live ? (header.controller.pageProperties.tags || [])
+                                             : (header.summary.tags || []).map(t => ({ name: t.display, key: t.tag }))
+            /// The field adding "tags" | "aliases" is open ("": none).
+            property string adding: ""
+            property string addError: ""
+            visible: aliases.length + tags.length > 0 || adding !== ""
             Layout.fillWidth: true
             Layout.topMargin: Theme.space1
             spacing: Theme.space1
@@ -299,21 +403,111 @@ Item {
             Repeater {
                 model: chips.aliases
                 delegate: BChip {
-                    required property string modelData
-                    text: header.editor ? header.editor.autoTextSafe(modelData) : modelData
+                    id: aliasChip
+                    required property var modelData
+                    readonly property bool editable: chips.live && aliasChip.modelData.editable === true
+                    objectName: "headerAlias_" + modelData.name
+                    text: header.editor ? header.editor.autoTextSafe(modelData.name) : modelData.name
                     iconName: "bookmark"
-                    Accessible.name: qsTr("Alias: %1").arg(modelData)
+                    interactive: editable
+                    Accessible.name: qsTr("Alias: %1").arg(modelData.name)
+                    onClicked: header.openChipMenu("aliases", aliasChip.modelData.name, aliasChip)
+                    onPressAndHold: header.openChipMenu("aliases", aliasChip.modelData.name, aliasChip)
+                    TapHandler {
+                        enabled: aliasChip.editable
+                        acceptedButtons: Qt.RightButton
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                        onTapped: header.openChipMenu("aliases", aliasChip.modelData.name, aliasChip)
+                    }
                 }
             }
             Repeater {
                 model: chips.tags
                 delegate: BChip {
+                    id: tagChip
                     required property var modelData
+                    readonly property bool editable: chips.live && tagChip.modelData.editable === true
+                    objectName: "headerTag_" + modelData.name
                     variant: "tag"
-                    text: "#" + (header.editor ? header.editor.autoTextSafe(modelData.display) : modelData.display)
+                    text: "#" + (header.editor ? header.editor.autoTextSafe(modelData.name) : modelData.name)
                     interactive: true
-                    Accessible.name: qsTr("Tag %1").arg(modelData.display)
-                    onClicked: AppController.openTag(modelData.tag)
+                    Accessible.name: qsTr("Tag %1").arg(modelData.name)
+                    onClicked: AppController.openTag(tagChip.modelData.key || tagChip.modelData.name)
+                    onPressAndHold: if (tagChip.editable) header.openChipMenu("tags", tagChip.modelData.name, tagChip)
+                    TapHandler {
+                        enabled: tagChip.editable
+                        acceptedButtons: Qt.RightButton
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                        onTapped: header.openChipMenu("tags", tagChip.modelData.name, tagChip)
+                    }
+                }
+            }
+            BIconButton {
+                id: chipsAdd
+                objectName: "pageHeaderAdd"
+                visible: chips.live && chips.adding === "" && header.controller.pageProperties.canAdd === true
+                         && !header.controller.sourceMode
+                size: "small"
+                iconName: "plus"
+                label: qsTr("Add a tag or alias…")
+                onClicked: header.openAddMenu(chipsAdd)
+            }
+            Loader {
+                id: chipsField
+                active: chips.adding !== ""
+                visible: active
+                width: active ? Math.min(240, header.textWidth) : 0
+                sourceComponent: BSuggestField {
+                    id: chipField
+                    objectName: "pageHeaderField"
+                    size: "small"
+                    placeholderText: chips.adding === "tags" ? qsTr("Tag") : qsTr("Alias")
+                    errorText: chips.addError
+                    inputMethodHints: Qt.ImhNoAutoUppercase
+                    provider: chips.adding !== "tags" ? null : (typed) => header.controller.suggestPropertyValues("tags", typed, 8)
+                        .map(v => ({ title: "#" + v.value, value: v.value, subtitle: v.count > 0 ? String(v.count) : "" }))
+                    property bool done: false
+                    function add(text) {
+                        if (text.trim() === "")
+                            return true
+                        const r = header.controller.addPageListItem(chips.adding, text)
+                        chips.addError = r.ok ? "" : r.reason
+                        if (r.ok)
+                            chipField.text = ""
+                        return r.ok
+                    }
+                    Component.onCompleted: forceActiveFocus()
+                    onTypedTextChanged: chips.addError = ""
+                    onPicked: (value) => add(String(value))
+                    onCommitted: (text) => {
+                        if (text.trim() === "")
+                            chips.adding = ""
+                        else
+                            add(text)
+                    }
+                    onCancelled: {
+                        done = true
+                        chips.adding = ""
+                        chips.addError = ""
+                    }
+                    /// Leaving the field (a tap elsewhere, another page shown): what it holds is
+                    /// added and it closes; what cannot be added is said in a toast.
+                    function leave() {
+                        if (done)
+                            return
+                        done = true
+                        if (preeditText !== "")
+                            EditorInput.commitPreedit(chipField)
+                        if (!add(text))
+                            AppController.toast(chips.addError, "error")
+                        chips.adding = ""
+                        chips.addError = ""
+                    }
+                    onActiveFocusChanged: if (!activeFocus) leave()
+                    Connections {
+                        target: header.controller
+                        function onPathAboutToChange() { chipField.leave() }
+                    }
                 }
             }
         }

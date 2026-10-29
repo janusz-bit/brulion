@@ -33,6 +33,15 @@
 //   frontmatter.h  findFrontmatter / parseFrontmatter(content), parseYaml(yaml) (subset, no
 //                  deps), stringifyYaml / stringifyFrontmatter(data, keyOrder),
 //                  setFrontmatterValue / removeFrontmatterValue(content, key[, value])
+//   pageprops.h    page properties as typed fields (the "Właściwości" panel): PropertyType
+//                  (text, number, checkbox, date, datetime, list, tags, aliases, unsupported),
+//                  inferPropertyType(key, value, source), readPageProperties(content) ->
+//                  PageProperties{items: PageProperty{key, source yaml | logseq, type, value,
+//                  items, text, …}, yaml / logseq blocks, addTarget()}; verified single-property
+//                  edits (only that property's lines change): setPageProperty, removePageProperty,
+//                  renamePageProperty, addPageListItem / removePageListItem (the header's tags and
+//                  aliases) -> PropertyEditResult{content, status}; convertPropertyValue (the type
+//                  menu), parseNumberInput ("3,5", "1 200"), checkPropertyKey, cleanListItem
 //   edit.h         pure edits (content in -> content out, EOLs and other bytes preserved):
 //                  setTaskStatus(content, line, status, today) (✅/❌ dates, recurring tasks get
 //                  their next occurrence inserted above, like Obsidian Tasks),
@@ -106,6 +115,7 @@
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
 #include "markdown/notemode.h"
+#include "markdown/pageprops.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"
 #include "markdown/rename.h"

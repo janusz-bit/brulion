@@ -123,7 +123,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="677"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="733"/>
         <source>Copied %n block(s) from several days</source>
         <translation>
             <numerusform>Copied %n block from several days</numerusform>
@@ -131,7 +131,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="679"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="735"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -139,7 +139,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="690"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="746"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -147,7 +147,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="706"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="762"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -155,7 +155,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="773"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="829"/>
         <source>Pasted %n picture(s) from the internet</source>
         <translation>
             <numerusform>Pasted %n picture from the internet</numerusform>
@@ -163,7 +163,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1536"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1603"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -612,7 +612,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="292"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="304"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -658,6 +658,17 @@
         <translation>
             <numerusform>Every minute</numerusform>
             <numerusform>Every %n minutes</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>PropertiesPanel</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/PropertiesPanel.qml" line="303"/>
+        <source>%n page(s)</source>
+        <translation>
+            <numerusform>%n page</numerusform>
+            <numerusform>%n pages</numerusform>
         </translation>
     </message>
 </context>

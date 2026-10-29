@@ -1,5 +1,6 @@
 #include "markdown/frontmatter.h"
 
+#include "markdown/frontmatter_p.h"
 #include "markdown/lines_p.h"
 #include "markdown/tokens_p.h"
 #include "text/text.h"
@@ -879,6 +880,14 @@ QString formatString(const QString &s)
     return needsQuotes(s) ? jsonQuote(s) : s;
 }
 
+/// A string inside a flow collection: also quoted when it holds a flow indicator.
+QString formatFlowString(const QString &s)
+{
+    static const QString flowIndicators = u",[]{}"_s;
+    const bool flowUnsafe = std::any_of(s.begin(), s.end(), [](QChar c) { return flowIndicators.contains(c); });
+    return flowUnsafe || needsQuotes(s) ? jsonQuote(s) : s;
+}
+
 QString formatDouble(double d)
 {
     if (!std::isfinite(d))
@@ -942,9 +951,12 @@ QString formatFlow(const QVariant &v)
         QStringList parts;
         const QVariantMap m = v.toMap();
         for (auto it = m.constBegin(); it != m.constEnd(); ++it)
-            parts.append(formatString(it.key()) + u": " + formatFlow(it.value()));
+            parts.append(formatFlowString(it.key()) + u": " + formatFlow(it.value()));
         return u'{' + parts.join(u", ") + u'}';
     }
+    // Inside a flow collection a comma or bracket anywhere in a plain string would end it.
+    if (v.typeId() == QMetaType::QString)
+        return formatFlowString(v.toString());
     return formatScalar(v).value_or(u"null"_s);
 }
 
@@ -1157,5 +1169,171 @@ QString removeFrontmatterValue(const QString &content, const QString &key)
         return content;
     return replaceLines(lines, found.first, found.last, {}, text::detectEol(content));
 }
+
+// ---------------------------------------------------------------------------------------------
+// Internal helpers (frontmatter_p.h)
+// ---------------------------------------------------------------------------------------------
+
+namespace detail {
+
+namespace {
+
+bool isSeqItemLine(QStringView line)
+{
+    const QStringView t = trimEndBlanks(line);
+    return t == u"-" || t.startsWith(u"- ") || t.startsWith(u"-\t");
+}
+
+} // namespace
+
+QList<FrontmatterEntry> frontmatterEntries(const QList<text::Line> &lines, int endLine)
+{
+    QList<FrontmatterEntry> out;
+    endLine = std::min<int>(endLine, int(lines.size()));
+    for (int i = 1; i < endLine; ++i) {
+        const QStringView t = lines[i].text;
+        if (isBlank(t) || isSpaceOrTab(t[0]) || t[0] == u'#' || isSeqItemLine(t))
+            continue;
+        QStringList keys;
+        parseYaml(t, &keys);
+        if (keys.isEmpty())
+            continue;
+        int last = i + 1;
+        for (int j = i + 1; j < endLine; ++j) {
+            const QStringView n = lines[j].text;
+            if (isBlank(n))
+                continue;
+            if (isSpaceOrTab(n[0]) || isSeqItemLine(n) || n[0] == u']' || n[0] == u'}')
+                last = j + 1;
+            else
+                break;
+        }
+        out.append(FrontmatterEntry{keys.first(), i, last});
+        i = last - 1;
+    }
+    return out;
+}
+
+QList<FrontmatterEntry> frontmatterEntries(const QList<text::Line> &lines, int endLine, const QString &key)
+{
+    QList<FrontmatterEntry> out;
+    for (const FrontmatterEntry &e : frontmatterEntries(lines, endLine)) {
+        if (e.key == key)
+            out.append(e);
+    }
+    return out;
+}
+
+QString rebuildLines(const QList<text::Line> &lines, const QList<FrontmatterEntry> &entries, int at,
+                     const QString &replacement)
+{
+    QString out;
+    qsizetype next = 0; // index into entries
+    for (int i = 0; i < lines.size(); ++i) {
+        if (i == at)
+            out += replacement;
+        while (next < entries.size() && i >= entries[next].last)
+            ++next;
+        if (next < entries.size() && i >= entries[next].first)
+            continue;
+        out += lines[i].text + lines[i].eol;
+    }
+    return out;
+}
+
+bool isYamlMapping(QStringView yaml)
+{
+    if (!parseYaml(yaml).isEmpty())
+        return true;
+    for (const text::Line &l : text::splitLines(yaml)) {
+        const QStringView t = l.text.trimmed();
+        if (!t.isEmpty() && !t.startsWith(u'#'))
+            return false;
+    }
+    return true;
+}
+
+qsizetype yamlCommentStart(QStringView s, qsizetype from)
+{
+    QChar quote;
+    for (qsizetype i = from; i < s.size(); ++i) {
+        const QChar c = s[i];
+        if (!quote.isNull()) {
+            if (c == quote)
+                quote = QChar();
+            continue;
+        }
+        if ((c == u'"' || c == u'\'') && (i == from || isSpaceOrTab(s[i - 1]) || s[i - 1] == u'[' || s[i - 1] == u','))
+            quote = c;
+        else if (c == u'#' && (i == from || isSpaceOrTab(s[i - 1])))
+            return i;
+    }
+    return s.size();
+}
+
+std::optional<YamlKeyLine> splitYamlKeyLine(QStringView line)
+{
+    const QStringView content = trimEnd(line);
+    const auto kv = splitKey(content);
+    if (!kv)
+        return std::nullopt;
+    YamlKeyLine out;
+    out.key = kv->key;
+    qsizetype colon = -1;
+    const QChar c0 = content[0];
+    if (c0 == u'"' || c0 == u'\'') {
+        const auto q = readQuoted(content, 0);
+        if (!q)
+            return std::nullopt;
+        qsizetype j = q->end;
+        while (isSpaceOrTab(charAt(content, j)))
+            ++j;
+        colon = j;
+    } else {
+        for (qsizetype k = 0; k < content.size(); ++k) {
+            if (content[k] == u':' && (k + 1 >= content.size() || isSpaceOrTab(content[k + 1]))) {
+                colon = k;
+                break;
+            }
+        }
+    }
+    if (colon < 0 || content[colon] != u':')
+        return std::nullopt;
+    out.colon = colon;
+    qsizetype rest = colon + 1;
+    while (rest < line.size() && isSpaceOrTab(line[rest]))
+        ++rest;
+    out.rest = rest;
+    return out;
+}
+
+QString yamlString(const QString &s)
+{
+    return formatString(s);
+}
+
+QString yamlFlowString(const QString &s)
+{
+    return formatFlowString(s);
+}
+
+std::optional<QString> yamlScalar(const QVariant &v)
+{
+    if (isList(v) || isMap(v))
+        return std::nullopt;
+    return formatScalar(v);
+}
+
+std::optional<QStringList> yamlBlockScalar(const QString &s, const QString &indent)
+{
+    return blockScalar(s, indent);
+}
+
+QString yamlQuoted(QStringView s)
+{
+    return jsonQuote(s);
+}
+
+} // namespace detail
 
 } // namespace brulion::markdown

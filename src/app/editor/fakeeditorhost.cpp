@@ -303,6 +303,22 @@ QVariantList FakeEditorHost::suggestBlocks(const QString &query, int limit) cons
     return out;
 }
 
+QVariantList FakeEditorHost::propertyKeys() const
+{
+    QVariantList out;
+    for (const PropertyKeyInfo &k : currentIndex().propertyKeys())
+        out.append(QVariantMap{{u"key"_s, k.key}, {u"count"_s, k.count}, {u"type"_s, k.type}});
+    return out;
+}
+
+QVariantList FakeEditorHost::propertyValues(const QString &key, const QString &prefix, int limit) const
+{
+    QVariantList out;
+    for (const PropertyValueCount &v : currentIndex().propertyValues(key, prefix, limit))
+        out.append(QVariantMap{{u"value"_s, v.value}, {u"count"_s, v.count}});
+    return out;
+}
+
 QVariantList FakeEditorHost::suggestTags(const QString &prefix, int limit) const
 {
     QHash<QString, int> counts;

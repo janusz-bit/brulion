@@ -43,7 +43,11 @@
 //                depth, view, headingLevel, task, path, line, raw (a text block's Markdown: its
 //                token menus, PageController::tokenChipIn), title, href, message ("cycle" |
 //                "depth" | ...) }] }]; nested embeds up to MaxTransclusionDepth levels, cycles cut
-//   properties   frontmatter: [{ key, value }]          query: { source, filters, terms }
+//   properties   frontmatter: [{ key, value (one line), type, source, raw, items, empty, editable,
+//                multiline, linkDate, html (a text value rendered: links, tags; escaped), itemsHtml
+//                (a list's items rendered) }] (blocktext.h pagePropertyMap(), cached by body)
+//   propertiesInfo  frontmatter: { source, editable, problem, canAdd } of the block
+//   query        { source, filters, terms }
 //   calloutType, calloutFolded, line (first line in the file), uid, plainText (one line, for
 //   breadcrumbs and accessibility)
 //   listMarker   list items: the marker as written ("-", "*", "+", "3.", "2)"); "" otherwise —
@@ -52,6 +56,9 @@
 //                spacing between blocks (a list item after a list item sits tight)
 //   noteModeOnly YAML frontmatter holding nothing but the note mode key `brulion` — such a row is
 //                not `visible` (the page header's mode toggle stands for it) unless edited
+// A leading frontmatter row whose text changed (a property edited in the panel, the note mode,
+// undo, another device) keeps its row in replaceContent(): a dataChanged instead of a removal and
+// an insertion, so its delegate (the expanded panel, a focused field) survives.
 // Folding can be switched off (setFoldingEnabled(false), the document mode): folded blocks then
 // show their children (`collapsed` false) while the folds are kept for the outline mode.
 #pragma once
@@ -126,6 +133,7 @@ public:
         PrevKindRole,
         NoteModeOnlyRole,
         SelectionEdgeRole,
+        PropertiesInfoRole,
     };
 
     /// Nested embeds rendered inside a transclusion (deeper ones become a "depth" note).
@@ -158,7 +166,8 @@ public:
     /// Replace the content with a model reset (a page was loaded).
     void resetContent(const QString &content);
     /// Replace the content keeping rows of unchanged blocks (undo/redo, external changes).
-    /// Returns old uid -> new uid for the blocks that were kept. View state (folds, zoom,
+    /// Returns old uid -> new uid for the blocks that were kept (not a leading frontmatter row
+    /// kept with another text: for the caller that is another block). View state (folds, zoom,
     /// editing, selection) follows the kept blocks. `blankBlocks`: that version's empty paragraphs
     /// (BlockDocument::blankBlocks(); the text has none of its own).
     QHash<quint64, quint64> replaceContent(const QString &content, const QList<markdown::BlankBlock> &blankBlocks = {});
@@ -255,6 +264,9 @@ private:
         /// Rendered table cells by text (until the rendering changes; no inline calculations or
         /// block references: those depend on more than the cell's text).
         QHash<QString, QString> cellHtml;
+        bool propertiesValid = false; ///< properties / propertiesInfo describe the current text
+        QVariantList properties;
+        QVariantMap propertiesInfo;
         bool transclusionsValid = false;
         bool transclusionsLocal = false; ///< embeds this page: follows every change of it
         QVariantList transclusions;
@@ -294,6 +306,8 @@ private:
     /// The embeds role entry of a picture from the internet (EditorHost::webPicture).
     QVariantMap webEmbed(const Embed &em) const;
     void ensureTransclusions(int row) const;
+    /// The `properties` / `propertiesInfo` roles of a frontmatter row (cached by its text).
+    void ensureProperties(int row) const;
     void rebuildIndex();
     /// Replays the row changes; returns whether the edit was calc-neutral (see apply()).
     bool replay(const QList<markdown::BlockChange> &changes, const QList<quint64> &finalUids);

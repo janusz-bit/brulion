@@ -419,6 +419,70 @@ frontmatter's `tags:`.
 * **Page properties**: YAML frontmatter at the very start (`---` … `---`), or `key:: value`
   lines at the very top of the file before any other block (Logseq style).
 
+### Editing page properties / Edycja właściwości strony
+
+The properties panel and the page header edit page properties as typed fields
+(`markdown/pageprops.h`); every edit changes only the lines of the one property and is one undo
+step. Obsidian and Logseq read the result as they read hand-written properties.
+
+**Types** are never stored — they are read from the value: `true`/`false` → *checkbox*; a number
+→ *number*; `YYYY-MM-DD` (a valid date) → *date*; `YYYY-MM-DD[T ]HH:mm[:ss]` → *date and time*; a
+list (also `[]`, also unquoted `[[Page]]` items) → *list*; `tags`/`tag` → *tags*, `aliases`/`alias`
+→ *aliases* (any case); a map or a list of maps / longer nested lists → *other* (read-only); any
+other string (also a quoted `"12"`) → *text*. In `key:: value` lines the same, but strictly: `3,5`
+or `1 200` stay text, `[[2026-10-28]]` is a date, comma lists of `[[links]]` / `#tags` are lists.
+An empty value takes the type its key has most often elsewhere in the notebook. What a person
+types into a number field may use a decimal comma and spaces between thousands (`3,5`, `1 200`);
+it is written in the plain form (`3.5`, `1200`).
+
+**Written forms** (YAML): a text is quoted when another YAML reader could read it differently
+(`"yes"`, `"12"`, `"[[Dom]]"`, `"a: b"`, `"#x"`); a text of several lines becomes a `|-` block
+scalar; numbers plain; checkboxes `true`/`false`; dates `2026-10-28`; new date-and-time values
+`2026-10-28T09:30` (an existing one keeps its separator — `T` or a space — and its seconds); an
+empty value `key:`, an empty list `key: []`; tags are written without `#`.
+
+**Rules for YAML frontmatter** (each edit is verified by parsing the result — the body after the
+block byte-identical, every other key unchanged, the edited key reads back as intended — and
+refused otherwise, nothing written):
+
+* the first entry of the key is replaced in place, later duplicates are dropped (a duplicate is
+  never added); the **key part** of the line (`"klucz: z dwukropkiem":`, `key :`) and a trailing
+  `# comment` of a one-line value stay as written, and so do indented `# comment` lines under a
+  value written on its key line (unless the new value is a block scalar, which would read them as
+  its text); new lines take the entry's line ending;
+* a value committed as it was is not rewritten: a text equal to the stored one once its ends are
+  trimmed (as a field trims what is typed) keeps its form — a `|` block scalar its last line
+  break, a quoted `" a "` its quotes;
+* **lists keep their style**: a block list keeps its indentation and dash spacing, and items that
+  did not change keep their lines verbatim (quotes, comments); a flow list `[a, b]` stays one flow
+  line (items with `,[]{}` quoted); a scalar list (`tags: a, b`) or a new key becomes a block list
+  in the frontmatter's own indentation (two spaces when it has none);
+* a new key goes before the closing delimiter (the line ending of the line above it); a page
+  without frontmatter gets `---` / the key / `---` in front (after a BOM, the note's line ending);
+* removing the last key removes the block (unless the body would then start a frontmatter of its
+  own); renaming changes only the key part of the entry's first line;
+* `brulion` (the note mode) is never added, renamed to or listed — the header's mode toggle
+  stands for it; a key equal to another one (case-insensitive) is refused, and adding a key the
+  page has already (in either block, in any case) is refused too — adding never overwrites a
+  value;
+* frontmatter that is not a mapping (plain text between `---` lines), whose keys are not at the
+  start of their lines (an indented mapping) or that does not parse back is shown read-only.
+
+**Rules for `key:: value` lines**: only the value (or the key) of the line changes; new keys go
+after the last property line; removing the last one also removes the blank lines after the block
+— unless the page would then start with a frontmatter of its own (a `---` line, as a rule, right
+after them): then the blank lines stay, or one empty line stands in for the block. A value that
+reads the same is not rewritten (`ilosc:: 1.50` set to 1.5, `done:: TRUE` set to true). Keys must
+be `[A-Za-z0-9_-]+` (a `źródło::` line would be no property). A list is links and tags: its items
+stay as written (`[[A]]`, `#b`), any other item becomes `[[item]]` (a text `a, b` made a list is
+`[[a]], [[b]]`); tags and aliases keep `#` when the line used it, an item with a comma is written
+`[[a, b]]`; a date written `[[2026-10-28]]` stays a link.
+
+**Page header**: adding a tag or an alias puts it into the property holding them (YAML `tags` /
+`tag` resp. `aliases` / `alias`, else the `key::` lines), creating `tags` / `aliases` where new
+properties go; removing one takes it out of every property holding it and removes a property
+whose list becomes empty.
+
 ### Tryb notatki / Note mode
 
 Every note is shown in one of two modes; the Markdown is the same in both:

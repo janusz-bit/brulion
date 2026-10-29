@@ -304,6 +304,18 @@ private Q_SLOTS:
         QCOMPARE(parsed.bodyStart, out.size());
     }
 
+    void flowItemsWithCommasQuoted()
+    {
+        // A comma or bracket anywhere in a flow item would end it: such items are quoted. (Each
+        // nested list wrapped in a QVariant: MSVC reads `QVariantList{QVariantList{…}}` as a copy.)
+        const QVariantList items{u"a, b"_s, u"c"_s, u"x]y"_s, u"ż{ó}"_s};
+        const QVariantList maps{QVariantMap{{u"k, l"_s, u"v"_s}}};
+        const QVariantMap data{{u"items"_s, QVariantList{QVariant(items)}}, {u"map"_s, QVariantList{QVariant(maps)}}};
+        const QString yaml = stringifyYaml(data);
+        QCOMPARE(yaml, u"items:\n  - [\"a, b\", c, \"x]y\", \"ż{ó}\"]\nmap:\n  - [{\"k, l\": v}]\n"_s);
+        QCOMPARE(parseYaml(yaml), data);
+    }
+
     void datesAsLocalDates()
     {
         const QVariantMap data{{u"d"_s, QDate(2026, 10, 14)}, {u"t"_s, QDateTime(QDate(2026, 10, 14), QTime(9, 5))}};

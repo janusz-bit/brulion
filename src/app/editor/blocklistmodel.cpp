@@ -313,6 +313,7 @@ QHash<int, QByteArray> BlockListModel::roleNames() const
             {PrevKindRole, "prevKind"},
             {SelectionEdgeRole, "selectionEdge"},
             {NoteModeOnlyRole, "noteModeOnly"},
+            {PropertiesInfoRole, "propertiesInfo"},
     };
 }
 
@@ -433,7 +434,34 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content,
     newSources.reserve(fresh.count());
     for (int i = 0; i < fresh.count(); ++i)
         newSources.append(fresh.at(i).prefix + fresh.at(i).body + QString::number(fresh.at(i).depth));
-    const QList<std::pair<int, int>> pairs = matchBlocks(oldSources, newSources);
+    QList<std::pair<int, int>> pairs = matchBlocks(oldSources, newSources);
+    // A leading frontmatter block whose text changed keeps its row (see the file comment): the
+    // old and the new block at the same index (0 or 1: YAML, then `key::` lines) are both left
+    // unmatched, are both frontmatter of the same form, and pairing them keeps the order.
+    QSet<int> changedInPlace; // indices in the new document
+    for (int k = 0; k < 2 && k < m_doc.count() && k < fresh.count(); ++k) {
+        const markdown::BlockEntry &o = m_doc.at(k);
+        const markdown::BlockEntry &n = fresh.at(k);
+        if (o.kind != BlockKind::Frontmatter || n.kind != BlockKind::Frontmatter)
+            break;
+        const auto yaml = [](const QString &body) { return body.trimmed().startsWith(u"---"); };
+        if (yaml(o.body) != yaml(n.body))
+            continue;
+        const bool matched =
+                std::any_of(pairs.cbegin(), pairs.cend(), [k](const auto &p) { return p.first == k || p.second == k; });
+        if (matched)
+            continue;
+        QList<std::pair<int, int>> paired = pairs;
+        paired.append({k, k});
+        std::sort(paired.begin(), paired.end());
+        bool ordered = true;
+        for (qsizetype q = 1; q < paired.size() && ordered; ++q)
+            ordered = paired[q].second > paired[q - 1].second;
+        if (!ordered)
+            continue;
+        pairs = paired;
+        changedInPlace.insert(k);
+    }
 
     QHash<quint64, quint64> mapping;
     QSet<int> keptOld;
@@ -473,6 +501,18 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content,
     }
     for (RowState &st : state)
         st.calcTextValid = false; // the kept blocks' own text may differ in indentation
+    for (const int k : std::as_const(changedInPlace)) {
+        // Another text: fresh content caches (the structural state stays — refresh() compares it).
+        auto it = state.find(fresh.at(k).uid);
+        if (it != state.end()) {
+            it->shapeValid = false;
+            it->htmlValid = false;
+            it->embedsValid = false;
+            it->transclusionsValid = false;
+            it->propertiesValid = false;
+            it->resultsValid = false;
+        }
+    }
     m_state = state;
     m_doc = std::move(fresh);
     m_text = content;
@@ -517,6 +557,12 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content,
     if (oldCount != m_rows.size())
         Q_EMIT countChanged();
     refresh(true);
+    for (const int k : std::as_const(changedInPlace)) {
+        Q_EMIT dataChanged(index(k), index(k));
+        // For the caller the block is another one (its text changed): editing it, a selection
+        // or a tracked handle on it end as before — an inline editor would hold the old text.
+        mapping.remove(oldUids[k]);
+    }
     return mapping;
 }
 
@@ -651,6 +697,7 @@ void BlockListModel::invalidateContent(quint64 uid)
     it->htmlValid = false;
     it->embedsValid = false;
     it->transclusionsValid = false;
+    it->propertiesValid = false;
     it->resultsValid = false;
     it->calcTextValid = false;
 }
@@ -1408,8 +1455,8 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case TableDataRole: return st.tableData;
     case EmbedsRole: ensureEmbeds(row); return stateFor(e.uid).embeds;
     case OnlyEmbedsRole: ensureEmbeds(row); return stateFor(e.uid).onlyEmbeds;
-    case PropertiesRole:
-        return cachedShape(row).view == BlockView::Frontmatter ? frontmatterProperties(e.body) : QVariantList();
+    case PropertiesRole: ensureProperties(row); return stateFor(e.uid).properties;
+    case PropertiesInfoRole: ensureProperties(row); return stateFor(e.uid).propertiesInfo;
     case QueryRole:
         return cachedShape(row).view == BlockView::Query ? queryInfo(cachedShape(row).editText) : QVariantMap();
     case CalloutTypeRole: return cachedShape(row).calloutType;
@@ -1587,6 +1634,57 @@ void BlockListModel::setToday(QDate today)
     invalidateRendering();
 }
 
+void BlockListModel::ensureProperties(int row) const
+{
+    const int i = docIndexOfRow(row);
+    if (i < 0)
+        return;
+    const markdown::BlockEntry &e = m_doc.at(i);
+    RowState &st = stateFor(e.uid);
+    if (st.propertiesValid)
+        return;
+    st.propertiesValid = true;
+    st.properties.clear();
+    st.propertiesInfo.clear();
+    if (cachedShape(row).view != BlockView::Frontmatter)
+        return;
+    RowState &state = stateFor(e.uid); // (cachedShape() may have created other states)
+    const QVariantList properties = frontmatterProperties(e.body);
+    state.propertiesInfo = frontmatterPropertiesInfo(e.body);
+    // Text values and list items are inline Markdown shown as rich text: links and tags work,
+    // everything else is escaped (rendered like table cells).
+    std::optional<markdown::InlineRenderer> renderer;
+    const auto render = [&](const QString &text) -> QString {
+        if (text.trimmed().isEmpty())
+            return {};
+        if (!renderer) {
+            markdown::RenderContext ctx = renderContext(i);
+            ctx.hideTransclusions = false;
+            ctx.dateLinks = false;
+            ctx.dayLinks = false;
+            renderer.emplace(ctx);
+        }
+        return renderer->renderBlock(text, BlockKind::Paragraph);
+    };
+    QVariantList out;
+    for (const QVariant &v : properties) {
+        QVariantMap p = v.toMap();
+        const QString type = p.value(u"type"_s).toString();
+        if (type == u"text")
+            p.insert(u"html"_s, render(p.value(u"value"_s).toString()));
+        else
+            p.insert(u"html"_s, markdown::InlineRenderer::escape(p.value(u"value"_s).toString()));
+        if (type == u"list") {
+            QStringList itemsHtml;
+            for (const QString &item : p.value(u"items"_s).toStringList())
+                itemsHtml.append(render(item));
+            p.insert(u"itemsHtml"_s, itemsHtml);
+        }
+        out.append(p);
+    }
+    stateFor(e.uid).properties = out;
+}
+
 void BlockListModel::invalidateRendering()
 {
     m_config.reset(); // the journal file format may have changed (links to days)
@@ -1594,6 +1692,7 @@ void BlockListModel::invalidateRendering()
         it->htmlValid = false;
         it->embedsValid = false;
         it->transclusionsValid = false;
+        it->propertiesValid = false; // links in values resolve differently
         it->cellHtml.clear();
     }
     // Table cells are rendered too (links resolve differently, other colours).
@@ -1613,7 +1712,7 @@ void BlockListModel::invalidateRendering()
     }
     if (!m_rows.isEmpty())
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1),
-                           {HtmlRole, EmbedsRole, OnlyEmbedsRole, TransclusionsRole});
+                           {HtmlRole, EmbedsRole, OnlyEmbedsRole, TransclusionsRole, PropertiesRole});
     emitRowsChanged(tableRows, {TableDataRole});
 }
 

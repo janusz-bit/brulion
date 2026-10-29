@@ -21,10 +21,16 @@
 #
 #   tests/app/perf/scroll-jumps.sh <brulion binary> <scratch dir>
 #
-# Environment: CASES ("<view>:<size>:<script>[:<cache px>]"; views journals, page, tasks, agenda;
-# sizes desktop, phone; scripts touchpad, drag, …), DAYS (generated days, default 40), TOLERANCE
-# (px, default 3), JOBS (cases run at the same time, default 2: each run is bounded in time, not in
-# work, so two at a time halve the test's time; each in its own copy of the prepared home).
+# Two of every three generated days have page properties (a YAML frontmatter with a list and a
+# text of two lines, or `key::` lines); a case ending in `:expanded` shows the properties panel
+# expanded (AppSettings.propertiesExpanded) — every day the stream creates must have its open panel
+# at once.
+#
+# Environment: CASES ("<view>:<size>:<script>[:<cache px>[:expanded]]"; views journals, page, tasks,
+# agenda; sizes desktop, phone; scripts touchpad, drag, …), DAYS (generated days, default 40),
+# TOLERANCE (px, default 3), JOBS (cases run at the same time, default 2: each run is bounded in
+# time, not in work, so two at a time halve the test's time; each in its own copy of the prepared
+# home).
 set -uo pipefail
 bin="$1"
 work="$2"
@@ -38,7 +44,8 @@ if (( slowdown > 1 )); then
   wait_ms=5000
 else
   default_cases="journals:desktop:touchpad journals:desktop:touchpad:0 journals:phone:drag:0
-    page:desktop:touchpad:0 page:phone:drag:0 tasks:phone:drag:0 agenda:phone:drag:0"
+    journals:phone:drag:0:expanded page:desktop:touchpad:0 page:phone:drag:0 tasks:phone:drag:0
+    agenda:phone:drag:0"
   max_ms=20000
   wait_ms=1500
 fi
@@ -77,6 +84,16 @@ day_text() { # day_text <n>
   done
 }
 
+# Page properties of day <n>: a frontmatter (every third day), `key::` lines (the next one), none
+# (the third).
+props_text() { # props_text <n>
+  local n="$1"
+  case $(( n % 3 )) in
+    0) printf -- '---\nstatus: w toku # wybrany\ntags: [dziennik, dom]\nkoszt: %d\ntermin: 2026-10-%02d\nautorzy:\n  - "[[Jan Kowalski]]"\n  - Anna\nnotatka: |\n  Zażółć gęślą jaźń\n  druga linia\n---\n' "$(( n * 10 ))" "$(( n % 28 + 1 ))" ;;
+    1) printf -- 'nastroj:: dobry\nmiejsce:: [[Kraków]], [[Gdańsk]]\ngotowe:: false\n\n' ;;
+  esac
+}
+
 home="$work/home"
 vault="$home/Przykładowy brulion"
 export XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state"
@@ -91,18 +108,18 @@ fi
 mkdir -p "$vault/journals"
 for (( n = 3; n < days + 3; n++ )); do
   file="$vault/journals/$(date -d "2026-10-14 - $n days" +%F).md"
-  [[ -e "$file" ]] || day_text "$n" > "$file" # (the sample notebook's own days stay)
+  [[ -e "$file" ]] || { props_text "$n"; day_text "$n"; } > "$file" # (the sample notebook's own days stay)
 done
 
 # One case: its result lines in <work>/<name>.result.
 case_name() { # case_name <case>
-  local view size script cache
-  IFS=: read -r view size script cache <<< "$1"
-  printf '%s-%s-%s%s' "$view" "$size" "$script" "${cache:+-cache$cache}"
+  local view size script cache panel
+  IFS=: read -r view size script cache panel <<< "$1"
+  printf '%s-%s-%s%s%s' "$view" "$size" "$script" "${cache:+-cache$cache}" "${panel:+-$panel}"
 }
 run_case() { # run_case <case>
-  local c="$1" view size script cache name geometry route cache_args own
-  IFS=: read -r view size script cache <<< "$c"
+  local c="$1" view size script cache panel name geometry route cache_args own
+  IFS=: read -r view size script cache panel <<< "$c"
   case "$size" in
     desktop) geometry=(--size 1280x800) ;;
     phone) geometry=(--size 412x915 --touch) ;;
@@ -120,6 +137,8 @@ run_case() { # run_case <case>
   own="$work/home-$name"
   rm -rf "$own"
   cp -a "$home" "$own"
+  # The properties panel expanded: a device setting, in this run's settings file.
+  [[ "${panel:-}" == expanded ]] && printf '\n[editor]\npropertiesExpanded=true\n' >> "$own/config/Brulion/Brulion.ini"
   # Down to the end and back up, each direction at most max_ms.
   if XDG_CONFIG_HOME="$own/config" XDG_DATA_HOME="$own/data" XDG_CACHE_HOME="$own/cache" XDG_STATE_HOME="$own/state" \
     timeout -k 10 "$run_timeout" "$bin" --vault "$own/Przykładowy brulion" --route "$route" "${geometry[@]}" --now "$now" \

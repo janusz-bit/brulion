@@ -662,41 +662,38 @@ QVariantMap queryInfo(QStringView source)
     return {{u"source"_s, source.toString()}, {u"filters"_s, filters}, {u"terms"_s, terms}};
 }
 
+QVariantMap pagePropertyMap(const markdown::PageProperty &p)
+{
+    return {{u"key"_s, p.key},
+            {u"value"_s, p.text},
+            {u"type"_s, markdown::propertyTypeName(p.type)},
+            {u"source"_s, markdown::propertySourceName(p.source)},
+            {u"raw"_s, p.value},
+            {u"items"_s, p.items},
+            {u"empty"_s, p.empty},
+            {u"editable"_s, p.editable},
+            {u"multiline"_s, p.multiline},
+            {u"linkDate"_s, p.linkDate}};
+}
+
 QVariantList frontmatterProperties(const QString &body)
 {
     QVariantList out;
-    const auto valueText = [](const QVariant &v) -> QString {
-        if (v.typeId() == QMetaType::QVariantList || v.typeId() == QMetaType::QStringList) {
-            QStringList parts;
-            for (const QVariant &x : v.toList())
-                parts.append(x.toString());
-            return parts.join(u", ");
-        }
-        if (v.typeId() == QMetaType::QVariantMap)
-            return u"…"_s;
-        return v.toString();
-    };
-    if (body.trimmed().startsWith(u"---")) {
-        QString content = body;
-        if (!content.endsWith(u'\n'))
-            content += u'\n';
-        const markdown::FrontmatterResult fm = markdown::parseFrontmatter(content);
-        for (const QString &key : fm.keys) {
-            // The note mode is the page header's mode toggle, not a property to show.
-            if (key == markdown::NoteModeKey)
-                continue;
-            out.append(QVariantMap{{u"key"_s, key}, {u"value"_s, valueText(fm.data.value(key))}});
-        }
-        return out;
-    }
-    for (const text::Line &l : text::splitLines(body)) {
-        const QString line = l.text.trimmed();
-        if (const auto pm = markdown::matchPropertyLine(line)) {
-            out.append(QVariantMap{{u"key"_s, pm->key},
-                                   {u"value"_s, line.mid(pm->valueFrom, pm->valueTo - pm->valueFrom)}});
-        }
-    }
+    for (const markdown::PageProperty &p : markdown::readPageProperties(body).items)
+        out.append(pagePropertyMap(p));
     return out;
+}
+
+QVariantMap frontmatterPropertiesInfo(const QString &body)
+{
+    const markdown::PageProperties props = markdown::readPageProperties(body);
+    const std::optional<markdown::PagePropertyBlock> &block = props.yaml ? props.yaml : props.logseq;
+    if (!block)
+        return {};
+    return {{u"source"_s, markdown::propertySourceName(block->source)},
+            {u"editable"_s, block->editable},
+            {u"problem"_s, block->problem},
+            {u"canAdd"_s, block->editable}};
 }
 
 bool onlyNoteModeKey(const QString &body)

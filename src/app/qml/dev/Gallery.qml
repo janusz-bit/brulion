@@ -696,6 +696,21 @@ ApplicationWindow {
                 BSearchField { width: 340; text: "żółw"; placeholderText: "Szukaj…" }
             }
             Specimen {
+                label: "Z PODPOWIEDZIAMI"
+                BSuggestField {
+                    width: 280
+                    size: "small"
+                    placeholderText: "Nazwa właściwości"
+                    // ↓ / ↑ wybierają, Enter albo Tab bierze podpowiedź, Escape zamyka.
+                    provider: (typed) => [
+                        { title: "status", subtitle: "12 stron", icon: "type" },
+                        { title: "termin", subtitle: "8 stron", icon: "calendar" },
+                        { title: "źródło", subtitle: "3 strony", icon: "type" },
+                        { title: "koszt", subtitle: "2 strony", icon: "sigma" }
+                    ].filter(s => typed === "" || s.title.indexOf(typed) >= 0)
+                }
+            }
+            Specimen {
                 label: "TEKST WIELOWIERSZOWY"
                 BTextArea {
                     width: Math.min(parent.width, 560)

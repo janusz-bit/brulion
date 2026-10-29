@@ -33,6 +33,9 @@ import Brulion
 //             one starting with <last> selected — on touch UIs in the selection mode (its tools
 //             docked at the bottom), as after a long press and a drag
 //   mode-tooltip   the tooltip of the page header's note mode toggle
+//   properties  the page (--route) with its properties panel expanded (as the device setting
+//             AppSettings.propertiesExpanded shows it), nothing focused, the view at the top — the
+//             `ui` benchmark's "properties" screen
 Item {
     id: script
 
@@ -165,6 +168,10 @@ Item {
                     Workspace.writeFile("Pusta strona.md", "")
                     AppController.openPage("Pusta strona.md", -1, false)
                 }
+                break
+            case "properties":
+                script.editor.setPropertiesExpanded(true)
+                script.editor.listView.positionViewAtBeginning()
                 break
             case "mode-tooltip": {
                 // Shown as by a long press: it stays up without a hovering mouse.

@@ -771,6 +771,26 @@ QVariantList Workspace::suggestTags(const QString &prefix, int limit) const
     return out;
 }
 
+QVariantList Workspace::propertyKeys() const
+{
+    QVariantList out;
+    if (!m_index)
+        return out;
+    for (const PropertyKeyInfo &k : m_index->propertyKeys())
+        out.append(QVariantMap{{u"key"_s, k.key}, {u"count"_s, k.count}, {u"type"_s, k.type}});
+    return out;
+}
+
+QVariantList Workspace::propertyValues(const QString &key, const QString &prefix, int limit) const
+{
+    QVariantList out;
+    if (!m_index)
+        return out;
+    for (const PropertyValueCount &v : m_index->propertyValues(key, prefix, limit))
+        out.append(QVariantMap{{u"value"_s, v.value}, {u"count"_s, v.count}});
+    return out;
+}
+
 QString Workspace::resolveLink(const QString &target, const QString &fromPath) const
 {
     if (!m_index)

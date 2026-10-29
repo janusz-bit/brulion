@@ -36,7 +36,9 @@ import Brulion
 // The note mode (docs/UI.md "Note modes"): the header's toggle, the page menu's "Przełącz na
 // dokument / konspekt" and the palette's "Przełącz tryb notatki" (uiAction "toggleNoteMode")
 // switch it (PageController.toggleMode writes the `brulion:` key); a change of the notebook's
-// default modes re-resolves pages that have no key. The palette's "Kopiuj link do strony / …
+// default modes re-resolves pages that have no key. "Dodaj właściwość" (the page menu, Ctrl+;, the
+// palette's uiAction "addProperty") opens the properties panel's add row (BlockEditor.addProperty);
+// whether the panel is open is a device setting (AppSettings.propertiesExpanded). The palette's "Kopiuj link do strony / …
 // odwołanie do bloku / … link do bloku / … link do nagłówka" (uiAction "copyLink:<kind>") copy
 // through the editor (BlockEditor.copyCurrentLink); the documentation notebook writes no block ids
 // (PageController.allowNewBlockIds).
@@ -366,6 +368,10 @@ FocusScope {
                                                   : AppController.toast(text, kind)
         focus: true
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
+        // The properties panel open or folded: a device setting (the panel's header switches it);
+        // bound here for the rows made with the editor, then by the Binding below.
+        propertiesExpanded: AppSettings.propertiesExpanded
+        onPropertiesExpandedToggled: (expanded) => AppSettings.propertiesExpanded = expanded
         // The side panel is narrow: phone-like margins there.
         horizontalPadding: Theme.compact || root.inSidePanel ? Theme.space3 : Theme.space8
         bottomSpace: refsSection.visible ? root.refsGap + refsSection.height + Theme.space16 : Theme.space16 * 2
@@ -386,6 +392,12 @@ FocusScope {
                 Component.onDestruction: if (root.pageHeader === pageHeader) root.pageHeader = null
             }
         }
+    }
+
+    Binding {
+        target: editor
+        property: "propertiesExpanded"
+        value: AppSettings.propertiesExpanded
     }
 
     // A picture attachment: the picture itself or its text, read-only (the editor behind it
@@ -479,6 +491,14 @@ FocusScope {
             onTriggered: root.toggleNoteMode()
         }
         BMenuItem {
+            objectName: "pageMenuAddProperty"
+            text: qsTr("Add property")
+            iconName: "plus"
+            shortcut: root.inSidePanel ? "" : "Ctrl+;"
+            enabled: page.loaded && !page.sourceMode && !root.pictureRoute
+            onTriggered: editor.addProperty()
+        }
+        BMenuItem {
             text: page.sourceMode ? qsTr("Edit as blocks") : qsTr("Markdown source")
             iconName: "code"
             shortcut: root.inSidePanel ? "" : "Ctrl+E"
@@ -555,8 +575,17 @@ FocusScope {
                 editor.copyCurrentLink(action.slice(9))
             } else if (action === "saveWebPictures" && root.visible && !root.inSidePanel && !root.pictureRoute) {
                 editor.downloadWebPictures("")
+            } else if (action === "addProperty" && root.visible && !root.inSidePanel && !root.pictureRoute) {
+                editor.addProperty()
             }
         }
+    }
+
+    // "Dodaj właściwość" (docs/UI.md "Page properties"): the panel's add row.
+    Shortcut {
+        sequence: "Ctrl+;"
+        enabled: root.visible && !root.inSidePanel && !root.pictureRoute && page.loaded && !page.sourceMode
+        onActivated: editor.addProperty()
     }
 
     Shortcut {

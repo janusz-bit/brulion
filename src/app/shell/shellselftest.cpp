@@ -4142,6 +4142,134 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                       "the \"Toggle note mode\" command switches back");
             }
 
+            // Page properties (docs/UI.md "Page properties"): the guide's tag chip in the header —
+            // a right-click, a long press — "Usuń z tej strony" writes only that property (its last
+            // tag: the `tags:` line goes), undo brings it back; the header's "+" → "Dodaj alias" and
+            // an alias typed in the row's field: `aliases:` gets it; the palette's "Dodaj
+            // właściwość strony" opens the properties panel's add row.
+            {
+                const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+                const auto saveNow = [page] {
+                    bool ok = false;
+                    QMetaObject::invokeMethod(page, "save", qReturnArg(ok));
+                    return ok;
+                };
+                const auto undoNow = [page] { QMetaObject::invokeMethod(page, "undo"); };
+                const auto shownItem = [&](const QString &name) {
+                    return uidriver::topmost(window, [&name](QQuickItem *i) { return i->objectName() == name; });
+                };
+                if (auto *list = editor->property("listView").value<QQuickItem *>())
+                    QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+                settle(300);
+                const QString before = app->workspace()->readFile(guide);
+                QQuickItem *chip = shownNamed(editor, u"headerTag_przewodnik"_s);
+                check(chip != nullptr && before.contains(u"\ntags: [przewodnik]\n"_s),
+                      "the guide's tag chip is in its header");
+                if (chip) {
+                    if (touch)
+                        touchTap(window, pointIn(chip), 1000);
+                    else
+                        mouseClick(window, pointIn(chip), Qt::RightButton);
+                    check(waitFor([&] { return openMenus(window) == 1; }),
+                          touch ? "a long press on the tag chip opens its menu"
+                                : "a right-click on the tag chip opens its menu");
+                    if (QQuickItem *remove = shownItem(u"headerChipRemove"_s)) {
+                        tapOrClick(window, pointIn(remove), touch);
+                        check(waitFor([&] {
+                                  return saveNow()
+                                         && app->workspace()->readFile(guide)
+                                                    == QString(before).replace(u"tags: [przewodnik]\n"_s, QString());
+                              }),
+                              "“Usuń z tej strony” removes the tag: only that line changes");
+                        check(waitFor([&] { return !shownNamed(editor, u"headerTag_przewodnik"_s); }),
+                              "the chip is gone from the header");
+                        undoNow();
+                        check(waitFor([&] { return saveNow() && app->workspace()->readFile(guide) == before; }),
+                              "undo brings the tag back");
+                    } else {
+                        check(false, "the chip's menu has “Usuń z tej strony”");
+                    }
+                }
+                closeMenus(window);
+                QQuickItem *plus = shownNamed(editor, u"pageHeaderAdd"_s);
+                check(plus != nullptr, "the header's chips end with “+”");
+                if (plus) {
+                    tapOrClick(window, pointIn(plus), touch);
+                    check(waitFor([&] { return openMenus(window) == 1; }), "“+” opens its menu");
+                    if (QQuickItem *alias = shownItem(u"headerAddAlias"_s)) {
+                        tapOrClick(window, pointIn(alias), touch);
+                        check(waitFor([&] {
+                                  const QQuickItem *f = window->activeFocusItem();
+                                  return f && f->objectName() == u"pageHeaderField";
+                              }),
+                              "“Dodaj alias” opens a field in the header");
+                        typeText(u"Żółw"_s);
+                        sendKey(window, Qt::Key_Return);
+                        check(waitFor([&] {
+                                  return saveNow()
+                                         && app->workspace()->readFile(guide)
+                                                    == QString(before).replace(u"aliases: [Przewodnik, Start]"_s,
+                                                                               u"aliases: [Przewodnik, Start, Żółw]"_s);
+                              }),
+                              "the alias typed there is written into `aliases:`");
+                        sendKey(window, Qt::Key_Escape);
+                        undoNow();
+                        check(waitFor([&] { return saveNow() && app->workspace()->readFile(guide) == before; }),
+                              "undo takes the alias away");
+                    } else {
+                        check(false, "the menu has “Dodaj alias”");
+                    }
+                }
+                closeMenus(window);
+                // An alias no link can use, then a tap elsewhere: nothing written, the field closes
+                // and a toast says why (Enter says it under the field).
+                plus = shownNamed(editor, u"pageHeaderAdd"_s);
+                if (plus) {
+                    tapOrClick(window, pointIn(plus), touch);
+                    check(waitFor([&] { return openMenus(window) == 1; }), "“+” opens its menu again");
+                    if (QQuickItem *alias = shownItem(u"headerAddAlias"_s)) {
+                        tapOrClick(window, pointIn(alias), touch);
+                        check(waitFor([&] {
+                                  const QQuickItem *f = window->activeFocusItem();
+                                  return f && f->objectName() == u"pageHeaderField";
+                              }),
+                              "“Dodaj alias” opens the field again");
+                        QString toast;
+                        const QMetaObject::Connection toasts =
+                                QObject::connect(app, &AppController::toastRequested, app,
+                                                 [&toast](const QString &text) { toast = text; });
+                        typeText(u"Dom|ż"_s);
+                        // The keyboard goes elsewhere (outside the editor: its focus scope would
+                        // give it back to the field).
+                        auto *elsewhere = new QQuickItem;
+                        elsewhere->setParentItem(window->contentItem());
+                        elsewhere->forceActiveFocus();
+                        const QString reason =
+                                QCoreApplication::translate("brulion::editor::PageController",
+                                                            "An alias with this character cannot be used in a link");
+                        check(waitFor([&] { return toast == reason; }),
+                              "an alias no link can use, left by a tap elsewhere: a toast says why");
+                        QObject::disconnect(toasts);
+                        check(waitFor([&] { return !shownNamed(editor, u"pageHeaderField"_s); }), "the field closed");
+                        check(saveNow() && app->workspace()->readFile(guide) == before, "nothing was written");
+                        delete elsewhere;
+                    } else {
+                        check(false, "the menu has “Dodaj alias” again");
+                    }
+                }
+                closeMenus(window);
+                app->requestUiAction(u"addProperty"_s);
+                check(waitFor([&] {
+                          const QQuickItem *f = window->activeFocusItem();
+                          return f && f->objectName() == u"propertiesKeyField";
+                      }),
+                      "the palette's “Dodaj właściwość strony” opens the properties panel's add row");
+                sendKey(window, Qt::Key_Escape);
+                check(app->workspace()->readFile(guide) == before, "nothing is written until a name is chosen");
+                app->settings()->setPropertiesExpanded(false);
+                settle(100);
+            }
+
             // Phones: a block at the bottom of the screen that starts editing is scrolled above
             // the editing toolbar (which sits on the keyboard) instead of staying under it.
             if (window->width() < 900) {

@@ -305,6 +305,13 @@ FocusScope {
     }
 
     // ---- The day's blocks -----------------------------------------------------------------------
+    // The setting again whenever it changes (the panel's header writes it through
+    // setPropertiesExpanded(), which replaces a plain binding).
+    Binding {
+        target: editor
+        property: "propertiesExpanded"
+        value: AppSettings.propertiesExpanded
+    }
     BlockEditor {
         id: editor
         objectName: "journalDayEditor"
@@ -328,6 +335,13 @@ FocusScope {
                                                   : AppController.toast(text, kind)
         listView.interactive: false
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
+        // The properties panel open or folded: a device setting, shared with pages. Bound here
+        // too, not only by the Binding above (applied when the day is complete, after the editor
+        // made its rows): a day created while the stream scrolls has its panel open at once —
+        // a panel opened a moment later made the day grow and the content jump (docs/UI.md
+        // "Scrolling performance", rule 1).
+        propertiesExpanded: AppSettings.propertiesExpanded
+        onPropertiesExpandedToggled: (expanded) => AppSettings.propertiesExpanded = expanded
         horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8
         bottomSpace: Theme.space3
         // Document days: headings stay below the date (the size of other days' dates).

@@ -43,6 +43,10 @@ brulion_add_test(tst_editor_queryresults
 brulion_add_test(tst_editor_notemode
     SOURCES tst_editor_notemode.cpp
     LIBS brulion_editor brulion_core_markdown)
+# Page properties as typed fields: PageController's edits, suggestions, the properties roles.
+brulion_add_test(tst_editor_pageprops
+    SOURCES tst_editor_pageprops.cpp
+    LIBS brulion_editor brulion_core_markdown)
 # The size of embedded pictures read from their headers / an SVG's root (picturesize.h).
 brulion_add_test(tst_editor_picturesize
     SOURCES tst_editor_picturesize.cpp
@@ -121,6 +125,22 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 COMMAND brulion --editor --editor-script datechips --no-single-instance
                     --size ${_chips_size} ${_chips_touch} --now "2026-10-15 10:00" --locale pl)
             set_tests_properties(${_chips_test} PROPERTIES
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+        endforeach()
+        # The page properties panel (`--editor-script propstest`, qml/dev/PropertiesSelfTest.qml):
+        # its header tapped open, typed fields with real keys (text, number "3,5", checkbox, a date
+        # from the dialog's "jutro", list items with Enter / Backspace / ×), the row's menu (rename,
+        # type, remove + "Cofnij"), a key from the suggestions, the first property of a page without
+        # any; a phone (--touch): stacked rows, 44 px targets.
+        foreach(_props "tst_editor_qml_properties;1280x800;" "tst_editor_qml_properties_touch;412x915;--touch")
+            list(GET _props 0 _props_test)
+            list(GET _props 1 _props_size)
+            list(GET _props 2 _props_touch)
+            add_test(NAME ${_props_test}
+                COMMAND brulion --editor --editor-script propstest --no-single-instance
+                    --size ${_props_size} ${_props_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_props_test} PROPERTIES
                 ENVIRONMENT "${_playground_env}"
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()

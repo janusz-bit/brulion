@@ -2,6 +2,7 @@
 // inline and property tags the parser collects, plus the items of the frontmatter's tag key
 // located in the YAML source. Used to rename tags (rename.cpp) and by the index's clients.
 #include "markdown/frontmatter.h"
+#include "markdown/frontmatter_p.h"
 #include "markdown/inline_p.h"
 #include "markdown/lines_p.h"
 #include "markdown/parse.h"
@@ -111,25 +112,6 @@ int yamlIndent(QStringView line)
     while (n < line.size() && (line[n] == u' ' || line[n] == u'\t'))
         ++n;
     return n;
-}
-
-/// End of `s` before a ` #comment` (a '#' at the start or after a blank, outside quotes).
-qsizetype commentStart(QStringView s, qsizetype from = 0)
-{
-    QChar quote;
-    for (qsizetype i = from; i < s.size(); ++i) {
-        const QChar c = s[i];
-        if (!quote.isNull()) {
-            if (c == quote)
-                quote = QChar();
-            continue;
-        }
-        if (isQuote(c) && (i == from || isSpaceOrTab(s[i - 1]) || s[i - 1] == u'[' || s[i - 1] == u','))
-            quote = c;
-        else if (c == u'#' && (i == from || isSpaceOrTab(s[i - 1])))
-            return i;
-    }
-    return s.size();
 }
 
 /// Collects the items of the tag key (namesFrom()'s rules) with their document ranges.
@@ -382,7 +364,7 @@ FrontmatterTags frontmatterTagItems(QStringView content)
     qsizetype v = out.key.size() + 1;
     while (v < line.text.size() && isSpaceOrTab(line.text[v]))
         ++v;
-    const qsizetype valueEnd = commentStart(line.text, v);
+    const qsizetype valueEnd = yamlCommentStart(line.text, v);
     const QStringView value = trimEndBlanks(line.text.sliced(v, valueEnd - v));
     bool ok = true;
     if (value.isEmpty()) {
@@ -399,7 +381,7 @@ FrontmatterTags frontmatterTagItems(QStringView content)
                 break;
             }
             const qsizetype from = indent + 1;
-            ok = scan.listItem(lines[k], {from, commentStart(t, from)});
+            ok = scan.listItem(lines[k], {from, yamlCommentStart(t, from)});
         }
     } else if (value.startsWith(u'[')) {
         ok = scanFlow(lines, keyLine, v, scan);

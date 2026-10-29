@@ -24,7 +24,9 @@ import Brulion
 // keyboard (keyboardTest(): KeyboardInsets.simulated) and exits; `blocklinks` checks copying links
 // to blocks and headings and following them (blockLinksTest()) and exits; `refreshtest` checks
 // that views follow what they depend on (RefreshSelfTest.qml) and exits; `datechips` checks the
-// menu of date chips with real input (DateChipSelfTest.qml) and exits; `copylink` /
+// menu of date chips with real input (DateChipSelfTest.qml) and exits; `propstest` checks the
+// page properties panel with real input (PropertiesSelfTest.qml) and exits; `properties` /
+// `properties-phone` show the panel expanded on a page with every type; `copylink` /
 // `copylink-document` show the block menu's "Kopiuj odnośnik" (outline / document),
 // `copylink-toolbar` the menu from the touch toolbar's "Więcej" (--touch), `copylink-table` a
 // table's menu from its cell toolbar's "Więcej" (--touch), `link-flash` a
@@ -311,6 +313,17 @@ ApplicationWindow {
         id: dateChipTestLoader
         active: false
         sourceComponent: DateChipSelfTest {
+            window: window
+            editor: editor
+            page: page
+            host: host
+        }
+    }
+    // ---- The page properties panel (`--editor-script propstest`) --------------------------------
+    Loader {
+        id: propertiesTestLoader
+        active: false
+        sourceComponent: PropertiesSelfTest {
             window: window
             editor: editor
             page: page
@@ -3384,6 +3397,22 @@ ApplicationWindow {
         case "datechips":
             dateChipTestLoader.active = true
             break
+        case "propstest":
+            propertiesTestLoader.active = true
+            break
+        case "properties":
+        case "properties-phone": {
+            // The page properties panel expanded on a page with every type (screenshots; the phone
+            // layout comes with --touch / a narrow --size).
+            host.setFile("Projekty/Remont garażu.md", "---\nstatus: w toku\nkoszt: 1200\ngotowe: false\n"
+                + "termin: 2026-10-28\nkiedy: 2026-10-30T09:30\ntags: [projekt, dom]\naliases: [Łazienka]\n"
+                + "autorzy:\n  - \"[[Jan Kowalski]]\"\n  - Anna\nopis: \"Płytki z [[Castorama]] #pilne\"\n"
+                + "pusta:\n---\n# Remont garażu\n\n- Kupić płytki\n- Zamówić hydraulika\n")
+            editor.setPropertiesExpanded(true)
+            page.path = "Projekty/Remont garażu.md"
+            scriptLater.run(() => editor.listView.positionViewAtBeginning())
+            break
+        }
         case "link-flash": {
             // A copied [[Page#^id]] (shown as the page and the block's text) followed: the block
             // selected and flashing (screenshots; --delay 1600 lands in the flash).

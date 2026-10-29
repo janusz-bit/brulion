@@ -45,6 +45,7 @@ constexpr auto kEditorLineSpacing = "editor/lineSpacing";
 constexpr auto kEditorFontSize = "editor/fontSize";
 constexpr auto kEditorWidth = "editor/maxWidth";
 constexpr auto kEditorSource = "editor/sourceMode";
+constexpr auto kPropertiesExpanded = "editor/propertiesExpanded";
 constexpr auto kWebPictures = "editor/webPicturesShown";
 constexpr auto kExportWebPictures = "export/webPictures";
 constexpr auto kCurrentVault = "vaults/current";
@@ -543,6 +544,17 @@ void AppSettings::setEditorSourceMode(bool on)
 {
     if (store(key(kEditorSource), on, editorSourceMode()))
         Q_EMIT editorSourceModeChanged();
+}
+
+bool AppSettings::propertiesExpanded() const
+{
+    return m_settings->value(key(kPropertiesExpanded), false).toBool();
+}
+
+void AppSettings::setPropertiesExpanded(bool on)
+{
+    if (store(key(kPropertiesExpanded), on, propertiesExpanded()))
+        Q_EMIT propertiesExpandedChanged();
 }
 
 bool AppSettings::webPicturesShown() const

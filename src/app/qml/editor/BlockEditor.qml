@@ -241,6 +241,62 @@ FocusScope {
             ensureRowVisible(row)
     }
 
+    // ---- Page properties (docs/UI.md "Page properties") ----------------------------------------------
+    /// The properties panel ("Właściwości") is expanded: a device setting in the app (PageView and
+    /// the journal days bind it to AppSettings.propertiesExpanded and store it when it is
+    /// switched: propertiesExpandedToggled()), folded by default.
+    property bool propertiesExpanded: false
+    signal propertiesExpandedToggled(bool expanded)
+    function setPropertiesExpanded(on) {
+        if (propertiesExpanded === on)
+            return
+        propertiesExpanded = on
+        propertiesExpandedToggled(on)
+    }
+    /// The first property of a page that shows none (PropertiesPanel's add row above the blocks).
+    property bool propertyDraft: false
+    /// A focus request for the panel: { key, part: "value" | "key" | "row" } for the row of `key`,
+    /// { part: "add", source? } for the add row — taken by the row or panel once it exists (a
+    /// property just added is a new row).
+    property var propertyFocus: null
+    /// The panel's field (or row) with the keyboard: kept above the on-screen keyboard
+    /// (ensureEditVisible()).
+    property Item editingProperty: null
+    /// The type an empty value is edited as, chosen in a row's menu this session: { key: type }.
+    property var propertyTypeOverride: ({})
+    function setPropertyTypeOverride(key, type) {
+        const o = Object.assign({}, propertyTypeOverride)
+        o[key] = type
+        propertyTypeOverride = o
+    }
+    /// "Dodaj właściwość" (Ctrl+;, the page menu, the palette): the add row of the shown block new
+    /// properties go to (zoomed out first), or — that block is not shown (a page without
+    /// properties, a frontmatter holding only the note mode, also above shown `key::` lines) —
+    /// the draft above the blocks.
+    function addProperty() {
+        if (!controller || controller.sourceMode || !controller.loaded)
+            return
+        if (controller.zoomBlock >= 0)
+            controller.zoomTo(-1)
+        closeSuggestions()
+        if (controller.editingRow >= 0)
+            controller.stopEditing()
+        const props = controller.pageProperties
+        const row = props.addRow
+        if (row >= 0) {
+            setPropertiesExpanded(true)
+            propertyFocus = { part: "add", source: props.addTarget }
+            later(() => {
+                if (!editor.controller)
+                    return
+                list.positionViewAtIndex(row, ListView.Contain)
+            })
+        } else {
+            propertyDraft = true
+            later(() => list.positionViewAtBeginning())
+        }
+    }
+
     // The title above the properties panel (BlockDelegate trades their places on screen): set by
     // those two delegates.
     readonly property bool titleFirst: controller !== null && controller.titleRow > 0 && controller.zoomBlock < 0
@@ -890,6 +946,8 @@ FocusScope {
             ensureVisible(activeEditor, activeEditor.cursorRectangle)
         else if (editingTable && editingTable.cellInput)
             ensureVisible(editingTable.cellInput, Qt.rect(0, 0, editingTable.cellInput.width, editingTable.cellInput.height))
+        else if (editingProperty && editingProperty.activeFocus)
+            ensureVisible(editingProperty, Qt.rect(0, 0, editingProperty.width, editingProperty.height))
     }
     // The view shrinks with the keyboard (the shell lifts it): what is being edited stays
     // visible — once the keyboard has settled. (Growing, it covers nothing: the view stays where
@@ -898,12 +956,13 @@ FocusScope {
     onHeightChanged: {
         const shrank = height < _lastHeight - 0.5
         _lastHeight = height
-        if (shrank && !autoHeight && (activeEditor !== null || editingTable !== null))
+        if (shrank && !autoHeight && (activeEditor !== null || editingTable !== null || editingProperty !== null))
             later(() => editor.ensureEditVisible())
     }
     readonly property bool keyboardSliding: KeyboardInsets.animating
     onKeyboardSlidingChanged: {
-        if (!keyboardSliding && KeyboardInsets.shown && (activeEditor !== null || editingTable !== null))
+        if (!keyboardSliding && KeyboardInsets.shown
+                && (activeEditor !== null || editingTable !== null || editingProperty !== null))
             later(() => editor.ensureEditVisible())
     }
 
@@ -1514,8 +1573,16 @@ FocusScope {
                 editor.ensureEditVisible()
             })
         }
+        // The draft's property is there (or another program wrote one): the panel shows it.
+        function onPagePropertiesChanged() {
+            if (editor.propertyDraft && editor.controller.pageProperties.addRow >= 0)
+                editor.later(() => editor.propertyDraft = false)
+        }
         function onLoadingChanged() {
             if (!editor.controller.loading) {
+                // Another page (or the same one read again): no draft or focus request of the last.
+                editor.propertyDraft = false
+                editor.propertyFocus = null
                 list.userMoved = false
                 list.showsTop = true
                 // The editor may be gone by then (a day of the journal stream scrolled away).
@@ -1656,7 +1723,9 @@ FocusScope {
         }
         // autoHeight: every row is in the range the list fills at once (synchronously, or with
         // the incubation of the item holding the editor) — none waits for the asynchronous cache.
-        displayMarginEnd: editor.autoHeight ? 1000000 : 0
+        // A title drawn above the page's properties (titleFirst) lies below them in the list: it
+        // is shown also while the expanded panel puts its row out of the view.
+        displayMarginEnd: editor.autoHeight ? 1000000 : editor.titleFirst ? Math.ceil(editor.propertiesHeight) : 0
         boundsBehavior: Flickable.StopAtBounds
         keyNavigationEnabled: false
         // No current item: a ListView gives its current item the focus whenever that item changes
@@ -1700,6 +1769,30 @@ FocusScope {
                 width: parent.width
                 active: editor.header !== null
                 sourceComponent: editor.header
+            }
+            // The first property of a page that shows none (addProperty()): only the add row.
+            Loader {
+                objectName: "propertyDraft"
+                x: editor.contentX
+                width: editor.contentWidth
+                active: editor.propertyDraft && editor.controller !== null
+                visible: active
+                sourceComponent: Rectangle {
+                    implicitHeight: draftPanel.implicitHeight + 2 * Theme.space1
+                    radius: Theme.radius
+                    color: Theme.bgSunken
+                    border.width: 1
+                    border.color: Theme.borderSubtle
+                    PropertiesPanel {
+                        id: draftPanel
+                        x: Theme.space1
+                        y: Theme.space1
+                        width: parent.width - 2 * Theme.space1
+                        editor: editor
+                        controller: editor.controller
+                        draft: true
+                    }
+                }
             }
             Loader {
                 x: editor.contentX
