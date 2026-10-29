@@ -640,7 +640,8 @@ private Q_SLOTS:
         QTest::addColumn<int>("style");
         QTest::addColumn<double>("side");
         QTest::addColumn<double>("width");
-        QTest::newRow("huge cross-hatch, hair-thin") << int(ElementType::Rectangle) << int(FillStyle::CrossHatch) << 55000.0 << 0.05;
+        QTest::newRow("huge cross-hatch, hair-thin")
+                << int(ElementType::Rectangle) << int(FillStyle::CrossHatch) << 55000.0 << 0.05;
         QTest::newRow("huge hachure ellipse") << int(ElementType::Ellipse) << int(FillStyle::Hachure) << 1e6 << 1.0;
         QTest::newRow("huge diamond") << int(ElementType::Diamond) << int(FillStyle::Zigzag) << 2e5 << 0.5;
         QTest::newRow("concave polygon") << int(ElementType::Line) << int(FillStyle::CrossHatch) << 50000.0 << 1.0;
@@ -1234,10 +1235,12 @@ private Q_SLOTS:
         QVERIFY(label.box.width() <= labelMaxWidth(shape) + 1e-9);
         // The shape holds the text's height as Excalidraw's getBoundTextMaxHeight measures it.
         const double h = shape.box.height();
-        const double maxHeight = ElementType(type) == ElementType::Ellipse ? std::floor(h / 2 * std::numbers::sqrt2 + 0.5) - 10
+        const double maxHeight = ElementType(type) == ElementType::Ellipse
+                                         ? std::floor(h / 2 * std::numbers::sqrt2 + 0.5) - 10
                                  : ElementType(type) == ElementType::Diamond ? std::floor(h / 2 + 0.5) - 10
                                                                              : h - 10;
-        QVERIFY2(label.box.height() <= maxHeight + 1e-9, qPrintable(u"%1 > %2"_s.arg(label.box.height()).arg(maxHeight)));
+        QVERIFY2(label.box.height() <= maxHeight + 1e-9,
+                 qPrintable(u"%1 > %2"_s.arg(label.box.height()).arg(maxHeight)));
         QVERIFY(std::abs(label.box.center().x() - shape.box.center().x()) < 0.01);
         QVERIFY(std::abs(label.box.center().y() - shape.box.center().y()) < 0.01);
         QCOMPARE(shape.box.topLeft(), box.topLeft()); // (grown from its top left, as Excalidraw does)

@@ -388,8 +388,9 @@ void reorderElements(Drawing &d, const QSet<QString> &ids, Reorder how, const Ed
     const QHash<QString, qsizetype> index = indexById(d);
     qsizetype fixed = 0;
     while (fixed < blocks.size()
-           && std::all_of(blocks.at(fixed).cbegin(), blocks.at(fixed).cend(),
-                          [&](qsizetype i) { return lockedIn(d, index, d.strokes.at(i)); }))
+           && std::all_of(
+                   blocks.at(fixed).cbegin(), blocks.at(fixed).cend(),
+                   [&](qsizetype i) { return lockedIn(d, index, d.strokes.at(i)); }))
         ++fixed;
     const auto picked = [&](qsizetype i) {
         return ids.contains(d.strokes.at(i).id) && !lockedIn(d, index, d.strokes.at(i));

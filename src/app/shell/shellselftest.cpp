@@ -2696,11 +2696,11 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         QStringList hidden;
         const auto allShown = [&] {
             hidden.clear();
-            for (const QString &name :
-                 {u"drawingUndo"_s, u"drawingRedo"_s, u"drawingPen"_s, u"drawingHighlighter"_s, u"drawingEraser"_s,
-                  u"drawingSelect"_s, u"drawingShape"_s, u"drawingText"_s, u"drawingStyle"_s, u"drawingMore"_s,
-                  u"drawingDone"_s}) {
-                QQuickItem *item = uidriver::topmost(window, [&name](QQuickItem *i) { return i->objectName() == name; });
+            for (const QString &name : {u"drawingUndo"_s, u"drawingRedo"_s, u"drawingPen"_s, u"drawingHighlighter"_s,
+                                        u"drawingEraser"_s, u"drawingSelect"_s, u"drawingShape"_s, u"drawingText"_s,
+                                        u"drawingStyle"_s, u"drawingMore"_s, u"drawingDone"_s}) {
+                QQuickItem *item =
+                        uidriver::topmost(window, [&name](QQuickItem *i) { return i->objectName() == name; });
                 if (!item || !uidriver::shown(item) || !uidriver::onScreen(window, item))
                     hidden.append(name);
             }
@@ -2806,12 +2806,13 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
               "a click with the text tool opens the text editor");
         const auto type = [&](const QString &text) {
             for (const QChar c : text)
-                sendKey(window, c == u'Ć' ? Qt::Key_unknown : Qt::Key(c.toUpper().unicode()), Qt::NoModifier, QString(c));
+                sendKey(window, c == u'Ć' ? Qt::Key_unknown : Qt::Key(c.toUpper().unicode()), Qt::NoModifier,
+                        QString(c));
         };
         type(u"Ć"_s);
         settle(1800);
         check(editor && editor->hasActiveFocus() && canvas->property("textEditing").toBool()
-                  && canvas->property("tool").toString() == u"text",
+                      && canvas->property("tool").toString() == u"text",
               "the save timer leaves a text being written alone");
         type(u"ma"_s);
         sendKey(window, Qt::Key_Escape);
