@@ -4244,8 +4244,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                         auto *elsewhere = new QQuickItem;
                         elsewhere->setParentItem(window->contentItem());
                         elsewhere->forceActiveFocus();
-                        const QString reason = QCoreApplication::translate(
-                                "brulion::editor::PageController", "An alias with this character cannot be used in a link");
+                        const QString reason =
+                                QCoreApplication::translate("brulion::editor::PageController",
+                                                            "An alias with this character cannot be used in a link");
                         check(waitFor([&] { return toast == reason; }),
                               "an alias no link can use, left by a tap elsewhere: a toast says why");
                         QObject::disconnect(toasts);

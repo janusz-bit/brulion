@@ -341,15 +341,16 @@ private Q_SLOTS:
         yaml("comment line under the value kept", u"---\nstatus: a\n  # uwaga do kosztu\nkoszt: 1\n---\n"_s,
              u"status"_s, u"b"_s, u"text"_s, u"---\nstatus: b\n  # uwaga do kosztu\nkoszt: 1\n---\n"_s);
         yaml("comment lines and blank kept crlf", u"---\r\nstatus: a # c\r\n  # ż\r\n\r\n  # ź\r\nb: 1\r\n---\r\n"_s,
-             u"status"_s, u"Zażółć"_s, u"text"_s, u"---\r\nstatus: Zażółć # c\r\n  # ż\r\n\r\n  # ź\r\nb: 1\r\n---\r\n"_s);
+             u"status"_s, u"Zażółć"_s, u"text"_s,
+             u"---\r\nstatus: Zażółć # c\r\n  # ż\r\n\r\n  # ź\r\nb: 1\r\n---\r\n"_s);
         yaml("comment line under an empty value kept", u"---\nstatus:\n  # do uzupełnienia\n---\n"_s, u"status"_s,
              u"x"_s, u"text"_s, u"---\nstatus: x\n  # do uzupełnienia\n---\n"_s);
         yaml("comment line kept when emptied", u"---\nkoszt: 5\n  # netto\n---\n"_s, u"koszt"_s, QVariant(),
              u"number"_s, u"---\nkoszt:\n  # netto\n---\n"_s);
         yaml("comment line kept under a new list", u"---\nl: a\n  # uwaga\nb: 1\n---\n"_s, u"l"_s,
              list({u"a"_s, u"b"_s}), u"list"_s, u"---\nl:\n  - a\n  - b\n  # uwaga\nb: 1\n---\n"_s);
-        yaml("comment line kept under a flow list", u"---\nl: [a]\n  # uwaga\n---\n"_s, u"l"_s,
-             list({u"a"_s, u"b"_s}), u"list"_s, u"---\nl: [a, b]\n  # uwaga\n---\n"_s);
+        yaml("comment line kept under a flow list", u"---\nl: [a]\n  # uwaga\n---\n"_s, u"l"_s, list({u"a"_s, u"b"_s}),
+             u"list"_s, u"---\nl: [a, b]\n  # uwaga\n---\n"_s);
         yaml("block scalar lines are no comments", u"---\nopis: |\n  # nagłówek\n  tekst\n---\n"_s, u"opis"_s,
              u"nowy"_s, u"text"_s, u"---\nopis: nowy\n---\n"_s);
         // Numbers, checkboxes, dates.
@@ -595,7 +596,8 @@ private Q_SLOTS:
         QFETCH(QString, expected);
         QFETCH(QString, status);
         const PropertyType t = typeOf(type);
-        const QVariant empty = t == PropertyType::List || t == PropertyType::Tags ? QVariant(QStringList()) : QVariant();
+        const QVariant empty =
+                t == PropertyType::List || t == PropertyType::Tags ? QVariant(QStringList()) : QVariant();
         const PropertyEditResult r = addPageProperty(content, sourceOf(source), key, empty, t);
         QCOMPARE(propertyEditStatusName(r.status), status);
         QCOMPARE(r.content, expected);

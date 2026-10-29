@@ -782,7 +782,8 @@ std::optional<QString> writeYamlEntry(const QString &content, const YamlDoc &doc
     };
     if (entries.isEmpty()) {
         const QString eol = doc.lines[doc.fm.endLine - 1].eol;
-        const QString edited = rebuildLines(doc.lines, {}, doc.fm.endLine, yamlEntryText(doc, nullptr, key, t, eol, eol));
+        const QString edited =
+                rebuildLines(doc.lines, {}, doc.fm.endLine, yamlEntryText(doc, nullptr, key, t, eol, eol));
         return verified(edited) ? std::optional<QString>(edited) : std::nullopt;
     }
     const FrontmatterEntry &first = entries.first();
@@ -1238,8 +1239,7 @@ PropertyEditResult removeLogseq(const QString &content, const PageRead &page, co
         // The document ended inside the dropped lines without a final line break: so does the
         // result. (A trailing terminator gives a last empty line: dropping that one changes nothing.)
         const bool endedWithout = !page.lines.isEmpty() && page.lines.last().eol.isEmpty()
-                                  && !page.lines.last().text.isEmpty()
-                                  && dropped.contains(int(page.lines.size()) - 1);
+                                  && !page.lines.last().text.isEmpty() && dropped.contains(int(page.lines.size()) - 1);
         if (endedWithout && lastKept >= 0)
             out.chop(page.lines[lastKept].eol.size());
         if (startsWithBom(content) && !startsWithBom(out))

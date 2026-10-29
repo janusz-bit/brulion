@@ -233,7 +233,8 @@ private Q_SLOTS:
         // A new key is written empty, one undo step.
         const QVariantMap added = f.page.addPageProperty(u"yaml"_s, u"źródło"_s, QVariantList(), u"list"_s);
         QVERIFY(added.value(u"ok"_s).toBool());
-        QCOMPARE(f.text(), u"---\nstatus: w toku # wybrany\ntags: [projekt, dom]\nźródło: []\n---\nstan:: x\n\n- a\n"_s);
+        QCOMPARE(f.text(),
+                 u"---\nstatus: w toku # wybrany\ntags: [projekt, dom]\nźródło: []\n---\nstan:: x\n\n- a\n"_s);
         f.page.undo();
         QCOMPARE(f.text(), content);
         QCOMPARE(status(f.page.addPageProperty(QString(), u"brulion"_s, QVariant(), u"text"_s)), u"reserved"_s);
