@@ -142,10 +142,10 @@ AppController::AppController(const Options &options, QObject *parent)
     m_startToday = args.contains(u"--today"_s);
     m_devPopup = argValue(args, u"--popup"_s);
     // Files opened with Brulion (--open: a file manager's "Otwórz za pomocą"), else --share.
-    if (!options.openFiles.isEmpty())
-        m_startShare = QJsonDocument(notebook::sharedContentToJson(
-                                             notebook::openedFilesShare(options.openFiles, options.workingDirectory)))
-                               .toJson(QJsonDocument::Compact);
+    if (const notebook::SharedContent opened =
+                notebook::openedFilesShare(options.openFiles, options.workingDirectory);
+        !opened.files.isEmpty())
+        m_startShare = QJsonDocument(notebook::sharedContentToJson(opened)).toJson(QJsonDocument::Compact);
     else
         m_startShare = argValue(args, u"--share"_s).toUtf8();
     m_startShareQuery = argValue(args, u"--share-query"_s);

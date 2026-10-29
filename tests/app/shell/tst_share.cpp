@@ -564,18 +564,21 @@ private Q_SLOTS:
 
     void startWithoutOpenFiles()
     {
-        // `brulion --open` with no files (a menu launch of `Exec=brulion --open %F`): a plain start.
+        // `brulion --open` with no files (a menu launch of `Exec=brulion --open %F`), or with
+        // empty ones only: a plain start.
         const QString vault = m_tmp.filePath(u"bez plików"_s);
         QDir().mkpath(vault);
-        auto app = makeApp({u"--vault"_s, vault}, {}, m_tmp.path());
-        QSignalSpy ui(app.get(), &AppController::uiActionRequested);
-        QSignalSpy toasts(app.get(), &AppController::toastRequested);
-        app->start();
-        QTRY_COMPARE(app->status(), u"ready"_s);
-        QTest::qWait(50);
-        QCOMPARE(shareRequests(ui), 0);
-        QCOMPARE(toastsWith(toasts, u"Nothing to save."_s), 0);
-        QVERIFY(app->pendingShare().isEmpty());
+        for (const QStringList &files : {QStringList(), QStringList{QString(), QString()}}) {
+            auto app = makeApp({u"--vault"_s, vault}, files, m_tmp.path());
+            QSignalSpy ui(app.get(), &AppController::uiActionRequested);
+            QSignalSpy toasts(app.get(), &AppController::toastRequested);
+            app->start();
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            QTest::qWait(50);
+            QCOMPARE(shareRequests(ui), 0);
+            QCOMPARE(toastsWith(toasts, u"Nothing to save."_s), 0);
+            QVERIFY(app->pendingShare().isEmpty());
+        }
     }
 
     void shareQuery()
