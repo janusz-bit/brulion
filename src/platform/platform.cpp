@@ -1,7 +1,16 @@
 #include "platform.h"
 
+#include <QGuiApplication>
 #include <QStandardPaths>
 #include <QSysInfo>
+#include <QWindow>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace brulion::platform {
 
@@ -52,6 +61,28 @@ QString deviceDescription()
             : QString();
     return QStringLiteral("%1%2, %3").arg(product, kernel, QSysInfo::currentCpuArchitecture());
 #endif
+#endif
+}
+
+void allowForegroundActivation()
+{
+#ifdef Q_OS_WIN
+    AllowSetForegroundWindow(ASFW_ANY);
+#endif
+}
+
+void endStartupNotification(const QByteArray &startupId)
+{
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (startupId.isEmpty() || QGuiApplication::platformName() != QLatin1String("xcb"))
+        return;
+    QWindow window;
+    window.setFlags(Qt::ToolTip | Qt::WindowTransparentForInput | Qt::WindowDoesNotAcceptFocus);
+    window.setGeometry(-16, -16, 1, 1);
+    window.show(); // QXcbScreen::windowShown(): "remove: ID=<DESKTOP_STARTUP_ID>", flushed
+    window.close();
+#else
+    Q_UNUSED(startupId)
 #endif
 }
 

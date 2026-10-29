@@ -41,10 +41,17 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * notatki na slajdach i PDF-ach z wykładu: rysowanie na obrazie w tle (strona PDF, slajd);
   * sprawdzić na tablecie z rysikiem (Android, Natalia) i w przeglądarce, czy nacisk rysika
     dociera do Brulionu.
-* **Udostępnianie do Brulionu poza Androidem** — w wersji w przeglądarce cel udostępniania PWA
-  (Web Share Target, jak w poprzedniej aplikacji: `archive/web-v1`), na komputerze „Otwórz
-  w Brulionie” dla plików `.md`/`.txt` (wpis `.desktop` z `MimeType`, skojarzenie plików
-  w Windows) — to samo okno co „Udostępnij → Brulion” na Androidzie (docs/ANDROID.md).
+* **Udostępnianie poza Androidem — sprawdzić na prawdziwych urządzeniach.** Automatycznie
+  sprawdzone (testy, CI): odczyt udostępnienia, okno, przekazanie do działającej kopii, wpis
+  `.desktop`, rejestr Windows (instalacja, aktualizacja, odinstalowanie), wersja webowa w Chromium
+  bez okna (`wasm-smoke.mjs --share`). Zostało ręcznie: Chrome lub Edge na Androidzie (wersja
+  webowa zainstalowana jako aplikacja → Udostępnij → Brulion ze strony i z zaznaczonego tekstu,
+  przy zamkniętym i otwartym Brulionie); Eksplorator Windows („Otwórz za pomocą → Brulion” na
+  `.md` i `.txt`, kilka plików naraz, okno na wierzchu, program domyślny bez zmian); menedżer
+  plików na Linuksie (GNOME Pliki, Dolphin: „Otwórz za pomocą”, okno wychodzi na wierzch pod
+  Waylandem, dwuklik na `.md` otwiera dalej dotychczasowy program; Cinnamon/Xfce pod X11: kursor
+  nie kręci się po otwarciu pliku w działającym Brulionie); AppImage zintegrowany przez Gear Lever
+  albo AppImageLauncher.
 * **Dopracowanie interfejsu — porównanie z Obsidianem.** Przejść ekran po ekranie (edytor
   w trybie dokumentu i konspektu, pasek boczny, wyszukiwarka, kalendarz, ustawienia; telefon
   i komputer) z Obsidianem obok i spisać różnice w układzie, odstępach, typografii, kolorach,

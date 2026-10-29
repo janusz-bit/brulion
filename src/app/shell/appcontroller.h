@@ -33,12 +33,17 @@
 //   --share <json>         receive a share as Android's ShareActivity hands it over
 //                          ({"subject", "text", "url", "files": [{"path", "name", "mime"}]},
 //                          notebook/share.h; appshare.cpp) once the notebook is ready
+//   --share-query <query>  the browser version's share target ("share-title=…&share-text=…&
+//                          share-url=…": wasm/index.html passes the launch's parameters so)
 //   --hidden               start minimised to the system tray (desktop; when a tray exists;
 //                          Windows' "Start when you sign in" starts Brulion so)
 //   --selftest-shell       drive the real shell with key events and exit with the number of
 //                          failed checks (desktop; main.cpp, shellselftest.h; ctest tst_shell_qml)
 // and for launchers (desktop entry actions): --capture opens quick capture, --today today's
-// journal, once the vault is open (a second launch asks the running instance instead, main.cpp).
+// journal, once the vault is open (a second launch asks the running instance instead, main.cpp);
+// `--open <file>…` (the desktop entry's `Exec=brulion --open %F`, Windows' "Otwórz za pomocą":
+// every argument after it is a file — Options::openFiles) offers the files in the share dialog, a
+// file of the open notebook opens as its page.
 #pragma once
 
 #include "appsettings.h"
@@ -163,7 +168,8 @@ class AppController : public QObject {
     /// text: notebook::composeSharedText; for "text"), files: [{ name, title, preview
     /// (the first lines), size, error ("" or a translated reason it cannot be saved) }], readable
     /// (files that can be saved), target ("journal" for text and several files, "page" for one
-    /// file), title (the new page's suggested title) }.
+    /// file), title (the new page's suggested title), source ("open": files opened with Brulion
+    /// on a desktop — copies are saved, the files stay as they are; "" another app's share) }.
     Q_PROPERTY(QVariantMap pendingShare READ pendingShare NOTIFY pendingShareChanged FINAL)
 
 public:
@@ -172,8 +178,13 @@ public:
         QString settingsFile;
         /// App data folder (History, LocalStore, secrets, demo vault); "" = AppDataLocation.
         QString dataDir;
-        /// Command line (dev options above); usually QCoreApplication::arguments().
+        /// Command line (dev options above); usually QCoreApplication::arguments() before
+        /// "--open" (notebook::splitOpenArguments).
         QStringList arguments;
+        /// Files to offer once started: the arguments after "--open" (main.cpp), paths relative
+        /// to `workingDirectory` ("" = QDir::currentPath()) or file:// URLs.
+        QStringList openFiles;
+        QString workingDirectory;
     };
 
     explicit AppController(const Options &options, QObject *parent = nullptr);
@@ -346,9 +357,12 @@ public:
     /// closes it). Forgets that hide — asked once per tray action (Main.qml).
     Q_INVOKABLE bool trayPopupShouldReopen();
     /// A message of a second launch or brulion-cli over the single-instance socket
-    /// (ipc/appmessage.h, parsed by main()): `activate`, `capture`, `today` and `open {"route",
-    /// "vault"}` show the window and do their part; false for any other verb, which changes
-    /// nothing (not even the window) — newer senders stay harmless.
+    /// (ipc/appmessage.h, parsed by main()): `activate`, `capture`, `today`, `open {"route",
+    /// "vault"}` and `share {"share"}` (files opened with Brulion: receiveShare() without the
+    /// share's "dir") show the window and do their part, `hidden` does nothing; false for any
+    /// other verb, which changes nothing (not even the window) — newer senders stay harmless. A
+    /// valid "activationToken" (Wayland: the launcher's XDG_ACTIVATION_TOKEN) is set for the
+    /// window's next activation.
     bool handleInstanceMessage(const QByteArray &verb, const QJsonObject &payload);
     /// Quit for real (also when closing to the tray is on).
     Q_INVOKABLE void quit();
@@ -376,15 +390,24 @@ public:
 
     // ---- Shares from other apps (appshare.cpp; docs/ANDROID.md "Udostępnij → Brulion") ------
     /// Text or .md/.txt files shared from another app (Android's ShareActivity through
-    /// AndroidBridge::shared, the --share option): the files are read at once (text types only, at
-    /// most notebook::SharedFileMaxBytes each), the window comes up and the shell's share dialog
-    /// opens (uiActionRequested("share")) — once the notebook is ready, in the user's notebook
-    /// (from the documentation it goes back to it first); with no notebook a notice asks for one
-    /// and the share waits. A newer share replaces one still waiting. Nothing is written until
-    /// saveShare().
+    /// AndroidBridge::shared, the --share option, the browser's share target: receiveShareQuery())
+    /// or opened with Brulion on a desktop (--open, a second launch's `share` message; source
+    /// "open"): the files are read at once (text types only — a file without a type gets one from
+    /// its name and content —, at most notebook::SharedFileMaxBytes each), the window comes up and
+    /// the shell's share dialog opens (uiActionRequested("share")) — once the notebook is ready, in
+    /// the user's notebook (from the documentation it goes back to it first); with no notebook a
+    /// notice asks for one and the share waits. An opened file that is a page of that notebook
+    /// opens as the page instead (the dialog lists only the others). A newer share replaces one
+    /// still waiting; opened files are added to opened files still waiting
+    /// (notebook::mergeOpenedShares). Nothing is written until saveShare(), and an opened file is
+    /// never changed or removed.
     Q_INVOKABLE void receiveShare(const QVariantMap &share);
     /// receiveShare() of the platform's JSON (notebook::sharedContentFromJson).
     void receiveShareJson(const QByteArray &json);
+    /// The browser version's share target (wasm/index.html passes the launch's share parameters as
+    /// --share-query; another tab hands them over through platform::WasmShare): receiveShare() of
+    /// notebook::sharedContentFromQuery(query).
+    Q_INVOKABLE void receiveShareQuery(const QString &query);
     QVariantMap pendingShare() const;
     /// Save the waiting share: { target: "journal" | "page", title (a single new page's title),
     /// text (the edited text of a text share) }. Journal: the text as one block of today's journal
@@ -507,6 +530,7 @@ private:
     int m_pendingNoteLine = -1;
     /// A shared file as read when the share came (appshare.cpp).
     struct ShareFile {
+        QString path; ///< the file read ("" when there was none)
         QString name;
         QString title;   ///< its page title (notebook::sharedPageTitle)
         QString content; ///< decoded text ("" when `error`)
@@ -525,7 +549,8 @@ private:
     bool m_devOnboarding = false;
     QVariantMap m_devRoute;
     QString m_devPopup;
-    QByteArray m_devShare;
+    QByteArray m_startShare;   ///< --share, or the --open files as share JSON (received by start())
+    QString m_startShareQuery; ///< --share-query (received by start())
     bool m_startCapture = false;
     bool m_startToday = false;
     QVariantMap m_routeAfterOpen; ///< openVaultAt()

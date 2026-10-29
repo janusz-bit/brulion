@@ -55,6 +55,8 @@ void DevTools::applyEarlyArguments(int argc, char **argv)
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
         const char *value = nullptr;
+        if (std::strcmp(arg, "--open") == 0)
+            break; // files from here on (main.cpp, notebook::splitOpenArguments)
         if (std::strcmp(arg, "--scale") == 0 && i + 1 < argc)
             value = argv[i + 1];
         else if (std::strncmp(arg, "--scale=", 8) == 0)

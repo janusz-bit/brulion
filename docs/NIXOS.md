@@ -128,6 +128,44 @@ nix run github:janusz-bit/brulion
   `share/metainfo/io.github.januszbit.brulion.metainfo.xml`, ikona
   `share/icons/hicolor/{scalable,256x256}/apps/io.github.januszbit.brulion.{svg,png}`.
 
+### Otwórz za pomocą
+
+Wpis pulpitu z pakietu (`Exec=brulion --open %F`, `MimeType=text/plain;`, `StartupNotify=true`)
+dodaje Brulion do **Otwórz za pomocą** w menedżerze plików (GNOME Pliki, Dolphin, Thunar, Nemo…)
+dla plików tekstowych, a więc i Markdown (`text/markdown` to odmiana `text/plain`) — nic nie trzeba
+konfigurować. W GNOME Plikach przy pliku `.md` Brulion jest w oknie **Otwórz za pomocą…** w części
+„Powiązane aplikacje”. Otwiera się okno **Zapisz w Brulionie**, to samo co „Udostępnij → Brulion”
+na Androidzie: plik trafia do dzisiejszego dziennika albo jako nowa strona, przy czym Brulion
+zapisuje **kopię**, a sam plik zostaje na miejscu bez zmian. Plik, który już jest stroną otwartego
+notatnika (także w folderze dowiązanym do notatnika z innego miejsca albo w folderze z kropką na
+początku nazwy), po prostu się otwiera. Kilka plików naraz trafia do jednego okna; gdy Brulion już
+działa, dostaje je działająca kopia i wychodzi na wierzch — pod Waylandem z tokenem aktywacji,
+który menedżer plików daje dzięki `StartupNotify=true` (program uruchamiający bez tokenu sprawi, że
+GNOME pokaże tylko „Brulion jest gotowy”); pod X11 drugie uruchomienie samo kończy powiadomienie
+o starcie, więc kursor nie kręci się dalej.
+
+**Programu domyślnego Brulion nie zmienia.** Dlatego deklaruje tylko `text/plain`, nie
+`text/markdown`: GNOME nie ma programu domyślnego dla Markdown i wybrałby pierwszy program, który
+deklaruje ten typ — Brulion po cichu otwierałby wtedy każdy plik `.md`. Tak pliki `.md` otwiera
+dalej program domyślny dla tekstu (np. Edytor tekstu). Bez żadnego programu domyślnego dla tekstu
+(sam menedżer okien, np. sway albo i3 bez `mimeapps.list`) system może wybrać dowolny program
+obsługujący tekst, także Brulion — ustaw wtedy swój edytor, np.:
+
+```sh
+xdg-mime default org.gnome.TextEditor.desktop text/plain text/markdown
+```
+
+A jeśli chcesz, żeby to Brulion otwierał pliki Markdown:
+
+```sh
+xdg-mime default io.github.januszbit.brulion.desktop text/markdown
+```
+
+Z wiersza poleceń: `brulion --open notatka.md …` (wszystko po `--open` to pliki; `brulion --open`
+bez plików uruchamia Brulion jak zwykle). **AppImage** ma ten sam wpis w środku: narzędzia, które
+integrują AppImage z menu (Gear Lever, AppImageLauncher, appimaged), instalują go z typami plików,
+więc „Otwórz za pomocą” działa też z AppImage.
+
 ### Notatki i Syncthing
 
 Notatki to zwykłe pliki `.md` w wybranym folderze. Synchronizacja z telefonem i innymi

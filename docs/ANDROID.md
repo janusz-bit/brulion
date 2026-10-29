@@ -273,6 +273,11 @@ notatnik będzie gotowy; gdy otwarta jest **dokumentacja**, Brulion najpierw wra
 notatnika (udostępnione notatki nigdy nie trafiają do dokumentacji); bez żadnego notatnika
 prosi o otwarcie albo utworzenie notatnika i pokazuje okno potem.
 
+To samo okno otwiera się na komputerze — **Otwórz za pomocą → Brulion** na pliku `.md` albo `.txt`
+w menedżerze plików ([docs/WINDOWS.md](WINDOWS.md#otwórz-za-pomocą),
+[docs/NIXOS.md](NIXOS.md#otwórz-za-pomocą)) — i w wersji w przeglądarce zainstalowanej jako
+aplikacja (Chrome lub Edge na Androidzie: tekst i odnośniki, [docs/WEB.md](WEB.md#udostępnianie-do-brulionu)).
+
 Jak to działa: osobna, eksportowana aktywność **`ShareActivity`** (filtry `ACTION_SEND`
 i `ACTION_SEND_MULTIPLE` dla `text/*`; bez własnego interfejsu, poza „Ostatnimi”, z własnym
 zadaniem — system uruchamia ją w zadaniu aplikacji wysyłającej, gdzie druga aktywność Qt żyć nie

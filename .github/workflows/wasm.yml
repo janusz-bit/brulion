@@ -121,7 +121,8 @@ jobs:
       # keyboard (a stubbed visualViewport; on an emulated phone the editing toolbar ends on it and
       # a page the browser shrank gets no overlap), the notes survive a reload and a browser
       # restart, a big vault gets indexed without input (and its index cache, kept in a database of
-      # its own, fails alone when the quota cannot take it), and it starts offline from the service
+      # its own, fails alone when the quota cannot take it), the share target opens the share
+      # dialog (also handed to the tab already open), and it starts offline from the service
       # worker.
       - name: Smoke test in Chrome
         run: |
@@ -142,6 +143,10 @@ jobs:
           # An index cache the site's quota cannot take fails alone (its own IndexedDB database).
           node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile "$RUNNER_TEMP/profile-quota" \
             --loads 2 --index-notes 1000 --cache-quota
+          # The share target: a launch with shared text opens the share dialog, and a share
+          # launched in another tab is handed to the open one.
+          node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile "$RUNNER_TEMP/profile-share" \
+            --loads 1 --share --screenshot "$RUNNER_TEMP/shots/share.png"
           kill "$server"
           wait "$server" || true
           node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile "$RUNNER_TEMP/profile" \

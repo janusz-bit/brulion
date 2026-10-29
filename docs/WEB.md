@@ -180,6 +180,16 @@ Pozostałe opcje:
   `…-content.png`. CI uruchamia go przy pierwszym teście.
 * `--two-tabs` — otwiera drugą kartę: musi czekać z komunikatem „Brulion jest otwarty w innej
   karcie…”, a po opuszczeniu aplikacji w pierwszej karcie przejąć dane.
+* `--share` — cel udostępniania (niżej, „Udostępnianie do Brulionu”): manifest odczytany przez
+  Chrome (`Page.getAppManifest`) ma `share_target` GET `./` z `share-title`, `share-text`,
+  `share-url` i żadnych błędów; start z udostępnionym tytułem i tekstem (`?selftest=share`:
+  aplikacja publikuje dane okna, `window.brulionShareSelfTest`, z `dialog` — czy okno miało się
+  otworzyć; przed startem w IndexedDB notatnik z dzisiejszym dziennikiem, jak przy `--copy`)
+  otwiera okno **Zapisz w Brulionie** z „[Przepis na żurek](https://kuchnia.pl/żurek) — Zobacz
+  to”, a pasek adresu traci parametry udostępnienia; druga karta z udostępnieniem przy otwartej
+  pierwszej przekazuje je (sama nie wczytuje aplikacji, pokazuje komunikat i prosi o zamknięcie),
+  a pierwsza pokazuje okno z „Zażółć gęślą jaźń”. Ze `--screenshot` dochodzi zrzut
+  `…-share.png`. CI uruchamia go osobno (profil `profile-share`).
 * `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
   zrzut ekranu ładowania (pasek postępu).
 * `--lang pl-PL` (domyślnie) — język przeglądarki.
@@ -391,6 +401,47 @@ Uwagi:
   * Do sprawdzenia w przeglądarce (build wasm z GitHub Actions): zdjęcie z
     `upload.wikimedia.org` (CORS dozwolony) i ze strony bez CORS, adres `http://` na stronie
     `https://` (GitHub Pages).
+
+## Udostępnianie do Brulionu
+
+Wersja w przeglądarce **zainstalowana jako aplikacja** jest w systemowym menu **Udostępnij**:
+w Chrome, Edge albo Samsung Internet na Androidzie (menu przeglądarki → **Zainstaluj aplikację**
+albo **Dodaj do ekranu głównego**) i na ChromeOS. Stronę z przeglądarki (jej tytuł i adres) albo
+zaznaczony tekst z innej aplikacji wysyłasz przez **Udostępnij → Brulion**; otwiera się to samo
+okno **Zapisz w Brulionie** co w aplikacji na Androida (docs/ANDROID.md „Udostępnij → Brulion”):
+tekst do poprawienia, **Dzisiejszy dziennik** albo **Nowa strona**, nic nie zapisuje się przed
+**Zapisz**. Daty w udostępnionym tekście nie tworzą przypomnień.
+
+* Tylko tekst i odnośniki. Pliki (`.md`, `.txt`) udostępnisz aplikacji na Androida; wersja
+  w przeglądarce ich nie przyjmuje (cel udostępniania z plikami wymaga wysłania ich do serwera
+  albo do service workera, którego GitHub Pages ani prosty serwer nie zastąpią).
+* Brulion jest już otwarty w innej karcie: udostępnienie trafia do tamtej karty (tam otwiera się
+  okno), a nowa karta nie wczytuje aplikacji, tylko mówi „Przekazano do Brulionu otwartego
+  w innej karcie.” i zamyka się, gdy przeglądarka na to pozwala. Gdy tamta karta nie odpowie
+  w 4 s (zamrożona, starsza wersja Brulionu), nowa karta startuje jak zwykle i czeka, aż tamta
+  zostanie zamknięta („Brulion jest otwarty w innej karcie…”), a potem pokazuje okno.
+* Na Androidzie zainstalowana aplikacja zwykle otwiera udostępnienie w swoim jedynym oknie:
+  otwarty Brulion wczytuje się od nowa z udostępnionym tekstem (zapisane notatki są bezpieczne;
+  przy zmianie, która jeszcze się zapisuje, przeglądarka może zapytać, czy opuścić stronę).
+* Bez notatnika (pierwsze uruchomienie) Brulion najpierw prosi o otwarcie albo utworzenie
+  notatnika — udostępnienie czeka.
+* Firefox, Safari (także na iPhonie) i przeglądarki bez instalacji jako WebAPK (np. Brave)
+  celów udostępniania nie obsługują — Brulionu w ich menu **Udostępnij** nie będzie.
+
+Technicznie: `wasm/manifest.webmanifest` ma `share_target` metodą GET z akcją `./` (sama
+aplikacja: działa bez service workera — GitHub Pages i nginx podają dla niej `index.html` — i offline
+z jego pamięci) i parametrami `share-title`, `share-text`, `share-url`. `index.html` zabiera je
+z paska adresu (`history.replaceState`: przeładowanie nie udostępnia drugi raz; inne parametry
+zostają) i przekazuje aplikacji jako `--share-query` (zakodowane jak formularz); zapytanie
+czyta rdzeń (`notebook::sharedContentFromQuery`, `src/core/notebook/share.h`: `+` to spacja,
+`%XX` to bajty UTF-8, błędne sekwencje → U+FFFD, nieznane klucze pomijane, tekst do 1 000 000
+znaków), a `AppController::receiveShareQuery` otwiera okno. Gdy inna karta trzyma blokadę magazynu
+(Web Lock `brulion-storage:…`, niżej „Dane w przeglądarce”), `index.html` wysyła
+`{type: "share", id, query}` kanałem `BroadcastChannel` „`brulion-share:<ścieżka strony>`”;
+odpowiada tylko karta z blokadą (`WasmShare`, `src/platform/wasm/wasmshare.h`, nasłuchuje od
+startu, zanim poprosi o blokadę) — `{type: "taken", id}` — i przekazuje zapytanie do
+`receiveShareQuery`. Bez `launch_handler`: Chrome z `focus-existing` gubi dane udostępnienia.
+Test: `scripts/wasm-smoke.mjs --share` (wyżej); ręcznie na telefonie — TODO.md.
 
 ## Powiadomienia (przypomnienia)
 
@@ -662,7 +713,7 @@ trafiają do bloku bez zmian we wszystkich trzech (sprawdzone ręcznie skryptem,
 |---|---|
 | `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | powłoka HTML, service worker, manifest |
 | `wasm/icons/` | ikony PWA; PNG wygenerowane z `assets/logo.svg` i `wasm/icons/maskable.svg` (odstęp bezpieczny dla ikon maskowalnych) oraz `badge.svg` (monochromatyczna plakietka powiadomień) |
-| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), test trwałości (`wasmselftest.h`) |
+| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, `WasmShare` (udostępnienia przekazane przez inną kartę), most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), test trwałości (`wasmselftest.h`) |
 | `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |
 | `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + złożenie strony, test w Chromium |
 | `tests/app/drawing/wasm-drawing-check.mjs` | rysunek w notatce w jasnym i ciemnym motywie, w Chromium; z `--text` tekst wpisany na rysunku |

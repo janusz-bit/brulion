@@ -15,6 +15,7 @@
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/redact.h"
+#include "notebook/share.h"
 #include "sync/synchistory.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -43,6 +44,7 @@
 #include <QQuickWindow>
 #include <QRegularExpression>
 #include <QScreen>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QUrlQuery>
 #include <QWheelEvent>
@@ -3333,6 +3335,38 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     check(!QFileInfo::exists(dir), "the shared file's copy is removed");
     if (page.endsWith(u"Łódź.md"_s))
         ws->deletePage(page);
+
+    // A file opened with Brulion from outside the notebook ("Otwórz za pomocą", --open): the
+    // dialog says a copy is saved and the file stays; "Zapisz" saves the page, the file is left
+    // as it was.
+    QTemporaryDir outside;
+    const QString openedPath = outside.filePath(u"Przepis na pierogi.md"_s);
+    const QByteArray openedBytes = "# Pierogi\r\n\r\n- mąka\r\n- ser\r\n";
+    QFile openedFile(openedPath);
+    const bool openedWritten = outside.isValid() && openedFile.open(QIODevice::WriteOnly)
+                               && openedFile.write(openedBytes) == openedBytes.size();
+    openedFile.close();
+    app->receiveShare(
+            notebook::sharedContentToJson(notebook::openedFilesShare({openedPath}, QString())).toVariantMap());
+    check(openedWritten && opened(), "a file opened with Brulion opens the share dialog");
+    const QString openedSubtitle =
+            QCoreApplication::translate("ShellShareDialog", "%n file(s) to save in the notebook", "", 1);
+    check(dialog->property("subtitle").toString() == openedSubtitle,
+          "its subtitle says the file is saved in the notebook");
+    check(shownNamed(window->contentItem(), u"shareCopyHint"_s) != nullptr,
+          "the dialog says a copy is saved and the file stays");
+    check(save() && closed(), "“Zapisz” saves the opened file as a page");
+    const QString openedPage = app->currentRoute().value(u"path"_s).toString();
+    check(openedPage.endsWith(u"Przepis na pierogi.md"_s), "the opened file's page opens");
+    QFile openedCopy(QDir(ws->rootPath()).filePath(openedPage));
+    check(openedCopy.open(QIODevice::ReadOnly) && openedCopy.readAll() == openedBytes, "the page has the file's bytes");
+    openedCopy.close();
+    openedFile.setFileName(openedPath);
+    check(openedFile.open(QIODevice::ReadOnly) && openedFile.readAll() == openedBytes,
+          "the opened file stays where it was, unchanged");
+    openedFile.close();
+    if (openedPage.endsWith(u"Przepis na pierogi.md"_s))
+        ws->deletePage(openedPage);
 
     // Escape drops a share: nothing written.
     app->receiveShare({{u"text"_s, u"Nie zapisuj mnie"_s}});

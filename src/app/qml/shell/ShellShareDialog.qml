@@ -3,12 +3,16 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// ShellShareDialog — "Udostępnij → Brulion" (docs/ANDROID.md): text or .md/.txt files another app
-// shared (AppController.pendingShare) go to today's journal or to a new page. Text is edited here
-// before it is saved; files are listed with their first lines and why one cannot be saved. Text
-// goes to the journal by default, a single file to a new page (its title from the file name).
-// Nothing is written before "Save" (AppController.saveShare); "Cancel" drops the share and its
-// copies (AppController.dismissShare). Shared content is shown as plain text only.
+// ShellShareDialog — "Zapisz w Brulionie": text or .md/.txt files another app shared
+// (AppController.pendingShare) go to today's journal or to a new page. They come from Android's
+// share sheet ("Udostępnij → Brulion", docs/ANDROID.md), a desktop's "Otwórz za pomocą → Brulion"
+// (`--open`, docs/WINDOWS.md and docs/NIXOS.md: source "open" — a copy is saved, the file stays as
+// it is; a file of the open notebook opens as its page instead), the browser version's share target
+// (docs/WEB.md) or `--share`. Text is edited here before it is saved; files are listed with their
+// first lines and why one cannot be saved. Text goes to the journal by default, a single file to
+// a new page (its title from the file name). Nothing is written before "Save"
+// (AppController.saveShare); "Cancel" drops the share and its copies (AppController.dismissShare).
+// Shared content is shown as plain text only.
 BDialog {
     id: dialog
 
@@ -16,6 +20,8 @@ BDialog {
     readonly property bool hasFiles: share.kind === "files"
     readonly property var files: share.files || []
     readonly property int readable: share.readable || 0
+    /// Files opened with Brulion on a desktop: copies go into the notebook, the files stay.
+    readonly property bool openedWithBrulion: share.source === "open"
     /// "journal" | "page"
     property string target: "journal"
     /// The last save failed (a page of that name exists): changed input tries again.
@@ -23,7 +29,9 @@ BDialog {
     property bool saved: false
 
     title: qsTr("Save to Brulion")
-    subtitle: hasFiles ? qsTr("%n file(s) shared", "", files.length) : ""
+    subtitle: hasFiles ? (openedWithBrulion ? qsTr("%n file(s) to save in the notebook", "", files.length)
+                                 : qsTr("%n file(s) shared", "", files.length))
+                       : ""
     iconName: "share"
     acceptText: qsTr("Save")
     // Once saved, pendingShare is empty: the dialog still closes as accepted.
@@ -134,6 +142,16 @@ BDialog {
                 Accessible.name: text
             }
         }
+    }
+
+    BText {
+        objectName: "shareCopyHint"
+        Layout.fillWidth: true
+        visible: dialog.openedWithBrulion
+        text: qsTr("Brulion saves a copy in the notebook. The file itself stays where it is, unchanged.")
+        variant: "faint"
+        font.pixelSize: Theme.textSm
+        wrapMode: Text.Wrap
     }
 
     BText {

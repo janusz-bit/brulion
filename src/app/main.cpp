@@ -17,7 +17,9 @@
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/slowscope.h"
+#include "notebook/share.h" // --open: files opened with Brulion
 
+#include <QDir>
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QLocale>
@@ -56,8 +58,10 @@
 
 #ifdef Q_OS_WASM
 #include "wasm/wasmselftest.h"
+#include "wasm/wasmshare.h"
 #include "wasm/wasmshell.h"
 #include "wasm/wasmstorage.h"
+#include <QJsonObject>
 #endif
 
 using namespace Qt::StringLiterals;
@@ -90,6 +94,14 @@ int main(int argc, char *argv[])
 #endif
     brulion::ui::DevTools::applyEarlyArguments(argc, argv); // --scale (before the app exists)
 #ifdef BRULION_DESKTOP_INTEGRATION
+    // Wayland: the launcher's activation token, for the running Brulion a second launch hands its
+    // files or its request to (read before Qt could take it for a window of this process). X11:
+    // the launcher's startup notification, which such a launch ends itself (Qt's xcb plugin takes
+    // the variable when the application object is made).
+    const QByteArray launchToken = qgetenv("XDG_ACTIVATION_TOKEN");
+    const QByteArray startupId = qgetenv("DESKTOP_STARTUP_ID");
+#endif
+#ifdef BRULION_DESKTOP_INTEGRATION
     QApplication app(argc, argv);
 #else
     QGuiApplication app(argc, argv);
@@ -117,7 +129,12 @@ int main(int argc, char *argv[])
     auto *androidBridge = brulion::platform::AndroidBridge::instance();
 #endif
 
-    const QStringList args = QCoreApplication::arguments();
+    // `--open <file>…` (the desktop entry's `Exec=brulion --open %F`, Windows' "Otwórz za pomocą"):
+    // every argument after it is a file to offer in the share dialog, never an option — the
+    // options are the arguments before it (notebook/share.h).
+    const brulion::notebook::OpenArguments launch =
+            brulion::notebook::splitOpenArguments(QCoreApplication::arguments());
+    const QStringList args = launch.options;
     // Dev/test options from the command line (component gallery, screenshots, forced theme
     // and language): src/app/ui/devtools.h. Without options it changes nothing.
     brulion::ui::DevTools devTools(args);
@@ -131,17 +148,27 @@ int main(int argc, char *argv[])
     if (mainUi && !devTools.screenshotMode() && !args.contains(u"--no-single-instance"_s)) {
         singleInstance = std::make_unique<brulion::ipc::SingleInstance>(brulion::ipc::SingleInstance::keyFor(
                 QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
-        // --hidden (Windows' start at sign-in, the running one already there): no window.
-        const QByteArray message = args.contains(u"--capture"_s)  ? "capture"
-                                   : args.contains(u"--today"_s)  ? "today"
-                                   : args.contains(u"--hidden"_s) ? "hidden"
-                                                                  : "activate";
+        // --hidden (Windows' start at sign-in, the running one already there): no window. Files
+        // to open go as a share, their paths made absolute here (this launch's working folder).
+        const brulion::notebook::SharedContent opened =
+                brulion::notebook::openedFilesShare(launch.files, QDir::currentPath());
+        const QByteArray message =
+                !opened.files.isEmpty()
+                        ? brulion::ipc::shareMessage(brulion::notebook::sharedContentToJson(opened), launchToken)
+                        : brulion::ipc::launchMessage(args.contains(u"--capture"_s)  ? "capture"
+                                                      : args.contains(u"--today"_s)  ? "today"
+                                                      : args.contains(u"--hidden"_s) ? "hidden"
+                                                                                     : "activate",
+                                                      launchToken);
+        // Windows: the running Brulion may take the foreground this launch was given.
+        brulion::platform::allowForegroundActivation();
         if (singleInstance->sendToPrimary(message)) {
             // The running app keeps its own setting: a second launch cannot switch it on.
             if (args.contains(u"--remote-control"_s))
                 std::fprintf(stderr, "Brulion is already running: --remote-control applies to a new run only. Turn "
                                      "remote control on in its settings (Settings → Application → For developers) or "
                                      "quit it first.\n");
+            brulion::platform::endStartupNotification(startupId);
             return 0;
         }
         if (singleInstance->listen()) {
@@ -159,8 +186,10 @@ int main(int argc, char *argv[])
             // once it listens. Should it not answer, run anyway rather than not at all.
             for (int attempt = 0; attempt < 20; ++attempt) {
                 QThread::msleep(100);
-                if (singleInstance->sendToPrimary(message, 200))
+                if (singleInstance->sendToPrimary(message, 200)) {
+                    brulion::platform::endStartupNotification(startupId);
                     return 0;
+                }
             }
             singleInstanceProblem = u"another Brulion holds %1.lock but does not answer"_s.arg(singleInstance->key());
             singleInstance.reset();
@@ -287,6 +316,8 @@ int main(int argc, char *argv[])
         AppController::Options options;
         options.settingsFile = settingsFile;
         options.arguments = args;
+        options.openFiles = launch.files;
+        options.workingDirectory = QDir::currentPath();
         controller = std::make_unique<AppController>(options);
         // --now "2026-10-14 10:00": the same fixed clock as DatesHelper (reproducible screenshots).
         const QDateTime fixedNow = QDateTime::fromString(argValue(args, u"--now"_s), u"yyyy-MM-dd HH:mm"_s);
@@ -324,6 +355,35 @@ int main(int argc, char *argv[])
                                      return;
                                  }
                                  ctl->handleInstanceMessage(message->verb, message->payload);
+                             });
+        }
+#endif
+#ifdef Q_OS_WASM
+        // The share target launched in another tab while Brulion runs here (wasm/index.html hands
+        // the share over): the share dialog, as for a share that started this tab (--share-query).
+        auto *shares = new brulion::platform::WasmShare(controller.get());
+        QObject::connect(shares, &brulion::platform::WasmShare::received, controller.get(),
+                         &AppController::receiveShareQuery);
+        // ?selftest=share (scripts/wasm-smoke.mjs --share): what the share dialog shows, and
+        // whether it was asked to open.
+        if (args.contains(u"--selftest-share"_s)) {
+            auto dialogShown = std::make_shared<bool>(false);
+            const auto publish = [ctl = controller.get(), dialogShown] {
+                QJsonObject result = QJsonObject::fromVariantMap(ctl->pendingShare());
+                result.insert(u"dialog"_s, *dialogShown);
+                brulion::platform::publishSelfTestResult("brulionShareSelfTest", result);
+            };
+            QObject::connect(controller.get(), &AppController::pendingShareChanged, controller.get(),
+                             [publish, dialogShown] {
+                                 *dialogShown = false; // a new share: its own dialog follows
+                                 publish();
+                             });
+            QObject::connect(controller.get(), &AppController::uiActionRequested, controller.get(),
+                             [publish, dialogShown](const QString &action) {
+                                 if (action != u"share")
+                                     return;
+                                 *dialogShown = true;
+                                 publish();
                              });
         }
 #endif
@@ -424,6 +484,9 @@ int main(int argc, char *argv[])
     // Brulion's emoji and symbols?
     if (args.contains(u"--selftest-glyphs"_s))
         wasm::publishSelfTestResult("brulionGlyphSelfTest", brulion::ui::fallbackFontsJson(fallbackFonts));
+    // Before the storage asks for its lock: whenever this tab holds it, a share another tab hands
+    // over is answered (wasm/index.html waits for that answer).
+    wasm::WasmShare::listen();
     wasm::setShellStage(wasm::ShellStage::LoadingNotes);
     storage.start();
 #else

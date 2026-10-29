@@ -119,9 +119,14 @@
   oznacza zadanie jako zrobione bez otwierania notatki.
   Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku. Daty wpisujesz
   po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
-* **Udostępnij → Brulion (Android).** Stronę z przeglądarki, tekst albo pliki `.md`/`.txt`
+* **Udostępnij / Otwórz w Brulionie.** Stronę z przeglądarki, tekst albo pliki `.md`/`.txt`
   z innej aplikacji zapiszesz w dzisiejszym dzienniku albo jako nową stronę — w oknie, w którym
-  poprawisz tekst i tytuł ([docs/ANDROID.md](docs/ANDROID.md#udostępnij--brulion)).
+  poprawisz tekst i tytuł: na Androidzie przez **Udostępnij → Brulion**
+  ([docs/ANDROID.md](docs/ANDROID.md#udostępnij--brulion)), na komputerze przez **Otwórz za
+  pomocą → Brulion** w menedżerze plików (kopia trafia do notatnika, plik zostaje bez zmian;
+  [docs/WINDOWS.md](docs/WINDOWS.md#otwórz-za-pomocą), [docs/NIXOS.md](docs/NIXOS.md#otwórz-za-pomocą)),
+  a w wersji w przeglądarce zainstalowanej jako aplikacja — tekst i odnośniki
+  ([docs/WEB.md](docs/WEB.md#udostępnianie-do-brulionu)).
 * **Widżety Androida.** Zadania na dziś („Mój dzień”: zaległe i dzisiejsze) z szybkim dodawaniem
   — dzień, godzina i alarm przyciskami, zapis do dziennika od razu, także przy zamkniętej
   aplikacji —, kalendarz z kropkami i agendą (najpierw zadania z godziną) oraz notatki
@@ -421,7 +426,9 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 
 * Runs on **NixOS/Linux** (flake + NixOS module, AppImage), **Android** 9+ (APK; native exact
   alarms that fire while the app is closed; text, links and `.md`/`.txt` files shared from other
-  apps go to the journal or a new page), in the **browser** (Qt for WebAssembly,
+  apps go to the journal or a new page — the same dialog opens for "Open with → Brulion" on a
+  `.md`/`.txt` file on the desktop, which saves a copy and leaves the file as it is, and for text
+  and links shared to the browser version installed as an app), in the **browser** (Qt for WebAssembly,
   works offline) and, as a **test version**, on **Windows** 10/11 x86_64 (a per-user installer
   without admin rights or a portable ZIP; unsigned; reminders as Windows toast notifications with
   Snooze/Done/OK, optional start at sign-in, a calendar with the day's tasks from a click on the

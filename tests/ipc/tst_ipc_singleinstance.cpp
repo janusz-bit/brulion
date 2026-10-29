@@ -4,7 +4,8 @@
 // key), a folder others can write to or a symbolic link — listen() says why and the app runs
 // without it; a lock that cannot be made is no running primary. The messages (appmessage.h):
 // "open {json}" from brulion-cli is delivered and parsed, malformed lines are refused; probing for
-// a running app sends nothing.
+// a running app sends nothing; a second launch's "share" message (files opened with Brulion) and its
+// activation token arrive in one line whatever the paths hold.
 #include "appmessage.h"
 #include "controlprotocol.h"
 #include "singleinstance.h"
@@ -258,6 +259,10 @@ private Q_SLOTS:
         QTest::newRow("verb with json") << QByteArray(R"(open {"route":{"view":"journal"}})") << true
                                         << QByteArray("open");
         QTest::newRow("future verb") << QByteArray("state-get {}") << true << QByteArray("state-get");
+        QTest::newRow("share") << QString(u"share {\"share\":{\"files\":[{\"path\":\"/home/ą/Łódź.md\"}]}}"_s).toUtf8()
+                               << true << QByteArray("share");
+        QTest::newRow("activate with a token")
+                << QByteArray(R"(activate {"activationToken":"x"})") << true << QByteArray("activate");
         QTest::newRow("empty") << QByteArray("  ") << false << QByteArray();
         QTest::newRow("upper case") << QByteArray("OPEN") << false << QByteArray();
         QTest::newRow("not an object") << QByteArray("open [1,2]") << false << QByteArray();
@@ -278,6 +283,37 @@ private Q_SLOTS:
         QCOMPARE(brulion::ipc::encodeMessage("today"), QByteArray("today"));
         QCOMPARE(brulion::ipc::parseMessage(brulion::ipc::encodeMessage("open", {{u"a"_s, u"ż"_s}}))->payload,
                  (QJsonObject{{u"a"_s, u"ż"_s}}));
+    }
+
+    void shareMessageThroughTheSocket()
+    {
+        const QString key = uniqueKey();
+        PrimaryThread app(key);
+        QVERIFY(app.startListening());
+        // Linux allows a line break in a file name: JSON escapes it, the message stays one line.
+        const QString odd = u"/home/ala/Zażółć gęślą\njaźń \"cytat\".md"_s;
+        const QJsonObject share{{u"source"_s, u"open"_s},
+                                {u"files"_s, QJsonArray{QJsonObject{{u"path"_s, odd}, {u"name"_s, u"jaźń.md"_s}},
+                                                        QJsonObject{{u"path"_s, u"/tmp/b.txt"_s}}}}};
+        const QByteArray message = brulion::ipc::shareMessage(share, "tok_123/ABC");
+        QVERIFY(!message.contains('\n'));
+        SingleInstance second(key);
+        QVERIFY(second.sendToPrimary(message));
+        QVERIFY(second.sendToPrimary(brulion::ipc::launchMessage("activate", "x-1")));
+        QTRY_COMPARE(app.messages().size(), 2);
+        const auto received = brulion::ipc::parseMessage(app.messages().first());
+        QVERIFY(received);
+        QCOMPARE(received->verb, QByteArray("share"));
+        QCOMPARE(received->payload.value(u"share"_s).toObject(), share);
+        QCOMPARE(received->payload.value(u"activationToken"_s).toString(), u"tok_123/ABC"_s);
+        const auto activate = brulion::ipc::parseMessage(app.messages().last());
+        QVERIFY(activate);
+        QCOMPARE(activate->verb, QByteArray("activate"));
+        QCOMPARE(activate->payload.value(u"activationToken"_s).toString(), u"x-1"_s);
+        // No token: the bare verb, as older senders send it; a share without one has no key.
+        QCOMPARE(brulion::ipc::launchMessage("activate"), QByteArray("activate"));
+        QCOMPARE(brulion::ipc::launchMessage("today", QByteArray()), QByteArray("today"));
+        QVERIFY(!brulion::ipc::parseMessage(brulion::ipc::shareMessage(share))->payload.contains(u"activationToken"_s));
     }
 
     void staleSocketIsReplaced()
