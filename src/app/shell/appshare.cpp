@@ -19,10 +19,12 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMimeDatabase>
+#include <QSet>
 #include <QStringList>
 #include <QVariantList>
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 using namespace Qt::StringLiterals;
@@ -69,6 +71,38 @@ constexpr Qt::CaseSensitivity FileNameCase = Qt::CaseInsensitive;
 constexpr Qt::CaseSensitivity FileNameCase = Qt::CaseSensitive;
 #endif
 
+/// The page of the open notebook an opened file (absolute, clean) already is, "" when it is none.
+/// Tried in turn: both paths with symbolic links resolved (a link to the notebook, a folder linked
+/// to another place in it), then the path as given against the notebook's folder as given and
+/// resolved — a page in a folder linked from outside (the vault follows such links) or a page that
+/// is itself a link resolves to a path outside the notebook. A page the notebook knows wins, spelled
+/// as it knows it; else the first one (a file it has not seen yet), only while the file exists.
+QString notebookPageOf(const QString &file, const Vault &vault)
+{
+    const QFileInfo info(file);
+    if (!info.isFile())
+        return {};
+    const QString root = vault.rootPath();
+    const QString canonicalRoot = QFileInfo(root).canonicalFilePath();
+    const QString canonical = info.canonicalFilePath();
+    const QString given = QDir::cleanPath(info.absoluteFilePath());
+    const std::pair<QString, QString> tries[] = {{canonical, canonicalRoot}, {given, root}, {given, canonicalRoot}};
+    QStringList pages;
+    for (const auto &[path, folder] : tries) {
+        if (path.isEmpty() || folder.isEmpty())
+            continue;
+        const QString page = notebook::pageForOpenedFile(path, folder, FileNameCase);
+        if (!page.isEmpty() && !pages.contains(page))
+            pages.append(page);
+    }
+    for (const QString &page : std::as_const(pages)) {
+        const std::optional<FileStat> known = vault.stat(vault.existingCase(page));
+        if (known && !known->isDir)
+            return known->path;
+    }
+    return pages.value(0);
+}
+
 } // namespace
 
 QString AppController::shareInboxPath() const
@@ -99,7 +133,12 @@ void AppController::receiveShare(const QVariantMap &map)
     // selected file, each start sends its own); any other newer share replaces the waiting one
     // (its copies go).
     QList<ShareFile> known;
+    QSet<QString> reopened; // opened again: read again (changed since, readable now)
     if (m_share && m_share->source == u"open" && share.source == u"open") {
+        for (const notebook::SharedFile &file : std::as_const(share.files)) {
+            if (!file.path.isEmpty())
+                reopened.insert(file.path);
+        }
         share = notebook::mergeOpenedShares(*m_share, share);
         known = std::exchange(m_shareFiles, {});
         m_share.reset(); // opened files have no copies to remove
@@ -111,9 +150,11 @@ void AppController::receiveShare(const QVariantMap &map)
     // their titles and first lines.
     QList<ShareFile> files;
     for (const notebook::SharedFile &shared : std::as_const(share.files)) {
-        // A file read for the waiting share is not read again.
-        const auto read = std::find_if(known.cbegin(), known.cend(), [&shared](const ShareFile &file) {
-            return !shared.path.isEmpty() && shared.error.isEmpty() && file.path == shared.path;
+        // A file read for the waiting share is not read again, unless it was opened again: it may
+        // have changed since (or be readable now), and that open asks for it as it is now.
+        const auto read = std::find_if(known.cbegin(), known.cend(), [&](const ShareFile &file) {
+            return !shared.path.isEmpty() && shared.error.isEmpty() && file.path == shared.path
+                   && !reopened.contains(shared.path);
         });
         if (read != known.cend()) {
             files.append(*read);
@@ -182,17 +223,15 @@ void AppController::applyPendingShare()
     }
     if (m_share->source == u"open") {
         // A file opened with Brulion that already is a page of this notebook opens as that page
-        // (also through a linked folder: canonical paths); only the others are offered as copies.
-        const QString root = QFileInfo(m_workspace->rootPath()).canonicalFilePath();
+        // (also through a link to the notebook, a folder linked into it, a page that is a link:
+        // notebookPageOf); only the others are offered as copies.
+        const Vault &vault = *m_workspace->vault();
         QString first;
         QList<notebook::SharedFile> keptShared;
         QList<ShareFile> keptFiles;
         for (qsizetype i = 0; i < m_shareFiles.size(); ++i) {
             const ShareFile &file = m_shareFiles.at(i);
-            const QString page =
-                    file.path.isEmpty() || root.isEmpty()
-                            ? QString()
-                            : notebook::pageForOpenedFile(QFileInfo(file.path).canonicalFilePath(), root, FileNameCase);
+            const QString page = file.path.isEmpty() ? QString() : notebookPageOf(file.path, vault);
             if (!page.isEmpty()) {
                 if (first.isEmpty())
                     first = page;

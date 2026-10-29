@@ -5,9 +5,10 @@
 // platform's copies removed (only inside the share inbox), and a share arriving while the
 // notebook opens, in the documentation, with no notebook, or through --share. Files opened with
 // Brulion on a desktop (--open, a second launch's `share` message): copied, the original never
-// changed or removed; a file of the open notebook (also through a linked folder) opens as its page;
-// files without an extension typed by their content; opens merged while the dialog waits; the
-// message's activation token and folder. The browser's share target (--share-query,
+// changed or removed; a file of the open notebook opens as its page (also through a link to the
+// notebook, in a folder linked from outside, a page that is a link, in a folder starting with ".");
+// files without an extension typed by their content; opens merged while the dialog waits, a file
+// opened again read again; the message's activation token and folder. The browser's share target (--share-query,
 // receiveShareQuery).
 #include "appcontroller.h"
 #include "workspace.h"
@@ -418,6 +419,62 @@ private Q_SLOTS:
 #endif
     }
 
+    void openedFileThroughLinks()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("symbolic links");
+#else
+        // The notebook follows a folder linked from outside and a page that is a link: their files'
+        // real paths are outside the notebook, yet they are its pages. A folder starting with "."
+        // holds pages too; a link to another folder of the notebook is not followed (its page is
+        // the real one).
+        const QString root = m_tmp.filePath(u"dowiązania"_s);
+        const QString outside = outsideFolder(
+                u"Dokumenty"_s, {{u"Praca/Plan.md"_s, "# Plan\n- zażółć\n"}, {u"Notatka.md"_s, "# Notatka\n"}});
+        QVERIFY(writeFile(root + u"/.szkice/Pomysł.md"_s, "# Pomysł\n"));
+        QVERIFY(writeFile(root + u"/Projekty/Cel.md"_s, "# Cel\n"));
+        QVERIFY(QFile::link(outside + u"/Praca"_s, root + u"/Praca"_s));
+        QVERIFY(QFile::link(outside + u"/Notatka.md"_s, root + u"/Skrót.md"_s));
+        QVERIFY(QFile::link(root + u"/Projekty"_s, root + u"/Alias"_s));
+        auto app = openApp(u"dowiązania"_s);
+        QCOMPARE(app->workspace()->rootPath(), QDir::cleanPath(root));
+        // What the notebook itself has (the premise).
+        QTRY_VERIFY(app->workspace()->exists(u"Praca/Plan.md"_s));
+        QVERIFY(app->workspace()->exists(u"Skrót.md"_s));
+        QVERIFY(app->workspace()->exists(u".szkice/Pomysł.md"_s));
+        QVERIFY(!app->workspace()->exists(u"Alias/Cel.md"_s));
+
+        QSignalSpy ui(app.get(), &AppController::uiActionRequested);
+        const QList<std::pair<QString, QString>> opened{
+                {root + u"/Praca/Plan.md"_s, u"Praca/Plan.md"_s},
+                {root + u"/Skrót.md"_s, u"Skrót.md"_s},
+                {root + u"/.szkice/Pomysł.md"_s, u".szkice/Pomysł.md"_s},
+                {root + u"/Alias/Cel.md"_s, u"Projekty/Cel.md"_s},
+        };
+        for (const auto &[file, page] : opened) {
+            app->goHome();
+            app->receiveShare(openedShare({file}));
+            QCOMPARE(app->currentRoute().value(u"path"_s).toString(), page);
+            QVERIFY2(app->pendingShare().isEmpty(), qPrintable(file));
+        }
+        // A file the notebook has not seen yet in the linked folder opens as its page too.
+        QVERIFY(writeFile(outside + u"/Praca/Nowy.md"_s, "# Nowy\n"));
+        app->receiveShare(openedShare({root + u"/Praca/Nowy.md"_s}));
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"Praca/Nowy.md"_s);
+        QCOMPARE(shareRequests(ui), 0);
+        // Nothing copied, nothing changed.
+        QVERIFY(!QFileInfo::exists(root + u"/Plan.md"_s));
+        QVERIFY(!QFileInfo::exists(root + u"/Pomysł.md"_s));
+        QCOMPARE(readRaw(outside + u"/Praca/Plan.md"_s), QByteArray("# Plan\n- zażółć\n"));
+        QVERIFY(QFileInfo(root + u"/Skrót.md"_s).isSymLink());
+        // The ignored folders stay no pages: offered as a copy.
+        QVERIFY(writeFile(root + u"/.trash/Stary.md"_s, "# Stary\n"));
+        app->receiveShare(openedShare({root + u"/.trash/Stary.md"_s}));
+        QCOMPARE(shareRequests(ui), 1);
+        app->dismissShare();
+#endif
+    }
+
     void openedMixed()
     {
         auto app = openApp(u"mieszane"_s);
@@ -494,6 +551,45 @@ private Q_SLOTS:
         QCOMPARE(files.first().toMap().value(u"name"_s).toString(), u"b.md"_s);
         app->dismissShare();
         QVERIFY(QFileInfo::exists(dir + u"/a.md"_s) && QFileInfo::exists(dir + u"/b.md"_s));
+    }
+
+    void reopenedFileReadAgain()
+    {
+        // While the dialog waits, a file opened again is read again (changed since, readable now);
+        // a waiting file not opened again keeps what was read.
+        auto app = openApp(u"ponownie"_s);
+        const QString dir =
+                outsideFolder(u"ponownie-pliki"_s, {{u"a.md"_s, "stara treść\n"}, {u"b.md"_s, "bez zmian\n"}});
+        const auto preview = [&app](qsizetype i) {
+            return app->pendingShare().value(u"files"_s).toList().value(i).toMap().value(u"preview"_s).toString();
+        };
+        const auto error = [&app](qsizetype i) {
+            return app->pendingShare().value(u"files"_s).toList().value(i).toMap().value(u"error"_s).toString();
+        };
+        app->receiveShare(openedShare({dir + u"/a.md"_s, dir + u"/b.md"_s}));
+        QCOMPARE(preview(0), u"stara treść"_s);
+        QCOMPARE(preview(1), u"bez zmian"_s);
+        // Edited in another program, opened again; b.md gone meanwhile; c.md not there yet.
+        QVERIFY(writeFile(dir + u"/a.md"_s, "nowa treść ąę\n"));
+        QVERIFY(QFile::remove(dir + u"/b.md"_s));
+        app->receiveShare(openedShare({dir + u"/a.md"_s, dir + u"/c.md"_s}));
+        QCOMPARE(app->pendingShare().value(u"files"_s).toList().size(), 3);
+        QCOMPARE(preview(0), u"nowa treść ąę"_s);
+        QCOMPARE(preview(1), u"bez zmian"_s);
+        QCOMPARE(error(2), u"Could not be read"_s);
+        // Written now, opened again: readable.
+        QVERIFY(writeFile(dir + u"/c.md"_s, "już jest\n"));
+        app->receiveShare(openedShare({dir + u"/c.md"_s}));
+        QCOMPARE(error(2), QString());
+        QCOMPARE(preview(2), u"już jest"_s);
+        QCOMPARE(app->pendingShare().value(u"readable"_s).toInt(), 3);
+        // What is saved is what the dialog shows.
+        QVERIFY(app->saveShare({{u"target"_s, u"journal"_s}}).value(u"ok"_s).toBool());
+        const QString today = journal(*app);
+        QVERIFY2(today.contains(u"nowa treść ąę"_s), qPrintable(today));
+        QVERIFY(!today.contains(u"stara"_s));
+        QVERIFY(today.contains(u"bez zmian"_s));
+        QVERIFY(today.contains(u"już jest"_s));
     }
 
     void instanceMessageShare()

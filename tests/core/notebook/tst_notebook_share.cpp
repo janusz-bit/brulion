@@ -631,7 +631,15 @@ private Q_SLOTS:
         QTest::newRow("trash") << u"/v/.trash/x.md"_s << u"/v"_s << false << QString();
         QTest::newRow("brulion's folder") << u"/v/.brulion/x.md"_s << u"/v"_s << false << QString();
         QTest::newRow("logseq") << u"/v/logseq/custom.md"_s << u"/v"_s << false << QString();
-        QTest::newRow("a hidden folder") << u"/v/a/.ukryty/x.md"_s << u"/v"_s << false << QString();
+        // The notebook's own rule (paths::isIgnored): a folder starting with "." holds pages too.
+        QTest::newRow("a folder with a dot") << u"/v/.szkice/Pomysł.md"_s << u"/v"_s << false << u".szkice/Pomysł.md"_s;
+        QTest::newRow("a deeper folder with a dot")
+                << u"/v/a/.ukryty/x.md"_s << u"/v"_s << false << u"a/.ukryty/x.md"_s;
+        QTest::newRow("a page with a dot") << u"/v/.notatka.md"_s << u"/v"_s << false << u".notatka.md"_s;
+        QTest::newRow("syncthing's folder") << u"/v/.stversions/a.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("git's folder deeper") << u"/v/a/.git/b.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("node modules") << u"/v/node_modules/x/README.md"_s << u"/v"_s << false << QString();
+        QTest::newRow("a lock file") << u"/v/.~lock.a.md#"_s << u"/v"_s << false << QString();
         QTest::newRow("a syncthing temporary file") << u"/v/~syncthing~a.md.tmp"_s << u"/v"_s << false << QString();
         QTest::newRow("a conflict copy is a page") << u"/v/a.sync-conflict-20261028-101010-ABCDEFG.md"_s << u"/v"_s
                                                    << false << u"a.sync-conflict-20261028-101010-ABCDEFG.md"_s;

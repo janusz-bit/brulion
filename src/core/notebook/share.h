@@ -100,8 +100,9 @@ SharedContent mergeOpenedShares(const SharedContent &waiting, const SharedConten
 
 /// The page of the notebook at `vaultRoot` that `file` is ("Projekty/Plan.md"), "" when it is none:
 /// outside the folder (also "/v2/a.md" for the root "/v"), the folder itself, not Markdown
-/// (paths::isMarkdown), ignored (paths::isIgnored) or inside a folder whose name starts with ".".
-/// Both paths absolute and already canonical (the caller resolves symbolic links), "/" separators.
+/// (paths::isMarkdown) or ignored (paths::isIgnored: .trash, .obsidian, logseq… — the notebook's
+/// own rule, so ".szkice/Pomysł.md" is a page). Both paths absolute and clean, "/" separators;
+/// symbolic links are compared as written (the caller tries them resolved and as given).
 /// `rootCase`: how the folder part is compared (Qt::CaseInsensitive where the file system ignores
 /// letter case, Windows); the page keeps the letters of `file`.
 QString pageForOpenedFile(const QString &file, const QString &vaultRoot,

@@ -413,14 +413,12 @@ QString pageForOpenedFile(const QString &file, const QString &vaultRoot, Qt::Cas
     if (file.size() <= prefix.size() || !file.startsWith(prefix, rootCase))
         return {};
     const QString page = file.mid(prefix.size());
-    const QStringList segments = page.split(u'/');
-    for (qsizetype i = 0; i < segments.size(); ++i) {
-        const QString &segment = segments.at(i);
+    for (const QString &segment : page.split(u'/')) {
         if (segment.isEmpty() || segment == u"." || segment == u"..")
             return {}; // not a clean path
-        if (i + 1 < segments.size() && segment.startsWith(u'.'))
-            return {}; // a folder the notebook hides
     }
+    // The vault's rule (vaultutil::isTracked): a folder starting with "." (".szkice") holds pages
+    // too, only the folders paths::isIgnored() names (.trash, .obsidian, logseq…) do not.
     if (!paths::isMarkdown(page) || paths::isIgnored(page))
         return {};
     return page;
