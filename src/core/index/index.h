@@ -68,8 +68,8 @@
 //   querycache.h   QueryCache — runQuery() kept across index changes: update(query, index, today,
 //                  weekStart, options) evaluates only the notes changed since (everything for
 //                  another query / day / page, page: and ref: filters after name changes, and
-//                  remind: filters), result(index), run(), itemsOf(path, index), total(),
-//                  lastSync()
+//                  remind: filters), result(index), run(), itemsOf(path or set of paths,
+//                  index), total(), lastSync(); queryResolvesNames(query)
 //   notecache.h    following the index (header-only): IndexFollower::follow(index, key,
 //                  dependsOnNames) -> NoteCacheSync{full, changed}; NoteCache<Value>::sync(index,
 //                  key, dependsOnNames, compute, keep[, fill]), values() (by path) — what

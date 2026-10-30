@@ -6,6 +6,8 @@
 #include "index/notecache.h"
 #include "index/query.h"
 
+#include <QSet>
+
 #include <memory>
 
 namespace brulion {
@@ -39,6 +41,9 @@ public:
                     const QueryOptions &options = {});
     /// The matches of note `path` in result order (all of them: no `limit`).
     QList<QueryItem> itemsOf(const VaultPath &path, const VaultIndex &index) const;
+    /// The matches of the notes `paths` in result order (all of them: no `limit`) — one pass over
+    /// the matches, however many notes (a change naming thousands of them).
+    QList<QueryItem> itemsOf(const QSet<VaultPath> &paths, const VaultIndex &index) const;
     /// Matches in all (QueryResult::total).
     int total() const;
     /// What the last update() evaluated again.
@@ -50,5 +55,11 @@ private:
     struct Private;
     std::unique_ptr<Private> d;
 };
+
+/// The query has filters that resolve names (`page:`, `ref:` — links, aliases, tags naming pages):
+/// a name change anywhere (VaultIndex::changesSince()'s `names`) may change their matches in any
+/// note. QueryCache follows the index fully then; so must anything following the index beside
+/// a QueryCache for the same query (IndexFollower::follow()'s `dependsOnNames`).
+bool queryResolvesNames(const Query &query);
 
 } // namespace brulion

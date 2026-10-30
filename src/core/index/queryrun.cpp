@@ -852,16 +852,14 @@ bool hasRemindFilter(const Query &query)
     });
 }
 
-/// Filters that resolve names (links, aliases, tags naming pages): a name change anywhere may
-/// change their matches in any note.
-bool resolvesNames(const Query &query)
+} // namespace
+
+bool queryResolvesNames(const Query &query)
 {
     return std::any_of(query.filters.cbegin(), query.filters.cend(), [](const QueryFilter &f) {
         return f.kind == QueryFilterKind::Page || f.kind == QueryFilterKind::Ref;
     });
 }
-
-} // namespace
 
 QueryResult runQuery(const Query &query, const VaultIndex &index, QDate today, Qt::DayOfWeek weekStart,
                      const QueryOptions &options)
@@ -904,7 +902,7 @@ const NoteCacheSync &QueryCache::update(const Query &query, const VaultIndex &in
         d->follower.reset();
     const QString key =
             today.toString(Qt::ISODate) + u'\x1f' + QString::number(int(weekStart)) + u'\x1f' + options.currentPath;
-    NoteCacheSync sync = d->follower.follow(index, key, resolvesNames(query));
+    NoteCacheSync sync = d->follower.follow(index, key, queryResolvesNames(query));
     if (hasRemindFilter(query)) // remind:overdue depends on the time of day
         sync = NoteCacheSync{true, {}};
     d->used = true;
@@ -968,6 +966,20 @@ QList<QueryItem> QueryCache::itemsOf(const VaultPath &path, const VaultIndex &in
     runner.trustEntries(d->current(index));
     for (const QueryMatch &m : std::as_const(d->sorted)) {
         if (m.path == path)
+            out.append(runner.itemOf(m));
+    }
+    return out;
+}
+
+QList<QueryItem> QueryCache::itemsOf(const QSet<VaultPath> &paths, const VaultIndex &index) const
+{
+    QList<QueryItem> out;
+    if (!d->used || paths.isEmpty())
+        return out;
+    Runner runner(d->query, index, d->today, d->weekStart, d->options);
+    runner.trustEntries(d->current(index));
+    for (const QueryMatch &m : std::as_const(d->sorted)) {
+        if (paths.contains(m.path))
             out.append(runner.itemOf(m));
     }
     return out;

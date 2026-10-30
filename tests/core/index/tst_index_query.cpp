@@ -618,6 +618,29 @@ private Q_SLOTS:
 
     // ---- QueryCache: runQuery() kept across index changes ------------------------------------------
 
+    // Which queries follow the index fully after a name change: the cache and the views beside it
+    // (the Tasks list) share one predicate.
+    void queryResolvesNames_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<bool>("resolves");
+        QTest::newRow("page") << u"page:Łódź"_s << true;
+        QTest::newRow("strona, negated") << u"-strona:\"Żółta łódź\" status:open"_s << true;
+        QTest::newRow("page:this") << u"page:this"_s << true;
+        QTest::newRow("ref") << u"ref:[[Zażółć gęślą jaźń]]"_s << true;
+        QTest::newRow("linki among others") << u"tag:praca linki:[[Ćma]] sort:due"_s << true;
+        QTest::newRow("tag") << u"tag:praca"_s << false;
+        QTest::newRow("path") << u"path:Projekty/ status:todo"_s << false;
+        QTest::newRow("dates and text") << u"due:<today \"źdźbło\" group:page"_s << false;
+        QTest::newRow("empty") << QString() << false;
+    }
+    void queryResolvesNames()
+    {
+        QFETCH(QString, source);
+        QFETCH(bool, resolves);
+        QCOMPARE(brulion::queryResolvesNames(parsed(source)), resolves);
+    }
+
     void queryCacheFollowsEdits()
     {
         VaultIndex index;
@@ -643,6 +666,22 @@ private Q_SLOTS:
         QVERIFY(cache.itemsOf(u"A.md"_s, index).first().task->text.startsWith(u"pierwsze zmienione"_s));
         QVERIFY(cache.itemsOf(u"Nie ma.md"_s, index).isEmpty());
         QCOMPARE(cache.total(), 6);
+        // Several notes at once (one pass over the matches): those notes' items in result order.
+        {
+            const QSet<VaultPath> some{u"Zebra.md"_s, u"A.md"_s, u"Łódź.md"_s, u"Nie ma.md"_s};
+            QueryResult expected = runQuery(q, index, fixture::Today);
+            expected.items.removeIf([&](const QueryItem &i) { return !some.contains(i.path); });
+            QueryResult got;
+            got.type = expected.type;
+            got.total = expected.total;
+            got.items = cache.itemsOf(some, index);
+            QCOMPARE(full(got), full(expected));
+            QCOMPARE(got.items.size(), 4);
+            QCOMPARE(pagesOf(got), QStringList({u"A.md"_s, u"Łódź.md"_s, u"Zebra.md"_s}));
+            QVERIFY(cache.itemsOf(QSet<VaultPath>(), index).isEmpty());
+            QVERIFY(cache.itemsOf(QSet<VaultPath>{u"Nie ma.md"_s}, index).isEmpty());
+            QVERIFY(QueryCache().itemsOf(some, index).isEmpty()); // before the first update()
+        }
 
         // Nothing changed: nothing evaluated.
         cache.update(q, index, fixture::Today);

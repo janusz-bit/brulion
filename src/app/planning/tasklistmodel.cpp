@@ -962,31 +962,27 @@ void TaskListModel::rebuild()
         m_query->update(*query, *m_index, today, ws, options);
         // The items follow the index on their own (the cache may be shared): what changed since
         // they were built. Their fields depend on the query (filters and sort), today and the
-        // week start; page: filters resolve names.
-        const bool names = std::any_of(query->filters.cbegin(), query->filters.cend(), [](const QueryFilter &f) {
-            return f.kind == QueryFilterKind::Page || f.kind == QueryFilterKind::Ref;
-        });
+        // week start; filters resolving names follow the cache's rule (queryResolvesNames()).
         const QString key = query->source + u'\x1f' + today.toString(Qt::ISODate) + u'\x1f' + QString::number(int(ws));
-        const NoteCacheSync sync = m_follower.follow(*m_index, key, names);
-        // Only the changed notes: their items again, merged into the others' sorted ones — unless
-        // a title is new (its rank among the others is not known: everything again).
+        const NoteCacheSync sync = m_follower.follow(*m_index, key, queryResolvesNames(*query));
+        // Only the changed notes: their items again (one pass over the cache's matches, however
+        // many notes changed), merged into the others' sorted ones — unless a title is new (its
+        // rank among the others is not known: everything again).
         QList<Item> fresh;
         bool full = sync.full;
+        QSet<VaultPath> changed;
         if (!full && !sync.changed.isEmpty()) {
-            for (const VaultPath &path : std::as_const(sync.changed)) {
-                for (const QueryItem &qi : m_query->itemsOf(path, *m_index)) {
-                    if (!qi.task)
-                        continue;
-                    fresh.append(makeItem(qi, today, ws));
-                    const auto rank = m_titleRank.constFind(fresh.last().pageTitle);
-                    if (rank == m_titleRank.cend()) {
-                        full = true;
-                        break;
-                    }
-                    fresh.last().title = *rank;
-                }
-                if (full)
+            changed = QSet<VaultPath>(sync.changed.cbegin(), sync.changed.cend());
+            for (const QueryItem &qi : m_query->itemsOf(changed, *m_index)) {
+                if (!qi.task)
+                    continue;
+                fresh.append(makeItem(qi, today, ws));
+                const auto rank = m_titleRank.constFind(fresh.last().pageTitle);
+                if (rank == m_titleRank.cend()) {
+                    full = true;
                     break;
+                }
+                fresh.last().title = *rank;
             }
         }
         if (full) {
@@ -1008,8 +1004,7 @@ void TaskListModel::rebuild()
             for (const qsizetype i : std::as_const(order))
                 sorted.append(std::move(items[i]));
             m_items = std::move(sorted);
-        } else if (!sync.changed.isEmpty()) {
-            const QSet<VaultPath> changed(sync.changed.cbegin(), sync.changed.cend());
+        } else if (!changed.isEmpty()) {
             m_items.removeIf([&](const Item &item) { return changed.contains(item.ref.path); });
             if (!fresh.isEmpty()) {
                 std::sort(fresh.begin(), fresh.end(), less);

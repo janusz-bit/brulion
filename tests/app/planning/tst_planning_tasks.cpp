@@ -16,6 +16,8 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 using brulion::Task;
 using brulion::TaskStatus;
@@ -693,6 +695,57 @@ private Q_SLOTS:
                 QCOMPARE(m.rowOfKey(m.data(m.index(r, 0), TaskListModel::KeyRole).toString()), r);
         }
         QVERIFY(partial > 20);
+    }
+
+    // One change naming thousands of notes (the page they all link to appears or goes): the list
+    // takes their items in one pass over the cache's matches and merges them — as cheap as a list
+    // built afresh (medians of three; machine-independent), not (changed notes × matches) — and
+    // equals a fresh list (the links' rich text follows the new target).
+    void changeNamingManyNotesStaysCheap()
+    {
+        constexpr int Notes = 3000;
+        Files files;
+        for (int i = 0; i < Notes; ++i) {
+            files.append({u"Notatki/n%1.md"_s.arg(i, 4, 10, QLatin1Char('0')),
+                          u"- [ ] zadanie %1 o [[Żółta łódź]] 📅 2026-10-%2\n"_s.arg(i).arg(10 + i % 10)});
+        }
+        auto index = makeIndex(files);
+        auto cache = std::make_shared<brulion::QueryCache>();
+        TaskListModel m;
+        m.setQueryCache(cache);
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setStatusFilter(u"all"_s);
+        m.setVaultIndex(index.get());
+        QCOMPARE(m.totalCount(), Notes);
+        QList<qint64> merged;
+        QList<qint64> built;
+        for (int rep = 0; rep < 3; ++rep) {
+            // A page without tasks: no new title in the list, so the changed notes are merged.
+            if (rep % 2 == 0)
+                index->update(u"Żółta łódź.md"_s, u"Strona o łodzi\n"_s);
+            else
+                index->remove(u"Żółta łódź.md"_s);
+            QElapsedTimer t;
+            t.start();
+            m.refresh();
+            merged.append(t.nsecsElapsed());
+            QVERIFY(!cache->lastSync().full);
+            QCOMPARE(cache->lastSync().changed.size(), qsizetype(Notes + 1));
+            t.restart();
+            TaskListModel fresh;
+            fresh.setToday(u"2026-10-15"_s);
+            fresh.setStatusFilter(u"all"_s);
+            fresh.setVaultIndex(index.get());
+            built.append(t.nsecsElapsed());
+            QVERIFY2(rowsOf(m) == rowsOf(fresh), qPrintable(u"rep %1"_s.arg(rep)));
+        }
+        std::sort(merged.begin(), merged.end());
+        std::sort(built.begin(), built.end());
+        qInfo("%d notes changed at once: merged %.1f ms, built afresh %.1f ms", Notes + 1, merged[1] / 1e6,
+              built[1] / 1e6);
+        QVERIFY2(merged[1] <= 2 * built[1] + 5'000'000,
+                 qPrintable(u"merged %1 ns, built afresh %2 ns"_s.arg(merged[1]).arg(built[1])));
     }
 };
 
