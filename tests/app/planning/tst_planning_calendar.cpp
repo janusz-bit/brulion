@@ -59,14 +59,13 @@ QStringList overdueByScan(const brulion::VaultIndex &index, QDate today, int *co
             && t.due->date < today)
             list.append({*t.due, ref});
     }
-    std::stable_sort(list.begin(), list.end(), [](const Entry &a, const Entry &b) {
-        return brulion::dates::compareDateSpecs(a.due, b.due) < 0;
-    });
+    std::stable_sort(list.begin(), list.end(),
+                     [](const Entry &a, const Entry &b) { return brulion::dates::compareDateSpecs(a.due, b.due) < 0; });
     *count = int(list.size());
     QStringList out;
     for (qsizetype i = 0; i < list.size() && i < CalendarModel::MaxOverdue; ++i)
         out << u"overdue:%1:%2"_s.arg(list.at(i).ref.path).arg(list.at(i).ref.task.line) + u' '
-                       + list.at(i).due.toString();
+                        + list.at(i).due.toString();
     return out;
 }
 
@@ -87,7 +86,7 @@ QStringList entriesOf(const CalendarModel &m)
         for (const QVariant &v : role(m, r, CalendarModel::ItemsRole).toList())
             keys << v.toMap().value(u"key"_s).toString() + u'=' + v.toMap().value(u"title"_s).toString();
         out << role(m, r, CalendarModel::DateRole).toString() + u' '
-                       + role(m, r, CalendarModel::JournalPathRole).toString() + u": "_s + keys.join(u", "_s);
+                        + role(m, r, CalendarModel::JournalPathRole).toString() + u": "_s + keys.join(u", "_s);
     }
     return out;
 }
@@ -688,8 +687,9 @@ private Q_SLOTS:
         QVERIFY(calendar->lastSync().full);
         const auto expected = [&](const CalendarModel &model) {
             QStringList out;
-            for (const brulion::CalendarItem &item : brulion::calendarItems(*index, QDate::fromString(model.rangeStart(), Qt::ISODate),
-                                                                            QDate::fromString(model.rangeEnd(), Qt::ISODate))) {
+            for (const brulion::CalendarItem &item :
+                 brulion::calendarItems(*index, QDate::fromString(model.rangeStart(), Qt::ISODate),
+                                        QDate::fromString(model.rangeEnd(), Qt::ISODate))) {
                 if (item.kind != brulion::CalendarItem::Journal)
                     out << item.date.toString(Qt::ISODate) + u' ' + item.title;
             }
@@ -699,12 +699,15 @@ private Q_SLOTS:
             QStringList out;
             for (int r = 0; r < model.rowCount(); ++r) {
                 for (const QVariant &v : role(model, r, CalendarModel::ItemsRole).toList())
-                    out << role(model, r, CalendarModel::DateRole).toString() + u' ' + v.toMap().value(u"title"_s).toString();
+                    out << role(model, r, CalendarModel::DateRole).toString() + u' '
+                                    + v.toMap().value(u"title"_s).toString();
             }
             return out;
         };
         QCOMPARE(shown(m), expected(m));
-        index->update(u"Dom.md"_s, u"- [ ] Remont kuchni 📅 2026-10-21\n- Wizyta ⏰ 2026-10-22 18:00\n- [ ] Stare 📅 2026-10-01\n"_s);
+        index->update(
+                u"Dom.md"_s,
+                u"- [ ] Remont kuchni 📅 2026-10-21\n- Wizyta ⏰ 2026-10-22 18:00\n- [ ] Stare 📅 2026-10-01\n"_s);
         QTRY_COMPARE(shown(m), expected(m));
         QVERIFY(!calendar->lastSync().full);
         QCOMPARE(calendar->lastSync().changed, QList<QString>{u"Dom.md"_s});

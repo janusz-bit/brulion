@@ -884,8 +884,8 @@ const NoteCacheSync &QueryCache::update(const Query &query, const VaultIndex &in
 {
     if (!d->used || !sameQuery(d->query, query))
         d->follower.reset();
-    const QString key = today.toString(Qt::ISODate) + u'\x1f' + QString::number(int(weekStart)) + u'\x1f'
-                        + options.currentPath;
+    const QString key =
+            today.toString(Qt::ISODate) + u'\x1f' + QString::number(int(weekStart)) + u'\x1f' + options.currentPath;
     NoteCacheSync sync = d->follower.follow(index, key, resolvesNames(query));
     if (hasRemindFilter(query)) // remind:overdue depends on the time of day
         sync = NoteCacheSync{true, {}};

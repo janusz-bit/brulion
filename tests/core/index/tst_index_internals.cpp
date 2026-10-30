@@ -753,7 +753,8 @@ private Q_SLOTS:
     void listsArePatchedNotRebuilt()
     {
         const QHash<QString, QString> start = {
-                {u"journals/2026-10-14.md"_s, u"- [ ] zadanie 📅 2026-10-15 #praca\n- przypomnienie ⏰ 2026-10-16 10:00\n"_s},
+                {u"journals/2026-10-14.md"_s,
+                 u"- [ ] zadanie 📅 2026-10-15 #praca\n- przypomnienie ⏰ 2026-10-16 10:00\n"_s},
                 {u"Żółw.md"_s, u"- [x] karmienie #zwierzęta\n```query\ntag:praca\n```\n"_s},
                 {u"Dom.md"_s, u"---\nstatus: aktywny\n---\n- [ ] malowanie ⏰ 2026-10-20 18:00\n"_s},
                 {u"zebra.md"_s, u"- tekst o Żółw\n"_s},
@@ -778,8 +779,8 @@ private Q_SLOTS:
             return out;
         };
         readAll(index);
-        const QStringList lists = {u"sorted"_s, u"byRelevance"_s, u"paths"_s,      u"tasks"_s,       u"reminders"_s,
-                                   u"journals"_s, u"tags"_s,      u"queryNotes"_s, u"propertyKeys"_s};
+        const QStringList lists = {u"sorted"_s,   u"byRelevance"_s, u"paths"_s,      u"tasks"_s,       u"reminders"_s,
+                                   u"journals"_s, u"tags"_s,        u"queryNotes"_s, u"propertyKeys"_s};
         const auto counts = [&] {
             QList<int> out;
             for (const QString &l : lists)

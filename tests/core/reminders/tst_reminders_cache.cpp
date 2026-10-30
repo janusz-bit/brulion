@@ -19,8 +19,12 @@ using namespace Qt::StringLiterals;
 
 namespace {
 
-const QStringList Paths = {u"journals/2026-10-14.md"_s, u"journals/2026-10-25.md"_s, u"Zdrowie.md"_s,
-                           u"Projekty/Dom.md"_s,        u"Ż.md"_s,                  u"żółw.md"_s,
+const QStringList Paths = {u"journals/2026-10-14.md"_s,
+                           u"journals/2026-10-25.md"_s,
+                           u"Zdrowie.md"_s,
+                           u"Projekty/Dom.md"_s,
+                           u"Ż.md"_s,
+                           u"żółw.md"_s,
                            u"x/Ala.md"_s};
 
 const QStringList Lines = {
@@ -266,7 +270,8 @@ private Q_SLOTS:
                 QString text = u"- [ ] zadanie %1 o żółwiu 📅 %2 ⏰ %2 09:00\n- notatka %1\n"_s.arg(i).arg(
                         due.toString(Qt::ISODate));
                 if (i % 10 == 0)
-                    text += u"- [ ] cykliczne %1 🔁 every week 📅 %2 ⏰ %2 18:00\n"_s.arg(i).arg(due.toString(Qt::ISODate));
+                    text += u"- [ ] cykliczne %1 🔁 every week 📅 %2 ⏰ %2 18:00\n"_s.arg(i).arg(
+                            due.toString(Qt::ISODate));
                 index.update(u"Notatki/n%1.md"_s.arg(i), text);
             }
         }

@@ -171,10 +171,9 @@ private Q_SLOTS:
                               now.date().addDays(ReminderScheduler::DefaultHorizonDays + 1));
         CalendarCache calendar;
         QueryCache queryCache;
-        const qsizetype warm = notifications.upcoming(idx, now, 14, 64).size()
-                               + calendar.items(idx, from, from.addDays(41)).size()
-                               + queryCache.run(query, idx, now.date()).items.size() + idx.tasks().size()
-                               + idx.reminders().size();
+        const qsizetype warm =
+                notifications.upcoming(idx, now, 14, 64).size() + calendar.items(idx, from, from.addDays(41)).size()
+                + queryCache.run(query, idx, now.date()).items.size() + idx.tasks().size() + idx.reminders().size();
         QVERIFY(warm >= 0);
         int flip = 0;
         qsizetype sink = 0;

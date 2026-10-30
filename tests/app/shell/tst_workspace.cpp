@@ -1690,8 +1690,8 @@ private Q_SLOTS:
         brulion::VaultIndex *index = ws->index();
         const auto stateless = [&](const QString &from, const QString &to) {
             QVariantList out;
-            for (const brulion::CalendarItem &item : brulion::calendarItems(*index, QDate::fromString(from, Qt::ISODate),
-                                                                            QDate::fromString(to, Qt::ISODate)))
+            for (const brulion::CalendarItem &item : brulion::calendarItems(
+                         *index, QDate::fromString(from, Qt::ISODate), QDate::fromString(to, Qt::ISODate)))
                 out.append(brulion::notebook::calendarItemJson(item).toVariantMap());
             return out;
         };
@@ -1700,8 +1700,8 @@ private Q_SLOTS:
             brulion::QueryOptions options;
             options.currentPath = page;
             options.now = QTime(10, 30);
-            const brulion::QueryResult r =
-                    brulion::runQuery(std::get<brulion::Query>(parsed), *index, QDate(2026, 10, 14), Qt::Monday, options);
+            const brulion::QueryResult r = brulion::runQuery(std::get<brulion::Query>(parsed), *index,
+                                                             QDate(2026, 10, 14), Qt::Monday, options);
             QStringList out{QString::number(r.total)};
             for (const brulion::QueryItem &item : r.items)
                 out << brulion::notebook::queryItemJson(*index, item).value(u"path"_s).toString()
@@ -1724,7 +1724,8 @@ private Q_SLOTS:
         QCOMPARE(shown(ws->runQuery(u"page:this"_s, u"Dom.md"_s)), query(u"page:this"_s, u"Dom.md"_s));
         QCOMPARE(ws->runQuery(u"tag:remont"_s).value(u"total"_s).toInt(), 3);
         QCOMPARE(ws->cachedLists(), (QStringList{u"2026-10-12|2026-10-18"_s, u"tag:remont\x1f"_s,
-                                                 u"page:this\x1f" u"Dom.md"_s}));
+                                                 u"page:this\x1f"
+                                                 u"Dom.md"_s}));
 
         // The most recently asked are kept: four ranges, eight queries.
         for (int d = 1; d <= Workspace::MaxCachedRanges + 1; ++d) {
@@ -1732,7 +1733,8 @@ private Q_SLOTS:
             QCOMPARE(ws->calendarItems(day, day), stateless(day, day));
         }
         for (int q = 0; q < Workspace::MaxCachedQueries + 2; ++q)
-            QCOMPARE(shown(ws->runQuery(u"tag:remont limit:%1"_s.arg(q + 1))), query(u"tag:remont limit:%1"_s.arg(q + 1)));
+            QCOMPARE(shown(ws->runQuery(u"tag:remont limit:%1"_s.arg(q + 1))),
+                     query(u"tag:remont limit:%1"_s.arg(q + 1)));
         const QStringList kept = ws->cachedLists();
         QCOMPARE(kept.size(), Workspace::MaxCachedRanges + Workspace::MaxCachedQueries);
         QCOMPARE(kept.first(), u"2026-10-05|2026-10-05"_s);

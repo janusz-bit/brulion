@@ -656,7 +656,8 @@ private Q_SLOTS:
         Env env(dt(2026, 10, 14, 7, 0));
         Files files = vault();
         for (int i = 0; i < 40; ++i)
-            files.append({u"Notatki/n%1.md"_s.arg(i), u"- [ ] zadanie %1 ⏰ 2026-10-%2 10:00"_s.arg(i).arg(15 + i % 10)});
+            files.append(
+                    {u"Notatki/n%1.md"_s.arg(i), u"- [ ] zadanie %1 ⏰ 2026-10-%2 10:00"_s.arg(i).arg(15 + i % 10)});
         fill(env.index, files);
         auto s = env.scheduler();
         s->start();
@@ -670,8 +671,8 @@ private Q_SLOTS:
         s->refresh();
         QCOMPARE(cache.computedNotes(), all + 1);
         QVERIFY(keys(s->upcoming()).contains(u"2026-10-14 07:30 zadanie trzy"_s));
-        QCOMPARE(keys(s->upcoming()), keys(upcomingNotifications(env.index, env.clock.now(), s->horizonDays(),
-                                                                  s->maxScheduled())));
+        QCOMPARE(keys(s->upcoming()),
+                 keys(upcomingNotifications(env.index, env.clock.now(), s->horizonDays(), s->maxScheduled())));
         // It fires from the same cache.
         env.clock.set(dt(2026, 10, 14, 7, 30, 5));
         s->checkNow();

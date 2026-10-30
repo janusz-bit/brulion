@@ -61,8 +61,8 @@ inline QStringList describeGraph(const GraphData &g)
 inline QString describeTask(const Task &t)
 {
     return u"%1|%2|%3|%4|%5|%6"_s.arg(QString::number(t.line), QString::number(int(t.status)),
-                                     QString::number(int(t.priority)), t.text,
-                                     t.due ? t.due->toString() : QString(), t.recurrence);
+                                      QString::number(int(t.priority)), t.text, t.due ? t.due->toString() : QString(),
+                                      t.recurrence);
 }
 
 inline QStringList describeTasks(const QList<TaskRef> &tasks)

@@ -12,8 +12,8 @@
 #include "index/querycache.h"
 #include "index/vaultindex.h"
 #include "notebook/journals.h"
-#include "reminders/calendar.h"
 #include "planningutil.h"
+#include "reminders/calendar.h"
 #include "vault/vault.h"
 
 #include <QDir>
@@ -195,7 +195,8 @@ private Q_SLOTS:
         QVERIFY(options.caches->tasks->lastSync().full);
         QVERIFY(options.caches->calendar->lastSync().full);
         index->update(u"journals/2026-10-27.md"_s,
-                      index->content(u"journals/2026-10-27.md"_s) + u"\n- [ ] Nowe z widżetu 📅 2026-10-28 ⏰ 2026-10-28 08:00\n"_s);
+                      index->content(u"journals/2026-10-27.md"_s)
+                              + u"\n- [ ] Nowe z widżetu 📅 2026-10-28 ⏰ 2026-10-28 08:00\n"_s);
         const QJsonObject cached = buildSnapshot(*index, options);
         QCOMPARE(cached, buildSnapshot(*index, fixtureOptions()));
         QCOMPARE(taskByText(cached, u"Nowe z widżetu"_s).value(u"section"_s).toString(), u"tomorrow"_s);

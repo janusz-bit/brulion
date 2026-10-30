@@ -297,9 +297,8 @@ QList<ScheduledNotification> NotificationCache::between(const VaultIndex &index,
     return out;
 }
 
-QList<ScheduledNotification> NotificationCache::upcoming(const VaultIndex &index, const QDateTime &now,
-                                                         int horizonDays, int max, int *dropped,
-                                                         dates::UiLocale locale)
+QList<ScheduledNotification> NotificationCache::upcoming(const VaultIndex &index, const QDateTime &now, int horizonDays,
+                                                         int max, int *dropped, dates::UiLocale locale)
 {
     if (dropped)
         *dropped = 0;

@@ -255,10 +255,18 @@ int IndexAccess::buildCount(const VaultIndex &index, std::string_view list)
 {
     const BuildCounts &b = index.d->builds;
     const std::pair<std::string_view, int> counts[] = {
-            {"sorted", b.sorted},       {"byRelevance", b.byRelevance}, {"paths", b.paths},
-            {"attachments", b.attachments}, {"tags", b.tags},          {"tasks", b.tasks},
-            {"reminders", b.reminders}, {"journals", b.journals},       {"missing", b.missing},
-            {"tagTargets", b.tagTargets}, {"queryNotes", b.queryNotes}, {"propertyKeys", b.propertyKeys},
+            {"sorted", b.sorted},
+            {"byRelevance", b.byRelevance},
+            {"paths", b.paths},
+            {"attachments", b.attachments},
+            {"tags", b.tags},
+            {"tasks", b.tasks},
+            {"reminders", b.reminders},
+            {"journals", b.journals},
+            {"missing", b.missing},
+            {"tagTargets", b.tagTargets},
+            {"queryNotes", b.queryNotes},
+            {"propertyKeys", b.propertyKeys},
     };
     for (const auto &[name, count] : counts) {
         if (name == list)

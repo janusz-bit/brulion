@@ -843,8 +843,8 @@ TaskListModel::Item TaskListModel::makeItem(const QueryItem &qi, QDate today, Qt
         }
     }
     const Task &t = item.ref.task;
-    item.section = sectionOf(t, today, weekStart,
-                             item.reminder ? std::optional<QDate>(item.reminder->at.date) : std::nullopt);
+    item.section =
+            sectionOf(t, today, weekStart, item.reminder ? std::optional<QDate>(item.reminder->at.date) : std::nullopt);
     item.sectionRank = sections.indexOf(item.section);
     item.finished = finishedDate(t);
     item.priority = priorityRank(t.priority);

@@ -256,9 +256,9 @@ private:
         std::optional<Reminder> reminder;
         // What the list is sorted by (itemLess()).
         qsizetype sectionRank = 0;
-        std::optional<QDate> finished;   ///< the done section's date
-        int priority = 0;                ///< priorityRank()
-        std::optional<DateSpec> date;    ///< the sort date, else the reminder's
+        std::optional<QDate> finished;            ///< the done section's date
+        int priority = 0;                         ///< priorityRank()
+        std::optional<DateSpec> date;             ///< the sort date, else the reminder's
         std::optional<QCollatorSortKey> titleKey; ///< nameSortKey(pageTitle)
         mutable QString html; ///< rendered lazily
         mutable bool rendered = false;
@@ -303,8 +303,8 @@ private:
     QString m_sort = QStringLiteral("due");
     QStringList m_collapsed{QStringLiteral("done")};
 
-    std::shared_ptr<QueryCache> m_query; ///< the query's matches, kept across index changes
-    IndexFollower m_follower;            ///< which notes changed since m_items was built
+    std::shared_ptr<QueryCache> m_query;          ///< the query's matches, kept across index changes
+    IndexFollower m_follower;                     ///< which notes changed since m_items was built
     QHash<QString, QCollatorSortKey> m_titleKeys; ///< nameSortKey() per page title
     enum SortMode { SortByDue, SortByPriority, SortByCreated, SortByPage };
     SortMode m_sortMode = SortByDue; ///< m_sort as itemLess() reads it

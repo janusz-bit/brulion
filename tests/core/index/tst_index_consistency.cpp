@@ -61,19 +61,20 @@ QString randomContent(QRandomGenerator &rng)
 
 // More tasks, reminders and nesting for the query cache: priorities, statuses, two reminders on
 // one line (ties), a recurring task, a child block, a ```query block.
-const QStringList QueryLines = Lines + QStringList{
-        u"- [ ] pilne ⏫ 📅 2026-10-12 #tag2/sub"_s,
-        u"- [/] w toku 🔼 ⏳ 2026-10-14 [[A]]"_s,
-        u"- [x] zrobione ✅ 2026-10-13 #tag1"_s,
-        u"- dwa ⏰ 2026-10-14 08:00 i ⏰ 2026-10-14 08:00"_s,
-        u"- [ ] cykliczne 🔁 every week 📅 2026-10-16 ⏰ 2026-10-15 18:00"_s,
-        u"  - podpunkt o żółwiu #tag1 [[Ż]]"_s,
-        u"- [-] anulowane 📅 2026-10-01 ⏰ 2026-10-13 07:00"_s,
-        u"```query\ntag:tag1\n```"_s,
-};
+const QStringList QueryLines = Lines
+                               + QStringList{
+                                       u"- [ ] pilne ⏫ 📅 2026-10-12 #tag2/sub"_s,
+                                       u"- [/] w toku 🔼 ⏳ 2026-10-14 [[A]]"_s,
+                                       u"- [x] zrobione ✅ 2026-10-13 #tag1"_s,
+                                       u"- dwa ⏰ 2026-10-14 08:00 i ⏰ 2026-10-14 08:00"_s,
+                                       u"- [ ] cykliczne 🔁 every week 📅 2026-10-16 ⏰ 2026-10-15 18:00"_s,
+                                       u"  - podpunkt o żółwiu #tag1 [[Ż]]"_s,
+                                       u"- [-] anulowane 📅 2026-10-01 ⏰ 2026-10-13 07:00"_s,
+                                       u"```query\ntag:tag1\n```"_s,
+                               };
 
-const QStringList QueryHeaders = Headers + QStringList{u"---\ntags: [strona]\nstatus: aktywny\n---\n"_s,
-                                                      u"typ:: projekt\n\n"_s};
+const QStringList QueryHeaders =
+        Headers + QStringList{u"---\ntags: [strona]\nstatus: aktywny\n---\n"_s, u"typ:: projekt\n\n"_s};
 
 QString queryContent(QRandomGenerator &rng)
 {
@@ -116,10 +117,9 @@ QHash<VaultPath, QString> fingerprints(const VaultIndex &index)
 
 QString describeItem(const QueryItem &item)
 {
-    return u"%1#%2|%3|%4"_s.arg(item.path, QString::number(item.blockIndex),
-                                item.task ? describeTask(*item.task) : u"-"_s,
-                                item.reminder ? item.reminder->at.toString() + u'/' + QString::number(item.reminder->line)
-                                              : u"-"_s);
+    return u"%1#%2|%3|%4"_s.arg(
+            item.path, QString::number(item.blockIndex), item.task ? describeTask(*item.task) : u"-"_s,
+            item.reminder ? item.reminder->at.toString() + u'/' + QString::number(item.reminder->line) : u"-"_s);
 }
 
 QStringList describeResult(const QueryResult &r)
@@ -562,9 +562,11 @@ private Q_SLOTS:
                 if (!caches[q].lastSync().full)
                     ++partial;
                 const QByteArray ctx = u"step %1 (%2), query %3"_s.arg(step).arg(what, sources[q]).toUtf8();
-                QVERIFY2(describeResult(cached) == describeResult(runQuery(queries[q], index, today, Qt::Monday, options)),
+                QVERIFY2(describeResult(cached)
+                                 == describeResult(runQuery(queries[q], index, today, Qt::Monday, options)),
                          ctx.constData());
-                QCOMPARE(describeResult(cached), describeResult(runQuery(queries[q], fresh, today, Qt::Monday, options)));
+                QCOMPARE(describeResult(cached),
+                         describeResult(runQuery(queries[q], fresh, today, Qt::Monday, options)));
                 QCOMPARE(caches[q].total(), cached.total);
             }
             if (QTest::currentTestFailed())

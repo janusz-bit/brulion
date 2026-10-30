@@ -1,10 +1,10 @@
 // Query language (docs/SYNTAX.md §10): parseQuery and runQuery over the fixture vault.
 #include "fixture.h"
 
+#include "centraleuropeantime.h"
 #include "index/querycache.h"
 #include "index/textutil_p.h"
 #include "markdown/parse.h"
-#include "centraleuropeantime.h"
 
 #include <QElapsedTimer>
 #include <QTest>
@@ -46,8 +46,8 @@ QStringList full(const QueryResult &r)
     QStringList out{u"type %1 total %2"_s.arg(int(r.type)).arg(r.total)};
     const auto item = [](const QueryItem &i) {
         return u"%1#%2|%3|%4|%5"_s.arg(i.path, QString::number(i.blockIndex), i.task ? i.task->text : u"-"_s,
-                                     i.task ? QString::number(int(i.task->status)) : u"-"_s,
-                                     i.reminder ? i.reminder->at.toString() : u"-"_s);
+                                       i.task ? QString::number(int(i.task->status)) : u"-"_s,
+                                       i.reminder ? i.reminder->at.toString() : u"-"_s);
     };
     for (const QueryItem &i : r.items)
         out.append(item(i));
@@ -631,8 +631,7 @@ private Q_SLOTS:
         QCOMPARE(full(cache.run(q, index, fixture::Today)), full(runQuery(q, index, fixture::Today)));
         QVERIFY(cache.lastSync().full);
         // Polish names: „Lodz” before „Łódź” (a letter with a mark after its base), „Zebra” last.
-        QCOMPARE(pagesOf(cache.result(index)),
-                 QStringList({u"A.md"_s, u"Lodz.md"_s, u"Łódź.md"_s, u"Zebra.md"_s}));
+        QCOMPARE(pagesOf(cache.result(index)), QStringList({u"A.md"_s, u"Lodz.md"_s, u"Łódź.md"_s, u"Zebra.md"_s}));
         QCOMPARE(cache.total(), 6);
 
         // An edit: only that note is evaluated again.
@@ -737,9 +736,9 @@ private Q_SLOTS:
         index.update(u"c.md"_s, u"- [ ] bez tagu ⏰ 2026-10-14 07:00"_s);
         QueryOptions here;
         here.currentPath = u"b.md"_s;
-        for (const QString &source : {u"type:reminders sort:remind"_s, u"type:reminders"_s, u"group:tag"_s,
-                                      u"group:page limit:2"_s, u"page:this"_s, u"type:blocks tag:a"_s,
-                                      u"group:status sort:-page"_s}) {
+        for (const QString &source :
+             {u"type:reminders sort:remind"_s, u"type:reminders"_s, u"group:tag"_s, u"group:page limit:2"_s,
+              u"page:this"_s, u"type:blocks tag:a"_s, u"group:status sort:-page"_s}) {
             const Query q = parsed(source);
             QueryCache cache;
             QCOMPARE(full(cache.run(q, index, fixture::Today, Qt::Monday, here)),

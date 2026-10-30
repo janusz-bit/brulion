@@ -644,8 +644,13 @@ private Q_SLOTS:
         QFETCH(quint32, seed);
         QFETCH(QString, sort);
         QFETCH(QString, status);
-        const QStringList paths = {u"journals/2026-10-15.md"_s, u"Dom.md"_s,    u"Ż.md"_s,
-                                   u"żółw.md"_s,                u"x/Ala.md"_s, u"Łódź.md"_s, u"Lodz.md"_s};
+        const QStringList paths = {u"journals/2026-10-15.md"_s,
+                                   u"Dom.md"_s,
+                                   u"Ż.md"_s,
+                                   u"żółw.md"_s,
+                                   u"x/Ala.md"_s,
+                                   u"Łódź.md"_s,
+                                   u"Lodz.md"_s};
         auto index = makeIndex({});
         auto cache = std::make_shared<brulion::QueryCache>();
         TaskListModel m;

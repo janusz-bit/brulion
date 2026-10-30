@@ -200,11 +200,11 @@ struct VaultIndex::Private {
     index_detail::BuildCounts builds;
 
     // ---- change log (VaultIndex::changesSince()) -------------------------------------------------
-    const quint64 serial;                        ///< VaultIndex::serial()
+    const quint64 serial;                             ///< VaultIndex::serial()
     std::deque<index_detail::ChangeRecord> changeLog; ///< oldest first
-    int logStart = 0;          ///< the log covers the versions after this one
-    qsizetype loggedPaths = 0; ///< paths in changeLog's records
-    index_detail::ChangeRecord pending; ///< the change being applied (markChanged() logs it)
+    int logStart = 0;                                 ///< the log covers the versions after this one
+    qsizetype loggedPaths = 0;                        ///< paths in changeLog's records
+    index_detail::ChangeRecord pending;               ///< the change being applied (markChanged() logs it)
 
     // ---- lookups --------------------------------------------------------------------------------
     const Entry *entry(const VaultPath &path) const;

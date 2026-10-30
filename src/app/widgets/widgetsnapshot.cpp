@@ -7,8 +7,8 @@
 #include "dates/local.h"
 #include "index/querycache.h"
 #include "index/vaultindex.h"
-#include "reminders/calendar.h"
 #include "notebook/journals.h"
+#include "reminders/calendar.h"
 #include "vault/vault.h"
 
 #include <QFileInfo>
