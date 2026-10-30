@@ -249,6 +249,23 @@ private:
 
 class VaultIndex;
 
+/// What changed in an index since one of its versions (VaultIndex::changesSince()): what a
+/// consumer that keeps results per note (index/notecache.h) has to compute again.
+struct IndexChanges {
+    /// False when the log does not reach back to that version (a clear(), a setConfig() that
+    /// parsed every note again, more changes than the log keeps, a version the index never had):
+    /// treat every note as changed.
+    bool complete = false;
+    /// Notes whose parse or link resolution changed, sorted (code units): updated, added and
+    /// removed notes (a rename: both paths), notes whose links now resolve to another file
+    /// (relink), and notes with `((id))` references to a block id the changed notes define
+    /// (the texts they show).
+    QList<VaultPath> notes;
+    /// A note or an attachment was added, removed or renamed, or aliases changed: link, tag and
+    /// `page:` resolution may differ in any note.
+    bool names = false;
+};
+
 /// VaultIndex::planRelocation() a few notes at a time, for a caller that must stay responsive
 /// (the dragged row's ghost asks for every folder it rests on): the lookup tables and the notes
 /// to look at are prepared at once, step() plans notes until its time is up. The plan equals
@@ -287,6 +304,14 @@ private:
 /// resolution the change can affect are re-resolved. The full-text index is updated lazily: in
 /// the background once changes pause (300 ms; a few milliseconds per event-loop turn, so nothing
 /// blocks), or at the latest by the next search().
+///
+/// The derived lists (paths(), tasks(), reminders(), journals(), notesWithQueries(), tags(), …)
+/// follow each change instead of being built again: a list built once is patched with the
+/// changed note (its place by path, its tasks and reminders), or dropped only when the change
+/// touches what it lists (a list of tags when the note's tags changed, missing pages when names
+/// or links changed); many changes between two reads drop the lists, the next read builds them
+/// once. changesSince() tells consumers that keep their own per-note results which notes to
+/// compute again (index/notecache.h, QueryCache, CalendarCache, NotificationCache).
 ///
 /// changed() is coalesced: emitted once per event-loop turn after any number of changes (zero
 /// timer), or right away by the endBatch() that closes the outermost batch. version() grows
@@ -378,6 +403,14 @@ public:
 
     /// Incremented on every change.
     int version() const;
+    /// Unique per VaultIndex in the process: a consumer keyed by version() tells indexes apart
+    /// with it (another notebook's index may have the same version).
+    quint64 serial() const;
+    /// Changes kept by the log: an older version gives an incomplete IndexChanges.
+    static constexpr int MaxLoggedChanges = 1024;
+    /// What changed since `version` (an earlier version() of this index); complete and empty for
+    /// the current version.
+    IndexChanges changesSince(int version) const;
 
     /// Build the full-text documents of all changed notes now (otherwise done in the background
     /// or by the next search()).
@@ -395,7 +428,7 @@ public:
     QList<VaultPath> paths() const;
     /// Known attachment paths (non-Markdown files), sorted.
     QList<VaultPath> attachments() const;
-    /// Notes with a ```query block (sorted by path; cached until the next change).
+    /// Notes with a ```query block (sorted by path).
     QList<VaultPath> notesWithQueries() const;
     /// Is `path` an indexed note or attachment?
     bool contains(const VaultPath &path) const;
@@ -476,6 +509,10 @@ public:
     QList<TaskRef> tasks() const;
     /// All reminders (notes by path, document order), with the task when the block is one.
     QList<ReminderRef> reminders() const;
+    /// The tasks / reminders of one note as tasks() / reminders() list them (empty for an
+    /// unknown path).
+    QList<TaskRef> tasksOf(const VaultPath &path) const;
+    QList<ReminderRef> remindersOf(const VaultPath &path) const;
     /// Daily notes, newest first (ties by path).
     QList<JournalRef> journals() const;
 
@@ -504,13 +541,13 @@ public:
     QList<TagSuggestion> suggestTags(const QString &prefix, int limit = 20) const;
     /// The page-property keys of all notes (YAML frontmatter and leading `key:: value` lines; the
     /// note mode key `brulion` and block properties left out), keys equal case-insensitively
-    /// (NFC) merged, most used first, then by key. Cached until the next change.
+    /// (NFC) merged, most used first, then by key. Kept until a note's page properties change.
     QList<PropertyKeyInfo> propertyKeys() const;
     /// The values written for page property `key` (case-insensitive): scalars as text, list items
     /// one by one (markdown::propertyValueTexts()), one entry per value (case-insensitive, NFC; the
     /// most used spelling), most used first (ties alphabetically); with `prefix` those whose
     /// folded text starts with it, then those containing it (diacritics ignored: "zol" finds
-    /// "Żółw"). At most `limit`. Cached per key until the next change.
+    /// "Żółw"). At most `limit`. Kept per key until a note's page properties change.
     QList<PropertyValueCount> propertyValues(const QString &key, const QString &prefix = {}, int limit = 20) const;
 
     // ---- graph ----------------------------------------------------------------------------------

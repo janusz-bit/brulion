@@ -28,7 +28,10 @@ class VaultIndex;
 /// **Scheduling** (all sinks): refresh() hands upcomingNotifications(index, now, horizonDays,
 /// maxScheduled) to NotificationSink::schedule() (whole set; skipped when unchanged, always
 /// sent by start()). Refreshes happen on start(), debounced after index changes
-/// (DefaultDebounceMs), every hour (the horizon slides) and after clock jumps.
+/// (DefaultDebounceMs), every hour (the horizon slides) and after clock jumps. The occurrences
+/// come from one NotificationCache of the days [today − HistoryDays − 1, today + horizonDays +
+/// 1]: after a save only the saved note is computed again, for the refresh and the in-app
+/// checks alike (the days move once a day: then every note).
 ///
 /// **In-app firing** (sinks whose firesWhenClosed() is false — queried by start()):
 /// * one precise QTimer is armed for the next reminder within the next 24 h (re-planned on every
@@ -118,6 +121,8 @@ public:
     int droppedCount() const;
     /// When the in-app timer fires next (invalid when not armed).
     QDateTime nextFireTime() const;
+    /// The occurrences kept between refreshes (tests: what a refresh computed again).
+    const NotificationCache &occurrenceCache() const { return m_occurrences; }
     /// Reminders that were due while the app was not running and too late to show, oldest
     /// first (see the class comment).
     QList<ScheduledNotification> missed() const;
@@ -150,6 +155,8 @@ Q_SIGNALS:
 
 private:
     void scheduleRefresh();
+    /// The days m_occurrences keeps for `now`.
+    void followDays(const QDateTime &now);
     void refreshAt(const QDateTime &now);
     void processDue(const QDateTime &now);
     void armTimer(const QDateTime &now);
@@ -189,6 +196,7 @@ private:
     QElapsedTimer m_beatClock;
     QDateTime m_beatWall;
 
+    NotificationCache m_occurrences;
     QList<ScheduledNotification> m_upcoming;
     int m_dropped = 0;
     QDateTime m_nextFire;

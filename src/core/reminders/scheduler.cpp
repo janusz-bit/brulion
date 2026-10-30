@@ -249,6 +249,7 @@ void ReminderScheduler::stop()
     m_replanTimer.stop();
     m_heartbeat.stop();
     m_nextFire = QDateTime();
+    m_occurrences.clear();
     // The time of the last check (not "now"): reminders due after it are caught up next time.
     if (m_inApp && m_lastSeen.isValid())
         setLastSeen(m_lastSeen, true);
@@ -275,14 +276,23 @@ void ReminderScheduler::scheduleRefresh()
         m_debounce.start();
 }
 
+void ReminderScheduler::followDays(const QDateTime &now)
+{
+    // The look-back of processDue() and pruneMissed() (HistoryDays), the horizon, a day of slack
+    // either side; local days.
+    const QDate today = now.toLocalTime().date();
+    m_occurrences.setDays(today.addDays(-HistoryDays - 1), today.addDays(m_horizonDays + 1));
+}
+
 void ReminderScheduler::refreshAt(const QDateTime &now)
 {
     m_debounce.stop();
     if (!m_running || !m_index || !m_sink)
         return;
+    followDays(now);
     int dropped = 0;
     QList<ScheduledNotification> next =
-            upcomingNotifications(*m_index, now, m_horizonDays, m_maxScheduled, &dropped, m_locale);
+            m_occurrences.upcoming(*m_index, now, m_horizonDays, m_maxScheduled, &dropped, m_locale);
     applyRingMinutes(next);
     m_dropped = dropped;
     if (m_forceSchedule || next != m_upcoming) {
@@ -329,7 +339,8 @@ void ReminderScheduler::processDue(const QDateTime &now)
     QDateTime from = now.addSecs(-60);
     if (m_lastSeen.isValid() && m_lastSeen < from)
         from = std::max(m_lastSeen, now.addDays(-HistoryDays));
-    QList<ScheduledNotification> due = notificationsBetween(*m_index, from, now, m_locale);
+    followDays(now);
+    QList<ScheduledNotification> due = m_occurrences.between(*m_index, from, now, m_locale);
     applyRingMinutes(due);
 
     bool handledChanged = false;
@@ -370,8 +381,9 @@ void ReminderScheduler::armTimer(const QDateTime &now)
     m_nextFire = QDateTime();
     if (!m_running || !m_inApp || !m_index)
         return;
+    followDays(now);
     const QList<ScheduledNotification> soon =
-            notificationsBetween(*m_index, now, now.addSecs(qint64(TimerWindowHours) * 3600), m_locale);
+            m_occurrences.between(*m_index, now, now.addSecs(qint64(TimerWindowHours) * 3600), m_locale);
     for (const ScheduledNotification &n : soon) {
         if (n.at > now && !m_handled.contains(n.id)) {
             m_nextFire = n.at;
@@ -476,7 +488,8 @@ void ReminderScheduler::pruneMissed(const QDateTime &now)
     if (check) {
         const QDateTime from = m_missed.constFirst().at;
         const QDateTime to = std::max(m_missed.constLast().at, from);
-        for (const ScheduledNotification &n : notificationsBetween(*m_index, from, to, m_locale))
+        followDays(now);
+        for (const ScheduledNotification &n : m_occurrences.between(*m_index, from, to, m_locale))
             alive.insert(n.id, n.taskLine);
     }
     const qsizetype removed = m_missed.removeIf(

@@ -2,6 +2,7 @@
 // Part of the reminders module — see reminders/reminders.h.
 #pragma once
 
+#include "index/notecache.h"
 #include "types.h"
 
 #include <QDate>
@@ -10,11 +11,10 @@
 #include <QString>
 #include <QTime>
 
+#include <memory>
 #include <optional>
 
 namespace brulion {
-
-class VaultIndex;
 
 /// One entry of the calendar.
 struct CalendarItem {
@@ -69,6 +69,30 @@ struct CalendarItem {
 /// start, done), reminders. A recurring series contributes at most 500 dates. `from` > `to` or
 /// invalid dates give an empty list.
 QList<CalendarItem> calendarItems(const VaultIndex &index, QDate from, QDate to);
+
+/// calendarItems() of a range asked for again and again (the calendar view, the side panel's
+/// month): keeps every note's task and reminder items of the range and, after an index change,
+/// computes only the notes VaultIndex::changesSince() names (another range: all of them). The
+/// same result as calendarItems(), which is a CalendarCache without history.
+class CalendarCache {
+public:
+    CalendarCache();
+    ~CalendarCache();
+    CalendarCache(CalendarCache &&) noexcept;
+    CalendarCache &operator=(CalendarCache &&) noexcept;
+    CalendarCache(const CalendarCache &) = delete;
+    CalendarCache &operator=(const CalendarCache &) = delete;
+
+    QList<CalendarItem> items(const VaultIndex &index, QDate from, QDate to);
+    /// What the last items() computed again (tests).
+    const NoteCacheSync &lastSync() const;
+    /// Forget everything (the next items() computes every note).
+    void clear();
+
+private:
+    struct Private;
+    std::unique_ptr<Private> d;
+};
 
 } // namespace brulion
 

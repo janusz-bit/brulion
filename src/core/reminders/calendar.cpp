@@ -12,10 +12,12 @@ using namespace reminders_detail;
 
 namespace {
 
-/// Collects the items of one date range.
+/// Collects the items of one date range into `out`.
 class CalendarBuilder {
 public:
-    CalendarBuilder(const VaultIndex &index, QDate from, QDate to) : m_index(index), m_from(from), m_to(to) { }
+    CalendarBuilder(const VaultIndex &index, QDate from, QDate to, QList<CalendarItem> &out)
+        : m_index(index), m_from(from), m_to(to), m_items(out)
+    { }
 
     void addJournals()
     {
@@ -33,30 +35,36 @@ public:
         }
     }
 
-    void addTasks()
+    /// The task dates of one note (document order), as index.tasks() lists its tasks.
+    void addTasks(const VaultPath &path, const ParsedNote &note)
     {
-        const QList<TaskRef> tasks = m_index.tasks();
-        for (const TaskRef &ref : tasks)
-            addTask(ref);
+        if (note.tasks.isEmpty())
+            return;
+        for (const Block &block : note.blocks) {
+            if (block.task)
+                addTask(path, *block.task);
+        }
     }
 
-    void addReminders()
+    /// The reminders of one note (document order).
+    void addReminders(const VaultPath &path)
     {
-        const QList<ReminderRef> reminders = m_index.reminders();
+        const QList<ReminderRef> reminders = m_index.remindersOf(path);
         for (const ReminderRef &ref : reminders)
             addReminder(ref);
     }
 
-    QList<CalendarItem> take()
+    /// The final order: by date; within a day timed items first (by time), then all-day ones;
+    /// stable.
+    static void sort(QList<CalendarItem> &items)
     {
-        std::stable_sort(m_items.begin(), m_items.end(), [](const CalendarItem &a, const CalendarItem &b) {
+        std::stable_sort(items.begin(), items.end(), [](const CalendarItem &a, const CalendarItem &b) {
             if (a.date != b.date)
                 return a.date < b.date;
             if (a.time.has_value() != b.time.has_value())
                 return a.time.has_value(); // timed items before all-day ones
             return a.time && *a.time < *b.time;
         });
-        return std::move(m_items);
     }
 
 private:
@@ -72,9 +80,8 @@ private:
         return plain.isEmpty() ? pageTitle(path) : plain;
     }
 
-    void addTask(const TaskRef &ref)
+    void addTask(const VaultPath &path, const Task &task)
     {
-        const Task &task = ref.task;
         const std::optional<dates::RecurrenceRule> rule = ruleOf(task.recurrence);
         // Done / cancelled series stop: only their written dates are shown.
         const std::optional<dates::RecurrenceRule> expand = isClosed(task) ? std::nullopt : rule;
@@ -84,13 +91,13 @@ private:
         QString title;
         const auto add = [&](CalendarItem::Kind kind, const DateSpec &spec, const DateSpec &written) {
             if (title.isNull())
-                title = titleFor(task.text, ref.path);
+                title = titleFor(task.text, path);
             CalendarItem item;
             item.date = spec.date;
             item.time = spec.time;
             item.kind = kind;
             item.title = title;
-            item.path = ref.path;
+            item.path = path;
             item.line = task.line;
             item.status = task.status;
             item.recurring = recurring;
@@ -153,7 +160,7 @@ private:
     const VaultIndex &m_index;
     const QDate m_from;
     const QDate m_to;
-    QList<CalendarItem> m_items;
+    QList<CalendarItem> &m_items;
     // The block of the previous reminder (see addReminder()).
     VaultPath m_blockPath;
     int m_blockIndex = -1;
@@ -161,17 +168,66 @@ private:
     QString m_blockTitle;
 };
 
+/// The items of one note within the range.
+struct NoteItems {
+    QList<CalendarItem> tasks;
+    QList<CalendarItem> reminders;
+};
+
 } // namespace
 
-QList<CalendarItem> calendarItems(const VaultIndex &index, QDate from, QDate to)
+struct CalendarCache::Private {
+    NoteCache<NoteItems> notes; ///< notes with items in the range
+    NoteCacheSync last;
+};
+
+CalendarCache::CalendarCache() : d(std::make_unique<Private>()) { }
+CalendarCache::~CalendarCache() = default;
+CalendarCache::CalendarCache(CalendarCache &&) noexcept = default;
+CalendarCache &CalendarCache::operator=(CalendarCache &&) noexcept = default;
+
+QList<CalendarItem> CalendarCache::items(const VaultIndex &index, QDate from, QDate to)
 {
     if (!from.isValid() || !to.isValid() || from > to)
         return {};
-    CalendarBuilder builder(index, from, to);
-    builder.addJournals();
-    builder.addTasks();
-    builder.addReminders();
-    return builder.take();
+    const QString key = from.toString(Qt::ISODate) + u'|' + to.toString(Qt::ISODate);
+    d->last = d->notes.sync(
+            index, key, false,
+            [&](const VaultPath &path, const ParsedNote &note) {
+                NoteItems items;
+                if (note.tasks.isEmpty() && note.reminders.isEmpty())
+                    return items;
+                CalendarBuilder(index, from, to, items.tasks).addTasks(path, note);
+                CalendarBuilder(index, from, to, items.reminders).addReminders(path);
+                return items;
+            },
+            [](const NoteItems &items) { return !items.tasks.isEmpty() || !items.reminders.isEmpty(); });
+    // Journals, then every note's task dates (notes by path), then every note's reminders —
+    // the order the stable sort keeps for ties.
+    QList<CalendarItem> out;
+    CalendarBuilder(index, from, to, out).addJournals();
+    for (const auto &[path, items] : d->notes.values())
+        out.append(items.tasks);
+    for (const auto &[path, items] : d->notes.values())
+        out.append(items.reminders);
+    CalendarBuilder::sort(out);
+    return out;
+}
+
+const NoteCacheSync &CalendarCache::lastSync() const
+{
+    return d->last;
+}
+
+void CalendarCache::clear()
+{
+    d->notes.clear();
+    d->last = NoteCacheSync();
+}
+
+QList<CalendarItem> calendarItems(const VaultIndex &index, QDate from, QDate to)
+{
+    return CalendarCache().items(index, from, to);
 }
 
 } // namespace brulion

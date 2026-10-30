@@ -4,6 +4,7 @@
 #pragma once
 
 #include "dates/names.h"
+#include "index/notecache.h"
 #include "types.h"
 
 #include <QDateTime>
@@ -12,9 +13,9 @@
 #include <QString>
 #include <QStringView>
 
-namespace brulion {
+#include <memory>
 
-class VaultIndex;
+namespace brulion {
 
 /// One notification to show at a local wall-clock time: one occurrence of a `⏰` / `⏰!` /
 /// `(@…)` reminder.
@@ -128,6 +129,46 @@ QList<ScheduledNotification> notificationsBetween(const VaultIndex &index, const
 QList<ScheduledNotification> upcomingNotifications(const VaultIndex &index, const QDateTime &now, int horizonDays = 14,
                                                    int max = 64, int *dropped = nullptr,
                                                    dates::UiLocale locale = dates::UiLocale::Polish);
+
+/// The reminder occurrences of a window of whole local days, kept per note across index changes
+/// (ReminderScheduler: the refresh after a save computes the saved note only). between() and
+/// upcoming() equal notificationsBetween() and upcomingNotifications() — those are a cache
+/// without history —; a request reaching outside the days (or before setDays()) is computed
+/// directly. After an index change only the notes VaultIndex::changesSince() names are computed
+/// again; other days or another locale: all of them.
+class NotificationCache {
+public:
+    NotificationCache();
+    ~NotificationCache();
+    NotificationCache(NotificationCache &&) noexcept;
+    NotificationCache &operator=(NotificationCache &&) noexcept;
+    NotificationCache(const NotificationCache &) = delete;
+    NotificationCache &operator=(const NotificationCache &) = delete;
+
+    /// Keep the occurrences of the local days [first, last] (inclusive).
+    void setDays(QDate first, QDate last);
+    QDate firstDay() const;
+    QDate lastDay() const;
+    /// notificationsBetween().
+    QList<ScheduledNotification> between(const VaultIndex &index, const QDateTime &from, const QDateTime &to,
+                                         dates::UiLocale locale = dates::UiLocale::Polish);
+    /// upcomingNotifications().
+    QList<ScheduledNotification> upcoming(const VaultIndex &index, const QDateTime &now, int horizonDays = 14,
+                                          int max = 64, int *dropped = nullptr,
+                                          dates::UiLocale locale = dates::UiLocale::Polish);
+    /// What the last request synced (nothing when it was computed directly), and how many notes
+    /// were computed for the kept days so far (tests).
+    const NoteCacheSync &lastSync() const;
+    int computedNotes() const;
+    /// Forget the kept occurrences (the days stay).
+    void clear();
+
+private:
+    struct Private;
+    std::unique_ptr<Private> d;
+    QList<ScheduledNotification> occurrences(const VaultIndex &index, const QDateTime &from, const QDateTime &to,
+                                             dates::UiLocale locale);
+};
 
 } // namespace brulion
 
