@@ -504,8 +504,10 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   undo / redo apply it as a document operation through `BlockListModel::apply()`
   (`PageController::applyStep()`: `BlockDocument::revert` / `reapply`): nothing is read again,
   only the changed blocks are parsed, every block keeps its uid. Rows of unchanged blocks stay,
-  a changed block keeps its row (`dataChanged`: its delegate, fold, an open table-cell editor and
-  a tracked handle survive — `undoKeepsChangedRowsInPlace`), only blocks the step adds or removes
+  a changed block keeps its row (`dataChanged`: its delegate, fold and a tracked handle survive —
+  `undoKeepsChangedRowsInPlace`; an inline editor open on it gets the step's text; a table cell
+  being edited is closed before the step — its field would keep the old text and write it back —
+  and the cell toolbar's Cofnij / Ponów open it again), only blocks the step adds or removes
   come and go, never a reset; undo costs about what the command cost (`largePageTouchesOneRow`
   compares their medians). Typing merges into one step per block (`BlockDocument::composed`); a
   keystroke that also changed blocks far away — typing at the top of a page renumbers a loose

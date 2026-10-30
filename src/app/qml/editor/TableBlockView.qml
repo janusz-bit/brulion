@@ -175,7 +175,9 @@ Item {
             controller.undo()
         else
             controller.redo()
-        // A changed table is a new delegate: the editor finds it again.
+        // The cell was closed before the step (its field would keep the text the step replaced);
+        // the table keeps its delegate (undo changes the block in place): the cell opens again
+        // with the text the step left in it.
         if (controller.editingRow < 0)
             editor.editTableCell(blockRow, r, c)
     }
@@ -454,8 +456,9 @@ Item {
                                         if (event.key === Qt.Key_Escape) {
                                             done = true
                                             root.finish()
-                                            // Cancel: the cell's typing is one undo step. Undoing it
-                                            // rebuilds this delegate, so keep what is needed.
+                                            // Cancel: the cell's typing is one undo step, undone
+                                            // with the cell closed first (finish()): its field
+                                            // would keep the text the undo takes back.
                                             const controller = root.block.controller
                                             const list = root.block.editor.listView
                                             const blockRow = root.block.index
