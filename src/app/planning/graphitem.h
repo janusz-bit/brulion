@@ -352,6 +352,7 @@ private:
     };
     QHash<int, LabelText> m_labelTexts;    ///< both paths (the GUI thread, or the render thread while it waits)
     std::atomic<double> m_lastPaintMs{0};
+    std::atomic<bool> m_softwareRendering{false}; ///< the window's scene graph is the software renderer
     double m_slowPaintMs = 16;
     QElapsedTimer m_clock;                  ///< started at construction (any thread reads it)
     std::atomic<qint64> m_lastPaintEnd{-1}; ///< m_clock time at the end of the last paint, ns

@@ -46,11 +46,6 @@ double distance(QPointF a, QPointF b)
     return std::hypot(a.x() - b.x(), a.y() - b.y());
 }
 
-bool softwareRenderer()
-{
-    return QQuickWindow::graphicsApi() == QSGRendererInterface::Software;
-}
-
 /// The software renderer's node: a QPainter frame as a texture (the texture owned here).
 class GraphImageNode : public QSGNode {
 public:
@@ -516,7 +511,8 @@ void GraphItem::repaintMoving()
     // and then, so the user's input gets most of the time. The settled layout is painted at once
     // (runningChanged), so are gestures and camera moves (they call update()). The scene graph
     // renderer only uploads new meshes: every frame.
-    const bool throttle = softwareRenderer() && m_model && m_model->running() && lastPaintMs() > m_slowPaintMs
+    const bool throttle = m_softwareRendering.load(std::memory_order_relaxed) && m_model && m_model->running()
+                          && lastPaintMs() > m_slowPaintMs
                           && m_gesture == Gesture::None && m_camera.state() != QAbstractAnimation::Running;
     if (!throttle) {
         m_repaintTimer.stop();
@@ -1321,6 +1317,7 @@ QSGNode *GraphItem::updatePaintNode(QSGNode *old, UpdatePaintNodeData *)
     QElapsedTimer timer;
     timer.start();
     const bool software = win->rendererInterface()->graphicsApi() == QSGRendererInterface::Software;
+    m_softwareRendering.store(software, std::memory_order_relaxed);
     QSGNode *node = software ? updateImageNode(old, win) : updateSceneNode(old, win);
     if (!software) {
         m_lastPaintMs.store(double(timer.nsecsElapsed()) / 1e6, std::memory_order_relaxed);

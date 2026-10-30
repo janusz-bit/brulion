@@ -3,6 +3,7 @@
 #include <QHash>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 
@@ -46,6 +47,25 @@ Band band(double width, double fringe)
 void quad(Mesh &m, quint16 a, quint16 b, quint16 c, quint16 d)
 {
     m.indices.insert(m.indices.end(), {a, b, c, a, c, d});
+}
+
+constexpr int kMaxSegments = 64;
+
+/// cos / sin of the k-th of `segments` equal steps around the circle (tables built once).
+const std::vector<QPointF> &unitCircle(int segments)
+{
+    static const auto tables = [] {
+        std::array<std::vector<QPointF>, kMaxSegments + 1> t;
+        for (int n = 3; n <= kMaxSegments; ++n) {
+            t[size_t(n)].reserve(size_t(n));
+            for (int k = 0; k < n; ++k) {
+                const double a = 2 * std::numbers::pi * k / n;
+                t[size_t(n)].emplace_back(std::cos(a), std::sin(a));
+            }
+        }
+        return t;
+    }();
+    return tables[size_t(std::clamp(segments, 3, kMaxSegments))];
 }
 
 } // namespace
@@ -111,21 +131,18 @@ void appendDisc(MeshChunks &out, QPointF centre, double radius, QRgb colour, dou
 {
     if (!finite(centre) || !std::isfinite(radius) || !std::isfinite(fringe) || radius <= 0)
         return;
-    segments = std::clamp(segments, 3, 64);
+    segments = std::clamp(segments, 3, kMaxSegments);
     const double inner = std::max(0.0, radius - fringe / 2);
     const double outer = radius + fringe / 2;
     const QRgb fill = scaled(colour, fringe > 0 && 2 * radius < fringe ? 2 * radius / fringe : 1.0);
+    const std::vector<QPointF> &circle = unitCircle(segments);
     Mesh &m = out.room(1 + 2 * segments);
     const auto base = quint16(m.vertices.size());
     m.vertices.push_back(vertex(centre, fill));
-    for (int k = 0; k < segments; ++k) {
-        const double a = 2 * std::numbers::pi * k / segments;
-        m.vertices.push_back(vertex(centre + QPointF(std::cos(a), std::sin(a)) * inner, fill));
-    }
-    for (int k = 0; k < segments; ++k) {
-        const double a = 2 * std::numbers::pi * k / segments;
-        m.vertices.push_back(vertex(centre + QPointF(std::cos(a), std::sin(a)) * outer, 0));
-    }
+    for (const QPointF &u : circle)
+        m.vertices.push_back(vertex(centre + u * inner, fill));
+    for (const QPointF &u : circle)
+        m.vertices.push_back(vertex(centre + u * outer, 0));
     const auto n = quint16(segments);
     for (quint16 k = 0; k < n; ++k) {
         const auto k1 = quint16((k + 1) % n);
@@ -139,18 +156,17 @@ void appendRing(MeshChunks &out, QPointF centre, double radius, double width, QR
     if (!finite(centre) || !std::isfinite(radius) || !std::isfinite(width) || !std::isfinite(fringe) || radius <= 0
         || width <= 0)
         return;
-    segments = std::clamp(segments, 3, 64);
+    segments = std::clamp(segments, 3, kMaxSegments);
     const Band b = band(width, fringe);
     const QRgb c = scaled(colour, b.factor);
     const QRgb rowColour[4] = {0, c, c, 0};
+    const std::vector<QPointF> &circle = unitCircle(segments);
     Mesh &m = out.room(4 * segments);
     const auto base = quint16(m.vertices.size());
     for (int row = 0; row < 4; ++row) {
         const double r = std::max(0.0, radius + b.o[row]);
-        for (int k = 0; k < segments; ++k) {
-            const double a = 2 * std::numbers::pi * k / segments;
-            m.vertices.push_back(vertex(centre + QPointF(std::cos(a), std::sin(a)) * r, rowColour[row]));
-        }
+        for (const QPointF &u : circle)
+            m.vertices.push_back(vertex(centre + u * r, rowColour[row]));
     }
     const auto n = quint16(segments);
     for (quint16 row = 0; row < 3; ++row) {

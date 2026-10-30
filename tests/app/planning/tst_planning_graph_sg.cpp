@@ -63,9 +63,10 @@ Files bigVault(int pages, int linksPerPage)
     return files;
 }
 
+/// The second ctest entry asks for the software renderer.
 bool softwareBackend()
 {
-    return QQuickWindow::graphicsApi() == QSGRendererInterface::Software;
+    return qEnvironmentVariable("QT_QUICK_BACKEND") == u"software"_s;
 }
 
 /// A window with a GraphItem filling it.
@@ -84,6 +85,17 @@ struct Scene {
         item->setModel(model);
         swapped = std::make_unique<QSignalSpy>(&window, &QQuickWindow::frameSwapped);
         window.show();
+    }
+    /// Shown, and the first frame synchronised; false when none comes.
+    bool firstFrame(int timeoutMs = 5000)
+    {
+        if (!QTest::qWaitForWindowExposed(&window))
+            return false;
+        QElapsedTimer t;
+        t.start();
+        while (item->sceneStats().frames == 0 && t.elapsed() < timeoutMs)
+            QTest::qWait(5);
+        return item->sceneStats().frames > 0;
     }
     /// Waits for a frame after the current one; false when none comes.
     bool nextFrame(int timeoutMs = 5000)
@@ -106,9 +118,13 @@ class TestGraphSceneGraph : public QObject {
 public:
     static void initMain()
     {
-        // The default entry: the RHI null backend (the scene graph without a GPU).
-        if (qEnvironmentVariableIsEmpty("QT_QUICK_BACKEND"))
+        // The default entry: the RHI null backend (the scene graph without a GPU). Asked for by
+        // name: without a request Qt Quick takes the software renderer on platforms without
+        // OpenGL (offscreen).
+        if (!softwareBackend()) {
+            QQuickWindow::setSceneGraphBackend(u"rhi"_s);
             QQuickWindow::setGraphicsApi(QSGRendererInterface::Null);
+        }
     }
 
 private Q_SLOTS:
@@ -123,8 +139,8 @@ private Q_SLOTS:
         m.step(300);
         Scene scene(&m);
         GraphItem *item = scene.item;
-        if (!QTest::qWaitForWindowExposed(&scene.window) || !scene.nextFrame())
-            QSKIP("no frame from the RHI null backend on this platform (run under Xvfb with QSG_RHI_BACKEND=opengl)");
+        if (!scene.firstFrame())
+            QSKIP("no frame from the RHI null backend on this platform");
         QCOMPARE(scene.window.rendererInterface()->graphicsApi(), QSGRendererInterface::Null);
         GraphItem::SceneStats s = item->sceneStats();
         QVERIFY(!s.software);
@@ -179,8 +195,9 @@ private Q_SLOTS:
         m.step(30);
         Scene scene(&m, QSize(1280, 800));
         GraphItem *item = scene.item;
-        if (!QTest::qWaitForWindowExposed(&scene.window) || !scene.nextFrame())
+        if (!scene.firstFrame())
             QSKIP("no frame from the RHI null backend on this platform");
+        QCOMPARE(scene.window.rendererInterface()->graphicsApi(), QSGRendererInterface::Null);
         GraphItem::SceneStats s = item->sceneStats();
         QVERIFY2(s.vertices > 65535, qPrintable(QString::number(s.vertices)));
         QVERIFY(s.chunks >= 2);
@@ -204,8 +221,9 @@ private Q_SLOTS:
         m.setVaultIndex(index.get());
         Scene scene(&m);
         GraphItem *item = scene.item;
-        if (!QTest::qWaitForWindowExposed(&scene.window) || !scene.nextFrame())
+        if (!scene.firstFrame())
             QSKIP("no frame from the RHI null backend on this platform");
+        QCOMPARE(scene.window.rendererInterface()->graphicsApi(), QSGRendererInterface::Null);
         QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000 * BRULION_TEST_SLOWDOWN);
         QTest::qWait(100); // the settled frame
         const int builds = item->sceneStats().meshBuilds;
@@ -223,8 +241,7 @@ private Q_SLOTS:
         m.setVaultIndex(index.get());
         {
             Scene scene(&m);
-            QVERIFY(QTest::qWaitForWindowExposed(&scene.window));
-            scene.nextFrame(2000);
+            scene.firstFrame(2000);
         } // the window, its scene graph and the item go (the layout may still run)
         QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 10000);
         QVERIFY(m.alpha() < m.layout().params().alphaMin);
@@ -241,8 +258,8 @@ private Q_SLOTS:
         m.step(300);
         Scene scene(&m);
         GraphItem *item = scene.item;
-        QVERIFY(QTest::qWaitForWindowExposed(&scene.window));
-        QVERIFY(scene.nextFrame());
+        QVERIFY(scene.firstFrame());
+        QCOMPARE(scene.window.rendererInterface()->graphicsApi(), QSGRendererInterface::Software);
         QVERIFY(item->sceneStats().software);
         QVERIFY(item->sceneStats().labels > 0);
         // Ink at every node (without labels, which may cover another node).

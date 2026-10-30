@@ -668,7 +668,7 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(m.framesApplied() >= 2, 5000);
         const int nodes = m.nodeCount();
         index->update(u"Nowa strona.md"_s, u"Łączy [[Strona 1]] i [[Strona 2]]\n"_s);
-        QCOMPARE(m.nodeCount(), nodes + 1);
+        QTRY_COMPARE(m.nodeCount(), nodes + 1);
         QVERIFY(m.running());
         QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000 * BRULION_TEST_SLOWDOWN);
         QVERIFY(consistent);
@@ -731,7 +731,9 @@ private Q_SLOTS:
         frames.clear();
         settling.clear();
         index->update(u"Żółta strona.md"_s, u"[[Strona 3]]\n"_s);
+        QTRY_VERIFY(m.indexOf(u"Żółta strona.md"_s) >= 0);
         QVERIFY(!m.settling());
+        QVERIFY(m.running());
         QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000 * BRULION_TEST_SLOWDOWN);
         QCOMPARE(settling.count(), 0);
         QCOMPARE(frames.count(), 2);

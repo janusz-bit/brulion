@@ -82,4 +82,8 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
   „Obraz…” i dzienniku zdarzeń), AppImage w prawdziwej sesji GNOME i KDE (okno portalu; bez sesji
   pulpitu sprawdzone tylko z xdg-desktop-portal-gtk pod Xvfb), Android z Dyskiem Google
   (import i „Zapisz…”), przeglądarka na telefonie (kilka plików naraz);
-* wykres powiązań na wątku roboczym (L16).
+* **Graf — sprawdzić ręcznie i zmierzyć na telefonie** (układ na wątku roboczym i rysowanie przez
+  kartę graficzną zrobione, L16b): na prawdziwym telefonie z dużym notatnikiem przesuwanie,
+  powiększanie i przeciąganie stron w trakcie układania; Windows z kartą graficzną (Direct3D 11)
+  i przeglądarka na telefonie; pomiar na Raspberry Pi (rysowanie programowe) i w emulatorze
+  Androida.

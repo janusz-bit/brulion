@@ -452,7 +452,8 @@ void GraphModel::reheat(double alpha)
     if (m_simOwned) {
         m_sim.command({SimCommand::ReheatTo, -1, 0, 0, alpha});
         m_layout.setAlpha(std::max(m_layout.alpha(), alpha));
-        if (std::max(alpha, m_alpha) >= m_layout.params().alphaMin)
+        m_alpha = std::max(m_alpha, alpha); // what the worker makes of it
+        if (m_alpha >= m_layout.params().alphaMin)
             m_simRunning = true;
         setFastCooling(false); // a new run decides again
     } else {
@@ -542,6 +543,7 @@ void GraphModel::endDrag(int node)
         if (m_reducedMotion) {
             // Settle the neighbours without animating them: one final frame.
             m_sim.command({SimCommand::ReheatTo, -1, 0, 0, 0.1});
+            m_alpha = std::max(m_alpha, 0.1);
             m_simRunning = true;
         } else {
             m_simRunning = m_alpha >= m_layout.params().alphaMin;
