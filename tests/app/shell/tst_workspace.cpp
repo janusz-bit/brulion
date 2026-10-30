@@ -467,6 +467,9 @@ private Q_SLOTS:
         // attachment it reused.
         QString root;
         auto ws = open({}, &root);
+        // (On the disk: a file written beside the app is in the vault's list only after its
+        // watcher event.)
+        const auto onDisk = [&root](const QString &path) { return QFileInfo::exists(root + u'/' + path); };
         QVERIFY(ws->vault()->createBinary(u"assets/slajdy.pdf"_s, "%PDF-1.7 slajdy") == u"assets/slajdy.pdf"_s);
         QVERIFY(writeRaw(root + u"/Wykłady/Fizyka – wykład 3.pdf"_s, "%PDF-1.7 wykład"));
         const QString outside = m_tmp.filePath(u"pobrane-porzucone/"_s);
@@ -478,7 +481,7 @@ private Q_SLOTS:
         QCOMPARE(copy, u"assets/Wykład 5 – fale.pdf"_s);
         ws->discardImport(copy);
         QVERIFY(!ws->exists(copy));
-        QVERIFY(!QFileInfo::exists(root + u"/assets/Wykład 5 – fale.pdf"_s));
+        QVERIFY(!onDisk(copy));
         QVERIFY(QFileInfo::exists(outside + u"Wykład 5 – fale.pdf"_s));
         QVERIFY(ws->vault()->trash().isEmpty()); // (not to the trash: it was only a copy)
         ws->discardImport(copy);                 // twice: nothing
@@ -487,36 +490,36 @@ private Q_SLOTS:
         const QString own = ws->importAttachment(QUrl::fromLocalFile(root + u"/Wykłady/Fizyka – wykład 3.pdf"_s));
         QCOMPARE(own, u"Wykłady/Fizyka – wykład 3.pdf"_s);
         ws->discardImport(own);
-        QVERIFY(ws->exists(own));
+        QVERIFY(onDisk(own));
         const QString reused = ws->importAttachment(QUrl::fromLocalFile(outside + u"slajdy.pdf"_s));
         QCOMPARE(reused, u"assets/slajdy.pdf"_s);
         ws->discardImport(reused);
-        QVERIFY(ws->exists(reused));
+        QVERIFY(onDisk(reused));
         // Nor any other path.
         QVERIFY(ws->write(u"Notatka.md"_s, u"- zostaje"_s));
         ws->discardImport(u"Notatka.md"_s);
-        QVERIFY(ws->exists(u"Notatka.md"_s));
+        QVERIFY(onDisk(u"Notatka.md"_s));
 
         // A copy that a later pick used again (its drawings made): kept.
         const QString kept = ws->importAttachment(QUrl::fromLocalFile(outside + u"Wykład 5 – fale.pdf"_s));
         QCOMPARE(kept, u"assets/Wykład 5 – fale.pdf"_s);
         QCOMPARE(ws->importAttachment(QUrl::fromLocalFile(outside + u"Wykład 5 – fale.pdf"_s)), kept);
         ws->discardImport(kept);
-        QVERIFY(ws->exists(kept));
+        QVERIFY(onDisk(kept));
 
         // The browser's pick (bytes): the same.
         const QString picked = ws->importAttachment(u"tablica – ćwiczenia.png"_s, QByteArray("\x89PNG tablica"));
         QCOMPARE(picked, u"assets/tablica – ćwiczenia.png"_s);
         ws->discardImport(picked);
-        QVERIFY(!ws->exists(picked));
+        QVERIFY(!onDisk(picked));
 
         // Another notebook opened meanwhile: the old pick's path means nothing there.
         const QString before = ws->importAttachment(QUrl::fromLocalFile(outside + u"Wykład 5 – fale.pdf"_s));
-        QVERIFY(ws->exists(before));
+        QVERIFY(onDisk(before));
         QString error;
         QVERIFY2(ws->open(root, m_tmp.filePath(u"state-porzucone"_s), &error), qPrintable(error));
         ws->discardImport(before);
-        QVERIFY(ws->exists(before));
+        QVERIFY(onDisk(before));
     }
 
     void importAndroidDocument()
@@ -528,12 +531,14 @@ private Q_SLOTS:
         auto ws = open({}, &root);
         QVERIFY(writeRaw(root + u"/Wykłady/Fizyka – wykład 3.pdf"_s, "%PDF-1.7 wykład"));
         const QString canonical = QFileInfo(root).canonicalFilePath() + u"/Wykłady/Fizyka – wykład 3.pdf"_s;
+        if (!canonical.startsWith(u'/'))
+            QSKIP("Android's paths start with / (a drive letter here)");
         const QUrl document(u"content://com.android.providers.downloads.documents/document/raw%3A"_s
                             + QString::fromLatin1(QUrl::toPercentEncoding(canonical)));
         QCOMPARE(ws->importAttachment(document), u"Wykłady/Fizyka – wykład 3.pdf"_s);
         QVERIFY(!QFileInfo::exists(root + u"/assets/Fizyka – wykład 3.pdf"_s));
         ws->discardImport(u"Wykłady/Fizyka – wykład 3.pdf"_s);
-        QVERIFY(ws->exists(u"Wykłady/Fizyka – wykład 3.pdf"_s));
+        QVERIFY(QFileInfo::exists(root + u"/Wykłady/Fizyka – wykład 3.pdf"_s));
         // A document that names no file (MediaStore) is read as a document — which this desktop
         // cannot: nothing stored.
         QCOMPARE(ws->importAttachment(QUrl(u"content://com.android.providers.media.documents/document/image%3A42"_s)),
