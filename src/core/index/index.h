@@ -15,7 +15,8 @@
 //                           relinked, showing a changed block's ((id))), names}, serial(); the
 //                           derived lists below are patched per change, not built again
 //                  notes:   note(path) -> const ParsedNote* | nullptr, paths(), attachments(),
-//                           contains(path), content(path)
+//                           contains(path), content(path), forEachNote(visit) (path order, no
+//                           lookups)
 //                  links:   resolveLink(target, from = {}) -> optional<VaultPath> (SYNTAX §2:
 //                           exact path ± .md case-insensitive NFC, relative to the source folder,
 //                           base name — shortest path, then alphabetical —, aliases; attachments
@@ -71,8 +72,8 @@
 //                  lastSync()
 //   notecache.h    following the index (header-only): IndexFollower::follow(index, key,
 //                  dependsOnNames) -> NoteCacheSync{full, changed}; NoteCache<Value>::sync(index,
-//                  key, dependsOnNames, compute, keep), values() (by path) — what QueryCache,
-//                  reminders' CalendarCache and NotificationCache are built on
+//                  key, dependsOnNames, compute, keep[, fill]), values() (by path) — what
+//                  QueryCache, reminders' CalendarCache and NotificationCache are built on
 //
 //   loading elsewhere (notebook::IndexLoader): VaultIndex::prepare(path, content, config) /
 //                  prepareParsed() -> PreparedNote (any thread), updatePrepared(prepared,

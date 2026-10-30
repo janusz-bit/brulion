@@ -5,12 +5,21 @@ porównany z wydaniem **v0.1.1** (`f61a2a4`) i z **d1141c0** (ostatni commit prz
 optymalizacjami). Wszystkie trzy wersje zmierzono w tych samych warunkach i tymi samymi
 benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsku, niżej). Uzupełnione
 2026-10-29 o falę 5: pamięć indeksu, indeksowanie na kilku rdzeniach i gotowy indeks zapisany na
-urządzeniu (porównanie z `82d0357`), a 2026-10-30 o szybsze cofanie (L5, porównanie z `b3d9a3d`).
+urządzeniu (porównanie z `82d0357`), a 2026-10-30 o szybsze cofanie (L5, porównanie z `b3d9a3d`) i
+szybsze odświeżanie list po zapisie (L3, porównanie z `ef90077`).
 
 ## Podsumowanie dla użytkowników
 
 ### Co się poprawiło
 
+* **Odświeżanie po zapisie w dużych notatnikach** (2026-10-30). Po każdym zapisie Zadania,
+  Kalendarz, przypomnienia, bloki zapytań i widżety przeliczają tylko zmienioną notatkę zamiast
+  całego notatnika. W notatniku z 10 000 notatek cała ta praca trwa na komputerze ok. 6 ms zamiast
+  ok. 112 ms (prawie 19 razy krócej), więc pisanie przy otwartej liście zadań albo kalendarzu nie
+  zacina się przy zapisie. Wyniki są dokładnie takie jak wcześniej (sprawdzają to testy z losowymi
+  zmianami). Zapytania są przy okazji o połowę szybsze także wtedy, gdy liczą się od nowa, a
+  Kalendarz i Agenda otwierają się o kilka milisekund szybciej. Na telefonie jeszcze tego nie
+  zmierzyliśmy (przedtem ok. 1 s).
 * **Cofanie i ponawianie na długich stronach** (2026-10-30). Ctrl+Z i Ctrl+Shift+Z nie wczytują
   już całej strony od nowa, tylko zmieniają bloki, których dotyczy krok. Na stronie z 5000 bloków
   na komputerze cofnięcie widać po ok. 13 ms zamiast ok. 33 ms — tyle co po Enterze — a sama jego
@@ -92,8 +101,6 @@ podręcznej i offline), powrót do strony z 1000 notatek rysuje pierwszą klatk�
 * **Pamięć** — notatnik 10 000 notatek zajmuje na komputerze ok. 340 MB (wcześniej ok.
   500 MB). Na telefonach z 3–4 GB RAM system może zamykać Brulion w tle (notatki są zawsze
   zapisane na dysku).
-* **Po każdym zapisie** listy zadań, kalendarz, przypomnienia i bloki zapytań przeliczają się od
-  nowa: przy 10 000 notatkach to ok. 0,13 s pracy na komputerze i ok. 1 s na telefonie.
 * **Kalendarz i Agenda** otwierają się na telefonie przy dużym notatniku po 1–1,3 s.
   (Cofanie na bardzo długiej stronie trwało na telefonie ok. 0,2 s; od 2026-10-30 kosztuje tyle co
   Enter — na komputerze zmierzone, na telefonie jeszcze nie.)
@@ -558,6 +565,91 @@ work an undo does on the laptop fell by 85 %.
 median of five undos (and five redos) of an Enter on a 5000-block page must stay ≤ 3 × the median
 Enter + 2 ms (Debug build: Enter 2.8 ms, undo 2.0 ms, redo 2.0 ms).
 
+### L3: incremental derived lists (2026-10-30)
+
+Every `VaultIndex` change used to drop all derived lists, and everything listening to
+`VaultIndex::changed` computed its view of the whole vault again: the reminder scheduler (up to four
+passes per save on desktops), the Tasks view, the Calendar / Agenda and the side panel's month,
+every ```query block of the open pages, the Android widgets. Now:
+
+* **The index logs and patches.** Each change records the notes it touched — the note (both paths
+  of a rename), notes whose links now resolve elsewhere (relink), notes whose `((id))` show one of
+  its block ids — and whether names changed (a note or attachment added, removed or renamed, aliases):
+  `changesSince(version)`, a log of 1024 changes / 16 384 paths, incomplete after `clear()`, a
+  re-parsing `setConfig()` or an overflow; `serial()` tells indexes apart. The lists built once are
+  patched with the changed note instead of dropped: sorted entries (by path and by relevance),
+  `paths()`, `tasks()`, `reminders()` (the note's segment), `journals()`, `notesWithQueries()`; tags,
+  missing pages, tag targets and the page-property lists are dropped only when the change touches
+  what they list (its tags and their spellings, its unresolved links, names, its page properties).
+  Lists nobody read for 32 changes (a bulk load) are dropped and built once at the next read.
+* **Consumers follow the log** (`index/notecache.h`: `IndexFollower`, `NoteCache<Value>`): per-note
+  values, computed again for the logged notes only; anything resolving names (`page:`, `ref:`) goes
+  full when names change, and another key (query, day, range, language) is a full sync.
+* **Three core caches** share their per-note code with the free functions, which are the caches
+  without history: `QueryCache` (a query's matches in result order — position and sort keys, no
+  `Task` copies; the changed notes evaluated, sorted and merged in; `remind:` filters always full),
+  `CalendarCache` (each note's task and reminder items of the range), `NotificationCache` (each
+  note's occurrences of a window of days; requests reaching outside it are computed directly).
+* **The app keeps them**: `ReminderScheduler` (one `NotificationCache` of [today − 8 days,
+  today + horizon + 1] for its refresh, the in-app firing checks and the missed-list pruning),
+  `TaskListModel` (a `QueryCache`; the changed notes' tasks merged into its sorted list, page titles
+  compared by ranks — a merge bringing a new title rebuilds), `CalendarModel` (a `CalendarCache`;
+  the overdue list from an `OverdueCache`: the old scan of open tasks due before today, per note),
+  `Workspace` (the last 4 calendar ranges and 8 queries: the side panel's month, query blocks),
+  `WidgetPublisher` (the snapshot's caches kept across publishes).
+* **Full syncs stay as cheap as the old full computation.** A first view, another range or the
+  date picker's marks compute everything: a `NoteCache` then fills its values from the index's own
+  task and reminder lists (contiguous, kept up to date by the index) rather than visiting 10 000
+  notes one by one, one-off reminders outside the range are skipped before they are copied, and a
+  query run walks the sorted note records, keeps its sort keys inline, sorts through a permutation
+  and visits only a note's task (or reminder) blocks. Without that the app's first open of the
+  Calendar was ~50 ms slower (it asks for several ranges; each full computation looked up every
+  note) — caught by the app benchmark below.
+
+**Core** (laptop, Release, P-cores, `-q 2`, 5 repetitions; `bench_reminders:afterEdit`, a journal of
+the mixed 10 000-note vault edited back and forth, the caches synced once before the loop; `sweep2`
+at `ef90077` measured right before in the same session):
+
+| after one save, mixed vault 10 000 notes | before | after (the app's path) | free function after |
+|---|---:|---:|---:|
+| `update` alone | 0.019 ms | 0.020 ms | – |
+| `reminders()` / `tasks()` | 6.2 / 13.5 ms | 0.020 / 0.020 ms (patched, shared copy) | – |
+| upcoming notifications (scheduler) | 25.5 ms | 0.13 ms (`NotificationCache`) | 18.0 ms |
+| calendar month (6 weeks) | 57 ms | 4.2 ms (`CalendarCache`) | 42.5 ms |
+| query `status:open due:<=+7d sort:due` | 31 ms | 0.73 ms (`QueryCache`) | 13.8 ms |
+| **all consumers** (guard row) | **112 ms** | **6.0 ms** (−95 %) | 75 ms |
+| all consumers, 10 000-task vault | 40 ms | 2.8 ms | 38.5 ms |
+
+What remains of the 6 ms is mostly the calendar range's items gathered and sorted again (the month
+holds thousands of items in this vault; the changed note's are computed alone). The free functions
+got faster too (full syncs fill from the index's lists, runs copy no `Task` per candidate): queries
+(`bench_index:query`, 10 000 notes, the same session) `tag:praca` 78 → 35.5 ms, `type:blocks "łódź"
+group:page` 74 → 33 ms, `ref:[[Strona 1]]` 89 → 49.5 ms, open due this week 28.5 → 15.8 ms, overdue
+27.5 → 12.5 ms, reminders this week 9.3 → 1.5 ms, all tasks sorted 58 → 56 ms; after one edit with a
+`QueryCache` (`bench_index:queryCache`): `tag:praca` 0.17 ms (runQuery 43 ms), all tasks sorted 1.9 ms
+(64 ms). A perf-check run of the branch passes all 33 checks; the laptop baseline's afterEdit row is
+6 ms now (was 138 ms) and its query row 36 ms (was 99 ms).
+
+**App** (`tests/bench/app`, laptop, Release, Xvfb; the `views` scenario on the 10 000-note bench
+notebook, `r0` first open, `r1` again; 5 runs per build, medians): Calendar r0 132.0 → 128.8 ms, r1
+119.6 → 115.0 ms; Agenda r0 107.4 → 103.3 ms; Tasks r1 82.6 → 82.9 ms, r0 100.1 → 106.7 ms (within
+the runs' spread; the query behind it is faster cold, 16–19 → 14–15 ms, and the second open is
+equal); Graph, All pages and Tags unchanged. An earlier build of the branch opened the Calendar
+~50 ms later (the full-sync costs above), which is why full syncs fill from the index's lists.
+
+Equivalence is the point, so it is tested, not assumed: random edit sequences (Polish names,
+renames, removals, `((id))` across notes, recurring series, malformed tokens) check at every step
+that `changesSince()` names every note whose tasks, reminders, link targets or shown block texts
+changed (`tst_index_consistency`), that a `QueryCache` per query equals `runQuery()` on the edited
+and on a fresh index (16 queries: tags, `ref:`, `page:this`, groups, `limit:`, `remind:overdue`, …),
+that `CalendarCache` / `NotificationCache` equal the free functions (a month, a week, a day, the
+2026-10-25 change to winter time, windows moving across midnight, another language;
+`tst_reminders_cache`), and that the Tasks list, the calendar's overdue list (against the old scan)
+and Workspace's cached lists equal what a fresh model computes. `tst_reminders_cache`
+`oneEditCostsAFraction` guards the gain without timing a machine: after one edit of 3000 notes the
+caches must cost ≤ 0.25 × the free functions (Debug: 2.8 vs 16.9 ms). The Raspberry Pi was not
+measured (no builds on it in this sweep): L3b in "Next steps"; it took 0.95 s before.
+
 ### Budgets
 
 Desktop = the laptop above, phone = Pi 4 (floor) and the emulator (optimistic), web = headless
@@ -574,7 +666,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |
 | Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s (L3, L10) | – |
 | Graph | settled < 1 s | ✅ 0.77 s | ❌ Pi 2.6 s (was 44 s; L16); emulator 1.5 s | – |
-| after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ❌ 131 ms (L3) | ❌ Pi 0.95 s (L3) | – |
+| after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ✅ 6.0 ms (L3; base in the same session 112 ms) | ❌ Pi 0.95 s before L3, not measured since (L3b) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
 | memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 86 MB of linear memory at 1k (was 104 MB) |
 | download | APK < 40 MB, web < 10 MB | – | ✅ 28.5 MB download (84.9 MB installed) | ❌ 13.7 MB gzip (9.4 MB brotli, not served) |
@@ -587,7 +679,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 |---|---|---|
 | L1b | cheaper merge of prepared notes on the GUI thread: link lookup keys (`cleanTarget`, NFC, lower case) and the name table's keys computed by the loader's workers; fewer redraws while loading (the browser's cold load: +11–16 % to "ready", 30 %–2.5× more draws since journals come first); measure the Pi and the Android emulator (L1/L2 of wave 5 not measured there yet) | laptop 10k index ready 0.96 / 0.83 s → 0.6 s; Pi ≤ 6 s cold, ≤ 3 s warm |
 | L5b | measure undo / redo on the Pi (`bench-matrix.sh` typing on the 5000-block outline, Release) and record the `blockDocOps` 5000 blocks undo+redo baseline in `pi.csv` (`perf-check.sh -u` in a quiet window; until then the Pi's check skips the row) | Pi undo 214 ms → < 50 ms |
-| L3 | incremental derived lists (Tasks, Calendar, reminders, query blocks) | after a save 131 ms → < 30 ms (Pi 0.95 s → < 0.2 s) |
+| L3b | measure the after-a-save fan-out on the Pi (`bench_reminders` afterEdit, small profile) and ratchet its `pi.csv` row (`perf-check.sh -m pi -u` in a quiet window; the row now measures the cached path, so the old 963 ms baseline only passes it loosely) | Pi 0.95 s → < 0.2 s |
 | L4 | `BlockDocument` fast path for body-only edits | keystroke core 1.3 ms → < 0.3 ms |
 | L7 | cheaper page opening (header summary and linked references from the index) | Pi open 653 ms → ~400 ms |
 | L9 | native file pickers instead of QtQuick.Dialogs (its per-style QML pulls in every style) | APK −15 MB, wasm −5 MB |
@@ -597,7 +689,8 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 
 Done in wave 5 (2026-10-29, above): L1 (parse on worker threads), L2 (the index cache), L8 (the
-memory diet); on 2026-10-30 L5 (delta undo/redo, above; the Pi still to be measured: L5b). Also
+memory diet); on 2026-10-30 L5 (delta undo/redo, above; the Pi still to be measured: L5b) and L3
+(incremental derived lists, above; the Pi: L3b). Also
 open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip only) and
 the ~90 ms later content on a desktop first start (above).
 
@@ -716,7 +809,7 @@ sync with the arrays in the script):
 | query | `bench_index:query` 10000 notes tag praca | query blocks |
 | suggestions | `bench_index:suggestBlocks` 'kawa ogród', `suggestPages` 'stro' (10000 notes) | `((` and `[[` popups, quick switcher (N7) |
 | index memory | `bench_index:memory` 10000 notes + search index | ≈ 10 B of heap per Markdown byte since wave 5 (L8) |
-| after a save | `bench_reminders:afterEdit` mixed vault 10000 notes, all consumers | every save's fan-out (L3) |
+| after a save | `bench_reminders:afterEdit` mixed vault 10000 notes, all consumers | every save's fan-out as the app runs it: the index's patched lists and the consumers' caches (L3; the free functions' "(stateless)" rows are beside it in the suite) |
 | keystroke | `bench_markdown:blockDocOps` 5000 blocks keystroke | typing on long pages (L4) |
 | undo / redo | `bench_markdown:blockDocOps` 5000 blocks undo+redo | an undo step applied as a delta (L5) |
 | UI state store | `bench_vault:localStoreFlush` 10000 synced files | N9 |

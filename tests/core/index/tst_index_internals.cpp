@@ -1,6 +1,7 @@
 // Internal helpers of the index module: name collation, excerpts, edit distance, name ranking,
 // link targets, the compact path sets of the lookup maps; the derived lists patched instead of
 // built again, and the change log (changesSince()).
+#include "index/notecache.h"
 #include "index/resolve_p.h"
 #include "index/smallsets_p.h"
 #include "index/suggest_p.h"
@@ -832,6 +833,58 @@ private Q_SLOTS:
             fresh3.update(it.key(), it.value());
         QCOMPARE(readAll(index), readAll(fresh3));
         QCOMPARE(IndexAccess::buildCount(index, "tasks"), built[lists.indexOf(u"tasks"_s)] + 1);
+    }
+
+    // NoteCache: per-note values follow the index (full sync, the changed notes only, removed
+    // notes dropped); a fill gives the same values as computing note by note; forEachNote() visits
+    // the notes in path order.
+    void noteCacheFollowsTheIndex()
+    {
+        VaultIndex index;
+        index.update(u"b.md"_s, u"- [ ] jeden\n- [ ] dwa\n"_s);
+        index.update(u"a.md"_s, u"- bez zadań\n"_s);
+        index.update(u"Ż.md"_s, u"- [x] żółw\n"_s);
+        QStringList visited;
+        index.forEachNote([&](const VaultPath &path, const brulion::ParsedNote &) { visited << path; });
+        QCOMPARE(visited, index.paths());
+        const auto compute = [](const VaultPath &, const brulion::ParsedNote &note) { return int(note.tasks.size()); };
+        const auto keep = [](int count) { return count > 0; };
+        const auto fill = [&](std::map<VaultPath, int> &values) {
+            for (const brulion::TaskRef &t : index.tasks())
+                ++values[t.path];
+        };
+        const auto describe = [](const std::map<VaultPath, int> &values) {
+            QStringList out;
+            for (const auto &[path, count] : values)
+                out << path + u'=' + QString::number(count);
+            return out;
+        };
+        brulion::NoteCache<int> plain;
+        brulion::NoteCache<int> filled;
+        QVERIFY(plain.sync(index, u"k"_s, false, compute, keep).full);
+        QVERIFY(filled.sync(index, u"k"_s, false, compute, keep, fill).full);
+        QCOMPARE(describe(plain.values()), (QStringList{u"b.md=2"_s, u"Ż.md=1"_s}));
+        QCOMPARE(describe(filled.values()), describe(plain.values()));
+        QVERIFY(!plain.sync(index, u"k"_s, false, compute, keep).any());
+
+        index.update(u"a.md"_s, u"- [ ] teraz z zadaniem\n"_s);
+        index.remove(u"Ż.md"_s);
+        brulion::NoteCacheSync s = plain.sync(index, u"k"_s, false, compute, keep);
+        QVERIFY(!s.full);
+        QCOMPARE(s.changed, (QList<VaultPath>{u"a.md"_s, u"Ż.md"_s}));
+        QCOMPARE(describe(plain.values()), (QStringList{u"a.md=1"_s, u"b.md=2"_s}));
+        QVERIFY(!filled.sync(index, u"k"_s, false, compute, keep, fill).full);
+        QCOMPARE(describe(filled.values()), describe(plain.values()));
+        // Names changed (a note came and went): full for a consumer that resolves names.
+        QVERIFY(plain.sync(index, u"k"_s, true, compute, keep).full == false);
+        index.update(u"c.md"_s, u"- [ ] nowa\n"_s);
+        QVERIFY(plain.sync(index, u"k"_s, true, compute, keep).full);
+        // Another key, clear(): full.
+        QVERIFY(plain.sync(index, u"inny"_s, true, compute, keep).full);
+        plain.clear();
+        QVERIFY(plain.values().empty());
+        QVERIFY(plain.sync(index, u"inny"_s, true, compute, keep).full);
+        QCOMPARE(describe(plain.values()), (QStringList{u"a.md=1"_s, u"b.md=2"_s, u"c.md=1"_s}));
     }
 
     void changesSince()
