@@ -17,7 +17,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]] — `[[strony]]`, odwołania do bloków, osadzenia.
 - [[Tagi i właściwości|Tagi i właściwości]] — `#tagi` (i ich strony), nagłówek YAML, `klucz:: wartość`, edycja właściwości w polach.
 - [[Wzory matematyczne|Wzory matematyczne]] — LaTeX w tekście i blokach: ułamki, pierwiastki, macierze.
-- [[Rysunki|Rysunki]] — pismo odręczne i szkice rysikiem, palcem albo myszką.
+- [[Rysunki|Rysunki]] — pismo odręczne i szkice rysikiem, palcem albo myszką, także na slajdach i stronach PDF.
 - [[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]] — codzienne strony i szablony.
 
 ## Planowanie
