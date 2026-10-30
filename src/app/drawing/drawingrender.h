@@ -12,7 +12,9 @@
 // Theme.fontMono): Excalidraw's monospace families (3, 8) in the monospace one, all others in the
 // UI one, the size the element's fontSize; each line at the baseline of drawing::textLines(), the
 // same in the SVG. Pictures as decoded from the scene's files (missing: a light grey placeholder);
-// in the dark theme they keep their colours.
+// in the dark theme they keep their colours — but the backdrop (core drawing/backdrop.h: a slide or a
+// PDF page under the ink) is shown "document dark", through darkImage(), so the ink mapped light
+// stays readable on it. Previews decode a backdrop at the size they show it.
 //
 // Thread-safe (the fonts behind a lock, no other shared state): the image provider calls them in
 // Qt Quick's image reader thread.
@@ -91,14 +93,18 @@ QPainterPath toPainterPath(const drawing::Path &path);
 /// drawing::DrawingHatchLines).
 Prepared prepare(const drawing::Stroke &element, qsizetype hatchLines = drawing::MaxHatchLines);
 /// The picture of an image element: decoded from its data URL in `files` (null when it has none
-/// Brulion draws: drawing::safeDataUrl()).
-QImage decodePicture(const QJsonObject &files, const QString &fileId);
-/// Pictures already decoded, by fileId (a null image: none).
+/// Brulion draws: drawing::safeDataUrl()); a larger raster than `atMost` (valid) decoded at that size,
+/// aspect kept (a preview's backdrop).
+QImage decodePicture(const QJsonObject &files, const QString &fileId, const QSize &atMost = QSize());
+/// Pictures already decoded, by fileId (a null image: none); a backdrop's dark twin under
+/// darkPictureKey().
 using PictureCache = QHash<QString, QImage>;
+QString darkPictureKey(const QString &fileId);
 /// Paint an element into `painter` (which maps scene coordinates); `pictures` caches the decoded
-/// pictures of `files`.
+/// pictures of `files`. `backdrop`: the element is the drawing's backdrop (drawing::backdropIndex) —
+/// in the dark its picture is drawn through darkImage().
 void paintElement(QPainter &painter, const drawing::Stroke &element, const Prepared &prepared, bool dark,
-                  const QJsonObject &files, PictureCache &pictures);
+                  const QJsonObject &files, PictureCache &pictures, bool backdrop = false);
 
 /// Paint the paper of an item of `size` that shows the scene through `sceneToItem`: its colour
 /// (drawing::displayPaper, opaque: it replaces whatever the image held) and the lines or the grid

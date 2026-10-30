@@ -994,6 +994,50 @@ QString Workspace::saveAttachment(const QString &fileName, const QByteArray &dat
     return path;
 }
 
+QString Workspace::importAttachment(const QString &fileName, const QByteArray &data)
+{
+    if (!m_vault || data.isEmpty())
+        return {};
+    // The same file picked again (another slide of the lecture's PDF): the one already stored.
+    const QString name = paths::sanitizeFileName(paths::basename(QString(fileName).replace(u'\\', u'/')).trimmed());
+    const QString folder = paths::normalize(m_vault->config().attachmentsFolder);
+    if (!name.isEmpty()) {
+        const VaultPath existing = m_vault->existingCase(folder.isEmpty() ? name : paths::join(folder, name));
+        const std::optional<FileStat> stat = m_vault->stat(existing);
+        if (stat && stat->size == data.size()) {
+            bool ok = false;
+            if (m_vault->readBinary(existing, &ok) == data && ok)
+                return existing;
+        }
+    }
+    return saveAttachment(fileName, data);
+}
+
+QString Workspace::importAttachment(const QUrl &file, qint64 maxBytes)
+{
+    if (!m_vault)
+        return {};
+    if (file.isLocalFile()) {
+        // A file of the notebook itself (the lecture's PDF synced into it): used where it is.
+        const QString absolute = QFileInfo(file.toLocalFile()).canonicalFilePath();
+        const QString root = QFileInfo(m_vault->rootPath()).canonicalFilePath();
+        if (!absolute.isEmpty() && !root.isEmpty()) {
+            const QString relative = QDir(root).relativeFilePath(absolute);
+            if (!relative.startsWith(u"../"_s) && relative != u".."_s && !QDir::isAbsolutePath(relative)
+                && QFileInfo(absolute).isFile())
+                return m_vault->existingCase(paths::normalize(relative));
+        }
+    }
+    return EditorHost::importAttachment(file, maxBytes);
+}
+
+QString Workspace::absoluteFilePath(const QString &path) const
+{
+    if (!m_vault || path.isEmpty())
+        return {};
+    return m_vault->absolutePath(paths::normalize(path));
+}
+
 // ---- EditorHost: context and navigation ------------------------------------------------------
 
 QVariantMap Workspace::vaultConfig() const

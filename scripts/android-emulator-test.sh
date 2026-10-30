@@ -2298,6 +2298,9 @@ started=$SECONDS
 check "scheduleReminders round 1: 3 armed (past one skipped)" wait_for 20 log_has "SELFTEST schedule round=1 ok=1 scheduled=3 exact=1"
 check "scheduleReminders round 2: idempotent" log_has "SELFTEST schedule round=2 ok=1 scheduled=3 exact=1"
 check "permissions reported (notifications granted, exact alarms)" log_has "SELFTEST permissions(start) allFiles=0 notifications=1 exact=1"
+# A PDF page through Android's PdfRenderer (src/platform/pdfpages_android.cpp, PdfPages.kt).
+check "PDF page drawn by PdfRenderer (red square, white corner)" \
+  log_has "SELFTEST pdf backend=Android PdfRenderer pages=1 width=59[0-9] height=84[0-9] centre=#ff0000 corner=#ffffff"
 check "cold-start tap delivered to C++" wait_for 10 log_has "SELFTEST activated path=dziennik/zimny-start.md line=5"
 # A tap while the app runs: onNewIntent -> nativeActivated (Polish path).
 adb shell am start -n "$ACTIVITY" --es "$EXTRA.PATH" "'strony/Łódź.md'" --ei "$EXTRA.LINE" 7 >/dev/null

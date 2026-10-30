@@ -43,9 +43,16 @@ import Brulion
 //    light, dark; DrawingCanvas.theme, saved in the file, an undo step) and follows the app's
 //    theme at once (DrawingCanvas.appDark: Theme.dark). The previews of the drawing elsewhere
 //    follow it too (Workspace.drawingUrl), the notice's picture below as well.
+//  * A backdrop (DrawingCanvas.setBackdrop; core drawing/backdrop.h): "Podkład z obrazu lub PDF…"
+//    in the paper's menu picks a picture or a PDF (FilePicker; the browser's picker: pictures),
+//    imports it into the notebook (Workspace.importAttachment: a file of the notebook stays where
+//    it is) and puts it — a PDF's page chosen in DrawingBackdropDialog — under the drawing; "Inna
+//    strona PDF…" chooses another page of the same PDF, "Usuń podkład" removes it. Undo takes each
+//    back.
 // route.open (screenshots): "style" (the colours and widths) and "more" on phones, "paper" (the
 // paper's menu) on wide windows, "theme" (the background's menu; on phones "Więcej"), "shape"
-// (the shapes' menu), "select" (everything selected: the selection bar).
+// (the shapes' menu), "select" (everything selected: the selection bar), "backdrop" (the page
+// picker of the backdrop's PDF; a picture's backdrop: the paper's menu).
 // View contract (ShellRouteView): `title` (the file's name), `editing` (no capture button over the
 // paper), `toolbarDocked` and `replacesBottomNav` (phones: the tool bar at the bottom — the
 // bottom navigation makes way; no keyboard involved, unlike an editor's toolbar),
@@ -80,6 +87,10 @@ FocusScope {
 
     /// "" (editable), "loading", "readonly", "notDrawing", "corrupt", "missing".
     property string status: "loading"
+    /// A backdrop being chosen: the browser's pick, the job preparing a picture (0 none).
+    property int backdropPick: 0
+    property int backdropJob: 0
+    property DrawingBackdropDialog backdropDialog: null
     /// The file the paper shows (follows renames; "" none).
     property string loadedPath: ""
     property bool _writing: false
@@ -227,6 +238,13 @@ FocusScope {
                 else if (open === "select") {
                     canvas.tool = "select"
                     canvas.selectAll()
+                } else if (open === "backdrop") {
+                    if (canvas.backdropPage > 0 && canvas.backdropPath !== "" && DrawingBackdrops.pdfAvailable)
+                        root.otherBackdropPage()
+                    else if (Theme.narrow)
+                        bar.openMore()
+                    else
+                        bar.openBackground()
                 }
             })
     }
@@ -281,6 +299,50 @@ FocusScope {
     function toggleFinger() {
         root.fingerMode = root.fingerDraws ? "off" : "on"
         AppSettings.setValue("drawing/finger", root.fingerMode)
+    }
+
+    /// "Podkład z obrazu lub PDF…": a picture or a PDF picked and imported into the notebook.
+    function pickBackdrop() {
+        if (root.status !== "")
+            return
+        const pick = DrawingBackdrops.pickInBrowser()
+        if (pick > 0)
+            root.backdropPick = pick // (the browser's picker: picked() below)
+        else
+            backdropPicker.open()
+    }
+    /// The backdrop's file (a vault path): a PDF's page is chosen, a picture prepared at once.
+    function useBackdropFile(path) {
+        if (path === "")
+            return
+        if (DrawingBackdrops.isPdf(path))
+            root.openPageDialog(path, 1)
+        else
+            root.backdropJob = DrawingBackdrops.prepare(path, [])
+    }
+    function openPageDialog(path, page) {
+        if (!root.backdropDialog)
+            root.backdropDialog = backdropDialogComponent.createObject(root) as DrawingBackdropDialog
+        root.backdropDialog.openFor(path, "single", page)
+    }
+    /// "Inna strona PDF…": the backdrop's PDF again (renames do not follow it into the drawing).
+    function otherBackdropPage() {
+        const path = canvas.backdropPath
+        if (path === "" || !Workspace.exists(path)) {
+            AppController.toast(qsTr("The file %1 is not in the notebook any more.").arg(path.slice(path.lastIndexOf("/") + 1)))
+            return
+        }
+        root.openPageDialog(path, canvas.backdropPage)
+    }
+    function applyBackdrop(items) {
+        const item = items.length > 0 ? items[0] : null
+        if (!item)
+            return
+        if (item.error !== "")
+            AppController.toast(DrawingBackdrops.errorText(item.error))
+        else
+            canvas.setBackdrop(item)
+        root.forceActiveFocus()
     }
 
     /// Gotowe: written, back to where the drawing was opened from.
@@ -352,6 +414,50 @@ FocusScope {
                 root.status = canvas.load(bytes)
         }
     }
+    Connections {
+        target: DrawingBackdrops
+        function onPicked(pick, path) {
+            if (pick !== root.backdropPick)
+                return
+            root.backdropPick = 0
+            root.useBackdropFile(path)
+        }
+        function onPickFailed(pick, name) {
+            if (pick !== root.backdropPick)
+                return
+            root.backdropPick = 0
+            AppController.toast(DrawingBackdrops.errorText("unreadable"))
+        }
+        function onFinished(job, items, cancelled) {
+            if (job !== root.backdropJob)
+                return
+            root.backdropJob = 0
+            if (!cancelled)
+                root.applyBackdrop(items)
+        }
+    }
+    FilePicker {
+        id: backdropPicker
+        title: qsTr("Backdrop from a picture or PDF")
+        fileMode: FilePicker.OpenFile
+        dark: Theme.dark
+        colors: Theme.colors
+        nameFilters: DrawingBackdrops.nameFilters
+        onAccepted: {
+            const path = Workspace.importAttachment(selectedFile)
+            if (path === "")
+                AppController.toast(DrawingBackdrops.errorText("unreadable"))
+            root.useBackdropFile(path)
+        }
+    }
+    Component {
+        id: backdropDialogComponent
+        DrawingBackdropDialog {
+            onPrepared: (items) => root.applyBackdrop(items)
+            onRejected: root.forceActiveFocus()
+        }
+    }
+
     Connections {
         target: Qt.application
         function onStateChanged() {
@@ -457,6 +563,9 @@ FocusScope {
             onFingerToggled: root.toggleFinger()
             onFitRequested: canvas.fitAll()
             onDone: root.done()
+            onBackdropRequested: root.pickBackdrop()
+            onBackdropPageRequested: root.otherBackdropPage()
+            onBackdropRemoved: canvas.removeBackdrop()
         }
 
         Item {
@@ -615,6 +724,9 @@ FocusScope {
             onFingerToggled: root.toggleFinger()
             onFitRequested: canvas.fitAll()
             onDone: root.done()
+            onBackdropRequested: root.pickBackdrop()
+            onBackdropPageRequested: root.otherBackdropPage()
+            onBackdropRemoved: canvas.removeBackdrop()
         }
     }
 }

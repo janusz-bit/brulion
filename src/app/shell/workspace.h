@@ -227,6 +227,15 @@ public:
     /// the local file's header itself).
     QSize assetPixelSize(const QString &path) const override;
     Q_INVOKABLE QString saveAttachment(const QString &fileName, const QByteArray &data) override;
+    /// A picked file used from the notebook (a drawing's backdrop): the attachment of the same name
+    /// and bytes in the attachments folder, else stored as saveAttachment() stores it.
+    Q_INVOKABLE QString importAttachment(const QString &fileName, const QByteArray &data) override;
+    /// A picked local file or Android document: one inside the notebook's folder is used where it
+    /// is (its vault path), others imported as above (at most `maxBytes`, 200 MB by default).
+    Q_INVOKABLE QString importAttachment(const QUrl &file, qint64 maxBytes = 200LL * 1024 * 1024) override;
+    /// The file system path of the vault path `path` ("" without a notebook or a path): the
+    /// drawing editor's PDF pages (DrawingBackdrops' path resolver).
+    Q_INVOKABLE QString absoluteFilePath(const QString &path) const;
     /// Pictures from the internet (workspacepictures.cpp): fetched by webpicture::PictureFetcher
     /// into the device's cache (<app cache>/web-pictures, webpicture::PictureCache), shown from
     /// there — file: URLs, data: URLs in the browser. Not tied to the notebook: the cache is the

@@ -24,6 +24,11 @@ import Brulion
 //                                   Android) or the browser's, stored as attachments, `![[…]]`
 //   pickWebImage(row, cursor)       Obraz z internetu…: a picture's address → `![](https://…)`,
 //                                   with "Zapisz w notatniku" stored as an attachment right away
+//   pickDrawingBackdrop(row, cursor)  Rysunek na obrazie lub PDF…: a picture or a PDF (the system's
+//                                   picker; the browser's: pictures only) → a PDF's pages chosen in
+//                                   DrawingBackdropDialog → one drawing per page (a picture: one
+//                                   drawing) with it as the backdrop, embedded at the caret and
+//                                   after it; one drawing opens in the drawing editor
 // The page may change while a dialog is open (sync, Syncthing): a dialog tracks its block
 // (PageController.trackBlock) and acts on wherever that block is then — never on whatever block
 // moved into its row (and on nothing when the block itself changed or is gone).
@@ -41,6 +46,8 @@ Item {
                                     || (templateDialog !== null && templateDialog.opened)
                                     || (imageDialog !== null && imageDialog.visible)
                                     || (webImageDialog !== null && webImageDialog.opened)
+                                    || (backdropPicker !== null && backdropPicker.visible)
+                                    || (backdropDialog !== null && backdropDialog.opened)
 
     /// The dialogs, null until first used (see the file comment).
     property BReminderDialog reminderDialog: null
@@ -50,6 +57,11 @@ Item {
     property var templateDialog: null
     property FilePicker imageDialog: null
     property var webImageDialog: null
+    property FilePicker backdropPicker: null
+    property DrawingBackdropDialog backdropDialog: null
+    /// "Rysunek na obrazie lub PDF…": the browser's pick and a picture being prepared (0 none).
+    property int backdropPick: 0
+    property int backdropJob: 0
     function reminderPopup(): BReminderDialog {
         if (!reminderDialog)
             reminderDialog = reminderComponent.createObject(root) as BReminderDialog
@@ -294,6 +306,100 @@ Item {
         webImageDialog.saveBox.checked = true // (each time: the dialog is reused)
         webImageDialog.open()
     }
+    function pickDrawingBackdrop(r, c) {
+        if (!controller)
+            return
+        remember(r)
+        cursor = c
+        // The browser has its own picker (pictures only; picked() below).
+        const pick = DrawingBackdrops.pickInBrowser()
+        if (pick > 0) {
+            backdropPick = pick
+            return
+        }
+        if (!backdropPicker)
+            backdropPicker = backdropPickerComponent.createObject(root) as FilePicker
+        backdropPicker.open()
+    }
+    /// The picked file (a vault path): a PDF's pages are chosen first, a picture is prepared now.
+    function useBackdropSource(path) {
+        if (path === "") {
+            refocus()
+            return
+        }
+        if (DrawingBackdrops.isPdf(path)) {
+            if (!backdropDialog)
+                backdropDialog = backdropDialogComponent.createObject(root) as DrawingBackdropDialog
+            backdropDialog.openFor(path, "insert", 1)
+            return
+        }
+        backdropJob = DrawingBackdrops.prepare(path, [])
+    }
+    /// The prepared backdrops become drawings in the note: one opens in the drawing editor.
+    function insertBackdrops(items) {
+        const good = items.filter((item) => item.error === "")
+        if (good.length < items.length)
+            AppController.toast(DrawingBackdrops.errorText(items.find((item) => item.error !== "").error))
+        if (good.length === 0) {
+            refocus()
+            return
+        }
+        // (The block gone meanwhile: at the end of the page.)
+        const r = blockRow()
+        const c = r >= 0 ? cursor : -1
+        const out = controller.insertDrawingsOn(r, c, c, good)
+        if (out.paths.length === 1)
+            controller.openDrawing(out.paths[0])
+        else if (out.paths.length > 1)
+            AppController.toast(qsTr("Inserted %n drawing(s)", "", out.paths.length))
+        else
+            refocus()
+    }
+
+    Connections {
+        target: DrawingBackdrops
+        function onPicked(pick, path) {
+            if (pick !== root.backdropPick)
+                return
+            root.backdropPick = 0
+            root.useBackdropSource(path)
+        }
+        function onPickFailed(pick, name) {
+            if (pick !== root.backdropPick)
+                return
+            root.backdropPick = 0
+            AppController.toast(DrawingBackdrops.errorText("unreadable"))
+            root.refocus()
+        }
+        function onFinished(job, items, cancelled) {
+            if (job !== root.backdropJob)
+                return
+            root.backdropJob = 0
+            if (!cancelled)
+                root.insertBackdrops(items)
+        }
+    }
+
+    Component {
+        id: backdropPickerComponent
+        FilePicker {
+            title: qsTr("Drawing on a picture or PDF")
+            fileMode: FilePicker.OpenFile
+            dark: Theme.dark
+            colors: Theme.colors
+            nameFilters: DrawingBackdrops.nameFilters
+            onAccepted: root.useBackdropSource(root.controller ? root.controller.importBackdropSource(selectedFile) : "")
+            onRejected: root.refocus()
+        }
+    }
+    Component {
+        id: backdropDialogComponent
+        DrawingBackdropDialog {
+            onPrepared: (items) => root.insertBackdrops(items)
+            onRejected: root.refocus()
+        }
+    }
+
     function pickImage(r, c) {
         if (!controller)
             return

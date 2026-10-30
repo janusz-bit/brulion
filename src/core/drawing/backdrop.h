@@ -94,5 +94,8 @@ bool removeBackdrop(Drawing &d);
 /// "all" or "*" — every page. Sorted, unique, within 1…count (a range is clipped to it), the first
 /// MaxPagesPerInsert of them; parts that are no number or range are ignored.
 QList<int> parsePageRanges(QStringView text, int count);
+/// Sorted unique pages as a user would type them: runs of three or more as ranges ("1-3, 7, 9-10"
+/// → "1-3, 7, 9, 10"); "" for none. parsePageRanges() reads it back.
+QString formatPageRanges(const QList<int> &pages);
 
 } // namespace brulion::drawing

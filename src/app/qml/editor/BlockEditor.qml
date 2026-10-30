@@ -1024,6 +1024,7 @@ FocusScope {
         case "image": dialogs.pickImage(row, result.cursor); break
         case "webImage": dialogs.pickWebImage(row, result.cursor); break
         case "drawing": insertDrawing(row, result.cursor); break
+        case "drawingOn": dialogs.pickDrawingBackdrop(row, result.cursor); break
         case "table":
             list.forceActiveFocus()
             break

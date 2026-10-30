@@ -450,6 +450,21 @@ object BrulionAndroid {
   fun listDocuments(context: Context, uri: String): String = Documents.list(context, uri)
 
   // -----------------------------------------------------------------------------------------
+  // PDF pages as a drawing's backdrop (src/platform/pdfpages_android.cpp): any thread
+  // -----------------------------------------------------------------------------------------
+
+  /** `{"pages", "sizes": [[w, h], ...] (points), "error", "locked"}` of the PDF at [path]. */
+  @JvmStatic
+  fun pdfInfo(path: String): String = PdfPages.info(path)
+
+  /**
+   * Page [page] (1-based) of the PDF at [path] on white, its long side [maxSide] pixels: 8 bytes of
+   * header (width, height, big-endian) and the RGBA_8888 premultiplied pixels; null on failure.
+   */
+  @JvmStatic
+  fun renderPdfPage(path: String, page: Int, maxSide: Int): ByteArray? = PdfPages.render(path, page, maxSide)
+
+  // -----------------------------------------------------------------------------------------
   // Sounds of reminders and alarms (ReminderSounds.kt; Settings → Reminders in the app)
   // -----------------------------------------------------------------------------------------
 

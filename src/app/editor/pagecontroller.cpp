@@ -8,6 +8,7 @@
 #include "calc/table.h"
 #include "dates/local.h"
 #include "dates/recurrence.h"
+#include "drawing/backdrop.h"
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
 #include "markdown/inline.h"
@@ -34,6 +35,7 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QMimeData>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QScopedValueRollback>
 #include <QSysInfo>
@@ -3008,7 +3010,7 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
     } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
                || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"webImage"
-               || cmd == u"drawing") {
+               || cmd == u"drawing" || cmd == u"drawingOn") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -3748,6 +3750,77 @@ QVariantMap PageController::insertDrawing(int row, int from, int to)
     }
     QVariantMap out = insertEmbeds(row, from, to, {path});
     out.insert(u"path"_s, path);
+    return out;
+}
+
+QString PageController::importBackdropSource(const QUrl &file)
+{
+    if (!isFileUrl(file))
+        return {};
+    const QString path = m_host ? m_host->importAttachment(file, MaxAttachmentBytes) : QString();
+    if (path.isEmpty()) {
+        const QString name = QFileInfo(fileSystemPath(file)).fileName();
+        Q_EMIT attachmentFailed(name.isEmpty() ? file.fileName() : name);
+    }
+    return path;
+}
+
+QVariantMap PageController::insertDrawingsOn(int row, int from, int to, const QVariantList &prepared)
+{
+    QStringList stored;
+    const qint64 now = currentDateTime().toMSecsSinceEpoch();
+    for (const QVariant &item : prepared) {
+        const QVariantMap m = item.toMap();
+        const drawing::BackdropSource source{m.value(u"path"_s).toString(), std::max(0, m.value(u"page"_s).toInt())};
+        QString name = m.value(u"name"_s).toString().trimmed();
+        if (name.isEmpty())
+            name = QFileInfo(source.path).completeBaseName().trimmed();
+        if (name.isEmpty())
+            name = tr("Drawing");
+        //: A drawing on page %2 of the PDF %1 ("Wykład 3 s. 4"); a file name, without the extension
+        const QString fileName = (source.page > 0 ? tr("%1 p. %2").arg(name).arg(source.page)
+                                                  //: A drawing on the picture %1; a file name, without the extension
+                                                  : tr("%1 (drawing)").arg(name))
+                                 + u".svg"_s;
+        drawing::Drawing d;
+        drawing::EditStamp stamp;
+        stamp.now = now;
+        stamp.random = [] { return QRandomGenerator::global()->bounded(1u, 2147483647u); };
+        stamp.newId = [] {
+            // nanoid's alphabet and length, as Excalidraw's element ids.
+            static constexpr char alphabet[] = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
+            QString id;
+            for (int i = 0; i < 21; ++i)
+                id += QLatin1Char(alphabet[QRandomGenerator::global()->bounded(64)]);
+            return id;
+        };
+        const drawing::BackdropImage image{m.value(u"bytes"_s).toByteArray(), m.value(u"mimeType"_s).toString(),
+                                           QSize(m.value(u"width"_s).toInt(), m.value(u"height"_s).toInt())};
+        if (!m.value(u"error"_s).toString().isEmpty() || !drawing::setBackdrop(d, image, source, stamp)) {
+            Q_EMIT attachmentFailed(fileName);
+            continue;
+        }
+        // A photo or an exported slide keeps its colours; a PDF page follows the app (it turns dark
+        // with it, "document dark").
+        d.theme = source.page == 0 ? drawing::PaperTheme::Light : drawing::PaperTheme::Auto;
+        const QString path = m_host ? m_host->saveAttachment(fileName, drawing::toSvg(d)) : QString();
+        if (path.isEmpty()) {
+            Q_EMIT attachmentFailed(fileName);
+            continue;
+        }
+        stored.append(path);
+    }
+    if (stored.isEmpty())
+        return {{u"row"_s, -1}, {u"cursor"_s, -1}, {u"paths"_s, QStringList()}};
+    beginCommand();
+    QVariantMap out = insertEmbeds(row, from, to, {stored.first()});
+    int last = out.value(u"row"_s).toInt();
+    for (qsizetype i = 1; i < stored.size() && last >= 0; ++i)
+        last = insertBlockAfter(last, embedFor(stored.at(i)));
+    endCommand(currentFocus());
+    if (stored.size() > 1)
+        stopEditing(); // (several drawings: the note stays, its blocks shown)
+    out.insert(u"paths"_s, stored);
     return out;
 }
 

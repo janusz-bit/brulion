@@ -8,6 +8,8 @@
 
 #include "picturesize.h"
 
+#include <QFile>
+#include <QFileInfo>
 #include <QObject>
 #include <QSize>
 #include <QString>
@@ -155,6 +157,30 @@ public:
     }
     /// Store pasted/dropped bytes in the attachments folder; returns the new vault path.
     virtual QString saveAttachment(const QString &fileName, const QByteArray &data) = 0;
+    /// A file the user picked to use from the notebook (a drawing's backdrop, docs/UI.md "Drawing
+    /// editor"), by its bytes: the attachment with the same name and the same bytes when there is
+    /// one, else stored like saveAttachment() (a free name). The vault path; "" when it could not
+    /// be stored. Default: always stored.
+    virtual QString importAttachment(const QString &fileName, const QByteArray &data)
+    {
+        return saveAttachment(fileName, data);
+    }
+    /// The same for a picked local file (file://) or Android document (content://): a file inside
+    /// the notebook is used where it is (its vault path, no copy); others are read (at most
+    /// `maxBytes`) and imported as above. "" when it cannot be read or stored. Default: read and
+    /// importAttachment(name, bytes).
+    virtual QString importAttachment(const QUrl &file, qint64 maxBytes)
+    {
+        const QString fsPath = file.isLocalFile() ? file.toLocalFile() : file.toString();
+        QFile f(fsPath);
+        if (fsPath.isEmpty() || !f.open(QIODevice::ReadOnly) || f.size() > maxBytes)
+            return {};
+        const QByteArray data = f.readAll();
+        QString name = QFileInfo(fsPath).fileName();
+        if (name.isEmpty())
+            name = file.fileName();
+        return data.isEmpty() ? QString() : importAttachment(name, data);
+    }
 
     // --- Pictures from the internet (`![alt](https://…)`, docs/SYNTAX.md §2) -------------------
     // The UI never loads them itself: the host fetches them (when the user allows it) into the

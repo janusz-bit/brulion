@@ -198,6 +198,12 @@ BMenu {
         iconName: "pen-tool"
         onTriggered: menu.act((r) => menu.editor.insertDrawing(r, -1))
     }
+    BMenuItem {
+        objectName: "blockMenuDrawingOn"
+        text: qsTr("Insert a drawing on a picture or PDF…")
+        iconName: "pen-tool"
+        onTriggered: menu.act((r) => menu.editor.dialogs.pickDrawingBackdrop(r, -1))
+    }
     BMenuSeparator {}
     OptionalItem {
         shown: !menu.documentMode || menu.listItem

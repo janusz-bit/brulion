@@ -5,6 +5,7 @@
 #include <QCryptographicHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QStringList>
 
 #include <algorithm>
 #include <climits>
@@ -248,6 +249,31 @@ QList<int> parsePageRanges(QStringView text, int count)
         }
     }
     return QList<int>(pages.cbegin(), pages.cend());
+}
+
+QString formatPageRanges(const QList<int> &pages)
+{
+    QList<int> sorted;
+    for (const int p : pages) {
+        if (p >= 1)
+            sorted.append(p);
+    }
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    QStringList parts;
+    for (qsizetype i = 0; i < sorted.size();) {
+        qsizetype j = i;
+        while (j + 1 < sorted.size() && sorted.at(j + 1) == sorted.at(j) + 1)
+            ++j;
+        if (j - i >= 2) {
+            parts.append(QString::number(sorted.at(i)) + u'-' + QString::number(sorted.at(j)));
+        } else {
+            for (qsizetype k = i; k <= j; ++k)
+                parts.append(QString::number(sorted.at(k)));
+        }
+        i = j + 1;
+    }
+    return parts.join(u", "_s);
 }
 
 } // namespace brulion::drawing
