@@ -11,6 +11,7 @@
 #include <QObject>
 #include <QString>
 
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -426,6 +427,9 @@ public:
     const ParsedNote *note(const VaultPath &path) const;
     /// All note paths, sorted (code units).
     QList<VaultPath> paths() const;
+    /// Visit every note in the order of paths() — cheaper than note() for each path (no lookups).
+    /// `visit` must not change the index.
+    void forEachNote(const std::function<void(const VaultPath &path, const ParsedNote &note)> &visit) const;
     /// Known attachment paths (non-Markdown files), sorted.
     QList<VaultPath> attachments() const;
     /// Notes with a ```query block (sorted by path).

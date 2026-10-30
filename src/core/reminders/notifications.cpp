@@ -78,8 +78,12 @@ QString idOf(const VaultPath &path, const QDateTime &at, QStringView textHash)
 /// reminders costs its size once, not once per reminder occurrence.
 class BlockInfo {
 public:
-    BlockInfo(const VaultIndex &index, const ReminderRef &ref)
-        : m_index(index), m_path(ref.path), m_block(ref.blockIndex), m_src(sourceOf(index, ref))
+    /// `note`: the reminder's note when at hand (else looked up).
+    BlockInfo(const VaultIndex &index, const ParsedNote *note, const ReminderRef &ref)
+        : m_index(index)
+        , m_path(ref.path)
+        , m_block(ref.blockIndex)
+        , m_src(note ? sourceOf(note, ref) : sourceOf(index, ref))
     { }
 
     bool isFor(const ReminderRef &ref) const { return ref.blockIndex == m_block && ref.path == m_path; }
@@ -115,17 +119,14 @@ private:
 /// The occurrences of note `path` within [from, to] (local times), merged by id (ids contain the
 /// path: no other note has them), unsorted, nativeIds not assigned. `capped`: a series gave
 /// MaxOccurrences dates (a longer window might differ further on).
-void collectNote(const VaultIndex &index, const VaultPath &path, const QDateTime &from, const QDateTime &to,
-                 dates::UiLocale locale, QList<ScheduledNotification> &out, bool *capped = nullptr)
+void collectRefs(const VaultIndex &index, const ParsedNote *note, const QList<ReminderRef> &refs, const QDateTime &from,
+                 const QDateTime &to, dates::UiLocale locale, QList<ScheduledNotification> &out, bool *capped = nullptr)
 {
-    const QList<ReminderRef> refs = index.remindersOf(path);
-    if (refs.isEmpty())
-        return;
     QHash<QString, qsizetype> byId;
     std::optional<BlockInfo> block; // remindersOf() lists the reminders of a block together
     for (const ReminderRef &ref : refs) {
         if (!block || !block->isFor(ref))
-            block.emplace(index, ref);
+            block.emplace(index, note, ref);
         const ReminderSource &src = block->source();
         if (isClosed(src.task))
             continue;
@@ -156,6 +157,15 @@ void collectNote(const VaultIndex &index, const VaultPath &path, const QDateTime
             out.append(std::move(n));
         }
     }
+}
+
+/// collectRefs() of one note (its reminders that may occur within [from, to]).
+void collectNote(const VaultIndex &index, const VaultPath &path, const ParsedNote &note, const QDateTime &from,
+                 const QDateTime &to, dates::UiLocale locale, QList<ScheduledNotification> &out, bool *capped = nullptr)
+{
+    const QList<ReminderRef> refs = remindersOf(path, note, from.date(), to.date());
+    if (!refs.isEmpty())
+        collectRefs(index, &note, refs, from, to, locale, out, capped);
 }
 
 /// The occurrences of one note for the kept days.
@@ -246,9 +256,9 @@ QList<ScheduledNotification> NotificationCache::occurrences(const VaultIndex &in
                       && to.date() <= d->last;
     if (!kept) {
         d->lastSync = NoteCacheSync();
-        const QList<VaultPath> paths = index.paths();
-        for (const VaultPath &path : paths)
-            collectNote(index, path, from, to, locale, direct);
+        forEachNoteReminders(index, from.date(), to.date(), [&](const VaultPath &, const QList<ReminderRef> &refs) {
+            collectRefs(index, nullptr, refs, from, to, locale, direct);
+        });
     } else {
         const QDateTime dayStart(d->first, QTime(0, 0));
         const QDateTime dayEnd(d->last, QTime(23, 59, 59, 999));
@@ -259,19 +269,34 @@ QList<ScheduledNotification> NotificationCache::occurrences(const VaultIndex &in
                 [&](const VaultPath &path, const ParsedNote &note) {
                     NoteOccurrences occurrences;
                     ++d->computed;
-                    if (!note.reminders.isEmpty())
-                        collectNote(index, path, dayStart, dayEnd, locale, occurrences.list, &occurrences.capped);
+                    collectNote(index, path, note, dayStart, dayEnd, locale, occurrences.list, &occurrences.capped);
                     occurrences.ms.reserve(occurrences.list.size());
                     for (const ScheduledNotification &n : std::as_const(occurrences.list))
                         occurrences.ms.append(n.at.toMSecsSinceEpoch());
                     return occurrences;
                 },
-                [](const NoteOccurrences &o) { return !o.list.isEmpty() || o.capped; });
+                [](const NoteOccurrences &o) { return !o.list.isEmpty() || o.capped; },
+                [&](std::map<VaultPath, NoteOccurrences> &values) {
+                    // Everything: from the index's reminder list (notes by path) — contiguous.
+                    forEachNoteReminders(index, d->first, d->last,
+                                         [&](const VaultPath &path, const QList<ReminderRef> &refs) {
+                                             NoteOccurrences occurrences;
+                                             collectRefs(index, nullptr, refs, dayStart, dayEnd, locale,
+                                                         occurrences.list, &occurrences.capped);
+                                             occurrences.ms.reserve(occurrences.list.size());
+                                             for (const ScheduledNotification &n : std::as_const(occurrences.list))
+                                                 occurrences.ms.append(n.at.toMSecsSinceEpoch());
+                                             if (!occurrences.list.isEmpty() || occurrences.capped)
+                                                 values.emplace_hint(values.end(), path, std::move(occurrences));
+                                         });
+                    d->computed += int(index.paths().size()); // as many notes as a sync note by note
+                });
         const qint64 fromMs = from.toMSecsSinceEpoch();
         const qint64 toMs = to.toMSecsSinceEpoch();
         for (const auto &[path, occurrences] : d->notes.values()) {
             if (occurrences.capped) { // the series' dates depend on the window: as asked
-                collectNote(index, path, from, to, locale, direct);
+                if (const ParsedNote *note = index.note(path))
+                    collectNote(index, path, *note, from, to, locale, direct);
                 continue;
             }
             for (qsizetype i = 0; i < occurrences.list.size(); ++i) {

@@ -236,6 +236,37 @@ const QStringList &Entry::pageTags() const
     return *m_pageTags;
 }
 
+const QList<int> &Entry::taskBlocks() const
+{
+    if (!m_taskBlocks) {
+        QList<int> out;
+        if (!note.tasks.isEmpty()) {
+            out.reserve(note.tasks.size());
+            for (qsizetype i = 0; i < note.blocks.size(); ++i) {
+                if (note.blocks[i].task)
+                    out.append(int(i));
+            }
+        }
+        m_taskBlocks = std::move(out);
+    }
+    return *m_taskBlocks;
+}
+
+const QList<int> &Entry::reminderBlocks() const
+{
+    if (!m_reminderBlocks) {
+        QList<int> out;
+        if (!note.reminders.isEmpty()) {
+            for (qsizetype i = 0; i < note.blocks.size(); ++i) {
+                if (!note.blocks[i].reminders.isEmpty())
+                    out.append(int(i));
+            }
+        }
+        m_reminderBlocks = std::move(out);
+    }
+    return *m_reminderBlocks;
+}
+
 const Entry *IndexAccess::entry(const VaultIndex &index, const VaultPath &path)
 {
     return index.d->entry(path);
@@ -249,6 +280,11 @@ const SearchIndex &IndexAccess::search(const VaultIndex &index)
 bool IndexAccess::searchComplete(const VaultIndex &index)
 {
     return index.d->searchDirty.isEmpty() && !index.d->searchElsewhere;
+}
+
+QList<const Entry *> IndexAccess::sortedEntries(const VaultIndex &index)
+{
+    return index.d->sortedEntries();
 }
 
 int IndexAccess::buildCount(const VaultIndex &index, std::string_view list)

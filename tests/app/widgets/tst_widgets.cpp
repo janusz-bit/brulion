@@ -7,6 +7,7 @@
 #include "widgetactions.h"
 #include "widgetsnapshot.h"
 
+#include "calendarmodel.h"
 #include "tasklistmodel.h"
 
 #include "index/querycache.h"

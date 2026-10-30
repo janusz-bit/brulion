@@ -209,6 +209,14 @@ QList<VaultPath> VaultIndex::paths() const
     return *d->cache.paths;
 }
 
+void VaultIndex::forEachNote(const std::function<void(const VaultPath &, const ParsedNote &)> &visit) const
+{
+    // A copy of the list: visit() may read lists that are built on first use.
+    const QList<const Private::Entry *> sorted = d->sortedEntries();
+    for (const Private::Entry *e : sorted)
+        visit(e->path, e->note);
+}
+
 QList<VaultPath> VaultIndex::attachments() const
 {
     d->cache.read();

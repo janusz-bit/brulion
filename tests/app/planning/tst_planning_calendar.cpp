@@ -678,7 +678,7 @@ private Q_SLOTS:
                                 {u"Dom.md"_s, u"- [ ] Remont 📅 2026-10-20\n- Wizyta ⏰ 2026-10-22 18:00\n"_s}});
         // Caches shared with another model (as the widgets keep them across snapshots).
         auto calendar = std::make_shared<brulion::CalendarCache>();
-        auto overdue = std::make_shared<brulion::QueryCache>();
+        auto overdue = std::make_shared<brulion::planning::OverdueCache>();
         CalendarModel m;
         m.setCaches(calendar, overdue);
         m.setRefreshDelay(0);

@@ -259,7 +259,7 @@ private:
         std::optional<QDate> finished;            ///< the done section's date
         int priority = 0;                         ///< priorityRank()
         std::optional<DateSpec> date;             ///< the sort date, else the reminder's
-        std::optional<QCollatorSortKey> titleKey; ///< nameSortKey(pageTitle)
+        int title = 0;                            ///< m_titleRank of pageTitle
         mutable QString html; ///< rendered lazily
         mutable bool rendered = false;
     };
@@ -275,8 +275,10 @@ private:
     /// rebuild(), or once when the QML component is complete.
     void requestRebuild();
     void rebuild();
-    /// The model's item for a task of the query's result.
+    /// The model's item for a task of the query's result (Item::title not set).
     Item makeItem(const QueryItem &qi, QDate today, Qt::DayOfWeek weekStart);
+    /// Rank the page titles of `items` in compareNames() order (m_titleRank) and set Item::title.
+    void rankTitles(QList<Item> &items);
     /// The list order: section, then the sort key's fields, then title, path and line.
     bool itemLess(const Item &a, const Item &b) const;
     void rebuildRows();
@@ -306,6 +308,7 @@ private:
     std::shared_ptr<QueryCache> m_query;          ///< the query's matches, kept across index changes
     IndexFollower m_follower;                     ///< which notes changed since m_items was built
     QHash<QString, QCollatorSortKey> m_titleKeys; ///< nameSortKey() per page title
+    QHash<QString, int> m_titleRank;              ///< the titles of m_items in compareNames() order
     enum SortMode { SortByDue, SortByPriority, SortByCreated, SortByPage };
     SortMode m_sortMode = SortByDue; ///< m_sort as itemLess() reads it
     QList<Item> m_items;            ///< all matching tasks, sorted by section then sort key

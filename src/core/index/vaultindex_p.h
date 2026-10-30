@@ -62,6 +62,10 @@ struct Entry {
     const QHash<QString, QString> &tagSpellings() const;
     /// pageLevelTags() of the note (the tags carried by the page as a whole).
     const QStringList &pageTags() const;
+    /// Indices of the blocks with a task / with reminders, in document order (queries over tasks
+    /// and reminders visit only those).
+    const QList<int> &taskBlocks() const;
+    const QList<int> &reminderBlocks() const;
 
 private:
     mutable std::optional<QString> m_lowerContent;
@@ -69,6 +73,8 @@ private:
     mutable std::optional<QString> m_foldedContent;
     mutable std::optional<QHash<QString, QString>> m_tagSpellings;
     mutable std::optional<QStringList> m_pageTags;
+    mutable std::optional<QList<int>> m_taskBlocks;
+    mutable std::optional<QList<int>> m_reminderBlocks;
 };
 
 /// Access to VaultIndex internals for the module's own free functions (runQuery, the index
@@ -78,6 +84,8 @@ struct IndexAccess {
     static const SearchIndex &search(const VaultIndex &index);
     /// Is the full-text index up to date and complete (nothing pending, not built elsewhere)?
     static bool searchComplete(const VaultIndex &index);
+    /// Every note's record, by path (valid until the next change).
+    static QList<const Entry *> sortedEntries(const VaultIndex &index);
     /// How often a derived list was built from scratch (tests: an edit patches the lists instead):
     /// "sorted", "byRelevance", "paths", "attachments", "tags", "tasks", "reminders", "journals",
     /// "missing", "tagTargets", "queryNotes", "propertyKeys"; -1 for another name.

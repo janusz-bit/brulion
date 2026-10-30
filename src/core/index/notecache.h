@@ -73,9 +73,20 @@ class NoteCache {
 public:
     using Compute = std::function<Value(const VaultPath &, const ParsedNote &)>;
     using Keep = std::function<bool(const Value &)>;
+    /// Fills an empty map with every note's value worth keeping, in path order — what compute()
+    /// and keep() would give note by note, from something cheaper to walk (the index's task or
+    /// reminder list: contiguous, kept up to date by the index).
+    using Fill = std::function<void(std::map<VaultPath, Value> &)>;
 
     NoteCacheSync sync(const VaultIndex &index, const QString &key, bool dependsOnNames, const Compute &compute,
                        const Keep &keep)
+    {
+        return sync(index, key, dependsOnNames, compute, keep, Fill());
+    }
+
+    /// sync() whose full syncs call `fill` (when given) instead of compute() for every note.
+    NoteCacheSync sync(const VaultIndex &index, const QString &key, bool dependsOnNames, const Compute &compute,
+                       const Keep &keep, const Fill &fill)
     {
         NoteCacheSync s = m_follower.follow(index, key, dependsOnNames);
         const auto put = [&](const VaultPath &path, const ParsedNote &note) {
@@ -85,13 +96,17 @@ public:
             else
                 m_values.erase(path);
         };
-        if (s.full) {
+        if (s.full && fill) {
             m_values.clear();
-            const QList<VaultPath> paths = index.paths();
-            for (const VaultPath &path : paths) {
-                if (const ParsedNote *note = index.note(path))
-                    put(path, *note);
-            }
+            fill(m_values);
+        } else if (s.full) {
+            // Paths come in order: each value goes at the end, nothing to erase.
+            m_values.clear();
+            index.forEachNote([&](const VaultPath &path, const ParsedNote &note) {
+                Value value = compute(path, note);
+                if (keep(value))
+                    m_values.emplace_hint(m_values.end(), path, std::move(value));
+            });
         } else {
             for (const VaultPath &path : std::as_const(s.changed)) {
                 if (const ParsedNote *note = index.note(path))

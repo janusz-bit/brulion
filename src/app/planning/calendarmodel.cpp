@@ -3,8 +3,6 @@
 #include "dates/format.h"
 #include "dates/local.h"
 #include "dates/names.h"
-#include "index/query.h"
-#include "index/querycache.h"
 #include "index/vaultindex.h"
 #include "planningutil.h"
 
@@ -125,10 +123,55 @@ CalendarModel::CalendarModel(QObject *parent) : QAbstractListModel(parent)
 
 CalendarModel::~CalendarModel() = default;
 
-void CalendarModel::setCaches(std::shared_ptr<CalendarCache> calendar, std::shared_ptr<QueryCache> overdue)
+void CalendarModel::setCaches(std::shared_ptr<CalendarCache> calendar, std::shared_ptr<OverdueCache> overdue)
 {
     m_calendar = std::move(calendar);
-    m_overdueQuery = std::move(overdue);
+    m_overdueTasks = std::move(overdue);
+}
+
+QList<OverdueCache::Overdue> OverdueCache::tasks(const VaultIndex &index, QDate today, int max, int *total)
+{
+    m_last = m_notes.sync(
+            index, today.toString(Qt::ISODate), false,
+            [today](const VaultPath &path, const ParsedNote &note) {
+                QList<Overdue> out;
+                for (const Task &t : note.tasks) { // the blocks' tasks, in document order
+                    if ((t.status == TaskStatus::Todo || t.status == TaskStatus::Doing) && t.due && t.due->date < today)
+                        out.append(Overdue{*t.due, path, t});
+                }
+                return out;
+            },
+            [](const QList<Overdue> &list) { return !list.isEmpty(); },
+            [&](std::map<VaultPath, QList<Overdue>> &values) {
+                // Everything: from the index's task list (notes by path, document order).
+                const QList<TaskRef> all = index.tasks();
+                for (qsizetype i = 0; i < all.size();) {
+                    const VaultPath &path = all.at(i).path;
+                    QList<Overdue> out;
+                    for (; i < all.size() && all.at(i).path == path; ++i) {
+                        const Task &t = all.at(i).task;
+                        if ((t.status == TaskStatus::Todo || t.status == TaskStatus::Doing) && t.due
+                            && t.due->date < today)
+                            out.append(Overdue{*t.due, path, t});
+                    }
+                    if (!out.isEmpty())
+                        values.emplace_hint(values.end(), path, std::move(out));
+                }
+            });
+    // Notes by path, tasks in document order, then stably by the due date (time included).
+    QList<const Overdue *> all;
+    for (const auto &[path, list] : m_notes.values()) {
+        for (const Overdue &o : list)
+            all.append(&o);
+    }
+    std::stable_sort(all.begin(), all.end(),
+                     [](const Overdue *a, const Overdue *b) { return dates::compareDateSpecs(a->due, b->due) < 0; });
+    if (total)
+        *total = int(all.size());
+    QList<Overdue> out;
+    for (qsizetype i = 0; i < all.size() && i < max; ++i)
+        out.append(*all.at(i));
+    return out;
 }
 
 void CalendarModel::classBegin()
@@ -651,25 +694,17 @@ void CalendarModel::rebuild(bool forceReset)
     }
 
     // Overdue: open tasks whose (written) due date passed, oldest first (then by page and line) —
-    // a query kept across index changes.
+    // kept per note across index changes.
     QVariantList overdue;
     int overdueCount = 0;
     if (m_index) {
-        static const Query query = [] {
-            const auto parsed = parseQuery(u"status:todo,doing due:<today sort:due limit:%1"_s.arg(MaxOverdue));
-            Q_ASSERT(std::holds_alternative<Query>(parsed));
-            return std::get<Query>(parsed);
-        }();
-        if (!m_overdueQuery)
-            m_overdueQuery = std::make_shared<QueryCache>();
-        const QueryResult result = m_overdueQuery->run(query, *m_index, today, weekStartDay());
-        overdueCount = result.total;
+        if (!m_overdueTasks)
+            m_overdueTasks = std::make_shared<OverdueCache>();
+        const QList<OverdueCache::Overdue> found = m_overdueTasks->tasks(*m_index, today, MaxOverdue, &overdueCount);
         const dates::UiLocale loc = uiLocale(m_locale);
-        for (const QueryItem &item : result.items) {
-            if (!item.task || !item.task->due)
-                continue;
-            const Task &task = *item.task;
-            const DateSpec &due = *task.due;
+        for (const OverdueCache::Overdue &item : found) {
+            const Task &task = item.task;
+            const DateSpec &due = item.due;
             const ParsedNote *note = m_index->note(item.path);
             overdue.append(QVariantMap{
                     {u"key"_s, u"overdue:%1:%2"_s.arg(item.path).arg(task.line)},

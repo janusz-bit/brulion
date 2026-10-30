@@ -180,7 +180,7 @@ std::shared_ptr<SnapshotCaches> SnapshotCaches::create()
     auto caches = std::make_shared<SnapshotCaches>();
     caches->tasks = std::make_shared<QueryCache>();
     caches->calendar = std::make_shared<CalendarCache>();
-    caches->overdue = std::make_shared<QueryCache>();
+    caches->overdue = std::make_shared<planning::OverdueCache>();
     return caches;
 }
 

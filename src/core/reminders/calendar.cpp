@@ -36,23 +36,22 @@ public:
         }
     }
 
-    /// The task dates of one note (document order), as index.tasks() lists its tasks.
+    /// The task dates of one note (document order: ParsedNote::tasks lists its blocks' tasks, as
+    /// index.tasks() does).
     void addTasks(const VaultPath &path, const ParsedNote &note)
     {
-        if (note.tasks.isEmpty())
-            return;
-        for (const Block &block : note.blocks) {
-            if (block.task)
-                addTask(path, *block.task);
-        }
+        for (const Task &task : note.tasks)
+            addTask(path, task);
     }
 
     /// The reminders of one note (document order).
-    void addReminders(const VaultPath &path)
+    void addReminders(const VaultPath &path, const ParsedNote &note)
     {
-        const QList<ReminderRef> reminders = m_index.remindersOf(path);
+        m_note = &note;
+        const QList<ReminderRef> reminders = reminders_detail::remindersOf(path, note, m_from, m_to);
         for (const ReminderRef &ref : reminders)
             addReminder(ref);
+        m_note = nullptr;
     }
 
     /// The final order of `items`: by date; within a day timed items first (by time), then
@@ -80,19 +79,7 @@ public:
         return out;
     }
 
-private:
-    QString pageTitle(const VaultPath &path) const
-    {
-        const ParsedNote *note = m_index.note(path);
-        return note ? note->title : QString();
-    }
-
-    QString titleFor(const QString &markdown, const VaultPath &path) const
-    {
-        const QString plain = plainText(markdown, &m_index);
-        return plain.isEmpty() ? pageTitle(path) : plain;
-    }
-
+    /// The dates of one task (see calendarItems()).
     void addTask(const VaultPath &path, const Task &task)
     {
         const std::optional<dates::RecurrenceRule> rule = ruleOf(task.recurrence);
@@ -132,6 +119,7 @@ private:
             add(CalendarItem::Done, DateSpec{*task.doneDate, std::nullopt}, DateSpec{*task.doneDate, std::nullopt});
     }
 
+    /// The dates of one reminder; the reminders of a block one after another.
     void addReminder(const ReminderRef &ref)
     {
         // index.reminders() lists the reminders of a block together: its source and title are
@@ -139,7 +127,7 @@ private:
         if (ref.path != m_blockPath || ref.blockIndex != m_blockIndex) {
             m_blockPath = ref.path;
             m_blockIndex = ref.blockIndex;
-            m_blockSource = sourceOf(m_index, ref);
+            m_blockSource = m_note ? sourceOf(m_note, ref) : sourceOf(m_index, ref);
             m_blockTitle = QString();
         }
         const ReminderSource &src = m_blockSource;
@@ -170,10 +158,24 @@ private:
         }
     }
 
+private:
+    QString pageTitle(const VaultPath &path) const
+    {
+        const ParsedNote *note = m_index.note(path);
+        return note ? note->title : QString();
+    }
+
+    QString titleFor(const QString &markdown, const VaultPath &path) const
+    {
+        const QString plain = plainText(markdown, &m_index);
+        return plain.isEmpty() ? pageTitle(path) : plain;
+    }
+
     const VaultIndex &m_index;
     const QDate m_from;
     const QDate m_to;
     QList<CalendarItem> &m_items;
+    const ParsedNote *m_note = nullptr; ///< the note of addReminders()
     // The block of the previous reminder (see addReminder()).
     VaultPath m_blockPath;
     int m_blockIndex = -1;
@@ -211,10 +213,32 @@ QList<CalendarItem> CalendarCache::items(const VaultIndex &index, QDate from, QD
                 if (note.tasks.isEmpty() && note.reminders.isEmpty())
                     return items;
                 CalendarBuilder(index, from, to, items.tasks).addTasks(path, note);
-                CalendarBuilder(index, from, to, items.reminders).addReminders(path);
+                CalendarBuilder(index, from, to, items.reminders).addReminders(path, note);
                 return items;
             },
-            [](const NoteItems &items) { return !items.tasks.isEmpty() || !items.reminders.isEmpty(); });
+            [](const NoteItems &items) { return !items.tasks.isEmpty() || !items.reminders.isEmpty(); },
+            [&](std::map<VaultPath, NoteItems> &values) {
+                // Everything: the same items from the index's task and reminder lists (notes by
+                // path, document order) — contiguous, so cheaper to walk than every note.
+                const QList<TaskRef> tasks = index.tasks();
+                for (qsizetype i = 0; i < tasks.size();) {
+                    const VaultPath &path = tasks.at(i).path;
+                    NoteItems items;
+                    CalendarBuilder builder(index, from, to, items.tasks);
+                    for (; i < tasks.size() && tasks.at(i).path == path; ++i)
+                        builder.addTask(path, tasks.at(i).task);
+                    if (!items.tasks.isEmpty())
+                        values.emplace_hint(values.end(), path, std::move(items));
+                }
+                forEachNoteReminders(index, from, to, [&](const VaultPath &path, const QList<ReminderRef> &refs) {
+                    QList<CalendarItem> list;
+                    CalendarBuilder builder(index, from, to, list);
+                    for (const ReminderRef &ref : refs)
+                        builder.addReminder(ref);
+                    if (!list.isEmpty())
+                        values[path].reminders = std::move(list);
+                });
+            });
     // Journals, then every note's task dates (notes by path), then every note's reminders —
     // the order ties keep.
     QList<CalendarItem> journals;

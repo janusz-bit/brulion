@@ -48,6 +48,9 @@ class CalendarCache;
 class QueryCache;
 class Vault;
 class VaultIndex;
+namespace planning {
+class OverdueCache;
+}
 } // namespace brulion
 
 namespace brulion::widgets {
@@ -71,7 +74,7 @@ struct CaptureDay {
 struct SnapshotCaches {
     std::shared_ptr<QueryCache> tasks;
     std::shared_ptr<CalendarCache> calendar;
-    std::shared_ptr<QueryCache> overdue;
+    std::shared_ptr<planning::OverdueCache> overdue;
 
     /// Empty caches.
     static std::shared_ptr<SnapshotCaches> create();
