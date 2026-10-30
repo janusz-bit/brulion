@@ -1,5 +1,5 @@
 // QueryCache — runQuery() for a query asked again and again (a ```query block, the Tasks view, the
-// calendar's overdue list): after an index change only the changed notes are evaluated again.
+// Android widgets' task list): after an index change only the changed notes are evaluated again.
 // Part of the index module — see index/index.h.
 #pragma once
 
