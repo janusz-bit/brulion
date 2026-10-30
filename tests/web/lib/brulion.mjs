@@ -49,12 +49,29 @@ export async function attachLog(testInfo, watched) {
   await testInfo.attach('console.txt', { body: watched.log.join('\n'), contentType: 'text/plain' });
 }
 
+/** The tab's sessionStorage key that marks it for tests (wasm/index.html: only then are
+ *  ?selftest=webpictures,pen, ?route= and ?now= honoured — a link cannot set it). */
+export const TEST_TAB_KEY = 'brulion-selftest';
+
+/** Marks the page's tab for tests before any page of it loads (an init script). */
+export async function markTestTab(page) {
+  await page.addInitScript((key) => {
+    try {
+      sessionStorage.setItem(key, '1');
+    } catch {
+      // about:blank and other opaque origins have no storage
+    }
+  }, TEST_TAB_KEY);
+}
+
 /**
  * Opens the app at `${origin}/brulion/` with `params` ({selftest, route, now…}; ?nosw always: the
- * service worker may refuse a self-signed site and is not what is tested) and waits until its
- * loading screen is gone. Fails at once when the page shows a problem instead.
+ * service worker may refuse a self-signed site and is not what is tested) in a tab marked for
+ * tests (markTestTab) and waits until its loading screen is gone. Fails at once when the page
+ * shows a problem instead.
  */
 export async function openApp(page, origin, params = {}) {
+  await markTestTab(page);
   const url = new URL(`${origin}/brulion/`);
   url.searchParams.set('nosw', '');
   url.searchParams.set('now', NOW);
