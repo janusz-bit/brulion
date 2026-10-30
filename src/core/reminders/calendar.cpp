@@ -5,6 +5,7 @@
 #include "reminders/reminders_p.h"
 
 #include <algorithm>
+#include <numeric>
 
 namespace brulion {
 
@@ -54,17 +55,29 @@ public:
             addReminder(ref);
     }
 
-    /// The final order: by date; within a day timed items first (by time), then all-day ones;
-    /// stable.
-    static void sort(QList<CalendarItem> &items)
+    /// The final order of `items`: by date; within a day timed items first (by time), then
+    /// all-day ones; ties in the given order (a stable sort). Sorted through pointers, so every
+    /// item is copied once.
+    static QList<CalendarItem> sorted(const QList<const CalendarItem *> &items)
     {
-        std::stable_sort(items.begin(), items.end(), [](const CalendarItem &a, const CalendarItem &b) {
+        QList<qsizetype> order(items.size());
+        std::iota(order.begin(), order.end(), 0);
+        std::sort(order.begin(), order.end(), [&items](qsizetype x, qsizetype y) {
+            const CalendarItem &a = *items[x];
+            const CalendarItem &b = *items[y];
             if (a.date != b.date)
                 return a.date < b.date;
             if (a.time.has_value() != b.time.has_value())
                 return a.time.has_value(); // timed items before all-day ones
-            return a.time && *a.time < *b.time;
+            if (a.time && *a.time != *b.time)
+                return *a.time < *b.time;
+            return x < y;
         });
+        QList<CalendarItem> out;
+        out.reserve(items.size());
+        for (const qsizetype i : std::as_const(order))
+            out.append(*items[i]);
+        return out;
     }
 
 private:
@@ -203,15 +216,21 @@ QList<CalendarItem> CalendarCache::items(const VaultIndex &index, QDate from, QD
             },
             [](const NoteItems &items) { return !items.tasks.isEmpty() || !items.reminders.isEmpty(); });
     // Journals, then every note's task dates (notes by path), then every note's reminders —
-    // the order the stable sort keeps for ties.
-    QList<CalendarItem> out;
-    CalendarBuilder(index, from, to, out).addJournals();
-    for (const auto &[path, items] : d->notes.values())
-        out.append(items.tasks);
-    for (const auto &[path, items] : d->notes.values())
-        out.append(items.reminders);
-    CalendarBuilder::sort(out);
-    return out;
+    // the order ties keep.
+    QList<CalendarItem> journals;
+    CalendarBuilder(index, from, to, journals).addJournals();
+    QList<const CalendarItem *> all;
+    for (const CalendarItem &item : std::as_const(journals))
+        all.append(&item);
+    for (const auto &[path, items] : d->notes.values()) {
+        for (const CalendarItem &item : items.tasks)
+            all.append(&item);
+    }
+    for (const auto &[path, items] : d->notes.values()) {
+        for (const CalendarItem &item : items.reminders)
+            all.append(&item);
+    }
+    return CalendarBuilder::sorted(all);
 }
 
 const NoteCacheSync &CalendarCache::lastSync() const

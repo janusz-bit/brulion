@@ -19,11 +19,16 @@
 //                      date), sorted, nativeIds assigned
 //                    notificationsBetween(index, from, to, locale) — same, explicit window, no limit
 //                    notificationId(path, at, text), nativeIdFor(id), assignNativeIds(list)
+//                    class NotificationCache — the occurrences of a window of days kept per note
+//                      across index changes: setDays(first, last), between(), upcoming() (= the
+//                      functions above; requests outside the days computed directly)
 //
 //   scheduler.h      class ReminderScheduler : QObject — (VaultIndex*, NotificationSink*,
 //                      LocalStore*, Clock = QDateTime::currentDateTime)
 //                      start() / stop() / refresh() (debounced on index changes) / checkNow()
 //                      settings: horizonDays, maxScheduled, alarmRingMinutes, locale
+//                      one NotificationCache of [today − 8, today + horizon + 1] for every pass
+//                      (a refresh after a save computes the saved note only)
 //                      in-app sinks (!firesWhenClosed): QTimer for the next reminder within
 //                      24 h (re-planned hourly), 30 s heartbeat for sleep / clock jumps, fire
 //                      once (handled ids persisted, pruned after 7 days), > 6 h late -> missed
@@ -38,6 +43,8 @@
 //                      that are not done/cancelled expanded; dates keep their distance to the
 //                      due/scheduled/start reference), done dates, reminders (expanded);
 //                      sorted by date, timed items by time, then all-day; stable
+//                    class CalendarCache — items(index, from, to) kept across index changes
+//                      (= calendarItems(); only the changed notes computed again)
 //
 //   snooze.h         snoozeReminder(content, line, newAt) -> content — replaces the first ⏰
 //                      token of the line (keeping '!'); a recurring reminder instead gets a

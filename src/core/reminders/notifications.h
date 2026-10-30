@@ -166,8 +166,10 @@ public:
 private:
     struct Private;
     std::unique_ptr<Private> d;
+    /// The occurrences within [from, to] (local) in time order, at most `max` (-1: all);
+    /// `total` receives how many there are.
     QList<ScheduledNotification> occurrences(const VaultIndex &index, const QDateTime &from, const QDateTime &to,
-                                             dates::UiLocale locale);
+                                             dates::UiLocale locale, qsizetype max, qsizetype *total);
 };
 
 } // namespace brulion

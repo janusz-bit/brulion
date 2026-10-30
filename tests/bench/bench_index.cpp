@@ -9,6 +9,7 @@
 #include "benchdata.h"
 
 #include "index/index.h"
+#include "index/querycache.h"
 #include "markdown/markdown.h"
 #include "notebook/pages.h"
 #include "vault/vault.h"
@@ -720,6 +721,54 @@ private Q_SLOTS:
             const QueryResult r = runQuery(std::get<Query>(parsed), idx, today);
             Q_UNUSED(r);
         }
+    }
+
+    // A query asked again after a save (a ```query block of the open page, the Tasks view): one
+    // note edited, then the query — with the QueryCache the app keeps (only the saved note is
+    // evaluated again; L3) and with runQuery() alone.
+    void queryCache_data()
+    {
+        QTest::addColumn<int>("notes");
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<bool>("cached");
+        for (int n : bench::sizes({10000}, {10000})) {
+            const QList<std::pair<QString, QString>> queries = {
+                    {u"tag praca"_s, u"tag:praca"_s},
+                    {u"all tasks sorted"_s, u"type:tasks sort:due,-priority,page"_s},
+            };
+            for (const auto &[name, q] : queries) {
+                for (const bool cached : {true, false}) {
+                    QTest::newRow(qPrintable(u"%1 notes %2, one note edited, %3"_s.arg(n).arg(
+                            name, cached ? u"QueryCache"_s : u"runQuery"_s)))
+                            << n << q << cached;
+                }
+            }
+        }
+    }
+    void queryCache()
+    {
+        QFETCH(int, notes);
+        QFETCH(QString, source);
+        QFETCH(bool, cached);
+        VaultIndex &idx = index(notes);
+        const QDate today = bench::fixedToday();
+        const QString path = files(notes).first().path;
+        const QString original = idx.content(path);
+        QVERIFY(!original.isNull());
+        const QString edited = original + u"\n- [ ] nowe zadanie #praca 📅 2026-10-20\n"_s;
+        const auto parsed = parseQuery(source);
+        QVERIFY2(std::holds_alternative<Query>(parsed), qPrintable(source));
+        const Query query = std::get<Query>(parsed);
+        QueryCache cache;
+        QVERIFY(cache.run(query, idx, today).total >= 0);
+        int flip = 0;
+        qsizetype sink = 0;
+        QBENCHMARK {
+            idx.update(path, (flip++ & 1) ? original : edited);
+            sink += cached ? cache.run(query, idx, today).total : runQuery(query, idx, today).total;
+        }
+        idx.update(path, original);
+        QVERIFY(sink >= 0);
     }
 
     // ---- links ----------------------------------------------------------------------------------

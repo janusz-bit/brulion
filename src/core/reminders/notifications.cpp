@@ -31,11 +31,34 @@ QString dueInfo(const DateSpec &due, dates::UiLocale locale, QDate day)
     return (locale == dates::UiLocale::Polish ? u" · termin: "_s : u" · due "_s) + when;
 }
 
-bool earlier(const ScheduledNotification &a, const ScheduledNotification &b)
+/// An occurrence with its time as milliseconds since the epoch: comparing QDateTimes in local
+/// time converts them on every comparison.
+struct Timed {
+    qint64 ms = 0;
+    const ScheduledNotification *n = nullptr;
+};
+
+/// By time, then id (the order of every list here).
+bool earlier(const Timed &a, const Timed &b)
 {
-    if (a.at != b.at)
-        return a.at < b.at;
-    return a.id < b.id;
+    if (a.ms != b.ms)
+        return a.ms < b.ms;
+    return a.n->id < b.n->id;
+}
+
+/// The first `max` of `items` in time order (all when `max` < 0), copied.
+QList<ScheduledNotification> firstInTime(QList<Timed> &items, qsizetype max)
+{
+    const qsizetype keep = max < 0 ? items.size() : std::min(max, items.size());
+    if (keep < items.size())
+        std::partial_sort(items.begin(), items.begin() + keep, items.end(), earlier);
+    else
+        std::sort(items.begin(), items.end(), earlier);
+    QList<ScheduledNotification> out;
+    out.reserve(keep);
+    for (qsizetype i = 0; i < keep; ++i)
+        out.append(*items[i].n);
+    return out;
 }
 
 /// notificationId() with the text already hashed (text::contentHash()).
@@ -138,6 +161,7 @@ void collectNote(const VaultIndex &index, const VaultPath &path, const QDateTime
 /// The occurrences of one note for the kept days.
 struct NoteOccurrences {
     QList<ScheduledNotification> list;
+    QList<qint64> ms;    ///< list's times since the epoch (ms)
     bool capped = false; ///< a series was cut at MaxOccurrences: requests compute the note directly
 };
 
@@ -165,24 +189,18 @@ void assignNativeIds(QList<ScheduledNotification> &notifications)
     }
 }
 
+// The free functions are a NotificationCache without days: every note computed for the request
+// (collectNote(), as for the cache's days) — one code path.
 QList<ScheduledNotification> notificationsBetween(const VaultIndex &index, const QDateTime &from, const QDateTime &to,
                                                   dates::UiLocale locale)
 {
-    NotificationCache cache;
-    if (from.isValid() && to.isValid())
-        cache.setDays(from.toLocalTime().date(), to.toLocalTime().date());
-    return cache.between(index, from, to, locale);
+    return NotificationCache().between(index, from, to, locale);
 }
 
 QList<ScheduledNotification> upcomingNotifications(const VaultIndex &index, const QDateTime &now, int horizonDays,
                                                    int max, int *dropped, dates::UiLocale locale)
 {
-    NotificationCache cache;
-    if (now.isValid()) {
-        const QDateTime local = now.toLocalTime();
-        cache.setDays(local.addSecs(-60).date(), local.addDays(std::clamp(horizonDays, 0, MaxHorizonDays)).date());
-    }
-    return cache.upcoming(index, now, horizonDays, max, dropped, locale);
+    return NotificationCache().upcoming(index, now, horizonDays, max, dropped, locale);
 }
 
 // ---- NotificationCache ----------------------------------------------------------------------------
@@ -217,18 +235,20 @@ QDate NotificationCache::lastDay() const
 }
 
 QList<ScheduledNotification> NotificationCache::occurrences(const VaultIndex &index, const QDateTime &from,
-                                                            const QDateTime &to, dates::UiLocale locale)
+                                                            const QDateTime &to, dates::UiLocale locale, qsizetype max,
+                                                            qsizetype *total)
 {
     // `from` and `to` are local. Reminders are local wall-clock times: the window's dates are
     // local dates, whatever time spec the caller used (e.g. a UTC "now").
-    QList<ScheduledNotification> out;
+    QList<ScheduledNotification> direct; // computed for this request (all notes, or capped ones)
+    QList<Timed> timed;
     const bool kept = d->first.isValid() && d->last.isValid() && d->first <= d->last && from.date() >= d->first
                       && to.date() <= d->last;
     if (!kept) {
         d->lastSync = NoteCacheSync();
         const QList<VaultPath> paths = index.paths();
         for (const VaultPath &path : paths)
-            collectNote(index, path, from, to, locale, out);
+            collectNote(index, path, from, to, locale, direct);
     } else {
         const QDateTime dayStart(d->first, QTime(0, 0));
         const QDateTime dayEnd(d->last, QTime(23, 59, 59, 999));
@@ -241,22 +261,30 @@ QList<ScheduledNotification> NotificationCache::occurrences(const VaultIndex &in
                     ++d->computed;
                     if (!note.reminders.isEmpty())
                         collectNote(index, path, dayStart, dayEnd, locale, occurrences.list, &occurrences.capped);
+                    occurrences.ms.reserve(occurrences.list.size());
+                    for (const ScheduledNotification &n : std::as_const(occurrences.list))
+                        occurrences.ms.append(n.at.toMSecsSinceEpoch());
                     return occurrences;
                 },
                 [](const NoteOccurrences &o) { return !o.list.isEmpty() || o.capped; });
+        const qint64 fromMs = from.toMSecsSinceEpoch();
+        const qint64 toMs = to.toMSecsSinceEpoch();
         for (const auto &[path, occurrences] : d->notes.values()) {
             if (occurrences.capped) { // the series' dates depend on the window: as asked
-                collectNote(index, path, from, to, locale, out);
+                collectNote(index, path, from, to, locale, direct);
                 continue;
             }
-            for (const ScheduledNotification &n : occurrences.list) {
-                if (n.at >= from && n.at <= to)
-                    out.append(n);
+            for (qsizetype i = 0; i < occurrences.list.size(); ++i) {
+                if (occurrences.ms[i] >= fromMs && occurrences.ms[i] <= toMs)
+                    timed.append(Timed{occurrences.ms[i], &occurrences.list[i]});
             }
         }
     }
-    std::sort(out.begin(), out.end(), earlier);
-    return out;
+    for (const ScheduledNotification &n : std::as_const(direct)) // `direct` is complete: pointers stay
+        timed.append(Timed{n.at.toMSecsSinceEpoch(), &n});
+    if (total)
+        *total = timed.size();
+    return firstInTime(timed, max);
 }
 
 QList<ScheduledNotification> NotificationCache::between(const VaultIndex &index, const QDateTime &from,
@@ -264,7 +292,7 @@ QList<ScheduledNotification> NotificationCache::between(const VaultIndex &index,
 {
     if (!from.isValid() || !to.isValid() || from > to)
         return {};
-    QList<ScheduledNotification> out = occurrences(index, from.toLocalTime(), to.toLocalTime(), locale);
+    QList<ScheduledNotification> out = occurrences(index, from.toLocalTime(), to.toLocalTime(), locale, -1, nullptr);
     assignNativeIds(out);
     return out;
 }
@@ -281,11 +309,10 @@ QList<ScheduledNotification> NotificationCache::upcoming(const VaultIndex &index
     const QDateTime local = now.toLocalTime();
     const QDateTime from = local.addSecs(-60);
     const QDateTime to = local.addDays(std::clamp(horizonDays, 0, MaxHorizonDays));
-    QList<ScheduledNotification> out = occurrences(index, from, to, locale);
-    const qsizetype keep = std::clamp<qsizetype>(max, 0, out.size());
+    qsizetype total = 0;
+    QList<ScheduledNotification> out = occurrences(index, from, to, locale, std::max(max, 0), &total);
     if (dropped)
-        *dropped = int(out.size() - keep);
-    out.resize(keep);
+        *dropped = int(total - out.size());
     assignNativeIds(out);
     return out;
 }

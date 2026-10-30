@@ -11,6 +11,9 @@
 //                    beginBatch()/endBatch() (+ RAII VaultIndex::Batch), version(), flushSearch()
 //                    Q_SIGNAL changed() — coalesced: once per event-loop turn (zero timer) or at
 //                    the endBatch() closing the outermost batch
+//                  change log: changesSince(version) -> IndexChanges{complete, notes (changed,
+//                           relinked, showing a changed block's ((id))), names}, serial(); the
+//                           derived lists below are patched per change, not built again
 //                  notes:   note(path) -> const ParsedNote* | nullptr, paths(), attachments(),
 //                           contains(path), content(path)
 //                  links:   resolveLink(target, from = {}) -> optional<VaultPath> (SYNTAX §2:
@@ -36,7 +39,8 @@
 //                  blocks:  blockById(id) -> optional<BlockRef{path, blockIndex}>
 //                  lists:   tags() -> TagCount{tag, count, paths, display}, tasks() -> TaskRef{path,
 //                           blockIndex, task}, reminders() -> ReminderRef{path, blockIndex,
-//                           reminder, task?}, journals() -> JournalRef{date, path} newest first
+//                           reminder, task?}, journals() -> JournalRef{date, path} newest first;
+//                           tasksOf(path), remindersOf(path) (one note's)
 //                  search:  search(query, limit = 50) -> SearchHit{path, title, score, line, excerpt}
 //                           suggestPages(prefix, limit = 20) -> PageSuggestion{path, title, alias}
 //                           suggestBlocks(text, limit = 20) -> BlockRef
@@ -60,6 +64,15 @@
 //                  runQuery(query, index, today, weekStart = Monday, QueryOptions{currentPath,
 //                  now, defaultLimit}) -> QueryResult{type, items (QueryItem{path, blockIndex,
 //                  task?, reminder?}), groups{key, label, items}, total}
+//   querycache.h   QueryCache — runQuery() kept across index changes: update(query, index, today,
+//                  weekStart, options) evaluates only the notes changed since (everything for
+//                  another query / day / page, page: and ref: filters after name changes, and
+//                  remind: filters), result(index), run(), itemsOf(path, index), total(),
+//                  lastSync()
+//   notecache.h    following the index (header-only): IndexFollower::follow(index, key,
+//                  dependsOnNames) -> NoteCacheSync{full, changed}; NoteCache<Value>::sync(index,
+//                  key, dependsOnNames, compute, keep), values() (by path) — what QueryCache,
+//                  reminders' CalendarCache and NotificationCache are built on
 //
 //   loading elsewhere (notebook::IndexLoader): VaultIndex::prepare(path, content, config) /
 //                  prepareParsed() -> PreparedNote (any thread), updatePrepared(prepared,

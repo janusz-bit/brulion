@@ -870,7 +870,8 @@ bool TaskListModel::itemLess(const Item &a, const Item &b) const
     };
     const Task &ta = a.ref.task;
     const Task &tb = b.ref.task;
-    if (a.section == u"done") {
+    static const qsizetype doneRank = sectionKeys().indexOf(u"done"_s);
+    if (a.sectionRank == doneRank) {
         if (a.finished != b.finished) {
             if (a.finished && b.finished)
                 return *a.finished > *b.finished;

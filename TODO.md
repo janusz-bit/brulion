@@ -69,7 +69,9 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
 * szybsze łączenie gotowych notatek w indeks w wątku interfejsu, mniej odświeżania widoku w trakcie
   wczytywania (w przeglądarce pierwsze wczytanie bez gotowego indeksu jest o 11–16 % dłuższe niż
   przed falą 5) i pomiar indeksowania na Raspberry Pi i telefonie (L1b);
-* przyrostowe listy zadań, kalendarza i przypomnień (L3);
+* pomiar odświeżania list po zapisie (zadania, kalendarz, przypomnienia, zapytania) na Raspberry Pi
+  (przed zmianą 0,95 s, cel < 0,2 s) i obniżenie jego wiersza bazowego w
+  tests/bench/baselines/pi.csv (L3b);
 * pomiar szybszego cofania na Raspberry Pi (przed zmianą 214 ms, cel < 50 ms) i zapis jego wiersza
   bazowego w tests/bench/baselines/pi.csv — do tego czasu sprawdzanie wydajności na Pi go pomija
   (L5b);
