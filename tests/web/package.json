@@ -1,0 +1,16 @@
+{
+  "name": "brulion-web-tests",
+  "private": true,
+  "description": "Browser tests of Brulion's web build: pictures from the internet and pen pressure in Chromium and Firefox (docs/WEB.md \"Testy w przeglądarkach\").",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "pngjs": "7.0.0"
+  }
+}
