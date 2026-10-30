@@ -11,9 +11,9 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   (docs/ANDROID.md „Obrazy z internetu”): przesuwanie powiększonego zdjęcia palcem i gest Wstecz
   z krawędzi, wklejenie adresu skopiowanego w Chrome przez „Wklej” z menu tekstu, eksport
   z „Dołącz kopie”.
-* **Rysunki — dalsze kroki.** Edytor rysunków (`/Rysunek`, docs/UI.md „Drawing editor”) ma
-  pismo odręczne, zakreślacz, gumkę, papier, kształty, strzałki, tekst i zaznaczanie lassem.
-  Do zrobienia:
+* **Rysunki — dalsze pomysły i sprawdzenie na urządzeniach.** Edytor rysunków (`/Rysunek`,
+  docs/UI.md „Drawing editor”) ma pismo odręczne, zakreślacz, gumkę, papier, kształty, strzałki,
+  tekst, zaznaczanie lassem, podkłady (obraz, slajd, strona PDF) i ciemne tło. Zostaje:
   * sprawdzić ręcznie „Scal rysunki” na prawdziwych urządzeniach: rysunek zmieniony bez sieci na
     telefonie i na laptopie, Syncthing zostawia kopię `*.sync-conflict-….svg` (albo
     `*.excalidraw.sync-conflict-….md` rysunku z Obsidiana) → „Scal rysunki” w centrum
@@ -21,12 +21,18 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     urządzeniach scala się sam, bez kopii). Kopie od prawdziwego Syncthinga (dwie instancje na
     jednym komputerze) scala `tests/app/io/syncthing-conflict.sh`, Nextcloud sprawdzono tylko na
     udawanym serwerze WebDAV (`tst_sync_devices`);
-  * sprawdzić ręcznie zaznaczanie lassem rysikiem na tablecie (Natalia) i polskie znaki z
-    klawiatury ekranowej w tekście na rysunku na prawdziwym telefonie (pisanie z klawiatury
-    sprawdza `scripts/android-emulator-test.sh --drawing`, zgodność z excalidraw.com w obie strony
+  * na prawdziwym tablecie z rysikiem (Android, Natalia — w aplikacji i w przeglądarce) i
+    telefonie: czy linia grubieje przy mocniejszym nacisku, czy drugi koniec rysika i przycisk
+    boczny ścierają, zaznaczanie lassem rysikiem, polskie znaki z klawiatury ekranowej w tekście na
+    rysunku; wstawić strony PDF-a z wykładu („/Rysunek na obrazie lub PDF”), pisać rysikiem po
+    slajdzie, sprawdzić ciemny podkład i czy obrócona strona PDF wygląda dobrze (automatycznie
+    sprawdzone: Chromium i Firefox — `tests/web`, emulator Androida — `--stylus`, `--drawing`,
+    strona PDF przez PdfRenderer — samotest mostka, zgodność z excalidraw.com w obie strony —
     `tests/app/drawing/excalidraw-roundtrip.sh`, wymaga internetu);
   * zmiana rozmiaru i obracanie zaznaczenia (uchwyty na ramce), zaznaczanie prostokątem;
   * kopiowanie elementów między Brulionem a excalidraw.com przez schowek;
+  * przechodzenie między stronami PDF w edytorze rysunków (dziś: powrót do notatki albo „Inna
+    strona PDF…”);
   * rysunki `*.excalidraw.md` wtyczki Excalidraw dla Obsidiana: obrazy z sekcji „Embedded Files”
     (dziś zastępcze prostokąty), eksport (HTML, Pandoc) takich rysunków jako obrazów (dziś
     osadzone jako strona);
@@ -35,11 +41,8 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     poprawnie, ale nie otwierano ich potem w Obsidianie): otworzyć `*.excalidraw.md` w Brulionie,
     dorysować coś i przesunąć tekst z linkiem `[[…]]`, otworzyć go w Obsidianie (rysunek się
     wczytuje, link w tekście działa, notatki z tyłu nietknięte); zetrzeć kreskę w Brulionie, gdy
-    Obsidian ma ten rysunek otwarty (powinna zniknąć i tam);
-  * notatki na slajdach i PDF-ach z wykładu: rysowanie na obrazie w tle (strona PDF, slajd);
-  * na prawdziwym tablecie z rysikiem (Android, Natalia — w aplikacji i w przeglądarce): czy
-    linia grubieje przy mocniejszym nacisku, czy drugi koniec rysika i przycisk boczny ścierają
-    (automatycznie sprawdzone: Chromium i Firefox — `tests/web`, emulator Androida — `--stylus`).
+    Obsidian ma ten rysunek otwarty (powinna zniknąć i tam); otworzyć w Obsidianie rysunek na
+    slajdzie (podkład widać pod pismem).
 * **Udostępnianie poza Androidem — sprawdzić na prawdziwych urządzeniach.** Automatycznie
   sprawdzone (testy, CI): odczyt udostępnienia, okno, przekazanie do działającej kopii, wpis
   `.desktop`, rejestr Windows (instalacja, aktualizacja, odinstalowanie), wersja webowa w Chromium

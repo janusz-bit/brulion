@@ -39,7 +39,7 @@ brulion/
 | blok z językiem `calc` lub `query` | obliczenia, zapytanie |
 | `$…$`, `$$…$$`, blok z językiem `math` | wzór matematyczny (LaTeX) |
 | komórka zaczynająca się od `=` | formuła w tabeli |
-| `![[Rysunek ….svg]]` | rysunek (zobacz [[Rysunki]]): obraz SVG ze sceną Excalidraw w środku; w scenie także papier (`brulionBackground`) i jasne albo ciemne tło (`brulionTheme`: `light`, `dark`, bez klucza — jak motyw) |
+| `![[Rysunek ….svg]]` | rysunek (zobacz [[Rysunki]]): obraz SVG ze sceną Excalidraw w środku; w scenie także papier (`brulionBackground`), jasne albo ciemne tło (`brulionTheme`: `light`, `dark`, bez klucza — jak motyw) i podkład — obraz albo strona PDF pod pismem: zablokowany element `image` na samym spodzie z `customData.brulionBackdrop` (`path` — ścieżka pliku w notatniku, `page` — strona PDF, 0 dla obrazu), a jego obraz w scenie (`files`) i w samym SVG |
 | `![[Szkic.excalidraw]]`, `*.excalidraw.md` | rysunek wtyczki Excalidraw dla Obsidiana (frontmatter `excalidraw-plugin`, scena w bloku `## Drawing`: `compressed-json` albo `json`) albo plik `.excalidraw` — Brulion edytuje go i zapisuje w tym samym formacie, zmieniając tylko scenę i wpisy zmienionych tekstów |
 
 Pliki nigdy nie zawierają dat słowami („jutro”) — tylko `RRRR-MM-DD` i `GG:MM`. HTML w notatce jest pokazywany jako tekst i nigdy nie jest wykonywany.

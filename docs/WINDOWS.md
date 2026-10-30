@@ -245,7 +245,9 @@ albo ponownym kliknięciem ikony.
 
 `.github/workflows/windows.yml` (runner `windows-2022`): Qt 6.11.2 `win64_msvc2022_64` z aqt
 (`jurplel/install-qt-action`, w cache; aqtinstall z przypiętego commita gałęzi master, bo wydanie
-3.3.0 nie zna układu repozytorium Qt 6.11 dla Windows), MSVC z `ilammy/msvc-dev-cmd`, ccache
+3.3.0 nie zna układu repozytorium Qt 6.11 dla Windows) razem z modułem **Qt PDF** (`modules:
+qtpdf`, rozszerzenie repozytorium Qt: strony PDF jako podkład rysunku, `src/platform/
+pdfpages_qtpdf.cpp`; `windeployqt` dokłada `Qt6Pdf.dll`, ok. 5 MB), MSVC z `ilammy/msvc-dev-cmd`, ccache
 z Chocolatey (pamięć podręczna kompilacji w cache Actions, zapisywana zaraz po budowaniu), CMake +
 Ninja, Release, potem `scripts/windows-build.ps1` krok po kroku: build, testy, paczki, sprawdzenie
 paczek → artefakt `brulion-windows` (ZIP + instalator). Uruchamia się jak `appimage.yml`: ręcznie
@@ -257,7 +259,8 @@ paczek → artefakt `brulion-windows` (ZIP + instalator). Uruchamia się jak `ap
 
 Potrzebne: Visual Studio 2022 z obciążeniem „Programowanie aplikacji klasycznych w C++” (ma CMake
 i Ninja), Qt 6.11.2 dla MSVC (instalator Qt albo aqt nowszy niż 3.3.0:
-`aqt install-qt windows desktop 6.11.2 win64_msvc2022_64 -O C:\Qt`), Inno Setup 6 (`winget install JRSoftware.InnoSetup`). Klon z Git for Windows
+`aqt install-qt windows desktop 6.11.2 win64_msvc2022_64 -O C:\Qt -m qtpdf`; bez `qtpdf` Brulion
+buduje się bez PDF-ów jako podkładu rysunku), Inno Setup 6 (`winget install JRSoftware.InnoSetup`). Klon z Git for Windows
 zostawia końce linii LF dzięki `.gitattributes` (`* -text`) — testy porównują bajty. W PowerShellu
 w katalogu repozytorium:
 

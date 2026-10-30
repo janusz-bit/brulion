@@ -146,6 +146,17 @@ z każdym backendem portalu: `xdg-desktop-portal-gtk`, `-gnome`, `-kde`, `-hyprl
 portalu wraca do okna Qt. Pakiet z Nixa niczego tu nie ustawia: zostaje motyw Qt, który wybrał
 pulpit (zmienna globalna zmienia też inne programy Qt).
 
+### Strony PDF jako podkład rysunku
+
+Pakiet z Nixa rysuje strony PDF (podkład rysunku, „Rysunek na obrazie lub PDF…”) przez
+**poppler-qt6** (`kdePackages.poppler`, licencja GPL-2.0-or-later, zgodna z AGPL-3.0-or-later
+Brulionu): nixpkgs ma Qt PDF tylko wewnątrz QtWebEngine, który powiększyłby zamknięcie pakietu
+o ok. 615 MiB, a poppler o ok. 26 MiB (poppler-qt6, poppler-data, nss, nspr, openjpeg, lcms2;
+z cache.nixos.org dla x86_64 i aarch64). CMake znajduje go przez pkg-config
+(`src/platform/CMakeLists.txt`), środowisko programisty (`nix develop`) dostaje go z pakietu, więc
+testy `tst_pdfpages` sprawdzają tam backend popplera. Zbudowanie bez PDF-ów:
+`-DBRULION_PDF_BACKEND=none`.
+
 ### Otwórz za pomocą
 
 Wpis pulpitu z pakietu (`Exec=brulion --open %F`, `MimeType=text/plain;`, `StartupNotify=true`)

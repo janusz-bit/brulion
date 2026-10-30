@@ -803,6 +803,7 @@ W brulion.selftest: SELFTEST schedule round=1 ok=1 scheduled=2 exact=1 error=
 W brulion.selftest: SELFTEST schedule round=2 ok=1 scheduled=2 exact=1 error=
 W brulion.selftest: SELFTEST activated path=dziennik/zimny-start.md line=5
 W brulion.selftest: SELFTEST activated path=strony/Łódź.md line=7
+W brulion.selftest: SELFTEST pdf backend=Android PdfRenderer pages=1 width=595 height=842 centre=#ff0000 corner=#ffffff error=
 ```
 
 `dumpsys alarm` pokazał przypomnienie jako dokładny budzik RTC_WAKEUP (`setExactAndAllowWhileIdle`)
@@ -820,6 +821,7 @@ arm64-v8a (`tests/bench/mobile/size-report.py apk`):
 | bez wtyczek debugera i profilera QML (`qmltooling`, 12 bibliotek) | `src/app/CMakeLists.txt` (`qt_import_plugins(… EXCLUDE_BY_TYPE qmltooling)`) | −1,0 MB |
 | bez QML deweloperskiego: galerii (`--gallery`), placu zabaw edytora (`--editor`), skryptów i samotestów `--editor-script` | opcja `BRULION_DEV_QML` w `src/app/CMakeLists.txt` (domyślne `AUTO`: wyłączona w Release/MinSizeRel na Androidzie i w przeglądarce, ustalane przy każdym `cmake`), zaślepki `src/app/qml/stubs/` | `libbrulion` −0,77 MB |
 | OpenSSL 3 (HTTPS, wyżej) | `src/app/CMakeLists.txt` | +4,45 MB |
+| strony PDF jako podkład rysunku (2026-10-30) przez systemowy `PdfRenderer` (`PdfPages.kt`, JNI) zamiast Qt PDF — Qt PDF dla Androida to `libQt6Pdf_arm64-v8a.so` 4,53 MB (archiwum 2,09 MB), a w repozytorium Qt jest tylko jako rozszerzenie, którego aqt nie zna | `src/platform/pdfpages_android.cpp`, `android/…/PdfPages.kt` | ok. 0 MB (kilka KB kodu) |
 | tylko styl Basic, bez QtQuick.Dialogs (2026-10-30): okna wyboru plików systemu przez `FilePicker` (wybór plików i folderów, „Zapisz jako” — te same intencje SAF co wcześniej), QML importuje `QtQuick.Controls.Basic` zamiast `QtQuick.Controls`, który przez opcjonalne importy pakował wszystkie style (Material, Universal, Imagine, Fusion, FluentWinUI3) | `src/app/ui/filepicker.h`, strażnik w `src/app/CMakeLists.txt` i `scripts/android-build.sh` (`nix/android.nix`) | −15,63 MB (25 plików mniej; pobranie −4,6 MB) |
 
 Razem 83,15 MB → 81,02 MB (do pobrania, po kompresji: 27,46 → 27,18 MB); bez OpenSSL byłoby
@@ -995,6 +997,8 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | sygnał `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | natywna `nativeImeChanged(Int, Boolean, Boolean)` (z `ImeInsets`, piksele fizyczne, każda klatka wysuwania na Androidzie 11+) / `requestImeState()` — raport jeszcze raz |
 | sygnał `systemGesturesChanged(int left, int right)` | natywna `nativeGestureInsetsChanged(Int, Int)` (z `ImeInsets`, piksele fizyczne stref gestów systemu przy krawędziach widoku Qt; raport jeszcze raz też przez `requestImeState()`) |
 | `void setSystemBarsLight(bool light)` | `setSystemBarsLight(Boolean)` — ikony pasków systemu ciemne nad jasnym oknem (Android 11+, okno pod paskami) |
+| `platform::pdfInfo(file)` (`src/platform/pdfpages_android.cpp`, nie `AndroidBridge`; każdy wątek) | `pdfInfo(String): String` — `{"pages", "sizes": [[w, h], …] (punkty), "error", "locked"}` (`PdfPages.kt`: systemowy `android.graphics.pdf.PdfRenderer`) |
+| `platform::renderPdfPage(file, page, maxSide)` (j.w.) | `renderPdfPage(String, Int, Int): ByteArray?` — 8 bajtów nagłówka (szerokość, wysokość, big-endian) i piksele RGBA_8888 strony na białym tle, dłuższy bok `maxSide`; `null` przy błędzie |
 
 * Element `scheduleReminders`: `{id: int, title, body, at: ms od epoki, alarm: bool,
   ringMinutes: int (alarmy, 1–60, domyślnie 10), path: ścieżka notatki w notatniku, line: int,
