@@ -4,7 +4,7 @@
 //
 //   node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/p \
 //       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--keyboard] [--keyboard-phone] \
-//       [--two-tabs] [--share] [--lang pl-PL] \
+//       [--two-tabs] [--share] [--pick-files] [--lang pl-PL] \
 //       [--index-notes N [--cache-quota]] [--copy] [--screenshot shot.png] [--loader-screenshot loading.png] \
 //       [--timeout 120]
 //
@@ -54,7 +54,14 @@
 // 64 KiB aborts its transaction and throws QuotaExceededError — DevTools' quota override,
 // Storage.overrideQuotaForOrigin, changes nothing in headless Chromium 155): the cache's write-back
 // must fail alone — counted in brulionStorage.cacheFailures, no failed write-back, no change left
-// pending, the cache gone from IndexedDB — and the reload then parses every note. --copy writes a notebook with today's journal into
+// pending, the cache gone from IndexedDB — and the reload then parses every note. --pick-files checks the
+// browser's file picker and download without Qt Widgets (src/platform/wasm/wasmfiles.h): in a tab
+// marked for tests, with showOpenFilePicker / showSaveFilePicker taken away (so Qt uses the
+// <input type=file> and the download every browser has), ?selftest=pickfiles,savefile; a real
+// click opens the picker, which must allow several files, and gets four (a Polish name with CRLF
+// lines, an empty file, one of 2 MB above the test's 1 MB limit, a .txt): the app must report
+// them in order with their sizes and SHA-256 — the big one never read; the next click downloads
+// "Zażółć.md", whose bytes must be "ąę\n". --copy writes a notebook with today's journal into
 // IndexedDB the same way and copies blocks with real input: a click on the first block's text,
 // Escape (the block selected), Shift+Down (the next one with its child), Ctrl+C — the browser's
 // clipboard (navigator.clipboard, permission granted) must then hold their Markdown as text/plain
@@ -65,6 +72,7 @@
 // SwiftShader (software). Set BRULION_CHROME_NO_SANDBOX=1 (or CI=true) where the sandbox
 // cannot start (containers, GitHub Actions on Ubuntu 24.04).
 import { spawn, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -87,6 +95,7 @@ function parseArgs(argv) {
     else if (a === '--keyboard-phone') args.keyboardPhone = true;
     else if (a === '--two-tabs') args.twoTabs = true;
     else if (a === '--share') args.share = true;
+    else if (a === '--pick-files') args.pickFiles = true;
     else if (a === '--lang') args.lang = next();
     else if (a === '--loader-screenshot') args.loaderScreenshot = next();
     else if (a === '--expect-first') args.expectFirst = Number(next());
@@ -348,6 +357,7 @@ async function main() {
     ...(args.notify ? ['notify'] : []),
     ...(args.glyphs ? ['glyphs'] : []),
     ...(args.keyboard || args.keyboardPhone ? ['keyboard'] : []),
+    ...(args.pickFiles ? ['pickfiles', 'savefile'] : []),
   ];
   if (flows.length) url.searchParams.set('selftest', flows.join(','));
   if (args.notify) {
@@ -355,6 +365,34 @@ async function main() {
   }
   if (args.keyboard || args.keyboardPhone) {
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: viewportStub });
+  }
+  let pick = null;
+  if (args.pickFiles) {
+    // A tab marked for tests (wasm/index.html runs these flows only there) without the File
+    // System Access pickers: Qt then uses an <input type=file>, whose chooser DevTools intercepts,
+    // and a download.
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `(() => {
+        try { sessionStorage.setItem('brulion-selftest', '1'); } catch (e) { /* no storage */ }
+        window.showOpenFilePicker = undefined;
+        window.showSaveFilePicker = undefined;
+      })()`,
+    });
+    await cdp.send('Page.setInterceptFileChooserDialog', { enabled: true });
+    const dir = join(args.profile, 'pick-files');
+    const downloads = join(args.profile, 'downloads');
+    for (const d of [dir, downloads]) {
+      rmSync(d, { recursive: true, force: true });
+      mkdirSync(d, { recursive: true });
+    }
+    const files = [
+      ['Zażółć gęślą jaźń.md', Buffer.from('# Zażółć gęślą jaźń\r\n\r\n- pierwszy blok\r\n- drugi blok\r\n', 'utf8')],
+      ['pusty.md', Buffer.alloc(0)],
+      ['duży.md', Buffer.alloc(2 * 1024 * 1024, 'x')],
+      ['notatka.txt', Buffer.from('ćma\n', 'utf8')],
+    ];
+    for (const [name, bytes] of files) writeFileSync(join(dir, name), bytes);
+    pick = { dir, downloads, files };
   }
   if (args.cacheQuota) {
     // A full quota, as IndexedDB reports it: the transaction aborts with QuotaExceededError (here
@@ -962,6 +1000,80 @@ async function main() {
     }
     tab2.close();
     await fetch(`http://127.0.0.1:${port}/json/close/${info.id}`).catch(() => {});
+  }
+
+  if (pick && results.at(-1)?.loaderHidden) {
+    const choosers = [];
+    cdp.on((msg) => {
+      if (msg.method === 'Page.fileChooserOpened') choosers.push(msg.params);
+    });
+    await cdp.send('DOM.enable');
+    const click = async (x, y) => {
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
+    };
+    // A corner of the window: a real click (the user's gesture) that presses no button of the app.
+    await sleep(1000);
+    await click(3, 3);
+    for (const end = deadline(15); Date.now() < end && !choosers.length; await sleep(100));
+    const chooser = choosers[0];
+    console.log(`pick-files: chooser ${JSON.stringify(chooser ?? null)}`);
+    if (!chooser) {
+      problems.push('pick-files: the click opened no file chooser');
+    } else {
+      if (chooser.mode !== 'selectMultiple') problems.push(`pick-files: the chooser takes one file only (${chooser.mode})`);
+      await cdp.send('DOM.setFileInputFiles', {
+        files: pick.files.map(([name]) => join(pick.dir, name)), backendNodeId: chooser.backendNodeId,
+      });
+      let picked = null;
+      for (const end = deadline(30); Date.now() < end && !picked; await sleep(200)) {
+        picked = await evaluate('window.brulionPickSelfTest ?? null');
+      }
+      console.log(`pick-files: ${JSON.stringify(picked)}`);
+      const expected = pick.files.map(([name, bytes]) => {
+        const tooLarge = bytes.length > 1024 * 1024;
+        return { name, size: bytes.length, tooLarge, read: tooLarge ? 0 : bytes.length,
+          sha256: tooLarge ? '' : createHash('sha256').update(bytes).digest('hex') };
+      });
+      // (The app's JSON has its keys sorted: compared field by field in the order above.)
+      const canonical = (files) => JSON.stringify((files ?? []).map((f) => ({
+        name: f.name, size: f.size, tooLarge: f.tooLarge, read: f.read, sha256: f.sha256,
+      })));
+      if (!picked) problems.push('pick-files: the app reported no picked files');
+      else if (picked.cancelled || canonical(picked.files) !== canonical(expected)) {
+        problems.push(`pick-files: the app read ${JSON.stringify(picked)}, expected ${JSON.stringify(expected)}`);
+      }
+    }
+    // The download (no showSaveFilePicker): the browser saves it under its id in `downloads`.
+    const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+    const browser = new Cdp(version.webSocketDebuggerUrl);
+    await browser.open();
+    const downloadEvents = [];
+    browser.on((msg) => {
+      if (msg.method === 'Browser.downloadWillBegin' || msg.method === 'Browser.downloadProgress') downloadEvents.push(msg);
+    });
+    await browser.send('Browser.setDownloadBehavior', { behavior: 'allowAndName', downloadPath: pick.downloads, eventsEnabled: true });
+    await click(3, 3);
+    let done = null;
+    for (const end = deadline(20); Date.now() < end && !done; await sleep(200)) {
+      done = downloadEvents.find((m) => m.method === 'Browser.downloadProgress' && m.params.state === 'completed') ?? null;
+    }
+    const begun = downloadEvents.find((m) => m.method === 'Browser.downloadWillBegin');
+    const started = await evaluate('window.brulionSaveSelfTest ?? null');
+    console.log(`save-file: ${JSON.stringify({ started, suggested: begun?.params.suggestedFilename, state: done?.params.state })}`);
+    if (!started?.started) problems.push('save-file: the app did not start the download');
+    else if (!done) problems.push(`save-file: no completed download (${JSON.stringify(downloadEvents.map((m) => m.params))})`);
+    else {
+      const bytes = readFileSync(join(pick.downloads, done.params.guid));
+      if (begun?.params.suggestedFilename !== 'Zażółć.md') {
+        problems.push(`save-file: downloaded as ${JSON.stringify(begun?.params.suggestedFilename)}, expected "Zażółć.md"`);
+      }
+      if (!bytes.equals(Buffer.from('ąę\n', 'utf8'))) problems.push(`save-file: the file holds ${JSON.stringify(bytes.toString('hex'))}`);
+    }
+    browser.close();
+  } else if (pick) {
+    problems.push('pick-files: the app did not start');
   }
 
   if (args.selftest) {

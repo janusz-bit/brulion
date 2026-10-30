@@ -501,6 +501,10 @@ int main(int argc, char *argv[])
     // Brulion's emoji and symbols?
     if (args.contains(u"--selftest-glyphs"_s))
         wasm::publishSelfTestResult("brulionGlyphSelfTest", brulion::ui::fallbackFontsJson(fallbackFonts));
+    // ?selftest=pickfiles,savefile in a test tab (scripts/wasm-smoke.mjs --pick-files): the
+    // browser's file picker and download at the next clicks.
+    if (args.contains(u"--selftest-pickfiles"_s) || args.contains(u"--selftest-savefile"_s))
+        wasm::runFilePickerSelfTest(args.contains(u"--selftest-pickfiles"_s), args.contains(u"--selftest-savefile"_s));
     // Before the storage asks for its lock: whenever this tab holds it, a share another tab hands
     // over is answered (wasm/index.html waits for that answer).
     wasm::WasmShare::listen();

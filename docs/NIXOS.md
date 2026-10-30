@@ -128,6 +128,24 @@ nix run github:janusz-bit/brulion
   `share/metainfo/io.github.januszbit.brulion.metainfo.xml`, ikona
   `share/icons/hicolor/{scalable,256x256}/apps/io.github.januszbit.brulion.{svg,png}`.
 
+### Okna wyboru plików
+
+Import, eksport („Zapisz…”), „Obraz…”, „Plik dźwiękowy…” i wybór folderu notatnika otwierają
+okno wyboru plików pulpitu, jeśli motyw platformy Qt je ma: GNOME (motyw `gtk3`, który Qt wybiera
+tam sam) — okno GTK, KDE Plasma (`plasma-integration`) — okno KDE. Na innych pulpitach (sway,
+Hyprland, i3…) Qt nie ma takiego motywu i Brulion pokazuje własne okno plików Qt (w kolorach
+Brulionu, także ciemne). Okno pulpitu przez **xdg-desktop-portal** dostaniesz, ustawiając
+
+```sh
+QT_QPA_PLATFORMTHEME=xdgdesktopportal brulion
+```
+
+(na stałe np. `environment.sessionVariables.QT_QPA_PLATFORMTHEME = "xdgdesktopportal";` — działa
+z każdym backendem portalu: `xdg-desktop-portal-gtk`, `-gnome`, `-kde`, `-hyprland`, `-wlr` z
+`-gtk` do plików). **AppImage** robi to sam, gdy zmienna nie jest ustawiona; bez działającego
+portalu wraca do okna Qt. Pakiet z Nixa niczego tu nie ustawia: zostaje motyw Qt, który wybrał
+pulpit (zmienna globalna zmienia też inne programy Qt).
+
 ### Otwórz za pomocą
 
 Wpis pulpitu z pakietu (`Exec=brulion --open %F`, `MimeType=text/plain;`, `StartupNotify=true`)

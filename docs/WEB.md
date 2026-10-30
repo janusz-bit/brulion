@@ -108,7 +108,9 @@ Parametry adresu (do debugowania):
 * `?selftest=storage`, `?selftest=notify`, `?selftest=glyphs`, `?selftest=keyboard`,
   `?selftest=share`, `?selftest=storage,notify` — testy (niżej).
 * Tylko w karcie oznaczonej do testów: `?selftest=webpictures`, `?selftest=pen` (testy na
-  otwartym notatniku: „Testy w przeglądarkach (Playwright)”) i razem z nimi `?route=<widok>` albo
+  otwartym notatniku: „Testy w przeglądarkach (Playwright)”), `?selftest=pickfiles,savefile`
+  (okno wyboru plików i pobieranie przy kolejnych kliknięciach: `scripts/wasm-smoke.mjs
+  --pick-files`) i razem z nimi `?route=<widok>` albo
   `?route=<trasa JSON>` — pierwszy widok po otwarciu notatnika (jak `--route`, np.
   `{"view":"drawing","path":"Rysunki/a.svg"}`), `?now=2026-10-14 10:00` — stały zegar (jak
   `--now`: znany dzień dziennika). Znacznik karty to `sessionStorage` `brulion-selftest` = `1`:
@@ -202,6 +204,15 @@ Pozostałe opcje:
   pierwszej przekazuje je (sama nie wczytuje aplikacji, pokazuje komunikat i prosi o zamknięcie),
   a pierwsza pokazuje okno z „Zażółć gęślą jaźń”. Ze `--screenshot` dochodzi zrzut
   `…-share.png`. CI uruchamia go osobno (profil `profile-share`).
+* `--pick-files` — wybór plików i pobieranie bez Qt Widgets (`platform/wasm/wasmfiles.h`): karta
+  oznaczona do testów (sessionStorage `brulion-selftest`), bez `showOpenFilePicker` /
+  `showSaveFilePicker` (Qt bierze wtedy `<input type=file>` i zwykłe pobranie, które ma każda
+  przeglądarka), `?selftest=pickfiles,savefile`. Prawdziwe kliknięcie otwiera okno wyboru, które
+  musi przyjmować kilka plików (DevTools je przechwytuje), i dostaje cztery: „Zażółć gęślą
+  jaźń.md” (UTF-8, wiersze CRLF), pusty `pusty.md`, `duży.md` 2 MB ponad testowy limit 1 MB i
+  `notatka.txt`; aplikacja (`window.brulionPickSelfTest`) musi podać je po kolei z rozmiarami
+  i SHA-256 — duży nieprzeczytany. Następne kliknięcie pobiera „Zażółć.md” z bajtami „ąę\n”
+  (`Browser.setDownloadBehavior`). CI uruchamia go osobno (profil `profile-pick`).
 * `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
   zrzut ekranu ładowania (pasek postępu).
 * `--lang pl-PL` (domyślnie) — język przeglądarki.
@@ -779,7 +790,15 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
   na komputerze z Linuksem; notatki z przeglądarki agent czyta przez Nextcloud.
 * Jednowątkowy Qt bez asyncify/JSPI: brak zagnieżdżonych pętli zdarzeń (`QDialog::exec()`,
   `QEventLoop::exec()`); dialogi i operacje muszą być asynchroniczne (sygnały, `open()`).
-* Pliki od/do użytkownika: `QFileDialog::getOpenFileContent()` / `saveFileContent()`.
+* Pliki od/do użytkownika: własny wybór plików przeglądarki (`platform/wasm/wasmfiles.h` nad
+  prywatnym `QWasmLocalFileAccess` z Qt; `showOpenFilePicker`, a gdzie go nie ma — `<input
+  type=file>`): kilka plików naraz przy imporcie i przy „Obraz…”, pliki ponad limit (jak na
+  komputerze: 512 MB importu, 200 MB obrazu) pominięte bez czytania; zapis — okno zapisu
+  przeglądarki (`showSaveFilePicker`, Chromium na https) albo zwykłe pobranie. Bez Qt Widgets
+  (`QFileDialog::getOpenFileContent()` ich wymaga), a własne okno plików Qt dla przeglądarki
+  daje adresy `weblocalfile:`, których jednowątkowy build nie przeczyta (potrzebny JSPI albo
+  asyncify). Anulowanie `<input>` bez zdarzenia `cancel` (starsze przeglądarki) po prostu nic
+  nie zmienia.
 * Wymagany WebGL 2 (powłoka ostrzega, gdy go brak, i pozwala spróbować mimo to).
 * Pamięć: start 50 MB, wzrost do 4 GB (domyślne Qt).
 * Sieć tylko przez `QNetworkAccessManager` (fetch przeglądarki) i z zasadami CORS.
@@ -855,7 +874,7 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
 |---|---|
 | `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | powłoka HTML, service worker, manifest |
 | `wasm/icons/` | ikony PWA; PNG wygenerowane z `assets/logo.svg` i `wasm/icons/maskable.svg` (odstęp bezpieczny dla ikon maskowalnych) oraz `badge.svg` (monochromatyczna plakietka powiadomień) |
-| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, `WasmShare` (udostępnienia przekazane przez inną kartę), most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), test trwałości (`wasmselftest.h`) |
+| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, `WasmShare` (udostępnienia przekazane przez inną kartę), most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), wybór plików i pobieranie (`wasmfiles.h`, bez Qt Widgets), testy trwałości i wyboru plików (`wasmselftest.h`) |
 | `src/app/diag/webselftest.h` | testy aplikacji dla przeglądarek: `?selftest=webpictures` (obrazy z internetu, eksport z kopiami), `?selftest=pen` (płótno pod rysikiem); testy na komputerze: `tests/app/diag/tst_webselftest.cpp` |
 | `tests/web/`, `scripts/web-test.sh` | testy Playwright w Chromium i Firefoksie (obrazy z internetu, rysik) i ich uruchamianie (CI: `wasm.yml`, zadanie `browsers`) |
 | `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |

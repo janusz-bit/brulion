@@ -529,11 +529,12 @@
           var args = [];
           var flows = ['storage', 'notify', 'glyphs', 'keyboard', 'share'];
           // The flows that work on the open notebook (src/app/diag/webselftest.h: they fetch its
-          // pictures from the internet and offer an export of it) and ?route= / ?now= only in a
-          // tab marked for tests: sessionStorage "brulion-selftest" = "1", which tests/web sets
+          // pictures from the internet and offer an export of it), the file picker's and the
+          // download's (wasmselftest.h: at the next clicks) and ?route= / ?now= only in a tab
+          // marked for tests: sessionStorage "brulion-selftest" = "1", which tests/web sets
           // before the page loads (by hand: in the console, then reload). A link cannot set it, so
           // a link sent to someone never runs them on their notes nor moves their clock or view.
-          var testFlows = ['webpictures', 'pen'];
+          var testFlows = ['webpictures', 'pen', 'pickfiles', 'savefile'];
           var testTab = false;
           try {
             testTab = window.sessionStorage.getItem('brulion-selftest') === '1';

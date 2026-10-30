@@ -13,6 +13,8 @@ Obsługiwane źródła: Obsidian, Logseq, Notion, Evernote, Google Keep, Microso
 2. Obejrzyj **podgląd**: co powstanie, co zostanie pominięte i dlaczego.
 3. Zatwierdź. Nic nie jest zapisywane przed tym krokiem.
 
+Pliki i foldery wybierasz w oknie wyboru plików systemu — na Androidzie także z Dysku Google albo karty SD. W przeglądarce też wybierzesz kilka plików naraz (folderu tam nie wybierzesz — spakuj go do ZIP-a); plik większy niż 512 MB zostanie pominięty z ostrzeżeniem w podglądzie.
+
 Importowane strony nie nadpisują istniejących — gdy nazwa się powtarza, nowa dostaje końcówkę ` 2`. Przed zmianami poprzednie wersje trafiają do historii.
 
 Tekst z programów, które nie piszą w Markdownie (HTML, Evernote, Google Keep, bazy Notion, Trilium, kalendarze), zostaje tekstem: znaki, które w Brulionie coś znaczą, dostają ukośnik. Tak samo `$` — ale tylko tam, gdzie dwa dolary utworzyłyby [[Wzory matematyczne|wzór]] (`Cena $10, Netflix 15$` zapisze się jako `Cena \$10, Netflix 15$`); pojedyncze ceny, jak `$5 i $10`, zostają bez zmian.
@@ -51,6 +53,8 @@ Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu j
 - **iCalendar** — zadania i przypomnienia do kalendarza,
 - **OPML** — konspekt,
 - **CSV** — lista zadań.
+
+Gotowy plik zapiszesz przyciskiem **Zapisz…** w oknie zapisu systemu; w przeglądarce plik się pobiera (Chrome i Edge na komputerze najpierw pytają, gdzie go zapisać).
 
 **Zdjęcia z internetu** (`![opis](https://…)`) w eksporcie HTML i Pandoc: wybierz **Zostaw adresy** — plik jest mały, ale zdjęcia pokażą się tylko z dostępem do sieci — albo **Dołącz kopie**: zdjęcia trafią do eksportu (w jednym pliku HTML — wewnątrz pliku, na stronie HTML i w archiwum Pandoca — do folderu `assets/web`). Brulion bierze kopie z pamięci podręcznej urządzenia, brakujące najpierw pobiera; zdjęcie, którego nie uda się pobrać, zostaje adresem, a raport po eksporcie to wymienia. Zdjęć z tego urządzenia albo twojej sieci domowej (np. `192.168.…`, `nas.local`) eksport sam nie pobiera — dołączy je, jeśli wcześniej wyświetlisz je w notatce. Kopii jest najwyżej 256 MB łącznie; dalsze zdjęcia zostają adresami. Wybór zapamiętuje to urządzenie. Inne formaty zostawiają tekst notatek bez zmian.
 

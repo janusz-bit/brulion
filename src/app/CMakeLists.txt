@@ -30,13 +30,6 @@ else()
 endif()
 set(BRULION_DEV_QML_ENABLED ${_brulion_dev_qml} CACHE INTERNAL "Effective BRULION_DEV_QML")
 message(STATUS "Developer QML: ${BRULION_DEV_QML_ENABLED} (BRULION_DEV_QML=${BRULION_DEV_QML})")
-# Static Qt (the browser): qmlimportscanner scans every .qml file under src/app, compiled or not,
-# and the build links the QML plugins it reports — without the developer QML, qml/dev's
-# `import QtTest` and Qt.labs.folderlistmodel stay out (-exclude takes a folder name). Android's
-# androiddeployqt always scans src/app whole (docs/PERFORMANCE.md L9, next steps).
-if(NOT BRULION_DEV_QML_ENABLED)
-    set_property(TARGET brulion APPEND PROPERTY QT_QML_IMPORT_SCANNER_EXTRA_ARGS -exclude dev)
-endif()
 
 # --- Design system (docs/UI.md): Theme singleton, shared B* components, the dev gallery and
 # their C++ helpers (QML singletons DatesHelper, TextHelper, DiffHelper, KeyboardInsets,

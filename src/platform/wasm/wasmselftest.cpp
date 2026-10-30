@@ -1,9 +1,12 @@
 #include "wasmselftest.h"
 
+#include "wasmfiles.h"
 #include "wasmnotifier.h"
 #include "wasmstorage.h"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QEvent>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -16,7 +19,9 @@
 
 #include <emscripten/em_js.h>
 
+#include <functional>
 #include <memory>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -104,6 +109,71 @@ void runStorageSelfTest(WasmStorage *storage)
                      Qt::SingleShotConnection);
     QTimer::singleShot(10000, storage, [publish]() mutable {
         publish(false, u"no automatic write-back within 10 s"_s);
+    });
+}
+
+namespace {
+
+/// Calls `action` once, at the next mouse button release or touch end anywhere in the app.
+class OnNextRelease : public QObject {
+public:
+    explicit OnNextRelease(std::function<void()> action)
+        : QObject(QCoreApplication::instance()), m_action(std::move(action))
+    {
+        QCoreApplication::instance()->installEventFilter(this);
+    }
+
+protected:
+    bool eventFilter(QObject *, QEvent *event) override
+    {
+        if (m_action && (event->type() == QEvent::MouseButtonRelease || event->type() == QEvent::TouchEnd)) {
+            const std::function<void()> action = std::exchange(m_action, {});
+            deleteLater();
+            action();
+        }
+        return false;
+    }
+
+private:
+    std::function<void()> m_action;
+};
+
+void startSaveSelfTest()
+{
+    new OnNextRelease([] {
+        wasm::saveFile(QByteArray("\xc4\x85\xc4\x99\n"), u"Zażółć.md"_s); // "ąę\n"
+        brulion_selftest_publish("brulionSaveSelfTest", R"({"started":true})");
+    });
+}
+
+} // namespace
+
+void runFilePickerSelfTest(bool pick, bool save)
+{
+    if (!pick) {
+        if (save)
+            startSaveSelfTest();
+        return;
+    }
+    new OnNextRelease([save] {
+        wasm::openFiles({ u"Notatki (*.md *.txt)"_s }, true, 1024 * 1024, [save](const QList<PickedFile> &picked) {
+            QJsonArray files;
+            for (const PickedFile &f : picked) {
+                files.append(QJsonObject{
+                        {u"name"_s, f.name},
+                        {u"size"_s, f.size},
+                        {u"tooLarge"_s, f.tooLarge},
+                        {u"read"_s, qint64(f.data.size())},
+                        {u"sha256"_s, f.tooLarge ? QString()
+                                                 : QString::fromLatin1(QCryptographicHash::hash(
+                                                           f.data, QCryptographicHash::Sha256).toHex())},
+                });
+            }
+            publishSelfTestResult("brulionPickSelfTest",
+                                  QJsonObject{ { u"cancelled"_s, picked.isEmpty() }, { u"files"_s, files } });
+            if (save)
+                startSaveSelfTest();
+        });
     });
 }
 
