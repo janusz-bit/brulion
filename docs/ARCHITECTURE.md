@@ -436,7 +436,9 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
   self-tests) as on Linux; `BRULION_PROFILE` (src/ipc/profile.h) isolates test runs there; the
   toast bus uses the Windows SDK's C++/WinRT headers and `WindowsApp.lib`; the installer has the
   task "autostart" (the Run value) and the AppUserModelID on its shortcuts — docs/WINDOWS.md.
-* Linux: `scripts/appimage-build.sh` (Qt 6.11.2 from aqt, linuxdeploy) → AppImage x86_64 +
+* Linux: `scripts/appimage-build.sh` (Qt 6.11.2 from aqt, linuxdeploy; the Qt Quick styles and
+  QtQuick.Dialogs that linuxdeploy-plugin-qt copies with `qml/QtQuick` are removed before packing,
+  the XDG portal's platform theme is kept for the file pickers) → AppImage x86_64 +
   aarch64, each with a `.zsync` file for AppImageUpdate (checked before publishing by
   `scripts/appimage-update-check.sh`); desktop entry and metainfo in `packaging/`.
 * Android: `scripts/android-build.sh` — Qt 6.11.2 for Android from aqt with host tools of the

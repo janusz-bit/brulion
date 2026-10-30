@@ -16,7 +16,8 @@ i mniejsze pakiety (L9, porównanie z `ef90077`).
   26,3 zamiast 30,9 MB), a wersja przeglądarkowa pobiera przy pierwszej wizycie 13,5 zamiast
   15,8 MB — przy łączu 20 Mbit/s pierwsza klatka jest o ok. 1,1 s wcześniej (7,4 zamiast 8,5 s).
   Pakiety nie zawierają już pięciu nieużywanych stylów kontrolek Qt i zastępczego okna plików Qt
-  Quick: okna wyboru plików są systemowe (@@DESKTOP_SUMMARY@@).
+  Quick: okna wyboru plików są systemowe. Wersja na Windows: ZIP 42,8 zamiast 49,5 MB,
+  instalator 29,5 zamiast 32,6 MB; AppImage 53 zamiast 58 MiB.
 * **Cofanie i ponawianie na długich stronach** (2026-10-30). Ctrl+Z i Ctrl+Shift+Z nie wczytują
   już całej strony od nowa, tylko zmieniają bloki, których dotyczy krok. Na stronie z 5000 bloków
   na komputerze cofnięcie widać po ok. 13 ms zamiast ok. 33 ms — tyle co po Enterze — a sama jego
@@ -603,10 +604,15 @@ toolchains (Qt 6.11.2, NDK r27c, emsdk 4.0.7):
 | web first visit at 20 Mbit/s, gzip (`wasm-bench.mjs --visits first --encoding gzip --throttle 20000,40`, 2 rounds × 5): `.wasm` transferred | 15.80 MB | 13.50 MB | −2.30 MB |
 | … first draw, median per round | 8.42 / 8.49 s | 7.38 / 7.32 s | −1.1 s (−13 %) |
 | … main thread busy during the load | 1.64 / 1.58 s | 1.43 / 1.45 s | −0.17 s |
-@@DESKTOP_ROWS@@
+| Windows ZIP / installer (`windows.yml`, GitHub Actions: `sweep2` run at `ef90077` and the branch, same day) | 49.5 / 32.6 MB | 42.8 / 29.5 MB | −6.7 / −3.1 MB (−14 / −10 %) |
+| AppImage x86_64 / aarch64 (`appimage.yml`, both trees the same day) | 60 492 280 / 60 529 160 B | 55 859 704 / 55 953 928 B | −4.42 / −4.36 MiB (−7.7 / −7.6 %) |
 
 (The 20 Mbit/s runs are network-bound; another agent's build ran on the laptop during them, the
-same for both builds.) Still packaged: QtTest, QuickTest and `Qt.labs.folderlistmodel`, imported by
+same for both builds.) The AppImage needed one more step: linuxdeploy-plugin-qt copies the folder of
+every QML import whole, so `import QtQuick` brought all of `qml/QtQuick` — the styles and
+QtQuick.Dialogs stayed after the QML changes alone (the AppImage was 0.1 MB larger);
+`scripts/appimage-build.sh` now deploys, removes them (their QML folders and libraries) and then
+packs, and its check fails when one is back. Still packaged: QtTest, QuickTest and `Qt.labs.folderlistmodel`, imported by
 the developer and self-test QML under `src/app` (`qml/dev`, `qml/content/*SelfTest.qml`) — APK
 0.84 MB, wasm 0.27 MB before wasm-opt. qmlimportscanner scans the target's whole source folder,
 compiled or not, and its `-exclude <folder>` does not keep a folder out in 6.11.2 (it also visits

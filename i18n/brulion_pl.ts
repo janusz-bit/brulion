@@ -13993,7 +13993,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller.cpp" line="3728"/>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3837"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3836"/>
         <source>Attachment</source>
         <translation>Załącznik</translation>
     </message>
@@ -14488,47 +14488,47 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Użyj folderu wewnątrz notatnika: bez „..”, bez folderów chronionych (.trash, .brulion) i bez znaków takich jak : * ? &quot; &lt; &gt; |.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="453"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="451"/>
         <source>Open a notebook first.</source>
         <translation>Najpierw otwórz notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="457"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="455"/>
         <source>No files were read.</source>
         <translation>Nie wczytano żadnych plików.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="468"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="466"/>
         <source>Checking what will be imported…</source>
         <translation>Sprawdzanie, co zostanie zaimportowane…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="493"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="491"/>
         <source>Brulion does not recognise these files. Choose the app they come from in the list.</source>
         <translation>Brulion nie rozpoznaje tych plików. Wybierz z listy aplikację, z której pochodzą.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="559"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="557"/>
         <source>Nothing to import was found in “%1”.</source>
         <translation>W „%1” nie znaleziono nic do zaimportowania.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="584"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="582"/>
         <source>Preparing…</source>
         <translation>Przygotowywanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="644"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="642"/>
         <source>“%1” already existed; it was saved as “%2”.</source>
         <translation>„%1” już istniał; zapisano jako „%2”.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="658"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="656"/>
         <source>Saving %1 of %2…</source>
         <translation>Zapisywanie: %1 z %2…</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="695"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="693"/>
         <source>Import stopped: %n file(s) saved.</source>
         <translation>
             <numerusform>Import zatrzymany: zapisano %n plik.</numerusform>
@@ -14537,7 +14537,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="696"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="694"/>
         <source>Import finished: %n file(s) saved.</source>
         <translation>
             <numerusform>Import zakończony: zapisano %n plik.</numerusform>
