@@ -223,6 +223,20 @@ private:
     QList<QHash<int, QVariant>> m_rows;
 };
 
+/// A prepared backdrop as DrawingBackdrops gives it (a PNG of one colour).
+QVariantMap preparedBackdrop(const QString &path, int page, const QString &name, QSize size = QSize(240, 135))
+{
+    QImage image(size, QImage::Format_RGB32);
+    image.fill(QColor(u"#74c0fc"_s));
+    QByteArray png;
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    image.save(&buffer, "PNG");
+    return {{u"bytes"_s, png},     {u"mimeType"_s, u"image/png"_s}, {u"width"_s, size.width()},
+            {u"height"_s, size.height()}, {u"path"_s, path},          {u"page"_s, page},
+            {u"name"_s, name},      {u"error"_s, QString()}};
+}
+
 } // namespace
 
 class TestPageController : public QObject {
@@ -4684,20 +4698,6 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.undo();
         f.page.undo();
         QCOMPARE(f.text(), u"- Wykład z łączności \n"_s);
-    }
-
-    /// A prepared backdrop as DrawingBackdrops gives it (a PNG of one colour).
-    static QVariantMap preparedBackdrop(const QString &path, int page, const QString &name, QSize size = QSize(240, 135))
-    {
-        QImage image(size, QImage::Format_RGB32);
-        image.fill(QColor(u"#74c0fc"_s));
-        QByteArray png;
-        QBuffer buffer(&png);
-        buffer.open(QIODevice::WriteOnly);
-        image.save(&buffer, "PNG");
-        return {{u"bytes"_s, png},     {u"mimeType"_s, u"image/png"_s}, {u"width"_s, size.width()},
-                {u"height"_s, size.height()}, {u"path"_s, path},          {u"page"_s, page},
-                {u"name"_s, name},      {u"error"_s, QString()}};
     }
 
     void drawingOnSlashCommand()
