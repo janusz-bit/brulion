@@ -874,10 +874,15 @@ hash).
 * **Before/after on GitHub's runners** (x86_64 and arm64, the flake's toolchain, both trees with
   head's bench sources, two alternating rounds): `gh workflow run perf-compare.yml --ref <branch>
   -f base=<ref> [-f suites="bench_index bench_markdown"] [-f reps=5]` — the comparison lands in
-  the job summary and an artifact. Shared runners are noisy: relative changes only.
+  the job summary and an artifact. Shared runners are noisy: relative changes only. `-f app="views
+  graph"` (`-f suites=` for only these) runs app benchmark groups too: both trees' `brulion` in
+  Release with Qt from aqt, the probe and the analysis from head, Xvfb + llvmpipe on
+  ubuntu-24.04, `app_rounds` × `app_runs` runs per build, alternating (report.py's table in the
+  summary). A workflow can call it too (`workflow_call`), e.g. a branch's own push trigger before
+  the file reaches the default branch, which `gh workflow run` needs.
 
 **App (the real binary, `tests/bench/app/`).** An `LD_PRELOAD` probe records frames, GUI stalls,
-memory and CPU and drives scenarios (startup, open-page, typing, search, switcher, views,
+memory and CPU and drives scenarios (startup, open-page, typing, search, switcher, views, graph,
 journal-scroll, switch-pages, idle, workload) with real input; no hook in the product code, so
 any build (v0.1.1 included) can be measured.
 
