@@ -39,7 +39,7 @@ void drive(PickCollector &collector, const QList<Offered> &files)
 
 Offered file(const QString &name, const QByteArray &bytes)
 {
-    return Offered{ name, bytes, quint64(bytes.size()) };
+    return Offered{name, bytes, quint64(bytes.size())};
 }
 
 } // namespace
@@ -67,10 +67,10 @@ private Q_SLOTS:
             got = files;
         });
         const QList<Offered> offered{
-            file(u"Zażółć gęślą jaźń.md"_s, "# Zażółć gęślą jaźń\r\n\r\n- pierwszy\r\n"_ba),
-            file(u"pusty.md"_s, QByteArray()),
-            file(u"duży.md"_s, QByteArray(100, 'x')),
-            file(u"notatka.txt"_s, "ćma\n"_ba),
+                file(u"Zażółć gęślą jaźń.md"_s, "# Zażółć gęślą jaźń\r\n\r\n- pierwszy\r\n"_ba),
+                file(u"pusty.md"_s, QByteArray()),
+                file(u"duży.md"_s, QByteArray(100, 'x')),
+                file(u"notatka.txt"_s, "ćma\n"_ba),
         };
         drive(collector, offered);
         QCOMPARE(calls, 1);
@@ -104,8 +104,8 @@ private Q_SLOTS:
             ++calls;
             got = files;
         });
-        Offered huge{ u"film.mp4"_s, QByteArray(), 5'000'000'000ULL };
-        drive(collector, { file(u"a.md"_s, QByteArray(11, 'a')), huge });
+        Offered huge{u"film.mp4"_s, QByteArray(), 5'000'000'000ULL};
+        drive(collector, {file(u"a.md"_s, QByteArray(11, 'a')), huge});
         QCOMPARE(calls, 1);
         QCOMPARE(got.size(), 2);
         QVERIFY(got.at(0).tooLarge && got.at(1).tooLarge);
@@ -116,7 +116,7 @@ private Q_SLOTS:
     void cancelled()
     {
         int calls = 0;
-        QList<PickedFile> got{ PickedFile{} };
+        QList<PickedFile> got{PickedFile{}};
         PickCollector collector(-1, [&](const QList<PickedFile> &files) {
             ++calls;
             got = files;

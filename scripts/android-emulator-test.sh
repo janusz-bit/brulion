@@ -115,8 +115,9 @@
 # DocumentsUI to the front (ACTION_OPEN_DOCUMENT), a note tapped there comes back to the import's
 # preview under its name; "Wybierz folder…" (ACTION_OPEN_DOCUMENT_TREE) → a folder of notes → "Use
 # this folder" → "Allow": the preview of its notes; Export → "Eksportuj…" opens the system's "Save"
-# (ACTION_CREATE_DOCUMENT) with the export's file name filled in (EXTRA_TITLE), "Save" in Download
-# writes the ZIP there. Screenshots pk-*.png; the same debuggable APK.
+# (ACTION_CREATE_DOCUMENT) with the export's file name filled in (EXTRA_TITLE), "Save" writes the
+# ZIP into Download (DocumentsUI opens in the folder used last: the one picked before). Checked on
+# Android 16 (API 36). Screenshots pk-*.png; the same debuggable APK.
 # --selection, --folders, --share, --widgets, --web-pictures, --done and --pickers find what they tap by its accessible name (UiAutomator reads Qt's
 # accessibility tree; the keyboard's keys from its dump of every window),
 # so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).

@@ -44,7 +44,7 @@ class FakeBackend : public FilePickerBackend {
     Q_OBJECT
 
 public:
-    explicit FakeBackend(bool canShow = true) : m_canShow(canShow) {}
+    explicit FakeBackend(bool canShow = true) : m_canShow(canShow) { }
     bool show(const FilePickerRequest &request, QWindow *parent) override
     {
         ++shown;
@@ -65,7 +65,7 @@ private:
 
 /// The backends the next open() gets (the factory hands them over; the test keeps QPointers).
 struct Fakes {
-    QList<bool> canShow{ true };
+    QList<bool> canShow{true};
     QList<QPointer<FakeBackend>> made;
     int calls = 0;
 
@@ -108,8 +108,7 @@ private Q_SLOTS:
                 << local(u"/home/ja/Zażółć gęślą jaźń"_s) << u"md"_s << local(u"/home/ja/Zażółć gęślą jaźń.md"_s);
         QTest::newRow("percent sign kept")
                 << local(u"/home/ja/50% planu"_s) << u"html"_s << local(u"/home/ja/50% planu.html"_s);
-        QTest::newRow("encoded-looking name")
-                << local(u"/home/ja/a%41b"_s) << u"md"_s << local(u"/home/ja/a%41b.md"_s);
+        QTest::newRow("encoded-looking name") << local(u"/home/ja/a%41b"_s) << u"md"_s << local(u"/home/ja/a%41b.md"_s);
         QTest::newRow("has a dot") << local(u"/home/ja/Notatka.v2"_s) << u"md"_s << local(u"/home/ja/Notatka.v2"_s);
         QTest::newRow("has the suffix") << local(u"/home/ja/a.md"_s) << u"md"_s << local(u"/home/ja/a.md"_s);
         QTest::newRow("dot in a folder only")
@@ -139,13 +138,13 @@ private Q_SLOTS:
         QTest::addColumn<QStringList>("filters");
         QTest::addColumn<QStringList>("expected");
         QTest::newRow("none") << QStringList() << QStringList();
-        QTest::newRow("one empty") << QStringList{ QString() } << QStringList();
-        QTest::newRow("blank") << QStringList{ u"  "_s } << QStringList();
-        QTest::newRow("filter and empty") << QStringList{ u"Obrazy (*.png *.jpg)"_s, QString() }
-                                          << QStringList{ u"Obrazy (*.png *.jpg)"_s };
-        QTest::newRow("malformed kept") << QStringList{ u"Obrazy (*.png"_s } << QStringList{ u"Obrazy (*.png"_s };
-        QTest::newRow("star") << QStringList{ u"*"_s } << QStringList{ u"*"_s };
-        QTest::newRow("all files") << QStringList{ u"Wszystkie pliki (*)"_s } << QStringList{ u"Wszystkie pliki (*)"_s };
+        QTest::newRow("one empty") << QStringList{QString()} << QStringList();
+        QTest::newRow("blank") << QStringList{u"  "_s} << QStringList();
+        QTest::newRow("filter and empty")
+                << QStringList{u"Obrazy (*.png *.jpg)"_s, QString()} << QStringList{u"Obrazy (*.png *.jpg)"_s};
+        QTest::newRow("malformed kept") << QStringList{u"Obrazy (*.png"_s} << QStringList{u"Obrazy (*.png"_s};
+        QTest::newRow("star") << QStringList{u"*"_s} << QStringList{u"*"_s};
+        QTest::newRow("all files") << QStringList{u"Wszystkie pliki (*)"_s} << QStringList{u"Wszystkie pliki (*)"_s};
     }
     void cleanNameFilters()
     {
@@ -170,7 +169,7 @@ private Q_SLOTS:
         FilePicker picker;
         picker.setFileMode(FilePicker::Mode(mode));
         picker.setTitle(u"Zapisz — zażółć gęślą jaźń"_s);
-        picker.setNameFilters({ u"Notatki (*.md *.txt)"_s, QString(), u"Wszystkie pliki (*)"_s });
+        picker.setNameFilters({u"Notatki (*.md *.txt)"_s, QString(), u"Wszystkie pliki (*)"_s});
         picker.setDefaultSuffix(u"md"_s);
         picker.setCurrentFolder(local(u"/home/ja/Dokumenty"_s));
         picker.setSelectedFile(local(u"/home/ja/Dokumenty/Źródła.md"_s));
@@ -180,12 +179,11 @@ private Q_SLOTS:
         const FilePickerRequest r = fakes.last()->lastRequest;
         QCOMPARE(int(r.mode), mode);
         QCOMPARE(r.title, u"Zapisz — zażółć gęślą jaźń"_s);
-        QCOMPARE(r.nameFilters, (QStringList{ u"Notatki (*.md *.txt)"_s, u"Wszystkie pliki (*)"_s }));
+        QCOMPARE(r.nameFilters, (QStringList{u"Notatki (*.md *.txt)"_s, u"Wszystkie pliki (*)"_s}));
         QCOMPARE(r.defaultSuffix, u"md"_s);
         QCOMPARE(r.folder, local(u"/home/ja/Dokumenty"_s));
         // The suggested file only for saving (Android's EXTRA_TITLE).
-        QCOMPARE(r.initialFile,
-                 mode == FilePicker::SaveFile ? local(u"/home/ja/Dokumenty/Źródła.md"_s) : QUrl());
+        QCOMPARE(r.initialFile, mode == FilePicker::SaveFile ? local(u"/home/ja/Dokumenty/Źródła.md"_s) : QUrl());
         QVERIFY(r.dark);
     }
 
@@ -211,10 +209,10 @@ private Q_SLOTS:
 
         picker.open();
         QVERIFY(picker.isVisible());
-        QCOMPARE(log, QStringList{ u"visible"_s });
-        const QList<QUrl> picked{ local(u"/home/ja/Ćma.oga"_s), QUrl(u"content://x/tree/Źródła"_s) };
+        QCOMPARE(log, QStringList{u"visible"_s});
+        const QList<QUrl> picked{local(u"/home/ja/Ćma.oga"_s), QUrl(u"content://x/tree/Źródła"_s)};
         Q_EMIT fakes.last()->accepted(picked);
-        QCOMPARE(log, (QStringList{ u"visible"_s, u"selected"_s, u"hidden"_s, u"accepted"_s }));
+        QCOMPARE(log, (QStringList{u"visible"_s, u"selected"_s, u"hidden"_s, u"accepted"_s}));
         QVERIFY(!picker.isVisible());
         QCOMPARE(picker.selectedFiles(), picked);
         QCOMPARE(picker.selectedFile(), picked.first());
@@ -225,14 +223,14 @@ private Q_SLOTS:
         log.clear();
         picker.open();
         Q_EMIT fakes.last()->rejected();
-        QCOMPARE(log, (QStringList{ u"visible"_s, u"hidden"_s, u"rejected"_s }));
+        QCOMPARE(log, (QStringList{u"visible"_s, u"hidden"_s, u"rejected"_s}));
         QCOMPARE(picker.selectedFiles(), picked);
 
         // Accepted with nothing chosen (some portals): cancelled.
         log.clear();
         picker.open();
-        Q_EMIT fakes.last()->accepted({ QUrl() });
-        QCOMPARE(log, (QStringList{ u"visible"_s, u"hidden"_s, u"rejected"_s }));
+        Q_EMIT fakes.last()->accepted({QUrl()});
+        QCOMPARE(log, (QStringList{u"visible"_s, u"hidden"_s, u"rejected"_s}));
         QCOMPARE(picker.selectedFiles(), picked);
         QCOMPARE(fakes.calls, 3);
     }
@@ -245,16 +243,16 @@ private Q_SLOTS:
         picker.setFileMode(FilePicker::SaveFile);
         picker.setDefaultSuffix(u"md"_s);
         picker.open();
-        Q_EMIT fakes.last()->accepted({ local(u"/home/ja/Zażółć gęślą jaźń"_s) });
+        Q_EMIT fakes.last()->accepted({local(u"/home/ja/Zażółć gęślą jaźń"_s)});
         QCOMPARE(picker.selectedFile(), local(u"/home/ja/Zażółć gęślą jaźń.md"_s));
         picker.open();
         const QUrl document(u"content://com.android.externalstorage.documents/document/primary%3ADownload%2Fa"_s);
-        Q_EMIT fakes.last()->accepted({ document });
+        Q_EMIT fakes.last()->accepted({document});
         QCOMPARE(picker.selectedFile(), document);
         // Not for opening.
         picker.setFileMode(FilePicker::OpenFile);
         picker.open();
-        Q_EMIT fakes.last()->accepted({ local(u"/home/ja/Notatka"_s) });
+        Q_EMIT fakes.last()->accepted({local(u"/home/ja/Notatka"_s)});
         QCOMPARE(picker.selectedFile(), local(u"/home/ja/Notatka"_s));
     }
 
@@ -275,7 +273,7 @@ private Q_SLOTS:
         QCOMPARE(fake->hidden, 1);
         // A late answer of the closed picker goes nowhere.
         QSignalSpy accepted(&picker, &FilePicker::accepted);
-        Q_EMIT fake->accepted({ local(u"/tmp/a.md"_s) });
+        Q_EMIT fake->accepted({local(u"/tmp/a.md"_s)});
         QCOMPARE(accepted.size(), 0);
         QVERIFY(picker.selectedFiles().isEmpty());
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
@@ -309,7 +307,7 @@ private Q_SLOTS:
         QVERIFY(fake);
         QCOMPARE(fake->hidden, 1);
         // Android: a result already on its way reaches nobody.
-        Q_EMIT fake->accepted({ local(u"/tmp/a.md"_s) });
+        Q_EMIT fake->accepted({local(u"/tmp/a.md"_s)});
         Q_EMIT fake->rejected();
         QVERIFY(!signalled);
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
@@ -319,7 +317,7 @@ private Q_SLOTS:
     void firstBackendThatShowsWins()
     {
         Fakes fakes;
-        fakes.canShow = { false, true, true };
+        fakes.canShow = {false, true, true};
         fakes.install();
         FilePicker picker;
         picker.setTitle(u"Wstaw obraz"_s);
@@ -331,14 +329,14 @@ private Q_SLOTS:
         QCOMPARE(fakes.made.at(1)->shown, 1);
         QCOMPARE(fakes.made.at(1)->lastRequest.title, u"Wstaw obraz"_s);
         QVERIFY(!fakes.made.at(2)); // never asked
-        Q_EMIT fakes.made.at(1)->accepted({ local(u"/tmp/żaba.png"_s) });
+        Q_EMIT fakes.made.at(1)->accepted({local(u"/tmp/żaba.png"_s)});
         QCOMPARE(picker.selectedFile(), local(u"/tmp/żaba.png"_s));
     }
 
     void noBackendRejects()
     {
         Fakes fakes;
-        fakes.canShow = { false };
+        fakes.canShow = {false};
         fakes.install();
         FilePicker picker;
         QSignalSpy rejected(&picker, &FilePicker::rejected);
@@ -406,7 +404,7 @@ FilePicker {
         QMetaObject::invokeMethod(picker, "open");
         QVERIFY(picker->property("visible").toBool());
         QCOMPARE(fakes.last()->lastRequest.title, u"Zapisz stronę jako"_s);
-        Q_EMIT fakes.last()->accepted({ local(u"/tmp/Źródła"_s) });
+        Q_EMIT fakes.last()->accepted({local(u"/tmp/Źródła"_s)});
         QCOMPARE(object->property("acceptedCount").toInt(), 1);
         QCOMPARE(object->property("first").toUrl(), local(u"/tmp/Źródła.md"_s));
         QCOMPARE(object->property("selectedFile").toUrl(), local(u"/tmp/Źródła.md"_s));
@@ -430,7 +428,7 @@ FilePicker {
         FilePicker picker;
         picker.setFileMode(FilePicker::OpenFile);
         picker.setTitle(u"Wybierz plik dźwiękowy"_s);
-        picker.setNameFilters({ u"Pliki dźwiękowe (*.oga *.ogg *.wav)"_s, u"Wszystkie pliki (*)"_s });
+        picker.setNameFilters({u"Pliki dźwiękowe (*.oga *.ogg *.wav)"_s, u"Wszystkie pliki (*)"_s});
         picker.setCurrentFolder(QUrl::fromLocalFile(dir.path()));
         picker.setDark(true);
         QSignalSpy accepted(&picker, &FilePicker::accepted);
@@ -449,7 +447,8 @@ FilePicker {
         static_cast<QDialog *>(dialog)->accept(); // QFileDialog::accept() is protected
         QCOMPARE(accepted.size(), 1);
         QVERIFY(!picker.isVisible());
-        QCOMPARE(QFileInfo(picker.selectedFile().toLocalFile()).canonicalFilePath(), QFileInfo(file).canonicalFilePath());
+        QCOMPARE(QFileInfo(picker.selectedFile().toLocalFile()).canonicalFilePath(),
+                 QFileInfo(file).canonicalFilePath());
 
         // Saving: the default suffix; cancelled with reject().
         picker.setFileMode(FilePicker::SaveFile);

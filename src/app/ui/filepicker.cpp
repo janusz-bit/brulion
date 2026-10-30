@@ -105,7 +105,7 @@ public:
             options->setInitialDirectory(request.folder);
         // Android names the new document after this (EXTRA_TITLE).
         if (!request.initialFile.isEmpty())
-            options->setInitiallySelectedFiles({ request.initialFile });
+            options->setInitiallySelectedFiles({request.initialFile});
         m_helper->setOptions(options);
         if (!request.nameFilters.isEmpty())
             m_helper->selectNameFilter(request.nameFilters.first());
@@ -148,12 +148,8 @@ public:
         dialog->setAttribute(Qt::WA_DeleteOnClose);
         dialog->setOption(QFileDialog::DontUseNativeDialog); // the native one was tried first
         switch (request.mode) {
-        case FilePicker::OpenFile:
-            dialog->setFileMode(QFileDialog::ExistingFile);
-            break;
-        case FilePicker::OpenFiles:
-            dialog->setFileMode(QFileDialog::ExistingFiles);
-            break;
+        case FilePicker::OpenFile: dialog->setFileMode(QFileDialog::ExistingFile); break;
+        case FilePicker::OpenFiles: dialog->setFileMode(QFileDialog::ExistingFiles); break;
         case FilePicker::OpenFolder:
             dialog->setFileMode(QFileDialog::Directory);
             dialog->setOption(QFileDialog::ShowDirsOnly);
@@ -228,7 +224,7 @@ private:
         p.setColor(QPalette::Mid, QColor(0x30, 0x30, 0x30));
         p.setColor(QPalette::Dark, QColor(0x1a, 0x1a, 0x1a));
         p.setColor(QPalette::Shadow, QColor(0x10, 0x10, 0x10));
-        for (const auto role : { QPalette::WindowText, QPalette::Text, QPalette::ButtonText })
+        for (const auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
             p.setColor(QPalette::Disabled, role, disabled);
         return p;
     }
@@ -273,7 +269,7 @@ std::unique_ptr<FilePickerBackend> createWidgetFilePicker()
 
 // --- FilePicker -------------------------------------------------------------------------------
 
-FilePicker::FilePicker(QObject *parent) : QObject(parent) {}
+FilePicker::FilePicker(QObject *parent) : QObject(parent) { }
 
 FilePicker::~FilePicker()
 {
@@ -412,7 +408,7 @@ void FilePicker::setCurrentFolder(const QUrl &folder)
 
 void FilePicker::setSelectedFile(const QUrl &file)
 {
-    const QList<QUrl> selected = file.isEmpty() ? QList<QUrl>() : QList<QUrl>{ file };
+    const QList<QUrl> selected = file.isEmpty() ? QList<QUrl>() : QList<QUrl>{file};
     if (m_selected == selected)
         return;
     m_selected = selected;

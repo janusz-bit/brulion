@@ -5,7 +5,7 @@
 
 namespace brulion::platform {
 
-PickCollector::PickCollector(qint64 maxBytes, Done done) : m_maxBytes(maxBytes), m_done(std::move(done)) {}
+PickCollector::PickCollector(qint64 maxBytes, Done done) : m_maxBytes(maxBytes), m_done(std::move(done)) { }
 
 void PickCollector::closed(int count)
 {
@@ -21,11 +21,10 @@ char *PickCollector::accept(quint64 size, const QString &name)
         return nullptr;
     PickedFile &file = m_files.emplace_back();
     file.name = name;
-    file.size = size > quint64(std::numeric_limits<qint64>::max()) ? std::numeric_limits<qint64>::max()
-                                                                   : qint64(size);
+    file.size = size > quint64(std::numeric_limits<qint64>::max()) ? std::numeric_limits<qint64>::max() : qint64(size);
     // QByteArray's limit too (2 GB on 32-bit wasm).
     const bool tooLarge = (m_maxBytes >= 0 && file.size > m_maxBytes)
-        || file.size > qint64(std::numeric_limits<qsizetype>::max() / 2);
+                          || file.size > qint64(std::numeric_limits<qsizetype>::max() / 2);
     if (tooLarge) {
         file.tooLarge = true;
         ++m_processed;

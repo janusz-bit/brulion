@@ -431,10 +431,10 @@ private Q_SLOTS:
         limits.maxFileBytes = 2000;
         g.setLimits(limits);
         QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
-        g.start({ QUrl::fromLocalFile(dir + u"/duży.zip"_s), QUrl::fromLocalFile(dir + u"/mały.md"_s) });
+        g.start({QUrl::fromLocalFile(dir + u"/duży.zip"_s), QUrl::fromLocalFile(dir + u"/mały.md"_s)});
         QVERIFY(finished.wait(5000));
         QCOMPARE(finished.first().at(1).toStringList(),
-                 QStringList{ brulion::ioviews::FileGatherer::tooLargeWarning(u"duży.zip"_s, 3000) });
+                 QStringList{brulion::ioviews::FileGatherer::tooLargeWarning(u"duży.zip"_s, 3000)});
         QCOMPARE(finished.first().at(2).toString(), brulion::ioviews::FileGatherer::sourceNameFor(2, u"duży.zip"_s));
         QCOMPARE(finished.first().at(2).toString(), u"2 file(s)"_s);
         const QString warning = brulion::ioviews::FileGatherer::tooLargeWarning(u"duży.zip"_s, 600LL * 1024 * 1024);
