@@ -296,8 +296,66 @@ def m_views(run):
         if s:
             out[key + "_settled_ms"] = s["t"] - t0
             out[key + "_stall_max"] = max([d for _, d in stalls_in(run, t0 - 1, s["t"] + 1)], default=0.0)
+            if tag.startswith("graph"):
+                # The graph animates its layout: frames shown between the navigation and settled.
+                out.update(frame_intervals(run, t0, s["t"], key + "_"))
         if "mem:view:" + tag in mk:
             out[key + "_rss_mb"] = mk["mem:view:" + tag]["VmRSS"] / 1024.0
+    return out
+
+
+def frame_intervals(run, a, b, prefix):
+    """Frames swapped in [a, b] and the intervals between consecutive ones."""
+    sw = [w for w in run["swap"] if a <= w <= b]
+    iv = [y - x for x, y in zip(sw, sw[1:])]
+    out = {prefix + "frames": len(sw)}
+    if iv:
+        out[prefix + "frame_p95_ms"] = pct(iv, 95)
+        out[prefix + "frame_max_ms"] = max(iv)
+    return out
+
+
+def m_graph(run):
+    """The graph scenario: open, pan and zoom while the layout runs, pan again once settled."""
+    out = {}
+    mk = run["marks"]
+    nav = mk.get("nav_start:graph")
+    if not nav:
+        return out
+    t0 = nav["t"]
+    if "nav_returned:graph" in mk:
+        out["sync_ms"] = mk["nav_returned:graph"]["t"] - t0
+        f = frame_after(run, mk["nav_returned:graph"]["t"])
+        if f is not None:
+            out["frame_ms"] = f - t0
+    done = mk.get("graph_layout_done")
+    if done:
+        out["layout_ms"] = done["t"] - t0  # GraphModel.running false: the layout has cooled down
+        out.update(stall_stats(run, t0, done["t"], "run_"))
+        out.update(frame_intervals(run, t0, done["t"], "run_"))
+    s = mk.get("graph_settled")
+    if s:
+        out["settled_ms"] = s["t"] - t0
+    for phase in ("graph_run_pan", "graph_settled_pan"):
+        p = phase[len("graph_"):]
+        moves = [x for x in run["actions"] if x["kind"] == "mouse" and x["label"] == phase]
+        frames = []
+        for x in moves:
+            f = frame_after(run, x["t1"], 2000)
+            frames.append(None if f is None else f - x["t0"])
+        out.update(dist(p + "_move_frame", frames))
+        out.update(dist(p + "_move_handle", [x["t1"] - x["t0"] for x in moves]))
+        a, b = mk.get(phase + ":start"), mk.get(phase + ":end")
+        if a and b:
+            out.update(frame_intervals(run, a["t"], b["t"], p + "_"))
+            out.update(stall_stats(run, a["t"], b["t"], p + "_"))
+    zooms = [x for x in run["actions"] if x["kind"] == "wheel" and x["label"] == "graph_zoom"]
+    zf = []
+    for x in zooms:
+        f = frame_after(run, x["t1"], 2000)
+        zf.append(None if f is None else f - x["t0"])
+    out.update(dist("zoom_frame", zf))
+    out.update(mem(run, "graph"))
     return out
 
 
@@ -409,7 +467,7 @@ def m_workload(run):
 SCENARIOS = {
     "startup": m_startup, "open-page": m_open_page, "typing": m_typing, "select-copy": m_select_copy,
     "search": m_search,
-    "switcher": m_switcher, "views": m_views, "journal-scroll": m_journal_scroll,
+    "switcher": m_switcher, "views": m_views, "graph": m_graph, "journal-scroll": m_journal_scroll,
     "switch-pages": m_switch_pages, "idle": m_idle, "idle-edit": m_idle, "workload": m_workload,
 }
 

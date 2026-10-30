@@ -2,15 +2,22 @@
 //
 //   GraphItem { model: graphModel; pageColor: Theme.link; ... ; onNodeActivated: (id) => open(id) }
 //
-// Rendering: a QQuickPaintedItem (works with every scene graph backend — OpenGL/Vulkan/Metal,
-// WebGL in the browser and the software renderer used for screenshots). Each frame draws the
-// visible edges in one batched call, the nodes grouped by colour and, at sufficient zoom (or for
-// the highlighted neighbourhood and the best connected nodes), labels that do not overlap
-// (cached QStaticText, at most MaxLabels). Off-screen nodes and edges are culled; antialiasing
-// is switched off for large graphs while the simulation or a gesture is running, so 2000 nodes
-// stay smooth, and comes back once things settle. On slow devices (GraphModel::timeBoxed) the
-// moving layout is repainted at most every movingRepaintInterval() ms and without labels (except
-// the highlighted and the focused node) — gestures and camera moves still repaint at once.
+// Rendering: a QQuickItem with its own scene-graph nodes (GraphSceneNode, graphscene.h): the
+// edges, discs and rings as vertex-antialiased triangle meshes in world units under a camera
+// transform (QSGVertexColorMaterial, no custom shaders), the labels as QSGTextNodes on rounded
+// backgrounds in screen units. Panning a settled graph only changes the camera's matrix (and places
+// the labels again); a moving layout, zooming, colours and the highlight rebuild the meshes
+// (buildMesh(), during the scene graph's sync). Labels: at sufficient zoom every visible node,
+// otherwise the highlighted neighbourhood, the local centre and the best connected nodes, never
+// overlapping (except the highlighted one), at most MaxLabels — the same rule for both renderers
+// (geometry::placeLabels).
+// With the software scene graph renderer (tests, screenshots, the Raspberry Pi's offscreen runs)
+// the QPainter code (render()) paints into an image node instead: off-screen nodes and edges are
+// culled, discs blitted from cached antialiased sprites, antialiasing off for large graphs while
+// things move; when a frame takes longer than slowPaintMs while the layout moves, the moving
+// layout is repainted at most every movingRepaintInterval() ms and without labels (except the
+// highlighted and the focused node) — gestures and camera moves still repaint at once.
+// While the model is `settling` (reduced motion, fresh layout) only the background is drawn.
 //
 // Interaction (mouse, touch, touchpad):
 // * wheel / pinch / touchpad pinch: zoom at the pointer; drag on the background / two-finger
@@ -24,6 +31,7 @@
 // view while the layout unfolds, until the user moves the camera.
 #pragma once
 
+#include "graphgeometry.h"
 #include "graphmodel.h"
 
 #include <QColor>
@@ -31,18 +39,20 @@
 #include <QFont>
 #include <QHash>
 #include <QImage>
+#include <QList>
 #include <QPointer>
-#include <QQuickPaintedItem>
+#include <QQuickItem>
 #include <QStaticText>
 #include <QTimer>
 #include <QVariantAnimation>
 
 #include <atomic>
-#include <set>
+#include <mutex>
+#include <vector>
 
 namespace brulion::planning {
 
-class GraphItem : public QQuickPaintedItem {
+class GraphItem : public QQuickItem {
     Q_OBJECT
 
     Q_PROPERTY(brulion::planning::GraphModel *model READ model WRITE setModel NOTIFY modelChanged FINAL)
@@ -85,8 +95,9 @@ class GraphItem : public QQuickPaintedItem {
     Q_PROPERTY(QPointF highlightedPosition READ highlightedPosition NOTIFY highlightedPositionChanged FINAL)
     /// A pointer gesture (pan, pinch, node drag) is in progress.
     Q_PROPERTY(bool interacting READ interacting NOTIFY interactingChanged FINAL)
-    /// Milliseconds the last frame took to paint (diagnostics; read on demand — painting may
-    /// happen on the render thread, so there is no change signal).
+    /// Milliseconds the last frame took to build (meshes and labels, or painting with the software
+    /// renderer; diagnostics; read on demand — this happens on the render thread, so there is no
+    /// change signal).
     Q_PROPERTY(double lastPaintMs READ lastPaintMs FINAL)
 
 public:
@@ -151,9 +162,12 @@ public:
     QPointF highlightedPosition() const;
     bool interacting() const { return m_interacting; }
     double lastPaintMs() const { return m_lastPaintMs.load(std::memory_order_relaxed); }
-    /// While a time-boxed layout moves: the least time between two repaints for a paint of
-    /// `paintMs` (painting takes at most a quarter of the time), ms.
+    /// While the layout moves with the software renderer: the least time between two repaints for
+    /// a paint of `paintMs` (painting takes at most a quarter of the time), ms.
     static int movingRepaintInterval(double paintMs);
+    /// Software renderer: a frame slower than this (ms) while the layout moves throttles repaints
+    /// and leaves out labels (default 16; tests: 0).
+    void setSlowPaintMs(double ms) { m_slowPaintMs = ms; }
 
     /// Show the whole graph (animated unless `animated` is false or animationDuration is 0).
     Q_INVOKABLE void fitAll(bool animated = true);
@@ -171,9 +185,35 @@ public:
     /// Back to auto-fit (after a mode change).
     Q_INVOKABLE void resetView();
 
-    void paint(QPainter *painter) override;
-    /// Draw the graph for an item of `size` (paint() and tests).
+    /// Draw the graph with QPainter for an item of `size` (the software renderer and tests).
     void render(QPainter *painter, const QSizeF &size);
+    /// The world-space meshes of the current state (edges, discs, rings; empty while settling)
+    /// for a device pixel ratio (the scene-graph renderer and tests).
+    void buildMesh(geometry::MeshChunks &out, qreal dpr) const;
+
+    /// A label to draw: the node, its box (screen coordinates) and whether it is dimmed.
+    struct PlacedLabel {
+        int node = -1;
+        QRectF rect;
+        bool dimmed = false;
+    };
+    /// The labels of a frame of `size` (both renderers; `sparse`: only the highlighted and the
+    /// focused node).
+    std::vector<PlacedLabel> labelsFor(const QSizeF &size, bool sparse = false);
+    /// The size of a node's label text (elided to the maximum width, the item's font).
+    QSizeF labelSize(int node);
+
+    /// What the last frames did (tests, diagnostics; any thread).
+    struct SceneStats {
+        int frames = 0;      ///< updatePaintNode calls
+        int meshBuilds = 0;  ///< world meshes built (scene graph)
+        int chunks = 0;      ///< geometry chunks of the world meshes
+        int vertices = 0;    ///< their vertices
+        int labels = 0;      ///< labels in the last frame
+        bool software = false; ///< the last frame was painted with QPainter (software renderer)
+        QList<QRectF> labelRects; ///< label boxes of the last frame (either renderer)
+    };
+    SceneStats sceneStats() const;
 
 Q_SIGNALS:
     void modelChanged();
@@ -209,6 +249,8 @@ protected:
     void touchUngrabEvent() override;
     bool event(QEvent *event) override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
+    void itemChange(ItemChange change, const ItemChangeData &value) override;
+    QSGNode *updatePaintNode(QSGNode *old, UpdatePaintNodeData *data) override;
 
 private:
     QPointF toScreen(double x, double y) const;
@@ -218,8 +260,26 @@ private:
     void setSelected(int node);
     void setInteracting(bool on);
     void onPositionsChanged();
-    /// update() — throttled while a time-boxed layout moves (see movingRepaintInterval()).
+    /// update() — throttled while the layout moves and the software renderer paints slowly (see
+    /// movingRepaintInterval()).
     void repaintMoving();
+    /// Something the meshes show changed: rebuild them at the next sync.
+    void meshChanged();
+    QSGNode *updateImageNode(QSGNode *old, QQuickWindow *window);
+    QSGNode *updateSceneNode(QSGNode *old, QQuickWindow *window);
+    /// Screen positions and visibility of the nodes, the highlight and its neighbourhood.
+    struct Frame {
+        int n = 0;
+        std::vector<QPointF> pos;
+        std::vector<char> visible;
+        int hl = -1;
+        std::vector<char> hood;
+        bool dimming = false;
+        int focus = -1;
+    };
+    Frame frameFor(const QSizeF &size) const;
+    std::vector<PlacedLabel> labelsFor(const Frame &frame, bool sparse);
+    QString labelText(int node);
     void onStructureChanged();
     void applyAutoFit();
     void stopCameraAnimation();
@@ -284,14 +344,26 @@ private:
     double m_camFrom[3] = {0, 0, 1};
     double m_camTo[3] = {0, 0, 1};
 
-    QHash<int, QStaticText> m_labels;
+    QHash<int, QStaticText> m_labels;       ///< QPainter path: prepared label texts
     QHash<quint64, QImage> m_sprites;
-    QHash<int, QString> m_labelTexts;
+    struct LabelText {
+        QString text; ///< elided
+        QSizeF size;
+    };
+    QHash<int, LabelText> m_labelTexts;    ///< both paths (the GUI thread, or the render thread while it waits)
     std::atomic<double> m_lastPaintMs{0};
-    bool m_settledRepaint = false;
+    double m_slowPaintMs = 16;
     QElapsedTimer m_clock;                  ///< started at construction (any thread reads it)
     std::atomic<qint64> m_lastPaintEnd{-1}; ///< m_clock time at the end of the last paint, ns
     QTimer m_repaintTimer;                  ///< a throttled repaint
+
+    // Scene graph state: written on the GUI thread, read during the sync (the GUI thread waits).
+    bool m_meshDirty = true;
+    bool m_labelsDirty = true; ///< node indices or the font changed: cached text layouts go
+    geometry::MeshChunks m_mesh;       ///< render thread: world meshes (allocations reused)
+    geometry::MeshChunks m_labelMesh;  ///< render thread: label backgrounds
+    mutable std::mutex m_statsMutex;
+    SceneStats m_stats;
 };
 
 } // namespace brulion::planning

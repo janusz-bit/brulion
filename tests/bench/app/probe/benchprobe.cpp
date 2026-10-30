@@ -11,7 +11,8 @@
 //   BENCH_T0         CLOCK_MONOTONIC ns at launch (the runner sets it just before exec); times
 //                    in the output are ms since then (default: the library's load)
 //   BENCH_SCENARIO   startup | open-page | typing | select-copy | search | switcher | views |
-//                    journal-scroll | switch-pages | idle | idle-edit | workload (see buildScenario())
+//                    graph | journal-scroll | switch-pages | idle | idle-edit | workload (see
+//                    buildScenario())
 //   BENCH_PAGE       page path for open-page / typing / select-copy / idle-edit
 //                    ("Bench/Konspekt 5000.md")
 //   BENCH_ROW        row to edit (typing, select-copy; default 10)
@@ -529,6 +530,22 @@ private:
         m_actions.push_back(a);
     }
 
+    /// A mouse event at a window position (synchronous delivery; t1 = handled).
+    void mouse(QEvent::Type type, QPointF local, Qt::MouseButtons buttons, const QString &label)
+    {
+        if (!m_window)
+            return;
+        Action a;
+        a.kind = u"mouse"_s;
+        a.label = label;
+        a.t0 = monoNs();
+        QWindowSystemInterface::handleMouseEvent<QWindowSystemInterface::SynchronousDelivery>(
+                m_window, local, m_window->mapToGlobal(local), buttons, Qt::LeftButton, type);
+        a.t1 = monoNs();
+        a.t2 = a.t1;
+        m_actions.push_back(a);
+    }
+
     // ---- scenario steps -------------------------------------------------------------------------
     struct Step {
         QString name;
@@ -927,6 +944,89 @@ private:
         }
     }
 
+    /// The visible GraphItem (GraphView's "graphItem") and its GraphModel.
+    QQuickItem *graphItem()
+    {
+        QQuickItem *found = nullptr;
+        walk(m_window ? m_window->contentItem() : nullptr, [&](QQuickItem *it) {
+            if (found || !it->isVisible())
+                return false;
+            if (it->objectName() == u"graphItem") {
+                found = it;
+                return false;
+            }
+            return true;
+        });
+        return found;
+    }
+    QObject *graphModel()
+    {
+        QQuickItem *item = graphItem();
+        return item ? item->property("model").value<QObject *>() : nullptr;
+    }
+    /// A window point over the graph's background (no node under it), else the item's centre.
+    QPointF graphBackgroundPoint()
+    {
+        QQuickItem *item = graphItem();
+        if (!item)
+            return QPointF(m_window->width() / 2.0, m_window->height() / 2.0);
+        for (const double fy : {0.62, 0.5, 0.38, 0.72, 0.28}) {
+            for (const double fx : {0.3, 0.5, 0.7, 0.2, 0.8}) {
+                const QPointF p(item->width() * fx, item->height() * fy);
+                QString id;
+                QMetaObject::invokeMethod(item, "nodeAt", Q_RETURN_ARG(QString, id), Q_ARG(qreal, p.x()), Q_ARG(qreal, p.y()));
+                if (id.isEmpty())
+                    return item->mapToScene(p);
+            }
+        }
+        return item->mapToScene(QPointF(item->width() / 2, item->height() / 2));
+    }
+    /// A mouse drag of `ms` on the graph's background, a move every 16 ms.
+    void graphPan(const QString &name, int ms)
+    {
+        action(name + u":start"_s, [this, name] {
+            m_panPos = graphBackgroundPoint();
+            mark(name + u":start"_s);
+            mouse(QEvent::MouseButtonPress, m_panPos, Qt::LeftButton, name + u":press"_s);
+        });
+        for (int i = 0; i < ms / 16; ++i) {
+            wait(16);
+            action(name, [this, name, i] {
+                m_panPos += QPointF(i % 2 ? 3 : 4, (i / 12) % 2 ? 2 : -2);
+                mouse(QEvent::MouseMove, m_panPos, Qt::LeftButton, name);
+            });
+        }
+        action(name + u":end"_s, [this, name] {
+            mouse(QEvent::MouseButtonRelease, m_panPos, Qt::NoButton, name + u":release"_s);
+            mark(name + u":end"_s);
+        });
+    }
+
+    void graphSteps()
+    {
+        // Open the graph, pan and zoom while the layout still runs, then once it has settled.
+        action(u"nav:graph"_s, [this] {
+            mark(u"nav_start:graph"_s);
+            navigate({{u"view"_s, u"graph"_s}});
+            mark(u"nav_returned:graph"_s);
+        });
+        waitUntil(u"graph_item"_s, [this] { return graphModel() != nullptr; }, 30000);
+        wait(300);
+        graphPan(u"graph_run_pan"_s, 1000);
+        for (int i = 0; i < 3; ++i) {
+            action(u"zoom"_s, [this] { wheel(120, u"graph_zoom"_s); });
+            wait(120);
+        }
+        waitUntil(u"graph_layout_done"_s, [this] {
+            QObject *m = graphModel();
+            return m && !m->property("running").toBool();
+        }, 180000);
+        waitSettled(u"graph_settled"_s, 1000, 60000);
+        graphPan(u"graph_settled_pan"_s, 1000);
+        waitSettled(u"graph_done"_s, 1000, 30000);
+        action(u"mem"_s, [this] { markMem(u"graph"_s); });
+    }
+
     void journalScrollSteps()
     {
         action(u"scroll_start"_s, [this] { mark(u"scroll_start"_s); });
@@ -1059,6 +1159,8 @@ private:
             switcherSteps();
         } else if (s == u"views") {
             viewSteps();
+        } else if (s == u"graph") {
+            graphSteps();
         } else if (s == u"journal-scroll") {
             journalScrollSteps();
         } else if (s == u"switch-pages") {
@@ -1079,6 +1181,7 @@ private:
 
     FILE *m_out = nullptr;
     QString m_scenario, m_page, m_startPage, m_status;
+    QPointF m_panPos;
     int m_row = 10;
     int m_idleMs = 30000;
     bool m_keep = false;

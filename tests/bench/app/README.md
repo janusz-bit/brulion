@@ -11,7 +11,7 @@ the `pageEditor` / `pageController` objects.
 
 | File | What |
 |---|---|
-| `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `select-copy`, `search`, `switcher`, `views`, `journal-scroll`, `switch-pages`, `idle`, `idle-edit`, `workload`; see the header) |
+| `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `select-copy`, `search`, `switcher`, `views`, `graph`, `journal-scroll`, `switch-pages`, `idle`, `idle-edit`, `workload`; see the header) |
 | `build-probe.sh <dir>` | builds `libbenchprobe.so` against the dev shell's Qt (a throw-away CMake project in `<dir>`) |
 | `make-bench-vault.py <dir>` | a deterministic synthetic notebook: 10 000 notes (≈ 650 journal days over two years + pages in 40 folders, links, tags, tasks with dates and reminders, a few queries), `Bench/Konspekt 5000.md` (5000-block outline), `Bench/Dokument 5000.md` (5000-block document), `Bench/Mała strona.md`; `<dir>.pages.txt` lists 50 pages for page switching |
 | `run-bench.py` | runs one scenario N times (fresh working copy of the vault per run; `--start first\|warm\|cold`; Xvfb or offscreen); writes one JSONL per run |
@@ -83,7 +83,15 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
 * `search` / `switcher`: key echo (`*_frame`) and `*_results` (key → the frame after the result
   model changed; the search field debounces 180 ms), `*_query_blocked` = GUI time blocked by
   the query.
-* `views`: per view and round (`r0` first open, `r1` again): `sync`, `frame`, `settled`.
+* `views`: per view and round (`r0` first open, `r1` again): `sync`, `frame`, `settled`; for the
+  graph also `frames` (swapped between the navigation and settled) and `frame_p95_ms` /
+  `frame_max_ms` (intervals between them).
+* `graph` (the 10 000-note vault, its graph capped at 4000 nodes): open the graph, 300 ms later a
+  1 s mouse drag on its background (a move every 16 ms) while the layout runs, three wheel zoom
+  steps, wait until `GraphModel.running` is false (`layout_ms`) and settled, then another 1 s drag:
+  `frame_ms`, `layout_ms`, `settled_ms`, `run_stall_max` (the longest GUI stall while the layout
+  runs), `run_frames` / `run_frame_p95_ms` / `run_frame_max_ms`, per drag `*_move_frame` (a move →
+  the frame showing it) and `*_frame_p95_ms`, `zoom_frame`.
 * `idle`: CPU % of one core, wakeups/s per thread and the timer events that fired, frames/s.
 * `switch-pages`: 200 page openings: time to the page's frame, heap / RSS / item count every 20.
 

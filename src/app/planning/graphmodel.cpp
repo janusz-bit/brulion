@@ -20,17 +20,6 @@ namespace {
 
 constexpr double kNormalAlphaDecay = 0.0228;  // ~300 ticks
 constexpr double kReducedAlphaDecay = 0.109;  // ~60 ticks
-constexpr double kSlowAlphaDecay = 0.067;     // ~100 ticks: time-boxed runs (slow devices)
-constexpr qint64 kReducedBurstMs = 30;
-constexpr qint64 kReducedInitialBudgetMs = 150;
-/// Timer-driven steps measured before a run is time-boxed or not (a fixed step: deterministic).
-constexpr int kDecisionTicks = 3;
-/// Time-boxed runs: steps per timer event while frames are shown, and afterwards — at least these
-/// ms of work, half / three quarters of a longer tick interval (phones, the browser), never more
-/// than kSlowMaxBurstMs, so input is handled in between.
-constexpr double kSlowBurstMs = 10;
-constexpr double kSlowFinishBurstMs = 20;
-constexpr double kSlowMaxBurstMs = 25;
 
 double nodeRadius(GraphModel::Kind kind, int degree)
 {
@@ -55,8 +44,7 @@ std::pair<double, double> offsetFor(const QString &id, std::uint32_t seed)
 
 GraphModel::GraphModel(QObject *parent) : QObject(parent)
 {
-    m_timer.setInterval(m_tickInterval);
-    connect(&m_timer, &QTimer::timeout, this, &GraphModel::onTick);
+    connect(&m_sim, &GraphSimulation::frameReady, this, &GraphModel::onFrameReady);
     m_refreshTimer.setSingleShot(true);
     m_refreshTimer.setInterval(300);
     connect(&m_refreshTimer, &QTimer::timeout, this, &GraphModel::rebuild);
@@ -202,9 +190,11 @@ void GraphModel::setActive(bool active)
     if (m_active == active)
         return;
     m_active = active;
-    if (active)
-        m_runClock.start(); // shown again: a time-boxed run shows its frames anew
     Q_EMIT activeChanged();
+    if (m_simOwned)
+        m_sim.command({active ? SimCommand::Resume : SimCommand::Pause});
+    else if (active)
+        ensureRunning();
     updateRunning();
 }
 
@@ -213,19 +203,21 @@ void GraphModel::setReducedMotion(bool on)
     if (m_reducedMotion == on)
         return;
     m_reducedMotion = on;
-    beginRun();
+    // The run starts over with the other cooling (and the other way of showing it).
+    takeBack();
+    m_layout.params().alphaDecay = alphaDecay();
     Q_EMIT reducedMotionChanged();
+    ensureRunning();
     updateRunning();
 }
 
-void GraphModel::setTickInterval(int msec)
+void GraphModel::setFrameInterval(int msec)
 {
     msec = std::clamp(msec, 1, 1000);
-    if (m_tickInterval == msec)
+    if (m_frameInterval == msec)
         return;
-    m_tickInterval = msec;
-    m_timer.setInterval(msec);
-    Q_EMIT tickIntervalChanged();
+    m_frameInterval = msec;
+    Q_EMIT frameIntervalChanged();
 }
 
 void GraphModel::setRefreshDelay(int msec)
@@ -239,9 +231,11 @@ void GraphModel::setRefreshDelay(int msec)
 
 QPointF GraphModel::position(int node) const
 {
-    if (node < 0 || node >= m_layout.nodeCount())
+    const auto &x = xs();
+    const auto &y = ys();
+    if (node < 0 || size_t(node) >= x.size() || size_t(node) >= y.size())
         return {};
-    return {m_layout.x(node), m_layout.y(node)};
+    return {x[size_t(node)], y[size_t(node)]};
 }
 
 // ---- queries -------------------------------------------------------------------------------
@@ -321,64 +315,177 @@ QStringList GraphModel::neighbors(const QString &id) const
 
 QRectF GraphModel::bounds() const
 {
-    if (m_nodes.isEmpty())
-        return {};
-    double x0 = m_layout.x(0), y0 = m_layout.y(0), x1 = x0, y1 = y0;
-    for (int i = 0; i < m_nodes.size(); ++i) {
+    const auto &xv = xs();
+    const auto &yv = ys();
+    const qsizetype n = std::min({m_nodes.size(), qsizetype(xv.size()), qsizetype(yv.size())});
+    bool any = false;
+    double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    for (qsizetype i = 0; i < n; ++i) {
+        const double x = xv[size_t(i)], y = yv[size_t(i)];
+        if (!std::isfinite(x) || !std::isfinite(y))
+            continue;
         const double r = m_nodes.at(i).radius;
-        x0 = std::min(x0, m_layout.x(i) - r);
-        y0 = std::min(y0, m_layout.y(i) - r);
-        x1 = std::max(x1, m_layout.x(i) + r);
-        y1 = std::max(y1, m_layout.y(i) + r);
+        if (!any) {
+            x0 = x - r, y0 = y - r, x1 = x + r, y1 = y + r;
+            any = true;
+            continue;
+        }
+        x0 = std::min(x0, x - r);
+        y0 = std::min(y0, y - r);
+        x1 = std::max(x1, x + r);
+        y1 = std::max(y1, y + r);
     }
+    if (!any)
+        return {};
     return QRectF(x0, y0, x1 - x0, y1 - y0);
 }
 
 // ---- simulation ----------------------------------------------------------------------------
 
-void GraphModel::reheat(double alpha)
+double GraphModel::alphaDecay() const
 {
-    m_layout.setAlpha(std::max(m_layout.alpha(), alpha));
-    beginRun();
+    return m_reducedMotion ? kReducedAlphaDecay : kNormalAlphaDecay;
+}
+
+void GraphModel::ensureRunning()
+{
+    if (m_active && !m_simOwned && !m_nodes.isEmpty() && m_layout.running())
+        startRun();
+}
+
+void GraphModel::startRun()
+{
+    ++m_generation;
+    m_layout.params().alphaDecay = alphaDecay();
+    m_x = m_layout.xs();
+    m_y = m_layout.ys();
+    m_alpha = m_layout.alpha();
+    m_simOwned = true;
+    m_simRunning = true;
+    m_tickMs = 0;
+    m_runTicks = 0;
+    setFastCooling(false);
+    setSettling(m_reducedMotion && m_fresh);
+    SimRun run;
+    run.generation = m_generation;
+    run.layout = m_layout;
+    run.reducedMotion = m_reducedMotion;
+    run.alphaDecay = alphaDecay();
+    run.slowTickMs = m_slowTickMs;
+    run.frameIntervalMs = m_frameInterval;
+    run.minRunMs = m_minRunMs;
+    m_sim.start(std::move(run));
+}
+
+void GraphModel::takeBack()
+{
+    if (!m_simOwned)
+        return;
+    m_sim.command({SimCommand::Cancel});
+    ++m_generation; // frames still on their way belong to no run
+    m_simOwned = false;
+    if (m_simRunning) {
+        // Mid-run: continue from the newest frame (a final frame already handed the full state).
+        m_layout.setPositions(m_x, m_y);
+        m_layout.setAlpha(m_alpha);
+    }
+    m_simRunning = false;
+    setSettling(false);
+}
+
+void GraphModel::onFrameReady()
+{
+    SimFrame frame;
+    if (!m_sim.takeFrame(frame))
+        return;
+    if (!m_simOwned || frame.generation != m_generation || frame.x.size() != size_t(m_nodes.size())
+        || frame.y.size() != frame.x.size()) {
+        ++m_staleFrames;
+        return;
+    }
+    ++m_framesApplied;
+    m_x = std::move(frame.x);
+    m_y = std::move(frame.y);
+    m_alpha = frame.alpha;
+    m_tickMs = frame.tickMs;
+    m_runTicks = frame.ticks;
+    if (m_dragging >= 0 && size_t(m_dragging) < m_x.size()) {
+        // The dragged node is where the pointer is, also in frames computed before its last move.
+        m_x[size_t(m_dragging)] = m_dragPos.x();
+        m_y[size_t(m_dragging)] = m_dragPos.y();
+    }
+    m_simRunning = frame.running;
+    if (frame.state) {
+        m_layout = std::move(*frame.state);
+        if (m_dragging >= 0) {
+            m_layout.fix(m_dragging, m_dragPos.x(), m_dragPos.y());
+            m_layout.setAlphaTarget(m_reducedMotion ? 0 : 0.3);
+        }
+    }
+    if (!frame.running) {
+        m_fresh = false;
+        setSettling(false);
+    }
+    setFastCooling(frame.fastCooling);
+    Q_EMIT positionsChanged();
     updateRunning();
 }
 
-void GraphModel::beginRun()
+void GraphModel::setFastCooling(bool on)
 {
-    m_layout.params().alphaDecay = m_reducedMotion ? kReducedAlphaDecay : kNormalAlphaDecay;
-    m_runTicks = 0;
-    m_tickMs = 0;
-    m_paintMs.store(0, std::memory_order_relaxed); // frames of this run count (not a settled one)
-    m_runClock.start();
-    if (m_timeBoxed) {
-        m_timeBoxed = false;
-        Q_EMIT timeBoxedChanged();
+    if (m_fastCooling == on)
+        return;
+    m_fastCooling = on;
+    Q_EMIT fastCoolingChanged();
+}
+
+void GraphModel::setSettling(bool on)
+{
+    if (m_settling == on)
+        return;
+    m_settling = on;
+    Q_EMIT settlingChanged();
+}
+
+void GraphModel::reheat(double alpha)
+{
+    if (m_simOwned) {
+        m_sim.command({SimCommand::ReheatTo, -1, 0, 0, alpha});
+        m_layout.setAlpha(std::max(m_layout.alpha(), alpha));
+        if (std::max(alpha, m_alpha) >= m_layout.params().alphaMin)
+            m_simRunning = true;
+        setFastCooling(false); // a new run decides again
+    } else {
+        m_layout.setAlpha(std::max(m_layout.alpha(), alpha));
+        m_layout.params().alphaDecay = alphaDecay();
+        ensureRunning();
     }
+    updateRunning();
 }
 
 void GraphModel::relayout()
 {
+    takeBack();
     QList<std::pair<int, int>> edges;
     edges.reserve(qsizetype(m_layout.edges().size()));
     for (const auto &e : m_layout.edges())
         edges.append(e);
     m_layout.reset(int(m_nodes.size()), edges, m_seed);
+    m_layout.params().alphaDecay = alphaDecay();
     m_dragging = -1;
-    beginRun();
-    if (m_reducedMotion) {
-        QElapsedTimer t;
-        t.start();
-        while (m_layout.running() && t.elapsed() < kReducedInitialBudgetMs)
-            m_layout.tick();
-    }
+    m_fresh = !m_nodes.isEmpty();
+    ensureRunning();
     Q_EMIT positionsChanged();
     updateRunning();
 }
 
 void GraphModel::step(int ticks)
 {
+    takeBack();
+    m_fresh = false;
     for (int i = 0; i < ticks; ++i)
         m_layout.tick();
+    ensureRunning();
     Q_EMIT positionsChanged();
     updateRunning();
 }
@@ -388,8 +495,18 @@ void GraphModel::beginDrag(int node)
     if (node < 0 || node >= m_nodes.size())
         return;
     m_dragging = node;
-    m_layout.fix(node, m_layout.x(node), m_layout.y(node));
-    m_layout.setAlphaTarget(m_reducedMotion ? 0 : 0.3);
+    m_dragPos = position(node);
+    const double target = m_reducedMotion ? 0 : 0.3;
+    m_layout.fix(node, m_dragPos.x(), m_dragPos.y());
+    m_layout.setAlphaTarget(target);
+    if (m_simOwned) {
+        m_sim.command({SimCommand::Fix, node, m_dragPos.x(), m_dragPos.y()});
+        m_sim.command({SimCommand::AlphaTarget, -1, 0, 0, target});
+        if (target > 0)
+            m_simRunning = true;
+    } else {
+        ensureRunning();
+    }
     updateRunning();
 }
 
@@ -397,83 +514,50 @@ void GraphModel::dragTo(int node, QPointF world)
 {
     if (node < 0 || node >= m_nodes.size())
         return;
+    if (node == m_dragging)
+        m_dragPos = world;
     m_layout.fix(node, world.x(), world.y());
-    if (m_reducedMotion || !m_active || !m_timer.isActive())
-        Q_EMIT positionsChanged();
+    if (m_simOwned) {
+        // The node follows the pointer now, not when the worker's next frame comes.
+        if (size_t(node) < m_x.size()) {
+            m_x[size_t(node)] = world.x();
+            m_y[size_t(node)] = world.y();
+        }
+        m_sim.command({SimCommand::Fix, node, world.x(), world.y()});
+    }
+    Q_EMIT positionsChanged();
 }
 
 void GraphModel::endDrag(int node)
 {
-    if (node >= 0 && node < m_nodes.size())
+    const bool valid = node >= 0 && node < m_nodes.size();
+    if (valid)
         m_layout.unfix(node);
     m_dragging = -1;
     m_layout.setAlphaTarget(0);
-    beginRun();
-    if (m_reducedMotion) {
-        // Settle the neighbours at once instead of animating them.
-        m_layout.setAlpha(std::max(m_layout.alpha(), 0.1));
-        QElapsedTimer t;
-        t.start();
-        while (m_layout.running() && t.elapsed() < kReducedInitialBudgetMs)
-            m_layout.tick();
-        Q_EMIT positionsChanged();
-    }
-    updateRunning();
-}
-
-void GraphModel::onTick()
-{
-    if (!m_layout.running()) {
-        updateRunning();
-        return;
-    }
-    if (m_reducedMotion) {
-        QElapsedTimer t;
-        t.start();
-        while (m_layout.running() && t.elapsed() < kReducedBurstMs)
-            m_layout.tick();
-        if (!m_layout.running())
-            Q_EMIT positionsChanged();
-    } else if (m_timeBoxed && m_dragging < 0) {
-        // A slow device: several steps per event (as many as fit the budget), frames only for
-        // the first m_timeBoxMs of the run — the rest is shown when it is done.
-        const bool frames = m_runClock.elapsed() < m_timeBoxMs;
-        const double budget = frames ? std::clamp(0.5 * m_tickInterval, kSlowBurstMs, kSlowMaxBurstMs)
-                                     : std::clamp(0.75 * m_tickInterval, kSlowFinishBurstMs, kSlowMaxBurstMs);
-        QElapsedTimer t;
-        t.start();
-        do {
-            m_layout.tick();
-        } while (m_layout.running() && double(t.nsecsElapsed()) / 1e6 + m_tickMs <= budget);
-        if (frames || !m_layout.running())
-            Q_EMIT positionsChanged();
-    } else {
-        QElapsedTimer t;
-        t.start();
-        m_layout.tick();
-        if (m_runTicks < kDecisionTicks) {
-            // The first steps of a run and the latest paint tell whether this device keeps up.
-            ++m_runTicks;
-            m_tickMs += (double(t.nsecsElapsed()) / 1e6 - m_tickMs) / double(m_runTicks);
-            if (m_runTicks == kDecisionTicks && m_dragging < 0
-                && m_tickMs + m_paintMs.load(std::memory_order_relaxed) > m_slowFrameMs) {
-                m_timeBoxed = true;
-                m_layout.params().alphaDecay = kSlowAlphaDecay;
-                Q_EMIT timeBoxedChanged();
-            }
+    if (m_simOwned) {
+        if (valid)
+            m_sim.command({SimCommand::Unfix, node});
+        m_sim.command({SimCommand::AlphaTarget, -1, 0, 0, 0});
+        if (m_reducedMotion) {
+            // Settle the neighbours without animating them: one final frame.
+            m_sim.command({SimCommand::ReheatTo, -1, 0, 0, 0.1});
+            m_simRunning = true;
+        } else {
+            m_simRunning = m_alpha >= m_layout.params().alphaMin;
         }
-        Q_EMIT positionsChanged();
+    } else {
+        if (m_reducedMotion)
+            m_layout.setAlpha(std::max(m_layout.alpha(), 0.1));
+        m_layout.params().alphaDecay = alphaDecay();
+        ensureRunning();
     }
     updateRunning();
 }
 
 void GraphModel::updateRunning()
 {
-    const bool run = m_active && !m_nodes.isEmpty() && m_layout.running();
-    if (run && !m_timer.isActive())
-        m_timer.start();
-    else if (!run && m_timer.isActive())
-        m_timer.stop();
+    const bool run = m_active && m_simOwned && m_simRunning;
     if (m_running != run) {
         m_running = run;
         Q_EMIT runningChanged();
@@ -499,16 +583,27 @@ void GraphModel::scheduleRebuild()
 void GraphModel::rebuild()
 {
     m_refreshTimer.stop();
-    // Positions to carry over.
+    // Positions to carry over (the newest ones: the worker's frame during a run).
     QHash<QString, QPointF> oldPos;
     oldPos.reserve(m_nodes.size());
-    for (int i = 0; i < m_nodes.size() && i < m_layout.nodeCount(); ++i)
-        oldPos.insert(m_nodes.at(i).id, QPointF(m_layout.x(i), m_layout.y(i)));
+    {
+        const auto &x = xs();
+        const auto &y = ys();
+        for (int i = 0; i < m_nodes.size() && size_t(i) < x.size() && size_t(i) < y.size(); ++i)
+            oldPos.insert(m_nodes.at(i).id, QPointF(x[size_t(i)], y[size_t(i)]));
+    }
     QStringList oldIds;
     for (const Node &n : std::as_const(m_nodes))
         oldIds.append(n.id);
     const std::vector<std::pair<int, int>> oldEdges = m_layout.edges();
-    const double oldAlpha = m_layout.alpha();
+    const double oldAlpha = alpha();
+    // The run on the worker belongs to the old graph.
+    if (m_simOwned) {
+        m_sim.command({SimCommand::Cancel});
+        ++m_generation;
+        m_simOwned = false;
+        m_simRunning = false;
+    }
 
     GraphData g;
     m_pageCount = 0;
@@ -658,14 +753,14 @@ void GraphModel::rebuild()
     }
 
     // 7. Positions: carried over, next to a known neighbour, or fresh.
-    std::vector<double> xs(size_t(nodes.size()), 0), ys(size_t(nodes.size()), 0);
+    std::vector<double> startX(size_t(nodes.size()), 0), startY(size_t(nodes.size()), 0);
     std::vector<bool> known(size_t(nodes.size()), false);
     int carried = 0;
     for (int i = 0; i < nodes.size(); ++i) {
         const auto it = oldPos.constFind(nodes.at(i).id);
         if (it != oldPos.cend()) {
-            xs[size_t(i)] = it->x();
-            ys[size_t(i)] = it->y();
+            startX[size_t(i)] = it->x();
+            startY[size_t(i)] = it->y();
             known[size_t(i)] = true;
             ++carried;
         }
@@ -677,8 +772,8 @@ void GraphModel::rebuild()
             for (const int j : adjacency.at(i)) {
                 if (known[size_t(j)]) {
                     const auto [dx, dy] = offsetFor(nodes.at(i).id, m_seed);
-                    xs[size_t(i)] = xs[size_t(j)] + dx;
-                    ys[size_t(i)] = ys[size_t(j)] + dy;
+                    startX[size_t(i)] = startX[size_t(j)] + dx;
+                    startY[size_t(i)] = startY[size_t(j)] + dy;
                     known[size_t(i)] = true;
                     break;
                 }
@@ -693,17 +788,14 @@ void GraphModel::rebuild()
     m_indexOf = indexOf;
     m_adjacency = adjacency;
     m_dragging = -1;
-    beginRun();
-    m_layout.reset(int(nodes.size()), edges, m_seed, xs, ys, known);
+    m_layout.reset(int(nodes.size()), edges, m_seed, startX, startY, known);
+    m_layout.params().alphaDecay = alphaDecay();
     const bool changed = newIds != oldIds || m_layout.edges() != oldEdges;
     if (carried > 0)
         m_layout.setAlpha(changed ? std::max(oldAlpha, carried == nodes.size() ? 0.15 : 0.35) : oldAlpha);
-    if (m_reducedMotion) {
-        QElapsedTimer t;
-        t.start();
-        while (m_layout.running() && t.elapsed() < kReducedInitialBudgetMs)
-            m_layout.tick();
-    }
+    m_fresh = carried == 0 && !nodes.isEmpty();
+    setSettling(false);
+    ensureRunning();
     Q_EMIT structureChanged();
     Q_EMIT positionsChanged();
     updateRunning();

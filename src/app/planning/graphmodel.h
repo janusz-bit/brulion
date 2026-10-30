@@ -1,6 +1,6 @@
 // GraphModel — the link graph of the vault for GraphView.qml / GraphItem: nodes (pages, daily
 // notes, #tags, pages that do not exist yet) and undirected edges from VaultIndex::graph(), laid
-// out by ForceLayout on a timer.
+// out by ForceLayout on a worker thread (GraphSimulation).
 //
 //   GraphModel { vaultIndex: PlanningContext.vaultIndex; showTags: true; focusPath: route.path; depth: 1 }
 //
@@ -12,26 +12,31 @@
 //   (1 or 2) links of it are kept.
 // * `maxNodes` caps the graph (the best connected nodes win, the focus always stays):
 //   `truncated` / `totalNodeCount` tell the view. Phones and the browser use a lower cap.
-// * The simulation runs on a timer (tickInterval ms) while `active` and stops when it has
-//   cooled down (`running`). With reducedMotion it cools down fast and is computed in bursts
-//   without intermediate frames, so nothing moves on screen.
-// * Slow devices (`timeBoxed`): when the first steps of a run, together with painting the view
-//   (GraphItem reports its paint time), cost more than a 30 fps frame, the rest of the run cools
-//   down in about 100 steps instead of 300, computed in bursts of several steps per timer event;
-//   the view repaints only now and then while it moves (GraphItem) and shows the frames of at
-//   most the first two seconds — then the rest is computed without frames and shown when done.
-//   The decision is measured on the device (phones, the browser, an old laptop alike) and taken
-//   at a fixed step, so the layout of a slow run is deterministic too.
+// * The simulation runs on a worker thread while `active` (GraphSimulation; inline on the GUI
+//   thread in slices in the browser, which has no threads) and stops when it has cooled down
+//   (`running`). The GUI thread never runs a step: it keeps a mirror of the newest positions
+//   (x(), y(), position(), bounds(), what GraphItem draws and hit-tests) that the worker's frames
+//   update, at most one per `frameInterval` ms. A run unfolds over about a second (pacing); a run
+//   whose first steps are slow cools down in ~100 steps instead of ~300 (`fastCooling`). Hidden
+//   (`active` false) the run pauses and resumes where it was.
+// * With reducedMotion the run cools down fast and only its final layout is shown; a layout that
+//   starts from fresh positions is `settling` until then (the view shows a spinner instead of a
+//   spiral that jumps).
+// * Dragging (beginDrag / dragTo / endDrag): the dragged node follows the pointer at once (the
+//   mirror), the worker pins it and keeps the simulation warm.
 // * Index changes are applied after `refreshDelay` ms: nodes keep their positions, new ones
 //   start next to a neighbour, and the simulation is reheated a little.
-// * Deterministic: the same index, settings and `seed` give the same layout (see ForceLayout).
+// * Deterministic: the same index, settings and `seed` give the same layout (see ForceLayout),
+//   threaded or not, whatever the frame timing.
 //
-// The C++ side (GraphItem) reads nodes(), edges(), adjacency() and layout() directly.
+// The C++ side (GraphItem) reads nodes(), edges(), adjacency() and the positions directly.
+// layout() is the authoritative ForceLayout while no run is on the worker (runActive() false: an
+// inactive model, tests stepping it with step()); during a run it holds the run's start state.
 #pragma once
 
 #include "forcelayout.h"
+#include "graphsimulation.h"
 
-#include <QElapsedTimer>
 #include <QHash>
 #include <QList>
 #include <QObject>
@@ -42,7 +47,8 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include <atomic>
+#include <algorithm>
+#include <vector>
 
 namespace brulion {
 class VaultIndex;
@@ -71,12 +77,16 @@ class GraphModel : public QObject {
     /// Run the simulation (bind to the view's visibility).
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged FINAL)
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged FINAL)
-    /// Milliseconds between simulation steps (default 16; phones/browser 33).
-    Q_PROPERTY(int tickInterval READ tickInterval WRITE setTickInterval NOTIFY tickIntervalChanged FINAL)
+    /// Least milliseconds between two frames of a moving layout (default 16; the browser 33).
+    Q_PROPERTY(int frameInterval READ frameInterval WRITE setFrameInterval NOTIFY frameIntervalChanged FINAL)
+    /// The current run cools down in ~100 steps: its first steps were slow (see above).
+    Q_PROPERTY(bool fastCooling READ fastCooling NOTIFY fastCoolingChanged FINAL)
+    /// Reduced motion and a layout from fresh positions: nothing to show until it has settled.
+    Q_PROPERTY(bool settling READ settling NOTIFY settlingChanged FINAL)
+    /// The simulation runs on a thread of its own (false in the browser; diagnostics).
+    Q_PROPERTY(bool threaded READ threaded CONSTANT FINAL)
     /// Debounce of rebuilds after index changes, ms (default 300).
     Q_PROPERTY(int refreshDelay READ refreshDelay WRITE setRefreshDelay NOTIFY refreshDelayChanged FINAL)
-    /// The current run is time-boxed because this device is slow (see above).
-    Q_PROPERTY(bool timeBoxed READ timeBoxed NOTIFY timeBoxedChanged FINAL)
 
     Q_PROPERTY(bool running READ running NOTIFY runningChanged FINAL)
     Q_PROPERTY(double alpha READ alpha NOTIFY positionsChanged FINAL)
@@ -134,25 +144,32 @@ public:
     void setActive(bool active);
     bool reducedMotion() const { return m_reducedMotion; }
     void setReducedMotion(bool on);
-    int tickInterval() const { return m_tickInterval; }
-    void setTickInterval(int msec);
+    int frameInterval() const { return m_frameInterval; }
+    void setFrameInterval(int msec);
     int refreshDelay() const { return m_refreshTimer.interval(); }
     void setRefreshDelay(int msec);
-    bool timeBoxed() const { return m_timeBoxed; }
-    /// Frame cost (one step + one paint, ms) above which a run is time-boxed (default 33; tests:
-    /// 0 = always, a huge value = never).
-    double slowFrameMs() const { return m_slowFrameMs; }
-    void setSlowFrameMs(double ms) { m_slowFrameMs = ms; }
-    /// How long a time-boxed run shows intermediate frames, ms (default 2000).
-    void setTimeBoxMs(int ms) { m_timeBoxMs = ms; }
-    /// GraphItem reports how long painting the graph took (any thread; the latest paint of the
-    /// current run counts).
-    void reportPaintCost(double ms) { m_paintMs.store(ms, std::memory_order_relaxed); }
-    /// Average cost of the simulation steps of the current run's first steps, ms.
+    bool fastCooling() const { return m_fastCooling; }
+    bool settling() const { return m_settling; }
+    bool threaded() const { return m_sim.threaded(); }
+    /// Average step cost (ms) above which a run cools down fast (default 5; tests: 0 = always,
+    /// a huge value = never). Applies to runs started afterwards.
+    double slowTickMs() const { return m_slowTickMs; }
+    void setSlowTickMs(double ms) { m_slowTickMs = ms; }
+    /// A normal run unfolds over at least this long, ms (default 1000; 0 = as fast as it can).
+    int minRunMs() const { return m_minRunMs; }
+    void setMinRunMs(int ms) { m_minRunMs = std::max(0, ms); }
+    /// Average cost of the current run's first steps, ms (measured by the worker).
     double tickCostMs() const { return m_tickMs; }
+    /// A run is on the worker (the mirror holds the positions; layout() its start state).
+    bool runActive() const { return m_simOwned; }
+    /// Steps of the current run as of the newest frame (diagnostics, tests).
+    int runTicks() const { return m_runTicks; }
+    /// Frames applied / dropped because they belonged to an older run (tests).
+    int framesApplied() const { return m_framesApplied; }
+    int staleFramesDropped() const { return m_staleFrames; }
 
     bool running() const { return m_running; }
-    double alpha() const { return m_layout.alpha(); }
+    double alpha() const { return m_simOwned ? m_alpha : m_layout.alpha(); }
     int nodeCount() const { return int(m_nodes.size()); }
     int edgeCount() const { return m_layout.edgeCount(); }
     int totalNodeCount() const { return m_totalNodes; }
@@ -163,10 +180,14 @@ public:
     const QList<Node> &nodes() const { return m_nodes; }
     const std::vector<std::pair<int, int>> &edges() const { return m_layout.edges(); }
     const QList<QList<int>> &adjacency() const { return m_adjacency; }
+    /// The authoritative layout while runActive() is false (see the header comment).
     const ForceLayout &layout() const { return m_layout; }
     ForceLayout &layout() { return m_layout; }
     /// Node index of an id, -1 when not in the graph.
     Q_INVOKABLE int indexOf(const QString &id) const { return m_indexOf.value(id, -1); }
+    /// Positions as drawn (world units): the worker's newest frame during a run, else layout().
+    const std::vector<double> &xs() const { return m_simOwned ? m_x : m_layout.xs(); }
+    const std::vector<double> &ys() const { return m_simOwned ? m_y : m_layout.ys(); }
     QPointF position(int node) const;
 
     /// Nodes whose title (or path) matches `query` (case- and diacritic-insensitive): exact,
@@ -181,7 +202,8 @@ public:
     Q_INVOKABLE void reheat(double alpha = 0.3);
     /// Start over from fresh positions.
     Q_INVOKABLE void relayout();
-    /// Run `ticks` simulation steps now (tests, warm-up).
+    /// Run `ticks` simulation steps now, on this thread (tests, warm-up): a run on the worker is
+    /// cancelled and the steps continue from its newest positions (velocities 0).
     Q_INVOKABLE void step(int ticks = 1);
     /// Rebuild the graph from the index now.
     Q_INVOKABLE void refresh();
@@ -200,10 +222,11 @@ Q_SIGNALS:
     void settingsChanged();
     void activeChanged();
     void reducedMotionChanged();
-    void tickIntervalChanged();
+    void frameIntervalChanged();
     void refreshDelayChanged();
     void runningChanged();
-    void timeBoxedChanged();
+    void fastCoolingChanged();
+    void settlingChanged();
     /// The nodes or edges changed (positions too).
     void structureChanged();
     /// Positions changed (a simulation step, a drag).
@@ -212,11 +235,17 @@ Q_SIGNALS:
 private:
     void scheduleRebuild();
     void rebuild();
-    void onTick();
     void updateRunning();
     void settingsEdited();
-    /// A (re)started simulation: the normal cooling, a fresh decision about time-boxing.
-    void beginRun();
+    double alphaDecay() const;
+    /// Hands m_layout to the worker when active, not empty and not cooled down yet.
+    void ensureRunning();
+    void startRun();
+    /// Ends the worker's run; m_layout continues from the newest frame (velocities 0).
+    void takeBack();
+    void onFrameReady();
+    void setFastCooling(bool on);
+    void setSettling(bool on);
 
     QPointer<VaultIndex> m_index;
     QMetaObject::Connection m_indexConnection;
@@ -232,7 +261,7 @@ private:
     int m_maxNodes = 4000;
     bool m_active = true;
     bool m_reducedMotion = false;
-    int m_tickInterval = 16;
+    int m_frameInterval = 16;
 
     QList<Node> m_nodes;
     QHash<QString, int> m_indexOf;
@@ -244,16 +273,26 @@ private:
     int m_pageCount = 0;
     bool m_running = false;
     int m_dragging = -1;
-    // Time-boxing on slow devices (see the header comment).
-    double m_slowFrameMs = 33;
-    int m_timeBoxMs = 2000;
-    std::atomic<double> m_paintMs{0};
-    double m_tickMs = 0;
-    int m_runTicks = 0; ///< timer-driven steps of the current run
-    bool m_timeBoxed = false;
-    QElapsedTimer m_runClock;
+    QPointF m_dragPos;
+    /// The layout starts from fresh positions (no carried ones): `settling` with reduced motion.
+    bool m_fresh = false;
 
-    QTimer m_timer;
+    // The run on the worker.
+    GraphSimulation m_sim;
+    quint64 m_generation = 0; ///< id of the current run (frames of other runs are dropped)
+    bool m_simOwned = false;  ///< the worker owns the layout (startRun … takeBack / cancel)
+    bool m_simRunning = false; ///< it is stepping (the newest frame, or a command that heats it)
+    std::vector<double> m_x, m_y; ///< the mirror: positions of the newest frame
+    double m_alpha = 0;
+    bool m_fastCooling = false;
+    bool m_settling = false;
+    double m_tickMs = 0;
+    double m_slowTickMs = 5;
+    int m_minRunMs = 1000;
+    int m_runTicks = 0;
+    int m_framesApplied = 0;
+    int m_staleFrames = 0;
+
     QTimer m_refreshTimer;
 };
 
