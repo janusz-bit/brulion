@@ -163,7 +163,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1604"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1605"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -190,7 +190,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="236"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="242"/>
         <source>Delete %n block(s)</source>
         <translation>
             <numerusform>Delete %n block</numerusform>
@@ -371,6 +371,28 @@
         <translation>
             <numerusform>in %n note</numerusform>
             <numerusform>in %n notes</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>DrawingBackdropDialog</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="98"/>
+        <source>%n page(s)</source>
+        <translation>
+            <numerusform>%n page</numerusform>
+            <numerusform>%n pages</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>EditorDialogs</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="354"/>
+        <source>Inserted %n drawing(s)</source>
+        <translation>
+            <numerusform>Inserted %n drawing</numerusform>
+            <numerusform>Inserted %n drawings</numerusform>
         </translation>
     </message>
 </context>

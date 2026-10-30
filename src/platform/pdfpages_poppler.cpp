@@ -2,12 +2,15 @@
 // QtWebEngine). poppler applies a page's /Rotate in pageSizeF() and when it renders.
 #include "pdfpages.h"
 
+#include "log/categories.h"
+
 #include <poppler-qt6.h>
 
 #include <QPainter>
 
 #include <algorithm>
 #include <memory>
+#include <mutex>
 
 using namespace Qt::StringLiterals;
 
@@ -15,9 +18,24 @@ namespace brulion::platform {
 
 namespace {
 
+/// poppler's complaints about a broken file (qDebug by default) go to the platform's category at
+/// debug level: a hostile PDF must not fill the event log.
+void quietPoppler()
+{
+    static std::once_flag once;
+    std::call_once(once, [] {
+        Poppler::setDebugErrorFunction(
+                [](const QString &message, const QVariant &) {
+                    qCDebug(brulion::logging::lcPlatform).noquote() << "poppler:" << message;
+                },
+                QVariant());
+    });
+}
+
 /// The document of `file`; null and `info` filled when it cannot be read.
 std::unique_ptr<Poppler::Document> load(const QString &file, PdfInfo *info)
 {
+    quietPoppler();
     std::unique_ptr<Poppler::Document> doc = Poppler::Document::load(file);
     info->pages = -1;
     if (!doc) {

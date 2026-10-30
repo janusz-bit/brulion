@@ -1,4 +1,5 @@
 #include "appidentity.h" // Windows: the AppUserModelID of the toasts (src/platform)
+#include "pdfpages.h"    // the PDF renderer's name for the event log (src/platform)
 #include "platform.h"
 #include "ui/devtools.h"      // design system dev tools: --gallery, --screenshot, --size … (devtools.h)
 #include "ui/fallbackfonts.h" // emoji and symbol fonts where the system has none
@@ -224,8 +225,10 @@ int main(int argc, char *argv[])
         since->start();
         logOptions.clock = [base = fixedStart.toMSecsSinceEpoch(), since] { return base + since->elapsed(); };
     }
-    logOptions.sessionInfo = u"Brulion %1 (%2, Qt %3)"_s.arg(
-            QStringLiteral(BRULION_VERSION), brulion::platform::deviceDescription(), QString::fromLatin1(qVersion()));
+    // (PDF: the renderer of drawings' PDF backdrops, src/platform/pdfpages.h.)
+    logOptions.sessionInfo = u"Brulion %1 (%2, Qt %3, PDF: %4)"_s.arg(
+            QStringLiteral(BRULION_VERSION), brulion::platform::deviceDescription(), QString::fromLatin1(qVersion()),
+            brulion::platform::pdfBackendName());
     Logger *logger = Logger::install(logOptions);
     logger->setVerbosity(brulion::logging::Verbosity::Normal);
 #ifdef BRULION_DESKTOP_INTEGRATION
