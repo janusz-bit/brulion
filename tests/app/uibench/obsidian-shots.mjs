@@ -224,6 +224,8 @@ async function boot(cdp, { size, lang, now, version }) {
   await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: dateShim(now) });
   await cdp.send('Emulation.setTimezoneOverride', { timezoneId: 'Europe/Warsaw' });
   await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+  touchSession = !!size.touch;
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: touchSession, maxTouchPoints: touchSession ? 5 : 1 });
   // Before the reload: the phone layout (is-phone) is decided while the app loads.
   await cdp.send('Emulation.setDeviceMetricsOverride', {
     width: size.width, height: size.height, deviceScaleFactor: size.scale, mobile: false,
@@ -270,9 +272,12 @@ async function closeModals(cdp) {
     document.querySelectorAll('.menu, .suggestion-container').forEach(e => e.remove());`);
 }
 
-// The pointer outside the page: no hover highlight where Xvfb's pointer happens to be.
+// The pointer outside the page: no hover highlight where Xvfb's pointer happens to be. Phones have
+// no pointer: their sessions emulate touch (boot), and a mouse event would only hover again.
+let touchSession = false;
 async function parkPointer(cdp) {
-  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: -40, y: -40 });
+  if (!touchSession)
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: -40, y: -40 });
 }
 
 async function resetWorkspace(cdp, baseline, size) {

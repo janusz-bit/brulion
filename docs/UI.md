@@ -2371,7 +2371,7 @@ vault settings, the Calendar plugin's hashes).
 | Fonts | `FONTCONFIG_FILE=<out>/env/fonts.conf`: Noto Sans / Serif / Sans Mono, Noto Color Emoji, DejaVu (nixpkgs), grayscale antialiasing, slight hinting | the same file, `--disable-lcd-text` |
 | Rendering | offscreen + software (the realism check `--render xcb-gl`: Xvfb + OpenGL/llvmpipe) | `--disable-gpu`, `--force-color-profile=srgb` |
 | Settings | defaults (fresh XDG home) | defaults (fresh `--user-data-dir`, `HOME`, `XDG_*`): Live Preview, readable line length; the settings screen in the main window (1.14 opens them in a window of their own: one 1280×800 picture like Brulion's) |
-| Pointer | none (offscreen) | moved outside the page before each shot (no hover highlight) |
+| Pointer | none (offscreen) | desktop: moved outside the page before each shot (no hover highlight); phone: touch emulation (no pointer) |
 | Network | none needed | a dead proxy (`--proxy-server=http://127.0.0.1:9`), `updateDisabled` |
 
 **The notebook** (`prepare-vault.sh`): Brulion's sample notebook seeded at the bench's clock
