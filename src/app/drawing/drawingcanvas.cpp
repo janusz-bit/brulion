@@ -938,17 +938,23 @@ QQuickItem *topInputItem(QQuickItem *item, QPointF scenePos)
     if (!item->isVisible() || !item->isEnabled() || qFuzzyIsNull(item->opacity()))
         return nullptr;
     if (item->inherits("QQuickOverlay")) {
-        // Qt Quick Controls' popup layer: visible over the whole window whenever a Drawer exists,
-        // and it takes every button. It lies over the canvas only where an open popup is — or
-        // everywhere while a modal one is open (the popup item's QObject parent is the popup).
-        const QList<QQuickItem *> popups = item->childItems();
-        for (auto it = popups.crbegin(); it != popups.crend(); ++it) {
-            QQuickItem *popup = *it;
-            if (!popup->isVisible())
+        // Qt Quick Controls' popup layer: visible over the whole window whenever a Drawer exists
+        // or any item is put there (the shell's toasts), and it takes every button. It lies over
+        // the canvas only where an open popup is — or everywhere while a modal one is open (the
+        // popup item's QObject parent is the popup) — and where an item put there takes input
+        // (a toast, not the window-wide host of the toasts).
+        const QList<QQuickItem *> children = item->childItems();
+        for (auto it = children.crbegin(); it != children.crend(); ++it) {
+            QQuickItem *child = *it;
+            if (!child->isVisible())
                 continue;
-            if (popup->contains(popup->mapFromScene(scenePos))
-                || (popup->parent() && popup->parent()->property("modal").toBool()))
-                return popup;
+            if (child->parent() && child->parent()->inherits("QQuickPopup")) {
+                if (child->contains(child->mapFromScene(scenePos)) || child->parent()->property("modal").toBool())
+                    return child;
+                continue;
+            }
+            if (QQuickItem *hit = topInputItem(child, scenePos))
+                return hit;
         }
         return nullptr;
     }

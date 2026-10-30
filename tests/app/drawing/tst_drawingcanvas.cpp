@@ -591,6 +591,53 @@ private Q_SLOTS:
         QCOMPARE(canvas->strokeCount(), 3);
     }
 
+    void itemsInTheOverlay()
+    {
+        // The shell puts its toasts' host into the overlay, filling the window (Main.qml
+        // BToastHost), and the overlay is visible whenever a Drawer exists (the shell's): only a
+        // toast takes the pen, where it is — the host itself took it everywhere (found by
+        // tests/web/stylus.spec.mjs in the real app: the pen drew without pressure there).
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData("import QtQuick\nimport QtQuick.Templates as T\nItem {\n"
+                          "  property alias toast: toast; property alias host: host\n"
+                          "  T.Drawer { width: 120; height: 600; edge: Qt.LeftEdge }\n"
+                          "  Item { id: host; z: 1000\n"
+                          "    MouseArea { id: toast; x: 500; y: 450; width: 250; height: 100; visible: false }\n"
+                          "  }\n"
+                          "}",
+                          QUrl());
+        std::unique_ptr<QObject> root(component.create());
+        QVERIFY2(root, qPrintable(component.errorString()));
+        auto *item = qobject_cast<QQuickItem *>(root.get());
+        item->setParentItem(window->contentItem());
+        item->setSize(QSizeF(800, 600));
+        QCoreApplication::processEvents();
+        // Into the overlay (the drawer made it), as Main.qml's `parent: T.Overlay.overlay` does.
+        QQuickItem *overlay = nullptr;
+        for (QQuickItem *child : window->contentItem()->childItems()) {
+            if (child->inherits("QQuickOverlay"))
+                overlay = child;
+        }
+        QVERIFY(overlay);
+        auto *host = root->property("host").value<QQuickItem *>();
+        host->setParentItem(overlay);
+        host->setSize(overlay->size());
+        QCoreApplication::processEvents();
+        QVERIFY(overlay->isVisible());
+        Pen pen(window.get());
+        pen.stroke({100, 300}, {600, 320}, 20, 0.2, 0.9);
+        QCOMPARE(canvas->strokeCount(), 1);
+        QVERIFY(!canvas->currentDrawing().strokes.first().simulatePressure); // the tablet's, no mouse
+        // A toast shown: the pen over it is the toast's, beside it the canvas's.
+        auto *toast = root->property("toast").value<QQuickItem *>();
+        toast->setVisible(true);
+        pen.stroke({550, 480}, {700, 520}, 10, 0.3, 0.6);
+        QCOMPARE(canvas->strokeCount(), 1);
+        pen.stroke({100, 100}, {300, 120}, 10, 0.3, 0.6);
+        QCOMPARE(canvas->strokeCount(), 2);
+    }
+
     void windowsMouseOfThePenIsIgnored()
     {
         // Windows makes mouse messages of the pen itself (no pressure): the tablet events drew it.
