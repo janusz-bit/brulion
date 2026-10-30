@@ -90,7 +90,9 @@ QByteArray sceneMetadata(QByteArrayView sceneJson)
 /// The length of the Excalidraw payload at `from` in `bytes` as Excalidraw writes it — the
 /// payload type's comment, the version's (optional), `<!-- payload-start -->`, the base64,
 /// `<!-- payload-end -->`, whitespace between them —, 0 when anything else is there. Only comments
-/// and base64 text: removing them leaves a well-formed picture well-formed (whatever holds them).
+/// and base64 text: removing them leaves a well-formed picture well-formed (whatever holds them),
+/// unless the bytes around them then end a CDATA section or a processing instruction
+/// (svgWithScene() checks).
 qsizetype payloadLength(QByteArrayView bytes, qsizetype from)
 {
     qsizetype i = from;
@@ -483,8 +485,15 @@ std::optional<QByteArray> svgWithScene(QByteArrayView picture, QByteArrayView sc
         copied = from + length;
     }
     rest += picture.sliced(copied);
-    if (rest.contains(PayloadType))
-        return std::nullopt; // (a marker made of the bytes around a removed payload)
+    if (copied != at) {
+        // The bytes around a removed payload must not make a marker of their own, nor the end of a
+        // CDATA section or a processing instruction (`]]` or `?` before it, `>` after it): the
+        // rest of the picture would be read another way, or not at all. (A payload holds neither.)
+        const QByteArrayView tail = picture.sliced(at);
+        if (rest.contains(PayloadType) || QByteArrayView(rest).count("]]>") != tail.count("]]>")
+            || QByteArrayView(rest).count("?>") != tail.count("?>"))
+            return std::nullopt;
+    }
     const QByteArray metadata = sceneMetadata(sceneJson);
     QByteArray out;
     out.reserve(at + SvgSourceComment.size() + metadata.size() + rest.size() + 3);

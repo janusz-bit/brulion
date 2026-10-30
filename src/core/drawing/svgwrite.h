@@ -73,8 +73,9 @@ QRectF pictureRect(const Drawing &drawing);
 /// toSvg() — when the picture has no well-formed prolog and root `<svg …>` start tag
 /// (QXmlStreamReader; only the head is read), the root is empty (`<svg/>`, `width` or `height` 0:
 /// a picture of an empty scene), its start tag ends beyond HeadBytes − 512
-/// (looksLikeExcalidrawSvg() must see the payload in the file's head), the prolog names a payload
-/// or the picture has the Excalidraw payload's type in any other place or shape.
+/// (looksLikeExcalidrawSvg() must see the payload in the file's head), the prolog names a payload,
+/// the picture has the Excalidraw payload's type in any other place or shape, or removing its scene
+/// would make the bytes around it end a CDATA section or a processing instruction.
 std::optional<QByteArray> svgWithScene(QByteArrayView picture, const Drawing &drawing);
 /// The same with the scene's JSON as given (UTF-8; e.g. a scene Brulion only shows, which the
 /// Drawing model would write with its foreign elements moved above the others).

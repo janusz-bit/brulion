@@ -1409,6 +1409,20 @@ private Q_SLOTS:
                 "<svg " + ns
                 + "><!-- payload-ty<!-- payload-type:application/vnd.excalidraw+json --><!-- "
                   "payload-start -->QUJD<!-- payload-end -->pe:application/vnd.excalidraw+json --></svg>");
+        // Nor may they make the end of a CDATA section or of a processing instruction: the rest of
+        // the picture would be read another way (or not at all).
+        const QByteArray scene = "<!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->"
+                                 "<!-- payload-start -->"
+                                 + encodePayload(R"({"type":"excalidraw","version":2,"elements":[]})")
+                                 + "<!-- payload-end -->";
+        QTest::newRow("a CDATA end made by a removal")
+                << QByteArray("<svg " + ns + "><style><![CDATA[a]]" + scene + ">b]]></style><rect/></svg>");
+        QTest::newRow("a CDATA end made in text by a removal")
+                << QByteArray("<svg " + ns + "><desc>żółw ]]" + scene + "></desc><rect/></svg>");
+        QTest::newRow("a CDATA end made by two removals")
+                << QByteArray("<svg " + ns + "><desc>]" + scene + "]" + scene + "></desc><rect/></svg>");
+        QTest::newRow("a processing instruction's end made by a removal")
+                << QByteArray("<svg " + ns + "><?brulion ?" + scene + "><rect id=\"new\"/>?><rect/></svg>");
         QTest::newRow("undeclared prefix") << QByteArray("<svg:svg width=\"5\"></svg:svg>");
         // An entity expanding beyond QXmlStreamReader's limit (4096 characters).
         QTest::newRow("entity expansion")
