@@ -717,6 +717,8 @@ private Q_SLOTS:
         geometry::MeshChunks mesh;
         item.buildMesh(mesh, 1.0);
         QVERIFY(mesh.isEmpty());
+        QCOMPARE(item.nodeAt(200, 150), QString()); // nothing to hover or tap either
+        QVERIFY(item.labelsFor(QSizeF(400, 300)).empty());
         QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000 * BRULION_TEST_SLOWDOWN);
         QVERIFY(!m.settling());
         QCOMPARE(settling.count(), 2);

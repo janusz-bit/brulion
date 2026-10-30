@@ -552,7 +552,7 @@ void GraphItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGeome
 
 int GraphItem::nodeIndexAt(QPointF pos) const
 {
-    if (!m_model)
+    if (!m_model || m_model->settling()) // nothing is drawn yet
         return -1;
     const auto &nodes = m_model->nodes();
     const auto &xs = m_model->xs();
