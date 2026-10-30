@@ -780,10 +780,11 @@ a `QQuickPaintedItem`, rasterised on every frame of the moving layout while the 
 the Raspberry Pi, Debug — the laptop was unreachable): one step 6.5 ms, building the whole graph's
 meshes 3.5 ms (64 412 vertices, one chunk) against 76–78 ms for one QPainter frame — a frame of the
 moving layout costs the GUI thread ~20× less, and a settled pan nothing but a matrix. Zoomed in to
-3× (discs with up to 64 segments, 245 198 vertices in 4 chunks) a frame with 33 new labels took
-32 ms on the Pi (Debug), and 8.6 ms on a GitHub runner (Release, OpenGL on llvmpipe; with the
-earlier banded edges, 274 550 vertices) (`tst_planning_graph_sg`; on the RHI null backend — the real scene graph without a GPU — and under
-Xvfb, where the OpenGL frame is also compared pixel by pixel with the QPainter one).
+3× (discs with up to 64 segments, 245 198 vertices in 4 chunks) a frame with 33 new labels took 32
+ms on the Pi (Debug), and 8.6 ms on a GitHub runner (Release, OpenGL on llvmpipe; with the earlier
+banded edges, 274 550 vertices) (`tst_planning_graph_sg`; on the RHI null backend — the real scene
+graph without a GPU — and under Xvfb, where the OpenGL frame is also compared pixel by pixel with
+the QPainter one).
 
 **App** (`tests/bench/app`, the 10 000-note bench vault, its graph capped at 4000 nodes). The
 laptop was unreachable, so both builds ran in the same GitHub Actions job (`perf-compare.yml`, `app`:
@@ -813,15 +814,16 @@ then drags again for 1 s:
 The `views` scenario agrees (graph r0: longest stall 967 → 220 ms, frame p95 973 → 198 ms, settled
 8.3 → 2.0 s; r1 the same; the other views unchanged within ±4 %). What is left on this machine is
 llvmpipe rasterising the meshes of 4000 discs and their edges, ~127 ms per frame on 4 vCPUs, while
-Qt's threaded render loop holds the GUI thread until the render thread can take the next sync; a
-GPU (phones, laptops with a driver) draws the same frame in well under a millisecond, and the GUI
-thread's own share of a frame is the 0.1–6 ms sync. That is also why the edges are single quads (2
-triangles instead of the 6 of a fringed band; an earlier run of this branch with banded edges:
-`views` graph frame interval p95 321 ms against 198 ms). Of the +56 MB, about 10 MB are ours (copies of the layout
-for the worker and its final frame, the meshes, cached label layouts; an estimate), the rest is
-llvmpipe's buffers for the meshes (a GPU keeps them in its own memory). The Raspberry Pi
-(software renderer: the image node, the same work as before) and the Android emulator were not
-measured (L16b).
+Qt's threaded render loop holds the GUI thread until the render thread can take the next sync; a GPU
+(phones, laptops with a driver) draws the meshes in a few batched draw calls, so there the GUI
+thread's own share of a frame is what is left: the 0.1–6 ms sync. That is also why the edges are
+single quads (2 triangles instead of the 6 of a fringed band; an earlier run of this branch with
+banded edges: `views` graph frame interval p95 321 ms against 198 ms). Of the +56 MB, about 10 MB
+are ours (copies of the layout for the worker and its final frame, the meshes, cached label layouts;
+an estimate), the rest most likely llvmpipe's buffers for the meshes (a GPU keeps them in its own
+memory).
+The Raspberry Pi (software renderer: the image node, the same work as before) and the Android
+emulator were not measured (L16b).
 
 ### Budgets
 
