@@ -206,8 +206,7 @@ QList<int> parsePageRanges(QStringView text, int count)
             std::swap(a, b);
         a = std::max(a, 1);
         b = std::min(b, count);
-        for (int p = a; p <= b && add(p); ++p) {
-        }
+        for (int p = a; p <= b && add(p); ++p) { }
     };
     if (lower == u"wszystkie" || lower == u"all" || lower == u"*") {
         addRange(1, count);

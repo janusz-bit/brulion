@@ -232,9 +232,10 @@ QVariantMap preparedBackdrop(const QString &path, int page, const QString &name,
     QBuffer buffer(&png);
     buffer.open(QIODevice::WriteOnly);
     image.save(&buffer, "PNG");
-    return {{u"bytes"_s, png},     {u"mimeType"_s, u"image/png"_s}, {u"width"_s, size.width()},
-            {u"height"_s, size.height()}, {u"path"_s, path},          {u"page"_s, page},
-            {u"name"_s, name},      {u"error"_s, QString()}};
+    return {{u"bytes"_s, png},          {u"mimeType"_s, u"image/png"_s},
+            {u"width"_s, size.width()}, {u"height"_s, size.height()},
+            {u"path"_s, path},          {u"page"_s, page},
+            {u"name"_s, name},          {u"error"_s, QString()}};
 }
 
 } // namespace
@@ -4727,9 +4728,10 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
                                  preparedBackdrop(pdf, 3, u"wykład"_s)};
         const QVariantMap r = f.page.insertDrawingsOn(0, 10, 10, items);
         const QStringList paths = r.value(u"paths"_s).toStringList();
-        QCOMPARE(paths, (QStringList{u"assets/wykład p. 1.svg"_s, u"assets/wykład p. 2.svg"_s,
-                                     u"assets/wykład p. 3.svg"_s}));
-        QCOMPARE(f.text(), u"- Wykład 3: ![[wykład p. 1.svg]]\n- ![[wykład p. 2.svg]]\n- ![[wykład p. 3.svg]]\n- dalej\n"_s);
+        QCOMPARE(paths,
+                 (QStringList{u"assets/wykład p. 1.svg"_s, u"assets/wykład p. 2.svg"_s, u"assets/wykład p. 3.svg"_s}));
+        QCOMPARE(f.text(),
+                 u"- Wykład 3: ![[wykład p. 1.svg]]\n- ![[wykład p. 2.svg]]\n- ![[wykład p. 3.svg]]\n- dalej\n"_s);
         // Each a drawing with the page as its backdrop, as the app shows it ("Jak motyw").
         for (int i = 0; i < 3; ++i) {
             QFile file(f.host.assetUrl(paths.at(i)).toLocalFile());
@@ -4759,8 +4761,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // A picture (an exported slide, a photo of the board): one drawing, light.
         Fixture f(u"- Tablica \n"_s);
         QSignalSpy failed(&f.page, &PageController::attachmentFailed);
-        const QVariantMap r =
-                f.page.insertDrawingsOn(0, 8, 8, {preparedBackdrop(u"assets/slajd.png"_s, 0, u"slajd"_s, QSize(80, 120))});
+        const QVariantMap r = f.page.insertDrawingsOn(
+                0, 8, 8, {preparedBackdrop(u"assets/slajd.png"_s, 0, u"slajd"_s, QSize(80, 120))});
         QCOMPARE(r.value(u"paths"_s).toStringList(), QStringList{u"assets/slajd (drawing).svg"_s});
         QCOMPARE(f.text(), u"- Tablica ![[slajd (drawing).svg]]\n"_s);
         QFile file(f.host.assetUrl(u"assets/slajd (drawing).svg"_s).toLocalFile());

@@ -88,7 +88,8 @@ QImage renderPdfPage(const QString &file, int page, int maxSide, QString *error)
 {
     PdfInfo info;
     const std::unique_ptr<Poppler::Document> doc = load(file, &info);
-    const std::unique_ptr<Poppler::Page> p = doc && page >= 1 && page <= doc->numPages() ? doc->page(page - 1) : nullptr;
+    const std::unique_ptr<Poppler::Page> p =
+            doc && page >= 1 && page <= doc->numPages() ? doc->page(page - 1) : nullptr;
     if (!p) {
         if (error)
             *error = doc ? u"No page %1"_s.arg(page) : info.error;

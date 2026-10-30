@@ -132,8 +132,8 @@ QStringList DrawingBackdrops::nameFilters() const
         return {tr("Pictures (%1)").arg(pictures.join(u' ')), tr("All files (*)")};
     }
     //: %1: the file name patterns of pictures and PDF, e.g. "*.png *.jpg *.pdf"
-    return {tr("Pictures and PDF (%1)").arg((pictures + QStringList{u"*.pdf"_s}).join(u' ')),
-            tr("PDF (*.pdf)"), tr("All files (*)")};
+    return {tr("Pictures and PDF (%1)").arg((pictures + QStringList{u"*.pdf"_s}).join(u' ')), tr("PDF (*.pdf)"),
+            tr("All files (*)")};
 }
 
 bool DrawingBackdrops::isPdf(const QString &vaultPath) const
@@ -165,9 +165,8 @@ QUrl DrawingBackdrops::pageUrl(const QString &vaultPath, int page) const
     const QFileInfo info(file);
     if (!info.isFile())
         return {};
-    return PdfPageImageProvider::url(file, page,
-                                     QString::number(info.lastModified().toMSecsSinceEpoch()) + u'-'
-                                             + QString::number(info.size()));
+    return PdfPageImageProvider::url(
+            file, page, QString::number(info.lastModified().toMSecsSinceEpoch()) + u'-' + QString::number(info.size()));
 }
 
 QString DrawingBackdrops::errorText(const QString &code) const

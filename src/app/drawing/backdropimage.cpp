@@ -160,8 +160,7 @@ PreparedBackdrop prepareBackdropPicture(const QString &absoluteFile, const QStri
         // A PNG or a JPEG small enough, upright: its bytes as they are.
         const bool keepable = (format == "png" || format == "jpeg" || format == "jpg")
                               && bytes.size() <= drawing::MaxBackdropBytes && own.isValid()
-                              && own.width() <= drawing::BackdropMaxPixels
-                              && own.height() <= drawing::BackdropMaxPixels
+                              && own.width() <= drawing::BackdropMaxPixels && own.height() <= drawing::BackdropMaxPixels
                               && reader.transformation() == QImageIOHandler::TransformationNone;
         if (keepable) {
             out.image = drawing::BackdropImage{bytes, format == "png" ? u"image/png"_s : u"image/jpeg"_s, own};

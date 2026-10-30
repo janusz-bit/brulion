@@ -3009,8 +3009,8 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         const int r = currentRow();
         focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
     } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
-               || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"webImage"
-               || cmd == u"drawing" || cmd == u"drawingOn") {
+               || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"webImage" || cmd == u"drawing"
+               || cmd == u"drawingOn") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));

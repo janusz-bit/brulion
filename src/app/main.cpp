@@ -11,9 +11,9 @@
 #include "appsettings.h"
 #include "backdrops.h"            // a drawing's backdrop: vault paths → files (src/app/drawing)
 #include "drawingimageprovider.h" // the previews of drawings, light or dark (src/app/drawing)
+#include "localnetwork.h"         // QML loads nothing from the network (src/app/ui)
+#include "logcontroller.h"        // the event log page's controller (src/app/diag)
 #include "pdfpageimageprovider.h" // the thumbnails of PDF pages (src/app/drawing)
-#include "localnetwork.h" // QML loads nothing from the network (src/app/ui)
-#include "logcontroller.h" // the event log page's controller (src/app/diag)
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -226,9 +226,10 @@ int main(int argc, char *argv[])
         logOptions.clock = [base = fixedStart.toMSecsSinceEpoch(), since] { return base + since->elapsed(); };
     }
     // (PDF: the renderer of drawings' PDF backdrops, src/platform/pdfpages.h.)
+    const QString device = brulion::platform::deviceDescription();
+    const QString pdf = brulion::platform::pdfBackendName();
     logOptions.sessionInfo = u"Brulion %1 (%2, Qt %3, PDF: %4)"_s.arg(
-            QStringLiteral(BRULION_VERSION), brulion::platform::deviceDescription(), QString::fromLatin1(qVersion()),
-            brulion::platform::pdfBackendName());
+            QStringLiteral(BRULION_VERSION), device, QString::fromLatin1(qVersion()), pdf);
     Logger *logger = Logger::install(logOptions);
     logger->setVerbosity(brulion::logging::Verbosity::Normal);
 #ifdef BRULION_DESKTOP_INTEGRATION
@@ -326,7 +327,7 @@ int main(int argc, char *argv[])
     });
     brulion::drawingview::DrawingBackdrops::setImporter([&controller](const QString &name, const QByteArray &data) {
         return controller && controller->workspace() ? controller->workspace()->importAttachment(name, data)
-                                                      : QString();
+                                                     : QString();
     });
     devTools.attach(&engine); // --size, --screenshot
     brulion::ui::connectKeyboardSources(&keyboardInsets, &engine);

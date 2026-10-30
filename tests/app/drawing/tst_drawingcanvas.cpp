@@ -376,8 +376,8 @@ int pixelsLike(const QImage &image, const QRect &area, const QColor &color, int 
 }
 
 /// A prepared backdrop (DrawingBackdrops' item) of a `size` picture of one colour.
-QVariantMap backdropOf(const QColor &color, QSize size = QSize(400, 300), const QString &path = u"Załączniki/slajd.png"_s,
-                       int page = 0)
+QVariantMap backdropOf(const QColor &color, QSize size = QSize(400, 300),
+                       const QString &path = u"Załączniki/slajd.png"_s, int page = 0)
 {
     QImage image(size, QImage::Format_RGB32);
     image.fill(color);
@@ -2962,7 +2962,8 @@ private Q_SLOTS:
         QCOMPARE(canvas->currentDrawing().strokes.first().type, brulion::drawing::ElementType::Image);
         const QImage image = painted(canvas);
         QVERIFY2(image.pixelColor(200, 100).lightness() < 80, qPrintable(image.pixelColor(200, 100).name()));
-        QVERIFY2(near(image.pixelColor(200, 200), QColor(u"#ff0000"_s), 12), qPrintable(image.pixelColor(200, 200).name()));
+        QVERIFY2(near(image.pixelColor(200, 200), QColor(u"#ff0000"_s), 12),
+                 qPrintable(image.pixelColor(200, 200).name()));
         // Beyond the backdrop: the paper.
         canvas->setCenterX(1400);
         QVERIFY(near(painted(canvas).pixelColor(780, 300), Qt::white));
@@ -3020,7 +3021,8 @@ private Q_SLOTS:
         canvas->setTheme(u"dark"_s);
         const QByteArray svg = canvas->svg();
         const QImage picture = renderSvg(svg, QSize(1232, 932));
-        QVERIFY2(near(picture.pixelColor(300, 300), QColor(u"#121212"_s), 3), qPrintable(picture.pixelColor(300, 300).name()));
+        QVERIFY2(near(picture.pixelColor(300, 300), QColor(u"#121212"_s), 3),
+                 qPrintable(picture.pixelColor(300, 300).name()));
         const std::optional<brulion::drawing::Drawing> back = brulion::drawing::readDrawing(svg);
         QVERIFY(back);
         const QString fileId = back->strokes.first().fileId;
@@ -3043,13 +3045,15 @@ private Q_SLOTS:
         const QImage dark = brulion::drawingview::DrawingImageProvider::picture(file, true, QSize(400, 0));
         QCOMPARE(natural, QSize(1232, 932));
         QVERIFY(near(light.pixelColor(200, 150), Qt::white));
-        QVERIFY2(near(dark.pixelColor(200, 150), QColor(u"#121212"_s), 3), qPrintable(dark.pixelColor(200, 150).name()));
+        QVERIFY2(near(dark.pixelColor(200, 150), QColor(u"#121212"_s), 3),
+                 qPrintable(dark.pixelColor(200, 150).name()));
     }
 
     void setRemoveBackdropUndo()
     {
         QSignalSpy changed(canvas, &DrawingCanvas::contentChanged);
-        QVERIFY(canvas->setBackdrop(backdropOf(QColor(u"#ff0000"_s), QSize(400, 300), u"Załączniki/Fizyka – wykład 3.pdf"_s, 3)));
+        QVERIFY(canvas->setBackdrop(
+                backdropOf(QColor(u"#ff0000"_s), QSize(400, 300), u"Załączniki/Fizyka – wykład 3.pdf"_s, 3)));
         QCOMPARE(changed.size(), 1);
         QVERIFY(canvas->modified());
         QCOMPARE(canvas->backdropPage(), 3);
@@ -3060,7 +3064,8 @@ private Q_SLOTS:
         canvas->redo();
         QVERIFY(canvas->hasBackdrop());
         // Replaced: the same element, a new version and file; undo brings the old one back.
-        QVERIFY(canvas->setBackdrop(backdropOf(QColor(u"#2f6fdd"_s), QSize(300, 400), u"Załączniki/Fizyka – wykład 3.pdf"_s, 4)));
+        QVERIFY(canvas->setBackdrop(
+                backdropOf(QColor(u"#2f6fdd"_s), QSize(300, 400), u"Załączniki/Fizyka – wykład 3.pdf"_s, 4)));
         const brulion::drawing::Stroke second = canvas->currentDrawing().strokes.first();
         QCOMPARE(canvas->strokeCount(), 1);
         QCOMPARE(second.id, first.id);
@@ -3115,7 +3120,8 @@ private Q_SLOTS:
         QVERIFY(QSvgRenderer(svg).isValid());
         // The picture: the margin, then the slide; self-contained (a data URL).
         const QImage picture = renderSvg(svg, QSize(1232, 932));
-        QVERIFY2(near(picture.pixelColor(600, 600), QColor(u"#ff0000"_s), 12), qPrintable(picture.pixelColor(600, 600).name()));
+        QVERIFY2(near(picture.pixelColor(600, 600), QColor(u"#ff0000"_s), 12),
+                 qPrintable(picture.pixelColor(600, 600).name()));
         QVERIFY(svg.contains("xlink:href=\"data:image/"));
     }
 
@@ -3131,8 +3137,8 @@ private Q_SLOTS:
         QTest::newRow("a large photo: shrunk") << u"photo.jpg"_s << QSize(2400, 1800) << QString() << 0 << QString();
         QTest::newRow("an SVG: drawn 2400 px") << u"wykres.svg"_s << QSize(2400, 1200) << QString() << 0 << QString();
         // (Turned by its EXIF orientation — or by the writer itself where JPEG has none.)
-        QTest::newRow("EXIF-turned JPEG: upright") << u"obrócone.jpg"_s << QSize(100, 200) << QString() << -1
-                                                   << QString();
+        QTest::newRow("EXIF-turned JPEG: upright")
+                << u"obrócone.jpg"_s << QSize(100, 200) << QString() << -1 << QString();
         QTest::newRow("BMP: encoded again") << u"kwadrat.bmp"_s << QSize(50, 50) << QString() << 0 << QString();
         QTest::newRow("10 random bytes") << u"szum.png"_s << QSize() << QString() << 0 << u"format"_s;
         QTest::newRow("HEIC") << u"zdjęcie.heic"_s << QSize() << QString() << 0 << u"format"_s;
@@ -3191,7 +3197,7 @@ private Q_SLOTS:
             QVERIFY(f.open(QIODevice::WriteOnly));
         }
         const QString vaultPath = u"Załączniki/"_s + kind;
-        const PreparedBackdrop p = prepareBackdropPicture(file, vaultPath);
+        const PreparedBackdrop p = brulion::drawingview::prepareBackdropPicture(file, vaultPath);
         QCOMPARE(p.error, error);
         QCOMPARE(p.source.path, vaultPath);
         QCOMPARE(p.source.page, 0);
@@ -3241,10 +3247,10 @@ private Q_SLOTS:
         QVERIFY(writeTwoPagePdf(pdf));
         const QString vaultPath = u"Załączniki/Wykład ćwiczenia.pdf"_s;
         if (!brulion::platform::pdfAvailable()) {
-            QCOMPARE(prepareBackdropPdfPage(pdf, vaultPath, 1).error, u"noPdf"_s);
+            QCOMPARE(brulion::drawingview::prepareBackdropPdfPage(pdf, vaultPath, 1).error, u"noPdf"_s);
             QSKIP("no PDF renderer in this build");
         }
-        const PreparedBackdrop p = prepareBackdropPdfPage(pdf, vaultPath, 2);
+        const PreparedBackdrop p = brulion::drawingview::prepareBackdropPdfPage(pdf, vaultPath, 2);
         QCOMPARE(p.error, QString());
         QCOMPARE(p.image.pixels, QSize(2400, 1697));
         QVERIFY(p.image.mimeType == u"image/png" || p.image.mimeType == u"image/jpeg");
@@ -3254,8 +3260,9 @@ private Q_SLOTS:
         const QImage image = QImage::fromData(p.image.bytes);
         const QColor centre = image.pixelColor(int(2400 * 50 / 297.0), int(1697 * 40 / 210.0));
         QVERIFY2(centre.red() > 200 && centre.green() < 60, qPrintable(centre.name()));
-        QCOMPARE(prepareBackdropPdfPage(pdf, vaultPath, 3).error, u"pdf"_s);
-        QCOMPARE(prepareBackdropPdfPage(dir.filePath(u"nie ma.pdf"_s), vaultPath, 1).error, u"unreadable"_s);
+        QCOMPARE(brulion::drawingview::prepareBackdropPdfPage(pdf, vaultPath, 3).error, u"pdf"_s);
+        QCOMPARE(brulion::drawingview::prepareBackdropPdfPage(dir.filePath(u"nie ma.pdf"_s), vaultPath, 1).error,
+                 u"unreadable"_s);
         // The page picker's thumbnail (image://pdfpage/…).
         PdfPageImageProvider provider;
         const QUrl url = PdfPageImageProvider::url(pdf, 1, u"1"_s);

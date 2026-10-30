@@ -67,10 +67,21 @@ QByteArray scene(const QJsonArray &elements, const QJsonObject &files = {})
 
 QJsonObject imageElement(const QString &id, bool locked, const QJsonValue &marker, const QJsonValue &fileId = u"f1"_s)
 {
-    QJsonObject e{{u"id"_s, id},          {u"type"_s, u"image"_s}, {u"x"_s, 10},           {u"y"_s, 20},
-                  {u"width"_s, 120},      {u"height"_s, 90},       {u"angle"_s, 0},        {u"strokeColor"_s, u"transparent"_s},
-                  {u"backgroundColor"_s, u"transparent"_s},        {u"locked"_s, locked},  {u"fileId"_s, fileId},
-                  {u"version"_s, 4},      {u"versionNonce"_s, 11}, {u"seed"_s, 5},          {u"isDeleted"_s, false},
+    QJsonObject e{{u"id"_s, id},
+                  {u"type"_s, u"image"_s},
+                  {u"x"_s, 10},
+                  {u"y"_s, 20},
+                  {u"width"_s, 120},
+                  {u"height"_s, 90},
+                  {u"angle"_s, 0},
+                  {u"strokeColor"_s, u"transparent"_s},
+                  {u"backgroundColor"_s, u"transparent"_s},
+                  {u"locked"_s, locked},
+                  {u"fileId"_s, fileId},
+                  {u"version"_s, 4},
+                  {u"versionNonce"_s, 11},
+                  {u"seed"_s, 5},
+                  {u"isDeleted"_s, false},
                   {u"status"_s, u"saved"_s}};
     if (!marker.isUndefined())
         e.insert(u"customData"_s, QJsonObject{{u"brulionBackdrop"_s, marker}, {u"inny"_s, u"zostaje"_s}});
@@ -274,8 +285,7 @@ void TestDrawingBackdrop::roundTrip()
     QVERIFY(back);
     QCOMPARE(backdropIndex(*back), 0);
     QCOMPARE(*backdropSource(*back), Lecture);
-    QCOMPARE(back->strokes.first().element.value(u"customData"_s).toObject().value(u"obcy"_s).toString(),
-             u"zażółć"_s);
+    QCOMPARE(back->strokes.first().element.value(u"customData"_s).toObject().value(u"obcy"_s).toString(), u"zażółć"_s);
     QCOMPARE(back->strokes.size(), 2);
 
     // The SVG: the picture once (the scene has it compressed), self-contained.
@@ -301,25 +311,24 @@ void TestDrawingBackdrop::onlyIndexZeroCounts_data()
     QTest::addColumn<bool>("firstLocked");
     const QJsonObject marker{{u"path"_s, u"slajdy/s1.png"_s}, {u"page"_s, 0}};
     const QJsonObject files{{u"f1"_s, pngFile(u"f1"_s)}};
-    QTest::newRow("index 0, locked, marked") << scene({imageElement(u"i"_s, true, marker), freedraw(u"a"_s)}, files)
-                                             << true << true;
+    QTest::newRow("index 0, locked, marked")
+            << scene({imageElement(u"i"_s, true, marker), freedraw(u"a"_s)}, files) << true << true;
     QTest::newRow("marker on index 2: a picture")
-            << scene({freedraw(u"a"_s), freedraw(u"b"_s), imageElement(u"i"_s, true, marker)}, files) << false
-            << false;
-    QTest::newRow("index 0 unlocked: a picture") << scene({imageElement(u"i"_s, false, marker)}, files) << false
-                                                 << false;
+            << scene({freedraw(u"a"_s), freedraw(u"b"_s), imageElement(u"i"_s, true, marker)}, files) << false << false;
+    QTest::newRow("index 0 unlocked: a picture")
+            << scene({imageElement(u"i"_s, false, marker)}, files) << false << false;
     QTest::newRow("locked picture without marker")
             << scene({imageElement(u"i"_s, true, QJsonValue(QJsonValue::Undefined))}, files) << false << true;
-    QTest::newRow("a locked rectangle")
-            << scene({QJsonObject{{u"id"_s, u"r"_s},
-                                  {u"type"_s, u"rectangle"_s},
-                                  {u"x"_s, 0},
-                                  {u"y"_s, 0},
-                                  {u"width"_s, 10},
-                                  {u"height"_s, 10},
-                                  {u"locked"_s, true},
-                                  {u"customData"_s, QJsonObject{{u"brulionBackdrop"_s, marker}}}}})
-            << false << true;
+    QTest::newRow("a locked rectangle") << scene(
+            {QJsonObject{{u"id"_s, u"r"_s},
+                         {u"type"_s, u"rectangle"_s},
+                         {u"x"_s, 0},
+                         {u"y"_s, 0},
+                         {u"width"_s, 10},
+                         {u"height"_s, 10},
+                         {u"locked"_s, true},
+                         {u"customData"_s, QJsonObject{{u"brulionBackdrop"_s, marker}}}}})
+                                        << false << true;
 }
 
 void TestDrawingBackdrop::onlyIndexZeroCounts()
@@ -353,21 +362,20 @@ void TestDrawingBackdrop::hostileBackdrop_data()
     QTest::newRow("data:text/html") << QJsonValue(marker) << QJsonValue(u"f1"_s)
                                     << with(u"data:text/html;base64,PGI+eDwvYj4="_s) << true
                                     << u"Załączniki/wykład.pdf"_s << 2 << false;
-    QTest::newRow("quote in the base64")
-            << QJsonValue(marker) << QJsonValue(u"f1"_s) << with(u"data:image/png;base64,AA\"/><script>"_s) << true
-            << u"Załączniki/wykład.pdf"_s << 2 << false;
+    QTest::newRow("quote in the base64") << QJsonValue(marker) << QJsonValue(u"f1"_s)
+                                         << with(u"data:image/png;base64,AA\"/><script>"_s) << true
+                                         << u"Załączniki/wykład.pdf"_s << 2 << false;
     QTest::newRow("missing file") << QJsonValue(marker) << QJsonValue(u"f1"_s) << QJsonObject() << true
                                   << u"Załączniki/wykład.pdf"_s << 2 << false;
     QTest::newRow("fileId a number") << QJsonValue(marker) << QJsonValue(7) << with(u"data:image/png;base64,AAAA"_s)
                                      << true << u"Załączniki/wykład.pdf"_s << 2 << false;
     QTest::newRow("marker a string") << QJsonValue(u"x"_s) << QJsonValue(u"f1"_s)
                                      << with(u"data:image/png;base64,AAAA"_s) << false << QString() << 0 << true;
-    QTest::newRow("page -3") << QJsonValue(QJsonObject{{u"path"_s, u"a.pdf"_s}, {u"page"_s, -3}})
-                             << QJsonValue(u"f1"_s) << with(u"data:image/png;base64,AAAA"_s) << true << u"a.pdf"_s
-                             << 0 << true;
+    QTest::newRow("page -3") << QJsonValue(QJsonObject{{u"path"_s, u"a.pdf"_s}, {u"page"_s, -3}}) << QJsonValue(u"f1"_s)
+                             << with(u"data:image/png;base64,AAAA"_s) << true << u"a.pdf"_s << 0 << true;
     QTest::newRow("page 1e9") << QJsonValue(QJsonObject{{u"path"_s, u"a.pdf"_s}, {u"page"_s, 1e9}})
-                              << QJsonValue(u"f1"_s) << with(u"data:image/png;base64,AAAA"_s) << true << u"a.pdf"_s
-                              << 0 << true;
+                              << QJsonValue(u"f1"_s) << with(u"data:image/png;base64,AAAA"_s) << true << u"a.pdf"_s << 0
+                              << true;
     QTest::newRow("page 2.5, a string path")
             << QJsonValue(QJsonObject{{u"path"_s, 5}, {u"page"_s, 2.5}}) << QJsonValue(u"f1"_s)
             << with(u"data:image/png;base64,AAAA"_s) << true << QString() << 0 << true;

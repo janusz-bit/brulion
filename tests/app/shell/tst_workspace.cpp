@@ -412,17 +412,18 @@ private Q_SLOTS:
     void importAttachment_data()
     {
         // A file picked for a drawing's backdrop (Workspace::importAttachment).
-        QTest::addColumn<QString>("source");   // "vault:<path>" a file of the vault, "out:<name>" one outside
+        QTest::addColumn<QString>("source"); // "vault:<path>" a file of the vault, "out:<name>" one outside
         QTest::addColumn<QByteArray>("bytes");
         QTest::addColumn<QString>("expected");
         QTest::newRow("inside the vault: used where it is")
-                << u"vault:Wykłady/Fizyka – wykład 3.pdf"_s << QByteArray("%PDF-1.7 wykład") << u"Wykłady/Fizyka – wykład 3.pdf"_s;
+                << u"vault:Wykłady/Fizyka – wykład 3.pdf"_s << QByteArray("%PDF-1.7 wykład")
+                << u"Wykłady/Fizyka – wykład 3.pdf"_s;
         QTest::newRow("same bytes in the attachments folder: reused")
                 << u"out:slajdy.pdf"_s << QByteArray("%PDF-1.7 slajdy") << u"assets/slajdy.pdf"_s;
         QTest::newRow("another file of that name: a free name")
                 << u"out:slajdy.pdf"_s << QByteArray("%PDF-1.7 inne slajdy") << u"assets/slajdy 2.pdf"_s;
-        QTest::newRow("a new file: copied") << u"out:zdjęcie tablicy.jpg"_s << QByteArray("\xff\xd8\xff jpeg")
-                                            << u"assets/zdjęcie tablicy.jpg"_s;
+        QTest::newRow("a new file: copied")
+                << u"out:zdjęcie tablicy.jpg"_s << QByteArray("\xff\xd8\xff jpeg") << u"assets/zdjęcie tablicy.jpg"_s;
         QTest::newRow("missing file") << u"out:-"_s << QByteArray() << QString();
     }
 

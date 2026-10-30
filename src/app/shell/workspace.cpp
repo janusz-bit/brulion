@@ -1007,8 +1007,7 @@ QString Workspace::importAttachment(const QString &fileName, const QByteArray &d
         const QString ext = paths::extension(path);
         const QString stem = path.left(path.size() - ext.size());
         for (int i = 1; i <= 50; ++i) {
-            const VaultPath candidate =
-                    m_vault->existingCase(i == 1 ? path : stem + u' ' + QString::number(i) + ext);
+            const VaultPath candidate = m_vault->existingCase(i == 1 ? path : stem + u' ' + QString::number(i) + ext);
             const std::optional<FileStat> stat = m_vault->stat(candidate);
             if (!stat)
                 break;

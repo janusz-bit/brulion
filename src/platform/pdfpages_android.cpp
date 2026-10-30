@@ -43,8 +43,8 @@ PdfInfo pdfInfo(const QString &file)
 {
     PdfInfo info;
     const QJniObject path = QJniObject::fromString(file);
-    const QJniObject answer = QJniObject::callStaticObjectMethod(kClass, "pdfInfo", "(Ljava/lang/String;)Ljava/lang/String;",
-                                                                 path.object<jstring>());
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, "pdfInfo", "(Ljava/lang/String;)Ljava/lang/String;", path.object<jstring>());
     if (threw() || !answer.isValid()) {
         info.error = u"BrulionAndroid.pdfInfo failed"_s;
         return info;
@@ -69,9 +69,9 @@ PdfInfo pdfInfo(const QString &file)
 QImage renderPdfPage(const QString &file, int page, int maxSide, QString *error)
 {
     const QJniObject path = QJniObject::fromString(file);
-    const QJniObject answer =
-            QJniObject::callStaticObjectMethod(kClass, "renderPdfPage", "(Ljava/lang/String;II)[B", path.object<jstring>(),
-                                               jint(page), jint(std::clamp(maxSide, 1, MaxPdfPageSide)));
+    const QJniObject answer = QJniObject::callStaticObjectMethod(kClass, "renderPdfPage", "(Ljava/lang/String;II)[B",
+                                                                 path.object<jstring>(), jint(page),
+                                                                 jint(std::clamp(maxSide, 1, MaxPdfPageSide)));
     if (threw() || !answer.isValid()) {
         if (error)
             *error = u"Page %1 cannot be rendered"_s.arg(page);

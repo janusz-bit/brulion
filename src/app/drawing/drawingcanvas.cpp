@@ -470,7 +470,7 @@ drawing::SvgOptions DrawingCanvas::svgOptions() const
         QImage dark = m_pictures.value(darkPictureKey(fileId));
         if (dark.isNull())
             dark = darkImage(m_pictures.contains(fileId) ? m_pictures.value(fileId)
-                                                          : decodePicture(m_doc.files, fileId));
+                                                         : decodePicture(m_doc.files, fileId));
         const drawing::BackdropImage encoded = encodeBackdrop(dark);
         it = m_darkBackdrops.insert(fileId, encoded.bytes.isEmpty() ? QString() : drawing::dataUrl(encoded));
     }
