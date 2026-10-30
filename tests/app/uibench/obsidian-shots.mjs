@@ -382,15 +382,18 @@ const h2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStar
 function hex(css) {
   if (!css) return null;
   if (cache.has(css)) return cache.get(css);
+  const alpha = (v) => v === undefined ? 1 : (v.endsWith('%') ? parseFloat(v) / 100 : parseFloat(v));
   let m = css.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/);
+  const srgb = css.match(/^color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/);
   let out;
   if (m) {
-    let a = m[4] === undefined ? 1 : (m[4].endsWith('%') ? parseFloat(m[4]) / 100 : parseFloat(m[4]));
-    out = '#' + h2(+m[1]) + h2(+m[2]) + h2(+m[3]) + h2(a * 255);
+    out = '#' + h2(+m[1]) + h2(+m[2]) + h2(+m[3]) + h2(alpha(m[4]) * 255);
+  } else if (srgb) {
+    out = '#' + h2(srgb[1] * 255) + h2(srgb[2] * 255) + h2(srgb[3] * 255) + h2(alpha(srgb[4]) * 255);
   } else {
-    ctx.globalCompositeOperation = 'copy';
+    // Over an opaque black and an opaque white pixel (source-over: the fills replace what was there).
+    ctx.clearRect(0, 0, 2, 1);
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 1, 1); ctx.fillStyle = '#fff'; ctx.fillRect(1, 0, 1, 1);
-    ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#0000'; ctx.fillStyle = css; ctx.fillRect(0, 0, 2, 1);
     const d = ctx.getImageData(0, 0, 2, 1).data;
     const a = 1 - (d[4] - d[0]) / 255;
