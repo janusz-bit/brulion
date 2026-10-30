@@ -235,7 +235,11 @@ private Q_SLOTS:
         QCOMPARE(second.stats.cache, u"used"_s);
         QVERIFY(!second.stats.searchFromCache);
         QCOMPARE(second.stats.fromCache, 23);
-        QCOMPARE(second.index->pendingSearchDocuments(), 0); // built by the loader's search thread
+        // Built by the loader's search thread — unless that never got a thread before every note
+        // was merged (a runner that starts threads late: the owner parses the notes itself), when
+        // the index builds every document itself. Never a part of them.
+        const qsizetype pending = second.index->pendingSearchDocuments();
+        QVERIFY2(pending == 0 || pending == 23, qPrintable(QString::number(pending)));
         const std::unique_ptr<VaultIndex> fresh = serialIndex(root);
         QCOMPARE(describeSearch(second.index->search(u"zolw"_s)), describeSearch(fresh->search(u"zolw"_s)));
     }
