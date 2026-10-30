@@ -6,6 +6,9 @@
 //   go away with the item;
 // * tst_planning_graph_sg_software — QT_QUICK_BACKEND=software (tests, screenshots, the Raspberry
 //   Pi): the QPainter frame in an image node, grabbed from the window.
+// By hand under an X server, the scene graph on OpenGL (Mesa's llvmpipe in CI) with its pixels
+// compared to the QPainter path's:
+//   xvfb-run -a env QT_QPA_PLATFORM=xcb BRULION_GRAPH_SG_API=opengl tests/app/planning/tst_planning_graph_sg
 #include "graphitem.h"
 #include "graphmodel.h"
 #include "planningtest.h"
@@ -69,6 +72,19 @@ bool softwareBackend()
     return qEnvironmentVariable("QT_QUICK_BACKEND") == u"software"_s;
 }
 
+/// The RHI backend asked for: Null (default) or OpenGL (BRULION_GRAPH_SG_API=opengl).
+QSGRendererInterface::GraphicsApi rhiApi()
+{
+    return qEnvironmentVariable("BRULION_GRAPH_SG_API") == u"opengl"_s ? QSGRendererInterface::OpenGL
+                                                                        : QSGRendererInterface::Null;
+}
+
+/// Sum of the channel differences.
+int colourDistance(const QColor &a, const QColor &b)
+{
+    return std::abs(a.red() - b.red()) + std::abs(a.green() - b.green()) + std::abs(a.blue() - b.blue());
+}
+
 /// A window with a GraphItem filling it.
 struct Scene {
     QQuickWindow window;
@@ -123,7 +139,7 @@ public:
         // OpenGL (offscreen).
         if (!softwareBackend()) {
             QQuickWindow::setSceneGraphBackend(u"rhi"_s);
-            QQuickWindow::setGraphicsApi(QSGRendererInterface::Null);
+            QQuickWindow::setGraphicsApi(rhiApi());
         }
     }
 
@@ -141,7 +157,7 @@ private Q_SLOTS:
         GraphItem *item = scene.item;
         if (!scene.firstFrame())
             QSKIP("no frame from the RHI null backend on this platform");
-        QCOMPARE(scene.window.rendererInterface()->graphicsApi(), QSGRendererInterface::Null);
+        QCOMPARE(scene.window.rendererInterface()->graphicsApi(), rhiApi());
         GraphItem::SceneStats s = item->sceneStats();
         QVERIFY(!s.software);
         QCOMPARE(s.meshBuilds, 1);
@@ -197,7 +213,7 @@ private Q_SLOTS:
         GraphItem *item = scene.item;
         if (!scene.firstFrame())
             QSKIP("no frame from the RHI null backend on this platform");
-        QCOMPARE(scene.window.rendererInterface()->graphicsApi(), QSGRendererInterface::Null);
+        QCOMPARE(scene.window.rendererInterface()->graphicsApi(), rhiApi());
         GraphItem::SceneStats s = item->sceneStats();
         QVERIFY2(s.vertices > 65535, qPrintable(QString::number(s.vertices)));
         QVERIFY(s.chunks >= 2);
@@ -223,7 +239,7 @@ private Q_SLOTS:
         GraphItem *item = scene.item;
         if (!scene.firstFrame())
             QSKIP("no frame from the RHI null backend on this platform");
-        QCOMPARE(scene.window.rendererInterface()->graphicsApi(), QSGRendererInterface::Null);
+        QCOMPARE(scene.window.rendererInterface()->graphicsApi(), rhiApi());
         QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000 * BRULION_TEST_SLOWDOWN);
         QTest::qWait(100); // the settled frame
         const int builds = item->sceneStats().meshBuilds;
@@ -245,6 +261,51 @@ private Q_SLOTS:
         } // the window, its scene graph and the item go (the layout may still run)
         QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 10000);
         QVERIFY(m.alpha() < m.layout().params().alphaMin);
+    }
+
+    void openglPixelsMatchThePainter()
+    {
+        if (softwareBackend() || rhiApi() != QSGRendererInterface::OpenGL)
+            QSKIP("run under an X server with BRULION_GRAPH_SG_API=opengl (see the file comment)");
+        auto index = makeIndex(smallVault());
+        GraphModel m;
+        m.setActive(false);
+        m.setShowMissing(true);
+        m.setVaultIndex(index.get());
+        m.step(300);
+        Scene scene(&m);
+        GraphItem *item = scene.item;
+        item->setLabelZoom(1e6); // labels may cover other nodes: compare the discs
+        QVERIFY(scene.firstFrame());
+        QCOMPARE(scene.window.rendererInterface()->graphicsApi(), QSGRendererInterface::OpenGL);
+        QTest::qWait(100);
+        const QImage shot = scene.window.grabWindow().convertToFormat(QImage::Format_ARGB32);
+        QVERIFY(!shot.isNull());
+        const qreal dpr = shot.devicePixelRatio();
+        QImage painted(shot.size(), QImage::Format_ARGB32_Premultiplied);
+        painted.setDevicePixelRatio(dpr);
+        {
+            QPainter p(&painted);
+            item->render(&p, item->size());
+        }
+        painted = painted.convertToFormat(QImage::Format_ARGB32);
+        QVERIFY2(colourDistance(shot.pixelColor(2, 2), painted.pixelColor(2, 2)) <= 3,
+                 qPrintable(shot.pixelColor(2, 2).name() + u" "_s + painted.pixelColor(2, 2).name()));
+        for (const auto &node : m.nodes()) {
+            const QPoint p = (item->nodePosition(node.id) * dpr).toPoint();
+            const QColor a = shot.pixelColor(p);
+            const QColor b = painted.pixelColor(p);
+            QVERIFY2(colourDistance(a, b) <= 24, qPrintable(node.id + u": "_s + a.name() + u" vs "_s + b.name()));
+        }
+        // A theme switch: the same again.
+        item->setBackgroundColor(QColor(u"#1c2130"_s));
+        item->setPageColor(QColor(u"#8fb8e8"_s));
+        QVERIFY(scene.nextFrame());
+        QTest::qWait(100);
+        const QImage dark = scene.window.grabWindow();
+        QVERIFY(colourDistance(dark.pixelColor(2, 2), QColor(u"#1c2130"_s)) <= 3);
+        const QPoint a = (item->nodePosition(u"A.md"_s) * dpr).toPoint();
+        QVERIFY2(colourDistance(dark.pixelColor(a), QColor(u"#8fb8e8"_s)) <= 24, qPrintable(dark.pixelColor(a).name()));
     }
 
     void softwareImage()
