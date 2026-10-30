@@ -998,16 +998,23 @@ QString Workspace::importAttachment(const QString &fileName, const QByteArray &d
 {
     if (!m_vault || data.isEmpty())
         return {};
-    // The same file picked again (another slide of the lecture's PDF): the one already stored.
+    // The same file picked again (another slide of the lecture's PDF): the one already stored —
+    // under its name or one saveAttachment() gave it ("Slajdy 2.pdf").
     const QString name = paths::sanitizeFileName(paths::basename(QString(fileName).replace(u'\\', u'/')).trimmed());
     const QString folder = paths::normalize(m_vault->config().attachmentsFolder);
     if (!name.isEmpty()) {
-        const VaultPath existing = m_vault->existingCase(folder.isEmpty() ? name : paths::join(folder, name));
-        const std::optional<FileStat> stat = m_vault->stat(existing);
-        if (stat && stat->size == data.size()) {
+        const VaultPath path = folder.isEmpty() ? name : paths::join(folder, name);
+        const QString ext = paths::extension(path);
+        const QString stem = path.left(path.size() - ext.size());
+        for (int i = 1; i <= 50; ++i) {
+            const VaultPath candidate =
+                    m_vault->existingCase(i == 1 ? path : stem + u' ' + QString::number(i) + ext);
+            const std::optional<FileStat> stat = m_vault->stat(candidate);
+            if (!stat)
+                break;
             bool ok = false;
-            if (m_vault->readBinary(existing, &ok) == data && ok)
-                return existing;
+            if (!stat->isDir && stat->size == data.size() && m_vault->readBinary(candidate, &ok) == data && ok)
+                return candidate;
         }
     }
     return saveAttachment(fileName, data);

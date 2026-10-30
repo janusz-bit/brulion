@@ -14,10 +14,12 @@
 // singleton "DrawingBackdrops" (drawingqml.h).
 #pragma once
 
+#include <QByteArray>
 #include <QHash>
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>

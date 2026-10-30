@@ -186,9 +186,11 @@ echo "CMake $(cmake --version | head -n 1 | cut -d' ' -f3), Ninja $(ninja --vers
 
 # --- Qt -----------------------------------------------------------------------------------------
 
-if [[ ! -f $QT_DIR/lib/cmake/Qt6/Qt6Config.cmake ]]; then
-  [[ $QT_DIR == "$QT_ROOT/$QT_VERSION/$qt_subdir" ]] || die "QT_DIR=$QT_DIR has no lib/cmake/Qt6"
-  info "Installing Qt $QT_VERSION $aqt_arch (aqt $AQT_VERSION) into $QT_ROOT"
+# Qt PDF (`qtpdf`, an extension of Qt's repository: about 4.5 MB) draws the PDF pages of drawings'
+# backdrops (src/platform/pdfpages_qtpdf.cpp); a Qt installed before without it gets it now.
+if [[ ! -f $QT_DIR/lib/cmake/Qt6/Qt6Config.cmake || ! -f $QT_DIR/lib/cmake/Qt6Pdf/Qt6PdfConfig.cmake ]]; then
+  [[ $QT_DIR == "$QT_ROOT/$QT_VERSION/$qt_subdir" ]] || die "QT_DIR=$QT_DIR has no lib/cmake/Qt6 with Qt6Pdf"
+  info "Installing Qt $QT_VERSION $aqt_arch with qtpdf (aqt $AQT_VERSION) into $QT_ROOT"
   mkdir -p "$QT_ROOT"
   # Qt mirrors occasionally serve a truncated archive ("Bad offset for central directory"):
   # retry a few times before giving up.
@@ -197,7 +199,7 @@ if [[ ! -f $QT_DIR/lib/cmake/Qt6/Qt6Config.cmake ]]; then
   for attempt in 1 2 3; do
     base=()
     [[ -n ${mirrors[attempt - 1]} ]] && base=(--base "${mirrors[attempt - 1]}")
-    aqt install-qt "$aqt_host" desktop "$QT_VERSION" "$aqt_arch" -O "$QT_ROOT" "${base[@]}" && break
+    aqt install-qt "$aqt_host" desktop "$QT_VERSION" "$aqt_arch" -O "$QT_ROOT" -m qtpdf "${base[@]}" && break
     ((attempt < 3)) || die "aqt failed to install Qt $QT_VERSION $aqt_arch"
     info "aqt failed (attempt $attempt), retrying with another mirror in 20 s"
     sleep 20

@@ -409,6 +409,56 @@ private Q_SLOTS:
         QVERIFY(!ws->assetPixelSize(u"assets/mała łąka.png"_s).isValid());
     }
 
+    void importAttachment_data()
+    {
+        // A file picked for a drawing's backdrop (Workspace::importAttachment).
+        QTest::addColumn<QString>("source");   // "vault:<path>" a file of the vault, "out:<name>" one outside
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("inside the vault: used where it is")
+                << u"vault:Wykłady/Fizyka – wykład 3.pdf"_s << QByteArray("%PDF-1.7 wykład") << u"Wykłady/Fizyka – wykład 3.pdf"_s;
+        QTest::newRow("same bytes in the attachments folder: reused")
+                << u"out:slajdy.pdf"_s << QByteArray("%PDF-1.7 slajdy") << u"assets/slajdy.pdf"_s;
+        QTest::newRow("another file of that name: a free name")
+                << u"out:slajdy.pdf"_s << QByteArray("%PDF-1.7 inne slajdy") << u"assets/slajdy 2.pdf"_s;
+        QTest::newRow("a new file: copied") << u"out:zdjęcie tablicy.jpg"_s << QByteArray("\xff\xd8\xff jpeg")
+                                            << u"assets/zdjęcie tablicy.jpg"_s;
+        QTest::newRow("missing file") << u"out:-"_s << QByteArray() << QString();
+    }
+
+    void importAttachment()
+    {
+        QFETCH(QString, source);
+        QFETCH(QByteArray, bytes);
+        QFETCH(QString, expected);
+        QString root;
+        auto ws = open({}, &root);
+        // Already there: the lecture's slides.
+        QVERIFY(ws->vault()->createBinary(u"assets/slajdy.pdf"_s, "%PDF-1.7 slajdy") == u"assets/slajdy.pdf"_s);
+        QUrl url;
+        if (source.startsWith(u"vault:"_s)) {
+            QVERIFY(writeRaw(root + u'/' + source.mid(6), bytes));
+            url = QUrl::fromLocalFile(root + u'/' + source.mid(6));
+        } else if (source == u"out:-") {
+            url = QUrl::fromLocalFile(m_tmp.filePath(u"nie ma.pdf"_s));
+        } else {
+            const QString file = m_tmp.filePath(u"pobrane-%1/"_s.arg(m_n) + source.mid(4));
+            QVERIFY(writeRaw(file, bytes));
+            url = QUrl::fromLocalFile(file);
+        }
+        QCOMPARE(ws->importAttachment(url), expected);
+        if (!expected.isEmpty())
+            QCOMPARE(readRaw(root + u'/' + expected), bytes);
+        // By bytes (the browser's picker): the same rules but the vault's own files.
+        if (source.startsWith(u"out:"_s) && !bytes.isEmpty()) {
+            const QString again = ws->importAttachment(source.mid(4), bytes);
+            QCOMPARE(again, expected); // (now it is there: reused)
+        }
+        // The file system path of a vault path.
+        QCOMPARE(ws->absoluteFilePath(u"assets/slajdy.pdf"_s), QDir(root).absoluteFilePath(u"assets/slajdy.pdf"_s));
+        QCOMPARE(ws->absoluteFilePath(QString()), QString());
+    }
+
     void decodablePictures_data()
     {
         QTest::addColumn<QString>("path");
