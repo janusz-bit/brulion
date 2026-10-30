@@ -1169,20 +1169,31 @@ and diagrams (shapes, arrows, text), on every platform.
   na obrazie lub PDF…"** open the file picker ("Obrazy i PDF"; `FilePicker` — the browser: its own
   picker, pictures only, `DrawingBackdrops.pickInBrowser`); the file is taken into the notebook
   (`EditorHost::importAttachment`, `Workspace::importAttachment`: a file of the notebook stays
-  where it is, the same file already in the attachments folder — also under a " 2" name — is used
-  again, anything else is copied there as pictures are). A picture becomes one drawing ("slajd
+  where it is — on Android also when the system's picker names it by a `content://` URI of the
+  phone's storage, a memory card or Downloads' path, `platform/documentpaths.h` —, the same file
+  already in the attachments folder — also under a " 2" name — is used again, anything else is
+  copied there as pictures are). When no drawing comes of the pick (the page picker cancelled, a
+  locked or unreadable PDF, a picture this device cannot decode) the copy made for it is deleted
+  again (`PageController.discardBackdropSource` / `Workspace.discardImport`: only a copy that pick
+  stored, never a file of the notebook or one reused). A picture becomes one drawing ("slajd
   (rysunek).svg", light — **Jasne**) and opens in the editor; a PDF opens
   **DrawingBackdropDialog** (a centred card, a bottom sheet on phones): the file's name, "N stron",
   the pages as thumbnails (the image provider `pdfpage`, `PdfPageImageProvider`:
-  `image://pdfpage/<file>?page=N&v=…`, drawn as they scroll into view), a tap chooses or drops a
-  page, **Wszystkie** / **Żadna**, the field **Strony** ("1-3, 7", "wszystkie"; in step with the
+  `image://pdfpage/<file>?page=N&v=…`, drawn as they scroll into view; every cell the first page's
+  shape — `DrawingBackdrops.pdfInfo` `width`/`height` —, wider cells for landscape slides), a tap
+  chooses or drops a page — with the keyboard Tab reaches the pages, the arrows move (a focus
+  ring), Space or Enter chooses; in the one-page dialog the arrows choose at once —,
+  **Wszystkie** / **Żadna**, the field **Strony** ("1-3, 7", "wszystkie"; in step with the
   thumbnails), at most 60 pages ("Najwyżej 60 stron naraz."), **"Wstaw rysunki (N)"**: one drawing
   per page ("wykład 3 s. 4.svg", as the app — **Jak motyw**), the first at the caret, every
   further one in a block of its own after it, in order — one undo step
   (`PageController.insertDrawingsOn`; the files stay, as with "/Rysunek"); one drawing opens in the
   editor, several stay in the note with a toast ("Wstawiono N rysunków"). The pages are prepared
   in the background (`DrawingBackdrops.prepare`: Qt's thread pool, the browser one per event-loop
-  turn) with a progress bar ("Strona 3 z 12…") and **Anuluj**; a PDF with a password ("Ten PDF
+  turn) with a progress bar ("Strona 3 z 12…") and **Anuluj** — inserted drawings' files made
+  there too (`prepare(…, drawings)`: core `newDrawingOnBackdrop` written — the raster's two base64
+  copies and the scene's deflate), so the GUI thread only stores them and 60 slides freeze no
+  window; a PDF with a password ("Ten PDF
   jest chroniony hasłem — Brulion go nie otworzy."), one that cannot be read and a picture this
   device cannot decode say so. **In the editor:** the paper's menu (on phones Więcej) has
   **"Podkład z obrazu lub PDF…"** (set or replace: a PDF's page in the same dialog, one page,
@@ -1197,8 +1208,10 @@ and diagrams (shapes, arrows, text), on every platform.
   no dark style sheet. The raster: the picture's own bytes when it is a PNG or a JPEG within 2400 px
   and 4 MB that needs no EXIF turning, else decoded (EXIF turned, the first frame of a GIF, an SVG
   — a drawing too — drawn 2400 px on its long side) and stored as the smaller of PNG and JPEG
-  (`backdropimage.h`); a PDF page drawn 2400 px on its long side. The previews decode a backdrop
-  at the size they show it.
+  (`backdropimage.h`); a PDF page drawn 2400 px on its long side (at the resolution of that size,
+  `pdfRenderDpi`: a page larger than A4 costs no more memory). The previews decode a backdrop
+  at the size they show it; the editor keeps decoded only the rasters its elements show (a
+  backdrop replaced: its raster and dark twin dropped, decoded again on undo).
   **PDF renderers** (`src/platform/pdfpages.h`, chosen by CMake): Android — the system's
   `PdfRenderer` (JNI, `PdfPages.kt`; nothing added to the APK); Windows, the AppImage and CI's
   Linux build — Qt PDF (pdfium; aqt's `qtpdf`); the Nix package — poppler-qt6 (nixpkgs has Qt PDF
@@ -1322,14 +1335,18 @@ light and dark; nothing written by looking), `tst_editor_picturesize`
 (`drawingFiles`, `drawingSizeFollowsTheFile`, `drawingExportsStandIn`), `tst_editor_blocktext`
 (`drawingEmbeds`), `tst_editor_controller`
 (`drawingSlashCommand`, `drawingEmbedsFollowTheirFile`, `drawingOnSlashCommand`, `insertDrawingsOnPdfPages`,
-`insertDrawingOnPicture`, `importBackdropSource`), `tst_drawing_backdrop` (the backdrop element: set,
+`insertDrawingOnPicture`, `insertDrawingsOnOddNames`, `insertDrawingsOnPreparedFiles`, `importBackdropSource`,
+`discardBackdropSource`), `tst_drawing_backdrop` (the backdrop element: set,
 replaced, removed, read back, only index 0, hostile markers and files, page ranges, the SVG's theme
-with a backdrop, the merge), `tst_pdfpages` (this build's PDF renderer on a PDF written with
-QPdfWriter; broken files), `tst_drawingcanvas` (`backdropUnderInk`, `backdropIsLocked`,
-`backdropDarkInverted`, `backdropPreviewDark`, `setRemoveBackdropUndo`, `backdropMerge`,
-`svgPictureShowsBackdrop`, `prepareBackdropPicture`, `prepareBackdropPdfPage` — and the page
-thumbnails —, `backdropsJobs`, `saveTimeWithBackdrop`), `tst_workspace` (`importAttachment`), the
-Android bridge self-test (a PDF page through PdfRenderer), `tst_shell_workspace_pictures`
+with a backdrop, the merge, a new drawing on a backdrop, the random stamp), `tst_pdfpages` (this
+build's PDF renderer on a PDF written with QPdfWriter; broken files; hand-made pages far larger than
+A4 and thinner than a pixel; `pdfRenderDpi`), `tst_documentpaths` (Android document URIs that name
+their file), `tst_drawingcanvas` (`backdropUnderInk`, `backdropIsLocked`,
+`backdropDarkInverted`, `backdropPreviewDark`, `setRemoveBackdropUndo`, `replacedBackdropsAreNotKept`,
+`backdropMerge`, `svgPictureShowsBackdrop`, `prepareBackdropPicture`, `prepareBackdropPdfPage` — and
+the page thumbnails —, `backdropsJobs`, `saveTimeWithBackdrop`), `tst_workspace` (`importAttachment`,
+`importedCopyDiscarded`, `importAndroidDocument`), the
+Android bridge self-test (a PDF page through PdfRenderer, the first page's size), `tst_shell_workspace_pictures`
 (`drawingsAreSavedAndShownAgain`, `excalidrawMarkdownIsADrawing`), the shell's self-test (`tst_shell_qml`, `_capture`: opened from
 its embed, drawn with a finger / the mouse, saved, undone; the embed in the app's other theme;
 the embed of a drawing whose file names another frame (excalidraw.com's margins) keeping its size

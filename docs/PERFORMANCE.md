@@ -761,9 +761,15 @@ Measured after the change (the feature's whole cost, not only the renderer):
 picture, as excalidraw.com's "Embed scene" export): every autosave base64-encodes and deflates it
 again. `tst_drawingcanvas saveTimeWithBackdrop` logs `toSvg` of 500 strokes on a 2.5 MB PNG
 backdrop and fails only above 1 s in a Release build; the backdrop is at most 4 MB
-(`drawing::MaxBackdropBytes`, shrunk when larger), so the autosave stays bounded. Memory: the
-editor keeps the decoded backdrop (2400 × 1350: 13 MB) and, once shown dark, its dark twin; the
-previews decode it at the size they show it.
+(`drawing::MaxBackdropBytes`, shrunk when larger), so the autosave stays bounded. Inserting
+drawings on many PDF pages makes their files where the pages are prepared, on Qt's thread pool
+(`DrawingBackdrops.prepare(…, drawings)`): 60 slides × ≈ 70–130 ms of `toSvg` on a phone no longer
+run on the GUI thread after the progress bar (an Android "not responding" dialog), which only
+stores the files and embeds them. Memory: the editor keeps the decoded backdrop (2400 × 1350:
+13 MB) and, once shown dark, its dark twin — only of the backdrop shown: one replaced ("Inna
+strona PDF…") is dropped and decoded again on undo; the previews decode it at the size they show
+it. poppler draws a page at the resolution of the size asked for (`pdfRenderDpi`; it had a floor of
+18 dpi, so a hostile 20000-pt MediaBox became a 5000 × 5000 px picture for a 230 px thumbnail).
 
 ### Budgets
 

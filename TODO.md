@@ -24,11 +24,12 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * na prawdziwym tablecie z rysikiem (Android, Natalia — w aplikacji i w przeglądarce) i
     telefonie: czy linia grubieje przy mocniejszym nacisku, czy drugi koniec rysika i przycisk
     boczny ścierają, zaznaczanie lassem rysikiem, polskie znaki z klawiatury ekranowej w tekście na
-    rysunku; wstawić strony PDF-a z wykładu („/Rysunek na obrazie lub PDF”), pisać rysikiem po
-    slajdzie, sprawdzić ciemny podkład i czy obrócona strona PDF wygląda dobrze (automatycznie
-    sprawdzone: Chromium i Firefox — `tests/web`, emulator Androida — `--stylus`, `--drawing`,
-    strona PDF przez PdfRenderer — samotest mostka, zgodność z excalidraw.com w obie strony —
-    `tests/app/drawing/excalidraw-roundtrip.sh`, wymaga internetu);
+    rysunku; wstawić strony PDF-a z wykładu („/Rysunek na obrazie lub PDF”; PDF wskazany w
+    systemowym oknie wyboru z folderu notatnika ma zostać na miejscu, bez kopii w załącznikach),
+    pisać rysikiem po slajdzie, sprawdzić ciemny podkład i czy obrócona strona PDF wygląda dobrze
+    (automatycznie sprawdzone: Chromium i Firefox — `tests/web`, emulator Androida — `--stylus`,
+    `--drawing`, strona PDF przez PdfRenderer — samotest mostka, zgodność z excalidraw.com w obie
+    strony — `tests/app/drawing/excalidraw-roundtrip.sh`, wymaga internetu);
   * zmiana rozmiaru i obracanie zaznaczenia (uchwyty na ramce), zaznaczanie prostokątem;
   * kopiowanie elementów między Brulionem a excalidraw.com przez schowek;
   * przechodzenie między stronami PDF w edytorze rysunków (dziś: powrót do notatki albo „Inna
