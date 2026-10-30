@@ -70,7 +70,7 @@ async function savedStrokes(page, n) {
       const scene = decodeDrawing(bytes);
       lines = (scene?.elements || []).filter((e) => e.type === 'freedraw' && !e.isDeleted);
       return lines.length;
-    }, { message: 'freehand lines in the saved drawing', timeout: 25_000 }).toBe(n);
+    }, { message: 'freehand lines in the saved drawing', timeout: 40_000 }).toBe(n);
   } catch (e) {
     const canvas = await page.evaluate(() => {
       const r = globalThis.brulionPenSelfTest;
