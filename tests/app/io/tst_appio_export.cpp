@@ -294,7 +294,7 @@ private Q_SLOTS:
 
     void suggestedSaveFile()
     {
-        // The save dialog's file (FileDialog.selectedFile; Android's "Save as" shows its name):
+        // The save dialog's file (FilePicker.selectedFile; Android's "Save as" shows its name):
         // a file URL in defaultSaveFolder whose name is the export's — spaces, "%", Polish
         // letters and all.
         auto ws = open({{u"Plany 100% – żółw/Grządki.md"_s, "- marchew\n"}});

@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
@@ -10,7 +9,7 @@ import Brulion
 // "Import notes" (opens the chosen notebook on its import screen), the sample notebook
 // ("Przykładowy brulion") and the recently used notebooks.
 //
-// Per platform: desktop — a path field with a folder picker (QtQuick.Dialogs FolderDialog,
+// Per platform: desktop — a path field with a folder picker (FilePicker, the system's own,
 // asynchronous); Android — a path on the phone's storage (default /storage/emulated/0/Brulion,
 // needs "All files access", which AppController asks for) or the app's private storage; browser
 // — one notebook kept in the browser's storage (IndexedDB).
@@ -430,9 +429,12 @@ Rectangle {
         }
     }
 
-    FolderDialog {
+    FilePicker {
         id: folderDialog
+        objectName: "onboardingFolderDialog"
         title: qsTr("Choose the notebook folder")
+        fileMode: FilePicker.OpenFolder
+        dark: Theme.dark
         onAccepted: pathField.text = AppController.localPath(selectedFolder)
     }
 }

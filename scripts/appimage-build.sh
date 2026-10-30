@@ -343,7 +343,10 @@ runnable_copy "$appimage" "$check_dir/brulion.AppImage"
 missing=$(find "$check_dir/squashfs-root/usr" -type f \( -name '*.so*' -o -path '*/bin/brulion' \) -print0 |
   xargs -0 ldd 2>/dev/null | grep 'not found' | sort -u || true)
 [[ -z $missing ]] || die "unresolved libraries in the AppImage:"$'\n'"$missing"
-for plugin in platforms/libqxcb.so platforms/libqwayland.so platforms/libqoffscreen.so; do
+# platformthemes/libqxdgdesktopportal.so: the desktop's own file pickers through xdg-desktop-portal
+# (main.cpp selects it inside the AppImage; FilePicker, docs/UI.md "File pickers").
+for plugin in platforms/libqxcb.so platforms/libqwayland.so platforms/libqoffscreen.so \
+  platformthemes/libqxdgdesktopportal.so; do
   [[ -f $check_dir/squashfs-root/usr/plugins/$plugin ]] || die "plugin $plugin missing from the AppImage"
 done
 # "Otwórz za pomocą → Brulion" for Markdown and text files: the desktop entry AppImage integration

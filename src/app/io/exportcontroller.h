@@ -15,12 +15,13 @@
 //             saveInBrowser() / saveToExportFolder() → "saved" (savedTo) | "error" (errorText)
 //
 // Saving per platform:
-//   desktop     QML FileDialog (fileMode: SaveFile, selectedFile = suggestedSaveFile) → saveTo(url)
-//   Android     the same FileDialog opens the system's "Save as" (a content:// document Qt writes
+//   desktop     QML FilePicker (fileMode: SaveFile, selectedFile = suggestedSaveFile; the system's
+//               dialog) → saveTo(url)
+//   Android     the same FilePicker opens the system's "Save as" (a content:// document Qt writes
 //               to); saveToExportFolder() ("Save to Downloads") puts it into the Download folder
 //               through MediaStore — no storage permission needed (Android 10+; Android 9 writes
 //               the file, with the storage permission) — the report names the file
-//   browser     saveInBrowser(): QFileDialog::saveFileContent (a download)
+//   browser     saveInBrowser(): the browser's save picker or a download (platform/wasm/wasmfiles.h)
 #pragma once
 
 #include "types.h"
@@ -89,9 +90,9 @@ class ExportController : public QObject {
     Q_PROPERTY(QString errorText READ errorText NOTIFY stateChanged FINAL)
     /// Where the file went (a path or a document name).
     Q_PROPERTY(QString savedTo READ savedTo NOTIFY stateChanged FINAL)
-    /// Folder for the file dialog to start in (Documents / Download).
+    /// Folder for the file picker to start in (Documents / Download).
     Q_PROPERTY(QUrl defaultSaveFolder READ defaultSaveFolder CONSTANT FINAL)
-    /// The produced file's name in defaultSaveFolder, as a file URL for FileDialog.selectedFile
+    /// The produced file's name in defaultSaveFolder, as a file URL for FilePicker.selectedFile
     /// (Android's "Save as" shows its file name); empty without a file.
     Q_PROPERTY(QUrl suggestedSaveFile READ suggestedSaveFile NOTIFY stateChanged FINAL)
     /// Folder used by saveToExportFolder().
@@ -134,11 +135,12 @@ public:
 
     /// Produce the file (async; "ready" when done).
     Q_INVOKABLE void prepare();
-    /// Write the produced file to a picked destination (FileDialog.selectedFile).
+    /// Write the produced file to a picked destination (FilePicker.selectedFile).
     Q_INVOKABLE bool saveTo(const QUrl &url);
     /// Write it into exportFolder() under its suggested name (made unique).
     Q_INVOKABLE bool saveToExportFolder();
-    /// Browser: offer it as a download (QFileDialog::saveFileContent). Elsewhere: false.
+    /// Browser: the browser's save picker (Chromium on https) or a download, a file each
+    /// (platform/wasm/wasmfiles.h). Elsewhere: false.
     Q_INVOKABLE bool saveInBrowser();
     /// Forget the produced file (back to "idle").
     Q_INVOKABLE void discard();

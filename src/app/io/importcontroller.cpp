@@ -16,7 +16,7 @@
 #include <QRegularExpression>
 
 #ifdef Q_OS_WASM
-#include <QFileDialog>
+#include "wasm/wasmfiles.h"
 #endif
 
 using namespace Qt::StringLiterals;
@@ -355,13 +355,25 @@ void ImportController::addPaths(const QStringList &paths)
 void ImportController::pickInBrowser()
 {
 #ifdef Q_OS_WASM
-    const QString filter = nameFilters().join(u";;"_s);
+    // Several files at once, as the desktop and Android pickers; the desktop's limit per file
+    // applies before a file is read (FileGatherer's texts).
     const QPointer<ImportController> self(this);
-    QFileDialog::getOpenFileContent(filter, [self](const QString &fileName, const QByteArray &content) {
-        if (!self || fileName.isEmpty())
-            return; // cancelled
-        self->setInput({ io::InputFile{ fileName, content } }, fileName);
-    });
+    platform::wasm::openFiles(nameFilters(), true, GatherLimits{}.maxFileBytes,
+                              [self](const QList<platform::PickedFile> &picked) {
+                                  if (!self || picked.isEmpty())
+                                      return; // cancelled
+                                  QList<io::InputFile> files;
+                                  QStringList warnings;
+                                  for (const platform::PickedFile &f : picked) {
+                                      if (f.tooLarge)
+                                          warnings.append(FileGatherer::tooLargeWarning(f.name, f.size));
+                                      else
+                                          files.append(io::InputFile{ f.name, f.data });
+                                  }
+                                  self->setInput(files, FileGatherer::sourceNameFor(int(picked.size()),
+                                                                                    picked.first().name),
+                                                 warnings);
+                              });
 #endif
 }
 

@@ -1,11 +1,14 @@
 # brulion_platform — OS integration (notifications, storage access, WASM persistence).
 #   all builds   platform (target, log folder, device), autostart ("Start when you sign in": the
 #                Windows Run key over any QSettings — the tests use INI files), appidentity (the
-#                Windows AppUserModelID of the toasts; pure helpers everywhere). Tests: tests/platform.
+#                Windows AppUserModelID of the toasts; pure helpers everywhere), pickedfiles (the
+#                bookkeeping of the browser's file picker, wasm/wasmfiles.h; pure, tested
+#                everywhere). Tests: tests/platform.
 qt_add_library(brulion_platform STATIC
     platform.h platform.cpp
     autostart.h autostart.cpp
     appidentity.h appidentity.cpp
+    pickedfiles.h pickedfiles.cpp
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)
@@ -25,16 +28,21 @@ if(ANDROID)
 endif()
 
 # WebAssembly: IndexedDB persistence (IDBFS), browser notifications, shares handed over by another
-# tab (the share target), loading-screen bridge and the self-tests (?selftest=…) — docs/WEB.md.
-# Include as "wasm/wasmstorage.h" etc.
+# tab (the share target), the browser's file picker and downloads (wasmfiles: Qt's private
+# QWasmLocalFileAccess, hence Qt6::GuiPrivate — no Qt Widgets in the browser build), loading-screen
+# bridge and the self-tests (?selftest=…) — docs/WEB.md. Include as "wasm/wasmstorage.h" etc.
 if(EMSCRIPTEN)
     target_sources(brulion_platform PRIVATE
         wasm/wasmstorage.h wasm/wasmstorage.cpp
         wasm/wasmnotifier.h wasm/wasmnotifier.cpp
         wasm/wasmshare.h wasm/wasmshare.cpp
         wasm/wasmshell.h wasm/wasmshell.cpp
+        wasm/wasmfiles.h wasm/wasmfiles.cpp
         wasm/wasmselftest.h wasm/wasmselftest.cpp
     )
+    set(QT_NO_PRIVATE_MODULE_WARNING ON)
+    find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+    target_link_libraries(brulion_platform PRIVATE Qt6::GuiPrivate)
     # IDBFS is an Emscripten JS library; it must be linked into the final executable.
     target_link_options(brulion_platform INTERFACE "-lidbfs.js")
 endif()

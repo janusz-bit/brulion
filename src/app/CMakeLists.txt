@@ -30,6 +30,13 @@ else()
 endif()
 set(BRULION_DEV_QML_ENABLED ${_brulion_dev_qml} CACHE INTERNAL "Effective BRULION_DEV_QML")
 message(STATUS "Developer QML: ${BRULION_DEV_QML_ENABLED} (BRULION_DEV_QML=${BRULION_DEV_QML})")
+# Static Qt (the browser): qmlimportscanner scans every .qml file under src/app, compiled or not,
+# and the build links the QML plugins it reports — without the developer QML, qml/dev's
+# `import QtTest` and Qt.labs.folderlistmodel stay out (-exclude takes a folder name). Android's
+# androiddeployqt always scans src/app whole (docs/PERFORMANCE.md L9, next steps).
+if(NOT BRULION_DEV_QML_ENABLED)
+    set_property(TARGET brulion APPEND PROPERTY QT_QML_IMPORT_SCANNER_EXTRA_ARGS -exclude dev)
+endif()
 
 # --- Design system (docs/UI.md): Theme singleton, shared B* components, the dev gallery and
 # their C++ helpers (QML singletons DatesHelper, TextHelper, DiffHelper, KeyboardInsets,
@@ -120,7 +127,8 @@ set(BRULION_UI_SOURCES
 set_source_files_properties(qml/theme/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The generated QML type registration includes the helper headers by file name.
 target_include_directories(brulion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui)
-target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch brulion_ui_scroll brulion_ui_network brulion_ui_fonts)
+target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch brulion_ui_scroll brulion_ui_network brulion_ui_fonts
+    brulion_ui_files)
 # Lucide icons (assets/icons, ISC licence) as :/icons/<name>.svg, used by BIcon; the logo as
 # :/images/logo.svg.
 file(GLOB _brulion_icons CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/icons/*.svg)
@@ -140,6 +148,28 @@ file(GLOB_RECURSE _brulion_file_selectors LIST_DIRECTORIES true
 list(FILTER _brulion_file_selectors INCLUDE REGEX "/\\+[^/]*$")
 if(_brulion_file_selectors)
     message(FATAL_ERROR "QML file selectors are not used (src/app/main.cpp): ${_brulion_file_selectors}")
+endif()
+
+# No QML imports QtQuick.Dialogs or the run-time style selector QtQuick.Controls: the deploy tools
+# (androiddeployqt, windeployqt, linuxdeploy, the browser build's static plugin list) follow every
+# import qmlimportscanner reports — QtQuick.Controls' optional imports of all five other styles,
+# QtQuick.Dialogs' fallback dialog per style —, about 15 MB of an APK (docs/PERFORMANCE.md L9).
+# Pickers: FilePicker (src/app/ui/filepicker.h); controls: QtQuick.Templates as T or
+# QtQuick.Controls.Basic (main.cpp also selects Basic).
+file(GLOB_RECURSE _brulion_qml_sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/qml/*.qml)
+set(_brulion_bad_qml_imports "")
+foreach(_qml IN LISTS _brulion_qml_sources)
+    file(STRINGS ${_qml} _bad REGEX "^[ \t]*import[ \t]+QtQuick\\.(Dialogs|Controls)([ \t]+[0-9.]+)?([ \t]+as[ \t]+[A-Za-z_]+)?[ \t]*;?[ \t]*$")
+    if(_bad)
+        file(RELATIVE_PATH _rel ${CMAKE_CURRENT_SOURCE_DIR} ${_qml})
+        list(APPEND _brulion_bad_qml_imports "${_rel}")
+    endif()
+endforeach()
+if(_brulion_bad_qml_imports)
+    list(JOIN _brulion_bad_qml_imports ", " _bad_list)
+    message(FATAL_ERROR "QML must not import QtQuick.Dialogs or QtQuick.Controls (the run-time style "
+        "selection deploys every style: docs/PERFORMANCE.md L9); use FilePicker and QtQuick.Controls.Basic "
+        "or QtQuick.Templates as T: ${_bad_list}")
 endif()
 
 qt_add_qml_module(brulion

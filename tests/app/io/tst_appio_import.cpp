@@ -115,7 +115,7 @@ public:
             nodes[parentUri].children.append(uri);
         return uri;
     }
-    /// A picked single document (FileDialog), not in any tree.
+    /// A picked single document (FilePicker.OpenFiles), not in any tree.
     void addDocument(const QString &uri, const QString &name, const QByteArray &data)
     {
         nodes.insert(uri, Node{name, false, data, {}, false, false, false});
@@ -178,7 +178,7 @@ const QString kTree = u"content://com.android.externalstorage.documents/tree/pri
 const QString kTreeRoot =
         u"content://com.android.externalstorage.documents/tree/primary%3ADownload%2FSejf/document/primary%3ADownload%2FSejf"_s;
 
-/// An Obsidian vault picked as a folder (FolderDialog → a document tree): notes with Polish
+/// An Obsidian vault picked as a folder (FilePicker.OpenFolder → a document tree): notes with Polish
 /// names, a picture, the vault's settings, a .git folder (skipped) and a Google Docs file that
 /// exists only online (skipped with a warning).
 std::shared_ptr<FakeDocuments> obsidianTree()
@@ -399,6 +399,48 @@ private Q_SLOTS:
         QVERIFY(progress.size() >= 3); // chunks of one file
         QVERIFY(brulion::io::detectImporter(files));
         QCOMPARE(brulion::io::detectImporter(files)->id(), u"obsidian"_s);
+    }
+
+    // The source name and the "too large" warning are shared with the browser's pick
+    // (ImportController::pickInBrowser): the texts the gatherer produces itself.
+    void gathererTexts_data()
+    {
+        QTest::addColumn<int>("count");
+        QTest::addColumn<QString>("single");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("one") << 1 << u"Zażółć gęślą jaźń.md"_s << u"Zażółć gęślą jaźń.md"_s;
+        QTest::newRow("one, empty name") << 1 << QString() << QString();
+        QTest::newRow("two") << 2 << u"a.md"_s << u"2 file(s)"_s;
+        QTest::newRow("five") << 5 << u"a.md"_s << u"5 file(s)"_s;
+        QTest::newRow("none") << 0 << QString() << u"0 file(s)"_s;
+    }
+    void gathererTexts()
+    {
+        QFETCH(int, count);
+        QFETCH(QString, single);
+        QFETCH(QString, expected);
+        QCOMPARE(brulion::ioviews::FileGatherer::sourceNameFor(count, single), expected);
+    }
+    void gathererTooLargeWarning()
+    {
+        const QString dir = m_tmp.filePath(u"Duże pliki"_s);
+        writeRaw(dir + u"/duży.zip"_s, QByteArray(3000, 'x'));
+        writeRaw(dir + u"/mały.md"_s, "- ćma\n");
+        brulion::ioviews::FileGatherer g;
+        brulion::ioviews::GatherLimits limits;
+        limits.maxFileBytes = 2000;
+        g.setLimits(limits);
+        QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
+        g.start({ QUrl::fromLocalFile(dir + u"/duży.zip"_s), QUrl::fromLocalFile(dir + u"/mały.md"_s) });
+        QVERIFY(finished.wait(5000));
+        QCOMPARE(finished.first().at(1).toStringList(),
+                 QStringList{ brulion::ioviews::FileGatherer::tooLargeWarning(u"duży.zip"_s, 3000) });
+        QCOMPARE(finished.first().at(2).toString(), brulion::ioviews::FileGatherer::sourceNameFor(2, u"duży.zip"_s));
+        QCOMPARE(finished.first().at(2).toString(), u"2 file(s)"_s);
+        const QString warning = brulion::ioviews::FileGatherer::tooLargeWarning(u"duży.zip"_s, 600LL * 1024 * 1024);
+        QVERIFY2(warning.startsWith(u"“duży.zip” ("_s) && warning.endsWith(u") is too large and was skipped."_s),
+                 qPrintable(warning));
+        QVERIFY(warning.contains(u"600"_s));
     }
 
     void gatherSkipsLinksOutsideAndSpecialFiles()
@@ -803,7 +845,7 @@ private Q_SLOTS:
 
     void importFolderPickedOnAndroid()
     {
-        // FolderDialog on the phone → a tree URI → preview → import, through the controller.
+        // FilePicker.OpenFolder on the phone → a tree URI → preview → import, through the controller.
         QString root;
         auto ws = open({}, &root);
         auto docs = obsidianTree();
@@ -860,7 +902,7 @@ private Q_SLOTS:
 
     void importSeveralLocalFilesAndPaths()
     {
-        // Desktop FileDialog (file:// URLs, several at once) and the typed path field.
+        // Desktop FilePicker (file:// URLs, several at once) and the typed path field.
         const QString dir = m_tmp.filePath(u"pobrane"_s);
         writeRaw(dir + u"/Przepisy.md"_s, "# Przepisy\n\n- [[Żurek]]\n");
         writeRaw(dir + u"/Żurek.md"_s, "- zakwas, kiełbasa\n");

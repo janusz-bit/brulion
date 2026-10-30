@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtCore
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import Brulion
 
@@ -91,10 +90,12 @@ BDialog {
         }
     }
 
-    FileDialog {
+    FilePicker {
         id: saveDialog
-        fileMode: FileDialog.SaveFile
+        objectName: "pageExportSaveDialog"
+        fileMode: FilePicker.SaveFile
         title: qsTr("Save the page as")
+        dark: Theme.dark
         currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
         selectedFile: currentFolder + "/" + dialog.tools.exportFileName(dialog.path, dialog.format)
         nameFilters: dialog.format === "html" ? [qsTr("HTML documents (*.html)")] : [qsTr("Markdown files (*.md)")]

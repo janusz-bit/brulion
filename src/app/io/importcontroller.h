@@ -141,16 +141,17 @@ public:
     QString errorText() const { return m_errorText; }
     QStringList readWarnings() const { return m_readWarnings; }
 
-    /// Read the picked files (QML FileDialog.selectedFiles; local or content:// URLs).
+    /// Read the picked files (QML FilePicker.selectedFiles; local or content:// URLs).
     Q_INVOKABLE void addUrls(const QList<QUrl> &urls);
-    /// Read a picked folder (QML FolderDialog.selectedFolder) recursively.
+    /// Read a picked folder (QML FilePicker.selectedFolder) recursively.
     Q_INVOKABLE void addFolder(const QUrl &url);
     /// Typed paths or URLs (route parameter, the "path on this device" field, drag and drop,
     /// tests): local files or folders ("/storage/emulated/0/Download/Obsidian"), file:// or
     /// content:// URLs.
     Q_INVOKABLE void addPaths(const QStringList &paths);
-    /// Browser (WebAssembly): the browser's file picker (QFileDialog::getOpenFileContent).
-    /// Elsewhere: nothing (use the QML dialogs).
+    /// Browser (WebAssembly): the browser's file picker, several files at once
+    /// (platform/wasm/wasmfiles.h; files above GatherLimits::maxFileBytes are skipped with a
+    /// warning). Elsewhere: nothing (QML uses FilePicker).
     Q_INVOKABLE void pickInBrowser();
     /// Use these files as the input (tests, the browser picker). Analyses them.
     void setInput(const QList<io::InputFile> &files, const QString &sourceName, const QStringList &warnings = {});

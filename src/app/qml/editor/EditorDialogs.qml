@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Templates as T
-import QtQuick.Dialogs
 import Brulion
 
 // EditorDialogs — the dialogs the block editor opens (all asynchronous, never exec()):
@@ -49,7 +48,7 @@ Item {
     property var dateDialog: null
     property var recurrenceDialog: null
     property var templateDialog: null
-    property FileDialog imageDialog: null
+    property FilePicker imageDialog: null
     property var webImageDialog: null
     function reminderPopup(): BReminderDialog {
         if (!reminderDialog)
@@ -71,9 +70,9 @@ Item {
             templateDialog = templateComponent.createObject(root)
         return templateDialog
     }
-    function imagePicker(): FileDialog {
+    function imagePicker(): FilePicker {
         if (!imageDialog)
-            imageDialog = imageComponent.createObject(root) as FileDialog
+            imageDialog = imageComponent.createObject(root) as FilePicker
         return imageDialog
     }
 
@@ -308,9 +307,10 @@ Item {
 
     Component {
         id: imageComponent
-        FileDialog {
+        FilePicker {
             title: qsTr("Insert a picture")
-            fileMode: FileDialog.OpenFiles
+            fileMode: FilePicker.OpenFiles
+            dark: Theme.dark
             nameFilters: root.controller ? root.controller.imageNameFilters : []
             onAccepted: {
                 const r = root.blockRow()

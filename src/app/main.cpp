@@ -102,6 +102,14 @@ int main(int argc, char *argv[])
     const QByteArray launchToken = qgetenv("XDG_ACTIVATION_TOKEN");
     const QByteArray startupId = qgetenv("DESKTOP_STARTUP_ID");
 #endif
+#if defined(BRULION_DESKTOP_INTEGRATION) && defined(Q_OS_LINUX)
+    // The AppImage: file pickers through xdg-desktop-portal — the desktop's own dialog on GNOME,
+    // KDE, Hyprland or Sway with a portal backend (FilePicker, src/app/ui/filepicker.h). Without a
+    // running portal the theme offers no dialog and FilePicker shows Qt's widget dialog. The
+    // user's own QT_QPA_PLATFORMTHEME wins; the Nix package keeps Qt's choice (docs/NIXOS.md).
+    if (qEnvironmentVariableIsSet("APPIMAGE") && !qEnvironmentVariableIsSet("QT_QPA_PLATFORMTHEME"))
+        qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
+#endif
 #ifdef BRULION_DESKTOP_INTEGRATION
     QApplication app(argc, argv);
 #else

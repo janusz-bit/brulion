@@ -24,7 +24,7 @@
 #include <utility>
 
 #ifdef Q_OS_WASM
-#include <QFileDialog>
+#include "wasm/wasmfiles.h"
 #endif
 #ifdef Q_OS_ANDROID
 #include "android/androidbridge.h"
@@ -718,7 +718,7 @@ bool ExportController::saveInBrowser()
     if (m_result.isEmpty())
         return false;
     for (const io::ExportedFile &f : std::as_const(m_result))
-        QFileDialog::saveFileContent(f.data, f.name);
+        platform::wasm::saveFile(f.data, f.name);
     m_savedTo = m_result.first().name;
     setState(u"saved"_s);
     Q_EMIT saved(tr("“%1” is being downloaded.").arg(m_result.first().name));

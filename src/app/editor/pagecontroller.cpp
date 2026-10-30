@@ -42,7 +42,7 @@
 #include <QUrl>
 
 #ifdef Q_OS_WASM
-#include <QFileDialog>
+#include "wasm/wasmfiles.h"
 #endif
 
 #include <algorithm>
@@ -3817,19 +3817,37 @@ QVariantMap PageController::pasteImage(int row, int from, int to)
 bool PageController::pickImageInBrowser(int row, int from, int to)
 {
 #ifdef Q_OS_WASM
+    // Several pictures at once, as insertFiles() on the desktop; the same size limit, checked
+    // before a picture is read.
     const int handle = trackBlock(row);
     const QPointer<PageController> self(this);
-    const QString filter = imageNameFilters().join(u";;"_s);
-    QFileDialog::getOpenFileContent(filter, [self, handle, from, to](const QString &fileName, const QByteArray &content) {
-        if (!self)
-            return;
-        const int current = self->trackedRow(handle);
-        self->untrack(handle);
-        if (fileName.isEmpty())
-            return; // cancelled
-        self->insertAttachment(current, current >= 0 ? from : -1, current >= 0 ? to : -1, QFileInfo(fileName).fileName(),
-                               content);
-    });
+    platform::wasm::openFiles(
+            imageNameFilters(), true, MaxAttachmentBytes,
+            [self, handle, from, to](const QList<platform::PickedFile> &picked) {
+                if (!self)
+                    return;
+                const int current = self->trackedRow(handle);
+                self->untrack(handle);
+                if (picked.isEmpty())
+                    return; // cancelled
+                QStringList stored;
+                for (const platform::PickedFile &file : picked) {
+                    QString name = QFileInfo(file.name).fileName().trimmed();
+                    if (name.isEmpty())
+                        name = tr("Attachment");
+                    // An empty or too large file is refused as on the desktop (storeFiles()).
+                    const QString path = self->m_host && !file.tooLarge && !file.data.isEmpty()
+                        ? self->m_host->saveAttachment(name, file.data)
+                        : QString();
+                    if (path.isEmpty()) {
+                        Q_EMIT self->attachmentFailed(name);
+                        continue;
+                    }
+                    stored.append(path);
+                }
+                if (!stored.isEmpty())
+                    self->insertEmbeds(current, current >= 0 ? from : -1, current >= 0 ? to : -1, stored);
+            });
     return true;
 #else
     Q_UNUSED(row);

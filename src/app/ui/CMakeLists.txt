@@ -35,6 +35,29 @@ target_link_libraries(brulion_ui_touch PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
 qt_extract_metatypes(brulion_ui_touch)
 brulion_set_warnings(brulion_ui_touch)
 
+# brulion_ui_files — FilePicker (filepicker.h): the system's file picker for QML instead of
+# QtQuick.Dialogs (docs/PERFORMANCE.md L9) — the platform theme's dialog helper (a QPA header:
+# Qt6::GuiPrivate; Android's document picker, Windows' IFileDialog, GTK / KDE / XDG portal), Qt
+# Widgets' QFileDialog as the desktop fallback (desktop builds only: Android and the browser stay
+# without Qt Widgets). A static library so that tests/app/filepicker drives it with fake backends
+# without the app; registered as "FilePicker" by qmlforeign.h.
+set(QT_NO_PRIVATE_MODULE_WARNING ON)
+find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+qt_add_library(brulion_ui_files STATIC
+    filepicker.h filepicker_p.h filepicker.cpp
+)
+target_include_directories(brulion_ui_files PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_files
+    PUBLIC Qt6::Core Qt6::Gui
+    PRIVATE Qt6::GuiPrivate Qt6::Quick brulion_core_log)
+if(BRULION_DESKTOP)
+    find_package(Qt6 REQUIRED COMPONENTS Widgets)
+    target_link_libraries(brulion_ui_files PRIVATE Qt6::Widgets)
+    target_compile_definitions(brulion_ui_files PUBLIC BRULION_FILEPICKER_WIDGETS=1)
+endif()
+qt_extract_metatypes(brulion_ui_files)
+brulion_set_warnings(brulion_ui_files)
+
 # brulion_ui_scroll — RowScroll (rowscroll.h): the scroll bar of long lists whose rows differ in
 # height, from the rows at the view's edges instead of ListView's estimate of its content height.
 # Qt Quick's public API only; a static library so that tests/app/scroll drives it with a ListView
@@ -75,7 +98,8 @@ if(NOT ANDROID)
 endif()
 brulion_set_warnings(brulion_ui_fonts)
 
-# Qt's own Polish texts (standard dialog buttons, QtQuick.Dialogs, QFileDialog — QtTranslations):
+# Qt's own Polish texts (standard dialog buttons, the fallback QFileDialog of FilePicker —
+# QtTranslations):
 # qtbase_pl.qm and qtdeclarative_pl.qm from Qt's translations folder, bundled as resources
 # ":/i18n/qt/…" so Android and the browser have them too. The folder: BRULION_QT_TRANSLATIONS_DIR
 # (set by nix/package.nix), else "translations/" of a prefix on the CMake search path (nix: the
