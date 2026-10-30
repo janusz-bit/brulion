@@ -2,13 +2,13 @@
 // through an EditorHost, owns the BlockListModel, executes every editing command on the
 // BlockDocument (each command is one undo step storing only the changed blocks, a
 // BlockDocument::Delta; undo / redo apply it as an operation: rows, folds and the editor of
-// unchanged and changed blocks stay; typing is coalesced per block / table cell), saves debounced (400 ms) and immediately on focus loss /
-// app suspend / quit / path change / destruction (an unresolved conflict goes to a conflict copy
-// instead, never over the other version), and handles changes made outside the editor (reload
-// when clean, three-way merge when dirty, a conflict that follows later changes; renames via
-// followRename()). Saves are compare-and-swap (EditorHost::writeIfUnchanged): a change another
-// program wrote a moment before a save — an agent's brulion-cli, Syncthing — is merged first,
-// never overwritten.
+// unchanged and changed blocks stay; typing is coalesced per block / table cell), saves
+// debounced (400 ms) and immediately on focus loss / app suspend / quit / path change /
+// destruction (an unresolved conflict goes to a conflict copy instead, never over the other
+// version), and handles changes made outside the editor (reload when clean, three-way merge when
+// dirty, a conflict that follows later changes; renames via followRename()). Saves are
+// compare-and-swap (EditorHost::writeIfUnchanged): a change another program wrote a moment before
+// a save — an agent's brulion-cli, Syncthing — is merged first, never overwritten.
 //
 // Rows are BlockListModel rows (= document block indices). Cursor positions given to and
 // returned by the controller are positions in the row's *edit text* (BlockListModel role
@@ -1062,7 +1062,7 @@ private:
     bool m_typingOpen = false;
     quint64 m_typingUid = 0;
     QPoint m_typingCell{-1, -2}; ///< table cell (column, table row) of a table typing session
-    bool m_undoing = false; ///< applyStep() runs (undo/redo): moving the caret changes no text
+    bool m_undoing = false;      ///< applyStep() runs (undo/redo): moving the caret changes no text
     /// > 0: a selection command runs — updateSelection() waits for its end (no empty selection in
     /// between: the touch selection mode would end).
     int m_selectionHold = 0;

@@ -5468,8 +5468,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             return v[v.size() / 2];
         };
         const qint64 enter = median(splits);
-        qInfo("5000 blocks: Enter %.2f ms, undo %.2f ms, redo %.2f ms (medians of 5)", enter / 1e6,
-              median(undos) / 1e6, median(redos) / 1e6);
+        qInfo("5000 blocks: Enter %.2f ms, undo %.2f ms, redo %.2f ms (medians of 5)", enter / 1e6, median(undos) / 1e6,
+              median(redos) / 1e6);
         QVERIFY2(median(undos) <= 3 * enter + 2'000'000, "undo costs much more than the command");
         QVERIFY2(median(redos) <= 3 * enter + 2'000'000, "redo costs much more than the command");
         QCOMPARE(reset.size(), 0);

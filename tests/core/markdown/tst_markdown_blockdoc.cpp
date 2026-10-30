@@ -138,8 +138,8 @@ QString difference(const BlockDocument &a, const BlockDocument &b, bool edits = 
     for (int i = 0; i < a.count(); ++i) {
         const BlockEntry &x = a.at(i);
         const BlockEntry &y = b.at(i);
-        if ((uids && x.uid != y.uid) || x.kind != y.kind || x.prefix != y.prefix || x.body != y.body || x.depth != y.depth
-            || x.parent != y.parent || x.headingLevel != y.headingLevel || x.lang != y.lang
+        if ((uids && x.uid != y.uid) || x.kind != y.kind || x.prefix != y.prefix || x.body != y.body
+            || x.depth != y.depth || x.parent != y.parent || x.headingLevel != y.headingLevel || x.lang != y.lang
             || x.taskStatus != y.taskStatus || x.blockId != y.blockId || x.trailing != y.trailing || x.line != y.line
             || a.hasChildren(i) != b.hasChildren(i) || a.blockSource(i) != b.blockSource(i))
             return u"block %1: "_s.arg(i) + entries(a).value(i) + u" | "_s + entries(b).value(i);
@@ -225,12 +225,15 @@ QList<std::pair<QString, std::function<EditResult(BlockDocument &, int)>>> delta
     const auto last = [](const BlockDocument &d, int i) { return std::min(i + 1, d.count() - 1); };
     return {
             {u"setBody"_s, [](BlockDocument &d, int i) { return d.setBody(i, u"Zażółć gęślą jaźń 😀\nnowa linia"_s); }},
-            {u"typed"_s, [](BlockDocument &d, int i) { return i < 0 ? EditResult() : d.setBody(i, d.at(i).body + u"ż"_s); }},
+            {u"typed"_s,
+             [](BlockDocument &d, int i) { return i < 0 ? EditResult() : d.setBody(i, d.at(i).body + u"ż"_s); }},
             {u"rule"_s, [](BlockDocument &d, int i) { return d.setBody(i, u"---"_s); }},
             {u"formula"_s, [](BlockDocument &d, int i) { return d.setBody(i, u"$$"_s); }},
             {u"split at 0"_s, [](BlockDocument &d, int i) { return d.split(i, 0); }},
-            {u"split middle"_s, [](BlockDocument &d, int i) { return i < 0 ? EditResult() : d.split(i, int(d.at(i).body.size() / 2)); }},
-            {u"split at end"_s, [](BlockDocument &d, int i) { return i < 0 ? EditResult() : d.split(i, int(d.at(i).body.size())); }},
+            {u"split middle"_s,
+             [](BlockDocument &d, int i) { return i < 0 ? EditResult() : d.split(i, int(d.at(i).body.size() / 2)); }},
+            {u"split at end"_s,
+             [](BlockDocument &d, int i) { return i < 0 ? EditResult() : d.split(i, int(d.at(i).body.size())); }},
             {u"merge"_s, [](BlockDocument &d, int i) { return d.mergeWithPrevious(i); }},
             {u"remove"_s, [](BlockDocument &d, int i) { return d.remove(i, true); }},
             {u"remove one"_s, [](BlockDocument &d, int i) { return d.remove(i, false); }},
@@ -248,7 +251,8 @@ QList<std::pair<QString, std::function<EditResult(BlockDocument &, int)>>> delta
             {u"outdent range"_s, [last](BlockDocument &d, int i) { return d.outdentRange(i, last(d, i)); }},
             {u"range up"_s, [last](BlockDocument &d, int i) { return d.moveRangeUp(i, last(d, i)); }},
             {u"range down"_s, [last](BlockDocument &d, int i) { return d.moveRangeDown(i, last(d, i)); }},
-            {u"insert item"_s, [](BlockDocument &d, int i) { return d.insertAfter(i, u"wstawiony ą"_s, i < 0 ? 0 : d.at(i).depth + 1); }},
+            {u"insert item"_s,
+             [](BlockDocument &d, int i) { return d.insertAfter(i, u"wstawiony ą"_s, i < 0 ? 0 : d.at(i).depth + 1); }},
             {u"insert paragraph"_s, [](BlockDocument &d, int i) { return d.insertAfter(i, u"akapit ę"_s, 0, false); }},
             {u"insert at start"_s, [](BlockDocument &d, int) { return d.insertAfter(-1, u"pierwszy ł"_s, 0); }},
     };
@@ -717,8 +721,7 @@ private Q_SLOTS:
         QTest::addColumn<QString>("body");
         QTest::addColumn<QString>("edited");
         // Normalisations of an edit are undone with it (the version comes back as it was loaded).
-        QTest::newRow("leading rule") << u"---\nAkapit\n\nDrugi\n"_s << 2 << u"---"_s
-                                      << u"\n---\nAkapit\n\n---\n"_s;
+        QTest::newRow("leading rule") << u"---\nAkapit\n\nDrugi\n"_s << 2 << u"---"_s << u"\n---\nAkapit\n\n---\n"_s;
         QTest::newRow("open formula") << u"- Wzór:\n  $$\n  a\n  $$\n- b\n- c\n  $$\n  d\n  $$\n"_s << 0
                                       << u"Wzór ąę:\n$$\na"_s
                                       << u"- Wzór ąę:\n  $$\n  a\n\n- b\n- c\n  $$\n  d\n  $$\n"_s;

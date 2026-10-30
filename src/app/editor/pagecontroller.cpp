@@ -69,8 +69,11 @@ public:
     /// Made right after the edit: `delta` leads from the version before it to the document.
     EditCommand(PageController *controller, BlockDocument::Delta delta, PageController::Focus focusBefore,
                 PageController::Focus focusAfter, quint64 typingUid)
-        : m_controller(controller), m_delta(std::move(delta)), m_focusBefore(std::move(focusBefore)),
-          m_focusAfter(std::move(focusAfter)), m_typingUid(typingUid)
+        : m_controller(controller)
+        , m_delta(std::move(delta))
+        , m_focusBefore(std::move(focusBefore))
+        , m_focusAfter(std::move(focusAfter))
+        , m_typingUid(typingUid)
     {
     }
 
@@ -105,7 +108,8 @@ public:
     /// one): false when the two do not chain.
     bool amendResult(const BlockDocument::Delta &amendment)
     {
-        const std::optional<BlockDocument::Delta> amended = m_controller->m_model->document().composed(m_delta, amendment);
+        const std::optional<BlockDocument::Delta> amended =
+                m_controller->m_model->document().composed(m_delta, amendment);
         if (!amended)
             return false;
         m_delta = *amended;

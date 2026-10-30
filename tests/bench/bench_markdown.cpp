@@ -167,9 +167,9 @@ private Q_SLOTS:
         QTest::addColumn<int>("blocks");
         QTest::addColumn<QString>("op");
         for (int n : {500, 5000}) {
-            for (const QString &op : {u"setBody"_s, u"split+merge"_s, u"insertAfter+remove"_s, u"indent+outdent"_s,
-                                      u"moveDown+moveUp"_s, u"toggleTask x2"_s, u"keystroke"_s, u"undo+redo"_s,
-                                      u"version+diff"_s, u"re-read"_s})
+            for (const QString &op :
+                 {u"setBody"_s, u"split+merge"_s, u"insertAfter+remove"_s, u"indent+outdent"_s, u"moveDown+moveUp"_s,
+                  u"toggleTask x2"_s, u"keystroke"_s, u"undo+redo"_s, u"version+diff"_s, u"re-read"_s})
                 QTest::newRow(qPrintable(u"%1 blocks %2"_s.arg(n).arg(op))) << n << op;
         }
     }
