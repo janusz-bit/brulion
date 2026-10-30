@@ -10,3 +10,6 @@ brulion_add_test(tst_pickedfiles SOURCES tst_pickedfiles.cpp LIBS brulion_platfo
 # on CI and Windows; none in the browser: skipped): a PDF written with QPdfWriter read and drawn,
 # broken and missing files refused.
 brulion_add_test(tst_pdfpages SOURCES tst_pdfpages.cpp LIBS brulion_platform)
+# The file an Android document URI names (documentpaths.h: the phone's storage, a memory card,
+# Downloads' raw paths; anything else none) — pure, so tested on every platform.
+brulion_add_test(tst_documentpaths SOURCES tst_documentpaths.cpp LIBS brulion_platform)

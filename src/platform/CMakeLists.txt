@@ -4,13 +4,15 @@
 #                Windows AppUserModelID of the toasts; pure helpers everywhere), pickedfiles (the
 #                bookkeeping of the browser's file picker, wasm/wasmfiles.h; pure, tested
 #                everywhere), pdfpages (PDF pages as pictures: a drawing's backdrop — one backend per
-#                build, below). Tests: tests/platform.
+#                build, below), documentpaths (the file an Android document URI names: a picked file
+#                of the notebook used where it is; pure, tested everywhere). Tests: tests/platform.
 qt_add_library(brulion_platform STATIC
     platform.h platform.cpp
     autostart.h autostart.cpp
     appidentity.h appidentity.cpp
     pickedfiles.h pickedfiles.cpp
     pdfpages.h pdfpages.cpp
+    documentpaths.h documentpaths.cpp
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)
