@@ -575,7 +575,8 @@ every ```query block of the open pages, the Android widgets. Now:
 * **The index logs and patches.** Each change records the notes it touched — the note (both paths
   of a rename), notes whose links now resolve elsewhere (relink), notes whose `((id))` show one of
   its block ids — and whether names changed (a note or attachment added, removed or renamed, aliases):
-  `changesSince(version)`, a log of 1024 changes / 16 384 paths, incomplete after `clear()`, a
+  `changesSince(version)`, a log of 1024 changes / 16 384 paths (each record's paths in a compact
+  set: ~60 bytes for the usual single note, not a 1.4 KB hash span), incomplete after `clear()`, a
   re-parsing `setConfig()` or an overflow; `serial()` tells indexes apart. The lists built once are
   patched with the changed note instead of dropped: sorted entries (by path and by relevance),
   `paths()`, `tasks()`, `reminders()` (the note's segment), `journals()`, `notesWithQueries()`; tags,
@@ -589,13 +590,18 @@ every ```query block of the open pages, the Android widgets. Now:
   without history: `QueryCache` (a query's matches in result order — position and sort keys, no
   `Task` copies; the changed notes evaluated, sorted and merged in; `remind:` filters always full),
   `CalendarCache` (each note's task and reminder items of the range), `NotificationCache` (each
-  note's occurrences of a window of days; requests reaching outside it are computed directly).
+  note's occurrences of a window of days; requests reaching outside it are computed directly; the
+  local time zone is part of its key — the kept instants are computed again after a change, so
+  reminders keep their wall-clock times).
 * **The app keeps them**: `ReminderScheduler` (one `NotificationCache` of [today − 8 days,
   today + horizon + 1] for its refresh, the in-app firing checks and the missed-list pruning),
-  `TaskListModel` (a `QueryCache`; the changed notes' tasks merged into its sorted list, page titles
-  compared by ranks — a merge bringing a new title rebuilds), `CalendarModel` (a `CalendarCache`;
+  `TaskListModel` (a `QueryCache`; the changed notes' tasks — taken in one pass over the cache's
+  matches, however many notes one change names — merged into its sorted list, page titles compared
+  by ranks — a merge bringing a new title rebuilds), `CalendarModel` (a `CalendarCache`;
   the overdue list from an `OverdueCache`: the old scan of open tasks due before today, per note),
-  `Workspace` (the last 4 calendar ranges and 8 queries: the side panel's month, query blocks),
+  `Workspace` (the last 4 calendar ranges and 8 queries: the side panel's month, query blocks; a
+  query matching more than 5000 items is not kept — its cache would hold every match, ~0.2 KB each,
+  for the session),
   `WidgetPublisher` (the snapshot's caches kept across publishes).
 * **Full syncs stay as cheap as the old full computation.** A first view, another range or the
   date picker's marks compute everything: a `NoteCache` then fills its values from the index's own
@@ -664,7 +670,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 15 / 13 ms (L5; base in the same session 15 / 32 ms) | ✅ Enter 38 ms; undo 214 ms before L5, not measured since (L5b) | – |
 | autosave stall | < 50 ms desktop, < 100 ms phone | ✅ small page 41 ms; ❌ 500 KB page 88 ms | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
 | open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |
-| Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s (L3, L10) | – |
+| Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s before L3, not measured since (L3b, L10) | – |
 | Graph | settled < 1 s | ✅ 0.77 s | ❌ Pi 2.6 s (was 44 s; L16); emulator 1.5 s | – |
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ✅ 6.0 ms (L3; base in the same session 112 ms) | ❌ Pi 0.95 s before L3, not measured since (L3b) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
