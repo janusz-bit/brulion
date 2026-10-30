@@ -208,17 +208,19 @@ public:
     /// parse of unchanged blocks is kept, changed and restored blocks are parsed again. No
     /// normalisation runs (a blank line before a leading `---` rule, after an open `$$`, line
     /// ends): the version comes back as it was. Row changes like every operation (a block in both
-    /// versions whose text differs: Changed); no focus. When the document is not that version
+    /// versions whose text differs: Changed; only the edges changed: row 0 Changed, nothing on a
+    /// document with no blocks); no focus. When the document is not that version
     /// (block count, edges, the run's uids or text differ) nothing changes, the result is empty and
     /// `*ok` (optional) is false.
     EditResult revert(const Delta &delta, bool *ok = nullptr);
     EditResult reapply(const Delta &delta, bool *ok = nullptr);
     /// `first` (A -> B) followed by `second` (B -> C) as one delta A -> C, where this document is
     /// C; it costs the blocks of both runs and those between them. nullopt when they do not chain
-    /// (counts, edges, the runs' blocks), when more than MaxComposeGap untouched blocks lie between
-    /// the runs, or — `bounded`: typing merges, which compose at every keystroke — when the
-    /// joined run would span more than MaxComposeRun blocks (an edit that also changed blocks far
-    /// away, e.g. renumbered a list). The caller then keeps two steps.
+    /// (counts, edges, the runs' blocks), or — `bounded`: typing merges, which compose at every
+    /// keystroke — when more than MaxComposeGap untouched blocks lie between the runs or the joined
+    /// run would span more than MaxComposeRun blocks (an edit that also changed blocks far away,
+    /// e.g. renumbered a list). The caller then keeps two steps. Unbounded (a step amended once,
+    /// PageController::dropEditorSpace()) runs any distance apart join.
     std::optional<Delta> composed(const Delta &first, const Delta &second, bool bounded = false) const;
     static constexpr int MaxComposeGap = 64;
     static constexpr int MaxComposeRun = 256;

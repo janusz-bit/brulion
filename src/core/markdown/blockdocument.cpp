@@ -722,7 +722,8 @@ EditResult BlockDocument::applyDelta(const Delta &delta, int from, int to, bool 
     recompute();
     EditResult r = rowChanges(before, -1, -1);
     // Only the edges changed (a BOM, the blank lines before the first block): the text did, which
-    // a caller learns from changed rows.
+    // a caller learns from changed rows. A document with no blocks has no row to report it with
+    // (BlockListModel::apply() makes the text of an empty page again).
     if (r.changes.isEmpty() && !(d.side[from].edges == d.side[to].edges) && count() > 0)
         r.changes.append({BlockChange::Type::Changed, 0, 1, -1});
     return r;
@@ -742,7 +743,7 @@ std::optional<BlockDocument::Delta> BlockDocument::composed(const Delta &first, 
     // Both runs in B: one window of B over them (with the untouched blocks between them).
     const int end1 = a.first + int(a.side[1].run.size());
     const int end2 = b.first + int(b.side[0].run.size());
-    if (std::max(a.first, b.first) - std::min(end1, end2) > MaxComposeGap)
+    if (bounded && std::max(a.first, b.first) - std::min(end1, end2) > MaxComposeGap)
         return std::nullopt;
     const int lo = std::min(a.first, b.first);
     const int hiB = std::max(end1, end2);

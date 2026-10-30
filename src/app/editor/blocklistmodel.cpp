@@ -555,8 +555,14 @@ markdown::EditResult BlockListModel::apply(const std::function<markdown::EditRes
     if (m_hasCalcConsumers && !m_calcFlagsValid)
         analyseCalc();
     markdown::EditResult r = op(m_doc);
-    if (!r.changed())
+    if (!r.changed()) {
+        // No row changed, yet a page without blocks may have another text: undo / redo of a step
+        // that changed only its edges (a BOM, blank lines) — there is no row to report it. Its
+        // text costs nothing to make again.
+        if (m_doc.isEmpty())
+            m_textValid = false;
         return r;
+    }
     m_textValid = false;
     m_pageCalc.reset();
     rebuildIndex();

@@ -780,17 +780,32 @@ private Q_SLOTS:
         copy.revert(*typing, &ok);
         QVERIFY(ok);
         QCOMPARE(copy.toString(), content);
-        // Edits far apart (more than MaxComposeGap untouched blocks between them) stay two steps;
-        // near ones join.
+        // Typing merges (bounded): edits far apart (more than MaxComposeGap untouched blocks
+        // between them) stay two steps; near ones join. Unbounded (a step amended once) they join
+        // at any distance and undo and redo as one.
         v = doc.version();
         doc.setBody(20, u"blisko"_s);
         const BlockDocument::Delta near = doc.diffFrom(v);
-        QVERIFY(doc.composed(*typing, near));
+        QVERIFY(doc.composed(*typing, near, true));
+        const QString beforeFar = doc.toString();
         v = doc.version();
         doc.setBody(20 + BlockDocument::MaxComposeGap + 2, u"daleko"_s);
-        QVERIFY(!doc.composed(near, doc.diffFrom(v)));
+        const BlockDocument::Delta distant = doc.diffFrom(v);
+        QVERIFY(!doc.composed(near, distant, true));
+        const std::optional<BlockDocument::Delta> amended = doc.composed(near, distant);
+        QVERIFY(amended);
+        const QString afterFar = doc.toString();
+        copy = doc;
+        copy.revert(*amended, &ok);
+        QVERIFY(ok);
+        QCOMPARE(copy.toString(), QString(beforeFar).replace(u"- blisko\n"_s, u"- wpis 20 źdźbło\n"_s));
+        copy.reapply(*amended, &ok);
+        QVERIFY(ok);
+        QCOMPARE(copy.toString(), afterFar);
+        QCOMPARE(uids(copy), uids(doc));
         // Deltas that do not chain: the same step twice.
         QVERIFY(!doc.composed(near, near));
+        QVERIFY(!doc.composed(near, near, true));
 
         // A step that changed blocks far apart, then typing: bounded (typing merges) the joined
         // run may not pass MaxComposeRun blocks; unbounded it joins and undoes as one.

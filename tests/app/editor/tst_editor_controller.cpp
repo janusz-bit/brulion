@@ -933,6 +933,84 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         verifyReload(f);
     }
 
+    void undoOfOnlyTheEdges_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("edited");
+        const QString bom(QChar(0xFEFF));
+        QTest::newRow("empty page, blank lines") << QString() << u"\n\n\n"_s;
+        QTest::newRow("blank lines cleared") << u"\n\n"_s << QString();
+        QTest::newRow("only a BOM, cleared") << bom << QString();
+        QTest::newRow("a BOM before blank lines") << u"\r\n\r\n"_s << bom + u"\r\n"_s;
+        QTest::newRow("blank lines before a block") << u"- żółw ąę\n"_s << u"\n\n- żółw ąę\n"_s;
+        QTest::newRow("a BOM before a block") << bom + u"Zażółć gęślą jaźń\r\n"_s << u"Zażółć gęślą jaźń\r\n"_s;
+    }
+
+    void undoOfOnlyTheEdges()
+    {
+        // A step that changed only the document's edges (a BOM, blank lines before the first
+        // block), also on a page with no blocks, where no row can tell of it: undo and redo
+        // change the text the page has and saves.
+        QFETCH(QString, content);
+        QFETCH(QString, edited);
+        Fixture f(content);
+        QCOMPARE(f.text(), content);
+        f.page.setSourceText(edited);
+        QCOMPARE(f.text(), edited);
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), edited);
+        for (int round = 0; round < 2; ++round) {
+            QVERIFY(f.page.canUndo());
+            f.page.undo();
+            QCOMPARE(f.text(), content);
+            QCOMPARE(f.page.sourceText(), content);
+            QVERIFY(f.page.save());
+            QCOMPARE(f.host.file(Page), content);
+            f.page.redo();
+            QCOMPARE(f.text(), edited);
+            QVERIFY(f.page.save());
+            QCOMPARE(f.host.file(Page), edited);
+        }
+    }
+
+    void editorSpaceJoinsAFarStep()
+    {
+        // The space the editor wrote after a completed tag goes as the caret leaves the block,
+        // within the last step also when that step changed a block far below (a task toggled
+        // while the block was edited): no step of its own that would only bring the space back.
+        QString content = u"- Kupić #zak\n"_s;
+        for (int i = 0; i < 2 * markdown::BlockDocument::MaxComposeGap; ++i)
+            content += u"- [ ] zadanie %1 ąę\n"_s.arg(i);
+        Fixture f(content);
+        f.page.startEditing(0, int(f.edit(0).size()));
+        f.page.applyCompletion(0, completionTriggerAt(f.edit(0), int(f.edit(0).size())).toMap(),
+                               {{u"insertText"_s, u"zakupy"_s}, {u"kind"_s, u"tag"_s}});
+        QVERIFY(f.text().startsWith(u"- Kupić #zakupy \n- [ ] zadanie 0 ąę\n"_s));
+        const QString completed = f.text();
+        const int far = f.count() - 2;
+        f.page.toggleTask(far);
+        QCOMPARE(f.page.editingRow(), 0);
+        QVERIFY(f.text().contains(u"- [x] zadanie %1 ąę"_s.arg(far - 1)));
+        const QString token = f.page.undoToken();
+        f.page.stopEditing();
+        QCOMPARE(f.page.undoToken(), token); // the last step, amended
+        const QString done = f.text();
+        QVERIFY(done.startsWith(u"- Kupić #zakupy\n"_s));
+        QVERIFY(done.contains(u"- [x] zadanie %1 ąę"_s.arg(far - 1)));
+        QCOMPARE(f.host.file(Page), done);
+        // One undo takes the toggle back (with the space, as the step before it left the block).
+        f.page.undo();
+        QCOMPARE(f.text(), completed);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QVERIFY(!f.page.canUndo());
+        f.page.redo();
+        QCOMPARE(f.text(), completed);
+        f.page.redo();
+        QCOMPARE(f.text(), done);
+        QVERIFY(!f.page.canRedo());
+    }
+
     void typingTaskMarkerBecomesCheckbox()
     {
         Fixture f(u"- zwykły\n"_s);
