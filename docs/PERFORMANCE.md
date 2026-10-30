@@ -751,6 +751,7 @@ Measured after the change (the feature's whole cost, not only the renderer):
 | APK arm64 release (`android.yml`, GitHub Actions, the same day) | 80 818 249 B | 81 195 081 B | +376 832 B (+0.47 %) |
 | … download (every entry deflated, `size-report.py`) | 26.33 MB | 26.43 MB | +0.10 MB |
 | … `libbrulion` / `classes.dex` | 31.26 MB / 493.19 KB | 31.60 MB / 496.63 KB | +0.34 MB / +3.4 KB (`PdfPages.kt`) |
+| `brulion.wasm` raw / gzip -9 (`wasm.yml`; no PDF renderer: the feature's code and QML only) | 42 069 890 / 13 551 537 B | 42 274 540 / 13 606 755 B | +204 650 B (+0.49 %) / +55 218 B |
 | Nix closure, aarch64 (`nix path-info -r` of the package's Qt inputs with and without poppler-qt6) | — | +25.99 MiB | poppler-qt6 6.46, poppler-data 12.38, nss 4.49, openjpeg 1.64, lcms2 0.51, nspr 0.50 MiB |
 
 **Saving a drawing with a backdrop.** The raster is in the file twice (the scene's `files` and the
