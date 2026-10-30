@@ -727,6 +727,56 @@ afresh + 5 ms (looking each changed note up among all matches took 275 vs 45 ms 
 sanitizers). The Raspberry Pi was not
 measured (no builds on it in this sweep): L3b in "Next steps"; it took 0.95 s before.
 
+### L16: the graph on a worker thread and the scene graph (2026-10-30)
+
+The graph view (N5) laid its graph out on the GUI thread — a step per 16 ms timer event, on slow
+devices time-boxed bursts of 10–25 ms during which input waited — and painted it with QPainter in
+a `QQuickPaintedItem`, rasterised on every frame of the moving layout while the GUI thread waited
+(throttled to a frame every 66–600 ms on slow devices). Now:
+
+* **The layout runs on a worker thread** (`GraphSimulation`: one `QThread` "brulion-graph" per open
+  graph, started with its first run). The GUI hands it a copy of the `ForceLayout` and keeps a
+  mirror of the newest positions — what it draws, hit-tests, fits and follows —, which the worker
+  publishes at most once per frame interval (16 ms); the newest frame replaces an unread one, so a
+  busy GUI thread gets the newest positions, not a backlog. Commands (pin and move the dragged node,
+  the drag's alpha target, reheat, pause while the view is hidden, cancel) apply before the
+  worker's next step; the dragged node follows the pointer at once in the mirror. Only value
+  copies cross threads (a run in, frames out; one mutex for the frame slot, one for the command
+  queue). `rebuild()` (`VaultIndex::graph()` and the filters) stays on the GUI thread.
+* **The browser** (single-threaded WebAssembly) runs the same worker on the GUI thread in slices of
+  ≤ 16.5 ms per 33 ms timer event (never a 0 ms timer, N13), at least one step per slice.
+* **Pacing and fast cooling instead of time-boxing.** A run unfolds over at least `minRunMs`
+  (1 s: several steps per frame for small graphs; one step per frame while a node is dragged, like
+  d3), a run that cannot keep up runs flat out. When the first three steps of a run cost more than
+  5 ms on average it cools down in ~100 steps instead of ~300 — decided at that fixed step, so the
+  layout stays deterministic: the tests compare the worker's final positions bit for bit with the
+  same `ForceLayout` steps taken by hand (threaded and inline, both coolings, a pause mid-run, a
+  GUI thread blocked for 300 ms). The decision no longer depends on painting.
+* **Reduced motion**: the worker computes the run and publishes only its final frame; a layout from
+  fresh positions shows a spinner (`GraphModel.settling`) instead of a spiral that jumps.
+* **Drawing through the scene graph.** `GraphItem` is a `QQuickItem` with its own nodes
+  (`GraphSceneNode`): edges, discs and rings as triangle meshes with a one-device-pixel fringe that
+  fades to transparent (antialiasing without custom shaders: `QSGVertexColorMaterial`, so no
+  shader tools in any toolchain; 16-bit indices in chunks of ≤ 65 535 vertices for GLES2), in world
+  units under a camera transform; labels as `QSGTextNode`s on rounded backgrounds in screen units,
+  their text layouts cached per node. Panning a settled graph only changes the camera's matrix
+  (and places the labels again); a moving layout, zooming, colours and the highlight rebuild the
+  meshes during the sync. No culling of discs and edges (every node goes to the GPU: ≤ 4000, 1200
+  on phones), so panning never rebuilds. Both renderers place labels with one rule
+  (`geometry::placeLabels`). With the software renderer (tests, screenshots, the Pi's offscreen
+  runs) the QPainter code paints into an image node — the cost of the `QQuickPaintedItem` before —
+  and keeps its throttling of slow frames of a moving layout (now: a paint over 16 ms).
+
+**Unit timings** (`tst_planning_graph` `bigGraphPerformance`, 2000 nodes / 7338 edges at fit zoom;
+the Raspberry Pi, Debug — the laptop was unreachable): one step 6.4–8.6 ms, building the whole
+graph's meshes 5.2–6.4 ms (93 764 vertices in 2 chunks) against 58–107 ms for one QPainter frame —
+a frame of the moving layout costs the GUI thread ~10–20× less, and a settled pan nothing but a
+matrix. Zoomed in to 3× (every disc with up to 64 segments, 274 550 vertices in 5 chunks) a frame
+with 33 new labels took 31–41 ms (`tst_planning_graph_sg`, the RHI null backend: the real scene
+graph without a GPU), Debug on the Pi.
+
+@@APP@@
+
 ### Budgets
 
 Desktop = the laptop above, phone = Pi 4 (floor) and the emulator (optimistic), web = headless

@@ -69,6 +69,8 @@ public:
 GraphItem::GraphItem(QQuickItem *parent) : QQuickItem(parent)
 {
     setFlag(ItemHasContents);
+    // The meshes hold every node, also those outside the view: keep them inside the item.
+    setClip(true);
     setAcceptedMouseButtons(Qt::LeftButton);
     setAcceptHoverEvents(true);
     setAcceptTouchEvents(true);

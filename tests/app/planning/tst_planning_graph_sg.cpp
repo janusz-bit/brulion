@@ -160,6 +160,7 @@ private Q_SLOTS:
         QCOMPARE(scene.window.rendererInterface()->graphicsApi(), rhiApi());
         GraphItem::SceneStats s = item->sceneStats();
         QVERIFY(!s.software);
+        QVERIFY(item->clip()); // the meshes hold nodes outside the view too
         QCOMPARE(s.meshBuilds, 1);
         QCOMPARE(s.chunks, 1);
         QVERIFY(s.vertices > 0);

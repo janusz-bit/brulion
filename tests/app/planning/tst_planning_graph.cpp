@@ -1318,7 +1318,7 @@ private Q_SLOTS:
         // Generous bounds (debug builds, shared CI machines); release builds are ~5x faster.
         QVERIFY2(tick < 60 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(tick)));
         QVERIFY2(paint < 250 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(paint)));
-        QVERIFY2(meshMs < 80 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(meshMs)));
+        QVERIFY2(meshMs < 40 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(meshMs)));
     }
 };
 
