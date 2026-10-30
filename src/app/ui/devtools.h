@@ -10,6 +10,9 @@
 //                          image and quit (exit code 0 = saved, 1 = failed); the window is
 //                          activated first (also on an X server without a window manager)
 //   --delay <ms>           see --screenshot
+//   --dump-layout <file>   with --screenshot: also write what the window shows (texts with their
+//                          colours and fonts, targets, boxes, the theme's tokens) as JSON for the
+//                          UI benchmark (layoutdump.h; tests/app/uibench), in the same frame
 //   --size <WxH>           initial window size, e.g. 1280x800 (desktop), 412x915 (phone)
 //   --scale <factor>       device pixel ratio (QT_SCALE_FACTOR), e.g. 2 or 2.625
 //   --theme light|dark     force the colour scheme (Theme.mode)
@@ -139,6 +142,7 @@ private:
     QString m_density;
     QString m_language;
     QString m_screenshot;
+    QString m_dumpLayout;
     int m_delayMs = 800;
     QSize m_size;
     bool m_touch = false;

@@ -1,6 +1,7 @@
 #include "devtools.h"
 
 #include "dateshelper.h"
+#include "layoutdump.h"
 #include "scrollprobe.h"
 #include "themepalette.h"
 
@@ -80,6 +81,7 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
     m_editor = arguments.contains(u"--editor"_s);
     m_editorScript = valueAfter(arguments, u"--editor-script"_s);
     m_screenshot = valueAfter(arguments, u"--screenshot"_s);
+    m_dumpLayout = valueAfter(arguments, u"--dump-layout"_s);
     m_touch = arguments.contains(u"--touch"_s);
     m_reducedMotion = arguments.contains(u"--reduced-motion"_s);
     m_testSlowdown = std::max(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
@@ -199,6 +201,16 @@ void DevTools::takeScreenshot(QObject *root)
         std::fprintf(stderr, "brulion: --screenshot: could not save %s\n", qPrintable(m_screenshot));
         QCoreApplication::exit(1);
         return;
+    }
+    // The layout of the same frame (the UI benchmark, layoutdump.h).
+    if (!m_dumpLayout.isEmpty()) {
+        const QObject *theme = m_engine ? m_engine->singletonInstance<QObject *>("Brulion", "Theme") : nullptr;
+        QString error;
+        if (!writeLayoutDump(window, m_dumpLayout, theme, &error)) {
+            std::fprintf(stderr, "brulion: --dump-layout: %s\n", qPrintable(error));
+            QCoreApplication::exit(1);
+            return;
+        }
     }
     std::fprintf(stderr, "brulion: screenshot %s (%dx%d)\n", qPrintable(m_screenshot), image.width(), image.height());
     QCoreApplication::exit(0);

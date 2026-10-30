@@ -1,0 +1,16 @@
+- Przeprowadzka na Żoliborz pod koniec października #projekt/dom
+  - Kartony i pakowanie
+    - [x] Zamówić kartony i taśmę ✅ 2026-10-10
+    - [ ] Spakować książki — spis w [[Książki 2026|biblioteczka]] 📅 2026-10-20
+    - [ ] Opisać kartony: kuchnia, łazienka, sypialnia
+  - Formalności
+    - [x] Podpisać umowę najmu ✅ 2026-10-10
+    - [ ] Zgłosić zmianę adresu w urzędzie 📅 2026-10-20
+    - [ ] Przepisać internet i prąd na nowe mieszkanie
+  - Transport
+    - Firma przeprowadzkowa: dwie osoby i bus na sobotę rano
+    - Rower i narty wieziemy sami — sprawdzić w [[Wyprawa w Bieszczady|notatki z wyjazdu]], co jeszcze wraca z gór
+  - Pomysły na nowe mieszkanie #pomysł
+    - Żółć, ćma, źdźbło — kolory do sypialni: ciepła żółć, szarość i zieleń
+    - Półki nad biurkiem zamiast regału
+    - Lampa nad stołem z pracowni ceramiki w Łodzi

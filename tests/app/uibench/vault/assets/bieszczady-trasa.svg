@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="260" viewBox="0 0 560 260">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#cfe2f3"/>
+      <stop offset="1" stop-color="#fbf7ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="560" height="260" rx="10" fill="url(#sky)"/>
+  <polygon points="0,200 70,150 130,170 210,95 260,120 330,60 400,110 460,90 560,150 560,260 0,260" fill="#b9c9a3"/>
+  <polygon points="0,230 90,190 170,205 250,170 340,200 420,175 500,195 560,185 560,260 0,260" fill="#8fa67a"/>
+  <polyline points="40,232 120,210 190,190 250,150 300,110 330,62" fill="none" stroke="#e2574c" stroke-width="3" stroke-dasharray="7 5" stroke-linecap="round"/>
+  <circle cx="40" cy="232" r="6" fill="#1f2430"/>
+  <circle cx="330" cy="62" r="6" fill="#e2574c"/>
+  <g font-family="sans-serif" font-size="15" fill="#1f2430">
+    <text x="52" y="248">Wołosate</text>
+    <text x="342" y="56">Tarnica, 1346 m</text>
+    <text x="200" y="140" font-size="12" fill="#3a4250">przełęcz</text>
+  </g>
+</svg>
