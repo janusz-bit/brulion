@@ -91,14 +91,40 @@ QString accessibleName(const QObject *object)
     return {};
 }
 
-QString targetLabel(const QObject *object)
+/// The first text shown inside `item` (depth first), for a target without a label of its own.
+QString innerText(const QQuickItem *item, int depth = 0)
+{
+    if (!item || depth > 6)
+        return {};
+    for (const QQuickItem *child : item->childItems()) {
+        if (!child->isVisible())
+            continue;
+        if (child->inherits("QQuickText") || child->inherits("QQuickTextEdit") || child->inherits("QQuickTextInput")) {
+            const QString t = collapsed(child->property("text").toString());
+            if (!t.isEmpty() && !Qt::mightBeRichText(t))
+                return t;
+            if (!t.isEmpty()) {
+                QTextDocument doc;
+                doc.setHtml(t);
+                return collapsed(doc.toPlainText());
+            }
+        }
+        const QString inner = innerText(child, depth + 1);
+        if (!inner.isEmpty())
+            return inner;
+    }
+    return {};
+}
+
+QString targetLabel(const QQuickItem *item)
 {
     for (const char *prop : { "text", "label", "title" }) {
-        const QVariant v = object->property(prop);
+        const QVariant v = item->property(prop);
         if (v.metaType().id() == QMetaType::QString && !v.toString().trimmed().isEmpty())
             return firstChars(collapsed(v.toString()), 60);
     }
-    return firstChars(collapsed(accessibleName(object)), 60);
+    const QString name = collapsed(accessibleName(item));
+    return firstChars(name.isEmpty() ? innerText(item) : name, 60);
 }
 
 /// One run of characters of a rich text with the same colours.
@@ -298,7 +324,9 @@ private:
             }
         }
         if (!kind.isEmpty()) {
-            const QRectF hit = scene.intersected(visible);
+            // The whole hit area (a row scrolled half out of the view is still as large), when any
+            // of it is visible.
+            const QRectF hit = scene.intersects(visible) ? scene : QRectF();
             if (!hit.isEmpty() && !(targetAncestor && sameRect(hit, *targetAncestor))) {
                 Record r;
                 r.item = item;

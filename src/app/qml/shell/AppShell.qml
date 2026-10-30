@@ -641,12 +641,27 @@ FocusScope {
         onActivated: shell.openRename(shell.route.path, false)
     }
 
-    // The navigation bar's first margin; --popup (screenshots and manual checks).
-    Component.onCompleted: {
-        noteNavigationBar()
-        const popup = AppController.devPopup
-        if (popup === "")
-            return
+    // The navigation bar's first margin.
+    Component.onCompleted: noteNavigationBar()
+
+    // --popup (screenshots, the UI benchmark, manual checks): opened once the notebook is open and
+    // indexed — a popup that lists pages (the switcher) then shows them, as a user sees it —, or
+    // after 3 s without one (onboarding).
+    Timer {
+        id: devPopupTimer
+        property int waited: 0
+        interval: 50
+        repeat: true
+        running: AppController.devPopup !== ""
+        onTriggered: {
+            waited += interval
+            if (!Workspace.ready && waited < 3000)
+                return
+            stop()
+            shell.openDevPopup(AppController.devPopup)
+        }
+    }
+    function openDevPopup(popup) {
         const name = popup.split(":")[0]
         const query = popup.indexOf(":") >= 0 ? popup.slice(popup.indexOf(":") + 1) : ""
         Qt.callLater(() => {

@@ -526,8 +526,9 @@ for (const el of document.body.querySelectorAll('*')) {
   if (!candidates.has(el)) continue;
   const s = cs(el);
   if (s.visibility !== 'visible' || opacityOf(el) <= 0.01 || s.pointerEvents === 'none') continue;
-  const r = inter(el.getBoundingClientRect(), clipOf(el.parentElement));
-  if (empty(r)) continue;
+  // The whole hit area, when any of it is visible (as Brulion's dump).
+  const r = el.getBoundingClientRect();
+  if (empty(inter(r, clipOf(el.parentElement)))) continue;
   // A duplicate of its nearest candidate ancestor (a label filling its button) is the same target.
   let anc = el.parentElement;
   while (anc && !targetRects.has(anc)) anc = anc.parentElement;
