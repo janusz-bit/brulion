@@ -257,6 +257,7 @@ async function setTheme(cdp, theme) {
 }
 
 async function closeModals(cdp) {
+  await evaluate(cdp, 'if (app.setting?.isOpen) app.setting.close();');
   for (let i = 0; i < 4; ++i) {
     const open = await evaluate(cdp,
       `return !!document.querySelector('.modal-container, .menu, .suggestion-container, .prompt');`);
@@ -269,8 +270,14 @@ async function closeModals(cdp) {
     document.querySelectorAll('.menu, .suggestion-container').forEach(e => e.remove());`);
 }
 
+// The pointer outside the page: no hover highlight where Xvfb's pointer happens to be.
+async function parkPointer(cdp) {
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: -40, y: -40 });
+}
+
 async function resetWorkspace(cdp, baseline, size) {
   await closeModals(cdp);
+  await parkPointer(cdp);
   await evaluate(cdp, `await app.workspace.changeLayout(${J(baseline)});
     document.querySelectorAll('style[data-uibench]').forEach(s => s.remove());
     ${size.touch ? 'app.workspace.leftSplit.collapse(); app.workspace.rightSplit.collapse();'
@@ -327,9 +334,14 @@ const STEPS = {
   search: (q) => `const p = app.internalPlugins.getPluginById('global-search'); if (!p?.enabled) throw new Error('no search');
     p.instance.openGlobalSearch(${J(q)});
     await new Promise(r => setTimeout(r, 300)); document.activeElement?.blur();`,
-  settings: (tab) => `app.setting.open(); app.setting.openTabById(${J(tab)});
+  // Obsidian 1.14 opens the settings in a window of their own on desktops; the bench keeps them in
+  // the main window (its in-window settings modal, as before 1.14): one 1280×800 picture like
+  // Brulion's settings view.
+  settings: (tab) => `if (typeof app.setting.shouldUsePopout === 'function') app.setting.shouldUsePopout = () => false;
+    app.setting.open(); app.setting.openTabById(${J(tab)});
     if (app.setting.activeTab?.id !== ${J(tab)}) throw new Error('no settings tab ' + ${J(tab)});
-    await new Promise(r => setTimeout(r, 300));`,
+    await new Promise(r => setTimeout(r, 300));
+    if (!document.querySelector('.modal.mod-settings')?.isConnected) throw new Error('the settings are not in the window');`,
   scroll: (selector) => `const el = document.querySelector(${J(selector)}); if (el) el.scrollTop = 0;`,
   wait: (ms) => async () => { await sleep(Number(ms)); },
   eval: (js) => js,
@@ -575,6 +587,8 @@ function pngSize(buf) {
 }
 
 async function shoot(cdp, base, size) {
+  await parkPointer(cdp);
+  await sleep(100);
   const shot = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
   const png = Buffer.from(shot.data, 'base64');
   const dump = await evaluate(cdp, DOM_DUMP);
@@ -680,6 +694,11 @@ async function main() {
               await resetWorkspace(session.cdp, baseline, size);
               for (const step of screen.obsidian.steps) await runStep(session.cdp, step);
               await settle(session.cdp, screen.obsidian.settleMs ?? 0);
+              // UIBENCH_DEBUG_JS: evaluated before each shot, its result logged (developing steps).
+              if (process.env.UIBENCH_DEBUG_JS) {
+                const targets = await (await fetch(`http://127.0.0.1:${args.port}/json/list`)).json();
+                console.error(`obsidian: debug ${screen.id}: ${J(await evaluate(session.cdp, process.env.UIBENCH_DEBUG_JS))} targets ${J(targets.map((t) => `${t.type} ${t.url}`))}`);
+              }
               await shoot(session.cdp, base, size);
               error = null;
               break;
