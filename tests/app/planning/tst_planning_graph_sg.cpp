@@ -216,13 +216,15 @@ private Q_SLOTS:
             QSKIP("no frame from the RHI null backend on this platform");
         QCOMPARE(scene.window.rendererInterface()->graphicsApi(), rhiApi());
         GraphItem::SceneStats s = item->sceneStats();
-        QVERIFY2(s.vertices > 65535, qPrintable(QString::number(s.vertices)));
-        QVERIFY(s.chunks >= 2);
+        QVERIFY(s.vertices > 30000);
         QVERIFY(s.labels > 0 && s.labels <= GraphItem::MaxLabels);
-        // Zoomed in: every visible node wants a label — still at most MaxLabels.
+        // Zoomed in: bigger discs with more segments (more than one chunk of 16-bit indices), and
+        // every visible node wants a label — still at most MaxLabels.
         item->centerOn(m.nodes().first().id, 3.0, false);
         QVERIFY(scene.nextFrame());
         s = item->sceneStats();
+        QVERIFY2(s.vertices > 65535, qPrintable(QString::number(s.vertices)));
+        QVERIFY(s.chunks >= 2);
         QVERIFY(s.labels > 0 && s.labels <= GraphItem::MaxLabels);
         qInfo("2000 nodes in the scene graph: %d vertices in %d chunks, %d labels, last frame %.2f ms", s.vertices,
               s.chunks, s.labels, item->lastPaintMs());

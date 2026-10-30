@@ -1,6 +1,6 @@
 # TEMPORARY (s2/perf-graph): the graph's app benchmarks, base vs head, on a push of this file —
 # perf-compare.yml cannot be dispatched before it reaches the default branch. Removed again.
-# (run 2: the probe activates the window)
+# (run 3: edges as single quads, the probe checks that a drag pans, rounds add runs)
 name: TEMPORARY graph benchmarks
 
 on:

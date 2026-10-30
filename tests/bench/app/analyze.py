@@ -279,11 +279,11 @@ def m_switcher(run):
 
 
 def app_state(run, out):
-    """Whether the app was active (in front) during the scenario: 1 yes, 0 no (Qt::ApplicationActive = 2)."""
+    """Whether the app was active (in front) during the scenario: 1 yes, 0 no (Qt::ApplicationActive = 4)."""
     m = run["marks"].get("app_state")
     if m:
-        out["app_active_before"] = 1 if m.get("before") == 2 else 0
-        out["app_active"] = 1 if m.get("after") == 2 else 0
+        out["app_active_before"] = 1 if m.get("before") == 4 else 0
+        out["app_active"] = 1 if m.get("after") == 4 else 0
 
 
 def m_views(run):
@@ -359,6 +359,9 @@ def m_graph(run):
         if a and b:
             out.update(frame_intervals(run, a["t"], b["t"], p + "_"))
             out.update(stall_stats(run, a["t"], b["t"], p + "_"))
+            if "cx" in a and "cx" in b and a.get("zoom"):
+                # How far the drag moved the camera, in screen pixels (≈ the drag's length if it panned).
+                out[p + "_moved_px"] = ((b["cx"] - a["cx"]) ** 2 + (b["cy"] - a["cy"]) ** 2) ** 0.5 * a["zoom"]
     zooms = [x for x in run["actions"] if x["kind"] == "wheel" and x["label"] == "graph_zoom"]
     zf = []
     for x in zooms:

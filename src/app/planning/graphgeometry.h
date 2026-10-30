@@ -63,9 +63,14 @@ int discSegments(double screenRadius);
 void appendDisc(MeshChunks &out, QPointF centre, double radius, QRgb colour, double fringe, int segments);
 /// A circle line of `width` centred on `radius`, with a fringe on both sides.
 void appendRing(MeshChunks &out, QPointF centre, double radius, double width, QRgb colour, double fringe, int segments);
-/// A line segment as a quad with fringe quads along both long sides (no caps); zero length adds
-/// nothing.
+/// A line segment as a quad with fringe quads along both long sides (no caps; 8 vertices, 6
+/// triangles); zero length adds nothing.
 void appendSegment(MeshChunks &out, QPointF a, QPointF b, double width, QRgb colour, double fringe);
+/// A thin line as one quad of width + fringe whose colour carries the coverage (× width / (width +
+/// fringe)): 4 vertices and 2 triangles instead of 8 and 6 — for the thousands of edges of a graph
+/// (a CPU rasteriser such as llvmpipe, or a weak phone GPU, draws far fewer triangles); softer
+/// sides, the same ink.
+void appendLine(MeshChunks &out, QPointF a, QPointF b, double width, QRgb colour, double fringe);
 void appendRoundedRect(MeshChunks &out, const QRectF &rect, double radius, QRgb colour, double fringe);
 
 /// A node that wants a label (screen coordinates), in priority order.

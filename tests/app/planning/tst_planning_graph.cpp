@@ -938,6 +938,33 @@ private Q_SLOTS:
             QVERIFY(std::isfinite(v.x) && std::isfinite(v.y));
     }
 
+    void lineMesh()
+    {
+        geometry::MeshChunks chunks;
+        // 1 px wide with a 1 px fringe: one 2 px quad at half the ink — the same coverage.
+        geometry::appendLine(chunks, QPointF(0, 0), QPointF(10, 0), 1, geometry::premultiplied(Qt::black), 1);
+        const geometry::Mesh &m = chunks.chunks()[0];
+        QCOMPARE(int(m.vertices.size()), 4);
+        QCOMPARE(int(m.indices.size()), 6);
+        for (const geometry::Vertex &v : m.vertices) {
+            QCOMPARE(int(v.a), 128);
+            QCOMPARE(std::abs(v.y), 1.0f);
+        }
+        QCOMPARE(m.vertices[0].x, 0.0f);
+        QCOMPARE(m.vertices[1].x, 10.0f);
+        // A diagonal one stays perpendicular, malformed ones add nothing.
+        chunks.clear();
+        geometry::appendLine(chunks, QPointF(-3, 4), QPointF(5, -2), 0.5, geometry::premultiplied(Qt::black), 0.25);
+        const geometry::Mesh &d = chunks.chunks()[0];
+        const double across = std::hypot(d.vertices[3].x - d.vertices[0].x, d.vertices[3].y - d.vertices[0].y);
+        QVERIFY(std::abs(across - 0.75) < 1e-5);
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        geometry::appendLine(chunks, QPointF(1, 1), QPointF(1, 1), 1, geometry::premultiplied(Qt::black), 1);
+        geometry::appendLine(chunks, QPointF(nan, 1), QPointF(1, 1), 1, geometry::premultiplied(Qt::black), 1);
+        geometry::appendLine(chunks, QPointF(0, 0), QPointF(1, 1), 0, geometry::premultiplied(Qt::black), 1);
+        QCOMPARE(chunks.vertexCount(), 4);
+    }
+
     void chunksSplitAt65535()
     {
         geometry::MeshChunks chunks;
@@ -1117,7 +1144,7 @@ private Q_SLOTS:
         item.setModel(&m);
         geometry::MeshChunks mesh;
         item.buildMesh(mesh, 1.0);
-        // 7 edges (8 vertices each) and 9 discs; the missing page is a disc and a ring.
+        // 7 edges (one quad each) and 9 discs; the missing page is a disc and a ring.
         int discVertices = 0;
         for (int i = 0; i < m.nodeCount(); ++i) {
             const double r = std::max(1.6, m.nodes().at(i).radius * item.zoom());
@@ -1126,7 +1153,7 @@ private Q_SLOTS:
             if (m.nodes().at(i).kind == GraphModel::Kind::Missing)
                 discVertices += 4 * segments;
         }
-        QCOMPARE(mesh.vertexCount(), m.edgeCount() * 8 + discVertices);
+        QCOMPARE(mesh.vertexCount(), m.edgeCount() * 4 + discVertices);
         // Selecting a node adds its highlight ring (and draws its edges strong, on top).
         item.setSelectedId(u"A.md"_s);
         geometry::MeshChunks selected;

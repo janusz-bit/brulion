@@ -200,6 +200,26 @@ void appendSegment(MeshChunks &out, QPointF a, QPointF b, double width, QRgb col
         quad(m, quint16(base + 2 * row), quint16(base + 2 * row + 1), quint16(base + 2 * row + 3), quint16(base + 2 * row + 2));
 }
 
+void appendLine(MeshChunks &out, QPointF a, QPointF b, double width, QRgb colour, double fringe)
+{
+    if (!finite(a) || !finite(b) || !std::isfinite(width) || !std::isfinite(fringe) || width <= 0 || fringe < 0)
+        return;
+    const QPointF d = b - a;
+    const double length = std::hypot(d.x(), d.y());
+    if (!(length > 0) || !std::isfinite(length))
+        return;
+    const double half = (width + fringe) / 2;
+    const QPointF n(-d.y() / length * half, d.x() / length * half);
+    const QRgb c = scaled(colour, width / (width + fringe));
+    Mesh &m = out.room(4);
+    const auto base = quint16(m.vertices.size());
+    m.vertices.push_back(vertex(a - n, c));
+    m.vertices.push_back(vertex(b - n, c));
+    m.vertices.push_back(vertex(b + n, c));
+    m.vertices.push_back(vertex(a + n, c));
+    quad(m, base, quint16(base + 1), quint16(base + 2), quint16(base + 3));
+}
+
 void appendRoundedRect(MeshChunks &out, const QRectF &rect, double radius, QRgb colour, double fringe)
 {
     if (!finite(rect.topLeft()) || !finite(rect.bottomRight()) || !std::isfinite(radius) || !std::isfinite(fringe)

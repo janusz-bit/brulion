@@ -1234,7 +1234,7 @@ void GraphItem::buildMesh(geometry::MeshChunks &out, qreal dpr) const
     for (const auto &[a, b] : edges) {
         if (a >= n || b >= n || (dimming && (a == hl || b == hl)))
             continue;
-        appendSegment(out, at(a), at(b), edgeWidth, edge, fringe);
+        appendLine(out, at(a), at(b), edgeWidth, edge, fringe); // thousands: 2 triangles each
     }
     if (dimming) {
         const QRgb strong = premultiplied(m_highlight);

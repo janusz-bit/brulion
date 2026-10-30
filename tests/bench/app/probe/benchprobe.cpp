@@ -530,7 +530,8 @@ private:
         m_actions.push_back(a);
     }
 
-    /// A mouse event at a window position (synchronous delivery; t1 = handled).
+    /// A mouse event at a window position (synchronous delivery; t1 = handled). `buttons`: the
+    /// buttons held after it; the left button changes on a press and a release.
     void mouse(QEvent::Type type, QPointF local, Qt::MouseButtons buttons, const QString &label)
     {
         if (!m_window)
@@ -539,8 +540,9 @@ private:
         a.kind = u"mouse"_s;
         a.label = label;
         a.t0 = monoNs();
+        const Qt::MouseButton button = type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton;
         QWindowSystemInterface::handleMouseEvent<QWindowSystemInterface::SynchronousDelivery>(
-                m_window, local, m_window->mapToGlobal(local), buttons, Qt::LeftButton, type);
+                m_window, local, m_window->mapToGlobal(local), buttons, button, type);
         a.t1 = monoNs();
         a.t2 = a.t1;
         m_actions.push_back(a);
@@ -917,7 +919,8 @@ private:
 
     /// Activates the window first: an X server without a window manager (Xvfb) never focuses it,
     /// and an inactive app pauses what runs only while it is in front (the graph's layout). The
-    /// state before and after is in the "app_state" mark (2 = Qt::ApplicationActive).
+    /// state before and after is in the "app_state" mark (Qt::ApplicationState: 4 active, 2
+    /// inactive).
     void activateSteps()
     {
         action(u"activate"_s, [this] {
@@ -1000,12 +1003,25 @@ private:
         }
         return item->mapToScene(QPointF(item->width() / 2, item->height() / 2));
     }
+    /// The graph's camera (centerX, centerY, zoom) for a mark: whether a drag panned it.
+    QJsonObject graphCamera()
+    {
+        QQuickItem *item = graphItem();
+        if (!item)
+            return {};
+        return {{u"cx"_s, item->property("centerX").toDouble()},
+                {u"cy"_s, item->property("centerY").toDouble()},
+                {u"zoom"_s, item->property("zoom").toDouble()}};
+    }
     /// A mouse drag of `ms` on the graph's background, a move every 16 ms.
     void graphPan(const QString &name, int ms)
     {
         action(name + u":start"_s, [this, name] {
             m_panPos = graphBackgroundPoint();
-            mark(name + u":start"_s);
+            QJsonObject o = graphCamera();
+            o.insert(u"x"_s, m_panPos.x());
+            o.insert(u"y"_s, m_panPos.y());
+            mark(name + u":start"_s, 0, o);
             mouse(QEvent::MouseButtonPress, m_panPos, Qt::LeftButton, name + u":press"_s);
         });
         for (int i = 0; i < ms / 16; ++i) {
@@ -1017,7 +1033,7 @@ private:
         }
         action(name + u":end"_s, [this, name] {
             mouse(QEvent::MouseButtonRelease, m_panPos, Qt::NoButton, name + u":release"_s);
-            mark(name + u":end"_s);
+            mark(name + u":end"_s, 0, graphCamera());
         });
     }
 
