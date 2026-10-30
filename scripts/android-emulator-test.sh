@@ -85,6 +85,16 @@
 # element — and the keyboard goes; a second text started at once after the first one is written
 # (while the save timer runs) stays open as well and is written too. Screenshots (dr-*.png); the
 # same debuggable APK.
+# With --stylus instead: a stylus's pressure reaches the drawing editor (docs/ANDROID.md "Rysik") —
+# `adb shell input stylus` presses with 1.0 only, so scripts/android-stylus/BrulionPen.java (built
+# here with the SDK's android.jar and d8, run by app_process as the shell user: no root) injects
+# stylus MotionEvents with the pressures asked for. A new drawing (0 bytes) opened with --route:
+# a stylus line with pressure 0.1 → 0.9 is saved with its pressures (simulatePressure false, from
+# the first to the last point: the lift's pressure 0 is not the line's), adb's own stylus line (one
+# pressure) is drawn as a line without pressure, the eraser end's tool type erases the first line,
+# the barrel button (BUTTON_STYLUS_PRIMARY) the second, and once a stylus was seen a finger moves
+# the paper instead of drawing. The drawing file is read back after each step; screenshots st-*.png;
+# the same debuggable APK.
 # With --web-keyboard SITE_DIR instead: the web build (scripts/wasm-build.sh -> dist-wasm) in Android's
 # browsers — Chrome (in the google_apis image), Brave 1.97.59 and Firefox 157.0.1 (pinned APKs,
 # SHA-256 checked, cached in ~/.cache/brulion-web-browsers): the site served from the host under
@@ -112,6 +122,8 @@
 #        scripts/android-emulator-test.sh --widgets [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-pictures [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --done [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --drawing [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --stylus [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-keyboard [SITE_DIR]   (default dist-wasm)
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
@@ -162,6 +174,7 @@ WIDGETS=0
 WEBPICTURES=0
 DONE=0
 DRAWING=0
+STYLUS=0
 WEBKEYBOARD=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
@@ -184,6 +197,9 @@ elif [[ ${1:-} == --done ]]; then
 elif [[ ${1:-} == --drawing ]]; then
   DRAWING=1
   shift
+elif [[ ${1:-} == --stylus ]]; then
+  STYLUS=1
+  shift
 elif [[ ${1:-} == --web-pictures ]]; then
   WEBPICTURES=1
   shift
@@ -199,7 +215,8 @@ else
   APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || DRAWING)) || [[ -f $SELFTEST_APK ]] ||
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || DRAWING || STYLUS)) ||
+    [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
 fi
 
@@ -1254,6 +1271,108 @@ if ((DRAWING)); then
   adb logcat -d >"$OUT/drawing-logcat.txt"
   check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/drawing-logcat.txt'"
   check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/drawing-logcat.txt'"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- a stylus's pressure in the drawing editor (--stylus) -----------------------------------------
+
+if ((STYLUS)); then
+  info "Stylus pressure: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  command -v node >/dev/null || die "--stylus reads the drawing with Node.js (not found)"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  # The injector: compiled against the newest platform's android.jar, dexed with the newest d8.
+  platform_jar=$(find "$SDK/platforms" -maxdepth 2 -name android.jar | sort -V | tail -n 1)
+  d8=$(find "$SDK/build-tools" -maxdepth 2 -name d8 | sort -V | tail -n 1)
+  [[ -n $platform_jar && -n $d8 ]] || die "--stylus needs an SDK platform (android.jar) and build-tools (d8)"
+  pen_build=$(mktemp -d) # (not in $OUT: the next run empties that of files only)
+  javac --release 17 -nowarn -cp "$platform_jar" -d "$pen_build" scripts/android-stylus/BrulionPen.java
+  bash "$d8" --min-api 30 --lib "$platform_jar" --output "$pen_build" "$pen_build/BrulionPen.class" # (#!/bin/bash: not on NixOS)
+  adb push "$pen_build/classes.dex" /data/local/tmp/brulion-pen.dex >/dev/null
+  pen() { adb shell CLASSPATH=/data/local/tmp/brulion-pen.dex app_process / BrulionPen stroke "$@" | tr -d '\r'; }
+  # A JSON argument for Qt's QProcess::splitCommand (Qt for Android splits applicationArguments
+  # so): quoted, every literal quote tripled.
+  qt_json_arg() { printf '"%s"' "${1//\"/\"\"\"}"; }
+
+  ST_VAULT=files/Rysik
+  ST_FILE=Rysunki/Nacisk-rysika.svg
+  : >"$OUT/empty.svg"
+  adb push "$OUT/empty.svg" /data/local/tmp/brulion-empty.svg >/dev/null
+  adb shell run-as "$PKG" mkdir -p "$ST_VAULT/Rysunki"
+  adb shell run-as "$PKG" cp /data/local/tmp/brulion-empty.svg "$ST_VAULT/$ST_FILE" # 0 bytes: a new drawing
+  # The drawing's freehand lines as saved: "<simulatePressure> <points> <pressures> <first> <last>
+  # <min> <max>" a line.
+  st_lines() {
+    adb shell run-as "$PKG" base64 "$ST_VAULT/$ST_FILE" 2>/dev/null | tr -d '\r\n' | base64 -d >"$OUT/drawing.svg" || true
+    node -e '
+      const svg = require("fs").readFileSync(process.argv[1], "latin1");
+      const m = /<!-- payload-start -->\s*([^<]*?)\s*<!-- payload-end -->/.exec(svg);
+      if (!m) process.exit(0);
+      const w = JSON.parse(Buffer.from(m[1], "base64").toString("latin1"));
+      const bytes = Buffer.from(w.encoded, "latin1");
+      const scene = JSON.parse((w.compressed ? require("zlib").inflateSync(bytes) : bytes).toString("utf8"));
+      for (const e of scene.elements) {
+        if (e.type !== "freedraw" || e.isDeleted) continue;
+        const p = e.pressures || [];
+        const n = (v) => (p.length ? v : "-");
+        console.log([e.simulatePressure, e.points.length, p.length, n(p[0]), n(p[p.length - 1]),
+          n(Math.min(...p)), n(Math.max(...p))].join(" "));
+      }' "$OUT/drawing.svg"
+  }
+  st_count() { [[ $(st_lines | wc -l) -eq $1 ]]; }
+  st_line() { st_lines | sed -n "$1p"; } # <1-based>
+  # Line 1: real pressures, one per point, from at most 0.15 (the first) to at least 0.85 (the last).
+  st_pressured() {
+    local l
+    l=$(st_line 1)
+    read -r sim points pressures first last lo hi <<<"$l"
+    echo "    line 1: simulatePressure $sim, $points points, $pressures pressures, $first → $last ($lo … $hi)"
+    [[ $sim == false && $points == "$pressures" ]] &&
+      awk -v a="$first" -v b="$last" -v lo="$lo" 'BEGIN { exit !(a <= 0.15 && b >= 0.85 && lo > 0) }'
+  }
+  st_simulated() { [[ $(st_line "$1" | cut -d' ' -f1) == true ]]; } # <1-based>
+
+  route=$(qt_json_arg "{\"view\":\"drawing\",\"path\":\"$ST_FILE\"}")
+  start_app "--vault /data/user/0/$PKG/$ST_VAULT --locale pl --route $route"
+  check "the app is running" running
+  check "the drawing editor is open" wait_for 20 ui_has 'Gotowe'
+  app_shot st-1-editor
+  xa=$((SCREEN_W / 4))
+  xb=$((SCREEN_W * 3 / 4))
+  xm=$((SCREEN_W / 2))
+  y_at() { echo $((SCREEN_H * $1 / 100)); } # <% of the height>
+
+  # 1. The stylus with pressure 0.1 → 0.9.
+  pen "$xa" "$(y_at 35)" "$xb" "$(y_at 35)" 40 0.1 0.9 stylus >/dev/null
+  check "a stylus line is saved with its pressures (0.1 → 0.9)" wait_for 15 st_count 1
+  check "… one per point, the first ≤ 0.15, the last ≥ 0.85, none 0, simulatePressure false" st_pressured
+  app_shot st-2-pressure
+  # 2. adb's own stylus: one pressure (1.0) is no pressure.
+  adb shell input stylus swipe "$xa" "$(y_at 50)" "$xb" "$(y_at 50)" 600
+  check "adb's stylus line (pressure always 1.0) is saved too" wait_for 15 st_count 2
+  check "… as a line without pressure (simulatePressure true)" st_simulated 2
+  # 3. The eraser end across line 1.
+  pen "$xm" "$(y_at 31)" "$xm" "$(y_at 39)" 16 0.5 0.5 eraser >/dev/null
+  check "the eraser end erases line 1" wait_for 15 st_count 1
+  check "… line 2 is left" st_simulated 1
+  app_shot st-3-erased
+  # 4. The barrel button (BUTTON_STYLUS_PRIMARY; Qt for Android: ExtraButton3) across line 2.
+  pen "$xm" "$(y_at 46)" "$xm" "$(y_at 54)" 16 0.5 0.5 stylus 32 >/dev/null
+  check "the barrel button erases line 2" wait_for 15 st_count 0
+  # 5. A stylus was seen: a finger moves the paper.
+  pen "$xa" "$(y_at 65)" "$xb" "$(y_at 65)" 30 1 1 finger >/dev/null
+  sleep 4
+  check "after the stylus a finger moves the paper (no new line)" st_count 0
+  app_shot st-4-finger
+  echo "    the drawing's freehand lines (simulatePressure points pressures first last min max):"
+  st_lines | sed 's/^/      /'
+
+  adb logcat -d >"$OUT/stylus-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/stylus-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/stylus-logcat.txt'"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"

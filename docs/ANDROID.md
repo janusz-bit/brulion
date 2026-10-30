@@ -943,7 +943,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--web-pictures`: obrazy z internetu; `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
@@ -1207,6 +1207,30 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   tekstem), klawiatura znika; drugi tekst zaczęty zaraz po pierwszym (gdy zapis po 1,2 s jeszcze
   czeka) też zostaje otwarty i zapisuje się. Zrzuty `dr-*.png`. Sprawdzone 2026-10-29 (Android 16,
   Pixel 6, Gboard po angielsku — polskich znaków z klawiatury ekranowej test nie wpisuje).
+* Rysik w edytorze rysunku (ten sam APK debugowalny; `node` na hoście):
+  ```sh
+  scripts/android-emulator-test.sh --stylus
+  ```
+  `adb shell input stylus …` zawsze naciska z siłą 1,0 (linia z jednym naciskiem rysuje się jak
+  myszą), a `sendevent` wymagałby roota i urządzenia dotykowego emulatora z rysikiem. Dlatego
+  skrypt kompiluje `scripts/android-stylus/BrulionPen.java` (`javac` + `d8` z SDK) i uruchamia go
+  przez `app_process` jako użytkownik powłoki (ma `INJECT_EVENTS`, bez roota — jak scrcpy): ukryte
+  `InputManagerGlobal.injectInputEvent` (Android 14+; wcześniej `InputManager`) dostaje zdarzenia
+  `MotionEvent` z typem narzędzia rysika (albo gumki, albo palca), naciskiem i przyciskami.
+  Nowy rysunek (plik 0 bajtów) otwarty przez `--route`: linia rysikiem z naciskiem 0,1 → 0,9
+  zapisuje się z naciskiem w każdym punkcie (`simulatePressure: false`, od pierwszego ≤ 0,15 do
+  ostatniego ≥ 0,85 — podniesienie rysika z naciskiem 0 nie jest naciskiem linii); linia z `adb
+  input stylus` (jeden nacisk) rysuje się bez nacisku; typ narzędzia gumki (`TOOL_TYPE_ERASER`)
+  ściera pierwszą linię, przycisk boczny (`BUTTON_STYLUS_PRIMARY`) drugą; po rysiku palec przesuwa
+  kartkę zamiast rysować. Plik rysunku jest czytany po każdym kroku; zrzuty `st-*.png`.
+  Test znalazł trzy błędy (poprawione, `tst_drawingcanvas`): host powiadomień w warstwie popupów
+  zasłaniał kartkę przed rysikiem w całej aplikacji (rysik nie rysował wcale albo rysował jak mysz),
+  Qt for Android podaje typ wskaźnika wartościami Qt 5 (pióro 1, gumka 3 — w Qt 6 to nie `Eraser`),
+  a przycisk boczny jako `Qt::ExtraButton3`; zdarzenie podniesienia ma nacisk 0 i leży o piksel
+  obok ostatniego ruchu (Android próbkuje ruchy na nowo), więc każda linia kończyła się naciskiem
+  0. GitHub Actions ma na `ubuntu-24.04` KVM (reguła udev, jak w `wasm.yml` zadanie
+  `keyboard-android`), więc ten tryb mógłby tam działać; uruchamia się go na laptopie (osobny
+  build APK x86_64 Debug).
 * Obrazy z internetu (ten sam APK debugowalny; potrzebny dostęp emulatora do internetu
   i `python3` na hoście):
   ```sh

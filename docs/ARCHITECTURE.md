@@ -165,7 +165,11 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   for the on-screen keyboard — the computation is `ViewportKeyboard` in `ui/keyboardinsets.h`,
   unit-tested); `wasmselftest.h` (`runStorageSelfTest`/`runNotifierSelfTest` for
   `?selftest=storage,notify`, `publishSelfTestResult` — also the share dialog's data for
-  `?selftest=share` —, driven by `scripts/wasm-smoke.mjs`).
+  `?selftest=share` —, driven by `scripts/wasm-smoke.mjs`). Self-tests that need the running app
+  live in the app: `src/app/diag/webselftest.h` (library `brulion_webselftest`, linked into the
+  browser build only; `?selftest=webpictures`: pictures from the internet as the editor fetches
+  them and an export with copies, `?selftest=pen`: the drawing canvas under a pen), driven by
+  the Playwright tests in `tests/web`.
 
 The notifier adapters themselves live in the app (`src/app/notify`, below), because they also
 talk to the tray and the settings.
@@ -432,8 +436,11 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
   sources (+ Kotlin unit tests); signed APK in GitHub Actions — docs/ANDROID.md.
 * WebAssembly: `scripts/wasm-build.sh` — Qt 6.11.2 `wasm_singlethread` + matching emsdk; our
   HTML shell, manifest and service worker in `wasm/` (offline PWA); deployed to GitHub Pages —
-  docs/WEB.md.
+  docs/WEB.md. Browser tests of the built site: `scripts/wasm-smoke.mjs` (Chrome over a
+  dependency-free DevTools client) and `tests/web` (an npm project CMake ignores: Playwright in
+  Chromium and Firefox — pictures from the internet, the pen —, `scripts/web-test.sh`).
 * CI (`.github/workflows`): `ci.yml` (Nix build + flake checks on x86_64/aarch64, aqt build
   with ASan/UBSan and `-Werror`, actionlint/shellcheck/clang-format), `android.yml`,
-  `appimage.yml`, `windows.yml`, `wasm.yml` (Pages), `release.yml` (tag `v*` → draft release with
+  `appimage.yml`, `windows.yml`, `wasm.yml` (Pages, after the smoke test, the Android emulator's
+  browsers and the Playwright tests — job `browsers`), `release.yml` (tag `v*` → draft release with
   APK, AppImages, the Windows installer and ZIP, web ZIP, sources, checksums) — docs/RELEASE.md.

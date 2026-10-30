@@ -495,6 +495,55 @@ private Q_SLOTS:
         QVERIFY(history.size() >= 2);
     }
 
+    void eraserEndOfQtForAndroid()
+    {
+        // Qt for Android names the pointer type with Qt 5's values: the pen 1, the eraser end 3
+        // (Generic | Finger in Qt 6). Its barrel button (BUTTON_STYLUS_PRIMARY, 32) comes as
+        // ExtraButton3 (scripts/android-emulator-test.sh --stylus).
+        Pen pen(window.get(), QPointingDevice::PointerType(1));
+        pen.stroke({100, 200}, {400, 200}, 20, 0.2, 0.8);
+        pen.stroke({100, 400}, {400, 400}, 20, 0.2, 0.8);
+        QCOMPARE(canvas->strokeCount(), 2);
+        QVERIFY(!canvas->currentDrawing().strokes.first().simulatePressure);
+        Pen eraser(window.get(), QPointingDevice::PointerType(3));
+        eraser.stroke({250, 150}, {250, 250}, 10, 0.5, 0.5);
+        QCOMPARE(canvas->strokeCount(), 1);
+        QCOMPARE(canvas->currentDrawing().strokes.first().points.first().y, 400.0);
+        pen.stroke({250, 350}, {250, 450}, 10, 0.5, 0.5, Qt::ExtraButton3);
+        QCOMPARE(canvas->strokeCount(), 0);
+    }
+
+    void releaseKeepsThePressure_data()
+    {
+        QTest::addColumn<qreal>("p0");
+        QTest::addColumn<qreal>("p1");
+        QTest::addColumn<bool>("simulated");
+        QTest::newRow("nacisk 0,2 → 0,9") << 0.2 << 0.9 << false;
+        QTest::newRow("stały nacisk 1,0 (adb)") << 1.0 << 1.0 << true;
+        QTest::newRow("stały nacisk 0,4") << 0.4 << 0.4 << true;
+    }
+    void releaseKeepsThePressure()
+    {
+        // The release reports the pen lifted (pressure 0) — on Android a pixel or two beside the
+        // last move (it resamples the moves): not the line's pressure.
+        QFETCH(qreal, p0);
+        QFETCH(qreal, p1);
+        QFETCH(bool, simulated);
+        Pen pen(window.get());
+        pen.send({100, 300}, Qt::LeftButton, p0);
+        for (int i = 1; i <= 20; ++i)
+            pen.send({100 + 15.0 * i, 300}, Qt::LeftButton, p0 + (p1 - p0) * i / 20);
+        pen.send({402, 301}, Qt::NoButton, 0);
+        QCOMPARE(canvas->strokeCount(), 1);
+        const brulion::drawing::Stroke s = canvas->currentDrawing().strokes.first();
+        QCOMPARE(s.simulatePressure, simulated);
+        QCOMPARE(s.points.last().x, 402.0); // the release's place is kept
+        if (!simulated) {
+            QVERIFY2(s.points.last().pressure >= 0.85, qPrintable(QString::number(s.points.last().pressure)));
+            QVERIFY(s.points.first().pressure <= 0.25);
+        }
+    }
+
     void eraserToolWithMouse()
     {
         mouseStroke(window.get(), {100, 100}, {300, 100}, 10);

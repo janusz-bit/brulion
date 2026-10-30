@@ -29,7 +29,9 @@
 // Input (the rules of docs/UI.md "Drawing editor"):
 //  * a stylus works the tool with its pressure; its eraser end (or a held barrel button) erases
 //    whatever the tool is (in the browser, whose pen is one device, the eraser end comes as the
-//    pen's button ExtraButton3: the web's eraser button). Qt Quick gives tablet events only to pointer handlers, and Qt makes
+//    pen's button ExtraButton3: the web's eraser button; Qt for Android names its eraser end with
+//    Qt 5's pointer type 3 and its barrel button BUTTON_STYLUS_PRIMARY as ExtraButton3). The
+//    release's pressure (0: the pen lifted) is not the line's: it ends with the pressure it had. Qt Quick gives tablet events only to pointer handlers, and Qt makes
 //    mouse events of the unhandled ones only on some platforms (X11, the browser; not Android,
 //    whose stylus would never reach an item): the canvas takes the tablet events from its window
 //    (an event filter) when it is the topmost item taking input under the pen — not under a

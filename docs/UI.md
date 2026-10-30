@@ -1054,14 +1054,18 @@ and diagrams (shapes, arrows, text), on every platform.
 * **Input:**
   * a **stylus** works the tool — draws with its pressure (the line widens as it presses harder;
     a stylus that reports one pressure only draws like a mouse), draws the lasso or a shape —; its
-    **eraser end**, or the barrel button held, erases whatever tool is chosen. Qt Quick hands an item no tablet events (only pointer handlers
+    **eraser end**, or the barrel button held, erases whatever tool is chosen (in the browser,
+    whose pen is one device, the eraser end comes as the pen's `Qt::ExtraButton3` — the web's
+    button 5 —, the barrel button as `Qt::RightButton`). Qt Quick hands an item no tablet events (only pointer handlers
     get them, and Qt makes mouse events of the unhandled ones only on some platforms — not on
     Android), so the canvas takes the stylus's tablet events from its window (an event filter) when
     it is the topmost item taking input under the pen: a menu, a popup, a toast or a bar over it
     gets the pen as before, and so does any modal popup that is open (the drawer opened). Qt Quick
     Controls' popup layer (`QQuickOverlay`), visible over the whole window whenever a Drawer exists
-    and taking every button, counts only where an open popup is (`tst_drawingcanvas`
-    `popupsOfQtQuickControls`). Mouse events the system makes of the pen itself (Windows) are
+    and taking every button, counts only where an open popup is and where an item put there takes
+    input — a toast, not the window-wide host of the toasts (`tst_drawingcanvas`
+    `popupsOfQtQuickControls`, `itemsInTheOverlay`; the host took the pen from the canvas in the
+    real app until the browser tests found it). Mouse events the system makes of the pen itself (Windows) are
     recognised by their time and place and left alone;
   * a **mouse** works the tool with the left button (Shift: a square or a circle, lines at 15°
     steps; with the select tool Shift adds to the selection or takes away); the middle or right
@@ -1232,7 +1236,7 @@ wins, deleted here / there, a backdrop at the bottom, an unknown base, versions,
 merges keeping their invariants; how two versions relate — counts, the same drawing, an older one;
 Nextcloud's merge of files: SVG, `.excalidraw`, plugin files with their Markdown, and everything it
 refuses — a frame, a broken scene, no base, other formats, an element changed without a new
-version, both sides' Markdown changed), `tst_drawingcanvas` (a preview no input reaches, stylus, eraser end, barrel button, a popup over the paper, Windows' mouse
+version, both sides' Markdown changed), `tst_drawingcanvas` (a preview no input reaches, stylus, eraser end — also the browser's `ExtraButton3` —, barrel button, a popup over the paper, the toasts' host in the overlay, Windows' mouse
 events of the pen, fingers, a pinch, a palm while the pen is down, mouse buttons and the wheel,
 undo, the SVG checked with Qt's SVG renderer, loading, merging — also during a stroke, the paper,
 the theme —, far-away strokes, painting light and dark, the app's theme as no edit, a stroke drawn
@@ -1266,6 +1270,14 @@ shows `tests/data/drawing/auto_theme.svg` dark when it prefers dark, light other
 an `<img>` in the page's own colour scheme — an app's dark theme on a light system; CI) and
 `tests/app/drawing/wasm-drawing-check.mjs` (the web build: a drawing's embed light and dark;
 `--text`: text typed on the drawing in the browser reaches its file) and
+`tests/web/stylus.spec.mjs` (Playwright, GitHub Actions: the web build's editor under a pen in
+Chromium — DevTools' trusted pen with pressure: the stroke keeps it, the line grows thicker on
+screen, one constant pressure and the mouse have none, the barrel button erases, the file keeps
+the pressures — and in Chromium and Firefox with pen events made by the page — out-of-range
+pressures clamped, the eraser end erases; the app reports its canvas: `?selftest=pen`,
+src/app/diag/webselftest.h, `tst_webselftest`), `scripts/android-emulator-test.sh --stylus` (the
+Android emulator: a stylus with pressure injected as the shell user — `adb input` presses with 1.0
+only —, the eraser end's tool type, the barrel button, a finger after a stylus moving the paper) and
 `tests/app/drawing/excalidraw-roundtrip.sh` (online, no ctest: a diagram drawn with the editor's
 tools — `tst_drawingcanvas shapesSample` — dropped on the real excalidraw.com, which must keep
 every element as written (`excalidraw-roundtrip.mjs`); its scene as excalidraw.com stores it opened

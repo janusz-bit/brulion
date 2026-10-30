@@ -106,7 +106,12 @@ Parametry adresu (do debugowania):
 
 * `?nosw` — nie rejestruj service workera.
 * `?selftest=storage`, `?selftest=notify`, `?selftest=glyphs`, `?selftest=keyboard`,
-  `?selftest=storage,notify` — testy (niżej).
+  `?selftest=share`, `?selftest=webpictures`, `?selftest=pen`, `?selftest=storage,notify` —
+  testy (niżej; `webpictures` i `pen`: „Testy w przeglądarkach (Playwright)”).
+* Tylko razem z `?selftest=…` (link udostępniony komuś nie przestawi mu zegara ani widoku):
+  `?route=<widok>` albo `?route=<trasa JSON>` — pierwszy widok po otwarciu notatnika (jak
+  `--route`, np. `{"view":"drawing","path":"Rysunki/a.svg"}`), `?now=2026-10-14 10:00` — stały
+  zegar (jak `--now`: znany dzień dziennika).
 * `?keyboard=visual` — klawiatura ekranowa zmniejsza tylko widoczny obszar, nie stronę
   (domyślne zachowanie przeglądarek, `interactive-widget=resizes-visual`; niżej, „Klawiatura
   ekranowa”) — do testów i diagnozy.
@@ -234,6 +239,62 @@ Protocol — Playwrightem, obscurą albo jak ten skrypt — z jej `?selftest=…
 Chromium: `$CHROME` albo `chromium`/`google-chrome` z `PATH`; WebGL 2 przez SwiftShader.
 `BRULION_CHROME_NO_SANDBOX=1` (lub `CI=true`) wyłącza sandbox, gdy nie może wystartować
 (kontenery, GitHub Actions na Ubuntu 24.04).
+
+## Testy w przeglądarkach (Playwright)
+
+`tests/web/` (osobny projekt npm: `@playwright/test` 1.64.1 i `pngjs` 7.0.0; CMake go pomija)
+sprawdza zbudowaną stronę w **Chromium i Firefoksie** — obrazy z internetu (niżej, „Obrazy
+z internetu”) i rysik w edytorze rysunków („Rysik (nacisk)”). GitHub Actions uruchamia go w
+`wasm.yml` (zadanie `browsers`, po `build`; wdrożenie na Pages na nie czeka, wydanie też — wywołuje
+`wasm.yml`); raport HTML, zrzuty i ślady nieudanych testów są w artefakcie `web-browser-tests`
+(7 dni). Lokalnie, po `scripts/wasm-build.sh`:
+
+```sh
+scripts/web-test.sh --install                     # npm ci + Chromium i Firefox Playwrighta
+scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `playwright test`
+npx --prefix tests/web playwright show-report tests/web/playwright-report
+```
+
+* **Serwery** (`tests/web/lib/servers.mjs`, w procesie testu, porty wybiera system): strona pod
+  `https://brulion.test:<p>/brulion/` i `http://brulion.test:<p>/brulion/` (niezabezpieczony
+  kontekst), zdjęcia pod `https://img-cors.brulion.test` (`Access-Control-Allow-Origin: *`),
+  `https://img-nocors.brulion.test` (bez nagłówków CORS) i `http://img-http.brulion.test`. Nazwy
+  `*.test` przeglądarki same kierują na 127.0.0.1 (Chromium `--host-resolver-rules`, Firefox
+  `network.dns.forceResolve`) — bez `/etc/hosts`, i nie adresy IP: `127.0.0.1` jest dla
+  przeglądarek „zaufany” (bez blokady mixed content), a dla Brulionu siecią prywatną (eksport by go
+  pominął). Certyfikat z podpisem własnym robi `openssl` przy każdym przebiegu
+  (`lib/cert.mjs`, przeglądarki go przyjmują: `ignoreHTTPSErrors`). Każdy serwer zapisuje
+  zapytania (metoda, ścieżka, nagłówki), więc test widzi, co przeglądarka naprawdę wysłała.
+* **Notatnik** test zapisuje wprost do IndexedDB (`lib/idbfs.mjs`, format jak niżej w „Dane
+  w przeglądarce” i w `scripts/wasm-smoke.mjs`) i otwiera aplikację z `?nosw` (service worker
+  mógłby odrzucić stronę z takim certyfikatem; i tak nie dotyka zapytań do innych witryn),
+  `?now=2026-10-14 10:00` i `?route=…`.
+* **Wyniki aplikacji** (`src/app/diag/webselftest.h`, biblioteka `brulion_webselftest`, w aplikacji
+  tylko w wersji webowej; bez `?selftest` nic nie robi) są globalami JavaScriptu:
+  * `?selftest=webpictures` → `brulionWebPictureSelfTest` `{page, pageScheme, done, timedOut,
+    elapsedMs, pictures: [{url, state, error, format, width, height, uiFetched}], shownTexts}` —
+    zdjęcia dzisiejszego dziennika tak, jak pobrał je edytor (`uiFetched`: sam, z ustawieniem
+    „pokazuj bez pytania”), i komunikaty widoczne w edytorze; potem eksport całego notatnika do
+    jednego pliku HTML z „Dołącz kopie” (`ExportController`) i `saveInBrowser()` →
+    `brulionExportSelfTest` `{state, errorText, format, scope, fileName, bytes, dataPictures,
+    warnings, saved}`;
+  * `?selftest=pen` → `brulionPenSelfTest` `{found, editable, stylusSeen, zoom, strokeCount,
+    elements, changes, canvas: {x, y, width, height}, strokes: [{tool, simulatePressure, points,
+    pressureMin, pressureMax, pressureFirst, pressureLast, width, bounds}]}` — płótno edytora
+    rysunków i jego linie odręczne (współrzędne okna, by porównać z miejscem rysowania), po każdej
+    zmianie.
+* **Plik z eksportu**: w Chromium na `https://` Qt zapisuje przez File System Access
+  (`showSaveFilePicker`), który wymaga gestu użytkownika — test podmienia go na stronie testowej
+  na rejestrator; w Firefoksie i na stronie `http://` przychodzi zwykłe pobranie pliku.
+* **Firefox** rysuje WebGL 2 (którego wymaga Qt) tylko z ekranem X: skrypt uruchamia testy pod
+  `xvfb-run` (Firefox z oknem), gdy nie ma `$DISPLAY`; brak WebGL 2 jest błędem testu, nie
+  pominięciem. Na NixOS `scripts/web-test.sh` bierze Node, `openssl` i `xvfb-run` z nixpkgs,
+  a przeglądarki Playwrighta (gotowe binaria) uruchamia przez nix-ld z ich bibliotekami
+  (`NIX_LD_LIBRARY_PATH`).
+* Wyniki z 2026-10-30 (laptop i GitHub Actions; Chromium 156 — Chrome for Testing
+  156.0.8078.4 — i Firefox 157 z Playwrighta 1.64.1): wszystkie testy przechodzą w obu
+  przeglądarkach (test rysika z DevTools tylko w Chromium — Playwright nie ma pióra dla
+  Firefoksa).
 
 ## Publikacja
 
@@ -398,9 +459,21 @@ Uwagi:
     ograniczeniami CORS; zdjęcie, którego nie da się pobrać, zostaje w eksporcie adresem. Kopii
     jest najwyżej 256 MB łącznie (pamięć karty przeglądarki; jeden plik HTML trzyma je jeszcze
     jako tekst `data:`), dalsze zostają adresami.
-  * Do sprawdzenia w przeglądarce (build wasm z GitHub Actions): zdjęcie z
-    `upload.wikimedia.org` (CORS dozwolony) i ze strony bez CORS, adres `http://` na stronie
-    `https://` (GitHub Pages).
+  * **Sprawdzone automatycznie** w Chromium 156 i Firefoksie 157 (`tests/web/webpictures.spec.mjs`,
+    GitHub Actions, 2026-10-30; „Testy w przeglądarkach” wyżej): zdjęcie z serwera z CORS
+    (z polskimi znakami w adresie) edytor pobiera sam i rysuje; bez CORS — komunikat nazywa CORS
+    i serwer; `http://` na stronie `https://` — komunikat o http/https, a zapytanie **nie wychodzi
+    z przeglądarki** (serwer `http://` nie dostaje żadnego, także po przekierowaniu z `https://`,
+    którego przeglądarka nie wyjaśnia stronie: komunikat mówi wtedy o CORS); 404 i strona HTML
+    zamiast obrazu — własne komunikaty; **żadnego zapytania wstępnego (OPTIONS)** w żadnej z
+    przeglądarek, a GET ma `Origin` strony, tylko `Accept: image/avif,…` od Brulionu (bez
+    `Accept-Language: *` i `User-Agent: Mozilla/5.0`) i bez ciasteczek; eksport HTML (jeden
+    plik) z „Dołącz kopie” zawiera zdjęcie z pamięci podręcznej i zdjęcie, które pobrał sam
+    (z innej strony notatnika), pozostałe zostają adresami z ostrzeżeniem dla każdego, a plik
+    dociera do przeglądarki (Chromium: File System Access, Firefox: pobranie). Na stronie
+    `http://` (niezabezpieczony kontekst: bez Web Locks i File System Access — aplikacja i tak
+    startuje) zdjęcie `http://` się wczytuje, a eksport przychodzi jako pobranie. Na prawdziwym
+    telefonie zostaje to, co w docs/ANDROID.md „Obrazy z internetu”.
 
 ## Udostępnianie do Brulionu
 
@@ -647,6 +720,37 @@ nad dołem okna). Znaki spoza ASCII wpisane klawiaturą (à, ß, ç, ñ — przy
 układzie Gboard; polskiego układu obraz emulatora nie ma, a jego pobranie wymaga ustawień Gboard)
 trafiają do bloku bez zmian we wszystkich trzech (sprawdzone ręcznie skryptem, nie w teście).
 
+## Rysik (nacisk)
+
+Rysik w przeglądarce dochodzi do edytora rysunków tak: zdarzenia wskaźnika (`pointerType: "pen"`,
+`pressure`, `tiltX/Y`, `buttons`) na elemencie okna Qt → Qt for WebAssembly
+(`QWindowSystemInterface::handleTabletEvent`, jedno urządzenie typu pióro; przy podniesieniu
+nacisk 0) → `QTabletEvent` → `DrawingCanvas` (src/app/drawing/drawingcanvas.h). **Drugi koniec
+rysika (gumka)** przeglądarka zgłasza jako przycisk 5 (`buttons & 32`), który Qt przekazuje jako
+`Qt::ExtraButton3` — płótno traktuje go jak gumkę (wcześniej rysował jak pióro); przycisk boczny
+(`buttons & 2`) to `Qt::RightButton`, też gumka.
+
+Sprawdzone automatycznie (`tests/web/stylus.spec.mjs`, „Testy w przeglądarkach” wyżej):
+
+* Chromium — prawdziwe zdarzenia pióra z DevTools (`Input.dispatchMouseEvent`, `pointerType:
+  "pen"`, `force`): pióro w zawieszeniu nie rysuje; linia z naciskiem 0,1 → 0,9 zachowuje nacisk
+  (`simulatePressure: false`, od ≤ 0,15 do ≥ 0,85) i na zrzucie ekranu grubieje (w ¾ długości
+  co najmniej 1,3 raza grubsza niż w ¼); stały nacisk to brak nacisku (linia jak myszą); linia
+  myszą nie ma nacisku; przycisk boczny ściera; zapisany plik ma nacisk w każdym punkcie.
+* Chromium i Firefox — zdarzenia pióra tworzone przez stronę (Playwright nie ma pióra dla
+  Firefoksa; `setPointerCapture` zmyślonego wskaźnika strona testowa przepuszcza): nacisk
+  0,2 → 1,0, nacisk spoza zakresu (1,7 i −0,3) przycięty do 0…1, gumka (przycisk 5) ściera linię,
+  na pustej kartce nie rysuje, mysz rysuje bez nacisku.
+
+Test znalazł też błąd całej aplikacji (nie tylko w przeglądarce): host powiadomień (toastów)
+powłoki leży w warstwie popupów Qt Quick Controls na całym oknie, a ta jest widoczna, gdy
+istnieje szuflada (Drawer) — płótno brało go za element nad sobą i zostawiało zdarzenia rysika,
+więc rysik rysował tylko przez zdarzenia myszy, które Qt z nich robi (bez nacisku; na Androidzie
+Qt ich nie robi). Teraz zasłania tylko popup i to, co w tej warstwie przyjmuje wejście (toast).
+
+Zostaje ręcznie: prawdziwy rysik w prawdziwej przeglądarce (tablet z Androidem, Natalia) —
+czy przeglądarka przekazuje nacisk i drugi koniec rysika.
+
 ## Ograniczenia techniczne
 
 * Wiersz poleceń (`brulion-cli`, docs/CLI.md) i odbieranie poleceń od niego (`app open`) są tylko
@@ -714,6 +818,8 @@ trafiają do bloku bez zmian we wszystkich trzech (sprawdzone ręcznie skryptem,
 | `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | powłoka HTML, service worker, manifest |
 | `wasm/icons/` | ikony PWA; PNG wygenerowane z `assets/logo.svg` i `wasm/icons/maskable.svg` (odstęp bezpieczny dla ikon maskowalnych) oraz `badge.svg` (monochromatyczna plakietka powiadomień) |
 | `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, `WasmShare` (udostępnienia przekazane przez inną kartę), most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), test trwałości (`wasmselftest.h`) |
+| `src/app/diag/webselftest.h` | testy aplikacji dla przeglądarek: `?selftest=webpictures` (obrazy z internetu, eksport z kopiami), `?selftest=pen` (płótno pod rysikiem); testy na komputerze: `tests/app/diag/tst_webselftest.cpp` |
+| `tests/web/`, `scripts/web-test.sh` | testy Playwright w Chromium i Firefoksie (obrazy z internetu, rysik) i ich uruchamianie (CI: `wasm.yml`, zadanie `browsers`) |
 | `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |
 | `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + złożenie strony, test w Chromium |
 | `tests/app/drawing/wasm-drawing-check.mjs` | rysunek w notatce w jasnym i ciemnym motywie, w Chromium; z `--text` tekst wpisany na rysunku |
