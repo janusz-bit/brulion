@@ -362,9 +362,14 @@ function Invoke-Packaged([string] $Dir, [string] $Label) {
         }
         if ($output) {
             $lines = $output -split "`r?`n"
-            # The failed checks first: the last 60 lines often start after them.
-            $failed = $lines | Where-Object { $_ -match '^selftest: FAIL ' }
-            if ($failed) { "Failed checks:`n" + ($failed -join "`n") | Write-Host }
+            # The failed checks first, each with the 4 lines before it (a check's own diagnostics
+            # come just before its verdict): the last 60 lines often start after them.
+            $failed = for ($i = 0; $i -lt $lines.Count; $i++) {
+                if ($lines[$i] -match '^selftest: FAIL ') {
+                    ($lines[[Math]::Max(0, $i - 4)..$i] -join "`n")
+                }
+            }
+            if ($failed) { "Failed checks:`n" + ($failed -join "`n--`n") | Write-Host }
             ($lines | Select-Object -Last 60) -join "`n" | Write-Host
         }
         if ($process.ExitCode -ne 0) { Fail "$Label`: brulion.exe --selftest-shell exited with $($process.ExitCode)" }

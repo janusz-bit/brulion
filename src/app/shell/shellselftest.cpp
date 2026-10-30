@@ -4413,17 +4413,24 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                           "a tap in the Markdown source puts the cursor there");
                     // A long press selects the word under the finger (where the platform has
                     // selection handles, they take it on from there). First the view settles
-                    // after the tap (the toolbar it brought up keeps the cursor above it).
+                    // after the tap: the toolbar it brought up and the keyboard shrink the view and
+                    // keep the cursor above them. A view that moved during the hold took the text
+                    // away from under the finger (the press is cancelled), which on a slow runner
+                    // (Windows) happened when only 150 ms of stillness were waited for.
                     qreal settledY = -1;
+                    qreal settledHeight = -1;
                     QElapsedTimer stillFor;
                     waitFor([&] {
                         const qreal y = sourceView->property("contentY").toReal();
-                        if (y != settledY || sourceView->property("moving").toBool()) {
+                        const qreal height = sourceView->height();
+                        if (y != settledY || height != settledHeight || sourceView->property("moving").toBool()
+                            || sourceView->property("keyboardSliding").toBool()) {
                             settledY = y;
+                            settledHeight = height;
                             stillFor.start();
                             return false;
                         }
-                        return stillFor.elapsed() >= 150;
+                        return stillFor.elapsed() >= 400;
                     });
                     const qreal scrolled = sourceView->property("contentY").toReal();
                     const auto textAt = [&](int from, int to) {
@@ -4443,9 +4450,14 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                             break;
                         }
                     }
-                    touchTap(window, onWord, 1000);
+                    // Held well past the long-press threshold (800 ms).
+                    touchTap(window, onWord, 1300);
                     const QString word = sourceEdit->property("selectedText").toString();
-                    std::fprintf(stderr, "selftest: a long press in the source selected \"%s\"\n", qPrintable(word));
+                    std::fprintf(stderr,
+                                 "selftest: a long press in the source at (%.1f, %.1f) selected \"%s\", contentY %.1f "
+                                 "-> %.1f, view height %.1f -> %.1f\n",
+                                 onWord.x(), onWord.y(), qPrintable(word), scrolled,
+                                 sourceView->property("contentY").toReal(), settledHeight, sourceView->height());
                     check(!word.isEmpty() && !word.contains(u' ') && !word.contains(u'\n')
                                   && qAbs(sourceView->property("contentY").toReal() - scrolled) < 1,
                           "a long press in the Markdown source selects the word under the finger");
