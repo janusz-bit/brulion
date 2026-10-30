@@ -40,6 +40,27 @@ on:
       app_rounds:
         description: "App benchmark rounds (labels alternate per round)"
         default: "2"
+  # The same from another workflow (a branch's own trigger before this file reaches main).
+  workflow_call:
+    inputs:
+      base:
+        type: string
+        required: true
+      suites:
+        type: string
+        default: "bench_index bench_markdown"
+      reps:
+        type: string
+        default: "5"
+      app:
+        type: string
+        default: ""
+      app_runs:
+        type: string
+        default: "3"
+      app_rounds:
+        type: string
+        default: "2"
 
 permissions:
   contents: read

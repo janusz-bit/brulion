@@ -1,0 +1,21 @@
+# TEMPORARY (s2/perf-graph): the graph's app benchmarks, base vs head, on a push of this file —
+# perf-compare.yml cannot be dispatched before it reaches the default branch. Removed again.
+name: TEMPORARY graph benchmarks
+
+on:
+  push:
+    branches: [s2/perf-graph]
+    paths: [.github/workflows/perf-graph-temp.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    uses: ./.github/workflows/perf-compare.yml
+    with:
+      base: 64d03804
+      suites: ""
+      app: "views graph"
+      app_runs: "3"
+      app_rounds: "2"
