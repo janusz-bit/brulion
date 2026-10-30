@@ -168,8 +168,11 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   `?selftest=share` —, driven by `scripts/wasm-smoke.mjs`). Self-tests that need the running app
   live in the app: `src/app/diag/webselftest.h` (library `brulion_webselftest`, linked into the
   browser build only; `?selftest=webpictures`: pictures from the internet as the editor fetches
-  them and an export with copies, `?selftest=pen`: the drawing canvas under a pen), driven by
-  the Playwright tests in `tests/web`.
+  them and an export with copies — only where the device shows such pictures without asking —,
+  `?selftest=pen`: the drawing canvas under a pen), driven by the Playwright tests in
+  `tests/web`. `wasm/index.html` passes those two flows and `?route=`/`?now=` only in a tab
+  marked for tests (sessionStorage `brulion-selftest`, which a link cannot set), each as one
+  `--option=value` argument.
 
 The notifier adapters themselves live in the app (`src/app/notify`, below), because they also
 talk to the tray and the settings.
@@ -441,6 +444,7 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
   Chromium and Firefox — pictures from the internet, the pen —, `scripts/web-test.sh`).
 * CI (`.github/workflows`): `ci.yml` (Nix build + flake checks on x86_64/aarch64, aqt build
   with ASan/UBSan and `-Werror`, actionlint/shellcheck/clang-format), `android.yml`,
-  `appimage.yml`, `windows.yml`, `wasm.yml` (Pages, after the smoke test, the Android emulator's
-  browsers and the Playwright tests — job `browsers`), `release.yml` (tag `v*` → draft release with
+  `appimage.yml`, `windows.yml`, `wasm.yml` (Pages, after the smoke test and the Playwright tests
+  — job `browsers`; the Android emulator's browsers — job `keyboard-android` — do not hold it
+  back), `release.yml` (tag `v*` → draft release with
   APK, AppImages, the Windows installer and ZIP, web ZIP, sources, checksums) — docs/RELEASE.md.

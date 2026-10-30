@@ -106,12 +106,19 @@ Parametry adresu (do debugowania):
 
 * `?nosw` — nie rejestruj service workera.
 * `?selftest=storage`, `?selftest=notify`, `?selftest=glyphs`, `?selftest=keyboard`,
-  `?selftest=share`, `?selftest=webpictures`, `?selftest=pen`, `?selftest=storage,notify` —
-  testy (niżej; `webpictures` i `pen`: „Testy w przeglądarkach (Playwright)”).
-* Tylko razem z `?selftest=…` (link udostępniony komuś nie przestawi mu zegara ani widoku):
-  `?route=<widok>` albo `?route=<trasa JSON>` — pierwszy widok po otwarciu notatnika (jak
-  `--route`, np. `{"view":"drawing","path":"Rysunki/a.svg"}`), `?now=2026-10-14 10:00` — stały
-  zegar (jak `--now`: znany dzień dziennika).
+  `?selftest=share`, `?selftest=storage,notify` — testy (niżej).
+* Tylko w karcie oznaczonej do testów: `?selftest=webpictures`, `?selftest=pen` (testy na
+  otwartym notatniku: „Testy w przeglądarkach (Playwright)”) i razem z nimi `?route=<widok>` albo
+  `?route=<trasa JSON>` — pierwszy widok po otwarciu notatnika (jak `--route`, np.
+  `{"view":"drawing","path":"Rysunki/a.svg"}`), `?now=2026-10-14 10:00` — stały zegar (jak
+  `--now`: znany dzień dziennika). Znacznik karty to `sessionStorage` `brulion-selftest` = `1`:
+  `tests/web` ustawia go, zanim strona się wczyta; ręcznie — w konsoli przeglądarki
+  `sessionStorage.setItem('brulion-selftest', '1')`, potem przeładowanie (znacznik znika
+  z zamknięciem karty). Link go nie ustawi, więc link wysłany komuś nie uruchomi testu na jego
+  notatniku (pobieranie zdjęć z internetu, eksport) ani nie przestawi mu zegara czy widoku —
+  bez znacznika te parametry są pomijane. Trasa i zegar idą do aplikacji jako jeden argument
+  (`--route=…`, `--now=…`), więc wartość nigdy nie staje się osobną opcją (`?route=--vault=…` to
+  tylko nieznany widok). Sprawdza to `tests/web/links.spec.mjs`.
 * `?keyboard=visual` — klawiatura ekranowa zmniejsza tylko widoczny obszar, nie stronę
   (domyślne zachowanie przeglądarek, `interactive-widget=resizes-visual`; niżej, „Klawiatura
   ekranowa”) — do testów i diagnozy.
@@ -269,21 +276,31 @@ scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `play
 * **Notatnik** test zapisuje wprost do IndexedDB (`lib/idbfs.mjs`, format jak niżej w „Dane
   w przeglądarce” i w `scripts/wasm-smoke.mjs`) i otwiera aplikację z `?nosw` (service worker
   mógłby odrzucić stronę z takim certyfikatem; i tak nie dotyka zapytań do innych witryn),
-  `?now=2026-10-14 10:00` i `?route=…`.
+  `?now=2026-10-14 10:00` i `?route=…` w karcie oznaczonej do testów (`markTestTab` w
+  `tests/web/lib/brulion.mjs`; „Uruchamianie lokalnie” wyżej).
+* **Parametry adresu** (`links.spec.mjs`, bez aplikacji: atrapa `qtloader.js` zapisuje jej
+  argumenty): bez znacznika karty link nie uruchamia testów na notatniku i nie przekazuje trasy
+  ani zegara; w karcie testowej każdy z nich jest jednym argumentem (`--route=--vault=…` nie
+  otwiera innego notatnika).
 * **Wyniki aplikacji** (`src/app/diag/webselftest.h`, biblioteka `brulion_webselftest`, w aplikacji
-  tylko w wersji webowej; bez `?selftest` nic nie robi) są globalami JavaScriptu:
-  * `?selftest=webpictures` → `brulionWebPictureSelfTest` `{page, pageScheme, done, timedOut,
-    elapsedMs, pictures: [{url, state, error, format, width, height, uiFetched}], shownTexts}` —
-    zdjęcia dzisiejszego dziennika tak, jak pobrał je edytor (`uiFetched`: sam, z ustawieniem
-    „pokazuj bez pytania”), i komunikaty widoczne w edytorze; potem eksport całego notatnika do
-    jednego pliku HTML z „Dołącz kopie” (`ExportController`) i `saveInBrowser()` →
+  tylko w wersji webowej; bez `?selftest=webpictures`/`pen` w karcie testowej nic nie robi) są
+  globalami JavaScriptu:
+  * `?selftest=webpictures` → `brulionWebPictureSelfTest` `{page, pageScheme, done, refused,
+    timedOut, elapsedMs, pictures: [{url, state, error, format, width, height, uiFetched}],
+    shownTexts}` — zdjęcia dzisiejszego dziennika tak, jak pobrał je edytor (`uiFetched`: sam,
+    z ustawieniem „pokazuj bez pytania”), i komunikaty widoczne w edytorze; test sam o żadne
+    zdjęcie nie prosi (zdjęcie z sieci lokalnej zostaje w stanie `ask`); potem eksport całego
+    notatnika do jednego pliku HTML z „Dołącz kopie” (`ExportController`) i `saveInBrowser()` →
     `brulionExportSelfTest` `{state, errorText, format, scope, fileName, bytes, dataPictures,
-    warnings, saved}`;
-  * `?selftest=pen` → `brulionPenSelfTest` `{found, editable, stylusSeen, zoom, strokeCount,
-    elements, changes, canvas: {x, y, width, height}, strokes: [{tool, simulatePressure, points,
-    pressureMin, pressureMax, pressureFirst, pressureLast, width, bounds}]}` — płótno edytora
-    rysunków i jego linie odręczne (współrzędne okna, by porównać z miejscem rysowania), po każdej
-    zmianie.
+    warnings, saved}`. Gdy urządzenie pyta przed pokazaniem zdjęć z internetu (ustawienie
+    wyłączone), test od razu kończy się z `{page, done: true, refused: true, error, pictures:
+    []}` — bez pobierania i bez eksportu (testy włączają to ustawienie w `settings.ini`);
+  * `?selftest=pen` → `brulionPenSelfTest` `{found, editable, modified, stylusSeen, zoom,
+    strokeCount, elements, changes, canvas: {x, y, width, height}, strokes: [{tool,
+    simulatePressure, points, pressureMin, pressureMax, pressureFirst, pressureLast, width,
+    bounds}]}` — płótno edytora rysunków (`modified`: zmiany jeszcze niezapisane do pliku;
+    `strokeCount` liczy linie odręczne, `elements` wszystkie elementy) i jego linie odręczne
+    (współrzędne okna, by porównać z miejscem rysowania), po każdej zmianie.
 * **Plik z eksportu**: w Chromium na `https://` Qt zapisuje przez File System Access
   (`showSaveFilePicker`), który wymaga gestu użytkownika — test podmienia go na stronie testowej
   na rejestrator; w Firefoksie i na stronie `http://` przychodzi zwykłe pobranie pliku.
