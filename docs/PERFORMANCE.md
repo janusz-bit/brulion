@@ -117,7 +117,7 @@ podręcznej i offline), powrót do strony z 1000 notatek rysuje pierwszą klatk�
 * **Rozmiar** — APK ma ok. 81 MB (pobranie ok. 26 MB), wersja przeglądarkowa pobiera przy
   pierwszej wizycie ok. 13,5 MB (pierwsza klatka przy łączu 20 Mbit/s po ok. 7,4 s). Strony PDF
   jako podkład rysunku nie powiększyły APK (Android rysuje je sam), pakiet z Nixa urósł o ok.
-  26 MiB (poppler), wersje na Windows i AppImage o bibliotekę Qt PDF (ok. 2 MB po spakowaniu).
+  26 MiB (poppler), AppImage o ok. 2,4 MB, a instalator na Windows o ok. 1,8 MB (biblioteka Qt PDF).
 
 **Bateria:** w tle na Androidzie Brulion nie zużywa procesora i nie wybudza telefonu; alarmy są
 ustawiane tylko dla przypomnień (do 64 na najbliższe 14 dni).
@@ -751,6 +751,9 @@ Measured after the change (the feature's whole cost, not only the renderer):
 | APK arm64 release (`android.yml`, GitHub Actions, the same day) | 80 818 249 B | 81 195 081 B | +376 832 B (+0.47 %) |
 | … download (every entry deflated, `size-report.py`) | 26.33 MB | 26.43 MB | +0.10 MB |
 | … `libbrulion` / `classes.dex` | 31.26 MB / 493.19 KB | 31.60 MB / 496.63 KB | +0.34 MB / +3.4 KB (`PdfPages.kt`) |
+| AppImage x86_64 (`appimage.yml`, `sweep2` and the branch the same day) | 55 941 624 B | 58 362 360 B | +2 420 736 B (+4.3 %): `libQt6Pdf.so.6` 4.51 MB uncompressed; QtQuick.Pdf, `libQt6PdfQuick` and the `qpdf` picture plugin pruned (−0.2 MB) |
+| AppImage aarch64 (the run's artifact: the AppImage and its .zsync, zipped) | 55 592 248 B | 58 015 457 B | +2 423 209 B |
+| Windows ZIP / installer (`windows.yml`, the step's sizes) | 42.9 / 29.5 MB | 45.4 / 31.3 MB | +2.5 / +1.8 MB (`Qt6Pdf.dll`; windeployqt also copies `qpdf.dll` and `qml/QtQuick/Pdf`, as it copies every style) |
 | `brulion.wasm` raw / gzip -9 (`wasm.yml`; no PDF renderer: the feature's code and QML only) | 42 069 890 / 13 551 537 B | 42 274 540 / 13 606 755 B | +204 650 B (+0.49 %) / +55 218 B |
 | Nix closure, aarch64 (`nix path-info -r` of the package's Qt inputs with and without poppler-qt6) | — | +25.99 MiB | poppler-qt6 6.46, poppler-data 12.38, nss 4.49, openjpeg 1.64, lcms2 0.51, nspr 0.50 MiB |
 
