@@ -649,11 +649,15 @@ that `changesSince()` names every note whose tasks, reminders, link targets or s
 changed (`tst_index_consistency`), that a `QueryCache` per query equals `runQuery()` on the edited
 and on a fresh index (16 queries: tags, `ref:`, `page:this`, groups, `limit:`, `remind:overdue`, …),
 that `CalendarCache` / `NotificationCache` equal the free functions (a month, a week, a day, the
-2026-10-25 change to winter time, windows moving across midnight, another language;
-`tst_reminders_cache`), and that the Tasks list, the calendar's overdue list (against the old scan)
+2026-10-25 change to winter time, windows moving across midnight, another language, a change of
+the local time zone; `tst_reminders_cache`), and that the Tasks list, the calendar's overdue list (against the old scan)
 and Workspace's cached lists equal what a fresh model computes. `tst_reminders_cache`
 `oneEditCostsAFraction` guards the gain without timing a machine: after one edit of 3000 notes the
-caches must cost ≤ 0.25 × the free functions (Debug: 2.8 vs 16.9 ms). The Raspberry Pi was not
+caches must cost ≤ 0.25 × the free functions (Debug: 2.8 vs 16.9 ms). `tst_planning_tasks`
+`changeNamingManyNotesStaysCheap` guards the other end: one change naming 3001 notes (the page 3000
+notes link to appears or goes) must merge into the Tasks list in ≤ 2 × the time of a list built
+afresh + 5 ms (looking each changed note up among all matches took 275 vs 45 ms under the CI's
+sanitizers). The Raspberry Pi was not
 measured (no builds on it in this sweep): L3b in "Next steps"; it took 0.95 s before.
 
 ### Budgets
