@@ -128,6 +128,22 @@ void WebPicturesSelfTest::start()
 {
     m_clock.start();
     m_phase.start();
+    // Only where the device shows pictures from the internet without asking (tests/web seeds
+    // that): never a fetch the user was to be asked for, nor an export of their notebook.
+    if (m_workspace && !m_workspace->webPicturesShown()) {
+        m_picturesReport = QJsonObject{
+                {u"page"_s, m_options.page},
+                {u"done"_s, true},
+                {u"refused"_s, true},
+                {u"error"_s, u"pictures from the internet are not shown without asking on this device"_s},
+                {u"pictures"_s, QJsonArray()},
+        };
+        if (m_publish)
+            m_publish("brulionWebPictureSelfTest", m_picturesReport);
+        m_finished = true;
+        Q_EMIT finished();
+        return;
+    }
     Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
     if (vault && !m_options.page.isEmpty()) {
         bool ok = false;
@@ -169,15 +185,12 @@ void WebPicturesSelfTest::pollStep()
         publishPictures(true);
         return;
     }
+    // Looking is what the editor does (Workspace::webPicture fetches what may be fetched without
+    // asking); "ask" (a host of the local network) stays: this test never asks for a picture.
     bool settled = true;
     for (const QString &url : std::as_const(m_urls)) {
-        QString state = m_workspace->webPicture(url).value(u"state"_s).toString();
-        if (state == u"ask" && !m_asked.contains(url)) {
-            m_asked.insert(url);
-            m_workspace->loadWebPicture(url);
-            state = u"loading"_s;
-        }
-        if (state != u"ready" && state != u"failed")
+        const QString state = m_workspace->webPicture(url).value(u"state"_s).toString();
+        if (state != u"ready" && state != u"failed" && state != u"ask")
             settled = false;
     }
     if (settled) {
@@ -189,7 +202,8 @@ void WebPicturesSelfTest::pollStep()
             const QStringList shown = shownTexts(m_window->contentItem(), u"webPictureText"_s);
             for (const QString &url : std::as_const(m_urls)) {
                 const QVariantMap picture = m_workspace->webPicture(url);
-                if (picture.value(u"state"_s).toString() == u"failed" && !shown.contains(picture.value(u"error"_s).toString()))
+                if (picture.value(u"state"_s).toString() == u"failed"
+                    && !shown.contains(picture.value(u"error"_s).toString()))
                     return;
             }
         }
@@ -224,6 +238,7 @@ void WebPicturesSelfTest::publishPictures(bool timedOut)
             {u"elapsedMs"_s, double(m_clock.elapsed())},
             {u"pictures"_s, pictures},
     };
+    m_picturesReport.insert(u"refused"_s, false);
     if (m_window)
         m_picturesReport.insert(u"shownTexts"_s,
                                 QJsonArray::fromStringList(shownTexts(m_window->contentItem(), u"webPictureText"_s)));

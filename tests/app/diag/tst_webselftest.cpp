@@ -248,6 +248,7 @@ private Q_SLOTS:
         QCOMPARE(pictures.value(u"page"_s).toString(), options.page);
         QCOMPARE(pictures.value(u"pageScheme"_s).toString(), u"https"_s);
         QVERIFY(pictures.value(u"done"_s).toBool());
+        QCOMPARE(pictures.value(u"refused"_s), QJsonValue(false));
         QVERIFY(!pictures.value(u"timedOut"_s).toBool());
         QVERIFY(!pictures.contains(u"shownTexts"_s)); // no window
         const QJsonArray all = pictures.value(u"pictures"_s).toArray();
@@ -295,7 +296,7 @@ private Q_SLOTS:
         const QString stalled = server.url(u"/czekał.png"_s);
         auto ws = openVault({{u"Strona.md"_s, u"![](%1)\n"_s.arg(stalled).toUtf8()}});
         ws->setWebPictureHostCheck([](const QString &) { return false; });
-        // Not shown without asking: the test asks itself.
+        ws->setWebPicturesShown(true); // no editor: the test's look fetches it
         Published published;
         WebPicturesSelfTest::Options options;
         options.page = u"Strona.md"_s;
@@ -325,6 +326,7 @@ private Q_SLOTS:
         const QString hidden = server.url(u"/ukryta-strona.html"_s); // another message: no picture
         auto ws = openVault({{u"Strona.md"_s, u"- ![](%1)\n- ![](%2)\n"_s.arg(missing, hidden).toUtf8()}});
         ws->setWebPictureHostCheck([](const QString &) { return false; });
+        ws->setWebPicturesShown(true);
         QQuickWindow window;
         window.resize(300, 200);
         QQmlEngine engine;
@@ -365,6 +367,7 @@ private Q_SLOTS:
     void webPicturesOfAMissingPage()
     {
         auto ws = openVault({{u"Strona.md"_s, "- zażółć\n"}});
+        ws->setWebPicturesShown(true);
         Published published;
         WebPicturesSelfTest::Options options;
         options.page = u"Nie ma takiej.md"_s;
@@ -377,6 +380,80 @@ private Q_SLOTS:
         QVERIFY(report.value(u"done"_s).toBool());
         QVERIFY(!report.value(u"timedOut"_s).toBool());
         QVERIFY(report.value(u"pictures"_s).toArray().isEmpty());
+    }
+
+    // A device that asks before showing pictures from the internet (a link to the site must not
+    // fetch them, nor export the notebook): the test refuses — no request, no export.
+    void webPicturesRefusedWhenTheDeviceAsks_data()
+    {
+        QTest::addColumn<bool>("exportCopies");
+        QTest::addColumn<bool>("withWindow");
+        QTest::newRow("z eksportem kopii") << true << false;
+        QTest::newRow("bez eksportu, z oknem") << false << true;
+    }
+    void webPicturesRefusedWhenTheDeviceAsks()
+    {
+        QFETCH(bool, exportCopies);
+        QFETCH(bool, withWindow);
+        MiniHttpServer server;
+        server.bodies.insert("/%C5%82%C4%85ka.png", pngBytes());
+        server.bodies.insert("/galeria-%C5%BC%C3%B3%C5%82w.svg", svgBytes);
+        const QString picture = server.url(u"/łąka.png"_s);
+        auto ws = openVault({{u"journals/2026-10-14.md"_s, u"- Łąka ![łąka](%1)\n"_s.arg(picture).toUtf8()},
+                             {u"Galeria.md"_s, u"- ![żółw](%1)\n"_s.arg(server.url(u"/galeria-żółw.svg"_s)).toUtf8()}});
+        ws->setWebPictureHostCheck([](const QString &) { return false; });
+        QVERIFY(!ws->webPicturesShown());
+        QQuickWindow window;
+        Published published;
+        WebPicturesSelfTest::Options options;
+        options.page = u"journals/2026-10-14.md"_s;
+        options.uiGraceMs = 0;
+        options.exportCopies = exportCopies;
+        WebPicturesSelfTest test(ws.get(), options, published.fn(), withWindow ? &window : nullptr);
+        QSignalSpy finished(&test, &WebPicturesSelfTest::finished);
+        test.start();
+        QCOMPARE(finished.size(), 1); // at once
+        QCOMPARE(published.names(), QList<QByteArray>{"brulionWebPictureSelfTest"});
+        const QJsonObject report = published.last("brulionWebPictureSelfTest");
+        QCOMPARE(report, test.picturesReport());
+        QVERIFY(report.value(u"done"_s).toBool());
+        QVERIFY(report.value(u"refused"_s).toBool());
+        QVERIFY(!report.value(u"error"_s).toString().isEmpty());
+        QCOMPARE(report.value(u"page"_s).toString(), options.page);
+        QVERIFY(report.value(u"pictures"_s).toArray().isEmpty());
+        QVERIFY(test.exportReport().isEmpty());
+        QTest::qWait(300);
+        QCOMPARE(server.requests, QList<QByteArray>());
+        QCOMPARE(published.names().size(), 1);
+        QCOMPARE(ws->webPicture(picture).value(u"state"_s).toString(), u"ask"_s); // still waits for "Pokaż"
+    }
+
+    // A picture from the local network waits for "Pokaż" even with the setting on: the test
+    // reports it as "ask" (settled, not timed out) and never asks for it.
+    void webPicturesNeverAskForTheLocalNetwork()
+    {
+        MiniHttpServer server;
+        server.bodies.insert("/zdj%C4%99cie-z-NAS.png", pngBytes());
+        const QString picture = server.url(u"/zdjęcie-z-NAS.png"_s);
+        auto ws = openVault({{u"Strona.md"_s, u"- Zażółć ![NAS](%1)\n"_s.arg(picture).toUtf8()}});
+        ws->setWebPictureHostCheck([](const QString &) { return true; }); // 127.0.0.1: the local network
+        ws->setWebPicturesShown(true);
+        Published published;
+        WebPicturesSelfTest::Options options;
+        options.page = u"Strona.md"_s;
+        options.uiGraceMs = 0;
+        options.settleMs = 5000;
+        options.exportCopies = false;
+        WebPicturesSelfTest test(ws.get(), options, published.fn());
+        QSignalSpy finished(&test, &WebPicturesSelfTest::finished);
+        test.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 3000);
+        const QJsonObject report = published.last("brulionWebPictureSelfTest");
+        QVERIFY(!report.value(u"refused"_s).toBool());
+        QVERIFY(!report.value(u"timedOut"_s).toBool());
+        QCOMPARE(pictureOf(report, picture).value(u"state"_s).toString(), u"ask"_s);
+        QTest::qWait(300);
+        QCOMPARE(server.requests, QList<QByteArray>());
     }
 
     void penReportsTheCanvas()

@@ -66,6 +66,7 @@ test.describe('Obrazy z internetu w przeglądarce', () => {
       const report = await waitGlobal(page, 'brulionWebPictureSelfTest', (v) => v.done, 150_000);
       await attachJson(testInfo, 'brulionWebPictureSelfTest.json', report);
       expect(report.pageScheme).toBe('https');
+      expect(report.refused).toBe(false);
       expect(report.timedOut).toBe(false);
       const p = byUrl(report);
       expect(Object.keys(p).sort()).toEqual(Object.values(rows).sort());
@@ -169,6 +170,7 @@ test.describe('Obrazy z internetu w przeglądarce', () => {
       const report = await waitGlobal(page, 'brulionWebPictureSelfTest', (v) => v.done, 150_000);
       await attachJson(testInfo, 'brulionWebPictureSelfTest.json', report);
       expect(report.pageScheme).toBe('http');
+      expect(report.refused).toBe(false);
       expect(report.timedOut).toBe(false);
       const p = byUrl(report);
       expect(p[rows.http]).toMatchObject({ state: 'ready', format: 'png', width: PICTURE.width,

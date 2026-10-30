@@ -60,17 +60,21 @@ QJsonObject strokeFacts(const drawing::Stroke &stroke);
 QStringList shownTexts(QQuickItem *root, const QString &objectName);
 
 /// The pictures from the internet on one page, as the editor fetches them, then an export of the
-/// notebook with copies of them.
+/// notebook with copies of them. Only where the device shows such pictures without asking
+/// (Workspace::webPicturesShown; tests/web seeds that): otherwise it publishes at once
+/// "brulionWebPictureSelfTest" {page, done: true, refused: true, error, pictures: []} and does
+/// nothing else — no fetch the user was to be asked for, no export.
 ///
 ///  1. the page's pictures as written (io::webPictureTargets: the editor's keys);
 ///  2. waits up to `uiGraceMs` for the editor to fetch them by itself (Workspace::
-///     webPictureChanged before this test asked: `uiFetched`);
-///  3. asks for the rest (Workspace::webPicture, "ask" → loadWebPicture) until every one is
-///     ready or failed, at most `settleMs` (`timedOut`), and (with a window) the editor shows the
-///     failures' messages, at most `uiSettleMs` more → publishes "brulionWebPictureSelfTest"
-///     {page, pageScheme, done, timedOut, elapsedMs, pictures: [{url, state, error, format,
-///     width, height, uiFetched}], shownTexts (the editor's "webPictureText" items; with a
-///     window)};
+///     webPictureChanged before this test looked: `uiFetched`);
+///  3. looks at the rest as the editor does (Workspace::webPicture: fetched when they may be
+///     without asking; one that stays "ask" — a host of the local network — is never asked for)
+///     until every one is ready, failed or "ask", at most `settleMs` (`timedOut`), and (with a
+///     window) the editor shows the failures' messages, at most `uiSettleMs` more → publishes
+///     "brulionWebPictureSelfTest" {page, pageScheme, done, refused: false, timedOut, elapsedMs,
+///     pictures: [{url, state, error, format, width, height, uiFetched}], shownTexts (the
+///     editor's "webPictureText" items; with a window)};
 ///  4. with `exportCopies`: ExportController (`exportFormat`, `exportScope`, webPictures
 ///     "include"), once the notebook is indexed; ready → saveInBrowser() when `save` (false off
 ///     the browser) → publishes "brulionExportSelfTest" {state, errorText, format, scope,
@@ -116,13 +120,12 @@ private:
     PublishFn m_publish;
     QPointer<QQuickWindow> m_window;
     QStringList m_urls;
-    QSet<QString> m_signalled; ///< told by the workspace (before this test asked: the editor's)
+    QSet<QString> m_signalled; ///< told by the workspace (before this test looked: the editor's)
     QSet<QString> m_uiFetched;
-    QSet<QString> m_asked; ///< loadWebPicture() called by this test
     bool m_polling = false;
     QElapsedTimer m_clock;
     QElapsedTimer m_phase;
-    QElapsedTimer m_settledAt; ///< every picture ready or failed since
+    QElapsedTimer m_settledAt; ///< every picture ready, failed or "ask" since
     QTimer m_timer;
     ioviews::ExportController *m_export = nullptr;
     QJsonObject m_picturesReport;
