@@ -627,9 +627,18 @@ if ((KEYBOARD)); then
     wait_for 10 toolbar_on_bottom_navigation
   echo "    $(typing_report)"
   check "the bottom navigation's tabs are on screen, the editing toolbar above them" toolbar_above_tabs
-  # A tap on the edited text brings the keyboard back: the toolbar on it, the navigation away.
-  adb shell input tap $((SCREEN_W * 24 / 100)) $((SCREEN_H * 25 / 100))
-  check "a tap on the text brings the keyboard back" wait_for 15 ime_shown
+  # A tap on the text brings the keyboard back: the toolbar on it, the navigation away. The
+  # sample's days follow today's date (other chips, other line breaks): a tap that lands between
+  # two blocks edits none, so a few heights 25–31 % down the screen, as with the page below.
+  keyboard_back() {
+    local fraction
+    for fraction in 25 28 31; do
+      adb shell input tap $((SCREEN_W * 24 / 100)) $((SCREEN_H * fraction / 100))
+      wait_for 6 ime_shown && return 0
+    done
+    return 1
+  }
+  check "a tap on the text brings the keyboard back" keyboard_back
   sleep 3
   app_shot keyboard-journal-again
   check "the app's view ends at the keyboard's top again" keyboard_matches
