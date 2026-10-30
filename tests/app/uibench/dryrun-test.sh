@@ -48,5 +48,20 @@ if bash "$here/bench.sh" --dry-run --out "$work/round" --sizes tablet >/dev/null
 fi
 
 node --check "$here/obsidian-shots.mjs" || fail "obsidian-shots.mjs does not parse"
+# The Node scripts inside bench.sh (the manifest) and lib.sh (screens.json) parse too: a quote in
+# them would end the shell's string.
+rm -f "$work"/inline-*.js
+for f in bench.sh lib.sh; do
+  awk -v out="$work/inline-${f%.sh}" '
+    /node -e \x27$/ { on = 1; n++; next }
+    on && /^\x27/ { on = 0; next }
+    on { print > (out "-" n ".js") }' "$here/$f"
+done
+inline=("$work"/inline-*.js)
+[[ ${#inline[@]} -ge 2 && -e "${inline[0]}" ]] || fail "the inline Node scripts were not found"
+for js in "${inline[@]}"; do
+  ! grep -n "'" "$js" || fail "a quote in an inline Node script ($js) ends the shell's string"
+  node --check "$js" || fail "an inline Node script ($js) does not parse"
+done
 node --check "$here/judge.mjs" || fail "judge.mjs does not parse"
 echo "dryrun-test: ok ($shots Brulion shots)"
