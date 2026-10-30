@@ -9,12 +9,12 @@ Brulion nie ma własnego serwera. Notatki to zwykły folder, więc synchronizuje
 ## Syncthing (polecane do pracy offline)
 1. Udostępnij folder notatnika w Syncthing (na Androidzie: Syncthing-Fork).
 2. Na każdym urządzeniu wskaż w Brulionie ten sam folder (na Androidzie np. `/storage/emulated/0/Brulion` i zgoda „Dostęp do wszystkich plików”).
-3. Gdy ta sama notatka zmieni się na dwóch urządzeniach, Syncthing zostawia kopię `*.sync-conflict-*`. Brulion nie pokazuje jej jako strony, tylko w centrum synchronizacji jako **konflikt do scalenia**.
+3. Gdy ta sama notatka zmieni się na dwóch urządzeniach, Syncthing zostawia kopię `*.sync-conflict-*`. Brulion nie pokazuje jej jako strony, tylko w centrum synchronizacji jako **konflikt do scalenia** — także kopię rysunku, którą scalisz przyciskiem **Scal rysunki**.
 
 Opcjonalnie Brulion pokazuje stan z API Syncthinga.
 
 ## Nextcloud (WebDAV)
-*Ustawienia → Synchronizacja* (albo centrum synchronizacji): adres serwera, użytkownik i **hasło aplikacji** wygenerowane w Nextcloudzie. Zmiany z wielu urządzeń scalane są trójstronnie, więc zwykle nic nie ginie i nie musisz nic robić. Gdy scalenie jest niemożliwe, zostają obie wersje i dostajesz widok scalania.
+*Ustawienia → Synchronizacja* (albo centrum synchronizacji): adres serwera, użytkownik i **hasło aplikacji** wygenerowane w Nextcloudzie. Zmiany z wielu urządzeń scalane są trójstronnie (rysunki element po elemencie, nigdy wiersz po wierszu), więc zwykle nic nie ginie i nie musisz nic robić. Gdy scalenie jest niemożliwe, zostają obie wersje i dostajesz widok scalania.
 
 Serwer i konto są wspólne, ale **włączenie synchronizacji i folder na serwerze należą do notatnika**: inny notatnik (także ta dokumentacja) startuje bez synchronizacji. Dzięki temu notatki z jednego notatnika nie trafią do drugiego.
 
@@ -46,6 +46,7 @@ Menu **Więcej** (⋮) → *Centrum synchronizacji*, albo kliknięcie stanu sync
 - Jeśli serwer długo nie odpowiada, pojawia się ostrzeżenie, a po 180 s próba jest przerywana i ponawiana — panel nie „synchronizuje” w nieskończoność.
 - Po błędzie widać odliczanie do kolejnej próby i przycisk „Spróbuj teraz”.
 - Historia ostatnich uruchomień pokazuje wynik, powód i czas; kliknięcie otwiera szczegóły.
+- **Konflikty** rysunków pokazują obie wersje i wynik scalenia jako rysunki, nigdy jako tekst. **Scal rysunki** łączy linie i kształty z obu wersji (starte tylko na jednym urządzeniu wrócą), poprzednią wersję zapisuje w historii, a kopię przenosi do kosza. Kopia rysunku z Obsidiana, która ma inne notatki niż twój rysunek, zostaje po scaleniu, dopóki nie przeniesiesz z niej notatek i jej nie usuniesz. Zobacz [[Rysunki#Zapisywanie i synchronizacja|Zapisywanie i synchronizacja rysunków]].
 
 ## Rejestr zdarzeń
 Gdy coś nie działa, zajrzyj do **Rejestru zdarzeń** (*Ustawienia → Aplikacja*, albo „rejestr” w palecie poleceń). Można go filtrować i przeszukiwać, a potem skopiować lub zapisać do wysłania. Rejestr nie zawiera haseł, tokenów ani treści notatek; zostaje na urządzeniu, dopóki sam go nie udostępnisz. Przy problemach z synchronizacją włącz najpierw „Szczegółowy rejestr”, powtórz synchronizację i dopiero wtedy wyślij rejestr.

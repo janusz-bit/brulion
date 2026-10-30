@@ -471,7 +471,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `search` | `SearchView` — results in a folder of any depth with `folder` (the tree's "Szukaj w folderze"; the route follows its renames and moves) | `query?`, `folder?` |
 | `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves | `path?` (folder), `sort?` |
 | `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Otwórz stronę" or "Utwórz stronę", "Zadania z tym tagiem"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
-| `sync` | `SyncView` — Przegląd, Syncthing, Nextcloud (live progress, history of runs), Konflikty (merge) | `tab?`, `copy?`, `run?` (open a run's details) |
+| `sync` | `SyncView` — Przegląd, Syncthing, Nextcloud (live progress, history of runs), Konflikty (merge; drawings element by element) | `tab?`, `copy?`, `run?` (open a run's details) |
 | `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles, what to export (notebook / folder / page), for the HTML and Pandoc formats **Obrazy z internetu**: Zostaw adresy / Dołącz kopie (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Pobieranie obrazów z internetu (1 z 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Eksportuj…, the progress card, save | `tab?`, `importer?`, `files?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Zastąpiona z wiersza poleceń (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` | — |
@@ -1151,7 +1151,8 @@ and diagrams (shapes, arrows, text), on every platform.
   version in its order, plus the elements drawn here since — on top —, the ones changed here
   replacing theirs, minus the ones erased here; what was deleted there stays deleted; the paper's
   pattern and its light or dark theirs unless changed here — the same rule as the sync center's
-  "Scal rysunki")
+  "Scal rysunki", which has no common version: a union, see "Sync visibility" → "Conflict copies
+  of drawings"; Nextcloud's sync merges against the version both devices had last)
   and saved, with a toast. A gesture in progress goes on and ends on the new version. A version
   Brulion cannot edit any more (a frame or an embedded page added in excalidraw.com) is
   shown as it is; what was drawn here and not saved is written to a new file beside it ("… (to
@@ -1227,8 +1228,11 @@ first, still a drawing beyond 4 KB), `tst_drawing_elements` (every kind of eleme
 changed one's version, new elements as excalidraw.com reads them, fractional indices, corners,
 arrowheads, hatching, hit tests, the lasso, every edit, undo diffs of random edits, the SVG of
 shapes and text, random elements), `tst_drawing_merge` (the merge: new here on top, changed here
-wins, deleted here / there, a backdrop at the bottom, an unknown base),
-`tst_drawingcanvas` (stylus, eraser end, barrel button, a popup over the paper, Windows' mouse
+wins, deleted here / there, a backdrop at the bottom, an unknown base, versions, Polish ids, random
+merges keeping their invariants; how two versions relate — counts, the same drawing, an older one;
+Nextcloud's merge of files: SVG, `.excalidraw`, plugin files with their Markdown, and everything it
+refuses — a frame, a broken scene, no base, other formats, an element changed without a new
+version, both sides' Markdown changed), `tst_drawingcanvas` (a preview no input reaches, stylus, eraser end, barrel button, a popup over the paper, Windows' mouse
 events of the pen, fingers, a pinch, a palm while the pen is down, mouse buttons and the wheel,
 undo, the SVG checked with Qt's SVG renderer, loading, merging — also during a stroke, the paper,
 the theme —, far-away strokes, painting light and dark, the app's theme as no edit, a stroke drawn
@@ -1776,6 +1780,44 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   box says "Serwer nie odpowiada od 25 s…" with what Brulion waits for; after 180 s the run is
   stopped and retried — the panel never says "syncing" forever. `Workspace.sync.statusText`
   (sidebar footer, settings) follows the phases at the same pace.
+* **Conflict copies of drawings** (`SyncConflictResolver.qml` over `ConflictResolver`, list
+  entries `drawing`: the copy or the original is a drawing — an SVG with an Excalidraw scene,
+  `*.excalidraw.md`, `.excalidraw` —, a pen icon in the list): never the text merge (a line merge
+  would cut the scene's payload). A card "Dwie wersje rysunku" with read-only previews
+  (`DrawingCanvas { interactive: false }`: the whole drawing in view, centred both ways, no
+  input, the app's theme;
+  a drawing Brulion does not draw as its picture, `Workspace.drawingUrl`) of this device's
+  version, the copy and — when both are drawings Brulion edits, of one format — "Po scaleniu",
+  the elements of each ("3 elementy") and "wspólne: 2, tylko tutaj: 1, tylko w kopii: 1"; on
+  phones two previews in a row and the merge below, in a scrolling area. **Scal rysunki**
+  writes the union (core `drawing::merge` with no common version: Syncthing keeps none — the
+  original's elements, order, paper and Markdown around the scene, plus the copy's other
+  elements on top; for an element both have the higher version, a tie the original's) into the
+  drawing (`WorkspaceSync.resolveConflictBytes`: its previous version in History, unthrottled)
+  and moves the copy to the trash. Elements erased on one device only come back (the card says
+  so). Same elements (another program wrote the picture) → "Kopia ma ten sam rysunek"; the copy
+  contained in the drawing → "Wszystko z kopii jest już w rysunku" ("Usuń kopię"). A drawing
+  Brulion cannot merge (a frame, a picture without a scene, a broken one) gets only "Zachowaj
+  moją" / "Zachowaj kopię" (the copy's exact bytes, the replaced version in History). An
+  Obsidian plugin file (`*.excalidraw.md`) is a note too: its Markdown around the scene
+  (frontmatter, the back of the card, element links, embedded files, text entries) counts
+  (`drawing::keepsMarkdownOf`: the copy's must survive in the original's — text entries follow
+  their elements). When the copy's notes would be lost, nothing is "the same" or "older": "Scal
+  rysunki" (the card says so) merges the elements into the drawing and **keeps the copy**
+  (`ConflictResolver.updated`, a toast, the resolver stays open); then — or when the copy adds
+  nothing to the drawing at all, a merge would leave it as it is (the copy's own paper, an element
+  edited by hand: never taken) — a card "Różnią się tylko notatki wokół rysunku" with a
+  `BDiffView` of both files' Markdown (the scene's block left empty, `oursNotes`/`theirsNotes`)
+  and "Usuń kopię" once the user carried over what they need in Obsidian. The replaced version
+  goes to History whatever its size (`writeBytesKeepingHistory` records it from the disk: the
+  vault snapshots only the content it holds in memory, up to 16 MB; nothing is written when it
+  cannot be recorded). A decision made on versions that changed meanwhile is refused and shown
+  again. Desktop: "Otwórz rysunek" in the header. Tests: `tst_appio_conflicts`;
+  `tests/app/io/syncthing-conflict.sh` (no ctest, needs `syncthing`: two Syncthing instances on
+  127.0.0.1 change an SVG and an Obsidian drawing while paused, their own conflict copies merged by
+  `realSyncthingConflicts` on both devices' folders). Nextcloud's own sync merges a drawing changed on both devices by itself, against
+  the version both had last (`drawing::mergeDrawingFiles`); only drawings it cannot merge so
+  become such copies.
 * **Retry and decisions:** a failed run shows "Kolejna próba za 25 s" (a countdown) with
   "Spróbuj teraz"; held-back deletions and conflicts are "Czeka na Twoją decyzję" / "Konflikt w
   … — scal wersje" (the deletion guard and the conflict list stay as before). Moving or renaming
@@ -2094,8 +2136,10 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
   a new drawing (`new`) and drawings of Obsidian's Excalidraw plugin (`obsidian` in the editor,
   `obsidianpage` opened as a page, `obsidianframe` with a frame: read-only).
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
-  `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center and
-  import/export with prepared notebooks; the io script also seeds a sync history and an earlier
+  `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center (`sync-conflict-
+  drawing`: the conflict of a drawing, previews and "Scal rysunki"; `sync-conflict-drawing-notes`:
+  an Obsidian drawing whose copy differs only in its notes) and import/export with prepared
+  notebooks; the io script also seeds a sync history and an earlier
   session of the event log (`fixtures.sh`) for `sync-nextcloud`, `sync-details`,
   `sync-details-failed`, `logs`, `logs-sync`, `settings-app` (and `sync-stalled`, not in the
   default set: a server that never answers, 24 s per shot).

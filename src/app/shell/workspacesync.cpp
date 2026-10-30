@@ -1,5 +1,6 @@
 #include "workspacesync.h"
 
+#include "picturesize.h"
 #include "workspace.h"
 
 #include "dates/dates.h"
@@ -865,6 +866,9 @@ void WorkspaceSync::refreshConflicts()
                 { u"device"_s, c.device },
                 { u"source"_s, c.source == sync::ConflictCopy::Source::Syncthing ? u"syncthing"_s : u"brulion"_s },
                 { u"text"_s, sync::isSyncTextPath(c.copy) },
+                // (The 4 KB head of each, cached by modification time and size.)
+                { u"drawing"_s, editor::localFileIsDrawing(m_vault->absolutePath(c.copy))
+                                        || editor::localFileIsDrawing(m_vault->absolutePath(c.original)) },
             });
         }
     }
@@ -916,6 +920,24 @@ bool WorkspaceSync::resolveConflict(const QString &original, const QString &copy
         return false;
     }
     return discardConflictCopy(copy);
+}
+
+bool WorkspaceSync::resolveConflictBytes(const QString &original, const QString &copy, const QByteArray &bytes,
+                                         bool removeCopy)
+{
+    const std::optional<QVariantMap> conflict = conflictFor(copy);
+    const QString o = paths::normalize(original);
+    // Only real conflict copies of this original are removed (never an ordinary file).
+    if (!m_vault || !conflict || conflict->value(u"original"_s).toString() != o)
+        return false;
+    bool ok = false;
+    const QByteArray current = m_vault->readBinary(o, &ok);
+    QString error;
+    if ((!ok || current != bytes) && !writeBytesKeepingHistory(*m_vault, o, bytes, ChangeSource::User, &error)) {
+        Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(paths::pageTitle(o), error));
+        return false;
+    }
+    return !removeCopy || discardConflictCopy(copy);
 }
 
 bool WorkspaceSync::discardConflictCopy(const QString &copy)

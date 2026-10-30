@@ -3,8 +3,8 @@
 // canvas; Windows' mouse events made of the pen), a mouse, fingers (drawing, panning, a pinch),
 // the wheel —, undo / redo, the SVG it writes (valid for QSvgRenderer, read back equal), loading
 // Excalidraw files, merging a version another device wrote and what it paints — light and dark
-// (the drawing's theme, the app's) —, and the previews of drawings (DrawingImageProvider,
-// drawingrender.h). Offscreen.
+// (the drawing's theme, the app's) —, a preview no input reaches (`interactive: false`), and the
+// previews of drawings (DrawingImageProvider, drawingrender.h). Offscreen.
 #include "drawingcanvas.h"
 #include "drawingimageprovider.h"
 #include "drawingrender.h"
@@ -783,6 +783,70 @@ private Q_SLOTS:
         z = canvas->toItem(b.bottomRight());
         QVERIFY(a.x() >= 23.5 && z.x() <= 96.5 && std::abs(a.y() - 24) < 0.5 && z.y() <= 66.5);
         QVERIFY(std::abs((a.x() + z.x()) / 2 - 60) < 0.5);
+    }
+
+    void previewIsNotInteractive()
+    {
+        // The sync center's previews of a conflict: a mouse, a pen (its tip and its eraser end),
+        // fingers, the wheel and Ctrl+wheel change nothing — the drawing, the view, the history.
+        QCOMPARE(canvas->load(strokesFile({u"a"_s, u"b"_s, u"c"_s})), QString());
+        QSignalSpy interactive(canvas, &DrawingCanvas::interactiveChanged);
+        canvas->setInteractive(false);
+        QCOMPARE(interactive.size(), 1);
+        QVERIFY(!canvas->interactive());
+        QCOMPARE(canvas->acceptedMouseButtons(), Qt::MouseButtons(Qt::NoButton));
+        QVERIFY(!canvas->acceptTouchEvents());
+        // The whole drawing in view, whatever the size (no fitAll() needed).
+        canvas->setSize(QSizeF(300, 160));
+        const auto inView = [this] {
+            const QRectF b = canvas->contentBounds();
+            const QPointF a = canvas->toItem(b.topLeft());
+            const QPointF z = canvas->toItem(b.bottomRight());
+            return a.x() >= -0.5 && a.y() >= -0.5 && z.x() <= canvas->width() + 0.5 && z.y() <= canvas->height() + 0.5;
+        };
+        QVERIFY(inView());
+        QVERIFY(canvas->zoom() < 1);
+        // Centred both ways: no empty paper left below, where nothing is written in a preview.
+        const auto centred = [this] {
+            const QPointF c = canvas->toItem(canvas->contentBounds().center());
+            return qAbs(c.x() - canvas->width() / 2) < 0.5 && qAbs(c.y() - canvas->height() / 2) < 0.5;
+        };
+        QVERIFY(centred());
+        canvas->setSize(QSizeF(120, 300));
+        QVERIFY(inView());
+        QVERIFY(centred());
+        canvas->setSize(QSizeF(300, 160));
+        QCOMPARE(canvas->load(strokesFile({u"a"_s, u"b"_s, u"c"_s})), QString());
+        QVERIFY(inView());
+        const QPointF center(canvas->centerX(), canvas->centerY());
+        const qreal zoom = canvas->zoom();
+        mouseStroke(window.get(), {20, 20}, {280, 140}, 10);
+        mouseStroke(window.get(), {100, 80}, {200, 100}, 5, Qt::MiddleButton);
+        Pen pen(window.get());
+        pen.stroke({30, 40}, {260, 120}, 10, 0.3, 0.9);
+        Pen eraser(window.get(), QPointingDevice::PointerType::Eraser);
+        eraser.stroke({150, 10}, {150, 150}, 10, 0.5, 0.5);
+        Fingers fingers(window.get());
+        fingers.drag({60, 60}, {200, 120}, 6);
+        for (const Qt::KeyboardModifiers modifiers : {Qt::KeyboardModifiers(), Qt::KeyboardModifiers(Qt::ControlModifier)}) {
+            QWheelEvent wheel(QPointF(150, 80), window->mapToGlobal(QPointF(150, 80)), QPoint(), QPoint(0, -240),
+                              Qt::NoButton, modifiers, Qt::NoScrollPhase, false);
+            QCoreApplication::sendEvent(window.get(), &wheel);
+        }
+        QCOMPARE(canvas->strokeCount(), 3);
+        QVERIFY(!canvas->modified());
+        QVERIFY(!canvas->canUndo());
+        QVERIFY(!canvas->busy());
+        QVERIFY(!canvas->stylusSeen());
+        QCOMPARE(QPointF(canvas->centerX(), canvas->centerY()), center);
+        QCOMPARE(canvas->zoom(), zoom);
+        QVERIFY(inView());
+        // Interactive again: the mouse draws.
+        canvas->setInteractive(true);
+        QCOMPARE(interactive.size(), 2);
+        QCOMPARE(canvas->acceptedMouseButtons(), Qt::LeftButton | Qt::RightButton | Qt::MiddleButton);
+        mouseStroke(window.get(), {20, 150}, {280, 150}, 10);
+        QCOMPARE(canvas->strokeCount(), 4);
     }
 
     void externalChangesMerge()

@@ -5,7 +5,9 @@ JSON.stringify(scene, null, 2) → pako.deflate → a byte string in {"version":
 "bstring","compressed":true,"encoded":…} → JSON.stringify → btoa → the SVG's payload comments).
 
 excalidraw_shapes.* hold every kind of element Brulion draws; excalidraw_frame.svg a frame (an
-element Brulion does not edit: the drawing is shown read-only).
+element Brulion does not edit: the drawing is shown read-only). conflict_ours.svg and
+conflict_theirs.svg are two versions of one drawing for the sync center's conflict of drawings
+(tests/app/io/fixtures.sh): elements "a", "b", "c" and "a", "b", "d".
 
 smiley_embedded_v2.svg and test_embedded_v1.svg are Excalidraw's own test fixtures
 (excalidraw/excalidraw, packages/excalidraw/tests/fixtures, MIT licence), unchanged.
@@ -377,6 +379,23 @@ shapes_scene = json.dumps(scene(SHAPES, SHAPE_FILES), indent=2, ensure_ascii=Fal
 write("excalidraw_shapes.svg", svg(shapes_scene))
 write("excalidraw_shapes.excalidraw", shapes_scene)
 write("excalidraw_frame.svg", svg(json.dumps(scene([RECTANGLE, FRAME]), indent=2, ensure_ascii=False)))
+
+# The sync center's conflict of a drawing: what both versions have ("a" a line, "b" a box), what
+# only this device drew ("c", blue) and what only the other one drew ("d", a red ellipse).
+CONFLICT_A = element("a", "freedraw", 40, 60, width=200, height=40, points=wave(40, 5, 16), pressures=[],
+                     simulatePressure=True, lastCommittedPoint=None, roughness=0)
+CONFLICT_B = shape("b", "rectangle", 60, 120, 160, 80, roughness=0, roundness={"type": 3})
+CONFLICT_C = element("c", "freedraw", 260, 80, width=120, height=30, strokeColor="#1971c2", strokeWidth=2,
+                     points=wave(30, 4, 12), pressures=[], simulatePressure=True, lastCommittedPoint=None,
+                     roughness=0)
+CONFLICT_D = shape("d", "ellipse", 260, 150, 120, 70, strokeColor="#e03131", backgroundColor="#ffc9c9",
+                   roughness=0)
+write("conflict_ours.svg",
+      svg(json.dumps(scene([CONFLICT_A, CONFLICT_B, CONFLICT_C]), indent=2, ensure_ascii=False), width=400,
+          height=260))
+write("conflict_theirs.svg",
+      svg(json.dumps(scene([CONFLICT_A, CONFLICT_B, CONFLICT_D]), indent=2, ensure_ascii=False), width=400,
+          height=260))
 
 
 # ---- The Obsidian Excalidraw plugin's files (`*.excalidraw.md`) ----

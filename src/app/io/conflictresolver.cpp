@@ -1,5 +1,7 @@
 #include "conflictresolver.h"
 
+#include "drawing/drawingfile.h"
+#include "drawing/merge.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 #include "workspacesync.h"
@@ -187,6 +189,14 @@ void ConflictResolver::reload()
     m_identical = false;
     m_copyIsOlder = false;
     m_oursSize = m_theirsSize = 0;
+    m_canMergeDrawings = false;
+    m_oursBytes.clear();
+    m_theirsBytes.clear();
+    m_mergedBytes.clear();
+    m_drawingCounts.clear();
+    m_notesDiffer = m_notesOnly = false;
+    m_oursNotes.clear();
+    m_theirsNotes.clear();
     Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
     if (!vault || m_copy.isEmpty()) {
         Q_EMIT changed();
@@ -210,6 +220,11 @@ void ConflictResolver::reload()
     details.remove(u"theirs"_s);
     m_conflict = details;
 
+    if (isDrawing()) {
+        loadDrawings(original, copy, details.value(u"originalExists"_s).toBool());
+        Q_EMIT changed();
+        return;
+    }
     if (!isText()) {
         if (m_oursSize == m_theirsSize && details.value(u"originalExists"_s).toBool())
             m_identical = vault->readBinary(original) == vault->readBinary(copy);
@@ -259,6 +274,53 @@ void ConflictResolver::reload()
     Q_EMIT changed();
 }
 
+void ConflictResolver::loadDrawings(const QString &original, const QString &copy, bool originalExists)
+{
+    Vault *vault = m_workspace->vault();
+    m_oursBytes = originalExists ? vault->readBinary(original) : QByteArray();
+    m_theirsBytes = vault->readBinary(copy);
+    if (!originalExists)
+        return; // "Restore from the copy"
+    m_identical = m_oursBytes == m_theirsBytes;
+    const std::optional<drawing::DrawingFile> mine = drawing::readDrawingFile(m_oursBytes);
+    const std::optional<drawing::DrawingFile> other = drawing::readDrawingFile(m_theirsBytes);
+    if (!mine || !other)
+        return; // a picture, a broken scene: keep one of them
+    // An Obsidian plugin file is a note as well: the Markdown around its scene (frontmatter, the
+    // back of the card, links) counts — a merge writes the original's, so the copy's must be in it.
+    const bool keepsNotes = drawing::keepsMarkdownOf(*mine, *other);
+    if (!m_identical)
+        m_identical = drawing::sameDrawing(mine->drawing, other->drawing) && keepsNotes
+                && drawing::keepsMarkdownOf(*other, *mine);
+    const bool contained = !m_identical && drawing::containsDrawing(mine->drawing, other->drawing);
+    m_copyIsOlder = contained && keepsNotes;
+    m_notesDiffer = !m_identical && !keepsNotes;
+    if (m_notesDiffer) {
+        m_oursNotes = QString::fromUtf8(drawing::markdownAroundScene(*mine));
+        m_theirsNotes = QString::fromUtf8(drawing::markdownAroundScene(*other));
+    }
+    const bool mergeable = mine->format == other->format && mine->writable && drawing::editable(mine->drawing)
+                           && drawing::editable(other->drawing);
+    // No common version is known (a Syncthing copy): a union. The original is the primary side —
+    // its order, paper and Markdown around the scene; the copy's elements it lacks on top.
+    const drawing::Drawing merged =
+            mergeable ? drawing::merge(drawing::MergeBase{}, other->drawing, mine->drawing) : drawing::Drawing{};
+    // Only the notes are left when the drawing would not change: the copy contained, or a union
+    // that is the original as it is (the copy's paper, an element edited by hand at the same
+    // version: never taken) — a merge offered again and again would never get to them.
+    m_notesOnly = m_notesDiffer && (contained || (mergeable && drawing::sameDrawing(merged, mine->drawing)));
+    if (m_notesOnly || !mergeable)
+        return;
+    m_mergedBytes = drawing::writeDrawingFile(*mine, merged, m_workspace->now().toMSecsSinceEpoch());
+    if (m_mergedBytes.isEmpty())
+        return;
+    m_canMergeDrawings = true;
+    const drawing::MergeCounts c = drawing::mergeCounts(mine->drawing, other->drawing, merged);
+    m_drawingCounts = QVariantMap{ { u"ours"_s, c.ours },         { u"theirs"_s, c.theirs },
+                                   { u"common"_s, c.common },     { u"onlyOurs"_s, c.onlyOurs },
+                                   { u"onlyTheirs"_s, c.onlyTheirs }, { u"merged"_s, c.merged } };
+}
+
 void ConflictResolver::finish(bool ok, const QString &message)
 {
     if (!ok) {
@@ -296,6 +358,48 @@ bool ConflictResolver::textsUnchanged()
     return false;
 }
 
+bool ConflictResolver::drawingsUnchanged()
+{
+    Vault *vault = m_workspace->vault();
+    const QString original = m_conflict.value(u"original"_s).toString();
+    const bool existed = m_conflict.value(u"originalExists"_s).toBool();
+    bool readOurs = false;
+    bool readTheirs = false;
+    const QByteArray ours = vault ? vault->readBinary(original, &readOurs) : QByteArray();
+    const QByteArray theirs = vault ? vault->readBinary(m_copy, &readTheirs) : QByteArray();
+    if (vault && readTheirs && theirs == m_theirsBytes && readOurs == existed && (!existed || ours == m_oursBytes))
+        return true;
+    const QString title = m_conflict.value(u"title"_s).toString();
+    reload();
+    Q_EMIT failed(tr("“%1” has changed in the meantime. Look at both versions again before deciding.").arg(title));
+    return false;
+}
+
+bool ConflictResolver::mergeDrawings()
+{
+    if (!loaded() || !isDrawing() || !m_canMergeDrawings)
+        return false;
+    if (!drawingsUnchanged())
+        return false;
+    const QString original = m_conflict.value(u"original"_s).toString();
+    const QString title = m_conflict.value(u"title"_s).toString();
+    if (m_notesDiffer) {
+        // The copy's notes would be lost with it: it stays until they are carried over.
+        if (!m_workspace->sync()->resolveConflictBytes(original, m_copy, m_mergedBytes, false)) {
+            Q_EMIT failed(tr("The merged drawing could not be saved."));
+            return false;
+        }
+        reload();
+        Q_EMIT updated(tr("Merged the drawing “%1”. The copy stays: its notes differ from yours.").arg(title));
+        return true;
+    }
+    const bool ok = m_workspace->sync()->resolveConflictBytes(original, m_copy, m_mergedBytes);
+    finish(ok, ok ? tr("Merged the drawing “%1”. Your previous version is in the history, the copy in the trash.")
+                            .arg(title)
+                  : tr("The merged drawing could not be saved."));
+    return ok;
+}
+
 bool ConflictResolver::keepCopy()
 {
     if (!loaded())
@@ -303,6 +407,15 @@ bool ConflictResolver::keepCopy()
     const QString original = m_conflict.value(u"original"_s).toString();
     const QString title = m_conflict.value(u"title"_s).toString();
     bool ok = false;
+    if (isDrawing()) {
+        // The copy's bytes as they are; the drawing they replace stays in the history.
+        if (!drawingsUnchanged())
+            return false;
+        ok = m_workspace->sync()->resolveConflictBytes(original, m_copy, m_theirsBytes);
+        finish(ok, ok ? tr("“%1” now has the copy's content. Your previous version is in the history.").arg(title)
+                      : tr("The copy could not be applied."));
+        return ok;
+    }
     if (isText()) {
         if (!textsUnchanged())
             return false;

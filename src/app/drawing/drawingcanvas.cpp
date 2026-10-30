@@ -234,6 +234,37 @@ void DrawingCanvas::setPanMode(bool on)
     Q_EMIT panModeChanged();
 }
 
+void DrawingCanvas::setInteractive(bool on)
+{
+    if (on == m_interactive)
+        return;
+    m_interactive = on;
+    if (!on) {
+        // A preview: whatever was going on ends, nothing more reaches it.
+        cancelStroke();
+        if (busy())
+            cancelToolGesture();
+        endTextEdit();
+        m_tabletGesture = false;
+        m_hover = QPointF(-1, -1);
+        ungrabMouse();
+        ungrabTouchPoints();
+        unsetCursor();
+    } else {
+        setCursor(m_panMode ? Qt::OpenHandCursor
+                  : m_tool == u"select" ? Qt::ArrowCursor
+                  : m_tool == u"text"   ? Qt::IBeamCursor
+                                        : Qt::CrossCursor);
+    }
+    setAcceptedMouseButtons(on ? Qt::LeftButton | Qt::RightButton | Qt::MiddleButton : Qt::NoButton);
+    setAcceptTouchEvents(on);
+    setAcceptHoverEvents(on);
+    if (!on)
+        fitAll();
+    update();
+    Q_EMIT interactiveChanged();
+}
+
 void DrawingCanvas::setZoom(qreal zoom)
 {
     zoom = std::clamp(zoom, MinZoom, MaxZoom);
@@ -356,6 +387,8 @@ QString DrawingCanvas::load(const QByteArray &bytes)
     setModified(false);
     m_viewSet = false;
     placeView();
+    if (!m_interactive)
+        fitAll(); // a preview shows the whole drawing
     Q_EMIT loadedChanged();
     Q_EMIT backgroundChanged();
     Q_EMIT themeChanged();
@@ -582,8 +615,10 @@ void DrawingCanvas::fitAll()
         const double z = std::min({(width() - 2 * margin) / std::max(1.0, b.width()),
                                    (height() - 2 * margin) / std::max(1.0, b.height()), 1.0});
         m_zoom = std::clamp(z, MinZoom, MaxZoom);
-        // Centred across, from the top down (room left over stays below, where writing goes on).
-        m_center = QPointF(b.center().x(), b.top() - margin / m_zoom + height() / (2 * m_zoom));
+        // Centred across, from the top down (room left over stays below, where writing goes on);
+        // a preview, where nothing is written, centred both ways.
+        m_center = m_interactive ? QPointF(b.center().x(), b.top() - margin / m_zoom + height() / (2 * m_zoom))
+                                 : b.center();
     }
     viewMoved(false);
 }
@@ -634,7 +669,9 @@ void DrawingCanvas::geometryChange(const QRectF &newGeometry, const QRectF &oldG
     QQuickPaintedItem::geometryChange(newGeometry, oldGeometry);
     if (newGeometry.size() == oldGeometry.size())
         return;
-    if (!m_viewSet)
+    if (!m_interactive)
+        fitAll(); // a preview shows the whole drawing
+    else if (!m_viewSet)
         placeView();
     else if (oldGeometry.width() > 0 && oldGeometry.height() > 0)
         // The scene point at the top left stays there (a phone's keyboard, a resized window).
@@ -877,6 +914,8 @@ void DrawingCanvas::render(QPainter *painter, const QSizeF &size)
 
 bool DrawingCanvas::eventFilter(QObject *watched, QEvent *event)
 {
+    if (!m_interactive)
+        return QQuickPaintedItem::eventFilter(watched, event); // a preview leaves the pen alone
     switch (event->type()) {
     case QEvent::TabletPress:
     case QEvent::TabletMove:
@@ -932,7 +971,7 @@ QQuickItem *topInputItem(QQuickItem *item, QPointF scenePos)
 bool DrawingCanvas::onTop(QPointF scenePos) const
 {
     QQuickWindow *w = window();
-    if (!w || !isVisible() || !isEnabled() || !contains(mapFromScene(scenePos)))
+    if (!w || !m_interactive || !isVisible() || !isEnabled() || !contains(mapFromScene(scenePos)))
         return false;
     return topInputItem(w->contentItem(), scenePos) == this;
 }
@@ -1142,6 +1181,10 @@ void DrawingCanvas::hoverLeaveEvent(QHoverEvent *event)
 
 void DrawingCanvas::wheelEvent(QWheelEvent *event)
 {
+    if (!m_interactive) {
+        event->ignore(); // (the list behind a preview scrolls)
+        return;
+    }
     m_interactingView = true;
     m_settle.start();
     if (event->modifiers() & Qt::ControlModifier) {
@@ -1159,7 +1202,7 @@ void DrawingCanvas::wheelEvent(QWheelEvent *event)
 
 bool DrawingCanvas::event(QEvent *event)
 {
-    if (event->type() == QEvent::NativeGesture) {
+    if (event->type() == QEvent::NativeGesture && m_interactive) {
         // A touchpad's pinch (macOS, Wayland, Windows precision touchpads).
         const auto *g = static_cast<QNativeGestureEvent *>(event);
         if (g->gestureType() == Qt::ZoomNativeGesture) {

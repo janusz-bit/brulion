@@ -1,8 +1,9 @@
 // One SyncEngine run: list both sides, decide per path (planSync), transfer, merge, record.
 #include "sync/syncrun_p.h"
 
+#include "drawing/drawingfile.h"
 #include "drawing/excalidraw.h"
-#include "drawing/excalidrawmd.h"
+#include "drawing/merge.h"
 #include "log/redact.h"
 #include "log/slowscope.h"
 #include "sync/conflicts.h"
@@ -52,18 +53,16 @@ bool isJsonObject(const QString &text)
     return error.error == QJsonParseError::NoError && doc.isObject();
 }
 
-/// A drawing of the Obsidian Excalidraw plugin (`*.excalidraw.md`, docs/SYNTAX.md §2 "Drawings") or
-/// a `.excalidraw` scene: a line merge of two versions may glue a scene into broken JSON (the
-/// plugin's "json" block) — never merged line by line. (A `.excalidraw` file syncs as a binary
-/// file today — isSyncTextPath() — so it never gets here; the check stays should it become text.)
-bool isExcalidrawText(const VaultPath &path, const QString &text)
+/// A drawing (docs/SYNTAX.md §2 "Drawings"): an SVG with an embedded Excalidraw scene, an Obsidian
+/// Excalidraw plugin file (`*.excalidraw.md`) or a `.excalidraw` scene — by its name and start
+/// (drawing::looksLikeDrawingFile). Never merged line by line: Brulion's SVG keeps its scene in one
+/// payload line both sides change, and a line merge may glue two scenes into broken JSON. (A
+/// `.excalidraw` file syncs as a binary file — isSyncTextPath() — so it never gets here; it would
+/// merge the same way should it become text.)
+bool isDrawingText(const VaultPath &path, const QString &text)
 {
     const QByteArray head = QStringView(text).first(std::min<qsizetype>(text.size(), drawing::HeadBytes)).toUtf8();
-    if (path.endsWith(u".md"_s, Qt::CaseInsensitive))
-        return drawing::looksLikeExcalidrawMarkdown(head);
-    if (path.endsWith(u".excalidraw"_s, Qt::CaseInsensitive))
-        return drawing::looksLikeExcalidrawJson(head);
-    return false;
+    return drawing::looksLikeDrawingFile(path, head);
 }
 
 /// Remote folders not worth listing (ignored ones; ".brulion" holds the config).
@@ -1539,15 +1538,22 @@ std::optional<QString> SyncRun::mergeText(const VaultPath &path, const QString &
     }
     if (!haveBase)
         return std::nullopt;
-    // An Excalidraw drawing changed on both sides: both versions kept (a conflict copy), never a
-    // line merge of its scene. One side as the base (a new ETag, the same text: a client uploaded
-    // it again) is no change there: the other side's version.
-    if (isExcalidrawText(path, local) || isExcalidrawText(path, remote)) {
+    // A drawing changed on both sides: merged element by element against the base (new elements
+    // of both, erased ones gone, the remote's order with this device's new elements on top),
+    // never line by line. One side as the base (a new ETag, the same text: a client uploaded it
+    // again) is no change there: the other side's version. A drawing that cannot be merged so (an
+    // element Brulion does not draw, a broken scene, no base: two drawings born apart under one
+    // name) keeps both versions (a conflict copy; the sync center merges it on request).
+    if (isDrawingText(path, local) || isDrawingText(path, remote)) {
         if (remote == base)
             return local;
         if (local == base)
             return remote;
-        return std::nullopt;
+        const std::optional<QByteArray> merged = drawing::mergeDrawingFiles(
+                base.toUtf8(), local.toUtf8(), remote.toUtf8(), now().toMSecsSinceEpoch());
+        if (!merged)
+            return std::nullopt;
+        return decodeSyncText(*merged);
     }
     const MergeResult result = merge3(base, local, remote);
     return result.clean ? std::optional<QString>(result.text) : std::nullopt;

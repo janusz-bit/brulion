@@ -2,8 +2,10 @@
 # Fixtures shared by qml-smoke.sh and screenshots.sh of the sync and import/export views.
 #
 #   source tests/app/io/fixtures.sh
-#   io_conflict_vault <dir>     conflict copies: Syncthing ones of "Zakupy.md" and of a picture, a
-#                               Brulion (Nextcloud) one of "Plan podróży.md"
+#   io_conflict_vault <dir>     conflict copies: Syncthing ones of "Zakupy.md", of a picture and of
+#                               a drawing ("assets/Szkic.svg": tests/data/drawing/conflict_*.svg),
+#                               of an Obsidian drawing with other notes ("Excalidraw/Szkic
+#                               ogrodu.excalidraw.md"), a Brulion (Nextcloud) one of "Plan podróży.md"
 #   io_seeded_vault <bin> <dir> <now>   once: the sample notebook seeded by the app itself (--demo
 #                               only seeds an empty folder) plus io_conflict_vault — copy it per run
 #   io_history_base <home> <vault>   this device's version history of "Zakupy.md" holds the common
@@ -19,8 +21,20 @@
 #                               a slow sync that timed out, a retry, a stall
 
 io_conflict_vault() {
-  local dir="$1"
+  local dir="$1" drawings
+  drawings="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../data/drawing" && pwd)"
   mkdir -p "$dir/assets"
+  # A drawing changed on two devices: a line and a box in both, a blue line here, a red ellipse in
+  # the copy ("Scal rysunki").
+  cp "$drawings/conflict_ours.svg" "$dir/assets/Szkic.svg"
+  cp "$drawings/conflict_theirs.svg" "$dir/assets/Szkic.sync-conflict-20261013-184500-LAPTOP7.svg"
+  # An Obsidian Excalidraw drawing whose copy differs only in the notes on the back of the drawing
+  # ("Różnią się tylko notatki wokół rysunku": the notes compared, "Usuń kopię").
+  mkdir -p "$dir/Excalidraw"
+  cp "$drawings/obsidian_freedraw.excalidraw.md" "$dir/Excalidraw/Szkic ogrodu.excalidraw.md"
+  sed 's/^Notatka z tyłu: Zażółć gęślą jaźń$/Notatka z tyłu: posadzić jabłoń przy płocie, ławka pod śliwą/' \
+    "$drawings/obsidian_freedraw.excalidraw.md" \
+    > "$dir/Excalidraw/Szkic ogrodu.excalidraw.sync-conflict-20261013-184500-LAPTOP7.md"
   # Zakupy: with io_history_base an automatic three-way merge (both appended after "masło", only
   # this device changed the bread); without it a two-way merge.
   printf -- '- mleko\n- chleb żytni\n- masło\n- jajka\n- kawa ziarnista\n' > "$dir/Zakupy.md"

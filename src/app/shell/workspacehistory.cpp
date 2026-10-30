@@ -48,6 +48,38 @@ bool writeTextKeepingHistory(Vault &vault, const QString &path, const QString &c
     return written;
 }
 
+bool writeBytesKeepingHistory(Vault &vault, const QString &path, const QByteArray &bytes, ChangeSource source,
+                              QString *error)
+{
+    History *h = vault.history();
+    bool written = false;
+    if (!h) {
+        written = vault.writeBinary(path, bytes, source);
+    } else {
+        const HistoryPolicy policy = h->policy();
+        HistoryPolicy unthrottled = policy;
+        unthrottled.throttleSeconds = 0;
+        h->setPolicy(unthrottled);
+        // The vault snapshots the content it holds in memory, never a file beyond its cache (a
+        // drawing with pasted photos): the version replaced is recorded from the disk here. (The
+        // vault's own snapshot of the same bytes is then no new entry.)
+        const bool exists = vault.exists(path);
+        bool read = false;
+        const QByteArray current = exists ? vault.readBinary(path, &read) : QByteArray();
+        const bool recorded =
+                !exists || (read && (current == bytes || h->snapshotBytes(path, current, changeSourceName(source))));
+        if (!recorded && error)
+            *error = read ? h->errorString() : vault.errorString();
+        written = recorded && vault.writeBinary(path, bytes, source);
+        h->setPolicy(policy);
+        if (!recorded)
+            return false;
+    }
+    if (!written && error)
+        *error = vault.errorString();
+    return written;
+}
+
 QVariantList Workspace::history(const QString &path) const
 {
     QVariantList out;

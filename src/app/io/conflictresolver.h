@@ -13,13 +13,37 @@
 //   copyIsOlder        the copy equals an older version of the original on this device: every
 //                      change in it is already contained in "mine"
 //
+// Drawings (`drawing`: the list's `drawing` — an SVG with an Excalidraw scene, `*.excalidraw.md`,
+// `.excalidraw`; `text` is false for them: never merged line by line, the payload would be cut):
+//   oursBytes, theirsBytes   both files, mergedBytes the merge (the previews load them)
+//   canMergeDrawings   both are drawings Brulion edits, of one format: drawing::merge with no
+//                      common version (a union) — the original's elements, order, paper and
+//                      Markdown around the scene, plus the elements only the copy has (on top);
+//                      for an element both have, the higher version (a tie: the original's)
+//   drawingCounts      { ours, theirs, common, onlyOurs, onlyTheirs, merged } (elements)
+//   identical          the same elements (another program wrote the picture around them) and,
+//                      for Obsidian Excalidraw plugin files, the same Markdown around the scene
+//   copyIsOlder        the original has every element of the copy (drawing::containsDrawing)
+//                      and every note of it (below)
+//   notesDiffer        plugin files: the copy's Markdown around its scene (frontmatter, the back
+//                      of the card, links, embedded files, text entries) would not survive in the
+//                      original's (drawing::keepsMarkdownOf) — oursNotes / theirsNotes show both
+//                      (drawing::markdownAroundScene); notesOnly: nothing else differs (the copy's
+//                      elements are all in the original, or a merge would not change it — the
+//                      copy's paper, a same-version hand edit): only "remove the copy" or "keep one"
+//   mergeDrawings()    mergedBytes replace the original, the copy goes — but while notesDiffer
+//                      the copy stays (updated(), not resolved()): its notes are carried over by
+//                      hand, then it is removed (notesOnly)
+//
 //   keepMine()         the original stays, the copy goes to the trash
 //   keepCopy()         the copy's content replaces the original, the copy goes (binary files: the
-//                      original goes to the trash and the copy is renamed into its place)
+//                      original goes to the trash and the copy is renamed into its place; a
+//                      drawing: the copy's bytes, the original's in the history)
 //   applyMerged(text)  `text` replaces the original, the copy goes
 // The replaced text of the original stays in the version history (Workspace.sync.resolveConflict,
-// unthrottled). keepCopy() and applyMerged() refuse (failed(), reload()) when the original or the
-// copy changed after they were loaded: the decision was made on the texts shown.
+// resolveConflictBytes; unthrottled). keepCopy(), applyMerged() and mergeDrawings() refuse
+// (failed(), reload()) when the original or the copy changed after they were loaded: the decision
+// was made on the versions shown.
 #pragma once
 
 #include "workspace.h"
@@ -56,8 +80,21 @@ class ConflictResolver : public QObject {
     Q_PROPERTY(bool loaded READ loaded NOTIFY changed FINAL)
     /// The conflict as listed by Workspace.sync.conflicts (+ originalExists).
     Q_PROPERTY(QVariantMap conflict READ conflict NOTIFY changed FINAL)
-    /// Both are text files (mergeable).
+    /// Both are text files, merged line by line (never drawings).
     Q_PROPERTY(bool text READ isText NOTIFY changed FINAL)
+    /// The copy or the original is a drawing: shown as drawings.
+    Q_PROPERTY(bool drawing READ isDrawing NOTIFY changed FINAL)
+    /// Both are drawings Brulion edits, of one format: "Scal rysunki".
+    Q_PROPERTY(bool canMergeDrawings READ canMergeDrawings NOTIFY changed FINAL)
+    Q_PROPERTY(QByteArray oursBytes READ oursBytes NOTIFY changed FINAL)
+    Q_PROPERTY(QByteArray theirsBytes READ theirsBytes NOTIFY changed FINAL)
+    Q_PROPERTY(QByteArray mergedBytes READ mergedBytes NOTIFY changed FINAL)
+    Q_PROPERTY(QVariantMap drawingCounts READ drawingCounts NOTIFY changed FINAL)
+    /// Plugin files whose Markdown around the scene a merge would lose (see above).
+    Q_PROPERTY(bool notesDiffer READ notesDiffer NOTIFY changed FINAL)
+    Q_PROPERTY(bool notesOnly READ notesOnly NOTIFY changed FINAL)
+    Q_PROPERTY(QString oursNotes READ oursNotes NOTIFY changed FINAL)
+    Q_PROPERTY(QString theirsNotes READ theirsNotes NOTIFY changed FINAL)
     Q_PROPERTY(QString ours READ ours NOTIFY changed FINAL)
     Q_PROPERTY(QString theirs READ theirs NOTIFY changed FINAL)
     Q_PROPERTY(QString base READ base NOTIFY changed FINAL)
@@ -82,7 +119,17 @@ public:
 
     bool loaded() const { return !m_conflict.isEmpty(); }
     QVariantMap conflict() const { return m_conflict; }
-    bool isText() const { return m_conflict.value(QStringLiteral("text")).toBool(); }
+    bool isText() const { return m_conflict.value(QStringLiteral("text")).toBool() && !isDrawing(); }
+    bool isDrawing() const { return m_conflict.value(QStringLiteral("drawing")).toBool(); }
+    bool canMergeDrawings() const { return m_canMergeDrawings; }
+    QByteArray oursBytes() const { return m_oursBytes; }
+    QByteArray theirsBytes() const { return m_theirsBytes; }
+    QByteArray mergedBytes() const { return m_mergedBytes; }
+    QVariantMap drawingCounts() const { return m_drawingCounts; }
+    bool notesDiffer() const { return m_notesDiffer; }
+    bool notesOnly() const { return m_notesOnly; }
+    QString oursNotes() const { return m_oursNotes; }
+    QString theirsNotes() const { return m_theirsNotes; }
     QString ours() const { return m_ours; }
     QString theirs() const { return m_theirs; }
     QString base() const { return m_base; }
@@ -102,6 +149,9 @@ public:
     Q_INVOKABLE bool keepMine();
     Q_INVOKABLE bool keepCopy();
     Q_INVOKABLE bool applyMerged(const QString &text);
+    /// Write mergedBytes into the original and move the copy to the trash (canMergeDrawings) —
+    /// unless notesDiffer: then the copy stays, reloaded (updated()).
+    Q_INVOKABLE bool mergeDrawings();
 
 Q_SIGNALS:
     void workspaceChanged();
@@ -109,11 +159,17 @@ Q_SIGNALS:
     /// The conflict is gone (translated message for a toast).
     void resolved(const QString &message);
     void failed(const QString &message);
+    /// The original changed, the conflict stays (translated message for a toast).
+    void updated(const QString &message);
 
 private:
     void finish(bool ok, const QString &message);
     /// Both files still hold the texts the user decided on; otherwise reload() and failed().
     bool textsUnchanged();
+    /// The same for drawings: both files still hold the bytes shown.
+    bool drawingsUnchanged();
+    /// Read both drawings and merge them (reload() of a drawing conflict).
+    void loadDrawings(const QString &original, const QString &copy, bool originalExists);
 
     QPointer<shell::Workspace> m_workspace;
     QString m_copy;
@@ -131,6 +187,15 @@ private:
     bool m_copyIsOlder = false;
     qint64 m_oursSize = 0;
     qint64 m_theirsSize = 0;
+    bool m_canMergeDrawings = false;
+    QByteArray m_oursBytes;
+    QByteArray m_theirsBytes;
+    QByteArray m_mergedBytes;
+    QVariantMap m_drawingCounts;
+    bool m_notesDiffer = false;
+    bool m_notesOnly = false;
+    QString m_oursNotes;
+    QString m_theirsNotes;
 };
 
 } // namespace brulion::ioviews

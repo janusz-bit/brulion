@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # QML smoke test of the sync and import/export views (ctest tst_appio_qml): SyncView on every tab
-# (with conflict copies and an unreachable Nextcloud account), a conflict opened in the resolver,
+# (with conflict copies and an unreachable Nextcloud account), conflicts opened in the resolver (a
+# note, a picture, a drawing, an Obsidian drawing whose notes differ),
 # ImportExportView with a Logseq graph preset (reading, recognising, the preview), the Microsoft To
 # Do card with its sign-in and the export
 # tab, the settings' sync and application sections and the event log page — at desktop and phone
@@ -28,6 +29,8 @@ routes=(
   '{"view":"sync","copy":"Plan podróży.conflict-Telefon-Łucji-20261014-091500.md"}'
   '{"view":"sync","copy":"assets/paragon.sync-conflict-20261013-184500-LAPTOP7.png"}'
   '{"view":"sync","copy":"Zakupy.sync-conflict-20261013-184500-LAPTOP7.md"}'
+  '{"view":"sync","copy":"assets/Szkic.sync-conflict-20261013-184500-LAPTOP7.svg"}'
+  '{"view":"sync","copy":"Excalidraw/Szkic ogrodu.excalidraw.sync-conflict-20261013-184500-LAPTOP7.md"}'
   importExport
   "{\"view\":\"importExport\",\"files\":\"$work/graf\"}"
   '{"view":"importExport","importer":"notion"}'

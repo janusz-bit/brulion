@@ -8,6 +8,10 @@
 //   canvas.load(Workspace.readAttachment(path)) → "" | "readonly" | "notDrawing" | "corrupt"
 //   const bytes = canvas.fileBytes(); Workspace.writeAttachment(path, bytes); canvas.markSaved(bytes)
 //
+// A preview (`interactive: false`: the sync center's conflict of two drawings and their merge)
+// only shows a drawing, all of it (fitAll()): no input reaches it, it never takes the pen from its
+// window.
+//
 // Files (core drawing/drawingfile.h): Brulion's SVG, a `.excalidraw` scene and an Obsidian
 // Excalidraw plugin file (`*.excalidraw.md`) — each written back in its own format (`format`,
 // fileBytes(): the plugin file's Markdown around the scene kept as it was).
@@ -119,6 +123,11 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(bool stylusSeen READ stylusSeen NOTIFY stylusSeenChanged FINAL)
     /// The left mouse button / one finger moves the paper (Space held).
     Q_PROPERTY(bool panMode READ panMode WRITE setPanMode NOTIFY panModeChanged FINAL)
+    /// Takes input (default). False: a preview (the sync center's conflict of drawings) — no mouse,
+    /// touch, stylus, wheel or pinch reaches it (they go to what lies behind: a list scrolls),
+    /// nothing is drawn or moved there; the whole drawing is in view (fitAll()) after load() and
+    /// whenever the item's size changes.
+    Q_PROPERTY(bool interactive READ interactive WRITE setInteractive NOTIFY interactiveChanged FINAL)
     /// The view: zoom (1 = one scene unit per pixel) and the scene point at the item's centre.
     Q_PROPERTY(qreal zoom READ zoom WRITE setZoom NOTIFY viewChanged FINAL)
     Q_PROPERTY(qreal centerX READ centerX WRITE setCenterX NOTIFY viewChanged FINAL)
@@ -190,6 +199,8 @@ public:
     bool stylusSeen() const { return m_stylusSeen; }
     bool panMode() const { return m_panMode; }
     void setPanMode(bool on);
+    bool interactive() const { return m_interactive; }
+    void setInteractive(bool on);
     qreal zoom() const { return m_zoom; }
     void setZoom(qreal zoom);
     qreal centerX() const { return m_center.x(); }
@@ -244,7 +255,8 @@ public:
     Q_INVOKABLE bool isKnownFile(const QByteArray &bytes) const { return !bytes.isEmpty() && bytes == m_known; }
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
-    /// The whole drawing in view (at most zoom 1), centred across, from its top.
+    /// The whole drawing in view (at most zoom 1), centred across, from its top (a preview —
+    /// `interactive` false — centred both ways).
     Q_INVOKABLE void fitAll();
     Q_INVOKABLE void zoomBy(qreal factor, qreal x = -1, qreal y = -1);
     Q_INVOKABLE void panBy(qreal dx, qreal dy);
@@ -316,6 +328,7 @@ Q_SIGNALS:
     void fingerDrawsChanged();
     void stylusSeenChanged();
     void panModeChanged();
+    void interactiveChanged();
     void viewChanged();
     void historyChanged();
     void modifiedChanged();
@@ -463,6 +476,7 @@ private:
     QColor m_paperLight = QColor(u"#ffffff");
     QColor m_paperDark = QColor(u"#121212");
     bool m_appDark = false;
+    bool m_interactive = true;
     bool m_editable = true;
     /// The file's format and, for an Excalidraw plugin file, its Markdown around the scene (the
     /// last loaded or taken in); m_writable false: shown only.
