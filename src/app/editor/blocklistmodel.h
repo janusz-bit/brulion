@@ -58,9 +58,12 @@
 //                spacing between blocks (a list item after a list item sits tight)
 //   noteModeOnly YAML frontmatter holding nothing but the note mode key `brulion` — such a row is
 //                not `visible` (the page header's mode toggle stands for it) unless edited
-// A leading frontmatter row whose text changed (a property edited in the panel, the note mode,
-// undo, another device) keeps its row in replaceContent(): a dataChanged instead of a removal and
-// an insertion, so its delegate (the expanded panel, a focused field) survives.
+// Blocks keep their uid, row and cached state through every change: operations and undo / redo
+// (BlockDocument::revert / reapply) report only the rows they add, remove, move or change, and
+// replaceContent() (a whole new text: another device, a paste of Markdown, source mode) gives the
+// blocks it keeps their old uids. A leading frontmatter row whose text changed (a property edited
+// in the panel, the note mode, another device) keeps its row there too: a dataChanged instead of
+// a removal and an insertion, so its delegate (the expanded panel, a focused field) survives.
 // Folding can be switched off (setFoldingEnabled(false), the document mode): folded blocks then
 // show their children (`collapsed` false) while the folds are kept for the outline mode.
 #pragma once
@@ -167,12 +170,12 @@ public:
     QString text() const;
     /// Replace the content with a model reset (a page was loaded).
     void resetContent(const QString &content);
-    /// Replace the content keeping rows of unchanged blocks (undo/redo, external changes).
-    /// Returns old uid -> new uid for the blocks that were kept (not a leading frontmatter row
-    /// kept with another text: for the caller that is another block). View state (folds, zoom,
-    /// editing, selection) follows the kept blocks. `blankBlocks`: that version's empty paragraphs
-    /// (BlockDocument::blankBlocks(); the text has none of its own).
-    QHash<quint64, quint64> replaceContent(const QString &content, const QList<markdown::BlankBlock> &blankBlocks = {});
+    /// Replace the content keeping rows of unchanged blocks (external changes, whole-text edits):
+    /// the blocks kept keep their uids (and rows, folds, zoom, editing, selection), the others
+    /// are removed and inserted. Returns uid -> uid (the same) for the blocks that were kept, not
+    /// for a leading frontmatter row kept with another text (for the caller that is another
+    /// block: editing, a selection or a tracked handle on it end).
+    QHash<quint64, quint64> replaceContent(const QString &content);
     /// Run a BlockDocument operation and replay its row changes.
     markdown::EditResult apply(const std::function<markdown::EditResult(markdown::BlockDocument &)> &op);
 

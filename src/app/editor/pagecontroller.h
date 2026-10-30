@@ -1,7 +1,8 @@
 // PageController — one page in the block editor (docs/UI.md "The block editor"): loads the file
 // through an EditorHost, owns the BlockListModel, executes every editing command on the
-// BlockDocument (each command is one undo step storing only the changed text; typing is
-// coalesced per block / table cell), saves debounced (400 ms) and immediately on focus loss /
+// BlockDocument (each command is one undo step storing only the changed blocks, a
+// BlockDocument::Delta; undo / redo apply it as an operation: rows, folds and the editor of
+// unchanged and changed blocks stay; typing is coalesced per block / table cell), saves debounced (400 ms) and immediately on focus loss /
 // app suspend / quit / path change / destruction (an unresolved conflict goes to a conflict copy
 // instead, never over the other version), and handles changes made outside the editor (reload
 // when clean, three-way merge when dirty, a conflict that follows later changes; renames via
@@ -424,7 +425,8 @@ public:
     /// changes meanwhile (sync, undo, edits). Returns a handle for trackedRow(); untrack() it.
     Q_INVOKABLE int trackBlock(int row);
     /// Current row of a tracked block; -1 when it is gone (removed, or itself changed by an
-    /// external change or undo — it is not guessed which block it became).
+    /// external change — it is not guessed which block it became). Undo and redo keep the blocks
+    /// they change; a block they bring back is tracked again.
     Q_INVOKABLE int trackedRow(int handle) const;
     Q_INVOKABLE void untrack(int handle);
     Q_INVOKABLE int nextVisibleRow(int row) const;
@@ -834,10 +836,11 @@ Q_SIGNALS:
 
 private:
     friend class EditCommand;
+    enum class StepDirection { Undo, Redo };
     struct Focus {
         /// `zoom` of a version whose step left the zoom as it was: undo / redo keep the zoom of
-        /// the moment (it follows its block, BlockListModel::replaceContent) while it shows the
-        /// restored caret or selection (restore()).
+        /// the moment (it follows its block) while it shows the restored caret or selection
+        /// (applyStep()).
         static constexpr int KeepZoom = -2;
         int row = -1;
         int cursor = -1;
@@ -868,10 +871,13 @@ private:
     void applyTaskStatus(int row, const QString &status);
     /// Zoom to `row` (-1: the whole page) — zoomTo() without keeping the edited block shown.
     void setZoomRow(int row);
-    /// Restore a text snapshot (undo/redo), its empty paragraphs and focus.
-    void restore(const QString &text, const Focus &focus, const QList<markdown::BlankBlock> &blankBlocks);
-    /// The document's empty paragraphs (an undo step keeps them: the text has none).
-    QList<markdown::BlankBlock> blankBlocks() const;
+    /// Undo / redo of a step: turn the document into the other version of `delta` (no change and a
+    /// warning when it is not the version the step expects), then the caret or selection `focus`
+    /// of that version.
+    void applyStep(const markdown::BlockDocument::Delta &delta, StepDirection direction, const Focus &focus);
+    /// Forget the editing, selected and editor-space blocks that are gone (an undo step removed
+    /// them).
+    void dropStaleUids();
     markdown::EditResult applyOp(const std::function<markdown::EditResult(markdown::BlockDocument &)> &op);
     /// Body edit of one row as one command.
     void editBody(int row, const QString &body, int focusCursor = -2);
@@ -1051,14 +1057,12 @@ private:
     QVariantMap placeWebPicture(int row, int from, int to, const QString &url, bool download, bool inPlace);
     /// Store the ready (or failed) picture `url` of m_webDownloads.
     void finishWebDownload(const QString &url, bool ready);
-    QString m_commandBefore;
-    QList<markdown::BlankBlock> m_commandBlankBefore;
+    markdown::BlockDocument::Version m_commandBefore;
     Focus m_commandFocusBefore;
     bool m_typingOpen = false;
     quint64 m_typingUid = 0;
     QPoint m_typingCell{-1, -2}; ///< table cell (column, table row) of a table typing session
-    bool m_restoring = false;
-    bool m_undoing = false; ///< restore() runs (undo/redo): moving the caret changes no text
+    bool m_undoing = false; ///< applyStep() runs (undo/redo): moving the caret changes no text
     /// > 0: a selection command runs — updateSelection() waits for its end (no empty selection in
     /// between: the touch selection mode would end).
     int m_selectionHold = 0;

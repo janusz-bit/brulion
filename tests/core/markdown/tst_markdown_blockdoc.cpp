@@ -126,9 +126,10 @@ bool changesReplay(const QList<quint64> &before, const QList<quint64> &after, co
 }
 
 /// The first difference between two documents, empty when there is none: their text, every field
-/// of every block, and what the same edit of each block does (it reads the parse results the
-/// entries do not show: continuation indentation, list marker columns, open display formulas).
-QString difference(const BlockDocument &a, const BlockDocument &b, bool edits = true)
+/// of every block (uids only with `uids`: two documents read from text never share one), and what
+/// the same edit of each block does (it reads the parse results the entries do not show:
+/// continuation indentation, list marker columns, open display formulas).
+QString difference(const BlockDocument &a, const BlockDocument &b, bool edits = true, bool uids = false)
 {
     if (a.toString() != b.toString())
         return u"text: "_s + a.toString() + u" | "_s + b.toString();
@@ -137,7 +138,7 @@ QString difference(const BlockDocument &a, const BlockDocument &b, bool edits = 
     for (int i = 0; i < a.count(); ++i) {
         const BlockEntry &x = a.at(i);
         const BlockEntry &y = b.at(i);
-        if (x.uid != y.uid || x.kind != y.kind || x.prefix != y.prefix || x.body != y.body || x.depth != y.depth
+        if ((uids && x.uid != y.uid) || x.kind != y.kind || x.prefix != y.prefix || x.body != y.body || x.depth != y.depth
             || x.parent != y.parent || x.headingLevel != y.headingLevel || x.lang != y.lang
             || x.taskStatus != y.taskStatus || x.blockId != y.blockId || x.trailing != y.trailing || x.line != y.line
             || a.hasChildren(i) != b.hasChildren(i) || a.blockSource(i) != b.blockSource(i))

@@ -10,7 +10,7 @@
 // Empty paragraphs (blank blocks: Enter at the start of a paragraph, a document's last empty
 // paragraph) exist only in memory: in the text they are blank lines, which a re-read puts into
 // the blank lines of the block before. blankBlocks() / restoreBlankBlocks() carry them across
-// a re-read of the same text (undo/redo).
+// a re-read of the same text.
 //
 // Round trip: toString() reproduces the original content byte for byte when nothing changed
 // (any mix of blocks, tabs/spaces/numbering, CRLF, BOM, missing final newline). Operations
@@ -26,6 +26,14 @@
 // Every operation returns an EditResult: ordered row changes (for QAbstractItemModel
 // begin/end calls) plus a suggested focus block and caret position. Folding is device-local and
 // not part of the document; operations that depend on it take a `collapsed` flag.
+//
+// Versions and undo: block uids are unique in the process (a copy of a document shares them), so
+// a block keeps its identity across documents. version() is a cheap snapshot (each block's uid and
+// exact text, shared with the document); diffFrom(version) after an edit is a Delta — the smallest
+// run of blocks that differs, a block in both versions with only its changed range of text. An
+// undo step keeps that Delta: revert() / reapply() turn the document into the other version
+// exactly (text, empty paragraphs, uids), parsing only the blocks the step changes, and report
+// the row changes like any operation. composed() joins two consecutive deltas (typing).
 #pragma once
 
 #include "types.h"
@@ -35,13 +43,23 @@
 #include <QString>
 
 #include <functional>
+#include <memory>
 #include <optional>
+#include <utility>
 
 namespace brulion::markdown {
 
+namespace detail {
+struct BlockEdges;
+struct BlockSource;
+struct BlockVersionData;
+struct BlockDeltaData;
+} // namespace detail
+
 /// One block (one row of the block editor).
 struct BlockEntry {
-    quint64 uid = 0; ///< stable identity while the document lives (survives moves)
+    quint64 uid = 0; ///< unique in the process (survives moves; undo / redo restore the uids of
+                     ///< the blocks they bring back; a copy of the document shares them)
     BlockKind kind = BlockKind::Paragraph;
     QString prefix;  ///< indentation + list marker + spacing ("\t- ", "  1. "); "" for non-list blocks
     QString body;    ///< editable text without the prefix, lines joined by "\n"; list item
@@ -106,6 +124,36 @@ struct BlockIdResult {
 
 class BlockDocument {
 public:
+    /// The document's blocks at one moment — their uids and exact text, and the document's edges —
+    /// to diff against after an edit (diffFrom()). Taking one costs a reference count per block
+    /// string, no copy of text.
+    class Version {
+    public:
+        Version();
+        bool isNull() const { return !d; }
+
+    private:
+        friend class BlockDocument;
+        std::shared_ptr<const detail::BlockVersionData> d;
+    };
+
+    /// What an edit changed: the smallest run of blocks that differs between two versions (uid or
+    /// text: own lines, line terminator, blank lines after), the document's edges in both (BOM,
+    /// leading blank lines, line terminator, final newline) and the block counts. A block in both
+    /// versions keeps only the changed range of its text, a block in one of them its whole text —
+    /// what an undo step keeps instead of the page (editor::PageController).
+    class Delta {
+    public:
+        Delta();
+        bool isEmpty() const;
+        /// Characters held.
+        qsizetype size() const;
+
+    private:
+        friend class BlockDocument;
+        std::shared_ptr<const detail::BlockDeltaData> d;
+    };
+
     BlockDocument();
     explicit BlockDocument(const QString &content, const BlockDocument *reuse = nullptr);
 
@@ -146,9 +194,35 @@ public:
     /// Make blank blocks of the blank lines at `blocks` (as blankBlocks() returned them for this
     /// text) again: the text stays byte for byte, only the blocks change (other uids stay). A block
     /// whose lines are not all blank lines before the first block or after a block is ignored.
-    /// Returns how many were made. Meant for a document just read from text
-    /// (BlockListModel::replaceContent).
+    /// Returns how many were made. Meant for a document just read from text.
     int restoreBlankBlocks(const QList<BlankBlock> &blocks);
+
+    // --- Versions and undo (see the file comment) ---------------------------------------------------
+
+    Version version() const;
+    /// The change from `older` (a version of this document) to the document as it is; empty when
+    /// nothing differs.
+    Delta diffFrom(const Version &older) const;
+    /// Undo / redo: turn the document from the delta's newer version back into the older one
+    /// (revert) or the older into the newer (reapply), exactly (text, empty paragraphs, uids); the
+    /// parse of unchanged blocks is kept, changed and restored blocks are parsed again. No
+    /// normalisation runs (a blank line before a leading `---` rule, after an open `$$`, line
+    /// ends): the version comes back as it was. Row changes like every operation (a block in both
+    /// versions whose text differs: Changed); no focus. When the document is not that version
+    /// (block count, edges, the run's uids or text differ) nothing changes, the result is empty and
+    /// `*ok` (optional) is false.
+    EditResult revert(const Delta &delta, bool *ok = nullptr);
+    EditResult reapply(const Delta &delta, bool *ok = nullptr);
+    /// `first` (A -> B) followed by `second` (B -> C) as one delta A -> C, where this document is
+    /// C. nullopt when they do not chain (counts, edges, the runs' blocks) or when more than
+    /// MaxComposeGap untouched blocks lie between their runs (the caller keeps two steps).
+    std::optional<Delta> composed(const Delta &first, const Delta &second) const;
+    static constexpr int MaxComposeGap = 64;
+
+    /// Give blocks the uids of another version of this document (BlockListModel::replaceContent:
+    /// the blocks it keeps keep their identity). `uids`: block index -> uid; each uid at most once
+    /// and none used by another block of this document.
+    void adoptUids(const QList<std::pair<int, quint64>> &uids);
 
     /// Enter at `cursor` in block `i` (list items, paragraphs, headings): the text after the
     /// cursor moves to a new block; line breaks right at the split point are dropped (no blank
@@ -269,6 +343,10 @@ private:
     };
 
     Item makeItem(const QString &own, const QString &eol, const QString &trailing);
+    /// The uid and exact text of blocks [from, to).
+    QList<detail::BlockSource> sourcesOf(int from, int to) const;
+    detail::BlockEdges edges() const;
+    void setEdges(const detail::BlockEdges &edges);
     /// The position-dependent parse options of block `i` (frontmatter / page properties are only
     /// recognised at the top of the document).
     struct PositionalOptions {
@@ -283,7 +361,13 @@ private:
     void recompute();
     void touch(int i);
     Snapshot snapshot() const;
+    /// The normalisations every edit ends with, recompute() and the row changes since `before`.
     EditResult finish(const Snapshot &before, int focus, int cursor);
+    /// The row changes since `before`: removed, moved, inserted rows, then rows whose version
+    /// changed.
+    EditResult rowChanges(const Snapshot &before, int focus, int cursor) const;
+    /// revert() / reapply(): from side `from` of the delta to side `to` (0 older, 1 newer).
+    EditResult applyDelta(const Delta &delta, int from, int to, bool *ok);
 
     int pinnedCount() const;
     bool isListItem(int i) const;
@@ -314,7 +398,6 @@ private:
     QString m_leading; ///< blank lines before the first block
     QString m_eol = QStringLiteral("\n");
     bool m_finalNewline = true;
-    quint64 m_nextUid = 1;
 };
 
 } // namespace brulion::markdown
