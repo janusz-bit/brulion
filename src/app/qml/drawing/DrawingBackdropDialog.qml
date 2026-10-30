@@ -6,7 +6,9 @@ import Brulion
 
 // DrawingBackdropDialog — a PDF's pages as drawings' backdrops (docs/UI.md "Drawing editor"): the
 // file's name and how many pages it has, the pages as thumbnails (DrawingBackdrops.pageUrl: the
-// image provider "pdfpage", drawn when they scroll into view) — a tap chooses or drops one —,
+// image provider "pdfpage", drawn when they scroll into view; the cells shaped as the first page —
+// wide for slides) — a tap chooses or drops one; with the keyboard the arrows move between them
+// and Space chooses (in "single" the arrows choose, as in a group of radio buttons) —,
 // "Wszystkie" / "Żadna" and the field "Strony" ("1-3, 7"; kept in step with the thumbnails).
 // Mode "insert" (a note's "Rysunek na obrazie lub PDF…"): any pages, at most
 // DrawingBackdrops' 60, one drawing each — "Wstaw rysunki (N)"; mode "single" (the drawing
@@ -31,6 +33,9 @@ BDialog {
     property var chosen: []
     /// More than the limit was asked for (the note under the field).
     property bool capped: false
+    /// The first page's height / width (the thumbnails' cells; clamped): portrait A4 1.41, a slide
+    /// 0.56.
+    property real pageAspect: 1.3
     /// The preparing job (0 none) and its progress.
     property int job: 0
     property int done: 0
@@ -40,7 +45,8 @@ BDialog {
     readonly property string fileName: path.slice(path.lastIndexOf("/") + 1)
     readonly property int maxPages: 60
 
-    /// The prepared backdrops ({ bytes, mimeType, width, height, path, page, name, error } each).
+    /// The prepared backdrops ({ bytes, mimeType, width, height, path, page, name, error } each;
+    /// "insert": the drawings' files in `svg` instead of `bytes`, DrawingBackdrops.prepare()).
     signal prepared(var items)
 
     function openFor(vaultPath, openMode, page) {
@@ -49,12 +55,15 @@ BDialog {
         const info = DrawingBackdrops.pdfInfo(vaultPath)
         dialog.pageCount = Math.max(0, info.pages)
         dialog.error = info.error
+        dialog.pageAspect = info.width > 0 && info.height > 0 ? Math.min(2, Math.max(0.35, info.height / info.width)) : 1.3
         dialog.capped = false
         dialog.job = 0
         dialog.done = 0
         dialog.total = 0
         const first = Math.min(Math.max(1, page || 1), Math.max(1, dialog.pageCount))
         dialog.setChosen(dialog.pageCount === 0 ? [] : dialog.single || dialog.pageCount === 1 ? [first] : [])
+        grid.keyboardUsed = false
+        grid.currentIndex = dialog.pageCount > 0 ? first - 1 : -1
         dialog.open()
         if (dialog.single && dialog.pageCount > 0)
             Qt.callLater(() => grid.positionViewAtIndex(first - 1, GridView.Contain))
@@ -101,11 +110,14 @@ BDialog {
     acceptText: single ? qsTr("Set backdrop") : qsTr("Insert drawings (%1)").arg(chosen.length)
     acceptEnabled: error === "" && chosen.length > 0
     busy: job !== 0
+    // One page to choose: the arrows at once (insert: the field "Strony" first, Tab to the pages).
+    initialFocusItem: single && error === "" && pageCount > 0 ? grid : null
     onAcceptRequested: {
         // Prepared first (the dialog stays, with its progress); prepared() and the close follow.
         dialog.done = 0
         dialog.total = dialog.chosen.length
-        dialog.job = DrawingBackdrops.prepare(dialog.path, dialog.chosen)
+        // (Inserting: the drawings' files made by the job too, off the GUI thread.)
+        dialog.job = DrawingBackdrops.prepare(dialog.path, dialog.chosen, !dialog.single)
     }
     onRejected: {
         if (dialog.job !== 0)
@@ -195,10 +207,33 @@ BDialog {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         model: dialog.error === "" ? dialog.pageCount : 0
-        readonly property int columns: Math.max(2, Math.floor(width / (Theme.touchUi ? 132 : 120)))
+        // Wide pages (slides) get wider cells, every cell the first page's shape.
+        readonly property int columns: Math.max(2, Math.floor(width / ((Theme.touchUi ? 132 : 120) * (dialog.pageAspect < 1 ? 1.5 : 1))))
+        readonly property int frameHeight: Math.round((cellWidth - 2 * Theme.space1 - 6) * dialog.pageAspect) + 6
+        /// A key was used since the dialog opened (the focus ring shows; a tap hides it).
+        property bool keyboardUsed: false
         cellWidth: Math.floor(width / columns)
-        cellHeight: Math.round(cellWidth * 1.3) + Theme.textSm + Theme.space2
+        cellHeight: frameHeight + Theme.space1 + Theme.space2 + Math.ceil(Theme.textSm * 1.5)
         T.ScrollBar.vertical: BScrollBar {}
+        activeFocusOnTab: visible
+        keyNavigationEnabled: true
+        currentIndex: -1
+        onCurrentIndexChanged: {
+            if (currentIndex < 0)
+                return
+            positionViewAtIndex(currentIndex, GridView.Contain)
+            // One page: the arrows choose it (a group of radio buttons).
+            if (dialog.single && activeFocus && dialog.job === 0)
+                dialog.setChosen([currentIndex + 1])
+        }
+        Keys.onPressed: (event) => {
+            grid.keyboardUsed = true
+            if ((event.key === Qt.Key_Space || ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                                                 && event.modifiers === Qt.NoModifier)) && currentIndex >= 0) {
+                dialog.toggle(currentIndex + 1)
+                event.accepted = true
+            }
+        }
 
         delegate: Item {
             id: cell
@@ -208,7 +243,7 @@ BDialog {
             width: grid.cellWidth
             height: grid.cellHeight
 
-            Accessible.role: Accessible.CheckBox
+            Accessible.role: dialog.single ? Accessible.RadioButton : Accessible.CheckBox
             Accessible.name: qsTr("Page %1").arg(cell.page)
             Accessible.checkable: true
             Accessible.checked: cell.checked
@@ -218,7 +253,7 @@ BDialog {
                 x: Theme.space1
                 y: Theme.space1
                 width: parent.width - 2 * Theme.space1
-                height: parent.height - pageLabel.height - Theme.space2 - Theme.space1
+                height: grid.frameHeight
                 radius: Theme.radiusSm
                 color: "#ffffff" // (a page is white, also in the dark theme)
                 border.width: cell.checked ? 2 : 1
@@ -232,6 +267,10 @@ BDialog {
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
                     cache: true
+                }
+                BFocusRing {
+                    visible: grid.activeFocus && cell.GridView.isCurrentItem && (grid.keyboardUsed || !Theme.touchUi)
+                    targetRadius: Theme.radiusSm
                 }
                 Rectangle {
                     visible: cell.checked
@@ -259,7 +298,11 @@ BDialog {
                 variant: cell.checked ? "label" : "caption"
             }
             TapHandler {
-                onTapped: dialog.toggle(cell.page)
+                onTapped: {
+                    grid.keyboardUsed = false
+                    grid.currentIndex = cell.index
+                    dialog.toggle(cell.page)
+                }
             }
         }
     }
