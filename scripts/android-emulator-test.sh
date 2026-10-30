@@ -861,15 +861,33 @@ if ((PICKERS)); then
   pk_json_arg() { printf '"%s"' "${1//\"/\"\"\"}"; }
   documents_front() { adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep -q documentsui; }
   brulion_front() { adb shell dumpsys window | grep -E 'mCurrentFocus' | grep -q "$PKG"; }
-  # DocumentsUI in its Downloads root: through its drawer of roots (it opens in Recent or the root
-  # used last).
-  documents_downloads() {
+  # DocumentsUI in the Download folder, until the item so named shows: the folder Download where
+  # it lists the storage's folders (the folder picker opens at the storage's top), else the
+  # Downloads root from its drawer of roots (the file pickers open in Recent or the root used last).
+  documents_downloads() { # <ERE>
     ui_has "$1" && return 0
-    ui_tap 'Show roots|Pokaż katalogi główne|Pokaż elementy główne' first 2 || return 1
-    ui_tap 'Downloads|Pobrane' first 3 || return 1
+    if ui_has 'Download|Pobrane'; then
+      ui_tap 'Download|Pobrane' first 3 || return 1
+    else
+      ui_tap 'Show roots|Pokaż katalogi główne|Pokaż elementy główne' first 2 || return 1
+      ui_tap 'Downloads|Pobrane' first 3 || return 1
+    fi
     wait_for 10 ui_has "$1"
   }
   downloads_zip() { adb shell ls /sdcard/Download/ 2>/dev/null | tr -d '\r' | grep -E '\.zip$' | head -n 1; }
+  zip_saved() { [[ -n $(downloads_zip) ]]; }
+  # A finger drags the view up until the item so named lies above the bottom navigation (a node
+  # under the navigation is "on screen" for UiAutomator, and a tap there switches the view).
+  pk_show() { # <ERE>
+    local y _
+    for _ in 1 2 3 4 5 6 7 8; do
+      y=$(ui_y "$1")
+      [[ -n $y ]] && ((y > SCREEN_H / 6 && y < SCREEN_H * 4 / 5)) && return 0
+      adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 70 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) 500
+      sleep 2
+    done
+    return 1
+  }
   # Files on shared storage: a note in Download, a folder of notes below it (Android lets no app
   # take Download itself as a tree).
   printf '# Zażółć gęślą jaźń\r\n\r\n- pierwszy blok ąę\r\n' >"$OUT/Zażółć.md"
@@ -887,7 +905,9 @@ if ((PICKERS)); then
   # 1. Files: ACTION_OPEN_DOCUMENT, a note picked by its name.
   start_app '--demo --locale pl --route importExport'
   check "the app is running" running
-  check "the import offers 'Wybierz pliki…'" wait_for 30 ui_has 'Wybierz pliki…'
+  # (The first start on a freshly wiped emulator can take a minute.)
+  check "the import offers 'Wybierz pliki…'" wait_for 90 ui_has 'Wybierz pliki…'
+  check "… shown above the bottom navigation" pk_show 'Wybierz pliki…'
   app_shot pk-1-import
   check "'Wybierz pliki…' is tapped" ui_tap 'Wybierz pliki…' first 4
   check "the system's document picker is in front (DocumentsUI)" wait_for 15 documents_front
@@ -902,6 +922,7 @@ if ((PICKERS)); then
   # 2. A folder: ACTION_OPEN_DOCUMENT_TREE, "Use this folder", "Allow".
   start_app '--demo --locale pl --route importExport'
   check "the import offers 'Wybierz folder…'" wait_for 30 ui_has 'Wybierz folder…'
+  check "… shown above the bottom navigation" pk_show 'Wybierz folder…'
   check "'Wybierz folder…' is tapped" ui_tap 'Wybierz folder…' first 4
   check "the system's folder picker is in front" wait_for 15 documents_front
   check "it shows the folder of notes" documents_downloads 'Notatki z telefonu'
@@ -918,6 +939,7 @@ if ((PICKERS)); then
   # 3. Export → "Save": ACTION_CREATE_DOCUMENT with the export's name, saved in Download.
   start_app "--demo --locale pl --route $(pk_json_arg '{"view":"importExport","tab":"export"}')"
   check "the export offers 'Eksportuj…'" wait_for 30 ui_has 'Eksportuj…'
+  check "… shown above the bottom navigation" pk_show 'Eksportuj…'
   check "'Eksportuj…' is tapped" ui_tap 'Eksportuj…' first 6
   check "the system's save picker is in front" wait_for 30 documents_front
   app_shot pk-7-save
@@ -928,9 +950,12 @@ if ((PICKERS)); then
   check "it goes to the Download folder" documents_downloads 'Notatki z telefonu'
   check "'Save'" ui_tap 'SAVE|Save|ZAPISZ|Zapisz' last 4
   check "Brulion is back in front" wait_for 15 brulion_front
-  check "the ZIP is in Download" wait_for 20 test -n "$(downloads_zip)"
+  check "the ZIP is in Download" wait_for 20 zip_saved
   saved=$(downloads_zip || true)
   echo "    saved: ${saved:-nothing}"
+  adb shell ls -la /sdcard/Download/ >"$OUT/download-listing.txt" 2>&1 || true
+  adb shell content query --uri content://media/external/downloads --projection _display_name:relative_path:_size \
+    >>"$OUT/download-listing.txt" 2>&1 || true
   if [[ -n $saved ]]; then
     adb pull "/sdcard/Download/$saved" "$OUT/export.zip" >/dev/null 2>&1 || true
     check "… named as suggested" test "$saved" = "$zip_name"

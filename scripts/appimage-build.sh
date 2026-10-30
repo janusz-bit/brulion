@@ -321,7 +321,18 @@ info "Bundling Qt and packing $appimage"
   export PATH="$TOOLS_DIR:$PATH"
   "$TOOLS_DIR/linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/brulion" --desktop-file "$desktop" --icon-file "$icon" \
-    --plugin qt --output appimage
+    --plugin qt
+  # linuxdeploy-plugin-qt copies the folder of every QML import whole, so `import QtQuick` brings
+  # all of qml/QtQuick: every Qt Quick Controls style and QtQuick.Dialogs, which Brulion never
+  # loads (QtQuick.Controls.Basic, FilePicker; docs/PERFORMANCE.md L9). Out before packing; the
+  # second run only packs (and deploys what the remaining files need).
+  for style in Material Universal Imagine Fusion FluentWinUI3; do
+    rm -rf -- "$APPDIR/usr/qml/QtQuick/Controls/$style"
+    rm -f -- "$APPDIR/usr/lib/libQt6QuickControls2$style"*.so*
+  done
+  rm -rf -- "$APPDIR/usr/qml/QtQuick/Dialogs"
+  rm -f -- "$APPDIR/usr/lib/libQt6QuickDialogs2"*.so*
+  "$TOOLS_DIR/linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" --output appimage
 )
 [[ -f $appimage ]] || die "linuxdeploy produced no $appimage"
 chmod +x "$appimage"
@@ -349,6 +360,16 @@ for plugin in platforms/libqxcb.so platforms/libqwayland.so platforms/libqoffscr
   platformthemes/libqxdgdesktopportal.so; do
   [[ -f $check_dir/squashfs-root/usr/plugins/$plugin ]] || die "plugin $plugin missing from the AppImage"
 done
+# Only the Basic style, no QtQuick.Dialogs (pruned above; docs/PERFORMANCE.md L9).
+unused_qml=""
+for path in qml/QtQuick/Dialogs qml/QtQuick/Controls/{Material,Universal,Imagine,Fusion,FluentWinUI3}; do
+  [[ ! -e $check_dir/squashfs-root/usr/$path ]] || unused_qml+=" $path"
+done
+for lib in "$check_dir"/squashfs-root/usr/lib/libQt6QuickDialogs2* \
+  "$check_dir"/squashfs-root/usr/lib/libQt6QuickControls2{Material,Universal,Imagine,Fusion,FluentWinUI3}*; do
+  [[ ! -e $lib ]] || unused_qml+=" ${lib##*/}"
+done
+[[ -z $unused_qml ]] || die "unused Qt Quick styles or QtQuick.Dialogs in the AppImage: $unused_qml"
 # "Otwórz za pomocą → Brulion" for Markdown and text files: the desktop entry AppImage integration
 # tools (Gear Lever, AppImageLauncher, appimaged) install keeps the files' types and --open %F —
 # text/plain only (text/markdown would make Brulion GNOME's default for .md files) — and

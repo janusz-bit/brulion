@@ -820,9 +820,13 @@ arm64-v8a (`tests/bench/mobile/size-report.py apk`):
 | bez wtyczek debugera i profilera QML (`qmltooling`, 12 bibliotek) | `src/app/CMakeLists.txt` (`qt_import_plugins(… EXCLUDE_BY_TYPE qmltooling)`) | −1,0 MB |
 | bez QML deweloperskiego: galerii (`--gallery`), placu zabaw edytora (`--editor`), skryptów i samotestów `--editor-script` | opcja `BRULION_DEV_QML` w `src/app/CMakeLists.txt` (domyślne `AUTO`: wyłączona w Release/MinSizeRel na Androidzie i w przeglądarce, ustalane przy każdym `cmake`), zaślepki `src/app/qml/stubs/` | `libbrulion` −0,77 MB |
 | OpenSSL 3 (HTTPS, wyżej) | `src/app/CMakeLists.txt` | +4,45 MB |
+| tylko styl Basic, bez QtQuick.Dialogs (2026-10-30): okna wyboru plików systemu przez `FilePicker` (wybór plików i folderów, „Zapisz jako” — te same intencje SAF co wcześniej), QML importuje `QtQuick.Controls.Basic` zamiast `QtQuick.Controls`, który przez opcjonalne importy pakował wszystkie style (Material, Universal, Imagine, Fusion, FluentWinUI3) | `src/app/ui/filepicker.h`, strażnik w `src/app/CMakeLists.txt` i `scripts/android-build.sh` (`nix/android.nix`) | −15,63 MB (25 plików mniej; pobranie −4,6 MB) |
 
 Razem 83,15 MB → 81,02 MB (do pobrania, po kompresji: 27,46 → 27,18 MB); bez OpenSSL byłoby
-76,5 MB. Buildy Debug i RelWithDebInfo (APK pomiarowe) mają `qmltooling` i QML deweloperski.
+76,5 MB. Od 2026-10-30 (bez nieużywanych stylów i QtQuick.Dialogs): 96,23 → 80,60 MB, do pobrania
+30,86 → 26,26 MB (docs/PERFORMANCE.md, L9). Zostaje QtTest, QuickTest i Qt.labs.folderlistmodel
+(0,84 MB) z QML deweloperskiego: `androiddeployqt` przegląda cały `src/app`, także pliki, których
+build nie kompiluje. Buildy Debug i RelWithDebInfo (APK pomiarowe) mają `qmltooling` i QML deweloperski.
 
 **R8** działa w każdym buildzie release Gradle'a (APK i AAB z `CMAKE_BUILD_TYPE` Release,
 RelWithDebInfo, MinSizeRel; Debug — bez R8). `android/settings.gradle` włącza go w projekcie

@@ -5,12 +5,18 @@ porównany z wydaniem **v0.1.1** (`f61a2a4`) i z **d1141c0** (ostatni commit prz
 optymalizacjami). Wszystkie trzy wersje zmierzono w tych samych warunkach i tymi samymi
 benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsku, niżej). Uzupełnione
 2026-10-29 o falę 5: pamięć indeksu, indeksowanie na kilku rdzeniach i gotowy indeks zapisany na
-urządzeniu (porównanie z `82d0357`), a 2026-10-30 o szybsze cofanie (L5, porównanie z `b3d9a3d`).
+urządzeniu (porównanie z `82d0357`), a 2026-10-30 o szybsze cofanie (L5, porównanie z `b3d9a3d`)
+i mniejsze pakiety (L9, porównanie z `ef90077`).
 
 ## Podsumowanie dla użytkowników
 
 ### Co się poprawiło
 
+* **Mniejsza aplikacja** (2026-10-30). APK na Androida ma 76,9 zamiast 91,8 MiB (do pobrania
+  26,3 zamiast 30,9 MB), a wersja przeglądarkowa pobiera przy pierwszej wizycie 13,5 zamiast
+  15,8 MB — przy łączu 20 Mbit/s pierwsza klatka jest o ok. 1,1 s wcześniej (7,4 zamiast 8,5 s).
+  Pakiety nie zawierają już pięciu nieużywanych stylów kontrolek Qt i zastępczego okna plików Qt
+  Quick: okna wyboru plików są systemowe (@@DESKTOP_SUMMARY@@).
 * **Cofanie i ponawianie na długich stronach** (2026-10-30). Ctrl+Z i Ctrl+Shift+Z nie wczytują
   już całej strony od nowa, tylko zmieniają bloki, których dotyczy krok. Na stronie z 5000 bloków
   na komputerze cofnięcie widać po ok. 13 ms zamiast ok. 33 ms — tyle co po Enterze — a sama jego
@@ -79,7 +85,7 @@ ok. 1,6 s, ale indeksował się ok. 15 s; od fali 5 robi to na kilku rdzeniach, 
 otwarciu bierze gotowy indeks z urządzenia (nowego czasu na Raspberry Pi i telefonie jeszcze nie
 zmierzyliśmy).
 
-**W przeglądarce**: pierwsza wizyta pobiera ok. 14 MB (później strona działa z pamięci
+**W przeglądarce**: pierwsza wizyta pobiera ok. 13,5 MB (później strona działa z pamięci
 podręcznej i offline), powrót do strony z 1000 notatek rysuje pierwszą klatkę po ok. 0,6 s.
 
 ### Znane wolne miejsca
@@ -100,8 +106,8 @@ podręcznej i offline), powrót do strony z 1000 notatek rysuje pierwszą klatk�
 * **Pierwszy start na komputerze z małym notatnikiem** (świeży profil) pokazuje treść ok.
   0,09 s później niż d1141c0 (okno za to 0,1 s wcześniej); przy kolejnych startach treść jest
   tak szybko jak wcześniej (szczegóły niżej).
-* **Rozmiar** — APK ma ok. 85 MB (pobranie ok. 28,5 MB), wersja przeglądarkowa pobiera ok.
-  14 MB.
+* **Rozmiar** — APK ma ok. 81 MB (pobranie ok. 26 MB), wersja przeglądarkowa pobiera przy
+  pierwszej wizycie ok. 13,5 MB (pierwsza klatka przy łączu 20 Mbit/s po ok. 7,4 s).
 
 **Bateria:** w tle na Androidzie Brulion nie zużywa procesora i nie wybudza telefonu; alarmy są
 ustawiane tylko dla przypomnień (do 64 na najbliższe 14 dni).
@@ -558,6 +564,61 @@ work an undo does on the laptop fell by 85 %.
 median of five undos (and five redos) of an Enter on a 5000-block page must stay ≤ 3 × the median
 Enter + 2 ms (Debug build: Enter 2.8 ms, undo 2.0 ms, redo 2.0 ms).
 
+### L9: native file pickers, one Qt Quick Controls style (2026-10-30)
+
+The packages carried five Qt Quick Controls styles and QtQuick.Dialogs that the app never shows,
+for two reasons found in Qt 6.11.2's sources: qmlimportscanner follows every `import … auto` of a
+qmldir, optional ones included, and every deploy step (androiddeployqt, the browser build's
+`qt_import_qml_plugins`, windeployqt, linuxdeploy-plugin-qt) packages what it reports. (1)
+`QtQuick/Controls/qmldir` has `optional import QtQuick.Controls.{Fusion,Imagine,Material,Universal,
+FluentWinUI3} auto`, so five files' `import QtQuick.Controls` (run-time style selection; the app
+forces Basic anyway) deployed all five styles; (2) QtQuick.Dialogs' non-native fallback dialog
+exists once per style (`quickimpl/qml/+Material/…`) and imports each style and
+`Qt.labs.folderlistmodel`. Now the QML imports `QtQuick.Controls.Basic` (compile-time style
+selection) and every picker is `FilePicker` (`src/app/ui/filepicker.h`, docs/UI.md "File
+pickers"): the platform theme's own dialog helper — the code path QtQuick.Dialogs took on Android
+(SAF intents) and Windows (`IFileDialog`) — and Qt Widgets' `QFileDialog` on desktops without one;
+the browser picks through `QWasmLocalFileAccess` (`src/platform/wasm/wasmfiles.h`) and has no Qt
+Widgets any more. Guards: configure stops on a bare `import QtQuick.Controls` / `QtQuick.Dialogs`
+(`src/app/CMakeLists.txt`); `scripts/android-build.sh` / `nix/android.nix` fail on a style or
+QtQuick.Dialogs library in the APK, `scripts/wasm-build.sh` on such a module in the app's QML plugin
+list.
+
+Measured on the laptop in one session, `sweep2` at `ef90077` (base) against the branch, same
+toolchains (Qt 6.11.2, NDK r27c, emsdk 4.0.7):
+
+| | base | L9 | change |
+|---|---:|---:|---:|
+| APK arm64 release (`android-apk.sh … rel`, signed) | 96 230 481 B (91.77 MiB) | 80 601 163 B (76.87 MiB) | −15 629 318 B (−16.2 %) |
+| APK arm64 download (every entry deflated, `size-report.py`) | 30.86 MB | 26.26 MB | −4.60 MB (−14.9 %) |
+| APK entries | 191 | 166 | −25 |
+| … Qt Quick Controls styles not used (19 entries) | 11.80 MB (3.80 MB deflated) | 0 | |
+| … Qt Quick Dialogs (5 entries) | 3.02 MB (0.83 MB deflated) | 0 | |
+| … `libbrulion` (FilePicker, the dialog helper's glue) | 30.94 MB | 31.06 MB | +0.12 MB |
+| `brulion.wasm` raw (MinSizeRel, `scripts/wasm-build.sh`) | 47 225 371 B | 41 909 609 B | −5 315 762 B (−11.3 %) |
+| `brulion.wasm` gzip -9 | 15 803 378 B | 13 498 551 B | −2 304 827 B (−14.6 %) |
+| `brulion.wasm` brotli -q 11 | 10 841 274 B | 9 231 654 B | −1 609 620 B (−14.8 %) |
+| wasm link map (`wasm-linkmap.sh`, before wasm-opt): code / data | 36.88 / 16.51 MB | 35.25 / 12.64 MB | −1.63 / −3.87 MB |
+| … styles not used / QuickDialogs2QuickImpl + Dialogs2 + Utils / Qt Widgets | 2.75 / 2.41 / 0.52 MB | 0 / 0 / 0 | |
+| web first visit at 20 Mbit/s, gzip (`wasm-bench.mjs --visits first --encoding gzip --throttle 20000,40`, 2 rounds × 5): `.wasm` transferred | 15.80 MB | 13.50 MB | −2.30 MB |
+| … first draw, median per round | 8.42 / 8.49 s | 7.38 / 7.32 s | −1.1 s (−13 %) |
+| … main thread busy during the load | 1.64 / 1.58 s | 1.43 / 1.45 s | −0.17 s |
+@@DESKTOP_ROWS@@
+
+(The 20 Mbit/s runs are network-bound; another agent's build ran on the laptop during them, the
+same for both builds.) Still packaged: QtTest, QuickTest and `Qt.labs.folderlistmodel`, imported by
+the developer and self-test QML under `src/app` (`qml/dev`, `qml/content/*SelfTest.qml`) — APK
+0.84 MB, wasm 0.27 MB before wasm-opt. qmlimportscanner scans the target's whole source folder,
+compiled or not, and its `-exclude <folder>` does not keep a folder out in 6.11.2 (it also visits
+each folder's `.` entry), so they need a folder of their own outside `src/app` (L9b below).
+
+Checks: `tests/app/filepicker` (fake backends, the widget dialog offscreen), `tst_pickedfiles`,
+the import self-test's save dialog (`tst_appio_import_qml*`), `scripts/wasm-smoke.mjs
+--pick-files` (CI: four files through the browser's `<input>`, one above the limit never read,
+and a download), the Playwright tests' export (`showSaveFilePicker` in Chromium, a download in
+Firefox) and `scripts/android-emulator-test.sh --pickers` (DocumentsUI's open, folder and save
+pickers on Android 16).
+
 ### Budgets
 
 Desktop = the laptop above, phone = Pi 4 (floor) and the emulator (optimistic), web = headless
@@ -565,7 +626,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 
 | budget | target | desktop | phone | web |
 |---|---|---|---|---|
-| start → first content | desktop < 1 s, phone < 2 s | ✅ 0.40 s (10k), 0.39 s demo | ✅ Pi demo 1.25 s, 10k 1.57 s | ✅ repeat 0.61 s, ×4 CPU 1.64 s; ❌ first visit at 20 Mbit/s 7.7 s |
+| start → first content | desktop < 1 s, phone < 2 s | ✅ 0.40 s (10k), 0.39 s demo | ✅ Pi demo 1.25 s, 10k 1.57 s | ✅ repeat 0.61 s, ×4 CPU 1.64 s; ❌ first visit at 20 Mbit/s 7.3–7.4 s (L9; 8.4–8.5 s before in the same session) |
 | index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 0.96 s, 0.83 s from the index cache (wave 5; was 1.89 s) | ❌ Pi 15 s before wave 5, not measured since (L1b) | ✅ 1k cold 1.3 s, warm 1.1 s (×4 CPU 5.8 / 4.7 s; was 1.1 / 5.2 s in the same session) |
 | GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b, L18) | – |
 | keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page; ⚠️ 5000-block outline p95 23 ms | ✅ small page; ⚠️ outline p95 42 ms | – |
@@ -577,7 +638,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ❌ 131 ms (L3) | ❌ Pi 0.95 s (L3) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
 | memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 86 MB of linear memory at 1k (was 104 MB) |
-| download | APK < 40 MB, web < 10 MB | – | ✅ 28.5 MB download (84.9 MB installed) | ❌ 13.7 MB gzip (9.4 MB brotli, not served) |
+| download | APK < 40 MB, web < 10 MB | – | ✅ 26.3 MB download (80.6 MB APK; L9: was 30.9 / 96.2 MB) | ❌ 13.5 MB gzip (9.2 MB brotli, not served; L9: was 15.8 / 10.8 MB) |
 
 ### Next steps
 
@@ -590,14 +651,15 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L3 | incremental derived lists (Tasks, Calendar, reminders, query blocks) | after a save 131 ms → < 30 ms (Pi 0.95 s → < 0.2 s) |
 | L4 | `BlockDocument` fast path for body-only edits | keystroke core 1.3 ms → < 0.3 ms |
 | L7 | cheaper page opening (header summary and linked references from the index) | Pi open 653 ms → ~400 ms |
-| L9 | native file pickers instead of QtQuick.Dialogs (its per-style QML pulls in every style) | APK −15 MB, wasm −5 MB |
+| L9b | the developer and self-test QML (`qml/dev`, `qml/content/*SelfTest.qml`) in a folder outside `src/app` (qmlimportscanner scans the target's source folder whole, and its `-exclude` does not work there), so that releases leave out QtTest, QuickTest and `Qt.labs.folderlistmodel` | APK −0.84 MB, wasm −0.27 MB (before wasm-opt) |
 | L10 | lazy cold views and dialogs, `BIcon` without a `Loader` | Pi demo first content −0.3 s |
 | L16 | graph layout on a worker, scene-graph rendering | smooth graph on phones |
 | L12 | sync: size + mtime quick check for unchanged text files | no-change sync ≥ 3× faster (laptop 10k 419 ms, Pi 5k 1.35 s) |
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 
 Done in wave 5 (2026-10-29, above): L1 (parse on worker threads), L2 (the index cache), L8 (the
-memory diet); on 2026-10-30 L5 (delta undo/redo, above; the Pi still to be measured: L5b). Also
+memory diet); on 2026-10-30 L5 (delta undo/redo, above; the Pi still to be measured: L5b) and L9 (native file
+pickers, one Qt Quick Controls style: APK −15.6 MB, wasm −2.3 MB gzip, above). Also
 open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip only) and
 the ~90 ms later content on a desktop first start (above).
 

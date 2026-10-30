@@ -638,6 +638,13 @@ Build dla przeglądarki nie zawiera QML deweloperskiego (galerii, placu zabaw ed
 i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 014 B surowego
 `brulion.wasm` (−160 008 B po gzip -9, −104 716 B po brotli).
 
+Bez nieużywanych stylów Qt Quick Controls, QtQuick.Dialogs i Qt Widgets (2026-10-30: QML importuje
+`QtQuick.Controls.Basic`, wybór plików i pobieranie przez `wasmfiles.h`; docs/PERFORMANCE.md, L9):
+`brulion.wasm` 47 225 371 → 41 909 609 B surowego (−5,07 MiB), 15 803 378 → 13 498 551 B po gzip -9
+(−2,20 MiB), 10 841 274 → 9 231 654 B po brotli (−1,54 MiB); pierwsza wizyta przy 20 Mbit/s (gzip)
+rysuje pierwszą klatkę po 7,3–7,4 zamiast 8,4–8,5 s. `scripts/wasm-build.sh` przerywa build, gdy
+lista modułów QML aplikacji znów zawiera inny styl albo QtQuick.Dialogs.
+
 ## Klawiatura ekranowa (telefon)
 
 Pasek narzędzi edycji ma leżeć dokładnie na klawiaturze ekranowej. Strona prosi przeglądarkę
