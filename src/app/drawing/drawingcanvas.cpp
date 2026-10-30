@@ -566,8 +566,10 @@ void DrawingCanvas::prunePictures()
         if (e.type == drawing::ElementType::Image && !e.fileId.isEmpty())
             shown.insert(e.fileId);
     }
-    m_pictures.removeIf([&shown](const PictureCache::iterator it) { return !shown.contains(fileIdOfPictureKey(it.key())); });
-    m_darkBackdrops.removeIf([&shown](const QHash<QString, QString>::iterator it) { return !shown.contains(it.key()); });
+    m_pictures.removeIf(
+            [&shown](const PictureCache::iterator it) { return !shown.contains(fileIdOfPictureKey(it.key())); });
+    m_darkBackdrops.removeIf(
+            [&shown](const QHash<QString, QString>::iterator it) { return !shown.contains(it.key()); });
 }
 
 // --- Undo -------------------------------------------------------------------------------------

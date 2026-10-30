@@ -3105,7 +3105,7 @@ private Q_SLOTS:
                                    QColor(u"#0c8599"_s), QColor(u"#ffffff"_s)};
         for (int i = 0; i < colors.size(); ++i) {
             QVERIFY(canvas->setBackdrop(backdropOf(colors.at(i), QSize(400, 300), u"Załączniki/wykład.pdf"_s, i + 1)));
-            painted(canvas);           // the picture and its dark twin decoded
+            painted(canvas);                   // the picture and its dark twin decoded
             QVERIFY(!canvas->svg().isEmpty()); // a Dark drawing's file: the dark raster encoded
             QVERIFY2(canvas->keptPictures() <= 3, qPrintable(QString::number(canvas->keptPictures())));
         }

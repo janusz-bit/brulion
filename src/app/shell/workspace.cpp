@@ -1061,7 +1061,8 @@ void Workspace::discardImport(const QString &path)
     if (!m_vault || !m_importedCopies.remove(path))
         return;
     if (!m_vault->removePermanently(path, ChangeSource::User))
-        qCWarning(lcWorkspace).noquote() << "could not remove the abandoned attachment" << path << m_vault->errorString();
+        qCWarning(lcWorkspace).noquote() << "could not remove the abandoned attachment" << path
+                                         << m_vault->errorString();
 }
 
 QString Workspace::absoluteFilePath(const QString &path) const

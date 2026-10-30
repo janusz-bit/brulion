@@ -58,8 +58,7 @@ bool writeFixture(const QString &path)
 QByteArray handMadePdf(const QSizeF &mediaBox, const QByteArray &content)
 {
     const QList<QByteArray> objects{
-            "<< /Type /Catalog /Pages 2 0 R >>"_ba,
-            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"_ba,
+            "<< /Type /Catalog /Pages 2 0 R >>"_ba, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"_ba,
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "_ba + QByteArray::number(mediaBox.width()) + ' '
                     + QByteArray::number(mediaBox.height()) + "] /Contents 4 0 R /Resources << >> >>",
             "<< /Length "_ba + QByteArray::number(content.size()) + " >>\nstream\n" + content + "\nendstream"};

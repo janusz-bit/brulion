@@ -4800,7 +4800,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QTest::addColumn<int>("page");
         QTest::addColumn<QString>("expected");
         QTest::newRow("a marker in the name") << u"Stopy 5%1"_s << 3 << u"assets/Stopy 5%1 p. 3.svg"_s;
-        QTest::newRow("the page's marker in the name") << u"Raport %2 – zysk"_s << 12 << u"assets/Raport %2 – zysk p. 12.svg"_s;
+        QTest::newRow("the page's marker in the name")
+                << u"Raport %2 – zysk"_s << 12 << u"assets/Raport %2 – zysk p. 12.svg"_s;
         QTest::newRow("both") << u"%1%2 ćwiczenia"_s << 1 << u"assets/%1%2 ćwiczenia p. 1.svg"_s;
         QTest::newRow("a picture") << u"Wzrost 50%1"_s << 0 << u"assets/Wzrost 50%1 (drawing).svg"_s;
     }
@@ -4827,7 +4828,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         for (int page = 1; page <= 2; ++page) {
             QVariantMap item = preparedBackdrop(u"assets/wykład 4.pdf"_s, page, u"wykład 4"_s);
             const std::optional<brulion::drawing::Drawing> d = brulion::drawing::newDrawingOnBackdrop(
-                    brulion::drawing::BackdropImage{item.value(u"bytes"_s).toByteArray(), u"image/png"_s, QSize(240, 135)},
+                    brulion::drawing::BackdropImage{item.value(u"bytes"_s).toByteArray(), u"image/png"_s,
+                                                    QSize(240, 135)},
                     brulion::drawing::BackdropSource{u"assets/wykład 4.pdf"_s, page},
                     brulion::drawing::randomEditStamp(1761700000000));
             QVERIFY(d);

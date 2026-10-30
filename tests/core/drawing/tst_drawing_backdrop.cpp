@@ -592,8 +592,8 @@ void TestDrawingBackdrop::newDrawingOnBackdrop_data()
     QTest::addColumn<int>("page");
     QTest::addColumn<bool>("made");
     QTest::addColumn<int>("theme");
-    QTest::newRow("PDF page: as the app") << "slajd-PNG-bajty"_ba << u"image/png"_s << QSize(2400, 1350)
-                                          << Lecture.path << 3 << true << int(PaperTheme::Auto);
+    QTest::newRow("PDF page: as the app") << "slajd-PNG-bajty"_ba << u"image/png"_s << QSize(2400, 1350) << Lecture.path
+                                          << 3 << true << int(PaperTheme::Auto);
     QTest::newRow("picture: light") << "zdjęcie-JPEG"_ba << u"image/jpeg"_s << QSize(1600, 1200)
                                     << u"Załączniki/Tablica – ćwiczenia.jpg"_s << 0 << true << int(PaperTheme::Light);
     QTest::newRow("empty bytes") << QByteArray() << u"image/png"_s << QSize(10, 10) << Lecture.path << 3 << false

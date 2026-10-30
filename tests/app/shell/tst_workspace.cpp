@@ -481,7 +481,7 @@ private Q_SLOTS:
         QVERIFY(!QFileInfo::exists(root + u"/assets/Wykład 5 – fale.pdf"_s));
         QVERIFY(QFileInfo::exists(outside + u"Wykład 5 – fale.pdf"_s));
         QVERIFY(ws->vault()->trash().isEmpty()); // (not to the trash: it was only a copy)
-        ws->discardImport(copy); // twice: nothing
+        ws->discardImport(copy);                 // twice: nothing
 
         // The notebook's own file and a reused attachment stay.
         const QString own = ws->importAttachment(QUrl::fromLocalFile(root + u"/Wykłady/Fizyka – wykład 3.pdf"_s));

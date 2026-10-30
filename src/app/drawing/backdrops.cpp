@@ -100,8 +100,8 @@ int DrawingBackdrops::pickInBrowser()
     QStringList pictures;
     for (const QString &ext : paths::pictureExtensions())
         pictures.append(u'*' + ext);
-    platform::wasm::openFiles({tr("Pictures (%1)").arg(pictures.join(u' '))}, false, MaxAttachmentBytes, MaxAttachmentBytes,
-                              [self, pick](const QList<platform::PickedFile> &files) {
+    platform::wasm::openFiles({tr("Pictures (%1)").arg(pictures.join(u' '))}, false, MaxAttachmentBytes,
+                              MaxAttachmentBytes, [self, pick](const QList<platform::PickedFile> &files) {
                                   if (!self || files.isEmpty())
                                       return; // cancelled
                                   const platform::PickedFile &file = files.first();
@@ -163,7 +163,8 @@ QVariantMap DrawingBackdrops::pdfInfo(const QString &vaultPath) const
     else if (info.pages <= 0)
         error = errorText(backdroperror::Pdf.toString());
     const QSizeF first = info.pages > 0 ? info.pagePoints.value(0) : QSizeF();
-    const bool sized = first.isValid() && !first.isEmpty() && std::isfinite(first.width()) && std::isfinite(first.height());
+    const bool sized =
+            first.isValid() && !first.isEmpty() && std::isfinite(first.width()) && std::isfinite(first.height());
     return {{u"pages"_s, info.pages},
             {u"error"_s, error},
             {u"locked"_s, info.locked},
