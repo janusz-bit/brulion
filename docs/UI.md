@@ -2058,7 +2058,8 @@ FilePicker {
   (`widgetDialogPalette()` in `filepicker_p.h`: window = bg, fields and lists = bgElevated, text =
   fg, placeholders and disabled text = fgFaint, the selection = accentSolid under white text; a
   missing or malformed colour is ThemePalette's default of the mode). Android and the browser
-  have no Qt Widgets.
+  have no Qt Widgets. The event log names the picker each `open()` showed (`brulion.platform`:
+  "File picker: QGtk3FileDialogHelper", "QXdgDesktopPortalFileDialog", "QFileDialog", …).
 * **Browser**: `available` is false; the controllers show the browser's own picker
   (`ImportController.pickInBrowser()`, `PageController.pickImageInBrowser()`: several files at
   once, files above the desktop's limits skipped before they are read, and the reading stopped

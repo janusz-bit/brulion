@@ -75,6 +75,8 @@ public:
     }
     ~NativeFilePicker() override { hide(); }
 
+    QString kind() const override { return QString::fromLatin1(m_helper->metaObject()->className()); }
+
     bool show(const FilePickerRequest &request, QWindow *parent) override
     {
         const QSharedPointer<QFileDialogOptions> options = QFileDialogOptions::create();
@@ -144,6 +146,8 @@ private:
 class WidgetFilePicker final : public FilePickerBackend {
 public:
     ~WidgetFilePicker() override { hide(); }
+
+    QString kind() const override { return u"QFileDialog"_s; }
 
     bool show(const FilePickerRequest &request, QWindow *parent) override
     {
@@ -336,6 +340,8 @@ void FilePicker::open()
         connect(backend, &FilePickerBackend::rejected, this, [this, backend] { cancelled(backend); });
         m_backend = std::move(candidate);
         if (backend->show(req, parent)) {
+            // Which one the user got (support: "the system's dialog" or Qt's own).
+            qCInfo(logging::lcPlatform) << "File picker:" << backend->kind();
             setVisible(true);
             return;
         }

@@ -516,6 +516,8 @@ FilePicker {
         picker.setCurrentFolder(QUrl::fromLocalFile(dir.path()));
         picker.setDark(true); // no colours given: Brulion's dark defaults (slate)
         QSignalSpy accepted(&picker, &FilePicker::accepted);
+        // The event log says which picker the user got.
+        QTest::ignoreMessage(QtInfoMsg, "File picker: \"QFileDialog\"");
         picker.open();
         QVERIFY(picker.isVisible());
         QFileDialog *dialog = shownFileDialog();

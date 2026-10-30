@@ -40,6 +40,8 @@ public:
     virtual bool show(const FilePickerRequest &request, QWindow *parent) = 0;
     /// Closes the picker without a signal.
     virtual void hide() = 0;
+    /// Which picker it is, for the event log ("QGtk3FileDialogHelper", "QFileDialog").
+    virtual QString kind() const { return QString::fromLatin1(metaObject()->className()); }
 
 Q_SIGNALS:
     void accepted(const QList<QUrl> &files);
