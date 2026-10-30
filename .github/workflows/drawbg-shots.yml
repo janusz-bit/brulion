@@ -1,0 +1,54 @@
+# Throwaway (branch s2/drawbg-emu only, never merged): the drawbg screenshots of
+# tests/app/drawing/screenshots.sh (a drawing on a slide, the PDF page picker, the phone's "Więcej"
+# and the desktop paper menu; desktop and phone, light and dark) taken with Qt 6.11.2 + Qt PDF from
+# aqt, with the laptop off.
+name: drawbg screenshots
+on:
+  push:
+    branches: [s2/drawbg-emu]
+permissions:
+  contents: read
+env:
+  QT_VERSION: 6.11.2
+jobs:
+  shots:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: qtpdf
+          aqtversion: ==3.3.0
+          cache: true
+      - name: Fonts
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-dejavu fonts-noto-core fonts-noto-color-emoji
+      - name: Build the app and the drawing test (Release)
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel --target brulion tst_drawingcanvas
+      # The save time's bound holds only in Release (CI's Debug + ASan build only logs it).
+      - name: Save time of a drawing on a backdrop (Release bound)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+        run: |
+          for i in 1 2 3 4 5; do
+            build/tests/app/drawing/tst_drawingcanvas saveTimeWithBackdrop replacedBackdropsAreNotKept prepareBackdropPdfPage
+          done
+      - name: Screenshots
+        env:
+          BRULION_BUILD_DIR: build
+          OUT_DIR: ${{ runner.temp }}/shots
+        run: tests/app/drawing/screenshots.sh backdrop backdroppages more paper
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: drawbg-shots
+          path: ${{ runner.temp }}/shots/
+          if-no-files-found: ignore
+          retention-days: 7
