@@ -734,9 +734,10 @@ Sprawdzone automatycznie (`tests/web/stylus.spec.mjs`, „Testy w przeglądarkac
 
 * Chromium — prawdziwe zdarzenia pióra z DevTools (`Input.dispatchMouseEvent`, `pointerType:
   "pen"`, `force`): pióro w zawieszeniu nie rysuje; linia z naciskiem 0,1 → 0,9 zachowuje nacisk
-  (`simulatePressure: false`, od ≤ 0,15 do ≥ 0,85) i na zrzucie ekranu grubieje (w ¾ długości
-  co najmniej 1,3 raza grubsza niż w ¼); stały nacisk to brak nacisku (linia jak myszą); linia
-  myszą nie ma nacisku; przycisk boczny ściera; zapisany plik ma nacisk w każdym punkcie.
+  (`simulatePressure: false`, od ≤ 0,15 do ≥ 0,85) i na zrzucie ekranu grubieje (przy 85 %
+  długości co najmniej 1,3 raza grubsza niż przy 15 %: 4 → 8 px); stały nacisk to brak nacisku
+  (linia jak myszą); linia myszą nie ma nacisku; przycisk boczny ściera; zapisany plik ma nacisk
+  w każdym punkcie.
 * Chromium i Firefox — zdarzenia pióra tworzone przez stronę (Playwright nie ma pióra dla
   Firefoksa; `setPointerCapture` zmyślonego wskaźnika strona testowa przepuszcza): nacisk
   0,2 → 1,0, nacisk spoza zakresu (1,7 i −0,3) przycięty do 0…1, gumka (przycisk 5) ściera linię,

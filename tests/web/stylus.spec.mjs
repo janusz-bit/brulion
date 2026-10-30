@@ -104,12 +104,14 @@ test.describe('Rysik w przeglądarce', () => {
     await testInfo.attach('nacisk.png', { body: shotBytes, contentType: 'image/png' });
     const shot = png(shotBytes);
     const y = g.cy(0.35);
-    const t25 = inkThickness(shot, g.x0 + 0.25 * (g.x1 - g.x0), y - 20, y + 20);
-    const t75 = inkThickness(shot, g.x0 + 0.75 * (g.x1 - g.x0), y - 20, y + 20);
-    testInfo.annotations.push({ type: 'ink thickness at 25 % / 75 %', description: `${t25} px / ${t75} px` });
-    console.log(`[${browserName}] DevTools pen: pressures ${a.pressureMin}…${a.pressureMax}, ink ${t25} px → ${t75} px`);
-    expect(t75).toBeGreaterThanOrEqual(4);
-    expect(t75).toBeGreaterThanOrEqual(1.3 * t25);
+    // At 15 % and 85 % of the line (pressure ≈ 0.22 and 0.78): the outline's width is
+    // ≈ 4.2 and 7.4 px there (stroke.cpp, pen width 1).
+    const thin = inkThickness(shot, g.x0 + 0.15 * (g.x1 - g.x0), y - 20, y + 20);
+    const thick = inkThickness(shot, g.x0 + 0.85 * (g.x1 - g.x0), y - 20, y + 20);
+    testInfo.annotations.push({ type: 'ink thickness at 15 % / 85 %', description: `${thin} px / ${thick} px` });
+    console.log(`[${browserName}] DevTools pen: pressures ${a.pressureMin}…${a.pressureMax}, ink ${thin} px → ${thick} px`);
+    expect(thick).toBeGreaterThanOrEqual(5);
+    expect(thick).toBeGreaterThanOrEqual(1.3 * thin);
 
     // B: one constant pressure is no pressure.
     await pen.stroke(line(g.x0, g.cy(0.5), g.x1, g.cy(0.5), 40, 0.5, 0.5));
