@@ -261,7 +261,7 @@ private:
 
     QPointer<VaultIndex> m_index;
     QMetaObject::Connection m_indexConnection;
-    std::shared_ptr<CalendarCache> m_calendar;  ///< the range's entries
+    std::shared_ptr<CalendarCache> m_calendar;    ///< the range's entries
     std::shared_ptr<OverdueCache> m_overdueTasks; ///< open tasks due before today
     QString m_mode = QStringLiteral("month");
     QDate m_anchor; ///< invalid = today

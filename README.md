@@ -433,7 +433,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 * Runs on **NixOS/Linux** (flake + NixOS module, AppImage), **Android** 9+ (APK; native exact
   alarms that fire while the app is closed; text, links and `.md`/`.txt` files shared from other
   apps go to the journal or a new page — the same dialog opens for "Open with → Brulion" on a
-  `.md`/`.txt` file on the desktop, which saves a copy and leaves the file as it is, and for text
+  `.md`/`.txt` file on the desktop (Linux: "Open with → Other application"; Brulion never becomes
+  the default program), which saves a copy and leaves the file as it is, and for text
   and links shared to the browser version installed as an app), in the **browser** (Qt for WebAssembly,
   works offline) and, as a **test version**, on **Windows** 10/11 x86_64 (a per-user installer
   without admin rights or a portable ZIP; unsigned; reminders as Windows toast notifications with

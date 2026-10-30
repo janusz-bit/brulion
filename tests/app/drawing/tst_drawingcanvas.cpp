@@ -341,7 +341,8 @@ QByteArray shapesFile()
     return toSvg(d);
 }
 
-const brulion::drawing::Stroke *elementOf(const DrawingCanvas *canvas, const QString &id, brulion::drawing::Drawing &keep)
+const brulion::drawing::Stroke *elementOf(const DrawingCanvas *canvas, const QString &id,
+                                          brulion::drawing::Drawing &keep)
 {
     keep = canvas->currentDrawing();
     for (const auto &s : keep.strokes) {
@@ -994,7 +995,8 @@ private Q_SLOTS:
         eraser.stroke({150, 10}, {150, 150}, 10, 0.5, 0.5);
         Fingers fingers(window.get());
         fingers.drag({60, 60}, {200, 120}, 6);
-        for (const Qt::KeyboardModifiers modifiers : {Qt::KeyboardModifiers(), Qt::KeyboardModifiers(Qt::ControlModifier)}) {
+        for (const Qt::KeyboardModifiers modifiers :
+             {Qt::KeyboardModifiers(), Qt::KeyboardModifiers(Qt::ControlModifier)}) {
             QWheelEvent wheel(QPointF(150, 80), window->mapToGlobal(QPointF(150, 80)), QPoint(), QPoint(0, -240),
                               Qt::NoButton, modifiers, Qt::NoScrollPhase, false);
             QCoreApplication::sendEvent(window.get(), &wheel);
@@ -2044,8 +2046,8 @@ private Q_SLOTS:
         const QByteArray bytes = fixture(u"excalidraw_mixed.svg"_s);
         QCOMPARE(canvas->load(bytes), QString());
         QVERIFY(canvas->editable());
-        QCOMPARE(strokeIds(canvas), (QStringList{u"Qk8_3vL1nYbXc0Rr2mT9a"_s, u"rect_00000000000000001"_s,
-                                                 u"text_00000000000000001"_s}));
+        QCOMPARE(strokeIds(canvas),
+                 (QStringList{u"Qk8_3vL1nYbXc0Rr2mT9a"_s, u"rect_00000000000000001"_s, u"text_00000000000000001"_s}));
         mouseStroke(window.get(), {100, 100}, {300, 160}, 10);
         const std::optional<brulion::drawing::Drawing> written = brulion::drawing::readDrawing(canvas->svg());
         QVERIFY(written && brulion::drawing::editable(*written));
@@ -2324,9 +2326,11 @@ private Q_SLOTS:
         fingers.send({{1, {QEventPoint::State::Pressed, {200, 400}}}});
         fingers.send({{1, {QEventPoint::State::Updated, {260, 440}}}});
         QVERIFY(canvas->busy());
-        fingers.send({{1, {QEventPoint::State::Stationary, {260, 440}}}, {2, {QEventPoint::State::Pressed, {400, 440}}}});
+        fingers.send(
+                {{1, {QEventPoint::State::Stationary, {260, 440}}}, {2, {QEventPoint::State::Pressed, {400, 440}}}});
         fingers.send({{1, {QEventPoint::State::Updated, {250, 440}}}, {2, {QEventPoint::State::Updated, {420, 440}}}});
-        fingers.send({{1, {QEventPoint::State::Released, {250, 440}}}, {2, {QEventPoint::State::Released, {420, 440}}}});
+        fingers.send(
+                {{1, {QEventPoint::State::Released, {250, 440}}}, {2, {QEventPoint::State::Released, {420, 440}}}});
         QCOMPARE(canvas->strokeCount(), fingerDraws ? 1 : 0);
     }
 
@@ -2562,9 +2566,11 @@ private Q_SLOTS:
         canvas->setCenterY(300);
         QImage image = painted(canvas);
         // The rectangle's red outline, its white inside; the ellipse filled; the text's ink.
-        QVERIFY2(near(image.pixelColor(200, 100), QColor(u"#e03131"_s), 30), qPrintable(image.pixelColor(200, 100).name()));
+        QVERIFY2(near(image.pixelColor(200, 100), QColor(u"#e03131"_s), 30),
+                 qPrintable(image.pixelColor(200, 100).name()));
         QCOMPARE(image.pixelColor(200, 150).name(), u"#ffffff"_s);
-        QVERIFY2(near(image.pixelColor(450, 150), QColor(u"#a5d8ff"_s), 3), qPrintable(image.pixelColor(450, 150).name()));
+        QVERIFY2(near(image.pixelColor(450, 150), QColor(u"#a5d8ff"_s), 3),
+                 qPrintable(image.pixelColor(450, 150).name()));
         QVERIFY(pixelsLike(image, QRect(100, 300, 160, 42), QColor(u"#1f2430"_s), 60) > 40);
         QVERIFY(pixelsLike(image, QRect(100, 260, 160, 30), QColor(u"#1f2430"_s), 60) == 0); // nothing above it
         // Dark: the colours as the dark theme shows them; the paper dark.
@@ -2599,7 +2605,8 @@ private Q_SLOTS:
         const QRectF picture = brulion::drawing::pictureRect(canvas->currentDrawing());
         const QImage image = renderSvg(svg, picture.size().toSize());
         const QPoint outline = (QPointF(200, 100) - picture.topLeft()).toPoint();
-        QVERIFY2(near(image.pixelColor(outline), QColor(u"#e03131"_s), 30), qPrintable(image.pixelColor(outline).name()));
+        QVERIFY2(near(image.pixelColor(outline), QColor(u"#e03131"_s), 30),
+                 qPrintable(image.pixelColor(outline).name()));
         const QPoint fill = (QPointF(450, 150) - picture.topLeft()).toPoint();
         QVERIFY2(near(image.pixelColor(fill), QColor(u"#a5d8ff"_s), 3), qPrintable(image.pixelColor(fill).name()));
         // Text: some ink where it is (in whatever font Qt's SVG renderer finds).
@@ -2626,6 +2633,44 @@ private Q_SLOTS:
         QCOMPARE(canvas->selection(), QStringList{u"prostokat"_s}); // still selected
         QVERIFY(canvas->modified());
         QVERIFY(!canvas->canUndo());
+    }
+
+    void undoAfterSaveIsANewEdit()
+    {
+        // The rectangle moved right and saved; the move undone and the rectangle moved down here
+        // while the other device's file (the saved move right and a new stroke) comes in: the move
+        // down is kept — undo stamps a new version, as any edit does.
+        QCOMPARE(canvas->load(shapesFile()), QString());
+        canvas->setTool(u"select"_s);
+        canvas->select({u"prostokat"_s});
+        canvas->nudgeSelection(50, 0);
+        const QByteArray saved = canvas->fileBytes();
+        canvas->markSaved(saved);
+        brulion::drawing::Drawing keep;
+        const int savedVersion = elementOf(canvas, u"prostokat"_s, keep)->version;
+        canvas->undo();
+        QVERIFY(elementOf(canvas, u"prostokat"_s, keep)->version > savedVersion);
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->box, QRectF(100, 100, 200, 100));
+        canvas->select({u"prostokat"_s});
+        canvas->nudgeSelection(0, 80);
+        brulion::drawing::Drawing theirs = *brulion::drawing::readDrawing(saved);
+        brulion::drawing::Stroke s;
+        s.id = u"tam"_s;
+        s.points = {{100, 450, 0.5}, {300, 450, 0.5}};
+        theirs.strokes.append(s);
+        QVERIFY(canvas->takeExternal(brulion::drawing::toSvg(theirs)));
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->box, QRectF(100, 180, 200, 100));
+        QVERIFY(elementOf(canvas, u"tam"_s, keep));
+        // Redo after undo: a version above the undone one.
+        canvas->select({u"prostokat"_s});
+        canvas->nudgeSelection(10, 0);
+        const int moved = elementOf(canvas, u"prostokat"_s, keep)->version;
+        canvas->undo();
+        const int undone = elementOf(canvas, u"prostokat"_s, keep)->version;
+        QVERIFY(undone > moved);
+        canvas->redo();
+        QVERIFY(elementOf(canvas, u"prostokat"_s, keep)->version > undone);
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->box, QRectF(110, 180, 200, 100));
     }
 
     void textRendersInWorkerThread()
@@ -2949,7 +2994,7 @@ private Q_SLOTS:
 
     void backdropUnderInk()
     {
-        QVERIFY(canvas->setBackdrop(backdropOf(QColor(u"#ff0000"_s))));
+        QCOMPARE(canvas->setBackdrop(backdropOf(QColor(u"#ff0000"_s))), QString());
         QVERIFY(canvas->hasBackdrop());
         QCOMPARE(canvas->backdropPath(), u"Załączniki/slajd.png"_s);
         QCOMPARE(canvas->backdropPage(), 0);
@@ -2971,7 +3016,7 @@ private Q_SLOTS:
 
     void backdropIsLocked()
     {
-        QVERIFY(canvas->setBackdrop(backdropOf(QColor(u"#2f9e44"_s))));
+        QCOMPARE(canvas->setBackdrop(backdropOf(QColor(u"#2f9e44"_s))), QString());
         mouseStroke(window.get(), {100, 400}, {300, 400}, 12);
         QCOMPARE(canvas->strokeCount(), 2);
         const QString backdrop = canvas->currentDrawing().strokes.first().id;
@@ -3004,7 +3049,7 @@ private Q_SLOTS:
 
     void backdropDarkInverted()
     {
-        QVERIFY(canvas->setBackdrop(backdropOf(Qt::white)));
+        QCOMPARE(canvas->setBackdrop(backdropOf(Qt::white)), QString());
         QVERIFY(near(painted(canvas).pixelColor(300, 300), Qt::white));
         canvas->setTheme(u"dark"_s);
         QVERIFY(canvas->dark());
@@ -3037,7 +3082,7 @@ private Q_SLOTS:
     void backdropPreviewDark()
     {
         // The previews (DrawingImageProvider) show a backdrop dark as the paper does.
-        QVERIFY(canvas->setBackdrop(backdropOf(Qt::white, QSize(800, 600))));
+        QCOMPARE(canvas->setBackdrop(backdropOf(Qt::white, QSize(800, 600))), QString());
         const QByteArray file = canvas->fileBytes(); // Auto: no style sheet, the light picture
         QVERIFY(!file.contains("prefers-color-scheme"));
         QSize natural;
@@ -3052,8 +3097,9 @@ private Q_SLOTS:
     void setRemoveBackdropUndo()
     {
         QSignalSpy changed(canvas, &DrawingCanvas::contentChanged);
-        QVERIFY(canvas->setBackdrop(
-                backdropOf(QColor(u"#ff0000"_s), QSize(400, 300), u"Załączniki/Fizyka – wykład 3.pdf"_s, 3)));
+        QCOMPARE(canvas->setBackdrop(
+                         backdropOf(QColor(u"#ff0000"_s), QSize(400, 300), u"Załączniki/Fizyka – wykład 3.pdf"_s, 3)),
+                 QString());
         QCOMPARE(changed.size(), 1);
         QVERIFY(canvas->modified());
         QCOMPARE(canvas->backdropPage(), 3);
@@ -3063,13 +3109,17 @@ private Q_SLOTS:
         QCOMPARE(canvas->strokeCount(), 0);
         canvas->redo();
         QVERIFY(canvas->hasBackdrop());
+        // (Redone as a new edit: a higher version.)
+        const int redone = canvas->currentDrawing().strokes.first().version;
+        QVERIFY(redone > first.version);
         // Replaced: the same element, a new version and file; undo brings the old one back.
-        QVERIFY(canvas->setBackdrop(
-                backdropOf(QColor(u"#2f6fdd"_s), QSize(300, 400), u"Załączniki/Fizyka – wykład 3.pdf"_s, 4)));
+        QCOMPARE(canvas->setBackdrop(
+                         backdropOf(QColor(u"#2f6fdd"_s), QSize(300, 400), u"Załączniki/Fizyka – wykład 3.pdf"_s, 4)),
+                 QString());
         const brulion::drawing::Stroke second = canvas->currentDrawing().strokes.first();
         QCOMPARE(canvas->strokeCount(), 1);
         QCOMPARE(second.id, first.id);
-        QCOMPARE(second.version, first.version + 1);
+        QCOMPARE(second.version, redone + 1);
         QVERIFY(second.fileId != first.fileId);
         QCOMPARE(second.box, QRectF(0, 0, 900, 1200));
         canvas->undo();
@@ -3088,11 +3138,62 @@ private Q_SLOTS:
         QCOMPARE(canvas->backdropPath(), u"Załączniki/Fizyka – wykład 3.pdf"_s);
         QCOMPARE(canvas->backdropPage(), 4);
         // Bad data changes nothing.
-        QVERIFY(!canvas->setBackdrop({}));
+        QCOMPARE(canvas->setBackdrop({}), u"invalid"_s);
         QVariantMap broken = backdropOf(Qt::red);
         broken.insert(u"mimeType"_s, u"text/html"_s);
-        QVERIFY(!canvas->setBackdrop(broken));
+        QCOMPARE(canvas->setBackdrop(broken), u"invalid"_s);
         QVERIFY(!canvas->modified());
+        // A stroke in progress: tried again when it ends (QML).
+        QTest::mousePress(window.get(), Qt::LeftButton, {}, QPoint(100, 100));
+        QTest::mouseMove(window.get(), QPoint(150, 120));
+        QVERIFY(canvas->busy());
+        QCOMPARE(canvas->setBackdrop(backdropOf(Qt::green)), u"busy"_s);
+        QTest::mouseRelease(window.get(), Qt::LeftButton, {}, QPoint(160, 130));
+        QVERIFY(!canvas->busy());
+        QCOMPARE(canvas->setBackdrop(backdropOf(Qt::green)), QString());
+    }
+
+    void backdropThatWouldNotOpenAgain()
+    {
+        // A scene of photos (18.7 MB of data URLs, its SVG payload some 29 MB) near the readers'
+        // limit (MaxSceneBytes for the payload): a 3.5 MB backdrop would make the file unreadable
+        // and is refused, the drawing stays as it was; a small one fits.
+        QRandomGenerator random(20261030);
+        const auto noise = [&random](qsizetype bytes) {
+            QList<quint32> words(bytes / 4);
+            random.fillRange(words.data(), words.size());
+            return QByteArray(reinterpret_cast<const char *>(words.constData()), words.size() * 4);
+        };
+        brulion::drawing::Drawing d;
+        for (int i = 0; i < 4; ++i) {
+            const QString id = u"zdjęcie%1"_s.arg(i);
+            d.files.insert(id,
+                           QJsonObject{{u"id"_s, id},
+                                       {u"mimeType"_s, u"image/jpeg"_s},
+                                       {u"dataURL"_s, QString(u"data:image/jpeg;base64,"_s
+                                                              + QString::fromLatin1(noise(3584 * 1024).toBase64()))}});
+            brulion::drawing::Stroke picture;
+            picture.type = brulion::drawing::ElementType::Image;
+            picture.id = u"p%1"_s.arg(i);
+            picture.fileId = id;
+            picture.box = QRectF(i * 200, 0, 180, 120);
+            d.strokes.append(picture);
+        }
+        QCOMPARE(canvas->load(brulion::drawing::toSvg(d)), QString());
+        QCOMPARE(canvas->strokeCount(), 4);
+        const auto backdrop = [&noise](qsizetype bytes) {
+            brulion::drawingview::PreparedBackdrop p;
+            p.image = {noise(bytes), u"image/jpeg"_s, QSize(2400, 1600)};
+            p.source = brulion::drawing::BackdropSource{u"Załączniki/zdjęcie.jpg"_s, 0};
+            return brulion::drawingview::toVariant(p);
+        };
+        QCOMPARE(canvas->setBackdrop(backdrop(3584 * 1024)), u"tooLarge"_s);
+        QVERIFY(!canvas->hasBackdrop());
+        QVERIFY(!canvas->modified());
+        QVERIFY(!canvas->canUndo());
+        QCOMPARE(canvas->setBackdrop(backdrop(64 * 1024)), QString());
+        QVERIFY(canvas->hasBackdrop());
+        QVERIFY(brulion::drawing::readDrawing(canvas->fileBytes()));
     }
 
     void replacedBackdropsAreNotKept()
@@ -3104,7 +3205,8 @@ private Q_SLOTS:
                                    QColor(u"#f59f00"_s), QColor(u"#ae3ec9"_s), QColor(u"#e8590c"_s),
                                    QColor(u"#0c8599"_s), QColor(u"#ffffff"_s)};
         for (int i = 0; i < colors.size(); ++i) {
-            QVERIFY(canvas->setBackdrop(backdropOf(colors.at(i), QSize(400, 300), u"Załączniki/wykład.pdf"_s, i + 1)));
+            QCOMPARE(canvas->setBackdrop(backdropOf(colors.at(i), QSize(400, 300), u"Załączniki/wykład.pdf"_s, i + 1)),
+                     QString());
             painted(canvas);                   // the picture and its dark twin decoded
             QVERIFY(!canvas->svg().isEmpty()); // a Dark drawing's file: the dark raster encoded
             QVERIFY2(canvas->keptPictures() <= 3, qPrintable(QString::number(canvas->keptPictures())));
@@ -3127,7 +3229,7 @@ private Q_SLOTS:
         // A backdrop set here while another device added a stroke: both kept, the backdrop at the
         // bottom.
         QCOMPARE(canvas->load(strokesFile({u"a"_s})), QString());
-        QVERIFY(canvas->setBackdrop(backdropOf(QColor(u"#ff0000"_s))));
+        QCOMPARE(canvas->setBackdrop(backdropOf(QColor(u"#ff0000"_s))), QString());
         QVERIFY(canvas->takeExternal(strokesFile({u"a"_s, u"c"_s})));
         QVERIFY(canvas->hasBackdrop());
         QCOMPARE(canvas->strokeCount(), 3);
@@ -3141,7 +3243,7 @@ private Q_SLOTS:
 
     void svgPictureShowsBackdrop()
     {
-        QVERIFY(canvas->setBackdrop(backdropOf(QColor(u"#ff0000"_s))));
+        QCOMPARE(canvas->setBackdrop(backdropOf(QColor(u"#ff0000"_s))), QString());
         mouseStroke(window.get(), {100, 100}, {300, 100}, 10);
         const QByteArray svg = canvas->svg();
         QVERIFY(QSvgRenderer(svg).isValid());

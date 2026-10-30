@@ -31,6 +31,8 @@ BTextField {
     property var keyFilter: null
     /// The list is shown (the field has the focus and there is something to suggest).
     readonly property bool listShown: popupLoader.item !== null && (popupLoader.item as T.Popup).opened
+    /// The list's popup (null until first shown; self-tests check where it is).
+    readonly property T.Popup suggestionPopup: popupLoader.item as T.Popup
     readonly property real rowHeight: Theme.touchUi ? 44 : 32
 
     /// A suggestion was chosen: its value (or title).
@@ -144,6 +146,31 @@ BTextField {
             Connections {
                 target: popup.visible ? KeyboardInsets : null
                 function onOverlapChanged() { field.placePopup() }
+            }
+            // The window shrinking for the keyboard (a browser's resizes-content: no overlap then).
+            Connections {
+                target: popup.visible ? popup.parent : null
+                function onHeightChanged() { field.placePopup() }
+                function onWidthChanged() { field.placePopup() }
+            }
+            // The field moved under the list (BKeyboardFocusKeeper scrolling it above the keyboard,
+            // a flick): placed again where the field is now. (Qt Quick reports no scene position.)
+            Timer {
+                property point last: Qt.point(-1, -1)
+                interval: 100
+                repeat: true
+                running: popup.visible
+                onRunningChanged: last = Qt.point(-1, -1)
+                onTriggered: {
+                    const overlay = popup.parent
+                    if (!overlay)
+                        return
+                    const p = field.mapToItem(overlay, 0, 0)
+                    if (p.x !== last.x || p.y !== last.y) {
+                        last = p
+                        field.placePopup()
+                    }
+                }
             }
 
             background: Item {

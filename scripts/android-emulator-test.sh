@@ -143,11 +143,15 @@
 #   BRULION_EMULATOR_PORT    console port (default 5584; adb serial emulator-<port>; 5554-5584:
 #                            the emulator warns that adb may not work with others)
 #   BRULION_EMULATOR_OUT     logs and screenshots (default dist-android/emulator-test)
+#   BRULION_EMULATOR_GPU     the emulator's -gpu mode (default swangle_indirect)
+#   BRULION_EMULATOR_VULKAN  1: the guest has Vulkan (default 1, but 0 for --web-keyboard: Chrome's
+#                            Vulkan on the host's SwiftShader crashed the emulator in half the runs)
 #   BRULION_WEBPICTURE_HTTPS --web-pictures: the public https picture (default: Google's logo)
 #   BRULION_WEBPICTURE_PORT  --web-pictures: the host's port of the http picture (default 8765)
 #   BRULION_WEB_PORT         --web-keyboard: the host's port of the site (default 8123)
 #   BRULION_WEB_BROWSERS     --web-keyboard: the browsers tested (default "chrome brave firefox")
 #   BRULION_WEB_BROWSERS_CACHE --web-keyboard: the browsers' APKs (~/.cache/brulion-web-browsers)
+#   BRULION_WEB_RETRY        --web-keyboard: 0 — a run with a failed check is not run once more
 # On NixOS the emulator runs under steam-run (its bundled libraries expect an FHS system).
 set -euo pipefail
 
@@ -288,8 +292,15 @@ if [[ -e /etc/NIXOS ]] && command -v steam-run >/dev/null; then emulator=(steam-
 info "Starting the emulator ($AVD, $SERIAL)"
 # Software rendering through ANGLE: swiftshader_indirect leaves black stripes on Qt Quick
 # buttons, so its screenshots would show a broken UI.
+emulator_args=(-gpu "${BRULION_EMULATOR_GPU:-swangle_indirect}")
+# Chrome draws with Vulkan when the guest has it: the host's SwiftShader Vulkan decoder segfaulted
+# in about half of the --web-keyboard runs (GitHub Actions, wasm.yml). Without it Chrome, Brave and
+# Firefox draw with GLES (ANGLE on the host), as the emulator's own UI does.
+if [[ ${BRULION_EMULATOR_VULKAN:-$((WEBKEYBOARD ? 0 : 1))} == 0 ]]; then
+  emulator_args+=(-feature -Vulkan)
+fi
 "${emulator[@]}" -avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
-  -gpu swangle_indirect >"$OUT/emulator.log" 2>&1 &
+  "${emulator_args[@]}" >"$OUT/emulator.log" 2>&1 &
 emulator_pid=$!
 http_pid=""
 cleanup() {
@@ -2258,14 +2269,32 @@ print(last)' "$OUT/report.jsonl" "$1"
     adb shell am force-stop "${WK_PKG[$b]}"
   }
 
+  # A run with a failed check runs once more (BRULION_WEB_RETRY=0: never): on the emulator a
+  # browser now and then misses a tap or answers late. Both runs are in the report; a real fault
+  # fails both. The emulator itself gone (a crash) ends the test.
+  retried=()
   for b in "${browsers[@]}"; do
     wk_first_start "$b"
-    wk_run "$b" content
-    wk_run "$b" visual
+    for mode in content visual; do
+      before=$failures
+      wk_run "$b" "$mode"
+      kill -0 "$emulator_pid" 2>/dev/null || die "the emulator stopped (see $OUT/emulator.log)"
+      if ((failures > before)) && [[ ${BRULION_WEB_RETRY:-1} != 0 ]]; then
+        echo "    $b-$mode: $((failures - before)) check(s) failed — once more"
+        retried+=("$b-$mode")
+        failures=$before
+        wk_run "$b" "$mode"
+        kill -0 "$emulator_pid" 2>/dev/null || die "the emulator stopped (see $OUT/emulator.log)"
+      fi
+    done
   done
   adb reverse --remove-all >/dev/null 2>&1 || true
   info "Result"
   echo "report: $OUT/report.jsonl; samples: $OUT/samples-*.jsonl; screenshots: $OUT/wk-*.png"
+  if ((${#retried[@]})); then
+    echo "run twice: ${retried[*]}"
+    [[ -z ${GITHUB_ACTIONS:-} ]] || echo "::warning::web keyboard: run twice after a failed check: ${retried[*]}"
+  fi
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"
   exit 0

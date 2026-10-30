@@ -112,10 +112,13 @@ stdenv.mkDerivation (finalAttrs: {
     test -f $out/share/icons/hicolor/scalable/apps/$id.svg
     test -f $out/share/icons/hicolor/256x256/apps/$id.png
     desktop-file-validate $out/share/applications/$id.desktop
-    # "Otwórz za pomocą → Brulion" for Markdown and text files (docs/NIXOS.md).
+    # "Otwórz za pomocą → Inny program → Brulion" for Markdown and text files (docs/NIXOS.md).
     grep -qx 'Exec=brulion --open %F' $out/share/applications/$id.desktop
-    # text/plain only: text/markdown would make Brulion GNOME's default for .md files.
-    grep -qx 'MimeType=text/plain;' $out/share/applications/$id.desktop
+    # No file types: a desktop without a default program would make Brulion the default for them.
+    if grep -q '^MimeType=' $out/share/applications/$id.desktop; then
+      echo "the desktop entry declares file types" >&2
+      exit 1
+    fi
     # Launchers hand over an activation token: the running Brulion comes to the front.
     grep -qx 'StartupNotify=true' $out/share/applications/$id.desktop
     appstreamcli validate --no-net --explain $out/share/metainfo/$id.metainfo.xml

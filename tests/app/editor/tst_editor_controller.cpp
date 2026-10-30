@@ -1500,16 +1500,16 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
                                           << u"- a\n\t- a1 \n\t\t- źdźbło\n- b\n"_s << 2 << u"źdźbło"_s;
         QTest::newRow("zadanie bez dzieci") << u"- [ ] kup mleko ść\n- b\n"_s << false << 0 << 4
                                             << u"- [ ] kup \n\t- [ ] mleko ść\n- b\n"_s << 1 << u"mleko ść"_s;
-        QTest::newRow("zwinięty punkt z dziećmi") << u"- ab\n\t- dziecko\n"_s << true << 0 << 1
-                                                  << u"- a\n\t- b\n\t- dziecko\n"_s << 1 << u"b"_s;
-        QTest::newRow("punkt z dziećmi (bez zmian)") << u"- ab\n\t- dziecko\n"_s << false << 0 << 1
-                                                     << u"- a\n\t- b\n\t- dziecko\n"_s << 1 << u"b"_s;
+        QTest::newRow("zwinięty punkt z dziećmi")
+                << u"- ab\n\t- dziecko\n"_s << true << 0 << 1 << u"- a\n\t- b\n\t- dziecko\n"_s << 1 << u"b"_s;
+        QTest::newRow("punkt z dziećmi (bez zmian)")
+                << u"- ab\n\t- dziecko\n"_s << false << 0 << 1 << u"- a\n\t- b\n\t- dziecko\n"_s << 1 << u"b"_s;
         QTest::newRow("punkt numerowany bez dzieci") << u"1. pierwszy drugi\n2. trzeci\n"_s << false << 0 << 9
                                                      << u"1. pierwszy \n\t1. drugi\n2. trzeci\n"_s << 1 << u"drugi"_s;
-        QTest::newRow("ostatni punkt bez końca wiersza") << u"- wstęp\n- ąę źć"_s << false << 1 << 3
-                                                         << u"- wstęp\n- ąę \n\t- źć"_s << 2 << u"źć"_s;
-        QTest::newRow("CRLF") << u"- ąę źć\r\n- b\r\n"_s << false << 0 << 3
-                              << u"- ąę \r\n\t- źć\r\n- b\r\n"_s << 1 << u"źć"_s;
+        QTest::newRow("ostatni punkt bez końca wiersza")
+                << u"- wstęp\n- ąę źć"_s << false << 1 << 3 << u"- wstęp\n- ąę \n\t- źć"_s << 2 << u"źć"_s;
+        QTest::newRow("CRLF") << u"- ąę źć\r\n- b\r\n"_s << false << 0 << 3 << u"- ąę \r\n\t- źć\r\n- b\r\n"_s << 1
+                              << u"źć"_s;
         // At the end and at the start: a new empty first child (as before).
         QTest::newRow("punkt, Enter na końcu") << u"- a\n\t- a1 ąę\n- b\n"_s << false << 1 << 5
                                                << u"- a\n\t- a1 ąę\n\t\t- \n- b\n"_s << 2 << QString();
@@ -1763,21 +1763,21 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
     void zoomOutKeepsTheEditedBlockShown_data()
     {
         QTest::addColumn<QString>("content");
-        QTest::addColumn<QList<int>>("folds");    // rows folded before zooming
-        QTest::addColumn<int>("zoom");            // the row zoomed into
-        QTest::addColumn<int>("edit");            // the row edited in it
-        QTest::addColumn<int>("enterAt");         // >= 0: Enter in the zoom root there instead
-        QTest::addColumn<int>("target");          // -2: zoomOut(), else zoomTo(target)
+        QTest::addColumn<QList<int>>("folds"); // rows folded before zooming
+        QTest::addColumn<int>("zoom");         // the row zoomed into
+        QTest::addColumn<int>("edit");         // the row edited in it
+        QTest::addColumn<int>("enterAt");      // >= 0: Enter in the zoom root there instead
+        QTest::addColumn<int>("target");       // -2: zoomOut(), else zoomTo(target)
         QTest::addColumn<int>("zoomAfter");
         QTest::addColumn<int>("editingAfter");
         QTest::addColumn<QVariantList>("foldsAfter"); // lines
 
-        QTest::newRow("zwinięty korzeń, strzałka") << u"- ab\n\t- dziecko ąę\n- c\n"_s << QList<int>{0} << 0 << 1
-                                                    << -1 << -2 << -1 << 1 << QVariantList();
-        QTest::newRow("zwinięty korzeń, okruszek strony") << u"- ab\n\t- dziecko ąę\n- c\n"_s << QList<int>{0} << 0
-                                                          << 1 << -1 << -1 << -1 << 1 << QVariantList();
-        QTest::newRow("Enter w środku zwiniętego korzenia") << u"- ab\n\t- dziecko\n- c\n"_s << QList<int>{0} << 0
-                                                            << -1 << 1 << -2 << -1 << 1 << QVariantList();
+        QTest::newRow("zwinięty korzeń, strzałka")
+                << u"- ab\n\t- dziecko ąę\n- c\n"_s << QList<int>{0} << 0 << 1 << -1 << -2 << -1 << 1 << QVariantList();
+        QTest::newRow("zwinięty korzeń, okruszek strony")
+                << u"- ab\n\t- dziecko ąę\n- c\n"_s << QList<int>{0} << 0 << 1 << -1 << -1 << -1 << 1 << QVariantList();
+        QTest::newRow("Enter w środku zwiniętego korzenia")
+                << u"- ab\n\t- dziecko\n- c\n"_s << QList<int>{0} << 0 << -1 << 1 << -2 << -1 << 1 << QVariantList();
         QTest::newRow("zwinięty rodzic korzenia, okruszek strony")
                 << u"- p\n\t- q\n\t\t- r źdźbło\n- c\n"_s << QList<int>{1, 0} << 1 << 2 << -1 << -1 << -1 << 2
                 << QVariantList();
@@ -1788,8 +1788,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
                                      << QVariantList();
         QTest::newRow("przybliżenie bez edytowanego bloku")
                 << u"- a\n\t- a1\n- b\n\t- b1\n"_s << QList<int>{} << 0 << 1 << -1 << 2 << 2 << -1 << QVariantList();
-        QTest::newRow("zwinięcie poza blokiem zostaje") << u"- a\n\t- a1 ść\n- b\n\t- b1\n"_s << QList<int>{2} << 0
-                                                        << 1 << -1 << -2 << -1 << 1 << QVariantList{2};
+        QTest::newRow("zwinięcie poza blokiem zostaje") << u"- a\n\t- a1 ść\n- b\n\t- b1\n"_s << QList<int>{2} << 0 << 1
+                                                        << -1 << -2 << -1 << 1 << QVariantList{2};
     }
 
     void zoomOutKeepsTheEditedBlockShown()

@@ -689,8 +689,8 @@ void setText(Drawing &d, const QString &id, const QString &text, const TextMetri
     layoutText(d, i, typed, m, s);
 }
 
-QString addLabel(Drawing &d, const QString &containerId, const QString &text, const TextStyle &st,
-                 const TextMetrics &m, const EditStamp &s)
+QString addLabel(Drawing &d, const QString &containerId, const QString &text, const TextStyle &st, const TextMetrics &m,
+                 const EditStamp &s)
 {
     const qsizetype c = indexOfElement(d, containerId);
     if (c < 0 || text.trimmed().isEmpty())
@@ -776,8 +776,18 @@ ElementDiff diffElements(const QList<Stroke> &before, const QList<Stroke> &after
     return diff;
 }
 
-void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward)
+void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward, const EditStamp *restamp)
 {
+    // (A version above `replaced` and above the element's own + 1 — see edit.h.)
+    const auto stampBack = [restamp](Stroke &e, int replaced) {
+        if (!restamp)
+            return;
+        const int own = e.version < INT_MAX - 1 ? e.version + 1 : 1;
+        const int above = std::max(replaced, own);
+        e.version = above < INT_MAX ? above + 1 : 2;
+        e.versionNonce = randomOf(*restamp);
+        e.updated = restamp->now;
+    };
     const auto &drop = forward ? diff.removed : diff.added;
     const auto &insert = forward ? diff.added : diff.removed;
     QList<qsizetype> dropIndices;
@@ -794,8 +804,11 @@ void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward)
             index.insert(mergeKey(elements.at(i)), i);
         for (const auto &[a, b] : diff.changed) {
             const qsizetype i = index.value(mergeKey(forward ? a : b), -1);
-            if (i >= 0)
-                elements[i] = forward ? b : a;
+            if (i < 0)
+                continue;
+            const int replaced = elements.at(i).version;
+            elements[i] = forward ? b : a;
+            stampBack(elements[i], replaced);
         }
     }
     const QStringList &order = forward ? diff.orderAfter : diff.orderBefore;
@@ -821,8 +834,10 @@ void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward)
     }
     QList<std::pair<qsizetype, Stroke>> adds = insert;
     std::stable_sort(adds.begin(), adds.end(), [](const auto &x, const auto &y) { return x.first < y.first; });
-    for (const auto &[i, e] : adds)
+    for (auto &[i, e] : adds) {
+        stampBack(e, 0);
         elements.insert(std::clamp<qsizetype>(i, 0, elements.size()), e);
+    }
 }
 
 } // namespace brulion::drawing

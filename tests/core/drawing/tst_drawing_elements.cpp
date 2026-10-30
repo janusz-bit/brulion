@@ -93,8 +93,9 @@ QString describe(const Stroke &s)
     QStringList parts{
             u"type=%1"_s.arg(elementTypeName(s.type)),
             // (Freehand lines, lines and arrows are their points.)
-            hasPoints(s.type) ? u"box=-"_s
-                              : u"box=%1,%2,%3,%4"_s.arg(s.box.x()).arg(s.box.y()).arg(s.box.width()).arg(s.box.height()),
+            hasPoints(s.type)
+                    ? u"box=-"_s
+                    : u"box=%1,%2,%3,%4"_s.arg(s.box.x()).arg(s.box.y()).arg(s.box.width()).arg(s.box.height()),
             u"points=%1"_s.arg(s.points.size()),
             u"angle=%1"_s.arg(s.angle),
             u"color=%1"_s.arg(s.color),
@@ -279,38 +280,36 @@ private Q_SLOTS:
         QTest::addColumn<QByteArray>("json");
         QTest::addColumn<bool>("drawn");
         QTest::addColumn<QString>("expected");
-        QTest::newRow("text that is a number") << QByteArray(R"({"type":"text","x":0,"y":0,"text":5})") << false
-                                               << QString();
-        QTest::newRow("font size of text") << QByteArray(R"({"type":"text","x":0,"y":0,"text":"ą","fontSize":"NaN"})")
-                                           << true << u"fontSize=20"_s;
+        QTest::newRow("text that is a number")
+                << QByteArray(R"({"type":"text","x":0,"y":0,"text":5})") << false << QString();
+        QTest::newRow("font size of text")
+                << QByteArray(R"({"type":"text","x":0,"y":0,"text":"ą","fontSize":"NaN"})") << true << u"fontSize=20"_s;
         QTest::newRow("huge font size") << QByteArray(R"({"type":"text","x":0,"y":0,"text":"ą","fontSize":1e9})")
                                         << true << u"fontSize=1000"_s;
-        QTest::newRow("tiny line height")
-                << QByteArray(R"({"type":"text","x":0,"y":0,"text":"ą","lineHeight":0.01})") << true
-                << u"lineHeight=1.25"_s;
-        QTest::newRow("line of one point") << QByteArray(R"({"type":"line","x":0,"y":0,"points":[[0,0]]})") << false
-                                           << QString();
+        QTest::newRow("tiny line height") << QByteArray(R"({"type":"text","x":0,"y":0,"text":"ą","lineHeight":0.01})")
+                                          << true << u"lineHeight=1.25"_s;
+        QTest::newRow("line of one point")
+                << QByteArray(R"({"type":"line","x":0,"y":0,"points":[[0,0]]})") << false << QString();
         QTest::newRow("point of text") << QByteArray(R"({"type":"arrow","x":0,"y":0,"points":[[0,"a"],[1,1]]})")
                                        << false << QString();
-        QTest::newRow("arrowhead 42")
-                << QByteArray(R"({"type":"arrow","x":0,"y":0,"points":[[0,0],[9,9]],"endArrowhead":42})") << true
-                << u"heads=-/arrow"_s;
-        QTest::newRow("arrowhead of the future") << QByteArray(
-                R"({"type":"arrow","x":0,"y":0,"points":[[0,0],[9,9]],"startArrowhead":"crowfoot_one"})")
-                                                 << true << u"heads=arrow/-"_s;
+        QTest::newRow("arrowhead 42") << QByteArray(
+                R"({"type":"arrow","x":0,"y":0,"points":[[0,0],[9,9]],"endArrowhead":42})")
+                                      << true << u"heads=-/arrow"_s;
+        QTest::newRow("arrowhead of the future")
+                << QByteArray(R"({"type":"arrow","x":0,"y":0,"points":[[0,0],[9,9]],"startArrowhead":"crowfoot_one"})")
+                << true << u"heads=arrow/-"_s;
         QTest::newRow("boundElements a string")
                 << QByteArray(R"({"type":"rectangle","x":0,"y":0,"width":5,"height":5,"boundElements":"x"})") << true
                 << u"bound= "_s;
         QTest::newRow("groupIds an object")
                 << QByteArray(R"({"type":"rectangle","x":0,"y":0,"width":5,"height":5,"groupIds":{}})") << true
                 << u"groups= "_s;
-        QTest::newRow("image without a file") << QByteArray(R"({"type":"image","x":0,"y":0,"width":5,"height":5})")
-                                              << true << u"file="_s;
+        QTest::newRow("image without a file")
+                << QByteArray(R"({"type":"image","x":0,"y":0,"width":5,"height":5})") << true << u"file="_s;
         QTest::newRow("far away") << QByteArray(R"({"type":"ellipse","x":2e6,"y":0,"width":5,"height":5})") << false
                                   << QString();
-        QTest::newRow("negative width")
-                << QByteArray(R"({"type":"rectangle","x":100,"y":10,"width":-50,"height":20})") << true
-                << u"box=50,10,50,20"_s;
+        QTest::newRow("negative width") << QByteArray(R"({"type":"rectangle","x":100,"y":10,"width":-50,"height":20})")
+                                        << true << u"box=50,10,50,20"_s;
         QTest::newRow("opacity over 100")
                 << QByteArray(R"({"type":"diamond","x":0,"y":0,"width":5,"height":5,"opacity":400})") << true
                 << u"opacity=100"_s;
@@ -404,17 +403,17 @@ private Q_SLOTS:
         QTest::addColumn<int>("type");
         QTest::addColumn<QStringList>("keys");
         const QStringList shape;
-        const QStringList linear{u"points"_s,          u"lastCommittedPoint"_s, u"startBinding"_s, u"endBinding"_s,
-                                 u"startArrowhead"_s, u"endArrowhead"_s};
+        const QStringList linear{u"points"_s,     u"lastCommittedPoint"_s, u"startBinding"_s,
+                                 u"endBinding"_s, u"startArrowhead"_s,     u"endArrowhead"_s};
         QTest::newRow("rectangle") << int(ElementType::Rectangle) << shape;
         QTest::newRow("ellipse") << int(ElementType::Ellipse) << shape;
         QTest::newRow("diamond") << int(ElementType::Diamond) << shape;
         QTest::newRow("line") << int(ElementType::Line) << (linear + QStringList{u"polygon"_s});
         QTest::newRow("arrow") << int(ElementType::Arrow) << (linear + QStringList{u"elbowed"_s});
         QTest::newRow("text") << int(ElementType::Text)
-                              << QStringList{u"text"_s,          u"fontSize"_s,  u"fontFamily"_s, u"textAlign"_s,
-                                             u"verticalAlign"_s, u"containerId"_s, u"originalText"_s,
-                                             u"autoResize"_s,    u"lineHeight"_s};
+                              << QStringList{u"text"_s,         u"fontSize"_s,      u"fontFamily"_s,
+                                             u"textAlign"_s,    u"verticalAlign"_s, u"containerId"_s,
+                                             u"originalText"_s, u"autoResize"_s,    u"lineHeight"_s};
         QTest::newRow("freedraw") << int(ElementType::Freedraw)
                                   << QStringList{u"points"_s, u"pressures"_s, u"simulatePressure"_s,
                                                  u"lastCommittedPoint"_s};
@@ -434,14 +433,34 @@ private Q_SLOTS:
             s = newShape(t, QPointF(10, 20), QPointF(110, 80), false, ShapeStyle{u"#2f6fdd"_s, 2, true}, stamp);
         Drawing d;
         d.strokes = {s};
-        const QJsonObject e = QJsonDocument::fromJson(sceneJson(d)).object().value(u"elements"_s).toArray().at(0).toObject();
+        const QJsonObject e =
+                QJsonDocument::fromJson(sceneJson(d)).object().value(u"elements"_s).toArray().at(0).toObject();
         // What Excalidraw's restore.ts reads of every element.
-        const QStringList common{u"id"_s,       u"type"_s,          u"x"_s,           u"y"_s,         u"width"_s,
-                                 u"height"_s,   u"angle"_s,         u"strokeColor"_s, u"backgroundColor"_s,
-                                 u"fillStyle"_s, u"strokeWidth"_s,  u"strokeStyle"_s, u"roughness"_s,
-                                 u"opacity"_s,  u"groupIds"_s,      u"frameId"_s,     u"roundness"_s,
-                                 u"seed"_s,     u"version"_s,       u"versionNonce"_s, u"isDeleted"_s,
-                                 u"boundElements"_s, u"updated"_s,  u"link"_s,        u"locked"_s};
+        const QStringList common{u"id"_s,
+                                 u"type"_s,
+                                 u"x"_s,
+                                 u"y"_s,
+                                 u"width"_s,
+                                 u"height"_s,
+                                 u"angle"_s,
+                                 u"strokeColor"_s,
+                                 u"backgroundColor"_s,
+                                 u"fillStyle"_s,
+                                 u"strokeWidth"_s,
+                                 u"strokeStyle"_s,
+                                 u"roughness"_s,
+                                 u"opacity"_s,
+                                 u"groupIds"_s,
+                                 u"frameId"_s,
+                                 u"roundness"_s,
+                                 u"seed"_s,
+                                 u"version"_s,
+                                 u"versionNonce"_s,
+                                 u"isDeleted"_s,
+                                 u"boundElements"_s,
+                                 u"updated"_s,
+                                 u"link"_s,
+                                 u"locked"_s};
         for (const QString &key : common + keys)
             QVERIFY2(e.contains(key), qPrintable(key));
         QCOMPARE(e.value(u"type"_s).toString(), typeName(type));
@@ -598,7 +617,8 @@ private Q_SLOTS:
         QTest::addColumn<int>("maxLines");
         QTest::newRow("square, hachure") << int(ElementType::Rectangle) << int(FillStyle::Hachure) << 17 << 19;
         QTest::newRow("square, cross-hatch") << int(ElementType::Rectangle) << int(FillStyle::CrossHatch) << 34 << 38;
-        QTest::newRow("square, zigzag (as hachure)") << int(ElementType::Rectangle) << int(FillStyle::Zigzag) << 17 << 19;
+        QTest::newRow("square, zigzag (as hachure)")
+                << int(ElementType::Rectangle) << int(FillStyle::Zigzag) << 17 << 19;
         QTest::newRow("square, solid") << int(ElementType::Rectangle) << int(FillStyle::Solid) << 0 << 0;
         QTest::newRow("diamond") << int(ElementType::Diamond) << int(FillStyle::Hachure) << 8 << 19;
         QTest::newRow("ellipse") << int(ElementType::Ellipse) << int(FillStyle::Hachure) << 10 << 19;
@@ -813,13 +833,13 @@ private Q_SLOTS:
         QTest::addColumn<QStringList>("selected");
         const QList<QPointF> square{{-20, -30}, {160, -30}, {160, 40}, {-20, 40}};
         QTest::newRow("around two of three") << square << QStringList{u"a"_s, u"b"_s};
-        QTest::newRow("half of the long one: taken") << QList<QPointF>{{345, -10}, {399, -10}, {399, 10}, {345, 10}}
-                                                     << QStringList{u"d"_s};
+        QTest::newRow("half of the long one: taken")
+                << QList<QPointF>{{345, -10}, {399, -10}, {399, 10}, {345, 10}} << QStringList{u"d"_s};
         QTest::newRow("40 % of it: not") << QList<QPointF>{{355, -10}, {399, -10}, {399, 10}, {355, 10}}
                                          << QStringList{};
         // A bow-tie (self-intersecting, even-odd): its left wing holds "e", its top gap not "f".
-        QTest::newRow("self-intersecting") << QList<QPointF>{{0, 100}, {100, 200}, {100, 100}, {0, 200}}
-                                           << QStringList{u"e"_s};
+        QTest::newRow("self-intersecting")
+                << QList<QPointF>{{0, 100}, {100, 200}, {100, 100}, {0, 200}} << QStringList{u"e"_s};
         QTest::newRow("two points: nothing") << QList<QPointF>{{-1000, -1000}, {1000, 1000}} << QStringList{};
     }
     void lassoSelects()
@@ -982,17 +1002,21 @@ private Q_SLOTS:
         QTest::newRow("to the back: above the backdrop")
                 << QStringList{u"R"_s} << int(Reorder::ToBack)
                 << QStringList{u"B"_s, u"R"_s, u"L"_s, u"x"_s, u"y"_s, u"g1"_s, u"g2"_s, u"z"_s};
-        QTest::newRow("forward: over one") << QStringList{u"R"_s} << int(Reorder::Forward)
-                                           << QStringList{u"B"_s, u"x"_s, u"y"_s, u"R"_s, u"L"_s, u"g1"_s, u"g2"_s, u"z"_s};
-        QTest::newRow("forward over a group") << QStringList{u"y"_s} << int(Reorder::Forward)
-                                              << QStringList{u"B"_s, u"x"_s, u"R"_s, u"L"_s, u"g1"_s, u"g2"_s, u"y"_s, u"z"_s};
-        QTest::newRow("a group backward") << QStringList{u"g1"_s, u"g2"_s} << int(Reorder::Backward)
-                                          << QStringList{u"B"_s, u"x"_s, u"R"_s, u"L"_s, u"g1"_s, u"g2"_s, u"y"_s, u"z"_s};
+        QTest::newRow("forward: over one")
+                << QStringList{u"R"_s} << int(Reorder::Forward)
+                << QStringList{u"B"_s, u"x"_s, u"y"_s, u"R"_s, u"L"_s, u"g1"_s, u"g2"_s, u"z"_s};
+        QTest::newRow("forward over a group")
+                << QStringList{u"y"_s} << int(Reorder::Forward)
+                << QStringList{u"B"_s, u"x"_s, u"R"_s, u"L"_s, u"g1"_s, u"g2"_s, u"y"_s, u"z"_s};
+        QTest::newRow("a group backward")
+                << QStringList{u"g1"_s, u"g2"_s} << int(Reorder::Backward)
+                << QStringList{u"B"_s, u"x"_s, u"R"_s, u"L"_s, u"g1"_s, u"g2"_s, u"y"_s, u"z"_s};
         QTest::newRow("backward at the bottom: nothing")
                 << QStringList{u"x"_s} << int(Reorder::Backward)
                 << QStringList{u"B"_s, u"x"_s, u"R"_s, u"L"_s, u"y"_s, u"g1"_s, u"g2"_s, u"z"_s};
-        QTest::newRow("the backdrop stays") << QStringList{u"B"_s} << int(Reorder::ToFront)
-                                            << QStringList{u"B"_s, u"x"_s, u"R"_s, u"L"_s, u"y"_s, u"g1"_s, u"g2"_s, u"z"_s};
+        QTest::newRow("the backdrop stays")
+                << QStringList{u"B"_s} << int(Reorder::ToFront)
+                << QStringList{u"B"_s, u"x"_s, u"R"_s, u"L"_s, u"y"_s, u"g1"_s, u"g2"_s, u"z"_s};
     }
     void reorder()
     {
@@ -1030,15 +1054,15 @@ private Q_SLOTS:
                                    << QPointF();
         QTest::newRow("Shift: a square") << int(ElementType::Rectangle) << QPointF(50, 30) << true
                                          << QRectF(10, 10, 40, 40) << QPointF();
-        QTest::newRow("Shift: a square up and left") << int(ElementType::Ellipse) << QPointF(-20, 30) << true
-                                                     << QRectF(-20, 10, 30, 30) << QPointF();
-        QTest::newRow("diamond dragged back") << int(ElementType::Diamond) << QPointF(0, 0) << false
-                                              << QRectF(0, 0, 10, 10) << QPointF();
+        QTest::newRow("Shift: a square up and left")
+                << int(ElementType::Ellipse) << QPointF(-20, 30) << true << QRectF(-20, 10, 30, 30) << QPointF();
+        QTest::newRow("diamond dragged back")
+                << int(ElementType::Diamond) << QPointF(0, 0) << false << QRectF(0, 0, 10, 10) << QPointF();
         QTest::newRow("line") << int(ElementType::Line) << QPointF(110, 20) << false << QRectF() << QPointF(110, 20);
-        QTest::newRow("Shift: a level line") << int(ElementType::Line) << QPointF(110, 20) << true << QRectF()
-                                             << QPointF(110.5, 10);
-        QTest::newRow("Shift: an arrow at 45°") << int(ElementType::Arrow) << QPointF(60, 62) << true << QRectF()
-                                                << QPointF(61.01, 61.01);
+        QTest::newRow("Shift: a level line")
+                << int(ElementType::Line) << QPointF(110, 20) << true << QRectF() << QPointF(110.5, 10);
+        QTest::newRow("Shift: an arrow at 45°")
+                << int(ElementType::Arrow) << QPointF(60, 62) << true << QRectF() << QPointF(61.01, 61.01);
     }
     void newShapes()
     {
@@ -1072,8 +1096,8 @@ private Q_SLOTS:
         const EditStamp stamp = testStamp();
         Drawing d;
         // A new text: measured.
-        const Stroke t = newText(QPointF(10, 10), u"Zażółć gęślą jaźń 🙂\nDruga"_s, TextStyle{u"#2f6fdd"_s, 20, 2}, m,
-                                 stamp);
+        const Stroke t =
+                newText(QPointF(10, 10), u"Zażółć gęślą jaźń 🙂\nDruga"_s, TextStyle{u"#2f6fdd"_s, 20, 2}, m, stamp);
         QCOMPARE(t.box.topLeft(), QPointF(10, 10));
         QVERIFY(std::abs(t.box.width() - 0.55 * 20 * u"Zażółć gęślą jaźń 🙂"_s.size()) < 0.01);
         QVERIFY(std::abs(t.box.height() - 2 * 20 * 1.15) < 0.01);
@@ -1310,6 +1334,88 @@ private Q_SLOTS:
         QVERIFY(diffElements(d.strokes, d.strokes).isEmpty());
     }
 
+    void undoRestampsVersions()
+    {
+        // Undo and redo put elements back as a new edit: their versions only go up.
+        EditStamp stamp = testStamp();
+        Drawing d;
+        d.strokes = {freehand(u"a"_s, 100, 0, 3), freehand(u"b"_s, 100, 100, 3)};
+        d.strokes[0].version = 1;
+        d.strokes[1].version = 5;
+        // A move (a: v2), undone (the old place, v3) and redone (the new place, v4).
+        QList<Stroke> before = d.strokes;
+        moveElements(d, {u"a"_s}, QPointF(50, 0), stamp);
+        QCOMPARE(d.strokes.at(0).version, 2);
+        const ElementDiff move = diffElements(before, d.strokes);
+        QList<Stroke> list = d.strokes;
+        EditStamp later = testStamp(1761600009000);
+        later.random = [] { return 4242u; };
+        applyDiff(list, move, false, &later);
+        QCOMPARE(list.at(0).points.first().x, 100.0);
+        QCOMPARE(list.at(0).version, 3);
+        QCOMPARE(list.at(0).updated, qint64(1761600009000));
+        QVERIFY(list.at(0).versionNonce != d.strokes.at(0).versionNonce);
+        QCOMPARE(list.at(1).version, 5); // untouched
+        applyDiff(list, move, true, &later);
+        QCOMPARE(list.at(0).points.first().x, 150.0);
+        QCOMPARE(list.at(0).version, 4);
+        // A deletion undone: back above the tombstone a save may have written (version + 1).
+        before = list;
+        d.strokes = list;
+        deleteElements(d, {u"b"_s}, stamp);
+        QCOMPARE(d.strokes.size(), 1);
+        const ElementDiff del = diffElements(before, d.strokes);
+        list = d.strokes;
+        applyDiff(list, del, false, &later);
+        QCOMPARE(list.size(), 2);
+        QCOMPARE(list.at(1).id, u"b"_s);
+        QCOMPARE(list.at(1).version, 7);
+        // A new element removed by undo and drawn again by redo: above its first version + 1.
+        before = list;
+        Stroke c = freehand(u"c"_s, 0, 200, 3);
+        c.version = 1;
+        list.append(c);
+        const ElementDiff add = diffElements(before, list);
+        applyDiff(list, add, false, &later);
+        QCOMPARE(list.size(), 2);
+        applyDiff(list, add, true, &later);
+        QCOMPARE(list.size(), 3);
+        QCOMPARE(list.at(2).version, 3);
+        // Without a stamp the diff restores the elements as they were.
+        applyDiff(list, add, false);
+        applyDiff(list, add, true);
+        QCOMPARE(list.at(2).version, 1);
+    }
+
+    void undoAfterSaveMerges()
+    {
+        // Saved with "a" moved right (v2); the move undone and "a" moved down here, while another
+        // device took the saved version (a moved right, v2) and added "d": the move down stays.
+        EditStamp stamp = testStamp();
+        Drawing d;
+        d.strokes = {freehand(u"a"_s, 100, 0, 3)};
+        d.strokes[0].version = 1;
+        QList<Stroke> before = d.strokes;
+        moveElements(d, {u"a"_s}, QPointF(50, 0), stamp);
+        const Drawing saved = d;
+        const ElementDiff move = diffElements(before, d.strokes);
+        applyDiff(d.strokes, move, false, &stamp);
+        moveElements(d, {u"a"_s}, QPointF(0, 80), stamp);
+        Drawing theirs = saved;
+        theirs.strokes.append(freehand(u"d"_s, 0, 300, 3));
+        const Drawing merged = merge(mergeBase(saved), d, theirs);
+        QCOMPARE(merged.strokes.size(), 2);
+        const qsizetype a = indexOfElement(merged, u"a"_s);
+        QCOMPARE(merged.strokes.at(a).points.first().x, 100.0);
+        QCOMPARE(merged.strokes.at(a).points.first().y, 80.0);
+        // A conflict copy of the saved version merged with no base (the sync center's union):
+        // the undone move does not come back.
+        Drawing undone = saved;
+        applyDiff(undone.strokes, move, false, &stamp);
+        const Drawing united = merge(MergeBase{}, undone, saved);
+        QCOMPARE(united.strokes.first().points.first().x, 100.0);
+    }
+
     void svgOfShapes()
     {
         Drawing d = shapesFixture();
@@ -1321,18 +1427,18 @@ private Q_SLOTS:
         d.strokes[13].version += 1;
         const QByteArray svg = toSvg(d);
         QVERIFY(wellFormed(svg));
-        QVERIFY(svg.contains("stroke-dasharray=\"8 10\""));   // the dashed ellipse (width 2)
-        QVERIFY(svg.contains("stroke-dasharray=\"1.5 8\""));  // the dotted line
+        QVERIFY(svg.contains("stroke-dasharray=\"8 10\""));  // the dashed ellipse (width 2)
+        QVERIFY(svg.contains("stroke-dasharray=\"1.5 8\"")); // the dotted line
         QVERIFY(svg.contains("xml:space=\"preserve\""));
         QVERIFY(svg.contains("&lt;script&gt;alert(&apos;ą&apos;)&lt;/script&gt; &amp; </text>"));
         QVERIFY(!svg.contains("<script"));
         QVERIFY(!svg.contains("javascript"));
-        QVERIFY(svg.contains("transform=\"rotate(28.65 "));   // the rotated rectangle (0.5 rad)
+        QVERIFY(svg.contains("transform=\"rotate(28.65 ")); // the rotated rectangle (0.5 rad)
         QVERIFY(svg.contains("xmlns:xlink=\"http://www.w3.org/1999/xlink\""));
         QVERIFY(svg.contains("xlink:href=\"data:image/png;base64,"));
-        QVERIFY(svg.contains("fill=\"#e9ecef\""));             // the pictures without a file
+        QVERIFY(svg.contains("fill=\"#e9ecef\"")); // the pictures without a file
         QVERIFY(svg.contains("font-family=\"Helvetica, Arial, sans-serif\""));
-        QVERIFY(svg.contains("text-anchor=\"middle\""));       // the label
+        QVERIFY(svg.contains("text-anchor=\"middle\"")); // the label
         QVERIFY(svg.contains("Dwie linie: ąćęłńóśźż</text>"));
         QVERIFY(svg.contains("I emoji 🙂</text>"));
         QVERIFY(looksLikeExcalidrawSvg(svg.left(HeadBytes)));
@@ -1375,10 +1481,11 @@ private Q_SLOTS:
             default: return -random.bounded(100.0);
             }
         };
-        const QStringList keys{u"width"_s,     u"height"_s,      u"angle"_s,     u"strokeWidth"_s, u"opacity"_s,
-                               u"roundness"_s, u"fontSize"_s,    u"lineHeight"_s, u"groupIds"_s,   u"boundElements"_s,
-                               u"text"_s,      u"containerId"_s, u"fileId"_s,     u"startBinding"_s,
-                               u"endArrowhead"_s, u"fillStyle"_s, u"backgroundColor"_s};
+        const QStringList keys{u"width"_s,          u"height"_s,        u"angle"_s,        u"strokeWidth"_s,
+                               u"opacity"_s,        u"roundness"_s,     u"fontSize"_s,     u"lineHeight"_s,
+                               u"groupIds"_s,       u"boundElements"_s, u"text"_s,         u"containerId"_s,
+                               u"fileId"_s,         u"startBinding"_s,  u"endArrowhead"_s, u"fillStyle"_s,
+                               u"backgroundColor"_s};
         for (int i = 0; i < 400; ++i) {
             QJsonObject e{{u"type"_s, types.at(qsizetype(random.bounded(quint32(types.size()))))},
                           {u"id"_s, u"e%1"_s.arg(i % 7)},

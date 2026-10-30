@@ -197,10 +197,9 @@ private Q_SLOTS:
                                u"ąćęłńóśźż\n\n# Excalidraw Data\n\n## Text Elements\n%%\n## Drawing\n```json\n"_s;
         QTest::newRow("plugin file") << u"Excalidraw/Szkic ćwiczeń.excalidraw.md"_s << plugin << true << false << true;
         QTest::newRow("CRLF plugin file") << u"Szkic.excalidraw.md"_s << plugin << true << true << true;
-        QTest::newRow("plugin file edited by hand") << u"Szkic źdźbła.excalidraw.md"_s << plugin << true << false
-                                                    << false;
-        QTest::newRow("a note") << u"Notatka.md"_s << u"---\ntytul: Szkic\n---\n```json\n"_s << false << false
-                                << true;
+        QTest::newRow("plugin file edited by hand")
+                << u"Szkic źdźbła.excalidraw.md"_s << plugin << true << false << false;
+        QTest::newRow("a note") << u"Notatka.md"_s << u"---\ntytul: Szkic\n---\n```json\n"_s << false << false << true;
     }
 
     void excalidrawDrawingsMergeElementByElement()
@@ -322,8 +321,13 @@ private Q_SLOTS:
         Pair p({{path, drawingSvg({u"s1"_s}).toUtf8()}});
         p.a.sync();
         p.b.sync();
-        const QJsonArray frame{QJsonObject{{u"id"_s, u"ramka"_s}, {u"type"_s, u"frame"_s}, {u"x"_s, 0}, {u"y"_s, 0},
-                                           {u"width"_s, 300}, {u"height"_s, 200}, {u"name"_s, u"Ramka"_s}}};
+        const QJsonArray frame{QJsonObject{{u"id"_s, u"ramka"_s},
+                                           {u"type"_s, u"frame"_s},
+                                           {u"x"_s, 0},
+                                           {u"y"_s, 0},
+                                           {u"width"_s, 300},
+                                           {u"height"_s, 200},
+                                           {u"name"_s, u"Ramka"_s}}};
         const QString framed = drawingSvg({u"s1"_s, u"s2"_s}, frame);
         QVERIFY(p.a.write(path, framed));
         QVERIFY(p.b.write(path, drawingSvg({u"s1"_s, u"s3"_s})));

@@ -146,8 +146,8 @@ private Q_SLOTS:
         QTest::newRow("nothing changed here") << u"a"_s << u"a"_s << u"a c"_s << u"a:1 c:1"_s;
         QTest::newRow("their order kept") << u"a b"_s << u"a b"_s << u"b a"_s << u"b:1 a:1"_s;
         // drawbg's backdrop: a locked element new here under everything; the rest on top.
-        QTest::newRow("a backdrop new here: at the bottom") << u"a"_s << u"B:1L n a"_s << u"a c"_s
-                                                            << u"B:1 a:1 c:1 n:1"_s;
+        QTest::newRow("a backdrop new here: at the bottom")
+                << u"a"_s << u"B:1L n a"_s << u"a c"_s << u"B:1 a:1 c:1 n:1"_s;
         QTest::newRow("a locked element not leading: on top") << u"a"_s << u"a B:1L"_s << u"a c"_s << u"a:1 c:1 B:1"_s;
         // No common ancestor (the sync center): a union, the higher version of each.
         QTest::newRow("unknown base: union") << u"?"_s << u"a:3 b x"_s << u"a:2 b:4 y"_s << u"a:3 b:4 y:1 x:1"_s;
@@ -253,11 +253,12 @@ private Q_SLOTS:
         QTest::addColumn<int>("ourBackground");
         QTest::addColumn<int>("theirBackground");
         QTest::addColumn<int>("merged");
-        QTest::newRow("changed here") << true << int(Background::Grid) << int(Background::Lines) << int(Background::Grid);
+        QTest::newRow("changed here") << true << int(Background::Grid) << int(Background::Lines)
+                                      << int(Background::Grid);
         QTest::newRow("changed there") << true << int(Background::Plain) << int(Background::Lines)
                                        << int(Background::Lines);
-        QTest::newRow("unknown base: theirs") << false << int(Background::Grid) << int(Background::Lines)
-                                              << int(Background::Lines);
+        QTest::newRow("unknown base: theirs")
+                << false << int(Background::Grid) << int(Background::Lines) << int(Background::Lines);
     }
     void patternAndTheme()
     {
@@ -420,18 +421,18 @@ private Q_SLOTS:
         QTest::addColumn<QByteArray>("remote");
         QTest::addColumn<QString>("merged"); // "-": no merge (both kept)
         QTest::newRow("both drew") << svgOf(u"s1"_s) << svgOf(u"s1 s3"_s) << svgOf(u"s1 s2"_s) << u"s1 s2 s3"_s;
-        QTest::newRow("erased here, drawn there") << svgOf(u"s1 s2"_s) << svgOf(u"s2"_s) << svgOf(u"s1 s2 s3"_s)
-                                                  << u"s2 s3"_s;
-        QTest::newRow("erased there, drawn here") << svgOf(u"s1 s2"_s) << svgOf(u"s1 s2 s4"_s) << svgOf(u"s2"_s)
-                                                  << u"s2 s4"_s;
-        QTest::newRow("changed here and there") << svgOf(u"s1 s2"_s) << svgOf(u"s1:2 s2"_s) << svgOf(u"s1 s2:5 ż"_s)
-                                                << u"s1 s2 ż"_s;
-        QTest::newRow("only one side changed") << svgOf(u"s1"_s) << svgOf(u"s1"_s) << svgOf(u"s1 łódź"_s)
-                                               << u"s1 łódź"_s;
+        QTest::newRow("erased here, drawn there")
+                << svgOf(u"s1 s2"_s) << svgOf(u"s2"_s) << svgOf(u"s1 s2 s3"_s) << u"s2 s3"_s;
+        QTest::newRow("erased there, drawn here")
+                << svgOf(u"s1 s2"_s) << svgOf(u"s1 s2 s4"_s) << svgOf(u"s2"_s) << u"s2 s4"_s;
+        QTest::newRow("changed here and there")
+                << svgOf(u"s1 s2"_s) << svgOf(u"s1:2 s2"_s) << svgOf(u"s1 s2:5 ż"_s) << u"s1 s2 ż"_s;
+        QTest::newRow("only one side changed")
+                << svgOf(u"s1"_s) << svgOf(u"s1"_s) << svgOf(u"s1 łódź"_s) << u"s1 łódź"_s;
         QTest::newRow(".excalidraw") << excalidrawOf(u"s1"_s) << excalidrawOf(u"s1 s3"_s) << excalidrawOf(u"s1 s2"_s)
                                      << u"s1 s2 s3"_s;
-        QTest::newRow("a frame there: not editable") << svgOf(u"s1"_s) << svgOf(u"s1 s3"_s)
-                                                     << fixture(u"excalidraw_frame.svg"_s) << u"-"_s;
+        QTest::newRow("a frame there: not editable")
+                << svgOf(u"s1"_s) << svgOf(u"s1 s3"_s) << fixture(u"excalidraw_frame.svg"_s) << u"-"_s;
         QTest::newRow("a frame here") << svgOf(u"s1"_s) << fixture(u"excalidraw_frame.svg"_s) << svgOf(u"s1 s2"_s)
                                       << u"-"_s;
         QByteArray broken = svgOf(u"s1"_s);
@@ -443,15 +444,15 @@ private Q_SLOTS:
                                          << QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\"/>") << u"-"_s;
         QTest::newRow("no base") << QByteArray() << svgOf(u"s1 s3"_s) << svgOf(u"s1 s2"_s) << u"-"_s;
         QTest::newRow("formats differ") << svgOf(u"s1"_s) << svgOf(u"s1 s3"_s) << excalidrawOf(u"s1 s2"_s) << u"-"_s;
-        QTest::newRow("not a drawing at all") << QByteArray("# Notatka\n") << QByteArray("# Notatka ż\n")
-                                              << QByteArray("# Notatka ź\n") << u"-"_s;
+        QTest::newRow("not a drawing at all")
+                << QByteArray("# Notatka\n") << QByteArray("# Notatka ż\n") << QByteArray("# Notatka ź\n") << u"-"_s;
         // A line moved without a new version (by hand, in a text editor): versions say nothing.
         Drawing moved = linesOf(u"s1 s2"_s);
         moved.strokes[0].points[1].y += 30;
-        QTest::newRow("changed without a new version here") << svgOf(u"s1 s2"_s) << toSvg(moved)
-                                                            << svgOf(u"s1 s2 s3"_s) << u"-"_s;
-        QTest::newRow("changed without a new version there") << svgOf(u"s1 s2"_s) << svgOf(u"s1 s2 s3"_s)
-                                                             << toSvg(moved) << u"-"_s;
+        QTest::newRow("changed without a new version here")
+                << svgOf(u"s1 s2"_s) << toSvg(moved) << svgOf(u"s1 s2 s3"_s) << u"-"_s;
+        QTest::newRow("changed without a new version there")
+                << svgOf(u"s1 s2"_s) << svgOf(u"s1 s2 s3"_s) << toSvg(moved) << u"-"_s;
     }
     void mergeDrawingFiles()
     {
@@ -681,8 +682,7 @@ private Q_SLOTS:
             theirs.removeDuplicates();
             const bool known = random.bounded(2) == 0;
             const MergeBase b = known ? mergeBase(linesOf(base.join(u' '))) : MergeBase{};
-            const Drawing merged =
-                    brulion::drawing::merge(b, linesOf(ours.join(u' ')), linesOf(theirs.join(u' ')));
+            const Drawing merged = brulion::drawing::merge(b, linesOf(ours.join(u' ')), linesOf(theirs.join(u' ')));
             QStringList result;
             for (const Stroke &s : merged.strokes)
                 result.append(s.id);

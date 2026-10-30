@@ -858,17 +858,17 @@ void WorkspaceSync::refreshConflicts()
         for (const sync::ConflictCopy &c : sync::findConflicts(m_vault->files())) {
             const QDateTime time = QDateTime::fromString(c.time, Qt::ISODate);
             list.append(QVariantMap{
-                { u"original"_s, c.original },
-                { u"copy"_s, c.copy },
-                { u"title"_s, paths::pageTitle(c.original) },
-                { u"time"_s, c.time },
-                { u"when"_s, human(time) },
-                { u"device"_s, c.device },
-                { u"source"_s, c.source == sync::ConflictCopy::Source::Syncthing ? u"syncthing"_s : u"brulion"_s },
-                { u"text"_s, sync::isSyncTextPath(c.copy) },
-                // (The 4 KB head of each, cached by modification time and size.)
-                { u"drawing"_s, editor::localFileIsDrawing(m_vault->absolutePath(c.copy))
-                                        || editor::localFileIsDrawing(m_vault->absolutePath(c.original)) },
+                    {u"original"_s, c.original},
+                    {u"copy"_s, c.copy},
+                    {u"title"_s, paths::pageTitle(c.original)},
+                    {u"time"_s, c.time},
+                    {u"when"_s, human(time)},
+                    {u"device"_s, c.device},
+                    {u"source"_s, c.source == sync::ConflictCopy::Source::Syncthing ? u"syncthing"_s : u"brulion"_s},
+                    {u"text"_s, sync::isSyncTextPath(c.copy)},
+                    // (The 4 KB head of each, cached by modification time and size.)
+                    {u"drawing"_s, editor::localFileIsDrawing(m_vault->absolutePath(c.copy))
+                                           || editor::localFileIsDrawing(m_vault->absolutePath(c.original))},
             });
         }
     }

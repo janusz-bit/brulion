@@ -112,8 +112,10 @@ std::optional<PropertyType> listKind(const QString &kind)
 
 void PageController::updatePageProperties()
 {
-    // The leading frontmatter rows (YAML, then `key::` lines) are the page's properties; in source
-    // mode the source text (called after an edit made there and when the mode changes).
+    // The leading frontmatter rows — a YAML block, then the first block of `key::` lines — are the
+    // page's properties, as the edits (readPageProperties() of the text) and the index see them:
+    // more `key::` blocks after a blank line are shown as property rows but are the page's text.
+    // In source mode the source text (called after an edit made there and when the mode changes).
     QString propertyText;
     const markdown::BlockDocument &doc = m_model->document();
     int rows = 0;
@@ -123,8 +125,11 @@ void PageController::updatePageProperties()
         propertyText = m_sourceText;
     } else {
         while (rows < doc.count() && doc.at(rows).kind == BlockKind::Frontmatter) {
+            const bool yaml = markdown::findFrontmatter(doc.at(rows).body).has_value();
+            if (yaml ? rows > 0 : logseqRow >= 0)
+                break;
             propertyText += doc.at(rows).body + u'\n';
-            (markdown::findFrontmatter(doc.at(rows).body) ? yamlRow : logseqRow) = rows;
+            (yaml ? yamlRow : logseqRow) = rows;
             ++rows;
         }
     }
@@ -188,6 +193,9 @@ PageController::applyPropertyEdit(const std::function<markdown::PropertyEditResu
 {
     if (!m_loaded)
         return PropertyEditStatus::NotFound;
+    // A fence being typed is closed first, as save() writes it: the text read again after the edit
+    // must not run its code block on over the page.
+    closeLoneFence(m_editingUid);
     const QString current = m_sourceMode ? m_sourceText : text();
     const markdown::PropertyEditResult r = edit(current);
     if (r.status != PropertyEditStatus::Changed)
