@@ -3,25 +3,30 @@
 # Obsidian)"): writes <env-dir>/fonts.conf, used by both apps through FONTCONFIG_FILE, with only
 # Noto Sans / Serif / Sans Mono (noto-fonts-lgc-plus), Noto Color Emoji and DejaVu (fallback) from
 # the repository's nixpkgs, sans-serif → Noto Sans, serif → Noto Serif, monospace → Noto Sans
-# Mono, grayscale antialiasing with slight hinting. Prints the font folders, one per line, on
-# stdout. Then checks that `fc-match sans-serif` gives Noto Sans (else exit 1).
+# Mono, grayscale antialiasing with slight hinting. fontconfig's own rules (conf.d of the same
+# nixpkgs: generic families, synthetic bold/italic, …) are included, except the user's and the
+# machine's local configuration (50-user, 51-local), so no other font comes in. Prints the font
+# folders, one per line, on stdout. Then checks that `fc-match sans-serif` gives Noto Sans (else
+# exit 1).
 #
-# Environment: UIBENCH_FONT_DIRS — the font folders (space-separated) instead of `nix build`
-# (tests, machines without nix).
+# Environment: UIBENCH_FONT_DIRS — the font folders (space-separated) and UIBENCH_FONT_CONFD —
+# fontconfig's conf.d — instead of `nix build` (tests, machines without nix).
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../../.." && pwd)"
 dir="${1:?usage: fonts.sh <env-dir>}"
 mkdir -p "$dir/fontcache"
 
+confd="${UIBENCH_FONT_CONFD:-}"
 if [[ -n "${UIBENCH_FONT_DIRS:-}" ]]; then
   read -r -a font_dirs <<< "$UIBENCH_FONT_DIRS"
 else
   mapfile -t paths < <(nix build --no-link --print-out-paths --inputs-from "path:$repo" \
-    nixpkgs#noto-fonts-lgc-plus nixpkgs#noto-fonts-color-emoji nixpkgs#dejavu_fonts)
+    nixpkgs#noto-fonts-lgc-plus nixpkgs#noto-fonts-color-emoji nixpkgs#dejavu_fonts nixpkgs#fontconfig.out)
   font_dirs=()
   for p in "${paths[@]}"; do
     [[ -d "$p/share/fonts" ]] && font_dirs+=("$p/share/fonts")
+    [[ -d "$p/etc/fonts/conf.d" ]] && confd="$p/etc/fonts/conf.d"
   done
 fi
 [[ ${#font_dirs[@]} -gt 0 ]] || { echo "fonts.sh: no font folders" >&2; exit 1; }
@@ -35,6 +40,13 @@ fi
     echo "  <dir>$d</dir>"
   done
   echo "  <cachedir>$(cd "$dir" && pwd)/fontcache</cachedir>"
+  if [[ -n "$confd" ]]; then
+    for f in "$confd"/*.conf; do
+      case "$(basename "$f")" in 50-user.conf|51-local.conf) continue ;; esac
+      echo "  <include ignore_missing=\"yes\">$(readlink -f "$f")</include>"
+    done
+  fi
+  # After fontconfig's own lists: these come first.
   for pair in "sans-serif:Noto Sans:DejaVu Sans" "serif:Noto Serif:DejaVu Serif" "monospace:Noto Sans Mono:DejaVu Sans Mono"; do
     IFS=: read -r generic first fallback <<< "$pair"
     echo "  <alias binding=\"same\"><family>$generic</family><prefer><family>$first</family><family>Noto Color Emoji</family><family>$fallback</family></prefer></alias>"

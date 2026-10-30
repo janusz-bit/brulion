@@ -56,6 +56,11 @@ Window {
             textFormat: Text.RichText; color: "#1f2430"; linkColor: "#2c6aa3"; font.pixelSize: 14
             text: 'Zobacz <a href="x">link do strony</a> i <span style="background-color:#529fc3e6">#tag</span>'
         }
+        Text {
+            objectName: "wrapped"; x: 130; y: 95; width: 115; wrapMode: Text.Wrap
+            textFormat: Text.RichText; font.pixelSize: 14; lineHeightMode: Text.FixedHeight; lineHeight: 20
+            text: "Pierwszy dzień zostawiamy na dojazd i krótki <b>spacer</b>, żeby nie zaczynać od zmęczenia."
+        }
         Text { objectName: "hidden"; visible: false; x: 10; y: 100; text: "Ukryty" }
         Text { objectName: "transparent"; opacity: 0; x: 10; y: 100; text: "Przezroczysty" }
         Item {
@@ -222,6 +227,12 @@ void TestUiBenchLayoutDump::richText()
     }
     QVERIFY2(link, qPrintable(QString::fromUtf8(QJsonDocument(fragments).toJson())));
     QVERIFY2(chip, qPrintable(QString::fromUtf8(QJsonDocument(fragments).toJson())));
+    QCOMPARE(rich[u"lines"_s].toInt(), 1);
+
+    // Rich text's lineCount stays 1: the lines come from its height.
+    const QJsonObject wrapped = byName(m_dump[u"texts"_s].toArray(), u"wrapped"_s);
+    QVERIFY(wrapped[u"lines"_s].toInt() >= 4);
+    QCOMPARE(wrapped[u"lines"_s].toInt(), qRound(rectOf(wrapped).height() / 20));
 }
 
 void TestUiBenchLayoutDump::leftOut()

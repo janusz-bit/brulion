@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QFont>
 #include <QFontInfo>
+#include <QFontMetricsF>
 #include <QGuiApplication>
 #include <QPalette>
 #include <QJsonArray>
@@ -156,6 +157,24 @@ QList<Run> colourRuns(const QTextDocument *doc, const QColor &color, const QColo
         }
     }
     return runs;
+}
+
+/// The lines a text shows: Text's lineCount stays 1 for rich text, so also its content height over
+/// one line's height (Text.FixedHeight: lineHeight px; else the font's line spacing × lineHeight).
+int textLines(const QQuickItem *item, const QFont &font)
+{
+    const QVariant counted = item->property("lineCount");
+    double line = QFontMetricsF(font).lineSpacing();
+    const QVariant lineHeight = item->property("lineHeight");
+    if (lineHeight.isValid() && lineHeight.toDouble() > 0) {
+        if (item->property("lineHeightMode").toInt() == 1) // Text.FixedHeight
+            line = lineHeight.toDouble();
+        else
+            line *= lineHeight.toDouble();
+    }
+    const double contentHeight = item->property("contentHeight").toDouble();
+    const int estimated = line > 0 ? int(std::lround(contentHeight / line)) : 1;
+    return std::max({ 1, counted.isValid() ? counted.toInt() : 1, estimated });
 }
 
 struct Record {
@@ -391,7 +410,6 @@ private:
 
         const QFont font = item->property("font").value<QFont>();
         const double px = font.pixelSize() > 0 ? font.pixelSize() : font.pointSizeF() * 96.0 / 72.0;
-        const QVariant lineCount = item->property("lineCount");
         bool placeholder = false;
         if (const QQuickItem *parent = item->parentItem()) {
             if ((parent->inherits("QQuickTextInput") || parent->inherits("QQuickTextEdit"))
@@ -414,7 +432,7 @@ private:
             { u"px"_s, round2(px) },
             { u"weight"_s, font.weight() },
             { u"family"_s, QFontInfo(font).family() },
-            { u"lines"_s, lineCount.isValid() ? std::max(1, lineCount.toInt()) : 1 },
+            { u"lines"_s, textLines(item, font) },
             { u"enabled"_s, enabled },
             { u"placeholder"_s, placeholder },
             { u"paint"_s, paint },
