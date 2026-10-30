@@ -1,6 +1,6 @@
 // QtTranslations — Qt's own texts in the UI language: the standard buttons of dialogs ("Anuluj",
-// "Otwórz"), the non-native file dialog of QtQuick.Dialogs and other strings of Qt's modules come
-// from Qt's catalogs, not from Brulion's (i18n/brulion_pl.ts). The catalogs of `catalogs()` are
+// "Otwórz"), FilePicker's fallback file dialog (QFileDialog) and other strings of Qt's modules
+// come from Qt's catalogs, not from Brulion's (i18n/brulion_pl.ts). The catalogs of `catalogs()` are
 // bundled as resources under ":/i18n/qt/" from Qt's translations folder at build time
 // (src/app/ui/CMakeLists.txt; nix: qt6.qttranslations), so the desktop, Android and the browser
 // load the same files; Qt's installed translations (QLibraryInfo::TranslationsPath) are the

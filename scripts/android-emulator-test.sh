@@ -110,7 +110,15 @@
 # ?keyboard=visual (the browser's default), for the record (Brave's brave-browser#60074: a gap).
 # The app's readings are kept (samples-<browser>-<mode>.jsonl) and printed as rows of
 # tests/app/tst_keyboardinsets.cpp; screenshots wk-*.png. docs/WEB.md "Klawiatura ekranowa".
-# --selection, --folders, --share, --widgets, --web-pictures and --done find what they tap by its accessible name (UiAutomator reads Qt's
+# With --pickers instead: the system's file pickers that FilePicker shows (docs/UI.md "File pickers";
+# no QtQuick.Dialogs since L9) — files in the shared Download folder: Import → "Wybierz pliki…" brings
+# DocumentsUI to the front (ACTION_OPEN_DOCUMENT), a note tapped there comes back to the import's
+# preview under its name; "Wybierz folder…" (ACTION_OPEN_DOCUMENT_TREE) → a folder of notes → "Use
+# this folder" → "Allow": the preview of its notes; Export → "Eksportuj…" opens the system's "Save"
+# (ACTION_CREATE_DOCUMENT) with the export's file name filled in (EXTRA_TITLE), "Save" writes the
+# ZIP into Download (DocumentsUI opens in the folder used last: the one picked before). Checked on
+# Android 16 (API 36). Screenshots pk-*.png; the same debuggable APK.
+# --selection, --folders, --share, --widgets, --web-pictures, --done and --pickers find what they tap by its accessible name (UiAutomator reads Qt's
 # accessibility tree; the keyboard's keys from its dump of every window),
 # so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).
 #
@@ -124,6 +132,7 @@
 #        scripts/android-emulator-test.sh --done [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --drawing [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --stylus [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --pickers [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-keyboard [SITE_DIR]   (default dist-wasm)
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
@@ -175,6 +184,7 @@ WEBPICTURES=0
 DONE=0
 DRAWING=0
 STYLUS=0
+PICKERS=0
 WEBKEYBOARD=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
@@ -200,6 +210,9 @@ elif [[ ${1:-} == --drawing ]]; then
 elif [[ ${1:-} == --stylus ]]; then
   STYLUS=1
   shift
+elif [[ ${1:-} == --pickers ]]; then
+  PICKERS=1
+  shift
 elif [[ ${1:-} == --web-pictures ]]; then
   WEBPICTURES=1
   shift
@@ -215,7 +228,7 @@ else
   APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || DRAWING || STYLUS)) ||
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || DRAWING || STYLUS || PICKERS)) ||
     [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
 fi
@@ -834,6 +847,131 @@ if ((FOLDERS)); then
   grep -E 'qml|brulion' "$OUT/folders-logcat.txt" | tail -n 40 >"$OUT/folders-summary.txt" || true
   info "Result"
   cat "$OUT/folders-summary.txt"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- the system's file pickers (--pickers) ----------------------------------------------------
+
+if ((PICKERS)); then
+  info "File pickers: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  pk_json_arg() { printf '"%s"' "${1//\"/\"\"\"}"; }
+  documents_front() { adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep -q documentsui; }
+  brulion_front() { adb shell dumpsys window | grep -E 'mCurrentFocus' | grep -q "$PKG"; }
+  # DocumentsUI in the Download folder, until the item so named shows: the folder Download where
+  # it lists the storage's folders (the folder picker opens at the storage's top), else the
+  # Downloads root from its drawer of roots (the file pickers open in Recent or the root used last).
+  documents_downloads() { # <ERE>
+    # (DocumentsUI lists the files a moment after it is in front.)
+    wait_for 15 ui_has "$1|Download|Pobrane|Show roots|Pokaż katalogi główne|Pokaż elementy główne" || true
+    ui_has "$1" && return 0
+    if ui_has 'Download|Pobrane'; then
+      ui_tap 'Download|Pobrane' first 3 || return 1
+    else
+      ui_tap 'Show roots|Pokaż katalogi główne|Pokaż elementy główne' first 2 || return 1
+      ui_tap 'Downloads|Pobrane' first 3 || return 1
+    fi
+    wait_for 10 ui_has "$1"
+  }
+  # The saved ZIP anywhere in Download (DocumentsUI's save picker opens in the folder used last).
+  downloads_zip() { adb shell find /sdcard/Download -name "'*.zip'" 2>/dev/null | tr -d '\r' | head -n 1; }
+  zip_saved() { [[ -n $(downloads_zip) ]]; }
+  # A finger drags the view up until the item so named lies above the bottom navigation (a node
+  # under the navigation is "on screen" for UiAutomator, and a tap there switches the view).
+  pk_show() { # <ERE>
+    local y _
+    for _ in 1 2 3 4 5 6 7 8; do
+      y=$(ui_y "$1")
+      [[ -n $y ]] && ((y > SCREEN_H / 6 && y < SCREEN_H * 4 / 5)) && return 0
+      adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 70 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) 500
+      sleep 2
+    done
+    return 1
+  }
+  # Files on shared storage: a note in Download, a folder of notes below it (Android lets no app
+  # take Download itself as a tree).
+  printf '# Zażółć gęślą jaźń\r\n\r\n- pierwszy blok ąę\r\n' >"$OUT/Zażółć.md"
+  printf -- '- notatka w folderze\n' >"$OUT/Pierwsza.md"
+  printf -- '- źródło ćma\n' >"$OUT/Źródła.md"
+  adb shell rm -rf "'/sdcard/Download/Notatki z telefonu'" "'/sdcard/Download/Zażółć.md'" >/dev/null 2>&1 || true
+  adb shell 'rm -f /sdcard/Download/*.zip' >/dev/null 2>&1 || true
+  adb shell mkdir -p "'/sdcard/Download/Notatki z telefonu'"
+  adb push "$OUT/Zażółć.md" "/sdcard/Download/Zażółć.md" >/dev/null
+  adb push "$OUT/Pierwsza.md" "/sdcard/Download/Notatki z telefonu/Pierwsza.md" >/dev/null
+  adb push "$OUT/Źródła.md" "/sdcard/Download/Notatki z telefonu/Źródła.md" >/dev/null
+  adb shell content call --uri content://media --method scan_volume --arg external_primary >/dev/null 2>&1 || true
+  sleep 3
+
+  # 1. Files: ACTION_OPEN_DOCUMENT, a note picked by its name.
+  start_app '--demo --locale pl --route importExport'
+  check "the app is running" running
+  # (The first start on a freshly wiped emulator can take a minute.)
+  check "the import offers 'Wybierz pliki…'" wait_for 90 ui_has 'Wybierz pliki…'
+  check "… shown above the bottom navigation" pk_show 'Wybierz pliki…'
+  app_shot pk-1-import
+  check "'Wybierz pliki…' is tapped" ui_tap 'Wybierz pliki…' first 4
+  check "the system's document picker is in front (DocumentsUI)" wait_for 15 documents_front
+  app_shot pk-2-documents
+  check "it shows the Download folder's note" documents_downloads 'Zażółć\.md'
+  check "a tap picks it" ui_tap 'Zażółć\.md' first 4
+  check "Brulion is back in front" wait_for 15 brulion_front
+  check "the import's preview is named after the note" wait_for 30 ui_has 'Zażółć\.md'
+  check "… and offers to import it" ui_has 'Importuj [0-9]+ plik.*'
+  app_shot pk-3-files-preview
+
+  # 2. A folder: ACTION_OPEN_DOCUMENT_TREE, "Use this folder", "Allow".
+  start_app '--demo --locale pl --route importExport'
+  check "the import offers 'Wybierz folder…'" wait_for 30 ui_has 'Wybierz folder…'
+  check "… shown above the bottom navigation" pk_show 'Wybierz folder…'
+  check "'Wybierz folder…' is tapped" ui_tap 'Wybierz folder…' first 4
+  check "the system's folder picker is in front" wait_for 15 documents_front
+  check "it shows the folder of notes" documents_downloads 'Notatki z telefonu'
+  check "the folder is opened" ui_tap 'Notatki z telefonu' first 3
+  app_shot pk-4-folder
+  check "'Use this folder'" ui_tap 'USE THIS FOLDER|Use this folder|UŻYJ TEGO FOLDERU|Użyj tego folderu' last 3
+  app_shot pk-5-allow
+  check "'Allow'" ui_tap 'ALLOW|Allow|ZEZWÓL|Zezwól' last 4
+  check "Brulion is back in front" wait_for 15 brulion_front
+  check "the preview is named after the folder" wait_for 30 ui_has 'Notatki z telefonu'
+  check "… and lists its notes" ui_has 'Importuj 2 pliki'
+  app_shot pk-6-folder-preview
+
+  # 3. Export → "Save": ACTION_CREATE_DOCUMENT with the export's name, saved in Download.
+  start_app "--demo --locale pl --route $(pk_json_arg '{"view":"importExport","tab":"export"}')"
+  check "the export offers 'Eksportuj…'" wait_for 30 ui_has 'Eksportuj…'
+  check "… shown above the bottom navigation" pk_show 'Eksportuj…'
+  check "'Eksportuj…' is tapped" ui_tap 'Eksportuj…' first 6
+  check "the system's save picker is in front" wait_for 30 documents_front
+  app_shot pk-7-save
+  ui_dump
+  zip_name=$(sed 's/<node /\n<node /g' "$OUT/ui.xml" | sed -nE 's/.*text="([^"]*\.zip)".*/\1/p' | head -n 1)
+  echo "    the save picker suggests: ${zip_name:-nothing}"
+  check "… with the export's file name (EXTRA_TITLE)" test -n "$zip_name"
+  check "it shows the Download folder (or the folder used last)" documents_downloads 'Notatki z telefonu'
+  check "'Save'" ui_tap 'SAVE|Save|ZAPISZ|Zapisz' last 4
+  check "Brulion is back in front" wait_for 15 brulion_front
+  check "the ZIP is in Download" wait_for 20 zip_saved
+  saved=$(downloads_zip || true)
+  echo "    saved: ${saved:-nothing}"
+  adb shell ls -la /sdcard/Download/ >"$OUT/download-listing.txt" 2>&1 || true
+  adb shell content query --uri content://media/external/downloads --projection _display_name:relative_path:_size \
+    >>"$OUT/download-listing.txt" 2>&1 || true
+  if [[ -n $saved ]]; then
+    adb pull "$saved" "$OUT/export.zip" >/dev/null 2>&1 || true
+    check "… named as suggested" test "${saved##*/}" = "$zip_name"
+    check "… a ZIP archive with the notebook" bash -c "[[ \$(head -c 2 '$OUT/export.zip') == PK ]] && (( \$(stat -c %s '$OUT/export.zip') > 1000 ))"
+  fi
+  app_shot pk-8-saved
+
+  adb logcat -d >"$OUT/pickers-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/pickers-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/pickers-logcat.txt'"
+  check "no file picker failed to open" bash -c "! grep -q 'No file picker could be shown' '$OUT/pickers-logcat.txt'"
+  info "Result"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"

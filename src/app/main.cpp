@@ -102,6 +102,15 @@ int main(int argc, char *argv[])
     const QByteArray launchToken = qgetenv("XDG_ACTIVATION_TOKEN");
     const QByteArray startupId = qgetenv("DESKTOP_STARTUP_ID");
 #endif
+#if defined(BRULION_DESKTOP_INTEGRATION) && defined(Q_OS_LINUX)
+    // The AppImage: file pickers through xdg-desktop-portal — the desktop's own dialog on GNOME,
+    // KDE, Hyprland or Sway with a portal backend (FilePicker, src/app/ui/filepicker.h). Without a
+    // running portal the theme offers no dialog and FilePicker shows Qt's widget dialog. The
+    // user's own QT_QPA_PLATFORMTHEME wins (scripts/appimage-build.sh drops linuxdeploy's AppRun
+    // hook, which set gtk2 on GNOME and XFCE); the Nix package keeps Qt's choice (docs/NIXOS.md).
+    if (qEnvironmentVariableIsSet("APPIMAGE") && !qEnvironmentVariableIsSet("QT_QPA_PLATFORMTHEME"))
+        qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
+#endif
 #ifdef BRULION_DESKTOP_INTEGRATION
     QApplication app(argc, argv);
 #else
@@ -493,6 +502,10 @@ int main(int argc, char *argv[])
     // Brulion's emoji and symbols?
     if (args.contains(u"--selftest-glyphs"_s))
         wasm::publishSelfTestResult("brulionGlyphSelfTest", brulion::ui::fallbackFontsJson(fallbackFonts));
+    // ?selftest=pickfiles,savefile in a test tab (scripts/wasm-smoke.mjs --pick-files): the
+    // browser's file picker and download at the next clicks.
+    if (args.contains(u"--selftest-pickfiles"_s) || args.contains(u"--selftest-savefile"_s))
+        wasm::runFilePickerSelfTest(args.contains(u"--selftest-pickfiles"_s), args.contains(u"--selftest-savefile"_s));
     // Before the storage asks for its lock: whenever this tab holds it, a share another tab hands
     // over is answered (wasm/index.html waits for that answer).
     wasm::WasmShare::listen();

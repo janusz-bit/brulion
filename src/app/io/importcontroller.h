@@ -52,6 +52,10 @@
 #include <functional>
 #include <optional>
 
+namespace brulion::platform {
+struct PickedFile; // pickedfiles.h (brulion_platform): one file of the browser's picker
+}
+
 namespace brulion::ioviews {
 
 /// Daily note collision policy: `existing` with `imported` appended under "## Import (<source>)"
@@ -141,17 +145,24 @@ public:
     QString errorText() const { return m_errorText; }
     QStringList readWarnings() const { return m_readWarnings; }
 
-    /// Read the picked files (QML FileDialog.selectedFiles; local or content:// URLs).
+    /// Read the picked files (QML FilePicker.selectedFiles; local or content:// URLs).
     Q_INVOKABLE void addUrls(const QList<QUrl> &urls);
-    /// Read a picked folder (QML FolderDialog.selectedFolder) recursively.
+    /// Read a picked folder (QML FilePicker.selectedFolder) recursively.
     Q_INVOKABLE void addFolder(const QUrl &url);
     /// Typed paths or URLs (route parameter, the "path on this device" field, drag and drop,
     /// tests): local files or folders ("/storage/emulated/0/Download/Obsidian"), file:// or
     /// content:// URLs.
     Q_INVOKABLE void addPaths(const QStringList &paths);
-    /// Browser (WebAssembly): the browser's file picker (QFileDialog::getOpenFileContent).
-    /// Elsewhere: nothing (use the QML dialogs).
+    /// Browser (WebAssembly): the browser's file picker, several files at once
+    /// (platform/wasm/wasmfiles.h) with the gatherer's limits, checked before a file is read: one
+    /// above GatherLimits::maxFileBytes is skipped, reading stops at maxTotalBytes (every picked
+    /// file stays in the browser's memory until the import) — then setPickedFiles(). Elsewhere:
+    /// nothing (QML uses FilePicker).
     Q_INVOKABLE void pickInBrowser();
+    /// The browser's pick as the input, as the gatherer would give it for the same files: the read
+    /// ones, FileGatherer's warnings for the skipped ones (too large; the total, once), the source's
+    /// name from all the picked files. Empty (cancelled): nothing changes.
+    void setPickedFiles(const QList<platform::PickedFile> &picked);
     /// Use these files as the input (tests, the browser picker). Analyses them.
     void setInput(const QList<io::InputFile> &files, const QString &sourceName, const QStringList &warnings = {});
     /// Back to "empty" (also cancels reading).

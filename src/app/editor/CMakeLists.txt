@@ -50,10 +50,8 @@ if(TARGET brulion_core_sync)
     target_link_libraries(brulion_editor PRIVATE brulion_core_sync)
     target_compile_definitions(brulion_editor PRIVATE BRULION_EDITOR_HAVE_SYNC_MERGE=1)
 endif()
-# Browser: the browser's file picker for pictures (QFileDialog::getOpenFileContent).
-if(EMSCRIPTEN)
-    find_package(Qt6 REQUIRED COMPONENTS Widgets)
-    target_link_libraries(brulion_editor PRIVATE Qt6::Widgets)
-endif()
+# The browser's file picker for pictures (platform/wasm/wasmfiles.h in the browser build; the
+# picked files' type, platform/pickedfiles.h, everywhere: PageController::pictureReceiver()).
+target_link_libraries(brulion_editor PRIVATE brulion_platform)
 qt_extract_metatypes(brulion_editor)
 brulion_set_warnings(brulion_editor)

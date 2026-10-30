@@ -472,7 +472,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves | `path?` (folder), `sort?` |
 | `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Otwórz stronę" or "Utwórz stronę", "Zadania z tym tagiem"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
 | `sync` | `SyncView` — Przegląd, Syncthing, Nextcloud (live progress, history of runs), Konflikty (merge; drawings element by element) | `tab?`, `copy?`, `run?` (open a run's details) |
-| `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles, what to export (notebook / folder / page), for the HTML and Pandoc formats **Obrazy z internetu**: Zostaw adresy / Dołącz kopie (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Pobieranie obrazów z internetu (1 z 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Eksportuj…, the progress card, save | `tab?`, `importer?`, `files?`, … |
+| `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder (the system's picker, `FilePicker`; the browser's own, several files at once) / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles, what to export (notebook / folder / page), for the HTML and Pandoc formats **Obrazy z internetu**: Zostaw adresy / Dołącz kopie (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Pobieranie obrazów z internetu (1 z 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Eksportuj…, the progress card, save (the system's save picker, `FilePicker`; the browser's save picker or a download) | `tab?`, `importer?`, `files?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Zastąpiona z wiersza poleceń (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` | — |
 | `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled | `section?` |
@@ -1931,9 +1931,10 @@ row in its own font, the default first), `BDiffView`,
 `qsTr()` everywhere with English source text; Polish translation in `i18n/brulion_pl.ts`
 (default UI language; `brulion_en.ts` only holds English plurals). Plurals with
 `qsTr("%n notes", "", n)`. The language can be switched at run time (settings, palette).
-Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's catalogs
-`qtbase_pl.qm` / `qtdeclarative_pl.qm`, bundled as resources (`QtTranslations` in
-`src/app/ui`; nix: `qt6.qttranslations`) and switched with the language.
+Qt's own texts (dialog buttons, `FilePicker`'s fallback widget file dialog) come from Qt's
+catalogs `qtbase_pl.qm` / `qtdeclarative_pl.qm`, bundled as resources (`QtTranslations` in
+`src/app/ui`; nix: `qt6.qttranslations`) and switched with the language. The system's own file
+pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the system's language.
 
 ## Design system in code (`src/app/qml/theme`, `src/app/qml/components`, `src/app/ui`)
 
@@ -1962,7 +1963,9 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   `listItemHeightDense`, `sidebarWidth`), and **the main window must bind its size**:
   `Binding { target: Theme; property: "windowWidth"; value: window.width }` (same for
   `windowHeight`) — `narrow` (< 900 px), `compact` (< 600 px) and `touchUi` derive from it.
-* **Components** are built on `QtQuick.Templates` (no style dependency), each file documents
+* **Components** are built on `QtQuick.Templates` (no style dependency; the few files that need
+  a ready control import `QtQuick.Controls.Basic`, never `QtQuick.Controls` — its run-time style
+  selection packages all six styles, and configure refuses it, "File pickers"), each file documents
   its API at the top. Conventions: icon-only buttons need a `label` (accessible name +
   tooltip); every interactive control shows `BFocusRing` on keyboard focus; on touch UIs
   hit areas are ≥ 44 px (visuals stay compact via insets) and hover effects are off;
@@ -2018,6 +2021,76 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   everywhere, the browser included (the SVG plugin is linked statically there; `BIcon` recolours
   on the CPU, no shader effect).
 * **Emoji and symbol fonts** (`src/app/ui/fallbackfonts.h`, see below).
+* **`FilePicker`** — the system's file picker (`src/app/ui/filepicker.h`, see below).
+
+### File pickers: `FilePicker` (`src/app/ui/filepicker.h`)
+
+Every file or folder the user picks goes through the system's own picker; the app never imports
+`QtQuick.Dialogs` (its non-native fallback dialog exists once per style and pulls Material,
+Universal, Imagine, Fusion and FluentWinUI3 into every package — docs/PERFORMANCE.md L9).
+
+```qml
+FilePicker {
+    id: saveDialog
+    objectName: "exportSaveDialog"
+    fileMode: FilePicker.SaveFile          // OpenFile, OpenFiles, OpenFolder, SaveFile
+    title: qsTr("Save the export")
+    nameFilters: [qsTr("ZIP archives (*.zip)"), qsTr("All files (*)")]
+    defaultSuffix: "zip"                   // SaveFile: "Notatka" → "Notatka.zip"
+    currentFolder: exporter.defaultSaveFolder
+    dark: Theme.dark                       // the fallback dialog's colours:
+    colors: Theme.colors                   //   the mode and Brulion's palette
+    onAccepted: exporter.saveTo(selectedFile)   // selectedFiles, selectedFolder
+}
+// saveDialog.selectedFile = suggestion; saveDialog.open()   — asynchronous, never exec()
+```
+
+* **Per platform**: the platform theme's dialog helper first — the code path QtQuick.Dialogs
+  took, so nothing changed there: Android's Storage Access Framework (`ACTION_OPEN_DOCUMENT`
+  with several files, `ACTION_OPEN_DOCUMENT_TREE`, `ACTION_CREATE_DOCUMENT` with the suggested
+  name as `EXTRA_TITLE`; content:// URLs with persistable permissions), Windows' `IFileDialog`,
+  the GTK / KDE dialog or the XDG portal on Linux where the platform theme has one (the AppImage
+  asks for the portal itself: `QT_QPA_PLATFORMTHEME=xdgdesktopportal` unless the user set one;
+  docs/NIXOS.md). Elsewhere (a Linux desktop without such a theme, offscreen runs) Qt Widgets'
+  `QFileDialog` — desktop builds have Qt Widgets for the tray anyway — in the Fusion style (set on
+  the dialog and on every widget in it, so a desktop style such as Breeze or Kvantum cannot draw
+  its own colours) with Brulion's colours from `colors` (Theme.colors) and `dark`
+  (`widgetDialogPalette()` in `filepicker_p.h`: window = bg, fields and lists = bgElevated, text =
+  fg, placeholders and disabled text = fgFaint, the selection = accentSolid under white text; a
+  missing or malformed colour is ThemePalette's default of the mode). Android and the browser
+  have no Qt Widgets. The event log names the picker each `open()` showed (`brulion.platform`:
+  "File picker: QGtk3FileDialogHelper", "QXdgDesktopPortalFileDialog", "QFileDialog", …).
+* **Browser**: `available` is false; the controllers show the browser's own picker
+  (`ImportController.pickInBrowser()`, `PageController.pickImageInBrowser()`: several files at
+  once, files above the desktop's limits skipped before they are read, and the reading stopped
+  at the file that would take the pick above its total — the import's 1.5 GB as on the desktop,
+  512 MB of pictures —, since the browser holds every read file in memory; `setPickedFiles()` /
+  `pictureReceiver()` turn the picked files into the input or the embeds on every platform) and
+  save with the
+  browser's save picker or a download (`ExportController.saveInBrowser()`, `Logs.download()`) —
+  `src/platform/wasm/wasmfiles.h`, docs/WEB.md.
+* **API**: QtQuick.Dialogs' names (`fileMode`, `selectedFile(s)`, `selectedFolder`,
+  `currentFolder`, `nameFilters`, `defaultSuffix`, `title`, `visible`, `open()`, `reject()`,
+  `accepted` / `rejected`), so `ioselftest` still watches `visible` and `selectedFile`. `open()`
+  while open does nothing (Android has one picker); a picker cancelled, closed by `reject()` or
+  accepted with nothing chosen (some portals) is `rejected`; the object destroyed while its
+  picker is up closes it and drops a late answer. `selectedFile` set before `open()` is the save
+  picker's suggestion. The window it is modal to: that of the nearest `Item` it belongs to.
+* **Rules**: new QML imports `QtQuick.Templates as T` or `QtQuick.Controls.Basic`, never
+  `QtQuick.Controls` or `QtQuick.Dialogs` — `src/app/CMakeLists.txt` stops configuring, the APK
+  build (`scripts/android-build.sh`, `nix/android.nix`) and the browser build
+  (`scripts/wasm-build.sh`) fail when another style or QtQuick.Dialogs is packaged.
+* **Tests**: `tests/app/filepicker` (fake backends: what each mode asks for, the signals, open
+  while open, destroyed while open; the widget dialog's palette from Brulion's colours, malformed
+  ones too; the widget dialog offscreen picked for real, Fusion in light and dark colours),
+  `tests/platform/tst_pickedfiles.cpp` (the browser pick's bookkeeping), the import self-test's
+  export save dialog (`tst_appio_import_qml*`), the browser pick's results on every platform
+  (`tst_appio_import` `browserPickAsGathered`: the same files, warnings and name as the desktop's
+  gatherer; `tst_editor_controller` `pictureReceiver`: skipped and empty pictures, the block moved
+  or deleted while the picker is open, one undo step), `scripts/wasm-smoke.mjs --pick-files` (the
+  browser's `<input>` with seven files — one too large, the last two past the total — and a
+  download, CI) and
+  `scripts/android-emulator-test.sh --pickers` (DocumentsUI on an emulator).
 
 ### Emoji and symbol fonts
 

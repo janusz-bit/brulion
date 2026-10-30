@@ -82,6 +82,10 @@
 
 class QUndoStack;
 
+namespace brulion::platform {
+struct PickedFile; // pickedfiles.h (brulion_platform): one file of the browser's picker
+}
+
 namespace brulion {
 class EditorHost;
 }
@@ -162,7 +166,7 @@ class PageController : public QObject {
     /// The host also runs queries and changes tasks in other files (an EditorHost that is a
     /// QueryHost, see queryhost.h): live ```query results, checkable tasks in results and embeds.
     Q_PROPERTY(bool queriesAvailable READ queriesAvailable NOTIFY hostChanged FINAL)
-    /// Name filters for picking a picture (FileDialog.nameFilters).
+    /// Name filters for picking a picture (FilePicker.nameFilters, the browser's picker).
     Q_PROPERTY(QStringList imageNameFilters READ imageNameFilters CONSTANT FINAL)
     /// Note mode: "outline" | "document" (see the file comment).
     Q_PROPERTY(QString mode READ mode NOTIFY modeChanged FINAL)
@@ -739,10 +743,18 @@ public:
     /// Open the drawing editor on the drawing at vault path `path` (route "drawing"); the page is
     /// saved first.
     Q_INVOKABLE void openDrawing(const QString &path);
-    /// Browser (WebAssembly): the browser's file picker for a picture, inserted asynchronously like
-    /// insertAttachment() into the row (tracked while the picker is open). False elsewhere — use
-    /// a FileDialog and insertFiles() there.
+    /// Browser (WebAssembly): the browser's file picker for pictures (several at once,
+    /// platform/wasm/wasmfiles.h; 200 MB per picture, 512 MB in all, checked before reading),
+    /// inserted asynchronously like insertFiles() by pictureReceiver(). False elsewhere — QML uses
+    /// FilePicker and insertFiles().
     Q_INVOKABLE bool pickImageInBrowser(int row, int from, int to);
+    /// What a browser pick of pictures into `row` (`from`, `to` as for insertFiles()) does with the
+    /// picked files (pickImageInBrowser(); tests): the block is tracked from now on, so they land
+    /// where it is then — after the last block when it is gone; each read one is stored as an
+    /// attachment, each skipped (too large, over the total), empty or failing one is
+    /// attachmentFailed() and the others still come; then one insertEmbeds() of all stored. An
+    /// empty list (cancelled) inserts nothing.
+    std::function<void(const QList<platform::PickedFile> &)> pictureReceiver(int row, int from, int to);
     /// The embed for an attachment at vault path `path`: "![[name]]" when the name finds it,
     /// else "![[path]]".
     Q_INVOKABLE QString embedFor(const QString &path) const;

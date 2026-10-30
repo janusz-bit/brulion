@@ -12,14 +12,15 @@
 //                     notes (.git, node_modules, .trash, .stversions) are skipped; limits per
 //                     file / in total / number of files give warnings instead of exhausting memory.
 //   DocumentProvider  how picked documents that are no local files are read: Android's Storage
-//                     Access Framework hands out content:// URIs — a document (FileDialog) or a
-//                     document tree (FolderDialog). Android: the bridge's DocumentsContract
+//                     Access Framework hands out content:// URIs — a document (FilePicker.OpenFiles)
+//                     or a document tree (FilePicker.OpenFolder). Android: the bridge's DocumentsContract
 //                     listing (one query per folder), with Qt's content file engine (QFile / QDir
 //                     on the URI) as the fallback; tests: an in-memory fake.
 //   writeToUrl()      atomic write to a local file (QSaveFile) or a write to a content:// document
 //                     (Android "Save as" through the system's document picker).
-//   Browser           WebAssembly has no file system the user can see: QFileDialog::
-//                     getOpenFileContent() / saveFileContent() (in the controllers) instead.
+//   Browser           WebAssembly has no file system the user can see: the browser's own picker
+//                     and downloads (platform/wasm/wasmfiles.h, in the controllers) instead.
+// Pickers on the desktop and Android: FilePicker (src/app/ui/filepicker.h) in QML.
 #pragma once
 
 #include "io/files.h"
@@ -99,6 +100,7 @@ public:
     explicit FileGatherer(QObject *parent = nullptr);
 
     void setLimits(const GatherLimits &limits) { m_limits = limits; }
+    const GatherLimits &limits() const { return m_limits; }
     /// Files read per batch (default 32; also bounded by bytes per batch).
     void setChunkSize(int files) { m_chunk = qMax(1, files); }
     /// How content:// URLs are read (default platformDocumentProvider(); tests: a fake).
@@ -108,6 +110,17 @@ public:
     void start(const QList<QUrl> &urls);
     void cancel();
     bool isRunning() const { return m_running; }
+
+    /// The source's name for `count` picked files: `single` (the one file's name) for one, else
+    /// "3 files" (also the browser's pick, ImportController::pickInBrowser()).
+    static QString sourceNameFor(int count, const QString &single);
+    /// The warning for a file above GatherLimits::maxFileBytes, which is skipped:
+    /// "“Eksport.zip” (600 MB) is too large and was skipped."
+    static QString tooLargeWarning(const QString &name, qint64 bytes);
+    /// The warning when reading stopped at GatherLimits::maxTotalBytes (`maxTotalBytes`): "Only the
+    /// first 1.5 GB were read: the selection is too large to import at once." (also the browser's
+    /// pick, ImportController::setPickedFiles()).
+    static QString totalLimitWarning(qint64 maxTotalBytes);
 
 Q_SIGNALS:
     /// `done` of `total` files read so far (`total` 0: still looking for the files).

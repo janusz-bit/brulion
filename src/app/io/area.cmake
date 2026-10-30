@@ -3,10 +3,10 @@
 # SyncView, ImportExportView and the "Synchronizacja" section of the settings — and its QML.
 #
 #   ImportController   importers with how-to texts (also the phone's steps), reading picked files /
-#                      folders (desktop and Android: QML FileDialog / FolderDialog — on Android
-#                      content:// documents and document trees through FileGatherer's
-#                      DocumentProvider and the platform bridge; a typed path; browser:
-#                      QFileDialog::getOpenFileContent), io::detectImporter with an override, the target
+#                      folders (desktop and Android: QML FilePicker, the system's picker — on
+#                      Android content:// documents and document trees through FileGatherer's
+#                      DocumentProvider and the platform bridge; a typed path; browser: its own
+#                      picker, platform/wasm/wasmfiles.h), io::detectImporter with an override, the target
 #                      folder, a dry-run preview, writing with the collision policy (existing
 #                      daily note: appended under "## Import (<source>)"; other files: unique
 #                      names), progress and the report
@@ -15,8 +15,8 @@
 #                      the Graph download (core module mstodo), the bundle handed to
 #                      ImportController::setInput (preview, report)
 #   ExportController   exporters, scope (vault / folder / page with its attachments), progress,
-#                      saving (FileDialog URL incl. Android content:// documents, an export folder
-#                      fallback, QFileDialog::saveFileContent in the browser)
+#                      saving (FilePicker URL incl. Android content:// documents, an export folder
+#                      fallback, the browser's save picker or a download: wasmfiles.h)
 #   NextcloudSetup     the Nextcloud form: drafts, validation, the WebDAV address, "Test
 #                      connection" with explained errors (401, 404 + create the folder, TLS,
 #                      CORS in the browser), saving into AppSettings
@@ -44,15 +44,11 @@ target_link_libraries(brulion_ioviews
     PUBLIC Qt6::Core Qt6::Gui brulion_shell brulion_core_io brulion_core_sync brulion_core_vault
     PRIVATE Qt6::Network brulion_core_mstodo brulion_core_util brulion_core_markdown brulion_core_index brulion_core_dates
         brulion_core_webpicture brulion_core_drawing)
-if(ANDROID)
-    # "Save to Downloads": MediaStore through the platform's Android bridge.
-    target_link_libraries(brulion_ioviews PRIVATE brulion_platform)
-endif()
-if(EMSCRIPTEN)
-    # QFileDialog::getOpenFileContent / saveFileContent: the browser's file picker and download.
-    find_package(Qt6 REQUIRED COMPONENTS Widgets)
-    target_link_libraries(brulion_ioviews PRIVATE Qt6::Widgets)
-endif()
+# The browser pick's files (platform/pickedfiles.h, ImportController::setPickedFiles; everywhere, so
+# that tests/app/io checks it). Android: "Save to Downloads" (MediaStore through the platform's
+# Android bridge). Browser: its file picker and downloads (platform/wasm/wasmfiles.h; no Qt
+# Widgets in the browser build).
+target_link_libraries(brulion_ioviews PRIVATE brulion_platform)
 qt_extract_metatypes(brulion_ioviews)
 brulion_set_warnings(brulion_ioviews)
 

@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import Brulion
 
@@ -449,11 +448,13 @@ FocusScope {
         onAccepted: Logs.clear()
     }
 
-    FileDialog {
+    FilePicker {
         id: saveDialog
         objectName: "logsSaveDialog"
         title: qsTr("Save the event log")
-        fileMode: FileDialog.SaveFile
+        fileMode: FilePicker.SaveFile
+        dark: Theme.dark
+        colors: Theme.colors
         nameFilters: [qsTr("Text files (*.txt)"), qsTr("All files (*)")]
         onAccepted: Logs.saveTo(selectedFile)
     }

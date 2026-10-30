@@ -325,10 +325,10 @@ void FileGatherer::start(const QList<QUrl> &urls)
     m_warnings.clear();
     m_bytes = 0;
     // A document's display name needs a query of its provider: the listing brings it.
-    if (urls.size() != 1)
-        m_sourceName = tr("%n file(s)", "", int(urls.size()));
-    else
-        m_sourceName = isDocumentUrl(urls.first()) ? nameInUri(urls.first()) : displayNameOf(urls.first());
+    QString single;
+    if (urls.size() == 1)
+        single = isDocumentUrl(urls.first()) ? nameInUri(urls.first()) : displayNameOf(urls.first());
+    m_sourceName = sourceNameFor(int(urls.size()), single);
     Q_EMIT progress(0, 0);
     if (!m_running)
         return; // cancelled from a progress handler
@@ -566,7 +566,7 @@ void FileGatherer::step()
         const Pending &p = m_pending.at(m_next++);
         ++planned;
         if (p.size > m_limits.maxFileBytes) {
-            m_warnings.append(tr("“%1” (%2) is too large and was skipped.").arg(p.relative, sizeText(p.size)));
+            m_warnings.append(tooLargeWarning(p.relative, p.size));
             continue;
         }
         if (m_bytes + batchBytes + qMax<qint64>(p.size, 0) > m_limits.maxTotalBytes) {
@@ -606,7 +606,7 @@ void FileGatherer::merge(const QList<Read> &reads)
         }
         // Sizes the listing did not know (some document providers) are checked now.
         if (r.data.size() > m_limits.maxFileBytes) {
-            m_warnings.append(tr("“%1” (%2) is too large and was skipped.").arg(p.relative, sizeText(r.data.size())));
+            m_warnings.append(tooLargeWarning(p.relative, r.data.size()));
             continue;
         }
         if (m_bytes + r.data.size() > m_limits.maxTotalBytes) {
@@ -627,11 +627,26 @@ void FileGatherer::merge(const QList<Read> &reads)
     finish();
 }
 
+QString FileGatherer::sourceNameFor(int count, const QString &single)
+{
+    return count == 1 ? single : tr("%n file(s)", "", count);
+}
+
+QString FileGatherer::tooLargeWarning(const QString &name, qint64 bytes)
+{
+    return tr("“%1” (%2) is too large and was skipped.").arg(name, sizeText(bytes));
+}
+
+QString FileGatherer::totalLimitWarning(qint64 maxTotalBytes)
+{
+    return tr("Only the first %1 were read: the selection is too large to import at once.")
+            .arg(sizeText(maxTotalBytes));
+}
+
 void FileGatherer::stopForTotal()
 {
     if (!m_stopped)
-        m_warnings.append(tr("Only the first %1 were read: the selection is too large to import at once.")
-                                  .arg(sizeText(m_limits.maxTotalBytes)));
+        m_warnings.append(totalLimitWarning(m_limits.maxTotalBytes));
     m_stopped = true;
 }
 

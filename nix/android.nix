@@ -308,6 +308,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       done
     ''}
     [[ $listing != *libplugins_qmltooling_* ]] || fail "QML debugging plugins (qmltooling) in a release APK"
+    # Only the Basic style, no QtQuick.Dialogs (docs/PERFORMANCE.md L9).
+    if ${gnugrep}/bin/grep -qE 'QuickControls2(Material|Universal|Imagine|Fusion|FluentWinUI3)|Controls_(Material|Universal|Imagine|Fusion|FluentWinUI3)|QuickDialogs2|QtQuick_Dialogs' <<<"$listing"; then
+      fail "unused Qt Quick styles or QtQuick.Dialogs in the APK"
+    fi
     ${lib.optionalString withAab ''
       [[ $(unzip -l $out/brulion-${version}-${abi}-unsigned.aab) == *"base/lib/${abi}/libbrulion_${abi}.so"* ]] ||
         fail "the AAB has no base/lib/${abi}/libbrulion_${abi}.so"

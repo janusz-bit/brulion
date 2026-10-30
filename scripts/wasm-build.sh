@@ -158,6 +158,13 @@ if [[ $do_build == 1 ]]; then
   log "configure ($BUILD_TYPE) in $BUILD_DIR"
   cmake -S "$root" -B "$BUILD_DIR" -G Ninja -DCMAKE_TOOLCHAIN_FILE="$toolchain" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DQT_HOST_PATH="$QT_HOST" "${launcher[@]}" >&2
+  # The QML plugins linked into the app (qmlimportscanner's list, written at configure time):
+  # only the Basic style, no QtQuick.Dialogs (docs/PERFORMANCE.md L9).
+  imports=$BUILD_DIR/src/app/.qt/qml_imports/brulion_conf.cmake
+  [[ -f $imports ]] || die "$imports missing: cannot check the QML modules linked into the app"
+  unwanted='QtQuick\.Controls\.(Material|Universal|Imagine|Fusion|FluentWinUI3)|QtQuick\.Dialogs'
+  bad=$(grep -oE "$unwanted" "$imports" | sort -u | tr '\n' ' ' || true)
+  [[ -z $bad ]] || die "QML modules that must not be in the browser build: $bad(FilePicker and QtQuick.Controls.Basic instead; $imports)"
   log "build (-j $JOBS)"
   cmake --build "$BUILD_DIR" --target brulion -j "$JOBS" >&2
 fi

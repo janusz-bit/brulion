@@ -9,6 +9,7 @@
 #include "fileexchange.h"
 #include "importcontroller.h"
 #include "iobackground.h"
+#include "pickedfiles.h"
 #include "workspace.h"
 
 #include "io/importer.h"
@@ -26,7 +27,9 @@
 #include <QTimer>
 #include <QTranslator>
 
+#include <algorithm>
 #include <atomic>
+#include <limits>
 #include <memory>
 
 using namespace Qt::StringLiterals;
@@ -115,7 +118,7 @@ public:
             nodes[parentUri].children.append(uri);
         return uri;
     }
-    /// A picked single document (FileDialog), not in any tree.
+    /// A picked single document (FilePicker.OpenFiles), not in any tree.
     void addDocument(const QString &uri, const QString &name, const QByteArray &data)
     {
         nodes.insert(uri, Node{name, false, data, {}, false, false, false});
@@ -178,7 +181,7 @@ const QString kTree = u"content://com.android.externalstorage.documents/tree/pri
 const QString kTreeRoot =
         u"content://com.android.externalstorage.documents/tree/primary%3ADownload%2FSejf/document/primary%3ADownload%2FSejf"_s;
 
-/// An Obsidian vault picked as a folder (FolderDialog → a document tree): notes with Polish
+/// An Obsidian vault picked as a folder (FilePicker.OpenFolder → a document tree): notes with Polish
 /// names, a picture, the vault's settings, a .git folder (skipped) and a Google Docs file that
 /// exists only online (skipped with a warning).
 std::shared_ptr<FakeDocuments> obsidianTree()
@@ -399,6 +402,146 @@ private Q_SLOTS:
         QVERIFY(progress.size() >= 3); // chunks of one file
         QVERIFY(brulion::io::detectImporter(files));
         QCOMPARE(brulion::io::detectImporter(files)->id(), u"obsidian"_s);
+    }
+
+    // The source name and the "too large" warning are shared with the browser's pick
+    // (ImportController::pickInBrowser): the texts the gatherer produces itself.
+    void gathererTexts_data()
+    {
+        QTest::addColumn<int>("count");
+        QTest::addColumn<QString>("single");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("one") << 1 << u"Zażółć gęślą jaźń.md"_s << u"Zażółć gęślą jaźń.md"_s;
+        QTest::newRow("one, empty name") << 1 << QString() << QString();
+        QTest::newRow("two") << 2 << u"a.md"_s << u"2 file(s)"_s;
+        QTest::newRow("five") << 5 << u"a.md"_s << u"5 file(s)"_s;
+        QTest::newRow("none") << 0 << QString() << u"0 file(s)"_s;
+    }
+    void gathererTexts()
+    {
+        QFETCH(int, count);
+        QFETCH(QString, single);
+        QFETCH(QString, expected);
+        QCOMPARE(brulion::ioviews::FileGatherer::sourceNameFor(count, single), expected);
+    }
+    void gathererTooLargeWarning()
+    {
+        const QString dir = m_tmp.filePath(u"Duże pliki"_s);
+        writeRaw(dir + u"/duży.zip"_s, QByteArray(3000, 'x'));
+        writeRaw(dir + u"/mały.md"_s, "- ćma\n");
+        brulion::ioviews::FileGatherer g;
+        brulion::ioviews::GatherLimits limits;
+        limits.maxFileBytes = 2000;
+        g.setLimits(limits);
+        QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
+        g.start({QUrl::fromLocalFile(dir + u"/duży.zip"_s), QUrl::fromLocalFile(dir + u"/mały.md"_s)});
+        QVERIFY(finished.wait(5000));
+        QCOMPARE(finished.first().at(1).toStringList(),
+                 QStringList{brulion::ioviews::FileGatherer::tooLargeWarning(u"duży.zip"_s, 3000)});
+        QCOMPARE(finished.first().at(2).toString(), brulion::ioviews::FileGatherer::sourceNameFor(2, u"duży.zip"_s));
+        QCOMPARE(finished.first().at(2).toString(), u"2 file(s)"_s);
+        const QString warning = brulion::ioviews::FileGatherer::tooLargeWarning(u"duży.zip"_s, 600LL * 1024 * 1024);
+        QVERIFY2(warning.startsWith(u"“duży.zip” ("_s) && warning.endsWith(u") is too large and was skipped."_s),
+                 qPrintable(warning));
+        QVERIFY(warning.contains(u"600"_s));
+    }
+
+    // The browser's pick (ImportController::pickInBrowser: PickCollector with the gatherer's
+    // limits, then setPickedFiles) gives what the desktop's gatherer gives for the same files: the
+    // same files read, the same warnings in the same order (too large; reading stopped at the
+    // total, once — the browser keeps every read file in memory, so it must stop there too) and
+    // the same source name.
+    void browserPickAsGathered_data()
+    {
+        QTest::addColumn<QStringList>("names");
+        QTest::addColumn<QList<int>>("sizes");
+        QTest::addColumn<qint64>("maxFile");
+        QTest::addColumn<qint64>("maxTotal");
+        QTest::addColumn<int>("read");
+        QTest::addColumn<int>("warnings");
+        const qint64 big = brulion::ioviews::GatherLimits{}.maxFileBytes;
+        const qint64 all = brulion::ioviews::GatherLimits{}.maxTotalBytes;
+        QTest::newRow("jeden plik") << QStringList{u"Zażółć gęślą jaźń.md"_s} << QList<int>{40} << big << all << 1 << 0;
+        QTest::newRow("w limitach") << QStringList{u"Przepisy.md"_s, u"Żurek.md"_s, u"pusty.md"_s}
+                                    << QList<int>{30, 20, 0} << big << all << 3 << 0;
+        QTest::newRow("za duży") << QStringList{u"duży.zip"_s, u"mały.md"_s} << QList<int>{3000, 6} << qint64(2000)
+                                 << all << 1 << 1;
+        QTest::newRow("suma") << QStringList{u"a.md"_s, u"b.md"_s, u"ć.md"_s, u"d.md"_s}
+                              << QList<int>{1000, 1000, 1000, 10} << qint64(2000) << qint64(2500) << 2 << 1;
+        QTest::newRow("za duży, potem suma")
+                << QStringList{u"ą.md"_s, u"ogromny.zip"_s, u"ę.md"_s, u"ć.md"_s, u"ź.md"_s}
+                << QList<int>{1000, 2000, 1000, 1000, 10} << qint64(1500) << qint64(2500) << 2 << 2;
+        QTest::newRow("dokładnie suma") << QStringList{u"a.md"_s, u"b.md"_s} << QList<int>{1250, 1250} << qint64(2000)
+                                        << qint64(2500) << 2 << 0;
+        QTest::newRow("pierwszy ponad sumę")
+                << QStringList{u"a.md"_s, u"b.md"_s} << QList<int>{2000, 5} << qint64(-1) << qint64(1000) << 0 << 1;
+        QTest::newRow("wszystkie za duże")
+                << QStringList{u"a.zip"_s, u"b.zip"_s} << QList<int>{20, 30} << qint64(10) << all << 0 << 2;
+    }
+    void browserPickAsGathered()
+    {
+        QFETCH(QStringList, names);
+        QFETCH(QList<int>, sizes);
+        QFETCH(qint64, maxFile);
+        QFETCH(qint64, maxTotal);
+        QFETCH(int, read);
+        QFETCH(int, warnings);
+        brulion::ioviews::GatherLimits limits;
+        limits.maxFileBytes = maxFile < 0 ? std::numeric_limits<qint64>::max() : maxFile;
+        limits.maxTotalBytes = maxTotal;
+        const QString dir = m_tmp.filePath(u"wybór-%1"_s.arg(++m_n));
+        QList<QUrl> urls;
+        QList<QByteArray> bytes;
+        for (qsizetype i = 0; i < names.size(); ++i) {
+            bytes.append(QByteArray(sizes.at(i), char('a' + i)));
+            writeRaw(dir + u'/' + names.at(i), bytes.last());
+            urls.append(QUrl::fromLocalFile(dir + u'/' + names.at(i)));
+        }
+        // The desktop: the gatherer reads the picked files.
+        brulion::ioviews::FileGatherer g;
+        g.setLimits(limits);
+        QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
+        g.start(urls);
+        QVERIFY(finished.wait(5000));
+        const auto gathered = finished.first().at(0).value<QList<InputFile>>();
+        const QStringList gatheredWarnings = finished.first().at(1).toStringList();
+        const QString gatheredName = finished.first().at(2).toString();
+        QCOMPARE(gathered.size(), read);
+        QCOMPARE(gatheredWarnings.size(), warnings);
+
+        // The browser: Qt's calls as QWasmLocalFileAccess makes them, the gatherer's limits.
+        QList<brulion::platform::PickedFile> picked;
+        brulion::platform::PickCollector collector(
+                limits.maxFileBytes, limits.maxTotalBytes,
+                [&](const QList<brulion::platform::PickedFile> &files) { picked = files; });
+        collector.closed(int(names.size()));
+        for (qsizetype i = 0; i < names.size(); ++i) {
+            if (char *buffer = collector.accept(quint64(bytes.at(i).size()), names.at(i))) {
+                std::copy(bytes.at(i).cbegin(), bytes.at(i).cend(), buffer);
+                collector.ready();
+            }
+        }
+        QVERIFY(collector.finished());
+        auto ws = open();
+        ImportController c;
+        c.setWorkspace(ws.get());
+        c.gatherer()->setLimits(limits);
+        QSignalSpy inputChanged(&c, &ImportController::inputChanged);
+        c.setPickedFiles(picked);
+        QCOMPARE(inputChanged.size(), 1);
+        QCOMPARE(c.inputCount(), int(gathered.size()));
+        qint64 gatheredBytes = 0;
+        for (const InputFile &f : gathered)
+            gatheredBytes += f.data.size();
+        QCOMPARE(c.inputBytes(), gatheredBytes);
+        QCOMPARE(c.readWarnings(), gatheredWarnings);
+        QCOMPARE(c.sourceName(), gatheredName);
+        if (maxTotal >= 0 && gatheredWarnings.contains(brulion::ioviews::FileGatherer::totalLimitWarning(maxTotal)))
+            QCOMPARE(gatheredWarnings.last(), brulion::ioviews::FileGatherer::totalLimitWarning(maxTotal));
+        // A cancelled pick (no files) changes nothing.
+        c.setPickedFiles({});
+        QCOMPARE(inputChanged.size(), 1);
+        QCOMPARE(c.sourceName(), gatheredName);
     }
 
     void gatherSkipsLinksOutsideAndSpecialFiles()
@@ -803,7 +946,7 @@ private Q_SLOTS:
 
     void importFolderPickedOnAndroid()
     {
-        // FolderDialog on the phone → a tree URI → preview → import, through the controller.
+        // FilePicker.OpenFolder on the phone → a tree URI → preview → import, through the controller.
         QString root;
         auto ws = open({}, &root);
         auto docs = obsidianTree();
@@ -860,7 +1003,7 @@ private Q_SLOTS:
 
     void importSeveralLocalFilesAndPaths()
     {
-        // Desktop FileDialog (file:// URLs, several at once) and the typed path field.
+        // Desktop FilePicker (file:// URLs, several at once) and the typed path field.
         const QString dir = m_tmp.filePath(u"pobrane"_s);
         writeRaw(dir + u"/Przepisy.md"_s, "# Przepisy\n\n- [[Żurek]]\n");
         writeRaw(dir + u"/Żurek.md"_s, "- zakwas, kiełbasa\n");

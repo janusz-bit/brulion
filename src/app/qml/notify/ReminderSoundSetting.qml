@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import Brulion
 
@@ -10,7 +9,7 @@ import Brulion
 //   * the choice: Default (the system's sound) / Ringtone / Vibrate (Android) / Silent — only
 //     what this platform offers (ReminderSounds.modes);
 //   * "Choose ringtone…": Android opens the system's ringtone picker; the desktop a menu of
-//     sound-theme sounds (Windows: its notification sounds) and "Sound file…" (FileDialog; not on
+//     sound-theme sounds (Windows: its notification sounds) and "Sound file…" (FilePicker; not on
 //     Windows, whose toasts cannot play files). "Ringtone" without a ringtone chosen
 //     yet does the same instead of selecting nothing;
 //   * "Play sample" (Android: the sound for three seconds; desktop: a sample notification).
@@ -205,9 +204,13 @@ GridLayout {
         onObjectAdded: (index, object) => soundMenu.insertItem(index, object)
         onObjectRemoved: (index, object) => soundMenu.removeItem(object)
     }
-    FileDialog {
+    FilePicker {
         id: soundFileDialog
+        objectName: setting.kind + "SoundFileDialog"
         title: qsTr("Choose a sound file")
+        fileMode: FilePicker.OpenFile
+        dark: Theme.dark
+        colors: Theme.colors
         nameFilters: [qsTr("Sound files (*.oga *.ogg *.wav)"), qsTr("All files (*)")]
         onAccepted: ReminderSounds.setCustom(setting.kind, selectedFile.toString(), "")
     }

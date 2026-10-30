@@ -15,8 +15,9 @@
 #include <QLocale>
 #include <QRegularExpression>
 
+#include "pickedfiles.h"
 #ifdef Q_OS_WASM
-#include <QFileDialog>
+#include "wasm/wasmfiles.h"
 #endif
 
 using namespace Qt::StringLiterals;
@@ -355,14 +356,36 @@ void ImportController::addPaths(const QStringList &paths)
 void ImportController::pickInBrowser()
 {
 #ifdef Q_OS_WASM
-    const QString filter = nameFilters().join(u";;"_s);
+    // Several files at once, as the desktop and Android pickers; the gatherer's limits apply
+    // before a file is read.
     const QPointer<ImportController> self(this);
-    QFileDialog::getOpenFileContent(filter, [self](const QString &fileName, const QByteArray &content) {
-        if (!self || fileName.isEmpty())
-            return; // cancelled
-        self->setInput({ io::InputFile{ fileName, content } }, fileName);
-    });
+    const GatherLimits &limits = m_gatherer.limits();
+    platform::wasm::openFiles(nameFilters(), true, limits.maxFileBytes, limits.maxTotalBytes,
+                              [self](const QList<platform::PickedFile> &picked) {
+                                  if (self)
+                                      self->setPickedFiles(picked);
+                              });
 #endif
+}
+
+void ImportController::setPickedFiles(const QList<platform::PickedFile> &picked)
+{
+    if (picked.isEmpty())
+        return; // cancelled
+    QList<io::InputFile> files;
+    QStringList warnings;
+    bool overTotal = false;
+    for (const platform::PickedFile &f : picked) {
+        if (f.tooLarge)
+            warnings.append(FileGatherer::tooLargeWarning(f.name, f.size));
+        else if (f.overTotal)
+            overTotal = true; // this one and every one after it (PickCollector)
+        else
+            files.append(io::InputFile{f.name, f.data});
+    }
+    if (overTotal)
+        warnings.append(FileGatherer::totalLimitWarning(m_gatherer.limits().maxTotalBytes));
+    setInput(files, FileGatherer::sourceNameFor(int(picked.size()), picked.first().name), warnings);
 }
 
 void ImportController::setInput(const QList<io::InputFile> &files, const QString &sourceName, const QStringList &warnings)

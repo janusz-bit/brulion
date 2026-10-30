@@ -24,11 +24,6 @@ target_include_directories(brulion_diag PUBLIC ${_brulion_diag_dir})
 target_link_libraries(brulion_diag
     PUBLIC Qt6::Core Qt6::Gui brulion_core_log
     PRIVATE brulion_core_text brulion_ioviews brulion_platform)
-if(EMSCRIPTEN)
-    # QFileDialog::saveFileContent: the browser's download.
-    find_package(Qt6 REQUIRED COMPONENTS Widgets)
-    target_link_libraries(brulion_diag PRIVATE Qt6::Widgets)
-endif()
 qt_extract_metatypes(brulion_diag)
 brulion_set_warnings(brulion_diag)
 

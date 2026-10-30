@@ -22,7 +22,7 @@
 #include "android/androidbridge.h"
 #endif
 #ifdef Q_OS_WASM
-#include <QFileDialog>
+#include "wasm/wasmfiles.h"
 #endif
 
 using namespace Qt::StringLiterals;
@@ -297,7 +297,7 @@ void LogController::download()
 {
 #ifdef Q_OS_WASM
     if (available())
-        QFileDialog::saveFileContent(exportText().toUtf8(), suggestedFileName());
+        platform::wasm::saveFile(exportText().toUtf8(), suggestedFileName());
 #endif
 }
 

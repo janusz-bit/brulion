@@ -108,7 +108,9 @@ Parametry adresu (do debugowania):
 * `?selftest=storage`, `?selftest=notify`, `?selftest=glyphs`, `?selftest=keyboard`,
   `?selftest=share`, `?selftest=storage,notify` — testy (niżej).
 * Tylko w karcie oznaczonej do testów: `?selftest=webpictures`, `?selftest=pen` (testy na
-  otwartym notatniku: „Testy w przeglądarkach (Playwright)”) i razem z nimi `?route=<widok>` albo
+  otwartym notatniku: „Testy w przeglądarkach (Playwright)”), `?selftest=pickfiles,savefile`
+  (okno wyboru plików i pobieranie przy kolejnych kliknięciach: `scripts/wasm-smoke.mjs
+  --pick-files`) i razem z nimi `?route=<widok>` albo
   `?route=<trasa JSON>` — pierwszy widok po otwarciu notatnika (jak `--route`, np.
   `{"view":"drawing","path":"Rysunki/a.svg"}`), `?now=2026-10-14 10:00` — stały zegar (jak
   `--now`: znany dzień dziennika). Znacznik karty to `sessionStorage` `brulion-selftest` = `1`:
@@ -202,6 +204,18 @@ Pozostałe opcje:
   pierwszej przekazuje je (sama nie wczytuje aplikacji, pokazuje komunikat i prosi o zamknięcie),
   a pierwsza pokazuje okno z „Zażółć gęślą jaźń”. Ze `--screenshot` dochodzi zrzut
   `…-share.png`. CI uruchamia go osobno (profil `profile-share`).
+* `--pick-files` — wybór plików i pobieranie bez Qt Widgets (`platform/wasm/wasmfiles.h`): karta
+  oznaczona do testów (sessionStorage `brulion-selftest`), bez `showOpenFilePicker` /
+  `showSaveFilePicker` (Qt bierze wtedy `<input type=file>` i zwykłe pobranie, które ma każda
+  przeglądarka), `?selftest=pickfiles,savefile`. Prawdziwe kliknięcie otwiera okno wyboru, które
+  musi przyjmować kilka plików (DevTools je przechwytuje), i dostaje siedem: „Zażółć gęślą
+  jaźń.md” (UTF-8, wiersze CRLF), pusty `pusty.md`, `duży.md` 2 MiB ponad testowy limit 1 MiB na
+  plik, `notatka.txt`, „pół — ą.md” równo 1 MiB, „drugie pół.md” 600 KiB, które przekroczyłoby
+  testowy limit 1,5 MiB łącznie, i mały „po limicie.txt”; aplikacja
+  (`window.brulionPickSelfTest`) musi podać je po kolei z rozmiarami i SHA-256 — duży
+  nieprzeczytany, a od pliku ponad sumę żaden (jak `FileGatherer` na komputerze). Następne
+  kliknięcie pobiera „Zażółć.md” z bajtami „ąę\n”
+  (`Browser.setDownloadBehavior`). CI uruchamia go osobno (profil `profile-pick`).
 * `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
   zrzut ekranu ładowania (pasek postępu).
 * `--lang pl-PL` (domyślnie) — język przeglądarki.
@@ -627,6 +641,13 @@ Build dla przeglądarki nie zawiera QML deweloperskiego (galerii, placu zabaw ed
 i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 014 B surowego
 `brulion.wasm` (−160 008 B po gzip -9, −104 716 B po brotli).
 
+Bez nieużywanych stylów Qt Quick Controls, QtQuick.Dialogs i Qt Widgets (2026-10-30: QML importuje
+`QtQuick.Controls.Basic`, wybór plików i pobieranie przez `wasmfiles.h`; docs/PERFORMANCE.md, L9):
+`brulion.wasm` 47 225 371 → 41 909 609 B surowego (−5,07 MiB), 15 803 378 → 13 498 551 B po gzip -9
+(−2,20 MiB), 10 841 274 → 9 231 654 B po brotli (−1,54 MiB); pierwsza wizyta przy 20 Mbit/s (gzip)
+rysuje pierwszą klatkę po 7,3–7,4 zamiast 8,4–8,5 s. `scripts/wasm-build.sh` przerywa build, gdy
+lista modułów QML aplikacji znów zawiera inny styl albo QtQuick.Dialogs.
+
 ## Klawiatura ekranowa (telefon)
 
 Pasek narzędzi edycji ma leżeć dokładnie na klawiaturze ekranowej. Strona prosi przeglądarkę
@@ -779,7 +800,18 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
   na komputerze z Linuksem; notatki z przeglądarki agent czyta przez Nextcloud.
 * Jednowątkowy Qt bez asyncify/JSPI: brak zagnieżdżonych pętli zdarzeń (`QDialog::exec()`,
   `QEventLoop::exec()`); dialogi i operacje muszą być asynchroniczne (sygnały, `open()`).
-* Pliki od/do użytkownika: `QFileDialog::getOpenFileContent()` / `saveFileContent()`.
+* Pliki od/do użytkownika: własny wybór plików przeglądarki (`platform/wasm/wasmfiles.h` nad
+  prywatnym `QWasmLocalFileAccess` z Qt; `showOpenFilePicker`, a gdzie go nie ma — `<input
+  type=file>`): kilka plików naraz przy imporcie i przy „Obraz…”, pliki ponad limit (jak na
+  komputerze: 512 MB importu, 200 MB obrazu) pominięte bez czytania, a czytanie kończy się na
+  pliku, z którym wybrane przekroczyłyby sumę (import: 1,5 GB jak na komputerze, obrazy: 512 MB
+  — przeglądarka trzyma wszystkie wczytane pliki w pamięci, zanim trafią do notatnika;
+  `PickCollector`, `platform/pickedfiles.h`, sprawdzany na każdej platformie); zapis — okno zapisu
+  przeglądarki (`showSaveFilePicker`, Chromium na https) albo zwykłe pobranie. Bez Qt Widgets
+  (`QFileDialog::getOpenFileContent()` ich wymaga), a własne okno plików Qt dla przeglądarki
+  daje adresy `weblocalfile:`, których jednowątkowy build nie przeczyta (potrzebny JSPI albo
+  asyncify). Anulowanie `<input>` bez zdarzenia `cancel` (starsze przeglądarki) po prostu nic
+  nie zmienia.
 * Wymagany WebGL 2 (powłoka ostrzega, gdy go brak, i pozwala spróbować mimo to).
 * Pamięć: start 50 MB, wzrost do 4 GB (domyślne Qt).
 * Sieć tylko przez `QNetworkAccessManager` (fetch przeglądarki) i z zasadami CORS.
@@ -855,7 +887,7 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
 |---|---|
 | `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | powłoka HTML, service worker, manifest |
 | `wasm/icons/` | ikony PWA; PNG wygenerowane z `assets/logo.svg` i `wasm/icons/maskable.svg` (odstęp bezpieczny dla ikon maskowalnych) oraz `badge.svg` (monochromatyczna plakietka powiadomień) |
-| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, `WasmShare` (udostępnienia przekazane przez inną kartę), most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), test trwałości (`wasmselftest.h`) |
+| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, `WasmShare` (udostępnienia przekazane przez inną kartę), most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), wybór plików i pobieranie (`wasmfiles.h`, bez Qt Widgets), testy trwałości i wyboru plików (`wasmselftest.h`) |
 | `src/app/diag/webselftest.h` | testy aplikacji dla przeglądarek: `?selftest=webpictures` (obrazy z internetu, eksport z kopiami), `?selftest=pen` (płótno pod rysikiem); testy na komputerze: `tests/app/diag/tst_webselftest.cpp` |
 | `tests/web/`, `scripts/web-test.sh` | testy Playwright w Chromium i Firefoksie (obrazy z internetu, rysik) i ich uruchamianie (CI: `wasm.yml`, zadanie `browsers`) |
 | `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |

@@ -15,6 +15,7 @@
 #include "markdown/tokenedit.h"
 #include "notebook/links.h"
 #include "pagecontroller.h"
+#include "pickedfiles.h"
 
 #include <QAbstractItemModelTester>
 #include <QBuffer>
@@ -4452,6 +4453,98 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY2(empty.text().startsWith(u"- ![[żółw.png]]"_s), qPrintable(empty.text()));
     }
 
+    /// The browser's pick of pictures (pickImageInBrowser(): the picker itself exists only in the
+    /// browser build): what the receiver does with the files PickCollector hands over — skipped
+    /// and empty ones refused with the others still inserted, names as the browser reports them,
+    /// the block moved or deleted while the picker was open, one undo step for all.
+    void pictureReceiver_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<int>("at");             // from = to (-1: the end of the text)
+        QTest::addColumn<QString>("change");     // while the picker is open: "", "insert above", "delete"
+        QTest::addColumn<QStringList>("picked"); // "state|name|bytes": r read, L too large, T over the total
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<QStringList>("failed");
+        QTest::newRow("trzy obrazy, jeden za duży")
+                << u"- Szkic łazienki\n"_s << 0 << 5 << QString()
+                << QStringList{u"r|żółw.png|PNG1"_s, u"L|ogromne zdjęcie.jpg|"_s, u"r|plan piętra.png|PNG2"_s}
+                << u"- Szkic ![[żółw.png]] ![[plan piętra.png]] łazienki\n"_s << QStringList{u"ogromne zdjęcie.jpg"_s};
+        QTest::newRow("ponad sumę wyboru")
+                << u"- Szkic\n"_s << 0 << -1 << QString() << QStringList{u"r|a.png|A"_s, u"T|b.png|"_s, u"T|ćma.png|"_s}
+                << u"- Szkic ![[a.png]]\n"_s << QStringList{u"b.png"_s, u"ćma.png"_s};
+        QTest::newRow("pusty, bez nazwy, ze ścieżką, ze spacjami")
+                << u"- Zdjęcia:\n"_s << 0 << -1 << QString()
+                << QStringList{u"r||GIF8"_s, u"r|pusty.png|"_s, u"r|katalog/łąka.webp|RIFF"_s,
+                               u"r|  spacje.png  |PNG"_s}
+                << u"- Zdjęcia: ![[Attachment]] ![[łąka.webp]] ![[spacje.png]]\n"_s << QStringList{u"pusty.png"_s};
+        QTest::newRow("blok przesunięty")
+                << u"- pierwszy\n- drugi\n"_s << 1 << 5 << u"insert above"_s << QStringList{u"r|źrebię.png|PNG"_s}
+                << u"- pierwszy\n- wstawiony\n- drugi ![[źrebię.png]]\n"_s << QStringList();
+        QTest::newRow("blok usunięty") << u"- pierwszy\n- drugi\n"_s << 1 << 2 << u"delete"_s
+                                       << QStringList{u"r|źrebię.png|PNG"_s, u"r|żaba.png|PNG"_s}
+                                       << u"- pierwszy\n- ![[źrebię.png]] ![[żaba.png]]\n"_s << QStringList();
+        QTest::newRow("żaden nie wszedł")
+                << u"- Szkic\n"_s << 0 << -1 << QString() << QStringList{u"L|film.mp4|"_s, u"T|zdjęcie.jpg|"_s}
+                << u"- Szkic\n"_s << QStringList{u"film.mp4"_s, u"zdjęcie.jpg"_s};
+        QTest::newRow("anulowany") << u"- Szkic\n"_s << 0 << -1 << QString() << QStringList() << u"- Szkic\n"_s
+                                   << QStringList();
+    }
+    void pictureReceiver()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, row);
+        QFETCH(int, at);
+        QFETCH(QString, change);
+        QFETCH(QStringList, picked);
+        QFETCH(QString, expected);
+        QFETCH(QStringList, failed);
+        Fixture f(content);
+        QSignalSpy failedSpy(&f.page, &PageController::attachmentFailed);
+        const auto receive = f.page.pictureReceiver(row, at, at);
+        if (change == u"insert above")
+            QVERIFY(f.page.insertBlockAfter(row - 1, u"wstawiony"_s) >= 0);
+        else if (change == u"delete")
+            f.page.deleteBlock(row);
+        const QString beforePick = f.text();
+        const int attachmentsBefore = f.host.attachmentCount();
+        QList<platform::PickedFile> files;
+        int read = 0;
+        for (const QString &entry : picked) {
+            const QStringList parts = entry.split(u'|');
+            QCOMPARE(parts.size(), 3);
+            platform::PickedFile file;
+            file.name = parts.at(1);
+            file.tooLarge = parts.at(0) == u"L";
+            file.overTotal = parts.at(0) == u"T";
+            file.size = file.tooLarge ? 300LL * 1024 * 1024 : parts.at(2).toUtf8().size();
+            if (file.isRead())
+                file.data = parts.at(2).toUtf8();
+            if (file.isRead() && !file.data.isEmpty())
+                ++read;
+            files.append(file);
+        }
+        receive(files);
+        QCOMPARE(f.text(), expected);
+        QStringList failedNames;
+        for (const QList<QVariant> &args : std::as_const(failedSpy))
+            failedNames.append(args.at(0).toString());
+        QCOMPARE(failedNames, failed);
+        // Only the read pictures were stored; the skipped ones never reached the notebook.
+        QCOMPARE(f.host.attachmentCount() - attachmentsBefore, read);
+        // All of them in one step.
+        if (expected != beforePick) {
+            f.page.undo();
+            QCOMPARE(f.text(), beforePick);
+        }
+        // A second answer (none should come) changes nothing: the block is no longer tracked.
+        const QString after = f.text();
+        if (!files.isEmpty() && read > 0) {
+            receive({});
+            QCOMPARE(f.text(), after);
+        }
+    }
+
     void pastingPictures()
     {
         Fixture f(u"- Zrzut: \n"_s);
@@ -4547,7 +4640,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         for (const QString &ext : {u"png"_s, u"jpg"_s, u"jpeg"_s, u"webp"_s, u"svg"_s, u"avif"_s, u"ico"_s})
             QVERIFY2(filter.contains(u"*."_s + ext + u' ') || filter.contains(u"*."_s + ext + u')'),
                      qPrintable(filter));
-        QVERIFY(!f.page.pickImageInBrowser(0, 0, 0)); // a FileDialog outside the browser
+        QVERIFY(!f.page.pickImageInBrowser(0, 0, 0)); // a FilePicker outside the browser
     }
 
     void drawingSlashCommand()

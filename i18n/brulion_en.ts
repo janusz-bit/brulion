@@ -623,7 +623,7 @@
 <context>
     <name>LogsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/diag/LogsView.qml" line="214"/>
+        <location filename="../src/app/qml/diag/LogsView.qml" line="213"/>
         <source>%n entries</source>
         <translation>
             <numerusform>%n entry</numerusform>
@@ -631,7 +631,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/diag/LogsView.qml" line="384"/>
+        <location filename="../src/app/qml/diag/LogsView.qml" line="383"/>
         <source>New entries (%n)</source>
         <translation>
             <numerusform>New entry (%n)</numerusform>
@@ -1237,7 +1237,7 @@
 <context>
     <name>brulion::ioviews::FileGatherer</name>
     <message numerus="yes">
-        <location filename="../src/app/io/fileexchange.cpp" line="329"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="632"/>
         <source>%n file(s)</source>
         <translation>
             <numerusform>%n file</numerusform>
@@ -1257,7 +1257,7 @@
 <context>
     <name>brulion::ioviews::ImportController</name>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="683"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="706"/>
         <source>Import stopped: %n file(s) saved.</source>
         <translation>
             <numerusform>Import stopped: %n file saved.</numerusform>
@@ -1265,7 +1265,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="684"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="707"/>
         <source>Import finished: %n file(s) saved.</source>
         <translation>
             <numerusform>Import finished: %n file saved.</numerusform>

@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import Brulion
 
@@ -8,10 +7,10 @@ import Brulion
 // files or a folder, check the preview and import (ImportPreview), all through one
 // ImportController.
 //
-// Picking: desktop and Android use QtQuick.Dialogs (asynchronous FileDialog / FolderDialog; on
-// Android these are the system's document pickers: several files at once, or a folder as a
-// document tree — content:// URLs the controller reads through Android's document provider); the
-// browser uses its own file picker (ImportController.pickInBrowser()). On Android the file picker
+// Picking: desktop and Android use the system's file picker (FilePicker, asynchronous; on Android
+// the system's document pickers: several files at once, or a folder as a document tree —
+// content:// URLs the controller reads through Android's document provider); the browser uses its
+// own file picker (ImportController.pickInBrowser(), several files at once as well). On Android the file picker
 // gets no type filter: providers name types differently (a Notion ZIP in Drive, a .md file in
 // Downloads), and a filtered picker greys such files out — the files are recognised by their
 // content instead. ImportPathCard reads a typed path (all platforms but the browser). `phone`
@@ -90,16 +89,23 @@ ColumnLayout {
         }
     }
 
-    FileDialog {
+    FilePicker {
         id: fileDialog
+        objectName: "importFilesDialog"
         title: qsTr("Choose the files to import")
-        fileMode: FileDialog.OpenFiles
+        fileMode: FilePicker.OpenFiles
         nameFilters: AppController.isAndroid ? [] : importerObject.nameFilters
+        dark: Theme.dark
+        colors: Theme.colors
         onAccepted: importerObject.addUrls(selectedFiles)
     }
-    FolderDialog {
+    FilePicker {
         id: folderDialog
+        objectName: "importFolderDialog"
         title: qsTr("Choose the folder to import")
+        fileMode: FilePicker.OpenFolder
+        dark: Theme.dark
+        colors: Theme.colors
         onAccepted: importerObject.addFolder(selectedFolder)
     }
 }

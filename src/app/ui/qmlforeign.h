@@ -4,11 +4,13 @@
 // still see their full API (from the library's extracted metatypes); KeyboardInsets and
 // GestureInsets are the instances main() creates and feeds (keyboardsources.h). Also TouchFlick
 // (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`; and RowScroll
-// (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar.
+// (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar; and FilePicker (brulion_ui_files),
+// the system's file picker (`FilePicker { fileMode: FilePicker.OpenFiles }`).
 #pragma once
 
 #include "dateshelper.h"
 #include "diffhelper.h"
+#include "filepicker.h"
 #include "gestureinsets.h"
 #include "keyboardinsets.h"
 #include "rowscroll.h"
@@ -108,6 +110,12 @@ struct RowScrollForeign {
     Q_GADGET
     QML_FOREIGN(brulion::ui::RowScroll)
     QML_NAMED_ELEMENT(RowScroll)
+};
+
+struct FilePickerForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::FilePicker)
+    QML_NAMED_ELEMENT(FilePicker)
 };
 
 } // namespace brulion::ui

@@ -72,7 +72,7 @@ Wpisz `/` na początku bloku, a pojawi się lista poleceń: zadanie, przypomnien
 **Ctrl+E** pokazuje cały plik jako surowy Markdown z podświetleniem składni. Przydaje się do hurtowych zmian; kolejne naciśnięcie wraca do bloków. Na telefonie tekst przesuwasz palcem, dotknięcie stawia kursor, a przytrzymanie zaznacza słowo. (Do kopiowania fragmentów kilku bloków nie musisz już przechodzić do źródła: zobacz [[#Zaznaczanie i kopiowanie|Zaznaczanie i kopiowanie]].)
 
 ## Obrazy i pliki
-Wklej obraz (Ctrl+V), upuść pliki na stronę albo użyj `/Obraz…`. Pliki trafiają do folderu załączników (`assets/`) i są osadzane jako `![[plik.png]]`.
+Wklej obraz (Ctrl+V), upuść pliki na stronę albo użyj `/Obraz…` — okno wyboru plików przyjmie kilka obrazów naraz, także w przeglądarce. Pliki trafiają do folderu załączników (`assets/`) i są osadzane jako `![[plik.png]]`.
 
 Kliknięcie osadzonego obrazu pokazuje samo zdjęcie dopasowane do widoku (mały obraz zostaje w naturalnej wielkości, bez rozmywającego powiększania). Gdy zdjęcie jest większe od widoku, kliknięcie na nim albo przycisk „Pokaż naturalny rozmiar” (na telefonie i w wąskim widoku ikona lupy) pokazuje je w naturalnej wielkości z możliwością przeciągania. Pod zdjęciem są notatki, które je osadzają albo do niego linkują (na szerokim ekranie także w panelu bocznym, w zakładce Linki).
 

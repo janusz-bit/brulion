@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
@@ -14,8 +13,9 @@ import Brulion
 // adresy" (the export shows them only online) or "Dołącz kopie" (copies from the device's cache,
 // the missing ones fetched first); the choice is remembered on the device (AppSettings).
 //
-// Saving: desktop and Android — FileDialog in save mode (Android: the system's "Save as" document
-// picker; "Zapisz w Pobranych" writes into the Download folder instead); browser — a download.
+// Saving: desktop and Android — the system's file picker in save mode (FilePicker; Android: the
+// system's "Save as" document picker; "Zapisz w Pobranych" writes into the Download folder
+// instead); browser — the browser's save picker or a download (platform/wasm/wasmfiles.h).
 // `preset` (route parameters): { format, scope, folder, path (the page) }.
 ColumnLayout {
     id: panel
@@ -401,11 +401,13 @@ ColumnLayout {
         }
     }
 
-    FileDialog {
+    FilePicker {
         id: saveDialog
         objectName: "exportSaveDialog"
         title: qsTr("Save the export")
-        fileMode: FileDialog.SaveFile
+        fileMode: FilePicker.SaveFile
+        dark: Theme.dark
+        colors: Theme.colors
         currentFolder: exporterObject.defaultSaveFolder
         // selectedFile: set by save()
         nameFilters: {
