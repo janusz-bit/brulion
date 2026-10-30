@@ -2,7 +2,10 @@
 // sequence, everything VaultIndex derives must equal a fresh index built from the same files —
 // also when notes are prepared on other threads (VaultIndex::prepare() + updatePrepared(), the
 // index loader's path) and when a full-text index built elsewhere is adopted (adoptSearch()).
+// The change log (changesSince()) names every note whose tasks, reminders, links or shown block
+// texts changed, and a QueryCache kept across the sequence equals runQuery() at every step.
 #include "index/index.h"
+#include "index/querycache.h"
 #include "indexcompare.h"
 #include "markdown/parse.h"
 
@@ -10,6 +13,7 @@
 #include <QTest>
 
 #include <thread>
+#include <vector>
 
 using namespace brulion;
 using namespace brulion::testing;
@@ -52,6 +56,82 @@ QString randomContent(QRandomGenerator &rng)
     const int n = 1 + rng.bounded(5);
     for (int i = 0; i < n; ++i)
         out += Lines[rng.bounded(int(Lines.size()))] + u'\n';
+    return out;
+}
+
+// More tasks, reminders and nesting for the query cache: priorities, statuses, two reminders on
+// one line (ties), a recurring task, a child block, a ```query block.
+const QStringList QueryLines = Lines + QStringList{
+        u"- [ ] pilne ⏫ 📅 2026-10-12 #tag2/sub"_s,
+        u"- [/] w toku 🔼 ⏳ 2026-10-14 [[A]]"_s,
+        u"- [x] zrobione ✅ 2026-10-13 #tag1"_s,
+        u"- dwa ⏰ 2026-10-14 08:00 i ⏰ 2026-10-14 08:00"_s,
+        u"- [ ] cykliczne 🔁 every week 📅 2026-10-16 ⏰ 2026-10-15 18:00"_s,
+        u"  - podpunkt o żółwiu #tag1 [[Ż]]"_s,
+        u"- [-] anulowane 📅 2026-10-01 ⏰ 2026-10-13 07:00"_s,
+        u"```query\ntag:tag1\n```"_s,
+};
+
+const QStringList QueryHeaders = Headers + QStringList{u"---\ntags: [strona]\nstatus: aktywny\n---\n"_s,
+                                                      u"typ:: projekt\n\n"_s};
+
+QString queryContent(QRandomGenerator &rng)
+{
+    QString out = QueryHeaders[rng.bounded(int(QueryHeaders.size()))];
+    const int n = 1 + rng.bounded(6);
+    for (int i = 0; i < n; ++i)
+        out += QueryLines[rng.bounded(int(QueryLines.size()))] + u'\n';
+    return out;
+}
+
+/// What a note shows that may depend on other notes or changes with it: its tasks, reminders,
+/// journal date, title, where its links resolve and the texts its `((id))` show.
+QString fingerprint(const VaultIndex &index, const VaultPath &path)
+{
+    const ParsedNote *note = index.note(path);
+    if (!note)
+        return {};
+    QStringList parts = describeTasks(index.tasksOf(path)) + describeReminders(index.remindersOf(path));
+    parts << (note->journalDate ? note->journalDate->toString(Qt::ISODate) : u"-"_s) << note->title;
+    for (const ResolvedLink &l : index.outgoingLinks(path)) {
+        parts << u"%1->%2"_s.arg(l.link.from).arg(l.target);
+        const bool shown = l.link.kind == LinkKind::BlockRef || l.link.kind == LinkKind::BlockEmbed;
+        if (shown && !l.link.blockId.isEmpty()) { // ((id)) shows the block (`[[#^id]]` does not)
+            if (const auto ref = index.blockById(l.link.blockId)) {
+                const ParsedNote *owner = index.note(ref->path);
+                parts << (owner ? owner->blocks.value(ref->blockIndex).text : u"?"_s);
+            }
+        }
+    }
+    return parts.join(u'\n');
+}
+
+QHash<VaultPath, QString> fingerprints(const VaultIndex &index)
+{
+    QHash<VaultPath, QString> out;
+    for (const VaultPath &p : index.paths())
+        out.insert(p, fingerprint(index, p));
+    return out;
+}
+
+QString describeItem(const QueryItem &item)
+{
+    return u"%1#%2|%3|%4"_s.arg(item.path, QString::number(item.blockIndex),
+                                item.task ? describeTask(*item.task) : u"-"_s,
+                                item.reminder ? item.reminder->at.toString() + u'/' + QString::number(item.reminder->line)
+                                              : u"-"_s);
+}
+
+QStringList describeResult(const QueryResult &r)
+{
+    QStringList out{u"type %1 total %2"_s.arg(int(r.type)).arg(r.total)};
+    for (const QueryItem &item : r.items)
+        out.append(describeItem(item));
+    for (const QueryGroup &g : r.groups) {
+        out.append(u"group "_s + g.key + u'|' + g.label);
+        for (const QueryItem &item : g.items)
+            out.append(u"  "_s + describeItem(item));
+    }
     return out;
 }
 
@@ -340,6 +420,194 @@ private Q_SLOTS:
         for (const QString &q : {u"zolw"_s, u"żółw"_s, u"spotkanie"_s, u"spot"_s, u"spotkanei"_s, u"stara"_s})
             QCOMPARE(describeSearch(index.search(q)), describeSearch(fresh.search(q)));
         QCOMPARE(index.pendingSearchDocuments(), 0);
+    }
+
+    // Every note whose fingerprint (tasks, reminders, title, journal date, link targets, the
+    // texts its ((id)) show) changed is named by changesSince(); names is set whenever notes or
+    // attachments came or went.
+    void changeLogNamesEveryDependent_data()
+    {
+        QTest::addColumn<quint32>("seed");
+        for (const quint32 seed : {1u, 7u, 42u, 2026u})
+            QTest::newRow(qPrintable(u"seed %1"_s.arg(seed))) << seed;
+    }
+    void changeLogNamesEveryDependent()
+    {
+        QFETCH(quint32, seed);
+        QRandomGenerator rng(seed);
+        VaultIndex index;
+        QHash<QString, QString> files;
+        for (int step = 0; step < 200; ++step) {
+            const QHash<VaultPath, QString> before = fingerprints(index);
+            const QList<VaultPath> files0 = index.paths() + index.attachments();
+            const int version = index.version();
+            const QString path = Paths[rng.bounded(int(Paths.size()))];
+            const int op = rng.bounded(100);
+            QString what;
+            if (op < 60) {
+                const QString content = path.endsWith(u".md"_s) ? randomContent(rng) : QString();
+                files.insert(path, content);
+                index.update(path, content);
+                what = u"update "_s + path;
+            } else if (op < 75) {
+                files.remove(path);
+                index.remove(path);
+                what = u"remove "_s + path;
+            } else {
+                const QString to = Paths[rng.bounded(int(Paths.size()))];
+                if (!files.contains(path) || to == path || to.endsWith(u".md"_s) != path.endsWith(u".md"_s))
+                    continue;
+                const QString content = rng.bounded(2) ? files.value(path) : randomContent(rng);
+                files.remove(path);
+                files.insert(to, to.endsWith(u".md"_s) ? content : QString());
+                index.rename(path, to, files.value(to));
+                what = u"rename "_s + path + u" -> "_s + to;
+            }
+            const QByteArray ctx = u"step %1: %2"_s.arg(step).arg(what).toUtf8();
+            const IndexChanges changes = index.changesSince(version);
+            QVERIFY2(changes.complete, ctx.constData());
+            QVERIFY2(std::is_sorted(changes.notes.cbegin(), changes.notes.cend()), ctx.constData());
+            const QHash<VaultPath, QString> after = fingerprints(index);
+            QSet<VaultPath> all(before.keyBegin(), before.keyEnd());
+            all.unite(QSet<VaultPath>(after.keyBegin(), after.keyEnd()));
+            for (const VaultPath &p : std::as_const(all)) {
+                if (before.value(p) != after.value(p) || before.contains(p) != after.contains(p))
+                    QVERIFY2(changes.notes.contains(p), QByteArray(ctx + " — not logged: " + p.toUtf8()).constData());
+            }
+            const QList<VaultPath> files1 = index.paths() + index.attachments();
+            if (files0 != files1)
+                QVERIFY2(changes.names, ctx.constData());
+            if (version == index.version())
+                QVERIFY2(changes.notes.isEmpty() && !changes.names, ctx.constData());
+            if (QTest::currentTestFailed())
+                return;
+        }
+    }
+
+    // A QueryCache per query, kept across a random sequence of edits, equals runQuery() on the
+    // edited index and on a fresh one at every step.
+    void queryCacheEqualsRunQuery_data()
+    {
+        QTest::addColumn<quint32>("seed");
+        for (const quint32 seed : {3u, 17u, 404u, 2026u})
+            QTest::newRow(qPrintable(u"seed %1"_s.arg(seed))) << seed;
+    }
+    void queryCacheEqualsRunQuery()
+    {
+        QFETCH(quint32, seed);
+        const QStringList sources = {
+                u"type:tasks status:open due:<=+7d sort:due"_s,
+                u"#tag1 sort:-priority"_s,
+                u"ref:[[A]]"_s,
+                u"page:Ż"_s,
+                u"page:this"_s,
+                u"[[x/A]] -tag:tag2/sub"_s,
+                u"type:reminders sort:remind"_s,
+                u"type:blocks \"żółw\""_s,
+                u"type:pages tag:strona"_s,
+                u"type:pages sort:page"_s,
+                u"group:tag"_s,
+                u"group:page limit:3"_s,
+                u"path:x/"_s,
+                u"due:none"_s,
+                u"remind:overdue"_s,
+                u"type:tasks sort:page,-status limit:5"_s,
+        };
+        QList<Query> queries;
+        for (const QString &source : sources) {
+            const auto parsed = parseQuery(source);
+            QVERIFY2(std::holds_alternative<Query>(parsed), qPrintable(source));
+            queries.append(std::get<Query>(parsed));
+        }
+        QueryOptions options;
+        options.currentPath = u"x/A.md"_s;
+        options.now = QTime(12, 0);
+        const QDate today(2026, 10, 14);
+        std::vector<QueryCache> caches(queries.size());
+        QRandomGenerator rng(seed);
+        VaultIndex index;
+        QHash<QString, QString> files;
+        int partial = 0;
+        for (int step = 0; step < 120; ++step) {
+            const QString path = Paths[rng.bounded(int(Paths.size()))];
+            const int op = rng.bounded(100);
+            QString what;
+            if (op < 65) {
+                const QString content = path.endsWith(u".md"_s) ? queryContent(rng) : QString();
+                files.insert(path, content);
+                index.update(path, content);
+                what = u"update "_s + path;
+            } else if (op < 78) {
+                files.remove(path);
+                index.remove(path);
+                what = u"remove "_s + path;
+            } else {
+                const QString to = Paths[rng.bounded(int(Paths.size()))];
+                if (!files.contains(path) || to == path || to.endsWith(u".md"_s) != path.endsWith(u".md"_s))
+                    continue;
+                const QString content = rng.bounded(2) ? files.value(path) : queryContent(rng);
+                files.remove(path);
+                files.insert(to, to.endsWith(u".md"_s) ? content : QString());
+                index.rename(path, to, files.value(to));
+                what = u"rename "_s + path + u" -> "_s + to;
+            }
+            VaultIndex fresh;
+            for (auto it = files.cbegin(); it != files.cend(); ++it)
+                fresh.update(it.key(), it.value());
+            // Every other step two of them, so changes accumulate between updates too.
+            for (qsizetype q = 0; q < queries.size(); ++q) {
+                if ((step + q) % 3 == 1)
+                    continue;
+                const QueryResult cached = caches[q].run(queries[q], index, today, Qt::Monday, options);
+                if (!caches[q].lastSync().full)
+                    ++partial;
+                const QByteArray ctx = u"step %1 (%2), query %3"_s.arg(step).arg(what, sources[q]).toUtf8();
+                QVERIFY2(describeResult(cached) == describeResult(runQuery(queries[q], index, today, Qt::Monday, options)),
+                         ctx.constData());
+                QCOMPARE(describeResult(cached), describeResult(runQuery(queries[q], fresh, today, Qt::Monday, options)));
+                QCOMPARE(caches[q].total(), cached.total);
+            }
+            if (QTest::currentTestFailed())
+                return;
+        }
+        QVERIFY(partial > 100); // the incremental path was taken
+    }
+
+    // Page-property lists (propertyKeys(), propertyValues()) follow property edits, body edits,
+    // renames and removals.
+    void propertyListsFollowEdits()
+    {
+        VaultIndex index;
+        QHash<QString, QString> files = {
+                {u"Projekt.md"_s, u"---\nstatus: aktywny\ntags: [praca]\n---\n- treść\n"_s},
+                {u"Żółw.md"_s, u"status:: Aktywny\nmiasto:: Łódź\n\n- tekst\n"_s},
+                {u"Inny.md"_s, u"- bez właściwości\n"_s},
+        };
+        const auto check = [&](const QString &step) {
+            VaultIndex fresh;
+            for (auto it = files.cbegin(); it != files.cend(); ++it)
+                fresh.update(it.key(), it.value());
+            compareIndexes(index, fresh, step);
+        };
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+            index.update(it.key(), it.value());
+        check(u"start"_s);
+        const auto edit = [&](const QString &path, const QString &content) {
+            files.insert(path, content);
+            index.update(path, content);
+        };
+        edit(u"Projekt.md"_s, u"---\nstatus: zamknięty\ntags: [praca]\npriorytet: 2\n---\n- treść\n"_s);
+        check(u"property edit"_s);
+        edit(u"Żółw.md"_s, u"status:: Aktywny\nmiasto:: Łódź\n\n- inny tekst o żółwiu\n"_s);
+        check(u"body edit"_s);
+        files.insert(u"Archiwum/Żółw.md"_s, files.take(u"Żółw.md"_s));
+        index.rename(u"Żółw.md"_s, u"Archiwum/Żółw.md"_s, files.value(u"Archiwum/Żółw.md"_s));
+        check(u"rename"_s);
+        files.remove(u"Projekt.md"_s);
+        index.remove(u"Projekt.md"_s);
+        check(u"remove"_s);
+        edit(u"Inny.md"_s, u"miasto:: Kraków\n\n- teraz z właściwością\n"_s);
+        check(u"property added"_s);
     }
 
     void configChangeMatchesFreshIndex()

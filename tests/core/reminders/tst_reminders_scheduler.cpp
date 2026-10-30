@@ -648,6 +648,47 @@ private Q_SLOTS:
         s.start();
         QCOMPARE(sink.shown.size(), 1);
     }
+
+    // The refresh after a save computes the saved note only — for the sink's set and the in-app
+    // checks alike (one NotificationCache); the next day, or other settings, everything.
+    void refreshAfterAnEditComputesOneNote()
+    {
+        Env env(dt(2026, 10, 14, 7, 0));
+        Files files = vault();
+        for (int i = 0; i < 40; ++i)
+            files.append({u"Notatki/n%1.md"_s.arg(i), u"- [ ] zadanie %1 ⏰ 2026-10-%2 10:00"_s.arg(i).arg(15 + i % 10)});
+        fill(env.index, files);
+        auto s = env.scheduler();
+        s->start();
+        const NotificationCache &cache = s->occurrenceCache();
+        const int all = int(env.index.paths().size());
+        QCOMPARE(cache.computedNotes(), all);
+        QVERIFY(cache.firstDay() <= QDate(2026, 10, 14).addDays(-ReminderScheduler::HistoryDays));
+        QVERIFY(cache.lastDay() >= QDate(2026, 10, 14).addDays(s->horizonDays()));
+
+        env.index.update(u"Notatki/n3.md"_s, u"- [ ] zadanie trzy ⏰ 2026-10-14 07:30"_s);
+        s->refresh();
+        QCOMPARE(cache.computedNotes(), all + 1);
+        QVERIFY(keys(s->upcoming()).contains(u"2026-10-14 07:30 zadanie trzy"_s));
+        QCOMPARE(keys(s->upcoming()), keys(upcomingNotifications(env.index, env.clock.now(), s->horizonDays(),
+                                                                  s->maxScheduled())));
+        // It fires from the same cache.
+        env.clock.set(dt(2026, 10, 14, 7, 30, 5));
+        s->checkNow();
+        QCOMPARE(env.sink.shownTitles(), QStringList{u"zadanie trzy"_s});
+        QCOMPARE(cache.computedNotes(), all + 1);
+
+        // Another day moves the kept days: every note once.
+        env.clock.set(dt(2026, 10, 15, 8, 0));
+        s->refresh();
+        QCOMPARE(cache.computedNotes(), 2 * all + 1);
+        // Another horizon too; stop() forgets the occurrences.
+        s->setHorizonDays(20);
+        QCOMPARE(cache.computedNotes(), 3 * all + 1);
+        s->stop();
+        s->start();
+        QCOMPARE(cache.computedNotes(), 4 * all + 1);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestRemindersScheduler)

@@ -1,6 +1,7 @@
 // compareIndexes(): everything a VaultIndex derives (paths, links both ways, unlinked references,
-// missing pages, tags, tasks, reminders, journals, block ids, link resolution, the graph,
-// full-text search) compared between two indexes that hold the same files — the oracle of the
+// missing pages, tags, tasks, reminders, journals, notes with queries, page properties, block ids,
+// link resolution, the graph, full-text search) compared between two indexes that hold the same
+// files — the oracle of the
 // index's incremental maintenance (tst_index_consistency) and of loading it on worker threads or
 // from the index cache (tst_notebook_indexloader, tst_index_cache). Header-only, for tests.
 #pragma once
@@ -57,6 +58,48 @@ inline QStringList describeGraph(const GraphData &g)
     return out;
 }
 
+inline QString describeTask(const Task &t)
+{
+    return u"%1|%2|%3|%4|%5|%6"_s.arg(QString::number(t.line), QString::number(int(t.status)),
+                                     QString::number(int(t.priority)), t.text,
+                                     t.due ? t.due->toString() : QString(), t.recurrence);
+}
+
+inline QStringList describeTasks(const QList<TaskRef> &tasks)
+{
+    QStringList out;
+    for (const TaskRef &t : tasks)
+        out.append(t.path + u'#' + QString::number(t.blockIndex) + u':' + describeTask(t.task));
+    return out;
+}
+
+inline QStringList describeReminders(const QList<ReminderRef> &reminders)
+{
+    QStringList out;
+    for (const ReminderRef &r : reminders) {
+        out.append(u"%1#%2:%3|%4|%5|%6|%7"_s.arg(r.path, QString::number(r.blockIndex), r.reminder.at.toString(),
+                                                 QString::number(int(r.reminder.alarm)), r.reminder.text,
+                                                 r.reminder.recurrence, r.task ? describeTask(*r.task) : u"-"_s));
+    }
+    return out;
+}
+
+inline QStringList describePropertyKeys(const QList<PropertyKeyInfo> &keys)
+{
+    QStringList out;
+    for (const PropertyKeyInfo &k : keys)
+        out.append(u"%1(%2):%3"_s.arg(k.key, k.type).arg(k.count));
+    return out;
+}
+
+inline QStringList describePropertyValues(const QList<PropertyValueCount> &values)
+{
+    QStringList out;
+    for (const PropertyValueCount &v : values)
+        out.append(u"%1:%2"_s.arg(v.value).arg(v.count));
+    return out;
+}
+
 inline QStringList describeSearch(const QList<SearchHit> &hits)
 {
     QStringList out;
@@ -80,9 +123,14 @@ inline void compareIndexes(const VaultIndex &a, const VaultIndex &b, const QStri
     }
     QCOMPARE(describeMissing(a.missingPages()), describeMissing(b.missingPages()));
     QCOMPARE(describeTags(a.tags()), describeTags(b.tags()));
-    QCOMPARE(a.tasks().size(), b.tasks().size());
-    QCOMPARE(a.reminders().size(), b.reminders().size());
+    QCOMPARE(describeTasks(a.tasks()), describeTasks(b.tasks()));
+    QCOMPARE(describeReminders(a.reminders()), describeReminders(b.reminders()));
     QCOMPARE(a.journals(), b.journals());
+    QCOMPARE(a.notesWithQueries(), b.notesWithQueries());
+    QCOMPARE(describePropertyKeys(a.propertyKeys()), describePropertyKeys(b.propertyKeys()));
+    for (const PropertyKeyInfo &k : a.propertyKeys())
+        QCOMPARE(describePropertyValues(a.propertyValues(k.key, {}, 100)),
+                 describePropertyValues(b.propertyValues(k.key, {}, 100)));
     for (const QString &id : {u"id1"_s, u"id2"_s}) {
         const std::optional<BlockRef> ra = a.blockById(id);
         const std::optional<BlockRef> rb = b.blockById(id);
