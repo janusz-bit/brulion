@@ -592,7 +592,7 @@ function pngSize(buf) {
 
 async function shoot(cdp, base, size) {
   await parkPointer(cdp);
-  await sleep(100);
+  await sleep(300);
   const shot = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
   const png = Buffer.from(shot.data, 'base64');
   const dump = await evaluate(cdp, DOM_DUMP);
@@ -697,6 +697,8 @@ async function main() {
             try {
               await resetWorkspace(session.cdp, baseline, size);
               for (const step of screen.obsidian.steps) await runStep(session.cdp, step);
+              // Before settling: a hover the steps left fades out (background transitions).
+              await parkPointer(session.cdp);
               await settle(session.cdp, screen.obsidian.settleMs ?? 0);
               // UIBENCH_DEBUG_JS: evaluated before each shot, its result logged (developing steps).
               if (process.env.UIBENCH_DEBUG_JS) {
