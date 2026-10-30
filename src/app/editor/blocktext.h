@@ -315,25 +315,14 @@ int snapToCharacter(QStringView text, int pos);
 QString restoreLineEndings(const QString &original, const QString &edited, const QString &eol);
 
 /// The difference between two versions of a text as one replaced range (common prefix and suffix
-/// left out): what an undo step stores instead of two copies of the whole page.
+/// left out): where an edit happened — for the fence lines typed in a block (blocktext.cpp) and a
+/// caret carried through an edit. Undo steps hold markdown::BlockDocument::Delta, not these.
 struct TextDelta {
-    qsizetype from = 0;    ///< start of the replaced range (the same in both versions)
-    QString removed;       ///< the range in the older version
-    QString inserted;      ///< the range in the newer version
-    qsizetype beforeSize = 0;
-    qsizetype afterSize = 0;
+    qsizetype from = 0; ///< start of the replaced range (the same in both versions)
+    QString removed;    ///< the range in the older version
+    QString inserted;   ///< the range in the newer version
 
     static TextDelta between(const QString &before, const QString &after);
-    /// `first` (A -> B) followed by `second` (B -> C) as one delta A -> C; `middle` is B.
-    static std::optional<TextDelta> compose(const TextDelta &first, const TextDelta &second, const QString &middle);
-    /// The newer version from the older one; nullopt when `before` is not the version this delta
-    /// was made from (it is never patched into something else).
-    std::optional<QString> apply(const QString &before) const;
-    /// The older version from the newer one; nullopt when `after` does not match.
-    std::optional<QString> revert(const QString &after) const;
-    bool isEmpty() const { return removed.isEmpty() && inserted.isEmpty(); }
-    /// Characters held by the delta.
-    qsizetype size() const { return removed.size() + inserted.size(); }
 };
 
 } // namespace brulion::editor

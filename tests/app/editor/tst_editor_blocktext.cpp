@@ -1212,22 +1212,15 @@ private Q_SLOTS:
         QFETCH(QString, before);
         QFETCH(QString, after);
         const TextDelta d = TextDelta::between(before, after);
-        QCOMPARE(d.apply(before), std::optional<QString>(after));
-        QCOMPARE(d.revert(after), std::optional<QString>(before));
-        // Only the changed part is stored.
+        // The replaced range turns either version into the other.
+        QVERIFY(d.from >= 0 && d.from + d.removed.size() <= before.size());
+        QCOMPARE(QStringView(before).sliced(d.from, d.removed.size()), QStringView(d.removed));
+        QCOMPARE(before.left(d.from) + d.inserted + before.mid(d.from + d.removed.size()), after);
+        QCOMPARE(after.left(d.from) + d.removed + after.mid(d.from + d.inserted.size()), before);
+        // Only the changed part.
         QVERIFY(d.removed.size() + d.inserted.size() <= std::abs(before.size() - after.size()) + 4);
-        // A text that is not the expected one is refused (never patched into garbage).
-        if (before != after) {
-            QVERIFY(!d.apply(after + u"?"_s).has_value());
-            QVERIFY(!d.revert(before + u"?"_s).has_value());
-        }
-        // Composition: two consecutive deltas as one.
-        const QString third = after + u"++"_s;
-        const TextDelta second = TextDelta::between(after, third);
-        const std::optional<TextDelta> both = TextDelta::compose(d, second, after);
-        QVERIFY(both.has_value());
-        QCOMPARE(both->apply(before), std::optional<QString>(third));
-        QCOMPARE(both->revert(third), std::optional<QString>(before));
+        if (before == after)
+            QVERIFY(d.removed.isEmpty() && d.inserted.isEmpty());
     }
 };
 
