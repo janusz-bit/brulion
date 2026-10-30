@@ -202,6 +202,69 @@ QStringList fixtures()
     };
 }
 
+/// More documents for undo / redo: Polish text and emoji, recurring tasks, a leading `---` rule and
+/// an open `$$` formula as loaded (never normalised), callouts, ordered lists, page properties that
+/// an edit before them turns into a paragraph.
+QStringList deltaFixtures()
+{
+    return {
+            u"- Zażółć gęślą jaźń 😀👍🏽\n\t- dziecko ✅\n- [ ] Kupić żółty ser 📅 2026-10-30\n"_s,
+            u"- [ ] Podlać kwiaty 🔁 co tydzień 📅 2026-10-30\n\t- notatka\n- [ ] Kupić żółty ser 📅 2026-10-30\n"_s,
+            u"---\nAkapit pod kreską\n\nDrugi akapit\n"_s,
+            u"- Wzór:\n  $$\n  a\n- b\n- $$\n- c\n"_s,
+            u"> [!note] Notatka ąę\n> - a\n\n- b\n\t- c\n"_s,
+            u"1. jeden\n2. dwa\n   1) trzy\n   2) cztery\n3. pięć\n"_s,
+            u"- przed\n\nklucz:: wartość\nstatus:: szkic\n\n- po\n"_s,
+            u"---\ntytuł: Łódź\n---\nklucz:: wartość\n\n# Nagłówek\n\n- [x] Zrobione ✅ 2026-10-29 ^id1\n"_s,
+    };
+}
+
+/// The editing operations an undo step can hold, on block `i` (-1 for an empty document).
+QList<std::pair<QString, std::function<EditResult(BlockDocument &, int)>>> deltaOperations()
+{
+    const auto last = [](const BlockDocument &d, int i) { return std::min(i + 1, d.count() - 1); };
+    return {
+            {u"setBody"_s, [](BlockDocument &d, int i) { return d.setBody(i, u"Zażółć gęślą jaźń 😀\nnowa linia"_s); }},
+            {u"typed"_s, [](BlockDocument &d, int i) { return i < 0 ? EditResult() : d.setBody(i, d.at(i).body + u"ż"_s); }},
+            {u"rule"_s, [](BlockDocument &d, int i) { return d.setBody(i, u"---"_s); }},
+            {u"formula"_s, [](BlockDocument &d, int i) { return d.setBody(i, u"$$"_s); }},
+            {u"split at 0"_s, [](BlockDocument &d, int i) { return d.split(i, 0); }},
+            {u"split middle"_s, [](BlockDocument &d, int i) { return i < 0 ? EditResult() : d.split(i, int(d.at(i).body.size() / 2)); }},
+            {u"split at end"_s, [](BlockDocument &d, int i) { return i < 0 ? EditResult() : d.split(i, int(d.at(i).body.size())); }},
+            {u"merge"_s, [](BlockDocument &d, int i) { return d.mergeWithPrevious(i); }},
+            {u"remove"_s, [](BlockDocument &d, int i) { return d.remove(i, true); }},
+            {u"remove one"_s, [](BlockDocument &d, int i) { return d.remove(i, false); }},
+            {u"indent"_s, [](BlockDocument &d, int i) { return d.indent(i); }},
+            {u"outdent"_s, [](BlockDocument &d, int i) { return d.outdent(i); }},
+            {u"up"_s, [](BlockDocument &d, int i) { return d.moveUp(i); }},
+            {u"down"_s, [](BlockDocument &d, int i) { return d.moveDown(i); }},
+            {u"toggle task"_s, [](BlockDocument &d, int i) { return d.toggleTask(i, Today); }},
+            {u"done"_s, [](BlockDocument &d, int i) { return d.setTaskStatus(i, TaskStatus::Done, Today); }},
+            {u"block id"_s, [](BlockDocument &d, int i) { return d.ensureBlockId(i).edit; }},
+            {u"to list"_s, [](BlockDocument &d, int i) { return d.convertToList(i); }},
+            {u"to paragraph"_s, [](BlockDocument &d, int i) { return d.convertToParagraph(i); }},
+            {u"remove range"_s, [last](BlockDocument &d, int i) { return d.removeRange(i, last(d, i)); }},
+            {u"indent range"_s, [last](BlockDocument &d, int i) { return d.indentRange(i, last(d, i)); }},
+            {u"outdent range"_s, [last](BlockDocument &d, int i) { return d.outdentRange(i, last(d, i)); }},
+            {u"range up"_s, [last](BlockDocument &d, int i) { return d.moveRangeUp(i, last(d, i)); }},
+            {u"range down"_s, [last](BlockDocument &d, int i) { return d.moveRangeDown(i, last(d, i)); }},
+            {u"insert item"_s, [](BlockDocument &d, int i) { return d.insertAfter(i, u"wstawiony ą"_s, i < 0 ? 0 : d.at(i).depth + 1); }},
+            {u"insert paragraph"_s, [](BlockDocument &d, int i) { return d.insertAfter(i, u"akapit ę"_s, 0, false); }},
+            {u"insert at start"_s, [](BlockDocument &d, int) { return d.insertAfter(-1, u"pierwszy ł"_s, 0); }},
+    };
+}
+
+/// Text, blocks (with their uids) and empty paragraphs of `doc` equal to `want`; the parse of every
+/// block too when `edits` (see difference()).
+QString versionDifference(const BlockDocument &doc, const BlockDocument &want, bool edits = false)
+{
+    if (const QString d = difference(doc, want, edits, true); !d.isEmpty())
+        return d;
+    if (doc.blankBlocks() != want.blankBlocks())
+        return u"empty paragraphs differ"_s;
+    return {};
+}
+
 } // namespace
 
 class TestBlockDocument : public QObject {
@@ -384,6 +447,376 @@ private Q_SLOTS:
         const BlockDocument reused(after, &old);
         d = difference(BlockDocument(before, &reused), BlockDocument(before));
         QVERIFY2(d.isEmpty(), qPrintable(d));
+    }
+
+    // --- versions and undo (deltas) ----------------------------------------------------------------
+
+    void deltaRoundTrip_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<bool>("blank"); // an empty paragraph first (Enter at the start of one)
+        int k = 0;
+        for (const QString &f : fixtures() + deltaFixtures()) {
+            QStringList variants{f};
+            QString crlf = f;
+            crlf.replace(u"\r\n"_s, u"\n"_s).replace(u"\n"_s, u"\r\n"_s);
+            if (crlf != f)
+                variants.append(crlf);
+            if (f.endsWith(u'\n'))
+                variants.append(f.chopped(1));
+            if (!f.startsWith(u'\uFEFF') && k % 3 == 0)
+                variants.append(u"\uFEFF"_s + f);
+            for (qsizetype v = 0; v < variants.size(); ++v) {
+                QTest::newRow(qPrintable(u"fixture %1/%2"_s.arg(k).arg(v))) << variants[v] << false;
+                QTest::newRow(qPrintable(u"fixture %1/%2 empty paragraph"_s.arg(k).arg(v))) << variants[v] << true;
+            }
+            ++k;
+        }
+    }
+
+    void deltaRoundTrip()
+    {
+        // Every operation, on every block: the delta of the edit turns the document back into the
+        // version before it and forward again exactly — text, empty paragraphs, uids, every entry
+        // field — and its row changes replay.
+        QFETCH(QString, content);
+        QFETCH(bool, blank);
+        BlockDocument base(content);
+        if (blank) {
+            int p = 0;
+            while (p < base.count() && (base.at(p).kind != BlockKind::Paragraph || base.at(p).body.isEmpty()))
+                ++p;
+            if (p == base.count())
+                QSKIP("no paragraph");
+            base.split(p, 0);
+            QVERIFY(!base.blankBlocks().isEmpty());
+        }
+        int checks = 0;
+        for (const auto &[name, op] : deltaOperations()) {
+            for (int i = base.isEmpty() ? -1 : 0; i < base.count(); ++i) {
+                BlockDocument doc = base;
+                const BlockDocument before = doc;
+                const BlockDocument::Version v = doc.version();
+                op(doc, i);
+                const BlockDocument after = doc;
+                const BlockDocument::Delta delta = doc.diffFrom(v);
+                const QString where = u"%1 at %2: "_s.arg(name).arg(i);
+                QCOMPARE(delta.isEmpty(), versionDifference(after, before).isEmpty());
+                QString why;
+                for (int round = 0; round < 2; ++round) {
+                    bool ok = false;
+                    EditResult r = doc.revert(delta, &ok);
+                    QVERIFY2(ok, qPrintable(where + u"revert refused"_s));
+                    QString d = versionDifference(doc, before, round == 1);
+                    QVERIFY2(d.isEmpty(), qPrintable(where + u"revert: "_s + d));
+                    QVERIFY2(changesReplay(uids(after), uids(doc), r.changes, &why),
+                             qPrintable(where + why + u": "_s + describe(r.changes)));
+                    QCOMPARE(r.focus, -1);
+                    r = doc.reapply(delta, &ok);
+                    QVERIFY2(ok, qPrintable(where + u"reapply refused"_s));
+                    d = versionDifference(doc, after, round == 1);
+                    QVERIFY2(d.isEmpty(), qPrintable(where + u"reapply: "_s + d));
+                    QVERIFY2(changesReplay(uids(before), uids(doc), r.changes, &why),
+                             qPrintable(where + why + u": "_s + describe(r.changes)));
+                }
+                ++checks;
+            }
+        }
+        QVERIFY(checks > 0);
+    }
+
+    void deltaFuzz()
+    {
+        // Random edits recorded as deltas: undone all in reverse and redone all, the document is
+        // each version again; two steps joined (composed) and all steps joined undo and redo as one.
+        const QStringList docs = fixtures() + deltaFixtures();
+        quint32 seed = 2026;
+        const auto rnd = [&](quint32 n) {
+            seed = (seed * 1103515245u + 12345u) % 2147483648u;
+            return n ? seed % n : 0;
+        };
+        const auto check = [](const BlockDocument &doc, const BlockDocument &want, const char *what, int step) {
+            const QString d = versionDifference(doc, want);
+            if (!d.isEmpty())
+                qWarning("%s of step %d: %s", what, step, qPrintable(d));
+            return d.isEmpty();
+        };
+        for (int round = 0; round < 300; ++round) {
+            BlockDocument doc(docs[rnd(quint32(docs.size()))]);
+            QList<BlockDocument> states{doc};
+            QList<BlockDocument::Delta> deltas;
+            std::optional<BlockDocument::Delta> all = BlockDocument::Delta();
+            const auto ops = deltaOperations();
+            for (int step = 0; step < 6; ++step) {
+                const BlockDocument::Version v = doc.version();
+                const int i = doc.count() ? int(rnd(quint32(doc.count()))) : -1;
+                ops[rnd(quint32(ops.size()))].second(doc, i);
+                deltas.append(doc.diffFrom(v));
+                states.append(doc);
+                all = doc.composed(*all, deltas.last());
+                QVERIFY(all); // small documents: the runs are never far apart
+            }
+            BlockDocument whole = doc;
+            bool ok = false;
+            whole.revert(*all, &ok);
+            QVERIFY(ok);
+            QVERIFY(check(whole, states.first(), "all undone", 0));
+            whole.reapply(*all, &ok);
+            QVERIFY(ok);
+            QVERIFY(check(whole, states.last(), "all redone", 0));
+
+            for (int k = int(deltas.size()) - 1; k >= 0; --k) {
+                if (k >= 1) {
+                    const std::optional<BlockDocument::Delta> two = doc.composed(deltas[k - 1], deltas[k]);
+                    QVERIFY(two);
+                    BlockDocument copy = doc;
+                    copy.revert(*two, &ok);
+                    QVERIFY(ok);
+                    QVERIFY(check(copy, states[k - 1], "two undone", k));
+                    copy.reapply(*two, &ok);
+                    QVERIFY(ok);
+                    QVERIFY(check(copy, states[k + 1], "two redone", k));
+                }
+                const QList<quint64> rows = uids(doc);
+                const EditResult r = doc.revert(deltas[k], &ok);
+                QVERIFY(ok);
+                QVERIFY(check(doc, states[k], "undo", k));
+                QString why;
+                QVERIFY2(changesReplay(rows, uids(doc), r.changes, &why), qPrintable(why));
+            }
+            for (qsizetype k = 0; k < deltas.size(); ++k) {
+                doc.reapply(deltas[k], &ok);
+                QVERIFY(ok);
+                QVERIFY(check(doc, states[k + 1], "redo", int(k)));
+            }
+        }
+    }
+
+    void deltaRefusesOtherVersions_data()
+    {
+        QTest::addColumn<QString>("how");
+        for (const char *how : {"undone twice", "redone twice", "text of the block", "same text, other blocks",
+                                "a block more", "byte order mark", "final newline", "empty document"})
+            QTest::newRow(how) << QString::fromLatin1(how);
+    }
+
+    void deltaRefusesOtherVersions()
+    {
+        // A delta applies only to its own version: anything else is left as it is, never patched.
+        QFETCH(QString, how);
+        const QString content = u"- a\n- Zażółć gęślą\n\t- dziecko\n- c 😀\n"_s;
+        BlockDocument doc(content);
+        const BlockDocument::Version v = doc.version();
+        doc.indent(3); // "c" becomes a child of "Zażółć": the run is that block
+        const BlockDocument::Delta delta = doc.diffFrom(v);
+        QVERIFY(!delta.isEmpty());
+        bool ok = true;
+        BlockDocument other;
+        bool redo = false;
+        if (how == u"undone twice") {
+            doc.revert(delta, &ok);
+            QVERIFY(ok);
+            other = doc;
+        } else if (how == u"redone twice") {
+            other = doc;
+            redo = true;
+        } else if (how == u"text of the block") {
+            other = doc;
+            other.setBody(3, u"c zmienione"_s);
+        } else if (how == u"same text, other blocks") {
+            other = BlockDocument(doc.toString());
+        } else if (how == u"a block more") {
+            other = doc;
+            other.insertAfter(other.count() - 1, u"nowy"_s, 0);
+        } else if (how == u"byte order mark" || how == u"final newline") {
+            // The same blocks (uids) in a document with other edges.
+            other = BlockDocument(how == u"final newline" ? doc.toString().chopped(1) : u"\uFEFF"_s + doc.toString());
+            QList<std::pair<int, quint64>> same;
+            for (int i = 0; i < doc.count(); ++i)
+                same.append({i, doc.at(i).uid});
+            other.adoptUids(same);
+            QCOMPARE(uids(other), uids(doc));
+        }
+        const QString text = other.toString();
+        const QList<quint64> rows = uids(other);
+        const EditResult r = redo ? other.reapply(delta, &ok) : other.revert(delta, &ok);
+        QVERIFY(!ok);
+        QVERIFY(!r.changed());
+        QCOMPARE(other.toString(), text);
+        QCOMPARE(uids(other), rows);
+    }
+
+    void deltaHoldsChangesOnly()
+    {
+        // One character typed into a 100 000-character code block: the step holds a few characters.
+        QString code = u"```\n"_s;
+        while (code.size() < 100'000)
+            code += u"linia kodu zażółć gęślą jaźń\n"_s;
+        code += u"```"_s;
+        const QString content = u"- przed\n\n"_s + code + u"\n\n- po\n"_s;
+        BlockDocument doc(content);
+        QCOMPARE(doc.at(1).kind, BlockKind::Code);
+        BlockDocument::Version v = doc.version();
+        const QString body = doc.at(1).body;
+        doc.setBody(1, body.left(5000) + u"ż"_s + body.mid(5000));
+        BlockDocument::Delta delta = doc.diffFrom(v);
+        QVERIFY2(delta.size() < 50, qPrintable(QString::number(delta.size())));
+        bool ok = false;
+        doc.revert(delta, &ok);
+        QVERIFY(ok);
+        QCOMPARE(doc.toString(), content);
+
+        // A removed subtree: the step holds its text.
+        const QString removed = u"- rodzic ąę\n\t- dziecko 1\n\t- dziecko 2\n"_s;
+        BlockDocument tree(u"- a\n"_s + removed + u"- b\n"_s);
+        v = tree.version();
+        tree.remove(1, true);
+        QCOMPARE(tree.toString(), u"- a\n- b\n"_s);
+        delta = tree.diffFrom(v);
+        QVERIFY2(delta.size() >= removed.size() && delta.size() <= removed.size() + 4,
+                 qPrintable(QString::number(delta.size())));
+        // Nothing changed: an empty delta.
+        QVERIFY(tree.diffFrom(tree.version()).isEmpty());
+        QCOMPARE(tree.diffFrom(tree.version()).size(), 0);
+    }
+
+    void deltaKeepsUidsOfChangedBlocks()
+    {
+        // Undo and redo report a block in both versions as changed, never removed and inserted.
+        BlockDocument doc(u"- a\n- bęben\n\t- c\n- d\n"_s);
+        const QList<quint64> rows = uids(doc);
+        BlockDocument::Version v = doc.version();
+        doc.setBody(1, u"bęben i trąbka"_s);
+        BlockDocument::Delta delta = doc.diffFrom(v);
+        bool ok = false;
+        QCOMPARE(describe(doc.revert(delta, &ok).changes), u"changed 1+1"_s);
+        QVERIFY(ok);
+        QCOMPARE(uids(doc), rows);
+        QCOMPARE(describe(doc.reapply(delta, &ok).changes), u"changed 1+1"_s);
+        // A move: rows moved (and changed where the indentation follows), nothing removed.
+        v = doc.version();
+        doc.moveDown(1);
+        delta = doc.diffFrom(v);
+        const QString moved = describe(doc.revert(delta, &ok).changes);
+        QVERIFY(ok);
+        QVERIFY2(moved.startsWith(u"moved"_s) && !moved.contains(u"removed"_s) && !moved.contains(u"inserted"_s),
+                 qPrintable(moved));
+        QCOMPARE(uids(doc), rows);
+        // Enter at the end: only the new block comes and goes.
+        v = doc.version();
+        doc.split(3, 1);
+        delta = doc.diffFrom(v);
+        QCOMPARE(describe(doc.revert(delta, &ok).changes), u"removed 4+1"_s);
+        QCOMPARE(describe(doc.reapply(delta, &ok).changes), u"inserted 4+1"_s);
+    }
+
+    void deltaRestoresTheVersionExactly_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("block");
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<QString>("edited");
+        // Normalisations of an edit are undone with it (the version comes back as it was loaded).
+        QTest::newRow("leading rule") << u"---\nAkapit\n\nDrugi\n"_s << 2 << u"---"_s
+                                      << u"\n---\nAkapit\n\n---\n"_s;
+        QTest::newRow("open formula") << u"- Wzór:\n  $$\n  a\n  $$\n- b\n- c\n  $$\n  d\n  $$\n"_s << 0
+                                      << u"Wzór ąę:\n$$\na"_s
+                                      << u"- Wzór ąę:\n  $$\n  a\n\n- b\n- c\n  $$\n  d\n  $$\n"_s;
+        QTest::newRow("no final newline") << u"Ala\n\nOla"_s << 1 << u"Ola ma kota"_s << u"Ala\n\nOla ma kota"_s;
+        QTest::newRow("crlf") << u"- a\r\n- b\r\n"_s << 1 << u"b\nżółw"_s << u"- a\r\n- b\r\n  żółw\r\n"_s;
+        // Page properties are only read at the top: what is before them decides.
+        QTest::newRow("properties") << u"- przed\n\nklucz:: wartość\n"_s << 0 << QString() << u"klucz:: wartość\n"_s;
+    }
+
+    void deltaRestoresTheVersionExactly()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, block);
+        QFETCH(QString, body);
+        QFETCH(QString, edited);
+        BlockDocument doc(content);
+        const QStringList before = entries(doc);
+        const BlockDocument::Version v = doc.version();
+        if (body.isEmpty())
+            doc.remove(block);
+        else
+            doc.setBody(block, body);
+        QCOMPARE(doc.toString(), edited);
+        const QStringList after = entries(doc);
+        const BlockDocument::Delta delta = doc.diffFrom(v);
+        bool ok = false;
+        doc.revert(delta, &ok);
+        QVERIFY(ok);
+        QCOMPARE(doc.toString(), content);
+        QCOMPARE(entries(doc), before);
+        QCOMPARE(entries(doc), entries(BlockDocument(content)));
+        doc.reapply(delta, &ok);
+        QVERIFY(ok);
+        QCOMPARE(doc.toString(), edited);
+        QCOMPARE(entries(doc), after);
+    }
+
+    void deltaComposeKeepsDistantStepsApart()
+    {
+        QString content;
+        for (int i = 0; i < 200; ++i)
+            content += u"- wpis %1 źdźbło\n"_s.arg(i);
+        BlockDocument doc(content);
+        // Typing in one block, one character at a time: one small step.
+        BlockDocument::Version v = doc.version();
+        std::optional<BlockDocument::Delta> typing = BlockDocument::Delta();
+        for (const QString &c : u"ą ć ę ł ń ó ś ź ż 😀 👍🏽"_s.split(u' ')) {
+            v = doc.version();
+            doc.setBody(10, doc.at(10).body + c);
+            typing = doc.composed(*typing, doc.diffFrom(v));
+            QVERIFY(typing);
+        }
+        QVERIFY2(typing->size() < 20, qPrintable(QString::number(typing->size())));
+        bool ok = false;
+        BlockDocument copy = doc;
+        copy.revert(*typing, &ok);
+        QVERIFY(ok);
+        QCOMPARE(copy.toString(), content);
+        // Edits far apart (more than MaxComposeGap untouched blocks between them) stay two steps;
+        // near ones join.
+        v = doc.version();
+        doc.setBody(20, u"blisko"_s);
+        const BlockDocument::Delta near = doc.diffFrom(v);
+        QVERIFY(doc.composed(*typing, near));
+        v = doc.version();
+        doc.setBody(20 + BlockDocument::MaxComposeGap + 2, u"daleko"_s);
+        QVERIFY(!doc.composed(near, doc.diffFrom(v)));
+        // Deltas that do not chain: the same step twice.
+        QVERIFY(!doc.composed(near, near));
+    }
+
+    void uidsAreUniqueAcrossDocuments()
+    {
+        // Two documents of the same text share no uid; adoptUids() makes one the other's blocks,
+        // so a delta of one applies to the other.
+        const QString text = u"---\ntytuł: Zażółć\n---\n- a\n\t- b ąę\n- c\n"_s;
+        BlockDocument a(text);
+        BlockDocument b(text);
+        const QList<quint64> ua = uids(a);
+        for (const quint64 uid : uids(b))
+            QVERIFY(!ua.contains(uid));
+        QList<std::pair<int, quint64>> same;
+        for (int i = 0; i < a.count(); ++i)
+            same.append({i, a.at(i).uid});
+        b.adoptUids(same);
+        QCOMPARE(uids(b), ua);
+        const BlockDocument::Version v = a.version();
+        a.indent(3);
+        bool ok = false;
+        b.reapply(a.diffFrom(v), &ok);
+        QVERIFY(ok);
+        const QString d = difference(a, b, true, true);
+        QVERIFY2(d.isEmpty(), qPrintable(d));
+        // New blocks never take a uid that exists.
+        const QList<quint64> before = uids(b);
+        b.insertAfter(1, u"nowy"_s, 1);
+        for (int i = 0; i < b.count(); ++i)
+            QCOMPARE(before.count(b.at(i).uid), b.at(i).body == u"nowy" ? 0 : 1);
     }
 
     // --- entries ---------------------------------------------------------------------------------
