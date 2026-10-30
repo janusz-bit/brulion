@@ -921,9 +921,9 @@
 <context>
     <name>SyncConflictResolver</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="281"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="289"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="301"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="283"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="291"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="303"/>
         <source>%n element(s)</source>
         <translation>
             <numerusform>%n element</numerusform>
@@ -931,7 +931,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="449"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="451"/>
         <source>Changes made on one side only are merged already. Decide the %n place(s) changed on both sides.</source>
         <translation>
             <numerusform>Changes made on one side only are merged already. Decide the %n place changed on both sides.</numerusform>
