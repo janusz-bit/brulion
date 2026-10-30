@@ -173,10 +173,16 @@ void collectNote(const VaultIndex &index, const VaultPath &path, const ParsedNot
 /// only while it stays — after a change (travel, an automatic time zone) every note is computed
 /// again, so reminders keep their local wall-clock times. The zone's id (also a TZ rule string)
 /// and the offsets at both ends of the kept days (local time goes through the C library, which
-/// may see a change the id does not).
+/// may see a change the id does not). Builds of Qt without the time zone database
+/// (`QT_CONFIG(timezone)` off: Qt for WebAssembly) have no zone id; the offsets alone tell a
+/// change there.
 QString zoneKey(const QDateTime &dayStart, const QDateTime &dayEnd)
 {
+#if QT_CONFIG(timezone)
     QString key = QString::fromUtf8(QTimeZone::systemTimeZoneId());
+#else
+    QString key;
+#endif
     key += u'|';
     key += QString::number(dayStart.offsetFromUtc());
     key += u'|';
