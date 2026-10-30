@@ -11,13 +11,194 @@
 #include <QSet>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 
 namespace brulion::markdown {
+
+namespace detail {
+
+/// The parts of a document outside its blocks.
+struct BlockEdges {
+    QString bom;
+    QString leading;
+    QString eol;
+    bool finalNewline = true;
+    friend bool operator==(const BlockEdges &, const BlockEdges &) = default;
+};
+
+/// What a version keeps of one block: its identity and exact text (everything else is derived).
+struct BlockSource {
+    quint64 uid = 0;
+    QString own;
+    QString eol;
+    QString trailing;
+};
+
+struct BlockVersionData {
+    QList<BlockSource> blocks;
+    BlockEdges edges;
+};
+
+/// A block in both versions of a delta. Index v of each array is a version (0 older, 1 newer):
+/// its own text differs in [from, from + text[v].size()) (empty texts when only the block's place,
+/// terminator or blank lines changed); `size` is the size of the whole own text.
+struct BlockOwnEdit {
+    qsizetype from = 0;
+    std::array<QString, 2> text;
+    std::array<qsizetype, 2> size{};
+    std::array<QString, 2> eol;
+    std::array<QString, 2> trailing;
+};
+
+/// One version's side of a delta.
+struct BlockDeltaSide {
+    int count = 0; ///< blocks of the whole document
+    BlockEdges edges;
+    QList<quint64> run;               ///< the run's uids in order (from BlockDeltaData::first)
+    QHash<quint64, BlockSource> only; ///< blocks of the run that the other version does not have
+};
+
+struct BlockDeltaData {
+    int first = 0; ///< the run's first block (the same index in both versions)
+    std::array<BlockDeltaSide, 2> side;
+    QHash<quint64, BlockOwnEdit> both;
+};
+
+} // namespace detail
 
 using namespace detail;
 using namespace Qt::StringLiterals;
 
 namespace {
+
+/// Block uids are unique in the process: an undo step brings blocks back with their uids, and
+/// BlockListModel::replaceContent() gives the blocks it keeps their old uids.
+quint64 nextUid()
+{
+    static std::atomic<quint64> next{1};
+    return next.fetch_add(1, std::memory_order_relaxed);
+}
+
+/// Equal strings, decided by their shared data first (the untouched blocks of two versions share
+/// their strings).
+bool sameText(const QString &a, const QString &b)
+{
+    return (a.constData() == b.constData() && a.size() == b.size()) || a == b;
+}
+
+bool sameSource(const BlockSource &a, const BlockSource &b)
+{
+    return a.uid == b.uid && sameText(a.own, b.own) && sameText(a.eol, b.eol) && sameText(a.trailing, b.trailing);
+}
+
+/// The lengths of the common prefix and suffix of two strings (not overlapping).
+std::pair<qsizetype, qsizetype> commonEnds(QStringView a, QStringView b)
+{
+    const qsizetype max = std::min(a.size(), b.size());
+    qsizetype p = 0;
+    while (p < max && a[p] == b[p])
+        ++p;
+    qsizetype s = 0;
+    while (s < max - p && a[a.size() - 1 - s] == b[b.size() - 1 - s])
+        ++s;
+    return {p, s};
+}
+
+/// The delta between two runs of blocks that start at block `first` of their versions (the blocks
+/// before and after the runs are the same in both); equal blocks at the ends of the runs are left
+/// out of it.
+BlockDeltaData diffRuns(int first, const QList<BlockSource> &older, const QList<BlockSource> &newer, int olderCount,
+                        int newerCount, const BlockEdges &olderEdges, const BlockEdges &newerEdges)
+{
+    const qsizetype max = std::min(older.size(), newer.size());
+    qsizetype p = 0;
+    while (p < max && sameSource(older[p], newer[p]))
+        ++p;
+    qsizetype s = 0;
+    while (s < max - p && sameSource(older[older.size() - 1 - s], newer[newer.size() - 1 - s]))
+        ++s;
+    BlockDeltaData d;
+    d.first = first + int(p);
+    d.side[0].count = olderCount;
+    d.side[1].count = newerCount;
+    d.side[0].edges = olderEdges;
+    d.side[1].edges = newerEdges;
+    QHash<quint64, qsizetype> inNewer;
+    for (qsizetype k = p; k < newer.size() - s; ++k)
+        inNewer.insert(newer[k].uid, k);
+    for (qsizetype k = p; k < older.size() - s; ++k) {
+        const BlockSource &o = older[k];
+        d.side[0].run.append(o.uid);
+        const auto found = inNewer.constFind(o.uid);
+        if (found == inNewer.constEnd()) {
+            d.side[0].only.insert(o.uid, o);
+            continue;
+        }
+        const BlockSource &n = newer[*found];
+        BlockOwnEdit e;
+        if (!sameText(o.own, n.own)) {
+            const auto [cp, cs] = commonEnds(o.own, n.own);
+            e.from = cp;
+            e.text = {o.own.mid(cp, o.own.size() - cp - cs), n.own.mid(cp, n.own.size() - cp - cs)};
+        }
+        e.size = {o.own.size(), n.own.size()};
+        e.eol = {o.eol, n.eol};
+        e.trailing = {o.trailing, n.trailing};
+        d.both.insert(o.uid, e);
+    }
+    for (qsizetype k = p; k < newer.size() - s; ++k) {
+        d.side[1].run.append(newer[k].uid);
+        if (!d.both.contains(newer[k].uid))
+            d.side[1].only.insert(newer[k].uid, newer[k]);
+    }
+    return d;
+}
+
+/// The run of version `to` of a delta from the run of version `from` (`run`: its blocks as they
+/// are); nullopt when `run` is not exactly that version's run (other uids, order or text).
+std::optional<QList<BlockSource>> convertRun(const BlockDeltaData &d, int from, int to, const QList<BlockSource> &run)
+{
+    const BlockDeltaSide &have = d.side[from];
+    if (run.size() != have.run.size())
+        return std::nullopt;
+    QHash<quint64, qsizetype> kept; // blocks in both versions: their index in `run`
+    for (qsizetype k = 0; k < run.size(); ++k) {
+        const BlockSource &b = run[k];
+        if (b.uid != have.run[k])
+            return std::nullopt;
+        if (const auto only = have.only.constFind(b.uid); only != have.only.constEnd()) {
+            if (!sameSource(*only, b))
+                return std::nullopt;
+            continue;
+        }
+        const auto e = d.both.constFind(b.uid);
+        if (e == d.both.constEnd() || b.own.size() != e->size[from] || e->from + e->text[from].size() > b.own.size()
+            || QStringView(b.own).sliced(e->from, e->text[from].size()) != e->text[from] || b.eol != e->eol[from]
+            || b.trailing != e->trailing[from])
+            return std::nullopt;
+        kept.insert(b.uid, k);
+    }
+    const BlockDeltaSide &want = d.side[to];
+    QList<BlockSource> out;
+    out.reserve(want.run.size());
+    for (const quint64 uid : want.run) {
+        if (const auto only = want.only.constFind(uid); only != want.only.constEnd()) {
+            out.append(*only);
+            continue;
+        }
+        const auto e = d.both.constFind(uid);
+        const auto at = kept.constFind(uid);
+        if (e == d.both.constEnd() || at == kept.constEnd())
+            return std::nullopt;
+        const BlockSource &b = run[*at];
+        BlockSource t{uid, b.own, e->eol[to], e->trailing[to]};
+        if (e->text[from] != e->text[to])
+            t.own = b.own.first(e->from) + e->text[to] + b.own.sliced(e->from + e->text[from].size());
+        out.append(t);
+    }
+    return out;
+}
 
 bool endsWithEol(QStringView s)
 {
@@ -144,17 +325,76 @@ bool needsBlankLine(BlockKind a, BlockKind b)
     }
 }
 
+/// A block's text with its position-dependent parse options: everything derive() reads.
+struct DeriveKey {
+    QStringView own;
+    bool frontmatter = false;
+    bool properties = false;
+};
+
+bool operator==(const DeriveKey &a, const DeriveKey &b)
+{
+    return a.frontmatter == b.frontmatter && a.properties == b.properties && a.own == b.own;
+}
+
+size_t qHash(const DeriveKey &key, size_t seed = 0)
+{
+    return qHashMulti(seed, key.own, key.frontmatter, key.properties);
+}
+
 } // namespace
+
+BlockDocument::Version::Version() = default;
+
+BlockDocument::Delta::Delta() = default;
+
+bool BlockDocument::Delta::isEmpty() const
+{
+    return !d || (d->side[0].run.isEmpty() && d->side[1].run.isEmpty() && d->side[0].edges == d->side[1].edges);
+}
+
+qsizetype BlockDocument::Delta::size() const
+{
+    if (!d)
+        return 0;
+    qsizetype n = 0;
+    for (const BlockDeltaSide &side : d->side) {
+        for (const BlockSource &b : side.only)
+            n += b.own.size() + b.eol.size() + b.trailing.size();
+    }
+    for (const BlockOwnEdit &e : d->both) {
+        n += e.text[0].size() + e.text[1].size();
+        if (!sameText(e.eol[0], e.eol[1]))
+            n += e.eol[0].size() + e.eol[1].size();
+        if (!sameText(e.trailing[0], e.trailing[1]))
+            n += e.trailing[0].size() + e.trailing[1].size();
+    }
+    if (!(d->side[0].edges == d->side[1].edges)) {
+        for (const BlockDeltaSide &side : d->side)
+            n += side.edges.bom.size() + side.edges.leading.size() + side.edges.eol.size();
+    }
+    return n;
+}
 
 BlockDocument::BlockDocument() = default;
 
-BlockDocument::BlockDocument(const QString &content)
+BlockDocument::BlockDocument(const QString &content, const BlockDocument *reuse)
 {
-    setContent(content);
+    setContent(content, reuse);
 }
 
-void BlockDocument::setContent(const QString &content)
+void BlockDocument::setContent(const QString &content, const BlockDocument *reuse)
 {
+    // The parsed blocks of `reuse` by text and options (`previous` shares its list: `reuse` may
+    // be this document; the keys point into its strings).
+    const QList<Item> previous = reuse ? reuse->m_items : QList<Item>();
+    QHash<DeriveKey, qsizetype> parsed;
+    parsed.reserve(previous.size());
+    for (qsizetype k = 0; k < previous.size(); ++k) {
+        const Item &it = previous[k];
+        parsed.insert(DeriveKey{it.own, it.frontmatterAllowed, it.propertiesAllowed}, k);
+    }
+
     m_items.clear();
     m_leading.clear();
     m_bom.clear();
@@ -209,8 +449,14 @@ void BlockDocument::setContent(const QString &content)
         m_items.append(makeItem(joinLineRange(lines, from, last + 1, false), lines[last].eol,
                                 joinLineRange(lines, last + 1, to, true)));
     }
-    for (int i = 0; i < count(); ++i)
-        derive(i);
+    for (int i = 0; i < count(); ++i) {
+        const PositionalOptions options = positionalOptions(i);
+        const auto known = parsed.constFind(DeriveKey{m_items[i].own, options.frontmatter, options.properties});
+        if (known != parsed.constEnd())
+            takeDerived(m_items[i], previous[*known]);
+        else
+            derive(i);
+    }
     recompute();
 }
 
@@ -341,17 +587,231 @@ int BlockDocument::restoreBlankBlocks(const QList<BlankBlock> &blocks)
 }
 
 // ---------------------------------------------------------------------------------------------
+// Versions and undo
+// ---------------------------------------------------------------------------------------------
+
+QList<BlockSource> BlockDocument::sourcesOf(int from, int to) const
+{
+    QList<BlockSource> out;
+    out.reserve(std::max(0, to - from));
+    for (int i = from; i < to; ++i) {
+        const Item &it = m_items[i];
+        out.append({it.entry.uid, it.own, it.eol, it.entry.trailing});
+    }
+    return out;
+}
+
+BlockEdges BlockDocument::edges() const
+{
+    return {m_bom, m_leading, m_eol, m_finalNewline};
+}
+
+void BlockDocument::setEdges(const BlockEdges &edges)
+{
+    m_bom = edges.bom;
+    m_leading = edges.leading;
+    m_eol = edges.eol;
+    m_finalNewline = edges.finalNewline;
+}
+
+BlockDocument::Version BlockDocument::version() const
+{
+    auto data = std::make_shared<BlockVersionData>();
+    data->blocks = sourcesOf(0, count());
+    data->edges = edges();
+    Version v;
+    v.d = std::move(data);
+    return v;
+}
+
+BlockDocument::Delta BlockDocument::diffFrom(const Version &older) const
+{
+    if (!older.d)
+        return {};
+    const QList<BlockSource> &old = older.d->blocks;
+    // The blocks at both ends that no edit touched share their strings with the version: the
+    // common prefix and suffix cost a pointer comparison per block.
+    const auto same = [&](qsizetype o, qsizetype n) {
+        const BlockSource &b = old[o];
+        const Item &it = m_items[n];
+        return b.uid == it.entry.uid && sameText(b.own, it.own) && sameText(b.eol, it.eol)
+               && sameText(b.trailing, it.entry.trailing);
+    };
+    const qsizetype max = std::min(old.size(), m_items.size());
+    qsizetype p = 0;
+    while (p < max && same(p, p))
+        ++p;
+    qsizetype s = 0;
+    while (s < max - p && same(old.size() - 1 - s, m_items.size() - 1 - s))
+        ++s;
+    const BlockEdges now = edges();
+    if (p + s == old.size() && p + s == m_items.size() && now == older.d->edges)
+        return {};
+    Delta delta;
+    delta.d = std::make_shared<const BlockDeltaData>(diffRuns(int(p), old.mid(p, old.size() - p - s),
+                                                              sourcesOf(int(p), count() - int(s)), int(old.size()),
+                                                              count(), older.d->edges, now));
+    return delta;
+}
+
+EditResult BlockDocument::revert(const Delta &delta, bool *ok)
+{
+    return applyDelta(delta, 1, 0, ok);
+}
+
+EditResult BlockDocument::reapply(const Delta &delta, bool *ok)
+{
+    return applyDelta(delta, 0, 1, ok);
+}
+
+EditResult BlockDocument::applyDelta(const Delta &delta, int from, int to, bool *ok)
+{
+    if (ok)
+        *ok = !delta.d; // an empty delta changes nothing
+    if (!delta.d)
+        return {};
+    const BlockDeltaData &d = *delta.d;
+    const int n = int(d.side[from].run.size());
+    if (count() != d.side[from].count || !(edges() == d.side[from].edges) || d.first < 0 || d.first + n > count())
+        return {};
+    const std::optional<QList<BlockSource>> target = convertRun(d, from, to, sourcesOf(d.first, d.first + n));
+    if (!target)
+        return {};
+    if (ok)
+        *ok = true;
+
+    const Snapshot before = snapshot();
+    QHash<quint64, int> current;
+    for (int k = d.first; k < d.first + n; ++k)
+        current.insert(m_items[k].entry.uid, k);
+    // The version's run: a block that is here keeps its parse unless its own text changes (its
+    // version goes up when its text does: a Changed row); a block only that version has is new
+    // here (an Inserted row) and is parsed.
+    QList<Item> run;
+    QList<bool> parse;
+    run.reserve(target->size());
+    parse.reserve(target->size());
+    for (const BlockSource &b : *target) {
+        const auto at = current.constFind(b.uid);
+        Item it;
+        bool ownChanged = true;
+        if (at != current.constEnd()) {
+            it = m_items[*at];
+            ownChanged = !sameText(it.own, b.own);
+            if (ownChanged || !sameText(it.eol, b.eol) || !sameText(it.entry.trailing, b.trailing))
+                ++it.version;
+        }
+        it.entry.uid = b.uid;
+        it.own = b.own;
+        it.eol = b.eol;
+        it.entry.trailing = b.trailing;
+        run.append(std::move(it));
+        parse.append(ownChanged);
+    }
+    m_items.remove(d.first, n);
+    m_items.insert(d.first, run.size(), Item());
+    for (qsizetype k = 0; k < run.size(); ++k)
+        m_items[d.first + k] = std::move(run[k]);
+    setEdges(d.side[to].edges);
+    // In order: the parse options of a block depend on the kinds of the blocks before it
+    // (recompute() then re-derives blocks whose options changed).
+    for (qsizetype k = 0; k < parse.size(); ++k) {
+        if (parse[k])
+            derive(d.first + int(k));
+    }
+    recompute();
+    EditResult r = rowChanges(before, -1, -1);
+    // Only the edges changed (a BOM, the blank lines before the first block): the text did, which
+    // a caller learns from changed rows. A document with no blocks has no row to report it with
+    // (BlockListModel::apply() makes the text of an empty page again).
+    if (r.changes.isEmpty() && !(d.side[from].edges == d.side[to].edges) && count() > 0)
+        r.changes.append({BlockChange::Type::Changed, 0, 1, -1});
+    return r;
+}
+
+std::optional<BlockDocument::Delta> BlockDocument::composed(const Delta &first, const Delta &second, bool bounded) const
+{
+    if (!first.d)
+        return second;
+    if (!second.d)
+        return first;
+    const BlockDeltaData &a = *first.d;  // A -> B
+    const BlockDeltaData &b = *second.d; // B -> C (this document)
+    if (a.side[1].count != b.side[0].count || !(a.side[1].edges == b.side[0].edges) || count() != b.side[1].count
+        || !(edges() == b.side[1].edges))
+        return std::nullopt;
+    // Both runs in B: one window of B over them (with the untouched blocks between them).
+    const int end1 = a.first + int(a.side[1].run.size());
+    const int end2 = b.first + int(b.side[0].run.size());
+    if (bounded && std::max(a.first, b.first) - std::min(end1, end2) > MaxComposeGap)
+        return std::nullopt;
+    const int lo = std::min(a.first, b.first);
+    const int hiB = std::max(end1, end2);
+    const int hiC = hiB - int(b.side[0].run.size()) + int(b.side[1].run.size());
+    if (lo < 0 || hiB > b.side[0].count || hiC > count() || (bounded && std::max(hiB, hiC) - lo > MaxComposeRun))
+        return std::nullopt;
+    // The window in C, back to B (the second run turned back), back to A (the first one).
+    const QList<BlockSource> windowC = sourcesOf(lo, hiC);
+    const qsizetype at2 = b.first - lo;
+    const qsizetype size2 = b.side[1].run.size();
+    const std::optional<QList<BlockSource>> run2 = convertRun(b, 1, 0, windowC.mid(at2, size2));
+    if (!run2)
+        return std::nullopt;
+    const QList<BlockSource> windowB = windowC.first(at2) + *run2 + windowC.sliced(at2 + size2);
+    const qsizetype at1 = a.first - lo;
+    const qsizetype size1 = a.side[1].run.size();
+    if (at1 + size1 > windowB.size())
+        return std::nullopt;
+    const std::optional<QList<BlockSource>> run1 = convertRun(a, 1, 0, windowB.mid(at1, size1));
+    if (!run1)
+        return std::nullopt;
+    const QList<BlockSource> windowA = windowB.first(at1) + *run1 + windowB.sliced(at1 + size1);
+    Delta out;
+    out.d = std::make_shared<const BlockDeltaData>(
+            diffRuns(lo, windowA, windowC, a.side[0].count, b.side[1].count, a.side[0].edges, b.side[1].edges));
+    return out;
+}
+
+void BlockDocument::adoptUids(const QList<std::pair<int, quint64>> &uids)
+{
+    if (uids.isEmpty())
+        return;
+    for (const auto &[i, uid] : uids) {
+        if (i >= 0 && i < count() && uid)
+            m_items[i].entry.uid = uid;
+    }
+#ifndef QT_NO_DEBUG
+    QSet<quint64> seen;
+    for (const Item &it : std::as_const(m_items)) {
+        Q_ASSERT_X(!seen.contains(it.entry.uid), "BlockDocument::adoptUids", "a uid used twice");
+        seen.insert(it.entry.uid);
+    }
+#endif
+    recompute(); // the parents' uids
+}
+
+// ---------------------------------------------------------------------------------------------
 // Items
 // ---------------------------------------------------------------------------------------------
 
 BlockDocument::Item BlockDocument::makeItem(const QString &own, const QString &eol, const QString &trailing)
 {
     Item it;
-    it.entry.uid = m_nextUid++;
+    it.entry.uid = nextUid();
     it.own = own;
     it.eol = eol;
     it.entry.trailing = trailing;
     return it;
+}
+
+BlockDocument::PositionalOptions BlockDocument::positionalOptions(int i) const
+{
+    PositionalOptions options;
+    options.frontmatter = i == 0 && m_leading.isEmpty();
+    options.properties = true; // only frontmatter blocks before this one (checked backwards: O(1) in practice)
+    for (int j = i - 1; j >= 0 && options.properties; --j)
+        options.properties = m_items[j].entry.kind == BlockKind::Frontmatter;
+    return options;
 }
 
 void BlockDocument::derive(int i)
@@ -359,12 +819,12 @@ void BlockDocument::derive(int i)
     Item &it = m_items[i];
     BlockEntry &e = it.entry;
     // A block is parsed on its own; frontmatter and page properties are only possible at the
-    // top of the document.
+    // top of the document. Everything set here depends only on `own` and these two options
+    // (takeDerived() copies it).
+    const PositionalOptions positional = positionalOptions(i);
     StructureOptions options;
-    options.frontmatter = i == 0 && m_leading.isEmpty();
-    options.pageProperties = true; // only frontmatter blocks before this one (checked backwards: O(1) in practice)
-    for (int j = i - 1; j >= 0 && options.pageProperties; --j)
-        options.pageProperties = m_items[j].entry.kind == BlockKind::Frontmatter;
+    options.frontmatter = positional.frontmatter;
+    options.pageProperties = positional.properties;
     it.frontmatterAllowed = options.frontmatter;
     it.propertiesAllowed = options.pageProperties;
     const ParsedNote note = parseNoteWith(QString(), it.own, VaultConfig(), options);
@@ -408,6 +868,23 @@ void BlockDocument::derive(int i)
     }
     it.contIndent = cont.isEmpty() ? defaultContIndent(e.prefix) : cont;
     e.body = body.join(u'\n');
+}
+
+/// What derive() sets, from a block with the same text and options (keep the two in step).
+void BlockDocument::takeDerived(Item &to, const Item &from)
+{
+    to.entry.kind = from.entry.kind;
+    to.entry.headingLevel = from.entry.headingLevel;
+    to.entry.lang = from.entry.lang;
+    to.entry.taskStatus = from.entry.taskStatus;
+    to.entry.blockId = from.entry.blockId;
+    to.entry.prefix = from.entry.prefix;
+    to.entry.body = from.entry.body;
+    to.markerCol = from.markerCol;
+    to.contIndent = from.contIndent;
+    to.frontmatterAllowed = from.frontmatterAllowed;
+    to.propertiesAllowed = from.propertiesAllowed;
+    to.displayMathOpen = from.displayMathOpen;
 }
 
 void BlockDocument::setOwn(int i, const QString &own)
@@ -571,6 +1048,11 @@ EditResult BlockDocument::finish(const Snapshot &before, int focus, int cursor)
     protectLeadingRule();
     separateDisplayMath();
     recompute();
+    return rowChanges(before, focus, cursor);
+}
+
+EditResult BlockDocument::rowChanges(const Snapshot &before, int focus, int cursor) const
+{
     EditResult r;
     r.focus = focus;
     r.cursor = cursor;

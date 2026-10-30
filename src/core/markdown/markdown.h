@@ -92,7 +92,10 @@
 //                  focus, cursor}; subtreeRange, parent, hasChildren, indexAtLine. Frontmatter /
 //                  page-property blocks at the top are pinned (never moved, nothing goes above).
 //                  Ranges (a block selection): rangeTops, removeRange, indentRange (all or
-//                  nothing), outdentRange, moveRangeUp / moveRangeDown
+//                  nothing), outdentRange, moveRangeUp / moveRangeDown. Undo: version(),
+//                  diffFrom(version) -> Delta (the changed run of blocks), revert / reapply
+//                  (exact, row changes), composed(first, second), adoptUids; uids are unique in
+//                  the process
 //   blockclipboard.h  what a block selection copies: topRows(doc, rows), blocksMarkdown(doc,
 //                  tops) (exact blocks re-based to column 0, LF, no BOM, no frontmatter),
 //                  blocksPlainText(doc, tops, {blockText}) ("• ", ☐/☑, no markup),

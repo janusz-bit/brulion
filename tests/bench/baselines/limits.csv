@@ -44,3 +44,5 @@ scaling,bench_index,openFromDisk,# notes loader warm cache 3 workers,1.5,small,w
 scaling,bench_index,cacheEncode,# notes,1.5,small,wave 5 (L2)
 scaling,bench_index,cacheDecode,# notes,1.5,small,wave 5 (L2)
 max,bench_index,memory,10000 notes + search index,233,full small,MiB of heap; L8 (wave 5): 545 -> 221.6 measured x 1.05
+scaling,bench_markdown,blockDocOps,# blocks undo+redo,1.3,full,L5 undo/redo apply a block delta (linear in blocks; re-reading the page was too)
+scaling,bench_markdown,blockDocOps,# blocks undo+redo,1.5,small,L5

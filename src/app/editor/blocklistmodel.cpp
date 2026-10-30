@@ -420,21 +420,24 @@ void BlockListModel::resetContent(const QString &content)
     Q_EMIT countChanged();
 }
 
-QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content,
-                                                       const QList<markdown::BlankBlock> &blankBlocks)
+QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content)
 {
+    // Blocks are matched by kind, text and depth (a block whose kind changed with the same text —
+    // `key:: value` lines moved to the top become page properties — is another one).
+    const auto sourceOf = [](const markdown::BlockEntry &e) {
+        return QString::number(int(e.kind)) + u'|' + e.prefix + e.body + u'|' + QString::number(e.depth);
+    };
     QStringList oldSources;
-    QList<quint64> oldUids = m_rows;
+    const QList<quint64> oldUids = m_rows;
     oldSources.reserve(m_doc.count());
     for (int i = 0; i < m_doc.count(); ++i)
-        oldSources.append(m_doc.at(i).prefix + m_doc.at(i).body + QString::number(m_doc.at(i).depth));
+        oldSources.append(sourceOf(m_doc.at(i)));
 
-    markdown::BlockDocument fresh(content);
-    fresh.restoreBlankBlocks(blankBlocks);
+    markdown::BlockDocument fresh(content, &m_doc); // unchanged blocks keep their parse
     QStringList newSources;
     newSources.reserve(fresh.count());
     for (int i = 0; i < fresh.count(); ++i)
-        newSources.append(fresh.at(i).prefix + fresh.at(i).body + QString::number(fresh.at(i).depth));
+        newSources.append(sourceOf(fresh.at(i)));
     QList<std::pair<int, int>> pairs = matchBlocks(oldSources, newSources);
     // A leading frontmatter block whose text changed keeps its row (see the file comment): the
     // old and the new block at the same index (0 or 1: YAML, then `key::` lines) are both left
@@ -464,14 +467,20 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content,
         changedInPlace.insert(k);
     }
 
-    QHash<quint64, quint64> mapping;
+    // The kept blocks are the same blocks: they keep their uids (rows, cached state, folds, zoom,
+    // editing and selection stay with them).
+    QList<std::pair<int, quint64>> adopted;
+    adopted.reserve(pairs.size());
     QSet<int> keptOld;
     QSet<int> keptNew;
+    QHash<quint64, quint64> mapping;
     for (const auto &[o, n] : pairs) {
         keptOld.insert(o);
         keptNew.insert(n);
-        mapping.insert(oldUids[o], fresh.at(n).uid);
+        adopted.append({n, oldUids[o]});
+        mapping.insert(oldUids[o], oldUids[o]);
     }
+    fresh.adoptUids(adopted);
 
     // Remove rows of old blocks that are gone (from the end, so indices stay valid).
     const int oldCount = int(m_rows.size());
@@ -491,52 +500,23 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content,
         r = first - 1;
     }
 
-    // Kept rows take the new uids (same blocks, same sources) with their cached state.
-    QHash<quint64, RowState> state;
-    for (int k = 0; k < m_rows.size(); ++k) {
-        const quint64 newUid = mapping.value(m_rows[k]);
-        auto it = m_state.find(m_rows[k]);
-        if (it != m_state.end())
-            state.insert(newUid, *it);
-        m_rows[k] = newUid;
-    }
-    for (RowState &st : state)
+    for (RowState &st : m_state)
         st.calcTextValid = false; // the kept blocks' own text may differ in indentation
-    for (const int k : std::as_const(changedInPlace)) {
-        // Another text: fresh content caches (the structural state stays — refresh() compares it).
-        auto it = state.find(fresh.at(k).uid);
-        if (it != state.end()) {
-            it->shapeValid = false;
-            it->htmlValid = false;
-            it->embedsValid = false;
-            it->transclusionsValid = false;
-            it->propertiesValid = false;
-            it->resultsValid = false;
-        }
-    }
-    m_state = state;
+    for (const int k : std::as_const(changedInPlace))
+        invalidateContent(fresh.at(k).uid); // another text (refresh() compares the structural state)
     m_doc = std::move(fresh);
     m_text = content;
     m_textValid = true;
     calcContentChanged();
     rebuildIndex();
 
-    // View state follows the kept blocks.
-    const auto remap = [&](quint64 uid) { return mapping.value(uid, 0); };
-    m_zoomUid = remap(m_zoomUid);
-    QSet<quint64> collapsed;
-    for (const quint64 uid : std::as_const(m_collapsed)) {
-        if (const quint64 n = remap(uid))
-            collapsed.insert(n);
-    }
-    m_collapsed = collapsed;
-    m_editingUid = remap(m_editingUid);
-    QSet<quint64> selected;
-    for (const quint64 uid : std::as_const(m_selectedUids)) {
-        if (const quint64 n = remap(uid))
-            selected.insert(n);
-    }
-    m_selectedUids = selected;
+    // View state of blocks that are gone.
+    if (m_zoomUid && !m_docIndex.contains(m_zoomUid))
+        m_zoomUid = 0;
+    m_collapsed.removeIf([this](quint64 uid) { return !m_docIndex.contains(uid); });
+    if (m_editingUid && !m_docIndex.contains(m_editingUid))
+        m_editingUid = 0;
+    m_selectedUids.removeIf([this](quint64 uid) { return !m_docIndex.contains(uid); });
 
     // Insert rows for new blocks.
     const int newCount = m_doc.count();
@@ -562,7 +542,7 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content,
         Q_EMIT dataChanged(index(k), index(k));
         // For the caller the block is another one (its text changed): editing it, a selection
         // or a tracked handle on it end as before — an inline editor would hold the old text.
-        mapping.remove(oldUids[k]);
+        mapping.remove(m_rows[k]);
     }
     return mapping;
 }
@@ -575,8 +555,14 @@ markdown::EditResult BlockListModel::apply(const std::function<markdown::EditRes
     if (m_hasCalcConsumers && !m_calcFlagsValid)
         analyseCalc();
     markdown::EditResult r = op(m_doc);
-    if (!r.changed())
+    if (!r.changed()) {
+        // No row changed, yet a page without blocks may have another text: undo / redo of a step
+        // that changed only its edges (a BOM, blank lines) — there is no row to report it. Its
+        // text costs nothing to make again.
+        if (m_doc.isEmpty())
+            m_textValid = false;
         return r;
+    }
     m_textValid = false;
     m_pageCalc.reset();
     rebuildIndex();
@@ -816,6 +802,16 @@ void BlockListModel::refresh(bool contentChanged)
         // Results stay while the block and, when they read calc variables, everything its
         // calculations see are unchanged.
         const BlockShape &shape = cachedShape(row);
+        // A block that is no calc block or table any more (its text changed in place: an edit,
+        // undo) has no results.
+        if (shape.view != BlockView::Calc && !st.calcResults.isEmpty()) {
+            st.calcResults.clear();
+            calcRows.append(row);
+        }
+        if (shape.view != BlockView::Table && !st.tableData.isEmpty()) {
+            st.tableData.clear();
+            tableRows.append(row);
+        }
         if (shape.view == BlockView::Calc || shape.view == BlockView::Table) {
             if (!st.resultsValid || (st.resultsUseScope && st.resultsEpoch != m_calcEpoch)
                 || (shape.view == BlockView::Table && st.resultsUseRefs)) {

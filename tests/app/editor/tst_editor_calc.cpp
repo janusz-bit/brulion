@@ -557,6 +557,27 @@ private Q_SLOTS:
 
     // --- random edits against a fresh model --------------------------------------------------------
 
+    void resultsGoWithTheView()
+    {
+        // A block that stops being a calc block or a table in place (undo keeps the block and its
+        // row) has no results left.
+        Fixture f(u"Akapit źdźbła\n\n- cena:: 12\n"_s);
+        f.page.setEditText(0, u"```calc\nx = cena * 2\n```"_s);
+        QCOMPARE(f.view(0), u"calc"_s);
+        QVERIFY(!f.role(0, BlockListModel::CalcResultsRole).toList().isEmpty());
+        f.page.undo();
+        QCOMPARE(f.view(0), u"text"_s);
+        QCOMPARE(f.role(0, BlockListModel::CalcResultsRole).toList(), QVariantList());
+        f.page.setEditText(0, u"| Rzecz | Kwota |\n| --- | ---: |\n| żółw | =cena * 3 |"_s);
+        QCOMPARE(f.view(0), u"table"_s);
+        QVERIFY(!f.role(0, BlockListModel::TableDataRole).toMap().isEmpty());
+        f.page.undo();
+        QCOMPARE(f.view(0), u"text"_s);
+        QCOMPARE(f.role(0, BlockListModel::TableDataRole).toMap(), QVariantMap());
+        QString why;
+        QVERIFY2(f.matchesFreshModel(&why), qPrintable(why));
+    }
+
     void randomEditsMatchAFreshModel_data()
     {
         QTest::addColumn<quint32>("seed");

@@ -5,12 +5,18 @@ porównany z wydaniem **v0.1.1** (`f61a2a4`) i z **d1141c0** (ostatni commit prz
 optymalizacjami). Wszystkie trzy wersje zmierzono w tych samych warunkach i tymi samymi
 benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsku, niżej). Uzupełnione
 2026-10-29 o falę 5: pamięć indeksu, indeksowanie na kilku rdzeniach i gotowy indeks zapisany na
-urządzeniu (porównanie z `82d0357`).
+urządzeniu (porównanie z `82d0357`), a 2026-10-30 o szybsze cofanie (L5, porównanie z `b3d9a3d`).
 
 ## Podsumowanie dla użytkowników
 
 ### Co się poprawiło
 
+* **Cofanie i ponawianie na długich stronach** (2026-10-30). Ctrl+Z i Ctrl+Shift+Z nie wczytują
+  już całej strony od nowa, tylko zmieniają bloki, których dotyczy krok. Na stronie z 5000 bloków
+  na komputerze cofnięcie widać po ok. 13 ms zamiast ok. 33 ms — tyle co po Enterze — a sama jego
+  obsługa trwa 3–4 ms zamiast ok. 25 ms. Zwinięte bloki, przybliżenie i otwarty edytor zostają po
+  cofnięciu na miejscu, także gdy cofnięcie zmienia ich tekst. Przy okazji pisanie na takiej
+  stronie jest odrobinę szybsze (obsługa znaku 4,1–4,2 zamiast 4,7–5,0 ms).
 * **Duże notatniki otwierają się dwa razy szybciej i zajmują o jedną trzecią mniej pamięci**
   (2026-10-29). Notatki indeksują się na kilku rdzeniach naraz, a gotowy indeks zostaje zapisany
   na urządzeniu, więc przy kolejnym otwarciu Brulion analizuje od nowa tylko notatki zmienione
@@ -88,8 +94,9 @@ podręcznej i offline), powrót do strony z 1000 notatek rysuje pierwszą klatk�
   zapisane na dysku).
 * **Po każdym zapisie** listy zadań, kalendarz, przypomnienia i bloki zapytań przeliczają się od
   nowa: przy 10 000 notatkach to ok. 0,13 s pracy na komputerze i ok. 1 s na telefonie.
-* **Cofanie (Ctrl+Z) na bardzo długiej stronie** trwa na telefonie ok. 0,2 s; Kalendarz
-  i Agenda otwierają się na telefonie przy dużym notatniku po 1–1,3 s.
+* **Kalendarz i Agenda** otwierają się na telefonie przy dużym notatniku po 1–1,3 s.
+  (Cofanie na bardzo długiej stronie trwało na telefonie ok. 0,2 s; od 2026-10-30 kosztuje tyle co
+  Enter — na komputerze zmierzone, na telefonie jeszcze nie.)
 * **Pierwszy start na komputerze z małym notatnikiem** (świeży profil) pokazuje treść ok.
   0,09 s później niż d1141c0 (okno za to 0,1 s wcześniej); przy kolejnych startach treść jest
   tak szybko jak wcześniej (szczegóły niżej).
@@ -491,6 +498,66 @@ no throttling, times from the navigation): index of 3000 notes complete at 4.99 
 load (cold, in slices on the GUI thread), the cache saved at 10.1 s, and on the reload complete at
 2.73 s with 3000 of 3000 notes from the cache (−45 %).
 
+### L5: delta undo/redo (2026-10-30)
+
+An undo step was a delta of the whole page text, and undo / redo turned the page into the other
+version by reading it again: `BlockListModel::replaceContent()` parsed the page (`BlockDocument`,
+every block's `parseNoteWith()`), matched the old and new blocks (LCS) and removed and inserted the
+rows of every changed block. Now a step is a `BlockDocument::Delta` — the run of blocks the command
+changed (from the first to the last changed block), a block in both versions with only its changed
+range of text — and undo / redo apply it as a document operation (`revert` / `reapply` through
+`BlockListModel::apply()`): only the changed blocks are parsed, every block keeps its uid and row
+(`dataChanged` for a changed one). Block uids are unique in the process, and `replaceContent()`
+gives the blocks it keeps their old uids, so whole-text edits (Markdown pasted, a template, the note
+mode, source mode) are small steps too. A command takes `version()` before it and `diffFrom()` after
+it instead of serialising the page and comparing two strings; typing merges `composed()` the
+keystroke's delta with the step (bounded: a step whose run spans more than 256 blocks — the first
+keystroke at the top of a page also renumbers a loose ordered list at its end — stays a step of its
+own, or every later keystroke would compose thousands of blocks).
+
+**Core** (laptop, Release, P-cores, `-q 3`, 5 repetitions; `bench_markdown:blockDocOps` on the
+5000-block outline, from the branch's perf-check run; the rows before L5 measured alternately with
+`sweep2` at `b3d9a3d` in the same session):
+
+| operation | 5000 blocks | 500 blocks |
+|---|---:|---:|
+| `undo+redo`: an Enter's delta reverted and reapplied (one undo + one redo) | 1.59 ms | 0.111 ms (k 1.16) |
+| `re-read`: the page read again, unchanged blocks lending their parse — the core of the old undo, which had no parse to borrow, and matched the blocks and moved the rows on top | 3.44 ms per step | 0.340 ms |
+| `version+diff`: a `setBody` with the step's bookkeeping (`version()` + `diffFrom()`) | 1.11 ms (`setBody` alone 1.00 ms) | 0.093 ms |
+| `keystroke`, `setBody`, `split+merge`, … against `b3d9a3d` | within noise (+1 to +9 %, no row outside max(10 %, noise)) | |
+
+**App** (`tests/bench/app`, laptop, Release, Xvfb; the `typing` scenario on the 5000-block pages of
+the bench notebook; 6 runs per build, base and branch interleaved; medians, min–max in brackets):
+
+| `typing-outline5000` | before | after | change |
+|---|---:|---:|---:|
+| undo (Ctrl+Z) → frame | 32.1 ms [31.7–32.2] | 13.2 ms [12.6–13.8] | −59 % |
+| … its handling | 24.7 ms | 3.6 ms | −85 % |
+| redo (Ctrl+Shift+Z) → frame | 34.6 ms [34.0–35.4] | 13.9 ms [13.5–14.1] | −60 % |
+| … its handling | 23.7 ms | 3.1 ms | −87 % |
+| Enter → frame | 14.6 ms | 14.7 ms | 0 |
+| keystroke handling, median / p95 | 4.7 / 9.4 ms | 4.1 / 8.7 ms | −13 / −7 % |
+| keystroke → frame, p95 | 15.2 ms | 14.3 ms | −6 % |
+| anonymous memory after the scenario | 408 MB | 402 MB | −6 MB |
+
+`typing-document5000` (5000 paragraphs, document mode): undo → frame 33.4 → 12.7 ms (handling
+26.2 → 3.4 ms), redo 37.0 → 13.2 ms (26.3 → 3.1 ms), Enter 14.3 → 13.8 ms, keystroke handling
+5.0 → 4.2 ms (p95 9.3 → 8.5 ms). The autosave after a burst of typing is unchanged within its noise
+(the GUI time it blocks: outline 149 → 139 ms, document 124 → 130 ms, the ranges overlapping).
+Undo and redo now cost what Enter costs (the budget below); before the bound on typing merges the
+first keystroke on the document page made every later one 1.1 ms slower (above).
+
+What the step holds: `undoStoresChangesNotPages` (3000 blocks, 60 Enter + typing steps: history <
+a quarter of the page) and `pasteIsASmallUndoStep` (3 pasted blocks on a 3000-block page: < 1000
+characters) guard it; one character typed into a 100 000-character code block is a step of a few
+characters (`deltaHoldsChangesOnly`). The Raspberry Pi was not measured (no builds on it in this
+sweep; L5b in "Next steps"); its undo was 214 ms before, five times its Enter (38 ms), and the
+work an undo does on the laptop fell by 85 %.
+
+`tst_editor_controller` `largePageTouchesOneRow` guards the ratio without timing a machine: the
+median of five undos (and five redos) of an Enter on a 5000-block page must stay ≤ 3 × the median
+Enter + 2 ms (Debug build: Enter 2.8 ms, undo 2.0 ms, redo 2.0 ms).
+
 ### Budgets
 
 Desktop = the laptop above, phone = Pi 4 (floor) and the emulator (optimistic), web = headless
@@ -502,7 +569,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 0.96 s, 0.83 s from the index cache (wave 5; was 1.89 s) | ❌ Pi 15 s before wave 5, not measured since (L1b) | ✅ 1k cold 1.3 s, warm 1.1 s (×4 CPU 5.8 / 4.7 s; was 1.1 / 5.2 s in the same session) |
 | GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b, L18) | – |
 | keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page; ⚠️ 5000-block outline p95 23 ms | ✅ small page; ⚠️ outline p95 42 ms | – |
-| Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 25 / 46 ms | ✅ Enter 38 ms; ❌ undo 214 ms (L5) | – |
+| Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 15 / 13 ms (L5; base in the same session 15 / 32 ms) | ✅ Enter 38 ms; undo 214 ms before L5, not measured since (L5b) | – |
 | autosave stall | < 50 ms desktop, < 100 ms phone | ✅ small page 41 ms; ❌ 500 KB page 88 ms | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
 | open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |
 | Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s (L3, L10) | – |
@@ -519,9 +586,9 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | # | change | expected |
 |---|---|---|
 | L1b | cheaper merge of prepared notes on the GUI thread: link lookup keys (`cleanTarget`, NFC, lower case) and the name table's keys computed by the loader's workers; fewer redraws while loading (the browser's cold load: +11–16 % to "ready", 30 %–2.5× more draws since journals come first); measure the Pi and the Android emulator (L1/L2 of wave 5 not measured there yet) | laptop 10k index ready 0.96 / 0.83 s → 0.6 s; Pi ≤ 6 s cold, ≤ 3 s warm |
+| L5b | measure undo / redo on the Pi (`bench-matrix.sh` typing on the 5000-block outline, Release) and record the `blockDocOps` 5000 blocks undo+redo baseline in `pi.csv` (`perf-check.sh -u` in a quiet window; until then the Pi's check skips the row) | Pi undo 214 ms → < 50 ms |
 | L3 | incremental derived lists (Tasks, Calendar, reminders, query blocks) | after a save 131 ms → < 30 ms (Pi 0.95 s → < 0.2 s) |
 | L4 | `BlockDocument` fast path for body-only edits | keystroke core 1.3 ms → < 0.3 ms |
-| L5 | delta undo/redo | Pi undo 214 ms → < 50 ms |
 | L7 | cheaper page opening (header summary and linked references from the index) | Pi open 653 ms → ~400 ms |
 | L9 | native file pickers instead of QtQuick.Dialogs (its per-style QML pulls in every style) | APK −15 MB, wasm −5 MB |
 | L10 | lazy cold views and dialogs, `BIcon` without a `Loader` | Pi demo first content −0.3 s |
@@ -530,8 +597,9 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 
 Done in wave 5 (2026-10-29, above): L1 (parse on worker threads), L2 (the index cache), L8 (the
-memory diet). Also open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip
-only) and the ~90 ms later content on a desktop first start (above).
+memory diet); on 2026-10-30 L5 (delta undo/redo, above; the Pi still to be measured: L5b). Also
+open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip only) and
+the ~90 ms later content on a desktop first start (above).
 
 ### How to run the benchmarks
 
@@ -650,6 +718,7 @@ sync with the arrays in the script):
 | index memory | `bench_index:memory` 10000 notes + search index | ≈ 10 B of heap per Markdown byte since wave 5 (L8) |
 | after a save | `bench_reminders:afterEdit` mixed vault 10000 notes, all consumers | every save's fan-out (L3) |
 | keystroke | `bench_markdown:blockDocOps` 5000 blocks keystroke | typing on long pages (L4) |
+| undo / redo | `bench_markdown:blockDocOps` 5000 blocks undo+redo | an undo step applied as a delta (L5) |
 | UI state store | `bench_vault:localStoreFlush` 10000 synced files | N9 |
 | sync | `bench_sync:syncNoChanges` 10000 files (Pi: 5000) | L12 |
 | open vault, threads | `bench_index:openFromDisk` 10000 notes loader 4 workers (Pi: 3) | L1 (wave 5) |
@@ -660,10 +729,11 @@ Scaling limits (`limits.csv`): `foldKey` / `foldKeyWithMap` polish k ≤ 1.2 (N1
 k ≤ 1.3 (N6), `unlinkedLongLine` k ≤ 1.3 (N6), `htmlToMarkdown` flat and nested lists k ≤ 1.3
 (N10), and from wave 4 `planRelocation` folder rename and page rename, `tagPageOpen` after a save,
 `selectAllCopy` Markdown and plain text, `clipboardHtml` k ≤ 1.3 (measured k 0.98–1.10), from wave
-5 `openFromDisk` loader 4 workers and loader warm cache 4 workers, `cacheEncode`, `cacheDecode`
-k ≤ 1.3 — 1.5 for all of them in the Pi's small profile (3 workers); index heap at 10 000 notes
+5 `openFromDisk` loader 4 workers and loader warm cache 4 workers, `cacheEncode`, `cacheDecode`, from
+L5 `blockDocOps` undo+redo (measured k 1.15) k ≤ 1.3 — 1.5 for all of them in the Pi's small
+profile (3 workers); index heap at 10 000 notes
 ≤ 233 MiB (wave 5: 220.6 MiB measured; it was ≤ 560 MiB before). The Pi baseline has no loader
-rows yet (record them with `-u` in a quiet window).
+rows and no undo+redo row yet (record them with `-u` in a quiet window; L1b, L5b).
 
 App-level guards (startup, typing, open-page, views, idle) are not automated: run
 `bench-matrix.sh` before a release and compare with the tables above (same rule: medians of 5

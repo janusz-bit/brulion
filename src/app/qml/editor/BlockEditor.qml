@@ -966,8 +966,9 @@ FocusScope {
             later(() => editor.ensureEditVisible())
     }
 
-    /// Edit cell (r, c) of the table in `row` (the cell's toolbar after an undo or redo: a table
-    /// whose text changed is a new delegate, so it is looked up again).
+    /// Edit cell (r, c) of the table in `row` (the cell's toolbar after an undo or redo, which
+    /// closed the cell first: the table keeps its delegate, the cell opens again with the text the
+    /// step left in it).
     function editTableCell(row, r, c) {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return

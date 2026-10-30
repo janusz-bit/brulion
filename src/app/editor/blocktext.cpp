@@ -1397,32 +1397,7 @@ TextDelta TextDelta::between(const QString &before, const QString &after)
     d.from = p;
     d.removed = before.mid(p, before.size() - p - s);
     d.inserted = after.mid(p, after.size() - p - s);
-    d.beforeSize = before.size();
-    d.afterSize = after.size();
     return d;
-}
-
-std::optional<TextDelta> TextDelta::compose(const TextDelta &first, const TextDelta &second, const QString &middle)
-{
-    const std::optional<QString> a = first.revert(middle);
-    const std::optional<QString> c = second.apply(middle);
-    if (!a || !c)
-        return std::nullopt;
-    return between(*a, *c);
-}
-
-std::optional<QString> TextDelta::apply(const QString &before) const
-{
-    if (before.size() != beforeSize || QStringView(before).sliced(from, removed.size()) != removed)
-        return std::nullopt;
-    return before.left(from) + inserted + before.mid(from + removed.size());
-}
-
-std::optional<QString> TextDelta::revert(const QString &after) const
-{
-    if (after.size() != afterSize || QStringView(after).sliced(from, inserted.size()) != inserted)
-        return std::nullopt;
-    return after.left(from) + removed + after.mid(from + inserted.size());
 }
 
 } // namespace brulion::editor

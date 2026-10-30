@@ -40,14 +40,29 @@ namespace {
 const QString Page = u"Notatki/Strona.md"_s;
 const QString Now = u"2026-10-15 10:00"_s;
 
-/// A controller on `content` (with a model tester watching every signal).
+/// A controller on `content` (with a model tester watching every signal, unless `NoModelTester`).
 struct Fixture {
+    /// The model tester checks the whole model after every signal: on pages of thousands of
+    /// blocks it takes most of the time (the small pages of the other tests check the signals).
+    struct NoModelTester { };
+
     FakeEditorHost host;
     PageController page;
     std::unique_ptr<QAbstractItemModelTester> tester;
 
     explicit Fixture(const QString &content, int saveDelay = 0, const QString &path = Page,
                      const QStringList &others = {})
+        : Fixture(content, saveDelay, path, others, NoModelTester{})
+    {
+        tester = std::make_unique<QAbstractItemModelTester>(page.blocks(),
+                                                            QAbstractItemModelTester::FailureReportingMode::QtTest);
+    }
+
+    Fixture(const QString &content, int saveDelay, NoModelTester)
+        : Fixture(content, saveDelay, Page, {}, NoModelTester{})
+    { }
+
+    Fixture(const QString &content, int saveDelay, const QString &path, const QStringList &others, NoModelTester)
     {
         host.setFile(path, content);
         host.setFile(u"Inna.md"_s, u"- Blok z innej strony #inne ^inny1\n- Drugi blok\n"_s);
@@ -57,7 +72,6 @@ struct Fixture {
         page.setSaveDelay(saveDelay);
         page.setHost(&host);
         page.setPath(path);
-        tester = std::make_unique<QAbstractItemModelTester>(page.blocks(), QAbstractItemModelTester::FailureReportingMode::QtTest);
     }
 
     BlockListModel *model() const { return page.blocks(); }
@@ -791,6 +805,210 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             f.page.undo();
         QCOMPARE(f.text(), content);
         verifyReload(f);
+    }
+
+    void undoKeepsChangedRowsInPlace()
+    {
+        // Undo and redo change the row of a block they change in place — the same block, its
+        // delegate and fold stay: dataChanged for it, no removal and insertion.
+        const QString content = u"- a\n- [ ] rodzic żółw\n\t- dziecko\n- c\n"_s;
+        Fixture f(content);
+        const QVariant first = f.role(0, "uid");
+        f.page.startEditing(0, 1);
+        f.page.setEditText(0, u"aąę"_s, 3);
+        QSignalSpy removed(f.model(), &QAbstractItemModel::rowsRemoved);
+        QSignalSpy inserted(f.model(), &QAbstractItemModel::rowsInserted);
+        QSignalSpy changed(f.model(), &QAbstractItemModel::dataChanged);
+        const auto onlyRow = [&](int row) {
+            QVERIFY(!changed.isEmpty());
+            for (const QList<QVariant> &args : std::as_const(changed)) {
+                QCOMPARE(args.at(0).toModelIndex().row(), row);
+                QCOMPARE(args.at(1).toModelIndex().row(), row);
+            }
+            QCOMPARE(removed.size(), 0);
+            QCOMPARE(inserted.size(), 0);
+            changed.clear();
+        };
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QCOMPARE(f.role(0, "uid"), first);
+        onlyRow(0);
+        f.page.redo();
+        QCOMPARE(f.text(), u"- aąę\n- [ ] rodzic żółw\n\t- dziecko\n- c\n"_s);
+        QCOMPARE(f.role(0, "uid"), first);
+        onlyRow(0);
+        f.page.undo();
+
+        // A folded task completed and the completion undone and redone: it stays folded.
+        f.page.stopEditing();
+        f.page.setFolded(1, true);
+        const QVariantList folds = f.page.foldState();
+        QCOMPARE(folds, QVariantList{1});
+        const QVariant parent = f.role(1, "uid");
+        f.page.toggleTask(1);
+        QVERIFY(f.text().startsWith(u"- a\n- [x] rodzic żółw ✅"_s));
+        QSignalSpy foldSignals(&f.page, &PageController::foldStateChanged);
+        for (int round = 0; round < 2; ++round) {
+            f.page.undo();
+            QCOMPARE(f.text(), content);
+            QCOMPARE(f.page.foldState(), folds);
+            QVERIFY(f.role(1, "collapsed").toBool());
+            QCOMPARE(f.role(1, "uid"), parent);
+            f.page.redo();
+            QVERIFY(f.role(1, "collapsed").toBool());
+            QCOMPARE(f.role(1, "uid"), parent);
+        }
+        QCOMPARE(foldSignals.size(), 0); // the folded lines stayed: nothing new to store
+        QCOMPARE(removed.size(), 0);
+        QCOMPARE(inserted.size(), 0);
+    }
+
+    void undoRedoRandomCommands_data()
+    {
+        QTest::addColumn<quint32>("seed");
+        QTest::newRow("1") << 1u;
+        QTest::newRow("7") << 7u;
+        QTest::newRow("2026") << 2026u;
+    }
+
+    void undoRedoRandomCommands()
+    {
+        // Random commands (typing, Enter, Backspace, Tab, moves, tasks, deletions, Markdown pasted,
+        // the note mode, a deleted selection): undone all and redone all, the page is each
+        // version again and the rows a view knows match the model.
+        QFETCH(quint32, seed);
+        Fixture f(u"# Zakupy\n\n- [ ] Kupić żółty ser 📅 2026-10-30\n- [ ] Podlać kwiaty 🔁 co tydzień\n"
+                  u"\t- notatka ąę\n- Zażółć gęślą jaźń 😀\n\nAkapit końcowy\n"_s);
+        const ViewMirror view(f.model());
+        const auto rnd = [&](quint32 n) {
+            seed = (seed * 1103515245u + 12345u) % 2147483648u;
+            return n ? int(seed % n) : 0;
+        };
+        QStringList texts{f.text()};
+        QString token = f.page.undoToken();
+        for (int step = 0; step < 40; ++step) {
+            const int n = f.count();
+            const int row = rnd(quint32(n));
+            switch (n ? rnd(13) : 12) {
+            case 0: f.page.setEditText(row, f.edit(row) + u" zażółć"_s, -1); break;
+            case 1: f.page.split(row, rnd(quint32(f.edit(row).size() + 1))); break;
+            case 2: f.page.mergeWithPrevious(row); break;
+            case 3: f.page.indent(row); break;
+            case 4: f.page.outdent(row); break;
+            case 5: f.page.moveUp(row); break;
+            case 6: f.page.moveDown(row); break;
+            case 7: f.page.toggleTask(row); break;
+            case 8: f.page.deleteBlock(row); break;
+            case 9: f.page.insertMarkdown(row, u"- wklejony ą\n- drugi ę\n"_s); break;
+            case 10: f.page.setMode(rnd(2) ? u"document"_s : u"outline"_s); break;
+            case 11:
+                f.page.selectRange(row, std::min(row + 1, n - 1));
+                f.page.deleteSelection();
+                break;
+            default: f.page.insertBlockAfter(row - 1, u"nowy łoś"_s); break;
+            }
+            // A new step, or the typing of the last one continued.
+            if (f.page.undoToken() != token)
+                texts.append(f.text());
+            else if (f.text() != texts.last())
+                texts.last() = f.text();
+            token = f.page.undoToken();
+            QVERIFY2(view.stale().isEmpty(), qPrintable(view.stale().join(u"; "_s)));
+        }
+        QVERIFY(texts.size() > 10);
+        for (qsizetype k = texts.size() - 2; k >= 0; --k) {
+            QVERIFY(f.page.canUndo());
+            f.page.undo();
+            QVERIFY2(f.text() == texts[k], qPrintable(u"undo to version %1"_s.arg(k)));
+            QVERIFY2(view.stale().isEmpty(), qPrintable(view.stale().join(u"; "_s)));
+        }
+        QVERIFY(!f.page.canUndo());
+        for (qsizetype k = 1; k < texts.size(); ++k) {
+            QVERIFY(f.page.canRedo());
+            f.page.redo();
+            QVERIFY2(f.text() == texts[k], qPrintable(u"redo to version %1"_s.arg(k)));
+            QVERIFY2(view.stale().isEmpty(), qPrintable(view.stale().join(u"; "_s)));
+        }
+        QVERIFY(!f.page.canRedo());
+        verifyReload(f);
+    }
+
+    void undoOfOnlyTheEdges_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("edited");
+        const QString bom(QChar(0xFEFF));
+        QTest::newRow("empty page, blank lines") << QString() << u"\n\n\n"_s;
+        QTest::newRow("blank lines cleared") << u"\n\n"_s << QString();
+        QTest::newRow("only a BOM, cleared") << bom << QString();
+        QTest::newRow("a BOM before blank lines") << u"\r\n\r\n"_s << bom + u"\r\n"_s;
+        QTest::newRow("blank lines before a block") << u"- żółw ąę\n"_s << u"\n\n- żółw ąę\n"_s;
+        QTest::newRow("a BOM before a block") << bom + u"Zażółć gęślą jaźń\r\n"_s << u"Zażółć gęślą jaźń\r\n"_s;
+    }
+
+    void undoOfOnlyTheEdges()
+    {
+        // A step that changed only the document's edges (a BOM, blank lines before the first
+        // block), also on a page with no blocks, where no row can tell of it: undo and redo
+        // change the text the page has and saves.
+        QFETCH(QString, content);
+        QFETCH(QString, edited);
+        Fixture f(content);
+        QCOMPARE(f.text(), content);
+        f.page.setSourceText(edited);
+        QCOMPARE(f.text(), edited);
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), edited);
+        for (int round = 0; round < 2; ++round) {
+            QVERIFY(f.page.canUndo());
+            f.page.undo();
+            QCOMPARE(f.text(), content);
+            QCOMPARE(f.page.sourceText(), content);
+            QVERIFY(f.page.save());
+            QCOMPARE(f.host.file(Page), content);
+            f.page.redo();
+            QCOMPARE(f.text(), edited);
+            QVERIFY(f.page.save());
+            QCOMPARE(f.host.file(Page), edited);
+        }
+    }
+
+    void editorSpaceJoinsAFarStep()
+    {
+        // The space the editor wrote after a completed tag goes as the caret leaves the block,
+        // within the last step also when that step changed a block far below (a task toggled
+        // while the block was edited): no step of its own that would only bring the space back.
+        QString content = u"- Kupić #zak\n"_s;
+        for (int i = 0; i < 2 * markdown::BlockDocument::MaxComposeGap; ++i)
+            content += u"- [ ] zadanie %1 ąę\n"_s.arg(i);
+        Fixture f(content);
+        f.page.startEditing(0, int(f.edit(0).size()));
+        f.page.applyCompletion(0, completionTriggerAt(f.edit(0), int(f.edit(0).size())).toMap(),
+                               {{u"insertText"_s, u"zakupy"_s}, {u"kind"_s, u"tag"_s}});
+        QVERIFY(f.text().startsWith(u"- Kupić #zakupy \n- [ ] zadanie 0 ąę\n"_s));
+        const QString completed = f.text();
+        const int far = f.count() - 2;
+        f.page.toggleTask(far);
+        QCOMPARE(f.page.editingRow(), 0);
+        QVERIFY(f.text().contains(u"- [x] zadanie %1 ąę"_s.arg(far - 1)));
+        const QString token = f.page.undoToken();
+        f.page.stopEditing();
+        QCOMPARE(f.page.undoToken(), token); // the last step, amended
+        const QString done = f.text();
+        QVERIFY(done.startsWith(u"- Kupić #zakupy\n"_s));
+        QVERIFY(done.contains(u"- [x] zadanie %1 ąę"_s.arg(far - 1)));
+        QCOMPARE(f.host.file(Page), done);
+        // One undo takes the toggle back (with the space, as the step before it left the block).
+        f.page.undo();
+        QCOMPARE(f.text(), completed);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QVERIFY(!f.page.canUndo());
+        f.page.redo();
+        QCOMPARE(f.text(), completed);
+        f.page.redo();
+        QCOMPARE(f.text(), done);
+        QVERIFY(!f.page.canRedo());
     }
 
     void typingTaskMarkerBecomesCheckbox()
@@ -5009,6 +5227,16 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.page.trackedRow(handle), 3);
         f.page.undo();
         QCOMPARE(f.page.trackedRow(handle), 2);
+        // Undo and redo of a change to the tracked block keep it: the same block.
+        f.page.setEditText(2, u"b ąę zmienione"_s, 14);
+        QCOMPARE(f.page.trackedRow(handle), 2);
+        f.page.undo();
+        QCOMPARE(f.page.trackedRow(handle), 2);
+        QCOMPARE(f.edit(2), u"b ąę"_s);
+        f.page.redo();
+        QCOMPARE(f.page.trackedRow(handle), 2);
+        f.page.undo();
+        QVERIFY(f.page.save());
         f.host.externalWrite(Page, u"- nowy z telefonu\n- a\n- c\n"_s); // the block is gone
         QCOMPARE(f.page.trackedRow(handle), -1);
         const int other = f.page.trackBlock(2);
@@ -5203,7 +5431,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QString content;
         for (int i = 0; i < 3000; ++i)
             content += u"- Blok numer %1 z tekstem zażółć gęślą jaźń\n"_s.arg(i);
-        Fixture f(content, 100000);
+        Fixture f(content, 100000, Fixture::NoModelTester{});
         for (int k = 0; k < 60; ++k) {
             f.page.startEditing(k * 10, -1);
             f.page.split(k * 10, -1);
@@ -5237,7 +5465,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         }
         QElapsedTimer load;
         load.start();
-        Fixture f(content, 100000);
+        Fixture f(content, 100000, Fixture::NoModelTester{});
         const qint64 loadMs = load.elapsed();
         const int row = 2500;
         QVERIFY(f.edit(row).startsWith(u"Wpis"_s));
@@ -5267,13 +5495,135 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         ops.start();
         f.page.split(row, -1);
         f.page.indent(row + 1);
+        const QVariant edited = f.role(row, "uid");
+        QCOMPARE(inserted.size(), 1); // the block Enter made
+        changed.clear();
+        inserted.clear();
         f.page.undo();
         f.page.undo();
+        // Undo keeps the rows of the blocks it changes: only the block Enter made goes.
+        QCOMPARE(inserted.size(), 0);
+        QCOMPARE(removed.size(), 1);
+        QCOMPARE(removed.first().at(1).toInt(), row + 1);
+        QCOMPARE(f.role(row, "uid"), edited);
+        // (The rows below learn their new file lines, the calculations their results.)
+        const QList<int> derived{f.model()->roleNames().key("line"), f.model()->roleNames().key("calcResults"),
+                                 f.model()->roleNames().key("html")};
+        for (const QList<QVariant> &args : std::as_const(changed)) {
+            const QList<int> roles = args.at(2).value<QList<int>>();
+            const bool ownData = std::any_of(roles.begin(), roles.end(), [&](int r) { return !derived.contains(r); });
+            if (roles.isEmpty() || ownData)
+                QVERIFY(args.at(0).toModelIndex().row() >= row && args.at(1).toModelIndex().row() <= row + 1);
+        }
         f.page.undo();
         const qint64 opsMs = ops.elapsed();
+        QCOMPARE(f.text(), content);
         QCOMPARE(reset.size(), 0);
         qInfo("5000 blocks: load %lld ms, 50 keystrokes %lld ms, split+indent+3 undo %lld ms", loadMs, typingMs, opsMs);
         QVERIFY2(typingMs < 50 * 40 * BRULION_TEST_SLOWDOWN, "typing on a 5000-block page is too slow");
+
+        // Undo and redo cost about what the command costs (they used to read the whole page
+        // again): medians of five, compared as a ratio (machines and sanitizers alike).
+        QList<qint64> splits;
+        QList<qint64> undos;
+        QList<qint64> redos;
+        QElapsedTimer t;
+        for (int k = 0; k < 5; ++k) {
+            t.start();
+            f.page.split(row, -1);
+            splits.append(t.nsecsElapsed());
+            t.start();
+            f.page.undo();
+            undos.append(t.nsecsElapsed());
+            t.start();
+            f.page.redo();
+            redos.append(t.nsecsElapsed());
+            f.page.undo();
+        }
+        QCOMPARE(f.text(), content);
+        const auto median = [](QList<qint64> v) {
+            std::sort(v.begin(), v.end());
+            return v[v.size() / 2];
+        };
+        const qint64 enter = median(splits);
+        qInfo("5000 blocks: Enter %.2f ms, undo %.2f ms, redo %.2f ms (medians of 5)", enter / 1e6, median(undos) / 1e6,
+              median(redos) / 1e6);
+        QVERIFY2(median(undos) <= 3 * enter + 2'000'000, "undo costs much more than the command");
+        QVERIFY2(median(redos) <= 3 * enter + 2'000'000, "redo costs much more than the command");
+        QCOMPARE(reset.size(), 0);
+    }
+
+    void typingAfterAFarChangeIsAStepOfItsOwn()
+    {
+        // A keystroke that also changed a block far away (typing at the top of a page renumbers a
+        // loose ordered list at its end, as it did before) is a step of its own: typing on merges
+        // into the next one, so a keystroke costs its block, not the blocks in between.
+        QString filler;
+        for (int i = 0; i < 300; ++i)
+            filler += u"Akapit %1 zażółć\n\n"_s.arg(i);
+        const QString content = u"Początek\n\n"_s + filler + u"1. jeden\n2. dwa\n\n1. trzy\n"_s;
+        Fixture f(content, 100000, Fixture::NoModelTester{});
+        f.page.startEditing(0, -1);
+        f.page.setEditText(0, u"Początekx"_s, 9);
+        const QString first = f.text();
+        QVERIFY(first.endsWith(u"\n\n3. trzy\n"_s));
+        f.page.setEditText(0, u"Początekxy"_s, 10);
+        f.page.setEditText(0, u"Początekxyż"_s, 11);
+        QVERIFY(f.page.undoHistorySize() < 100);
+        f.page.undo();
+        QCOMPARE(f.text(), first);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QVERIFY(!f.page.canUndo());
+        f.page.redo();
+        f.page.redo();
+        QVERIFY(f.text().startsWith(u"Początekxyż\n"_s));
+        QVERIFY(f.text().endsWith(u"\n\n3. trzy\n"_s));
+    }
+
+    void pasteIsASmallUndoStep()
+    {
+        // Markdown pasted into a long page (a whole-text edit): the step holds the pasted blocks,
+        // the rows around them stay.
+        QString content;
+        for (int i = 0; i < 3000; ++i)
+            content += u"- Blok numer %1 zażółć gęślą jaźń\n"_s.arg(i);
+        Fixture f(content, 100000, Fixture::NoModelTester{});
+        QSignalSpy removed(f.model(), &QAbstractItemModel::rowsRemoved);
+        QSignalSpy inserted(f.model(), &QAbstractItemModel::rowsInserted);
+        const QVariant kept = f.role(2999, "uid");
+        f.page.insertMarkdown(1500, u"- wklejony ą\n- drugi ę\n- trzeci ł\n"_s);
+        QCOMPARE(f.count(), 3003);
+        QCOMPARE(removed.size(), 0);
+        QCOMPARE(inserted.size(), 1);
+        QCOMPARE(f.role(3002, "uid"), kept);
+        QVERIFY2(f.page.undoHistorySize() < 1000, qPrintable(QString::number(f.page.undoHistorySize())));
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QCOMPARE(f.role(2999, "uid"), kept);
+        QCOMPARE(removed.size(), 1);
+        f.page.redo();
+        QCOMPARE(f.count(), 3003);
+        QVERIFY(f.text().contains(u"- Blok numer 1500 zażółć gęślą jaźń\n- wklejony ą\n"_s));
+    }
+
+    void externalReloadKeepsUidsOfKeptBlocks()
+    {
+        // Another device changed one block: the others stay the same blocks (rows, folds, tracked).
+        Fixture f(u"- a\n\t- a1\n- b ąę\n- c\n"_s, 10000);
+        const QVariant a = f.role(0, "uid");
+        const QVariant c = f.role(3, "uid");
+        const int handle = f.page.trackBlock(3);
+        f.page.setFolded(0, true);
+        QSignalSpy removed(f.model(), &QAbstractItemModel::rowsRemoved);
+        f.host.externalWrite(Page, u"- a\n\t- a1\n- b zmienione na telefonie\n- c\n"_s);
+        QCOMPARE(f.text(), u"- a\n\t- a1\n- b zmienione na telefonie\n- c\n"_s);
+        QCOMPARE(f.role(0, "uid"), a);
+        QCOMPARE(f.role(3, "uid"), c);
+        QCOMPARE(f.page.trackedRow(handle), 3);
+        QVERIFY(f.role(0, "collapsed").toBool());
+        QCOMPARE(removed.size(), 1); // the changed block only
+        QCOMPARE(removed.first().at(1).toInt(), 2);
     }
 
     // Last: runs the application's event loop to quit it.

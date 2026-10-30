@@ -498,20 +498,33 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   Clicking or tapping it edits it inline (`InlineEditor`: a `TextEdit` with the raw Markdown,
   minus the task marker / fences the delegate draws, and `MarkdownHighlighter`).
 * `PageController` executes commands (one undo step each, typing coalesced), saves debounced
-  and on focus loss / suspend / quit, and merges external changes three-way. Undo / redo keep the
-  rows of unchanged blocks (`BlockListModel::replaceContent`: rows removed and inserted, never a
-  reset) and put the caret back in the block and at the place it had — also when the undone step
-  put a block at the very start of the page: Enter at the start of the first block, a pasted
-  list, Alt+Up, below a hidden note-mode frontmatter (`tst_editor_controller`
+  and on focus loss / suspend / quit, and merges external changes three-way. An undo step is a
+  `BlockDocument::Delta` — the run of blocks the command changed, a block in both versions with
+  only its changed range of text (`undoStoresChangesNotPages`, `pasteIsASmallUndoStep`) — and
+  undo / redo apply it as a document operation through `BlockListModel::apply()`
+  (`PageController::applyStep()`: `BlockDocument::revert` / `reapply`): nothing is read again,
+  only the changed blocks are parsed, every block keeps its uid. Rows of unchanged blocks stay,
+  a changed block keeps its row (`dataChanged`: its delegate, fold and a tracked handle survive —
+  `undoKeepsChangedRowsInPlace`; an inline editor open on it gets the step's text; a table cell
+  being edited is closed before the step — its field would keep the old text and write it back —
+  and the cell toolbar's Cofnij / Ponów open it again), only blocks the step adds or removes
+  come and go, never a reset; undo costs about what the command cost (`largePageTouchesOneRow`
+  compares their medians). Typing merges into one step per block (`BlockDocument::composed`); a
+  keystroke that also changed blocks far away — typing at the top of a page renumbers a loose
+  ordered list further down — stays a step of its own (`typingAfterAFarChangeIsAStepOfItsOwn`). The caret goes back to the block and the place it had — also when the
+  undone step put a block at the very start of the page: Enter at the start of the first block, a
+  pasted list, Alt+Up, below a hidden note-mode frontmatter (`tst_editor_controller`
   `undoOfAnInsertionAtTheStart` follows the rows as a view sees them from the model's signals).
-  The zoom is view state: undo / redo leave it as it is (it follows its block; a block whose own
-  text the step changed loses it), except for Enter made in a zoom — it records the zoomed row of
-  both versions (`PageController::Focus::zoom`), so undo zooms back in (also after Enter in a
-  zoomed heading or paragraph ended the zoom, or split the zoomed block's text) and redo restores
-  the zoom after it (`zoomRootTextBlockEnterLeavesZoom`, `zoomRootListItemEnterInTheMiddle`).
+  `zoomChanged` and `foldStateChanged` follow a step only when the zoom (its breadcrumb) or the
+  lines of folded blocks changed. The zoom is view state: undo / redo leave it as it is (it
+  follows its block; a step that removes the zoomed block ends it), except for Enter made in a
+  zoom — it records the zoomed row of both versions (`PageController::Focus::zoom`), so undo zooms
+  back in (also after Enter in a zoomed heading or paragraph ended the zoom, or split the zoomed
+  block's text) and redo restores the zoom after it (`zoomRootTextBlockEnterLeavesZoom`,
+  `zoomRootListItemEnterInTheMiddle`).
   Undo / redo never leave the caret or a block selection in a hidden block: a zoom that does not
   hold the restored block ends — one chosen after the step, or the zoom an Enter next to it
-  brought back — and the folds over it open, as when a hidden block is edited (`restore()` →
+  brought back — and the folds over it open, as when a hidden block is edited (`applyStep()` →
   `reveal()`; `zoomUndoRedoNeverHideTheCaret`, `zoomUndoRedoNeverHideTheSelection`). Zooming out
   (`zoomTo()`: the breadcrumb, its arrow) keeps the edited block shown too: the zoom root's
   children are shown whatever its fold, so leaving a folded zoom root opens the folds over the
@@ -520,12 +533,15 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   The `line` role (the block's first line in the file) is announced with `dataChanged` for the
   rows a change above them moved. Empty paragraphs (Enter at the start of a paragraph or
   heading, a paragraph typed empty, a document's last empty paragraph) are only blank lines in
-  the file, so a re-read text has none: each undo step also remembers the lines of its two
-  versions' empty paragraphs (`BlockDocument::blankBlocks`: their lines, also several for one with
-  line breaks typed into it), and undo / redo split them out
-  of the blank lines again (`restoreBlankBlocks`, the text unchanged byte for byte;
-  `tst_editor_controller` `undoKeepsEmptyParagraphs`). A reload from the file (or an external
-  change) still reads them as blank lines.
+  the file, so a re-read text has none; undo / redo bring them back as the blocks they were (with
+  their uids; the text unchanged byte for byte — `tst_editor_controller`
+  `undoKeepsEmptyParagraphs`). A reload from the file (or an external change) still reads them as
+  blank lines. Whole-text changes — another device's version, Markdown pasted
+  (`insertMarkdown`), a template, the note mode, source mode, a resolved conflict — go through
+  `BlockListModel::replaceContent()`, which matches the blocks by kind, text and depth and gives
+  the kept ones their old uids (`BlockDocument::adoptUids`): their rows, folds, zoom and editing
+  stay, and the undo step of such a change holds only the changed blocks
+  (`externalReloadKeepsUidsOfKeptBlocks`).
 * Code fences (`blocktext.h`, `bodyWithEditText`): a code block ends at its first closing fence,
   exactly as in the parser. Its editor shows the code only — the fence lines are hidden, and so
   are a block id line (`^id`, written by "Kopiuj odwołanie do bloku" and `((` completion) and
@@ -1666,8 +1682,9 @@ source text, like `setMode`), returning { ok, status, reason } —, `suggestProp
 `properties` role is typed and cached per row (`pagePropertyMap`: key, value, type, source, raw,
 items, empty, editable, multiline, linkDate, html, itemsHtml), `propertiesInfo` { source, editable,
 problem, canAdd }; `replaceContent` keeps a leading frontmatter row whose text changed (same index,
-same form) as the same row with a `dataChanged` — the panel's delegate survives property edits,
-the note mode, undo and other devices' changes.
+same form) as the same row (the same uid) with a `dataChanged` — the panel's delegate survives
+property edits, the note mode and other devices' changes; undo and redo keep every changed block's
+row anyway.
 
 **Tests**: `tst_markdown_pageprops` (types, reading, the writing rules byte for byte, random
 input), `tst_index_properties`, `tst_editor_pageprops` (undo steps, the row kept, source mode,
