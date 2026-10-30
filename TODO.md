@@ -77,6 +77,7 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
   wydania nie pakowały QtTest, QuickTest i Qt.labs.folderlistmodel (L9b: APK −0,84 MB, wersja
   webowa −0,27 MB przed wasm-opt);
 * **Okna wyboru plików — sprawdzić ręcznie**: Windows (Otwórz/Zapisz w imporcie, eksporcie,
-  „Obraz…” i dzienniku zdarzeń), AppImage na GNOME i KDE (okno portalu), Android z Dyskiem Google
+  „Obraz…” i dzienniku zdarzeń), AppImage w prawdziwej sesji GNOME i KDE (okno portalu; bez sesji
+  pulpitu sprawdzone tylko z xdg-desktop-portal-gtk pod Xvfb), Android z Dyskiem Google
   (import i „Zapisz…”), przeglądarka na telefonie (kilka plików naraz);
 * wykres powiązań na wątku roboczym (L16).
