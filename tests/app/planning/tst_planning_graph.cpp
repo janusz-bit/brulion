@@ -531,7 +531,8 @@ private Q_SLOTS:
             layout.tick();
             ++steps;
         }
-        QVERIFY2(fastCooling ? steps > 80 && steps < 120 : steps > 280 && steps < 320, qPrintable(QString::number(steps)));
+        QVERIFY2(fastCooling ? steps > 80 && steps < 120 : steps > 280 && steps < 320,
+                 qPrintable(QString::number(steps)));
         QCOMPARE(m.runTicks(), steps);
         QCOMPARE(manual.nodeCount(), m.nodeCount());
         for (int i = 0; i < m.nodeCount(); ++i) {
@@ -564,7 +565,7 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(m.framesApplied() >= 3, 10000 * BRULION_TEST_SLOWDOWN);
         m.setActive(false); // the view is hidden mid-run
         QVERIFY(!m.running());
-        QTest::qWait(60);   // a frame computed before the pause may still arrive
+        QTest::qWait(60); // a frame computed before the pause may still arrive
         const int ticks = m.runTicks();
         const QPointF p = m.position(0);
         QTest::qWait(100);
@@ -777,7 +778,7 @@ private Q_SLOTS:
         GraphItem item;
         item.setSize(QSizeF(800, 600));
         item.setModel(&m);
-        item.setSlowPaintMs(0); // every frame counts as slow
+        item.setSlowPaintMs(0);  // every frame counts as slow
         item.setLabelZoom(0.01); // labels for every visible node
         item.setAutoFit(true);
         QImage still(800, 600, QImage::Format_ARGB32_Premultiplied);
@@ -879,9 +880,9 @@ private Q_SLOTS:
         QCOMPARE(int(m.vertices.size()), 4 * 16);
         QCOMPARE(int(m.indices.size()), 3 * 16 * 6);
         for (int k = 0; k < 16; ++k) {
-            QCOMPARE(int(m.vertices[size_t(k)].a), 0);       // inner fringe
+            QCOMPARE(int(m.vertices[size_t(k)].a), 0); // inner fringe
             QCOMPARE(int(m.vertices[size_t(16 + k)].a), 255);
-            QCOMPARE(int(m.vertices[size_t(48 + k)].a), 0);  // outer fringe
+            QCOMPARE(int(m.vertices[size_t(48 + k)].a), 0); // outer fringe
         }
         QVERIFY(std::abs(std::hypot(m.vertices[0].x, m.vertices[0].y) - 8.5) < 1e-4);
         QVERIFY(std::abs(std::hypot(m.vertices[48].x, m.vertices[48].y) - 11.5) < 1e-4);
@@ -996,10 +997,12 @@ private Q_SLOTS:
             QVERIFY(i < m.vertices.size());
         // The opaque outline stays inside the rect, the fringe reaches half a pixel beyond it.
         for (int k = 1; k <= 20; ++k)
-            QVERIFY(QRectF(9.99, 9.99, 60.02, 16.02).contains(QPointF(m.vertices[size_t(k)].x, m.vertices[size_t(k)].y)));
+            QVERIFY(QRectF(9.99, 9.99, 60.02, 16.02)
+                            .contains(QPointF(m.vertices[size_t(k)].x, m.vertices[size_t(k)].y)));
         for (int k = 21; k <= 40; ++k) {
             QCOMPARE(int(m.vertices[size_t(k)].a), 0);
-            QVERIFY(QRectF(9.49, 9.49, 61.02, 17.02).contains(QPointF(m.vertices[size_t(k)].x, m.vertices[size_t(k)].y)));
+            QVERIFY(QRectF(9.49, 9.49, 61.02, 17.02)
+                            .contains(QPointF(m.vertices[size_t(k)].x, m.vertices[size_t(k)].y)));
         }
         chunks.clear();
         geometry::appendRoundedRect(chunks, QRectF(0, 0, 0, 10), 3, geometry::premultiplied(Qt::white), 1);
@@ -1015,20 +1018,21 @@ private Q_SLOTS:
         QTest::addColumn<double>("radius");
         QTest::addColumn<int>("maxLabels");
         QTest::addColumn<QList<int>>("slots"); // 0 below, 1 above, 2 right, 3 left, -1 not placed
-        QTest::newRow("far apart: all below") << QList<QPointF>{{0, 0}, {300, 0}, {0, 300}} << QList<bool>{false, false, false}
-                                              << 5.0 << 260 << QList<int>{0, 0, 0};
-        QTest::newRow("neighbours: the second above") << QList<QPointF>{{100, 100}, {104, 110}} << QList<bool>{false, false}
-                                                      << 5.0 << 260 << QList<int>{0, 1};
+        QTest::newRow("far apart: all below") << QList<QPointF>{{0, 0}, {300, 0}, {0, 300}}
+                                              << QList<bool>{false, false, false} << 5.0 << 260 << QList<int>{0, 0, 0};
+        QTest::newRow("neighbours: the second above") << QList<QPointF>{{100, 100}, {104, 110}}
+                                                      << QList<bool>{false, false} << 5.0 << 260 << QList<int>{0, 1};
         // A big disc: its four slots do not touch each other.
-        QTest::newRow("the four slots in order") << QList<QPointF>{{100, 100}, {100, 100}, {100, 100}, {100, 100}, {100, 100}}
-                                                 << QList<bool>(5, false) << 30.0 << 260 << QList<int>{0, 1, 2, 3, -1};
-        QTest::newRow("the highlighted one overlaps") << QList<QPointF>{{100, 100}, {100, 100}} << QList<bool>{false, true}
-                                                      << 5.0 << 260 << QList<int>{0, 0};
-        QTest::newRow("cut at maxLabels") << QList<QPointF>{{0, 0}, {300, 0}, {600, 0}, {900, 0}} << QList<bool>(4, false)
-                                          << 5.0 << 2 << QList<int>{0, 0, -1, -1};
+        QTest::newRow("the four slots in order")
+                << QList<QPointF>{{100, 100}, {100, 100}, {100, 100}, {100, 100}, {100, 100}} << QList<bool>(5, false)
+                << 30.0 << 260 << QList<int>{0, 1, 2, 3, -1};
+        QTest::newRow("the highlighted one overlaps")
+                << QList<QPointF>{{100, 100}, {100, 100}} << QList<bool>{false, true} << 5.0 << 260 << QList<int>{0, 0};
+        QTest::newRow("cut at maxLabels") << QList<QPointF>{{0, 0}, {300, 0}, {600, 0}, {900, 0}}
+                                          << QList<bool>(4, false) << 5.0 << 2 << QList<int>{0, 0, -1, -1};
         const double nan = std::numeric_limits<double>::quiet_NaN();
-        QTest::newRow("malformed centre") << QList<QPointF>{{nan, 0}, {0, 0}} << QList<bool>{false, false} << 5.0 << 260
-                                          << QList<int>{-1, 0};
+        QTest::newRow("malformed centre")
+                << QList<QPointF>{{nan, 0}, {0, 0}} << QList<bool>{false, false} << 5.0 << 260 << QList<int>{-1, 0};
     }
 
     void placeLabels()
@@ -1066,8 +1070,14 @@ private Q_SLOTS:
             QCOMPARE(r.size(), QSizeF(c.text.width() + 6, c.text.height() + 2));
             const QPointF p = c.centre;
             switch (slot) {
-            case 0: QCOMPARE(r.top(), p.y() + c.radius + 2); QCOMPARE(r.center().x(), p.x()); break;
-            case 1: QCOMPARE(r.bottom(), p.y() - c.radius - 2); QCOMPARE(r.center().x(), p.x()); break;
+            case 0:
+                QCOMPARE(r.top(), p.y() + c.radius + 2);
+                QCOMPARE(r.center().x(), p.x());
+                break;
+            case 1:
+                QCOMPARE(r.bottom(), p.y() - c.radius - 2);
+                QCOMPARE(r.center().x(), p.x());
+                break;
             case 2: QCOMPARE(r.left(), p.x() + c.radius + 3); break;
             case 3: QCOMPARE(r.right(), p.x() - c.radius - 3); break;
             }
@@ -1100,7 +1110,8 @@ private Q_SLOTS:
         QVERIFY(item.labelSize(longOne).width() <= 220);
         QVERIFY(item.labelSize(longOne).width() > 100);
         const int turtle = m.indexOf(u"Żółw.md"_s);
-        QCOMPARE(item.labelSize(turtle), QSizeF(QFontMetricsF(font).horizontalAdvance(u"Żółw"_s), QFontMetricsF(font).height()));
+        QCOMPARE(item.labelSize(turtle),
+                 QSizeF(QFontMetricsF(font).horizontalAdvance(u"Żółw"_s), QFontMetricsF(font).height()));
     }
 
     void painterLabelsUseTheSharedRule()

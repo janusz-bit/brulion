@@ -76,7 +76,7 @@ bool softwareBackend()
 QSGRendererInterface::GraphicsApi rhiApi()
 {
     return qEnvironmentVariable("BRULION_GRAPH_SG_API") == u"opengl"_s ? QSGRendererInterface::OpenGL
-                                                                        : QSGRendererInterface::Null;
+                                                                       : QSGRendererInterface::Null;
 }
 
 /// Sum of the channel differences.
@@ -338,7 +338,8 @@ private Q_SLOTS:
         for (const auto &node : m.nodes()) {
             const QPointF p = item->nodePosition(node.id) * dpr;
             const QColor c = shot.pixelColor(p.toPoint());
-            const int diff = std::abs(c.red() - bg.red()) + std::abs(c.green() - bg.green()) + std::abs(c.blue() - bg.blue());
+            const int diff =
+                    std::abs(c.red() - bg.red()) + std::abs(c.green() - bg.green()) + std::abs(c.blue() - bg.blue());
             QVERIFY2(diff > 60 || node.kind == GraphModel::Kind::Missing, qPrintable(node.id));
         }
         // Colours change at once.

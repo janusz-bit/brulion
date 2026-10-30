@@ -43,8 +43,8 @@ public:
 
     struct Label {
         int node = -1;
-        QString text;  ///< the (elided) label text
-        QPointF pos;   ///< top-left of the text, screen coordinates
+        QString text; ///< the (elided) label text
+        QPointF pos;  ///< top-left of the text, screen coordinates
         bool dimmed = false;
     };
 

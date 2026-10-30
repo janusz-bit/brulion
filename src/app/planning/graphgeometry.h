@@ -77,8 +77,8 @@ void appendRoundedRect(MeshChunks &out, const QRectF &rect, double radius, QRgb 
 struct LabelCandidate {
     int node = -1;
     QPointF centre;
-    double radius = 0; ///< the disc's radius on screen
-    QSizeF text;       ///< the label text's size
+    double radius = 0;   ///< the disc's radius on screen
+    QSizeF text;         ///< the label text's size
     bool always = false; ///< the highlighted node: placed below it even over other labels
 };
 

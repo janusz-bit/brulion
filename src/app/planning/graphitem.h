@@ -205,12 +205,12 @@ public:
 
     /// What the last frames did (tests, diagnostics; any thread).
     struct SceneStats {
-        int frames = 0;      ///< updatePaintNode calls
-        int meshBuilds = 0;  ///< world meshes built (scene graph)
-        int chunks = 0;      ///< geometry chunks of the world meshes
-        int vertices = 0;    ///< their vertices
-        int labels = 0;      ///< labels in the last frame
-        bool software = false; ///< the last frame was painted with QPainter (software renderer)
+        int frames = 0;           ///< updatePaintNode calls
+        int meshBuilds = 0;       ///< world meshes built (scene graph)
+        int chunks = 0;           ///< geometry chunks of the world meshes
+        int vertices = 0;         ///< their vertices
+        int labels = 0;           ///< labels in the last frame
+        bool software = false;    ///< the last frame was painted with QPainter (software renderer)
         QList<QRectF> labelRects; ///< label boxes of the last frame (either renderer)
     };
     SceneStats sceneStats() const;
@@ -344,13 +344,13 @@ private:
     double m_camFrom[3] = {0, 0, 1};
     double m_camTo[3] = {0, 0, 1};
 
-    QHash<int, QStaticText> m_labels;       ///< QPainter path: prepared label texts
+    QHash<int, QStaticText> m_labels; ///< QPainter path: prepared label texts
     QHash<quint64, QImage> m_sprites;
     struct LabelText {
         QString text; ///< elided
         QSizeF size;
     };
-    QHash<int, LabelText> m_labelTexts;    ///< both paths (the GUI thread, or the render thread while it waits)
+    QHash<int, LabelText> m_labelTexts; ///< both paths (the GUI thread, or the render thread while it waits)
     std::atomic<double> m_lastPaintMs{0};
     std::atomic<bool> m_softwareRendering{false}; ///< the window's scene graph is the software renderer
     double m_slowPaintMs = 16;
@@ -360,9 +360,9 @@ private:
 
     // Scene graph state: written on the GUI thread, read during the sync (the GUI thread waits).
     bool m_meshDirty = true;
-    bool m_labelsDirty = true; ///< node indices or the font changed: cached text layouts go
-    geometry::MeshChunks m_mesh;       ///< render thread: world meshes (allocations reused)
-    geometry::MeshChunks m_labelMesh;  ///< render thread: label backgrounds
+    bool m_labelsDirty = true;        ///< node indices or the font changed: cached text layouts go
+    geometry::MeshChunks m_mesh;      ///< render thread: world meshes (allocations reused)
+    geometry::MeshChunks m_labelMesh; ///< render thread: label backgrounds
     mutable std::mutex m_statsMutex;
     SceneStats m_stats;
 };

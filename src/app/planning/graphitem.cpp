@@ -514,8 +514,8 @@ void GraphItem::repaintMoving()
     // (runningChanged), so are gestures and camera moves (they call update()). The scene graph
     // renderer only uploads new meshes: every frame.
     const bool throttle = m_softwareRendering.load(std::memory_order_relaxed) && m_model && m_model->running()
-                          && lastPaintMs() > m_slowPaintMs
-                          && m_gesture == Gesture::None && m_camera.state() != QAbstractAnimation::Running;
+                          && lastPaintMs() > m_slowPaintMs && m_gesture == Gesture::None
+                          && m_camera.state() != QAbstractAnimation::Running;
     if (!throttle) {
         m_repaintTimer.stop();
         update();
@@ -846,7 +846,8 @@ QString GraphItem::labelText(int node)
 {
     auto it = m_labelTexts.find(node);
     if (it == m_labelTexts.end()) {
-        const QString title = m_model && node >= 0 && node < m_model->nodeCount() ? m_model->nodes().at(node).title : QString();
+        const QString title =
+                m_model && node >= 0 && node < m_model->nodeCount() ? m_model->nodes().at(node).title : QString();
         const QFontMetricsF fm(m_font);
         LabelText t;
         t.text = fm.elidedText(title, Qt::ElideRight, kLabelMaxWidth);
@@ -883,7 +884,8 @@ GraphItem::Frame GraphItem::frameFor(const QSizeF &size) const
         if (!std::isfinite(p.x()) || !std::isfinite(p.y()))
             continue;
         const double r = std::max(1.6, nodes.at(i).radius * z);
-        f.visible[size_t(i)] = p.x() + r >= -margin && p.x() - r <= w + margin && p.y() + r >= -margin && p.y() - r <= h + margin;
+        f.visible[size_t(i)] =
+                p.x() + r >= -margin && p.x() - r <= w + margin && p.y() + r >= -margin && p.y() - r <= h + margin;
     }
     f.hl = m_hovered >= 0 ? m_hovered : m_selected;
     if (f.hl >= 0 && f.hl < f.n) {
@@ -940,7 +942,9 @@ std::vector<GraphItem::PlacedLabel> GraphItem::labelsFor(const Frame &f, bool sp
                     byDegree.push_back(i);
             }
             // The hubs first: a few when far away, more when closer.
-            const size_t top = std::min<size_t>(byDegree.size(), z >= m_labelZoom * 0.7 ? 40 : z >= m_labelZoom * 0.45 ? 14 : 8);
+            const size_t top = std::min<size_t>(byDegree.size(), z >= m_labelZoom * 0.7    ? 40
+                                                                 : z >= m_labelZoom * 0.45 ? 14
+                                                                                           : 8);
             std::partial_sort(byDegree.begin(), byDegree.begin() + qsizetype(top), byDegree.end(),
                               [&](int a, int b) { return nodes.at(a).degree > nodes.at(b).degree; });
             byDegree.resize(top);
@@ -1206,7 +1210,7 @@ void GraphItem::buildMesh(geometry::MeshChunks &out, qreal dpr) const
     const int n = int(std::min({size_t(nodes.size()), xs.size(), ys.size()}));
     const double z = std::max(1e-6, m_zoom);
     dpr = dpr > 0 ? dpr : 1;
-    const double px = 1.0 / z;           // one logical pixel in world units
+    const double px = 1.0 / z;             // one logical pixel in world units
     const double fringe = 1.0 / (dpr * z); // one device pixel
     const auto at = [&](int i) { return QPointF(xs[size_t(i)], ys[size_t(i)]); };
 

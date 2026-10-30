@@ -181,7 +181,8 @@ private:
             allowed = m_segTicks + 1;
         } else if (!m_run.reducedMotion && m_run.minRunMs > 0 && m_expected >= 0) {
             const double elapsedMs = double(m_activeNs + m_clock.nsecsElapsed()) / 1e6;
-            const auto paced = static_cast<long long>(std::ceil(double(m_expected) * elapsedMs / double(m_run.minRunMs)));
+            const auto paced =
+                    static_cast<long long>(std::ceil(double(m_expected) * elapsedMs / double(m_run.minRunMs)));
             allowed = std::max<long long>(m_segTicks + 1, paced);
         }
         const double budgetMs = m_threaded ? double(std::max(1, m_run.frameIntervalMs))
@@ -203,7 +204,8 @@ private:
             ++m_runTicks;
             if (m_segTicks <= kDecisionTicks) {
                 m_segTickMs += (ms - m_segTickMs) / double(m_segTicks);
-                if (m_segTicks == kDecisionTicks && !dragging && !m_run.reducedMotion && m_segTickMs > m_run.slowTickMs) {
+                if (m_segTicks == kDecisionTicks && !dragging && !m_run.reducedMotion
+                    && m_segTickMs > m_run.slowTickMs) {
                     // Too slow to unfold within the pacing: cool down in ~100 steps.
                     m_fast = true;
                     layout.params().alphaDecay = kFastAlphaDecay;
@@ -346,7 +348,8 @@ void GraphSimulation::command(const SimCommand &command)
         auto &queue = m_shared->commands;
         // A drag sends a Fix per pointer move: only the newest position of a node counts.
         if (command.kind == SimCommand::Fix && !queue.empty()) {
-            if (auto *last = std::get_if<SimCommand>(&queue.back()); last && last->kind == SimCommand::Fix && last->node == command.node) {
+            if (auto *last = std::get_if<SimCommand>(&queue.back());
+                last && last->kind == SimCommand::Fix && last->node == command.node) {
                 *last = command;
                 return; // already woken for the replaced one
             }

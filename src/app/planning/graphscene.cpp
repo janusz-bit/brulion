@@ -67,7 +67,8 @@ void GraphSceneNode::setCamera(const QMatrix4x4 &matrix)
         m_camera->setMatrix(matrix);
 }
 
-void GraphSceneNode::syncChunks(QSGNode *parent, std::vector<QSGGeometryNode *> &nodes, const geometry::MeshChunks &chunks)
+void GraphSceneNode::syncChunks(QSGNode *parent, std::vector<QSGGeometryNode *> &nodes,
+                                const geometry::MeshChunks &chunks)
 {
     const auto meshes = chunks.chunks();
     while (nodes.size() > meshes.size()) {
@@ -83,7 +84,8 @@ void GraphSceneNode::syncChunks(QSGNode *parent, std::vector<QSGGeometryNode *> 
             node = nodes[i];
         } else {
             node = new QSGGeometryNode;
-            auto *g = new QSGGeometry(QSGGeometry::defaultAttributes_ColoredPoint2D(), 0, 0, QSGGeometry::UnsignedShortType);
+            auto *g = new QSGGeometry(QSGGeometry::defaultAttributes_ColoredPoint2D(), 0, 0,
+                                      QSGGeometry::UnsignedShortType);
             g->setDrawingMode(QSGGeometry::DrawTriangles);
             g->setVertexDataPattern(QSGGeometry::StreamPattern);
             g->setIndexDataPattern(QSGGeometry::StreamPattern);

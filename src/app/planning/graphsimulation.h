@@ -50,24 +50,24 @@ namespace brulion::planning {
 
 /// One run of the force layout as the owner hands it to the worker.
 struct SimRun {
-    quint64 generation = 0;      ///< the owner's run id (frames of other runs are dropped)
-    ForceLayout layout;          ///< the start state (the worker owns its copy)
-    bool reducedMotion = false;  ///< compute to the end, publish only the final frame
-    double alphaDecay = 0.0228;  ///< normal cooling (~300 steps)
-    double slowTickMs = 5.0;     ///< fast cooling when the first steps cost more than this, ms
-    int frameIntervalMs = 16;    ///< at most one frame per interval
-    int minRunMs = 1000;         ///< a normal run unfolds over at least this long (animation)
+    quint64 generation = 0;     ///< the owner's run id (frames of other runs are dropped)
+    ForceLayout layout;         ///< the start state (the worker owns its copy)
+    bool reducedMotion = false; ///< compute to the end, publish only the final frame
+    double alphaDecay = 0.0228; ///< normal cooling (~300 steps)
+    double slowTickMs = 5.0;    ///< fast cooling when the first steps cost more than this, ms
+    int frameIntervalMs = 16;   ///< at most one frame per interval
+    int minRunMs = 1000;        ///< a normal run unfolds over at least this long (animation)
 };
 
 /// What the worker publishes (the newest one wins; an unread older frame is replaced).
 struct SimFrame {
     quint64 generation = 0;
-    std::vector<double> x, y;        ///< node positions (world units)
+    std::vector<double> x, y; ///< node positions (world units)
     double alpha = 0;
-    bool running = true;             ///< false: the layout has cooled down — `state` holds it
+    bool running = true; ///< false: the layout has cooled down — `state` holds it
     bool fastCooling = false;
-    double tickMs = 0;               ///< average cost of the run's first steps, ms
-    int ticks = 0;                   ///< steps of the current run so far (diagnostics, tests)
+    double tickMs = 0;                ///< average cost of the run's first steps, ms
+    int ticks = 0;                    ///< steps of the current run so far (diagnostics, tests)
     std::optional<ForceLayout> state; ///< the full state (velocities included), final frames only
 };
 
@@ -80,7 +80,7 @@ struct SimCommand {
         ReheatTo,    ///< alpha = max(value, alpha), a new run segment (pacing, cooling decision)
         Pause,       ///< stop stepping, keep the state (the view is hidden)
         Resume,
-        Cancel,      ///< drop the run (no more frames)
+        Cancel, ///< drop the run (no more frames)
     };
     Kind kind = Fix;
     int node = -1;

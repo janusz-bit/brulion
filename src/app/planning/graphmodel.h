@@ -279,9 +279,9 @@ private:
 
     // The run on the worker.
     GraphSimulation m_sim;
-    quint64 m_generation = 0; ///< id of the current run (frames of other runs are dropped)
-    bool m_simOwned = false;  ///< the worker owns the layout (startRun … takeBack / cancel)
-    bool m_simRunning = false; ///< it is stepping (the newest frame, or a command that heats it)
+    quint64 m_generation = 0;     ///< id of the current run (frames of other runs are dropped)
+    bool m_simOwned = false;      ///< the worker owns the layout (startRun … takeBack / cancel)
+    bool m_simRunning = false;    ///< it is stepping (the newest frame, or a command that heats it)
     std::vector<double> m_x, m_y; ///< the mirror: positions of the newest frame
     double m_alpha = 0;
     bool m_fastCooling = false;

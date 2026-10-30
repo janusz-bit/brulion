@@ -197,7 +197,8 @@ void appendSegment(MeshChunks &out, QPointF a, QPointF b, double width, QRgb col
         m.vertices.push_back(vertex(b + normal * band_.o[row], rowColour[row]));
     }
     for (quint16 row = 0; row < 3; ++row)
-        quad(m, quint16(base + 2 * row), quint16(base + 2 * row + 1), quint16(base + 2 * row + 3), quint16(base + 2 * row + 2));
+        quad(m, quint16(base + 2 * row), quint16(base + 2 * row + 1), quint16(base + 2 * row + 3),
+             quint16(base + 2 * row + 2));
 }
 
 void appendLine(MeshChunks &out, QPointF a, QPointF b, double width, QRgb colour, double fringe)
@@ -300,8 +301,9 @@ QList<QRectF> placeLabels(const std::vector<LabelCandidate> &ordered, int maxLab
         const double lw = c.text.width() + 6;
         const double lh = c.text.height() + 2;
         // Below the node; if taken, above, right, left.
-        const QRectF options[] = {QRectF(p.x() - lw / 2, p.y() + r + 2, lw, lh), QRectF(p.x() - lw / 2, p.y() - r - 2 - lh, lw, lh),
-                                  QRectF(p.x() + r + 3, p.y() - lh / 2, lw, lh), QRectF(p.x() - r - 3 - lw, p.y() - lh / 2, lw, lh)};
+        const QRectF options[] = {
+                QRectF(p.x() - lw / 2, p.y() + r + 2, lw, lh), QRectF(p.x() - lw / 2, p.y() - r - 2 - lh, lw, lh),
+                QRectF(p.x() + r + 3, p.y() - lh / 2, lw, lh), QRectF(p.x() - r - 3 - lw, p.y() - lh / 2, lw, lh)};
         QRectF rect;
         for (const QRectF &option : options) {
             if (c.always || !overlaps(option)) {

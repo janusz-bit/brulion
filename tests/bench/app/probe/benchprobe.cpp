@@ -939,11 +939,16 @@ private:
             if (m_window)
                 m_window->requestActivate();
         });
-        waitUntil(u"app_active"_s, [this] {
-            return QGuiApplication::applicationState() == Qt::ApplicationActive || monoNs() - m_stepStart > 3000000000LL;
-        }, 5000, false);
+        waitUntil(
+                u"app_active"_s,
+                [this] {
+                    return QGuiApplication::applicationState() == Qt::ApplicationActive
+                           || monoNs() - m_stepStart > 3000000000LL;
+                },
+                5000, false);
         action(u"app_state"_s, [this] {
-            mark(u"app_state"_s, 0, {{u"before"_s, m_stateBefore}, {u"after"_s, int(QGuiApplication::applicationState())}});
+            mark(u"app_state"_s, 0,
+                 {{u"before"_s, m_stateBefore}, {u"after"_s, int(QGuiApplication::applicationState())}});
         });
     }
 
@@ -1007,7 +1012,8 @@ private:
             for (const double fx : {0.3, 0.5, 0.7, 0.2, 0.8}) {
                 const QPointF p(item->width() * fx, item->height() * fy);
                 QString id;
-                QMetaObject::invokeMethod(item, "nodeAt", Q_RETURN_ARG(QString, id), Q_ARG(qreal, p.x()), Q_ARG(qreal, p.y()));
+                QMetaObject::invokeMethod(item, "nodeAt", Q_RETURN_ARG(QString, id), Q_ARG(qreal, p.x()),
+                                          Q_ARG(qreal, p.y()));
                 if (id.isEmpty())
                     return item->mapToScene(p);
             }
@@ -1064,10 +1070,13 @@ private:
             action(u"zoom"_s, [this] { wheel(120, u"graph_zoom"_s); });
             wait(120);
         }
-        waitUntil(u"graph_layout_done"_s, [this] {
-            QObject *m = graphModel();
-            return m && !m->property("running").toBool();
-        }, 180000);
+        waitUntil(
+                u"graph_layout_done"_s,
+                [this] {
+                    QObject *m = graphModel();
+                    return m && !m->property("running").toBool();
+                },
+                180000);
         waitSettled(u"graph_settled"_s, 1000, 60000);
         graphPan(u"graph_settled_pan"_s, 1000);
         waitSettled(u"graph_done"_s, 1000, 30000);
