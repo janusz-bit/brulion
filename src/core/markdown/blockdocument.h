@@ -214,10 +214,14 @@ public:
     EditResult revert(const Delta &delta, bool *ok = nullptr);
     EditResult reapply(const Delta &delta, bool *ok = nullptr);
     /// `first` (A -> B) followed by `second` (B -> C) as one delta A -> C, where this document is
-    /// C. nullopt when they do not chain (counts, edges, the runs' blocks) or when more than
-    /// MaxComposeGap untouched blocks lie between their runs (the caller keeps two steps).
-    std::optional<Delta> composed(const Delta &first, const Delta &second) const;
+    /// C; it costs the blocks of both runs and those between them. nullopt when they do not chain
+    /// (counts, edges, the runs' blocks), when more than MaxComposeGap untouched blocks lie between
+    /// the runs, or — `bounded`: typing merges, which compose at every keystroke — when the
+    /// joined run would span more than MaxComposeRun blocks (an edit that also changed blocks far
+    /// away, e.g. renumbered a list). The caller then keeps two steps.
+    std::optional<Delta> composed(const Delta &first, const Delta &second, bool bounded = false) const;
     static constexpr int MaxComposeGap = 64;
+    static constexpr int MaxComposeRun = 256;
 
     /// Give blocks the uids of another version of this document (BlockListModel::replaceContent:
     /// the blocks it keeps keep their identity). `uids`: block index -> uid; each uid at most once

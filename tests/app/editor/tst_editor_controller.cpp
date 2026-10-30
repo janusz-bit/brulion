@@ -5475,6 +5475,34 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(reset.size(), 0);
     }
 
+    void typingAfterAFarChangeIsAStepOfItsOwn()
+    {
+        // A keystroke that also changed a block far away (typing at the top of a page renumbers a
+        // loose ordered list at its end, as it did before) is a step of its own: typing on merges
+        // into the next one, so a keystroke costs its block, not the blocks in between.
+        QString filler;
+        for (int i = 0; i < 300; ++i)
+            filler += u"Akapit %1 zażółć\n\n"_s.arg(i);
+        const QString content = u"Początek\n\n"_s + filler + u"1. jeden\n2. dwa\n\n1. trzy\n"_s;
+        Fixture f(content, 100000, Fixture::NoModelTester{});
+        f.page.startEditing(0, -1);
+        f.page.setEditText(0, u"Początekx"_s, 9);
+        const QString first = f.text();
+        QVERIFY(first.endsWith(u"\n\n3. trzy\n"_s));
+        f.page.setEditText(0, u"Początekxy"_s, 10);
+        f.page.setEditText(0, u"Początekxyż"_s, 11);
+        QVERIFY(f.page.undoHistorySize() < 100);
+        f.page.undo();
+        QCOMPARE(f.text(), first);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QVERIFY(!f.page.canUndo());
+        f.page.redo();
+        f.page.redo();
+        QVERIFY(f.text().startsWith(u"Początekxyż\n"_s));
+        QVERIFY(f.text().endsWith(u"\n\n3. trzy\n"_s));
+    }
+
     void pasteIsASmallUndoStep()
     {
         // Markdown pasted into a long page (a whole-text edit): the step holds the pasted blocks,

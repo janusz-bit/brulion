@@ -728,7 +728,7 @@ EditResult BlockDocument::applyDelta(const Delta &delta, int from, int to, bool 
     return r;
 }
 
-std::optional<BlockDocument::Delta> BlockDocument::composed(const Delta &first, const Delta &second) const
+std::optional<BlockDocument::Delta> BlockDocument::composed(const Delta &first, const Delta &second, bool bounded) const
 {
     if (!first.d)
         return second;
@@ -747,7 +747,7 @@ std::optional<BlockDocument::Delta> BlockDocument::composed(const Delta &first, 
     const int lo = std::min(a.first, b.first);
     const int hiB = std::max(end1, end2);
     const int hiC = hiB - int(b.side[0].run.size()) + int(b.side[1].run.size());
-    if (lo < 0 || hiB > b.side[0].count || hiC > count())
+    if (lo < 0 || hiB > b.side[0].count || hiC > count() || (bounded && std::max(hiB, hiC) - lo > MaxComposeRun))
         return std::nullopt;
     // The window in C, back to B (the second run turned back), back to A (the first one).
     const QList<BlockSource> windowC = sourcesOf(lo, hiC);

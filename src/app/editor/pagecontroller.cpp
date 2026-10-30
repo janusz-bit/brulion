@@ -89,9 +89,11 @@ public:
         const auto *o = static_cast<const EditCommand *>(other);
         if (!m_typingUid || o->m_typingUid != m_typingUid || !o->m_mergeable)
             return false;
-        // QUndoStack merges right after `o`'s edit: the document is its result.
+        // QUndoStack merges right after `o`'s edit: the document is its result. Bounded: a merge
+        // costs the blocks of the joined run at every keystroke, so a step that also changed blocks
+        // far away (typing at the top renumbered a loose ordered list below) stays one of its own.
         const std::optional<BlockDocument::Delta> merged =
-                m_controller->m_model->document().composed(m_delta, o->m_delta);
+                m_controller->m_model->document().composed(m_delta, o->m_delta, true);
         if (!merged)
             return false;
         m_delta = *merged;

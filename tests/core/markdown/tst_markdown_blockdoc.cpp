@@ -788,6 +788,26 @@ private Q_SLOTS:
         QVERIFY(!doc.composed(near, doc.diffFrom(v)));
         // Deltas that do not chain: the same step twice.
         QVERIFY(!doc.composed(near, near));
+
+        // A step that changed blocks far apart, then typing: bounded (typing merges) the joined
+        // run may not pass MaxComposeRun blocks; unbounded it joins and undoes as one.
+        QString many;
+        for (int i = 0; i < 400; ++i)
+            many += u"- wpis %1 gęślą\n"_s.arg(i);
+        BlockDocument far(many);
+        v = far.version();
+        far.setBody(10, u"zmieniony ą"_s);
+        far.setBody(10 + BlockDocument::MaxComposeRun + 5, u"daleko ę"_s);
+        const BlockDocument::Delta wide = far.diffFrom(v);
+        v = far.version();
+        far.setBody(10, u"zmieniony ąż"_s);
+        const BlockDocument::Delta typed = far.diffFrom(v);
+        QVERIFY(!far.composed(wide, typed, true));
+        const std::optional<BlockDocument::Delta> joined = far.composed(wide, typed);
+        QVERIFY(joined);
+        far.revert(*joined, &ok);
+        QVERIFY(ok);
+        QCOMPARE(far.toString(), many);
     }
 
     void uidsAreUniqueAcrossDocuments()
