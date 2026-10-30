@@ -269,7 +269,7 @@ const m = {
   vault: { overlay, files: vault },
   screensHash: sha256(screensText),
   // Obsidian shots stay valid while this is the same (--reuse-obsidian): screens.json without
-  // Brulion's arguments, the overlay, the fonts, Obsidian's version, the clock.
+  // the Brulion arguments, the overlay, the fonts, the Obsidian version, the clock.
   benchConfigHash: sha256([JSON.stringify({ ...JSON.parse(screensText), screens: JSON.parse(screensText).screens
     .map(({ brulion, ...rest }) => rest) }), overlay, fonts.join("\n"), version, now].join("\n---\n")),
   shots: { brulion: shots("brulion" + suffix), obsidian: suffix ? [] : shots("obsidian") },
