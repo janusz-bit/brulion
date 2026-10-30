@@ -67,7 +67,7 @@ uibench_brulion_shot() {
     XDG_STATE_HOME="$home/state")
   [[ -n "${UIBENCH_FONTS:-}" ]] && env+=(FONTCONFIG_FILE="$UIBENCH_FONTS")
   if [[ "$render" == xcb-gl ]]; then
-    env+=(QT_QPA_PLATFORM=xcb LIBGL_ALWAYS_SOFTWARE=1)
+    env+=(QT_QPA_PLATFORM=xcb LIBGL_ALWAYS_SOFTWARE=1 QSG_INFO=1)
   else
     env+=(QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software)
   fi

@@ -2370,7 +2370,8 @@ vault settings, the Calendar plugin's hashes).
 | Clock | `--now "2026-10-14 10:00"`, `TZ=Europe/Warsaw` | a running `Date` shifted to that instant (`Page.addScriptToEvaluateOnNewDocument`) and the zone override |
 | Fonts | `FONTCONFIG_FILE=<out>/env/fonts.conf`: Noto Sans / Serif / Sans Mono, Noto Color Emoji, DejaVu (nixpkgs), grayscale antialiasing, slight hinting | the same file, `--disable-lcd-text` |
 | Rendering | offscreen + software (the realism check `--render xcb-gl`: Xvfb + OpenGL/llvmpipe) | `--disable-gpu`, `--force-color-profile=srgb` |
-| Settings | defaults (fresh XDG home) | defaults (fresh `--user-data-dir`, `HOME`, `XDG_*`): Live Preview, readable line length |
+| Settings | defaults (fresh XDG home) | defaults (fresh `--user-data-dir`, `HOME`, `XDG_*`): Live Preview, readable line length; the settings screen in the main window (1.14 opens them in a window of their own: one 1280×800 picture like Brulion's) |
+| Pointer | none (offscreen) | moved outside the page before each shot (no hover highlight) |
 | Network | none needed | a dead proxy (`--proxy-server=http://127.0.0.1:9`), `updateDisabled` |
 
 **The notebook** (`prepare-vault.sh`): Brulion's sample notebook seeded at the bench's clock
@@ -2453,7 +2454,10 @@ px.
 **Regression guard** `tst_uibench_lint_qml` (`lint.sh`, slow): 8 Brulion shots (daily, doc,
 settings, palette × desktop light / phone dark; system fonts) fail on any enabled, visible text
 below its WCAG contrast or a target below its size that `lint-allow.json` does not excuse
-(`[{screen, type, text|name, reason}]`).
+(`[{screen, kind, type, text|name, count, reason}]`: `count` excuses that many failures of a shot,
+so one more is caught). Its first entries are the round-0 baseline of Brulion's known failures
+(the bullet's zoom handle, short block rows and the settings' 38-px segmented choices on phones,
+the calculation block's faint caption): the loop removes them as it fixes them.
 
 **README pictures** (`docs/images/`, Polish locale, the sample notebook) come from these scripts
 — `SIZES=<size> THEMES=<theme> tests/app/<area>/screenshots.sh <shot>` — and are optimised with
