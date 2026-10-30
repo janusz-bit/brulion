@@ -8,6 +8,7 @@
 
 #include <QElapsedTimer>
 #include <QRandomGenerator>
+#include <QScopeGuard>
 #include <QTest>
 
 #include <algorithm>
@@ -80,6 +81,17 @@ QStringList describe(const QList<ScheduledNotification> &list)
                 QString::number(int(n.alarm)), n.path, QString::number(n.line), QString::number(n.taskLine)));
     }
     return out;
+}
+
+/// Local time follows `tz` (a POSIX rule: no time zone database needed).
+void useZone(const char *tz)
+{
+    qputenv("TZ", tz);
+#ifdef Q_OS_WIN
+    _tzset();
+#else
+    tzset();
+#endif
 }
 
 double median(QList<qint64> values)
@@ -256,6 +268,69 @@ private Q_SLOTS:
         const QDateTime later = dt(2026, 10, 14, 0, 0);
         QCOMPARE(describe(wide.between(index, later, later.addDays(30))),
                  describe(notificationsBetween(index, later, later.addDays(30))));
+    }
+
+    // The kept instants follow the local time zone: after a change (travel, an automatic time
+    // zone) every reminder keeps its wall-clock time, exactly as the free functions give it — a
+    // reminder at 09:00 fires at 09:00 of the new zone, not an hour early or late.
+    void zoneChangeComputesAgain_data()
+    {
+        QTest::addColumn<QByteArray>("tz");
+        QTest::newRow("UTC") << QByteArray("UTC0");
+        QTest::newRow("London: west, its own change to winter time") << QByteArray("GMT0BST,M3.5.0/1,M10.5.0");
+        QTest::newRow("Moscow: east, no summer time") << QByteArray("MSK-3");
+        QTest::newRow("Kyiv: east, the same change dates") << QByteArray("EET-2EEST,M3.5.0/3,M10.5.0/4");
+    }
+    void zoneChangeComputesAgain()
+    {
+        QFETCH(QByteArray, tz);
+        VaultIndex index;
+        fill(index, vault());
+        index.update(u"Spotkania.md"_s, u"- [ ] Spotkanie z Łucją ⏰ 2026-10-14 09:00\n"
+                                        u"- ⏰! 2026-10-26 07:15 Pobudka po zmianie czasu\n"_s);
+        NotificationCache notes;
+        notes.setDays(Today.addDays(-8), Today.addDays(15));
+        // Kept in Central European time.
+        QVERIFY(!notes.upcoming(index, dt(2026, 10, 14, 7, 0)).isEmpty());
+        QVERIFY(notes.lastSync().full);
+        const int before = dt(2026, 10, 14, 12, 0).offsetFromUtc();
+        const auto restore = qScopeGuard([] { brulion::test::useCentralEuropeanTime("CET-1CEST,M3.5.0,M10.5.0/3"); });
+        useZone(tz.constData());
+        if (dt(2026, 10, 14, 12, 0).offsetFromUtc() == before)
+            QSKIP("local time does not follow TZ here");
+
+        // The same wall-clock times in the new zone: everything computed again.
+        const QDateTime now = dt(2026, 10, 14, 8, 59, 30);
+        QCOMPARE(describe(notes.upcoming(index, now)), describe(upcomingNotifications(index, now)));
+        QVERIFY(notes.lastSync().full);
+        // The scheduler's check at 09:00 finds the meeting — at 09:00 of the new zone.
+        const QDateTime nine = dt(2026, 10, 14, 9, 0);
+        const QList<ScheduledNotification> due = notes.between(index, now, nine);
+        QCOMPARE(describe(due), describe(notificationsBetween(index, now, nine)));
+        QCOMPARE(due.size(), 1);
+        QCOMPARE(due.first().title, u"Spotkanie z Łucją"_s);
+        QCOMPARE(due.first().at.toMSecsSinceEpoch(), nine.toMSecsSinceEpoch());
+        // The hours around it do not have it (not an hour early, not an hour late).
+        const auto meeting = [](const QList<ScheduledNotification> &list) {
+            return std::any_of(list.cbegin(), list.cend(),
+                               [](const ScheduledNotification &n) { return n.title == u"Spotkanie z Łucją"_s; });
+        };
+        QVERIFY(!meeting(notes.between(index, nine.addSecs(-3 * 3600), nine.addSecs(-60))));
+        QVERIFY(!meeting(notes.between(index, nine.addSecs(60), nine.addSecs(3 * 3600))));
+        // After the change to winter time too.
+        const QDateTime wake = dt(2026, 10, 26, 7, 15);
+        QCOMPARE(describe(notes.between(index, wake.addSecs(-30), wake.addSecs(30))),
+                 describe(notificationsBetween(index, wake.addSecs(-30), wake.addSecs(30))));
+        QCOMPARE(notes.between(index, wake.addSecs(-30), wake.addSecs(30)).size(), 1);
+        // Nothing changed since: kept.
+        notes.upcoming(index, now);
+        QVERIFY(!notes.lastSync().any());
+
+        // Back in Central European time: computed again, as the free functions give it.
+        brulion::test::useCentralEuropeanTime("CET-1CEST,M3.5.0,M10.5.0/3");
+        QCOMPARE(describe(notes.between(index, now, nine)), describe(notificationsBetween(index, now, nine)));
+        QVERIFY(notes.lastSync().full);
+        QCOMPARE(describe(notes.upcoming(index, now)), describe(upcomingNotifications(index, now)));
     }
 
     // After one edit the caches compute one note: at least four times cheaper than computing

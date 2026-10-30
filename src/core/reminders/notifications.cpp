@@ -8,6 +8,7 @@
 
 #include <QHash>
 #include <QSet>
+#include <QTimeZone>
 
 #include <algorithm>
 #include <optional>
@@ -168,10 +169,25 @@ void collectNote(const VaultIndex &index, const VaultPath &path, const ParsedNot
         collectRefs(index, &note, refs, from, to, locale, out, capped);
 }
 
+/// The local time zone as part of the kept days' key: the kept occurrences' instants (`ms`) hold
+/// only while it stays — after a change (travel, an automatic time zone) every note is computed
+/// again, so reminders keep their local wall-clock times. The zone's id (also a TZ rule string)
+/// and the offsets at both ends of the kept days (local time goes through the C library, which
+/// may see a change the id does not).
+QString zoneKey(const QDateTime &dayStart, const QDateTime &dayEnd)
+{
+    QString key = QString::fromUtf8(QTimeZone::systemTimeZoneId());
+    key += u'|';
+    key += QString::number(dayStart.offsetFromUtc());
+    key += u'|';
+    key += QString::number(dayEnd.offsetFromUtc());
+    return key;
+}
+
 /// The occurrences of one note for the kept days.
 struct NoteOccurrences {
     QList<ScheduledNotification> list;
-    QList<qint64> ms;    ///< list's times since the epoch (ms)
+    QList<qint64> ms;    ///< list's times since the epoch (ms), in the local zone of the key
     bool capped = false; ///< a series was cut at MaxOccurrences: requests compute the note directly
 };
 
@@ -263,7 +279,7 @@ QList<ScheduledNotification> NotificationCache::occurrences(const VaultIndex &in
         const QDateTime dayStart(d->first, QTime(0, 0));
         const QDateTime dayEnd(d->last, QTime(23, 59, 59, 999));
         const QString key = d->first.toString(Qt::ISODate) + u'|' + d->last.toString(Qt::ISODate) + u'|'
-                            + QString::number(int(locale));
+                            + QString::number(int(locale)) + u'|' + zoneKey(dayStart, dayEnd);
         d->lastSync = d->notes.sync(
                 index, key, false,
                 [&](const VaultPath &path, const ParsedNote &note) {

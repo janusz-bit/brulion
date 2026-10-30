@@ -135,7 +135,8 @@ QList<ScheduledNotification> upcomingNotifications(const VaultIndex &index, cons
 /// upcoming() equal notificationsBetween() and upcomingNotifications() — those are a cache
 /// without history —; a request reaching outside the days (or before setDays()) is computed
 /// directly. After an index change only the notes VaultIndex::changesSince() names are computed
-/// again; other days or another locale: all of them.
+/// again; other days, another locale or another local time zone (the kept instants follow the
+/// wall-clock times): all of them.
 class NotificationCache {
 public:
     NotificationCache();
