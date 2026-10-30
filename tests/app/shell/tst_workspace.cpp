@@ -1747,6 +1747,31 @@ private Q_SLOTS:
         ws->close();
         QVERIFY(ws->cachedLists().isEmpty());
     }
+
+    // A query matching more than MaxCachedQueryMatches is not kept (its cache would hold every
+    // match for the session, whatever its limit:): computed afresh, the same result; smaller
+    // queries are kept.
+    void broadQueriesAreNotKept()
+    {
+        QString many;
+        for (int i = 0; i <= Workspace::MaxCachedQueryMatches; ++i)
+            many += u"- wiersz %1 o żółtej łodzi\n"_s.arg(i);
+        auto ws = open({{u"Łódź.md"_s, many}, {u"Dom.md"_s, u"- [ ] Malowanie #remont\n- inna łódź\n"_s}});
+        const QVariantMap broad = ws->runQuery(u"\"łodzi\" limit:3"_s);
+        QVERIFY(broad.value(u"ok"_s).toBool());
+        QCOMPARE(broad.value(u"total"_s).toInt(), Workspace::MaxCachedQueryMatches + 1);
+        QCOMPARE(broad.value(u"items"_s).toList().size(), 3);
+        QVERIFY(ws->cachedLists().isEmpty());
+        const QVariantMap narrow = ws->runQuery(u"tag:remont"_s);
+        QCOMPARE(narrow.value(u"total"_s).toInt(), 1);
+        QCOMPARE(ws->cachedLists(), QStringList{u"tag:remont\x1f"_s});
+        // Again after a write: computed afresh, still not kept.
+        QVERIFY(ws->write(u"Dom.md"_s, u"- [ ] Malowanie #remont\n- żółta łodzi przystań\n"_s));
+        const QVariantMap again = ws->runQuery(u"\"łodzi\" limit:3"_s);
+        QCOMPARE(again.value(u"total"_s).toInt(), Workspace::MaxCachedQueryMatches + 2);
+        QCOMPARE(again.value(u"items"_s).toList().size(), 3);
+        QCOMPARE(ws->cachedLists(), QStringList{u"tag:remont\x1f"_s});
+    }
 };
 
 QTEST_GUILESS_MAIN(TestWorkspace)

@@ -55,6 +55,10 @@ public:
             m_entries.removeLast();
         return *m_entries.first().second;
     }
+    void remove(const QString &key)
+    {
+        m_entries.removeIf([&key](const auto &entry) { return entry.first == key; });
+    }
     QStringList keys() const
     {
         QStringList out;
@@ -243,8 +247,12 @@ QVariantMap Workspace::runQuery(const QString &source, const QString &currentPat
     options.currentPath = paths::normalize(currentPath);
     const QDateTime current = now();
     options.now = current.time();
-    QueryCache &cache = listCaches().queries.get(source + u'\x1f' + options.currentPath);
+    const QString key = source + u'\x1f' + options.currentPath;
+    QueryCache &cache = listCaches().queries.get(key);
     const QueryResult result = cache.run(query, *m_index, current.date(), m_vault->config().weekStartsOn, options);
+    // A query matching much of the vault: its matches would stay in memory for the session.
+    if (cache.total() > MaxCachedQueryMatches)
+        listCaches().queries.remove(key);
     QVariantList items;
     items.reserve(result.items.size());
     for (const QueryItem &item : result.items)

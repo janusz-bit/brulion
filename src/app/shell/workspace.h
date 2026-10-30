@@ -432,6 +432,9 @@ public:
     /// Calendar ranges and queries whose caches are kept (the most recently asked first; tests).
     static constexpr int MaxCachedRanges = 4;
     static constexpr int MaxCachedQueries = 8;
+    /// A query matching more is not kept (a cache holds every match, ~0.2 KB each, whatever its
+    /// `limit:`): it is computed afresh each time, as before the caches.
+    static constexpr int MaxCachedQueryMatches = 5000;
     /// The ranges ("from|to") and queries ("source\x1fcurrentPath") kept, most recent first (tests).
     QStringList cachedLists() const;
 
