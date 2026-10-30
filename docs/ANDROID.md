@@ -997,7 +997,7 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | sygnał `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | natywna `nativeImeChanged(Int, Boolean, Boolean)` (z `ImeInsets`, piksele fizyczne, każda klatka wysuwania na Androidzie 11+) / `requestImeState()` — raport jeszcze raz |
 | sygnał `systemGesturesChanged(int left, int right)` | natywna `nativeGestureInsetsChanged(Int, Int)` (z `ImeInsets`, piksele fizyczne stref gestów systemu przy krawędziach widoku Qt; raport jeszcze raz też przez `requestImeState()`) |
 | `void setSystemBarsLight(bool light)` | `setSystemBarsLight(Boolean)` — ikony pasków systemu ciemne nad jasnym oknem (Android 11+, okno pod paskami) |
-| `platform::pdfInfo(file)` (`src/platform/pdfpages_android.cpp`, nie `AndroidBridge`; każdy wątek) | `pdfInfo(String): String` — `{"pages", "sizes": [[w, h], …] (punkty), "error", "locked"}` (`PdfPages.kt`: systemowy `android.graphics.pdf.PdfRenderer`) |
+| `platform::pdfInfo(file, pageSizes)` (`src/platform/pdfpages_android.cpp`, nie `AndroidBridge`; każdy wątek) | `pdfInfo(String, Boolean): String` — `{"pages", "sizes": [[w, h], …] (punkty, tylko z `pageSizes`), "error", "locked"}` (`PdfPages.kt`: systemowy `android.graphics.pdf.PdfRenderer`) |
 | `platform::renderPdfPage(file, page, maxSide)` (j.w.) | `renderPdfPage(String, Int, Int): ByteArray?` — 8 bajtów nagłówka (szerokość, wysokość, big-endian) i piksele RGBA_8888 strony na białym tle, dłuższy bok `maxSide`; `null` przy błędzie |
 
 * Element `scheduleReminders`: `{id: int, title, body, at: ms od epoki, alarm: bool,

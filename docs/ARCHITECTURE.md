@@ -117,8 +117,9 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   launcher's startup notification (`StartupNotify=true`) itself, through Qt's xcb plugin, which
   says "remove" once the process shows a window — a 1×1 tooltip window off the screen (nothing
   elsewhere).
-* **PDF pages** (`pdfpages.h`; tests/platform `tst_pdfpages`): `pdfAvailable()`, `pdfInfo(file)` —
-  the pages and their sizes in points, a password-protected file `locked` —,
+* **PDF pages** (`pdfpages.h`; tests/platform `tst_pdfpages`): `pdfAvailable()`, `pdfInfo(file,
+  pageSizes)` — the pages and, when asked, their sizes in points, a password-protected file
+  `locked` —,
   `renderPdfPage(file, page, maxSide)` — a page on white, its long side `maxSide` px (a drawing's
   backdrop, the page picker's thumbnails); thread-safe, every call opens the file. One backend per
   build, chosen by `src/platform/CMakeLists.txt` (`BRULION_PDF_BACKEND`, default `auto`): Android

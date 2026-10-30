@@ -31,14 +31,17 @@ internal object PdfPages {
   /** The largest long side drawn (src/platform/pdfpages.h MaxPdfPageSide). */
   private const val MAX_SIDE = 8192
 
-  fun info(path: String): String {
+  /** The page count and — [pageSizes] — every page's size (each page opened: slower). */
+  fun info(path: String, pageSizes: Boolean): String {
     val out = JSONObject()
     try {
       ParcelFileDescriptor.open(File(path), ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
         PdfRenderer(descriptor).use { renderer ->
           val sizes = JSONArray()
-          for (i in 0 until renderer.pageCount) {
-            renderer.openPage(i).use { page -> sizes.put(JSONArray().put(page.width).put(page.height)) }
+          if (pageSizes) {
+            for (i in 0 until renderer.pageCount) {
+              renderer.openPage(i).use { page -> sizes.put(JSONArray().put(page.width).put(page.height)) }
+            }
           }
           out.put("pages", renderer.pageCount)
           out.put("sizes", sizes)

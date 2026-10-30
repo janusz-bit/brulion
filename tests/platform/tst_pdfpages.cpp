@@ -102,6 +102,10 @@ void TestPdfPages::infoAndSizes()
     QVERIFY(qAbs(info.pagePoints.at(0).height() - A4H) < 2);
     QVERIFY(qAbs(info.pagePoints.at(1).width() - A4H) < 2);
     QVERIFY(qAbs(info.pagePoints.at(1).height() - A4W) < 2);
+    // The count alone (the page picker opening a long PDF).
+    const PdfInfo count = pdfInfo(m_pdf, false);
+    QCOMPARE(count.pages, 2);
+    QVERIFY(count.pagePoints.isEmpty());
 }
 
 void TestPdfPages::renderSecondPage()

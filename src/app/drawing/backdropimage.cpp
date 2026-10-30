@@ -184,14 +184,10 @@ PreparedBackdrop prepareBackdropPdfPage(const QString &absoluteFile, const QStri
         return failed(vaultPath, page, backdroperror::NoPdf);
     if (!QFileInfo(absoluteFile).isFile())
         return failed(vaultPath, page, backdroperror::Unreadable);
-    const platform::PdfInfo info = platform::pdfInfo(absoluteFile);
-    if (info.locked)
-        return failed(vaultPath, page, backdroperror::Locked);
-    if (info.pages <= 0 || page < 1 || page > info.pages)
-        return failed(vaultPath, page, backdroperror::Pdf);
     const QImage rendered = platform::renderPdfPage(absoluteFile, page, drawing::BackdropMaxPixels);
-    if (rendered.isNull())
-        return failed(vaultPath, page, backdroperror::Pdf);
+    if (rendered.isNull()) // (why: a password, or anything else)
+        return failed(vaultPath, page,
+                      platform::pdfInfo(absoluteFile, false).locked ? backdroperror::Locked : backdroperror::Pdf);
     PreparedBackdrop out;
     out.source = drawing::BackdropSource{vaultPath, page};
     out.name = nameOf(vaultPath);

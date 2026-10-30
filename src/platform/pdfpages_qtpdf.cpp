@@ -49,13 +49,15 @@ QString pdfBackendName()
     return u"Qt PDF"_s;
 }
 
-PdfInfo pdfInfo(const QString &file)
+PdfInfo pdfInfo(const QString &file, bool pageSizes)
 {
     PdfInfo info;
     QPdfDocument doc;
     if (!load(doc, file, &info))
         return info;
     info.pages = doc.pageCount();
+    if (!pageSizes)
+        return info;
     info.pagePoints.reserve(info.pages);
     for (int i = 0; i < info.pages; ++i)
         info.pagePoints.append(doc.pagePointSize(i));

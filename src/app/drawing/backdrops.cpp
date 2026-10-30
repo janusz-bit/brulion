@@ -149,7 +149,7 @@ QVariantMap DrawingBackdrops::pdfInfo(const QString &vaultPath) const
         return {{u"pages"_s, -1}, {u"error"_s, errorText(backdroperror::NoPdf.toString())}, {u"locked"_s, false}};
     if (file.isEmpty() || !QFileInfo(file).isFile())
         return {{u"pages"_s, -1}, {u"error"_s, errorText(backdroperror::Unreadable.toString())}, {u"locked"_s, false}};
-    const platform::PdfInfo info = platform::pdfInfo(file);
+    const platform::PdfInfo info = platform::pdfInfo(file, false); // (the count only: a long PDF opens fast)
     QString error;
     if (info.locked)
         error = errorText(backdroperror::Locked.toString());

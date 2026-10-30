@@ -69,13 +69,15 @@ QString pdfBackendName()
     return u"poppler"_s;
 }
 
-PdfInfo pdfInfo(const QString &file)
+PdfInfo pdfInfo(const QString &file, bool pageSizes)
 {
     PdfInfo info;
     const std::unique_ptr<Poppler::Document> doc = load(file, &info);
     if (!doc)
         return info;
     info.pages = doc->numPages();
+    if (!pageSizes)
+        return info;
     info.pagePoints.reserve(info.pages);
     for (int i = 0; i < info.pages; ++i) {
         const std::unique_ptr<Poppler::Page> page = doc->page(i);

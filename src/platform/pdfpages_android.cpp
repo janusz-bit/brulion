@@ -39,12 +39,12 @@ QString pdfBackendName()
     return u"Android PdfRenderer"_s;
 }
 
-PdfInfo pdfInfo(const QString &file)
+PdfInfo pdfInfo(const QString &file, bool pageSizes)
 {
     PdfInfo info;
     const QJniObject path = QJniObject::fromString(file);
     const QJniObject answer = QJniObject::callStaticObjectMethod(
-            kClass, "pdfInfo", "(Ljava/lang/String;)Ljava/lang/String;", path.object<jstring>());
+            kClass, "pdfInfo", "(Ljava/lang/String;Z)Ljava/lang/String;", path.object<jstring>(), jboolean(pageSizes));
     if (threw() || !answer.isValid()) {
         info.error = u"BrulionAndroid.pdfInfo failed"_s;
         return info;
@@ -57,7 +57,7 @@ PdfInfo pdfInfo(const QString &file)
         const QJsonArray wh = size.toArray();
         info.pagePoints.append(QSizeF(wh.at(0).toDouble(), wh.at(1).toDouble()));
     }
-    if (info.pages <= 0 || info.pagePoints.size() != info.pages) {
+    if (info.pages <= 0 || (pageSizes && info.pagePoints.size() != info.pages)) {
         info.pages = -1;
         info.pagePoints.clear();
         if (info.error.isEmpty())

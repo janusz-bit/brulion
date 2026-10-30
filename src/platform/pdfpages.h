@@ -31,15 +31,15 @@ QString pdfBackendName();
 struct PdfInfo {
     /// The number of pages; -1: the file cannot be read as a PDF (`error` says why).
     int pages = -1;
-    /// Each page's size in points (1/72 inch), rotation applied.
+    /// Each page's size in points (1/72 inch), rotation applied (empty when not asked for).
     QList<QSizeF> pagePoints;
     QString error;
     /// The file asks for a password (pages −1).
     bool locked = false;
 };
 
-/// The file's pages and their sizes.
-PdfInfo pdfInfo(const QString &file);
+/// The file's pages and — `pageSizes` — their sizes (every page opened: slower for a long PDF).
+PdfInfo pdfInfo(const QString &file, bool pageSizes = true);
 /// Page `page` (1-based) of the file on white, its long side `maxSide` pixels (1…8192; the aspect
 /// from the page's size, rotation applied). Null (and `error`) when the file or the page cannot be
 /// read.

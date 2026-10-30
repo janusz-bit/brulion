@@ -17,9 +17,10 @@ QString pdfBackendName()
     return u"none"_s;
 }
 
-PdfInfo pdfInfo(const QString &file)
+PdfInfo pdfInfo(const QString &file, bool pageSizes)
 {
     Q_UNUSED(file);
+    Q_UNUSED(pageSizes);
     PdfInfo info;
     info.error = u"This build has no PDF renderer"_s;
     return info;

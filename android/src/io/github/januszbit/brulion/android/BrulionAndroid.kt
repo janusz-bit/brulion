@@ -453,9 +453,12 @@ object BrulionAndroid {
   // PDF pages as a drawing's backdrop (src/platform/pdfpages_android.cpp): any thread
   // -----------------------------------------------------------------------------------------
 
-  /** `{"pages", "sizes": [[w, h], ...] (points), "error", "locked"}` of the PDF at [path]. */
+  /**
+   * `{"pages", "sizes": [[w, h], ...] (points; only with [pageSizes]), "error", "locked"}` of the
+   * PDF at [path].
+   */
   @JvmStatic
-  fun pdfInfo(path: String): String = PdfPages.info(path)
+  fun pdfInfo(path: String, pageSizes: Boolean): String = PdfPages.info(path, pageSizes)
 
   /**
    * Page [page] (1-based) of the PDF at [path] on white, its long side [maxSide] pixels: 8 bytes of
