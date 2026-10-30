@@ -515,15 +515,16 @@ keystroke's delta with the step (bounded: a step whose run spans more than 256 b
 keystroke at the top of a page also renumbers a loose ordered list at its end — stays a step of its
 own, or every later keystroke would compose thousands of blocks).
 
-**Core** (laptop, Release, P-cores, `-q 3`, 5 repetitions; before = `sweep2` at `b3d9a3d`, the rows
-it can build; `bench_markdown:blockDocOps` on the 5000-block outline):
+**Core** (laptop, Release, P-cores, `-q 3`, 5 repetitions; `bench_markdown:blockDocOps` on the
+5000-block outline, from the branch's perf-check run; the rows before L5 measured alternately with
+`sweep2` at `b3d9a3d` in the same session):
 
-| operation | before | after |
+| operation | 5000 blocks | 500 blocks |
 |---|---:|---:|
-| `undo+redo`: an Enter's delta reverted and reapplied (one undo + one redo) | – | 1.72 ms (500 blocks 0.12 ms, k 1.15) |
-| `re-read`: the page read again, unchanged blocks lending their parse (the core of the old undo, which also had no parse to borrow, matched the blocks and moved the rows) | – | 3.94 ms per step |
-| `version+diff`: a `setBody` with the step's bookkeeping (`version()` + `diffFrom()`) | – | 1.23 ms (`setBody` alone 1.00 ms) |
-| `keystroke`, `setBody`, `split+merge`, … (the other rows) | | within noise (+1 to +9 %, 0 rows outside max(10 %, noise)) |
+| `undo+redo`: an Enter's delta reverted and reapplied (one undo + one redo) | 1.59 ms | 0.111 ms (k 1.16) |
+| `re-read`: the page read again, unchanged blocks lending their parse — the core of the old undo, which had no parse to borrow, and matched the blocks and moved the rows on top | 3.44 ms per step | 0.340 ms |
+| `version+diff`: a `setBody` with the step's bookkeeping (`version()` + `diffFrom()`) | 1.11 ms (`setBody` alone 1.00 ms) | 0.093 ms |
+| `keystroke`, `setBody`, `split+merge`, … against `b3d9a3d` | within noise (+1 to +9 %, no row outside max(10 %, noise)) | |
 
 **App** (`tests/bench/app`, laptop, Release, Xvfb; the `typing` scenario on the 5000-block pages of
 the bench notebook; 6 runs per build, base and branch interleaved; medians, min–max in brackets):
