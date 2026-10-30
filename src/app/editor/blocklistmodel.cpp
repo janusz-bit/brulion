@@ -796,6 +796,16 @@ void BlockListModel::refresh(bool contentChanged)
         // Results stay while the block and, when they read calc variables, everything its
         // calculations see are unchanged.
         const BlockShape &shape = cachedShape(row);
+        // A block that is no calc block or table any more (its text changed in place: an edit,
+        // undo) has no results.
+        if (shape.view != BlockView::Calc && !st.calcResults.isEmpty()) {
+            st.calcResults.clear();
+            calcRows.append(row);
+        }
+        if (shape.view != BlockView::Table && !st.tableData.isEmpty()) {
+            st.tableData.clear();
+            tableRows.append(row);
+        }
         if (shape.view == BlockView::Calc || shape.view == BlockView::Table) {
             if (!st.resultsValid || (st.resultsUseScope && st.resultsEpoch != m_calcEpoch)
                 || (shape.view == BlockView::Table && st.resultsUseRefs)) {
