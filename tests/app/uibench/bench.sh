@@ -183,7 +183,7 @@ if [[ "$app" != brulion ]]; then
     if [[ -e /etc/NIXOS ]]; then
       extracted="$cache/obsidian-$obsidian_version"
       [[ $dry == 1 || -d "$extracted" ]] || appimage-run -x "$extracted" "$appimage" >/dev/null
-      launch="appimage-run -w $extracted"
+      launch="appimage-run -w $extracted --"
     else
       extracted="$cache/obsidian-$obsidian_version-root"
       if [[ $dry == 0 && ! -x "$extracted/obsidian" ]]; then
