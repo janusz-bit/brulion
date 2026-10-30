@@ -59,9 +59,14 @@ public:
 
     double x(int i) const { return m_x[size_t(i)]; }
     double y(int i) const { return m_y[size_t(i)]; }
+    const std::vector<double> &xs() const { return m_x; }
+    const std::vector<double> &ys() const { return m_y; }
     double vx(int i) const { return m_vx[size_t(i)]; }
     double vy(int i) const { return m_vy[size_t(i)]; }
     void setPosition(int i, double x, double y);
+    /// All positions at once (sizes must equal nodeCount(), else nothing happens); velocities 0,
+    /// alpha and pinned nodes kept (a pinned node keeps its pin, at its new position).
+    void setPositions(const std::vector<double> &xs, const std::vector<double> &ys);
     void fix(int i, double x, double y);
     void unfix(int i);
     bool isFixed(int i) const { return m_fixed[size_t(i)] != 0; }
@@ -72,6 +77,11 @@ public:
     void setAlphaTarget(double target) { m_alphaTarget = target; }
     /// alpha above alphaMin, or a positive alpha target.
     bool running() const { return m_alpha >= m_params.alphaMin || m_alphaTarget > 0; }
+    /// Steps until the simulation stops with the current alpha, decay and a zero alpha target
+    /// (-1 with a positive target: it runs until the target is lowered).
+    int expectedTicks() const;
+    /// Steps for `alpha` to cool below `alphaMin` at `alphaDecay` per step (alpha target 0).
+    static int ticksToCool(double alpha, double alphaMin, double alphaDecay);
 
     /// One simulation step (cools alpha first, like d3).
     void tick();

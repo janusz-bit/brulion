@@ -6,13 +6,21 @@ optymalizacjami). Wszystkie trzy wersje zmierzono w tych samych warunkach i tymi
 benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsku, niżej). Uzupełnione
 2026-10-29 o falę 5: pamięć indeksu, indeksowanie na kilku rdzeniach i gotowy indeks zapisany na
 urządzeniu (porównanie z `82d0357`), a 2026-10-30 o szybsze cofanie (L5, porównanie z `b3d9a3d`),
-mniejsze pakiety (L9, porównanie z `ef90077`) i szybsze odświeżanie list po zapisie (L3,
-porównanie z `ef90077`).
+mniejsze pakiety (L9, porównanie z `ef90077`), szybsze odświeżanie list po zapisie (L3,
+porównanie z `ef90077`) i płynny graf (L16, porównanie z `64d0380` na serwerze GitHub Actions).
 
 ## Podsumowanie dla użytkowników
 
 ### Co się poprawiło
 
+* **Płynny graf** (2026-10-30). Widok **Graf** układa się w osobnym wątku, a rysuje go karta
+  graficzna: od pierwszej chwili można go przesuwać, powiększać i przeciągać strony, a interfejs
+  nie czeka na obliczenia układu. Przy notatniku z 10 000 notatek (graf 4000 stron) pierwsza
+  klatka grafu jest po ok. 0,13 s zamiast ok. 1,1 s, najdłuższe zacięcie w trakcie układania
+  trwa ok. 0,2 zamiast 1 s, a przesuwanie i powiększanie odpowiada 2–3 razy szybciej — i to na
+  serwerze bez karty graficznej, który rysuje na procesorze; z kartą graficzną klatka kosztuje
+  ułamek milisekundy. Na telefonie graf animuje się 60 razy na sekundę zamiast 30 (pomiar na
+  telefonie jeszcze przed nami).
 * **Mniejsza aplikacja** (2026-10-30). APK na Androida ma 76,9 zamiast 91,8 MiB (do pobrania
   26,3 zamiast 30,9 MB), a wersja przeglądarkowa pobiera przy pierwszej wizycie 13,5 zamiast
   15,8 MB — przy łączu 20 Mbit/s pierwsza klatka jest o ok. 1,1 s wcześniej (7,4 zamiast 8,5 s).
@@ -60,7 +68,7 @@ porównanie z `ef90077`).
   o jedną trzecią mniej.
 * **Widoki:** Zadania otwierają się dwa razy szybciej (komputer 0,26 → 0,13 s, telefon 1,1 →
   0,7 s), Kalendarz i Agenda o 10–30 % szybciej. **Graf na telefonie** układa się w 2,6 s
-  zamiast 44 s.
+  zamiast 44 s (pomiar sprzed układania grafu w osobnym wątku, wyżej).
 * **Import** długich list z HTML (np. eksport Evernote/Notion) — 20 000 punktów w 0,2 s zamiast
   13 s. Podpowiedzi bloków `((` są dwa razy szybsze, podpowiedzi stron `[[` o ok. jedną trzecią.
 * **Android:** synchronizacja z Nextcloud przez HTTPS wreszcie działa (wcześniej każde połączenie
@@ -85,7 +93,8 @@ porównanie z `ef90077`).
 cały notatnik zaindeksowany po ok. 1 s, przy kolejnym otwarciu po 0,8 s (w tym czasie można już
 czytać i pisać). Strona z 5000
 bloków otwiera się w ok. 0,1 s, wyszukiwanie zwraca wyniki w kilka–kilkanaście milisekund,
-Zadania/Kalendarz/Agenda otwierają się w 0,13–0,17 s. Bezczynny Brulion zużywa ok. 0,1 %
+Zadania/Kalendarz/Agenda otwierają się w 0,13–0,17 s, graf z 4000 stron pokazuje się po ok.
+0,13 s i od razu da się go przesuwać (układa się w tle). Bezczynny Brulion zużywa ok. 0,1 %
 procesora i nie rysuje klatek.
 
 **Na telefonie** (mierzone na Raspberry Pi 4, który odpowiada słabszemu telefonowi, i na
@@ -771,10 +780,105 @@ strona PDF…") is dropped and decoded again on undo; the previews decode it at 
 it. poppler draws a page at the resolution of the size asked for (`pdfRenderDpi`; it had a floor of
 18 dpi, so a hostile 20000-pt MediaBox became a 5000 × 5000 px picture for a 230 px thumbnail).
 
+### L16: the graph on a worker thread and the scene graph (2026-10-30)
+
+The graph view (N5) laid its graph out on the GUI thread — a step per 16 ms timer event, on slow
+devices time-boxed bursts of 10–25 ms during which input waited — and painted it with QPainter in
+a `QQuickPaintedItem`, rasterised on every frame of the moving layout while the GUI thread waited
+(throttled to a frame every 66–600 ms on slow devices). Now:
+
+* **The layout runs on a worker thread** (`GraphSimulation`: one `QThread` "brulion-graph" per open
+  graph, started with its first run). The GUI hands it a copy of the `ForceLayout` and keeps a
+  mirror of the newest positions — what it draws, hit-tests, fits and follows —, which the worker
+  publishes at most once per frame interval (16 ms); the newest frame replaces an unread one, so a
+  busy GUI thread gets the newest positions, not a backlog. Commands (pin and move the dragged node,
+  the drag's alpha target, reheat, pause while the view is hidden, cancel) apply before the
+  worker's next step; the dragged node follows the pointer at once in the mirror. Only value
+  copies cross threads (a run in, frames out; one mutex for the frame slot, one for the command
+  queue). `rebuild()` (`VaultIndex::graph()` and the filters) stays on the GUI thread; the view
+  sets its settings before the index, so opening it builds the graph once (before: once more for
+  each setting that differs from its default — the phones' node cap, an English UI, saved
+  toggles).
+* **The browser** (single-threaded WebAssembly) runs the same worker on the GUI thread in slices of
+  ≤ 16.5 ms per 33 ms timer event (never a 0 ms timer, N13), at least one step per slice.
+* **Pacing and fast cooling instead of time-boxing.** A run unfolds over at least `minRunMs`
+  (1 s: several steps per frame for small graphs; one step per frame while a node is dragged, like
+  d3), a run that cannot keep up runs flat out. When the first three steps of a run cost more than
+  5 ms on average it cools down in ~100 steps instead of ~300 — decided at that fixed step, so the
+  layout stays deterministic: the tests compare the worker's final positions bit for bit with the
+  same `ForceLayout` steps taken by hand (threaded and inline, both coolings, a pause mid-run, a
+  GUI thread blocked for 300 ms). The decision no longer depends on painting.
+* **Reduced motion**: the worker computes the run and publishes only its final frame; a layout from
+  positions that never moved (a fresh build, also rebuilt — a filter, the local graph, an index
+  change — before its first frame) shows a spinner (`GraphModel.settling`) instead of a spiral
+  that jumps.
+* **Drawing through the scene graph.** `GraphItem` is a `QQuickItem` with its own nodes
+  (`GraphSceneNode`): edges, discs and rings as triangle meshes with a one-device-pixel fringe that
+  fades to transparent (antialiasing without custom shaders: `QSGVertexColorMaterial`, so no
+  shader tools in any toolchain; 16-bit indices in chunks of ≤ 65 535 vertices for GLES2), in world
+  units under a camera transform; labels as `QSGTextNode`s on rounded backgrounds in screen units,
+  their text layouts cached per node. Panning a settled graph only changes the camera's matrix
+  (and places the labels again); a moving layout, zooming, colours and the highlight rebuild the
+  meshes during the sync. No culling of discs and edges (every node goes to the GPU: ≤ 4000, 1200
+  on phones), so panning never rebuilds. Both renderers place labels with one rule
+  (`geometry::placeLabels`). With the software renderer (tests, screenshots, the Pi's offscreen
+  runs) the QPainter code paints into an image node — the cost of the `QQuickPaintedItem` before —
+  and keeps its throttling of slow frames of a moving layout (now: a paint over 16 ms).
+
+**Unit timings** (`tst_planning_graph` `bigGraphPerformance`, 2000 nodes / 7338 edges at fit zoom;
+the Raspberry Pi, Debug — the laptop was unreachable): one step 6.5 ms, building the whole graph's
+meshes 3.5 ms (64 412 vertices, one chunk) against 76–78 ms for one QPainter frame — a frame of the
+moving layout costs the GUI thread ~20× less, and a settled pan nothing but a matrix. Zoomed in to
+3× (discs with up to 64 segments, 245 198 vertices in 4 chunks) a frame with 33 new labels took 32
+ms on the Pi (Debug), and 8.6 ms on a GitHub runner (Release, OpenGL on llvmpipe; with the earlier
+banded edges, 274 550 vertices) (`tst_planning_graph_sg`; on the RHI null backend — the real scene
+graph without a GPU — and under Xvfb, where the OpenGL frame is also compared pixel by pixel with
+the QPainter one).
+
+**App** (`tests/bench/app`, the 10 000-note bench vault, its graph capped at 4000 nodes). The
+laptop was unreachable, so both builds ran in the same GitHub Actions job (`perf-compare.yml`, `app`:
+ubuntu-24.04, 4 vCPUs, Release with Qt 6.11.2 from aqt, Xvfb + Mesa llvmpipe — frames rendered on
+the CPU, pessimistic; base = `sweep2` at `64d0380`, head = this change; 2 alternating rounds × 3
+runs = 6 per build; medians, min–max in the summary of the run). The probe activates the window
+first: under an X server without a window manager the app stays inactive and the graph's layout
+paused — the `views` rows of earlier tables measured opening a graph that never laid out (it did
+lay out offscreen, on the Pi). The new `graph` scenario opens the graph, drags its background for
+1 s 300 ms later while the layout runs, zooms three wheel steps, waits until the layout is done,
+then drags again for 1 s:
+
+| graph, 4000 nodes (GitHub runner, llvmpipe) | before | after | |
+|---|---:|---:|---:|
+| open → first frame (`views` r0 / `graph`) | 1077 / 1067 ms | 122 / 132 ms | −89 % |
+| longest GUI stall while it lays out (`graph` run) | 958 ms | 219 ms | −77 % |
+| frame interval p95 while it lays out | 818 ms | 173 ms | −79 % |
+| frames while it lays out (frames / s) | 56 in 40 s (1.4) | 70 in 9.2 s (7.6) | ×5.4 |
+| layout done (with the drags and zooms) | 40.0 s | 9.2 s | −77 % |
+| a frame's sync (GUI thread waits): moving layout / settled pan | 660 / 578 ms | 0.1 / 0.2 ms | −99.9 % |
+| a frame's render + swap (llvmpipe) | 7 ms | 127 ms | (the meshes, on the CPU) |
+| drag move → frame (median): during the layout / settled | 675 / 586 ms | 254 / 252 ms | −62 / −57 % |
+| wheel zoom → frame (median) | 830 ms | 336 ms | −60 % |
+| process CPU time, whole `graph` run | 131 s | 66 s | −50 % |
+| RSS after the scenario | 501 MB | 557 MB | +56 MB |
+
+The `views` scenario agrees (graph r0: longest stall 967 → 220 ms, frame p95 973 → 198 ms, settled
+8.3 → 2.0 s; r1 the same; the other views unchanged within ±4 %). What is left on this machine is
+llvmpipe rasterising the meshes of 4000 discs and their edges, ~127 ms per frame on 4 vCPUs, while
+Qt's threaded render loop holds the GUI thread until the render thread can take the next sync; a GPU
+(phones, laptops with a driver) draws the meshes in a few batched draw calls, so there the GUI
+thread's own share of a frame is what is left: the 0.1–6 ms sync. That is also why the edges are
+single quads (2 triangles instead of the 6 of a fringed band; an earlier run of this branch with
+banded edges: `views` graph frame interval p95 321 ms against 198 ms). Of the +56 MB, about 10 MB
+are ours (copies of the layout for the worker and its final frame, the meshes, cached label layouts;
+an estimate), the rest most likely llvmpipe's buffers for the meshes (a GPU keeps them in its own
+memory).
+The Raspberry Pi (software renderer: the image node, the same work as before) and the Android
+emulator were not measured (L16b).
+
 ### Budgets
 
-Desktop = the laptop above, phone = Pi 4 (floor) and the emulator (optimistic), web = headless
-Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current code).
+Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
+emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses
+(current code).
 
 | budget | target | desktop | phone | web |
 |---|---|---|---|---|
@@ -786,7 +890,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | autosave stall | < 50 ms desktop, < 100 ms phone | ✅ small page 41 ms; ❌ 500 KB page 88 ms | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
 | open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |
 | Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s before L3, not measured since (L3b, L10) | – |
-| Graph | settled < 1 s | ✅ 0.77 s | ❌ Pi 2.6 s (was 44 s; L16); emulator 1.5 s | – |
+| Graph (4000 nodes; 1200 phones) | settled < 1.5 s desktop, < 3 s phone; GUI stall during the layout < 16 ms desktop, < 33 ms phone | ❌ not the laptop (unreachable): a GitHub runner with llvmpipe, CPU-rendered frames — stall 219 ms (was 958 ms), settled 2.0 s (`views`; was 8.3 s), 9.2 s with drags (was 40 s), first frame 0.13 s (was 1.07 s); the GUI thread's own sync 0.1–6 ms | ❌ Pi 2.6 s before L16, emulator 1.5 s; not measured since (L16b) | – |
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ✅ 6.0 ms (L3; base in the same session 112 ms) | ❌ Pi 0.95 s before L3, not measured since (L3b) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
 | memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 86 MB of linear memory at 1k (was 104 MB) |
@@ -805,14 +909,15 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L7 | cheaper page opening (header summary and linked references from the index) | Pi open 653 ms → ~400 ms |
 | L9b | the developer and self-test QML (`qml/dev`, `qml/content/*SelfTest.qml`) in a folder outside `src/app` (qmlimportscanner scans the target's source folder whole, and its `-exclude` does not work there), so that releases leave out QtTest, QuickTest and `Qt.labs.folderlistmodel` | APK −0.84 MB, wasm −0.27 MB (before wasm-opt) |
 | L10 | lazy cold views and dialogs, `BIcon` without a `Loader` | Pi demo first content −0.3 s |
-| L16 | graph layout on a worker, scene-graph rendering | smooth graph on phones |
+| L16b | measure the graph on the Raspberry Pi (`bench-matrix.sh views graph`, offscreen: the software renderer's image node, 3 000-note vault; must not regress) and in the Android emulator probe (`android-batch.sh probe`, the scene graph on GLES); check it by hand on a phone, on Windows with a GPU (Direct3D 11) and in a phone's browser; if `rebuild()` (VaultIndex::graph and the filters, GUI thread) costs a phone > 50 ms, move its pure part onto the worker | phone: GUI stall during the layout < 33 ms, settled < 3 s |
 | L12 | sync: size + mtime quick check for unchanged text files | no-change sync ≥ 3× faster (laptop 10k 419 ms, Pi 5k 1.35 s) |
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 
 Done in wave 5 (2026-10-29, above): L1 (parse on worker threads), L2 (the index cache), L8 (the
 memory diet); on 2026-10-30 L5 (delta undo/redo, above; the Pi still to be measured: L5b), L9 (native file
-pickers, one Qt Quick Controls style: APK −15.6 MB, wasm −2.3 MB gzip, above) and L3
-(incremental derived lists, above; the Pi: L3b). Also
+pickers, one Qt Quick Controls style: APK −15.6 MB, wasm −2.3 MB gzip, above), L3
+(incremental derived lists, above; the Pi: L3b) and L16 (the graph's layout on a worker thread,
+drawn through the scene graph, above; the phones: L16b). Also
 open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip only) and
 the ~90 ms later content on a desktop first start (above).
 
@@ -867,10 +972,15 @@ hash).
 * **Before/after on GitHub's runners** (x86_64 and arm64, the flake's toolchain, both trees with
   head's bench sources, two alternating rounds): `gh workflow run perf-compare.yml --ref <branch>
   -f base=<ref> [-f suites="bench_index bench_markdown"] [-f reps=5]` — the comparison lands in
-  the job summary and an artifact. Shared runners are noisy: relative changes only.
+  the job summary and an artifact. Shared runners are noisy: relative changes only. `-f app="views
+  graph"` (`-f suites=` for only these) runs app benchmark groups too: both trees' `brulion` in
+  Release with Qt from aqt, the probe and the analysis from head, Xvfb + llvmpipe on
+  ubuntu-24.04, `app_rounds` × `app_runs` runs per build, alternating (report.py's table in the
+  summary). A workflow can call it too (`workflow_call`), e.g. a branch's own push trigger before
+  the file reaches the default branch, which `gh workflow run` needs.
 
 **App (the real binary, `tests/bench/app/`).** An `LD_PRELOAD` probe records frames, GUI stalls,
-memory and CPU and drives scenarios (startup, open-page, typing, search, switcher, views,
+memory and CPU and drives scenarios (startup, open-page, typing, search, switcher, views, graph,
 journal-scroll, switch-pages, idle, workload) with real input; no hook in the product code, so
 any build (v0.1.1 included) can be measured.
 

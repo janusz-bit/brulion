@@ -11,7 +11,8 @@
 //   BENCH_T0         CLOCK_MONOTONIC ns at launch (the runner sets it just before exec); times
 //                    in the output are ms since then (default: the library's load)
 //   BENCH_SCENARIO   startup | open-page | typing | select-copy | search | switcher | views |
-//                    journal-scroll | switch-pages | idle | idle-edit | workload (see buildScenario())
+//                    graph | journal-scroll | switch-pages | idle | idle-edit | workload (see
+//                    buildScenario())
 //   BENCH_PAGE       page path for open-page / typing / select-copy / idle-edit
 //                    ("Bench/Konspekt 5000.md")
 //   BENCH_ROW        row to edit (typing, select-copy; default 10)
@@ -24,8 +25,8 @@
 //   * marks: preload (library constructor), qapp (QCoreApplication constructed), window
 //     (first expose), first_frame, vault_open, ready (Workspace.ready), content (first
 //     BlockDelegate on screen / the page's blocks), settled (no GUI stall for 1 s), …
-//   * frames: for every frame the render thread's beforeSynchronizing (GUI state handed over)
-//     and frameSwapped time;
+//   * frames: for every frame the render thread's beforeSynchronizing (GUI state handed over),
+//     afterSynchronizing (the sync done: items' updatePaintNode) and frameSwapped time;
 //   * stalls: a 4 ms PreciseTimer on the GUI thread; every gap > 12 ms is a stall (the event
 //     loop was blocked: long tasks, the user's input would wait that long);
 //   * actions: synthetic input through QWindowSystemInterface (the same path as real
@@ -164,6 +165,7 @@ QJsonObject threadStats()
 
 struct Frame {
     qint64 sync = 0;
+    qint64 synced = 0; ///< afterSynchronizing: the end of the sync (the GUI thread waits until then)
     qint64 swap = 0;
 };
 
@@ -304,12 +306,21 @@ private:
                 },
                 Qt::DirectConnection);
         connect(
+                w, &QQuickWindow::afterSynchronizing, this,
+                [this] {
+                    std::lock_guard<std::mutex> lock(m_frameMutex);
+                    m_pendingSynced = monoNs();
+                },
+                Qt::DirectConnection);
+        connect(
                 w, &QQuickWindow::frameSwapped, this,
                 [this] {
                     const qint64 t = monoNs();
                     std::lock_guard<std::mutex> lock(m_frameMutex);
-                    m_frames.push_back({m_pendingSync ? m_pendingSync : t, t});
+                    const qint64 sync = m_pendingSync ? m_pendingSync : t;
+                    m_frames.push_back({sync, m_pendingSynced >= sync ? m_pendingSynced : sync, t});
                     m_pendingSync = 0;
+                    m_pendingSynced = 0;
                 },
                 Qt::DirectConnection);
         m_engine = qmlEngine(w);
@@ -529,6 +540,24 @@ private:
         m_actions.push_back(a);
     }
 
+    /// A mouse event at a window position (synchronous delivery; t1 = handled). `buttons`: the
+    /// buttons held after it; the left button changes on a press and a release.
+    void mouse(QEvent::Type type, QPointF local, Qt::MouseButtons buttons, const QString &label)
+    {
+        if (!m_window)
+            return;
+        Action a;
+        a.kind = u"mouse"_s;
+        a.label = label;
+        a.t0 = monoNs();
+        const Qt::MouseButton button = type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton;
+        QWindowSystemInterface::handleMouseEvent<QWindowSystemInterface::SynchronousDelivery>(
+                m_window, local, m_window->mapToGlobal(local), buttons, button, type);
+        a.t1 = monoNs();
+        a.t2 = a.t1;
+        m_actions.push_back(a);
+    }
+
     // ---- scenario steps -------------------------------------------------------------------------
     struct Step {
         QString name;
@@ -660,12 +689,13 @@ private:
         m_lag.stop();
         m_poll.stop();
         markMem(u"end"_s);
-        QJsonArray sync, swap;
+        QJsonArray sync, synced, swap;
         for (const Frame &f : framesCopy()) {
             sync.append(msOf(f.sync));
+            synced.append(msOf(f.synced));
             swap.append(msOf(f.swap));
         }
-        emitJson({{u"ev"_s, u"frames"_s}, {u"sync"_s, sync}, {u"swap"_s, swap}});
+        emitJson({{u"ev"_s, u"frames"_s}, {u"sync"_s, sync}, {u"synced"_s, synced}, {u"swap"_s, swap}});
         QJsonArray st;
         for (const auto &s : m_stalls)
             st.append(QJsonArray{msOf(s.first), double(s.second - s.first) / 1e6});
@@ -898,8 +928,33 @@ private:
         waitSettled(u"switcher_done"_s, 800, 20000);
     }
 
+    /// Activates the window first: an X server without a window manager (Xvfb) never focuses it,
+    /// and an inactive app pauses what runs only while it is in front (the graph's layout). The
+    /// state before and after is in the "app_state" mark (Qt::ApplicationState: 4 active, 2
+    /// inactive).
+    void activateSteps()
+    {
+        action(u"activate"_s, [this] {
+            m_stateBefore = int(QGuiApplication::applicationState());
+            if (m_window)
+                m_window->requestActivate();
+        });
+        waitUntil(
+                u"app_active"_s,
+                [this] {
+                    return QGuiApplication::applicationState() == Qt::ApplicationActive
+                           || monoNs() - m_stepStart > 3000000000LL;
+                },
+                5000, false);
+        action(u"app_state"_s, [this] {
+            mark(u"app_state"_s, 0,
+                 {{u"before"_s, m_stateBefore}, {u"after"_s, int(QGuiApplication::applicationState())}});
+        });
+    }
+
     void viewSteps()
     {
+        activateSteps();
         const QList<QPair<QString, QVariantMap>> views = {
                 {u"tasks"_s, {{u"view"_s, u"tasks"_s}}},
                 {u"calendar"_s, {{u"view"_s, u"calendar"_s}}},
@@ -925,6 +980,107 @@ private:
                 waitSettled(u"view_settled:journals-after-"_s + tag, 1000, 60000);
             }
         }
+    }
+
+    /// The visible GraphItem (GraphView's "graphItem") and its GraphModel.
+    QQuickItem *graphItem()
+    {
+        QQuickItem *found = nullptr;
+        walk(m_window ? m_window->contentItem() : nullptr, [&](QQuickItem *it) {
+            if (found || !it->isVisible())
+                return false;
+            if (it->objectName() == u"graphItem") {
+                found = it;
+                return false;
+            }
+            return true;
+        });
+        return found;
+    }
+    QObject *graphModel()
+    {
+        QQuickItem *item = graphItem();
+        return item ? item->property("model").value<QObject *>() : nullptr;
+    }
+    /// A window point over the graph's background (no node under it), else the item's centre.
+    QPointF graphBackgroundPoint()
+    {
+        QQuickItem *item = graphItem();
+        if (!item)
+            return QPointF(m_window->width() / 2.0, m_window->height() / 2.0);
+        for (const double fy : {0.62, 0.5, 0.38, 0.72, 0.28}) {
+            for (const double fx : {0.3, 0.5, 0.7, 0.2, 0.8}) {
+                const QPointF p(item->width() * fx, item->height() * fy);
+                QString id;
+                QMetaObject::invokeMethod(item, "nodeAt", Q_RETURN_ARG(QString, id), Q_ARG(qreal, p.x()),
+                                          Q_ARG(qreal, p.y()));
+                if (id.isEmpty())
+                    return item->mapToScene(p);
+            }
+        }
+        return item->mapToScene(QPointF(item->width() / 2, item->height() / 2));
+    }
+    /// The graph's camera (centerX, centerY, zoom) for a mark: whether a drag panned it.
+    QJsonObject graphCamera()
+    {
+        QQuickItem *item = graphItem();
+        if (!item)
+            return {};
+        return {{u"cx"_s, item->property("centerX").toDouble()},
+                {u"cy"_s, item->property("centerY").toDouble()},
+                {u"zoom"_s, item->property("zoom").toDouble()}};
+    }
+    /// A mouse drag of `ms` on the graph's background, a move every 16 ms.
+    void graphPan(const QString &name, int ms)
+    {
+        action(name + u":start"_s, [this, name] {
+            m_panPos = graphBackgroundPoint();
+            QJsonObject o = graphCamera();
+            o.insert(u"x"_s, m_panPos.x());
+            o.insert(u"y"_s, m_panPos.y());
+            mark(name + u":start"_s, 0, o);
+            mouse(QEvent::MouseButtonPress, m_panPos, Qt::LeftButton, name + u":press"_s);
+        });
+        for (int i = 0; i < ms / 16; ++i) {
+            wait(16);
+            action(name, [this, name, i] {
+                m_panPos += QPointF(i % 2 ? 3 : 4, (i / 12) % 2 ? 2 : -2);
+                mouse(QEvent::MouseMove, m_panPos, Qt::LeftButton, name);
+            });
+        }
+        action(name + u":end"_s, [this, name] {
+            mouse(QEvent::MouseButtonRelease, m_panPos, Qt::NoButton, name + u":release"_s);
+            mark(name + u":end"_s, 0, graphCamera());
+        });
+    }
+
+    void graphSteps()
+    {
+        // Open the graph, pan and zoom while the layout still runs, then once it has settled.
+        activateSteps();
+        action(u"nav:graph"_s, [this] {
+            mark(u"nav_start:graph"_s);
+            navigate({{u"view"_s, u"graph"_s}});
+            mark(u"nav_returned:graph"_s);
+        });
+        waitUntil(u"graph_item"_s, [this] { return graphModel() != nullptr; }, 30000);
+        wait(300);
+        graphPan(u"graph_run_pan"_s, 1000);
+        for (int i = 0; i < 3; ++i) {
+            action(u"zoom"_s, [this] { wheel(120, u"graph_zoom"_s); });
+            wait(120);
+        }
+        waitUntil(
+                u"graph_layout_done"_s,
+                [this] {
+                    QObject *m = graphModel();
+                    return m && !m->property("running").toBool();
+                },
+                180000);
+        waitSettled(u"graph_settled"_s, 1000, 60000);
+        graphPan(u"graph_settled_pan"_s, 1000);
+        waitSettled(u"graph_done"_s, 1000, 30000);
+        action(u"mem"_s, [this] { markMem(u"graph"_s); });
     }
 
     void journalScrollSteps()
@@ -1059,6 +1215,8 @@ private:
             switcherSteps();
         } else if (s == u"views") {
             viewSteps();
+        } else if (s == u"graph") {
+            graphSteps();
         } else if (s == u"journal-scroll") {
             journalScrollSteps();
         } else if (s == u"switch-pages") {
@@ -1079,6 +1237,8 @@ private:
 
     FILE *m_out = nullptr;
     QString m_scenario, m_page, m_startPage, m_status;
+    QPointF m_panPos;
+    int m_stateBefore = -1;
     int m_row = 10;
     int m_idleMs = 30000;
     bool m_keep = false;
@@ -1091,6 +1251,7 @@ private:
     std::mutex m_frameMutex;
     std::vector<Frame> m_frames;
     qint64 m_pendingSync = 0;
+    qint64 m_pendingSynced = 0;
 
     QTimer m_lag, m_poll;
     qint64 m_lastLag = 0;

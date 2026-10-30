@@ -81,4 +81,6 @@ Podpowiedź `[[` też wstawia ścieżkę, gdy wybrana strona ma imienniczkę w i
 ## Graf
 Widok **Graf** rysuje strony i dni dziennika jako sieć połączeń: cały notatnik albo okolice jednej strony (głębokość 1–2). Tag, który nazywa stronę, łączy się z nią jak link. Przełączniki ukrywają tagi bez strony, brakujące strony, dzienniki i szablony.
 
+Graf układa się w tle — od razu możesz go przesuwać, powiększać i przeciągać strony, także na telefonie. Z ustawieniem **Ogranicz animacje** graf nie rozwija się na ekranie: zamiast tego chwilę kręci się kółko, a potem pojawia się gotowy układ.
+
 Dalej: [[Tagi i właściwości|Tagi i właściwości]].

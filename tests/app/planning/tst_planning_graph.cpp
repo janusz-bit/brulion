@@ -1,27 +1,38 @@
 // The graph: ForceLayout (seeded determinism, convergence, Barnes–Hut close to the exact
-// forces, pinned nodes), GraphModel (kinds, toggles for tags / missing pages / journals /
-// orphans, local graph depth 1 and 2, the node cap, positions kept across index changes,
-// search with Polish letters, reduced motion) and GraphItem (camera maths, hit-testing, touch
-// selection, painting — also 2000 nodes, with timings).
+// forces, pinned nodes, tick estimates), GraphModel (kinds, toggles for tags / missing pages /
+// journals / orphans, local graph depth 1 and 2, the node cap, positions kept across index
+// changes, search with Polish letters), the worker (GraphSimulation: threaded and inline runs equal
+// to manual steps, fast cooling, pause / resume, coalesced frames, dragging during a run, rebuilds
+// and destruction mid-run, reduced motion — also rebuilt before it is shown —, pacing, a new frame
+// interval mid-run), the scene-graph geometry (discs, rings, segments, chunks of 16-bit indices,
+// label placement) and GraphItem (camera maths, hit-testing, touch selection, painting — also 2000
+// nodes, with timings —, the software renderer's canvas painted all over).
 #include "forcelayout.h"
+#include "graphgeometry.h"
 #include "graphitem.h"
 #include "graphmodel.h"
+#include "graphsimulation.h"
 #include "planningtest.h"
 
 #include <QElapsedTimer>
+#include <QFontMetricsF>
 #include <QImage>
 #include <QPainter>
 #include <QSignalSpy>
 #include <QTest>
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 
 using namespace Qt::StringLiterals;
 using brulion::planning::ForceLayout;
 using brulion::planning::GraphItem;
 using brulion::planning::GraphModel;
+using brulion::planning::GraphSimulation;
 using brulion::planning::test::Files;
 using brulion::planning::test::makeIndex;
+namespace geometry = brulion::planning::geometry;
 
 namespace {
 
@@ -68,6 +79,14 @@ QList<std::pair<int, int>> ring(int n)
         edges.append({i, (i + 1) % n});
     return edges;
 }
+
+/// Simulations created while it lives run inline (the browser's way) or on their worker thread.
+struct InlineRuns {
+    explicit InlineRuns(bool inlineRuns) { GraphSimulation::setInlineForTests(inlineRuns); }
+    ~InlineRuns() { GraphSimulation::setInlineForTests(false); }
+    InlineRuns(const InlineRuns &) = delete;
+    InlineRuns &operator=(const InlineRuns &) = delete;
+};
 
 bool hasInk(const QImage &img, const QColor &bg)
 {
@@ -179,6 +198,48 @@ private Q_SLOTS:
         l.setAlpha(0.5);
         l.tick(20);
         QVERIFY(l.x(3) < 500.0);
+    }
+
+    void tickEstimates()
+    {
+        ForceLayout l;
+        l.reset(40, ring(40), 9);
+        const int expected = l.expectedTicks();
+        QCOMPARE(expected, ForceLayout::ticksToCool(1.0, 0.001, 0.0228));
+        int ticks = 0;
+        while (l.running()) {
+            l.tick();
+            ++ticks;
+        }
+        QCOMPARE(ticks, expected);
+        QCOMPARE(l.expectedTicks(), 0);
+        l.setAlphaTarget(0.3);
+        QCOMPARE(l.expectedTicks(), -1); // warm until the target is lowered
+        QCOMPARE(ForceLayout::ticksToCool(0.5, 0.001, 0.109), 54);
+        QCOMPARE(ForceLayout::ticksToCool(0.0005, 0.001, 0.0228), 0);
+        QCOMPARE(ForceLayout::ticksToCool(std::numeric_limits<double>::quiet_NaN(), 0.001, 0.0228), 0);
+        QCOMPARE(ForceLayout::ticksToCool(1, 0.001, 0), -1);
+    }
+
+    void setPositionsKeepsAlphaAndPins()
+    {
+        ForceLayout l;
+        l.reset(4, ring(4), 2);
+        l.tick(5);
+        l.fix(1, 10, 20);
+        const double alpha = l.alpha();
+        std::vector<double> xs{1, 2, 3, 4}, ys{-1, -2, -3, -4};
+        l.setPositions(xs, ys);
+        QCOMPARE(l.alpha(), alpha);
+        QCOMPARE(l.x(2), 3.0);
+        QCOMPARE(l.vx(2), 0.0);
+        QVERIFY(l.isFixed(1));
+        l.tick();
+        QCOMPARE(l.x(1), 2.0); // pinned where setPositions put it
+        QCOMPARE(l.y(1), -2.0);
+        l.setPositions({1, 2}, {3, 4}); // wrong size: nothing happens
+        QCOMPARE(l.nodeCount(), 4);
+        QCOMPARE(l.x(1), 2.0);
     }
 
     // ---- GraphModel ----------------------------------------------------------------------------
@@ -362,21 +423,6 @@ private Q_SLOTS:
         QCOMPARE(m.find(u"e"_s, 2).size(), 2);
     }
 
-    void reducedMotionSettlesAtOnce()
-    {
-        auto index = makeIndex(bigVault(200, 3));
-        GraphModel m;
-        m.setReducedMotion(true);
-        m.setActive(false);
-        QElapsedTimer t;
-        t.start();
-        m.setVaultIndex(index.get());
-        qInfo("reduced motion: settled in %lld ms", static_cast<long long>(t.elapsed()));
-        if (BRULION_TEST_SLOWDOWN > 1)
-            QSKIP("settling has a 150 ms budget, which sanitizer builds cannot meet");
-        QVERIFY(m.alpha() < 0.01 || !m.layout().running());
-    }
-
     void dragging()
     {
         auto index = makeIndex(smallVault());
@@ -395,128 +441,466 @@ private Q_SLOTS:
         QCOMPARE(m.layout().alphaTarget(), 0.0);
     }
 
-    void runsOnTimerAndStops()
+    // ---- the worker (GraphSimulation) ------------------------------------------------------------
+
+    void runsOnWorkerAndStops_data()
     {
+        QTest::addColumn<bool>("inlineRuns");
+        QTest::newRow("worker thread") << false;
+        QTest::newRow("inline (the browser)") << true;
+    }
+
+    void runsOnWorkerAndStops()
+    {
+        QFETCH(bool, inlineRuns);
+        InlineRuns guard(inlineRuns);
         auto index = makeIndex(smallVault());
         GraphModel m;
-        m.setTickInterval(1);
+        m.setMinRunMs(200);
+        QCOMPARE(m.threaded(), !inlineRuns);
         QSignalSpy running(&m, &GraphModel::runningChanged);
         m.setVaultIndex(index.get());
         QVERIFY(m.running());
+        QVERIFY(m.runActive());
         QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 10000);
         QVERIFY(running.count() >= 2);
+        QVERIFY(m.framesApplied() >= 2);
+        QVERIFY(!m.layout().running()); // the final state came back from the worker
+        QCOMPARE(m.position(0), QPointF(m.layout().x(0), m.layout().y(0)));
         m.reheat(0.5);
         QVERIFY(m.running());
-        m.setActive(false);
+        m.setActive(false); // paused at once
         QVERIFY(!m.running());
+        m.setActive(true);
+        QVERIFY(m.running());
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 10000);
+        QVERIFY(m.alpha() < m.layout().params().alphaMin);
+        // Stepping by hand takes the layout back from the worker.
+        m.reheat(0.4);
+        m.step(1);
+        QVERIFY(m.runActive()); // and hands it over again (still warm)
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 10000);
     }
 
-    // ---- slow devices --------------------------------------------------------------------------
-
-    void timeBoxedRunsOnSlowDevices()
+    void workerRunMatchesManualSteps_data()
     {
-        // A device that cannot draw 30 frames a second (here: any device, threshold 0): after
-        // three measured steps the run cools down in ~100 steps instead of ~300, in bursts, with
-        // no frames once the time box is over (0 ms here) — and the layout is still deterministic.
-        auto index = makeIndex(bigVault(400, 3));
+        QTest::addColumn<int>("pages"); // 0: the small vault
+        QTest::addColumn<int>("seed");
+        QTest::addColumn<double>("slowTickMs");
+        QTest::addColumn<bool>("inlineRuns");
+        QTest::newRow("small, seed 1, normal cooling") << 0 << 1 << 1e9 << false;
+        QTest::newRow("small, seed 7, fast cooling, inline") << 0 << 7 << -1.0 << true;
+        QTest::newRow("400 pages, seed 12345, fast cooling") << 400 << 12345 << -1.0 << false;
+        QTest::newRow("400 pages, seed 7, normal cooling, inline") << 400 << 7 << 1e9 << true;
+        QTest::newRow("400 pages, seed 1, normal cooling") << 400 << 1 << 1e9 << false;
+        QTest::newRow("400 pages, seed 7, fast cooling, inline") << 400 << 7 << -1.0 << true;
+    }
+
+    void workerRunMatchesManualSteps()
+    {
+        // Pacing, coalescing and threads change when frames are shown, never the layout: the run
+        // ends exactly where the same ForceLayout steps end (3 with the normal cooling, then the
+        // fast one when the first steps were "slow").
+        QFETCH(int, pages);
+        QFETCH(int, seed);
+        QFETCH(double, slowTickMs);
+        QFETCH(bool, inlineRuns);
+        InlineRuns guard(inlineRuns);
+        auto index = makeIndex(pages == 0 ? smallVault() : bigVault(pages, 3));
         GraphModel m;
-        m.setSlowFrameMs(0);
-        m.setTimeBoxMs(0);
-        m.setTickInterval(1);
-        m.setSeed(7);
-        QSignalSpy frames(&m, &GraphModel::positionsChanged);
-        QSignalSpy boxed(&m, &GraphModel::timeBoxedChanged);
+        m.setSeed(seed);
+        m.setSlowTickMs(slowTickMs);
+        m.setMinRunMs(150);
+        QSignalSpy fast(&m, &GraphModel::fastCoolingChanged);
         m.setVaultIndex(index.get());
         QVERIFY(m.running());
-        QVERIFY(!m.timeBoxed());
-        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
-        QVERIFY(m.timeBoxed());
-        QCOMPARE(boxed.count(), 1);
-        QVERIFY(m.alpha() < m.layout().params().alphaMin);
-        // The rebuild, the three measured steps, then only the final layout.
-        QCOMPARE(frames.count(), 1 + 3 + 1);
+        QVERIFY(!m.fastCooling());
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 30000 * BRULION_TEST_SLOWDOWN);
+        const bool fastCooling = slowTickMs < 0;
+        QCOMPARE(m.fastCooling(), fastCooling);
+        QCOMPARE(fast.count(), fastCooling ? 1 : 0);
+        QVERIFY(m.tickCostMs() > 0);
 
-        // The same steps by hand: 3 with the normal cooling, then the fast one until it stops.
         GraphModel manual;
         manual.setActive(false);
-        manual.setSeed(7);
+        manual.setSeed(seed);
+        manual.setVaultIndex(index.get());
+        ForceLayout &layout = manual.layout();
+        int steps = 0;
+        while (layout.running()) {
+            if (steps == 3 && fastCooling)
+                layout.params().alphaDecay = 0.067;
+            layout.tick();
+            ++steps;
+        }
+        QVERIFY2(fastCooling ? steps > 80 && steps < 120 : steps > 280 && steps < 320,
+                 qPrintable(QString::number(steps)));
+        QCOMPARE(m.runTicks(), steps);
+        QCOMPARE(manual.nodeCount(), m.nodeCount());
+        for (int i = 0; i < m.nodeCount(); ++i) {
+            QCOMPARE(m.position(i).x(), layout.x(i));
+            QCOMPARE(m.position(i).y(), layout.y(i));
+        }
+
+        // A new run decides again, starting with the normal cooling.
+        m.reheat(0.5);
+        QVERIFY(!m.fastCooling());
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 30000 * BRULION_TEST_SLOWDOWN);
+        QCOMPARE(m.fastCooling(), fastCooling);
+    }
+
+    void pauseResumeKeepsDeterminism()
+    {
+        auto index = makeIndex(bigVault(300, 3));
+        GraphModel straight;
+        straight.setSeed(3);
+        straight.setSlowTickMs(1e9);
+        straight.setMinRunMs(0);
+        straight.setVaultIndex(index.get());
+        QTRY_VERIFY_WITH_TIMEOUT(!straight.running(), 30000 * BRULION_TEST_SLOWDOWN);
+
+        GraphModel m;
+        m.setSeed(3);
+        m.setSlowTickMs(1e9);
+        m.setMinRunMs(600);
+        m.setVaultIndex(index.get());
+        QTRY_VERIFY_WITH_TIMEOUT(m.framesApplied() >= 3, 10000 * BRULION_TEST_SLOWDOWN);
+        m.setActive(false); // the view is hidden mid-run
+        QVERIFY(!m.running());
+        QTest::qWait(60); // a frame computed before the pause may still arrive
+        const int ticks = m.runTicks();
+        const QPointF p = m.position(0);
+        QTest::qWait(100);
+        QCOMPARE(m.runTicks(), ticks); // nothing ran while hidden
+        QCOMPARE(m.position(0), p);
+        QVERIFY(ticks < 300);
+        m.setActive(true);
+        QVERIFY(m.running());
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 30000 * BRULION_TEST_SLOWDOWN);
+        QCOMPARE(m.runTicks(), straight.runTicks());
+        for (int i = 0; i < m.nodeCount(); ++i)
+            QCOMPARE(m.position(i), straight.position(i));
+    }
+
+    void framesCoalesceWhenTheGuiIsBusy()
+    {
+        auto index = makeIndex(bigVault(300, 3));
+        GraphModel m;
+        m.setSeed(5);
+        m.setSlowTickMs(-1); // ~100 steps …
+        m.setMinRunMs(1500); // … over 1.5 s: one or two per frame
+        int lastTicks = 0;
+        int maxJump = 0;
+        int changes = 0;
+        connect(&m, &GraphModel::positionsChanged, &m, [&] {
+            ++changes;
+            maxJump = std::max(maxJump, m.runTicks() - lastTicks);
+            lastTicks = m.runTicks();
+        });
+        m.setVaultIndex(index.get());
+        QTRY_VERIFY_WITH_TIMEOUT(m.framesApplied() >= 3, 10000 * BRULION_TEST_SLOWDOWN);
+        const int jumpBefore = maxJump;
+        QTest::qSleep(300); // the GUI thread is busy; the worker is not
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 30000 * BRULION_TEST_SLOWDOWN);
+        // The frame after the busy spell carried the newest positions, many steps ahead.
+        QVERIFY2(maxJump >= jumpBefore + 5, qPrintable(u"%1 → %2"_s.arg(jumpBefore).arg(maxJump)));
+        QVERIFY(changes <= m.runTicks() + 1);
+
+        GraphModel manual;
+        manual.setActive(false);
+        manual.setSeed(5);
         manual.setVaultIndex(index.get());
         ForceLayout &layout = manual.layout();
         layout.tick(3);
         layout.params().alphaDecay = 0.067;
-        int steps = 3;
-        while (layout.running()) {
+        while (layout.running())
             layout.tick();
-            ++steps;
-        }
-        QVERIFY2(steps > 80 && steps < 120, qPrintable(QString::number(steps)));
-        QCOMPARE(manual.nodeCount(), m.nodeCount());
         for (int i = 0; i < m.nodeCount(); ++i)
-            QCOMPARE(m.position(i), manual.position(i));
-
-        // A new run decides again, starting with the normal cooling.
-        m.reheat(0.5);
-        QVERIFY(!m.timeBoxed());
-        QCOMPARE(m.layout().params().alphaDecay, 0.0228);
-        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
-        QVERIFY(m.timeBoxed());
+            QCOMPARE(m.position(i), QPointF(layout.x(i), layout.y(i)));
     }
 
-    void timeBoxDecisionMeasuresStepsAndPainting()
+    void dragDuringRun()
+    {
+        auto index = makeIndex(smallVault());
+        GraphModel m;
+        m.setMinRunMs(800);
+        m.setVaultIndex(index.get());
+        QVERIFY(m.running());
+        const int a = m.indexOf(u"A.md"_s);
+        m.beginDrag(a);
+        QVERIFY(m.layout().isFixed(a));
+        m.dragTo(a, QPointF(300, 300));
+        QCOMPARE(m.position(a), QPointF(300, 300)); // at once, not with the next frame
+        const int frames = m.framesApplied();
+        QTRY_VERIFY_WITH_TIMEOUT(m.framesApplied() >= frames + 3, 5000);
+        QCOMPARE(m.position(a), QPointF(300, 300)); // and in the worker's frames
+        QVERIFY(m.running());                       // kept warm while dragging
+        // The neighbours follow it.
+        const int b = m.indexOf(u"B.md"_s);
+        const auto dist = [&] { return std::hypot(m.position(b).x() - 300, m.position(b).y() - 300); };
+        const double before = dist();
+        QTRY_VERIFY_WITH_TIMEOUT(dist() < before - 1, 5000);
+        m.endDrag(a);
+        QVERIFY(!m.layout().isFixed(a));
+        QTRY_VERIFY_WITH_TIMEOUT(m.position(a) != QPointF(300, 300), 5000); // released: it moves on
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 10000);
+        QVERIFY(!m.layout().isFixed(a));
+        QCOMPARE(m.layout().alphaTarget(), 0.0);
+
+        // A drag on a settled graph warms it up again.
+        m.beginDrag(a);
+        QVERIFY(m.running());
+        m.dragTo(a, QPointF(-200, 50));
+        QTRY_VERIFY_WITH_TIMEOUT(m.framesApplied() >= frames + 10, 5000);
+        QCOMPARE(m.position(a), QPointF(-200, 50));
+        m.endDrag(a);
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 10000);
+    }
+
+    void rebuildDuringRunDropsStaleFrames()
     {
         auto index = makeIndex(bigVault(200, 3));
-        // Cheap steps and cheap painting: the normal run of ~300 steps with a frame each.
+        GraphModel m;
+        m.setRefreshDelay(0);
+        m.setMinRunMs(1000);
+        bool consistent = true;
+        connect(&m, &GraphModel::positionsChanged, &m, [&] {
+            consistent = consistent && m.xs().size() == size_t(m.nodeCount()) && m.ys().size() == size_t(m.nodeCount());
+        });
+        m.setVaultIndex(index.get());
+        QTRY_VERIFY_WITH_TIMEOUT(m.framesApplied() >= 2, 5000);
+        const int nodes = m.nodeCount();
+        index->update(u"Nowa strona.md"_s, u"Łączy [[Strona 1]] i [[Strona 2]]\n"_s);
+        QTRY_COMPARE(m.nodeCount(), nodes + 1);
+        QVERIFY(m.running());
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(consistent);
+        QVERIFY(m.staleFramesDropped() >= 0);
+        QCOMPARE(m.layout().nodeCount(), m.nodeCount());
+        const QPointF p = m.position(m.indexOf(u"Nowa strona.md"_s));
+        QVERIFY(std::isfinite(p.x()) && std::isfinite(p.y()));
+    }
+
+    void destroyWhileRunning()
+    {
+        auto index = makeIndex(bigVault(2000, 4));
+        auto *m = new GraphModel;
+        m->setVaultIndex(index.get());
+        QVERIFY(m->running());
+        QTest::qWait(20);
+        QElapsedTimer t;
+        t.start();
+        delete m; // joins the worker within a step
+        QVERIFY2(t.elapsed() < 500 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
+    }
+
+    void reducedMotionShowsOnlyTheFinalLayout()
+    {
+        auto index = makeIndex(bigVault(200, 3));
+        GraphModel m;
+        m.setRefreshDelay(0);
+        m.setReducedMotion(true);
+        QSignalSpy frames(&m, &GraphModel::positionsChanged);
+        QSignalSpy settling(&m, &GraphModel::settlingChanged);
+        m.setVaultIndex(index.get());
+        // A fresh layout: nothing to show until it has settled.
+        QVERIFY(m.settling());
+        QVERIFY(m.running());
+        GraphItem item;
+        item.setSize(QSizeF(400, 300));
+        item.setModel(&m);
+        const QColor bg(u"#fbf7ee");
+        item.setBackgroundColor(bg);
+        QImage img(400, 300, QImage::Format_ARGB32_Premultiplied);
+        {
+            QPainter p(&img);
+            item.render(&p, img.size());
+        }
+        QVERIFY(!hasInk(img, bg));
+        geometry::MeshChunks mesh;
+        item.buildMesh(mesh, 1.0);
+        QVERIFY(mesh.isEmpty());
+        QCOMPARE(item.nodeAt(200, 150), QString()); // nothing to hover or tap either
+        QVERIFY(item.labelsFor(QSizeF(400, 300)).empty());
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(!m.settling());
+        QCOMPARE(settling.count(), 2);
+        QCOMPARE(frames.count(), 2); // the rebuild and the final layout
+        QVERIFY(m.alpha() < m.layout().params().alphaMin);
+        {
+            QPainter p(&img);
+            item.render(&p, img.size());
+        }
+        QVERIFY(hasInk(img, bg));
+        // Carried positions are shown as they are and jump once to the result: no settling.
+        frames.clear();
+        settling.clear();
+        index->update(u"Żółta strona.md"_s, u"[[Strona 3]]\n"_s);
+        QTRY_VERIFY(m.indexOf(u"Żółta strona.md"_s) >= 0);
+        QVERIFY(!m.settling());
+        QVERIFY(m.running());
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000 * BRULION_TEST_SLOWDOWN);
+        QCOMPARE(settling.count(), 0);
+        QCOMPARE(frames.count(), 2);
+    }
+
+    void reducedMotionSettlesThroughRebuilds_data()
+    {
+        QTest::addColumn<QString>("scenario");
+        QTest::addColumn<bool>("settles");
+        // GraphView's bindings: the index first, then a setting that differs from the default.
+        QTest::newRow("a phone opens the view (maxNodes after the index)") << u"maxNodes"_s << true;
+        QTest::newRow("an English UI (locale after the index)") << u"locale"_s << true;
+        QTest::newRow("tags shown (a saved toggle after the index)") << u"showTags"_s << true;
+        // Rebuilds while the spinner shows.
+        QTest::newRow("a local graph (focusPath after the whole graph)") << u"focusPath"_s << true;
+        QTest::newRow("a filter tapped while settling") << u"filter"_s << true;
+        QTest::newRow("the index changes while settling (żółta strona)") << u"index"_s << true;
+        // Positions the user has already seen moving jump once to the result, as carried ones do.
+        QTest::newRow("reduced motion turned on mid-animation") << u"midRun"_s << false;
+    }
+
+    void reducedMotionSettlesThroughRebuilds()
+    {
+        // The start positions of a build whose run has published nothing yet are no layout: a
+        // rebuild that carries them over keeps `settling` (a spinner, not a spiral that jumps).
+        QFETCH(QString, scenario);
+        QFETCH(bool, settles);
+        auto index = makeIndex(bigVault(200, 3));
+        GraphModel m;
+        m.setRefreshDelay(0);
+        m.setMinRunMs(2000); // "midRun": still moving after its first frames
+        const bool reducedFirst = scenario == u"focusPath" || scenario == u"filter" || scenario == u"index";
+        if (reducedFirst)
+            m.setReducedMotion(true);
+        m.setVaultIndex(index.get());
+        QVERIFY(m.running());
+        QCOMPARE(m.settling(), reducedFirst);
+        const int nodes = m.nodeCount();
+        if (scenario == u"maxNodes") {
+            m.setMaxNodes(150);
+            QCOMPARE(m.nodeCount(), 150);
+        } else if (scenario == u"locale") {
+            m.setLocale(u"en"_s);
+        } else if (scenario == u"showTags") {
+            m.setShowTags(true);
+        } else if (scenario == u"focusPath") {
+            m.setFocusPath(u"Strona 3.md"_s);
+            m.setDepth(2);
+            QVERIFY(m.nodeCount() < nodes);
+        } else if (scenario == u"filter") {
+            m.setShowOrphans(false);
+            m.setShowJournals(false);
+        } else if (scenario == u"index") {
+            index->update(u"Żółta strona.md"_s, u"Łączy [[Strona 3]] i [[Strona 4]]\n"_s);
+            m.refresh();
+            QCOMPARE(m.nodeCount(), nodes + 1);
+        } else if (scenario == u"midRun") {
+            QTRY_VERIFY_WITH_TIMEOUT(m.framesApplied() >= 2, 10000 * BRULION_TEST_SLOWDOWN);
+        }
+        // Everywhere else no event loop ran: no frame has been applied in between.
+        QVERIFY(m.running());
+        const int applied = m.framesApplied();
+        if (!reducedFirst)
+            m.setReducedMotion(true);
+        QCOMPARE(m.settling(), settles);
+        if (settles) {
+            QCOMPARE(m.framesApplied(), 0);
+            // Nothing drawn, nothing to hover or tap.
+            GraphItem item;
+            item.setSize(QSizeF(400, 300));
+            item.setModel(&m);
+            const QColor bg(u"#fbf7ee"_s);
+            item.setBackgroundColor(bg);
+            QImage img(400, 300, QImage::Format_ARGB32_Premultiplied);
+            {
+                QPainter p(&img);
+                item.render(&p, img.size());
+            }
+            QVERIFY(!hasInk(img, bg));
+            QCOMPARE(item.nodeAt(200, 150), QString());
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(!m.settling());
+        if (settles)
+            QCOMPARE(m.framesApplied(), 1); // one picture: the final layout
+        else
+            QVERIFY(m.framesApplied() > applied);
+        QVERIFY(m.alpha() < m.layout().params().alphaMin);
+    }
+
+    void frameIntervalReachesTheRunningLayout_data()
+    {
+        QTest::addColumn<bool>("inlineRuns");
+        QTest::newRow("worker thread") << false;
+        QTest::newRow("inline (the browser)") << true;
+    }
+
+    void frameIntervalReachesTheRunningLayout()
+    {
+        // GraphView sets frameInterval after the index: its first run already uses the new interval
+        // (the browser's 33 ms with 16.5 ms slices, not 16 ms with 8 ms ones).
+        QFETCH(bool, inlineRuns);
+        InlineRuns guard(inlineRuns);
+        auto index = makeIndex(smallVault());
+        GraphModel m;
+        m.setSlowTickMs(1e9);
+        m.setMinRunMs(5000); // paced: a frame per timer event for 5 s
+        m.setVaultIndex(index.get());
+        QVERIFY(m.running());
+        QCOMPARE(m.frameInterval(), 16);
+        m.setFrameInterval(250);
+        QSignalSpy frames(&m, &GraphModel::positionsChanged);
+        QTest::qWait(1000);
+        // At 16 ms some 60 frames; at 250 ms four (and one queued before the change).
+        QVERIFY2(frames.count() >= 2 && frames.count() <= 7, qPrintable(QString::number(frames.count())));
+        QVERIFY(m.running());
+        m.setActive(false); // a paused run takes the change too
+        m.setFrameInterval(16);
+        m.setActive(true);
+        frames.clear();
+        QTest::qWait(1000);
+        QVERIFY2(frames.count() >= 15, qPrintable(QString::number(frames.count())));
+        QVERIFY(m.running());
+    }
+
+    void pacingUnfoldsSmallGraphs()
+    {
+        auto index = makeIndex(smallVault());
         {
             GraphModel m;
-            m.setSlowFrameMs(50);
-            m.setTickInterval(1);
+            m.setMinRunMs(300);
+            QSignalSpy frames(&m, &GraphModel::positionsChanged);
+            QElapsedTimer t;
+            t.start();
+            m.setVaultIndex(index.get());
+            QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 10000);
+            QVERIFY2(t.elapsed() >= 280, qPrintable(QString::number(t.elapsed())));
+            QVERIFY2(frames.count() >= 10, qPrintable(QString::number(frames.count())));
+        }
+        {
+            GraphModel m;
+            m.setMinRunMs(0); // as fast as it can: a few frames
             QSignalSpy frames(&m, &GraphModel::positionsChanged);
             m.setVaultIndex(index.get());
-            m.reportPaintCost(10); // the view painted the first frame of the run
-            QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
-            QVERIFY(!m.timeBoxed());
-            QVERIFY(frames.count() > 250);
-            QVERIFY(m.tickCostMs() > 0);
-        }
-        // Painting the view takes longer than a 30 fps frame: time-boxed.
-        {
-            GraphModel m;
-            m.setSlowFrameMs(50);
-            m.setTickInterval(1);
-            m.reportPaintCost(80); // a paint before the run (a settled frame) does not count
-            m.setVaultIndex(index.get());
-            QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
-            QVERIFY(!m.timeBoxed());
-            m.reheat(1.0);
-            m.reportPaintCost(80); // a frame of this run
-            QTRY_VERIFY_WITH_TIMEOUT(m.timeBoxed(), 20000);
-            QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
-        }
-        // Reduced motion keeps its own schedule.
-        {
-            GraphModel m;
-            m.setSlowFrameMs(0);
-            m.setReducedMotion(true);
-            m.setTickInterval(1);
-            m.setVaultIndex(index.get());
-            QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
-            QVERIFY(!m.timeBoxed());
+            QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 10000);
+            QVERIFY2(frames.count() <= 4, qPrintable(QString::number(frames.count())));
         }
     }
 
-    void timeBoxedFramesLeaveOutLabelsWhileMoving()
+    // ---- slow software painting ------------------------------------------------------------------
+
+    void slowFramesLeaveOutLabelsWhileMoving()
     {
         auto index = makeIndex(bigVault(400, 3));
         GraphModel m;
-        m.setSlowFrameMs(0);
-        m.setTickInterval(200); // the decision after 3 steps, then time to look at it
+        m.setActive(false);
         m.setVaultIndex(index.get());
-        QTRY_VERIFY_WITH_TIMEOUT(m.timeBoxed(), 20000);
-        m.setActive(false); // frozen (not moving)
-        QVERIFY(!m.running());
+        m.step(3);
         GraphItem item;
         item.setSize(QSizeF(800, 600));
         item.setModel(&m);
+        item.setSlowPaintMs(0);  // every frame counts as slow
         item.setLabelZoom(0.01); // labels for every visible node
         item.setAutoFit(true);
         QImage still(800, 600, QImage::Format_ARGB32_Premultiplied);
@@ -526,12 +910,14 @@ private Q_SLOTS:
             QPainter p(&still);
             item.render(&p, still.size());
         }
-        m.setActive(true); // moving again (no step happens before the event loop runs)
+        QVERIFY(item.sceneStats().labels > 0);
+        m.setActive(true); // moving (no frame is applied before the event loop runs)
         QVERIFY(m.running());
         {
             QPainter p(&moving);
             item.render(&p, moving.size());
         }
+        QCOMPARE(item.sceneStats().labels, 0);
         m.setActive(false);
         item.setLabelZoom(1e6); // no labels at all
         {
@@ -543,6 +929,53 @@ private Q_SLOTS:
         QVERIFY(item.lastPaintMs() > 0);
     }
 
+    void softwareCanvasIsPaintedAllOver_data()
+    {
+        QTest::addColumn<QSizeF>("size");
+        QTest::addColumn<qreal>("dpr");
+        QTest::newRow("whole pixels at 1×") << QSizeF(400, 300) << qreal(1);
+        QTest::newRow("400.4 × 300.6 at 1×: a last column and row") << QSizeF(400.4, 300.6) << qreal(1);
+        QTest::newRow("401 × 299 at 1.25×") << QSizeF(401, 299) << qreal(1.25);
+        QTest::newRow("a phone: 411.43 × 914.3 at 2.625×") << QSizeF(411.43, 914.3) << qreal(2.625);
+        QTest::newRow("half a pixel") << QSizeF(0.5, 0.5) << qreal(1);
+    }
+
+    void softwareCanvasIsPaintedAllOver()
+    {
+        // The software renderer reuses its canvas, and a new one is uninitialised memory: every
+        // pixel is painted each frame, also those a fractional item size leaves out of render().
+        QFETCH(QSizeF, size);
+        QFETCH(qreal, dpr);
+        auto index = makeIndex(smallVault());
+        GraphModel m;
+        m.setActive(false);
+        m.setVaultIndex(index.get());
+        m.step(300);
+        GraphItem item;
+        item.setSize(size);
+        item.setModel(&m);
+        item.setBackgroundColor(QColor(u"#1c2130"_s));
+        const QSize pixels(int(std::ceil(size.width() * dpr)), int(std::ceil(size.height() * dpr)));
+        QImage canvas(pixels, QImage::Format_ARGB32_Premultiplied);
+        const QRgb leftover = qRgba(255, 0, 255, 255); // what the reused memory held
+        for (int frame = 0; frame < 2; ++frame) {
+            canvas.fill(leftover);
+            item.paintCanvas(canvas, dpr);
+            QCOMPARE(canvas.size(), pixels);
+            QCOMPARE(canvas.devicePixelRatio(), dpr);
+            int left = 0;
+            for (int y = 0; y < canvas.height(); ++y) {
+                const QRgb *line = reinterpret_cast<const QRgb *>(canvas.constScanLine(y));
+                left += int(std::count(line, line + canvas.width(), leftover));
+            }
+            QCOMPARE(left, 0);
+        }
+        // A canvas of another size is replaced.
+        QImage small(3, 3, QImage::Format_ARGB32_Premultiplied);
+        item.paintCanvas(small, dpr);
+        QCOMPARE(small.size(), pixels);
+    }
+
     void movingRepaintInterval()
     {
         QCOMPARE(GraphItem::movingRepaintInterval(0), 66);
@@ -550,6 +983,372 @@ private Q_SLOTS:
         QCOMPARE(GraphItem::movingRepaintInterval(100), 300);
         QCOMPARE(GraphItem::movingRepaintInterval(150.2), 451);
         QCOMPARE(GraphItem::movingRepaintInterval(5000), 600);
+    }
+
+    // ---- scene-graph geometry --------------------------------------------------------------------
+
+    void discSegments_data()
+    {
+        QTest::addColumn<double>("radius");
+        QTest::addColumn<int>("segments");
+        QTest::newRow("half a pixel") << 0.5 << 8;
+        QTest::newRow("the smallest disc") << 1.6 << 8;
+        QTest::newRow("4 px") << 4.0 << 9;
+        QTest::newRow("22 px") << 22.0 << 47;
+        QTest::newRow("132 px (capped)") << 132.0 << 64;
+        QTest::newRow("zero") << 0.0 << 8;
+        QTest::newRow("negative") << -3.0 << 8;
+        QTest::newRow("NaN") << std::numeric_limits<double>::quiet_NaN() << 8;
+        QTest::newRow("infinite") << std::numeric_limits<double>::infinity() << 8;
+    }
+
+    void discSegments()
+    {
+        QFETCH(double, radius);
+        QFETCH(int, segments);
+        QCOMPARE(geometry::discSegments(radius), segments);
+    }
+
+    void discMesh()
+    {
+        geometry::MeshChunks chunks;
+        const QRgb colour = geometry::premultiplied(QColor(200, 100, 50, 128));
+        QCOMPARE(qAlpha(colour), 128);
+        QCOMPARE(qRed(colour), 100); // premultiplied: 200 · 128 / 255
+        geometry::appendDisc(chunks, QPointF(10, 20), 5, colour, 1, 12);
+        QCOMPARE(int(chunks.chunks().size()), 1);
+        const geometry::Mesh &m = chunks.chunks()[0];
+        QCOMPARE(int(m.vertices.size()), 1 + 2 * 12);
+        QCOMPARE(int(m.indices.size()), 12 * 9);
+        for (const quint16 i : m.indices)
+            QVERIFY(i < m.vertices.size());
+        QCOMPARE(m.vertices[0].x, 10.0f);
+        QCOMPARE(m.vertices[0].y, 20.0f);
+        QCOMPARE(int(m.vertices[0].r), qRed(colour));
+        QCOMPARE(int(m.vertices[0].a), 128);
+        for (int k = 1; k <= 12; ++k) {
+            QCOMPARE(int(m.vertices[size_t(k)].a), 128);
+            QVERIFY(std::abs(std::hypot(m.vertices[size_t(k)].x - 10, m.vertices[size_t(k)].y - 20) - 4.5) < 1e-4);
+        }
+        for (int k = 13; k <= 24; ++k) {
+            QCOMPARE(int(m.vertices[size_t(k)].a), 0); // the fringe fades out
+            QVERIFY(std::abs(std::hypot(m.vertices[size_t(k)].x - 10, m.vertices[size_t(k)].y - 20) - 5.5) < 1e-4);
+        }
+        // Malformed input adds nothing.
+        geometry::appendDisc(chunks, QPointF(std::numeric_limits<double>::quiet_NaN(), 0), 5, colour, 1, 12);
+        geometry::appendDisc(chunks, QPointF(0, 0), 0, colour, 1, 12);
+        geometry::appendDisc(chunks, QPointF(0, 0), std::numeric_limits<double>::infinity(), colour, 1, 12);
+        QCOMPARE(chunks.vertexCount(), 25);
+    }
+
+    void ringMesh()
+    {
+        geometry::MeshChunks chunks;
+        geometry::appendRing(chunks, QPointF(0, 0), 10, 2, geometry::premultiplied(Qt::red), 1, 16);
+        const geometry::Mesh &m = chunks.chunks()[0];
+        QCOMPARE(int(m.vertices.size()), 4 * 16);
+        QCOMPARE(int(m.indices.size()), 3 * 16 * 6);
+        for (int k = 0; k < 16; ++k) {
+            QCOMPARE(int(m.vertices[size_t(k)].a), 0); // inner fringe
+            QCOMPARE(int(m.vertices[size_t(16 + k)].a), 255);
+            QCOMPARE(int(m.vertices[size_t(48 + k)].a), 0); // outer fringe
+        }
+        QVERIFY(std::abs(std::hypot(m.vertices[0].x, m.vertices[0].y) - 8.5) < 1e-4);
+        QVERIFY(std::abs(std::hypot(m.vertices[48].x, m.vertices[48].y) - 11.5) < 1e-4);
+        // Thinner than the fringe: it fades instead of shrinking.
+        chunks.clear();
+        QVERIFY(chunks.isEmpty());
+        geometry::appendRing(chunks, QPointF(0, 0), 10, 0.5, geometry::premultiplied(Qt::red), 1, 16);
+        QCOMPARE(int(chunks.chunks()[0].vertices[16].a), 170); // 255 · 2 · 0.5 / 1.5
+    }
+
+    void segmentMesh_data()
+    {
+        QTest::addColumn<QPointF>("a");
+        QTest::addColumn<QPointF>("b");
+        QTest::addColumn<double>("width");
+        QTest::addColumn<int>("vertices");
+        QTest::addColumn<int>("innerAlpha");
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        QTest::newRow("horizontal") << QPointF(0, 0) << QPointF(10, 0) << 2.0 << 8 << 255;
+        QTest::newRow("vertical") << QPointF(0, 0) << QPointF(0, -10) << 2.0 << 8 << 255;
+        QTest::newRow("diagonal") << QPointF(-3, 4) << QPointF(5, -2) << 1.0 << 8 << 255;
+        QTest::newRow("thin (fades)") << QPointF(0, 0) << QPointF(10, 0) << 0.25 << 8 << 102; // 255 · 0.5 / 1.25
+        QTest::newRow("zero length") << QPointF(3, 3) << QPointF(3, 3) << 2.0 << 0 << 0;
+        QTest::newRow("NaN end") << QPointF(0, 0) << QPointF(nan, 1) << 2.0 << 0 << 0;
+        QTest::newRow("zero width") << QPointF(0, 0) << QPointF(10, 0) << 0.0 << 0 << 0;
+    }
+
+    void segmentMesh()
+    {
+        QFETCH(QPointF, a);
+        QFETCH(QPointF, b);
+        QFETCH(double, width);
+        QFETCH(int, vertices);
+        QFETCH(int, innerAlpha);
+        geometry::MeshChunks chunks;
+        geometry::appendSegment(chunks, a, b, width, geometry::premultiplied(Qt::black), 1);
+        QCOMPARE(chunks.vertexCount(), vertices);
+        if (vertices == 0)
+            return;
+        const geometry::Mesh &m = chunks.chunks()[0];
+        QCOMPARE(int(m.indices.size()), 18);
+        QCOMPARE(int(m.vertices[0].a), 0);
+        QCOMPARE(int(m.vertices[2].a), innerAlpha);
+        QCOMPARE(int(m.vertices[7].a), 0);
+        // The band is perpendicular to the segment and as wide as the line plus the fringe.
+        const QPointF outer0(m.vertices[0].x, m.vertices[0].y);
+        const QPointF outer3(m.vertices[6].x, m.vertices[6].y);
+        const double across = std::hypot(outer3.x() - outer0.x(), outer3.y() - outer0.y());
+        QVERIFY2(std::abs(across - (width + 1)) < 1e-4, qPrintable(QString::number(across)));
+        const QPointF d = b - a;
+        const QPointF n = outer3 - outer0;
+        QVERIFY(std::abs(d.x() * n.x() + d.y() * n.y()) < 1e-3);
+        for (const geometry::Vertex &v : m.vertices)
+            QVERIFY(std::isfinite(v.x) && std::isfinite(v.y));
+    }
+
+    void lineMesh()
+    {
+        geometry::MeshChunks chunks;
+        // 1 px wide with a 1 px fringe: one 2 px quad at half the ink — the same coverage.
+        geometry::appendLine(chunks, QPointF(0, 0), QPointF(10, 0), 1, geometry::premultiplied(Qt::black), 1);
+        const geometry::Mesh &m = chunks.chunks()[0];
+        QCOMPARE(int(m.vertices.size()), 4);
+        QCOMPARE(int(m.indices.size()), 6);
+        for (const geometry::Vertex &v : m.vertices) {
+            QCOMPARE(int(v.a), 128);
+            QCOMPARE(std::abs(v.y), 1.0f);
+        }
+        QCOMPARE(m.vertices[0].x, 0.0f);
+        QCOMPARE(m.vertices[1].x, 10.0f);
+        // A diagonal one stays perpendicular, malformed ones add nothing.
+        chunks.clear();
+        geometry::appendLine(chunks, QPointF(-3, 4), QPointF(5, -2), 0.5, geometry::premultiplied(Qt::black), 0.25);
+        const geometry::Mesh &d = chunks.chunks()[0];
+        const double across = std::hypot(d.vertices[3].x - d.vertices[0].x, d.vertices[3].y - d.vertices[0].y);
+        QVERIFY(std::abs(across - 0.75) < 1e-5);
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        geometry::appendLine(chunks, QPointF(1, 1), QPointF(1, 1), 1, geometry::premultiplied(Qt::black), 1);
+        geometry::appendLine(chunks, QPointF(nan, 1), QPointF(1, 1), 1, geometry::premultiplied(Qt::black), 1);
+        geometry::appendLine(chunks, QPointF(0, 0), QPointF(1, 1), 0, geometry::premultiplied(Qt::black), 1);
+        QCOMPARE(chunks.vertexCount(), 4);
+    }
+
+    void chunksSplitAt65535()
+    {
+        geometry::MeshChunks chunks;
+        for (int i = 0; i < 6000; ++i)
+            geometry::appendDisc(chunks, QPointF(i % 100, i / 100), 0.4, geometry::premultiplied(Qt::blue), 0.1, 16);
+        QCOMPARE(chunks.vertexCount(), 6000 * 33);
+        QVERIFY(chunks.chunks().size() >= 4);
+        for (const geometry::Mesh &m : chunks.chunks()) {
+            QVERIFY(m.vertices.size() <= 65535);
+            QCOMPARE(m.vertices.size() % 33, size_t(0)); // a disc never spans two chunks
+            for (const quint16 i : m.indices)
+                QVERIFY(i < m.vertices.size());
+        }
+        // clear() keeps the allocations and starts over.
+        chunks.clear();
+        QVERIFY(chunks.isEmpty());
+        geometry::appendDisc(chunks, QPointF(0, 0), 1, geometry::premultiplied(Qt::blue), 0.1, 8);
+        QCOMPARE(int(chunks.chunks().size()), 1);
+        QCOMPARE(chunks.vertexCount(), 17);
+    }
+
+    void roundedRectMesh()
+    {
+        geometry::MeshChunks chunks;
+        geometry::appendRoundedRect(chunks, QRectF(10, 10, 60, 16), 3, geometry::premultiplied(Qt::white), 1);
+        const geometry::Mesh &m = chunks.chunks()[0];
+        QCOMPARE(int(m.vertices.size()), 41);
+        for (const quint16 i : m.indices)
+            QVERIFY(i < m.vertices.size());
+        // The opaque outline stays inside the rect, the fringe reaches half a pixel beyond it.
+        for (int k = 1; k <= 20; ++k)
+            QVERIFY(QRectF(9.99, 9.99, 60.02, 16.02)
+                            .contains(QPointF(m.vertices[size_t(k)].x, m.vertices[size_t(k)].y)));
+        for (int k = 21; k <= 40; ++k) {
+            QCOMPARE(int(m.vertices[size_t(k)].a), 0);
+            QVERIFY(QRectF(9.49, 9.49, 61.02, 17.02)
+                            .contains(QPointF(m.vertices[size_t(k)].x, m.vertices[size_t(k)].y)));
+        }
+        chunks.clear();
+        geometry::appendRoundedRect(chunks, QRectF(0, 0, 0, 10), 3, geometry::premultiplied(Qt::white), 1);
+        geometry::appendRoundedRect(chunks, QRectF(std::numeric_limits<double>::quiet_NaN(), 0, 5, 5), 3,
+                                    geometry::premultiplied(Qt::white), 1);
+        QVERIFY(chunks.isEmpty());
+    }
+
+    void placeLabels_data()
+    {
+        QTest::addColumn<QList<QPointF>>("centres");
+        QTest::addColumn<QList<bool>>("always");
+        QTest::addColumn<double>("radius");
+        QTest::addColumn<int>("maxLabels");
+        QTest::addColumn<QList<int>>("slots"); // 0 below, 1 above, 2 right, 3 left, -1 not placed
+        QTest::newRow("far apart: all below") << QList<QPointF>{{0, 0}, {300, 0}, {0, 300}}
+                                              << QList<bool>{false, false, false} << 5.0 << 260 << QList<int>{0, 0, 0};
+        QTest::newRow("neighbours: the second above") << QList<QPointF>{{100, 100}, {104, 110}}
+                                                      << QList<bool>{false, false} << 5.0 << 260 << QList<int>{0, 1};
+        // A big disc: its four slots do not touch each other.
+        QTest::newRow("the four slots in order")
+                << QList<QPointF>{{100, 100}, {100, 100}, {100, 100}, {100, 100}, {100, 100}} << QList<bool>(5, false)
+                << 30.0 << 260 << QList<int>{0, 1, 2, 3, -1};
+        QTest::newRow("the highlighted one overlaps")
+                << QList<QPointF>{{100, 100}, {100, 100}} << QList<bool>{false, true} << 5.0 << 260 << QList<int>{0, 0};
+        QTest::newRow("cut at maxLabels") << QList<QPointF>{{0, 0}, {300, 0}, {600, 0}, {900, 0}}
+                                          << QList<bool>(4, false) << 5.0 << 2 << QList<int>{0, 0, -1, -1};
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        QTest::newRow("malformed centre")
+                << QList<QPointF>{{nan, 0}, {0, 0}} << QList<bool>{false, false} << 5.0 << 260 << QList<int>{-1, 0};
+    }
+
+    void placeLabels()
+    {
+        QFETCH(QList<QPointF>, centres);
+        QFETCH(QList<bool>, always);
+        QFETCH(double, radius);
+        QFETCH(int, maxLabels);
+        QFETCH(QList<int>, slots);
+        QFont font;
+        font.setPixelSize(11);
+        const QFontMetricsF fm(font);
+        const QStringList titles{u"Żółw"_s, u"Zażółć gęślą jaźń"_s, u"wt 13 paź"_s, u"#projekt"_s, u"Łódź"_s};
+        std::vector<geometry::LabelCandidate> candidates;
+        for (qsizetype k = 0; k < centres.size(); ++k) {
+            geometry::LabelCandidate c;
+            c.node = int(k);
+            c.centre = centres.at(k);
+            c.radius = radius;
+            const QString title = titles.at(k % titles.size());
+            c.text = QSizeF(fm.horizontalAdvance(title), fm.height());
+            c.always = always.at(k);
+            candidates.push_back(c);
+        }
+        const QList<QRectF> rects = geometry::placeLabels(candidates, maxLabels);
+        QCOMPARE(rects.size(), centres.size());
+        for (qsizetype k = 0; k < rects.size(); ++k) {
+            const QRectF &r = rects.at(k);
+            const int slot = slots.at(k);
+            if (slot < 0) {
+                QVERIFY2(r.isNull(), qPrintable(QString::number(k)));
+                continue;
+            }
+            const geometry::LabelCandidate &c = candidates[size_t(k)];
+            QCOMPARE(r.size(), QSizeF(c.text.width() + 6, c.text.height() + 2));
+            const QPointF p = c.centre;
+            switch (slot) {
+            case 0:
+                QCOMPARE(r.top(), p.y() + c.radius + 2);
+                QCOMPARE(r.center().x(), p.x());
+                break;
+            case 1:
+                QCOMPARE(r.bottom(), p.y() - c.radius - 2);
+                QCOMPARE(r.center().x(), p.x());
+                break;
+            case 2: QCOMPARE(r.left(), p.x() + c.radius + 3); break;
+            case 3: QCOMPARE(r.right(), p.x() - c.radius - 3); break;
+            }
+        }
+        // Placed labels never overlap, except a highlighted one.
+        for (qsizetype i = 0; i < rects.size(); ++i) {
+            for (qsizetype j = i + 1; j < rects.size(); ++j) {
+                if (!rects.at(i).isNull() && !rects.at(j).isNull() && !always.at(i) && !always.at(j))
+                    QVERIFY(!rects.at(i).intersects(rects.at(j)));
+            }
+        }
+    }
+
+    void labelsElideLongTitles()
+    {
+        Files files = smallVault();
+        files.append({u"Zażółć gęślą jaźń — notatki ze spotkania zespołu projektowego o planach na drugi kwartał.md"_s,
+                      u"[[A]]\n"_s});
+        auto index = makeIndex(files);
+        GraphModel m;
+        m.setActive(false);
+        m.setVaultIndex(index.get());
+        GraphItem item;
+        QFont font;
+        font.setPixelSize(11);
+        item.setFont(font);
+        item.setModel(&m);
+        const int longOne = m.indexOf(files.last().first);
+        QVERIFY(longOne >= 0);
+        QVERIFY(item.labelSize(longOne).width() <= 220);
+        QVERIFY(item.labelSize(longOne).width() > 100);
+        const int turtle = m.indexOf(u"Żółw.md"_s);
+        QCOMPARE(item.labelSize(turtle),
+                 QSizeF(QFontMetricsF(font).horizontalAdvance(u"Żółw"_s), QFontMetricsF(font).height()));
+    }
+
+    void painterLabelsUseTheSharedRule()
+    {
+        // The QPainter path draws exactly the boxes of labelsFor() (the scene graph's too).
+        auto index = makeIndex(bigVault(120, 3));
+        GraphModel m;
+        m.setActive(false);
+        m.setVaultIndex(index.get());
+        m.step(300);
+        GraphItem item;
+        item.setSize(QSizeF(800, 600));
+        item.setModel(&m);
+        item.setSelectedId(m.nodes().at(5).id);
+        for (const double zoom : {0.5, 1.0, 2.5}) {
+            item.setZoom(zoom);
+            QImage img(800, 600, QImage::Format_ARGB32_Premultiplied);
+            {
+                QPainter p(&img);
+                item.render(&p, img.size());
+            }
+            QList<QRectF> expected;
+            for (const auto &l : item.labelsFor(QSizeF(800, 600)))
+                expected.append(l.rect);
+            QVERIFY(!expected.isEmpty());
+            QCOMPARE(item.sceneStats().labelRects, expected);
+            QVERIFY(expected.size() <= GraphItem::MaxLabels);
+        }
+    }
+
+    void meshOfTheGraph()
+    {
+        auto index = makeIndex(smallVault());
+        GraphModel m;
+        m.setActive(false);
+        m.setShowMissing(true);
+        m.setVaultIndex(index.get());
+        m.step(300);
+        GraphItem item;
+        item.setSize(QSizeF(800, 600));
+        item.setModel(&m);
+        geometry::MeshChunks mesh;
+        item.buildMesh(mesh, 1.0);
+        // 7 edges (one quad each) and 9 discs; the missing page is a disc and a ring.
+        int discVertices = 0;
+        for (int i = 0; i < m.nodeCount(); ++i) {
+            const double r = std::max(1.6, m.nodes().at(i).radius * item.zoom());
+            const int segments = geometry::discSegments(r);
+            discVertices += 1 + 2 * segments;
+            if (m.nodes().at(i).kind == GraphModel::Kind::Missing)
+                discVertices += 4 * segments;
+        }
+        QCOMPARE(mesh.vertexCount(), m.edgeCount() * 4 + discVertices);
+        // Selecting a node adds its highlight ring (and draws its edges strong, on top).
+        item.setSelectedId(u"A.md"_s);
+        geometry::MeshChunks selected;
+        item.buildMesh(selected, 1.0);
+        QVERIFY(selected.vertexCount() > mesh.vertexCount());
+        // Every vertex is finite and inside the graph's bounds (plus the rings and fringes).
+        const QRectF b = m.bounds().adjusted(-20, -20, 20, 20);
+        for (const geometry::Mesh &chunk : selected.chunks()) {
+            for (const geometry::Vertex &v : chunk.vertices)
+                QVERIFY(b.contains(QPointF(v.x, v.y)));
+        }
+        // A higher device pixel ratio makes the fringe thinner, not the shapes.
+        geometry::MeshChunks hidpi;
+        item.buildMesh(hidpi, 2.0);
+        QCOMPARE(hidpi.vertexCount(), selected.vertexCount());
     }
 
     void emptyVault()
@@ -707,11 +1506,28 @@ private Q_SLOTS:
         t.restart();
         item.render(&p, img.size());
         const double labelled = double(t.nsecsElapsed()) / 1e6;
-        qInfo("2000 nodes / %d edges: build %lld ms, tick %.2f ms, paint %.2f ms, zoomed paint %.2f ms",
-              m.edgeCount(), static_cast<long long>(build), tick, paint, labelled);
+        // The scene graph's meshes of the whole graph (what a moving frame rebuilds), and the
+        // labels of a frame.
+        item.resetView();
+        geometry::MeshChunks mesh;
+        double meshMs = 0;
+        for (int k = 0; k < 5; ++k) {
+            t.restart();
+            item.buildMesh(mesh, 1.0);
+            meshMs += double(t.nsecsElapsed()) / 1e6;
+        }
+        meshMs /= 5;
+        t.restart();
+        const auto labels = item.labelsFor(QSizeF(1280, 800));
+        const double labelMs = double(t.nsecsElapsed()) / 1e6;
+        qInfo("2000 nodes / %d edges: build %lld ms, tick %.2f ms, paint %.2f ms, zoomed paint %.2f ms, "
+              "mesh %.2f ms (%d vertices, %d chunks), labels %.2f ms (%d)",
+              m.edgeCount(), static_cast<long long>(build), tick, paint, labelled, meshMs, mesh.vertexCount(),
+              int(mesh.chunks().size()), labelMs, int(labels.size()));
         // Generous bounds (debug builds, shared CI machines); release builds are ~5x faster.
         QVERIFY2(tick < 60 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(tick)));
         QVERIFY2(paint < 250 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(paint)));
+        QVERIFY2(meshMs < 40 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(meshMs)));
     }
 };
 

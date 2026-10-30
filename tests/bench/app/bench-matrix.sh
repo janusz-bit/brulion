@@ -7,7 +7,7 @@
 #   LOCK=/path/laptop.lock tests/bench/app/bench-matrix.sh [groups…]
 #
 # Groups (default: all): startup-demo startup-big (startup-big-short) open-page typing select-copy search
-#   switcher views journal-scroll switch-pages idle workload
+#   switcher views graph journal-scroll switch-pages idle workload
 # Labels run alternately per group (base, cur, base, cur … when ROUNDS > 1) to spread drift.
 # RUN_TIMEOUT: seconds one app run may take (default 300; a scenario's own --timeout wins);
 # BENCH_TIMEOUT_MS (exported) is the probe's watchdog inside the app (default 240000).
@@ -22,18 +22,20 @@ work="${WORKDIR:-$(mktemp -d)}"
 mkdir -p "$OUT" "$work"
 read -r -a bins <<< "$BINS"
 if [[ $# -gt 0 ]]; then groups=("$@"); else
-  groups=(startup-demo startup-big open-page typing select-copy search switcher views journal-scroll switch-pages idle
-    workload); fi
+  groups=(startup-demo startup-big open-page typing select-copy search switcher views graph journal-scroll switch-pages
+    idle workload); fi
 
-run() { # run <label> <bin> <run-bench args…>
+run() { # run <label> <bin> <run-bench args…> (rounds after the first add to the first one's runs)
   local label="$1" bin="$2"; shift 2
+  local append=()
+  [[ "${round:-0}" -gt 0 ]] && append=(--append)
   python3 "$here/run-bench.py" --bin "$bin" --probe "$PROBE" --label "$label" --out "$OUT" \
-    --platform "$platform" --workdir "$work/$label" --timeout "${RUN_TIMEOUT:-300}" "$@"
+    --platform "$platform" --workdir "$work/$label" --timeout "${RUN_TIMEOUT:-300}" "${append[@]}" "$@"
 }
 
 group() { # group <name> : runs every label for that group
-  local g="$1" r label bin spec n
-  for ((r = 0; r < rounds; r++)); do
+  local g="$1" round label bin spec n
+  for ((round = 0; round < rounds; round++)); do
     for spec in "${bins[@]}"; do
       label="${spec%%=*}"; bin="${spec#*=}"
       n="$runs"
@@ -69,6 +71,7 @@ group() { # group <name> : runs every label for that group
         search) run "$label" "$bin" --vault "$VAULT_BIG" --scenario search --name search-10k --start first --runs "$n" ;;
         switcher) run "$label" "$bin" --vault "$VAULT_BIG" --scenario switcher --name switcher-10k --start first --runs "$n" ;;
         views) run "$label" "$bin" --vault "$VAULT_BIG" --scenario views --name views-10k --start first --runs "$n" ;;
+        graph) run "$label" "$bin" --vault "$VAULT_BIG" --scenario graph --name graph-10k --start first --runs "$n" ;;
         journal-scroll) run "$label" "$bin" --vault "$VAULT_BIG" --scenario journal-scroll --name journal-scroll-10k --start first --runs "$n" ;;
         switch-pages) run "$label" "$bin" --vault "$VAULT_BIG" --scenario switch-pages --name switch-pages-10k --start first \
             --runs 3 --env "BENCH_PAGES=$(realpath "$pages")" --timeout 600 ;;

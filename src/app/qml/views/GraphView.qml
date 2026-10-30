@@ -15,8 +15,10 @@ import Brulion
 // * search ("/" or Ctrl+F) centres and selects a page; whole graph / local graph around a page
 //   (route.path, or the selected node) with depth 1 or 2; toggles for tags, missing pages and
 //   daily notes (remembered on this device);
-// * the simulation stops when it has settled, when the view is hidden and — with reduced motion
-//   — is computed without animation; phones and the browser get a lower node cap and frame rate.
+// * the layout is computed on a worker thread (in slices in the browser) and unfolds over about
+//   a second; it stops when it has settled and pauses while the view is hidden; with reduced
+//   motion only the final layout is shown (a spinner while a fresh one is computed); phones and
+//   the browser get a lower node cap, the browser a lower frame rate.
 //
 // Route parameters: path (local graph around that page), select (a node id to select —
 // screenshots), depth (1–2).
@@ -115,7 +117,8 @@ FocusScope {
 
     GraphModel {
         id: graphModel
-        vaultIndex: PlanningContext.vaultIndex
+        // The settings before the index (Qt applies the bindings in this order): opening the view
+        // builds the graph once, with them — not once per setting that differs from its default.
         showTags: root.showTags
         showMissing: root.showMissing
         showJournals: root.showJournals
@@ -124,9 +127,12 @@ FocusScope {
         depth: root.depth
         locale: DatesHelper.locale
         maxNodes: root.lowEnd ? 1200 : 4000
-        tickInterval: root.lowEnd ? 33 : 16
+        // Phones get 60 frames a second (the layout runs on a worker); the browser computes it on
+        // the GUI thread in slices between its frames.
+        frameInterval: DeviceInfo.platform === "wasm" ? 33 : 16
         reducedMotion: Theme.reducedMotion
         active: root.visible && Qt.application.state === Qt.ApplicationActive
+        vaultIndex: PlanningContext.vaultIndex
     }
 
     GraphItem {
@@ -384,6 +390,14 @@ FocusScope {
         anchors.centerIn: parent
         size: Theme.iconSizeLg
         visible: graphModel.pageCount === 0 && Workspace.indexing
+        running: visible
+    }
+    // Reduced motion: a fresh layout is computed without animation; this instead of a spiral that jumps.
+    BSpinner {
+        objectName: "graphSettlingSpinner"
+        anchors.centerIn: parent
+        size: Theme.iconSizeLg
+        visible: graphModel.settling && graphModel.nodeCount > 0
         running: visible
     }
 }

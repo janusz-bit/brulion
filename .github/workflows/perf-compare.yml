@@ -10,6 +10,13 @@
 # `bench.sh compare` per round. Shared runners are noisy: read the timings as relative changes
 # and trust only changes beyond the noise column; memory rows are exact. Results: the job summary
 # and an artifact per architecture. docs/PERFORMANCE.md, "How to run the benchmarks".
+#
+# App benchmarks (`app`: bench-matrix.sh groups, e.g. "views graph"; empty = none; `suites` may be
+# empty to run only these): both trees' `brulion` in Release with Qt from aqt (as ci.yml's linux
+# job), the LD_PRELOAD probe and the analysis from head's tests/bench/app, the 10 000-note bench
+# vault, Xvfb + Mesa llvmpipe (frames rendered on the CPU, like the laptop's runs); the labels
+# alternate per round (`app_rounds` × `app_runs` runs each). Results: report.py's table in the job
+# summary, the raw runs as an artifact.
 name: Performance comparison
 
 on:
@@ -24,6 +31,36 @@ on:
       reps:
         description: "Repetitions per suite and round"
         default: "5"
+      app:
+        description: "App benchmark groups (bench-matrix.sh, e.g. \"views graph\"); empty = none"
+        default: ""
+      app_runs:
+        description: "App benchmark runs per label and round"
+        default: "3"
+      app_rounds:
+        description: "App benchmark rounds (labels alternate per round)"
+        default: "2"
+  # The same from another workflow (a branch's own trigger before this file reaches main).
+  workflow_call:
+    inputs:
+      base:
+        type: string
+        required: true
+      suites:
+        type: string
+        default: "bench_index bench_markdown"
+      reps:
+        type: string
+        default: "5"
+      app:
+        type: string
+        default: ""
+      app_runs:
+        type: string
+        default: "3"
+      app_rounds:
+        type: string
+        default: "2"
 
 permissions:
   contents: read
@@ -35,6 +72,7 @@ concurrency:
 jobs:
   compare:
     name: Base vs head (${{ matrix.arch }})
+    if: inputs.suites != ''
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
     strategy:
@@ -105,4 +143,90 @@ jobs:
         with:
           name: perf-compare-${{ matrix.arch }}
           path: results
+          retention-days: 30
+
+  app:
+    name: App benchmarks, base vs head (x86_64, Xvfb)
+    if: inputs.app != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      QT_VERSION: 6.11.2
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          path: head
+
+      - name: Base tree with head's benchmark sources
+        env:
+          BASE: ${{ inputs.base }}
+        run: |
+          git -C head worktree add --detach "$GITHUB_WORKSPACE/base" "$BASE"
+          rm -rf base/tests/bench
+          cp -r head/tests/bench base/tests/bench
+          echo "app benchmarks — base: $(git -C base rev-parse --short HEAD), head: $(git -C head rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          aqtversion: ==3.3.0
+          cache: true
+
+      # Xvfb, Mesa's llvmpipe (GLX) and the libraries Qt's xcb platform plugin loads.
+      - name: X server, Mesa and xcb libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build xvfb libgl1-mesa-dri libglx-mesa0 libegl1 libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 fonts-dejavu-core
+
+      - name: Build both apps (Release, no tests)
+        run: |
+          for tree in base head; do
+            cmake -S "$tree" -B "build-$tree" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+              -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+            cmake --build "build-$tree" --parallel --target brulion
+          done
+          CMAKE_PREFIX_PATH="$QT_ROOT_DIR" head/tests/bench/app/build-probe.sh "$RUNNER_TEMP/probe"
+          python3 head/tests/bench/app/make-bench-vault.py "$RUNNER_TEMP/vaults/big10k"
+
+      - name: Run alternately
+        env:
+          GROUPS_TO_RUN: ${{ inputs.app }}
+          RUNS: ${{ inputs.app_runs }}
+          ROUNDS: ${{ inputs.app_rounds }}
+        run: |
+          read -r -a groups <<< "$GROUPS_TO_RUN"
+          BINS="base=$GITHUB_WORKSPACE/build-base/src/app/brulion head=$GITHUB_WORKSPACE/build-head/src/app/brulion" \
+            PROBE="$RUNNER_TEMP/probe/libbenchprobe.so" VAULT_DEMO="$RUNNER_TEMP/vaults/big10k" \
+            VAULT_BIG="$RUNNER_TEMP/vaults/big10k" OUT="$GITHUB_WORKSPACE/app-results" PLATFORM=xvfb \
+            PROBE_XDG_DATA_DIRS=/usr/local/share:/usr/share \
+            head/tests/bench/app/bench-matrix.sh "${groups[@]}"
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "### App benchmarks (medians, min–max)"
+            echo
+            python3 head/tests/bench/app/report.py "$GITHUB_WORKSPACE/app-results" \
+              --platform "GitHub ubuntu-24.04, Xvfb + llvmpipe" --base base --cur head || true
+            echo
+            echo '<details><summary>All metrics</summary>'
+            echo
+            echo '```'
+            python3 head/tests/bench/app/analyze.py "$GITHUB_WORKSPACE/app-results" --csv "$GITHUB_WORKSPACE/app-results/all.csv" || true
+            echo '```'
+            echo '</details>'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-compare-app
+          path: app-results
           retention-days: 30

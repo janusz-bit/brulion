@@ -4060,17 +4060,17 @@
 <context>
     <name>GraphView</name>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="29"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="31"/>
         <source>Graph: %1</source>
         <translation>Graf: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="29"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="31"/>
         <source>Graph</source>
         <translation>Graf</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="159"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="165"/>
         <source>Link graph: %n pages</source>
         <translation>
             <numerusform>Graf linków: %n strona</numerusform>
@@ -4079,32 +4079,32 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="160"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="166"/>
         <source>Use the search field to find a page.</source>
         <translation>Użyj pola wyszukiwania, aby znaleźć stronę.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="271"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="277"/>
         <source>Zoom in</source>
         <translation>Przybliż</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="277"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="283"/>
         <source>Zoom out</source>
         <translation>Oddal</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="283"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="289"/>
         <source>Show everything</source>
         <translation>Pokaż wszystko</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="289"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="295"/>
         <source>Arrange again</source>
         <translation>Rozmieść ponownie</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="307"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="313"/>
         <source>%n nodes</source>
         <translation>
             <numerusform>%n węzeł</numerusform>
@@ -4113,7 +4113,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="307"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="313"/>
         <source>%n links</source>
         <translation>
             <numerusform>%n link</numerusform>
@@ -4122,7 +4122,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="309"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="315"/>
         <source>the %n best connected shown</source>
         <translation>
             <numerusform>widoczny %n najlepiej połączony</numerusform>
@@ -4131,57 +4131,57 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="344"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="350"/>
         <source>Page</source>
         <translation>Strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="344"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="350"/>
         <source>Journal</source>
         <translation>Dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="344"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="350"/>
         <source>Tag</source>
         <translation>Tag</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="344"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="350"/>
         <source>Missing page</source>
         <translation>Brakująca strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="359"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="365"/>
         <source>The graph is empty</source>
         <translation>Graf jest pusty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="360"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="366"/>
         <source>Pages and the [[links]] between them appear here. Link two pages to see the first connection.</source>
         <translation>Tu pojawiają się strony i [[linki]] między nimi. Połącz dwie strony linkiem, aby zobaczyć pierwsze połączenie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="367"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="373"/>
         <source>Nothing to show</source>
         <translation>Nie ma nic do pokazania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="368"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="374"/>
         <source>All pages are hidden by the options.</source>
         <translation>Opcje ukrywają wszystkie strony.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="369"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="375"/>
         <source>Show daily notes</source>
         <translation>Pokaż notatki dzienne</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="380"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="386"/>
         <source>“%1” is not in the graph</source>
         <translation>„%1” nie ma w grafie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/GraphView.qml" line="381"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="387"/>
         <source>The page was deleted or is hidden by the options. Showing the whole graph.</source>
         <translation>Strona została usunięta albo ukrywają ją opcje. Widoczny jest cały graf.</translation>
     </message>

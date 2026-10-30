@@ -125,6 +125,46 @@ void ForceLayout::setPosition(int i, double x, double y)
     }
 }
 
+void ForceLayout::setPositions(const std::vector<double> &xs, const std::vector<double> &ys)
+{
+    if (xs.size() != m_x.size() || ys.size() != m_y.size())
+        return;
+    m_x = xs;
+    m_y = ys;
+    std::fill(m_vx.begin(), m_vx.end(), 0.0);
+    std::fill(m_vy.begin(), m_vy.end(), 0.0);
+    for (size_t i = 0; i < m_x.size(); ++i) {
+        if (m_fixed[i]) {
+            m_fx[i] = m_x[i];
+            m_fy[i] = m_y[i];
+        }
+    }
+}
+
+int ForceLayout::ticksToCool(double alpha, double alphaMin, double alphaDecay)
+{
+    if (!(alpha >= alphaMin))
+        return 0;
+    if (!(alphaDecay > 0) || alphaDecay >= 1 || !(alphaMin > 0))
+        return alphaDecay >= 1 ? 1 : -1;
+    // tick() multiplies alpha by (1 - decay) before each step; it runs while alpha >= alphaMin.
+    // Counted rather than computed with logarithms: the same rounding as tick() itself (capped
+    // for absurdly slow cooling).
+    int ticks = 0;
+    while (alpha >= alphaMin && ticks < 1000000) {
+        alpha += (0 - alpha) * alphaDecay;
+        ++ticks;
+    }
+    return ticks;
+}
+
+int ForceLayout::expectedTicks() const
+{
+    if (m_alphaTarget > 0)
+        return -1;
+    return ticksToCool(m_alpha, m_params.alphaMin, m_params.alphaDecay);
+}
+
 void ForceLayout::fix(int i, double x, double y)
 {
     if (i < 0 || i >= nodeCount())

@@ -113,10 +113,19 @@ def main():
                     help="keep LD_PRELOAD in the wrapper's environment (a Qt tool such as qmlprofiler that "
                          "starts the app itself; the probe only activates inside brulion)")
     ap.add_argument("--app-arg", action="append", default=[])
+    ap.add_argument("--append", action="store_true",
+                    help="add to the runs already in <out> for this name and label (another round) instead "
+                         "of replacing them")
     args = ap.parse_args()
 
     name = args.name or args.scenario
     os.makedirs(args.out, exist_ok=True)
+    meta_path = os.path.join(args.out, "%s-%s.runs.json" % (name, args.label))
+    earlier = []
+    if args.append and os.path.exists(meta_path):
+        with open(meta_path) as f:
+            earlier = json.load(f).get("runs", [])
+    first = sum(1 for r in earlier if not r.get("warmup"))
     work = args.workdir or tempfile.mkdtemp(prefix="brulion-bench-")
     os.makedirs(work, exist_ok=True)
     vault = os.path.join(work, "Notatnik testowy")
@@ -164,7 +173,8 @@ def main():
             for kv in args.env:
                 k, _, v = kv.partition("=")
                 env[k] = v
-            tag = "warmup" if warmup else "%02d" % (i - (1 if args.start in ("warm", "cold") else 0))
+            tag = ("warmup%d" % first if first else "warmup") if warmup else \
+                "%02d" % (first + i - (1 if args.start in ("warm", "cold") else 0))
             out = os.path.join(args.out, "%s-%s-%s.jsonl" % (name, args.label, tag))
             env["BENCH_OUT"] = out
             cmd = [args.bin, "--no-single-instance", "--vault", vault, "--size", args.size,
@@ -222,9 +232,9 @@ def main():
             pass
     meta = {"name": name, "label": args.label, "scenario": args.scenario, "start": args.start,
             "platform": args.platform, "size": args.size, "route": args.route, "env": args.env,
-            "bin": os.path.realpath(args.bin), "runs": results, "host": os.uname().nodename,
+            "bin": os.path.realpath(args.bin), "runs": earlier + results, "host": os.uname().nodename,
             "machine": os.uname().machine}
-    with open(os.path.join(args.out, "%s-%s.runs.json" % (name, args.label)), "w") as f:
+    with open(meta_path, "w") as f:
         json.dump(meta, f, indent=1)
 
 

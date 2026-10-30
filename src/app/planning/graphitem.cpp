@@ -1,16 +1,23 @@
 #include "graphitem.h"
 
 #include "graphmodel.h"
+#include "graphscene.h"
 
 #include <QCursor>
 #include <QElapsedTimer>
 #include <QFontMetricsF>
+#include <QMatrix4x4>
 #include <QNativeGestureEvent>
 #include <QPainter>
 #include <QPointingDevice>
+#include <QQuickWindow>
+#include <QSGImageNode>
+#include <QSGRendererInterface>
+#include <QSGTexture>
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 namespace brulion::planning {
 
@@ -23,7 +30,8 @@ constexpr double kLabelMaxWidth = 220;
 constexpr int kAntialiasEdgeLimit = 2500;
 constexpr double kSpriteMaxRadius = 24;
 constexpr int kMaxSprites = 600;
-/// Throttled repaints of a moving time-boxed layout: at least this far apart, at most this far.
+/// Throttled repaints of a moving layout (software renderer): at least this far apart, at most
+/// this far.
 constexpr int kMinMovingRepaintMs = 66;
 constexpr int kMaxMovingRepaintMs = 600;
 
@@ -38,16 +46,34 @@ double distance(QPointF a, QPointF b)
     return std::hypot(a.x() - b.x(), a.y() - b.y());
 }
 
+/// The software renderer's node: a QPainter frame as a texture (the texture owned here).
+class GraphImageNode : public QSGNode {
+public:
+    explicit GraphImageNode(QQuickWindow *window) : image(window->createImageNode())
+    {
+        image->setOwnsTexture(false);
+        appendChildNode(image);
+    }
+    ~GraphImageNode() override
+    {
+        removeChildNode(image);
+        delete image; // before the texture it shows
+    }
+    QSGImageNode *image;
+    std::unique_ptr<QSGTexture> texture;
+    QImage canvas;
+};
+
 } // namespace
 
-GraphItem::GraphItem(QQuickItem *parent) : QQuickPaintedItem(parent)
+GraphItem::GraphItem(QQuickItem *parent) : QQuickItem(parent)
 {
+    setFlag(ItemHasContents);
+    // The meshes hold every node, also those outside the view: keep them inside the item.
+    setClip(true);
     setAcceptedMouseButtons(Qt::LeftButton);
     setAcceptHoverEvents(true);
     setAcceptTouchEvents(true);
-    setOpaquePainting(true);
-    setAntialiasing(true);
-    setFillColor(m_bg);
     m_font.setPixelSize(11);
     m_camera.setStartValue(0.0);
     m_camera.setEndValue(1.0);
@@ -83,14 +109,17 @@ void GraphItem::setModel(GraphModel *model)
     m_selected = -1;
     m_labels.clear();
     m_labelTexts.clear();
+    m_labelsDirty = true;
     if (m_model) {
         connect(m_model, &GraphModel::positionsChanged, this, &GraphItem::onPositionsChanged);
         connect(m_model, &GraphModel::structureChanged, this, &GraphItem::onStructureChanged);
+        // The settled frame (software renderer: drawn with antialiasing and all labels).
         connect(m_model, &GraphModel::runningChanged, this, [this] { update(); });
+        connect(m_model, &GraphModel::settlingChanged, this, &GraphItem::meshChanged);
         onStructureChanged();
     }
     Q_EMIT modelChanged();
-    update();
+    meshChanged();
 }
 
 void GraphItem::setZoom(qreal zoom)
@@ -201,7 +230,7 @@ void GraphItem::setTouchMode(bool on)
             return;                                                                                                    \
         member = c;                                                                                                    \
         Q_EMIT colorsChanged();                                                                                        \
-        update();                                                                                                      \
+        meshChanged();                                                                                                 \
     }
 
 void GraphItem::setBackgroundColor(const QColor &c)
@@ -210,9 +239,8 @@ void GraphItem::setBackgroundColor(const QColor &c)
         return;
     m_bg = c;
     m_sprites.clear(); // rings are filled with the background
-    setFillColor(c);
     Q_EMIT colorsChanged();
-    update();
+    meshChanged();
 }
 BRULION_COLOR_SETTER(EdgeColor, m_edge)
 BRULION_COLOR_SETTER(HighlightColor, m_highlight)
@@ -232,6 +260,7 @@ void GraphItem::setFont(const QFont &font)
     m_font = font;
     m_labels.clear();
     m_labelTexts.clear();
+    m_labelsDirty = true;
     Q_EMIT fontChanged();
     update();
 }
@@ -257,7 +286,7 @@ void GraphItem::setSelectedId(const QString &id)
     if (highlightedId() != before)
         Q_EMIT highlightedIdChanged();
     emitHighlightPosition();
-    update();
+    meshChanged();
 }
 
 QString GraphItem::highlightedId() const
@@ -421,6 +450,8 @@ void GraphItem::onStructureChanged()
 {
     m_labels.clear();
     m_labelTexts.clear();
+    m_labelsDirty = true;
+    m_meshDirty = true;
     const QString before = highlightedId();
     m_hovered = m_model && !m_hoveredIdCache.isEmpty() ? m_model->indexOf(m_hoveredIdCache) : -1;
     if (m_hovered < 0 && !m_hoveredIdCache.isEmpty()) {
@@ -468,13 +499,22 @@ int GraphItem::movingRepaintInterval(double paintMs)
     return std::clamp(int(std::ceil(3 * paintMs)), kMinMovingRepaintMs, kMaxMovingRepaintMs);
 }
 
+void GraphItem::meshChanged()
+{
+    m_meshDirty = true;
+    update();
+}
+
 void GraphItem::repaintMoving()
 {
-    // Slow devices: a frame of the moving layout costs more than the simulation steps between
-    // them (QPainter rasterises everything, on the GUI thread or while it waits): repaint now and
-    // then, so the steps — and the user's input — get most of the time. The settled layout is
-    // painted at once (runningChanged), so are gestures and camera moves (they call update()).
-    const bool throttle = m_model && m_model->timeBoxed() && m_model->running() && m_gesture == Gesture::None
+    m_meshDirty = true;
+    // The software renderer on a slow device: a frame of the moving layout costs more than a
+    // frame interval (QPainter rasterises everything while the GUI thread waits): repaint now
+    // and then, so the user's input gets most of the time. The settled layout is painted at once
+    // (runningChanged), so are gestures and camera moves (they call update()). The scene graph
+    // renderer only uploads new meshes: every frame.
+    const bool throttle = m_softwareRendering.load(std::memory_order_relaxed) && m_model && m_model->running()
+                          && lastPaintMs() > m_slowPaintMs && m_gesture == Gesture::None
                           && m_camera.state() != QAbstractAnimation::Running;
     if (!throttle) {
         m_repaintTimer.stop();
@@ -500,7 +540,7 @@ void GraphItem::emitHighlightPosition()
 
 void GraphItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
 {
-    QQuickPaintedItem::geometryChange(newGeometry, oldGeometry);
+    QQuickItem::geometryChange(newGeometry, oldGeometry);
     if (newGeometry.size() != oldGeometry.size()) {
         applyAutoFit();
         emitHighlightPosition();
@@ -512,15 +552,18 @@ void GraphItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGeome
 
 int GraphItem::nodeIndexAt(QPointF pos) const
 {
-    if (!m_model)
+    if (!m_model || m_model->settling()) // nothing is drawn yet
         return -1;
     const auto &nodes = m_model->nodes();
-    const ForceLayout &layout = m_model->layout();
+    const auto &xs = m_model->xs();
+    const auto &ys = m_model->ys();
     const double slack = m_touchMode ? 20 : 5; // px around the drawn disc
     int best = -1;
     double bestD = 0;
-    for (int i = 0; i < nodes.size() && i < layout.nodeCount(); ++i) {
-        const QPointF s = toScreen(layout.x(i), layout.y(i));
+    for (int i = 0; i < nodes.size() && size_t(i) < xs.size() && size_t(i) < ys.size(); ++i) {
+        if (!std::isfinite(xs[size_t(i)]) || !std::isfinite(ys[size_t(i)]))
+            continue;
+        const QPointF s = toScreen(xs[size_t(i)], ys[size_t(i)]);
         const double r = std::max(1.6, nodes.at(i).radius * m_zoom);
         const double dist = distance(s, pos);
         if (dist <= r + slack && (best < 0 || dist - r < bestD)) {
@@ -562,7 +605,7 @@ void GraphItem::setHovered(int node)
     if (highlightedId() != before)
         Q_EMIT highlightedIdChanged();
     emitHighlightPosition();
-    update();
+    meshChanged();
 }
 
 void GraphItem::setSelected(int node)
@@ -794,19 +837,175 @@ bool GraphItem::event(QEvent *event)
             return true;
         }
     }
-    return QQuickPaintedItem::event(event);
+    return QQuickItem::event(event);
 }
 
-// ---- painting ------------------------------------------------------------------------------
+// ---- labels (both renderers) -------------------------------------------------------------------
+
+QString GraphItem::labelText(int node)
+{
+    auto it = m_labelTexts.find(node);
+    if (it == m_labelTexts.end()) {
+        const QString title =
+                m_model && node >= 0 && node < m_model->nodeCount() ? m_model->nodes().at(node).title : QString();
+        const QFontMetricsF fm(m_font);
+        LabelText t;
+        t.text = fm.elidedText(title, Qt::ElideRight, kLabelMaxWidth);
+        t.size = QSizeF(fm.horizontalAdvance(t.text), fm.height());
+        it = m_labelTexts.insert(node, t);
+    }
+    return it->text;
+}
+
+QSizeF GraphItem::labelSize(int node)
+{
+    labelText(node);
+    return m_labelTexts.value(node).size;
+}
+
+GraphItem::Frame GraphItem::frameFor(const QSizeF &size) const
+{
+    Frame f;
+    if (!m_model)
+        return f;
+    const auto &nodes = m_model->nodes();
+    const auto &xs = m_model->xs();
+    const auto &ys = m_model->ys();
+    f.n = int(std::min({size_t(nodes.size()), xs.size(), ys.size()}));
+    const double w = size.width();
+    const double h = size.height();
+    const double z = m_zoom;
+    f.pos.resize(size_t(f.n));
+    f.visible.assign(size_t(f.n), 0);
+    const double margin = 40;
+    for (int i = 0; i < f.n; ++i) {
+        const QPointF p((xs[size_t(i)] - m_cx) * z + w / 2, (ys[size_t(i)] - m_cy) * z + h / 2);
+        f.pos[size_t(i)] = p;
+        if (!std::isfinite(p.x()) || !std::isfinite(p.y()))
+            continue;
+        const double r = std::max(1.6, nodes.at(i).radius * z);
+        f.visible[size_t(i)] =
+                p.x() + r >= -margin && p.x() - r <= w + margin && p.y() + r >= -margin && p.y() - r <= h + margin;
+    }
+    f.hl = m_hovered >= 0 ? m_hovered : m_selected;
+    if (f.hl >= 0 && f.hl < f.n) {
+        f.hood.assign(size_t(f.n), 0);
+        f.hood[size_t(f.hl)] = 1;
+        for (const int j : m_model->adjacency().at(f.hl)) {
+            if (j < f.n)
+                f.hood[size_t(j)] = 1;
+        }
+    } else {
+        f.hl = -1;
+    }
+    f.dimming = !f.hood.empty();
+    f.focus = m_model->focusPath().isEmpty() ? -1 : m_model->indexOf(m_model->focusPath());
+    if (f.focus >= f.n)
+        f.focus = -1;
+    return f;
+}
+
+std::vector<GraphItem::PlacedLabel> GraphItem::labelsFor(const QSizeF &size, bool sparse)
+{
+    return labelsFor(frameFor(size), sparse);
+}
+
+std::vector<GraphItem::PlacedLabel> GraphItem::labelsFor(const Frame &f, bool sparse)
+{
+    std::vector<PlacedLabel> out;
+    if (!m_model || f.n == 0 || m_model->settling())
+        return out;
+    const auto &nodes = m_model->nodes();
+    const double z = m_zoom;
+    const int hl = f.hl;
+    const int focus = f.focus;
+    // Everything visible at sufficient zoom; otherwise the highlighted neighbourhood, the local
+    // centre and the best connected nodes. Sparse (a slow moving frame): only the highlighted
+    // node and the local centre.
+    const bool all = z >= m_labelZoom && !sparse;
+    std::vector<int> candidates;
+    if (sparse) {
+        if (hl >= 0 && f.visible[size_t(hl)])
+            candidates.push_back(hl);
+        if (focus >= 0 && f.visible[size_t(focus)])
+            candidates.push_back(focus);
+    } else if (all) {
+        for (int i = 0; i < f.n; ++i) {
+            if (f.visible[size_t(i)])
+                candidates.push_back(i);
+        }
+    } else {
+        std::vector<int> byDegree;
+        if (z >= m_labelZoom * 0.2) {
+            for (int i = 0; i < f.n; ++i) {
+                if (f.visible[size_t(i)] && nodes.at(i).degree > 0)
+                    byDegree.push_back(i);
+            }
+            // The hubs first: a few when far away, more when closer.
+            const size_t top = std::min<size_t>(byDegree.size(), z >= m_labelZoom * 0.7    ? 40
+                                                                 : z >= m_labelZoom * 0.45 ? 14
+                                                                                           : 8);
+            std::partial_sort(byDegree.begin(), byDegree.begin() + qsizetype(top), byDegree.end(),
+                              [&](int a, int b) { return nodes.at(a).degree > nodes.at(b).degree; });
+            byDegree.resize(top);
+        }
+        if (f.dimming) {
+            for (int i = 0; i < f.n; ++i) {
+                if (f.hood[size_t(i)] && f.visible[size_t(i)])
+                    candidates.push_back(i);
+            }
+        }
+        if (focus >= 0 && f.visible[size_t(focus)])
+            candidates.push_back(focus);
+        candidates.insert(candidates.end(), byDegree.begin(), byDegree.end());
+    }
+    const auto priority = [&](int i) {
+        if (i == hl)
+            return 0;
+        if (i == focus)
+            return 1;
+        if (f.dimming && f.hood[size_t(i)])
+            return 2;
+        return 3;
+    };
+    std::stable_sort(candidates.begin(), candidates.end(), [&](int a, int b) {
+        const int pa = priority(a), pb = priority(b);
+        if (pa != pb)
+            return pa < pb;
+        return nodes.at(a).degree > nodes.at(b).degree;
+    });
+    candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+
+    std::vector<geometry::LabelCandidate> ordered;
+    ordered.reserve(candidates.size());
+    for (const int i : candidates) {
+        geometry::LabelCandidate c;
+        c.node = i;
+        c.centre = f.pos[size_t(i)];
+        c.radius = std::max(1.6, nodes.at(i).radius * z);
+        c.text = labelSize(i);
+        c.always = i == hl;
+        ordered.push_back(c);
+    }
+    const QList<QRectF> rects = geometry::placeLabels(ordered, MaxLabels);
+    for (size_t k = 0; k < ordered.size(); ++k) {
+        const QRectF &rect = rects.at(qsizetype(k));
+        if (rect.isNull())
+            continue;
+        const int i = ordered[k].node;
+        out.push_back({i, rect, f.dimming && !f.hood[size_t(i)]});
+    }
+    return out;
+}
+
+// ---- painting (the software renderer, tests) ---------------------------------------------------
 
 const QStaticText &GraphItem::labelFor(int node)
 {
     auto it = m_labels.find(node);
     if (it != m_labels.end())
         return it.value();
-    const QString title = m_model ? m_model->nodes().at(node).title : QString();
-    const QFontMetricsF fm(m_font);
-    QStaticText st(fm.elidedText(title, Qt::ElideRight, kLabelMaxWidth));
+    QStaticText st(labelText(node));
     st.setTextFormat(Qt::PlainText);
     st.setPerformanceHint(QStaticText::AggressiveCaching);
     st.prepare(QTransform(), m_font);
@@ -846,11 +1045,6 @@ const QImage &GraphItem::spriteFor(const QColor &color, bool ring, double radius
     return m_sprites.insert(key, img).value();
 }
 
-void GraphItem::paint(QPainter *painter)
-{
-    render(painter, size());
-}
-
 void GraphItem::render(QPainter *painter, const QSizeF &size)
 {
     QElapsedTimer timer;
@@ -860,53 +1054,31 @@ void GraphItem::render(QPainter *painter, const QSizeF &size)
         const double ms = double(timer.nsecsElapsed()) / 1e6;
         m_lastPaintMs.store(ms, std::memory_order_relaxed);
         m_lastPaintEnd.store(m_clock.nsecsElapsed(), std::memory_order_relaxed);
-        if (m_model)
-            m_model->reportPaintCost(ms);
     };
     painter->fillRect(QRectF(QPointF(0, 0), size), m_bg);
-    if (!m_model || m_model->nodeCount() == 0) {
+    if (!m_model || m_model->nodeCount() == 0 || m_model->settling()) {
         finished();
         return;
     }
+    const Frame f = frameFor(size);
     const auto &nodes = m_model->nodes();
-    const ForceLayout &layout = m_model->layout();
     const auto &edges = m_model->edges();
-    const auto &adjacency = m_model->adjacency();
-    const int n = std::min(int(nodes.size()), layout.nodeCount());
+    const int n = f.n;
     const double w = size.width();
     const double h = size.height();
     const double z = m_zoom;
-    const auto sx = [&](double x) { return (x - m_cx) * z + w / 2; };
-    const auto sy = [&](double y) { return (y - m_cy) * z + h / 2; };
-
-    const int hl = m_hovered >= 0 ? m_hovered : m_selected;
-    std::vector<char> hood;
-    if (hl >= 0 && hl < n) {
-        hood.assign(size_t(n), 0);
-        hood[size_t(hl)] = 1;
-        for (const int j : adjacency.at(hl))
-            hood[size_t(j)] = 1;
-    }
-    const bool dimming = !hood.empty();
-    const int focus = m_model->focusPath().isEmpty() ? -1 : m_model->indexOf(m_model->focusPath());
+    const auto &pos = f.pos;
+    const auto &visible = f.visible;
+    const auto &hood = f.hood;
+    const int hl = f.hl;
+    const bool dimming = f.dimming;
+    const int focus = f.focus;
 
     const bool busy = m_model->running() || m_gesture != Gesture::None
                       || m_camera.state() == QAbstractAnimation::Running;
     const bool smooth = !busy || n < kAntialiasNodeLimit;
     painter->setRenderHint(QPainter::Antialiasing, smooth);
     const qreal dpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
-
-    // Screen positions + visibility (with a margin for discs and labels).
-    std::vector<QPointF> pos(static_cast<size_t>(n));
-    std::vector<char> visible(size_t(n), 0);
-    const double margin = 40;
-    for (int i = 0; i < n; ++i) {
-        const QPointF p(sx(layout.x(i)), sy(layout.y(i)));
-        pos[size_t(i)] = p;
-        const double r = std::max(1.6, nodes.at(i).radius * z);
-        visible[size_t(i)] = p.x() + r >= -margin && p.x() - r <= w + margin && p.y() + r >= -margin
-                             && p.y() - r <= h + margin;
-    }
 
     // Edges: one batched call for the normal ones, one for the highlighted neighbourhood.
     QList<QLineF> normal;
@@ -999,126 +1171,253 @@ void GraphItem::render(QPainter *painter, const QSizeF &size)
     ring(focus, m_focus, 3);
     ring(hl, m_highlight, 2.5);
 
-    // Labels: everything visible at sufficient zoom; otherwise the highlighted neighbourhood,
-    // the local centre and the best connected nodes. No overlaps (except the highlighted one).
-    // A time-boxed layout on the move: only the highlighted node and the local centre (labels
-    // are the costly part of a frame, and they would only flicker past).
-    const bool sparse = m_model->timeBoxed() && m_model->running();
-    const bool all = z >= m_labelZoom && !sparse;
-    std::vector<int> candidates;
-    if (sparse) {
-        if (hl >= 0 && hl < n && visible[size_t(hl)])
-            candidates.push_back(hl);
-        if (focus >= 0 && visible[size_t(focus)])
-            candidates.push_back(focus);
-    } else if (all) {
-        for (int i = 0; i < n; ++i) {
-            if (visible[size_t(i)])
-                candidates.push_back(i);
-        }
-    } else {
-        std::vector<int> byDegree;
-        if (z >= m_labelZoom * 0.2) {
-            for (int i = 0; i < n; ++i) {
-                if (visible[size_t(i)] && nodes.at(i).degree > 0)
-                    byDegree.push_back(i);
-            }
-            // The hubs first: a few when far away, more when closer.
-            const size_t top = std::min<size_t>(byDegree.size(), z >= m_labelZoom * 0.7 ? 40 : z >= m_labelZoom * 0.45 ? 14 : 8);
-            std::partial_sort(byDegree.begin(), byDegree.begin() + qsizetype(top), byDegree.end(),
-                              [&](int a, int b) { return nodes.at(a).degree > nodes.at(b).degree; });
-            byDegree.resize(top);
-        }
-        if (dimming) {
-            for (int i = 0; i < n; ++i) {
-                if (hood[size_t(i)] && visible[size_t(i)])
-                    candidates.push_back(i);
-            }
-        }
-        if (focus >= 0 && visible[size_t(focus)])
-            candidates.push_back(focus);
-        candidates.insert(candidates.end(), byDegree.begin(), byDegree.end());
-    }
-    const auto priority = [&](int i) {
-        if (i == hl)
-            return 0;
-        if (i == focus)
-            return 1;
-        if (dimming && hood[size_t(i)])
-            return 2;
-        return 3;
-    };
-    std::stable_sort(candidates.begin(), candidates.end(), [&](int a, int b) {
-        const int pa = priority(a), pb = priority(b);
-        if (pa != pb)
-            return pa < pb;
-        return nodes.at(a).degree > nodes.at(b).degree;
-    });
-    candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
-
+    // Labels (the rule shared with the scene graph). The layout on the move while frames are
+    // slow: only the highlighted node and the local centre (labels are the costly part of a
+    // frame, and they would only flicker past).
+    const bool sparse = m_model->running() && lastPaintMs() > m_slowPaintMs;
+    const std::vector<PlacedLabel> labels = labelsFor(f, sparse);
     painter->setFont(m_font);
-    const double cell = 64;
-    QHash<quint64, QList<QRectF>> grid;
-    const auto cellKey = [](int cx, int cy) { return (quint64(quint32(cx)) << 32) | quint32(cy); };
-    std::vector<char> labelled(size_t(n), 0);
-    int drawn = 0;
     const QColor labelDim = withAlpha(m_label, 0.4);
-    for (const int i : candidates) {
-        if (drawn >= MaxLabels)
-            break;
-        if (labelled[size_t(i)])
-            continue;
-        const QStaticText &st = labelFor(i);
-        const QSizeF ts = st.size();
-        const double r = std::max(1.6, nodes.at(i).radius * z);
-        const QPointF p = pos[size_t(i)];
-        const double lw = ts.width() + 6;
-        const double lh = ts.height() + 2;
-        // Below the node; if taken, above, right, left.
-        const QRectF options[] = {QRectF(p.x() - lw / 2, p.y() + r + 2, lw, lh), QRectF(p.x() - lw / 2, p.y() - r - 2 - lh, lw, lh),
-                                  QRectF(p.x() + r + 3, p.y() - lh / 2, lw, lh), QRectF(p.x() - r - 3 - lw, p.y() - lh / 2, lw, lh)};
-        const auto overlaps = [&](const QRectF &rect) {
-            const int c0 = int(std::floor(rect.left() / cell)), c1 = int(std::floor(rect.right() / cell));
-            const int r0 = int(std::floor(rect.top() / cell)), r1 = int(std::floor(rect.bottom() / cell));
-            for (int cx = c0; cx <= c1; ++cx) {
-                for (int cy = r0; cy <= r1; ++cy) {
-                    const auto it = grid.constFind(cellKey(cx, cy));
-                    if (it == grid.cend())
-                        continue;
-                    for (const QRectF &o : it.value()) {
-                        if (o.intersects(rect))
-                            return true;
-                    }
-                }
-            }
-            return false;
-        };
-        QRectF rect;
-        bool placed = false;
-        for (const QRectF &candidate : options) {
-            if (i == hl || !overlaps(candidate)) {
-                rect = candidate;
-                placed = true;
-                break;
-            }
-        }
-        if (!placed)
-            continue;
-        const int c0 = int(std::floor(rect.left() / cell)), c1 = int(std::floor(rect.right() / cell));
-        const int r0 = int(std::floor(rect.top() / cell)), r1 = int(std::floor(rect.bottom() / cell));
-        for (int cx = c0; cx <= c1; ++cx) {
-            for (int cy = r0; cy <= r1; ++cy)
-                grid[cellKey(cx, cy)].append(rect);
-        }
-        labelled[size_t(i)] = 1;
-        ++drawn;
+    QList<QRectF> rects;
+    rects.reserve(qsizetype(labels.size()));
+    for (const PlacedLabel &l : labels) {
         painter->setPen(Qt::NoPen);
         painter->setBrush(m_labelBg);
-        painter->drawRoundedRect(rect, 3, 3);
-        painter->setPen(dimming && !hood[size_t(i)] ? labelDim : m_label);
-        painter->drawStaticText(QPointF(rect.left() + 3, rect.top() + 1), st);
+        painter->drawRoundedRect(l.rect, 3, 3);
+        painter->setPen(l.dimmed ? labelDim : m_label);
+        painter->drawStaticText(QPointF(l.rect.left() + 3, l.rect.top() + 1), labelFor(l.node));
+        rects.append(l.rect);
+    }
+    {
+        std::lock_guard lock(m_statsMutex);
+        m_stats.labels = int(labels.size());
+        m_stats.labelRects = rects;
     }
     finished();
+}
+
+// ---- the scene graph ---------------------------------------------------------------------------
+
+void GraphItem::buildMesh(geometry::MeshChunks &out, qreal dpr) const
+{
+    using namespace geometry;
+    out.clear();
+    if (!m_model || m_model->nodeCount() == 0 || m_model->settling())
+        return;
+    const auto &nodes = m_model->nodes();
+    const auto &xs = m_model->xs();
+    const auto &ys = m_model->ys();
+    const int n = int(std::min({size_t(nodes.size()), xs.size(), ys.size()}));
+    const double z = std::max(1e-6, m_zoom);
+    dpr = dpr > 0 ? dpr : 1;
+    const double px = 1.0 / z;             // one logical pixel in world units
+    const double fringe = 1.0 / (dpr * z); // one device pixel
+    const auto at = [&](int i) { return QPointF(xs[size_t(i)], ys[size_t(i)]); };
+
+    int hl = m_hovered >= 0 ? m_hovered : m_selected;
+    if (hl >= n)
+        hl = -1;
+    std::vector<char> hood;
+    if (hl >= 0) {
+        hood.assign(size_t(n), 0);
+        hood[size_t(hl)] = 1;
+        for (const int j : m_model->adjacency().at(hl)) {
+            if (j < n)
+                hood[size_t(j)] = 1;
+        }
+    }
+    const bool dimming = !hood.empty();
+    int focus = m_model->focusPath().isEmpty() ? -1 : m_model->indexOf(m_model->focusPath());
+    if (focus >= n)
+        focus = -1;
+
+    // Edges, then the highlighted node's (stronger, on top).
+    const double edgeWidth = std::clamp(z * 0.9, 0.6, 1.6) * px;
+    const QRgb edge = premultiplied(m_edge, dimming ? 0.45 : 1.0);
+    const auto &edges = m_model->edges();
+    for (const auto &[a, b] : edges) {
+        if (a >= n || b >= n || (dimming && (a == hl || b == hl)))
+            continue;
+        appendLine(out, at(a), at(b), edgeWidth, edge, fringe); // thousands: 2 triangles each
+    }
+    if (dimming) {
+        const QRgb strong = premultiplied(m_highlight);
+        for (const int j : m_model->adjacency().at(hl)) {
+            if (j < n)
+                appendSegment(out, at(hl), at(j), edgeWidth * 1.7, strong, fringe);
+        }
+    }
+
+    // Discs grouped by kind: the dimmed ones first, then the rest.
+    const auto colorOf = [&](GraphModel::Kind k) -> const QColor & {
+        switch (k) {
+        case GraphModel::Kind::Journal: return m_journal;
+        case GraphModel::Kind::Tag: return m_tag;
+        case GraphModel::Kind::Missing: return m_missing;
+        case GraphModel::Kind::Page: break;
+        }
+        return m_page;
+    };
+    static constexpr GraphModel::Kind kinds[] = {GraphModel::Kind::Journal, GraphModel::Kind::Page,
+                                                 GraphModel::Kind::Tag, GraphModel::Kind::Missing};
+    const QRgb bg = premultiplied(m_bg);
+    for (int pass = 0; pass < 2; ++pass) {
+        const bool dimPass = pass == 0;
+        if (dimPass && !dimming)
+            continue;
+        for (const GraphModel::Kind kind : kinds) {
+            const QRgb c = premultiplied(colorOf(kind), dimPass ? 0.28 : 1.0);
+            for (int i = 0; i < n; ++i) {
+                if (nodes.at(i).kind != kind)
+                    continue;
+                if (dimming && (hood[size_t(i)] == 0) != dimPass)
+                    continue;
+                const double screenRadius = std::max(1.6, nodes.at(i).radius * z);
+                const double r = screenRadius * px;
+                const int segments = discSegments(screenRadius);
+                if (kind == GraphModel::Kind::Missing) {
+                    // A ring filled with the background (a page that does not exist yet).
+                    const double ringWidth = std::clamp(screenRadius * 0.35, 1.0, 2.0) * px;
+                    appendDisc(out, at(i), r, bg, fringe, segments);
+                    appendRing(out, at(i), r - ringWidth / 2, ringWidth, c, fringe, segments);
+                } else {
+                    appendDisc(out, at(i), r, c, fringe, segments);
+                }
+            }
+        }
+    }
+    // Rings: the local graph's centre and the highlighted node.
+    const auto ring = [&](int i, const QColor &c, double gap) {
+        if (i < 0)
+            return;
+        const double screenRadius = std::max(1.6, nodes.at(i).radius * z) + gap;
+        appendRing(out, at(i), screenRadius * px, 2 * px, premultiplied(c), fringe, discSegments(screenRadius));
+    };
+    ring(focus, m_focus, 3);
+    ring(hl, m_highlight, 2.5);
+}
+
+GraphItem::SceneStats GraphItem::sceneStats() const
+{
+    std::lock_guard lock(m_statsMutex);
+    return m_stats;
+}
+
+void GraphItem::itemChange(ItemChange change, const ItemChangeData &value)
+{
+    if (change == ItemDevicePixelRatioHasChanged || change == ItemSceneChange) {
+        m_meshDirty = true;
+        m_labelsDirty = true;
+        update();
+    }
+    QQuickItem::itemChange(change, value);
+}
+
+QSGNode *GraphItem::updatePaintNode(QSGNode *old, UpdatePaintNodeData *)
+{
+    QQuickWindow *win = window();
+    if (!win || width() <= 0 || height() <= 0) {
+        delete old;
+        return nullptr;
+    }
+    QElapsedTimer timer;
+    timer.start();
+    const bool software = win->rendererInterface()->graphicsApi() == QSGRendererInterface::Software;
+    m_softwareRendering.store(software, std::memory_order_relaxed);
+    QSGNode *node = software ? updateImageNode(old, win) : updateSceneNode(old, win);
+    if (!software) {
+        m_lastPaintMs.store(double(timer.nsecsElapsed()) / 1e6, std::memory_order_relaxed);
+        m_lastPaintEnd.store(m_clock.nsecsElapsed(), std::memory_order_relaxed);
+    }
+    std::lock_guard lock(m_statsMutex);
+    ++m_stats.frames;
+    m_stats.software = software;
+    return node;
+}
+
+void GraphItem::paintCanvas(QImage &canvas, qreal dpr)
+{
+    const QSize pixels(int(std::ceil(width() * dpr)), int(std::ceil(height() * dpr)));
+    if (canvas.size() != pixels || canvas.format() != QImage::Format_ARGB32_Premultiplied)
+        canvas = QImage(pixels, QImage::Format_ARGB32_Premultiplied); // uninitialised memory
+    canvas.setDevicePixelRatio(dpr);
+    QPainter painter(&canvas);
+    // render() fills the item's rect, which the raster engine rounds to whole pixels: with a
+    // fractional width or height (400.4 at 1×, 401 at 1.25×) the canvas's last column or row is
+    // left out. Fill those strips (logical units, rounded the same way) before every frame.
+    const QSizeF all = QSizeF(pixels) / dpr;
+    if (all.width() > width())
+        painter.fillRect(QRectF(width(), 0, all.width() - width(), all.height()), m_bg);
+    if (all.height() > height())
+        painter.fillRect(QRectF(0, height(), all.width(), all.height() - height()), m_bg);
+    render(&painter, size());
+}
+
+QSGNode *GraphItem::updateImageNode(QSGNode *old, QQuickWindow *window)
+{
+    auto *node = static_cast<GraphImageNode *>(old);
+    if (!node)
+        node = new GraphImageNode(window);
+    paintCanvas(node->canvas, window->effectiveDevicePixelRatio());
+    // The new texture first, then the old one goes.
+    QSGTexture *texture = window->createTextureFromImage(node->canvas);
+    node->image->setTexture(texture);
+    node->texture.reset(texture);
+    node->image->setRect(boundingRect());
+    m_meshDirty = false;
+    m_labelsDirty = false;
+    return node;
+}
+
+QSGNode *GraphItem::updateSceneNode(QSGNode *old, QQuickWindow *window)
+{
+    auto *node = static_cast<GraphSceneNode *>(old);
+    if (!node) {
+        node = new GraphSceneNode(window);
+        m_meshDirty = true;
+    }
+    const qreal dpr = window->effectiveDevicePixelRatio();
+    node->setBackground(boundingRect(), m_bg);
+    if (m_labelsDirty) {
+        node->clearLabels();
+        m_labelsDirty = false;
+    }
+    if (m_meshDirty || node->meshZoom != m_zoom || node->meshDpr != dpr) {
+        buildMesh(m_mesh, dpr);
+        node->setWorldMeshes(m_mesh);
+        node->meshZoom = m_zoom;
+        node->meshDpr = dpr;
+        m_meshDirty = false;
+        std::lock_guard lock(m_statsMutex);
+        ++m_stats.meshBuilds;
+        m_stats.chunks = int(m_mesh.chunks().size());
+        m_stats.vertices = m_mesh.vertexCount();
+    }
+    QMatrix4x4 camera;
+    camera.translate(float(width() / 2), float(height() / 2));
+    camera.scale(float(m_zoom));
+    camera.translate(float(-m_cx), float(-m_cy));
+    node->setCamera(camera);
+
+    // Labels: placed again every frame (in screen coordinates; panning moves them).
+    const std::vector<PlacedLabel> placed = labelsFor(size(), false);
+    m_labelMesh.clear();
+    std::vector<GraphSceneNode::Label> labels;
+    labels.reserve(placed.size());
+    QList<QRectF> rects;
+    rects.reserve(qsizetype(placed.size()));
+    const QRgb labelBg = geometry::premultiplied(m_labelBg);
+    for (const PlacedLabel &l : placed) {
+        geometry::appendRoundedRect(m_labelMesh, l.rect, 3, labelBg, 1.0 / dpr);
+        labels.push_back({l.node, labelText(l.node), QPointF(l.rect.left() + 3, l.rect.top() + 1), l.dimmed});
+        rects.append(l.rect);
+    }
+    node->setLabelBackgrounds(m_labelMesh);
+    node->setLabels(window, labels, m_font, m_label, withAlpha(m_label, 0.4), dpr);
+    std::lock_guard lock(m_statsMutex);
+    m_stats.labels = node->labelCount();
+    m_stats.labelRects = rects;
+    return node;
 }
 
 } // namespace brulion::planning

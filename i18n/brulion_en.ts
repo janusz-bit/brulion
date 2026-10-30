@@ -429,7 +429,7 @@
 <context>
     <name>GraphView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="159"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="165"/>
         <source>Link graph: %n pages</source>
         <translation>
             <numerusform>Link graph: %n page</numerusform>
@@ -437,7 +437,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="307"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="313"/>
         <source>%n nodes</source>
         <translation>
             <numerusform>%n node</numerusform>
@@ -445,7 +445,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="307"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="313"/>
         <source>%n links</source>
         <translation>
             <numerusform>%n link</numerusform>
@@ -453,7 +453,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="309"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="315"/>
         <source>the %n best connected shown</source>
         <translation>
             <numerusform>the best connected one shown</numerusform>

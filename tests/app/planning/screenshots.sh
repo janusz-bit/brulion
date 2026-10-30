@@ -15,6 +15,10 @@
 #     --run 'BRULION_BIN=$BRULION_BUILD_DIR/src/app/brulion tests/app/planning/screenshots.sh' \
 #     --pull tests/screenshots
 #
+# PLATFORM=xvfb takes the shots on the X server of $DISPLAY with the scene graph on OpenGL (the
+# graph's GPU path; e.g. `xvfb-run -a env PLATFORM=xvfb tests/app/planning/screenshots.sh graph`)
+# instead of offscreen with the software renderer.
+#
 # Run inside `nix develop` (Qt plugin and QML paths). One app instance at a time (lock).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
@@ -31,6 +35,13 @@ now="${NOW:-2026-10-14 10:00}"
 delay="${DELAY:-1600}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
+if [[ "${PLATFORM:-offscreen}" == xvfb ]]; then
+  platform_env=(-u QT_QUICK_BACKEND QT_QPA_PLATFORM=xcb QSG_RHI_BACKEND=opengl)
+  renderer_suffix="-gl"
+else
+  platform_env=(QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software)
+  renderer_suffix=""
+fi
 
 all_shots=(calendar calendar-week calendar-agenda calendar-day calendar-add tasks tasks-add tasks-filtered
   tasks-query graph graph-local graph-selected calendar-big tasks-big graph-big)
@@ -98,10 +109,10 @@ for shot in "${shots[@]}"; do
     # The day sheet only exists on narrow windows.
     [[ "$shot" == calendar-day && "$size" == desktop ]] && continue
     for theme in "${themes[@]}"; do
-      file="$out/planning-${shot}-${size}-${theme}${suffix}.png"
+      file="$out/planning-${shot}-${size}-${theme}${suffix}${renderer_suffix}.png"
       home="$(mktemp -d)"
-      if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
-        QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+      if env "${platform_env[@]}" XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" \
+        XDG_STATE_HOME="$home/state" QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 \
         "$bin" "${args[@]}" --no-single-instance --size "$geometry" --theme "$theme" --locale "$locale" \
         --now "$now" --delay "$shot_delay" "${extra[@]}" --screenshot "$file" \
         2> >(grep -v "^brulion: screenshot" >&2); then

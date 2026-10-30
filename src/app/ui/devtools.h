@@ -7,7 +7,8 @@
 //   --editor-script <name> playground: put the editor into a state for screenshots (editing,
 //                          suggest, slash, date, zoom, source, reminder, …; see the playground)
 //   --screenshot <file>    after loading (+ --delay ms, default 800) save the window as an
-//                          image and quit (exit code 0 = saved, 1 = failed)
+//                          image and quit (exit code 0 = saved, 1 = failed); the window is
+//                          activated first (also on an X server without a window manager)
 //   --delay <ms>           see --screenshot
 //   --size <WxH>           initial window size, e.g. 1280x800 (desktop), 412x915 (phone)
 //   --scale <factor>       device pixel ratio (QT_SCALE_FACTOR), e.g. 2 or 2.625

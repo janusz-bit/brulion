@@ -175,8 +175,12 @@ void DevTools::attach(QQmlApplicationEngine *engine)
             return;
         if (m_size.isValid())
             window->resize(m_size);
-        if (!m_screenshot.isEmpty())
+        if (!m_screenshot.isEmpty()) {
+            // In front, as a user sees it: an X server without a window manager (Xvfb) never
+            // activates a window by itself, and an inactive app pauses the graph's layout.
+            window->requestActivate();
             QTimer::singleShot(m_delayMs, this, [this, object] { takeScreenshot(object); });
+        }
     });
     // --scroll-probe: frame-by-frame measurements of scrolling (scrollprobe.h).
     startScrollProbe(engine, m_probeArguments);
