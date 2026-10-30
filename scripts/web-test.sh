@@ -55,6 +55,8 @@ if [[ -e /etc/NIXOS && -z ${BRULION_WEB_IN_NIX_SHELL:-} ]]; then
   # The system's OpenGL drivers (Firefox's WebGL 2 under Xvfb: Mesa's llvmpipe).
   [[ -d /run/opengl-driver/lib ]] && ld_path+="/run/opengl-driver/lib:"
   export NIX_LD_LIBRARY_PATH="${ld_path}${NIX_LD_LIBRARY_PATH:-/run/current-system/sw/share/nix-ld/lib}"
+  # Playwright checks the libraries with ldd, which does not see nix-ld's.
+  export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1
   if [[ -d /run/opengl-driver/share/glvnd/egl_vendor.d ]]; then
     export __EGL_VENDOR_LIBRARY_DIRS=/run/opengl-driver/share/glvnd/egl_vendor.d
   fi
@@ -82,8 +84,7 @@ if ((install)); then
     deps=(--with-deps)
   fi
   log "installing Playwright's Chromium and Firefox ${deps[*]:-}"
-  # (NixOS: its check of the browsers' system libraries fails there — they come from nix-ld.)
-  npx playwright install ${deps[@]+"${deps[@]}"} chromium firefox || [[ -e /etc/NIXOS ]]
+  npx playwright install ${deps[@]+"${deps[@]}"} chromium firefox
 fi
 [[ -d node_modules/@playwright/test ]] || { log "tests/web/node_modules missing: run with --install"; exit 2; }
 

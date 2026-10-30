@@ -107,6 +107,7 @@ test.describe('Rysik w przeglądarce', () => {
     const t25 = inkThickness(shot, g.x0 + 0.25 * (g.x1 - g.x0), y - 20, y + 20);
     const t75 = inkThickness(shot, g.x0 + 0.75 * (g.x1 - g.x0), y - 20, y + 20);
     testInfo.annotations.push({ type: 'ink thickness at 25 % / 75 %', description: `${t25} px / ${t75} px` });
+    console.log(`[${browserName}] DevTools pen: pressures ${a.pressureMin}…${a.pressureMax}, ink ${t25} px → ${t75} px`);
     expect(t75).toBeGreaterThanOrEqual(4);
     expect(t75).toBeGreaterThanOrEqual(1.3 * t25);
 
@@ -163,6 +164,8 @@ test.describe('Rysik w przeglądarce', () => {
       expect(e.pressureMin).toBeGreaterThanOrEqual(0);
       expect(e.pressureMax).toBeLessThanOrEqual(1);
       testInfo.annotations.push({ type: 'out-of-range pressures', description: JSON.stringify(e) });
+      console.log(`[${browserName}] page pen events: pressures ${d.pressureMin}…${d.pressureMax}; `
+        + `1.7/−0.3 kept as ${e.pressureMin}…${e.pressureMax}`);
 
       // The eraser end (button 5) across D erases it.
       await syntheticStroke(page, line(g.xm, g.cy(0.29), g.xm, g.cy(0.41), 20, 0.5, 0.5), { eraser: true });

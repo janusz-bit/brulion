@@ -138,6 +138,8 @@ test.describe('Obrazy z internetu w przeglądarce', () => {
       // The file the browser received.
       const file = await savedFile(page, watched);
       testInfo.annotations.push({ type: 'saved by', description: `${file.how}: ${file.name}` });
+      console.log(`[${browserName}] https page: redirect → "${p[rows.redirect].error}"; `
+        + `TLS hellos on the http server: ${imgHttp.tlsHellos}; export ${exported.bytes} B by ${file.how}`);
       expect(file.name).toMatch(/\.html$/);
       expect(file.bytes.length).toBe(exported.bytes);
       const html = file.bytes.toString('utf8');
