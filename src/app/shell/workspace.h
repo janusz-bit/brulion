@@ -252,6 +252,7 @@ public:
     /// browser forbids: a site that does not allow other pages its pictures (CORS), http:// on a
     /// https:// page (mixed content).
     void setWebPageScheme(const QString &scheme);
+    QString webPageScheme() const { return m_webPageScheme; }
     QVariantMap vaultConfig() const override;
     /// Copied blocks as HTML (io::clipboardHtml: attachments as file links — none in the browser,
     /// whose assets are data: URLs —, block references as their text); workspaceclipboard.cpp.

@@ -20,3 +20,6 @@ keystore.properties
 /dist-appimage/
 /dist-source/
 aqtinstall.log
+/tests/web/node_modules/
+/tests/web/test-results/
+/tests/web/playwright-report/

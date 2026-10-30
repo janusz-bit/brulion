@@ -474,6 +474,76 @@ private Q_SLOTS:
         QCOMPARE(canvas->strokeCount(), 1);
     }
 
+    void eraserEndOfTheBrowsersPen()
+    {
+        // Qt for WebAssembly: one pen device; the eraser end is the web's button 5
+        // (`buttons & 32`), which Qt passes as ExtraButton3.
+        Pen pen(window.get());
+        pen.stroke({100, 200}, {400, 200}, 20, 0.2, 0.8);
+        QCOMPARE(canvas->strokeCount(), 1);
+        QSignalSpy history(canvas, &DrawingCanvas::historyChanged);
+        pen.stroke({250, 120}, {250, 280}, 12, 0.5, 0.5, Qt::ExtraButton3);
+        QCOMPARE(canvas->strokeCount(), 0);
+        canvas->undo(); // one step
+        QCOMPARE(canvas->strokeCount(), 1);
+        // On empty paper it draws nothing.
+        pen.stroke({100, 450}, {400, 450}, 12, 0.3, 0.9, Qt::ExtraButton3);
+        QCOMPARE(canvas->strokeCount(), 1);
+        // With the tip's button too (a browser that reports both).
+        pen.stroke({300, 120}, {300, 280}, 12, 0.5, 0.5, Qt::ExtraButton3 | Qt::LeftButton);
+        QCOMPARE(canvas->strokeCount(), 0);
+        QVERIFY(history.size() >= 2);
+    }
+
+    void eraserEndOfQtForAndroid()
+    {
+        // Qt for Android names the pointer type with Qt 5's values: the pen 1, the eraser end 3
+        // (Generic | Finger in Qt 6). Its barrel button (BUTTON_STYLUS_PRIMARY, 32) comes as
+        // ExtraButton3 (scripts/android-emulator-test.sh --stylus).
+        Pen pen(window.get(), QPointingDevice::PointerType(1));
+        pen.stroke({100, 200}, {400, 200}, 20, 0.2, 0.8);
+        pen.stroke({100, 400}, {400, 400}, 20, 0.2, 0.8);
+        QCOMPARE(canvas->strokeCount(), 2);
+        QVERIFY(!canvas->currentDrawing().strokes.first().simulatePressure);
+        Pen eraser(window.get(), QPointingDevice::PointerType(3));
+        eraser.stroke({250, 150}, {250, 250}, 10, 0.5, 0.5);
+        QCOMPARE(canvas->strokeCount(), 1);
+        QCOMPARE(canvas->currentDrawing().strokes.first().points.first().y, 400.0);
+        pen.stroke({250, 350}, {250, 450}, 10, 0.5, 0.5, Qt::ExtraButton3);
+        QCOMPARE(canvas->strokeCount(), 0);
+    }
+
+    void releaseKeepsThePressure_data()
+    {
+        QTest::addColumn<qreal>("p0");
+        QTest::addColumn<qreal>("p1");
+        QTest::addColumn<bool>("simulated");
+        QTest::newRow("nacisk 0,2 → 0,9") << 0.2 << 0.9 << false;
+        QTest::newRow("stały nacisk 1,0 (adb)") << 1.0 << 1.0 << true;
+        QTest::newRow("stały nacisk 0,4") << 0.4 << 0.4 << true;
+    }
+    void releaseKeepsThePressure()
+    {
+        // The release reports the pen lifted (pressure 0) — on Android a pixel or two beside the
+        // last move (it resamples the moves): not the line's pressure.
+        QFETCH(qreal, p0);
+        QFETCH(qreal, p1);
+        QFETCH(bool, simulated);
+        Pen pen(window.get());
+        pen.send({100, 300}, Qt::LeftButton, p0);
+        for (int i = 1; i <= 20; ++i)
+            pen.send({100 + 15.0 * i, 300}, Qt::LeftButton, p0 + (p1 - p0) * i / 20);
+        pen.send({402, 301}, Qt::NoButton, 0);
+        QCOMPARE(canvas->strokeCount(), 1);
+        const brulion::drawing::Stroke s = canvas->currentDrawing().strokes.first();
+        QCOMPARE(s.simulatePressure, simulated);
+        QCOMPARE(s.points.last().x, 402.0); // the release's place is kept
+        if (!simulated) {
+            QVERIFY2(s.points.last().pressure >= 0.85, qPrintable(QString::number(s.points.last().pressure)));
+            QVERIFY(s.points.first().pressure <= 0.25);
+        }
+    }
+
     void eraserToolWithMouse()
     {
         mouseStroke(window.get(), {100, 100}, {300, 100}, 10);
@@ -568,6 +638,53 @@ private Q_SLOTS:
         QTRY_VERIFY(!root->property("dialog").value<QObject *>()->property("visible").toBool());
         pen.stroke({200, 200}, {400, 220}, 10, 0.3, 0.6);
         QCOMPARE(canvas->strokeCount(), 3);
+    }
+
+    void itemsInTheOverlay()
+    {
+        // The shell puts its toasts' host into the overlay, filling the window (Main.qml
+        // BToastHost), and the overlay is visible whenever a Drawer exists (the shell's): only a
+        // toast takes the pen, where it is — the host itself took it everywhere (found by
+        // tests/web/stylus.spec.mjs in the real app: the pen drew without pressure there).
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData("import QtQuick\nimport QtQuick.Templates as T\nItem {\n"
+                          "  property alias toast: toast; property alias host: host\n"
+                          "  T.Drawer { width: 120; height: 600; edge: Qt.LeftEdge }\n"
+                          "  Item { id: host; z: 1000\n"
+                          "    MouseArea { id: toast; x: 500; y: 450; width: 250; height: 100; visible: false }\n"
+                          "  }\n"
+                          "}",
+                          QUrl());
+        std::unique_ptr<QObject> root(component.create());
+        QVERIFY2(root, qPrintable(component.errorString()));
+        auto *item = qobject_cast<QQuickItem *>(root.get());
+        item->setParentItem(window->contentItem());
+        item->setSize(QSizeF(800, 600));
+        QCoreApplication::processEvents();
+        // Into the overlay (the drawer made it), as Main.qml's `parent: T.Overlay.overlay` does.
+        QQuickItem *overlay = nullptr;
+        for (QQuickItem *child : window->contentItem()->childItems()) {
+            if (child->inherits("QQuickOverlay"))
+                overlay = child;
+        }
+        QVERIFY(overlay);
+        auto *host = root->property("host").value<QQuickItem *>();
+        host->setParentItem(overlay);
+        host->setSize(overlay->size());
+        QCoreApplication::processEvents();
+        QVERIFY(overlay->isVisible());
+        Pen pen(window.get());
+        pen.stroke({100, 300}, {600, 320}, 20, 0.2, 0.9);
+        QCOMPARE(canvas->strokeCount(), 1);
+        QVERIFY(!canvas->currentDrawing().strokes.first().simulatePressure); // the tablet's, no mouse
+        // A toast shown: the pen over it is the toast's, beside it the canvas's.
+        auto *toast = root->property("toast").value<QQuickItem *>();
+        toast->setVisible(true);
+        pen.stroke({550, 480}, {700, 520}, 10, 0.3, 0.6);
+        QCOMPARE(canvas->strokeCount(), 1);
+        pen.stroke({100, 100}, {300, 120}, 10, 0.3, 0.6);
+        QCOMPARE(canvas->strokeCount(), 2);
     }
 
     void windowsMouseOfThePenIsIgnored()

@@ -61,6 +61,7 @@
 #include "wasm/wasmshare.h"
 #include "wasm/wasmshell.h"
 #include "wasm/wasmstorage.h"
+#include "webselftest.h"
 #include <QJsonObject>
 #endif
 
@@ -436,6 +437,14 @@ int main(int argc, char *argv[])
             remote.language = [&devTools] { return devTools.language(); };
             remoteControl = std::make_unique<brulion::shell::RemoteControl>(&engine, controller.get(), remote);
         }
+#endif
+#ifdef Q_OS_WASM
+        // ?selftest=webpictures,pen (tests/web): pictures from the internet and the pen, in the
+        // real UI, once the notebook is open (src/app/diag/webselftest.h).
+        brulion::diag::startBrowserSelfTests(&engine, controller.get(), args,
+                                             [](const char *name, const QJsonObject &result) {
+                                                 brulion::platform::publishSelfTestResult(name, result);
+                                             });
 #endif
     };
 

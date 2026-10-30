@@ -4,6 +4,9 @@
 # (https://<owner>.github.io/brulion/; the site uses relative URLs, so any base path works).
 # Also called by release.yml (deploy: false, pages-artifact) for the brulion-web-<version>.zip
 # release asset; release.yml deploys that site to GitHub Pages once the release is published.
+# The job "browsers" tests the built site in Playwright's Chromium and Firefox (tests/web: pictures
+# from the internet — CORS, mixed content, no preflight, the export with copies — and the pen's
+# pressure and eraser end in the drawing editor); the deployment waits for it.
 # One-time setup: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions", and
 # Settings -> Environments -> github-pages -> Deployment branches and tags: main and tag v*.
 name: Web
@@ -22,6 +25,8 @@ on:
       - scripts/wasm-build.sh
       - scripts/wasm-smoke.mjs
       - scripts/web-test-server.py
+      - scripts/web-test.sh
+      - tests/web/**
       - .github/workflows/wasm.yml
   workflow_dispatch:
     inputs:
@@ -222,9 +227,52 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Pictures from the internet (a server with CORS and one without — the message names CORS —,
+  # http:// on an https:// page — blocked before it is sent —, no preflight, only safe-listed
+  # headers, the export with copies the browser receives) and the pen in the drawing editor (its
+  # pressure reaches the stroke, the line grows thicker, the barrel button and the eraser end
+  # erase, the file keeps the pressures), in Playwright's Chromium and Firefox (under Xvfb: its
+  # WebGL 2) against local https/http servers — tests/web, docs/WEB.md "Testy w przeglądarkach".
+  browsers:
+    name: Pictures from the internet and pen pressure (Chromium, Firefox)
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: brulion-web
+          path: dist-wasm
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache Playwright's browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('tests/web/package-lock.json') }}
+
+      - name: Chromium and Firefox
+        run: scripts/web-test.sh --dist dist-wasm --install
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-browser-tests
+          path: |
+            tests/web/playwright-report/
+            tests/web/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   deploy:
     name: Deploy to GitHub Pages
-    needs: build
+    needs: [build, browsers]
     if: needs.build.outputs.deploy == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15

@@ -932,23 +932,39 @@ bool DrawingCanvas::eventFilter(QObject *watched, QEvent *event)
 
 namespace {
 
+/// The pen's eraser end by its device: an eraser (the desktops), or Qt for Android's — which
+/// still names the pointer type with Qt 5's QTabletEvent::Eraser (3; its pen is 1, Qt 5's Pen),
+/// a value no device of Qt 6 has (Generic | Finger).
+bool eraserDevice(QPointingDevice::PointerType type)
+{
+    return type == QPointingDevice::PointerType::Eraser || int(type) == 3;
+}
+
 /// The topmost visible, enabled item under `scenePos` that takes mouse or touch input.
 QQuickItem *topInputItem(QQuickItem *item, QPointF scenePos)
 {
     if (!item->isVisible() || !item->isEnabled() || qFuzzyIsNull(item->opacity()))
         return nullptr;
     if (item->inherits("QQuickOverlay")) {
-        // Qt Quick Controls' popup layer: visible over the whole window whenever a Drawer exists,
-        // and it takes every button. It lies over the canvas only where an open popup is — or
-        // everywhere while a modal one is open (the popup item's QObject parent is the popup).
-        const QList<QQuickItem *> popups = item->childItems();
-        for (auto it = popups.crbegin(); it != popups.crend(); ++it) {
-            QQuickItem *popup = *it;
-            if (!popup->isVisible())
+        // Qt Quick Controls' popup layer: visible over the whole window whenever a Drawer exists
+        // or any item is put there (the shell's toasts), and it takes every button. It lies over
+        // the canvas only where an open popup is — or everywhere while a modal one is open (the
+        // popup item's QObject parent is the popup) — and where an item put there takes input
+        // (a toast, not the window-wide host of the toasts).
+        QList<QQuickItem *> children = item->childItems();
+        std::stable_sort(children.begin(), children.end(),
+                         [](QQuickItem *a, QQuickItem *b) { return a->z() < b->z(); });
+        for (auto it = children.crbegin(); it != children.crend(); ++it) {
+            QQuickItem *child = *it;
+            if (!child->isVisible())
                 continue;
-            if (popup->contains(popup->mapFromScene(scenePos))
-                || (popup->parent() && popup->parent()->property("modal").toBool()))
-                return popup;
+            if (child->parent() && child->parent()->inherits("QQuickPopup")) {
+                if (child->contains(child->mapFromScene(scenePos)) || child->parent()->property("modal").toBool())
+                    return child;
+                continue;
+            }
+            if (QQuickItem *hit = topInputItem(child, scenePos))
+                return hit;
         }
         return nullptr;
     }
@@ -979,8 +995,11 @@ bool DrawingCanvas::onTop(QPointF scenePos) const
 bool DrawingCanvas::handleTablet(QTabletEvent *event)
 {
     const QPointF pos = mapFromScene(event->position());
-    const bool eraser =
-            event->pointerType() == QPointingDevice::PointerType::Eraser || (event->buttons() & Qt::RightButton);
+    // The eraser end: the desktops and Android report an eraser device (eraserDevice()); Qt for
+    // WebAssembly has one pen device and passes the web's eraser button (button 5, `buttons & 32`)
+    // as ExtraButton3. A held barrel button erases too: RightButton, and on Android
+    // BUTTON_STYLUS_PRIMARY (32), which Qt for Android passes as ExtraButton3 as well.
+    const bool eraser = eraserDevice(event->pointerType()) || (event->buttons() & (Qt::RightButton | Qt::ExtraButton3));
     const Pointer p{true, eraser, false, std::clamp(double(event->pressure()), 0.0, 1.0), event->modifiers()};
     const auto remember = [this, event] {
         m_lastTabletTime = event->timestamp();
@@ -1034,6 +1053,15 @@ bool DrawingCanvas::handleTablet(QTabletEvent *event)
         if (event->buttons() != Qt::NoButton)
             return true; // a button let go, the tip still down
         m_tabletGesture = false;
+        if (m_gesture == Gesture::Draw && !m_live.points.isEmpty()) {
+            // The release tells the pen lifted (pressure 0: the browser, Android), on Android a
+            // pixel beside the last move (it resamples moves): the line ends with the pressure it
+            // had, a stylus pressing one pressure stays without pressure.
+            Pointer up = p;
+            up.pressure = m_live.points.last().pressure;
+            endToolGesture(pos, up);
+            return true;
+        }
         endToolGesture(pos, p);
         return true;
     default: break;
@@ -1057,7 +1085,7 @@ DrawingCanvas::Pointer DrawingCanvas::pointerOf(const QPointerEvent *event) cons
     if (const QPointingDevice *device = event->pointingDevice()) {
         p.stylus = device->type() == QInputDevice::DeviceType::Stylus
                    || device->type() == QInputDevice::DeviceType::Airbrush;
-        p.eraser = device->pointerType() == QPointingDevice::PointerType::Eraser;
+        p.eraser = eraserDevice(device->pointerType());
         p.touch = device->type() == QInputDevice::DeviceType::TouchScreen;
     }
     if (const auto *mouse = dynamic_cast<const QSinglePointEvent *>(event))

@@ -156,6 +156,22 @@
       (function () {
         'use strict';
 
+        // Qt 6.11.2 for WebAssembly keeps one browser timeout for its next due timer, with the
+        // wait cut down to whole milliseconds (QEventDispatcherWasm::updateNativeTimer), and arms
+        // the next one only after a timer fired (sendTimerEvents). A timeout that runs before the
+        // timer is due — Firefox keeps a timeout to the millisecond and reads the clock coarsely —
+        // fires none and arms none: every Qt timer stops until another one is started or stopped
+        // (input does not wake them), e.g. the drawing editor's save 1.2 s after the last line.
+        // So every timeout of the page with a wait gets TIMEOUT_MARGIN_MS more; 0 ms (Qt's
+        // wake-ups) stays. docs/WEB.md "Ograniczenia techniczne"; tests/web/shell.spec.mjs.
+        var TIMEOUT_MARGIN_MS = 2;
+        var nativeSetTimeout = window.setTimeout;
+        window.setTimeout = function (handler, delay) {
+          var args = Array.prototype.slice.call(arguments);
+          if (typeof delay === 'number' && delay > 0) args[1] = delay + TIMEOUT_MARGIN_MS;
+          return nativeSetTimeout.apply(window, args);
+        };
+
         // Filled in by scripts/wasm-build.sh (left as "@…@" when the file is used unprocessed).
         var WASM_SIZE = parseInt('@BRULION_WASM_SIZE@', 10);
         var ASSET_VERSION = '@BRULION_ASSET_VERSION@';
@@ -511,11 +527,38 @@
           var params = new URLSearchParams(location.search);
           // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify,glyphs,keyboard,share
           var args = [];
+          var flows = ['storage', 'notify', 'glyphs', 'keyboard', 'share'];
+          // The flows that work on the open notebook (src/app/diag/webselftest.h: they fetch its
+          // pictures from the internet and offer an export of it) and ?route= / ?now= only in a
+          // tab marked for tests: sessionStorage "brulion-selftest" = "1", which tests/web sets
+          // before the page loads (by hand: in the console, then reload). A link cannot set it, so
+          // a link sent to someone never runs them on their notes nor moves their clock or view.
+          var testFlows = ['webpictures', 'pen'];
+          var testTab = false;
+          try {
+            testTab = window.sessionStorage.getItem('brulion-selftest') === '1';
+          } catch (e) {
+            // no storage: not a test tab
+          }
+          var testing = false;
           (params.get('selftest') || '').split(',').forEach(function (name) {
-            if (name === 'storage' || name === 'notify' || name === 'glyphs' || name === 'keyboard' || name === 'share') {
+            if (flows.indexOf(name) >= 0) {
               args.push('--selftest-' + name);
+            } else if (testTab && testFlows.indexOf(name) >= 0) {
+              args.push('--selftest-' + name);
+              testing = true;
             }
           });
+          // With ?selftest=webpictures|pen in a test tab only, each one argument "--option=value"
+          // (a value is never an option of its own: ?route=--vault=… stays the route):
+          //   ?route=<view> | <route JSON>  → --route (the first route after the notebook opens)
+          //   ?now=yyyy-MM-dd HH:mm         → --now (a fixed clock: the journal's day is known)
+          if (testing) {
+            var route = params.get('route');
+            if (route && route.length <= 2000) args.push('--route=' + route);
+            var now = params.get('now');
+            if (now && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(now)) args.push('--now=' + now);
+          }
           if (shareQuery) args.push('--share-query', shareQuery);
 
           // Start the big download first; the small scripts load in parallel.

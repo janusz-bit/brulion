@@ -5,16 +5,12 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 ## Funkcje
 
-* **Zdjęcia z internetu — sprawdzić na telefonie i w przeglądarce.** Na emulatorze Androida
-  sprawdzone (`scripts/android-emulator-test.sh --web-pictures`: `https://` i `http://`, pamięć
-  podręczna po restarcie i offline, przeglądarka zdjęcia i Wstecz, menu z przytrzymania, zapis
-  w notatniku); wersja webowa nie była uruchomiona (listy kontrolne: docs/ANDROID.md „Obrazy
-  z internetu”, docs/WEB.md):
-  * prawdziwy telefon: przesuwanie powiększonego zdjęcia palcem i gest Wstecz z krawędzi,
-    wklejenie adresu skopiowanego w Chrome przez „Wklej” z menu tekstu, eksport z „Dołącz kopie”;
-  * przeglądarka: obraz z serwera z CORS i bez (komunikat nazywa CORS), `http://` na stronie
-    `https://` (komunikat o mieszanej treści), brak zapytania wstępnego (preflight) w Firefoksie,
-    eksport z kopiami.
+* **Zdjęcia z internetu — sprawdzić na prawdziwym telefonie.** Emulator Androida
+  (`scripts/android-emulator-test.sh --web-pictures`) i przeglądarki Chromium i Firefox
+  (`tests/web`, GitHub Actions) sprawdzają to automatycznie; zostaje prawdziwy telefon
+  (docs/ANDROID.md „Obrazy z internetu”): przesuwanie powiększonego zdjęcia palcem i gest Wstecz
+  z krawędzi, wklejenie adresu skopiowanego w Chrome przez „Wklej” z menu tekstu, eksport
+  z „Dołącz kopie”.
 * **Rysunki — dalsze kroki.** Edytor rysunków (`/Rysunek`, docs/UI.md „Drawing editor”) ma
   pismo odręczne, zakreślacz, gumkę, papier, kształty, strzałki, tekst i zaznaczanie lassem.
   Do zrobienia:
@@ -41,8 +37,9 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     wczytuje, link w tekście działa, notatki z tyłu nietknięte); zetrzeć kreskę w Brulionie, gdy
     Obsidian ma ten rysunek otwarty (powinna zniknąć i tam);
   * notatki na slajdach i PDF-ach z wykładu: rysowanie na obrazie w tle (strona PDF, slajd);
-  * sprawdzić na tablecie z rysikiem (Android, Natalia) i w przeglądarce, czy nacisk rysika
-    dociera do Brulionu.
+  * na prawdziwym tablecie z rysikiem (Android, Natalia — w aplikacji i w przeglądarce): czy
+    linia grubieje przy mocniejszym nacisku, czy drugi koniec rysika i przycisk boczny ścierają
+    (automatycznie sprawdzone: Chromium i Firefox — `tests/web`, emulator Androida — `--stylus`).
 * **Udostępnianie poza Androidem — sprawdzić na prawdziwych urządzeniach.** Automatycznie
   sprawdzone (testy, CI): odczyt udostępnienia, okno, przekazanie do działającej kopii, wpis
   `.desktop`, rejestr Windows (instalacja, aktualizacja, odinstalowanie), wersja webowa w Chromium
