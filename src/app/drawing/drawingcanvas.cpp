@@ -505,14 +505,14 @@ bool DrawingCanvas::setBackdrop(const QVariantMap &prepared)
         return false;
     const drawing::EditStamp s = stamp();
     // (One undo step; push() reports the change.)
-    return editElements([&](drawing::Drawing &d) { drawing::setBackdrop(d, p.image, p.source, s); });
+    return editElements([&](drawing::Drawing &doc) { drawing::setBackdrop(doc, p.image, p.source, s); });
 }
 
 void DrawingCanvas::removeBackdrop()
 {
     if (!m_editable || !m_writable || busy() || m_textEditing)
         return;
-    editElements([](drawing::Drawing &d) { drawing::removeBackdrop(d); });
+    editElements([](drawing::Drawing &doc) { drawing::removeBackdrop(doc); });
 }
 
 void DrawingCanvas::markSaved(const QByteArray &written)
