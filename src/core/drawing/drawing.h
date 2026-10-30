@@ -28,6 +28,8 @@
 //   readExcalidrawMarkdown(),                  the Obsidian Excalidraw plugin's files
 //   writeExcalidrawMarkdown(), stringifyJson() (excalidrawmd.h); LZ-String (lzstring.h)
 //   toSvg(drawing), pictureRect(drawing)       the file Brulion writes (svgwrite.h)
+//   svgWithScene(picture, drawing)             another program's picture of the scene with the
+//                                              scene embedded (an imported Trilium canvas)
 //   elementShape(), hitTest(), lassoSelects()  the look and the hit tests of elements (geometry.h)
 //   moveElements(), duplicateElements(), …     the edits of elements; undo diffs (edit.h)
 //   merge(), mergeBase(), mergeKey()           two versions of a drawing merged element by element

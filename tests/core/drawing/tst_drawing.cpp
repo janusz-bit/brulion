@@ -1246,6 +1246,231 @@ private Q_SLOTS:
         }
     }
 
+    void svgWithScene_data()
+    {
+        // The picture, the bytes up to the end of its root's start tag (kept), the bytes after
+        // it as they must follow the inserted scene (a scene the picture had removed).
+        QTest::addColumn<QByteArray>("picture");
+        QTest::addColumn<QByteArray>("before");
+        QTest::addColumn<QByteArray>("rest");
+        // Trilium's canvas export (TriliumNext: its own class and the dark filter for browsers).
+        const QByteArray trilium = "<svg xmlns=\"http://www.w3.org/2000/svg\" class=\"trilium-drawing-picture\" "
+                                   "width=\"100\" height=\"60\" viewBox=\"0 0 100 60\">";
+        const QByteArray body = "<style>@media (prefers-color-scheme: dark){svg.trilium-drawing-picture{filter:"
+                                "invert(93%) hue-rotate(180deg)}}</style><rect x=\"5\" y=\"5\" width=\"90\" "
+                                "height=\"50\" fill=\"none\" stroke=\"#1e1e1e\"/><text x=\"20\" y=\"35\">Grządka "
+                                "&amp; żółw</text></svg>";
+        QTest::newRow("Trilium") << trilium + body << trilium << body;
+        const QByteArray prolog = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<!-- Zażółć gęślą "
+                                  "jaźń > ąę -->\n";
+        QTest::newRow("prolog and a comment") << prolog + trilium + body << prolog + trilium << body;
+        const QByteArray doctype = "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" "
+                                   "\"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n";
+        QTest::newRow("doctype") << doctype + trilium + body << doctype + trilium << body;
+        QTest::newRow("BOM") << "\xEF\xBB\xBF" + trilium + body << "\xEF\xBB\xBF" + trilium << body;
+        const QByteArray quoted = "<svg xmlns=\"http://www.w3.org/2000/svg\" data-a=\"1>0\" data-b='/>' "
+                                  "aria-label=\"Szkic &gt; ćwiczeń\" width=\"40\" height=\"30\">";
+        QTest::newRow("> in attributes") << quoted + body << quoted << body;
+        const QByteArray crlf = "<?xml version=\"1.0\"?>\r\n<svg\r\n  xmlns=\"http://www.w3.org/2000/svg\"\r\n  "
+                                "width=\"100\"\r\n  height=\"60\">";
+        QTest::newRow("CRLF") << crlf + "\r\n<rect width=\"5\" height=\"5\"/>\r\n</svg>\r\n"
+                              << crlf << QByteArray("\r\n<rect width=\"5\" height=\"5\"/>\r\n</svg>\r\n");
+        const QByteArray bare = "<svg xmlns=\"http://www.w3.org/2000/svg\">";
+        QTest::newRow("no size (an export without it)")
+                << bare + "<rect/></svg>" << bare << QByteArray("<rect/></svg>");
+        const QByteArray prefixed = "<svg:svg xmlns:svg=\"http://www.w3.org/2000/svg\" width=\"9\">";
+        QTest::newRow("namespace prefix")
+                << prefixed + "<svg:rect/></svg:svg>" << prefixed << QByteArray("<svg:rect/></svg:svg>");
+        // An entity in the root's attributes: the tag still ends where its '>' is.
+        const QByteArray entity = "<!DOCTYPE svg [<!ENTITY nazwa \"Szkic grządek\">]>\n<svg "
+                                  "xmlns=\"http://www.w3.org/2000/svg\" aria-label=\"&nazwa;\" width=\"9\">";
+        QTest::newRow("entity in the root") << entity + "<rect/></svg>" << entity << QByteArray("<rect/></svg>");
+        // An export that had a scene already (excalidraw.com's "Embed scene"): one scene after.
+        const QByteArray excalidraw = "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 9 9\" "
+                                      "width=\"9\" height=\"9\">";
+        QTest::newRow("a scene already")
+                << excalidraw
+                           + "<!-- svg-source:excalidraw --><metadata>"
+                             "<!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->"
+                             "<!-- payload-start -->"
+                           + encodePayload(R"({"type":"excalidraw","version":2,"elements":[]})")
+                           + "<!-- payload-end --></metadata><rect/></svg>"
+                << excalidraw << QByteArray("<!-- svg-source:excalidraw --><metadata></metadata><rect/></svg>");
+        // Another program's comments named like a payload are its own: kept (a scene is only
+        // what Excalidraw writes — those comments and the base64 between them).
+        const QByteArray other = "<!-- payload-type:text/plain --><rect id=\"keep\"/><!-- payload-end --></svg>";
+        QTest::newRow("another program's payload comments") << bare + other << bare << other;
+        const QByteArray scene = "<!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->"
+                                 "<!-- payload-start -->"
+                                 + encodePayload(R"({"type":"excalidraw","version":2,"elements":[]})")
+                                 + "<!-- payload-end -->";
+        const QByteArray cdata = "<style><![CDATA[/* <!-- payload-type:x */]]></style><rect id=\"keep\"/>";
+        QTest::newRow("a payload's start in CDATA, a scene after it")
+                << bare + cdata + "<metadata>" + scene + "</metadata></svg>" << bare
+                << cdata + "<metadata></metadata></svg>";
+        // A scene inside CDATA (or any text): the comments and the base64 go, the CDATA stays.
+        QTest::newRow("a scene in CDATA") << bare + "<style><![CDATA[" + scene + "]]></style><rect/></svg>" << bare
+                                          << QByteArray("<style><![CDATA[]]></style><rect/></svg>");
+        QTest::newRow("a scene without its version, with line breaks")
+                << bare
+                           + "<metadata>\n<!-- payload-type:application/vnd.excalidraw+json -->\n<!-- payload-start "
+                             "-->\nQUJD\r\nREVG\n<!-- payload-end -->\n</metadata></svg>"
+                << bare << QByteArray("<metadata>\n\n</metadata></svg>");
+        QTest::newRow("two scenes") << bare + scene + "<rect/>" + scene + "</svg>" << bare
+                                    << QByteArray("<rect/></svg>");
+        const QByteArray smiley = fixture(u"smiley_embedded_v2.svg"_s);
+        const qsizetype smileyRoot = smiley.indexOf('>') + 1;
+        const qsizetype smileyFrom = smiley.indexOf("<!-- payload-type:");
+        const qsizetype smileyTo = smiley.indexOf("<!-- payload-end -->") + 20;
+        QTest::newRow("excalidraw.com's export with a scene")
+                << smiley << smiley.first(smileyRoot)
+                << smiley.sliced(smileyRoot, smileyFrom - smileyRoot) + smiley.sliced(smileyTo);
+    }
+    void svgWithScene()
+    {
+        QFETCH(QByteArray, picture);
+        QFETCH(QByteArray, before);
+        QFETCH(QByteArray, rest);
+        Drawing d;
+        d.strokes = {wavyStroke(u"źdźbło"_s, 10, 12, 20, true), wavyStroke(u"łodyga"_s, 4, 30, 9)};
+        d.foreign.append(QJsonObject{{u"type"_s, u"frame"_s},
+                                     {u"id"_s, u"ramka-ż"_s},
+                                     {u"x"_s, 0},
+                                     {u"y"_s, 0},
+                                     {u"width"_s, 50},
+                                     {u"height"_s, 40}});
+        const std::optional<QByteArray> out = brulion::drawing::svgWithScene(picture, d);
+        QVERIFY(out);
+        // The picture's bytes before and after the scene, as they were.
+        QVERIFY(out->startsWith(before));
+        const qsizetype metadataEnd = out->indexOf("</metadata>\n", before.size()) + 12;
+        QVERIFY(metadataEnd > before.size());
+        QCOMPARE(out->sliced(metadataEnd), rest);
+        QCOMPARE(out->count("payload-type:application/vnd.excalidraw+json"), 1);
+        QCOMPARE(out->count("<!-- svg-source:excalidraw -->"), 1);
+        QVERIFY(looksLikeExcalidrawSvg(out->first(std::min(out->size(), HeadBytes))));
+        QVERIFY(checkSvg(*out).wellFormed);
+        // The drawing, read back.
+        const std::optional<Drawing> read = readDrawing(*out);
+        QVERIFY(read);
+        QCOMPARE(read->strokes.size(), 2);
+        QCOMPARE(read->strokes.at(0).id, u"źdźbło"_s);
+        QCOMPARE(read->strokes.at(1).id, u"łodyga"_s);
+        QCOMPARE(read->foreign.size(), 1);
+        QCOMPARE(read->foreign.at(0).toObject().value(u"id"_s).toString(), u"ramka-ż"_s);
+        QCOMPARE(sceneJson(*read), sceneJson(d));
+        // Deterministic (an import twice stores the file once).
+        QCOMPARE(*brulion::drawing::svgWithScene(picture, d), *out);
+    }
+
+    void svgWithSceneRefuses_data()
+    {
+        QTest::addColumn<QByteArray>("picture");
+        const QByteArray ns = "xmlns=\"http://www.w3.org/2000/svg\"";
+        QTest::newRow("empty") << QByteArray();
+        QTest::newRow("not XML") << QByteArray("zażółć gęślą jaźń");
+        QTest::newRow("PNG") << QByteArray("\x89PNG\r\n\x1a\n\0\0\0\rIHDR", 16);
+        QTest::newRow("HTML") << QByteArray("<html><body><svg " + ns + " width=\"5\"></svg></body></html>");
+        QTest::newRow("self-closing") << QByteArray("<svg " + ns + "/>");
+        QTest::newRow("self-closing with a size") << QByteArray("<svg " + ns + " width=\"5\" height=\"5\" />");
+        // A picture of an empty scene (new Trilium).
+        QTest::newRow("width and height 0") << QByteArray("<svg " + ns + " width=\"0\" height=\"0\"></svg>");
+        QTest::newRow("height 0px") << QByteArray("<svg " + ns + " width=\"10\" height=\"0px\"></svg>");
+        QTest::newRow("negative width") << QByteArray("<svg " + ns + " width=\"-4\" height=\"3\"></svg>");
+        QTest::newRow("unterminated tag") << QByteArray("<svg " + ns + " width=\"5\"");
+        QTest::newRow("unterminated attribute") << QByteArray("<svg " + ns + " width=\"5><rect/></svg>");
+        QTest::newRow("root tag after 4 KB of comments")
+                << QByteArray("<!--" + QByteArray(4000, 'x') + "-->\n<svg " + ns + " width=\"5\"></svg>");
+        QTest::newRow("root tag longer than the head")
+                << QByteArray("<svg " + ns + " data-x=\"" + QByteArray(3700, 'y') + "\"></svg>");
+        QTest::newRow("bytes that are no UTF-8 before the root")
+                << QByteArray("<!-- \xff\xfe -->\n<svg " + ns + " width=\"5\"></svg>");
+        QTest::newRow("a scene's marker before the root")
+                << QByteArray("<!-- payload-type:application/vnd.excalidraw+json -->\n<svg " + ns + "></svg>");
+        QTest::newRow("a marker of no whole scene")
+                << QByteArray("<svg " + ns + "><!-- payload-type:application/vnd.excalidraw+json --></svg>");
+        // Not a scene as Excalidraw writes it: removing it would remove the picture's content.
+        QTest::newRow("an element inside a scene")
+                << QByteArray("<svg " + ns
+                              + "><!-- payload-type:application/vnd.excalidraw+json --><!-- payload-start --><rect "
+                                "id=\"keep\"/>QUJD<!-- payload-end --></svg>");
+        QTest::newRow("a scene's type outside a comment")
+                << QByteArray("<svg " + ns + "><desc>payload-type:application/vnd.excalidraw+json</desc><rect/></svg>");
+        QTest::newRow("a scene's type with no start")
+                << QByteArray("<svg " + ns
+                              + "><!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->QUJD"
+                                "<!-- payload-end --></svg>");
+        QTest::newRow("a version that is no number")
+                << QByteArray("<svg " + ns
+                              + "><!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:dwa -->"
+                                "<!-- payload-start -->QUJD<!-- payload-end --></svg>");
+        // The bytes around a removed scene would make a marker of their own.
+        QTest::newRow("a marker made by a removal") << QByteArray(
+                "<svg " + ns
+                + "><!-- payload-ty<!-- payload-type:application/vnd.excalidraw+json --><!-- "
+                  "payload-start -->QUJD<!-- payload-end -->pe:application/vnd.excalidraw+json --></svg>");
+        // Nor may they make the end of a CDATA section or of a processing instruction: the rest of
+        // the picture would be read another way (or not at all).
+        const QByteArray scene = "<!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->"
+                                 "<!-- payload-start -->"
+                                 + encodePayload(R"({"type":"excalidraw","version":2,"elements":[]})")
+                                 + "<!-- payload-end -->";
+        QTest::newRow("a CDATA end made by a removal")
+                << QByteArray("<svg " + ns + "><style><![CDATA[a]]" + scene + ">b]]></style><rect/></svg>");
+        QTest::newRow("a CDATA end made in text by a removal")
+                << QByteArray("<svg " + ns + "><desc>żółw ]]" + scene + "></desc><rect/></svg>");
+        QTest::newRow("a CDATA end made by two removals")
+                << QByteArray("<svg " + ns + "><desc>]" + scene + "]" + scene + "></desc><rect/></svg>");
+        QTest::newRow("a processing instruction's end made by a removal")
+                << QByteArray("<svg " + ns + "><?brulion ?" + scene + "><rect id=\"new\"/>?><rect/></svg>");
+        QTest::newRow("undeclared prefix") << QByteArray("<svg:svg width=\"5\"></svg:svg>");
+        // An entity expanding beyond QXmlStreamReader's limit (4096 characters).
+        QTest::newRow("entity expansion")
+                << QByteArray("<!DOCTYPE svg [<!ENTITY a \"aaaaaaaaaa\"><!ENTITY b \"&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;\">"
+                              "<!ENTITY c \"&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;\"><!ENTITY d "
+                              "\"&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;\">]><svg "
+                              + ns + " aria-label=\"&d;\"></svg>");
+    }
+    void svgWithSceneRefuses()
+    {
+        QFETCH(QByteArray, picture);
+        Drawing d;
+        d.strokes = {wavyStroke(u"ż"_s, 0, 0, 8)};
+        QVERIFY(!brulion::drawing::svgWithScene(picture, d));
+    }
+
+    void svgWithSceneOfRandomBytes()
+    {
+        // Damaged pictures: a file or nothing, never a crash; a file is always a drawing.
+        QRandomGenerator random(20261028);
+        Drawing d;
+        d.strokes = {wavyStroke(u"a"_s, 0, 0, 12)};
+        const QByteArray picture = "<?xml version=\"1.0\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" "
+                                   "width=\"100\" height=\"60\"><rect x=\"5\" y=\"5\" width=\"90\" height=\"50\"/>"
+                                   "<text x=\"20\" y=\"35\">Grządka</text></svg>";
+        // (And one with a scene of its own, replaced.)
+        QByteArray withScene = picture;
+        withScene.replace("<rect", QByteArray("<metadata><!-- payload-type:application/vnd.excalidraw+json --><!-- "
+                                              "payload-version:2 --><!-- payload-start -->"
+                                              + encodePayload(R"({"type":"excalidraw","version":2,"elements":[]})")
+                                              + "<!-- payload-end --></metadata><rect"));
+        for (int i = 0; i < 1000; ++i) {
+            QByteArray bytes = i % 2 ? withScene : picture;
+            const int damage = 1 + int(random.bounded(6));
+            for (int k = 0; k < damage; ++k)
+                bytes[qsizetype(random.bounded(quint32(bytes.size())))] = char(random.bounded(256));
+            if (i % 4 == 0)
+                bytes.truncate(qsizetype(random.bounded(quint32(bytes.size()))));
+            if (const std::optional<QByteArray> out = brulion::drawing::svgWithScene(bytes, d)) {
+                QVERIFY2(readDrawing(*out).has_value(), out->constData());
+                QCOMPARE(readDrawing(*out)->strokes.size(), 1);
+                // A well-formed picture stays well-formed.
+                if (checkSvg(bytes).wellFormed)
+                    QVERIFY2(checkSvg(*out).wellFormed, out->constData());
+            }
+        }
+    }
+
     void randomInputNeverCrashes()
     {
         // Random bytes, and random damage to a valid file, as a sync conflict or a bad copy may give.

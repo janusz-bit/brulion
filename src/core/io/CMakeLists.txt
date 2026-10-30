@@ -46,6 +46,6 @@ brulion_add_core_module(io
         export_html.cpp
         export_pandoc.cpp
         export_data.cpp
-    DEPS util text dates markdown index notebook
+    DEPS util text dates markdown index notebook drawing
     QT Gui)
 target_link_libraries(brulion_core_io PRIVATE brulion_miniz)

@@ -202,7 +202,11 @@ every program shows the file as a picture (Obsidian, Logseq, browsers, file mana
 excalidraw.com opens it as a drawing again, Brulion's editor (docs/UI.md "Drawing editor") edits
 it. Brulion reads payload versions 1 and 2, compressed or not, and `.excalidraw` JSON. An SVG is a
 drawing when its first 4 KB name the payload type (`looksLikeExcalidrawSvg`); one without the scene
-is a picture only.
+is a picture only. The picture may also be another program's: excalidraw.com's own "Embed scene"
+export, and an imported Trilium canvas — Trilium's picture of it, byte for byte, with the scene
+(and the pictures pasted into the canvas, in its `files`) inserted right after the root's start
+tag (`drawing::svgWithScene`); Brulion shows and edits such a drawing as its own and writes its
+own picture (`toSvg`) when it saves an edit.
 
 *Elements (Elementy rysunku; `drawing.h` Stroke, `geometry.h`, `edit.h`):* Brulion draws and edits
 freehand lines (also rotated or filled), rectangles, ellipses, diamonds, lines (also curved or

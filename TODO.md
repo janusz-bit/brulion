@@ -40,8 +40,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     dorysować coś i przesunąć tekst z linkiem `[[…]]`, otworzyć go w Obsidianie (rysunek się
     wczytuje, link w tekście działa, notatki z tyłu nietknięte); zetrzeć kreskę w Brulionie, gdy
     Obsidian ma ten rysunek otwarty (powinna zniknąć i tam);
-  * import z Trilium: notatka typu „canvas” jako jeden plik SVG ze sceną Excalidraw (dziś
-    importer zapisuje obok siebie SVG i plik `.excalidraw`);
   * notatki na slajdach i PDF-ach z wykładu: rysowanie na obrazie w tle (strona PDF, slajd);
   * sprawdzić na tablecie z rysikiem (Android, Natalia) i w przeglądarce, czy nacisk rysika
     dociera do Brulionu.

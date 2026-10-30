@@ -6,6 +6,7 @@
 #include "drawing/stroke.h"
 
 #include <QJsonObject>
+#include <QXmlStreamReader>
 
 #include <algorithm>
 #include <cmath>
@@ -75,6 +76,83 @@ QString xmlText(const QString &text)
     return out;
 }
 
+constexpr QByteArrayView SvgSourceComment = "<!-- svg-source:excalidraw -->";
+
+constexpr QByteArrayView PayloadTypeComment = "<!-- payload-type:application/vnd.excalidraw+json -->";
+
+/// The scene (its JSON) as excalidraw.com's "Embed scene" writes it into an SVG (excalidraw.h).
+QByteArray sceneMetadata(QByteArrayView sceneJson)
+{
+    return "<metadata>" + PayloadTypeComment.toByteArray() + "<!-- payload-version:2 --><!-- payload-start -->"
+           + encodePayload(sceneJson) + "<!-- payload-end --></metadata>";
+}
+
+/// The length of the Excalidraw payload at `from` in `bytes` as Excalidraw writes it — the
+/// payload type's comment, the version's (optional), `<!-- payload-start -->`, the base64,
+/// `<!-- payload-end -->`, whitespace between them —, 0 when anything else is there. Only comments
+/// and base64 text: removing them leaves a well-formed picture well-formed (whatever holds them),
+/// unless the bytes around them then end a CDATA section or a processing instruction
+/// (svgWithScene() checks).
+qsizetype payloadLength(QByteArrayView bytes, qsizetype from)
+{
+    qsizetype i = from;
+    const auto skip = [&](QByteArrayView text) {
+        if (!bytes.sliced(i).startsWith(text))
+            return false;
+        i += text.size();
+        return true;
+    };
+    const auto skipSpace = [&] {
+        while (i < bytes.size() && (bytes[i] == ' ' || bytes[i] == '\t' || bytes[i] == '\n' || bytes[i] == '\r'))
+            ++i;
+    };
+    if (!skip(PayloadTypeComment))
+        return 0;
+    skipSpace();
+    if (skip("<!-- payload-version:")) {
+        const qsizetype digits = i;
+        while (i < bytes.size() && bytes[i] >= '0' && bytes[i] <= '9')
+            ++i;
+        if (i == digits || !skip(" -->"))
+            return 0;
+        skipSpace();
+    }
+    if (!skip("<!-- payload-start -->"))
+        return 0;
+    while (i < bytes.size()) {
+        const char c = bytes[i];
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/'
+              || c == '=' || c == ' ' || c == '\t' || c == '\n' || c == '\r'))
+            break;
+        ++i;
+    }
+    return skip("<!-- payload-end -->") ? i - from : 0;
+}
+
+/// Does `text` hold an element's start tag (the first one, after the prolog)? Its name in `name`,
+/// its attributes in `attributes`, the character offset after it (the reader's) in `end`. Entity
+/// expansion is bounded by QXmlStreamReader's own limit.
+bool firstStartTag(QStringView text, QString *name = nullptr, QXmlStreamAttributes *attributes = nullptr,
+                   qint64 *end = nullptr)
+{
+    QXmlStreamReader xml(text);
+    while (!xml.atEnd()) {
+        const QXmlStreamReader::TokenType token = xml.readNext();
+        if (token == QXmlStreamReader::StartElement) {
+            if (name)
+                *name = xml.name().toString();
+            if (attributes)
+                *attributes = xml.attributes();
+            if (end)
+                *end = xml.characterOffset();
+            return true;
+        }
+        if (token == QXmlStreamReader::Invalid)
+            return false;
+    }
+    return false;
+}
+
 } // namespace
 
 QString safeDataUrl(const QJsonObject &files, const QString &fileId)
@@ -142,10 +220,8 @@ QByteArray toSvg(const Drawing &drawing)
     svg += u"<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\""_s
            + (images ? u" xmlns:xlink=\"http://www.w3.org/1999/xlink\""_s : QString()) + u" viewBox=\"0 0 "_s + w
            + u' ' + h + u"\" width=\""_s + w + u"\" height=\""_s + h + u"\">\n"_s;
-    svg += u"<!-- svg-source:excalidraw -->\n"_s;
-    svg += u"<metadata><!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->"
-           "<!-- payload-start -->"_s
-           + QString::fromLatin1(encodePayload(sceneJson(drawing))) + u"<!-- payload-end --></metadata>\n"_s;
+    svg += QString::fromLatin1(SvgSourceComment) + u'\n';
+    svg += QString::fromLatin1(sceneMetadata(sceneJson(drawing))) + u'\n';
 
     // Auto: the dark theme's colours for browsers, by class (the style sheet goes in after the
     // metadata once the elements are written: it names only the classes used).
@@ -351,6 +427,86 @@ QByteArray toSvg(const Drawing &drawing)
     svg += body;
     svg += u"</svg>\n"_s;
     return svg.toUtf8();
+}
+
+std::optional<QByteArray> svgWithScene(QByteArrayView picture, const Drawing &drawing)
+{
+    return svgWithScene(picture, QByteArrayView(sceneJson(drawing)));
+}
+
+std::optional<QByteArray> svgWithScene(QByteArrayView picture, QByteArrayView sceneJson)
+{
+    constexpr QByteArrayView Bom = "\xEF\xBB\xBF";
+    const qsizetype bom = picture.startsWith(Bom) ? Bom.size() : 0;
+    // Only the head is read: the root's start tag must end where looksLikeExcalidrawSvg() still
+    // sees the payload that follows it.
+    constexpr qsizetype TagLimit = HeadBytes - 512;
+    const QByteArrayView head = picture.sliced(bom, std::min(picture.size(), TagLimit) - bom);
+    const QString text = QString::fromUtf8(head);
+    QString name;
+    QXmlStreamAttributes attributes;
+    qint64 end = 0;
+    if (!firstStartTag(text, &name, &attributes, &end) || name != u"svg")
+        return std::nullopt;
+    // The tag ends at `end` exactly: the text up to it holds the tag, one character less does
+    // not (whatever the reader counts in an expanded entity or a line break).
+    if (end < 2 || end > text.size() || text.at(end - 1) != u'>' || text.at(end - 2) == u'/'
+        || !firstStartTag(QStringView(text).first(end)) || firstStartTag(QStringView(text).first(end - 1)))
+        return std::nullopt;
+    // The bytes before it: the same text (no byte that is not UTF-8 there), no scene's marker.
+    const QByteArray before = QStringView(text).first(end).toUtf8();
+    if (!head.startsWith(before) || before.contains("payload-"))
+        return std::nullopt;
+    for (const QStringView size : {u"width", u"height"}) {
+        QStringView value = attributes.value(size).trimmed();
+        if (value.endsWith(u"px"))
+            value.chop(2);
+        bool number = false;
+        const double v = value.toDouble(&number);
+        if (number && !(v > 0))
+            return std::nullopt; // (also NaN)
+    }
+    const qsizetype at = bom + before.size();
+    // A scene the picture had: replaced by this one. Only a payload as Excalidraw writes it is
+    // removed (other programs' comments stay); a scene's marker in any other shape refuses the
+    // picture (the scene read from the file would not be this one).
+    constexpr QByteArrayView PayloadType = "payload-type:application/vnd.excalidraw+json";
+    constexpr qsizetype CommentStart = 5; // "<!-- "
+    QByteArray rest;
+    rest.reserve(picture.size() - at);
+    qsizetype copied = at;
+    for (qsizetype marker = picture.indexOf(PayloadType, at); marker >= 0;
+         marker = picture.indexOf(PayloadType, copied)) {
+        const qsizetype from = marker - CommentStart;
+        const qsizetype length = from >= copied ? payloadLength(picture, from) : 0;
+        if (length == 0)
+            return std::nullopt;
+        rest += picture.sliced(copied, from - copied);
+        copied = from + length;
+    }
+    rest += picture.sliced(copied);
+    if (copied != at) {
+        // The bytes around a removed payload must not make a marker of their own, nor the end of a
+        // CDATA section or a processing instruction (`]]` or `?` before it, `>` after it): the
+        // rest of the picture would be read another way, or not at all. (A payload holds neither.)
+        const QByteArrayView tail = picture.sliced(at);
+        if (rest.contains(PayloadType) || QByteArrayView(rest).count("]]>") != tail.count("]]>")
+            || QByteArrayView(rest).count("?>") != tail.count("?>"))
+            return std::nullopt;
+    }
+    const QByteArray metadata = sceneMetadata(sceneJson);
+    QByteArray out;
+    out.reserve(at + SvgSourceComment.size() + metadata.size() + rest.size() + 3);
+    out += picture.first(at);
+    out += '\n';
+    if (!rest.contains(SvgSourceComment)) {
+        out += SvgSourceComment;
+        out += '\n';
+    }
+    out += metadata;
+    out += '\n';
+    out += rest;
+    return out;
 }
 
 } // namespace brulion::drawing
