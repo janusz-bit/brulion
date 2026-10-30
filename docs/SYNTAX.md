@@ -316,7 +316,9 @@ picture (an excalidraw.com user who unlocked and moved it up) — consistent and
 never selects, moves or erases it; reordering keeps it at the bottom; a merge puts a backdrop new
 on one side at the bottom (the leading locked elements). The picture has the raster too (an
 `<image>` under the ink: the file is self-contained, as excalidraw.com's "Embed scene" export, so
-the raster is in the file twice — a typical slide makes a 0.4–1.4 MB drawing). In the dark the
+the raster is in the file twice, the scene's copy deflated and base64-encoded twice more: a slide
+of 150–500 KB makes a drawing of about 0.5–1.7 MB, the largest backdrop one of about 15 MB). In the
+dark the
 backdrop is shown **"document dark"**, through Excalidraw's dark filter per pixel (as a PDF
 reader's night mode), so the ink mapped light stays readable on it; ordinary pictures keep their
 colours. In the file: none (as the app) — no `<style>` at all (a browser that turned only the ink

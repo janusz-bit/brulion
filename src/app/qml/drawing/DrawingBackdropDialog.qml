@@ -188,7 +188,9 @@ BDialog {
         id: grid
         objectName: "drawingBackdropGrid"
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.min(contentHeight, Math.max(cellHeight, dialog.overlayHeight * 0.5))
+        // (From the rows, not contentHeight: GridView changes that while it lays out — a loop.)
+        Layout.preferredHeight: Math.min(Math.ceil(count / columns) * cellHeight,
+                                         Math.max(cellHeight, dialog.overlayHeight * 0.5))
         visible: dialog.error === "" && dialog.pageCount > 0
         clip: true
         boundsBehavior: Flickable.StopAtBounds

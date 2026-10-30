@@ -3254,13 +3254,15 @@ private Q_SLOTS:
         }
         const PreparedBackdrop p = brulion::drawingview::prepareBackdropPdfPage(pdf, vaultPath, 2);
         QCOMPARE(p.error, QString());
-        QCOMPARE(p.image.pixels, QSize(2400, 1697));
+        // (210 × 297 mm: 1697 px high; Qt PDF reads the page as 842 × 595 points: 1696.)
+        QCOMPARE(p.image.pixels.width(), 2400);
+        QVERIFY2(qAbs(p.image.pixels.height() - 1697) <= 1, qPrintable(QString::number(p.image.pixels.height())));
         QVERIFY(p.image.mimeType == u"image/png" || p.image.mimeType == u"image/jpeg");
         QCOMPARE(p.source, (brulion::drawing::BackdropSource{vaultPath, 2}));
         QCOMPARE(p.name, u"Wykład ćwiczenia"_s);
         // The red square of page 2 (40–60 mm across, 30–50 mm down of 297 × 210 mm).
         const QImage image = QImage::fromData(p.image.bytes);
-        const QColor centre = image.pixelColor(int(2400 * 50 / 297.0), int(1697 * 40 / 210.0));
+        const QColor centre = image.pixelColor(int(2400 * 50 / 297.0), int(image.height() * 40 / 210.0));
         QVERIFY2(centre.red() > 200 && centre.green() < 60, qPrintable(centre.name()));
         QCOMPARE(brulion::drawingview::prepareBackdropPdfPage(pdf, vaultPath, 3).error, u"pdf"_s);
         QCOMPARE(brulion::drawingview::prepareBackdropPdfPage(dir.filePath(u"nie ma.pdf"_s), vaultPath, 1).error,

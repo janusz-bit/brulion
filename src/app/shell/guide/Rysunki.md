@@ -84,7 +84,7 @@ Każdą z tych zmian cofniesz. Podkład jest zablokowany: gumka go nie ściera, 
 
 **Gdzie działa PDF.** Strony PDF wstawisz w aplikacji na Androida, Windows i Linuksa (pakiet Nix i AppImage). W wersji w przeglądarce PDF-ów nie ma (przeglądarkowa wersja Qt nie umie ich rysować) — tam podkładem może być obraz, a rysunki na stronach PDF zrobione na innym urządzeniu wyglądają i edytują się normalnie, bo obraz strony jest w pliku rysunku.
 
-**W pliku.** Obraz podkładu jest w samym rysunku (najwyżej 2400 pikseli na dłuższym boku i 4 MB), więc rysunek wygląda tak samo na każdym urządzeniu, w Obsidianie, w przeglądarce i w excalidraw.com — tam podkład jest zwykłym zablokowanym obrazem na spodzie. Rysunek ze slajdem waży zwykle od 0,4 do 1,4 MB.
+**W pliku.** Obraz podkładu jest w samym rysunku (najwyżej 2400 pikseli na dłuższym boku i 4 MB), więc rysunek wygląda tak samo na każdym urządzeniu, w Obsidianie, w przeglądarce i w excalidraw.com — tam podkład jest zwykłym zablokowanym obrazem na spodzie. Obraz jest w pliku dwa razy (w scenie i w samym obrazie), więc rysunek ze slajdem waży zwykle od 0,5 do 1,7 MB.
 
 ## Rysik, palec i mysz
 - **Rysik** rysuje. **Palce** wtedy nie rysują, tylko przesuwają kartkę (jeden palec) i powiększają ją (dwa palce) — możesz więc oprzeć dłoń na ekranie. Dopóki rysik dotyka ekranu, dłoń niczego nie zmienia: nie przesuwa kartki i nie przerywa linii.
