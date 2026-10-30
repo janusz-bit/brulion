@@ -51,8 +51,8 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   webowa zainstalowana jako aplikacja → Udostępnij → Brulion ze strony i z zaznaczonego tekstu,
   przy zamkniętym i otwartym Brulionie); Eksplorator Windows („Otwórz za pomocą → Brulion” na
   `.md` i `.txt`, kilka plików naraz, okno na wierzchu, program domyślny bez zmian); menedżer
-  plików na Linuksie (GNOME Pliki, Dolphin: „Otwórz za pomocą”, okno wychodzi na wierzch pod
-  Waylandem, dwuklik na `.md` otwiera dalej dotychczasowy program; Cinnamon/Xfce pod X11: kursor
+  plików na Linuksie (GNOME Pliki, Dolphin: „Otwórz za pomocą → Inny program”, okno wychodzi na
+  wierzch pod Waylandem, dwuklik na `.md` otwiera dalej dotychczasowy program; Cinnamon/Xfce pod X11: kursor
   nie kręci się po otwarciu pliku w działającym Brulionie); AppImage zintegrowany przez Gear Lever
   albo AppImageLauncher.
 * **Dopracowanie interfejsu — porównanie z Obsidianem.** Przejść ekran po ekranie (edytor

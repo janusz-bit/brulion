@@ -85,6 +85,12 @@ Item {
         target: root.canvas
         function onTextEditRequested(r) { root.open(r) }
         function onTextCommitRequested() { root.commit() }
+        // The paper shrinking under the text (a browser's keyboard resizes the page: it reports
+        // no overlap then) moves the view as the keyboard's cover does.
+        function onHeightChanged() {
+            if (root.active)
+                Qt.callLater(root.keepInView)
+        }
         function onTextEditingChanged() {
             // The canvas ended it (another drawing loaded): nothing to write.
             if (!root.canvas.textEditing && root.active) {

@@ -9,10 +9,10 @@ Exec=brulion --open %F
 Icon=io.github.januszbit.brulion
 Terminal=false
 Categories=Office;Utility;
-# "Otwórz za pomocą → Brulion" (docs/NIXOS.md): text/plain only — Markdown is a kind of it, so .md
-# files list Brulion too. Declaring text/markdown itself would make Brulion GNOME's default for .md
-# files, which has none of its own (GIO prefers an app of the exact type to the parent's default).
-MimeType=text/plain;
+# "Otwórz za pomocą → Inny program → Brulion" (docs/NIXOS.md): no MimeType on purpose. A desktop
+# without a default for a type (sway, i3, Hyprland without mimeapps.list; GNOME for text/markdown)
+# takes the first app in mimeinfo.cache, sorted by name: io.github… comes before nvim, org.gnome…,
+# org.kde…, so declaring text/plain made Brulion the default for every text file there.
 # Launchers then hand over an activation token (Wayland), which a second launch forwards: the
 # running Brulion comes to the front.
 StartupNotify=true

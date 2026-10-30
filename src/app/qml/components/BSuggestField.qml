@@ -145,6 +145,31 @@ BTextField {
                 target: popup.visible ? KeyboardInsets : null
                 function onOverlapChanged() { field.placePopup() }
             }
+            // The window shrinking for the keyboard (a browser's resizes-content: no overlap then).
+            Connections {
+                target: popup.visible ? popup.parent : null
+                function onHeightChanged() { field.placePopup() }
+                function onWidthChanged() { field.placePopup() }
+            }
+            // The field moved under the list (BKeyboardFocusKeeper scrolling it above the keyboard,
+            // a flick): placed again where the field is now. (Qt Quick reports no scene position.)
+            Timer {
+                property point last: Qt.point(-1, -1)
+                interval: 100
+                repeat: true
+                running: popup.visible
+                onRunningChanged: last = Qt.point(-1, -1)
+                onTriggered: {
+                    const overlay = popup.parent
+                    if (!overlay)
+                        return
+                    const p = field.mapToItem(overlay, 0, 0)
+                    if (p.x !== last.x || p.y !== last.y) {
+                        last = p
+                        field.placePopup()
+                    }
+                }
+            }
 
             background: Item {
                 BShadow { target: popupBackground; level: 2 }
