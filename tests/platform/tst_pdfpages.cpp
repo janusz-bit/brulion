@@ -2,10 +2,13 @@
 // the Nix dev shell, Qt PDF on CI's Linux build and Windows (Android's PdfRenderer: the bridge
 // self-test, src/platform/android/selftest): a PDF written here with QPdfWriter (an A4 page with
 // Polish text, a landscape A4 page with a red square at a known place) read and drawn; pages out of
-// range, broken, empty, missing and renamed files refused without a crash; a Polish file name.
-// Skipped where the build has no PDF renderer (the browser).
+// range, broken, empty, missing and renamed files refused without a crash; a Polish file name;
+// hand-made pages far larger than A4 (a hostile MediaBox: drawn at the resolution of the size
+// asked for, pdfRenderDpi()) and one thinner than a pixel. Skipped where the build has no PDF
+// renderer (the browser).
 #include "pdfpages.h"
 
+#include <QElapsedTimer>
 #include <QFile>
 #include <QPageLayout>
 #include <QPageSize>
@@ -50,6 +53,31 @@ bool writeFixture(const QString &path)
     return QFile::exists(path);
 }
 
+/// A one-page PDF of `mediaBox` points whose page draws `content` (a content stream), its cross-
+/// reference table right — pages no QPdfWriter makes.
+QByteArray handMadePdf(const QSizeF &mediaBox, const QByteArray &content)
+{
+    const QList<QByteArray> objects{
+            "<< /Type /Catalog /Pages 2 0 R >>"_ba,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"_ba,
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "_ba + QByteArray::number(mediaBox.width()) + ' '
+                    + QByteArray::number(mediaBox.height()) + "] /Contents 4 0 R /Resources << >> >>",
+            "<< /Length "_ba + QByteArray::number(content.size()) + " >>\nstream\n" + content + "\nendstream"};
+    QByteArray pdf = "%PDF-1.4\n"_ba;
+    QList<qsizetype> offsets;
+    for (qsizetype i = 0; i < objects.size(); ++i) {
+        offsets.append(pdf.size());
+        pdf += QByteArray::number(i + 1) + " 0 obj\n" + objects.at(i) + "\nendobj\n";
+    }
+    const qsizetype xref = pdf.size();
+    pdf += "xref\n0 " + QByteArray::number(objects.size() + 1) + "\n0000000000 65535 f \n";
+    for (const qsizetype offset : std::as_const(offsets))
+        pdf += QByteArray::number(offset).rightJustified(10, '0') + " 00000 n \n";
+    pdf += "trailer\n<< /Size " + QByteArray::number(objects.size() + 1) + " /Root 1 0 R >>\nstartxref\n"
+           + QByteArray::number(xref) + "\n%%EOF\n";
+    return pdf;
+}
+
 } // namespace
 
 class TestPdfPages : public QObject {
@@ -67,6 +95,10 @@ private Q_SLOTS:
     void unreadable();
     void pagePixels_data();
     void pagePixels();
+    void renderDpi_data();
+    void renderDpi();
+    void hugePage();
+    void thinPage();
 
 private:
     QTemporaryDir m_dir;
@@ -102,10 +134,12 @@ void TestPdfPages::infoAndSizes()
     QVERIFY(qAbs(info.pagePoints.at(0).height() - A4H) < 2);
     QVERIFY(qAbs(info.pagePoints.at(1).width() - A4H) < 2);
     QVERIFY(qAbs(info.pagePoints.at(1).height() - A4W) < 2);
-    // The count alone (the page picker opening a long PDF).
+    // The count and the first page's size (the page picker opening a long PDF).
     const PdfInfo count = pdfInfo(m_pdf, false);
     QCOMPARE(count.pages, 2);
-    QVERIFY(count.pagePoints.isEmpty());
+    QCOMPARE(count.pagePoints.size(), 1);
+    QVERIFY(qAbs(count.pagePoints.at(0).width() - A4W) < 2);
+    QVERIFY(qAbs(count.pagePoints.at(0).height() - A4H) < 2);
 }
 
 void TestPdfPages::renderSecondPage()
@@ -220,6 +254,90 @@ void TestPdfPages::pagePixels()
     QFETCH(int, maxSide);
     QFETCH(QSize, expected);
     QCOMPARE(pdfPagePixels(points, maxSide), expected);
+}
+
+void TestPdfPages::renderDpi_data()
+{
+    QTest::addColumn<QSizeF>("points");
+    QTest::addColumn<QSize>("pixels");
+    QTest::addColumn<double>("expected");
+    QTest::newRow("A4 for a backdrop") << QSizeF(A4W, A4H) << QSize(1697, 2400) << 72.0 * 2400 / A4H;
+    QTest::newRow("a slide's thumbnail") << QSizeF(960, 540) << QSize(230, 129) << 72.0 * 230 / 960;
+    // A hostile MediaBox: the size asked for, not 18 dpi (5000 × 5000 px for a thumbnail).
+    QTest::newRow("20000 pt for 2400 px") << QSizeF(20000, 20000) << QSize(2400, 2400) << 8.64;
+    QTest::newRow("100000 pt for a thumbnail") << QSizeF(100000, 100000) << QSize(230, 230) << 0.1656;
+    QTest::newRow("a strip: one pixel across") << QSizeF(1000, 1) << QSize(600, 1) << 72.0;
+    QTest::newRow("a hostile strip: at most MaxPdfPageSide long")
+            << QSizeF(1000000, 0.001) << QSize(2400, 1) << 72.0 * MaxPdfPageSide / 1000000;
+    QTest::newRow("empty page") << QSizeF(0, 10) << QSize(10, 10) << 0.0;
+    QTest::newRow("no pixels") << QSizeF(A4W, A4H) << QSize() << 0.0;
+    QTest::newRow("not a number") << QSizeF(qQNaN(), 10) << QSize(10, 10) << 0.0;
+}
+
+void TestPdfPages::renderDpi()
+{
+    QFETCH(QSizeF, points);
+    QFETCH(QSize, pixels);
+    QFETCH(double, expected);
+    const double dpi = pdfRenderDpi(points, pixels);
+    QVERIFY2(qAbs(dpi - expected) < 1e-3 * qMax(1.0, expected), qPrintable(QString::number(dpi)));
+    // Never a picture smaller than asked or longer than the limit.
+    if (dpi > 0) {
+        const double longSide = qMax(points.width(), points.height()) * dpi / 72;
+        QVERIFY(longSide <= MaxPdfPageSide + 1e-6);
+        if (longSide < MaxPdfPageSide - 1e-6) { // (not capped)
+            QVERIFY(points.width() * dpi / 72 >= pixels.width() - 1e-6);
+            QVERIFY(points.height() * dpi / 72 >= pixels.height() - 1e-6);
+        }
+    }
+}
+
+void TestPdfPages::hugePage()
+{
+    if (!pdfAvailable())
+        QSKIP("no PDF renderer in this build");
+    // 20000 × 20000 pt (7 m a side) with a red square in its middle: a thumbnail and a backdrop
+    // drawn at their own size.
+    const QString path = m_dir.filePath(u"plakat – ogromny.pdf"_s);
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(handMadePdf(QSizeF(20000, 20000), "1 0 0 rg 7500 7500 5000 5000 re f"_ba));
+    }
+    const PdfInfo info = pdfInfo(path, false);
+    QCOMPARE(info.pages, 1);
+    QCOMPARE(info.pagePoints.value(0), QSizeF(20000, 20000));
+    for (const int side : {230, 2400}) {
+        QElapsedTimer timer;
+        timer.start();
+        QString error;
+        const QImage page = renderPdfPage(path, 1, side, &error);
+        qInfo("%d px of a 20000-pt page: %lld ms", side, qint64(timer.elapsed()));
+        QVERIFY2(!page.isNull(), qPrintable(error));
+        QCOMPARE(page.size(), QSize(side, side));
+        const QColor centre = page.pixelColor(side / 2, side / 2);
+        QVERIFY2(centre.red() > 200 && centre.green() < 60 && centre.blue() < 60, qPrintable(centre.name()));
+        QCOMPARE(page.pixelColor(2, 2), QColor(Qt::white));
+    }
+}
+
+void TestPdfPages::thinPage()
+{
+    if (!pdfAvailable())
+        QSKIP("no PDF renderer in this build");
+    // 14400 × 4 pt, all red: thinner than a pixel at 600 px — still one pixel, red.
+    const QString path = m_dir.filePath(u"pasek.pdf"_s);
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(handMadePdf(QSizeF(14400, 4), "1 0 0 rg 0 0 14400 4 re f"_ba));
+    }
+    QString error;
+    const QImage page = renderPdfPage(path, 1, 600, &error);
+    QVERIFY2(!page.isNull(), qPrintable(error));
+    QCOMPARE(page.size(), QSize(600, 1));
+    const QColor middle = page.pixelColor(300, 0);
+    QVERIFY2(middle.red() > 150 && middle.green() < 120, qPrintable(middle.name()));
 }
 
 QTEST_MAIN(TestPdfPages)

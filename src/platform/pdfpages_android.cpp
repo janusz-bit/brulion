@@ -57,7 +57,7 @@ PdfInfo pdfInfo(const QString &file, bool pageSizes)
         const QJsonArray wh = size.toArray();
         info.pagePoints.append(QSizeF(wh.at(0).toDouble(), wh.at(1).toDouble()));
     }
-    if (info.pages <= 0 || (pageSizes && info.pagePoints.size() != info.pages)) {
+    if (info.pages <= 0 || info.pagePoints.size() != (pageSizes ? info.pages : 1)) {
         info.pages = -1;
         info.pagePoints.clear();
         if (info.error.isEmpty())

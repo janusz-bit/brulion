@@ -454,8 +454,8 @@ object BrulionAndroid {
   // -----------------------------------------------------------------------------------------
 
   /**
-   * `{"pages", "sizes": [[w, h], ...] (points; only with [pageSizes]), "error", "locked"}` of the
-   * PDF at [path].
+   * `{"pages", "sizes": [[w, h], ...] (points; every page's with [pageSizes], else the first
+   * page's only), "error", "locked"}` of the PDF at [path].
    */
   @JvmStatic
   fun pdfInfo(path: String, pageSizes: Boolean): String = PdfPages.info(path, pageSizes)

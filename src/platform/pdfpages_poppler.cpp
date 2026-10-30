@@ -8,7 +8,6 @@
 
 #include <QPainter>
 
-#include <algorithm>
 #include <memory>
 #include <mutex>
 
@@ -76,10 +75,9 @@ PdfInfo pdfInfo(const QString &file, bool pageSizes)
     if (!doc)
         return info;
     info.pages = doc->numPages();
-    if (!pageSizes)
-        return info;
-    info.pagePoints.reserve(info.pages);
-    for (int i = 0; i < info.pages; ++i) {
+    const int sized = pageSizes ? info.pages : 1;
+    info.pagePoints.reserve(sized);
+    for (int i = 0; i < sized; ++i) {
         const std::unique_ptr<Poppler::Page> page = doc->page(i);
         info.pagePoints.append(page ? page->pageSizeF() : QSizeF());
     }
@@ -104,10 +102,10 @@ QImage renderPdfPage(const QString &file, int page, int maxSide, QString *error)
             *error = u"Page %1 has no size"_s.arg(page);
         return {};
     }
-    // (At least 18 dpi: poppler makes no picture of less than a pixel; it is scaled down below.)
-    const double dpi =
-            std::max(18.0, 72.0 * std::max(size.width(), size.height()) / std::max(points.width(), points.height()));
-    const QImage rendered = p->renderToImage(dpi, dpi);
+    // At the resolution of the size asked for: a page far larger than A4 (a poster, a hostile
+    // MediaBox) costs no more memory than the picture asked for.
+    const double dpi = pdfRenderDpi(points, size);
+    const QImage rendered = dpi > 0 ? p->renderToImage(dpi, dpi) : QImage();
     if (rendered.isNull()) {
         if (error)
             *error = u"Page %1 cannot be rendered"_s.arg(page);

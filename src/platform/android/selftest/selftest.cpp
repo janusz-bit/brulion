@@ -116,10 +116,16 @@ int main(int argc, char *argv[])
             painter.fillRect(QRectF(100, 100, 200, 200), Qt::red);
         }
         const brulion::platform::PdfInfo info = brulion::platform::pdfInfo(pdf);
+        // The count and the first page's size only (the page picker).
+        const brulion::platform::PdfInfo first = brulion::platform::pdfInfo(pdf, false);
+        const QSizeF firstSize = first.pagePoints.value(0);
         QString error;
         const QImage page = brulion::platform::renderPdfPage(pdf, 1, 842, &error);
-        qCWarning(lcSelfTest, "SELFTEST pdf backend=%s pages=%d width=%d height=%d centre=%s corner=%s error=%s",
-                  qUtf8Printable(brulion::platform::pdfBackendName()), info.pages, page.width(), page.height(),
+        qCWarning(lcSelfTest,
+                  "SELFTEST pdf backend=%s pages=%d first=%dx%d width=%d height=%d centre=%s corner=%s error=%s",
+                  qUtf8Printable(brulion::platform::pdfBackendName()), info.pages,
+                  first.pages == 1 && first.pagePoints.size() == 1 ? qRound(firstSize.width()) : -1,
+                  qRound(firstSize.height()), page.width(), page.height(),
                   qUtf8Printable(page.isNull() ? QString() : page.pixelColor(200, 200).name()),
                   qUtf8Printable(page.isNull() ? QString() : page.pixelColor(5, 5).name()),
                   qUtf8Printable(error.isEmpty() ? info.error : error));

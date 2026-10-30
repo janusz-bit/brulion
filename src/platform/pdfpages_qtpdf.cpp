@@ -56,10 +56,9 @@ PdfInfo pdfInfo(const QString &file, bool pageSizes)
     if (!load(doc, file, &info))
         return info;
     info.pages = doc.pageCount();
-    if (!pageSizes)
-        return info;
-    info.pagePoints.reserve(info.pages);
-    for (int i = 0; i < info.pages; ++i)
+    const int sized = pageSizes ? info.pages : 1;
+    info.pagePoints.reserve(sized);
+    for (int i = 0; i < sized; ++i)
         info.pagePoints.append(doc.pagePointSize(i));
     return info;
 }
