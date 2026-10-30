@@ -48,6 +48,14 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   w tekście, „Otwórz w innej aplikacji”), jak widok zdjęcia dla obrazów; na telefonie,
   komputerze i w przeglądarce (sprawdzić moduł Qt PDF, `QtQuick.Pdf`, także w WebAssembly).
   Podstawa dla rysowania na PDF-ach z wykładu (punkt „Rysunki — dalsze kroki”).
+* **Klikalne części linku do strony w folderze** — w tekście
+  `Zapytać się [[Firma/Adam cośtam]] o to czego się pouczyć` kliknięcie w `Firma` ma otwierać
+  stronę `Firma`, a w `Adam cośtam` stronę `Firma/Adam cośtam` (dziś cały link prowadzi do
+  `Firma/Adam cośtam`); przy głębszych ścieżkach (`[[A/B/C]]`) każda część osobno, jak przestrzenie
+  nazw w Logsequ (foldery jako przestrzenie nazw: docs/SYNTAX.md §1). Do ustalenia: co otwiera
+  `Firma`, gdy takiej strony nie ma (widok folderu jak w „Wszystkie strony” albo nowa strona jak
+  przy nierozwiązanym linku); link z własnym tekstem (`[[Firma/Adam cośtam|Adam]]`) zostaje
+  jednym linkiem; na telefonie dotknięcie części tak samo.
 
 ## Windows
 
