@@ -6,13 +6,21 @@ optymalizacjami). Wszystkie trzy wersje zmierzono w tych samych warunkach i tymi
 benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsku, niżej). Uzupełnione
 2026-10-29 o falę 5: pamięć indeksu, indeksowanie na kilku rdzeniach i gotowy indeks zapisany na
 urządzeniu (porównanie z `82d0357`), a 2026-10-30 o szybsze cofanie (L5, porównanie z `b3d9a3d`),
-mniejsze pakiety (L9, porównanie z `ef90077`) i szybsze odświeżanie list po zapisie (L3,
-porównanie z `ef90077`).
+mniejsze pakiety (L9, porównanie z `ef90077`), szybsze odświeżanie list po zapisie (L3,
+porównanie z `ef90077`) i płynny graf (L16, porównanie z `64d0380` na serwerze GitHub Actions).
 
 ## Podsumowanie dla użytkowników
 
 ### Co się poprawiło
 
+* **Płynny graf** (2026-10-30). Widok **Graf** układa się w osobnym wątku, a rysuje go karta
+  graficzna: od pierwszej chwili można go przesuwać, powiększać i przeciągać strony, a interfejs
+  nie czeka na obliczenia układu. Przy notatniku z 10 000 notatek (graf 4000 stron) pierwsza
+  klatka grafu jest po ok. 0,13 s zamiast ok. 1,1 s, najdłuższe zacięcie w trakcie układania
+  trwa ok. 0,2 zamiast 1 s, a przesuwanie i powiększanie odpowiada 2–3 razy szybciej — i to na
+  serwerze bez karty graficznej, który rysuje na procesorze; z kartą graficzną klatka kosztuje
+  ułamek milisekundy. Na telefonie graf animuje się 60 razy na sekundę zamiast 30 (pomiar na
+  telefonie jeszcze przed nami).
 * **Mniejsza aplikacja** (2026-10-30). APK na Androida ma 76,9 zamiast 91,8 MiB (do pobrania
   26,3 zamiast 30,9 MB), a wersja przeglądarkowa pobiera przy pierwszej wizycie 13,5 zamiast
   15,8 MB — przy łączu 20 Mbit/s pierwsza klatka jest o ok. 1,1 s wcześniej (7,4 zamiast 8,5 s).
@@ -60,7 +68,7 @@ porównanie z `ef90077`).
   o jedną trzecią mniej.
 * **Widoki:** Zadania otwierają się dwa razy szybciej (komputer 0,26 → 0,13 s, telefon 1,1 →
   0,7 s), Kalendarz i Agenda o 10–30 % szybciej. **Graf na telefonie** układa się w 2,6 s
-  zamiast 44 s.
+  zamiast 44 s (pomiar sprzed układania grafu w osobnym wątku, wyżej).
 * **Import** długich list z HTML (np. eksport Evernote/Notion) — 20 000 punktów w 0,2 s zamiast
   13 s. Podpowiedzi bloków `((` są dwa razy szybsze, podpowiedzi stron `[[` o ok. jedną trzecią.
 * **Android:** synchronizacja z Nextcloud przez HTTPS wreszcie działa (wcześniej każde połączenie
@@ -85,7 +93,8 @@ porównanie z `ef90077`).
 cały notatnik zaindeksowany po ok. 1 s, przy kolejnym otwarciu po 0,8 s (w tym czasie można już
 czytać i pisać). Strona z 5000
 bloków otwiera się w ok. 0,1 s, wyszukiwanie zwraca wyniki w kilka–kilkanaście milisekund,
-Zadania/Kalendarz/Agenda otwierają się w 0,13–0,17 s. Bezczynny Brulion zużywa ok. 0,1 %
+Zadania/Kalendarz/Agenda otwierają się w 0,13–0,17 s, graf z 4000 stron pokazuje się po ok.
+0,13 s i od razu da się go przesuwać (układa się w tle). Bezczynny Brulion zużywa ok. 0,1 %
 procesora i nie rysuje klatek.
 
 **Na telefonie** (mierzone na Raspberry Pi 4, który odpowiada słabszemu telefonowi, i na
@@ -768,14 +777,51 @@ a `QQuickPaintedItem`, rasterised on every frame of the moving layout while the 
   and keeps its throttling of slow frames of a moving layout (now: a paint over 16 ms).
 
 **Unit timings** (`tst_planning_graph` `bigGraphPerformance`, 2000 nodes / 7338 edges at fit zoom;
-the Raspberry Pi, Debug — the laptop was unreachable): one step 6.4–8.6 ms, building the whole
-graph's meshes 5.2–6.4 ms (93 764 vertices in 2 chunks) against 58–107 ms for one QPainter frame —
-a frame of the moving layout costs the GUI thread ~10–20× less, and a settled pan nothing but a
-matrix. Zoomed in to 3× (every disc with up to 64 segments, 274 550 vertices in 5 chunks) a frame
-with 33 new labels took 31–41 ms (`tst_planning_graph_sg`, the RHI null backend: the real scene
-graph without a GPU), Debug on the Pi.
+the Raspberry Pi, Debug — the laptop was unreachable): one step 6.5 ms, building the whole graph's
+meshes 3.5 ms (64 412 vertices, one chunk) against 76–78 ms for one QPainter frame — a frame of the
+moving layout costs the GUI thread ~20× less, and a settled pan nothing but a matrix. Zoomed in to
+3× (discs with up to 64 segments, 245 198 vertices in 4 chunks) a frame with 33 new labels took
+32 ms on the Pi (Debug), and 8.6 ms on a GitHub runner (Release, OpenGL on llvmpipe; with the
+earlier banded edges, 274 550 vertices) (`tst_planning_graph_sg`; on the RHI null backend — the real scene graph without a GPU — and under
+Xvfb, where the OpenGL frame is also compared pixel by pixel with the QPainter one).
 
-@@APP@@
+**App** (`tests/bench/app`, the 10 000-note bench vault, its graph capped at 4000 nodes). The
+laptop was unreachable, so both builds ran in the same GitHub Actions job (`perf-compare.yml`, `app`:
+ubuntu-24.04, 4 vCPUs, Release with Qt 6.11.2 from aqt, Xvfb + Mesa llvmpipe — frames rendered on
+the CPU, pessimistic; base = `sweep2` at `64d0380`, head = this change; 2 alternating rounds × 3
+runs = 6 per build; medians, min–max in the summary of the run). The probe activates the window
+first: under an X server without a window manager the app stays inactive and the graph's layout
+paused — the `views` rows of earlier tables measured opening a graph that never laid out (it did
+lay out offscreen, on the Pi). The new `graph` scenario opens the graph, drags its background for
+1 s 300 ms later while the layout runs, zooms three wheel steps, waits until the layout is done,
+then drags again for 1 s:
+
+| graph, 4000 nodes (GitHub runner, llvmpipe) | before | after | |
+|---|---:|---:|---:|
+| open → first frame (`views` r0 / `graph`) | 1077 / 1067 ms | 122 / 132 ms | −89 % |
+| longest GUI stall while it lays out (`graph` run) | 958 ms | 219 ms | −77 % |
+| frame interval p95 while it lays out | 818 ms | 173 ms | −79 % |
+| frames while it lays out (frames / s) | 56 in 40 s (1.4) | 70 in 9.2 s (7.6) | ×5.4 |
+| layout done (with the drags and zooms) | 40.0 s | 9.2 s | −77 % |
+| a frame's sync (GUI thread waits): moving layout / settled pan | 660 / 578 ms | 0.1 / 0.2 ms | −99.9 % |
+| a frame's render + swap (llvmpipe) | 7 ms | 127 ms | (the meshes, on the CPU) |
+| drag move → frame (median): during the layout / settled | 675 / 586 ms | 254 / 252 ms | −62 / −57 % |
+| wheel zoom → frame (median) | 830 ms | 336 ms | −60 % |
+| process CPU time, whole `graph` run | 131 s | 66 s | −50 % |
+| RSS after the scenario | 501 MB | 557 MB | +56 MB |
+
+The `views` scenario agrees (graph r0: longest stall 967 → 220 ms, frame p95 973 → 198 ms, settled
+8.3 → 2.0 s; r1 the same; the other views unchanged within ±4 %). What is left on this machine is
+llvmpipe rasterising the meshes of 4000 discs and their edges, ~127 ms per frame on 4 vCPUs, while
+Qt's threaded render loop holds the GUI thread until the render thread can take the next sync; a
+GPU (phones, laptops with a driver) draws the same frame in well under a millisecond, and the GUI
+thread's own share of a frame is the 0.1–6 ms sync. That is also why the edges are single quads (2
+triangles instead of the 6 of a fringed band; an earlier run of this branch with banded edges:
+`views` graph frame interval p95 321 ms against 198 ms). Of the +56 MB, about 10 MB are ours (copies of the layout
+for the worker and its final frame, the meshes, cached label layouts; an estimate), the rest is
+llvmpipe's buffers for the meshes (a GPU keeps them in its own memory). The Raspberry Pi
+(software renderer: the image node, the same work as before) and the Android emulator were not
+measured (L16b).
 
 ### Budgets
 
@@ -792,7 +838,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | autosave stall | < 50 ms desktop, < 100 ms phone | ✅ small page 41 ms; ❌ 500 KB page 88 ms | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
 | open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |
 | Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s before L3, not measured since (L3b, L10) | – |
-| Graph | settled < 1 s | ✅ 0.77 s | ❌ Pi 2.6 s (was 44 s; L16); emulator 1.5 s | – |
+| Graph (4000 nodes; 1200 phones) | settled < 1.5 s desktop, < 3 s phone; GUI stall during the layout < 16 ms desktop, < 33 ms phone | ⚠️ GitHub runner, llvmpipe: stall 219 ms (was 958 ms), first frame 0.13 s (was 1.07 s), layout 9.2 s with drags (was 40 s) — CPU-rendered frames; the GUI thread's own sync 0.1–6 ms | ❌ Pi 2.6 s before L16, emulator 1.5 s; not measured since (L16b) | – |
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ✅ 6.0 ms (L3; base in the same session 112 ms) | ❌ Pi 0.95 s before L3, not measured since (L3b) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
 | memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 86 MB of linear memory at 1k (was 104 MB) |
