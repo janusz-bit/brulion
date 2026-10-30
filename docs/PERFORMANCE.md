@@ -115,7 +115,9 @@ podręcznej i offline), powrót do strony z 1000 notatek rysuje pierwszą klatk�
   0,09 s później niż d1141c0 (okno za to 0,1 s wcześniej); przy kolejnych startach treść jest
   tak szybko jak wcześniej (szczegóły niżej).
 * **Rozmiar** — APK ma ok. 81 MB (pobranie ok. 26 MB), wersja przeglądarkowa pobiera przy
-  pierwszej wizycie ok. 13,5 MB (pierwsza klatka przy łączu 20 Mbit/s po ok. 7,4 s).
+  pierwszej wizycie ok. 13,5 MB (pierwsza klatka przy łączu 20 Mbit/s po ok. 7,4 s). Strony PDF
+  jako podkład rysunku nie powiększyły APK (Android rysuje je sam), pakiet z Nixa urósł o ok.
+  26 MiB (poppler), wersje na Windows i AppImage o bibliotekę Qt PDF (ok. 2 MB po spakowaniu).
 
 **Bateria:** w tle na Androidzie Brulion nie zużywa procesora i nie wybudza telefonu; alarmy są
 ustawiane tylko dla przypomnień (do 64 na najbliższe 14 dni).
@@ -726,6 +728,38 @@ notes link to appears or goes) must merge into the Tasks list in ≤ 2 × the ti
 afresh + 5 ms (looking each changed note up among all matches took 275 vs 45 ms under the CI's
 sanitizers). The Raspberry Pi was not
 measured (no builds on it in this sweep): L3b in "Next steps"; it took 0.95 s before.
+
+### Drawing backdrops: PDF renderers and what they cost (2026-10-30)
+
+A drawing's backdrop (docs/UI.md "Drawing editor") needs PDF pages drawn as pictures on the
+platforms that can afford it. Qt PDF (`QPdfDocument`, pdfium) for Qt 6.11.2, checked 2026-10-28,
+and the choice per build (`src/platform/pdfpages.h`):
+
+| build | where a renderer comes from | its size | chosen |
+|---|---|---|---|
+| Android arm64 | Qt PDF only as an extension of Qt's repository (`all_os/extensions/qtpdf/6112/qt6_6112_arm64_v8a`; aqt 3.3.0 does not list it for Android) | `libQt6Pdf_arm64-v8a.so` 4.53 MB (2.09 MB deflated) | the system's `android.graphics.pdf.PdfRenderer` (API 21+, min SDK 28) through JNI: no library |
+| AppImage x86_64 / aarch64 | aqt `-m qtpdf` | `libQt6Pdf.so.6.11.2` 4.51 MB (archive 2.1 MB) | Qt PDF |
+| Windows | `install-qt-action` `modules: qtpdf` | `Qt6Pdf.dll` ≈ 5 MB (archive 5.2 MB) | Qt PDF |
+| CI Linux (ASan) | `install-qt-action` `modules: qtpdf` | — | Qt PDF (`tst_pdfpages` under the sanitizers) |
+| Nix | nixpkgs has Qt PDF only inside `qt6.qtwebengine` (closure +615 MiB) | poppler-qt6 (`kdePackages.poppler` 26.09.0, GPL-2.0-or-later): closure +26 MiB | poppler-qt6 |
+| browser | Qt's repository has no `qtpdf` for WebAssembly; pdf.js would add ≥ 2 MB and a JavaScript bridge | — | none: pictures only (drawings on PDF pages made elsewhere show, their pixels are in the file) |
+
+Measured after the change (the feature's whole cost, not only the renderer):
+
+| | before (`sweep2` 64d0380) | after | change |
+|---|---:|---:|---:|
+| APK arm64 release (`android.yml`, GitHub Actions, the same day) | 80 818 249 B | 81 195 081 B | +376 832 B (+0.47 %) |
+| … download (every entry deflated, `size-report.py`) | 26.33 MB | 26.43 MB | +0.10 MB |
+| … `libbrulion` / `classes.dex` | 31.26 MB / 493.19 KB | 31.60 MB / 496.63 KB | +0.34 MB / +3.4 KB (`PdfPages.kt`) |
+| Nix closure, aarch64 (`nix path-info -r` of the package's Qt inputs with and without poppler-qt6) | — | +25.99 MiB | poppler-qt6 6.46, poppler-data 12.38, nss 4.49, openjpeg 1.64, lcms2 0.51, nspr 0.50 MiB |
+
+**Saving a drawing with a backdrop.** The raster is in the file twice (the scene's `files` and the
+picture, as excalidraw.com's "Embed scene" export): every autosave base64-encodes and deflates it
+again. `tst_drawingcanvas saveTimeWithBackdrop` logs `toSvg` of 500 strokes on a 2.5 MB PNG
+backdrop and fails only above 1 s in a Release build; the backdrop is at most 4 MB
+(`drawing::MaxBackdropBytes`, shrunk when larger), so the autosave stays bounded. Memory: the
+editor keeps the decoded backdrop (2400 × 1350: 13 MB) and, once shown dark, its dark twin; the
+previews decode it at the size they show it.
 
 ### Budgets
 
