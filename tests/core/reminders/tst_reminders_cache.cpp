@@ -11,6 +11,7 @@
 #include <QTest>
 
 #include <algorithm>
+#include <ctime>
 
 using namespace brulion;
 using namespace remtest;
