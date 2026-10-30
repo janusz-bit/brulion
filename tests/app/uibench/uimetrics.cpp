@@ -1179,7 +1179,9 @@ QList<LintFailure> lint(const LayoutDump &dump, const QImage &png, Device device
                         const QByteArray &allow, QString *error)
 {
     struct Allowed {
-        QString screen, type, text, name;
+        QString screen, kind, type, text, name;
+        int count = -1; ///< failures it excuses in one shot, -1 = any number
+        int used = 0;
     };
     QList<Allowed> allowed;
     if (!allow.trimmed().isEmpty()) {
@@ -1197,27 +1199,37 @@ QList<LintFailure> lint(const LayoutDump &dump, const QImage &png, Device device
                     *error = u"allow list: every entry needs a reason"_s;
                 return {};
             }
-            allowed.append({ o.value(u"screen"_s).toString(), o.value(u"type"_s).toString(), o.value(u"text"_s).toString(),
-                             o.value(u"name"_s).toString() });
+            Allowed a{ o.value(u"screen"_s).toString(), o.value(u"kind"_s).toString(), o.value(u"type"_s).toString(),
+                       o.value(u"text"_s).toString(), o.value(u"name"_s).toString(), o.value(u"count"_s).toInt(-1) };
+            if (a.type.isEmpty() && a.text.isEmpty() && a.name.isEmpty()) {
+                if (error)
+                    *error = u"allow list: an entry needs a type, a text or a name"_s;
+                return {};
+            }
+            allowed.append(a);
         }
     }
-    auto excused = [&](const QString &type, const QString &text, const QString &name) {
-        return std::any_of(allowed.cbegin(), allowed.cend(), [&](const Allowed &a) {
-            return (a.screen.isEmpty() || a.screen == u"*" || a.screen == screen) && (a.type.isEmpty() || a.type == type)
-                && (a.text.isEmpty() || text.startsWith(a.text)) && (a.name.isEmpty() || a.name == name)
-                && !(a.text.isEmpty() && a.name.isEmpty() && a.type.isEmpty());
-        });
+    auto excused = [&](const QString &kind, const QString &type, const QString &text, const QString &name) {
+        for (Allowed &a : allowed) {
+            if ((a.screen.isEmpty() || a.screen == u"*" || a.screen == screen) && (a.kind.isEmpty() || a.kind == kind)
+                && (a.type.isEmpty() || a.type == type) && (a.text.isEmpty() || text.startsWith(a.text))
+                && (a.name.isEmpty() || a.name == name) && (a.count < 0 || a.used < a.count)) {
+                ++a.used;
+                return true;
+            }
+        }
+        return false;
     };
     QList<LintFailure> out;
     for (const TextContrast &c : textContrast(dump, png)) {
-        if (c.pass || excused(c.type, c.text, c.name))
+        if (c.pass || excused(u"contrast"_s, c.type, c.text, c.name))
             continue;
         out.append({ u"contrast"_s, c.type, c.text, c.name,
                      u"%1:1 < %2:1 (%3 on %4, %5 px)"_s.arg(c.ratio, 0, 'f', 2).arg(c.required, 0, 'f', 1)
                          .arg(toHex(c.fg), toHex(c.bg)).arg(c.px) });
     }
     for (const TargetCheck &t : targetSizes(dump, device)) {
-        if (t.pass || excused(t.type, t.label, t.label))
+        if (t.pass || excused(u"target"_s, t.type, t.label, t.label))
             continue;
         out.append({ u"target"_s, t.type, t.label, QString(), t.reason });
     }

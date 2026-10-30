@@ -174,8 +174,10 @@ struct LintFailure {
     QString type, text, name;
     QString detail;
 };
-/// The accessibility failures of one shot that `allow` (JSON array of {screen, type, text|name,
-/// reason}) does not excuse.
+/// The accessibility failures of one shot that `allow` does not excuse: a JSON array of {screen
+/// ("" or "*": any), kind ("contrast" | "target"; "": both), type, text (a prefix of the text or the
+/// target's label), name, count (how many failures of the shot it excuses; none: any number),
+/// reason (required)}; an entry needs a type, a text or a name.
 QList<LintFailure> lint(const LayoutDump &dump, const QImage &png, Device device, const QString &screen,
                         const QByteArray &allow, QString *error);
 

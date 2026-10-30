@@ -1,1 +1,16 @@
-[]
+[
+  {"screen": "daily", "kind": "target", "type": "Item", "text": "Przybliż blok", "count": 12,
+   "reason": "Round-0 baseline: the bullet's zoom handle (20×22 on the desktop next to the task box, 28×44 on phones). The UI loop enlarges it or accepts it."},
+  {"screen": "daily", "kind": "target", "type": "Item", "count": 8,
+   "reason": "Round-0 baseline: the rows of rendered blocks (24 px tall) and a 12-px band in the journal on phones (tap to edit)."},
+  {"screen": "daily", "kind": "target", "type": "Text", "count": 2,
+   "reason": "Round-0 baseline: the journal's day titles (29 px tall on phones) open the day as a page."},
+  {"screen": "daily", "kind": "contrast", "type": "Text", "text": "Obliczenia", "count": 1,
+   "reason": "Round-0 baseline: the calculation block's faint caption (11 px, 3.4:1)."},
+  {"screen": "doc", "kind": "target", "type": "Text", "text": "1.", "count": 1,
+   "reason": "Round-0 baseline: a numbered list's number (14×28) on phones."},
+  {"screen": "doc", "kind": "target", "type": "Item", "count": 2,
+   "reason": "Round-0 baseline: rendered blocks shorter than 44 px (a callout, a heading) on phones."},
+  {"screen": "settings", "kind": "target", "type": "AbstractButton", "count": 11,
+   "reason": "Round-0 baseline: the appearance settings' segmented choices are 38 px tall on phones."}
+]

@@ -637,6 +637,31 @@ void TestUiBenchMetrics::lintAllow()
     QCOMPARE(lint(d, img, Device::Desktop, u"settings"_s, allow, &error).size(), 1);
     lint(d, img, Device::Desktop, u"doc"_s, R"([{"screen": "doc", "type": "BText"}])", &error);
     QVERIFY(error.contains(u"reason"));
+    error.clear();
+    lint(d, img, Device::Desktop, u"doc"_s, R"([{"screen": "doc", "reason": "x"}])", &error);
+    QVERIFY(error.contains(u"type"));
+    error.clear();
+
+    // `count`: a baseline of known failures — one more is caught; `kind` keeps targets apart.
+    TextItem second = t;
+    second.rect = QRectF(10, 32, 150, 20);
+    second.text = u"Słaby drugi"_s;
+    d.texts.append(second);
+    Target small;
+    small.rect = QRectF(150, 5, 10, 10);
+    small.type = u"BText"_s;
+    small.label = u"Słaby"_s;
+    d.targets.append(small);
+    const QByteArray one = R"([{"screen": "doc", "kind": "contrast", "type": "BText", "text": "Słaby", "count": 1, "reason": "x"}])";
+    const QList<LintFailure> left = lint(d, img, Device::Phone, u"doc"_s, one, &error);
+    QVERIFY(error.isEmpty());
+    QCOMPARE(left.size(), 2);
+    QCOMPARE(left.at(0).kind, u"contrast"_s);
+    QCOMPARE(left.at(0).text, u"Słaby drugi"_s);
+    QCOMPARE(left.at(1).kind, u"target"_s);
+    const QByteArray two = R"([{"screen": "*", "kind": "contrast", "type": "BText", "count": 2, "reason": "x"},
+                              {"kind": "target", "text": "Sła", "reason": "x"}])";
+    QCOMPARE(lint(d, img, Device::Phone, u"doc"_s, two, &error).size(), 0);
 }
 
 void TestUiBenchMetrics::cli()
