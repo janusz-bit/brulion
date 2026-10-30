@@ -208,10 +208,13 @@ Pozostałe opcje:
   oznaczona do testów (sessionStorage `brulion-selftest`), bez `showOpenFilePicker` /
   `showSaveFilePicker` (Qt bierze wtedy `<input type=file>` i zwykłe pobranie, które ma każda
   przeglądarka), `?selftest=pickfiles,savefile`. Prawdziwe kliknięcie otwiera okno wyboru, które
-  musi przyjmować kilka plików (DevTools je przechwytuje), i dostaje cztery: „Zażółć gęślą
-  jaźń.md” (UTF-8, wiersze CRLF), pusty `pusty.md`, `duży.md` 2 MB ponad testowy limit 1 MB i
-  `notatka.txt`; aplikacja (`window.brulionPickSelfTest`) musi podać je po kolei z rozmiarami
-  i SHA-256 — duży nieprzeczytany. Następne kliknięcie pobiera „Zażółć.md” z bajtami „ąę\n”
+  musi przyjmować kilka plików (DevTools je przechwytuje), i dostaje siedem: „Zażółć gęślą
+  jaźń.md” (UTF-8, wiersze CRLF), pusty `pusty.md`, `duży.md` 2 MiB ponad testowy limit 1 MiB na
+  plik, `notatka.txt`, „pół — ą.md” równo 1 MiB, „drugie pół.md” 600 KiB, które przekroczyłoby
+  testowy limit 1,5 MiB łącznie, i mały „po limicie.txt”; aplikacja
+  (`window.brulionPickSelfTest`) musi podać je po kolei z rozmiarami i SHA-256 — duży
+  nieprzeczytany, a od pliku ponad sumę żaden (jak `FileGatherer` na komputerze). Następne
+  kliknięcie pobiera „Zażółć.md” z bajtami „ąę\n”
   (`Browser.setDownloadBehavior`). CI uruchamia go osobno (profil `profile-pick`).
 * `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
   zrzut ekranu ładowania (pasek postępu).
@@ -800,7 +803,10 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
 * Pliki od/do użytkownika: własny wybór plików przeglądarki (`platform/wasm/wasmfiles.h` nad
   prywatnym `QWasmLocalFileAccess` z Qt; `showOpenFilePicker`, a gdzie go nie ma — `<input
   type=file>`): kilka plików naraz przy imporcie i przy „Obraz…”, pliki ponad limit (jak na
-  komputerze: 512 MB importu, 200 MB obrazu) pominięte bez czytania; zapis — okno zapisu
+  komputerze: 512 MB importu, 200 MB obrazu) pominięte bez czytania, a czytanie kończy się na
+  pliku, z którym wybrane przekroczyłyby sumę (import: 1,5 GB jak na komputerze, obrazy: 512 MB
+  — przeglądarka trzyma wszystkie wczytane pliki w pamięci, zanim trafią do notatnika;
+  `PickCollector`, `platform/pickedfiles.h`, sprawdzany na każdej platformie); zapis — okno zapisu
   przeglądarki (`showSaveFilePicker`, Chromium na https) albo zwykłe pobranie. Bez Qt Widgets
   (`QFileDialog::getOpenFileContent()` ich wymaga), a własne okno plików Qt dla przeglądarki
   daje adresy `weblocalfile:`, których jednowątkowy build nie przeczyta (potrzebny JSPI albo

@@ -134,7 +134,7 @@ Import, eksport („Zapisz…”), „Obraz…”, „Plik dźwiękowy…” i w
 okno wyboru plików pulpitu, jeśli motyw platformy Qt je ma: GNOME (motyw `gtk3`, który Qt wybiera
 tam sam) — okno GTK, KDE Plasma (`plasma-integration`) — okno KDE. Na innych pulpitach (sway,
 Hyprland, i3…) Qt nie ma takiego motywu i Brulion pokazuje własne okno plików Qt (w kolorach
-Brulionu, także ciemne). Okno pulpitu przez **xdg-desktop-portal** dostaniesz, ustawiając
+Brulionu: tło, tekst i akcent jak w aplikacji, także ciemne — niezależnie od stylu Qt pulpitu). Okno pulpitu przez **xdg-desktop-portal** dostaniesz, ustawiając
 
 ```sh
 QT_QPA_PLATFORMTHEME=xdgdesktopportal brulion

@@ -311,6 +311,7 @@ Item {
             title: qsTr("Insert a picture")
             fileMode: FilePicker.OpenFiles
             dark: Theme.dark
+            colors: Theme.colors
             nameFilters: root.controller ? root.controller.imageNameFilters : []
             onAccepted: {
                 const r = root.blockRow()

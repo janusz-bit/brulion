@@ -82,6 +82,10 @@
 
 class QUndoStack;
 
+namespace brulion::platform {
+struct PickedFile; // pickedfiles.h (brulion_platform): one file of the browser's picker
+}
+
 namespace brulion {
 class EditorHost;
 }
@@ -740,9 +744,17 @@ public:
     /// saved first.
     Q_INVOKABLE void openDrawing(const QString &path);
     /// Browser (WebAssembly): the browser's file picker for pictures (several at once,
-    /// platform/wasm/wasmfiles.h), inserted asynchronously like insertFiles() into the row
-    /// (tracked while the picker is open). False elsewhere — QML uses FilePicker and insertFiles().
+    /// platform/wasm/wasmfiles.h; 200 MB per picture, 512 MB in all, checked before reading),
+    /// inserted asynchronously like insertFiles() by pictureReceiver(). False elsewhere — QML uses
+    /// FilePicker and insertFiles().
     Q_INVOKABLE bool pickImageInBrowser(int row, int from, int to);
+    /// What a browser pick of pictures into `row` (`from`, `to` as for insertFiles()) does with the
+    /// picked files (pickImageInBrowser(); tests): the block is tracked from now on, so they land
+    /// where it is then — after the last block when it is gone; each read one is stored as an
+    /// attachment, each skipped (too large, over the total), empty or failing one is
+    /// attachmentFailed() and the others still come; then one insertEmbeds() of all stored. An
+    /// empty list (cancelled) inserts nothing.
+    std::function<void(const QList<platform::PickedFile> &)> pictureReceiver(int row, int from, int to);
     /// The embed for an attachment at vault path `path`: "![[name]]" when the name finds it,
     /// else "![[path]]".
     Q_INVOKABLE QString embedFor(const QString &path) const;

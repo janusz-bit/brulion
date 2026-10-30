@@ -25,9 +25,10 @@ namespace brulion::platform::wasm {
 /// user's gesture. `done` gets the chosen files in order once every one is read; an empty list
 /// when the picker was cancelled — and never at all when the browser reports no cancel (an
 /// <input> closed without a choice in an older browser): callers keep no state waiting for it.
-/// Files above `maxBytes` (< 0: no limit) come back with tooLarge set and no data (never read).
-/// `nameFilters`: Qt's filter syntax ("Notatki (*.md *.txt)").
-void openFiles(const QStringList &nameFilters, bool multiple, qint64 maxBytes,
+/// Files above `maxFileBytes` come back with tooLarge set and no data (never read); reading stops
+/// at the file that would take the read ones above `maxTotalBytes` (it and the rest: overTotal) —
+/// PickCollector (< 0: no limit). `nameFilters`: Qt's filter syntax ("Notatki (*.md *.txt)").
+void openFiles(const QStringList &nameFilters, bool multiple, qint64 maxFileBytes, qint64 maxTotalBytes,
                std::function<void(const QList<PickedFile> &files)> done);
 
 /// The browser's save picker where it has one (showSaveFilePicker: Chromium on https), else a

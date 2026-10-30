@@ -153,7 +153,8 @@ jobs:
           node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile "$RUNNER_TEMP/profile-share" \
             --loads 1 --share --screenshot "$RUNNER_TEMP/shots/share.png"
           # The browser's own file picker and download without Qt Widgets: several files at once
-          # (one above the limit never read) and a file saved as a download.
+          # (one above the limit never read, the reading stopped at the total) and a file saved as
+          # a download.
           node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile "$RUNNER_TEMP/profile-pick" \
             --loads 1 --pick-files --screenshot "$RUNNER_TEMP/shots/pick.png"
           kill "$server"

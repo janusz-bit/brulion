@@ -39,10 +39,11 @@ void runNotifierSelfTest();
 
 /// The browser's file picker and download (wasmfiles.h), `?selftest=pickfiles,savefile` in a test
 /// tab (scripts/wasm-smoke.mjs --pick-files). `pick`: at the first mouse button release (the
-/// user's gesture browsers want) openFiles({"Notatki (*.md *.txt)"}, several files, 1 MB) and
-/// `window.brulionPickSelfTest` `{cancelled, files: [{name, size, tooLarge, read, sha256}]}` once
-/// they are read. `save` (after the pick, if both): at the next release saveFile("ąę\n",
-/// "Zażółć.md") and `window.brulionSaveSelfTest` `{started: true}`.
+/// user's gesture browsers want) openFiles({"Notatki (*.md *.txt)"}, several files, 1 MiB per
+/// file, 1.5 MiB in all) and `window.brulionPickSelfTest`
+/// `{cancelled, files: [{name, size, tooLarge, overTotal, read, sha256}]}` once they are read.
+/// `save` (after the pick, if both): at the next release saveFile("ąę\n", "Zażółć.md") and
+/// `window.brulionSaveSelfTest` `{started: true}`.
 void runFilePickerSelfTest(bool pick, bool save);
 
 } // namespace brulion::platform

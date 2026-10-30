@@ -407,6 +407,7 @@ ColumnLayout {
         title: qsTr("Save the export")
         fileMode: FilePicker.SaveFile
         dark: Theme.dark
+        colors: Theme.colors
         currentFolder: exporterObject.defaultSaveFolder
         // selectedFile: set by save()
         nameFilters: {

@@ -435,6 +435,7 @@ Rectangle {
         title: qsTr("Choose the notebook folder")
         fileMode: FilePicker.OpenFolder
         dark: Theme.dark
+        colors: Theme.colors
         onAccepted: pathField.text = AppController.localPath(selectedFolder)
     }
 }

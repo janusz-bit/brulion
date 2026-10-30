@@ -454,6 +454,7 @@ FocusScope {
         title: qsTr("Save the event log")
         fileMode: FilePicker.SaveFile
         dark: Theme.dark
+        colors: Theme.colors
         nameFilters: [qsTr("Text files (*.txt)"), qsTr("All files (*)")]
         onAccepted: Logs.saveTo(selectedFile)
     }

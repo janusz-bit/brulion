@@ -93,6 +93,10 @@ endif()
 # DatesHelper, TextHelper and DiffHelper live in the GUI-free static library brulion_ui_helpers
 # (src/app/ui/CMakeLists.txt, unit-tested in tests/app) and are registered here by
 # ui/qmlforeign.h; DevTools and DeviceInfo are app-only.
+# Qt6::GuiPrivate (FilePicker's QPA dialog helper, brulion_ui_files) also known in this directory:
+# the app's deferred finalizer walks the links of brulion_ui_files here ("GuiPrivate … not declared").
+set(QT_NO_PRIVATE_MODULE_WARNING ON)
+find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 add_subdirectory(ui)
 # The scroll probe (ui/scrollprobe.h, `--scroll-probe`): a measuring tool for developers, ~160 KB
 # of code, nothing at run time unless asked for. Left out of the Android and browser builds that

@@ -2,10 +2,12 @@
 // The pure helpers (the default suffix, the name filters) data-driven; the picker's life with fake
 // backends (what each mode asks for, accept / cancel / reject, signals in order, open while open,
 // destroyed while open, the first backend that shows wins, none at all); the parent window from
-// the QQuickItem it belongs to; the QML API (the enum, list<url>); and, in desktop builds, the
-// widget fallback (QFileDialog) offscreen: picked for real, cancelled, the dark palette.
+// the QQuickItem it belongs to; the QML API (the enum, list<url>); the widget fallback's palette
+// from Brulion's colours (malformed ones too); and, in desktop builds, the widget fallback
+// (QFileDialog) offscreen: picked for real, cancelled, Fusion in the app's light and dark colours.
 #include "filepicker.h"
 #include "filepicker_p.h"
+#include "themepalette.h"
 
 #include <QDir>
 #include <QFile>
@@ -25,6 +27,7 @@
 #include <QApplication>
 #include <QFileDialog>
 #include <QLineEdit>
+#include <QStyle>
 #else
 #include <QGuiApplication>
 #endif
@@ -88,6 +91,12 @@ struct Fakes {
 QUrl local(const QString &path)
 {
     return QUrl::fromLocalFile(path);
+}
+
+/// Brulion's colour `key` ("#rrggbb" in `colors`) as a QColor.
+QColor themeColor(const QVariantMap &colors, const QString &key)
+{
+    return QColor::fromString(colors.value(key).toString());
 }
 
 } // namespace
@@ -174,6 +183,8 @@ private Q_SLOTS:
         picker.setCurrentFolder(local(u"/home/ja/Dokumenty"_s));
         picker.setSelectedFile(local(u"/home/ja/Dokumenty/Źródła.md"_s));
         picker.setDark(true);
+        const QVariantMap colors = brulion::ui::paletteMap(true, u"paper", u"black", u"teal", {});
+        picker.setColors(colors);
         picker.open();
         QVERIFY(fakes.last());
         const FilePickerRequest r = fakes.last()->lastRequest;
@@ -185,6 +196,74 @@ private Q_SLOTS:
         // The suggested file only for saving (Android's EXTRA_TITLE).
         QCOMPARE(r.initialFile, mode == FilePicker::SaveFile ? local(u"/home/ja/Dokumenty/Źródła.md"_s) : QUrl());
         QVERIFY(r.dark);
+        QCOMPARE(r.colors, colors);
+    }
+
+    /// The fallback dialog's palette: Brulion's colours by role; each missing or malformed one
+    /// (settings and QML pass anything) from ThemePalette's defaults of the mode.
+    void widgetDialogPalette_data()
+    {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<QVariantMap>("colors");
+        QTest::addColumn<QColor>("window");
+        QTest::addColumn<QColor>("base");
+        QTest::addColumn<QColor>("text");
+        QTest::addColumn<QColor>("highlight");
+
+        const QVariantMap light = brulion::ui::paletteMap(false, {}, {}, {}, {});
+        const QVariantMap dark = brulion::ui::paletteMap(true, {}, {}, {}, {});
+        // Defaults: paper and slate (Theme.qml's first look), the logo's red.
+        QTest::newRow("jasny, domyślne") << false << QVariantMap() << QColor(0xfbf7ee) << QColor(0xfffdf7)
+                                         << themeColor(light, u"fg"_s) << themeColor(light, u"accentSolid"_s);
+        QTest::newRow("ciemny, domyślne") << true << QVariantMap() << QColor(0x1c2130) << QColor(0x232a3b)
+                                          << themeColor(dark, u"fg"_s) << themeColor(dark, u"accentSolid"_s);
+        const QVariantMap oled = brulion::ui::paletteMap(true, {}, u"black", u"custom", u"#13958b");
+        QTest::newRow("ciemny OLED, własny akcent") << true << oled << QColor(0, 0, 0) << QColor(0x111318)
+                                                    << themeColor(oled, u"fg"_s) << themeColor(oled, u"accentSolid"_s);
+        const QVariantMap white = brulion::ui::paletteMap(false, u"white", {}, u"violet", {});
+        QTest::newRow("jasny biały, fioletowy") << false << white << QColor(0xffffff) << QColor(0xffffff)
+                                                << themeColor(white, u"fg"_s) << themeColor(white, u"accentSolid"_s);
+        // The colours of the other mode are what they are: the map wins over `dark`.
+        QTest::newRow("mapa jasna, dark = true") << true << light << QColor(0xfbf7ee) << QColor(0xfffdf7)
+                                                 << themeColor(light, u"fg"_s) << themeColor(light, u"accentSolid"_s);
+        QVariantMap malformed{{u"bg"_s, u"czerwony"_s},
+                              {u"bgElevated"_s, u"#12"_s},
+                              {u"fg"_s, 42},
+                              {u"accentSolid"_s, u" #ABC "_s},
+                              {u"accent"_s, QVariant()}};
+        QTest::newRow("błędne wpisy") << false << malformed << QColor(0xfbf7ee) << QColor(0xfffdf7)
+                                      << themeColor(light, u"fg"_s) << QColor(0xaabbcc);
+        const QVariantMap qmlColors{
+                {u"bg"_s, QColor(0x102030)}, {u"bgElevated"_s, QColor(0x20, 0x30, 0x40, 0x80)}, {u"fg"_s, QColor()}};
+        QTest::newRow("kolory QML") << true << qmlColors << QColor(0x102030) << QColor(0x203040)
+                                    << themeColor(dark, u"fg"_s) << themeColor(dark, u"accentSolid"_s);
+    }
+    void widgetDialogPalette()
+    {
+        QFETCH(bool, dark);
+        QFETCH(QVariantMap, colors);
+        QFETCH(QColor, window);
+        QFETCH(QColor, base);
+        QFETCH(QColor, text);
+        QFETCH(QColor, highlight);
+        const QPalette p = brulion::ui::widgetDialogPalette(dark, colors);
+        for (const auto group : {QPalette::Active, QPalette::Inactive}) {
+            QCOMPARE(p.color(group, QPalette::Window), window);
+            QCOMPARE(p.color(group, QPalette::Base), base);
+            QCOMPARE(p.color(group, QPalette::Text), text);
+            QCOMPARE(p.color(group, QPalette::WindowText), text);
+            QCOMPARE(p.color(group, QPalette::ButtonText), text);
+            QCOMPARE(p.color(group, QPalette::Highlight), highlight);
+            QCOMPARE(p.color(group, QPalette::HighlightedText), QColor(Qt::white));
+        }
+        // The highlight keeps white text readable (accentSolid: 4.5:1) where the colours are Brulion's.
+        if (qstrcmp(QTest::currentDataTag(), "błędne wpisy") != 0) {
+            const brulion::ui::Rgb h{highlight.red(), highlight.green(), highlight.blue()};
+            QVERIFY2(brulion::ui::contrast(h, {255, 255, 255}) >= 4.5, qPrintable(highlight.name()));
+        }
+        // Disabled texts are faint, not the normal text colour.
+        QVERIFY(p.color(QPalette::Disabled, QPalette::Text) != text);
+        QCOMPARE(p.color(QPalette::Disabled, QPalette::Text), p.color(QPalette::Active, QPalette::PlaceholderText));
     }
 
     void acceptAndReject_data()
@@ -392,6 +471,7 @@ FilePicker {
     nameFilters: ["Pliki Markdown (*.md)"]
     defaultSuffix: "md"
     dark: true
+    colors: ({ bg: "#1c2130", accentSolid: "#b23c31" })
     onAccepted: { acceptedCount++; first = selectedFiles[0] }
 })qml",
                           QUrl(u"qrc:/tst_filepicker.qml"_s));
@@ -404,6 +484,10 @@ FilePicker {
         QMetaObject::invokeMethod(picker, "open");
         QVERIFY(picker->property("visible").toBool());
         QCOMPARE(fakes.last()->lastRequest.title, u"Zapisz stronę jako"_s);
+        // A JavaScript object (Theme.colors) arrives as a map of colour strings.
+        QCOMPARE(fakes.last()->lastRequest.colors.value(u"bg"_s).toString(), u"#1c2130"_s);
+        QCOMPARE(brulion::ui::widgetDialogPalette(true, fakes.last()->lastRequest.colors).color(QPalette::Highlight),
+                 QColor(0xb23c31));
         Q_EMIT fakes.last()->accepted({local(u"/tmp/Źródła"_s)});
         QCOMPARE(object->property("acceptedCount").toInt(), 1);
         QCOMPARE(object->property("first").toUrl(), local(u"/tmp/Źródła.md"_s));
@@ -430,7 +514,7 @@ FilePicker {
         picker.setTitle(u"Wybierz plik dźwiękowy"_s);
         picker.setNameFilters({u"Pliki dźwiękowe (*.oga *.ogg *.wav)"_s, u"Wszystkie pliki (*)"_s});
         picker.setCurrentFolder(QUrl::fromLocalFile(dir.path()));
-        picker.setDark(true);
+        picker.setDark(true); // no colours given: Brulion's dark defaults (slate)
         QSignalSpy accepted(&picker, &FilePicker::accepted);
         picker.open();
         QVERIFY(picker.isVisible());
@@ -442,7 +526,17 @@ FilePicker {
         QVERIFY(dialog->testOption(QFileDialog::DontUseNativeDialog));
         QCOMPARE(dialog->nameFilters().size(), 2);
         QCOMPARE(dialog->directory().canonicalPath(), QDir(dir.path()).canonicalPath());
-        QCOMPARE(dialog->palette().color(QPalette::Window), QColor(0x2b, 0x2b, 0x2b));
+        QCOMPARE(dialog->palette().color(QPalette::Window), QColor(0x1c2130));
+        QCOMPARE(dialog->palette().color(QPalette::Base), QColor(0x232a3b));
+        // Fusion for the dialog and the widgets in it (the desktop's style may ignore palettes).
+        QVERIFY(dialog->style());
+        QCOMPARE(dialog->style()->name().toLower(), u"fusion"_s);
+        const QList<QLineEdit *> edits = dialog->findChildren<QLineEdit *>();
+        QVERIFY(!edits.isEmpty());
+        for (QLineEdit *edit : edits) {
+            QCOMPARE(edit->style(), dialog->style());
+            QCOMPARE(edit->palette().color(QPalette::Base), QColor(0x232a3b));
+        }
         dialog->selectFile(file);
         static_cast<QDialog *>(dialog)->accept(); // QFileDialog::accept() is protected
         QCOMPARE(accepted.size(), 1);
@@ -454,12 +548,17 @@ FilePicker {
         picker.setFileMode(FilePicker::SaveFile);
         picker.setDefaultSuffix(u"md"_s);
         picker.setDark(false);
+        // Theme.colors of a light app with a custom accent: the paper and that accent.
+        const QVariantMap colors = brulion::ui::paletteMap(false, u"paper", u"slate", u"custom", u"#2e9a5a");
+        picker.setColors(colors);
         picker.setSelectedFile(QUrl::fromLocalFile(dir.filePath(u"Notatka"_s)));
         picker.open();
         dialog = shownFileDialog();
         QVERIFY(dialog);
         QCOMPARE(dialog->acceptMode(), QFileDialog::AcceptSave);
-        QVERIFY(dialog->palette().color(QPalette::Window) != QColor(0x2b, 0x2b, 0x2b));
+        QCOMPARE(dialog->palette().color(QPalette::Window), QColor(0xfbf7ee));
+        QCOMPARE(dialog->palette().color(QPalette::Highlight), themeColor(colors, u"accentSolid"_s));
+        QCOMPARE(dialog->style()->name().toLower(), u"fusion"_s);
         static_cast<QDialog *>(dialog)->accept(); // QFileDialog::accept() is protected
         QCOMPARE(accepted.size(), 2);
         QCOMPARE(picker.selectedFile().fileName(), u"Notatka.md"_s);

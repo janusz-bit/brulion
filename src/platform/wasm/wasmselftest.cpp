@@ -156,17 +156,19 @@ void runFilePickerSelfTest(bool pick, bool save)
         return;
     }
     new OnNextRelease([save] {
-        wasm::openFiles({ u"Notatki (*.md *.txt)"_s }, true, 1024 * 1024, [save](const QList<PickedFile> &picked) {
+        constexpr qint64 MiB = 1024 * 1024;
+        wasm::openFiles({ u"Notatki (*.md *.txt)"_s }, true, MiB, MiB + MiB / 2, [save](const QList<PickedFile> &picked) {
             QJsonArray files;
             for (const PickedFile &f : picked) {
                 files.append(QJsonObject{
                         {u"name"_s, f.name},
                         {u"size"_s, f.size},
                         {u"tooLarge"_s, f.tooLarge},
+                        {u"overTotal"_s, f.overTotal},
                         {u"read"_s, qint64(f.data.size())},
-                        {u"sha256"_s, f.tooLarge ? QString()
-                                                 : QString::fromLatin1(QCryptographicHash::hash(
-                                                           f.data, QCryptographicHash::Sha256).toHex())},
+                        {u"sha256"_s, !f.isRead() ? QString()
+                                                  : QString::fromLatin1(QCryptographicHash::hash(
+                                                            f.data, QCryptographicHash::Sha256).toHex())},
                 });
             }
             publishSelfTestResult("brulionPickSelfTest",

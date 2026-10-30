@@ -2,7 +2,9 @@
 
 #include "filepicker_p.h"
 #include "log/categories.h"
+#include "themepalette.h"
 
+#include <QColor>
 #include <QCoreApplication>
 #include <QDir>
 #include <QQuickItem>
@@ -18,7 +20,8 @@
 #ifdef BRULION_FILEPICKER_WIDGETS
 #include <QApplication>
 #include <QFileDialog>
-#include <QPalette>
+#include <QStyle>
+#include <QStyleFactory>
 #endif
 
 using namespace Qt::StringLiterals;
@@ -137,7 +140,7 @@ private:
 #ifdef BRULION_FILEPICKER_WIDGETS
 
 /// Qt Widgets' own file dialog where the platform theme has none (a Linux desktop without a GTK,
-/// KDE or portal theme; offscreen). Its colours follow the app's theme.
+/// KDE or portal theme; offscreen). Fusion in the app's colours (widgetDialogPalette()).
 class WidgetFilePicker final : public FilePickerBackend {
 public:
     ~WidgetFilePicker() override { hide(); }
@@ -167,8 +170,15 @@ public:
             dialog->setDirectoryUrl(request.folder);
         if (!request.initialFile.isEmpty())
             dialog->selectUrl(request.initialFile);
-        if (request.dark)
-            dialog->setPalette(darkPalette());
+        // The style of the dialog and of every widget in it (a widget's style does not reach its
+        // children): the desktop's style may draw its own colours over the palette.
+        if (QStyle *fusion = fusionStyle()) {
+            dialog->setStyle(fusion);
+            const QList<QWidget *> children = dialog->findChildren<QWidget *>();
+            for (QWidget *child : children)
+                child->setStyle(fusion);
+        }
+        dialog->setPalette(widgetDialogPalette(request.dark, request.colors));
         dialog->setWindowModality(parent ? Qt::WindowModal : Qt::ApplicationModal);
         if (parent) {
             dialog->winId(); // creates the native window, so that it can have a transient parent
@@ -200,33 +210,16 @@ public:
     }
 
 private:
-    static QPalette darkPalette()
+    /// One Fusion style for every fallback dialog (a widget does not own its style), the app's.
+    static QStyle *fusionStyle()
     {
-        QPalette p;
-        const QColor text(0xe6, 0xe6, 0xe6);
-        const QColor disabled(0x7a, 0x7a, 0x7a);
-        p.setColor(QPalette::Window, QColor(0x2b, 0x2b, 0x2b));
-        p.setColor(QPalette::WindowText, text);
-        p.setColor(QPalette::Base, QColor(0x1e, 0x1e, 0x1e));
-        p.setColor(QPalette::AlternateBase, QColor(0x26, 0x26, 0x26));
-        p.setColor(QPalette::Text, text);
-        p.setColor(QPalette::PlaceholderText, QColor(0x8a, 0x8a, 0x8a));
-        p.setColor(QPalette::Button, QColor(0x35, 0x35, 0x35));
-        p.setColor(QPalette::ButtonText, text);
-        p.setColor(QPalette::BrightText, Qt::white);
-        p.setColor(QPalette::Highlight, QColor(0x3d, 0x7b, 0xd9));
-        p.setColor(QPalette::HighlightedText, Qt::white);
-        p.setColor(QPalette::Link, QColor(0x6e, 0xa8, 0xfe));
-        p.setColor(QPalette::ToolTipBase, QColor(0x35, 0x35, 0x35));
-        p.setColor(QPalette::ToolTipText, text);
-        p.setColor(QPalette::Light, QColor(0x45, 0x45, 0x45));
-        p.setColor(QPalette::Midlight, QColor(0x3a, 0x3a, 0x3a));
-        p.setColor(QPalette::Mid, QColor(0x30, 0x30, 0x30));
-        p.setColor(QPalette::Dark, QColor(0x1a, 0x1a, 0x1a));
-        p.setColor(QPalette::Shadow, QColor(0x10, 0x10, 0x10));
-        for (const auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
-            p.setColor(QPalette::Disabled, role, disabled);
-        return p;
+        static QPointer<QStyle> style;
+        if (!style) {
+            style = QStyleFactory::create(u"Fusion"_s);
+            if (style)
+                style->setParent(QCoreApplication::instance());
+        }
+        return style;
     }
 
     QPointer<QFileDialog> m_dialog;
@@ -256,6 +249,51 @@ std::unique_ptr<FilePickerBackend> createNativeFilePicker()
     }
     return std::make_unique<NativeFilePicker>(fileHelper);
 #endif
+}
+
+QPalette widgetDialogPalette(bool dark, const QVariantMap &colors)
+{
+    const QVariantMap defaults = paletteMap(dark, {}, {}, {}, {});
+    const auto color = [&](const QString &key) {
+        const QVariant value = colors.value(key);
+        if (value.metaType() == QMetaType::fromType<QColor>()) {
+            if (const QColor c = value.value<QColor>(); c.isValid())
+                return QColor(c.rgb()); // opaque, as the palette's colours are
+        } else if (value.metaType() == QMetaType::fromType<QString>()) {
+            if (const auto rgb = parseColor(value.toString()))
+                return QColor(rgb->r, rgb->g, rgb->b);
+        }
+        const auto rgb = parseColor(defaults.value(key).toString());
+        return rgb ? QColor(rgb->r, rgb->g, rgb->b) : QColor(dark ? Qt::white : Qt::black);
+    };
+    const QColor fg = color(u"fg"_s);
+    const QColor faint = color(u"fgFaint"_s);
+    const QColor onAccent(Qt::white); // Theme.fgOnAccent; accentSolid keeps 4.5:1 under it
+    QPalette p;
+    p.setColor(QPalette::Window, color(u"bg"_s));
+    p.setColor(QPalette::WindowText, fg);
+    p.setColor(QPalette::Base, color(u"bgElevated"_s));
+    p.setColor(QPalette::AlternateBase, color(u"bgSunken"_s));
+    p.setColor(QPalette::Text, fg);
+    p.setColor(QPalette::PlaceholderText, faint);
+    p.setColor(QPalette::Button, color(u"bgElevated2"_s));
+    p.setColor(QPalette::ButtonText, fg);
+    p.setColor(QPalette::BrightText, onAccent);
+    p.setColor(QPalette::Highlight, color(u"accentSolid"_s));
+    p.setColor(QPalette::HighlightedText, onAccent);
+    p.setColor(QPalette::Accent, color(u"accent"_s));
+    p.setColor(QPalette::Link, color(u"link"_s));
+    p.setColor(QPalette::LinkVisited, color(u"link"_s));
+    p.setColor(QPalette::ToolTipBase, color(u"bgElevated2"_s));
+    p.setColor(QPalette::ToolTipText, fg);
+    p.setColor(QPalette::Light, color(u"bgElevated2"_s));
+    p.setColor(QPalette::Midlight, color(u"borderSubtle"_s));
+    p.setColor(QPalette::Mid, color(u"border"_s));
+    p.setColor(QPalette::Dark, color(u"borderStrong"_s));
+    p.setColor(QPalette::Shadow, color(u"borderControl"_s));
+    for (const auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
+        p.setColor(QPalette::Disabled, role, faint);
+    return p;
 }
 
 std::unique_ptr<FilePickerBackend> createWidgetFilePicker()
@@ -432,6 +470,14 @@ void FilePicker::setDark(bool dark)
     Q_EMIT optionsChanged();
 }
 
+void FilePicker::setColors(const QVariantMap &colors)
+{
+    if (m_colors == colors)
+        return;
+    m_colors = colors;
+    Q_EMIT optionsChanged();
+}
+
 QWindow *FilePicker::parentWindow() const
 {
     if (m_parentWindowSet)
@@ -460,6 +506,7 @@ FilePickerRequest FilePicker::request() const
     if (m_mode == SaveFile)
         r.initialFile = selectedFile();
     r.dark = m_dark;
+    r.colors = m_colors;
     return r;
 }
 

@@ -15,6 +15,7 @@
 #include <QLocale>
 #include <QRegularExpression>
 
+#include "pickedfiles.h"
 #ifdef Q_OS_WASM
 #include "wasm/wasmfiles.h"
 #endif
@@ -355,24 +356,36 @@ void ImportController::addPaths(const QStringList &paths)
 void ImportController::pickInBrowser()
 {
 #ifdef Q_OS_WASM
-    // Several files at once, as the desktop and Android pickers; the desktop's limit per file
-    // applies before a file is read (FileGatherer's texts).
+    // Several files at once, as the desktop and Android pickers; the gatherer's limits apply
+    // before a file is read.
     const QPointer<ImportController> self(this);
-    platform::wasm::openFiles(
-            nameFilters(), true, GatherLimits{}.maxFileBytes, [self](const QList<platform::PickedFile> &picked) {
-                if (!self || picked.isEmpty())
-                    return; // cancelled
-                QList<io::InputFile> files;
-                QStringList warnings;
-                for (const platform::PickedFile &f : picked) {
-                    if (f.tooLarge)
-                        warnings.append(FileGatherer::tooLargeWarning(f.name, f.size));
-                    else
-                        files.append(io::InputFile{f.name, f.data});
-                }
-                self->setInput(files, FileGatherer::sourceNameFor(int(picked.size()), picked.first().name), warnings);
-            });
+    const GatherLimits &limits = m_gatherer.limits();
+    platform::wasm::openFiles(nameFilters(), true, limits.maxFileBytes, limits.maxTotalBytes,
+                              [self](const QList<platform::PickedFile> &picked) {
+                                  if (self)
+                                      self->setPickedFiles(picked);
+                              });
 #endif
+}
+
+void ImportController::setPickedFiles(const QList<platform::PickedFile> &picked)
+{
+    if (picked.isEmpty())
+        return; // cancelled
+    QList<io::InputFile> files;
+    QStringList warnings;
+    bool overTotal = false;
+    for (const platform::PickedFile &f : picked) {
+        if (f.tooLarge)
+            warnings.append(FileGatherer::tooLargeWarning(f.name, f.size));
+        else if (f.overTotal)
+            overTotal = true; // this one and every one after it (PickCollector)
+        else
+            files.append(io::InputFile{f.name, f.data});
+    }
+    if (overTotal)
+        warnings.append(FileGatherer::totalLimitWarning(m_gatherer.limits().maxTotalBytes));
+    setInput(files, FileGatherer::sourceNameFor(int(picked.size()), picked.first().name), warnings);
 }
 
 void ImportController::setInput(const QList<io::InputFile> &files, const QString &sourceName, const QStringList &warnings)

@@ -52,6 +52,10 @@
 #include <functional>
 #include <optional>
 
+namespace brulion::platform {
+struct PickedFile; // pickedfiles.h (brulion_platform): one file of the browser's picker
+}
+
 namespace brulion::ioviews {
 
 /// Daily note collision policy: `existing` with `imported` appended under "## Import (<source>)"
@@ -150,9 +154,15 @@ public:
     /// content:// URLs.
     Q_INVOKABLE void addPaths(const QStringList &paths);
     /// Browser (WebAssembly): the browser's file picker, several files at once
-    /// (platform/wasm/wasmfiles.h; files above GatherLimits::maxFileBytes are skipped with a
-    /// warning). Elsewhere: nothing (QML uses FilePicker).
+    /// (platform/wasm/wasmfiles.h) with the gatherer's limits, checked before a file is read: one
+    /// above GatherLimits::maxFileBytes is skipped, reading stops at maxTotalBytes (every picked
+    /// file stays in the browser's memory until the import) — then setPickedFiles(). Elsewhere:
+    /// nothing (QML uses FilePicker).
     Q_INVOKABLE void pickInBrowser();
+    /// The browser's pick as the input, as the gatherer would give it for the same files: the read
+    /// ones, FileGatherer's warnings for the skipped ones (too large; the total, once), the source's
+    /// name from all the picked files. Empty (cancelled): nothing changes.
+    void setPickedFiles(const QList<platform::PickedFile> &picked);
     /// Use these files as the input (tests, the browser picker). Analyses them.
     void setInput(const QList<io::InputFile> &files, const QString &sourceName, const QStringList &warnings = {});
     /// Back to "empty" (also cancels reading).

@@ -210,6 +210,7 @@ GridLayout {
         title: qsTr("Choose a sound file")
         fileMode: FilePicker.OpenFile
         dark: Theme.dark
+        colors: Theme.colors
         nameFilters: [qsTr("Sound files (*.oga *.ogg *.wav)"), qsTr("All files (*)")]
         onAccepted: ReminderSounds.setCustom(setting.kind, selectedFile.toString(), "")
     }

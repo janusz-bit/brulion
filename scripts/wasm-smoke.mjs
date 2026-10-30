@@ -58,9 +58,11 @@
 // browser's file picker and download without Qt Widgets (src/platform/wasm/wasmfiles.h): in a tab
 // marked for tests, with showOpenFilePicker / showSaveFilePicker taken away (so Qt uses the
 // <input type=file> and the download every browser has), ?selftest=pickfiles,savefile; a real
-// click opens the picker, which must allow several files, and gets four (a Polish name with CRLF
-// lines, an empty file, one of 2 MB above the test's 1 MB limit, a .txt): the app must report
-// them in order with their sizes and SHA-256 — the big one never read; the next click downloads
+// click opens the picker, which must allow several files, and gets seven (a Polish name with CRLF
+// lines, an empty file, one of 2 MiB above the test's 1 MiB limit per file, a .txt, one of exactly
+// 1 MiB, one of 600 KiB that would pass the test's 1.5 MiB in all, a small one after it): the app
+// must report them in order with their sizes and SHA-256 — the 2 MiB one never read, the last two
+// not read either (the total stops the reading, as FileGatherer does); the next click downloads
 // "Zażółć.md", whose bytes must be "ąę\n". --copy writes a notebook with today's journal into
 // IndexedDB the same way and copies blocks with real input: a click on the first block's text,
 // Escape (the block selected), Shift+Down (the next one with its child), Ctrl+C — the browser's
@@ -390,6 +392,9 @@ async function main() {
       ['pusty.md', Buffer.alloc(0)],
       ['duży.md', Buffer.alloc(2 * 1024 * 1024, 'x')],
       ['notatka.txt', Buffer.from('ćma\n', 'utf8')],
+      ['pół — ą.md', Buffer.alloc(1024 * 1024, 'y')],
+      ['drugie pół.md', Buffer.alloc(600 * 1024, 'z')],
+      ['po limicie.txt', Buffer.from('ź\n', 'utf8')],
     ];
     for (const [name, bytes] of files) writeFileSync(join(dir, name), bytes);
     pick = { dir, downloads, files };
@@ -1031,14 +1036,22 @@ async function main() {
         picked = await evaluate('window.brulionPickSelfTest ?? null');
       }
       console.log(`pick-files: ${JSON.stringify(picked)}`);
+      // The self-test's limits (src/platform/wasm/wasmselftest.cpp): 1 MiB per file, 1.5 MiB in all.
+      let total = 0;
+      let stopped = false;
       const expected = pick.files.map(([name, bytes]) => {
-        const tooLarge = bytes.length > 1024 * 1024;
-        return { name, size: bytes.length, tooLarge, read: tooLarge ? 0 : bytes.length,
-          sha256: tooLarge ? '' : createHash('sha256').update(bytes).digest('hex') };
+        let tooLarge = false;
+        let overTotal = stopped;
+        if (!overTotal && bytes.length > 1024 * 1024) tooLarge = true;
+        else if (!overTotal && total + bytes.length > 1.5 * 1024 * 1024) overTotal = stopped = true;
+        const read = !tooLarge && !overTotal;
+        if (read) total += bytes.length;
+        return { name, size: bytes.length, tooLarge, overTotal, read: read ? bytes.length : 0,
+          sha256: read ? createHash('sha256').update(bytes).digest('hex') : '' };
       });
       // (The app's JSON has its keys sorted: compared field by field in the order above.)
       const canonical = (files) => JSON.stringify((files ?? []).map((f) => ({
-        name: f.name, size: f.size, tooLarge: f.tooLarge, read: f.read, sha256: f.sha256,
+        name: f.name, size: f.size, tooLarge: f.tooLarge, overTotal: f.overTotal, read: f.read, sha256: f.sha256,
       })));
       if (!picked) problems.push('pick-files: the app reported no picked files');
       else if (picked.cancelled || canonical(picked.files) !== canonical(expected)) {

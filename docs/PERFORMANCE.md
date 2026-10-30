@@ -620,8 +620,8 @@ each folder's `.` entry), so they need a folder of their own outside `src/app` (
 
 Checks: `tests/app/filepicker` (fake backends, the widget dialog offscreen), `tst_pickedfiles`,
 the import self-test's save dialog (`tst_appio_import_qml*`), `scripts/wasm-smoke.mjs
---pick-files` (CI: four files through the browser's `<input>`, one above the limit never read,
-and a download), the Playwright tests' export (`showSaveFilePicker` in Chromium, a download in
+--pick-files` (CI: seven files through the browser's `<input>`, one above the limit per file
+never read, the reading stopped at the pick's total, and a download), the Playwright tests' export (`showSaveFilePicker` in Chromium, a download in
 Firefox) and `scripts/android-emulator-test.sh --pickers` (DocumentsUI's open, folder and save
 pickers on Android 16).
 

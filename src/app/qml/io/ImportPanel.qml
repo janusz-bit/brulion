@@ -96,6 +96,7 @@ ColumnLayout {
         fileMode: FilePicker.OpenFiles
         nameFilters: AppController.isAndroid ? [] : importerObject.nameFilters
         dark: Theme.dark
+        colors: Theme.colors
         onAccepted: importerObject.addUrls(selectedFiles)
     }
     FilePicker {
@@ -104,6 +105,7 @@ ColumnLayout {
         title: qsTr("Choose the folder to import")
         fileMode: FilePicker.OpenFolder
         dark: Theme.dark
+        colors: Theme.colors
         onAccepted: importerObject.addFolder(selectedFolder)
     }
 }

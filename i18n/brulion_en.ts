@@ -1257,7 +1257,7 @@
 <context>
     <name>brulion::ioviews::ImportController</name>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="693"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="706"/>
         <source>Import stopped: %n file(s) saved.</source>
         <translation>
             <numerusform>Import stopped: %n file saved.</numerusform>
@@ -1265,7 +1265,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="694"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="707"/>
         <source>Import finished: %n file(s) saved.</source>
         <translation>
             <numerusform>Import finished: %n file saved.</numerusform>

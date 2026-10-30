@@ -2038,7 +2038,8 @@ FilePicker {
     nameFilters: [qsTr("ZIP archives (*.zip)"), qsTr("All files (*)")]
     defaultSuffix: "zip"                   // SaveFile: "Notatka" → "Notatka.zip"
     currentFolder: exporter.defaultSaveFolder
-    dark: Theme.dark                       // the fallback dialog's colours
+    dark: Theme.dark                       // the fallback dialog's colours:
+    colors: Theme.colors                   //   the mode and Brulion's palette
     onAccepted: exporter.saveTo(selectedFile)   // selectedFiles, selectedFolder
 }
 // saveDialog.selectedFile = suggestion; saveDialog.open()   — asynchronous, never exec()
@@ -2051,11 +2052,20 @@ FilePicker {
   the GTK / KDE dialog or the XDG portal on Linux where the platform theme has one (the AppImage
   asks for the portal itself: `QT_QPA_PLATFORMTHEME=xdgdesktopportal` unless the user set one;
   docs/NIXOS.md). Elsewhere (a Linux desktop without such a theme, offscreen runs) Qt Widgets'
-  `QFileDialog` — desktop builds have Qt Widgets for the tray anyway — in Fusion colours: dark
-  with `dark: true`. Android and the browser have no Qt Widgets.
+  `QFileDialog` — desktop builds have Qt Widgets for the tray anyway — in the Fusion style (set on
+  the dialog and on every widget in it, so a desktop style such as Breeze or Kvantum cannot draw
+  its own colours) with Brulion's colours from `colors` (Theme.colors) and `dark`
+  (`widgetDialogPalette()` in `filepicker_p.h`: window = bg, fields and lists = bgElevated, text =
+  fg, placeholders and disabled text = fgFaint, the selection = accentSolid under white text; a
+  missing or malformed colour is ThemePalette's default of the mode). Android and the browser
+  have no Qt Widgets.
 * **Browser**: `available` is false; the controllers show the browser's own picker
   (`ImportController.pickInBrowser()`, `PageController.pickImageInBrowser()`: several files at
-  once, files above the desktop's limits skipped before they are read) and save with the
+  once, files above the desktop's limits skipped before they are read, and the reading stopped
+  at the file that would take the pick above its total — the import's 1.5 GB as on the desktop,
+  512 MB of pictures —, since the browser holds every read file in memory; `setPickedFiles()` /
+  `pictureReceiver()` turn the picked files into the input or the embeds on every platform) and
+  save with the
   browser's save picker or a download (`ExportController.saveInBrowser()`, `Logs.download()`) —
   `src/platform/wasm/wasmfiles.h`, docs/WEB.md.
 * **API**: QtQuick.Dialogs' names (`fileMode`, `selectedFile(s)`, `selectedFolder`,
@@ -2070,10 +2080,15 @@ FilePicker {
   build (`scripts/android-build.sh`, `nix/android.nix`) and the browser build
   (`scripts/wasm-build.sh`) fail when another style or QtQuick.Dialogs is packaged.
 * **Tests**: `tests/app/filepicker` (fake backends: what each mode asks for, the signals, open
-  while open, destroyed while open; the widget dialog offscreen picked for real),
+  while open, destroyed while open; the widget dialog's palette from Brulion's colours, malformed
+  ones too; the widget dialog offscreen picked for real, Fusion in light and dark colours),
   `tests/platform/tst_pickedfiles.cpp` (the browser pick's bookkeeping), the import self-test's
-  export save dialog (`tst_appio_import_qml*`), `scripts/wasm-smoke.mjs --pick-files` (the
-  browser's `<input>` with four files and a download, CI) and
+  export save dialog (`tst_appio_import_qml*`), the browser pick's results on every platform
+  (`tst_appio_import` `browserPickAsGathered`: the same files, warnings and name as the desktop's
+  gatherer; `tst_editor_controller` `pictureReceiver`: skipped and empty pictures, the block moved
+  or deleted while the picker is open, one undo step), `scripts/wasm-smoke.mjs --pick-files` (the
+  browser's `<input>` with seven files — one too large, the last two past the total — and a
+  download, CI) and
   `scripts/android-emulator-test.sh --pickers` (DocumentsUI on an emulator).
 
 ### Emoji and symbol fonts

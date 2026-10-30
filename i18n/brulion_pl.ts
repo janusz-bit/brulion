@@ -2142,22 +2142,22 @@
         <translation>Zapisz stronę jako</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentExportDialog.qml" line="101"/>
+        <location filename="../src/app/qml/content/ContentExportDialog.qml" line="102"/>
         <source>HTML documents (*.html)</source>
         <translation>Dokumenty HTML (*.html)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentExportDialog.qml" line="101"/>
+        <location filename="../src/app/qml/content/ContentExportDialog.qml" line="102"/>
         <source>Markdown files (*.md)</source>
         <translation>Pliki Markdown (*.md)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentExportDialog.qml" line="105"/>
+        <location filename="../src/app/qml/content/ContentExportDialog.qml" line="106"/>
         <source>Page exported</source>
         <translation>Wyeksportowano stronę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentExportDialog.qml" line="108"/>
+        <location filename="../src/app/qml/content/ContentExportDialog.qml" line="109"/>
         <source>The file could not be written.</source>
         <translation>Nie udało się zapisać pliku.</translation>
     </message>
@@ -3362,26 +3362,26 @@
         <translation>Wstaw obraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="339"/>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="406"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="340"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="407"/>
         <source>Insert</source>
         <translation>Wstaw</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="357"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="358"/>
         <source>Enter an address starting with http:// or https://</source>
         <translation>Wpisz adres zaczynający się od http:// lub https://</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="406"/>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="474"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="407"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="475"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
     <message>
         <location filename="../src/app/qml/editor/EditorDialogs.qml" line="169"/>
         <location filename="../src/app/qml/editor/EditorDialogs.qml" line="224"/>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="402"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="403"/>
         <source>Remove</source>
         <translation>Usuń</translation>
     </message>
@@ -3391,102 +3391,102 @@
         <translation>Wyczyść</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="470"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="471"/>
         <source>Repeat</source>
         <translation>Powtarzanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="480"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="481"/>
         <source>Don&apos;t repeat</source>
         <translation>Nie powtarzaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="498"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="499"/>
         <source>Daily</source>
         <translation>Codziennie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="499"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="500"/>
         <source>Weekdays</source>
         <translation>W dni robocze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="500"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="501"/>
         <source>Weekly</source>
         <translation>Co tydzień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="501"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="502"/>
         <source>Every 2 weeks</source>
         <translation>Co 2 tygodnie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="502"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="503"/>
         <source>Monthly</source>
         <translation>Co miesiąc</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="503"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="504"/>
         <source>Yearly</source>
         <translation>Co roku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="519"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="520"/>
         <source>e.g. co tydzień w poniedziałek, every month on the 15th</source>
         <translation>np. co tydzień w poniedziałek, co miesiąc 15.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="522"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="523"/>
         <source>Not a recurrence rule</source>
         <translation>To nie jest reguła powtarzania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="536"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="537"/>
         <source>Written in the note as: %1</source>
         <translation>W notatce: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="552"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="553"/>
         <source>Insert template</source>
         <translation>Wstaw szablon</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="556"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="557"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="569"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="570"/>
         <source>Search templates…</source>
         <translation>Szukaj szablonów…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="577"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="578"/>
         <source>No templates</source>
         <translation>Brak szablonów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="578"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="579"/>
         <source>Put Markdown files into the templates folder of the vault.</source>
         <translation>Umieść pliki Markdown w folderze szablonów notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="336"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="337"/>
         <source>Picture from the internet</source>
         <translation>Obraz z internetu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="355"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="356"/>
         <source>Picture address</source>
         <translation>Adres obrazu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="365"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="366"/>
         <source>Save to notebook</source>
         <translation>Zapisz w notatniku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="366"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="367"/>
         <source>A copy in the attachments folder: shown offline and synced with the notes. Without it the picture is loaded from the site when it is shown.</source>
         <translation>Kopia w folderze załączników: widać ją bez sieci i synchronizuje się razem z notatkami. Bez niej obraz jest pobierany ze strony, gdy go pokazujesz.</translation>
     </message>
@@ -3797,8 +3797,8 @@
         <translation>Zapisz eksport</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/ExportPanel.qml" line="414"/>
-        <location filename="../src/app/qml/io/ExportPanel.qml" line="414"/>
+        <location filename="../src/app/qml/io/ExportPanel.qml" line="415"/>
+        <location filename="../src/app/qml/io/ExportPanel.qml" line="415"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
@@ -4275,7 +4275,7 @@
         <translation>Wybierz pliki do importu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/ImportPanel.qml" line="104"/>
+        <location filename="../src/app/qml/io/ImportPanel.qml" line="105"/>
         <source>Choose the folder to import</source>
         <translation>Wybierz folder do importu</translation>
     </message>
@@ -5563,12 +5563,12 @@
         <translation>Zapisz rejestr zdarzeń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/diag/LogsView.qml" line="457"/>
+        <location filename="../src/app/qml/diag/LogsView.qml" line="458"/>
         <source>Text files (*.txt)</source>
         <translation>Pliki tekstowe (*.txt)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/diag/LogsView.qml" line="457"/>
+        <location filename="../src/app/qml/diag/LogsView.qml" line="458"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
@@ -7061,12 +7061,12 @@
         <translation>Wybierz plik dźwiękowy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/notify/ReminderSoundSetting.qml" line="213"/>
+        <location filename="../src/app/qml/notify/ReminderSoundSetting.qml" line="214"/>
         <source>Sound files (*.oga *.ogg *.wav)</source>
         <translation>Pliki dźwiękowe (*.oga *.ogg *.wav)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/notify/ReminderSoundSetting.qml" line="213"/>
+        <location filename="../src/app/qml/notify/ReminderSoundSetting.qml" line="214"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
@@ -13981,29 +13981,29 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::editor::PageController</name>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3490"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3494"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3490"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3494"/>
         <source>Pictures (%1)</source>
         <extracomment>%1: the file name patterns of pictures, e.g. &quot;*.png *.jpg *.jpeg&quot;</extracomment>
         <translation>Obrazy (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3728"/>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3836"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3732"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3852"/>
         <source>Attachment</source>
         <translation>Załącznik</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3739"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3743"/>
         <source>Drawing %1</source>
         <translation>Rysunek %1</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3813"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3817"/>
         <source>Pasted image %1</source>
         <translation>Wklejony obraz %1</translation>
     </message>
@@ -14423,7 +14423,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Plik „%1” (%2) jest za duży i został pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="643"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="642"/>
         <source>Only the first %1 were read: the selection is too large to import at once.</source>
         <translation>Wczytano tylko pierwsze %1: wybór jest za duży, by zaimportować go naraz.</translation>
     </message>
@@ -14463,72 +14463,72 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::ioviews::ImportController</name>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="162"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="163"/>
         <source>Reading %1 of %2 files…</source>
         <translation>Wczytywanie pliku %1 z %2…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="335"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="336"/>
         <source>Reading…</source>
         <translation>Wczytywanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="249"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="250"/>
         <source>Exports of notes apps (%1)</source>
         <translation>Eksporty aplikacji do notatek (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="251"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="252"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="295"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="296"/>
         <source>Use a folder inside the notebook: no “..”, no protected folders (.trash, .brulion) and no characters such as : * ? &quot; &lt; &gt; |.</source>
         <translation>Użyj folderu wewnątrz notatnika: bez „..”, bez folderów chronionych (.trash, .brulion) i bez znaków takich jak : * ? &quot; &lt; &gt; |.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="451"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="464"/>
         <source>Open a notebook first.</source>
         <translation>Najpierw otwórz notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="455"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="468"/>
         <source>No files were read.</source>
         <translation>Nie wczytano żadnych plików.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="466"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="479"/>
         <source>Checking what will be imported…</source>
         <translation>Sprawdzanie, co zostanie zaimportowane…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="491"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="504"/>
         <source>Brulion does not recognise these files. Choose the app they come from in the list.</source>
         <translation>Brulion nie rozpoznaje tych plików. Wybierz z listy aplikację, z której pochodzą.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="557"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="570"/>
         <source>Nothing to import was found in “%1”.</source>
         <translation>W „%1” nie znaleziono nic do zaimportowania.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="582"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="595"/>
         <source>Preparing…</source>
         <translation>Przygotowywanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="642"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="655"/>
         <source>“%1” already existed; it was saved as “%2”.</source>
         <translation>„%1” już istniał; zapisano jako „%2”.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="656"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="669"/>
         <source>Saving %1 of %2…</source>
         <translation>Zapisywanie: %1 z %2…</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="693"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="706"/>
         <source>Import stopped: %n file(s) saved.</source>
         <translation>
             <numerusform>Import zatrzymany: zapisano %n plik.</numerusform>
@@ -14537,7 +14537,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="694"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="707"/>
         <source>Import finished: %n file(s) saved.</source>
         <translation>
             <numerusform>Import zakończony: zapisano %n plik.</numerusform>
@@ -14626,7 +14626,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Pliki kalendarza (.ics) z Kalendarza Google, Outlooka, Thunderbirda lub telefonu. Wydarzenia trafią do notatek dziennych z ich dni jako przypomnienia ⏰, a zadania do wykonania staną się zadaniami.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="162"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="163"/>
         <source>Looking for the files…</source>
         <translation>Szukanie plików…</translation>
     </message>
@@ -16857,12 +16857,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/app/main.cpp" line="467"/>
+        <location filename="../src/app/main.cpp" line="468"/>
         <source>Saving to the browser&apos;s storage failed: %1</source>
         <translation>Nie udało się zapisać w pamięci przeglądarki: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="493"/>
+        <location filename="../src/app/main.cpp" line="494"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
     </message>

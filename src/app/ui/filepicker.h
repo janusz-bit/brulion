@@ -30,6 +30,7 @@
 #include <QPointer>
 #include <QStringList>
 #include <QUrl>
+#include <QVariantMap>
 
 #include <functional>
 #include <memory>
@@ -61,8 +62,11 @@ class FilePicker : public QObject {
     Q_PROPERTY(bool visible READ isVisible NOTIFY visibleChanged FINAL)
     /// False in the browser, where the controllers show the browser's own picker.
     Q_PROPERTY(bool available READ available CONSTANT FINAL)
-    /// The fallback widget dialog's colours follow the app's theme (Theme.dark).
+    /// The fallback widget dialog's colours follow the app's theme: `dark` (Theme.dark) and
+    /// `colors` (Theme.colors — bg, bgElevated, fg, accentSolid, … as "#rrggbb"; missing or
+    /// malformed entries: Brulion's default colours of the mode). widgetDialogPalette().
     Q_PROPERTY(bool dark READ dark WRITE setDark NOTIFY optionsChanged FINAL)
+    Q_PROPERTY(QVariantMap colors READ colors WRITE setColors NOTIFY optionsChanged FINAL)
 
 public:
     enum Mode { OpenFile, OpenFiles, OpenFolder, SaveFile };
@@ -94,6 +98,8 @@ public:
     static bool available();
     bool dark() const { return m_dark; }
     void setDark(bool dark);
+    QVariantMap colors() const { return m_colors; }
+    void setColors(const QVariantMap &colors);
 
     /// The window the picker is modal to: the one set here, else the window of the nearest
     /// QQuickItem among the QObject parents (nullptr: none — application-modal).
@@ -134,6 +140,7 @@ private:
     QUrl m_currentFolder;
     QList<QUrl> m_selected;
     bool m_dark = false;
+    QVariantMap m_colors;
     bool m_visible = false;
     QPointer<QWindow> m_parentWindow;
     bool m_parentWindowSet = false;

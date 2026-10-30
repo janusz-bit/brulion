@@ -39,8 +39,9 @@ brulion_set_warnings(brulion_ui_touch)
 # QtQuick.Dialogs (docs/PERFORMANCE.md L9) — the platform theme's dialog helper (a QPA header:
 # Qt6::GuiPrivate; Android's document picker, Windows' IFileDialog, GTK / KDE / XDG portal), Qt
 # Widgets' QFileDialog as the desktop fallback (desktop builds only: Android and the browser stay
-# without Qt Widgets). A static library so that tests/app/filepicker drives it with fake backends
-# without the app; registered as "FilePicker" by qmlforeign.h.
+# without Qt Widgets; its palette from ThemePalette's colours, brulion_ui_helpers). A static
+# library so that tests/app/filepicker drives it with fake backends without the app; registered as
+# "FilePicker" by qmlforeign.h.
 set(QT_NO_PRIVATE_MODULE_WARNING ON)
 find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 qt_add_library(brulion_ui_files STATIC
@@ -49,7 +50,7 @@ qt_add_library(brulion_ui_files STATIC
 target_include_directories(brulion_ui_files PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_ui_files
     PUBLIC Qt6::Core Qt6::Gui
-    PRIVATE Qt6::GuiPrivate Qt6::Quick brulion_core_log)
+    PRIVATE Qt6::GuiPrivate Qt6::Quick brulion_core_log brulion_ui_helpers)
 if(BRULION_DESKTOP)
     find_package(Qt6 REQUIRED COMPONENTS Widgets)
     target_link_libraries(brulion_ui_files PRIVATE Qt6::Widgets)

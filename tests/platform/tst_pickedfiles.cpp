@@ -2,7 +2,8 @@
 // (platform/wasm/wasmfiles.h) driven the way Qt's QWasmLocalFileAccess::openFiles calls it — the
 // count when the picker closes, then per file "accept?" and, for accepted ones, "read": several
 // files with Polish names, an empty file, one above the limit (never read), all of them too
-// large, a cancel, and calls after the end.
+// large, the total for the pick (reading stops at the file that would pass it — the ones after
+// it are not read either), a cancel, and calls after the end.
 #include "pickedfiles.h"
 
 #include <QTest>
@@ -62,7 +63,7 @@ private Q_SLOTS:
         QFETCH(int, tooLargeIndex);
         QList<PickedFile> got;
         int calls = 0;
-        PickCollector collector(maxBytes, [&](const QList<PickedFile> &files) {
+        PickCollector collector(maxBytes, -1, [&](const QList<PickedFile> &files) {
             ++calls;
             got = files;
         });
@@ -81,14 +82,71 @@ private Q_SLOTS:
             QCOMPARE(got.at(i).size, qint64(offered.at(i).size));
             const bool tooLarge = i == tooLargeIndex;
             QCOMPARE(got.at(i).tooLarge, tooLarge);
+            QVERIFY(!got.at(i).overTotal);
+            QCOMPARE(got.at(i).isRead(), !tooLarge);
             QCOMPARE(got.at(i).data, tooLarge ? QByteArray() : offered.at(i).bytes);
         }
+    }
+
+    // The pick's total, as FileGatherer's maxTotalBytes: a file too large by itself is skipped
+    // first; the file that would take the read ones above the total stops the reading — it and
+    // every one after it, even a small one, come back overTotal and unread.
+    void total_data()
+    {
+        QTest::addColumn<qint64>("maxFile");
+        QTest::addColumn<qint64>("maxTotal");
+        QTest::addColumn<QList<int>>("sizes");
+        QTest::addColumn<QString>("states"); // per file: r read, L too large, T over the total
+        QTest::newRow("bez limitu sumy") << qint64(-1) << qint64(-1) << QList<int>{30, 30, 50} << u"rrr"_s;
+        QTest::newRow("pod sumą") << qint64(64) << qint64(1000) << QList<int>{30, 30, 50} << u"rrr"_s;
+        QTest::newRow("dokładnie suma") << qint64(-1) << qint64(70) << QList<int>{35, 35} << u"rr"_s;
+        QTest::newRow("zatrzymuje się na pliku ponad sumę")
+                << qint64(-1) << qint64(70) << QList<int>{30, 30, 50, 1} << u"rrTT"_s;
+        QTest::newRow("za duży, potem suma") << qint64(40) << qint64(70) << QList<int>{30, 50, 30, 20, 1} << u"rLrTT"_s;
+        QTest::newRow("za duży po zatrzymaniu nie jest czytany")
+                << qint64(40) << qint64(50) << QList<int>{30, 30, 100} << u"rTT"_s;
+        QTest::newRow("pierwszy ponad sumę") << qint64(-1) << qint64(10) << QList<int>{20, 1} << u"TT"_s;
+        QTest::newRow("suma zero") << qint64(-1) << qint64(0) << QList<int>{0, 1, 0} << u"rTT"_s;
+    }
+    void total()
+    {
+        QFETCH(qint64, maxFile);
+        QFETCH(qint64, maxTotal);
+        QFETCH(QList<int>, sizes);
+        QFETCH(QString, states);
+        QList<PickedFile> got;
+        int calls = 0;
+        PickCollector collector(maxFile, maxTotal, [&](const QList<PickedFile> &files) {
+            ++calls;
+            got = files;
+        });
+        QList<Offered> offered;
+        for (qsizetype i = 0; i < sizes.size(); ++i)
+            offered.append(file(u"plik %1 — źdźbło.md"_s.arg(i), QByteArray(sizes.at(i), char('a' + i))));
+        drive(collector, offered);
+        QCOMPARE(calls, 1);
+        QCOMPARE(got.size(), offered.size());
+        QString actual;
+        qint64 read = 0;
+        for (qsizetype i = 0; i < got.size(); ++i) {
+            const PickedFile &f = got.at(i);
+            QCOMPARE(f.name, offered.at(i).name);
+            QCOMPARE(f.size, qint64(sizes.at(i)));
+            QVERIFY(!(f.tooLarge && f.overTotal));
+            actual += f.tooLarge ? u'L' : f.overTotal ? u'T' : u'r';
+            QCOMPARE(f.data, f.isRead() ? offered.at(i).bytes : QByteArray());
+            if (f.isRead())
+                read += f.data.size();
+        }
+        QCOMPARE(actual, states);
+        if (maxTotal >= 0)
+            QVERIFY(read <= maxTotal);
     }
 
     void emptyFileGetsABuffer()
     {
         // nullptr would make Qt skip the file: an empty file must get a real (empty) buffer.
-        PickCollector collector(-1, {});
+        PickCollector collector(-1, -1, {});
         collector.closed(1);
         QVERIFY(collector.accept(0, u"pusty.md"_s) != nullptr);
         QVERIFY(!collector.finished());
@@ -100,7 +158,7 @@ private Q_SLOTS:
     {
         QList<PickedFile> got;
         int calls = 0;
-        PickCollector collector(10, [&](const QList<PickedFile> &files) {
+        PickCollector collector(10, -1, [&](const QList<PickedFile> &files) {
             ++calls;
             got = files;
         });
@@ -117,7 +175,7 @@ private Q_SLOTS:
     {
         int calls = 0;
         QList<PickedFile> got{PickedFile{}};
-        PickCollector collector(-1, [&](const QList<PickedFile> &files) {
+        PickCollector collector(-1, -1, [&](const QList<PickedFile> &files) {
             ++calls;
             got = files;
         });
@@ -134,7 +192,7 @@ private Q_SLOTS:
     void malformedCount()
     {
         int calls = 0;
-        PickCollector collector(-1, [&](const QList<PickedFile> &) { ++calls; });
+        PickCollector collector(-1, -1, [&](const QList<PickedFile> &) { ++calls; });
         collector.closed(-3); // nonsense from the browser: nothing chosen
         QCOMPARE(calls, 1);
     }
@@ -142,7 +200,7 @@ private Q_SLOTS:
     void waitsForEveryFile()
     {
         int calls = 0;
-        PickCollector collector(-1, [&](const QList<PickedFile> &) { ++calls; });
+        PickCollector collector(-1, -1, [&](const QList<PickedFile> &) { ++calls; });
         collector.closed(2);
         char *first = collector.accept(3, u"ą.md"_s);
         QVERIFY(first);

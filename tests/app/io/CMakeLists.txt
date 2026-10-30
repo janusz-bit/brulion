@@ -7,7 +7,7 @@
 # Real Workspaces over QTemporaryDir vaults; no network but a tiny HTTP server on 127.0.0.1 for
 # pictures from the internet (../minihttpserver.h).
 brulion_add_test(tst_appio_import SOURCES tst_appio_import.cpp
-    LIBS brulion_ioviews brulion_core_io brulion_core_vault)
+    LIBS brulion_ioviews brulion_core_io brulion_core_vault brulion_platform)
 brulion_add_test(tst_appio_export SOURCES tst_appio_export.cpp ../minihttpserver.h
     LIBS brulion_ioviews brulion_core_io brulion_core_vault brulion_core_webpicture Qt6::Network)
 brulion_add_test(tst_appio_conflicts SOURCES tst_appio_conflicts.cpp

@@ -96,6 +96,7 @@ BDialog {
         fileMode: FilePicker.SaveFile
         title: qsTr("Save the page as")
         dark: Theme.dark
+        colors: Theme.colors
         currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
         selectedFile: currentFolder + "/" + dialog.tools.exportFileName(dialog.path, dialog.format)
         nameFilters: dialog.format === "html" ? [qsTr("HTML documents (*.html)")] : [qsTr("Markdown files (*.md)")]

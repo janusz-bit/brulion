@@ -13,7 +13,7 @@ Obsługiwane źródła: Obsidian, Logseq, Notion, Evernote, Google Keep, Microso
 2. Obejrzyj **podgląd**: co powstanie, co zostanie pominięte i dlaczego.
 3. Zatwierdź. Nic nie jest zapisywane przed tym krokiem.
 
-Pliki i foldery wybierasz w oknie wyboru plików systemu — na Androidzie także z Dysku Google albo karty SD. W przeglądarce też wybierzesz kilka plików naraz (folderu tam nie wybierzesz — spakuj go do ZIP-a); plik większy niż 512 MB zostanie pominięty z ostrzeżeniem w podglądzie.
+Pliki i foldery wybierasz w oknie wyboru plików systemu — na Androidzie także z Dysku Google albo karty SD. W przeglądarce też wybierzesz kilka plików naraz (folderu tam nie wybierzesz — spakuj go do ZIP-a); plik większy niż 512 MB zostanie pominięty z ostrzeżeniem w podglądzie, a gdy wybrane pliki razem przekroczą 1,5 GB, Brulion wczyta tylko te, które się mieszczą, i też o tym napisze — tak samo jak na komputerze.
 
 Importowane strony nie nadpisują istniejących — gdy nazwa się powtarza, nowa dostaje końcówkę ` 2`. Przed zmianami poprzednie wersje trafiają do historii.
 

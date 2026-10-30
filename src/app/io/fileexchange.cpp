@@ -637,11 +637,16 @@ QString FileGatherer::tooLargeWarning(const QString &name, qint64 bytes)
     return tr("“%1” (%2) is too large and was skipped.").arg(name, sizeText(bytes));
 }
 
+QString FileGatherer::totalLimitWarning(qint64 maxTotalBytes)
+{
+    return tr("Only the first %1 were read: the selection is too large to import at once.")
+            .arg(sizeText(maxTotalBytes));
+}
+
 void FileGatherer::stopForTotal()
 {
     if (!m_stopped)
-        m_warnings.append(tr("Only the first %1 were read: the selection is too large to import at once.")
-                                  .arg(sizeText(m_limits.maxTotalBytes)));
+        m_warnings.append(totalLimitWarning(m_limits.maxTotalBytes));
     m_stopped = true;
 }
 

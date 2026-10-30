@@ -100,6 +100,7 @@ public:
     explicit FileGatherer(QObject *parent = nullptr);
 
     void setLimits(const GatherLimits &limits) { m_limits = limits; }
+    const GatherLimits &limits() const { return m_limits; }
     /// Files read per batch (default 32; also bounded by bytes per batch).
     void setChunkSize(int files) { m_chunk = qMax(1, files); }
     /// How content:// URLs are read (default platformDocumentProvider(); tests: a fake).
@@ -116,6 +117,10 @@ public:
     /// The warning for a file above GatherLimits::maxFileBytes, which is skipped:
     /// "“Eksport.zip” (600 MB) is too large and was skipped."
     static QString tooLargeWarning(const QString &name, qint64 bytes);
+    /// The warning when reading stopped at GatherLimits::maxTotalBytes (`maxTotalBytes`): "Only the
+    /// first 1.5 GB were read: the selection is too large to import at once." (also the browser's
+    /// pick, ImportController::setPickedFiles()).
+    static QString totalLimitWarning(qint64 maxTotalBytes);
 
 Q_SIGNALS:
     /// `done` of `total` files read so far (`total` 0: still looking for the files).

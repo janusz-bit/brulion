@@ -44,11 +44,11 @@ target_link_libraries(brulion_ioviews
     PUBLIC Qt6::Core Qt6::Gui brulion_shell brulion_core_io brulion_core_sync brulion_core_vault
     PRIVATE Qt6::Network brulion_core_mstodo brulion_core_util brulion_core_markdown brulion_core_index brulion_core_dates
         brulion_core_webpicture brulion_core_drawing)
-if(ANDROID OR EMSCRIPTEN)
-    # Android: "Save to Downloads" (MediaStore through the platform's Android bridge). Browser: its
-    # file picker and downloads (platform/wasm/wasmfiles.h; no Qt Widgets in the browser build).
-    target_link_libraries(brulion_ioviews PRIVATE brulion_platform)
-endif()
+# The browser pick's files (platform/pickedfiles.h, ImportController::setPickedFiles; everywhere, so
+# that tests/app/io checks it). Android: "Save to Downloads" (MediaStore through the platform's
+# Android bridge). Browser: its file picker and downloads (platform/wasm/wasmfiles.h; no Qt
+# Widgets in the browser build).
+target_link_libraries(brulion_ioviews PRIVATE brulion_platform)
 qt_extract_metatypes(brulion_ioviews)
 brulion_set_warnings(brulion_ioviews)
 
