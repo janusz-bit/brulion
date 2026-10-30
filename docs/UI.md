@@ -2365,7 +2365,7 @@ vault settings, the Calendar plugin's hashes).
 | Version | the working tree (git revision in the manifest) | the official 1.14.4 AppImage, sha256 checked (`appimage-run -w` on NixOS, `--appimage-extract` elsewhere) |
 | Notebook | a fresh copy of `vault-brulion` per shot | a copy without `.brulion/`, with `.obsidian/` (daily notes in `journals/`, the Calendar plugin 1.5.10) |
 | Sizes | desktop 1280×800 at 1×, phone 412×915 at 2× (`--size`, `--scale`, `--touch`) | the same viewport and scale through `Emulation.setDeviceMetricsOverride`; phone: `EmulateMobile` (the mobile layout, `body.is-phone`) |
-| Themes | `--theme light\|dark` | the "Use light/dark mode" command (`theme:use-*`; fallback `app.updateTheme`) |
+| Themes | `--theme light\|dark` | the setting "Schemat kolorów" set to Jasny / Ciemny (`app.vault.setConfig('theme')` + `app.updateTheme`; a "Use light/dark mode" command when the version has one, never the toggle) |
 | Language | `--locale pl` | Polish (`localStorage.language`, else the setting and a restart; English is flagged) |
 | Clock | `--now "2026-10-14 10:00"`, `TZ=Europe/Warsaw` | a running `Date` shifted to that instant (`Page.addScriptToEvaluateOnNewDocument`) and the zone override |
 | Fonts | `FONTCONFIG_FILE=<out>/env/fonts.conf`: Noto Sans / Serif / Sans Mono, Noto Color Emoji, DejaVu (nixpkgs), grayscale antialiasing, slight hinting | the same file, `--disable-lcd-text` |

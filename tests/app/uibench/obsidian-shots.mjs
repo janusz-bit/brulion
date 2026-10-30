@@ -243,11 +243,14 @@ async function setTheme(cdp, theme) {
     const want = ${J(theme)};
     const ids = Object.keys(app.commands.commands).filter(id => id.startsWith('theme:'));
     const byId = ids.find(id => id === 'theme:use-' + want);
-    const byName = ids.find(id => (want === 'dark' ? /dark|ciemn/i : /light|jasn/i).test(app.commands.commands[id].name));
+    // Not a toggle ("theme:toggle-light-dark" names both): it would flip whatever is shown.
+    const byName = ids.filter(id => !/toggle/i.test(id))
+      .find(id => (want === 'dark' ? /dark|ciemn/i : /light|jasn/i).test(app.commands.commands[id].name));
     const id = byId ?? byName;
     let used = id ?? null;
     if (id) app.commands.executeCommandById(id);
-    if (!document.body.classList.contains('theme-' + want)) {
+    // 1.14 has only the toggle: the setting itself ("Schemat kolorów": Jasny / Ciemny), explicitly.
+    if (!id || !document.body.classList.contains('theme-' + want)) {
       used = 'updateTheme';
       app.vault.setConfig?.('theme', want === 'dark' ? 'obsidian' : 'moonstone');
       app.updateTheme?.(want === 'dark' ? 'obsidian' : 'moonstone');
