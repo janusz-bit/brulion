@@ -18,7 +18,7 @@ import sys
 
 
 def load(path):
-    run = {"marks": {}, "marklist": [], "sync": [], "swap": [], "stalls": [], "actions": [],
+    run = {"marks": {}, "marklist": [], "sync": [], "synced": [], "swap": [], "stalls": [], "actions": [],
            "model": [], "saved": [], "errors": [], "notes": [], "end": None}
     with open(path) as f:
         for line in f:
@@ -32,6 +32,7 @@ def load(path):
                 run["marklist"].append(o)
             elif ev == "frames":
                 run["sync"], run["swap"] = o["sync"], o["swap"]
+                run["synced"] = o.get("synced", [])
             elif ev == "stalls":
                 run["stalls"] = [(a, d) for a, d in o["list"]]
             elif ev == "actions":
@@ -314,13 +315,19 @@ def m_views(run):
 
 
 def frame_intervals(run, a, b, prefix):
-    """Frames swapped in [a, b] and the intervals between consecutive ones."""
+    """Frames swapped in [a, b], the intervals between consecutive ones and — when the probe
+    recorded the end of each sync — the sync (updatePaintNode of every item; the GUI thread waits)
+    and the rest (render + swap) per frame."""
     sw = [w for w in run["swap"] if a <= w <= b]
     iv = [y - x for x, y in zip(sw, sw[1:])]
     out = {prefix + "frames": len(sw)}
     if iv:
         out[prefix + "frame_p95_ms"] = pct(iv, 95)
         out[prefix + "frame_max_ms"] = max(iv)
+    if run.get("synced") and len(run["synced"]) == len(run["swap"]):
+        frames = [(s, d, w) for s, d, w in zip(run["sync"], run["synced"], run["swap"]) if a <= w <= b]
+        out.update(dist(prefix + "sync", [d - s for s, d, _ in frames]))
+        out.update(dist(prefix + "render", [w - d for _, d, w in frames]))
     return out
 
 

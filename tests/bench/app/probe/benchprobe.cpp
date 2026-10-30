@@ -25,8 +25,8 @@
 //   * marks: preload (library constructor), qapp (QCoreApplication constructed), window
 //     (first expose), first_frame, vault_open, ready (Workspace.ready), content (first
 //     BlockDelegate on screen / the page's blocks), settled (no GUI stall for 1 s), …
-//   * frames: for every frame the render thread's beforeSynchronizing (GUI state handed over)
-//     and frameSwapped time;
+//   * frames: for every frame the render thread's beforeSynchronizing (GUI state handed over),
+//     afterSynchronizing (the sync done: items' updatePaintNode) and frameSwapped time;
 //   * stalls: a 4 ms PreciseTimer on the GUI thread; every gap > 12 ms is a stall (the event
 //     loop was blocked: long tasks, the user's input would wait that long);
 //   * actions: synthetic input through QWindowSystemInterface (the same path as real
@@ -165,6 +165,7 @@ QJsonObject threadStats()
 
 struct Frame {
     qint64 sync = 0;
+    qint64 synced = 0; ///< afterSynchronizing: the end of the sync (the GUI thread waits until then)
     qint64 swap = 0;
 };
 
@@ -305,12 +306,21 @@ private:
                 },
                 Qt::DirectConnection);
         connect(
+                w, &QQuickWindow::afterSynchronizing, this,
+                [this] {
+                    std::lock_guard<std::mutex> lock(m_frameMutex);
+                    m_pendingSynced = monoNs();
+                },
+                Qt::DirectConnection);
+        connect(
                 w, &QQuickWindow::frameSwapped, this,
                 [this] {
                     const qint64 t = monoNs();
                     std::lock_guard<std::mutex> lock(m_frameMutex);
-                    m_frames.push_back({m_pendingSync ? m_pendingSync : t, t});
+                    const qint64 sync = m_pendingSync ? m_pendingSync : t;
+                    m_frames.push_back({sync, m_pendingSynced >= sync ? m_pendingSynced : sync, t});
                     m_pendingSync = 0;
+                    m_pendingSynced = 0;
                 },
                 Qt::DirectConnection);
         m_engine = qmlEngine(w);
@@ -679,12 +689,13 @@ private:
         m_lag.stop();
         m_poll.stop();
         markMem(u"end"_s);
-        QJsonArray sync, swap;
+        QJsonArray sync, synced, swap;
         for (const Frame &f : framesCopy()) {
             sync.append(msOf(f.sync));
+            synced.append(msOf(f.synced));
             swap.append(msOf(f.swap));
         }
-        emitJson({{u"ev"_s, u"frames"_s}, {u"sync"_s, sync}, {u"swap"_s, swap}});
+        emitJson({{u"ev"_s, u"frames"_s}, {u"sync"_s, sync}, {u"synced"_s, synced}, {u"swap"_s, swap}});
         QJsonArray st;
         for (const auto &s : m_stalls)
             st.append(QJsonArray{msOf(s.first), double(s.second - s.first) / 1e6});
@@ -1231,6 +1242,7 @@ private:
     std::mutex m_frameMutex;
     std::vector<Frame> m_frames;
     qint64 m_pendingSync = 0;
+    qint64 m_pendingSynced = 0;
 
     QTimer m_lag, m_poll;
     qint64 m_lastLag = 0;
