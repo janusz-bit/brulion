@@ -951,7 +951,8 @@ QQuickItem *topInputItem(QQuickItem *item, QPointF scenePos)
         // the canvas only where an open popup is — or everywhere while a modal one is open (the
         // popup item's QObject parent is the popup) — and where an item put there takes input
         // (a toast, not the window-wide host of the toasts).
-        const QList<QQuickItem *> children = item->childItems();
+        QList<QQuickItem *> children = item->childItems();
+        std::stable_sort(children.begin(), children.end(), [](QQuickItem *a, QQuickItem *b) { return a->z() < b->z(); });
         for (auto it = children.crbegin(); it != children.crend(); ++it) {
             QQuickItem *child = *it;
             if (!child->isVisible())
