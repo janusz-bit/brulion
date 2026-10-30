@@ -47,6 +47,12 @@ if(_pdf_backend STREQUAL "auto")
 endif()
 if(_pdf_backend STREQUAL "qtpdf")
     find_package(Qt6 REQUIRED COMPONENTS Pdf)
+    # Seen by every target that links brulion_platform (Qt's finalizer walks their libraries in
+    # their own directories; found here, the target is this directory's only).
+    get_target_property(_pdf_global Qt6::Pdf IMPORTED_GLOBAL)
+    if(NOT _pdf_global)
+        set_target_properties(Qt6::Pdf PROPERTIES IMPORTED_GLOBAL TRUE)
+    endif()
     target_sources(brulion_platform PRIVATE pdfpages_qtpdf.cpp)
     target_link_libraries(brulion_platform PRIVATE Qt6::Pdf)
 elseif(_pdf_backend STREQUAL "poppler")
