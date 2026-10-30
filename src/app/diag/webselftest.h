@@ -66,7 +66,8 @@ QStringList shownTexts(QQuickItem *root, const QString &objectName);
 ///  2. waits up to `uiGraceMs` for the editor to fetch them by itself (Workspace::
 ///     webPictureChanged before this test asked: `uiFetched`);
 ///  3. asks for the rest (Workspace::webPicture, "ask" → loadWebPicture) until every one is
-///     ready or failed, at most `settleMs` (`timedOut`) → publishes "brulionWebPictureSelfTest"
+///     ready or failed, at most `settleMs` (`timedOut`), and (with a window) the editor shows the
+///     failures' messages, at most `uiSettleMs` more → publishes "brulionWebPictureSelfTest"
 ///     {page, pageScheme, done, timedOut, elapsedMs, pictures: [{url, state, error, format,
 ///     width, height, uiFetched}], shownTexts (the editor's "webPictureText" items; with a
 ///     window)};
@@ -82,6 +83,7 @@ public:
         QString page;          ///< vault path whose pictures are watched (main.cpp: today's journal)
         int uiGraceMs = 10000; ///< wait this long for the editor to fetch them before asking
         int settleMs = 45000;  ///< give up on pictures still loading after this
+        int uiSettleMs = 5000; ///< then wait this long at most for the editor to show the failures
         int exportMs = 90000;  ///< give up on the export after this (state "timeout")
         bool exportCopies = true;
         QString exportFormat = QStringLiteral("html-single");
@@ -120,6 +122,7 @@ private:
     bool m_polling = false;
     QElapsedTimer m_clock;
     QElapsedTimer m_phase;
+    QElapsedTimer m_settledAt; ///< every picture ready or failed since
     QTimer m_timer;
     ioviews::ExportController *m_export = nullptr;
     QJsonObject m_picturesReport;
@@ -128,10 +131,10 @@ private:
 };
 
 /// The drawing editor's canvas under a pen: publishes "brulionPenSelfTest" once the canvas is
-/// shown and after every change of it — {found, editable, stylusSeen, zoom, strokeCount (its
-/// freehand lines), elements (all), changes, canvas: {x, y, width, height} (window coordinates),
-/// strokes: [strokeFacts + bounds: {x, y, width, height} in window coordinates]}. Without a
-/// canvas within the deadline: {found: false, error}.
+/// shown and after every change of it — {found, editable, modified (not saved yet), stylusSeen,
+/// zoom, strokeCount (its freehand lines), elements (all), changes, canvas: {x, y, width, height}
+/// (window coordinates), strokes: [strokeFacts + bounds: {x, y, width, height} in window
+/// coordinates]}. Without a canvas within the deadline: {found: false, error}.
 class PenSelfTest : public QObject {
     Q_OBJECT
 public:

@@ -63,13 +63,22 @@ function expectAlong(stroke, off, x0, y0, x1, y1, tol = 8) {
  *  last change, IndexedDB follows). */
 async function savedStrokes(page, n) {
   let lines = [];
-  await expect.poll(async () => {
-    const bytes = await readFile(page, DRAWING);
-    if (!bytes || !bytes.length) return -1;
-    const scene = decodeDrawing(bytes);
-    lines = (scene?.elements || []).filter((e) => e.type === 'freedraw' && !e.isDeleted);
-    return lines.length;
-  }, { message: 'freehand lines in the saved drawing', timeout: 25_000 }).toBe(n);
+  try {
+    await expect.poll(async () => {
+      const bytes = await readFile(page, DRAWING);
+      if (!bytes || !bytes.length) return -1;
+      const scene = decodeDrawing(bytes);
+      lines = (scene?.elements || []).filter((e) => e.type === 'freedraw' && !e.isDeleted);
+      return lines.length;
+    }, { message: 'freehand lines in the saved drawing', timeout: 25_000 }).toBe(n);
+  } catch (e) {
+    const canvas = await page.evaluate(() => {
+      const r = globalThis.brulionPenSelfTest;
+      return r && { strokeCount: r.strokeCount, modified: r.modified, changes: r.changes };
+    });
+    e.message += `\nthe canvas now: ${JSON.stringify(canvas)}`;
+    throw e;
+  }
   return lines;
 }
 

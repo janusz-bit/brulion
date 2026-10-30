@@ -180,10 +180,23 @@ void WebPicturesSelfTest::pollStep()
         if (state != u"ready" && state != u"failed")
             settled = false;
     }
-    if (settled)
+    if (settled) {
+        // The editor's rows follow a moment later: their messages are waited for (a picture
+        // scrolled out of view never shows one: up to uiSettleMs).
+        if (!m_settledAt.isValid())
+            m_settledAt.start();
+        if (m_window && m_settledAt.elapsed() < m_options.uiSettleMs) {
+            const QStringList shown = shownTexts(m_window->contentItem(), u"webPictureText"_s);
+            for (const QString &url : std::as_const(m_urls)) {
+                const QVariantMap picture = m_workspace->webPicture(url);
+                if (picture.value(u"state"_s).toString() == u"failed" && !shown.contains(picture.value(u"error"_s).toString()))
+                    return;
+            }
+        }
         publishPictures(false);
-    else if (m_phase.elapsed() >= m_options.settleMs)
+    } else if (m_phase.elapsed() >= m_options.settleMs) {
         publishPictures(true);
+    }
 }
 
 void WebPicturesSelfTest::publishPictures(bool timedOut)
@@ -328,7 +341,8 @@ void PenSelfTest::look()
         ++m_changes;
         publish();
     });
-    for (auto signal : {&DrawingCanvas::stylusSeenChanged, &DrawingCanvas::loadedChanged, &DrawingCanvas::viewChanged})
+    for (auto signal : {&DrawingCanvas::stylusSeenChanged, &DrawingCanvas::loadedChanged, &DrawingCanvas::viewChanged,
+                        &DrawingCanvas::modifiedChanged})
         connect(canvas, signal, this, &PenSelfTest::publish);
     // The editor closed (another route): look again.
     connect(canvas, &QObject::destroyed, this, [this] {
@@ -372,6 +386,7 @@ QJsonObject PenSelfTest::report() const
     return {
             {u"found"_s, true},
             {u"editable"_s, canvas->editable()},
+            {u"modified"_s, canvas->modified()},
             {u"stylusSeen"_s, canvas->stylusSeen()},
             {u"zoom"_s, canvas->zoom()},
             {u"strokeCount"_s, int(strokes.size())},

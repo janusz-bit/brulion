@@ -14,6 +14,7 @@
 
 #include <QBuffer>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QImage>
 #include <QJsonArray>
@@ -26,6 +27,7 @@
 #include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 #include <memory>
 
@@ -313,6 +315,53 @@ private Q_SLOTS:
         QTRY_COMPARE(server.requests.size(), 1);
     }
 
+    // The editor's rows show a failure a moment after it is told: the report waits for them (a
+    // row never shown: up to uiSettleMs).
+    void webPicturesWaitForTheEditorsMessages()
+    {
+        MiniHttpServer server;
+        server.bodies.insert("/ukryta-strona.html", "<!doctype html><p>Zażółć</p>");
+        const QString missing = server.url(u"/brak-zdjęcia.png"_s);
+        const QString hidden = server.url(u"/ukryta-strona.html"_s); // another message: no picture
+        auto ws = openVault({{u"Strona.md"_s, u"- ![](%1)\n- ![](%2)\n"_s.arg(missing, hidden).toUtf8()}});
+        ws->setWebPictureHostCheck([](const QString &) { return false; });
+        QQuickWindow window;
+        window.resize(300, 200);
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData("import QtQuick\nText { objectName: \"webPictureText\" }", QUrl());
+        std::unique_ptr<QObject> text(component.create());
+        QVERIFY2(text, qPrintable(component.errorString()));
+        qobject_cast<QQuickItem *>(text.get())->setParentItem(window.contentItem());
+        // The "editor": shows the first picture's message 400 ms after it failed.
+        connect(ws.get(), &Workspace::webPictureChanged, text.get(), [&](const QString &url) {
+            if (url != missing || ws->webPicture(url).value(u"state"_s).toString() != u"failed")
+                return;
+            QTimer::singleShot(400, text.get(), [&] {
+                text->setProperty("text", ws->webPicture(missing).value(u"error"_s).toString());
+            });
+        });
+        Published published;
+        WebPicturesSelfTest::Options options;
+        options.page = u"Strona.md"_s;
+        options.uiGraceMs = 0;
+        options.uiSettleMs = 2000;
+        options.exportCopies = false;
+        WebPicturesSelfTest test(ws.get(), options, published.fn(), &window);
+        QSignalSpy finished(&test, &WebPicturesSelfTest::finished);
+        QElapsedTimer clock;
+        clock.start();
+        test.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        const QJsonObject report = published.last("brulionWebPictureSelfTest");
+        const QString error = pictureOf(report, missing).value(u"error"_s).toString();
+        QVERIFY(error.contains(u"404"_s));
+        QCOMPARE(report.value(u"shownTexts"_s).toArray(), QJsonArray{error});
+        // The second picture's message never shows: the report waited uiSettleMs for it.
+        QCOMPARE(pictureOf(report, hidden).value(u"state"_s).toString(), u"failed"_s);
+        QVERIFY(clock.elapsed() >= 2000);
+    }
+
     void webPicturesOfAMissingPage()
     {
         auto ws = openVault({{u"Strona.md"_s, "- zażółć\n"}});
@@ -352,6 +401,7 @@ private Q_SLOTS:
         QJsonObject report = published.last("brulionPenSelfTest");
         QVERIFY(report.value(u"found"_s).toBool());
         QVERIFY(report.value(u"editable"_s).toBool());
+        QVERIFY(!report.value(u"modified"_s).toBool());
         QVERIFY(!report.value(u"stylusSeen"_s).toBool());
         QCOMPARE(report.value(u"zoom"_s).toDouble(), 1.0);
         QCOMPARE(report.value(u"strokeCount"_s).toInt(), 0);
@@ -372,6 +422,7 @@ private Q_SLOTS:
         QCOMPARE(report.value(u"strokeCount"_s).toInt(), 1);
         QCOMPARE(report.value(u"elements"_s).toInt(), 1);
         QCOMPARE(report.value(u"changes"_s).toInt(), 1);
+        QVERIFY(report.value(u"modified"_s).toBool()); // not saved yet
         const QJsonObject stroke = report.value(u"strokes"_s).toArray().first().toObject();
         QCOMPARE(stroke.value(u"tool"_s).toString(), u"pen"_s);
         QVERIFY(stroke.value(u"simulatePressure"_s).toBool());
@@ -381,6 +432,10 @@ private Q_SLOTS:
         QVERIFY(qAbs(bounds.value(u"y"_s).toDouble() - 100) <= 3);
         QVERIFY(qAbs(bounds.value(u"x"_s).toDouble() + bounds.value(u"width"_s).toDouble() - 300) <= 3);
         QVERIFY(qAbs(bounds.value(u"y"_s).toDouble() + bounds.value(u"height"_s).toDouble() - 160) <= 3);
+
+        // Saved (DrawingView: markSaved): told at once.
+        canvas->markSaved(canvas->fileBytes());
+        QVERIFY(!published.last("brulionPenSelfTest").value(u"modified"_s).toBool());
 
         // Moved and zoomed: the bounds follow the view.
         canvas->zoomBy(2, 0, 0);
