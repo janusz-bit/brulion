@@ -865,6 +865,8 @@ if ((PICKERS)); then
   # it lists the storage's folders (the folder picker opens at the storage's top), else the
   # Downloads root from its drawer of roots (the file pickers open in Recent or the root used last).
   documents_downloads() { # <ERE>
+    # (DocumentsUI lists the files a moment after it is in front.)
+    wait_for 15 ui_has "$1|Download|Pobrane|Show roots|Pokaż katalogi główne|Pokaż elementy główne" || true
     ui_has "$1" && return 0
     if ui_has 'Download|Pobrane'; then
       ui_tap 'Download|Pobrane' first 3 || return 1
@@ -874,7 +876,8 @@ if ((PICKERS)); then
     fi
     wait_for 10 ui_has "$1"
   }
-  downloads_zip() { adb shell ls /sdcard/Download/ 2>/dev/null | tr -d '\r' | grep -E '\.zip$' | head -n 1; }
+  # The saved ZIP anywhere in Download (DocumentsUI's save picker opens in the folder used last).
+  downloads_zip() { adb shell find /sdcard/Download -name "'*.zip'" 2>/dev/null | tr -d '\r' | head -n 1; }
   zip_saved() { [[ -n $(downloads_zip) ]]; }
   # A finger drags the view up until the item so named lies above the bottom navigation (a node
   # under the navigation is "on screen" for UiAutomator, and a tap there switches the view).
@@ -947,7 +950,7 @@ if ((PICKERS)); then
   zip_name=$(sed 's/<node /\n<node /g' "$OUT/ui.xml" | sed -nE 's/.*text="([^"]*\.zip)".*/\1/p' | head -n 1)
   echo "    the save picker suggests: ${zip_name:-nothing}"
   check "… with the export's file name (EXTRA_TITLE)" test -n "$zip_name"
-  check "it goes to the Download folder" documents_downloads 'Notatki z telefonu'
+  check "it shows the Download folder (or the folder used last)" documents_downloads 'Notatki z telefonu'
   check "'Save'" ui_tap 'SAVE|Save|ZAPISZ|Zapisz' last 4
   check "Brulion is back in front" wait_for 15 brulion_front
   check "the ZIP is in Download" wait_for 20 zip_saved
@@ -957,8 +960,8 @@ if ((PICKERS)); then
   adb shell content query --uri content://media/external/downloads --projection _display_name:relative_path:_size \
     >>"$OUT/download-listing.txt" 2>&1 || true
   if [[ -n $saved ]]; then
-    adb pull "/sdcard/Download/$saved" "$OUT/export.zip" >/dev/null 2>&1 || true
-    check "… named as suggested" test "$saved" = "$zip_name"
+    adb pull "$saved" "$OUT/export.zip" >/dev/null 2>&1 || true
+    check "… named as suggested" test "${saved##*/}" = "$zip_name"
     check "… a ZIP archive with the notebook" bash -c "[[ \$(head -c 2 '$OUT/export.zip') == PK ]] && (( \$(stat -c %s '$OUT/export.zip') > 1000 ))"
   fi
   app_shot pk-8-saved
