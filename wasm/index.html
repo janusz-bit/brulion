@@ -156,6 +156,22 @@
       (function () {
         'use strict';
 
+        // Qt 6.11.2 for WebAssembly keeps one browser timeout for its next due timer, with the
+        // wait cut down to whole milliseconds (QEventDispatcherWasm::updateNativeTimer), and arms
+        // the next one only after a timer fired (sendTimerEvents). A timeout that runs before the
+        // timer is due — Firefox keeps a timeout to the millisecond and reads the clock coarsely —
+        // fires none and arms none: every Qt timer stops until another one is started or stopped
+        // (input does not wake them), e.g. the drawing editor's save 1.2 s after the last line.
+        // So every timeout of the page with a wait gets TIMEOUT_MARGIN_MS more; 0 ms (Qt's
+        // wake-ups) stays. docs/WEB.md "Ograniczenia techniczne"; tests/web/shell.spec.mjs.
+        var TIMEOUT_MARGIN_MS = 2;
+        var nativeSetTimeout = window.setTimeout;
+        window.setTimeout = function (handler, delay) {
+          var args = Array.prototype.slice.call(arguments);
+          if (typeof delay === 'number' && delay > 0) args[1] = delay + TIMEOUT_MARGIN_MS;
+          return nativeSetTimeout.apply(window, args);
+        };
+
         // Filled in by scripts/wasm-build.sh (left as "@…@" when the file is used unprocessed).
         var WASM_SIZE = parseInt('@BRULION_WASM_SIZE@', 10);
         var ASSET_VERSION = '@BRULION_ASSET_VERSION@';

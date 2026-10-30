@@ -29,6 +29,7 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 - **Telefon: szuflada pokazuje otwartą stronę i nowy folder** — wiersz otwartej strony w drzewie („Pokazuj otwartą stronę”), nowego folderu i strony z „Pokaż w drzewie” lądował czasem pod paskiem synchronizacji na dole szuflady, a stuknięcie w niego otwierało Synchronizację. Teraz drzewo przewija się tak, żeby cały wiersz był widoczny — także gdy szuflada otwiera się po schowaniu klawiatury albo po zmianie rozmiaru okna — dopóki sam nie przewiniesz listy.
 - **Rysik rysuje z naciskiem** — w edytorze rysunku rysik rysował tylko jak mysz: linia miała wszędzie tę samą grubość, a na Androidzie mógł w ogóle nie rysować (warstwa powiadomień Brulionu zasłaniała kartkę przed rysikiem). Teraz linia grubieje przy mocniejszym nacisku, a drugi koniec rysika i przycisk boczny ścierają. Zobacz [[Rysunki#Rysik, palec i mysz|Rysik, palec i mysz]].
 - **Wersja w przeglądarce: drugi koniec rysika ściera** — gumka na drugim końcu rysika rysowała w przeglądarce jak pióro, zamiast ścierać.
+- **Wersja w przeglądarce: rysunek zapisuje się po ostatniej linii** — zwłaszcza w Firefoksie wszystko, co Brulion robi z opóźnieniem, potrafiło stanąć: ostatnia linia rysunku zostawała niezapisana (zapis przychodzi 1,2 s po zmianie), dopóki nie zmieniło się coś innego. Teraz takie zapisy przychodzą zawsze.
 
 ## 0.5.0 — 28 października 2026
 

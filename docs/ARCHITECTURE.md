@@ -438,10 +438,12 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
   x86_64, x86 → one multi-ABI APK); `android/` holds the manifest, resources and Kotlin
   sources (+ Kotlin unit tests); signed APK in GitHub Actions — docs/ANDROID.md.
 * WebAssembly: `scripts/wasm-build.sh` — Qt 6.11.2 `wasm_singlethread` + matching emsdk; our
-  HTML shell, manifest and service worker in `wasm/` (offline PWA); deployed to GitHub Pages —
-  docs/WEB.md. Browser tests of the built site: `scripts/wasm-smoke.mjs` (Chrome over a
-  dependency-free DevTools client) and `tests/web` (an npm project CMake ignores: Playwright in
-  Chromium and Firefox — pictures from the internet, the pen —, `scripts/web-test.sh`).
+  HTML shell, manifest and service worker in `wasm/` (offline PWA; the shell gives every
+  `setTimeout` with a wait 2 ms more, as Qt 6.11.2's dispatcher stops all its timers when one
+  runs early — docs/WEB.md "Ograniczenia techniczne"); deployed to GitHub Pages — docs/WEB.md.
+  Browser tests of the built site: `scripts/wasm-smoke.mjs` (Chrome over a dependency-free
+  DevTools client) and `tests/web` (an npm project CMake ignores: Playwright in Chromium and
+  Firefox — pictures from the internet, the pen, the shell —, `scripts/web-test.sh`).
 * CI (`.github/workflows`): `ci.yml` (Nix build + flake checks on x86_64/aarch64, aqt build
   with ASan/UBSan and `-Werror`, actionlint/shellcheck/clang-format), `android.yml`,
   `appimage.yml`, `windows.yml`, `wasm.yml` (Pages, after the smoke test and the Playwright tests

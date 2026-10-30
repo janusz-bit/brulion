@@ -118,7 +118,7 @@ Parametry adresu (do debugowania):
   notatniku (pobieranie zdjęć z internetu, eksport) ani nie przestawi mu zegara czy widoku —
   bez znacznika te parametry są pomijane. Trasa i zegar idą do aplikacji jako jeden argument
   (`--route=…`, `--now=…`), więc wartość nigdy nie staje się osobną opcją (`?route=--vault=…` to
-  tylko nieznany widok). Sprawdza to `tests/web/links.spec.mjs`.
+  tylko nieznany widok). Sprawdza to `tests/web/shell.spec.mjs`.
 * `?keyboard=visual` — klawiatura ekranowa zmniejsza tylko widoczny obszar, nie stronę
   (domyślne zachowanie przeglądarek, `interactive-widget=resizes-visual`; niżej, „Klawiatura
   ekranowa”) — do testów i diagnozy.
@@ -278,10 +278,13 @@ scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `play
   mógłby odrzucić stronę z takim certyfikatem; i tak nie dotyka zapytań do innych witryn),
   `?now=2026-10-14 10:00` i `?route=…` w karcie oznaczonej do testów (`markTestTab` w
   `tests/web/lib/brulion.mjs`; „Uruchamianie lokalnie” wyżej).
-* **Parametry adresu** (`links.spec.mjs`, bez aplikacji: atrapa `qtloader.js` zapisuje jej
+* **Strona wokół aplikacji** (`shell.spec.mjs`; bez aplikacji: atrapa `qtloader.js` zapisuje jej
   argumenty): bez znacznika karty link nie uruchamia testów na notatniku i nie przekazuje trasy
   ani zegara; w karcie testowej każdy z nich jest jednym argumentem (`--route=--vault=…` nie
-  otwiera innego notatnika).
+  otwiera innego notatnika); każde opóźnienie `setTimeout` > 0 ms dostaje 2 ms zapasu, 0 ms
+  zostaje. Z prawdziwą aplikacją w przeglądarce, która uruchamia każdy `setTimeout` 1 ms za
+  wcześnie, edytor rysunków i tak zapisuje linię po 1,2 s bez żadnego wejścia (niżej,
+  „Ograniczenia techniczne”: zegary Qt).
 * **Wyniki aplikacji** (`src/app/diag/webselftest.h`, biblioteka `brulion_webselftest`, w aplikacji
   tylko w wersji webowej; bez `?selftest=webpictures`/`pen` w karcie testowej nic nie robi) są
   globalami JavaScriptu:
@@ -820,6 +823,22 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
   Minimalny przypadek: `QCoreApplication` z jednym powtarzanym `QTimer` 0 ms — licznik
   wywołań zatrzymuje się na 1 (z interwałem 1 ms: ~230 wywołań/s); dodatkowy timer 250 ms
   nie odpala wtedy ani razu (obok timera 1 ms: 4 razy na sekundę).
+* **Zegary Qt a `setTimeout` uruchomiony za wcześnie.** Dyspozytor zdarzeń Qt 6.11.2
+  (`QEventDispatcherWasm::updateNativeTimer()`) ustawia jeden `setTimeout` przeglądarki na
+  najbliższy timer Qt z czasem oczekiwania obciętym do pełnych milisekund, a następny ustawia
+  dopiero wtedy, gdy któryś timer odpalił (`sendTimerEvents()`). Gdy `setTimeout` przyjdzie
+  przed terminem timera (Firefox trzyma `setTimeout` co do milisekundy, a zegar
+  `performance.now()`, z którego Qt liczy czas, ma zgrubną rozdzielczość), nie odpala żaden
+  timer i żaden nowy `setTimeout` nie powstaje: **wszystkie** timery Qt stoją, dopóki inny timer
+  nie zostanie uruchomiony/zatrzymany — wejście (ruch myszy) ich nie budzi. Tak w Firefoksie
+  (2026-10-30, laptop: 2 z 30 i 1 z 15 przebiegów testu rysika) edytor rysunków nie zapisywał
+  ostatniej linii (zapis 1,2 s po zmianie), choć płótno ją miało. Dlatego `index.html` dodaje
+  każdemu `setTimeout` strony z opóźnieniem > 0 ms 2 ms zapasu (`TIMEOUT_MARGIN_MS`; 0 ms —
+  przebudzenia Qt — zostaje): po tej zmianie 0 z 60 przebiegów. Test:
+  `tests/web/shell.spec.mjs` (przeglądarka z każdym `setTimeout` 1 ms za wcześnie — bez zapasu
+  zapis w Chromium nie przychodzi nigdy; Firefox uruchamia tu swoje `setTimeout` dość późno, by
+  i tak zdążyć). 2 ms wystarczą na obcięcie (< 1 ms) i zgrubny zegar (< 1 ms), a timer 1 ms
+  indeksowania nie zwalnia: przeglądarka i tak odkłada zagnieżdżone `setTimeout` o ≥ 4 ms.
 * Kod skompilowany: `index.html` podaje `WebAssembly.compileStreaming()` oryginalną odpowiedź
   `fetch` (postęp pobierania czyta z jej kopii, `response.clone()`), bo tylko odpowiedź z
   adresem URL może trafić do pamięci podręcznej skompilowanego kodu przeglądarki. Chrome
