@@ -29,7 +29,8 @@
 //                      of the card, links, embedded files, text entries) would not survive in the
 //                      original's (drawing::keepsMarkdownOf) — oursNotes / theirsNotes show both
 //                      (drawing::markdownAroundScene); notesOnly: nothing else differs (the copy's
-//                      elements are all in the original): only "remove the copy" or "keep one"
+//                      elements are all in the original, or a merge would not change it — the
+//                      copy's paper, a same-version hand edit): only "remove the copy" or "keep one"
 //   mergeDrawings()    mergedBytes replace the original, the copy goes — but while notesDiffer
 //                      the copy stays (updated(), not resolved()): its notes are carried over by
 //                      hand, then it is removed (notesOnly)

@@ -1805,7 +1805,8 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   their elements). When the copy's notes would be lost, nothing is "the same" or "older": "Scal
   rysunki" (the card says so) merges the elements into the drawing and **keeps the copy**
   (`ConflictResolver.updated`, a toast, the resolver stays open); then — or when the copy adds
-  nothing to the drawing at all — a card "Różnią się tylko notatki wokół rysunku" with a
+  nothing to the drawing at all, a merge would leave it as it is (the copy's own paper, an element
+  edited by hand: never taken) — a card "Różnią się tylko notatki wokół rysunku" with a
   `BDiffView` of both files' Markdown (the scene's block left empty, `oursNotes`/`theirsNotes`)
   and "Usuń kopię" once the user carried over what they need in Obsidian. The replaced version
   goes to History whatever its size (`writeBytesKeepingHistory` records it from the disk: the

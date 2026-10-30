@@ -603,14 +603,19 @@ private Q_SLOTS:
     {
         // The copy adds nothing to the drawing, but its notes around it (the back of the card)
         // were changed in Obsidian on the other device: neither "the same" nor "older" — removing
-        // it would lose those notes without a word.
+        // it would lose those notes without a word. With a paper of its own (Brulion's dark one)
+        // the copy is not contained in the drawing, but a merge would add nothing to it either.
         QTest::addColumn<bool>("drawnHere");
-        QTest::newRow("the same drawing") << false;
-        QTest::newRow("a line more here") << true;
+        QTest::addColumn<bool>("otherPaper");
+        QTest::newRow("the same drawing") << false << false;
+        QTest::newRow("a line more here") << true << false;
+        QTest::newRow("another paper there") << false << true;
+        QTest::newRow("a line more here, another paper there") << true << true;
     }
     void pluginDrawingOnlyTheNotesDiffer()
     {
         QFETCH(bool, drawnHere);
+        QFETCH(bool, otherPaper);
         const QString original = u"Excalidraw/Szkic.excalidraw.md"_s;
         const QString copy = u"Excalidraw/Szkic.excalidraw.sync-conflict-20261014-093000-ABCDEFG.md"_s;
         const QByteArray base = fixture(u"obsidian_freedraw.excalidraw.md"_s);
@@ -619,7 +624,9 @@ private Q_SLOTS:
         brulion::drawing::Drawing mine = file->drawing;
         if (drawnHere)
             mine.strokes.append(line(u"tutaj"_s));
-        QByteArray noted = base;
+        brulion::drawing::Drawing theirs = file->drawing;
+        theirs.theme = brulion::drawing::PaperTheme::Dark;
+        QByteArray noted = otherPaper ? brulion::drawing::writeDrawingFile(*file, theirs, 1761650000000) : base;
         noted.replace("Notatka z tyłu: Zażółć gęślą jaźń", "Notatka z tyłu: WAŻNE zmiany z laptopa, ąę");
         QVERIFY(noted != base);
         auto ws = open({ { original, brulion::drawing::writeDrawingFile(*file, mine, 1761650000000) }, { copy, noted } });
@@ -643,11 +650,20 @@ private Q_SLOTS:
         QCOMPARE(idsOf(ws->vault()->readBinary(original)), idsOf(brulion::drawing::writeDrawingFile(*file, mine)));
     }
 
+    void pluginDrawingNotesDifferMergeKeepsTheCopy_data()
+    {
+        // (Another paper there: the merge keeps the original's, so the copy is never contained in
+        // the merged drawing — the notes are all that is left to do all the same.)
+        QTest::addColumn<bool>("otherPaper");
+        QTest::newRow("the same paper") << false;
+        QTest::newRow("another paper there") << true;
+    }
     void pluginDrawingNotesDifferMergeKeepsTheCopy()
     {
         // Both devices drew a line, and the other one changed the back of the card as well (what
         // Nextcloud leaves as a conflict copy instead of merging): "Scal rysunki" merges the
         // elements into the original and keeps the copy, whose notes would be lost with it.
+        QFETCH(bool, otherPaper);
         const QString original = u"Excalidraw/Szkic.excalidraw.md"_s;
         const QString copy = u"Excalidraw/Szkic.excalidraw.sync-conflict-20261014-093000-ABCDEFG.md"_s;
         const QByteArray base = fixture(u"obsidian_freedraw.excalidraw.md"_s);
@@ -657,6 +673,8 @@ private Q_SLOTS:
         mine.strokes.append(line(u"tutaj"_s));
         brulion::drawing::Drawing theirs = file->drawing;
         theirs.strokes.append(line(u"tam-ż"_s));
+        if (otherPaper)
+            theirs.theme = brulion::drawing::PaperTheme::Dark;
         const QByteArray ours = brulion::drawing::writeDrawingFile(*file, mine, 1761650000000);
         QByteArray copied = brulion::drawing::writeDrawingFile(*file, theirs, 1761650000000);
         copied.replace("Notatka z tyłu: Zażółć gęślą jaźń", "Notatka z tyłu: WAŻNE zmiany z laptopa");

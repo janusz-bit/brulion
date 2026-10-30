@@ -295,17 +295,22 @@ void ConflictResolver::loadDrawings(const QString &original, const QString &copy
     const bool contained = !m_identical && drawing::containsDrawing(mine->drawing, other->drawing);
     m_copyIsOlder = contained && keepsNotes;
     m_notesDiffer = !m_identical && !keepsNotes;
-    m_notesOnly = m_notesDiffer && contained;
     if (m_notesDiffer) {
         m_oursNotes = QString::fromUtf8(drawing::markdownAroundScene(*mine));
         m_theirsNotes = QString::fromUtf8(drawing::markdownAroundScene(*other));
     }
-    if (m_notesOnly || mine->format != other->format || !mine->writable || !drawing::editable(mine->drawing)
-        || !drawing::editable(other->drawing))
-        return;
+    const bool mergeable = mine->format == other->format && mine->writable && drawing::editable(mine->drawing)
+                           && drawing::editable(other->drawing);
     // No common version is known (a Syncthing copy): a union. The original is the primary side —
     // its order, paper and Markdown around the scene; the copy's elements it lacks on top.
-    const drawing::Drawing merged = drawing::merge(drawing::MergeBase{}, other->drawing, mine->drawing);
+    const drawing::Drawing merged =
+            mergeable ? drawing::merge(drawing::MergeBase{}, other->drawing, mine->drawing) : drawing::Drawing{};
+    // Only the notes are left when the drawing would not change: the copy contained, or a union
+    // that is the original as it is (the copy's paper, an element edited by hand at the same
+    // version: never taken) — a merge offered again and again would never get to them.
+    m_notesOnly = m_notesDiffer && (contained || (mergeable && drawing::sameDrawing(merged, mine->drawing)));
+    if (m_notesOnly || !mergeable)
+        return;
     m_mergedBytes = drawing::writeDrawingFile(*mine, merged, m_workspace->now().toMSecsSinceEpoch());
     if (m_mergedBytes.isEmpty())
         return;
