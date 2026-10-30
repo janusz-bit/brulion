@@ -334,6 +334,10 @@ info "Bundling Qt and packing $appimage"
   done
   rm -rf -- "$APPDIR/usr/qml/QtQuick/Dialogs"
   rm -f -- "$APPDIR/usr/lib/libQt6QuickDialogs2"*.so*
+  # The same for Qt PDF's QML module (QtQuick.Pdf) and its picture plugin: Brulion draws PDF pages
+  # with libQt6Pdf itself (src/platform/pdfpages_qtpdf.cpp), never through QML or QImageReader.
+  rm -rf -- "$APPDIR/usr/qml/QtQuick/Pdf"
+  rm -f -- "$APPDIR/usr/lib/libQt6PdfQuick"*.so* "$APPDIR/usr/plugins/imageformats/libqpdf.so"
   # linuxdeploy-plugin-qt's AppRun hook exports QT_QPA_PLATFORMTHEME=gtk2 on GNOME and XFCE, over
   # the user's own value: a Qt 5 theme Qt 6 does not have, and with the variable set main.cpp
   # does not choose the XDG portal, so the file pickers were Qt's widget dialog there. Out; AppRun
@@ -375,16 +379,20 @@ for plugin in platforms/libqxcb.so platforms/libqwayland.so platforms/libqoffscr
   platformthemes/libqxdgdesktopportal.so; do
   [[ -f $check_dir/squashfs-root/usr/plugins/$plugin ]] || die "plugin $plugin missing from the AppImage"
 done
-# Only the Basic style, no QtQuick.Dialogs (pruned above; docs/PERFORMANCE.md L9).
+# Only the Basic style, no QtQuick.Dialogs (pruned above; docs/PERFORMANCE.md L9), no QtQuick.Pdf;
+# libQt6Pdf itself is there (the PDF pages of drawings' backdrops).
 unused_qml=""
-for path in qml/QtQuick/Dialogs qml/QtQuick/Controls/{Material,Universal,Imagine,Fusion,FluentWinUI3}; do
+for path in qml/QtQuick/Dialogs qml/QtQuick/Pdf qml/QtQuick/Controls/{Material,Universal,Imagine,Fusion,FluentWinUI3} \
+  plugins/imageformats/libqpdf.so; do
   [[ ! -e $check_dir/squashfs-root/usr/$path ]] || unused_qml+=" $path"
 done
-for lib in "$check_dir"/squashfs-root/usr/lib/libQt6QuickDialogs2* \
+for lib in "$check_dir"/squashfs-root/usr/lib/libQt6QuickDialogs2* "$check_dir"/squashfs-root/usr/lib/libQt6PdfQuick* \
   "$check_dir"/squashfs-root/usr/lib/libQt6QuickControls2{Material,Universal,Imagine,Fusion,FluentWinUI3}*; do
   [[ ! -e $lib ]] || unused_qml+=" ${lib##*/}"
 done
-[[ -z $unused_qml ]] || die "unused Qt Quick styles or QtQuick.Dialogs in the AppImage: $unused_qml"
+[[ -z $unused_qml ]] || die "unused Qt Quick styles, QtQuick.Dialogs or QtQuick.Pdf in the AppImage: $unused_qml"
+[[ -n $(find "$check_dir/squashfs-root/usr/lib" -maxdepth 1 -name 'libQt6Pdf.so*' -print -quit) ]] ||
+  die "libQt6Pdf missing from the AppImage (the PDF pages of drawings' backdrops)"
 # "Otwórz za pomocą → Brulion" for Markdown and text files: the desktop entry AppImage integration
 # tools (Gear Lever, AppImageLauncher, appimaged) install keeps the files' types and --open %F —
 # text/plain only (text/markdown would make Brulion GNOME's default for .md files) — and
