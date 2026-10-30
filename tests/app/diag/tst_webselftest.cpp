@@ -54,7 +54,8 @@ QByteArray pngBytes()
     return buffer.data();
 }
 
-const QByteArray svgBytes = R"(<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10" fill="#00ff00"/></svg>)";
+const QByteArray svgBytes =
+        R"(<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10" fill="#00ff00"/></svg>)";
 
 /// A port nobody listens on (taken, then let go).
 quint16 closedPort()
@@ -218,8 +219,9 @@ private Q_SLOTS:
         const QString missing = server.url(u"/brak.png"_s);
         const QString page = server.url(u"/strona.html"_s);
         const QString gallery = server.url(u"/galeria-żółw.svg"_s);
-        const QString journal = u"- Łąka: ![łąka](%1)\n- ![obraz](%2)\n- ![zdjęcie](%3)\n- ![brak](%4)\n"
-                                u"- ![strona](%5)\n- zwykły tekst, zażółć gęślą jaźń\n"_s.arg(ok, http, https, missing, page);
+        const QString journal =
+                u"- Łąka: ![łąka](%1)\n- ![obraz](%2)\n- ![zdjęcie](%3)\n- ![brak](%4)\n"
+                u"- ![strona](%5)\n- zwykły tekst, zażółć gęślą jaźń\n"_s.arg(ok, http, https, missing, page);
         auto ws = openVault({{u"journals/2026-10-14.md"_s, journal.toUtf8()},
                              {u"Galeria.md"_s, u"- ![żółw](%1)\n"_s.arg(gallery).toUtf8()}});
         QVERIFY(ws->isOpen());
@@ -257,7 +259,8 @@ private Q_SLOTS:
         QCOMPARE(ready.value(u"error"_s).toString(), QString());
         const QString httpError = pictureOf(pictures, http).value(u"error"_s).toString();
         QCOMPARE(pictureOf(pictures, http).value(u"state"_s).toString(), u"failed"_s);
-        QVERIFY2(httpError.contains(u"http://"_s) && httpError.contains(u"https://"_s) && !httpError.contains(u"(CORS)"_s),
+        QVERIFY2(httpError.contains(u"http://"_s) && httpError.contains(u"https://"_s)
+                         && !httpError.contains(u"(CORS)"_s),
                  qPrintable(httpError));
         const QString corsError = pictureOf(pictures, https).value(u"error"_s).toString();
         QVERIFY2(corsError.contains(u"(CORS)"_s) && corsError.contains(u"127.0.0.1"_s), qPrintable(corsError));
@@ -276,7 +279,7 @@ private Q_SLOTS:
         // The cached picture and the gallery's, fetched by the export itself.
         QCOMPARE(exported.value(u"dataPictures"_s).toInt(), 2);
         QCOMPARE(server.requests.count("/galeria-%C5%BC%C3%B3%C5%82w.svg"), 1); // not on the page: once
-        QCOMPARE(server.requests.count("/%C5%82%C4%85ka.png"), 1); // the export took the cached copy
+        QCOMPARE(server.requests.count("/%C5%82%C4%85ka.png"), 1);              // the export took the cached copy
         const QJsonArray warnings = exported.value(u"warnings"_s).toArray();
         QCOMPARE(warnings.size(), 4);
         for (const QJsonValue &w : warnings)
@@ -383,7 +386,8 @@ private Q_SLOTS:
         canvas->zoomBy(2, 0, 0);
         report = published.last("brulionPenSelfTest");
         QCOMPARE(report.value(u"zoom"_s).toDouble(), 2.0);
-        const QJsonObject zoomed = report.value(u"strokes"_s).toArray().first().toObject().value(u"bounds"_s).toObject();
+        const QJsonObject zoomed =
+                report.value(u"strokes"_s).toArray().first().toObject().value(u"bounds"_s).toObject();
         QVERIFY(zoomed.value(u"width"_s).toDouble() > 1.8 * bounds.value(u"width"_s).toDouble());
 
         // Undo is a change too: no lines left.

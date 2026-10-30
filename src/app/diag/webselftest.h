@@ -79,18 +79,18 @@ class WebPicturesSelfTest : public QObject {
     Q_OBJECT
 public:
     struct Options {
-        QString page;           ///< vault path whose pictures are watched (main.cpp: today's journal)
-        int uiGraceMs = 10000;  ///< wait this long for the editor to fetch them before asking
-        int settleMs = 45000;   ///< give up on pictures still loading after this
-        int exportMs = 90000;   ///< give up on the export after this (state "timeout")
+        QString page;          ///< vault path whose pictures are watched (main.cpp: today's journal)
+        int uiGraceMs = 10000; ///< wait this long for the editor to fetch them before asking
+        int settleMs = 45000;  ///< give up on pictures still loading after this
+        int exportMs = 90000;  ///< give up on the export after this (state "timeout")
         bool exportCopies = true;
         QString exportFormat = QStringLiteral("html-single");
         QString exportScope = QStringLiteral("vault");
-        bool save = true;       ///< ExportController::saveInBrowser() once the file is ready
+        bool save = true; ///< ExportController::saveInBrowser() once the file is ready
     };
 
-    WebPicturesSelfTest(shell::Workspace *workspace, Options options, PublishFn publish,
-                        QQuickWindow *window = nullptr, QObject *parent = nullptr);
+    WebPicturesSelfTest(shell::Workspace *workspace, Options options, PublishFn publish, QQuickWindow *window = nullptr,
+                        QObject *parent = nullptr);
     ~WebPicturesSelfTest() override;
 
     void start();
@@ -116,7 +116,7 @@ private:
     QStringList m_urls;
     QSet<QString> m_signalled; ///< told by the workspace (before this test asked: the editor's)
     QSet<QString> m_uiFetched;
-    QSet<QString> m_asked;     ///< loadWebPicture() called by this test
+    QSet<QString> m_asked; ///< loadWebPicture() called by this test
     bool m_polling = false;
     QElapsedTimer m_clock;
     QElapsedTimer m_phase;

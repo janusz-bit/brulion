@@ -106,8 +106,11 @@ QStringList shownTexts(QQuickItem *root, const QString &objectName)
 
 WebPicturesSelfTest::WebPicturesSelfTest(shell::Workspace *workspace, Options options, PublishFn publish,
                                          QQuickWindow *window, QObject *parent)
-    : QObject(parent), m_workspace(workspace), m_options(std::move(options)), m_publish(std::move(publish)),
-      m_window(window)
+    : QObject(parent)
+    , m_workspace(workspace)
+    , m_options(std::move(options))
+    , m_publish(std::move(publish))
+    , m_window(window)
 {
     m_timer.setInterval(StepMs);
     // What the workspace tells before this test asks for anything was asked for by the editor.

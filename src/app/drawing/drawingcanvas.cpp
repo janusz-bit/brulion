@@ -997,8 +997,7 @@ bool DrawingCanvas::handleTablet(QTabletEvent *event)
     // WebAssembly has one pen device and passes the web's eraser button (button 5, `buttons & 32`)
     // as ExtraButton3. A held barrel button erases too: RightButton, and on Android
     // BUTTON_STYLUS_PRIMARY (32), which Qt for Android passes as ExtraButton3 as well.
-    const bool eraser =
-            eraserDevice(event->pointerType()) || (event->buttons() & (Qt::RightButton | Qt::ExtraButton3));
+    const bool eraser = eraserDevice(event->pointerType()) || (event->buttons() & (Qt::RightButton | Qt::ExtraButton3));
     const Pointer p{true, eraser, false, std::clamp(double(event->pressure()), 0.0, 1.0), event->modifiers()};
     const auto remember = [this, event] {
         m_lastTabletTime = event->timestamp();
