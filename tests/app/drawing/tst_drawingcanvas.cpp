@@ -3,12 +3,19 @@
 // canvas; Windows' mouse events made of the pen), a mouse, fingers (drawing, panning, a pinch),
 // the wheel —, undo / redo, the SVG it writes (valid for QSvgRenderer, read back equal), loading
 // Excalidraw files, merging a version another device wrote and what it paints — light and dark
-// (the drawing's theme, the app's) —, a preview no input reaches (`interactive: false`), and the
-// previews of drawings (DrawingImageProvider, drawingrender.h). Offscreen.
+// (the drawing's theme, the app's) —, a preview no input reaches (`interactive: false`), the
+// previews of drawings (DrawingImageProvider, drawingrender.h) and backdrops (a picture or a PDF
+// page under the ink: locked, dark, undo, merged, prepared from files — backdropimage.h —, the
+// PDF page thumbnails, DrawingBackdrops' jobs). Offscreen.
+#include "backdropimage.h"
+#include "backdrops.h"
 #include "drawingcanvas.h"
 #include "drawingimageprovider.h"
 #include "drawingrender.h"
+#include "pdfpageimageprovider.h"
+#include "pdfpages.h"
 
+#include "drawing/backdrop.h"
 #include "drawing/drawingfile.h"
 #include "drawing/edit.h"
 #include "drawing/excalidraw.h"
@@ -19,17 +26,25 @@
 #include "drawing/svgwrite.h"
 
 #include <QBuffer>
+#include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
+#include <QImageWriter>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPageLayout>
+#include <QPageSize>
 #include <QPainter>
+#include <QPdfWriter>
 #include <QPointingDevice>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRandomGenerator>
 #include <QSignalSpy>
 #include <QSvgRenderer>
 #include <QTemporaryDir>
@@ -358,6 +373,40 @@ int pixelsLike(const QImage &image, const QRect &area, const QColor &color, int 
         }
     }
     return n;
+}
+
+/// A prepared backdrop (DrawingBackdrops' item) of a `size` picture of one colour.
+QVariantMap backdropOf(const QColor &color, QSize size = QSize(400, 300),
+                       const QString &path = u"Załączniki/slajd.png"_s, int page = 0)
+{
+    QImage image(size, QImage::Format_RGB32);
+    image.fill(color);
+    brulion::drawingview::PreparedBackdrop p;
+    p.image = brulion::drawingview::encodeBackdrop(image);
+    p.source = brulion::drawing::BackdropSource{path, page};
+    p.name = u"slajd"_s;
+    return brulion::drawingview::toVariant(p);
+}
+
+/// A PDF of two A4 pages: text on the first, a red 20 mm square (40–60 mm across, 30–50 mm down)
+/// on the second, landscape.
+bool writeTwoPagePdf(const QString &path)
+{
+    QPdfWriter writer(path);
+    writer.setResolution(72);
+    writer.setPageSize(QPageSize(QPageSize::A4));
+    writer.setPageMargins(QMarginsF(0, 0, 0, 0));
+    QPainter p;
+    if (!p.begin(&writer))
+        return false;
+    p.drawText(QPointF(60, 120), u"Zażółć gęślą jaźń"_s);
+    writer.setPageOrientation(QPageLayout::Landscape);
+    if (!writer.newPage())
+        return false;
+    const double mm = 72 / 25.4;
+    p.fillRect(QRectF(40 * mm, 30 * mm, 20 * mm, 20 * mm), Qt::red);
+    p.end();
+    return QFile::exists(path);
 }
 
 } // namespace
@@ -2894,6 +2943,474 @@ private Q_SLOTS:
         canvas->render(&p, QSizeF(800, 600));
         qInfo("600 shapes: load %lld ms, render %.1f ms", loadMs, canvas->lastRenderMs());
         QVERIFY(canvas->lastRenderMs() < 2000.0 * BRULION_TEST_SLOWDOWN);
+    }
+
+    // --- Backdrops (core drawing/backdrop.h, backdropimage.h, backdrops.h) --------------------
+
+    void backdropUnderInk()
+    {
+        QVERIFY(canvas->setBackdrop(backdropOf(QColor(u"#ff0000"_s))));
+        QVERIFY(canvas->hasBackdrop());
+        QCOMPARE(canvas->backdropPath(), u"Załączniki/slajd.png"_s);
+        QCOMPARE(canvas->backdropPage(), 0);
+        // 400 × 300 px: 1200 × 900 scene units from the origin (the view's top left at zoom 1).
+        QCOMPARE(canvas->contentBounds(), QRectF(0, 0, 1200, 900));
+        canvas->setColor(QColor(u"#1f2430"_s));
+        canvas->setPenWidth(4);
+        mouseStroke(window.get(), {100, 100}, {300, 100}, 20);
+        QCOMPARE(canvas->strokeCount(), 2);
+        QCOMPARE(canvas->currentDrawing().strokes.first().type, brulion::drawing::ElementType::Image);
+        const QImage image = painted(canvas);
+        QVERIFY2(image.pixelColor(200, 100).lightness() < 80, qPrintable(image.pixelColor(200, 100).name()));
+        QVERIFY2(near(image.pixelColor(200, 200), QColor(u"#ff0000"_s), 12),
+                 qPrintable(image.pixelColor(200, 200).name()));
+        // Beyond the backdrop: the paper.
+        canvas->setCenterX(1400);
+        QVERIFY(near(painted(canvas).pixelColor(780, 300), Qt::white));
+    }
+
+    void backdropIsLocked()
+    {
+        QVERIFY(canvas->setBackdrop(backdropOf(QColor(u"#2f9e44"_s))));
+        mouseStroke(window.get(), {100, 400}, {300, 400}, 12);
+        QCOMPARE(canvas->strokeCount(), 2);
+        const QString backdrop = canvas->currentDrawing().strokes.first().id;
+        const QString stroke = strokeIds(canvas).last();
+        // The eraser across it (away from the stroke) takes nothing.
+        canvas->setTool(u"eraser"_s);
+        mouseStroke(window.get(), {100, 150}, {500, 200}, 12);
+        QCOMPARE(canvas->strokeCount(), 2);
+        // All of it in view (1200 × 900 at zoom 0.5: 100,75–700,525), a lasso around everything:
+        // only the stroke.
+        canvas->setZoom(0.5);
+        canvas->setCenterX(600);
+        canvas->setCenterY(450);
+        canvas->setTool(u"select"_s);
+        Pen pen(window.get());
+        penPath(pen, {{20, 20}, {780, 20}, {780, 580}, {20, 580}, {20, 30}});
+        QCOMPARE(canvas->selection(), QStringList{stroke});
+        canvas->clearSelection();
+        // A tap on it (scene 1000, 250) selects nothing; select all takes the stroke only.
+        QTest::mouseClick(window.get(), Qt::LeftButton, {}, QPoint(600, 200));
+        QCOMPARE(canvas->selectionCount(), 0);
+        canvas->selectAll();
+        QCOMPARE(canvas->selection(), QStringList{stroke});
+        // To the back: above it. Moved with the arrows: it stays.
+        canvas->reorderSelection(u"back"_s);
+        QCOMPARE(strokeIds(canvas).first(), backdrop);
+        canvas->nudgeSelection(10, 0);
+        QCOMPARE(canvas->currentDrawing().strokes.first().box.topLeft(), QPointF(0, 0));
+    }
+
+    void backdropDarkInverted()
+    {
+        QVERIFY(canvas->setBackdrop(backdropOf(Qt::white)));
+        QVERIFY(near(painted(canvas).pixelColor(300, 300), Qt::white));
+        canvas->setTheme(u"dark"_s);
+        QVERIFY(canvas->dark());
+        const QColor dark = painted(canvas).pixelColor(300, 300);
+        QVERIFY2(near(dark, QColor(u"#121212"_s), 2), qPrintable(dark.name()));
+        // "auto" follows the app.
+        canvas->setTheme(u"auto"_s);
+        canvas->setAppDark(true);
+        QVERIFY(near(painted(canvas).pixelColor(300, 300), QColor(u"#121212"_s), 2));
+        canvas->setAppDark(false);
+        QVERIFY(near(painted(canvas).pixelColor(300, 300), Qt::white));
+        // A Dark drawing's file shows the backdrop dark in other programs; its scene keeps the
+        // original raster.
+        canvas->setTheme(u"dark"_s);
+        const QByteArray svg = canvas->svg();
+        const QImage picture = renderSvg(svg, QSize(1232, 932));
+        QVERIFY2(near(picture.pixelColor(300, 300), QColor(u"#121212"_s), 3),
+                 qPrintable(picture.pixelColor(300, 300).name()));
+        const std::optional<brulion::drawing::Drawing> back = brulion::drawing::readDrawing(svg);
+        QVERIFY(back);
+        const QString fileId = back->strokes.first().fileId;
+        QCOMPARE(back->files.value(fileId).toObject().value(u"dataURL"_s).toString(),
+                 canvas->currentDrawing().files.value(fileId).toObject().value(u"dataURL"_s).toString());
+        QCOMPARE(back->theme, brulion::drawing::PaperTheme::Dark);
+        // The light picture of a Light drawing.
+        canvas->setTheme(u"light"_s);
+        QVERIFY(near(renderSvg(canvas->svg(), QSize(1232, 932)).pixelColor(300, 300), Qt::white));
+    }
+
+    void backdropPreviewDark()
+    {
+        // The previews (DrawingImageProvider) show a backdrop dark as the paper does.
+        QVERIFY(canvas->setBackdrop(backdropOf(Qt::white, QSize(800, 600))));
+        const QByteArray file = canvas->fileBytes(); // Auto: no style sheet, the light picture
+        QVERIFY(!file.contains("prefers-color-scheme"));
+        QSize natural;
+        const QImage light = brulion::drawingview::DrawingImageProvider::picture(file, false, QSize(400, 0), &natural);
+        const QImage dark = brulion::drawingview::DrawingImageProvider::picture(file, true, QSize(400, 0));
+        QCOMPARE(natural, QSize(1232, 932));
+        QVERIFY(near(light.pixelColor(200, 150), Qt::white));
+        QVERIFY2(near(dark.pixelColor(200, 150), QColor(u"#121212"_s), 3),
+                 qPrintable(dark.pixelColor(200, 150).name()));
+    }
+
+    void setRemoveBackdropUndo()
+    {
+        QSignalSpy changed(canvas, &DrawingCanvas::contentChanged);
+        QVERIFY(canvas->setBackdrop(
+                backdropOf(QColor(u"#ff0000"_s), QSize(400, 300), u"Załączniki/Fizyka – wykład 3.pdf"_s, 3)));
+        QCOMPARE(changed.size(), 1);
+        QVERIFY(canvas->modified());
+        QCOMPARE(canvas->backdropPage(), 3);
+        const brulion::drawing::Stroke first = canvas->currentDrawing().strokes.first();
+        canvas->undo();
+        QVERIFY(!canvas->hasBackdrop());
+        QCOMPARE(canvas->strokeCount(), 0);
+        canvas->redo();
+        QVERIFY(canvas->hasBackdrop());
+        // Replaced: the same element, a new version and file; undo brings the old one back.
+        QVERIFY(canvas->setBackdrop(
+                backdropOf(QColor(u"#2f6fdd"_s), QSize(300, 400), u"Załączniki/Fizyka – wykład 3.pdf"_s, 4)));
+        const brulion::drawing::Stroke second = canvas->currentDrawing().strokes.first();
+        QCOMPARE(canvas->strokeCount(), 1);
+        QCOMPARE(second.id, first.id);
+        QCOMPARE(second.version, first.version + 1);
+        QVERIFY(second.fileId != first.fileId);
+        QCOMPARE(second.box, QRectF(0, 0, 900, 1200));
+        canvas->undo();
+        QCOMPARE(canvas->currentDrawing().strokes.first().fileId, first.fileId);
+        QCOMPARE(canvas->backdropPage(), 3);
+        canvas->redo();
+        // Removed in one step; undo restores it (its file was kept).
+        canvas->removeBackdrop();
+        QVERIFY(!canvas->hasBackdrop());
+        canvas->undo();
+        QCOMPARE(canvas->currentDrawing().strokes.first().fileId, second.fileId);
+        // Written and read back.
+        const QByteArray svg = canvas->svg();
+        QCOMPARE(canvas->load(svg), QString());
+        QVERIFY(canvas->hasBackdrop());
+        QCOMPARE(canvas->backdropPath(), u"Załączniki/Fizyka – wykład 3.pdf"_s);
+        QCOMPARE(canvas->backdropPage(), 4);
+        // Bad data changes nothing.
+        QVERIFY(!canvas->setBackdrop({}));
+        QVariantMap broken = backdropOf(Qt::red);
+        broken.insert(u"mimeType"_s, u"text/html"_s);
+        QVERIFY(!canvas->setBackdrop(broken));
+        QVERIFY(!canvas->modified());
+    }
+
+    void replacedBackdropsAreNotKept()
+    {
+        // "Inna strona PDF…" eight times on a dark tablet: only the shown backdrop's raster and its
+        // dark twin stay decoded (each 2400 × 1350 one is ≈ 13 MB); undo decodes the old one again.
+        canvas->setTheme(u"dark"_s);
+        const QList<QColor> colors{QColor(u"#ff0000"_s), QColor(u"#2f6fdd"_s), QColor(u"#2b8a3e"_s),
+                                   QColor(u"#f59f00"_s), QColor(u"#ae3ec9"_s), QColor(u"#e8590c"_s),
+                                   QColor(u"#0c8599"_s), QColor(u"#ffffff"_s)};
+        for (int i = 0; i < colors.size(); ++i) {
+            QVERIFY(canvas->setBackdrop(backdropOf(colors.at(i), QSize(400, 300), u"Załączniki/wykład.pdf"_s, i + 1)));
+            painted(canvas);                   // the picture and its dark twin decoded
+            QVERIFY(!canvas->svg().isEmpty()); // a Dark drawing's file: the dark raster encoded
+            QVERIFY2(canvas->keptPictures() <= 3, qPrintable(QString::number(canvas->keptPictures())));
+        }
+        // The last one shows: white, dark.
+        QVERIFY(near(painted(canvas).pixelColor(300, 300), QColor(u"#121212"_s), 2));
+        // Undo: the previous page decoded again and shown (its file stayed in the drawing).
+        canvas->undo();
+        canvas->setTheme(u"light"_s);
+        QVERIFY2(near(painted(canvas).pixelColor(300, 300), colors.at(6), 12),
+                 qPrintable(painted(canvas).pixelColor(300, 300).name()));
+        // Removed: nothing kept.
+        canvas->removeBackdrop();
+        painted(canvas);
+        QCOMPARE(canvas->keptPictures(), 0);
+    }
+
+    void backdropMerge()
+    {
+        // A backdrop set here while another device added a stroke: both kept, the backdrop at the
+        // bottom.
+        QCOMPARE(canvas->load(strokesFile({u"a"_s})), QString());
+        QVERIFY(canvas->setBackdrop(backdropOf(QColor(u"#ff0000"_s))));
+        QVERIFY(canvas->takeExternal(strokesFile({u"a"_s, u"c"_s})));
+        QVERIFY(canvas->hasBackdrop());
+        QCOMPARE(canvas->strokeCount(), 3);
+        QCOMPARE(strokeIds(canvas).mid(1), (QStringList{u"a"_s, u"c"_s}));
+        QVERIFY(canvas->modified());
+        // Their removal of the backdrop (a file without it) wins only when nothing changed here.
+        canvas->markSaved(canvas->fileBytes());
+        QVERIFY(canvas->takeExternal(strokesFile({u"a"_s, u"c"_s})));
+        QVERIFY(!canvas->hasBackdrop());
+    }
+
+    void svgPictureShowsBackdrop()
+    {
+        QVERIFY(canvas->setBackdrop(backdropOf(QColor(u"#ff0000"_s))));
+        mouseStroke(window.get(), {100, 100}, {300, 100}, 10);
+        const QByteArray svg = canvas->svg();
+        QVERIFY(QSvgRenderer(svg).isValid());
+        // The picture: the margin, then the slide; self-contained (a data URL).
+        const QImage picture = renderSvg(svg, QSize(1232, 932));
+        QVERIFY2(near(picture.pixelColor(600, 600), QColor(u"#ff0000"_s), 12),
+                 qPrintable(picture.pixelColor(600, 600).name()));
+        QVERIFY(svg.contains("xlink:href=\"data:image/"));
+    }
+
+    void prepareBackdropPicture_data()
+    {
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QSize>("pixels");
+        QTest::addColumn<QString>("mime");
+        QTest::addColumn<int>("sameBytes"); // 1 kept as they are, 0 encoded again, -1 either
+        QTest::addColumn<QString>("error");
+        QTest::newRow("PNG with alpha: kept") << u"alpha.png"_s << QSize(64, 64) << u"image/png"_s << 1 << QString();
+        QTest::newRow("small JPEG: kept") << u"small.jpg"_s << QSize(320, 200) << u"image/jpeg"_s << 1 << QString();
+        QTest::newRow("a large photo: shrunk") << u"photo.jpg"_s << QSize(2400, 1800) << QString() << 0 << QString();
+        QTest::newRow("an SVG: drawn 2400 px") << u"wykres.svg"_s << QSize(2400, 1200) << QString() << 0 << QString();
+        // (Turned by its EXIF orientation — or by the writer itself where JPEG has none.)
+        QTest::newRow("EXIF-turned JPEG: upright")
+                << u"obrócone.jpg"_s << QSize(100, 200) << QString() << -1 << QString();
+        QTest::newRow("BMP: encoded again") << u"kwadrat.bmp"_s << QSize(50, 50) << QString() << 0 << QString();
+        QTest::newRow("10 random bytes") << u"szum.png"_s << QSize() << QString() << 0 << u"format"_s;
+        QTest::newRow("HEIC") << u"zdjęcie.heic"_s << QSize() << QString() << 0 << u"format"_s;
+        QTest::newRow("empty file") << u"pusty.png"_s << QSize() << QString() << 0 << u"format"_s;
+        QTest::newRow("missing file") << u"nie ma.png"_s << QSize() << QString() << 0 << u"unreadable"_s;
+    }
+
+    void prepareBackdropPicture()
+    {
+        using namespace brulion::drawingview;
+        QFETCH(QString, kind);
+        QFETCH(QSize, pixels);
+        QFETCH(QString, mime);
+        QFETCH(int, sameBytes);
+        QFETCH(QString, error);
+        QTemporaryDir dir;
+        const QString file = dir.filePath(kind);
+        if (kind == u"alpha.png") {
+            QImage image(64, 64, QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            QPainter(&image).fillRect(10, 10, 20, 20, Qt::red);
+            QVERIFY(image.save(file, "PNG"));
+        } else if (kind == u"small.jpg") {
+            QImage image(320, 200, QImage::Format_RGB32);
+            image.fill(QColor(u"#74c0fc"_s));
+            QVERIFY(image.save(file, "JPEG", 80));
+        } else if (kind == u"photo.jpg") {
+            // A photo's size, 4000 × 3000: gradients.
+            QImage image(4000, 3000, QImage::Format_RGB32);
+            for (int y = 0; y < image.height(); ++y) {
+                auto *line = reinterpret_cast<QRgb *>(image.scanLine(y));
+                for (int x = 0; x < image.width(); ++x)
+                    line[x] = qRgb((x / 16) % 256, (y / 12) % 256, (x + y) / 28 % 256);
+            }
+            QVERIFY(image.save(file, "JPEG", 95));
+        } else if (kind == u"wykres.svg") {
+            QFile f(file);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            // (No raw string here: moc's tokenizer lost the class after this one.)
+            f.write("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\">"
+                    "<rect width=\"100\" height=\"50\" fill=\"#e03131\"/></svg>");
+        } else if (kind == u"obrócone.jpg") {
+            QImage image(200, 100, QImage::Format_RGB32);
+            image.fill(Qt::green);
+            QImageWriter writer(file, "jpeg");
+            writer.setTransformation(QImageIOHandler::TransformationRotate90);
+            QVERIFY(writer.write(image));
+        } else if (kind == u"kwadrat.bmp") {
+            QImage image(50, 50, QImage::Format_RGB32);
+            image.fill(Qt::blue);
+            QVERIFY(image.save(file, "BMP"));
+        } else if (kind == u"szum.png" || kind == u"zdjęcie.heic") {
+            QFile f(file);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("\x13\x37\xfe\x00\x11\x22\x33\x44\x55\x66", 10);
+        } else if (kind == u"pusty.png") {
+            QFile f(file);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+        }
+        const QString vaultPath = u"Załączniki/"_s + kind;
+        const PreparedBackdrop p = brulion::drawingview::prepareBackdropPicture(file, vaultPath);
+        QCOMPARE(p.error, error);
+        QCOMPARE(p.source.path, vaultPath);
+        QCOMPARE(p.source.page, 0);
+        QCOMPARE(p.name, QFileInfo(kind).completeBaseName());
+        if (!error.isEmpty())
+            return;
+        QCOMPARE(p.image.pixels, pixels);
+        if (!mime.isEmpty())
+            QCOMPARE(p.image.mimeType, mime);
+        QVERIFY(p.image.bytes.size() <= brulion::drawing::MaxBackdropBytes);
+        QVERIFY(brulion::drawing::validBackdropImage(p.image));
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        if (sameBytes >= 0)
+            QCOMPARE(p.image.bytes == f.readAll(), sameBytes == 1);
+        // What is stored decodes to the size stated.
+        QCOMPARE(QImage::fromData(p.image.bytes).size(), pixels);
+        // Round trip through QML's map.
+        const PreparedBackdrop back = fromVariant(toVariant(p));
+        QCOMPARE(back.image.bytes, p.image.bytes);
+        QCOMPARE(back.image.pixels, p.image.pixels);
+        QCOMPARE(back.source, p.source);
+    }
+
+    void encodeBackdropStaysWithinTheLimit()
+    {
+        // Noise compresses badly: shrunk until it fits (never below BackdropMinPixels), as JPEG.
+        QImage noise(2400, 2400, QImage::Format_RGB32);
+        for (int y = 0; y < noise.height(); ++y) {
+            auto *line = reinterpret_cast<QRgb *>(noise.scanLine(y));
+            for (int x = 0; x < noise.width(); ++x)
+                line[x] = QRandomGenerator::global()->generate() | 0xff000000;
+        }
+        const brulion::drawing::BackdropImage out = brulion::drawingview::encodeBackdrop(noise);
+        QVERIFY(!out.bytes.isEmpty());
+        QVERIFY(out.bytes.size() <= brulion::drawing::MaxBackdropBytes);
+        QVERIFY(out.pixels.width() >= brulion::drawing::BackdropMinPixels);
+        QCOMPARE(out.mimeType, u"image/jpeg"_s);
+        QVERIFY(brulion::drawingview::encodeBackdrop(QImage()).bytes.isEmpty());
+    }
+
+    void prepareBackdropPdfPage()
+    {
+        using namespace brulion::drawingview;
+        QTemporaryDir dir;
+        const QString pdf = dir.filePath(u"Wykład ćwiczenia.pdf"_s);
+        QVERIFY(writeTwoPagePdf(pdf));
+        const QString vaultPath = u"Załączniki/Wykład ćwiczenia.pdf"_s;
+        if (!brulion::platform::pdfAvailable()) {
+            QCOMPARE(brulion::drawingview::prepareBackdropPdfPage(pdf, vaultPath, 1).error, u"noPdf"_s);
+            QSKIP("no PDF renderer in this build");
+        }
+        const PreparedBackdrop p = brulion::drawingview::prepareBackdropPdfPage(pdf, vaultPath, 2);
+        QCOMPARE(p.error, QString());
+        // (210 × 297 mm: 1697 px high; Qt PDF reads the page as 842 × 595 points: 1696.)
+        QCOMPARE(p.image.pixels.width(), 2400);
+        QVERIFY2(qAbs(p.image.pixels.height() - 1697) <= 1, qPrintable(QString::number(p.image.pixels.height())));
+        QVERIFY(p.image.mimeType == u"image/png" || p.image.mimeType == u"image/jpeg");
+        QCOMPARE(p.source, (brulion::drawing::BackdropSource{vaultPath, 2}));
+        QCOMPARE(p.name, u"Wykład ćwiczenia"_s);
+        // The red square of page 2 (40–60 mm across, 30–50 mm down of 297 × 210 mm).
+        const QImage image = QImage::fromData(p.image.bytes);
+        const QColor centre = image.pixelColor(int(2400 * 50 / 297.0), int(image.height() * 40 / 210.0));
+        QVERIFY2(centre.red() > 200 && centre.green() < 60, qPrintable(centre.name()));
+        QCOMPARE(brulion::drawingview::prepareBackdropPdfPage(pdf, vaultPath, 3).error, u"pdf"_s);
+        QCOMPARE(brulion::drawingview::prepareBackdropPdfPage(dir.filePath(u"nie ma.pdf"_s), vaultPath, 1).error,
+                 u"unreadable"_s);
+        // The page picker's thumbnail (image://pdfpage/…).
+        PdfPageImageProvider provider;
+        const QUrl url = PdfPageImageProvider::url(pdf, 1, u"1"_s);
+        QSize size;
+        const QImage thumbnail = provider.requestImage(imageId(url), &size, QSize(120, 0));
+        QCOMPARE(thumbnail.height(), 120);
+        QCOMPARE(size, thumbnail.size());
+        // Only absolute paths of PDFs.
+        QVERIFY(provider.requestImage(u"Wyk%C5%82ad.pdf?page=1"_s, &size, QSize()).isNull());
+        QVERIFY(provider.requestImage(imageId(PdfPageImageProvider::url(dir.filePath(u"../x.pdf"_s), 1, u"1"_s)), &size,
+                                      QSize())
+                        .isNull());
+        QVERIFY(provider.requestImage(imageId(PdfPageImageProvider::url(dir.filePath(u"a.svg"_s), 1, u"1"_s)), &size,
+                                      QSize())
+                        .isNull());
+        QVERIFY(provider.requestImage(imageId(PdfPageImageProvider::url(pdf, 0, u"1"_s)), &size, QSize()).isNull());
+    }
+
+    void backdropsJobs()
+    {
+        // DrawingBackdrops: vault paths through the resolver, a job per file, cancelled between pages.
+        using namespace brulion::drawingview;
+        QTemporaryDir dir;
+        QImage image(120, 90, QImage::Format_RGB32);
+        image.fill(Qt::yellow);
+        QVERIFY(QDir(dir.path()).mkpath(u"Załączniki"_s));
+        QVERIFY(image.save(dir.filePath(u"Załączniki/żółty.png"_s)));
+        QVERIFY(writeTwoPagePdf(dir.filePath(u"Załączniki/wykład.pdf"_s)));
+        DrawingBackdrops::setPathResolver([&dir](const QString &path) { return dir.filePath(path); });
+        DrawingBackdrops backdrops;
+        QVERIFY(backdrops.isPdf(u"a/B.PDF"_s));
+        QVERIFY(!backdrops.isPdf(u"a/b.png"_s));
+        QSignalSpy finished(&backdrops, &DrawingBackdrops::finished);
+        QSignalSpy progress(&backdrops, &DrawingBackdrops::progress);
+        const int job = backdrops.prepare(u"Załączniki/żółty.png"_s, {});
+        QVERIFY(job > 0);
+        QVERIFY(finished.wait(10000 * BRULION_TEST_SLOWDOWN));
+        QCOMPARE(finished.first().at(0).toInt(), job);
+        const QVariantList items = finished.first().at(1).toList();
+        QCOMPARE(items.size(), 1);
+        QCOMPARE(items.first().toMap().value(u"error"_s).toString(), QString());
+        QCOMPARE(items.first().toMap().value(u"width"_s).toInt(), 120);
+        QCOMPARE(items.first().toMap().value(u"name"_s).toString(), u"żółty"_s);
+        QCOMPARE(progress.size(), 1);
+        // A file that is not there: the item says why.
+        finished.clear();
+        backdrops.prepare(u"Załączniki/nie ma.png"_s, {});
+        QVERIFY(finished.wait(10000 * BRULION_TEST_SLOWDOWN));
+        QCOMPARE(finished.first().at(1).toList().first().toMap().value(u"error"_s).toString(), u"unreadable"_s);
+        QVERIFY(!backdrops.errorText(u"unreadable"_s).isEmpty());
+        // Pages typed and shown.
+        QCOMPARE(backdrops.parsePages(u"3–1, 7"_s, 10), (QList<int>{1, 2, 3, 7}));
+        QCOMPARE(backdrops.formatPages({1, 2, 3, 7}), u"1-3, 7"_s);
+        if (backdrops.pdfAvailable()) {
+            const QVariantMap info = backdrops.pdfInfo(u"Załączniki/wykład.pdf"_s);
+            QCOMPARE(info.value(u"pages"_s).toInt(), 2);
+            QCOMPARE(info.value(u"error"_s).toString(), QString());
+            QVERIFY(backdrops.pageUrl(u"Załączniki/wykład.pdf"_s, 2).toString().startsWith(u"image://pdfpage/"_s));
+            QVERIFY(backdrops.nameFilters().first().contains(u"*.pdf"_s));
+            // Two pages, cancelled at once: finished as cancelled with at most what was done.
+            finished.clear();
+            const int two = backdrops.prepare(u"Załączniki/wykład.pdf"_s, {2, 1, 2, -4});
+            backdrops.cancel(two);
+            QVERIFY(finished.wait(10000 * BRULION_TEST_SLOWDOWN));
+            QCOMPARE(finished.first().at(2).toBool(), true);
+            QVERIFY(finished.first().at(1).toList().size() < 2);
+            // Not cancelled: both, in the order asked, duplicates dropped.
+            finished.clear();
+            backdrops.prepare(u"Załączniki/wykład.pdf"_s, {2, 1, 2});
+            QVERIFY(finished.wait(20000 * BRULION_TEST_SLOWDOWN));
+            const QVariantList pages = finished.first().at(1).toList();
+            QCOMPARE(pages.size(), 2);
+            QCOMPARE(pages.at(0).toMap().value(u"page"_s).toInt(), 2);
+            QCOMPARE(pages.at(1).toMap().value(u"page"_s).toInt(), 1);
+            QCOMPARE(pages.at(1).toMap().value(u"height"_s).toInt(), 2400);
+        } else {
+            QCOMPARE(backdrops.pdfInfo(u"Załączniki/wykład.pdf"_s).value(u"pages"_s).toInt(), -1);
+            QVERIFY(!backdrops.nameFilters().first().contains(u"*.pdf"_s));
+            QVERIFY(backdrops.pageUrl(u"Załączniki/wykład.pdf"_s, 1).isEmpty());
+        }
+        QVERIFY(backdrops.pdfInfo(u"Załączniki/nie ma.pdf"_s).value(u"pages"_s).toInt() < 0);
+        QCOMPARE(backdrops.pickInBrowser(), 0); // (not the browser)
+        DrawingBackdrops::setPathResolver({});
+    }
+
+    void saveTimeWithBackdrop()
+    {
+        // 500 strokes on a 2.5 MB backdrop: every autosave writes the raster twice (scene + picture).
+        QImage noise(1100, 760, QImage::Format_RGB32);
+        for (int y = 0; y < noise.height(); ++y) {
+            auto *line = reinterpret_cast<QRgb *>(noise.scanLine(y));
+            for (int x = 0; x < noise.width(); ++x)
+                line[x] = QRandomGenerator::global()->generate() | 0xff000000;
+        }
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(noise.save(&buffer, "PNG"));
+        QVERIFY(png.size() > 2 * 1024 * 1024);
+        brulion::drawing::Drawing d;
+        QVERIFY(brulion::drawing::setBackdrop(d, {png, u"image/png"_s, noise.size()}, {u"slajd.png"_s, 0}, {}));
+        for (int i = 0; i < 500; ++i) {
+            brulion::drawing::Stroke s;
+            s.id = u"s%1"_s.arg(i);
+            for (int k = 0; k < 20; ++k)
+                s.points.append({50.0 + k * 10, 20.0 + i * 1.5, 0.5});
+            d.strokes.append(s);
+        }
+        QElapsedTimer t;
+        t.start();
+        const QByteArray svg = brulion::drawing::toSvg(d);
+        const qint64 ms = t.elapsed();
+        qInfo("toSvg of 500 strokes on a %.1f MB backdrop: %lld ms, %.1f MB", png.size() / 1048576.0, ms,
+              svg.size() / 1048576.0);
+#ifdef NDEBUG
+        QVERIFY2(ms < 1000, qPrintable(QString::number(ms)));
+#endif
     }
 };
 

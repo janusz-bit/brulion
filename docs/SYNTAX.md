@@ -294,6 +294,39 @@ numbers of Brulion's own formatting go into the CSS, never text from a scene; Qt
 ignores such a style sheet (it applies media rules only for a medium it is given and drops a style
 sheet with a media feature query), so it draws the light picture.
 
+*Backdrop (Podkład; `drawing/backdrop.h`):* a drawing may lie on a picture, an exported slide or a
+PDF page — lecture notes on slides. The backdrop is an ordinary Excalidraw **`image` element at
+index 0, `locked: true`**, marked by `customData.brulionBackdrop`, with its raster in `files`:
+
+```
+{"id":"…","type":"image","x":0,"y":0,"width":1200,"height":675,"locked":true,"fileId":"<sha1>",
+ "status":"saved","scale":[1,1],"crop":null,"strokeColor":"transparent",…,
+ "customData":{"brulionBackdrop":{"path":"Załączniki/Fizyka – wykład 3.pdf","page":3}}}
+files: {"<sha1>": {"mimeType":"image/png","id":"<sha1>","dataURL":"data:image/png;base64,…",…}}
+```
+
+`path` is the source file's vault path (relative, `/`; one that is absolute or leaves the vault
+reads as none) and `page` its PDF page (1-based; `0` a picture) — provenance and "Inna strona
+PDF…", never needed to show the drawing: the raster travels in the file (`fileId` the SHA-1 of its
+bytes, as Excalidraw's own), so every device and every other program shows the slide, also where
+no PDF renderer exists. It is a PNG or a JPEG (the smaller; PNG when see-through) of at most
+2400 px a side (2 px a scene unit) and 4 MB, its long side 1200 scene units, at (0, 0). Only the
+element at index 0 counts: the same marker anywhere else, or an unlocked one, is an ordinary
+picture (an excalidraw.com user who unlocked and moved it up) — consistent and lossless. Brulion
+never selects, moves or erases it; reordering keeps it at the bottom; a merge puts a backdrop new
+on one side at the bottom (the leading locked elements). The picture has the raster too (an
+`<image>` under the ink: the file is self-contained, as excalidraw.com's "Embed scene" export, so
+the raster is in the file twice, the scene's copy deflated and base64-encoded twice more: a slide
+of 150–500 KB makes a drawing of about 0.5–1.7 MB, the largest backdrop one of about 15 MB). In the
+dark the
+backdrop is shown **"document dark"**, through Excalidraw's dark filter per pixel (as a PDF
+reader's night mode), so the ink mapped light stays readable on it; ordinary pictures keep their
+colours. In the file: none (as the app) — no `<style>` at all (a browser that turned only the ink
+light would lose it on the light slide); `dark` — the dark raster the app made in the picture
+(the scene keeps the original); a writer without that raster (Nextcloud's merge, an import,
+`brulion-cli`) writes the light picture, the scene still says `dark`, and Brulion's next save
+writes it dark. A drawing made on a picture starts `light`, one on a PDF page as the app.
+
 *Other drawing files (Inne pliki rysunków; `drawing/drawingfile.h`):* Brulion's drawing editor
 also edits **`.excalidraw` scene files** (excalidraw.com's "Save to disk", the Obsidian plugin's
 compatibility mode, Logseq's Excalidraw plugin: the scene's JSON, `{` first, `"excalidraw"` within

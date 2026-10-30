@@ -24,9 +24,15 @@ and checked against lz-string's own test vectors (lzstring/, copied from its tes
 file is written: the script fails when they differ. excalidraw_freedraw.excalidraw is a
 `.excalidraw` file as excalidraw.com's "Save to disk" writes it (JSON.stringify(scene, null, 2)).
 
+backdrop.svg is a drawing with a backdrop (docs/SYNTAX.md §2 "Drawings": the locked image element at
+index 0 with `customData.brulionBackdrop`, a 32 × 18 PNG "slide" in `files`) and handwriting over it;
+slajdy.pdf a small PDF of two pages (a landscape slide, a portrait page) for the backdrop's page
+picker (tests/app/drawing/qml-smoke.sh, screenshots.sh), written by hand (PDF 1.4, Helvetica).
+
     python3 tests/data/drawing/make-fixtures.py   # rewrites the files below next to this script
 """
 import base64
+import hashlib
 import json
 import os
 import zlib
@@ -379,6 +385,83 @@ shapes_scene = json.dumps(scene(SHAPES, SHAPE_FILES), indent=2, ensure_ascii=Fal
 write("excalidraw_shapes.svg", svg(shapes_scene))
 write("excalidraw_shapes.excalidraw", shapes_scene)
 write("excalidraw_frame.svg", svg(json.dumps(scene([RECTANGLE, FRAME]), indent=2, ensure_ascii=False)))
+
+# A drawing on a slide (a backdrop): the slide 32 × 18 px as 1200 × 675 scene units, locked, at index 0;
+# handwriting over it.
+def png_rgb(width, height, pixel):
+    """An RGB PNG of `pixel(x, y)` -> (r, g, b)."""
+    import struct
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xffffffff)
+
+    raw = b"".join(b"\x00" + bytes(c for x in range(width) for c in pixel(x, y)) for y in range(height))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+
+
+def slide_pixel(x, y):
+    """A lecture slide: a blue title band, two grey lines of "text", a red mark, on white."""
+    if y < 4:
+        return (0x1c, 0x4e, 0x80)
+    if y in (7, 10) and 3 <= x < (26 if y == 7 else 20):
+        return (0x86, 0x8e, 0x96)
+    if 12 <= y < 16 and 24 <= x < 28:
+        return (0xe0, 0x31, 0x31)
+    return (0xff, 0xff, 0xff)
+
+
+BACKDROP_PNG = png_rgb(32, 18, slide_pixel)
+BACKDROP_FILE = hashlib.sha1(BACKDROP_PNG).hexdigest()
+BACKDROP = element("slajd_wykladu_3_podkl", "image", 0, 0, width=1200, height=675, strokeColor="transparent",
+                   strokeWidth=1, roughness=0, version=1, versionNonce=1, locked=True, fileId=BACKDROP_FILE,
+                   status="saved", scale=[1, 1], crop=None,
+                   customData={"brulionBackdrop": {"path": "Załączniki/Wykład 3 – ruch falowy.pdf", "page": 2}})
+BACKDROP_INK = element("notatka_na_slajdzie_01", "freedraw", 120, 360, width=600, height=60, strokeColor="#2f6fdd",
+                       strokeWidth=1, roughness=0, points=wave(60, 10, 30),
+                       pressures=[round(0.35 + 0.006 * i, 3) for i in range(60)], simulatePressure=False,
+                       lastCommittedPoint=None)
+BACKDROP_FILES = {BACKDROP_FILE: {"mimeType": "image/png", "id": BACKDROP_FILE, "created": 1761568000000,
+                                  "lastRetrieved": 1761568000000,
+                                  "dataURL": "data:image/png;base64," + base64.b64encode(BACKDROP_PNG).decode("ascii")}}
+write("backdrop.svg", svg(json.dumps(scene([BACKDROP, BACKDROP_INK], BACKDROP_FILES), indent=2, ensure_ascii=False),
+                          width=1232, height=707))
+
+
+def pdf(pages):
+    """A PDF 1.4 of `pages` [(width, height, content stream)] in points, Helvetica as /F1."""
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>", None,
+               b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"]
+    kids = []
+    for width, height, content in pages:
+        page = len(objects) + 1
+        kids.append(f"{page} 0 R")
+        objects.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] "
+                       f"/Resources << /Font << /F1 3 0 R >> >> /Contents {page + 1} 0 R >>".encode("ascii"))
+        objects.append(b"<< /Length %d >>\nstream\n" % len(content) + content + b"\nendstream")
+    objects[1] = f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(pages)} >>".encode("ascii")
+    out = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"
+    offsets = []
+    for i, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % i + body + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % o for o in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+    return out
+
+
+SLIDE = (b"0.11 0.31 0.5 rg 0 515 842 80 re f\n"
+         b"BT /F1 36 Tf 1 1 1 rg 40 540 Td (Wyklad 3: ruch falowy) Tj ET\n"
+         b"BT /F1 24 Tf 0.2 0.2 0.2 rg 60 420 Td (Rownanie fali: y = A sin(kx - wt)) Tj ET\n"
+         b"0.88 0.19 0.19 RG 4 w 120 200 m 220 300 l 320 200 l 420 300 l 520 200 l S\n")
+PAGE = (b"BT /F1 28 Tf 0 0 0 rg 60 760 Td (Zadania) Tj ET\n"
+        b"0.18 0.62 0.27 rg 60 560 200 120 re f\n"
+        b"0.18 0.43 0.87 RG 3 w 320 560 200 120 re S\n")
+with open(os.path.join(HERE, "slajdy.pdf"), "wb") as f:
+    f.write(pdf([(842, 595, SLIDE), (595, 842, PAGE)]))
 
 # The sync center's conflict of a drawing: what both versions have ("a" a line, "b" a box), what
 # only this device drew ("c", blue) and what only the other one drew ("d", a red ellipse).

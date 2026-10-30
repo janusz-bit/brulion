@@ -59,6 +59,13 @@
 // its lines and the elements are shown in the colours of the theme in force (`dark`), the stored
 // colours never change. A change of either repaints at once (a stroke being drawn too).
 //
+// The backdrop (core drawing/backdrop.h: a picture or a PDF page under the ink, the locked image
+// element at index 0): setBackdrop() with a prepared one (backdropimage.h, QML's
+// DrawingBackdrops), removeBackdrop() — one undo step each. It is never selected, moved or erased;
+// in the dark it is drawn "document dark" (drawingrender.h darkImage(), the twin decoded once), and a
+// Dark drawing's file gets that dark raster in its picture (encoded once per backdrop:
+// drawing::SvgOptions), so other programs show it as Brulion does.
+//
 // Rendering: a QQuickPaintedItem (every scene graph backend, the software one of the screenshots
 // too). Every element is prepared once (drawingrender.h Prepared: its paths, by version) and the
 // committed ones rendered on the GUI thread into a cached image of the view; while the view moves
@@ -75,6 +82,7 @@
 #include "drawing/drawingfile.h"
 #include "drawing/edit.h"
 #include "drawing/merge.h"
+#include "drawing/svgwrite.h"
 
 #include <QColor>
 #include <QElapsedTimer>
@@ -156,6 +164,11 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(QColor paperColor READ paperColor NOTIFY renderChanged FINAL)
     /// Milliseconds the last cached image took to render (diagnostics).
     Q_PROPERTY(double lastRenderMs READ lastRenderMs FINAL)
+    /// The drawing has a backdrop; its source file's vault path ("" unknown) and PDF page (0: a
+    /// picture).
+    Q_PROPERTY(bool hasBackdrop READ hasBackdrop NOTIFY contentChanged FINAL)
+    Q_PROPERTY(QString backdropPath READ backdropPath NOTIFY contentChanged FINAL)
+    Q_PROPERTY(int backdropPage READ backdropPage NOTIFY contentChanged FINAL)
 
 public:
     explicit DrawingCanvas(QQuickItem *parent = nullptr);
@@ -226,6 +239,9 @@ public:
     }
     QColor paperColor() const { return dark() ? m_paperDark : m_paperLight; }
     double lastRenderMs() const { return m_lastRenderMs; }
+    bool hasBackdrop() const;
+    QString backdropPath() const;
+    int backdropPage() const;
 
     /// Show the drawing in `bytes` (Brulion's SVG, excalidraw.com's "Embed scene" SVG, a
     /// .excalidraw file, an Obsidian Excalidraw plugin file; empty: a new drawing — an SVG). ""
@@ -289,6 +305,12 @@ public:
     Q_INVOKABLE void cancelText();
     /// Edit the text (or the shape's label) `id` as a double tap would (tests, QML).
     Q_INVOKABLE void editText(const QString &id);
+    /// Put a prepared backdrop ({ bytes, mimeType, width, height, path, page }: DrawingBackdrops)
+    /// under the drawing, or replace the one it has (core drawing::setBackdrop) — one undo step.
+    /// False when nothing changed (not editable, bad data).
+    Q_INVOKABLE bool setBackdrop(const QVariantMap &prepared);
+    /// Remove the backdrop — one undo step (undo brings it back).
+    Q_INVOKABLE void removeBackdrop();
     /// Move the view so the scene rect is on screen above `bottomInset` px (a phone's keyboard).
     Q_INVOKABLE void ensureVisible(const QRectF &sceneRect, qreal bottomInset = 0);
     /// A stored colour as the paper shows it now (the tool bar's swatches): mapped in the dark
@@ -300,6 +322,8 @@ public:
 
     /// The drawing as it is now (tests).
     drawing::Drawing currentDrawing() const { return m_doc; }
+    /// The decoded pictures and dark backdrops kept (tests: a replaced backdrop's are dropped).
+    qsizetype keptPictures() const { return m_pictures.size() + m_darkBackdrops.size(); }
     /// Select the elements `ids` (with their groups and labels; tests).
     void select(const QStringList &ids);
     /// The clock of new strokes (ms since the epoch); tests fix it.
@@ -455,6 +479,8 @@ private:
     void pruneSelection();
     /// The keys of elements hidden in the cached image (erased, moved, edited meanwhile).
     QSet<QString> hiddenKeys() const;
+    /// What the file's picture gets besides the drawing: a Dark drawing's backdrop dark.
+    drawing::SvgOptions svgOptions() const;
 
     QTransform sceneToItem() const;
     void placeView();
@@ -469,7 +495,9 @@ private:
     void invalidateCache();
     void drawIntoCache(qsizetype index);
     void updateLive();
-    QString newId() const;
+    /// Drop the decoded pictures and dark backdrops of files no element shows any more (a
+    /// backdrop replaced, a picture deleted): an undo decodes them again.
+    void prunePictures();
 
     // The drawing.
     drawing::Drawing m_doc;
@@ -477,6 +505,8 @@ private:
     QList<Prepared> m_prepared;
     /// The decoded pictures of m_doc's files.
     mutable PictureCache m_pictures;
+    /// The dark rasters of backdrops as data URLs, by fileId ("" none could be made).
+    mutable QHash<QString, QString> m_darkBackdrops;
     /// The paper as the light and the dark theme show it (drawing::displayPaper).
     QColor m_paperLight = QColor(u"#ffffff");
     QColor m_paperDark = QColor(u"#121212");

@@ -5,6 +5,7 @@
 #include "blocklistmodel.h"
 #include "blocktext.h"
 #include "dayclock.h"
+#include "drawing/backdrop.h"
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
 #include "fakeeditorhost.h"
@@ -221,6 +222,21 @@ private:
     QHash<int, QString> m_roles;
     QList<QHash<int, QVariant>> m_rows;
 };
+
+/// A prepared backdrop as DrawingBackdrops gives it (a PNG of one colour).
+QVariantMap preparedBackdrop(const QString &path, int page, const QString &name, QSize size = QSize(240, 135))
+{
+    QImage image(size, QImage::Format_RGB32);
+    image.fill(QColor(u"#74c0fc"_s));
+    QByteArray png;
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    image.save(&buffer, "PNG");
+    return {{u"bytes"_s, png},          {u"mimeType"_s, u"image/png"_s},
+            {u"width"_s, size.width()}, {u"height"_s, size.height()},
+            {u"path"_s, path},          {u"page"_s, page},
+            {u"name"_s, name},          {u"error"_s, QString()}};
+}
 
 } // namespace
 
@@ -4683,6 +4699,188 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.undo();
         f.page.undo();
         QCOMPARE(f.text(), u"- Wykład z łączności \n"_s);
+    }
+
+    void drawingOnSlashCommand()
+    {
+        // "/slajd": the picker of a picture or a PDF (QML's EditorDialogs.pickDrawingBackdrop).
+        Fixture f(u"- Notatki z wykładu /slaj\n"_s);
+        const QVariantMap r = f.page.applySlashCommand(0, 18, 23, u"drawingOn"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"drawingOn"_s);
+        QCOMPARE(f.text(), u"- Notatki z wykładu \n"_s);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 18);
+        // Found by its Polish and English words.
+        for (const QString &word : {u"slajd"_s, u"pdf"_s, u"podkład"_s, u"wykład"_s, u"annotate"_s}) {
+            bool found = false;
+            for (const SlashCommand *c : filterSlashCommands(word))
+                found = found || c->id == u"drawingOn";
+            QVERIFY2(found, qPrintable(word));
+        }
+    }
+
+    void insertDrawingsOnPdfPages()
+    {
+        // Three pages of a lecture's PDF: three drawings, the first at the caret, each further one
+        // a block of its own after it, in order — one undo step.
+        Fixture f(u"- Wykład 3: \n- dalej\n"_s);
+        const QString pdf = u"assets/wykład.pdf"_s;
+        const QVariantList items{preparedBackdrop(pdf, 1, u"wykład"_s), preparedBackdrop(pdf, 2, u"wykład"_s),
+                                 preparedBackdrop(pdf, 3, u"wykład"_s)};
+        const QVariantMap r = f.page.insertDrawingsOn(0, 10, 10, items);
+        const QStringList paths = r.value(u"paths"_s).toStringList();
+        QCOMPARE(paths,
+                 (QStringList{u"assets/wykład p. 1.svg"_s, u"assets/wykład p. 2.svg"_s, u"assets/wykład p. 3.svg"_s}));
+        QCOMPARE(f.text(),
+                 u"- Wykład 3: ![[wykład p. 1.svg]]\n- ![[wykład p. 2.svg]]\n- ![[wykład p. 3.svg]]\n- dalej\n"_s);
+        // Each a drawing with the page as its backdrop, as the app shows it ("Jak motyw").
+        for (int i = 0; i < 3; ++i) {
+            QFile file(f.host.assetUrl(paths.at(i)).toLocalFile());
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            const QByteArray svg = file.readAll();
+            const std::optional<brulion::drawing::Drawing> d = brulion::drawing::readDrawing(svg);
+            QVERIFY(d);
+            QCOMPARE(d->theme, brulion::drawing::PaperTheme::Auto);
+            const std::optional<brulion::drawing::BackdropSource> source = brulion::drawing::backdropSource(*d);
+            QVERIFY(source);
+            QCOMPARE(source->path, pdf);
+            QCOMPARE(source->page, i + 1);
+            QVERIFY(svg.contains("width=\"1232\" height=\"707\"")); // 1200 × 675 and the margin
+            QVERIFY(f.role(i, "embeds").toList().value(0).toMap().value(u"drawing"_s).toBool());
+        }
+        // One undo step takes the three embeds (the files stay).
+        f.page.undo();
+        QCOMPARE(f.text(), u"- Wykład 3: \n- dalej\n"_s);
+        QVERIFY(f.host.assetUrl(paths.at(2)).isLocalFile());
+        // The same pages again: free names.
+        const QVariantMap again = f.page.insertDrawingsOn(1, -1, -1, {preparedBackdrop(pdf, 1, u"wykład"_s)});
+        QCOMPARE(again.value(u"paths"_s).toStringList(), QStringList{u"assets/wykład p. 1 2.svg"_s});
+    }
+
+    void insertDrawingOnPicture()
+    {
+        // A picture (an exported slide, a photo of the board): one drawing, light.
+        Fixture f(u"- Tablica \n"_s);
+        QSignalSpy failed(&f.page, &PageController::attachmentFailed);
+        const QVariantMap r = f.page.insertDrawingsOn(
+                0, 8, 8, {preparedBackdrop(u"assets/slajd.png"_s, 0, u"slajd"_s, QSize(80, 120))});
+        QCOMPARE(r.value(u"paths"_s).toStringList(), QStringList{u"assets/slajd (drawing).svg"_s});
+        QCOMPARE(f.text(), u"- Tablica ![[slajd (drawing).svg]]\n"_s);
+        QFile file(f.host.assetUrl(u"assets/slajd (drawing).svg"_s).toLocalFile());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const std::optional<brulion::drawing::Drawing> d = brulion::drawing::readDrawing(file.readAll());
+        QVERIFY(d);
+        QCOMPARE(d->theme, brulion::drawing::PaperTheme::Light);
+        QCOMPARE(d->strokes.first().box, QRectF(0, 0, 800, 1200)); // portrait: 1200 high
+        QCOMPARE(brulion::drawing::backdropSource(*d)->page, 0);
+        // Opening it: the drawing route.
+        f.page.openDrawing(r.value(u"paths"_s).toStringList().first());
+        QCOMPARE(f.host.lastRoute().value(u"view"_s).toString(), u"drawing"_s);
+        // A name taken: " 2".
+        const QVariantMap second =
+                f.page.insertDrawingsOn(0, -1, -1, {preparedBackdrop(u"assets/slajd.png"_s, 0, u"slajd"_s)});
+        QCOMPARE(second.value(u"paths"_s).toStringList(), QStringList{u"assets/slajd (drawing) 2.svg"_s});
+        QCOMPARE(failed.size(), 0);
+        // Items that cannot be used: refused one by one, nothing inserted for them.
+        QVariantMap broken = preparedBackdrop(u"assets/x.png"_s, 0, u"x"_s);
+        broken.insert(u"mimeType"_s, u"text/html"_s);
+        QVariantMap failedItem = preparedBackdrop(u"assets/y.heic"_s, 0, u"y"_s);
+        failedItem.insert(u"error"_s, u"format"_s);
+        const QString before = f.text();
+        const QVariantMap none = f.page.insertDrawingsOn(0, -1, -1, {broken, failedItem, QVariant()});
+        QCOMPARE(none.value(u"row"_s).toInt(), -1);
+        QVERIFY(none.value(u"paths"_s).toStringList().isEmpty());
+        QCOMPARE(f.text(), before);
+        QCOMPARE(failed.size(), 3);
+    }
+
+    void insertDrawingsOnOddNames_data()
+    {
+        // The PDF's own name goes into the drawing's name as it is — also with Qt's place markers.
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<int>("page");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("a marker in the name") << u"Stopy 5%1"_s << 3 << u"assets/Stopy 5%1 p. 3.svg"_s;
+        QTest::newRow("the page's marker in the name")
+                << u"Raport %2 – zysk"_s << 12 << u"assets/Raport %2 – zysk p. 12.svg"_s;
+        QTest::newRow("both") << u"%1%2 ćwiczenia"_s << 1 << u"assets/%1%2 ćwiczenia p. 1.svg"_s;
+        QTest::newRow("a picture") << u"Wzrost 50%1"_s << 0 << u"assets/Wzrost 50%1 (drawing).svg"_s;
+    }
+
+    void insertDrawingsOnOddNames()
+    {
+        QFETCH(QString, name);
+        QFETCH(int, page);
+        QFETCH(QString, expected);
+        Fixture f(u"- \n"_s);
+        const QVariantMap r = f.page.insertDrawingsOn(
+                0, 2, 2, {preparedBackdrop(u"assets/"_s + name + (page > 0 ? u".pdf"_s : u".png"_s), page, name)});
+        QCOMPARE(r.value(u"paths"_s).toStringList(), QStringList{expected});
+    }
+
+    void insertDrawingsOnPreparedFiles()
+    {
+        // DrawingBackdrops made the drawings' files on its worker thread (`svg`): stored as they
+        // are — the GUI thread only writes them and embeds.
+        Fixture f(u"- Wykład 4: \n"_s);
+        QSignalSpy failed(&f.page, &PageController::attachmentFailed);
+        QVariantList items;
+        QList<QByteArray> files;
+        for (int page = 1; page <= 2; ++page) {
+            QVariantMap item = preparedBackdrop(u"assets/wykład 4.pdf"_s, page, u"wykład 4"_s);
+            const std::optional<brulion::drawing::Drawing> d = brulion::drawing::newDrawingOnBackdrop(
+                    brulion::drawing::BackdropImage{item.value(u"bytes"_s).toByteArray(), u"image/png"_s,
+                                                    QSize(240, 135)},
+                    brulion::drawing::BackdropSource{u"assets/wykład 4.pdf"_s, page},
+                    brulion::drawing::randomEditStamp(1761700000000));
+            QVERIFY(d);
+            files.append(brulion::drawing::toSvg(*d));
+            item.remove(u"bytes"_s); // (the job drops the raster: it is inside the file)
+            item.insert(u"svg"_s, files.last());
+            items.append(item);
+        }
+        // A failed page of the same job: refused, the others still come.
+        QVariantMap bad = preparedBackdrop(u"assets/wykład 4.pdf"_s, 3, u"wykład 4"_s);
+        bad.insert(u"svg"_s, files.first());
+        bad.insert(u"error"_s, u"pdf"_s);
+        items.append(bad);
+        const QVariantMap r = f.page.insertDrawingsOn(0, 11, 11, items);
+        const QStringList paths = r.value(u"paths"_s).toStringList();
+        QCOMPARE(paths, (QStringList{u"assets/wykład 4 p. 1.svg"_s, u"assets/wykład 4 p. 2.svg"_s}));
+        QCOMPARE(failed.size(), 1);
+        for (qsizetype i = 0; i < paths.size(); ++i) {
+            QFile file(f.host.assetUrl(paths.at(i)).toLocalFile());
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QCOMPARE(file.readAll(), files.at(i));
+        }
+        QCOMPARE(f.text(), u"- Wykład 4: ![[wykład 4 p. 1.svg]]\n- ![[wykład 4 p. 2.svg]]\n"_s);
+    }
+
+    void discardBackdropSource()
+    {
+        // An abandoned pick: the host removes the copy it stored for it (Workspace; tst_workspace).
+        Fixture f(u"- \n"_s);
+        f.page.discardBackdropSource(u"assets/Wykład 5 – fale.pdf"_s);
+        f.page.discardBackdropSource(QString());
+        QCOMPARE(f.host.discardedImports(), QStringList{u"assets/Wykład 5 – fale.pdf"_s});
+    }
+
+    void importBackdropSource()
+    {
+        // A picked file goes through the host's importAttachment (the fake: stored like any).
+        Fixture f(u"- \n"_s);
+        QTemporaryDir dir;
+        const QString file = dir.filePath(u"Fizyka – wykład 3.pdf"_s);
+        {
+            QFile out(file);
+            QVERIFY(out.open(QIODevice::WriteOnly));
+            out.write("%PDF-1.7");
+        }
+        QCOMPARE(f.page.importBackdropSource(QUrl::fromLocalFile(file)), u"assets/Fizyka – wykład 3.pdf"_s);
+        QSignalSpy failed(&f.page, &PageController::attachmentFailed);
+        QCOMPARE(f.page.importBackdropSource(QUrl::fromLocalFile(dir.filePath(u"nie ma.pdf"_s))), QString());
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(failed.first().first().toString(), u"nie ma.pdf"_s);
+        QCOMPARE(f.page.importBackdropSource(QUrl(u"https://example.org/a.pdf"_s)), QString());
     }
 
     void drawingEmbedsFollowTheirFile()

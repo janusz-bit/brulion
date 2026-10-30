@@ -1,7 +1,9 @@
 #include "drawingcanvas.h"
 
+#include "backdropimage.h"
 #include "drawingrender.h"
 
+#include "drawing/backdrop.h"
 #include "drawing/geometry.h"
 #include "drawing/palette.h"
 #include "drawing/stroke.h"
@@ -329,6 +331,7 @@ void DrawingCanvas::syncPrepared()
         m_prepared[i] = prepare(m_doc.strokes.at(i), std::min(drawing::MaxHatchLines, budget));
         budget -= m_prepared.at(i).hatch.size();
     }
+    prunePictures();
 }
 
 void DrawingCanvas::setDocument(drawing::Drawing doc)
@@ -444,14 +447,73 @@ QByteArray DrawingCanvas::fileBytes() const
     drawing::DrawingFile file;
     file.format = m_format;
     file.markdown = m_markdown;
-    return drawing::writeDrawingFile(file, m_doc, m_clock ? m_clock() : QDateTime::currentMSecsSinceEpoch());
+    return drawing::writeDrawingFile(file, m_doc, m_clock ? m_clock() : QDateTime::currentMSecsSinceEpoch(),
+                                     svgOptions());
 }
 
 QByteArray DrawingCanvas::svg() const
 {
     if (!m_editable)
         return {};
-    return drawing::toSvg(m_doc);
+    return drawing::toSvg(m_doc, svgOptions());
+}
+
+drawing::SvgOptions DrawingCanvas::svgOptions() const
+{
+    drawing::SvgOptions options;
+    const qsizetype backdrop = drawing::backdropIndex(m_doc);
+    if (backdrop < 0 || m_doc.theme != drawing::PaperTheme::Dark)
+        return options;
+    const QString fileId = m_doc.strokes.at(backdrop).fileId;
+    auto it = m_darkBackdrops.find(fileId);
+    if (it == m_darkBackdrops.end()) {
+        // Once per backdrop: the dark twin painted already when there is one, else made now.
+        QImage dark = m_pictures.value(darkPictureKey(fileId));
+        if (dark.isNull())
+            dark = darkImage(m_pictures.contains(fileId) ? m_pictures.value(fileId)
+                                                         : decodePicture(m_doc.files, fileId));
+        const drawing::BackdropImage encoded = encodeBackdrop(dark);
+        it = m_darkBackdrops.insert(fileId, encoded.bytes.isEmpty() ? QString() : drawing::dataUrl(encoded));
+    }
+    if (!it->isEmpty())
+        options.pictureImages.insert(fileId, *it);
+    return options;
+}
+
+bool DrawingCanvas::hasBackdrop() const
+{
+    return drawing::backdropIndex(m_doc) >= 0;
+}
+
+QString DrawingCanvas::backdropPath() const
+{
+    const std::optional<drawing::BackdropSource> source = drawing::backdropSource(m_doc);
+    return source ? source->path : QString();
+}
+
+int DrawingCanvas::backdropPage() const
+{
+    const std::optional<drawing::BackdropSource> source = drawing::backdropSource(m_doc);
+    return source ? source->page : 0;
+}
+
+bool DrawingCanvas::setBackdrop(const QVariantMap &prepared)
+{
+    if (!m_editable || !m_writable || busy() || m_textEditing)
+        return false;
+    const PreparedBackdrop p = fromVariant(prepared);
+    if (!p.error.isEmpty() || !drawing::validBackdropImage(p.image))
+        return false;
+    const drawing::EditStamp s = stamp();
+    // (One undo step; push() reports the change.)
+    return editElements([&](drawing::Drawing &doc) { drawing::setBackdrop(doc, p.image, p.source, s); });
+}
+
+void DrawingCanvas::removeBackdrop()
+{
+    if (!m_editable || !m_writable || busy() || m_textEditing)
+        return;
+    editElements([](drawing::Drawing &doc) { drawing::removeBackdrop(doc); });
 }
 
 void DrawingCanvas::markSaved(const QByteArray &written)
@@ -495,15 +557,19 @@ QRectF DrawingCanvas::contentBounds() const
     return out;
 }
 
-QString DrawingCanvas::newId() const
+void DrawingCanvas::prunePictures()
 {
-    // nanoid's alphabet and length, as Excalidraw's element ids.
-    static constexpr char alphabet[] = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
-    QString id;
-    id.reserve(21);
-    for (int i = 0; i < 21; ++i)
-        id += QLatin1Char(alphabet[QRandomGenerator::global()->bounded(64)]);
-    return id;
+    if (m_pictures.isEmpty() && m_darkBackdrops.isEmpty())
+        return;
+    QSet<QString> shown;
+    for (const drawing::Stroke &e : std::as_const(m_doc.strokes)) {
+        if (e.type == drawing::ElementType::Image && !e.fileId.isEmpty())
+            shown.insert(e.fileId);
+    }
+    m_pictures.removeIf(
+            [&shown](const PictureCache::iterator it) { return !shown.contains(fileIdOfPictureKey(it.key())); });
+    m_darkBackdrops.removeIf(
+            [&shown](const QHash<QString, QString>::iterator it) { return !shown.contains(it.key()); });
 }
 
 // --- Undo -------------------------------------------------------------------------------------
@@ -728,11 +794,12 @@ void DrawingCanvas::renderCache()
     p.setPen(Qt::NoPen);
     p.setTransform(sceneToItem(), true);
     const QSet<QString> hidden = hiddenKeys();
+    const qsizetype backdrop = drawing::backdropIndex(m_doc);
     for (qsizetype i = 0; i < m_prepared.size(); ++i) {
         const Prepared &prepared = m_prepared.at(i);
         if (!prepared.bounds.intersects(visible) || (!hidden.isEmpty() && hidden.contains(prepared.key)))
             continue;
-        paintElement(p, m_doc.strokes.at(i), prepared, shownDark, m_doc.files, m_pictures);
+        paintElement(p, m_doc.strokes.at(i), prepared, shownDark, m_doc.files, m_pictures, i == backdrop);
     }
     p.end();
     m_lastRenderMs = double(timer.nsecsElapsed()) / 1e6;
@@ -748,7 +815,8 @@ void DrawingCanvas::drawIntoCache(qsizetype index)
     p.setRenderHint(QPainter::Antialiasing);
     p.setPen(Qt::NoPen);
     p.setTransform(sceneToItem(), true);
-    paintElement(p, m_doc.strokes.at(index), m_prepared.at(index), dark(), m_doc.files, m_pictures);
+    paintElement(p, m_doc.strokes.at(index), m_prepared.at(index), dark(), m_doc.files, m_pictures,
+                 index == drawing::backdropIndex(m_doc));
 }
 
 QSet<QString> DrawingCanvas::hiddenKeys() const
@@ -1424,7 +1492,7 @@ void DrawingCanvas::finishStroke()
             pt.pressure = 0.5;
     }
     drawing::normalizeStroke(s);
-    s.id = newId();
+    s.id = drawing::newElementId();
     s.seed = int(QRandomGenerator::global()->bounded(1, 2147483647));
     s.versionNonce = int(QRandomGenerator::global()->bounded(1, 2147483647));
     s.version = 1;

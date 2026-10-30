@@ -1,12 +1,15 @@
 #include "drawingrender.h"
 
+#include "drawing/backdrop.h"
 #include "drawing/merge.h"
 #include "drawing/stroke.h"
 #include "drawing/svgwrite.h"
 
+#include <QBuffer>
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QGuiApplication>
+#include <QImageReader>
 #include <QPainter>
 #include <QReadWriteLock>
 #include <QSvgRenderer>
@@ -196,13 +199,36 @@ Prepared prepare(const drawing::Stroke &e, qsizetype hatchLines)
     return p;
 }
 
-QImage decodePicture(const QJsonObject &files, const QString &fileId)
+QString darkPictureKey(const QString &fileId)
+{
+    return fileId + u"\x1fdark"_s;
+}
+
+QString fileIdOfPictureKey(const QString &key)
+{
+    const qsizetype separator = key.indexOf(QChar(0x1f));
+    return separator < 0 ? key : key.left(separator);
+}
+
+QImage decodePicture(const QJsonObject &files, const QString &fileId, const QSize &atMost)
 {
     const QString url = drawing::safeDataUrl(files, fileId);
     if (url.isEmpty())
         return {};
     const qsizetype comma = url.indexOf(u',');
     const QByteArray bytes = QByteArray::fromBase64(QStringView(url).sliced(comma + 1).toLatin1());
+    if (atMost.isValid() && !atMost.isEmpty() && !url.startsWith(u"data:image/svg+xml"_s)) {
+        // At the size it is shown (a preview of a note full of slides decodes no full rasters).
+        QBuffer buffer;
+        buffer.setData(bytes);
+        buffer.open(QIODevice::ReadOnly);
+        QImageReader reader(&buffer);
+        reader.setAllocationLimit(256);
+        const QSize own = reader.size();
+        if (own.isValid() && (own.width() > atMost.width() || own.height() > atMost.height()))
+            reader.setScaledSize(own.scaled(atMost, Qt::KeepAspectRatio).expandedTo(QSize(1, 1)));
+        return reader.read();
+    }
     if (url.startsWith(u"data:image/svg+xml"_s)) {
         QSvgRenderer svg(bytes);
         if (!svg.isValid())
@@ -223,7 +249,7 @@ QImage decodePicture(const QJsonObject &files, const QString &fileId)
 }
 
 void paintElement(QPainter &painter, const drawing::Stroke &e, const Prepared &p, bool dark, const QJsonObject &files,
-                  PictureCache &pictures)
+                  PictureCache &pictures, bool backdrop)
 {
     const QColor color = dark ? p.dark : p.light;
     const QColor fill = dark ? p.fillDark : p.fillLight;
@@ -286,6 +312,14 @@ void paintElement(QPainter &painter, const drawing::Stroke &e, const Prepared &p
         auto it = pictures.find(e.fileId);
         if (it == pictures.end())
             it = pictures.insert(e.fileId, decodePicture(files, e.fileId));
+        if (backdrop && dark && !it->isNull()) {
+            // "Document dark": the slide inverted as Excalidraw's dark filter, the ink stays readable.
+            const QString key = darkPictureKey(e.fileId);
+            auto darkIt = pictures.find(key);
+            if (darkIt == pictures.end())
+                darkIt = pictures.insert(key, darkImage(*it));
+            it = darkIt;
+        }
         if (!it->isNull()) {
             painter.setRenderHint(QPainter::SmoothPixmapTransform);
             painter.drawImage(e.box, *it);
@@ -376,13 +410,21 @@ QImage renderDrawing(const drawing::Drawing &drawing, QSize pixels, bool dark, c
     p.setTransform(t);
     const QRectF visible = picture.adjusted(-1, -1, 1, 1);
     PictureCache pictures;
+    const qsizetype backdrop = drawing::backdropIndex(drawing);
+    if (backdrop >= 0) {
+        // The backdrop decoded at the size this picture shows it (twice that, for a sharp scale).
+        const drawing::Stroke &b = drawing.strokes.at(backdrop);
+        const QSize shown = (b.box.size() * k * 2).toSize().expandedTo(QSize(16, 16));
+        pictures.insert(b.fileId, decodePicture(drawing.files, b.fileId, shown));
+    }
     qsizetype hatchBudget = drawing::DrawingHatchLines;
-    for (const drawing::Stroke &s : drawing.strokes) {
+    for (qsizetype i = 0; i < drawing.strokes.size(); ++i) {
+        const drawing::Stroke &s = drawing.strokes.at(i);
         const Prepared prepared = prepare(s, std::min(drawing::MaxHatchLines, hatchBudget));
         hatchBudget -= prepared.hatch.size();
         if (!prepared.bounds.intersects(visible))
             continue;
-        paintElement(p, s, prepared, dark, drawing.files, pictures);
+        paintElement(p, s, prepared, dark, drawing.files, pictures, i == backdrop);
     }
     p.end();
     return image;

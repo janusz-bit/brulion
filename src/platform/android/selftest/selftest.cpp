@@ -6,15 +6,23 @@
 // in 75 s ringing 1 minute, one in the past that must be skipped), two files saved to Downloads
 // (saveToDownloads: MediaStore), every activated() tap and every "Zrobione" tap (reminders 101 and
 // 104 are on tasks: their notifications have the button; takeDoneRequests()). 104 comes due in
-// 200 s, after the script killed the process: its tap waits in the queue for the next start.
+// 200 s, after the script killed the process: its tap waits in the queue for the next start. A PDF
+// page through Android's PdfRenderer (pdfpages.h: a 1-page PDF written here with a red square, its
+// page count, its size and two pixels).
 
 #include "android/androidbridge.h"
+#include "pdfpages.h"
 
 #include <QDateTime>
+#include <QDir>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QPageSize>
+#include <QPainter>
+#include <QPdfWriter>
+#include <QStandardPaths>
 
 using namespace Qt::StringLiterals;
 using brulion::platform::AndroidBridge;
@@ -92,6 +100,35 @@ int main(int argc, char *argv[])
                                                    "Zażółć gęślą jaźń\n"_ba.repeated(1000));
         qCWarning(lcSelfTest, "SELFTEST download round=%d ok=%d unsupported=%d name=%s error=%s", round, saved.ok,
                   saved.unsupported, qUtf8Printable(saved.name), qUtf8Printable(saved.error));
+    }
+    // A PDF page as a picture (pdfpages_android.cpp → PdfPages.kt): A4 at one pixel a point, a red
+    // square 100–300 pt from the top left.
+    {
+        const QString dir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        QDir().mkpath(dir);
+        const QString pdf = dir + u"/Wykład ćwiczenia.pdf"_s;
+        {
+            QPdfWriter writer(pdf);
+            writer.setResolution(72);
+            writer.setPageSize(QPageSize(QPageSize::A4));
+            writer.setPageMargins(QMarginsF(0, 0, 0, 0));
+            QPainter painter(&writer);
+            painter.fillRect(QRectF(100, 100, 200, 200), Qt::red);
+        }
+        const brulion::platform::PdfInfo info = brulion::platform::pdfInfo(pdf);
+        // The count and the first page's size only (the page picker).
+        const brulion::platform::PdfInfo first = brulion::platform::pdfInfo(pdf, false);
+        const QSizeF firstSize = first.pagePoints.value(0);
+        QString error;
+        const QImage page = brulion::platform::renderPdfPage(pdf, 1, 842, &error);
+        qCWarning(lcSelfTest,
+                  "SELFTEST pdf backend=%s pages=%d first=%dx%d width=%d height=%d centre=%s corner=%s error=%s",
+                  qUtf8Printable(brulion::platform::pdfBackendName()), info.pages,
+                  first.pages == 1 && first.pagePoints.size() == 1 ? qRound(firstSize.width()) : -1,
+                  qRound(firstSize.height()), page.width(), page.height(),
+                  qUtf8Printable(page.isNull() ? QString() : page.pixelColor(200, 200).name()),
+                  qUtf8Printable(page.isNull() ? QString() : page.pixelColor(5, 5).name()),
+                  qUtf8Printable(error.isEmpty() ? info.error : error));
     }
     return QGuiApplication::exec();
 }

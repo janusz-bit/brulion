@@ -1,12 +1,15 @@
 // QML registration of the drawing editor's C++ (library brulion_drawing, drawing/CMakeLists.txt)
 // in the app's QML module "Brulion": DrawingCanvas is a creatable type (qml/drawing/DrawingView.qml);
-// DrawingFonts the fonts its text is drawn in (and the previews': drawingrender.h setTextFonts).
+// DrawingFonts the fonts its text is drawn in (and the previews': drawingrender.h setTextFonts);
+// DrawingBackdrops the backdrops (backdrops.h: PDF pages, preparing a picture or a page).
 #pragma once
 
+#include "backdrops.h"
 #include "drawingcanvas.h"
 #include "drawingrender.h"
 
 #include <QObject>
+#include <QQmlEngine>
 #include <QtQml/qqmlregistration.h>
 
 namespace brulion::drawingview {
@@ -15,6 +18,16 @@ struct DrawingCanvasForeign {
     Q_GADGET
     QML_FOREIGN(brulion::drawingview::DrawingCanvas)
     QML_NAMED_ELEMENT(DrawingCanvas)
+};
+
+/// DrawingBackdrops.pdfAvailable, .pdfInfo(path), .pageUrl(path, page), .prepare(path, pages), …
+struct DrawingBackdropsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::drawingview::DrawingBackdrops)
+    QML_NAMED_ELEMENT(DrawingBackdrops)
+    QML_SINGLETON
+public:
+    static DrawingBackdrops *create(QQmlEngine *, QJSEngine *) { return new DrawingBackdrops; }
 };
 
 /// DrawingFonts.set(Theme.fontUi, Theme.fontMono): text in drawings in the app's fonts (Excalidraw's

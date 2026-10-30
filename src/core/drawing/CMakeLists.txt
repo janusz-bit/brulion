@@ -3,7 +3,8 @@
 # perfect-freehand, MIT), the geometry and hit tests of elements, their edits and undo diffs, the
 # merge of two versions, the Excalidraw scene and its payload embedded in an SVG, the colours of
 # the light and the dark theme (Excalidraw's dark mode), the SVG file Brulion writes, the Obsidian
-# Excalidraw plugin's `*.excalidraw.md` files (LZ-String) and one API for every drawing file format.
+# Excalidraw plugin's `*.excalidraw.md` files (LZ-String), one API for every drawing file format and
+# the backdrop of a drawing (a picture or a PDF page under the ink).
 # QtCore only; zlib through the vendored miniz.
 if(NOT TARGET brulion_miniz)
     add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/miniz ${CMAKE_BINARY_DIR}/3rdparty/miniz)
@@ -21,5 +22,6 @@ brulion_add_core_module(drawing
         svgwrite.h svgwrite.cpp
         lzstring.h lzstring.cpp
         excalidrawmd.h excalidrawmd.cpp
-        drawingfile.h drawingfile.cpp)
+        drawingfile.h drawingfile.cpp
+        backdrop.h backdrop.cpp)
 target_link_libraries(brulion_core_drawing PRIVATE brulion_miniz)

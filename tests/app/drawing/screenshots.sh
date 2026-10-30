@@ -6,7 +6,8 @@
 # drawing with a frame (read-only), a new empty drawing and the menus (the colours, "Więcej", the
 # paper, the background: light or dark), a drawing of Obsidian's Excalidraw plugin in the editor
 # (`obsidian`), opened as a page (`obsidianpage`: its picture view) and one with a frame
-# (`obsidianframe`: read-only) — × {desktop 1280×800,
+# (`obsidianframe`: read-only), handwriting on a lecture's slide (`backdrop`: a backdrop, shown
+# "document dark" in the dark), its PDF's page picker (`backdroppages`) — × {desktop 1280×800,
 # phone 412×915 --touch} × {light, dark} into tests/screenshots/drawing-<shot>-<size>-<theme>.png.
 # The drawings follow the app's theme ("Jak motyw"): the dark shots show them on dark paper.
 #
@@ -38,7 +39,7 @@ read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
 all_shots=(editor page picture shapes selection shapemenu readonly new style more paper theme obsidian obsidianpage
-           obsidianframe)
+           obsidianframe backdrop backdroppages)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
 for f in "$bin" "$sample_test"; do
@@ -61,6 +62,9 @@ cp tests/data/drawing/excalidraw_frame.svg "$vault/assets/Ramka z Excalidraw.svg
 mkdir -p "$vault/Excalidraw"
 cp tests/data/drawing/obsidian_mixed.excalidraw.md "$vault/Excalidraw/Szkic z Obsidiana.excalidraw.md"
 cp tests/data/drawing/obsidian_frame.excalidraw.md "$vault/Excalidraw/Ramka z Obsidiana.excalidraw.md"
+mkdir -p "$vault/Załączniki"
+cp tests/data/drawing/backdrop.svg "$vault/assets/Slajd z notatkami.svg"
+cp tests/data/drawing/slajdy.pdf "$vault/Załączniki/Wykład 3 – ruch falowy.pdf"
 cat > "$vault/Wykład z łączności.md" <<'MD'
 # Wykład z łączności
 
@@ -90,6 +94,8 @@ shot_args() {
     obsidian) printf '%s\n' --route '{"view":"drawing","path":"Excalidraw/Szkic z Obsidiana.excalidraw.md"}' ;;
     obsidianpage) printf '%s\n' --route '{"view":"page","path":"Excalidraw/Szkic z Obsidiana.excalidraw.md"}' ;;
     obsidianframe) printf '%s\n' --route '{"view":"drawing","path":"Excalidraw/Ramka z Obsidiana.excalidraw.md"}' ;;
+    backdrop) printf '%s\n' --route '{"view":"drawing","path":"assets/Slajd z notatkami.svg"}' ;;
+    backdroppages) printf '%s\n' --route '{"view":"drawing","path":"assets/Slajd z notatkami.svg","open":"backdrop"}' ;;
     *) return 1 ;;
   esac
 }

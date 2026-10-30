@@ -35,6 +35,14 @@ struct EditStamp {
     std::function<QString()> newId;
 };
 
+/// A new element id as Excalidraw makes them (nanoid: 21 characters of its URL-safe alphabet).
+/// Thread-safe.
+QString newElementId();
+/// The stamp of an edit made now (`now`, ms since the epoch) with real random numbers and
+/// newElementId(): the drawing editor's, and new drawings made elsewhere (a drawing on a backdrop).
+/// Thread-safe.
+EditStamp randomEditStamp(qint64 now);
+
 /// The width of a line of text in a font (the app's: QFontMetricsF); unset: 0.55 × fontSize a
 /// character.
 struct TextMetrics {

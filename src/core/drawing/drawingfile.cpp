@@ -104,7 +104,7 @@ std::optional<DrawingFile> readDrawingFile(QByteArrayView bytes, ReadError *erro
     return DrawingFile{FileFormat::Svg, std::move(*d), nullptr, true};
 }
 
-QByteArray writeDrawingFile(const DrawingFile &file, const Drawing &drawing, qint64 now)
+QByteArray writeDrawingFile(const DrawingFile &file, const Drawing &drawing, qint64 now, const SvgOptions &options)
 {
     if (!file.writable)
         return {};
@@ -114,7 +114,7 @@ QByteArray writeDrawingFile(const DrawingFile &file, const Drawing &drawing, qin
         return file.markdown ? writeExcalidrawMarkdown(*file.markdown, drawing, now) : QByteArray();
     case FileFormat::Svg: break;
     }
-    return toSvg(drawing);
+    return toSvg(drawing, options);
 }
 
 bool looksLikeDrawingFile(QStringView path, QByteArrayView head)

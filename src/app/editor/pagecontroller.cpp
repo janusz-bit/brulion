@@ -8,6 +8,7 @@
 #include "calc/table.h"
 #include "dates/local.h"
 #include "dates/recurrence.h"
+#include "drawing/backdrop.h"
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
 #include "markdown/inline.h"
@@ -3007,8 +3008,8 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         const int r = currentRow();
         focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
     } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
-               || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"webImage"
-               || cmd == u"drawing") {
+               || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"webImage" || cmd == u"drawing"
+               || cmd == u"drawingOn") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -3438,8 +3439,6 @@ QVariantMap PageController::openLocation(const QString &path, int line, bool new
 
 namespace {
 
-/// Largest file stored as an attachment (pictures, PDFs; not whole videos by mistake).
-constexpr qint64 MaxAttachmentBytes = 200LL * 1024 * 1024;
 /// The pictures of one browser pick in all (pickImageInBrowser()): every one stays in the
 /// browser's memory until all are read, and stored attachments live there too.
 [[maybe_unused]] constexpr qint64 MaxPickedAttachmentBytes = 512LL * 1024 * 1024;
@@ -3748,6 +3747,73 @@ QVariantMap PageController::insertDrawing(int row, int from, int to)
     }
     QVariantMap out = insertEmbeds(row, from, to, {path});
     out.insert(u"path"_s, path);
+    return out;
+}
+
+QString PageController::importBackdropSource(const QUrl &file)
+{
+    if (!isFileUrl(file))
+        return {};
+    const QString path = m_host ? m_host->importAttachment(file, MaxAttachmentBytes) : QString();
+    if (path.isEmpty()) {
+        const QString name = QFileInfo(fileSystemPath(file)).fileName();
+        Q_EMIT attachmentFailed(name.isEmpty() ? file.fileName() : name);
+    }
+    return path;
+}
+
+void PageController::discardBackdropSource(const QString &path)
+{
+    if (m_host && !path.isEmpty())
+        m_host->discardImport(path);
+}
+
+QVariantMap PageController::insertDrawingsOn(int row, int from, int to, const QVariantList &prepared)
+{
+    QStringList stored;
+    const qint64 now = currentDateTime().toMSecsSinceEpoch();
+    for (const QVariant &item : prepared) {
+        const QVariantMap m = item.toMap();
+        const drawing::BackdropSource source{m.value(u"path"_s).toString(), std::max(0, m.value(u"page"_s).toInt())};
+        QString name = m.value(u"name"_s).toString().trimmed();
+        if (name.isEmpty())
+            name = QFileInfo(source.path).completeBaseName().trimmed();
+        if (name.isEmpty())
+            name = tr("Drawing");
+        // (Both at once: a name with "%1" in it keeps it, the page goes where %2 is.)
+        //: A drawing on page %2 of the PDF %1 ("Wykład 3 s. 4"); a file name, without the extension
+        const QString fileName = (source.page > 0 ? tr("%1 p. %2").arg(name, QString::number(source.page))
+                                                  //: A drawing on the picture %1; a file name, without the extension
+                                                  : tr("%1 (drawing)").arg(name))
+                                 + u".svg"_s;
+        // The drawing's file as DrawingBackdrops prepared it (off the GUI thread: 60 slides do not
+        // freeze the window), else made here from the raster.
+        QByteArray svg = m.value(u"error"_s).toString().isEmpty() ? m.value(u"svg"_s).toByteArray() : QByteArray();
+        if (svg.isEmpty() && m.value(u"error"_s).toString().isEmpty()) {
+            const drawing::BackdropImage image{m.value(u"bytes"_s).toByteArray(), m.value(u"mimeType"_s).toString(),
+                                               QSize(m.value(u"width"_s).toInt(), m.value(u"height"_s).toInt())};
+            if (const std::optional<drawing::Drawing> d =
+                        drawing::newDrawingOnBackdrop(image, source, drawing::randomEditStamp(now)))
+                svg = drawing::toSvg(*d);
+        }
+        const QString path = svg.isEmpty() || !m_host ? QString() : m_host->saveAttachment(fileName, svg);
+        if (path.isEmpty()) {
+            Q_EMIT attachmentFailed(fileName);
+            continue;
+        }
+        stored.append(path);
+    }
+    if (stored.isEmpty())
+        return {{u"row"_s, -1}, {u"cursor"_s, -1}, {u"paths"_s, QStringList()}};
+    beginCommand();
+    QVariantMap out = insertEmbeds(row, from, to, {stored.first()});
+    int last = out.value(u"row"_s).toInt();
+    for (qsizetype i = 1; i < stored.size() && last >= 0; ++i)
+        last = insertBlockAfter(last, embedFor(stored.at(i)));
+    endCommand(currentFocus());
+    if (stored.size() > 1)
+        stopEditing(); // (several drawings: the note stays, its blocks shown)
+    out.insert(u"paths"_s, stored);
     return out;
 }
 

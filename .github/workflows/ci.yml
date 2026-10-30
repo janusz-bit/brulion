@@ -6,8 +6,9 @@
 #              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
 #  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
 #              UndefinedBehaviorSanitizer at -O1 (asserts on), ccache kept between runs, ctest
-#              with the GUI tests side by side (fast feedback, independent of nixpkgs); a drawing's
-#              SVG light and dark in Chrome (tests/app/drawing/svg-theme-check.mjs);
+#              with the GUI tests side by side (fast feedback, independent of nixpkgs); Qt PDF
+#              (aqt's `qtpdf`) for drawings' PDF backdrops; a drawing's SVG light and dark in Chrome
+#              (tests/app/drawing/svg-theme-check.mjs);
 #  * lint    — actionlint + shellcheck (workflows, scripts), no QML read made only for a binding's
 #              dependency (scripts/check-qml-reads.sh) and clang-format on the changed lines
 #              (.clang-format; tools from the flake's nixpkgs, the same as `nix develop`);
@@ -93,12 +94,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Qt PDF (`qtpdf`, an extension of Qt's repository): the PDF pages of drawings' backdrops
+      # (src/platform/pdfpages_qtpdf.cpp; tests/platform/tst_pdfpages under the sanitizers).
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           host: linux
           target: desktop
           arch: linux_gcc_64
+          modules: qtpdf
           aqtversion: ==3.3.0
           cache: true
 

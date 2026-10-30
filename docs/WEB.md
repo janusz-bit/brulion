@@ -812,6 +812,13 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
   daje adresy `weblocalfile:`, których jednowątkowy build nie przeczyta (potrzebny JSPI albo
   asyncify). Anulowanie `<input>` bez zdarzenia `cancel` (starsze przeglądarki) po prostu nic
   nie zmienia.
+* **Bez PDF-ów jako podkładu rysunku** (docs/UI.md „Drawing editor”, „Backdrop”): Qt nie ma Qt PDF
+  dla WebAssembly (repozytorium Qt 6.11.2 nie ma `qtpdf` dla `wasm_singlethread`), a pdf.js
+  dodałby ponad 2 MB i most do JavaScriptu — więc „Rysunek na obrazie lub PDF…” i „Podkład z obrazu
+  lub PDF…” biorą tu tylko obrazy (własny wybór plików przeglądarki,
+  `DrawingBackdrops.pickInBrowser`), a backend `src/platform/pdfpages_none.cpp` mówi, że PDF-ów nie
+  ma. Rysunki na stronach PDF zrobione na innym urządzeniu wyglądają i edytują się normalnie: obraz
+  strony jest w pliku rysunku.
 * Wymagany WebGL 2 (powłoka ostrzega, gdy go brak, i pozwala spróbować mimo to).
 * Pamięć: start 50 MB, wzrost do 4 GB (domyślne Qt).
 * Sieć tylko przez `QNetworkAccessManager` (fetch przeglądarki) i z zasadami CORS.

@@ -7,8 +7,9 @@ import Brulion
 // redo, the pen, the highlighter, the eraser, the selection (lasso), the shapes (one button showing
 // the last of rectangle, ellipse, diamond, line and arrow; a second click opens their menu) and
 // text, the current tool's colours and widths (text: its sizes S, M, L, XL), the paper (plain,
-// lines, grid), its light or dark background ("Tło rysunku": as the app, light, dark), "Rysuj
-// palcem" on touch screens, "Pokaż cały rysunek" and Gotowe.
+// lines, grid) and its backdrop ("Podkład z obrazu lub PDF…", "Inna strona PDF…", "Usuń podkład"
+// in the paper's menu), its light or dark background ("Tło rysunku": as the app, light, dark),
+// "Rysuj palcem" on touch screens, "Pokaż cały rysunek" and Gotowe.
 // Wide windows: everything in one row above the paper. `compact` (phones; at the bottom, in
 // reach of the thumb): the colours and widths behind one swatch (a popup above the bar), the
 // paper, its background, finger drawing and fitting in "Więcej"; when one row cannot hold it all
@@ -54,6 +55,15 @@ Rectangle {
     signal fingerToggled()
     signal fitRequested()
     signal done()
+    /// The backdrop's entries of the paper's menu ("Więcej" on phones): a picture or a PDF page
+    /// chosen, another page of its PDF, removed.
+    signal backdropRequested()
+    signal backdropPageRequested()
+    signal backdropRemoved()
+
+    /// "Inna strona PDF…": the backdrop is a PDF's page and PDFs can be drawn here.
+    readonly property bool backdropPdf: canvas.hasBackdrop && canvas.backdropPage > 0 && canvas.backdropPath !== ""
+                                        && DrawingBackdrops.pdfAvailable
 
     /// A tool that has a colour (everything but the eraser and the selection).
     readonly property bool drawingTool: canvas.tool !== "eraser" && canvas.tool !== "select"
@@ -512,6 +522,7 @@ Rectangle {
 
     BMenu {
         id: backgroundMenu
+        objectName: "drawingBackgroundMenu"
         BMenuItem {
             text: qsTr("Plain")
             iconName: "square"
@@ -532,6 +543,30 @@ Rectangle {
             checkable: true
             checked: bar.canvas.background === "grid"
             onTriggered: bar.canvas.background = "grid"
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "drawingBackdrop"
+            text: qsTr("Backdrop from a picture or PDF…")
+            iconName: "image"
+            enabled: bar.canvas.editable
+            onTriggered: bar.backdropRequested()
+        }
+        BMenuItem {
+            objectName: "drawingBackdropPage"
+            visible: bar.backdropPdf
+            height: visible ? implicitHeight : 0
+            text: qsTr("Another PDF page…")
+            iconName: "file-text"
+            onTriggered: bar.backdropPageRequested()
+        }
+        BMenuItem {
+            objectName: "drawingBackdropRemove"
+            visible: bar.canvas.hasBackdrop
+            height: visible ? implicitHeight : 0
+            text: qsTr("Remove backdrop")
+            iconName: "trash-2"
+            onTriggered: bar.backdropRemoved()
         }
     }
 
@@ -610,6 +645,28 @@ Rectangle {
             checkable: true
             checked: bar.canvas.theme === "dark"
             onTriggered: bar.canvas.theme = "dark"
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "drawingBackdropItem"
+            text: qsTr("Backdrop from a picture or PDF…")
+            iconName: "image"
+            enabled: bar.canvas.editable
+            onTriggered: bar.backdropRequested()
+        }
+        BMenuItem {
+            visible: bar.backdropPdf
+            height: visible ? implicitHeight : 0
+            text: qsTr("Another PDF page…")
+            iconName: "file-text"
+            onTriggered: bar.backdropPageRequested()
+        }
+        BMenuItem {
+            visible: bar.canvas.hasBackdrop
+            height: visible ? implicitHeight : 0
+            text: qsTr("Remove backdrop")
+            iconName: "trash-2"
+            onTriggered: bar.backdropRemoved()
         }
         BMenuSeparator {}
         BMenuItem {

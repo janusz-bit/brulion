@@ -1,6 +1,6 @@
 ---
 tags: [dokumentacja]
-aliases: [Rysunek, Rysowanie, Notatki odręczne, Schematy, Kształty]
+aliases: [Rysunek, Rysowanie, Notatki odręczne, Schematy, Kształty, Notatki na slajdach, Podkład]
 brulion: document
 ---
 # Rysunki
@@ -63,6 +63,28 @@ W innych programach:
 - rysunek z tłem **Ciemne** jest ciemny wszędzie;
 - rysunek z tłem **Jak motyw** jest ciemny w Obsidianie z ciemnym motywem (na komputerze także wtedy, gdy system jest jasny), a w przeglądarkach i zwykle też na GitHubie, gdy używają ciemnego motywu — plik ma w środku opis ciemnych kolorów dla przeglądarek (`prefers-color-scheme`). Program, który go nie rozumie, pokaże jasny rysunek;
 - **excalidraw.com** pokazuje rysunek w swoim motywie, niezależnie od tego wyboru.
+
+## Notatki na slajdach i PDF-ach
+Rysunek może leżeć na obrazie, slajdzie wyeksportowanym jako obraz albo stronie PDF — piszesz wtedy prosto po slajdach z wykładu. Taki obraz pod rysunkiem to **podkład**.
+
+**Wstawianie z notatki.** Wpisz w bloku `/Rysunek na obrazie lub PDF` (albo krócej `/slajd`, `/pdf`, `/podkład`, `/wykład`) albo wybierz w menu bloku **Wstaw rysunek na obrazie lub PDF…** i wskaż plik:
+- **obraz** (zdjęcie tablicy, slajd zapisany jako PNG albo JPEG) — powstaje jeden rysunek „slajd (rysunek).svg” i od razu otwiera się do rysowania; zaczyna z **jasnym** tłem, bo zdjęcie ma swoje kolory;
+- **PDF** — otwiera się okno ze stronami pliku jako miniaturami. Stuknij strony, które chcesz (stuknięcie drugi raz je odznacza), wybierz **Wszystkie** albo **Żadna**, albo wpisz je w polu **Strony**, np. `1-3, 7` (miniatury i pole zmieniają się razem). Z klawiatury: `Tab` przechodzi do miniatur, strzałki między nimi, `Spacja` zaznacza stronę. **Wstaw rysunki (N)** tworzy po jednym rysunku na stronę — „wykład 3 s. 4.svg” — pierwszy w miejscu kursora, kolejne w osobnych blokach pod nim, po kolei. Naraz wstawisz najwyżej 60 stron. Przygotowanie stron trwa chwilę (pasek postępu „Strona 3 z 12…”); **Anuluj** przerywa. Jeden rysunek otwiera się od razu, kilka zostaje w notatce. Całe wstawienie cofniesz jednym `Ctrl+Z` (pliki rysunków zostają w załącznikach, jak przy `/Rysunek`).
+
+Plik spoza notatnika Brulion kopiuje do folderu załączników, jak obrazy. Plik, który już jest w notatniku (np. PDF zsynchronizowany do folderu wykładu), zostaje na swoim miejscu — na Androidzie też, gdy wskażesz go w pamięci telefonu, na karcie pamięci albo w Pobranych — a ten sam plik wybrany drugi raz nie jest kopiowany ponownie. Jeśli z wybranego pliku nie powstanie żaden rysunek (anulujesz wybór stron, PDF jest chroniony hasłem albo uszkodzony, obrazu nie da się pokazać), skopiowany plik znika z załączników.
+
+**Podkład w edytorze rysunku.** W menu **Papier** (na telefonie w **Więcej**):
+- **Podkład z obrazu lub PDF…** — kładzie obraz albo stronę PDF pod istniejący rysunek (albo zmienia podkład, który już jest);
+- **Inna strona PDF…** — inna strona tego samego PDF-a (gdy podkładem jest strona PDF); jeśli pliku nie ma już w notatniku (przeniesiony, usunięty), Brulion to powie — rysunek ma jednak w sobie obraz strony i wygląda dalej tak samo;
+- **Usuń podkład** — zostawia samo pismo.
+
+Każdą z tych zmian cofniesz. Podkład jest zablokowany: gumka go nie ściera, lasso i `Ctrl+A` go nie zaznaczają, a **Na spód** kładzie elementy tuż nad nim.
+
+**Ciemne tło.** Na ciemnej kartce podkład też ciemnieje — jak tryb nocny czytnika PDF: biała strona staje się ciemnoszara, czarny tekst jasny — więc jasne pismo dalej dobrze widać. Rysunek na stronie PDF zaczyna z tłem **Jak motyw** (ciemnieje razem z Brulionem), rysunek na obrazie z tłem **Jasne**; obie możesz zmienić przyciskiem **Tło rysunku**. Rysunek z tłem **Ciemne** ma ciemny podkład także w Obsidianie i w przeglądarce.
+
+**Gdzie działa PDF.** Strony PDF wstawisz w aplikacji na Androida, Windows i Linuksa (pakiet Nix i AppImage). W wersji w przeglądarce PDF-ów nie ma (przeglądarkowa wersja Qt nie umie ich rysować) — tam podkładem może być obraz, a rysunki na stronach PDF zrobione na innym urządzeniu wyglądają i edytują się normalnie, bo obraz strony jest w pliku rysunku.
+
+**W pliku.** Obraz podkładu jest w samym rysunku (najwyżej 2400 pikseli na dłuższym boku i 4 MB), więc rysunek wygląda tak samo na każdym urządzeniu, w Obsidianie, w przeglądarce i w excalidraw.com — tam podkład jest zwykłym zablokowanym obrazem na spodzie. Obraz jest w pliku dwa razy (w scenie i w samym obrazie), więc rysunek ze slajdem waży zwykle od 0,5 do 1,7 MB.
 
 ## Rysik, palec i mysz
 - **Rysik** rysuje. **Palce** wtedy nie rysują, tylko przesuwają kartkę (jeden palec) i powiększają ją (dwa palce) — możesz więc oprzeć dłoń na ekranie. Dopóki rysik dotyka ekranu, dłoń niczego nie zmienia: nie przesuwa kartki i nie przerywa linii.

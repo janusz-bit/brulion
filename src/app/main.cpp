@@ -1,4 +1,5 @@
 #include "appidentity.h" // Windows: the AppUserModelID of the toasts (src/platform)
+#include "pdfpages.h"    // the PDF renderer's name for the event log (src/platform)
 #include "platform.h"
 #include "ui/devtools.h"      // design system dev tools: --gallery, --screenshot, --size … (devtools.h)
 #include "ui/fallbackfonts.h" // emoji and symbol fonts where the system has none
@@ -8,9 +9,11 @@
 
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
+#include "backdrops.h"            // a drawing's backdrop: vault paths → files (src/app/drawing)
 #include "drawingimageprovider.h" // the previews of drawings, light or dark (src/app/drawing)
-#include "localnetwork.h" // QML loads nothing from the network (src/app/ui)
-#include "logcontroller.h" // the event log page's controller (src/app/diag)
+#include "localnetwork.h"         // QML loads nothing from the network (src/app/ui)
+#include "logcontroller.h"        // the event log page's controller (src/app/diag)
+#include "pdfpageimageprovider.h" // the thumbnails of PDF pages (src/app/drawing)
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -222,8 +225,11 @@ int main(int argc, char *argv[])
         since->start();
         logOptions.clock = [base = fixedStart.toMSecsSinceEpoch(), since] { return base + since->elapsed(); };
     }
-    logOptions.sessionInfo = u"Brulion %1 (%2, Qt %3)"_s.arg(
-            QStringLiteral(BRULION_VERSION), brulion::platform::deviceDescription(), QString::fromLatin1(qVersion()));
+    // (PDF: the renderer of drawings' PDF backdrops, src/platform/pdfpages.h.)
+    const QString device = brulion::platform::deviceDescription();
+    const QString pdf = brulion::platform::pdfBackendName();
+    logOptions.sessionInfo = u"Brulion %1 (%2, Qt %3, PDF: %4)"_s.arg(
+            QStringLiteral(BRULION_VERSION), device, QString::fromLatin1(qVersion()), pdf);
     Logger *logger = Logger::install(logOptions);
     logger->setVerbosity(brulion::logging::Verbosity::Normal);
 #ifdef BRULION_DESKTOP_INTEGRATION
@@ -313,6 +319,16 @@ int main(int argc, char *argv[])
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     // image://drawing/…: the previews of drawings in the light or the dark theme (Workspace::drawingUrl).
     engine.addImageProvider(u"drawing"_s, new brulion::drawingview::DrawingImageProvider);
+    // image://pdfpage/…: the thumbnails of a PDF's pages in the backdrop's page picker.
+    engine.addImageProvider(u"pdfpage"_s, new brulion::drawingview::PdfPageImageProvider);
+    // A drawing's backdrop (DrawingBackdrops): vault paths are files of the open notebook.
+    brulion::drawingview::DrawingBackdrops::setPathResolver([&controller](const QString &path) {
+        return controller && controller->workspace() ? controller->workspace()->absoluteFilePath(path) : QString();
+    });
+    brulion::drawingview::DrawingBackdrops::setImporter([&controller](const QString &name, const QByteArray &data) {
+        return controller && controller->workspace() ? controller->workspace()->importAttachment(name, data)
+                                                     : QString();
+    });
     devTools.attach(&engine); // --size, --screenshot
     brulion::ui::connectKeyboardSources(&keyboardInsets, &engine);
     brulion::ui::connectGestureSources(&gestureInsets, &engine);
@@ -516,6 +532,8 @@ int main(int argc, char *argv[])
     startUi();
 #endif
     const int code = QGuiApplication::exec();
+    brulion::drawingview::DrawingBackdrops::setPathResolver({});
+    brulion::drawingview::DrawingBackdrops::setImporter({});
     if (controller)
         controller->settings()->sync();
     return code;

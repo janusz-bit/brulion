@@ -152,7 +152,10 @@
   z excalidraw.com z kształtami i tekstem edytujesz w Brulionie), a Syncthing synchronizuje jak
   każdy plik. Rysunki wtyczki Excalidraw dla Obsidiana (`*.excalidraw.md`) i pliki `.excalidraw`
   Brulion też pokazuje w notatkach i edytuje, a zapisuje je w ich własnym formacie — Obsidian
-  otworzy je dalej, z notatkami „z tyłu” rysunku i linkami w tekstach.
+  otworzy je dalej, z notatkami „z tyłu” rysunku i linkami w tekstach. **Notatki na slajdach:**
+  `/Rysunek na obrazie lub PDF` kładzie pod rysunek obraz, slajd albo strony PDF z wykładu (po
+  jednym rysunku na stronę; na Androidzie, Windows i Linuksie — w przeglądarce obrazy), a podkład
+  ciemnieje razem z ciemną kartką.
 * **Zapytania.** Blok ` ```query ` pokazuje na żywo np. wszystkie otwarte zadania z tagiem
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
@@ -410,7 +413,9 @@ do C++ w `src/core/drawing/stroke.cpp`. Rysunki wtyczki Excalidraw dla Obsidiana
 [lz-string](https://github.com/pieroxy/lz-string) (MIT, © 2013 Pieroxy), przeniesiona do C++
 w `src/core/drawing/lzstring.cpp`. Emoji i symbole tam, gdzie system nie ma
 czcionki z nimi (przeglądarka, część Linuksów): fragmenty [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji)
-i Noto Sans Math (SIL OFL 1.1, [assets/fonts](assets/fonts/README.md)).
+i Noto Sans Math (SIL OFL 1.1, [assets/fonts](assets/fonts/README.md)). Strony PDF jako podkład
+rysunku: Qt PDF (pdfium, BSD-3-Clause; Windows, AppImage), [poppler](https://poppler.freedesktop.org)
+(GPL-2.0-or-later, zgodna z AGPL; pakiet Nix), a na Androidzie systemowy `PdfRenderer`.
 
 ---
 
@@ -506,7 +511,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   with shapes and text are edited in Brulion), Syncthing syncs it like any file. Drawings of the
   Obsidian Excalidraw plugin (`*.excalidraw.md`) and `.excalidraw` files are shown in notes and
   edited too, and saved back in their own format — Obsidian still opens them, with the notes on
-  the back of the drawing and the links in its texts.
+  the back of the drawing and the links in its texts. **Notes on slides:** "/Rysunek na obrazie lub
+  PDF" puts a picture, a slide or a lecture's PDF pages under a drawing (one drawing per page; on
+  Android, Windows and Linux — pictures in the browser), and the backdrop turns dark with dark
+  paper.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Something not working? Settings → Application → **Event log** shows what the app and the sync
   did (live sync progress and the history of runs are in the sync center); share or save it
@@ -523,6 +531,8 @@ English): [architecture](docs/ARCHITECTURE.md), [Markdown dialect](docs/SYNTAX.m
 [UI](docs/UI.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), the stroke
 outline of drawings ported from perfect-freehand (MIT, © Stephen Ruiz Ltd), the compression of
 Obsidian Excalidraw plugin drawings ported from lz-string (MIT, © 2013 Pieroxy), emoji and
-symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`).
+symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`); PDF
+pages of drawing backdrops: Qt PDF (pdfium, BSD-3-Clause; Windows, AppImage), poppler
+(GPL-2.0-or-later, compatible with the AGPL; the Nix package), Android's own `PdfRenderer`.
 
 Performance (numbers per platform, budgets, how to benchmark, regression guards): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).

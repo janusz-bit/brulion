@@ -477,7 +477,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `trash` | `TrashView` | — |
 | `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled | `section?` |
 | `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
-| `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path` |
+| `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path`, `open?` (screenshots: `style`, `more`, `paper`, `theme`, `shape`, `select`, `backdrop` — the page picker of the backdrop's PDF) |
 
 `OnboardingView` is shown before a notebook is open (pick or create a folder, or the sample
 notebook "Przykładowy brulion").
@@ -587,7 +587,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   ("Task: to do" … "Task: no status"; also found as todo, doing, done, czeka, odłożone, waiting,
   anulowane, cancel, bez statusu…), Przypomnienie…, Alarm…, Termin…, Zaplanuj…, Powtarzaj…, Dziś,
   Jutro, Data…, Tabela, Obliczenia, Zapytanie, Nagłówek 1–3, Cytat, Callout, Kod, Wzór
-  matematyczny, Szablon…, Obraz…, Rysunek (a new drawing, opened in the drawing editor), Osadź,
+  matematyczny, Szablon…, Obraz…, Rysunek (a new drawing, opened in the drawing editor), Rysunek na
+  obrazie lub PDF… (drawings on a picture or a PDF's pages: "Drawing editor" → Backdrop), Osadź,
   Odwołanie do bloku, Priorytet wysoki / niski, Linia
   pozioma, Aktualna godzina. Under each name: the syntax it writes ("⏰ data godzina", "- [ ]
   zadanie", "blok ```calc"). A status command sets the status of the block being edited
@@ -1120,7 +1121,7 @@ and diagrams (shapes, arrows, text), on every platform.
   highlighter: żółty, zielony, różowy, niebieski, pomarańczowy) and widths (cienka / średnia /
   gruba; wąska / średnia / szeroka; text: its sizes Mały / Średni / Duży / Bardzo duży, 16 / 20 /
   28 / 36 — an "A" at four sizes, `drawing/fontSize`) — on phones behind one swatch, a popup above
-  the bar —, Papier (gładki, w linie, w kratkę: an undo step),
+  the bar —, Papier (gładki, w linie, w kratkę: an undo step; and the backdrop's entries, below),
   **Tło rysunku** (a sun-and-moon, sun or moon icon: Jak motyw / Jasne / Ciemne; on phones in
   Więcej: "Tło jak motyw", "Jasne tło", "Ciemne tło"), Rysuj palcem (touch screens), Pokaż cały
   rysunek (Ctrl+0; Ctrl++ / Ctrl+- zoom) and **Gotowe**
@@ -1161,6 +1162,62 @@ and diagrams (shapes, arrows, text), on every platform.
   moves so the text stays above the keyboard (`DrawingCanvas.ensureVisible`, `KeyboardInsets`).
   New text: Excalidraw's Helvetica (sans in both apps) in the app's UI font, line height 1.15.
   While text is written the canvas takes no other input and the view's keys rest.
+* **Backdrop** (Podkład — notes on slides and PDF pages; docs/SYNTAX.md §2 "Backdrop", core
+  `drawing/backdrop.h`): a picture, an exported slide or a PDF page under the ink. **In a note:**
+  the slash command **"/Rysunek na obrazie lub PDF…"** (`drawingOn`: also "slajd", "slajdy", "pdf",
+  "podkład", "wykład", "tło", "slide", "annotate", "backdrop") and the block menu's **"Wstaw rysunek
+  na obrazie lub PDF…"** open the file picker ("Obrazy i PDF"; `FilePicker` — the browser: its own
+  picker, pictures only, `DrawingBackdrops.pickInBrowser`); the file is taken into the notebook
+  (`EditorHost::importAttachment`, `Workspace::importAttachment`: a file of the notebook stays
+  where it is — on Android also when the system's picker names it by a `content://` URI of the
+  phone's storage, a memory card or Downloads' path, `platform/documentpaths.h` —, the same file
+  already in the attachments folder — also under a " 2" name — is used again, anything else is
+  copied there as pictures are). When no drawing comes of the pick (the page picker cancelled, a
+  locked or unreadable PDF, a picture this device cannot decode) the copy made for it is deleted
+  again (`PageController.discardBackdropSource` / `Workspace.discardImport`: only a copy that pick
+  stored, never a file of the notebook or one reused). A picture becomes one drawing ("slajd
+  (rysunek).svg", light — **Jasne**) and opens in the editor; a PDF opens
+  **DrawingBackdropDialog** (a centred card, a bottom sheet on phones): the file's name, "N stron",
+  the pages as thumbnails (the image provider `pdfpage`, `PdfPageImageProvider`:
+  `image://pdfpage/<file>?page=N&v=…`, drawn as they scroll into view; every cell the first page's
+  shape — `DrawingBackdrops.pdfInfo` `width`/`height` —, wider cells for landscape slides), a tap
+  chooses or drops a page — with the keyboard Tab reaches the pages, the arrows move (a focus
+  ring), Space or Enter chooses; in the one-page dialog the arrows choose at once —,
+  **Wszystkie** / **Żadna**, the field **Strony** ("1-3, 7", "wszystkie"; in step with the
+  thumbnails), at most 60 pages ("Najwyżej 60 stron naraz."), **"Wstaw rysunki (N)"**: one drawing
+  per page ("wykład 3 s. 4.svg", as the app — **Jak motyw**), the first at the caret, every
+  further one in a block of its own after it, in order — one undo step
+  (`PageController.insertDrawingsOn`; the files stay, as with "/Rysunek"); one drawing opens in the
+  editor, several stay in the note with a toast ("Wstawiono N rysunków"). The pages are prepared
+  in the background (`DrawingBackdrops.prepare`: Qt's thread pool, the browser one per event-loop
+  turn) with a progress bar ("Strona 3 z 12…") and **Anuluj** — inserted drawings' files made
+  there too (`prepare(…, drawings)`: core `newDrawingOnBackdrop` written — the raster's two base64
+  copies and the scene's deflate), so the GUI thread only stores them and 60 slides freeze no
+  window; a PDF with a password ("Ten PDF
+  jest chroniony hasłem — Brulion go nie otworzy."), one that cannot be read and a picture this
+  device cannot decode say so. **In the editor:** the paper's menu (on phones Więcej) has
+  **"Podkład z obrazu lub PDF…"** (set or replace: a PDF's page in the same dialog, one page,
+  **"Ustaw podkład"**), **"Inna strona PDF…"** (when the backdrop is a PDF's page and PDFs can be
+  drawn here; the file renamed or gone: "Pliku … nie ma już w notatniku" — renames do not follow
+  into drawings) and **"Usuń podkład"** — each one undo step (`DrawingCanvas.setBackdrop`,
+  `removeBackdrop`; `hasBackdrop`, `backdropPath`, `backdropPage`). The backdrop is locked: the
+  eraser, the lasso, a tap and Ctrl+A never take it, "Na spód" stops above it. In the dark it is
+  shown **"document dark"** (Excalidraw's dark filter per pixel, `darkImage`, decoded once per
+  backdrop: a white slide `#121212`), so the ink mapped light stays readable; a Ciemne drawing's
+  file gets that dark raster in its picture (encoded once, `drawing::SvgOptions`), a Jak motyw one
+  no dark style sheet. The raster: the picture's own bytes when it is a PNG or a JPEG within 2400 px
+  and 4 MB that needs no EXIF turning, else decoded (EXIF turned, the first frame of a GIF, an SVG
+  — a drawing too — drawn 2400 px on its long side) and stored as the smaller of PNG and JPEG
+  (`backdropimage.h`); a PDF page drawn 2400 px on its long side (at the resolution of that size,
+  `pdfRenderDpi`: a page larger than A4 costs no more memory). The previews decode a backdrop
+  at the size they show it; the editor keeps decoded only the rasters its elements show (a
+  backdrop replaced: its raster and dark twin dropped, decoded again on undo).
+  **PDF renderers** (`src/platform/pdfpages.h`, chosen by CMake): Android — the system's
+  `PdfRenderer` (JNI, `PdfPages.kt`; nothing added to the APK); Windows, the AppImage and CI's
+  Linux build — Qt PDF (pdfium; aqt's `qtpdf`); the Nix package — poppler-qt6 (nixpkgs has Qt PDF
+  only inside QtWebEngine); the browser — none (Qt has no Qt PDF for WebAssembly): there pictures
+  only, while drawings on PDF pages made elsewhere show and edit normally (their pixels are in the
+  file). Sizes: docs/PERFORMANCE.md "Rozmiar".
 * **Saving:** by itself, 1.2 s after the last change, and when the route changes, the view goes
   (Back, Gotowe, another view) and the app leaves the foreground (`Workspace.writeAttachment`:
   atomic, the replaced version kept in History as for notes). A text being written goes in first
@@ -1273,10 +1330,23 @@ the plugin's export standing in),
 `tst_drawing_qml` (the route and its notices, the background menu, a drawing of shapes with the
 shapes' menu and everything selected, a frame read-only, embeds and the picture view in the real
 app, Obsidian Excalidraw plugin drawings — editable, a frame, the oldest form, opened as a page,
-embedded three ways —, light and dark; nothing written by looking), `tst_editor_picturesize`
+embedded three ways —, a drawing on a PDF's slide with its page picker and the paper's menu,
+light and dark; nothing written by looking), `tst_editor_picturesize`
 (`drawingFiles`, `drawingSizeFollowsTheFile`, `drawingExportsStandIn`), `tst_editor_blocktext`
 (`drawingEmbeds`), `tst_editor_controller`
-(`drawingSlashCommand`, `drawingEmbedsFollowTheirFile`), `tst_shell_workspace_pictures`
+(`drawingSlashCommand`, `drawingEmbedsFollowTheirFile`, `drawingOnSlashCommand`, `insertDrawingsOnPdfPages`,
+`insertDrawingOnPicture`, `insertDrawingsOnOddNames`, `insertDrawingsOnPreparedFiles`, `importBackdropSource`,
+`discardBackdropSource`), `tst_drawing_backdrop` (the backdrop element: set,
+replaced, removed, read back, only index 0, hostile markers and files, page ranges, the SVG's theme
+with a backdrop, the merge, a new drawing on a backdrop, the random stamp), `tst_pdfpages` (this
+build's PDF renderer on a PDF written with QPdfWriter; broken files; hand-made pages far larger than
+A4 and thinner than a pixel; `pdfRenderDpi`), `tst_documentpaths` (Android document URIs that name
+their file), `tst_drawingcanvas` (`backdropUnderInk`, `backdropIsLocked`,
+`backdropDarkInverted`, `backdropPreviewDark`, `setRemoveBackdropUndo`, `replacedBackdropsAreNotKept`,
+`backdropMerge`, `svgPictureShowsBackdrop`, `prepareBackdropPicture`, `prepareBackdropPdfPage` — and
+the page thumbnails —, `backdropsJobs`, `saveTimeWithBackdrop`), `tst_workspace` (`importAttachment`,
+`importedCopyDiscarded`, `importAndroidDocument`), the
+Android bridge self-test (a PDF page through PdfRenderer, the first page's size), `tst_shell_workspace_pictures`
 (`drawingsAreSavedAndShownAgain`, `excalidrawMarkdownIsADrawing`), the shell's self-test (`tst_shell_qml`, `_capture`: opened from
 its embed, drawn with a finger / the mouse, saved, undone; the embed in the app's other theme;
 the embed of a drawing whose file names another frame (excalidraw.com's margins) keeping its size

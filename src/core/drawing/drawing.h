@@ -35,6 +35,9 @@
 //   merge(), mergeBase(), mergeKey()           two versions of a drawing merged element by element
 //   mergeCounts(), sameDrawing(),              (merge.h): the open editor, the sync center's
 //   containsDrawing(), mergeDrawingFiles()     conflict copies, Nextcloud's sync of a drawing file
+//   backdropIndex(), backdropSource(),         a picture or a PDF page under the ink: a locked
+//   setBackdrop(), removeBackdrop(),           image element at index 0 with a marker, its
+//   parsePageRanges()                          raster in the scene (backdrop.h)
 //   darkColor(), displayInk(), displayPaper()  the colours of the dark theme (palette.h)
 //   strokeOutline(stroke), outlineToSvgPath()  the outline of a freehand line (stroke.h)
 //   parseScene(), sceneJson(), svgPayload(),   the Excalidraw format (excalidraw.h)

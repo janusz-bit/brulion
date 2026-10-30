@@ -5,6 +5,8 @@
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
+#include "documentpaths.h"
+
 #include "dates/dates.h"
 #include "drawing/excalidrawmd.h"
 #include "index/vaultindex.h"
@@ -251,6 +253,7 @@ void Workspace::close()
     m_listCaches.reset();
     m_index.reset();
     m_vault.reset();
+    m_importedCopies.clear(); // (paths of that notebook)
     ++m_revision;
     Q_EMIT openChanged();
     Q_EMIT configChanged();
@@ -992,6 +995,81 @@ QString Workspace::saveAttachment(const QString &fileName, const QByteArray &dat
     if (path.isEmpty())
         Q_EMIT errorOccurred(tr("Could not save the attachment %1: %2").arg(name, m_vault->errorString()));
     return path;
+}
+
+QString Workspace::importAttachment(const QString &fileName, const QByteArray &data)
+{
+    if (!m_vault || data.isEmpty())
+        return {};
+    // The same file picked again (another slide of the lecture's PDF): the one already stored —
+    // under its name or one saveAttachment() gave it ("Slajdy 2.pdf").
+    const QString name = paths::sanitizeFileName(paths::basename(QString(fileName).replace(u'\\', u'/')).trimmed());
+    const QString folder = paths::normalize(m_vault->config().attachmentsFolder);
+    if (!name.isEmpty()) {
+        const VaultPath path = folder.isEmpty() ? name : paths::join(folder, name);
+        const QString ext = paths::extension(path);
+        const QString stem = path.left(path.size() - ext.size());
+        for (int i = 1; i <= 50; ++i) {
+            const VaultPath candidate = m_vault->existingCase(i == 1 ? path : stem + u' ' + QString::number(i) + ext);
+            const std::optional<FileStat> stat = m_vault->stat(candidate);
+            if (!stat)
+                break;
+            bool ok = false;
+            if (!stat->isDir && stat->size == data.size() && m_vault->readBinary(candidate, &ok) == data && ok) {
+                // Used again: no longer the abandoned pick's own copy (discardImport() keeps it).
+                m_importedCopies.remove(candidate);
+                return candidate;
+            }
+        }
+    }
+    const QString stored = saveAttachment(fileName, data);
+    if (!stored.isEmpty())
+        m_importedCopies.insert(stored);
+    return stored;
+}
+
+QString Workspace::importAttachment(const QUrl &file, qint64 maxBytes)
+{
+    if (!m_vault)
+        return {};
+    const QString root = QFileInfo(m_vault->rootPath()).canonicalFilePath();
+    // The picked file on disk: a local one, or the file an Android document's URI names (the
+    // system's picker gives content:// URIs also for the notebook's own files).
+    QString local;
+    if (file.isLocalFile())
+        local = file.toLocalFile();
+    else if (file.scheme() == u"content")
+        local = platform::localPathOfDocument(file, platform::primaryStorageOf(root));
+    if (!local.isEmpty() && !root.isEmpty()) {
+        // A file of the notebook itself (the lecture's PDF synced into it): used where it is.
+        const QString absolute = QFileInfo(local).canonicalFilePath();
+        if (!absolute.isEmpty()) {
+            const QString relative = QDir(root).relativeFilePath(absolute);
+            if (!relative.startsWith(u"../"_s) && relative != u".."_s && !QDir::isAbsolutePath(relative)
+                && QFileInfo(absolute).isFile()) {
+                const QString path = m_vault->existingCase(paths::normalize(relative));
+                m_importedCopies.remove(path);
+                return path;
+            }
+        }
+    }
+    return EditorHost::importAttachment(file, maxBytes);
+}
+
+void Workspace::discardImport(const QString &path)
+{
+    if (!m_vault || !m_importedCopies.remove(path))
+        return;
+    if (!m_vault->removePermanently(path, ChangeSource::User))
+        qCWarning(lcWorkspace).noquote() << "could not remove the abandoned attachment" << path
+                                         << m_vault->errorString();
+}
+
+QString Workspace::absoluteFilePath(const QString &path) const
+{
+    if (!m_vault || path.isEmpty())
+        return {};
+    return m_vault->absolutePath(paths::normalize(path));
 }
 
 // ---- EditorHost: context and navigation ------------------------------------------------------
