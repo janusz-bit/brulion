@@ -32,6 +32,8 @@ bool writeBehind(const QString &file, const QByteArray &bytes)
         if (f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size() && f.commit())
             return true;
         error = f.errorString();
+        if (attempt == 0) // (the reason in CI's log even when a retry succeeds)
+            qInfo("writeBehind %s refused, retrying: %s", qPrintable(file), qPrintable(error));
         QTest::qWait(50);
     }
     qWarning("writeBehind %s: %s", qPrintable(file), qPrintable(error));
