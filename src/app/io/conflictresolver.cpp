@@ -311,7 +311,11 @@ void ConflictResolver::loadDrawings(const QString &original, const QString &copy
     m_notesOnly = m_notesDiffer && (contained || (mergeable && drawing::sameDrawing(merged, mine->drawing)));
     if (m_notesOnly || !mergeable)
         return;
-    m_mergedBytes = drawing::writeDrawingFile(*mine, merged, m_workspace->now().toMSecsSinceEpoch());
+    // (The pictures of both together may be more than a file holds: then no merge is offered.)
+    const qint64 now = m_workspace->now().toMSecsSinceEpoch();
+    if (!drawing::readsBack(*mine, merged, now))
+        return;
+    m_mergedBytes = drawing::writeDrawingFile(*mine, merged, now);
     if (m_mergedBytes.isEmpty())
         return;
     m_canMergeDrawings = true;

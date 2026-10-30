@@ -1,5 +1,6 @@
 #include "drawing/merge.h"
 
+#include "drawing/backdrop.h"
 #include "drawing/drawingfile.h"
 #include "drawing/excalidraw.h"
 
@@ -143,6 +144,9 @@ MergeBase mergeBase(const Drawing &base)
 
 Drawing merge(const MergeBase &base, const Drawing &ours, Drawing theirs)
 {
+    // Each side's backdrop (backdrop.h), by key: when both set one of their own, one stays.
+    const QString ourBackdrop = backdropIndex(ours) == 0 ? mergeKey(ours.strokes.first()) : QString();
+    const QString theirBackdrop = backdropIndex(theirs) == 0 ? mergeKey(theirs.strokes.first()) : QString();
     QHash<QString, qsizetype> oursIndex;
     QStringList oursKeys;
     oursKeys.reserve(ours.strokes.size());
@@ -194,6 +198,25 @@ Drawing merge(const MergeBase &base, const Drawing &ours, Drawing theirs)
     }
     if (!bottom.isEmpty())
         merged = bottom + merged;
+    if (!ourBackdrop.isEmpty() && !theirBackdrop.isEmpty() && ourBackdrop != theirBackdrop) {
+        // Two backdrops (each side set its own): the one set last stays at the bottom (a tie keeps
+        // theirs), the other goes — it would lie on it, hidden from the backdrop's menu.
+        qsizetype mine = -1, other = -1;
+        for (qsizetype i = 0; i < merged.size() && (mine < 0 || other < 0); ++i) {
+            const QString k = mergeKey(merged.at(i));
+            if (k == ourBackdrop && mine < 0)
+                mine = i;
+            else if (k == theirBackdrop && other < 0)
+                other = i;
+        }
+        if (mine >= 0 && other >= 0) {
+            const bool oursWins = merged.at(mine).updated > merged.at(other).updated;
+            Stroke kept = merged.at(oursWins ? mine : other);
+            merged.removeAt(std::max(mine, other));
+            merged.removeAt(std::min(mine, other));
+            merged.prepend(std::move(kept));
+        }
+    }
     theirs.strokes = std::move(merged);
     if (base.known && ours.background != base.background)
         theirs.background = ours.background;
@@ -320,6 +343,8 @@ std::optional<QByteArray> mergeDrawingFiles(QByteArrayView base, QByteArrayView 
             into = &*here;
     }
     const Drawing merged = merge(mergeBase(was->drawing), here->drawing, there->drawing);
+    if (!readsBack(*into, merged, now))
+        return std::nullopt; // (the pictures of both together: more than a file may hold)
     QByteArray out = writeDrawingFile(*into, merged, now);
     if (out.isEmpty())
         return std::nullopt;

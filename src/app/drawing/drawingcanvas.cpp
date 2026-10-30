@@ -4,6 +4,7 @@
 #include "drawingrender.h"
 
 #include "drawing/backdrop.h"
+#include "drawing/drawingfile.h"
 #include "drawing/geometry.h"
 #include "drawing/palette.h"
 #include "drawing/stroke.h"
@@ -497,16 +498,28 @@ int DrawingCanvas::backdropPage() const
     return source ? source->page : 0;
 }
 
-bool DrawingCanvas::setBackdrop(const QVariantMap &prepared)
+QString DrawingCanvas::setBackdrop(const QVariantMap &prepared)
 {
-    if (!m_editable || !m_writable || busy() || m_textEditing)
-        return false;
+    if (!m_editable || !m_writable)
+        return u"readonly"_s;
+    if (busy() || m_textEditing)
+        return u"busy"_s;
     const PreparedBackdrop p = fromVariant(prepared);
     if (!p.error.isEmpty() || !drawing::validBackdropImage(p.image))
-        return false;
+        return u"invalid"_s;
     const drawing::EditStamp s = stamp();
+    drawing::Drawing next = m_doc;
+    if (!drawing::setBackdrop(next, p.image, p.source, s))
+        return u"invalid"_s;
+    // A scene full of pictures may leave no room for one more: never write a file that does not
+    // open again.
+    drawing::DrawingFile file;
+    file.format = m_format;
+    file.markdown = m_markdown;
+    if (!drawing::readsBack(file, next, s.now))
+        return u"tooLarge"_s;
     // (One undo step; push() reports the change.)
-    return editElements([&](drawing::Drawing &doc) { drawing::setBackdrop(doc, p.image, p.source, s); });
+    return editElements([&next](drawing::Drawing &doc) { doc = std::move(next); }) ? QString() : u"invalid"_s;
 }
 
 void DrawingCanvas::removeBackdrop()
@@ -598,11 +611,14 @@ void DrawingCanvas::apply(const Op &op, bool forward)
         renderMaybeChanged(wasDark);
         break;
     }
-    case Op::Elements:
-        drawing::applyDiff(m_doc.strokes, op.diff, forward);
+    case Op::Elements: {
+        // Stamped as a new edit: another device's copy or the Excalidraw plugin merges by version.
+        const drawing::EditStamp s = stamp();
+        drawing::applyDiff(m_doc.strokes, op.diff, forward, &s);
         syncPrepared();
         pruneSelection();
         break;
+    }
     }
     invalidateCache();
 }

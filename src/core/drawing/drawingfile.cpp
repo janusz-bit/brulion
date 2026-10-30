@@ -117,6 +117,27 @@ QByteArray writeDrawingFile(const DrawingFile &file, const Drawing &drawing, qin
     return toSvg(drawing, options);
 }
 
+bool readsBack(const DrawingFile &file, const Drawing &drawing, qint64 now)
+{
+    if (!file.writable)
+        return false;
+    const QByteArray json = sceneJson(drawing);
+    const qsizetype around = file.markdown ? file.markdown->bytes.size() : 0;
+    if (json.size() + around <= MaxSceneBytes / 8)
+        return true;
+    if (file.format != FileFormat::Svg)
+        return readDrawingFile(writeDrawingFile(file, drawing, now)).has_value();
+    // An SVG: what its reader limits (svgPayload(), sceneRoot()) — not the picture around it.
+    if (json.size() > MaxSceneBytes)
+        return false;
+    qsizetype containers = 0;
+    for (const char c : json) {
+        if ((c == '[' || c == '{') && ++containers > MaxSceneContainers)
+            return false;
+    }
+    return encodePayload(json).size() <= MaxSceneBytes;
+}
+
 bool looksLikeDrawingFile(QStringView path, QByteArrayView head)
 {
     if (endsWith(path, u".svg"))

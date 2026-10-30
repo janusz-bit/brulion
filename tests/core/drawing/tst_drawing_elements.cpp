@@ -1310,6 +1310,88 @@ private Q_SLOTS:
         QVERIFY(diffElements(d.strokes, d.strokes).isEmpty());
     }
 
+    void undoRestampsVersions()
+    {
+        // Undo and redo put elements back as a new edit: their versions only go up.
+        EditStamp stamp = testStamp();
+        Drawing d;
+        d.strokes = {freehand(u"a"_s, 100, 0, 3), freehand(u"b"_s, 100, 100, 3)};
+        d.strokes[0].version = 1;
+        d.strokes[1].version = 5;
+        // A move (a: v2), undone (the old place, v3) and redone (the new place, v4).
+        QList<Stroke> before = d.strokes;
+        moveElements(d, {u"a"_s}, QPointF(50, 0), stamp);
+        QCOMPARE(d.strokes.at(0).version, 2);
+        const ElementDiff move = diffElements(before, d.strokes);
+        QList<Stroke> list = d.strokes;
+        EditStamp later = testStamp(1761600009000);
+        later.random = [] { return 4242u; };
+        applyDiff(list, move, false, &later);
+        QCOMPARE(list.at(0).points.first().x, 100.0);
+        QCOMPARE(list.at(0).version, 3);
+        QCOMPARE(list.at(0).updated, qint64(1761600009000));
+        QVERIFY(list.at(0).versionNonce != d.strokes.at(0).versionNonce);
+        QCOMPARE(list.at(1).version, 5); // untouched
+        applyDiff(list, move, true, &later);
+        QCOMPARE(list.at(0).points.first().x, 150.0);
+        QCOMPARE(list.at(0).version, 4);
+        // A deletion undone: back above the tombstone a save may have written (version + 1).
+        before = list;
+        d.strokes = list;
+        deleteElements(d, {u"b"_s}, stamp);
+        QCOMPARE(d.strokes.size(), 1);
+        const ElementDiff del = diffElements(before, d.strokes);
+        list = d.strokes;
+        applyDiff(list, del, false, &later);
+        QCOMPARE(list.size(), 2);
+        QCOMPARE(list.at(1).id, u"b"_s);
+        QCOMPARE(list.at(1).version, 7);
+        // A new element removed by undo and drawn again by redo: above its first version + 1.
+        before = list;
+        Stroke c = freehand(u"c"_s, 0, 200, 3);
+        c.version = 1;
+        list.append(c);
+        const ElementDiff add = diffElements(before, list);
+        applyDiff(list, add, false, &later);
+        QCOMPARE(list.size(), 2);
+        applyDiff(list, add, true, &later);
+        QCOMPARE(list.size(), 3);
+        QCOMPARE(list.at(2).version, 3);
+        // Without a stamp the diff restores the elements as they were.
+        applyDiff(list, add, false);
+        applyDiff(list, add, true);
+        QCOMPARE(list.at(2).version, 1);
+    }
+
+    void undoAfterSaveMerges()
+    {
+        // Saved with "a" moved right (v2); the move undone and "a" moved down here, while another
+        // device took the saved version (a moved right, v2) and added "d": the move down stays.
+        EditStamp stamp = testStamp();
+        Drawing d;
+        d.strokes = {freehand(u"a"_s, 100, 0, 3)};
+        d.strokes[0].version = 1;
+        QList<Stroke> before = d.strokes;
+        moveElements(d, {u"a"_s}, QPointF(50, 0), stamp);
+        const Drawing saved = d;
+        const ElementDiff move = diffElements(before, d.strokes);
+        applyDiff(d.strokes, move, false, &stamp);
+        moveElements(d, {u"a"_s}, QPointF(0, 80), stamp);
+        Drawing theirs = saved;
+        theirs.strokes.append(freehand(u"d"_s, 0, 300, 3));
+        const Drawing merged = merge(mergeBase(saved), d, theirs);
+        QCOMPARE(merged.strokes.size(), 2);
+        const qsizetype a = indexOfElement(merged, u"a"_s);
+        QCOMPARE(merged.strokes.at(a).points.first().x, 100.0);
+        QCOMPARE(merged.strokes.at(a).points.first().y, 80.0);
+        // A conflict copy of the saved version merged with no base (the sync center's union):
+        // the undone move does not come back.
+        Drawing undone = saved;
+        applyDiff(undone.strokes, move, false, &stamp);
+        const Drawing united = merge(MergeBase{}, undone, saved);
+        QCOMPARE(united.strokes.first().points.first().x, 100.0);
+    }
+
     void svgOfShapes()
     {
         Drawing d = shapesFixture();

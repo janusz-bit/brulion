@@ -141,7 +141,11 @@ struct ElementDiff {
     }
 };
 ElementDiff diffElements(const QList<Stroke> &before, const QList<Stroke> &after);
-/// The list `before` (forward) or `after` (back) of the diff made into the other one.
-void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward);
+/// The list `before` (forward) or `after` (back) of the diff made into the other one. With `restamp`
+/// (undo and redo) every element the diff puts back is stamped as an edit made now, so versions
+/// only go up and a merge by version (merge.h, the Excalidraw plugin's reconciling) takes the
+/// undo as the newest edit: a version above the one it replaces and above its own + 1 (a save may
+/// have written a removed element as a tombstone at version + 1), a new versionNonce, `updated`.
+void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward, const EditStamp *restamp = nullptr);
 
 } // namespace brulion::drawing

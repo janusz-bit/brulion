@@ -307,8 +307,10 @@ public:
     Q_INVOKABLE void editText(const QString &id);
     /// Put a prepared backdrop ({ bytes, mimeType, width, height, path, page }: DrawingBackdrops)
     /// under the drawing, or replace the one it has (core drawing::setBackdrop) — one undo step.
-    /// False when nothing changed (not editable, bad data).
-    Q_INVOKABLE bool setBackdrop(const QVariantMap &prepared);
+    /// "" when set; else nothing changed: "readonly" (not editable or writable), "busy" (a stroke,
+    /// a shape, a moved selection or a text in progress: try again when it ends), "invalid" (bad
+    /// data) or "tooLarge" (the file written with it would not open again: drawing::readsBack()).
+    Q_INVOKABLE QString setBackdrop(const QVariantMap &prepared);
     /// Remove the backdrop — one undo step (undo brings it back).
     Q_INVOKABLE void removeBackdrop();
     /// Move the view so the scene rect is on screen above `bottomInset` px (a phone's keyboard).
