@@ -2,14 +2,17 @@
 // rolled-over scheduled tasks, reminder-only tasks, filters (tag incl. sub-tags and page tags,
 // page, folder, priority, status, diacritic-insensitive text), the equivalent query text (and
 // that the query engine agrees), sorting, collapsed sections, applyQuery(), escaping of the
-// rendered text, choices for the filter menus, and incremental row updates.
+// rendered text, choices for the filter menus, and incremental row updates — the list kept across
+// random edits equals a list built afresh.
 #include "index/query.h"
+#include "index/querycache.h"
 #include "planningtest.h"
 #include "planningutil.h"
 #include "tasklistmodel.h"
 
 #include <QAbstractItemModelTester>
 #include <QElapsedTimer>
+#include <QRandomGenerator>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -86,6 +89,44 @@ QStringList textsIn(const TaskListModel &m, const QString &section)
     }
     return out;
 }
+
+/// Every row of the model with what it shows (keys, sections, dates, titles, counts).
+QStringList rowsOf(const TaskListModel &m)
+{
+    QStringList out{u"total %1 open %2 overdue %3 today %4 vault %5"_s.arg(m.totalCount())
+                            .arg(m.openCount())
+                            .arg(m.overdueCount())
+                            .arg(m.todayCount())
+                            .arg(m.vaultTaskCount())};
+    for (int r = 0; r < m.rowCount(); ++r) {
+        const QModelIndex i = m.index(r, 0);
+        QStringList fields;
+        for (const TaskListModel::Role role :
+             {TaskListModel::RowTypeRole, TaskListModel::KeyRole, TaskListModel::SectionRole,
+              TaskListModel::SectionCountRole, TaskListModel::TextRole, TaskListModel::StatusRole,
+              TaskListModel::PageTitleRole, TaskListModel::DueRole, TaskListModel::ScheduledRole,
+              TaskListModel::ReminderSpecRole, TaskListModel::PriorityRole, TaskListModel::HtmlRole})
+            fields << m.data(i, role).toString();
+        out << fields.join(u'|');
+    }
+    return out;
+}
+
+const QStringList RandomTaskLines = {
+        u"- [ ] Zaległe 📅 2026-10-12 #praca"_s,
+        u"- [ ] Na dziś ⏫ 📅 2026-10-15"_s,
+        u"- [/] W toku 🔼 ⏳ 2026-10-13"_s,
+        u"- [ ] Jutro ⏰ 2026-10-16 09:00 #praca/telefony"_s,
+        u"- [ ] Bez daty #dom"_s,
+        u"- [ ] W tym tygodniu 🔽 📅 2026-10-17 ➕ 2026-10-01"_s,
+        u"- [ ] Później 🛫 2026-11-20 ➕ 2026-10-05"_s,
+        u"- [x] Zrobione ✅ 2026-10-13"_s,
+        u"- [-] Anulowane ❌ 2026-10-14"_s,
+        u"- [ ] Link do [[Ż]] i ((b1)) 📅 2026-10-15"_s,
+        u"- blok o żółwiu ^b1"_s,
+        u"- [>] Odłożone"_s,
+        u"  - [ ] Podzadanie 📅 2026-10-16"_s,
+};
 
 } // namespace
 
@@ -584,6 +625,69 @@ private Q_SLOTS:
             sum += s.toMap().value(u"count"_s).toInt();
         QCOMPARE(sum, 4500);
         QCOMPARE(sectionCount(m, u"done"_s), 900);
+    }
+
+    // Kept across random edits (only the changed notes evaluated and merged in), the list equals
+    // a model built afresh: rows, sections, counts, keys, the rich text; every sort.
+    void incrementalMatchesFullRebuild_data()
+    {
+        QTest::addColumn<quint32>("seed");
+        QTest::addColumn<QString>("sort");
+        QTest::addColumn<QString>("status");
+        QTest::newRow("due") << 3u << u"due"_s << u"all"_s;
+        QTest::newRow("priority") << 11u << u"priority"_s << u"all"_s;
+        QTest::newRow("page") << 42u << u"page"_s << u"open"_s;
+        QTest::newRow("created") << 2026u << u"created"_s << u"all"_s;
+    }
+    void incrementalMatchesFullRebuild()
+    {
+        QFETCH(quint32, seed);
+        QFETCH(QString, sort);
+        QFETCH(QString, status);
+        const QStringList paths = {u"journals/2026-10-15.md"_s, u"Dom.md"_s,    u"Ż.md"_s,
+                                   u"żółw.md"_s,                u"x/Ala.md"_s, u"Łódź.md"_s, u"Lodz.md"_s};
+        auto index = makeIndex({});
+        auto cache = std::make_shared<brulion::QueryCache>();
+        TaskListModel m;
+        QAbstractItemModelTester tester(&m, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        m.setQueryCache(cache);
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setSortKey(sort);
+        m.setStatusFilter(status);
+        m.setCollapsedSections({});
+        m.setVaultIndex(index.get());
+        QRandomGenerator rng(seed);
+        int partial = 0;
+        for (int step = 0; step < 60; ++step) {
+            const QString path = paths[rng.bounded(int(paths.size()))];
+            const int op = rng.bounded(100);
+            if (op < 75) {
+                QString content;
+                for (int n = 1 + rng.bounded(5); n > 0; --n)
+                    content += RandomTaskLines[rng.bounded(int(RandomTaskLines.size()))] + u'\n';
+                index->update(path, content);
+            } else if (op < 90) {
+                index->remove(path);
+            } else {
+                const QString to = paths[rng.bounded(int(paths.size()))];
+                if (to != path && index->note(path))
+                    index->rename(path, to, index->content(path));
+            }
+            m.refresh();
+            if (!cache->lastSync().full)
+                ++partial;
+            TaskListModel fresh;
+            fresh.setToday(u"2026-10-15"_s);
+            fresh.setSortKey(sort);
+            fresh.setStatusFilter(status);
+            fresh.setCollapsedSections({});
+            fresh.setVaultIndex(index.get());
+            QVERIFY2(rowsOf(m) == rowsOf(fresh), qPrintable(u"step %1"_s.arg(step)));
+            for (int r = 0; r < m.rowCount(); ++r)
+                QCOMPARE(m.rowOfKey(m.data(m.index(r, 0), TaskListModel::KeyRole).toString()), r);
+        }
+        QVERIFY(partial > 20);
     }
 };
 

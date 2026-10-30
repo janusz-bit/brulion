@@ -26,6 +26,8 @@
 // sections are left out, their header stays (with the count). Empty sections have no header.
 // Created from QML, the model builds its rows once, when the component is complete (not once
 // per property set on creation); afterwards every change of a property rebuilds at once.
+// After an index change only the changed notes are evaluated again (a QueryCache) and their
+// tasks merged into the sorted list; rows then move, appear or disappear as before.
 //
 // Header roles: rowType, section, sectionLabel, sectionCount, collapsed.
 // Task roles (also on headers, empty): key ("path:line"), text (plain), html (escaped rich
@@ -37,10 +39,12 @@
 // HH:mm": its chip's menu names it), doneDate, created.
 #pragma once
 
+#include "index/notecache.h"
 #include "index/vaultindex.h"
 #include "types.h"
 
 #include <QAbstractListModel>
+#include <QCollatorSortKey>
 #include <QDate>
 #include <QPointer>
 #include <QQmlParserStatus>
@@ -49,6 +53,13 @@
 #include <QVariantMap>
 
 #include <functional>
+#include <memory>
+#include <optional>
+
+namespace brulion {
+class QueryCache;
+struct QueryItem;
+} // namespace brulion
 
 namespace brulion::planning {
 
@@ -202,6 +213,9 @@ public:
 
     /// Test hook: the clock used when `today` is "".
     void setClock(std::function<QDate()> clock);
+    /// The QueryCache the model evaluates its query with (C++ only; default: its own). Widgets
+    /// keep one across the models they create per publish. Set it before the model builds.
+    void setQueryCache(std::shared_ptr<QueryCache> cache);
 
     /// The section of a task for `today` (keys as above); `reminder` is the date of the block's
     /// next reminder (used when the task has no due / scheduled date).
@@ -240,6 +254,12 @@ private:
         bool isJournal = false;
         QStringList tags;
         std::optional<Reminder> reminder;
+        // What the list is sorted by (itemLess()).
+        qsizetype sectionRank = 0;
+        std::optional<QDate> finished;   ///< the done section's date
+        int priority = 0;                ///< priorityRank()
+        std::optional<DateSpec> date;    ///< the sort date, else the reminder's
+        std::optional<QCollatorSortKey> titleKey; ///< nameSortKey(pageTitle)
         mutable QString html; ///< rendered lazily
         mutable bool rendered = false;
     };
@@ -255,6 +275,10 @@ private:
     /// rebuild(), or once when the QML component is complete.
     void requestRebuild();
     void rebuild();
+    /// The model's item for a task of the query's result.
+    Item makeItem(const QueryItem &qi, QDate today, Qt::DayOfWeek weekStart);
+    /// The list order: section, then the sort key's fields, then title, path and line.
+    bool itemLess(const Item &a, const Item &b) const;
     void rebuildRows();
     void filtersEdited();
     QVariant taskRowData(const Item &item, int role) const;
@@ -279,6 +303,11 @@ private:
     QString m_sort = QStringLiteral("due");
     QStringList m_collapsed{QStringLiteral("done")};
 
+    std::shared_ptr<QueryCache> m_query; ///< the query's matches, kept across index changes
+    IndexFollower m_follower;            ///< which notes changed since m_items was built
+    QHash<QString, QCollatorSortKey> m_titleKeys; ///< nameSortKey() per page title
+    enum SortMode { SortByDue, SortByPriority, SortByCreated, SortByPage };
+    SortMode m_sortMode = SortByDue; ///< m_sort as itemLess() reads it
     QList<Item> m_items;            ///< all matching tasks, sorted by section then sort key
     QHash<QString, int> m_sectionCounts;
     QList<Row> m_rows;

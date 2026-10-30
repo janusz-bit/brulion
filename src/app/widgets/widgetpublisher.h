@@ -20,11 +20,15 @@
 #include <QPointer>
 #include <QTimer>
 
+#include <memory>
+
 namespace brulion::shell {
 class AppController;
 }
 
 namespace brulion::widgets {
+
+struct SnapshotCaches;
 
 class WidgetPublisher : public QObject {
     Q_OBJECT
@@ -43,6 +47,8 @@ private:
     QPointer<shell::AppController> m_app;
     QTimer m_debounce;
     QTimer m_midnight;
+    /// Kept across snapshots: a publish after a save computes the changed notes only.
+    std::shared_ptr<SnapshotCaches> m_caches;
 };
 
 } // namespace brulion::widgets

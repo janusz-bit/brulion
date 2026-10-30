@@ -5,7 +5,9 @@
 #include "tasklistmodel.h"
 
 #include "dates/local.h"
+#include "index/querycache.h"
 #include "index/vaultindex.h"
+#include "reminders/calendar.h"
 #include "notebook/journals.h"
 #include "vault/vault.h"
 
@@ -52,6 +54,8 @@ QJsonObject tasksJson(VaultIndex *index, const SnapshotOptions &options, QDate t
     using Model = planning::TaskListModel;
     Model model;
     model.classBegin();
+    if (options.caches)
+        model.setQueryCache(options.caches->tasks);
     model.setVaultIndex(index);
     model.setToday(planning::isoDate(today));
     model.setWeekStart(int(options.weekStart));
@@ -116,6 +120,8 @@ QJsonObject calendarJson(VaultIndex *index, const SnapshotOptions &options, QDat
     using Model = planning::CalendarModel;
     Model model;
     model.classBegin();
+    if (options.caches)
+        model.setCaches(options.caches->calendar, options.caches->overdue);
     model.setVaultIndex(index);
     model.setMode(u"agenda"_s);
     model.setToday(planning::isoDate(today));
@@ -168,6 +174,15 @@ QString builtStamp(const QDateTime &now)
 }
 
 } // namespace
+
+std::shared_ptr<SnapshotCaches> SnapshotCaches::create()
+{
+    auto caches = std::make_shared<SnapshotCaches>();
+    caches->tasks = std::make_shared<QueryCache>();
+    caches->calendar = std::make_shared<CalendarCache>();
+    caches->overdue = std::make_shared<QueryCache>();
+    return caches;
+}
 
 QJsonObject buildSnapshot(const VaultIndex &constIndex, const SnapshotOptions &options)
 {

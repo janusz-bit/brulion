@@ -1,12 +1,17 @@
 // CalendarModel: month / week / agenda ranges for both week starts, Polish and English titles,
 // entries per day (journals, due / scheduled / reminders / alarms / done, timed first), overdue
 // tasks, recurring series, a month with a DST change, marks for the date picker, navigation and
-// how the model updates (dataChanged instead of resets).
+// how the model updates (dataChanged instead of resets); kept across random edits, its entries
+// and overdue list equal what calendarItems() and a scan of every task give.
 #include "calendarmodel.h"
 #include "planningtest.h"
 #include "centraleuropeantime.h"
 
+#include "dates/local.h"
+#include "index/querycache.h"
+
 #include <QElapsedTimer>
+#include <QRandomGenerator>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -38,6 +43,69 @@ QStringList kindsOf(const QVariantList &items, const QString &key = u"variant"_s
         out << v.toMap().value(key).toString();
     return out;
 }
+
+/// The overdue list as CalendarModel computed it before it kept a query: open (todo, doing) tasks
+/// due before today from index.tasks(), stably sorted by the due date, at most MaxOverdue.
+QStringList overdueByScan(const brulion::VaultIndex &index, QDate today, int *count)
+{
+    struct Entry {
+        brulion::DateSpec due;
+        brulion::TaskRef ref;
+    };
+    QList<Entry> list;
+    for (const brulion::TaskRef &ref : index.tasks()) {
+        const brulion::Task &t = ref.task;
+        if ((t.status == brulion::TaskStatus::Todo || t.status == brulion::TaskStatus::Doing) && t.due
+            && t.due->date < today)
+            list.append({*t.due, ref});
+    }
+    std::stable_sort(list.begin(), list.end(), [](const Entry &a, const Entry &b) {
+        return brulion::dates::compareDateSpecs(a.due, b.due) < 0;
+    });
+    *count = int(list.size());
+    QStringList out;
+    for (qsizetype i = 0; i < list.size() && i < CalendarModel::MaxOverdue; ++i)
+        out << u"overdue:%1:%2"_s.arg(list.at(i).ref.path).arg(list.at(i).ref.task.line) + u' '
+                       + list.at(i).due.toString();
+    return out;
+}
+
+QStringList overdueOf(const CalendarModel &m)
+{
+    QStringList out;
+    for (const QVariant &v : m.overdue())
+        out << v.toMap().value(u"key"_s).toString() + u' ' + v.toMap().value(u"due"_s).toString();
+    return out;
+}
+
+/// Every day's entries of the model (date: keys).
+QStringList entriesOf(const CalendarModel &m)
+{
+    QStringList out;
+    for (int r = 0; r < m.rowCount(); ++r) {
+        QStringList keys;
+        for (const QVariant &v : role(m, r, CalendarModel::ItemsRole).toList())
+            keys << v.toMap().value(u"key"_s).toString() + u'=' + v.toMap().value(u"title"_s).toString();
+        out << role(m, r, CalendarModel::DateRole).toString() + u' '
+                       + role(m, r, CalendarModel::JournalPathRole).toString() + u": "_s + keys.join(u", "_s);
+    }
+    return out;
+}
+
+const QStringList RandomLines = {
+        u"- [ ] Zaległe 📅 2026-10-12"_s,
+        u"- [/] W toku 📅 2026-10-12 18:00"_s,
+        u"- [ ] Dawno 📅 2026-09-01 ⏰ 2026-10-14 08:00"_s,
+        u"- [x] Zrobione 📅 2026-10-01 ✅ 2026-10-02"_s,
+        u"- [-] Anulowane 📅 2026-10-03"_s,
+        u"- [>] Odłożone 📅 2026-10-04"_s,
+        u"- [ ] Na jutro ⏳ 2026-10-16 ⏰! 2026-10-16 06:00"_s,
+        u"- [ ] Cykliczne 🔁 every week 📅 2026-10-08"_s,
+        u"- Spotkanie ⏰ 2026-10-20 10:30"_s,
+        u"- [ ] Żółw ((b1)) 📅 2026-10-13"_s,
+        u"- blok o żółwiu ^b1"_s,
+        u"- [ ] zepsute 📅 2026-13-45"_s,
+};
 
 } // namespace
 
@@ -545,6 +613,108 @@ private Q_SLOTS:
               static_cast<long long>(month), static_cast<long long>(again), static_cast<long long>(week),
               static_cast<long long>(agenda), static_cast<long long>(marksMs));
         QVERIFY2(again < 1000 * BRULION_TEST_SLOWDOWN, "a refresh of the month takes far too long");
+    }
+
+    // The overdue list, now a query kept across index changes, equals the scan of every task it
+    // replaced; the range's entries equal calendarItems() — after every random edit.
+    void overdueListMatchesTheTaskScan_data()
+    {
+        QTest::addColumn<quint32>("seed");
+        for (const quint32 seed : {5u, 77u, 2026u})
+            QTest::newRow(qPrintable(u"seed %1"_s.arg(seed))) << seed;
+    }
+    void overdueListMatchesTheTaskScan()
+    {
+        QFETCH(quint32, seed);
+        QRandomGenerator rng(seed);
+        const QStringList paths = {u"journals/2026-10-14.md"_s, u"Dom.md"_s, u"Ż.md"_s, u"żółw.md"_s, u"x/Ala.md"_s};
+        auto index = makeIndex({});
+        CalendarModel m;
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setMode(u"month"_s);
+        m.setVaultIndex(index.get());
+        QHash<QString, QString> files;
+        for (int step = 0; step < 60; ++step) {
+            const QString path = paths[rng.bounded(int(paths.size()))];
+            if (rng.bounded(100) < 80) {
+                QString content;
+                for (int n = 1 + rng.bounded(4); n > 0; --n)
+                    content += RandomLines[rng.bounded(int(RandomLines.size()))] + u'\n';
+                files.insert(path, content);
+                index->update(path, content);
+            } else {
+                files.remove(path);
+                index->remove(path);
+            }
+            m.refresh();
+            int count = 0;
+            const QStringList scan = overdueByScan(*index, QDate(2026, 10, 15), &count);
+            const QByteArray ctx = u"step %1"_s.arg(step).toUtf8();
+            QVERIFY2(overdueOf(m) == scan, ctx.constData());
+            QCOMPARE(m.overdueCount(), count);
+            // A model built afresh shows the same days.
+            CalendarModel fresh;
+            fresh.setToday(u"2026-10-15"_s);
+            fresh.setMode(u"month"_s);
+            fresh.setVaultIndex(index.get());
+            QVERIFY2(entriesOf(m) == entriesOf(fresh), ctx.constData());
+            QCOMPARE(overdueOf(fresh), scan);
+        }
+        // More than MaxOverdue: the first ones, and the full count.
+        QString many;
+        for (int i = 0; i < CalendarModel::MaxOverdue + 15; ++i)
+            many += u"- [ ] stare %1 📅 2026-10-%2\n"_s.arg(i).arg(1 + i % 14, 2, 10, QChar(u'0'));
+        index->update(u"Wiele.md"_s, many);
+        m.refresh();
+        int count = 0;
+        QCOMPARE(overdueOf(m), overdueByScan(*index, QDate(2026, 10, 15), &count));
+        QCOMPARE(m.overdueCount(), count);
+        QCOMPARE(m.overdue().size(), CalendarModel::MaxOverdue);
+    }
+
+    void cachedRangeMatchesCalendarItems()
+    {
+        auto index = makeIndex({{u"journals/2026-10-15.md"_s, u"- [ ] Dziś 📅 2026-10-15 ⏰ 2026-10-15 09:00\n"_s},
+                                {u"Dom.md"_s, u"- [ ] Remont 📅 2026-10-20\n- Wizyta ⏰ 2026-10-22 18:00\n"_s}});
+        // Caches shared with another model (as the widgets keep them across snapshots).
+        auto calendar = std::make_shared<brulion::CalendarCache>();
+        auto overdue = std::make_shared<brulion::QueryCache>();
+        CalendarModel m;
+        m.setCaches(calendar, overdue);
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setVaultIndex(index.get());
+        QVERIFY(calendar->lastSync().full);
+        const auto expected = [&](const CalendarModel &model) {
+            QStringList out;
+            for (const brulion::CalendarItem &item : brulion::calendarItems(*index, QDate::fromString(model.rangeStart(), Qt::ISODate),
+                                                                            QDate::fromString(model.rangeEnd(), Qt::ISODate))) {
+                if (item.kind != brulion::CalendarItem::Journal)
+                    out << item.date.toString(Qt::ISODate) + u' ' + item.title;
+            }
+            return out;
+        };
+        const auto shown = [](const CalendarModel &model) {
+            QStringList out;
+            for (int r = 0; r < model.rowCount(); ++r) {
+                for (const QVariant &v : role(model, r, CalendarModel::ItemsRole).toList())
+                    out << role(model, r, CalendarModel::DateRole).toString() + u' ' + v.toMap().value(u"title"_s).toString();
+            }
+            return out;
+        };
+        QCOMPARE(shown(m), expected(m));
+        index->update(u"Dom.md"_s, u"- [ ] Remont kuchni 📅 2026-10-21\n- Wizyta ⏰ 2026-10-22 18:00\n- [ ] Stare 📅 2026-10-01\n"_s);
+        QTRY_COMPARE(shown(m), expected(m));
+        QVERIFY(!calendar->lastSync().full);
+        QCOMPARE(calendar->lastSync().changed, QList<QString>{u"Dom.md"_s});
+        QCOMPARE(m.overdueCount(), 1);
+        QVERIFY(!overdue->lastSync().full);
+        // Another month: the range's entries again.
+        m.next();
+        QVERIFY(calendar->lastSync().full);
+        QCOMPARE(shown(m), expected(m));
+        QVERIFY(shown(m).isEmpty() || !shown(m).first().startsWith(u"2026-10-15"_s));
     }
 };
 

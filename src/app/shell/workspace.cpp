@@ -248,6 +248,7 @@ void Workspace::close()
     m_vault->stopWatching();
     disconnect(m_vault.get(), nullptr, this, nullptr);
     disconnect(m_index.get(), nullptr, this, nullptr);
+    m_listCaches.reset();
     m_index.reset();
     m_vault.reset();
     ++m_revision;

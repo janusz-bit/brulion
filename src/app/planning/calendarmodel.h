@@ -32,7 +32,9 @@
 // `today` "" follows the system clock (re-evaluated at midnight). `weekStart` 0 takes the
 // vault's weekStartsOn. Everything is local wall-clock dates (QDate arithmetic, never UTC), so
 // DST changes cannot shift a day. Created from QML, the model builds its days once, when the
-// component is complete (not once per property set on creation).
+// component is complete (not once per property set on creation). The range's entries come from
+// a CalendarCache and the overdue list from a QueryCache: after an index change only the changed
+// notes are computed again.
 #pragma once
 
 #include "reminders/calendar.h"
@@ -48,10 +50,12 @@
 #include <QVariantMap>
 
 #include <functional>
+#include <memory>
 
 namespace brulion {
+class QueryCache;
 class VaultIndex;
-}
+} // namespace brulion
 
 namespace brulion::planning {
 
@@ -196,6 +200,10 @@ public:
 
     /// Test hook: the clock used when `today` is "".
     void setClock(std::function<QDate()> clock);
+    /// The caches of the range's entries and of the overdue list (C++ only; default: the
+    /// model's own). Widgets keep them across the models they create per publish. Set them
+    /// before the model builds.
+    void setCaches(std::shared_ptr<CalendarCache> calendar, std::shared_ptr<QueryCache> overdue);
 
 Q_SIGNALS:
     void vaultIndexChanged();
@@ -233,6 +241,8 @@ private:
 
     QPointer<VaultIndex> m_index;
     QMetaObject::Connection m_indexConnection;
+    std::shared_ptr<CalendarCache> m_calendar; ///< the range's entries
+    std::shared_ptr<QueryCache> m_overdueQuery; ///< open tasks due before today
     QString m_mode = QStringLiteral("month");
     QDate m_anchor; ///< invalid = today
     QString m_todayText;

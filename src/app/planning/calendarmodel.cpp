@@ -3,6 +3,8 @@
 #include "dates/format.h"
 #include "dates/local.h"
 #include "dates/names.h"
+#include "index/query.h"
+#include "index/querycache.h"
 #include "index/vaultindex.h"
 #include "planningutil.h"
 
@@ -122,6 +124,12 @@ CalendarModel::CalendarModel(QObject *parent) : QAbstractListModel(parent)
 }
 
 CalendarModel::~CalendarModel() = default;
+
+void CalendarModel::setCaches(std::shared_ptr<CalendarCache> calendar, std::shared_ptr<QueryCache> overdue)
+{
+    m_calendar = std::move(calendar);
+    m_overdueQuery = std::move(overdue);
+}
 
 void CalendarModel::classBegin()
 {
@@ -604,7 +612,9 @@ void CalendarModel::rebuild(bool forceReset)
     int firstHour = 24;
     int lastHour = -1;
     if (m_index) {
-        const QList<CalendarItem> items = calendarItems(*m_index, from, to);
+        if (!m_calendar)
+            m_calendar = std::make_shared<CalendarCache>();
+        const QList<CalendarItem> items = m_calendar->items(*m_index, from, to);
         for (const CalendarItem &item : items) {
             Day &day = byDate[item.date];
             day.date = item.date;
@@ -640,53 +650,52 @@ void CalendarModel::rebuild(bool forceReset)
         days.append(day);
     }
 
-    // Overdue: open tasks whose (written) due date passed.
+    // Overdue: open tasks whose (written) due date passed, oldest first (then by page and line) —
+    // a query kept across index changes.
     QVariantList overdue;
     int overdueCount = 0;
     if (m_index) {
-        struct Entry {
-            DateSpec due;
-            TaskRef ref;
-        };
-        QList<Entry> list;
-        for (const TaskRef &ref : m_index->tasks()) {
-            const Task &t = ref.task;
-            if ((t.status == TaskStatus::Todo || t.status == TaskStatus::Doing) && t.due && t.due->date < today)
-                list.append({*t.due, ref});
-        }
-        std::stable_sort(list.begin(), list.end(), [](const Entry &a, const Entry &b) {
-            return dates::compareDateSpecs(a.due, b.due) < 0;
-        });
-        overdueCount = int(list.size());
+        static const Query query = [] {
+            const auto parsed = parseQuery(u"status:todo,doing due:<today sort:due limit:%1"_s.arg(MaxOverdue));
+            Q_ASSERT(std::holds_alternative<Query>(parsed));
+            return std::get<Query>(parsed);
+        }();
+        if (!m_overdueQuery)
+            m_overdueQuery = std::make_shared<QueryCache>();
+        const QueryResult result = m_overdueQuery->run(query, *m_index, today, weekStartDay());
+        overdueCount = result.total;
         const dates::UiLocale loc = uiLocale(m_locale);
-        for (qsizetype i = 0; i < list.size() && i < MaxOverdue; ++i) {
-            const Entry &e = list.at(i);
-            const ParsedNote *note = m_index->note(e.ref.path);
+        for (const QueryItem &item : result.items) {
+            if (!item.task || !item.task->due)
+                continue;
+            const Task &task = *item.task;
+            const DateSpec &due = *task.due;
+            const ParsedNote *note = m_index->note(item.path);
             overdue.append(QVariantMap{
-                    {u"key"_s, u"overdue:%1:%2"_s.arg(e.ref.path).arg(e.ref.task.line)},
+                    {u"key"_s, u"overdue:%1:%2"_s.arg(item.path).arg(task.line)},
                     {u"kind"_s, u"due"_s},
                     {u"variant"_s, u"overdue"_s},
                     {u"icon"_s, u"calendar"_s},
-                    {u"title"_s, plainText(e.ref.task.text)},
-                    {u"path"_s, e.ref.path},
-                    {u"line"_s, e.ref.task.line},
+                    {u"title"_s, plainText(task.text)},
+                    {u"path"_s, item.path},
+                    {u"line"_s, task.line},
                     {u"pageTitle"_s, note ? note->title : QString()},
                     {u"isJournalPage"_s, note && note->journalDate.has_value()},
-                    {u"due"_s, e.due.toString()},
-                    {u"dueLabel"_s, humanDate(e.due, loc, today)},
-                    {u"time"_s, clockTime(e.due.time)},
+                    {u"due"_s, due.toString()},
+                    {u"dueLabel"_s, humanDate(due, loc, today)},
+                    {u"time"_s, clockTime(due.time)},
                     {u"minutes"_s, -1},
                     {u"isTask"_s, true},
-                    {u"status"_s, statusName(e.ref.task.status)},
+                    {u"status"_s, statusName(task.status)},
                     {u"closed"_s, false},
                     {u"overdue"_s, true},
-                    {u"recurring"_s, !e.ref.task.recurrence.isEmpty()},
+                    {u"recurring"_s, !task.recurrence.isEmpty()},
                     {u"alarm"_s, false},
-                    {u"date"_s, isoDate(e.due.date)},
-                    {u"spec"_s, e.due.toString()},
+                    {u"date"_s, isoDate(due.date)},
+                    {u"spec"_s, due.toString()},
                     {u"occurrence"_s, false},
-                    {u"rule"_s, e.ref.task.recurrence},
-                    {u"priority"_s, priorityName(e.ref.task.priority)},
+                    {u"rule"_s, task.recurrence},
+                    {u"priority"_s, priorityName(task.priority)},
             });
         }
     }

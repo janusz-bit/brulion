@@ -41,7 +41,11 @@
 #include <QList>
 #include <QString>
 
+#include <memory>
+
 namespace brulion {
+class CalendarCache;
+class QueryCache;
 class Vault;
 class VaultIndex;
 } // namespace brulion
@@ -62,6 +66,17 @@ struct CaptureDay {
     QString newText; ///< the text the note starts with when missing (the journal template; often "")
 };
 
+/// What a publisher keeps across snapshots (SnapshotOptions::caches): the task list's query, the
+/// agenda's entries and its overdue list — a snapshot after a save computes the changed notes only.
+struct SnapshotCaches {
+    std::shared_ptr<QueryCache> tasks;
+    std::shared_ptr<CalendarCache> calendar;
+    std::shared_ptr<QueryCache> overdue;
+
+    /// Empty caches.
+    static std::shared_ptr<SnapshotCaches> create();
+};
+
 struct SnapshotOptions {
     QDateTime now;                          ///< local wall clock
     Qt::DayOfWeek weekStart = Qt::Monday;
@@ -79,6 +94,7 @@ struct SnapshotOptions {
     int calendarDaysAfter = 56;
     int maxDayItems = 40;
     int maxPages = 10;                      ///< favourites / recent pages each
+    std::shared_ptr<SnapshotCaches> caches; ///< kept across snapshots (null: computed afresh)
 };
 
 /// Version of the JSON (WidgetSnapshot.kt ignores other versions).
