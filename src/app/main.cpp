@@ -106,7 +106,8 @@ int main(int argc, char *argv[])
     // The AppImage: file pickers through xdg-desktop-portal — the desktop's own dialog on GNOME,
     // KDE, Hyprland or Sway with a portal backend (FilePicker, src/app/ui/filepicker.h). Without a
     // running portal the theme offers no dialog and FilePicker shows Qt's widget dialog. The
-    // user's own QT_QPA_PLATFORMTHEME wins; the Nix package keeps Qt's choice (docs/NIXOS.md).
+    // user's own QT_QPA_PLATFORMTHEME wins (scripts/appimage-build.sh drops linuxdeploy's AppRun
+    // hook, which set gtk2 on GNOME and XFCE); the Nix package keeps Qt's choice (docs/NIXOS.md).
     if (qEnvironmentVariableIsSet("APPIMAGE") && !qEnvironmentVariableIsSet("QT_QPA_PLATFORMTHEME"))
         qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
 #endif

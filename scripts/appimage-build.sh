@@ -332,6 +332,19 @@ info "Bundling Qt and packing $appimage"
   done
   rm -rf -- "$APPDIR/usr/qml/QtQuick/Dialogs"
   rm -f -- "$APPDIR/usr/lib/libQt6QuickDialogs2"*.so*
+  # linuxdeploy-plugin-qt's AppRun hook exports QT_QPA_PLATFORMTHEME=gtk2 on GNOME and XFCE, over
+  # the user's own value: a Qt 5 theme Qt 6 does not have, and with the variable set main.cpp
+  # does not choose the XDG portal, so the file pickers were Qt's widget dialog there. Out; AppRun
+  # becomes the program again (linuxdeploy's wrapper sources the hook; with other hooks left the
+  # second run writes a wrapper for them).
+  rm -f -- "$APPDIR/apprun-hooks/linuxdeploy-plugin-qt-hook.sh"
+  if [[ -d $APPDIR/apprun-hooks && -z $(ls -A -- "$APPDIR/apprun-hooks") ]]; then
+    rmdir -- "$APPDIR/apprun-hooks"
+    if [[ -e $APPDIR/AppRun.wrapped || -L $APPDIR/AppRun.wrapped ]]; then
+      rm -f -- "$APPDIR/AppRun"
+      mv -- "$APPDIR/AppRun.wrapped" "$APPDIR/AppRun"
+    fi
+  fi
   "$TOOLS_DIR/linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" --output appimage
 )
 [[ -f $appimage ]] || die "linuxdeploy produced no $appimage"
@@ -390,6 +403,20 @@ printf '%s\n' "$log" | head -n 40
 if grep -E -i 'is not installed|module .* not found|cannot load library|could not load the qt platform plugin|failed to load' <<<"$log"; then
   die "Qt or QML errors at startup"
 fi
+# The file pickers on GNOME: no AppRun hook may choose the platform theme, and Qt's first try is
+# the XDG portal (main.cpp; APPIMAGE as the AppImage runtime sets it).
+if [[ -d $check_dir/squashfs-root/apprun-hooks ]] && grep -rl 'QT_QPA_PLATFORMTHEME' "$check_dir/squashfs-root/apprun-hooks"; then
+  die "an AppRun hook sets QT_QPA_PLATFORMTHEME (the file pickers would not use the XDG portal)"
+fi
+mkdir -p "$check_dir/home-gnome"
+set +e
+theme_log=$(cd "$check_dir" && APPIMAGE=$PWD/brulion.AppImage XDG_CURRENT_DESKTOP=ubuntu:GNOME QT_QPA_PLATFORM=offscreen \
+  QT_FORCE_STDERR_LOGGING=1 QT_LOGGING_RULES='qt.qpa.theme.debug=true' HOME=$PWD/home-gnome timeout 5 ./squashfs-root/AppRun 2>&1)
+set -e
+first_theme=$(grep -m 1 'Attempting to create platform theme' <<<"$theme_log" || true)
+printf 'GNOME: %s\n' "${first_theme:-no platform theme tried}"
+[[ $first_theme == *'"xdgdesktopportal"'* ]] ||
+  die "on GNOME the AppImage does not ask for the XDG portal theme (file pickers): ${first_theme:-no theme tried}"
 rm -rf -- "$check_dir"
 
 if [[ -n ${GITHUB_OUTPUT:-} ]]; then

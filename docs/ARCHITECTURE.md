@@ -438,7 +438,9 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
   task "autostart" (the Run value) and the AppUserModelID on its shortcuts — docs/WINDOWS.md.
 * Linux: `scripts/appimage-build.sh` (Qt 6.11.2 from aqt, linuxdeploy; the Qt Quick styles and
   QtQuick.Dialogs that linuxdeploy-plugin-qt copies with `qml/QtQuick` are removed before packing,
-  the XDG portal's platform theme is kept for the file pickers) → AppImage x86_64 +
+  and so is its AppRun hook, which set `QT_QPA_PLATFORMTHEME=gtk2` on GNOME and XFCE; the XDG
+  portal's platform theme is kept for the file pickers, and the check asks Qt which theme it tries
+  first under GNOME) → AppImage x86_64 +
   aarch64, each with a `.zsync` file for AppImageUpdate (checked before publishing by
   `scripts/appimage-update-check.sh`); desktop entry and metainfo in `packaging/`.
 * Android: `scripts/android-build.sh` — Qt 6.11.2 for Android from aqt with host tools of the
