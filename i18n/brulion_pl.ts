@@ -2978,37 +2978,37 @@
         <translation>Wstaw rysunki (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="153"/>
+        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="154"/>
         <source>Pages, e.g. 1-3, 7</source>
         <translation>Strony, np. 1-3, 7</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="154"/>
+        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="155"/>
         <source>Pages</source>
         <translation>Strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="162"/>
+        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="163"/>
         <source>All</source>
         <translation>Wszystkie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="169"/>
+        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="170"/>
         <source>None</source>
         <translation>Żadna</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="183"/>
+        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="184"/>
         <source>At most %1 pages at once.</source>
         <translation>Najwyżej %1 stron naraz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="209"/>
+        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="212"/>
         <source>Page %1</source>
         <translation>Strona %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="272"/>
+        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="275"/>
         <source>Page %1 of %2…</source>
         <translation>Strona %1 z %2…</translation>
     </message>
@@ -3360,42 +3360,42 @@
         <translation>Pliku %1 nie ma już w notatniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="441"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="442"/>
         <source>Backdrop from a picture or PDF</source>
         <translation>Podkład z obrazu lub PDF</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="646"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="647"/>
         <source>This drawing is in an old format of Obsidian&apos;s Excalidraw plugin. Open it once in Obsidian to update it; Brulion shows it as it is.</source>
         <translation>Ten rysunek ma stary format wtyczki Excalidraw dla Obsidiana. Otwórz go raz w Obsidianie, żeby go zaktualizować; Brulion pokazuje go takim, jaki jest.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="648"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="649"/>
         <source>This drawing from Obsidian&apos;s Excalidraw plugin has frames or embedded pages, which Brulion does not edit yet. Change it in Obsidian; Brulion shows it as it is.</source>
         <translation>Ten rysunek z wtyczki Excalidraw dla Obsidiana ma ramki albo osadzone strony, których Brulion jeszcze nie edytuje. Zmień go w Obsidianie; Brulion pokazuje go takim, jaki jest.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="649"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="650"/>
         <source>This drawing has frames or embedded web pages from Excalidraw, which Brulion does not edit. Open the file in excalidraw.com to change it.</source>
         <translation>Ten rysunek ma ramki lub osadzone strony internetowe z Excalidraw, których Brulion nie edytuje. Otwórz plik w excalidraw.com, aby go zmienić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="651"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="652"/>
         <source>This picture is not a drawing: it can only be viewed.</source>
         <translation>Ten obraz nie jest rysunkiem: można go tylko oglądać.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="653"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="654"/>
         <source>The drawing data in this file cannot be read. The picture is shown as it was saved.</source>
         <translation>Nie można odczytać danych rysunku z tego pliku. Obraz jest pokazany tak, jak został zapisany.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="655"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="656"/>
         <source>The drawing %1 is not in the notebook.</source>
         <translation>Rysunku %1 nie ma w notatniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="664"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="665"/>
         <source>Open as a picture</source>
         <translation>Otwórz jako obraz</translation>
     </message>
@@ -3447,31 +3447,31 @@
         <translation>Przypomnienie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="417"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="419"/>
         <source>Insert a picture</source>
         <translation>Wstaw obraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="446"/>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="513"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="448"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="515"/>
         <source>Insert</source>
         <translation>Wstaw</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="464"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="466"/>
         <source>Enter an address starting with http:// or https://</source>
         <translation>Wpisz adres zaczynający się od http:// lub https://</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="513"/>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="581"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="515"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="583"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
     <message>
         <location filename="../src/app/qml/editor/EditorDialogs.qml" line="181"/>
         <location filename="../src/app/qml/editor/EditorDialogs.qml" line="236"/>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="509"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="511"/>
         <source>Remove</source>
         <translation>Usuń</translation>
     </message>
@@ -3490,107 +3490,107 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="386"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="388"/>
         <source>Drawing on a picture or PDF</source>
         <translation>Rysunek na obrazie lub PDF</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="577"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="579"/>
         <source>Repeat</source>
         <translation>Powtarzanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="587"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="589"/>
         <source>Don&apos;t repeat</source>
         <translation>Nie powtarzaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="605"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="607"/>
         <source>Daily</source>
         <translation>Codziennie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="606"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="608"/>
         <source>Weekdays</source>
         <translation>W dni robocze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="607"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="609"/>
         <source>Weekly</source>
         <translation>Co tydzień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="608"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="610"/>
         <source>Every 2 weeks</source>
         <translation>Co 2 tygodnie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="609"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="611"/>
         <source>Monthly</source>
         <translation>Co miesiąc</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="610"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="612"/>
         <source>Yearly</source>
         <translation>Co roku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="626"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="628"/>
         <source>e.g. co tydzień w poniedziałek, every month on the 15th</source>
         <translation>np. co tydzień w poniedziałek, co miesiąc 15.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="629"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="631"/>
         <source>Not a recurrence rule</source>
         <translation>To nie jest reguła powtarzania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="643"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="645"/>
         <source>Written in the note as: %1</source>
         <translation>W notatce: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="659"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="661"/>
         <source>Insert template</source>
         <translation>Wstaw szablon</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="663"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="665"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="676"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="678"/>
         <source>Search templates…</source>
         <translation>Szukaj szablonów…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="684"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="686"/>
         <source>No templates</source>
         <translation>Brak szablonów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="685"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="687"/>
         <source>Put Markdown files into the templates folder of the vault.</source>
         <translation>Umieść pliki Markdown w folderze szablonów notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="443"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="445"/>
         <source>Picture from the internet</source>
         <translation>Obraz z internetu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="462"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="464"/>
         <source>Picture address</source>
         <translation>Adres obrazu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="472"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="474"/>
         <source>Save to notebook</source>
         <translation>Zapisz w notatniku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="473"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="475"/>
         <source>A copy in the attachments folder: shown offline and synced with the notes. Without it the picture is loaded from the site when it is shown.</source>
         <translation>Kopia w folderze załączników: widać ją bez sieci i synchronizuje się razem z notatkami. Bez niej obraz jest pobierany ze strony, gdy go pokazujesz.</translation>
     </message>
@@ -14085,20 +14085,20 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::drawingview::DrawingBackdrops</name>
     <message>
-        <location filename="../src/app/drawing/backdrops.cpp" line="96"/>
-        <location filename="../src/app/drawing/backdrops.cpp" line="132"/>
+        <location filename="../src/app/drawing/backdrops.cpp" line="97"/>
+        <location filename="../src/app/drawing/backdrops.cpp" line="133"/>
         <source>Pictures (%1)</source>
         <extracomment>%1: the file name patterns of pictures, e.g. &quot;*.png *.jpg *.jpeg&quot;</extracomment>
         <translation>Obrazy (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing/backdrops.cpp" line="132"/>
-        <location filename="../src/app/drawing/backdrops.cpp" line="136"/>
+        <location filename="../src/app/drawing/backdrops.cpp" line="133"/>
+        <location filename="../src/app/drawing/backdrops.cpp" line="137"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing/backdrops.cpp" line="135"/>
+        <location filename="../src/app/drawing/backdrops.cpp" line="136"/>
         <source>Pictures and PDF (%1)</source>
         <extracomment>%1: the file name patterns of pictures and PDF, e.g. &quot;*.png *.jpg *.pdf&quot;</extracomment>
         <translation>Obrazy i PDF (%1)</translation>
@@ -15932,19 +15932,19 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1102"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1123"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1101"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1122"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="330"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1253"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1252"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1256"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1255"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
@@ -16054,17 +16054,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1270"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1269"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1285"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1284"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1316"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1315"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
@@ -17035,12 +17035,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/app/main.cpp" line="483"/>
+        <location filename="../src/app/main.cpp" line="484"/>
         <source>Saving to the browser&apos;s storage failed: %1</source>
         <translation>Nie udało się zapisać w pamięci przeglądarki: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="509"/>
+        <location filename="../src/app/main.cpp" line="510"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
     </message>
