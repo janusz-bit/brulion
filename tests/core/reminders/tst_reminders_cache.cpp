@@ -328,9 +328,13 @@ private Q_SLOTS:
 
         // Back in Central European time: computed again, as the free functions give it.
         brulion::test::useCentralEuropeanTime("CET-1CEST,M3.5.0,M10.5.0/3");
-        QCOMPARE(describe(notes.between(index, now, nine)), describe(notificationsBetween(index, now, nine)));
+        const QDateTime nowHere = dt(2026, 10, 14, 8, 59, 30);
+        const QDateTime nineHere = dt(2026, 10, 14, 9, 0);
+        QCOMPARE(describe(notes.between(index, nowHere, nineHere)),
+                 describe(notificationsBetween(index, nowHere, nineHere)));
         QVERIFY(notes.lastSync().full);
-        QCOMPARE(describe(notes.upcoming(index, now)), describe(upcomingNotifications(index, now)));
+        QCOMPARE(notes.between(index, nowHere, nineHere).size(), 1);
+        QCOMPARE(describe(notes.upcoming(index, nowHere)), describe(upcomingNotifications(index, nowHere)));
     }
 
     // After one edit the caches compute one note: at least four times cheaper than computing
