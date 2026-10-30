@@ -1246,6 +1246,7 @@ bool PageController::setMode(const QString &name)
     const std::optional<NoteMode> mode = markdown::parseNoteMode(name);
     if (!mode || !m_loaded)
         return false;
+    closeLoneFence(m_editingUid); // (as applyPropertyEdit(): the text is read again)
     const QString current = m_sourceMode ? m_sourceText : text();
     const QString updated = markdown::setNoteModeKey(current, *mode);
     // Frontmatter that cannot be edited safely (malformed YAML) is left alone: no switch then.
@@ -1821,6 +1822,7 @@ int PageController::insertMarkdown(int row, const QString &markdown)
         md.chop(1);
     if (md.isEmpty())
         return -1;
+    closeLoneFence(m_editingUid); // (as applyPropertyEdit(): the text is read again)
     const BlockDocument &doc = m_model->document();
     const QString eol = doc.eol();
     const QString content = text();

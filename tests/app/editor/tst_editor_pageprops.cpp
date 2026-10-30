@@ -316,6 +316,55 @@ private Q_SLOTS:
         QCOMPARE(g.page.pageProperties().value(u"visibleRow"_s).toInt(), 0);
     }
 
+    void onlyTheFirstKeyBlockIsThePages()
+    {
+        // `key::` blocks after a blank line are the page's text (as for the index and the edits):
+        // the panel lists the first block only, so every property it shows can be edited.
+        Fixture f(u"status:: szkic\n\nautor:: Jan\n\nTreść\n"_s);
+        QCOMPARE(f.role(0, "kind").toString(), u"frontmatter"_s);
+        QCOMPARE(f.items().size(), 1);
+        QCOMPARE(f.item(u"status"_s).value(u"value"_s).toString(), u"szkic"_s);
+        QVERIFY(f.item(u"autor"_s).isEmpty());
+        QVERIFY(f.page.setPageProperty(u"logseq"_s, u"status"_s, u"gotowe"_s, u"text"_s).value(u"ok"_s).toBool());
+        QCOMPARE(f.text(), u"status:: gotowe\n\nautor:: Jan\n\nTreść\n"_s);
+        QCOMPARE(f.page.pageProperties().value(u"addRow"_s).toInt(), 0);
+        // YAML, a `k::` block and a `j::` block: YAML and `k::` are the page's.
+        Fixture g(u"---\na: 1\n---\nk:: x\n\nj:: y\n\n- tekst\n"_s);
+        QCOMPARE(g.items().size(), 2);
+        QCOMPARE(g.item(u"k"_s).value(u"value"_s).toString(), u"x"_s);
+        QVERIFY(g.item(u"j"_s).isEmpty());
+        QCOMPARE(g.page.pageProperties().value(u"addRow"_s).toInt(), 0);
+    }
+
+    void loneFenceIsClosedBeforeAnEdit()
+    {
+        // "```js" typed in a paragraph (still the edited block), then a tag removed in the page
+        // header or the note mode switched: the text read again keeps the paragraphs — the fence
+        // is closed as save() writes it, never left to run on over the page.
+        const QString head = u"---\ntags: [dom, praca]\nbrulion: document\n---\n"_s;
+        const QString rest = u"\n\nAkapit drugi\n\nAkapit trzeci\n"_s;
+        Fixture f(head + u"Akapit pierwszy"_s + rest);
+        QCOMPARE(f.model()->rowCount(), 4);
+        f.page.startEditing(1, 15);
+        f.page.setEditText(1, u"```js"_s, 5);
+        QVERIFY(f.page.removePageListItem(u"tags"_s, u"praca"_s).value(u"ok"_s).toBool());
+        QCOMPARE(f.model()->rowCount(), 4);
+        const QString edited = u"---\ntags: [dom]\nbrulion: document\n---\n```js\n```"_s + rest;
+        QCOMPARE(f.text(), edited);
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), edited);
+        // Adding one and the mode switch the same way.
+        f.page.startEditing(2, 0);
+        f.page.setEditText(2, u"~~~"_s, 3);
+        QVERIFY(f.page.addPageListItem(u"tags"_s, u"żółw"_s).value(u"ok"_s).toBool());
+        QCOMPARE(f.model()->rowCount(), 4);
+        f.page.startEditing(3, 0);
+        f.page.setEditText(3, u"```"_s, 3);
+        QVERIFY(f.page.setMode(u"outline"_s));
+        QCOMPARE(f.model()->rowCount(), 4);
+        QVERIFY(f.text().endsWith(u"~~~\n~~~\n\n```\n```\n"_s));
+    }
+
     void typeMenu()
     {
         Fixture f(u"---\nkoszt: dużo\nlista: a, b\n---\n"_s);
