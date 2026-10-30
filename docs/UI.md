@@ -1190,7 +1190,9 @@ and diagrams (shapes, arrows, text), on every platform.
   per page ("wykład 3 s. 4.svg", as the app — **Jak motyw**), the first at the caret, every
   further one in a block of its own after it, in order — one undo step
   (`PageController.insertDrawingsOn`; the files stay, as with "/Rysunek"); one drawing opens in the
-  editor, several stay in the note with a toast ("Wstawiono N rysunków"). The pages are prepared
+  editor, several stay in the note with a toast ("Wstawiono N rysunków"); when another page was
+  opened in that editor while a picture was prepared, nothing is inserted (a toast; the imported
+  copy goes). The pages are prepared
   in the background (`DrawingBackdrops.prepare`: Qt's thread pool, the browser one per event-loop
   turn) with a progress bar ("Strona 3 z 12…") and **Anuluj** — inserted drawings' files made
   there too (`prepare(…, drawings)`: core `newDrawingOnBackdrop` written — the raster's two base64

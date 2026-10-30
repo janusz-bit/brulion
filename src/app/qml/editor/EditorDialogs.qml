@@ -67,6 +67,9 @@ Item {
     /// The picked file's vault path until a drawing uses it: abandoned, its copy goes again
     /// (PageController.discardBackdropSource).
     property string backdropImport: ""
+    /// The page the drawings are for (the controller's path at the pick): another page loaded
+    /// meanwhile gets none.
+    property string backdropPage: ""
     function reminderPopup(): BReminderDialog {
         if (!reminderDialog)
             reminderDialog = reminderComponent.createObject(root) as BReminderDialog
@@ -316,6 +319,7 @@ Item {
             return
         remember(r)
         cursor = c
+        backdropPage = controller.path
         // The browser has its own picker (pictures only; picked() below).
         const pick = DrawingBackdrops.pickInBrowser()
         if (pick > 0) {
@@ -357,6 +361,12 @@ Item {
         if (good.length === 0 || !controller) {
             abandonBackdropSource()
             refocus()
+            return
+        }
+        if (controller.path !== backdropPage) {
+            // Another page is shown now: never at the end of that one.
+            abandonBackdropSource()
+            AppController.toast(qsTr("Another page was opened while the picture was prepared: no drawing was inserted."))
             return
         }
         // (The block gone meanwhile: at the end of the page.)
