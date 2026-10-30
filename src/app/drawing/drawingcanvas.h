@@ -322,6 +322,8 @@ public:
 
     /// The drawing as it is now (tests).
     drawing::Drawing currentDrawing() const { return m_doc; }
+    /// The decoded pictures and dark backdrops kept (tests: a replaced backdrop's are dropped).
+    qsizetype keptPictures() const { return m_pictures.size() + m_darkBackdrops.size(); }
     /// Select the elements `ids` (with their groups and labels; tests).
     void select(const QStringList &ids);
     /// The clock of new strokes (ms since the epoch); tests fix it.
@@ -493,7 +495,9 @@ private:
     void invalidateCache();
     void drawIntoCache(qsizetype index);
     void updateLive();
-    QString newId() const;
+    /// Drop the decoded pictures and dark backdrops of files no element shows any more (a
+    /// backdrop replaced, a picture deleted): an undo decodes them again.
+    void prunePictures();
 
     // The drawing.
     drawing::Drawing m_doc;

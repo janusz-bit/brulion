@@ -204,6 +204,12 @@ QString darkPictureKey(const QString &fileId)
     return fileId + u"\x1fdark"_s;
 }
 
+QString fileIdOfPictureKey(const QString &key)
+{
+    const qsizetype separator = key.indexOf(QChar(0x1f));
+    return separator < 0 ? key : key.left(separator);
+}
+
 QImage decodePicture(const QJsonObject &files, const QString &fileId, const QSize &atMost)
 {
     const QString url = drawing::safeDataUrl(files, fileId);

@@ -4,6 +4,7 @@
 #include "drawing/merge.h"
 
 #include <QHash>
+#include <QRandomGenerator>
 
 #include <algorithm>
 #include <atomic>
@@ -104,6 +105,26 @@ bool lockedIn(const Drawing &d, const QHash<QString, qsizetype> &index, const St
 }
 
 } // namespace
+
+QString newElementId()
+{
+    // nanoid's alphabet and length, as Excalidraw's element ids.
+    static constexpr char alphabet[] = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
+    QString id;
+    id.reserve(21);
+    for (int i = 0; i < 21; ++i)
+        id += QLatin1Char(alphabet[QRandomGenerator::global()->bounded(64)]);
+    return id;
+}
+
+EditStamp randomEditStamp(qint64 now)
+{
+    EditStamp s;
+    s.now = now;
+    s.random = [] { return QRandomGenerator::global()->bounded(1u, 2147483647u); };
+    s.newId = [] { return newElementId(); };
+    return s;
+}
 
 qsizetype indexOfElement(const Drawing &d, QStringView id)
 {

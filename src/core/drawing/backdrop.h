@@ -90,6 +90,11 @@ bool validBackdropImage(const BackdropImage &image);
 bool setBackdrop(Drawing &d, const BackdropImage &image, const BackdropSource &source, const EditStamp &stamp);
 /// Remove the backdrop (its file entry stays: undo brings it back). False when there is none.
 bool removeBackdrop(Drawing &d);
+/// A new drawing on `image`: the backdrop set (setBackdrop()) and its background — "Jasne" (Light)
+/// on a picture, which keeps its colours, "Jak motyw" (Auto) on a PDF page, which turns dark with
+/// the app ("document dark"). nullopt for an invalid image.
+std::optional<Drawing> newDrawingOnBackdrop(const BackdropImage &image, const BackdropSource &source,
+                                            const EditStamp &stamp);
 /// The pages a user typed out of `count`: "1-3, 7"; "3–1" (en dash; reversed); "wszystkie",
 /// "all" or "*" — every page. Sorted, unique, within 1…count (a range is clipped to it), the first
 /// `limit` of them (a caller may ask for one more to tell that the text named too many); parts

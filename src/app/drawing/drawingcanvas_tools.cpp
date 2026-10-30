@@ -11,7 +11,6 @@
 
 #include <QGuiApplication>
 #include <QLineF>
-#include <QRandomGenerator>
 
 #include <algorithm>
 #include <cmath>
@@ -58,11 +57,7 @@ DrawingCanvas::Pointer DrawingCanvas::touchPointer()
 
 drawing::EditStamp DrawingCanvas::stamp() const
 {
-    drawing::EditStamp s;
-    s.now = m_clock ? m_clock() : 0;
-    s.random = [] { return QRandomGenerator::global()->bounded(1u, 2147483647u); };
-    s.newId = [this] { return newId(); };
-    return s;
+    return drawing::randomEditStamp(m_clock ? m_clock() : 0);
 }
 
 bool DrawingCanvas::editElements(const std::function<void(drawing::Drawing &)> &edit)

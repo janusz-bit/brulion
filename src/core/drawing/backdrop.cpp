@@ -186,6 +186,16 @@ bool removeBackdrop(Drawing &d)
     return true;
 }
 
+std::optional<Drawing> newDrawingOnBackdrop(const BackdropImage &image, const BackdropSource &source,
+                                            const EditStamp &stamp)
+{
+    Drawing d;
+    if (!setBackdrop(d, image, source, stamp))
+        return std::nullopt;
+    d.theme = source.page > 0 ? PaperTheme::Auto : PaperTheme::Light;
+    return d;
+}
+
 QList<int> parsePageRanges(QStringView text, int count, int limit)
 {
     if (count <= 0 || limit <= 0)

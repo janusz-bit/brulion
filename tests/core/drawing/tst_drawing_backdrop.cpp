@@ -2,7 +2,8 @@
 // `customData.brulionBackdrop` and its raster in `files`; set, replaced, removed; read back from
 // the scene and the SVG; only index 0 counts; hostile markers and files; the pages a user types;
 // the SVG's theme with a backdrop (no style sheet for Auto, the dark raster for Dark — or the Light
-// picture without it); a merge keeps a backdrop new here at the bottom.
+// picture without it); a merge keeps a backdrop new here at the bottom; a new drawing on a backdrop
+// (its background by the source) and the random stamp both the editor and new drawings use.
 #include "drawing/backdrop.h"
 #include "drawing/drawing.h"
 #include "drawing/edit.h"
@@ -13,6 +14,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QTest>
 
 #include <memory>
@@ -140,6 +142,9 @@ private Q_SLOTS:
     void svgThemeWithBackdrop();
     void reorderKeepsBackdropAtBottom();
     void backdropMerge();
+    void newDrawingOnBackdrop_data();
+    void newDrawingOnBackdrop();
+    void randomStampAndIds();
 };
 
 void TestDrawingBackdrop::fileIdOfKnownBytes()
@@ -576,6 +581,80 @@ void TestDrawingBackdrop::backdropMerge()
     QVERIFY(merged.files.contains(ours.strokes.first().fileId));
     // The picture of the merge still shows the slide.
     QVERIFY(toSvg(merged).contains("slajd-PNG-bajty"_ba.toBase64()));
+}
+
+void TestDrawingBackdrop::newDrawingOnBackdrop_data()
+{
+    QTest::addColumn<QByteArray>("bytes");
+    QTest::addColumn<QString>("mime");
+    QTest::addColumn<QSize>("pixels");
+    QTest::addColumn<QString>("path");
+    QTest::addColumn<int>("page");
+    QTest::addColumn<bool>("made");
+    QTest::addColumn<int>("theme");
+    QTest::newRow("PDF page: as the app") << "slajd-PNG-bajty"_ba << u"image/png"_s << QSize(2400, 1350)
+                                          << Lecture.path << 3 << true << int(PaperTheme::Auto);
+    QTest::newRow("picture: light") << "zdjęcie-JPEG"_ba << u"image/jpeg"_s << QSize(1600, 1200)
+                                    << u"Załączniki/Tablica – ćwiczenia.jpg"_s << 0 << true << int(PaperTheme::Light);
+    QTest::newRow("empty bytes") << QByteArray() << u"image/png"_s << QSize(10, 10) << Lecture.path << 3 << false
+                                 << int(PaperTheme::Auto);
+    QTest::newRow("no size") << "x"_ba << u"image/png"_s << QSize(0, 0) << Lecture.path << 3 << false
+                             << int(PaperTheme::Auto);
+    QTest::newRow("HTML is no picture") << "<b>"_ba << u"text/html"_s << QSize(10, 10) << Lecture.path << 1 << false
+                                        << int(PaperTheme::Auto);
+}
+
+void TestDrawingBackdrop::newDrawingOnBackdrop()
+{
+    QFETCH(QByteArray, bytes);
+    QFETCH(QString, mime);
+    QFETCH(QSize, pixels);
+    QFETCH(QString, path);
+    QFETCH(int, page);
+    QFETCH(bool, made);
+    QFETCH(int, theme);
+    const BackdropSource source{path, page};
+    const std::optional<Drawing> d =
+            brulion::drawing::newDrawingOnBackdrop(BackdropImage{bytes, mime, pixels}, source, testStamp());
+    QCOMPARE(d.has_value(), made);
+    if (!made)
+        return;
+    QCOMPARE(int(d->theme), theme);
+    QCOMPARE(d->strokes.size(), 1);
+    QCOMPARE(backdropIndex(*d), 0);
+    QCOMPARE(*backdropSource(*d), source);
+    // Written and read back: the same backdrop, the same background.
+    const std::optional<Drawing> back = parseScene(sceneJson(*d));
+    QVERIFY(back);
+    QCOMPARE(int(back->theme), theme);
+    QCOMPARE(*backdropSource(*back), source);
+}
+
+void TestDrawingBackdrop::randomStampAndIds()
+{
+    static const QString alphabet = u"useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict"_s;
+    QSet<QString> seen;
+    for (int i = 0; i < 1000; ++i) {
+        const QString id = newElementId();
+        QCOMPARE(id.size(), 21);
+        for (const QChar c : id)
+            QVERIFY2(alphabet.contains(c), qPrintable(id));
+        seen.insert(id);
+    }
+    QCOMPARE(seen.size(), 1000); // (126 random bits each)
+    const EditStamp s = randomEditStamp(1761700000123);
+    QCOMPARE(s.now, 1761700000123);
+    QVERIFY(s.random && s.newId);
+    for (int i = 0; i < 100; ++i) {
+        const quint32 r = s.random();
+        QVERIFY(r >= 1 && r < 2147483647u);
+    }
+    QCOMPARE(s.newId().size(), 21);
+    // A backdrop made with it gets such an id.
+    Drawing d;
+    QVERIFY(setBackdrop(d, image(), Lecture, s));
+    QCOMPARE(d.strokes.first().id.size(), 21);
+    QVERIFY(d.strokes.first().seed >= 1);
 }
 
 QTEST_GUILESS_MAIN(TestDrawingBackdrop)

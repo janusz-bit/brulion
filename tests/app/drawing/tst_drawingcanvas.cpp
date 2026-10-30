@@ -3095,6 +3095,33 @@ private Q_SLOTS:
         QVERIFY(!canvas->modified());
     }
 
+    void replacedBackdropsAreNotKept()
+    {
+        // "Inna strona PDF…" eight times on a dark tablet: only the shown backdrop's raster and its
+        // dark twin stay decoded (each 2400 × 1350 one is ≈ 13 MB); undo decodes the old one again.
+        canvas->setTheme(u"dark"_s);
+        const QList<QColor> colors{QColor(u"#ff0000"_s), QColor(u"#2f6fdd"_s), QColor(u"#2b8a3e"_s),
+                                   QColor(u"#f59f00"_s), QColor(u"#ae3ec9"_s), QColor(u"#e8590c"_s),
+                                   QColor(u"#0c8599"_s), QColor(u"#ffffff"_s)};
+        for (int i = 0; i < colors.size(); ++i) {
+            QVERIFY(canvas->setBackdrop(backdropOf(colors.at(i), QSize(400, 300), u"Załączniki/wykład.pdf"_s, i + 1)));
+            painted(canvas);           // the picture and its dark twin decoded
+            QVERIFY(!canvas->svg().isEmpty()); // a Dark drawing's file: the dark raster encoded
+            QVERIFY2(canvas->keptPictures() <= 3, qPrintable(QString::number(canvas->keptPictures())));
+        }
+        // The last one shows: white, dark.
+        QVERIFY(near(painted(canvas).pixelColor(300, 300), QColor(u"#121212"_s), 2));
+        // Undo: the previous page decoded again and shown (its file stayed in the drawing).
+        canvas->undo();
+        canvas->setTheme(u"light"_s);
+        QVERIFY2(near(painted(canvas).pixelColor(300, 300), colors.at(6), 12),
+                 qPrintable(painted(canvas).pixelColor(300, 300).name()));
+        // Removed: nothing kept.
+        canvas->removeBackdrop();
+        painted(canvas);
+        QCOMPARE(canvas->keptPictures(), 0);
+    }
+
     void backdropMerge()
     {
         // A backdrop set here while another device added a stroke: both kept, the backdrop at the

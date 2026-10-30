@@ -331,6 +331,7 @@ void DrawingCanvas::syncPrepared()
         m_prepared[i] = prepare(m_doc.strokes.at(i), std::min(drawing::MaxHatchLines, budget));
         budget -= m_prepared.at(i).hatch.size();
     }
+    prunePictures();
 }
 
 void DrawingCanvas::setDocument(drawing::Drawing doc)
@@ -556,15 +557,17 @@ QRectF DrawingCanvas::contentBounds() const
     return out;
 }
 
-QString DrawingCanvas::newId() const
+void DrawingCanvas::prunePictures()
 {
-    // nanoid's alphabet and length, as Excalidraw's element ids.
-    static constexpr char alphabet[] = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
-    QString id;
-    id.reserve(21);
-    for (int i = 0; i < 21; ++i)
-        id += QLatin1Char(alphabet[QRandomGenerator::global()->bounded(64)]);
-    return id;
+    if (m_pictures.isEmpty() && m_darkBackdrops.isEmpty())
+        return;
+    QSet<QString> shown;
+    for (const drawing::Stroke &e : std::as_const(m_doc.strokes)) {
+        if (e.type == drawing::ElementType::Image && !e.fileId.isEmpty())
+            shown.insert(e.fileId);
+    }
+    m_pictures.removeIf([&shown](const PictureCache::iterator it) { return !shown.contains(fileIdOfPictureKey(it.key())); });
+    m_darkBackdrops.removeIf([&shown](const QHash<QString, QString>::iterator it) { return !shown.contains(it.key()); });
 }
 
 // --- Undo -------------------------------------------------------------------------------------
@@ -1487,7 +1490,7 @@ void DrawingCanvas::finishStroke()
             pt.pressure = 0.5;
     }
     drawing::normalizeStroke(s);
-    s.id = newId();
+    s.id = drawing::newElementId();
     s.seed = int(QRandomGenerator::global()->bounded(1, 2147483647));
     s.versionNonce = int(QRandomGenerator::global()->bounded(1, 2147483647));
     s.version = 1;

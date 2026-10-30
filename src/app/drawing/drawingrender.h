@@ -100,6 +100,8 @@ QImage decodePicture(const QJsonObject &files, const QString &fileId, const QSiz
 /// darkPictureKey().
 using PictureCache = QHash<QString, QImage>;
 QString darkPictureKey(const QString &fileId);
+/// The fileId a key of a PictureCache belongs to (its own, or the one of its dark twin).
+QString fileIdOfPictureKey(const QString &key);
 /// Paint an element into `painter` (which maps scene coordinates); `pictures` caches the decoded
 /// pictures of `files`. `backdrop`: the element is the drawing's backdrop (drawing::backdropIndex) —
 /// in the dark its picture is drawn through darkImage().
