@@ -158,14 +158,18 @@ private Q_SLOTS:
     }
 
     // Editing operations in the middle of an outline, as reversible pairs so every iteration
-    // starts from the same document.
+    // starts from the same document. Undo (L5): "undo+redo" reverts and reapplies the delta of
+    // an Enter (an undo step, BlockDocument::Delta), "version+diff" is what every command adds
+    // to keep that step (version() before, diffFrom() after a setBody), "re-read" what undo did
+    // before L5 (the page's text read again, unchanged blocks lending their parse).
     void blockDocOps_data()
     {
         QTest::addColumn<int>("blocks");
         QTest::addColumn<QString>("op");
         for (int n : {500, 5000}) {
             for (const QString &op : {u"setBody"_s, u"split+merge"_s, u"insertAfter+remove"_s, u"indent+outdent"_s,
-                                      u"moveDown+moveUp"_s, u"toggleTask x2"_s, u"keystroke"_s})
+                                      u"moveDown+moveUp"_s, u"toggleTask x2"_s, u"keystroke"_s, u"undo+redo"_s,
+                                      u"version+diff"_s, u"re-read"_s})
                 QTest::newRow(qPrintable(u"%1 blocks %2"_s.arg(n).arg(op))) << n << op;
         }
     }
@@ -180,8 +184,26 @@ private Q_SLOTS:
         const QDate today = bench::fixedToday();
         int flip = 0;
         qsizetype sink = 0;
+        BlockDocument::Delta enter;
+        if (op == u"undo+redo") {
+            const BlockDocument::Version v = doc.version();
+            doc.split(i, int(body.size() / 2));
+            enter = doc.diffFrom(v);
+        }
         QBENCHMARK {
-            if (op == u"setBody") {
+            if (op == u"undo+redo") {
+                bool ok = false;
+                doc.revert(enter, &ok);
+                doc.reapply(enter, &ok);
+                sink += ok ? 1 : 0;
+            } else if (op == u"version+diff") {
+                const BlockDocument::Version v = doc.version();
+                doc.setBody(i, (flip++ & 1) ? body : body + u"x"_s);
+                sink += doc.diffFrom(v).size();
+            } else if (op == u"re-read") {
+                const BlockDocument fresh(doc.toString(), &doc);
+                sink += fresh.count();
+            } else if (op == u"setBody") {
                 doc.setBody(i, (flip++ & 1) ? body : body + u" x"_s);
             } else if (op == u"split+merge") {
                 const EditResult r = doc.split(i, int(body.size() / 2));

@@ -73,6 +73,5 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
   wczytywania (w przeglądarce pierwsze wczytanie bez gotowego indeksu jest o 11–16 % dłuższe niż
   przed falą 5) i pomiar indeksowania na Raspberry Pi i telefonie (L1b);
 * przyrostowe listy zadań, kalendarza i przypomnień (L3);
-* szybsze cofanie (L5);
 * natywne okna wyboru plików (L9: APK −15 MB, wersja webowa −5 MB);
 * wykres powiązań na wątku roboczym (L16).

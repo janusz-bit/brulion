@@ -52,13 +52,14 @@ guards_full=(
   "bench_index:memory:10000 notes + search index"
   "bench_reminders:afterEdit:mixed vault 10000 notes, update + all consumers"
   "bench_markdown:blockDocOps:5000 blocks keystroke"
+  "bench_markdown:blockDocOps:5000 blocks undo+redo"
   "bench_vault:localStoreFlush:10000 synced files"
   "bench_sync:syncNoChanges:10000 files"
   "bench_index:openFromDisk:10000 notes loader 4 workers"
   "bench_index:openFromDisk:10000 notes loader warm cache 4 workers"
 )
 guards_small=(
-  "${guards_full[@]:0:9}"
+  "${guards_full[@]:0:10}"
   "bench_sync:syncNoChanges:5000 files"
   "bench_index:openFromDisk:10000 notes loader 3 workers"
   "bench_index:openFromDisk:10000 notes loader warm cache 3 workers"

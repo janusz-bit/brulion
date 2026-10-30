@@ -1346,8 +1346,7 @@ QVariantMap PageController::split(int row, int cursor)
     const int len = int(shape.editText.size());
     cursor = cursor < 0 ? len : snapToCharacter(shape.editText, cursor);
     // Enter made in a zoom records the zoomed row of both versions (Focus::zoom): undo and redo
-    // bring that zoom back also when the zoomed block's own text changed (a block whose source
-    // changed loses the zoom in BlockListModel::replaceContent) and when the step ended the zoom.
+    // bring that zoom back also when the step ended the zoom (a zoomed heading or paragraph).
     const int zoom = zoomBlock();
     const auto finish = [&](Focus f) {
         if (zoom >= 0) {
