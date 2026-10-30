@@ -264,8 +264,7 @@ std::optional<Stroke> elementFromJson(const QJsonObject &e)
             return std::nullopt;
         s.simulatePressure = e.value(u"simulatePressure"_s).toBool(true);
         const QJsonArray pressures = e.value(u"pressures"_s).toArray();
-        const bool realPressure =
-                !s.simulatePressure && pressures.size() == e.value(u"points"_s).toArray().size();
+        const bool realPressure = !s.simulatePressure && pressures.size() == e.value(u"points"_s).toArray().size();
         std::optional<QList<StrokePoint>> points = pointsFrom(e, x, y, pressures, realPressure);
         if (!points)
             return std::nullopt;

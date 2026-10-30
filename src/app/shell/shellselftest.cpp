@@ -3036,7 +3036,8 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
             check(waitFor([&] { return editor && editor->hasActiveFocus(); }), "a text opens low on the paper");
             const qreal paperHeight = canvas->height();
             window->resize(full.width(), full.height() * 2 / 3);
-            check(waitFor([&] { return canvas->height() < paperHeight - full.height() / 4; }), "the paper shrinks with the window");
+            check(waitFor([&] { return canvas->height() < paperHeight - full.height() / 4; }),
+                  "the paper shrinks with the window");
             const auto onPaper = [&] {
                 const QRectF e = editor->mapRectToScene(QRectF(0, 0, editor->width(), editor->height()));
                 const QRectF c = canvas->mapRectToScene(QRectF(0, 0, canvas->width(), canvas->height()));
@@ -3097,8 +3098,13 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     // A version Brulion cannot edit (a frame added in excalidraw.com): shown as it is, never
     // written over; what was drawn here is kept in a new file beside it.
     drawing::Drawing shapes = drawing::readDrawing(workspace->readAttachment(path)).value_or(drawing::Drawing());
-    shapes.foreign.append(QJsonObject{{u"type"_s, u"frame"_s}, {u"id"_s, u"ramka"_s}, {u"x"_s, 10},
-                                      {u"y"_s, 10}, {u"width"_s, 50}, {u"height"_s, 40}, {u"name"_s, u"Ramka"_s}});
+    shapes.foreign.append(QJsonObject{{u"type"_s, u"frame"_s},
+                                      {u"id"_s, u"ramka"_s},
+                                      {u"x"_s, 10},
+                                      {u"y"_s, 10},
+                                      {u"width"_s, 50},
+                                      {u"height"_s, 40},
+                                      {u"name"_s, u"Ramka"_s}});
     const QByteArray shapesBytes = drawing::toSvg(shapes);
     drawStroke(0.8);
     check(waitFor([&] { return canvas->property("strokeCount").toInt() == 4; }) && writeBehind(shapes),

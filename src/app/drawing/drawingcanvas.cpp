@@ -98,7 +98,7 @@ void DrawingCanvas::setTool(const QString &tool)
     // (The selection belongs to the select tool: another tool draws on.)
     if (t != u"select")
         clearSelection();
-    setCursor(m_panMode ? Qt::OpenHandCursor
+    setCursor(m_panMode        ? Qt::OpenHandCursor
               : t == u"select" ? Qt::ArrowCursor
               : t == u"text"   ? Qt::IBeamCursor
                                : Qt::CrossCursor);
@@ -230,7 +230,7 @@ void DrawingCanvas::setPanMode(bool on)
     if (on == m_panMode)
         return;
     m_panMode = on;
-    setCursor(on ? Qt::OpenHandCursor
+    setCursor(on                    ? Qt::OpenHandCursor
               : m_tool == u"select" ? Qt::ArrowCursor
               : m_tool == u"text"   ? Qt::IBeamCursor
                                     : Qt::CrossCursor);
@@ -254,7 +254,7 @@ void DrawingCanvas::setInteractive(bool on)
         ungrabTouchPoints();
         unsetCursor();
     } else {
-        setCursor(m_panMode ? Qt::OpenHandCursor
+        setCursor(m_panMode             ? Qt::OpenHandCursor
                   : m_tool == u"select" ? Qt::ArrowCursor
                   : m_tool == u"text"   ? Qt::IBeamCursor
                                         : Qt::CrossCursor);

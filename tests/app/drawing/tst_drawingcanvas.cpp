@@ -341,7 +341,8 @@ QByteArray shapesFile()
     return toSvg(d);
 }
 
-const brulion::drawing::Stroke *elementOf(const DrawingCanvas *canvas, const QString &id, brulion::drawing::Drawing &keep)
+const brulion::drawing::Stroke *elementOf(const DrawingCanvas *canvas, const QString &id,
+                                          brulion::drawing::Drawing &keep)
 {
     keep = canvas->currentDrawing();
     for (const auto &s : keep.strokes) {
@@ -994,7 +995,8 @@ private Q_SLOTS:
         eraser.stroke({150, 10}, {150, 150}, 10, 0.5, 0.5);
         Fingers fingers(window.get());
         fingers.drag({60, 60}, {200, 120}, 6);
-        for (const Qt::KeyboardModifiers modifiers : {Qt::KeyboardModifiers(), Qt::KeyboardModifiers(Qt::ControlModifier)}) {
+        for (const Qt::KeyboardModifiers modifiers :
+             {Qt::KeyboardModifiers(), Qt::KeyboardModifiers(Qt::ControlModifier)}) {
             QWheelEvent wheel(QPointF(150, 80), window->mapToGlobal(QPointF(150, 80)), QPoint(), QPoint(0, -240),
                               Qt::NoButton, modifiers, Qt::NoScrollPhase, false);
             QCoreApplication::sendEvent(window.get(), &wheel);
@@ -2044,8 +2046,8 @@ private Q_SLOTS:
         const QByteArray bytes = fixture(u"excalidraw_mixed.svg"_s);
         QCOMPARE(canvas->load(bytes), QString());
         QVERIFY(canvas->editable());
-        QCOMPARE(strokeIds(canvas), (QStringList{u"Qk8_3vL1nYbXc0Rr2mT9a"_s, u"rect_00000000000000001"_s,
-                                                 u"text_00000000000000001"_s}));
+        QCOMPARE(strokeIds(canvas),
+                 (QStringList{u"Qk8_3vL1nYbXc0Rr2mT9a"_s, u"rect_00000000000000001"_s, u"text_00000000000000001"_s}));
         mouseStroke(window.get(), {100, 100}, {300, 160}, 10);
         const std::optional<brulion::drawing::Drawing> written = brulion::drawing::readDrawing(canvas->svg());
         QVERIFY(written && brulion::drawing::editable(*written));
@@ -2324,9 +2326,11 @@ private Q_SLOTS:
         fingers.send({{1, {QEventPoint::State::Pressed, {200, 400}}}});
         fingers.send({{1, {QEventPoint::State::Updated, {260, 440}}}});
         QVERIFY(canvas->busy());
-        fingers.send({{1, {QEventPoint::State::Stationary, {260, 440}}}, {2, {QEventPoint::State::Pressed, {400, 440}}}});
+        fingers.send(
+                {{1, {QEventPoint::State::Stationary, {260, 440}}}, {2, {QEventPoint::State::Pressed, {400, 440}}}});
         fingers.send({{1, {QEventPoint::State::Updated, {250, 440}}}, {2, {QEventPoint::State::Updated, {420, 440}}}});
-        fingers.send({{1, {QEventPoint::State::Released, {250, 440}}}, {2, {QEventPoint::State::Released, {420, 440}}}});
+        fingers.send(
+                {{1, {QEventPoint::State::Released, {250, 440}}}, {2, {QEventPoint::State::Released, {420, 440}}}});
         QCOMPARE(canvas->strokeCount(), fingerDraws ? 1 : 0);
     }
 
@@ -2562,9 +2566,11 @@ private Q_SLOTS:
         canvas->setCenterY(300);
         QImage image = painted(canvas);
         // The rectangle's red outline, its white inside; the ellipse filled; the text's ink.
-        QVERIFY2(near(image.pixelColor(200, 100), QColor(u"#e03131"_s), 30), qPrintable(image.pixelColor(200, 100).name()));
+        QVERIFY2(near(image.pixelColor(200, 100), QColor(u"#e03131"_s), 30),
+                 qPrintable(image.pixelColor(200, 100).name()));
         QCOMPARE(image.pixelColor(200, 150).name(), u"#ffffff"_s);
-        QVERIFY2(near(image.pixelColor(450, 150), QColor(u"#a5d8ff"_s), 3), qPrintable(image.pixelColor(450, 150).name()));
+        QVERIFY2(near(image.pixelColor(450, 150), QColor(u"#a5d8ff"_s), 3),
+                 qPrintable(image.pixelColor(450, 150).name()));
         QVERIFY(pixelsLike(image, QRect(100, 300, 160, 42), QColor(u"#1f2430"_s), 60) > 40);
         QVERIFY(pixelsLike(image, QRect(100, 260, 160, 30), QColor(u"#1f2430"_s), 60) == 0); // nothing above it
         // Dark: the colours as the dark theme shows them; the paper dark.
@@ -2599,7 +2605,8 @@ private Q_SLOTS:
         const QRectF picture = brulion::drawing::pictureRect(canvas->currentDrawing());
         const QImage image = renderSvg(svg, picture.size().toSize());
         const QPoint outline = (QPointF(200, 100) - picture.topLeft()).toPoint();
-        QVERIFY2(near(image.pixelColor(outline), QColor(u"#e03131"_s), 30), qPrintable(image.pixelColor(outline).name()));
+        QVERIFY2(near(image.pixelColor(outline), QColor(u"#e03131"_s), 30),
+                 qPrintable(image.pixelColor(outline).name()));
         const QPoint fill = (QPointF(450, 150) - picture.topLeft()).toPoint();
         QVERIFY2(near(image.pixelColor(fill), QColor(u"#a5d8ff"_s), 3), qPrintable(image.pixelColor(fill).name()));
         // Text: some ink where it is (in whatever font Qt's SVG renderer finds).
@@ -3160,10 +3167,11 @@ private Q_SLOTS:
         brulion::drawing::Drawing d;
         for (int i = 0; i < 4; ++i) {
             const QString id = u"zdjęcie%1"_s.arg(i);
-            d.files.insert(id, QJsonObject{{u"id"_s, id},
-                                           {u"mimeType"_s, u"image/jpeg"_s},
-                                           {u"dataURL"_s, QString(u"data:image/jpeg;base64,"_s
-                                                                          + QString::fromLatin1(noise(3584 * 1024).toBase64()))}});
+            d.files.insert(id,
+                           QJsonObject{{u"id"_s, id},
+                                       {u"mimeType"_s, u"image/jpeg"_s},
+                                       {u"dataURL"_s, QString(u"data:image/jpeg;base64,"_s
+                                                              + QString::fromLatin1(noise(3584 * 1024).toBase64()))}});
             brulion::drawing::Stroke picture;
             picture.type = brulion::drawing::ElementType::Image;
             picture.id = u"p%1"_s.arg(i);
@@ -3197,7 +3205,8 @@ private Q_SLOTS:
                                    QColor(u"#f59f00"_s), QColor(u"#ae3ec9"_s), QColor(u"#e8590c"_s),
                                    QColor(u"#0c8599"_s), QColor(u"#ffffff"_s)};
         for (int i = 0; i < colors.size(); ++i) {
-            QCOMPARE(canvas->setBackdrop(backdropOf(colors.at(i), QSize(400, 300), u"Załączniki/wykład.pdf"_s, i + 1)), QString());
+            QCOMPARE(canvas->setBackdrop(backdropOf(colors.at(i), QSize(400, 300), u"Załączniki/wykład.pdf"_s, i + 1)),
+                     QString());
             painted(canvas);                   // the picture and its dark twin decoded
             QVERIFY(!canvas->svg().isEmpty()); // a Dark drawing's file: the dark raster encoded
             QVERIFY2(canvas->keptPictures() <= 3, qPrintable(QString::number(canvas->keptPictures())));

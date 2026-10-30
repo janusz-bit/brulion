@@ -596,8 +596,7 @@ void TestDrawingBackdrop::backdropsOfBothSides_data()
     QTest::addColumn<int>("page");
     QTest::newRow("known base, theirs later") << true << qint64(1761700000000) << qint64(1761700005000) << 4;
     QTest::newRow("known base, ours later") << true << qint64(1761700009000) << qint64(1761700005000) << 3;
-    QTest::newRow("known base, the same time: theirs") << true << qint64(1761700000000) << qint64(1761700000000)
-                                                        << 4;
+    QTest::newRow("known base, the same time: theirs") << true << qint64(1761700000000) << qint64(1761700000000) << 4;
     QTest::newRow("union, theirs later") << false << qint64(1761700000000) << qint64(1761700005000) << 4;
     QTest::newRow("union, ours later") << false << qint64(1761700009000) << qint64(1761700005000) << 3;
 }

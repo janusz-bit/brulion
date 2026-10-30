@@ -1549,8 +1549,8 @@ std::optional<QString> SyncRun::mergeText(const VaultPath &path, const QString &
             return local;
         if (local == base)
             return remote;
-        const std::optional<QByteArray> merged = drawing::mergeDrawingFiles(
-                base.toUtf8(), local.toUtf8(), remote.toUtf8(), now().toMSecsSinceEpoch());
+        const std::optional<QByteArray> merged =
+                drawing::mergeDrawingFiles(base.toUtf8(), local.toUtf8(), remote.toUtf8(), now().toMSecsSinceEpoch());
         if (!merged)
             return std::nullopt;
         return decodeSyncText(*merged);

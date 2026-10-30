@@ -230,8 +230,8 @@ QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
                                     [](const Stroke &s) { return s.type == ElementType::Image; });
     QString svg;
     svg += u"<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\""_s
-           + (images ? u" xmlns:xlink=\"http://www.w3.org/1999/xlink\""_s : QString()) + u" viewBox=\"0 0 "_s + w
-           + u' ' + h + u"\" width=\""_s + w + u"\" height=\""_s + h + u"\">\n"_s;
+           + (images ? u" xmlns:xlink=\"http://www.w3.org/1999/xlink\""_s : QString()) + u" viewBox=\"0 0 "_s + w + u' '
+           + h + u"\" width=\""_s + w + u"\" height=\""_s + h + u"\">\n"_s;
     svg += QString::fromLatin1(SvgSourceComment) + u'\n';
     svg += QString::fromLatin1(sceneMetadata(sceneJson(drawing))) + u'\n';
 

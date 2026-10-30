@@ -97,8 +97,7 @@ enum class Reorder { Forward, Backward, ToFront, ToBack };
 void reorderElements(Drawing &d, const QSet<QString> &ids, Reorder how, const EditStamp &s);
 /// A new rectangle, ellipse, diamond, line or arrow dragged from `from` to `to` (`constrain`, Shift:
 /// a square or a circle; lines and arrows at 15° steps).
-Stroke newShape(ElementType type, QPointF from, QPointF to, bool constrain, const ShapeStyle &st,
-                const EditStamp &s);
+Stroke newShape(ElementType type, QPointF from, QPointF to, bool constrain, const ShapeStyle &st, const EditStamp &s);
 /// A new text at `topLeft`, its box measured.
 Stroke newText(QPointF topLeft, const QString &text, const TextStyle &st, const TextMetrics &m, const EditStamp &s);
 /// The text an editor offers for the Text element `e`: as typed (originalText) for a label or a
@@ -117,8 +116,8 @@ double labelMaxWidth(const Stroke &container);
 void setText(Drawing &d, const QString &id, const QString &text, const TextMetrics &m, const EditStamp &s);
 /// A label `text` for the shape `containerId`, right after it (its boundElements name it). The new
 /// text's id ("" when there is no such shape or the text is empty).
-QString addLabel(Drawing &d, const QString &containerId, const QString &text, const TextStyle &st,
-                 const TextMetrics &m, const EditStamp &s);
+QString addLabel(Drawing &d, const QString &containerId, const QString &text, const TextStyle &st, const TextMetrics &m,
+                 const EditStamp &s);
 /// `text` wrapped to lines no wider than `maxWidth` (at spaces; a longer word at characters);
 /// the lines it has stay.
 QString wrapText(const QString &text, double maxWidth, int fontFamily, double fontSize, const TextMetrics &m);
@@ -135,10 +134,7 @@ struct ElementDiff {
     QStringList orderBefore;
     QStringList orderAfter;
 
-    bool isEmpty() const
-    {
-        return removed.isEmpty() && added.isEmpty() && changed.isEmpty() && orderBefore.isEmpty();
-    }
+    bool isEmpty() const { return removed.isEmpty() && added.isEmpty() && changed.isEmpty() && orderBefore.isEmpty(); }
 };
 ElementDiff diffElements(const QList<Stroke> &before, const QList<Stroke> &after);
 /// The list `before` (forward) or `after` (back) of the diff made into the other one. With `restamp`

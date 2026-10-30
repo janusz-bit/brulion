@@ -492,8 +492,7 @@ private Q_SLOTS:
                                    << true;
         QTest::newRow("image") << QByteArray("{\"type\":\"image\",\"x\":1,\"y\":2,\"fileId\":\"abc\"}") << true;
         QTest::newRow("text") << QByteArray("{\"type\":\"text\",\"x\":1,\"y\":2,\"text\":\"źdźbło\"}") << true;
-        QTest::newRow("frame") << QByteArray("{\"type\":\"frame\",\"x\":1,\"y\":2,\"width\":3,\"height\":4}")
-                               << false;
+        QTest::newRow("frame") << QByteArray("{\"type\":\"frame\",\"x\":1,\"y\":2,\"width\":3,\"height\":4}") << false;
         QTest::newRow("magic frame") << QByteArray("{\"type\":\"magicframe\",\"x\":1,\"y\":2}") << false;
         QTest::newRow("embedded page") << QByteArray("{\"type\":\"embeddable\",\"x\":1,\"y\":2,\"link\":\"x\"}")
                                        << false;

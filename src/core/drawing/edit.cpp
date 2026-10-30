@@ -689,8 +689,8 @@ void setText(Drawing &d, const QString &id, const QString &text, const TextMetri
     layoutText(d, i, typed, m, s);
 }
 
-QString addLabel(Drawing &d, const QString &containerId, const QString &text, const TextStyle &st,
-                 const TextMetrics &m, const EditStamp &s)
+QString addLabel(Drawing &d, const QString &containerId, const QString &text, const TextStyle &st, const TextMetrics &m,
+                 const EditStamp &s)
 {
     const qsizetype c = indexOfElement(d, containerId);
     if (c < 0 || text.trimmed().isEmpty())
