@@ -8,7 +8,7 @@
 # not excuse. Needs node (screens.json). BRULION_TEST_SLOWDOWN stretches the delays.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "$here/lib.sh"
 
 bin="${1:?usage: lint.sh <brulion> <brulion-uimetrics> <work-dir>}"

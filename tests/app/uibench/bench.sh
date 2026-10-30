@@ -28,7 +28,7 @@
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../../.." && pwd)"
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "$here/lib.sh"
 
 usage() {
@@ -136,6 +136,7 @@ if [[ "$app" != obsidian ]]; then
       fi
       rm -f "$base.png" "$base.layout.json"
       if [[ "$render" == xcb-gl ]]; then
+        # shellcheck disable=SC2016 # expanded by the inner bash
         "${xvfb[@]}" bash -c 'source "$1"; shift; uibench_brulion_shot "$@"' _ "$here/lib.sh" \
           "$bin" "$out/vault-brulion/$name" "$out/tmp/brulion-home" "$base.png" "$base.layout.json" \
           "$w" "$h" "$scale" "$touch" "$theme" "$delay" "$render" "$now" "${args[@]}" >"$log" 2>&1 || true
