@@ -2396,8 +2396,8 @@ scripts/remote-build.sh -n uibench brulion brulion-uimetrics \
 rsync -a laptop:work/brulion-uibench-data/round-00/ /home/nixos/workspace/brulion-work/uibench/round-00/
 ```
 `--app brulion --reuse-obsidian <round-00>/shots/obsidian` re-shoots only Brulion (Obsidian is shot
-once per bench configuration: the manifest's `benchConfigHash` changes with screens.json, the
-fonts, the overlay or Obsidian's version); `--only`, `--sizes`, `--themes` narrow it; `--render
+once per bench configuration: the manifest's `benchConfigHash` changes with screens.json — Brulion's
+arguments aside —, the fonts, the overlay, the clock or Obsidian's version); `--only`, `--sizes`, `--themes` narrow it; `--render
 xcb-gl` is the realism check (doc and daily on the desktop under Xvfb with OpenGL, into
 `shots/brulion-gl/` and `metrics-gl.json`); `--dry-run` prints the commands (ctest
 `tst_uibench_bench_dryrun`). Output: `shots/<app>/<id>-<size>-<theme>.{png,layout.json}`,

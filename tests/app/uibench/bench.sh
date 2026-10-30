@@ -268,8 +268,10 @@ const m = {
   fonts: { dirs: fonts, fcMatch, conf: read(path.join(out, "env/fonts.conf")) },
   vault: { overlay, files: vault },
   screensHash: sha256(screensText),
-  // Obsidian shots stay valid while this is the same (--reuse-obsidian).
-  benchConfigHash: sha256([screensText, overlay, fonts.join("\n"), version, now].join("\n---\n")),
+  // Obsidian shots stay valid while this is the same (--reuse-obsidian): screens.json without
+  // Brulion's arguments, the overlay, the fonts, Obsidian's version, the clock.
+  benchConfigHash: sha256([JSON.stringify({ ...JSON.parse(screensText), screens: JSON.parse(screensText).screens
+    .map(({ brulion, ...rest }) => rest) }), overlay, fonts.join("\n"), version, now].join("\n---\n")),
   shots: { brulion: shots("brulion" + suffix), obsidian: suffix ? [] : shots("obsidian") },
   failures: (read(path.join(out, "tmp/failures.txt")) ?? "").split("\n").filter(Boolean),
 };
