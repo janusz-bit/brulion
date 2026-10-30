@@ -3,6 +3,7 @@
 
 #include "dates/dates.h"
 #include "index/index.h"
+#include "index/querycache.h"
 #include "markdown/markdown.h"
 #include "notebook/json.h"
 #include "reminders/calendar.h"
@@ -35,6 +36,42 @@ std::optional<TaskStatus> statusFromName(const QString &name)
     return std::nullopt;
 }
 
+/// The caches of the most recently used keys (the oldest dropped beyond `max`).
+template<typename Cache>
+class RecentCaches {
+public:
+    explicit RecentCaches(int max) : m_max(max) { }
+
+    Cache &get(const QString &key)
+    {
+        for (qsizetype i = 0; i < m_entries.size(); ++i) {
+            if (m_entries[i].first == key) {
+                m_entries.move(i, 0);
+                return *m_entries.first().second;
+            }
+        }
+        m_entries.prepend({key, std::make_shared<Cache>()});
+        while (m_entries.size() > m_max)
+            m_entries.removeLast();
+        return *m_entries.first().second;
+    }
+    void remove(const QString &key)
+    {
+        m_entries.removeIf([&key](const auto &entry) { return entry.first == key; });
+    }
+    QStringList keys() const
+    {
+        QStringList out;
+        for (const auto &entry : m_entries)
+            out.append(entry.first);
+        return out;
+    }
+
+private:
+    int m_max;
+    QList<std::pair<QString, std::shared_ptr<Cache>>> m_entries; ///< most recent first
+};
+
 /// One line of plain text (lists show the start of long blocks).
 QString shortText(const QString &text)
 {
@@ -45,6 +82,27 @@ QString shortText(const QString &text)
 }
 
 } // namespace
+
+// ---- Caches of the lists asked for again and again ------------------------------------------------
+
+struct Workspace::ListCaches {
+    RecentCaches<CalendarCache> ranges{MaxCachedRanges}; ///< the side panel's month, a picked day, …
+    RecentCaches<QueryCache> queries{MaxCachedQueries};  ///< the ```query blocks of the open pages
+};
+
+Workspace::ListCaches &Workspace::listCaches() const
+{
+    if (!m_listCaches)
+        m_listCaches = std::make_shared<ListCaches>();
+    return *m_listCaches;
+}
+
+QStringList Workspace::cachedLists() const
+{
+    if (!m_listCaches)
+        return {};
+    return m_listCaches->ranges.keys() + m_listCaches->queries.keys();
+}
 
 // ---- Journals -----------------------------------------------------------------------------------
 
@@ -156,7 +214,8 @@ QVariantList Workspace::calendarItems(const QString &from, const QString &to) co
     const QDate b = QDate::fromString(to, Qt::ISODate);
     if (!m_index || !a.isValid() || !b.isValid() || a > b || a.daysTo(b) > 400)
         return out;
-    for (const CalendarItem &item : brulion::calendarItems(*m_index, a, b))
+    CalendarCache &cache = listCaches().ranges.get(a.toString(Qt::ISODate) + u'|' + b.toString(Qt::ISODate));
+    for (const CalendarItem &item : cache.items(*m_index, a, b))
         out.append(notebook::calendarItemJson(item).toVariantMap());
     return out;
 }
@@ -188,8 +247,12 @@ QVariantMap Workspace::runQuery(const QString &source, const QString &currentPat
     options.currentPath = paths::normalize(currentPath);
     const QDateTime current = now();
     options.now = current.time();
-    const QueryResult result =
-            brulion::runQuery(query, *m_index, current.date(), m_vault->config().weekStartsOn, options);
+    const QString key = source + u'\x1f' + options.currentPath;
+    QueryCache &cache = listCaches().queries.get(key);
+    const QueryResult result = cache.run(query, *m_index, current.date(), m_vault->config().weekStartsOn, options);
+    // A query matching much of the vault: its matches would stay in memory for the session.
+    if (cache.total() > MaxCachedQueryMatches)
+        listCaches().queries.remove(key);
     QVariantList items;
     items.reserve(result.items.size());
     for (const QueryItem &item : result.items)

@@ -30,6 +30,38 @@ struct ReminderSource {
 
 /// Resolve the source of `ref` (see ReminderSource).
 ReminderSource sourceOf(const VaultIndex &index, const ReminderRef &ref);
+/// The same with the reminder's note at hand (null: unknown).
+ReminderSource sourceOf(const ParsedNote *note, const ReminderRef &ref);
+
+/// May the reminder have a date within [from, to]? With a 🔁 rule perhaps; without one only on
+/// its own date (reminderDates()).
+inline bool mayOccurWithin(const Reminder &r, QDate from, QDate to)
+{
+    return !r.recurrence.isEmpty() || (r.at.date >= from && r.at.date <= to);
+}
+
+/// The reminders of a note as VaultIndex::reminders() lists them (blocks in document order) that
+/// may have a date within [from, to] (mayOccurWithin()).
+QList<ReminderRef> remindersOf(const VaultPath &path, const ParsedNote &note, QDate from, QDate to);
+
+/// The same for every note, from the index's reminder list (notes by path): visit(path, refs) for
+/// each note with such reminders.
+template<typename Visit>
+void forEachNoteReminders(const VaultIndex &index, QDate from, QDate to, Visit &&visit)
+{
+    const QList<ReminderRef> all = index.reminders();
+    QList<ReminderRef> refs;
+    for (qsizetype i = 0; i < all.size();) {
+        const VaultPath &path = all.at(i).path;
+        refs.clear();
+        for (; i < all.size() && all.at(i).path == path; ++i) {
+            if (mayOccurWithin(all.at(i).reminder, from, to))
+                refs.append(all.at(i));
+        }
+        if (!refs.isEmpty())
+            visit(path, refs);
+    }
+}
 
 /// Done or cancelled: reminders of such tasks never fire, recurring tasks stop expanding.
 bool isClosed(const Task &task);

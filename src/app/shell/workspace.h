@@ -15,7 +15,9 @@
 //                                      views (tasks lists), setTaskStatus(path, line, status)
 //   index queries                      search, backlinks, unlinkedReferences, tagList, journals,
 //                                      journalDates, calendarItems (plain QVariant data; C++
-//                                      models use index() directly)
+//                                      models use index() directly); calendarItems and runQuery
+//                                      keep caches of the last ranges and queries asked (after
+//                                      an index change only the changed notes are computed)
 //   pages                              createPage, renamePage (rewrites links in every file
 //                                      linking to it), deletePage (-> .trash/), restore,
 //                                      trashItems, deleteForever, emptyTrash
@@ -427,6 +429,14 @@ public:
     /// or ""), kind ("journal" | "due" | "scheduled" | "start" | "reminder" | "done"), title,
     /// path, line, status ("" or a task status), recurring, alarm }].
     Q_INVOKABLE QVariantList calendarItems(const QString &from, const QString &to) const;
+    /// Calendar ranges and queries whose caches are kept (the most recently asked first; tests).
+    static constexpr int MaxCachedRanges = 4;
+    static constexpr int MaxCachedQueries = 8;
+    /// A query matching more is not kept (a cache holds every match, ~0.2 KB each, whatever its
+    /// `limit:`): it is computed afresh each time, as before the caches.
+    static constexpr int MaxCachedQueryMatches = 5000;
+    /// The ranges ("from|to") and queries ("source\x1fcurrentPath") kept, most recent first (tests).
+    QStringList cachedLists() const;
 
     // ---- QueryHost ----------------------------------------------------------------------------
     Q_INVOKABLE QVariantMap runQuery(const QString &source, const QString &currentPath = QString()) override;
@@ -566,6 +576,11 @@ private:
 
     std::unique_ptr<Vault> m_vault;
     std::unique_ptr<VaultIndex> m_index;
+    /// CalendarCaches of the last ranges calendarItems() was asked for, QueryCaches of the last
+    /// queries runQuery() ran (workspacequery.cpp; dropped by close()).
+    struct ListCaches;
+    mutable std::shared_ptr<ListCaches> m_listCaches;
+    ListCaches &listCaches() const;
     /// Relocation impacts (ok ones) for one state of the notebook: key "from\nto".
     struct ImpactCache {
         int version = -1;

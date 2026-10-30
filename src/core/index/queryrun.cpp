@@ -1,5 +1,6 @@
 // Query execution (docs/SYNTAX.md §10) over a VaultIndex — see index/query.h for the semantics.
 #include "index/query.h"
+#include "index/querycache.h"
 
 #include "dates/expr.h"
 #include "dates/local.h"
@@ -11,6 +12,7 @@
 #include "util/paths.h"
 
 #include <QSet>
+#include <QVarLengthArray>
 
 #include <algorithm>
 #include <numeric>
@@ -112,18 +114,10 @@ struct View {
     }
 };
 
+/// A candidate item of one note: where it is (`reminder`: its ordinal in the block).
 struct Candidate {
-    QueryItem item;
     View view;
-};
-
-/// Sort value of an item (`present` false = missing, sorts last).
-struct SortValue {
-    bool present = false;
-    int number = 0;
-    QString text;
-    DateSpec date;
-    QString nameKey; ///< nameSortKey(text) for QuerySortKey::Page (set by sortCandidates)
+    int reminder = -1;
 };
 
 struct GroupInfo {
@@ -139,6 +133,42 @@ struct NoteMeta {
     QList<std::optional<QStringList>> effective; ///< per block
 };
 
+} // namespace
+
+namespace index_detail {
+
+/// Sort value of an item (`present` false = missing, sorts last).
+struct QuerySortValue {
+    bool present = false;
+    int number = 0;
+    QString text;
+    DateSpec date;
+    QString nameKey; ///< nameSortKey(text) for QuerySortKey::Page
+};
+
+/// A match of a query: where it is and what it sorts by — no Task copy (a QueryCache keeps these
+/// across index changes; QueryItems are made for the returned ones).
+struct QueryMatch {
+    VaultPath path;
+    /// The note's record when the match was found: valid while the note is unchanged — the
+    /// matches of a changed note are found again — and read only at the index version the
+    /// matches were brought up to (else looked up by path).
+    const Entry *entry = nullptr;
+    int block = -1;
+    int reminder = -1; ///< ordinal in the block's reminders (type:reminders)
+    int line = 0;
+    QVarLengthArray<QuerySortValue, 1> keys; ///< one per QuerySort of the query
+    QString title;                           ///< type:pages: the note's title …
+    QString titleKey;                        ///< … and its nameSortKey()
+    DateSpec at;                             ///< type:reminders: the reminder's time
+};
+
+} // namespace index_detail
+
+namespace {
+
+using SortValue = QuerySortValue;
+
 class Runner {
 public:
     Runner(const Query &query, const VaultIndex &index, QDate today, Qt::DayOfWeek weekStart,
@@ -146,10 +176,23 @@ public:
         : m_query(query), m_index(index), m_today(today), m_weekStart(weekStart), m_options(options)
     { }
 
-    QueryResult run();
+    /// The matches of one note (filtered; type:blocks without nested matches), unsorted.
+    void matchesOf(const Entry &entry, QList<QueryMatch> &out);
+    /// The result order: the sort keys, the default order, then the place in the vault — the
+    /// stable sort of the candidates in path / block / reminder order as a total order.
+    bool less(const QueryMatch &a, const QueryMatch &b) const;
+    /// Sort the matches of the whole result.
+    void sort(QList<QueryMatch> &matches) const;
+    /// The result of `sorted` matches: total, the first `limit` as items, groups.
+    QueryResult finish(const QList<QueryMatch> &sorted);
+    /// The QueryItem of a match (the note as it is in the index now).
+    QueryItem itemOf(const QueryMatch &match) const;
+    /// The matches' Entry pointers may be read (the index has not changed since they were found
+    /// or brought up to date); else notes are looked up by path.
+    void trustEntries(bool on) { m_trustEntries = on; }
 
 private:
-    QList<Candidate> candidates() const;
+    View viewOf(const QueryMatch &match) const;
     bool matchesAll(const View &view);
     bool test(const QueryFilter &f, const View &view);
     bool pageMatches(const QString &value, const View &view);
@@ -158,7 +201,9 @@ private:
     bool textMatches(const QString &value, const View &view);
     bool dateMatches(QueryDateField field, const QueryDateCondition &cond, const View &view);
     bool isOverdue(QueryDateField field, const DateSpec &value, const View &view) const;
-    QList<DateSpec> dateValues(QueryDateField field, const View &view) const;
+    /// The item's dates of a field (at most a few: no allocation for the usual one).
+    using DateValues = QVarLengthArray<DateSpec, 4>;
+    DateValues dateValues(QueryDateField field, const View &view) const;
     QStringList effectiveTags(const View &view);
     NoteMeta &meta(const Entry *entry);
     QSet<int> refLines(const VaultPath &path, const QString &value);
@@ -167,12 +212,10 @@ private:
     std::optional<VaultPath> resolveCached(const QString &target);
     QString folded(const QString &value);
     void collapseNested(QList<Candidate> &cands) const;
-    void sortCandidates(QList<Candidate> &cands) const;
     SortValue sortValue(QuerySortKey key, const View &view) const;
-    /// `keyA` / `keyB`: nameSortKey() of the titles (used by page queries only).
-    int defaultCompare(const View &a, const QString &keyA, const View &b, const QString &keyB) const;
+    int defaultCompare(const QueryMatch &a, const QueryMatch &b) const;
     QList<GroupInfo> groupsOf(const View &view);
-    QList<QueryGroup> buildGroups(const QList<Candidate> &cands);
+    QList<QueryGroup> buildGroups(const QList<QueryItem> &items, const QList<View> &views);
 
     const Query &m_query;
     const VaultIndex &m_index;
@@ -180,55 +223,77 @@ private:
     Qt::DayOfWeek m_weekStart;
     const QueryOptions &m_options;
     QHash<const Entry *, NoteMeta> m_meta;
-    QHash<QString, std::optional<dates::DateExpr>> m_exprs;
+    /// Resolved date expressions by condition (each filter's conditions resolved once per run).
+    QHash<const QueryDateCondition *, std::optional<dates::DateExpr>> m_exprs;
     QHash<QString, std::optional<VaultPath>> m_resolved;
     QHash<QString, QSet<int>> m_refLines;
     QHash<QString, QSet<QString>> m_refTags;
     QHash<QString, QString> m_folded;
+    bool m_trustEntries = true;
 };
 
 // ---- candidates ---------------------------------------------------------------------------------
 
-QList<Candidate> Runner::candidates() const
+void Runner::matchesOf(const Entry &e, QList<QueryMatch> &out)
 {
-    QList<Candidate> out;
-    for (const VaultPath &path : m_index.paths()) {
-        const Entry *e = IndexAccess::entry(m_index, path);
-        if (!e)
-            continue;
-        const QList<Block> &blocks = e->note.blocks;
-        switch (m_query.type) {
-        case QueryType::Pages:
-            out.append(Candidate{QueryItem{path, -1, std::nullopt, std::nullopt}, View{e, -1, nullptr, nullptr}});
-            break;
-        case QueryType::Tasks:
-            for (qsizetype i = 0; i < blocks.size(); ++i) {
-                if (const auto &task = blocks[i].task)
-                    out.append(
-                            Candidate{QueryItem{path, int(i), task, std::nullopt}, View{e, int(i), &*task, nullptr}});
-            }
-            break;
-        case QueryType::Blocks:
-            for (qsizetype i = 0; i < blocks.size(); ++i) {
-                const Block &b = blocks[i];
-                if (b.kind == BlockKind::Frontmatter || (b.kind == BlockKind::Code && b.lang == u"query"))
-                    continue;
-                out.append(Candidate{QueryItem{path, int(i), b.task, std::nullopt},
-                                     View{e, int(i), b.task ? &*b.task : nullptr, nullptr}});
-            }
-            break;
-        case QueryType::Reminders:
-            for (qsizetype i = 0; i < blocks.size(); ++i) {
-                const Block &b = blocks[i];
-                for (const Reminder &r : b.reminders) {
-                    out.append(Candidate{QueryItem{path, int(i), b.task, r},
-                                         View{e, int(i), b.task ? &*b.task : nullptr, &r}});
-                }
-            }
-            break;
+    QList<Candidate> cands;
+    const QList<Block> &blocks = e.note.blocks;
+    switch (m_query.type) {
+    case QueryType::Pages: cands.append(Candidate{View{&e, -1, nullptr, nullptr}, -1}); break;
+    case QueryType::Tasks:
+        for (const int i : e.taskBlocks())
+            cands.append(Candidate{View{&e, i, &*blocks[i].task, nullptr}, -1});
+        break;
+    case QueryType::Blocks:
+        for (qsizetype i = 0; i < blocks.size(); ++i) {
+            const Block &b = blocks[i];
+            if (b.kind == BlockKind::Frontmatter || (b.kind == BlockKind::Code && b.lang == u"query"))
+                continue;
+            cands.append(Candidate{View{&e, int(i), b.task ? &*b.task : nullptr, nullptr}, -1});
         }
+        break;
+    case QueryType::Reminders:
+        for (const int i : e.reminderBlocks()) {
+            const Block &b = blocks[i];
+            for (qsizetype r = 0; r < b.reminders.size(); ++r)
+                cands.append(Candidate{View{&e, i, b.task ? &*b.task : nullptr, &b.reminders[r]}, int(r)});
+        }
+        break;
     }
-    return out;
+    cands.removeIf([&](const Candidate &c) { return !matchesAll(c.view); });
+    if (m_query.type == QueryType::Blocks)
+        collapseNested(cands); // only ever looks at one note
+    if (cands.isEmpty())
+        return;
+    // Sort values (and name keys) once per match: in the comparator they would cost
+    // O(n log n) allocations (tens of thousands of tasks in a big vault).
+    std::optional<QString> titleKey; // nameSortKey() of the note's title, computed once per note
+    const auto noteTitleKey = [&]() -> const QString & {
+        if (!titleKey)
+            titleKey = nameSortKey(e.note.title);
+        return *titleKey;
+    };
+    for (const Candidate &c : std::as_const(cands)) {
+        QueryMatch m;
+        m.path = e.path;
+        m.entry = &e;
+        m.block = c.view.block;
+        m.reminder = c.reminder;
+        m.line = c.view.line();
+        m.keys.reserve(m_query.sort.size());
+        for (const QuerySort &s : m_query.sort) {
+            m.keys.append(sortValue(s.key, c.view));
+            if (s.key == QuerySortKey::Page)
+                m.keys.last().nameKey = noteTitleKey();
+        }
+        if (m_query.type == QueryType::Pages) {
+            m.title = e.note.title;
+            m.titleKey = noteTitleKey();
+        }
+        if (c.view.reminder)
+            m.at = c.view.reminder->at;
+        out.append(std::move(m));
+    }
 }
 
 // ---- filters ------------------------------------------------------------------------------------
@@ -359,9 +424,9 @@ bool Runner::textMatches(const QString &value, const View &view)
     return view.entry->foldedTitleAndContent().contains(needle);
 }
 
-QList<DateSpec> Runner::dateValues(QueryDateField field, const View &view) const
+Runner::DateValues Runner::dateValues(QueryDateField field, const View &view) const
 {
-    QList<DateSpec> out;
+    DateValues out;
     const Task *t = view.task;
     auto addSpec = [&](const std::optional<DateSpec> &spec) {
         if (spec && spec->isValid())
@@ -429,13 +494,13 @@ bool Runner::isOverdue(QueryDateField field, const DateSpec &value, const View &
 
 bool Runner::dateMatches(QueryDateField field, const QueryDateCondition &cond, const View &view)
 {
-    auto cached = m_exprs.find(cond.expr);
+    auto cached = m_exprs.find(&cond); // the query outlives the run: conditions stay put
     if (cached == m_exprs.end())
-        cached = m_exprs.insert(cond.expr, dates::resolveDateExpr(cond.expr, m_today, m_weekStart));
+        cached = m_exprs.insert(&cond, dates::resolveDateExpr(cond.expr, m_today, m_weekStart));
     if (!cached->has_value())
         return false;
     const dates::DateExpr &expr = **cached;
-    const QList<DateSpec> values = dateValues(field, view);
+    const DateValues values = dateValues(field, view);
     if (const auto *special = std::get_if<dates::SpecialDate>(&expr)) {
         switch (*special) {
         case dates::SpecialDate::None: return values.isEmpty();
@@ -551,7 +616,7 @@ SortValue Runner::sortValue(QuerySortKey key, const View &view) const
     case QuerySortKey::Path: return SortValue{true, 0, view.path(), {}, {}};
     default: break;
     }
-    const QList<DateSpec> values = dateValues(dateFieldOf(key), view);
+    const DateValues values = dateValues(dateFieldOf(key), view);
     for (const DateSpec &d : values) {
         if (!v.present || dates::compareDateSpecs(d, v.date) < 0) {
             v.present = true;
@@ -561,78 +626,96 @@ SortValue Runner::sortValue(QuerySortKey key, const View &view) const
     return v;
 }
 
-int Runner::defaultCompare(const View &a, const QString &keyA, const View &b, const QString &keyB) const
+int Runner::defaultCompare(const QueryMatch &a, const QueryMatch &b) const
 {
     if (m_query.type == QueryType::Pages) {
-        if (const int c = compareNameKeys(keyA, a.note().title, keyB, b.note().title); c != 0)
+        if (const int c = compareNameKeys(a.titleKey, a.title, b.titleKey, b.title); c != 0)
             return c;
-        return a.path() < b.path() ? -1 : (b.path() < a.path() ? 1 : 0);
+        return a.path < b.path ? -1 : (b.path < a.path ? 1 : 0);
     }
-    if (m_query.type == QueryType::Reminders && a.reminder && b.reminder) {
-        if (const int c = dates::compareDateSpecs(a.reminder->at, b.reminder->at); c != 0)
+    if (m_query.type == QueryType::Reminders && a.reminder >= 0 && b.reminder >= 0) {
+        if (const int c = dates::compareDateSpecs(a.at, b.at); c != 0)
             return c;
     }
-    if (a.path() != b.path())
-        return a.path() < b.path() ? -1 : 1;
-    return a.line() - b.line();
+    if (a.path != b.path)
+        return a.path < b.path ? -1 : 1;
+    return a.line - b.line;
 }
 
-void Runner::sortCandidates(QList<Candidate> &cands) const
+bool Runner::less(const QueryMatch &a, const QueryMatch &b) const
 {
-    auto compareKey = [](QuerySortKey key, const SortValue &a, const SortValue &b) {
+    const auto compareKey = [](QuerySortKey key, const SortValue &x, const SortValue &y) {
         switch (key) {
         case QuerySortKey::Priority:
-        case QuerySortKey::Status: return a.number - b.number;
-        case QuerySortKey::Page: return a.text == b.text ? 0 : compareNameKeys(a.nameKey, a.text, b.nameKey, b.text);
-        case QuerySortKey::Path: return a.text < b.text ? -1 : (b.text < a.text ? 1 : 0);
-        default: return dates::compareDateSpecs(a.date, b.date);
+        case QuerySortKey::Status: return x.number - y.number;
+        case QuerySortKey::Page: return x.text == y.text ? 0 : compareNameKeys(x.nameKey, x.text, y.nameKey, y.text);
+        case QuerySortKey::Path: return x.text < y.text ? -1 : (y.text < x.text ? 1 : 0);
+        default: return dates::compareDateSpecs(x.date, y.date);
         }
     };
-    // Sort values (and the name keys of compareNames()) are computed once per item: in the
-    // comparator they would cost O(n log n) allocations (tens of thousands of tasks in a big
-    // vault).
     const qsizetype keyCount = m_query.sort.size();
-    QList<SortValue> values;
-    values.reserve(cands.size() * keyCount);
-    for (const Candidate &c : std::as_const(cands)) {
-        for (const QuerySort &s : m_query.sort) {
-            values.append(sortValue(s.key, c.view));
-            if (s.key == QuerySortKey::Page)
-                values.last().nameKey = nameSortKey(values.last().text);
-        }
+    for (qsizetype k = 0; k < keyCount; ++k) {
+        const SortValue &x = a.keys[k];
+        const SortValue &y = b.keys[k];
+        if (!x.present && !y.present)
+            continue;
+        if (x.present != y.present)
+            return x.present; // missing values last in both directions
+        const QuerySort &s = m_query.sort[k];
+        const int c = compareKey(s.key, x, y);
+        if (c != 0)
+            return s.descending ? c > 0 : c < 0;
     }
-    QList<QString> titleKeys;
-    if (m_query.type == QueryType::Pages) {
-        titleKeys.reserve(cands.size());
-        for (const Candidate &c : std::as_const(cands))
-            titleKeys.append(nameSortKey(c.view.note().title));
-    }
-    const auto titleKey = [&](qsizetype i) -> const QString & {
-        static const QString none;
-        return titleKeys.isEmpty() ? none : titleKeys[i];
-    };
-    QList<qsizetype> order(cands.size());
+    if (const int c = defaultCompare(a, b); c != 0)
+        return c < 0;
+    // Ties keep the vault's order (notes by path, document order): what a stable sort of the
+    // candidates in that order gives.
+    if (a.path != b.path)
+        return a.path < b.path;
+    if (a.block != b.block)
+        return a.block < b.block;
+    return a.reminder < b.reminder;
+}
+
+void Runner::sort(QList<QueryMatch> &matches) const
+{
+    // Through a permutation: a match is too big to move around n log n times.
+    QList<qsizetype> order(matches.size());
     std::iota(order.begin(), order.end(), 0);
-    std::stable_sort(order.begin(), order.end(), [&](qsizetype x, qsizetype y) {
-        for (qsizetype k = 0; k < keyCount; ++k) {
-            const SortValue &a = values[x * keyCount + k];
-            const SortValue &b = values[y * keyCount + k];
-            if (!a.present && !b.present)
-                continue;
-            if (a.present != b.present)
-                return a.present; // missing values last in both directions
-            const QuerySort &s = m_query.sort[k];
-            const int c = compareKey(s.key, a, b);
-            if (c != 0)
-                return s.descending ? c > 0 : c < 0;
-        }
-        return defaultCompare(cands.at(x).view, titleKey(x), cands.at(y).view, titleKey(y)) < 0;
-    });
-    QList<Candidate> sorted;
-    sorted.reserve(cands.size());
+    std::sort(order.begin(), order.end(), [&](qsizetype x, qsizetype y) { return less(matches[x], matches[y]); });
+    QList<QueryMatch> sorted;
+    sorted.reserve(matches.size());
     for (const qsizetype i : std::as_const(order))
-        sorted.append(std::move(cands[i]));
-    cands = std::move(sorted);
+        sorted.append(std::move(matches[i]));
+    matches = std::move(sorted);
+}
+
+View Runner::viewOf(const QueryMatch &match) const
+{
+    View view;
+    view.entry = m_trustEntries && match.entry ? match.entry : IndexAccess::entry(m_index, match.path);
+    if (!view.entry)
+        return view;
+    view.block = match.block;
+    const QList<Block> &blocks = view.entry->note.blocks;
+    if (match.block >= 0 && match.block < blocks.size()) {
+        const Block &b = blocks[match.block];
+        view.task = b.task ? &*b.task : nullptr;
+        if (match.reminder >= 0 && match.reminder < b.reminders.size())
+            view.reminder = &b.reminders[match.reminder];
+    }
+    return view;
+}
+
+QueryItem Runner::itemOf(const QueryMatch &match) const
+{
+    QueryItem item{match.path, match.block, std::nullopt, std::nullopt};
+    const View view = viewOf(match);
+    if (view.task)
+        item.task = *view.task;
+    if (view.reminder)
+        item.reminder = *view.reminder;
+    return item;
 }
 
 QList<GroupInfo> Runner::groupsOf(const View &view)
@@ -646,7 +729,7 @@ QList<GroupInfo> Runner::groupsOf(const View &view)
         const QueryDateField field = m_query.group == QueryGroupKey::Due         ? QueryDateField::Due
                                      : m_query.group == QueryGroupKey::Scheduled ? QueryDateField::Scheduled
                                                                                  : QueryDateField::Date;
-        const QList<DateSpec> values = dateValues(field, view);
+        const DateValues values = dateValues(field, view);
         if (values.isEmpty())
             return {GroupInfo{QString(), messages::noDate(), 1, QString()}};
         const QString day = values.first().date.toString(Qt::ISODate);
@@ -675,20 +758,20 @@ QList<GroupInfo> Runner::groupsOf(const View &view)
     return {};
 }
 
-QList<QueryGroup> Runner::buildGroups(const QList<Candidate> &cands)
+QList<QueryGroup> Runner::buildGroups(const QList<QueryItem> &items, const QList<View> &views)
 {
     QList<QueryGroup> groups;
     QList<GroupInfo> infos;
     QHash<QString, qsizetype> byKey;
-    for (const Candidate &c : cands) {
-        for (const GroupInfo &g : groupsOf(c.view)) {
+    for (qsizetype i = 0; i < items.size(); ++i) {
+        for (const GroupInfo &g : groupsOf(views[i])) {
             auto it = byKey.constFind(g.key);
             if (it == byKey.constEnd()) {
                 it = byKey.insert(g.key, groups.size());
                 groups.append(QueryGroup{g.key, g.label, {}});
                 infos.append(g);
             }
-            groups[*it].items.append(c.item);
+            groups[*it].items.append(items[i]);
         }
     }
     QList<qsizetype> order(groups.size());
@@ -734,33 +817,187 @@ void Runner::collapseNested(QList<Candidate> &cands) const
     });
 }
 
-QueryResult Runner::run()
+QueryResult Runner::finish(const QList<QueryMatch> &sorted)
 {
     QueryResult result;
     result.type = m_query.type;
-    QList<Candidate> cands = candidates();
-    cands.removeIf([&](const Candidate &c) { return !matchesAll(c.view); });
-    if (m_query.type == QueryType::Blocks)
-        collapseNested(cands);
-    sortCandidates(cands);
-    result.total = int(cands.size());
+    result.total = int(sorted.size());
     const int limit = std::max(0, m_query.limit.value_or(m_options.defaultLimit));
-    if (cands.size() > limit)
-        cands.resize(limit);
-    result.items.reserve(cands.size());
-    for (const Candidate &c : std::as_const(cands))
-        result.items.append(c.item);
+    const qsizetype count = std::min<qsizetype>(limit, sorted.size());
+    result.items.reserve(count);
+    QList<View> views;
     if (m_query.group != QueryGroupKey::None)
-        result.groups = buildGroups(cands);
+        views.reserve(count);
+    for (qsizetype i = 0; i < count; ++i) {
+        result.items.append(itemOf(sorted[i]));
+        if (m_query.group != QueryGroupKey::None)
+            views.append(viewOf(sorted[i]));
+    }
+    if (m_query.group != QueryGroupKey::None)
+        result.groups = buildGroups(result.items, views);
     return result;
+}
+
+/// Same query (all of it: a cache keyed by the text alone would trust callers to set `source`).
+bool sameQuery(const Query &a, const Query &b)
+{
+    return a.source == b.source && a.type == b.type && a.explicitType == b.explicitType && a.filters == b.filters
+           && a.sort == b.sort && a.group == b.group && a.limit == b.limit;
+}
+
+bool hasRemindFilter(const Query &query)
+{
+    return std::any_of(query.filters.cbegin(), query.filters.cend(), [](const QueryFilter &f) {
+        return f.kind == QueryFilterKind::Date && f.field == QueryDateField::Remind;
+    });
 }
 
 } // namespace
 
+bool queryResolvesNames(const Query &query)
+{
+    return std::any_of(query.filters.cbegin(), query.filters.cend(), [](const QueryFilter &f) {
+        return f.kind == QueryFilterKind::Page || f.kind == QueryFilterKind::Ref;
+    });
+}
+
 QueryResult runQuery(const Query &query, const VaultIndex &index, QDate today, Qt::DayOfWeek weekStart,
                      const QueryOptions &options)
 {
-    return Runner(query, index, today, weekStart, options).run();
+    Runner runner(query, index, today, weekStart, options);
+    QList<QueryMatch> matches;
+    for (const Entry *e : IndexAccess::sortedEntries(index))
+        runner.matchesOf(*e, matches);
+    runner.sort(matches);
+    return runner.finish(matches);
+}
+
+// ---- QueryCache ---------------------------------------------------------------------------------
+
+struct QueryCache::Private {
+    IndexFollower follower;
+    bool used = false; ///< an update() ran (query, today, … are set)
+    Query query;
+    QDate today;
+    Qt::DayOfWeek weekStart = Qt::Monday;
+    QueryOptions options;
+    QList<QueryMatch> sorted; ///< every match of the vault, in result order
+    NoteCacheSync last;
+    quint64 serial = 0; ///< the index (VaultIndex::serial()) and version the matches are up to
+    int version = -1;
+
+    /// May the matches' Entry pointers be read with `index`?
+    bool current(const VaultIndex &index) const { return index.serial() == serial && index.version() == version; }
+};
+
+QueryCache::QueryCache() : d(std::make_unique<Private>()) { }
+QueryCache::~QueryCache() = default;
+QueryCache::QueryCache(QueryCache &&) noexcept = default;
+QueryCache &QueryCache::operator=(QueryCache &&) noexcept = default;
+
+const NoteCacheSync &QueryCache::update(const Query &query, const VaultIndex &index, QDate today,
+                                        Qt::DayOfWeek weekStart, const QueryOptions &options)
+{
+    if (!d->used || !sameQuery(d->query, query))
+        d->follower.reset();
+    const QString key =
+            today.toString(Qt::ISODate) + u'\x1f' + QString::number(int(weekStart)) + u'\x1f' + options.currentPath;
+    NoteCacheSync sync = d->follower.follow(index, key, queryResolvesNames(query));
+    if (hasRemindFilter(query)) // remind:overdue depends on the time of day
+        sync = NoteCacheSync{true, {}};
+    d->used = true;
+    d->query = query;
+    d->today = today;
+    d->weekStart = weekStart;
+    d->options = options;
+    Runner runner(d->query, index, today, weekStart, d->options);
+    if (sync.full) {
+        d->sorted.clear();
+        for (const Entry *e : IndexAccess::sortedEntries(index))
+            runner.matchesOf(*e, d->sorted);
+        runner.sort(d->sorted);
+    } else if (!sync.changed.isEmpty()) {
+        const QSet<VaultPath> changed(sync.changed.cbegin(), sync.changed.cend());
+        d->sorted.removeIf([&](const QueryMatch &m) { return changed.contains(m.path); });
+        QList<QueryMatch> fresh;
+        for (const VaultPath &path : std::as_const(sync.changed)) {
+            if (const Entry *e = IndexAccess::entry(index, path))
+                runner.matchesOf(*e, fresh);
+        }
+        if (!fresh.isEmpty()) {
+            runner.sort(fresh);
+            QList<QueryMatch> merged;
+            merged.reserve(d->sorted.size() + fresh.size());
+            std::merge(std::make_move_iterator(d->sorted.begin()), std::make_move_iterator(d->sorted.end()),
+                       std::make_move_iterator(fresh.begin()), std::make_move_iterator(fresh.end()),
+                       std::back_inserter(merged),
+                       [&runner](const QueryMatch &a, const QueryMatch &b) { return runner.less(a, b); });
+            d->sorted = std::move(merged);
+        }
+    }
+    d->last = std::move(sync);
+    d->serial = index.serial();
+    d->version = index.version();
+    return d->last;
+}
+
+QueryResult QueryCache::result(const VaultIndex &index) const
+{
+    if (!d->used)
+        return {};
+    Runner runner(d->query, index, d->today, d->weekStart, d->options);
+    runner.trustEntries(d->current(index));
+    return runner.finish(d->sorted);
+}
+
+QueryResult QueryCache::run(const Query &query, const VaultIndex &index, QDate today, Qt::DayOfWeek weekStart,
+                            const QueryOptions &options)
+{
+    update(query, index, today, weekStart, options);
+    return result(index);
+}
+
+QList<QueryItem> QueryCache::itemsOf(const VaultPath &path, const VaultIndex &index) const
+{
+    QList<QueryItem> out;
+    if (!d->used)
+        return out;
+    Runner runner(d->query, index, d->today, d->weekStart, d->options);
+    runner.trustEntries(d->current(index));
+    for (const QueryMatch &m : std::as_const(d->sorted)) {
+        if (m.path == path)
+            out.append(runner.itemOf(m));
+    }
+    return out;
+}
+
+QList<QueryItem> QueryCache::itemsOf(const QSet<VaultPath> &paths, const VaultIndex &index) const
+{
+    QList<QueryItem> out;
+    if (!d->used || paths.isEmpty())
+        return out;
+    Runner runner(d->query, index, d->today, d->weekStart, d->options);
+    runner.trustEntries(d->current(index));
+    for (const QueryMatch &m : std::as_const(d->sorted)) {
+        if (paths.contains(m.path))
+            out.append(runner.itemOf(m));
+    }
+    return out;
+}
+
+int QueryCache::total() const
+{
+    return int(d->sorted.size());
+}
+
+const NoteCacheSync &QueryCache::lastSync() const
+{
+    return d->last;
+}
+
+void QueryCache::clear()
+{
+    d = std::make_unique<Private>();
 }
 
 } // namespace brulion

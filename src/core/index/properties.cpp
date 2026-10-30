@@ -85,8 +85,10 @@ void countSpelling(QList<std::pair<QString, int>> &spellings, const QString &spe
 
 QList<PropertyKeyInfo> VaultIndex::propertyKeys() const
 {
+    d->cache.read();
     if (d->cache.propertyKeys)
         return *d->cache.propertyKeys;
+    ++d->builds.propertyKeys;
     struct Acc {
         QList<std::pair<QString, int>> spellings;
         int count = 0;
@@ -153,6 +155,7 @@ QList<PropertyValueCount> VaultIndex::propertyValues(const QString &key, const Q
     const QString k = foldedKey(key.trimmed());
     if (limit <= 0 || k.isEmpty())
         return out;
+    d->cache.read();
     auto cached = d->cache.propertyValues.constFind(k);
     if (cached == d->cache.propertyValues.constEnd()) {
         struct Acc {

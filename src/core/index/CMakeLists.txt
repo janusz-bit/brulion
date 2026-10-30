@@ -3,14 +3,16 @@
 # values, graph) and the
 # query language (docs/SYNTAX.md §10), and the index cache on the device (indexcache.h, L2 of
 # docs/PERFORMANCE.md). Public headers: index.h (overview), vaultindex.h, searchindex.h, query.h,
-# indexcache.h; internal headers end in _p.h.
+# querycache.h, notecache.h (following the index's change log), indexcache.h; internal headers end
+# in _p.h.
 brulion_add_core_module(index
     SOURCES
         index.h
         vaultindex.h vaultindex_p.h vaultindex.cpp vaultindex_views.cpp
+        notecache.h
         searchindex.h searchindex.cpp
         indexcache.h indexcache_p.h indexcache.cpp
-        query.h queryparse.cpp queryrun.cpp querymessages_p.h querymessages.cpp
+        query.h querycache.h queryparse.cpp queryrun.cpp querymessages_p.h querymessages.cpp
         properties.cpp
         relocate.cpp
         resolve_p.h resolve.cpp

@@ -16,10 +16,32 @@ using namespace Qt::StringLiterals;
 
 ReminderSource sourceOf(const VaultIndex &index, const ReminderRef &ref)
 {
+    return sourceOf(index.note(ref.path), ref);
+}
+
+QList<ReminderRef> remindersOf(const VaultPath &path, const ParsedNote &note, QDate from, QDate to)
+{
+    QList<ReminderRef> out;
+    // Most reminders of a vault are one-off ones on other days (skipped cheaply), and most notes
+    // have no other.
+    const auto mayOccur = [&](const Reminder &r) { return mayOccurWithin(r, from, to); };
+    if (std::none_of(note.reminders.cbegin(), note.reminders.cend(), mayOccur))
+        return out;
+    for (qsizetype i = 0; i < note.blocks.size(); ++i) {
+        const Block &block = note.blocks.at(i);
+        for (const Reminder &r : block.reminders) {
+            if (mayOccur(r))
+                out.append(ReminderRef{path, int(i), r, block.task});
+        }
+    }
+    return out;
+}
+
+ReminderSource sourceOf(const ParsedNote *note, const ReminderRef &ref)
+{
     ReminderSource src;
     src.text = ref.reminder.text;
     src.task = ref.task;
-    const ParsedNote *note = index.note(ref.path);
     if (!note)
         return src;
     src.pageTitle = note->title;
@@ -54,7 +76,7 @@ bool isClosed(const std::optional<Task> &task)
 
 std::optional<dates::RecurrenceRule> ruleOf(const QString &recurrence)
 {
-    if (recurrence.trimmed().isEmpty())
+    if (recurrence.isEmpty() || recurrence.trimmed().isEmpty())
         return std::nullopt;
     return dates::parseRecurrence(recurrence);
 }

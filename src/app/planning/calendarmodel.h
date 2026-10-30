@@ -32,9 +32,12 @@
 // `today` "" follows the system clock (re-evaluated at midnight). `weekStart` 0 takes the
 // vault's weekStartsOn. Everything is local wall-clock dates (QDate arithmetic, never UTC), so
 // DST changes cannot shift a day. Created from QML, the model builds its days once, when the
-// component is complete (not once per property set on creation).
+// component is complete (not once per property set on creation). The range's entries come from
+// a CalendarCache and the overdue list from an OverdueCache: after an index change only the
+// changed notes are computed again.
 #pragma once
 
+#include "index/notecache.h"
 #include "reminders/calendar.h"
 #include "types.h"
 
@@ -48,12 +51,33 @@
 #include <QVariantMap>
 
 #include <functional>
+#include <memory>
 
 namespace brulion {
 class VaultIndex;
-}
+} // namespace brulion
 
 namespace brulion::planning {
+
+/// The open tasks (todo, doing) whose due date passed, kept per note across index changes: after
+/// a change only the changed notes are looked at again (CalendarModel's overdue list).
+class OverdueCache {
+public:
+    struct Overdue {
+        DateSpec due;
+        VaultPath path;
+        Task task;
+    };
+    /// The tasks due before `today`, by due date (ties: page path, then document order), at most
+    /// `max`; `total` receives how many there are.
+    QList<Overdue> tasks(const VaultIndex &index, QDate today, int max, int *total);
+    /// What the last tasks() looked at again (tests).
+    const NoteCacheSync &lastSync() const { return m_last; }
+
+private:
+    NoteCache<QList<Overdue>> m_notes; ///< notes with overdue tasks, each in document order
+    NoteCacheSync m_last;
+};
 
 class CalendarModel : public QAbstractListModel, public QQmlParserStatus {
     Q_OBJECT
@@ -196,6 +220,10 @@ public:
 
     /// Test hook: the clock used when `today` is "".
     void setClock(std::function<QDate()> clock);
+    /// The caches of the range's entries and of the overdue list (C++ only; default: the
+    /// model's own). Widgets keep them across the models they create per publish. Set them
+    /// before the model builds.
+    void setCaches(std::shared_ptr<CalendarCache> calendar, std::shared_ptr<OverdueCache> overdue);
 
 Q_SIGNALS:
     void vaultIndexChanged();
@@ -233,6 +261,8 @@ private:
 
     QPointer<VaultIndex> m_index;
     QMetaObject::Connection m_indexConnection;
+    std::shared_ptr<CalendarCache> m_calendar;  ///< the range's entries
+    std::shared_ptr<OverdueCache> m_overdueTasks; ///< open tasks due before today
     QString m_mode = QStringLiteral("month");
     QDate m_anchor; ///< invalid = today
     QString m_todayText;

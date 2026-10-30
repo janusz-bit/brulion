@@ -3,6 +3,7 @@
 #include "dates/local.h"
 #include "dates/recurrence.h"
 #include "index/query.h"
+#include "index/querycache.h"
 #include "index/vaultindex.h"
 #include "planningutil.h"
 
@@ -11,6 +12,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <numeric>
+#include <vector>
 
 namespace brulion::planning {
 
@@ -571,6 +574,12 @@ void TaskListModel::setClock(std::function<QDate()> clock)
     rebuild();
 }
 
+void TaskListModel::setQueryCache(std::shared_ptr<QueryCache> cache)
+{
+    m_query = std::move(cache);
+    m_follower.reset();
+}
+
 QString TaskListModel::pageQueryValue(const QString &path) const
 {
     // The title reads best; use it when it resolves back to the same page, else the path.
@@ -820,134 +829,198 @@ void TaskListModel::scheduleRefresh()
         m_refreshTimer.start();
 }
 
+TaskListModel::Item TaskListModel::makeItem(const QueryItem &qi, QDate today, Qt::DayOfWeek weekStart)
+{
+    static const QStringList sections = sectionKeys();
+    Item item;
+    item.ref = TaskRef{qi.path, qi.blockIndex, *qi.task};
+    item.folder = folderOf(qi.path);
+    if (const ParsedNote *note = m_index ? m_index->note(qi.path) : nullptr) {
+        item.pageTitle = note->title;
+        item.isJournal = note->journalDate.has_value();
+        if (qi.blockIndex >= 0 && qi.blockIndex < note->blocks.size()) {
+            const Block &block = note->blocks.at(qi.blockIndex);
+            item.tags = block.tags;
+            item.reminder = nextReminder(block.reminders, today);
+        }
+    }
+    const Task &t = item.ref.task;
+    item.section =
+            sectionOf(t, today, weekStart, item.reminder ? std::optional<QDate>(item.reminder->at.date) : std::nullopt);
+    item.sectionRank = sections.indexOf(item.section);
+    item.finished = finishedDate(t);
+    item.priority = priorityRank(t.priority);
+    item.date = sortDate(t);
+    if (!item.date && item.reminder)
+        item.date = item.reminder->at;
+    return item;
+}
+
+void TaskListModel::rankTitles(QList<Item> &items)
+{
+    // The distinct titles sorted once by their collation keys (kept per title: many tasks share a
+    // page, and a rebuild sees the same pages again); the comparison then reads integers.
+    QList<QString> titles;
+    QSet<QString> seen;
+    for (const Item &item : std::as_const(items)) {
+        if (!seen.contains(item.pageTitle)) {
+            seen.insert(item.pageTitle);
+            titles.append(item.pageTitle);
+        }
+    }
+    std::vector<QCollatorSortKey> keys; // copies share the key's data
+    keys.reserve(size_t(titles.size()));
+    for (const QString &title : std::as_const(titles)) {
+        auto key = m_titleKeys.constFind(title);
+        if (key == m_titleKeys.cend())
+            key = m_titleKeys.insert(title, nameSortKey(title));
+        keys.push_back(*key);
+    }
+    QList<qsizetype> order(titles.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](qsizetype a, qsizetype b) {
+        const int c = keys[size_t(a)].compare(keys[size_t(b)]);
+        return c != 0 ? c < 0 : QString::compare(titles[a], titles[b]) < 0;
+    });
+    m_titleRank.clear();
+    for (qsizetype k = 0; k < order.size(); ++k)
+        m_titleRank.insert(titles[order[k]], int(k));
+    for (Item &item : items)
+        item.title = m_titleRank.value(item.pageTitle);
+}
+
+bool TaskListModel::itemLess(const Item &a, const Item &b) const
+{
+    if (a.sectionRank != b.sectionRank)
+        return a.sectionRank < b.sectionRank;
+    // compareNames() order of the page titles (ranks).
+    const auto titles = [&] { return a.title - b.title; };
+    const Task &ta = a.ref.task;
+    const Task &tb = b.ref.task;
+    static const qsizetype doneRank = sectionKeys().indexOf(u"done"_s);
+    if (a.sectionRank == doneRank) {
+        if (a.finished != b.finished) {
+            if (a.finished && b.finished)
+                return *a.finished > *b.finished;
+            return a.finished.has_value();
+        }
+    } else if (m_sortMode == SortByPriority) {
+        if (a.priority != b.priority)
+            return a.priority < b.priority;
+    } else if (m_sortMode == SortByCreated) {
+        if (ta.created != tb.created) {
+            if (ta.created && tb.created)
+                return *ta.created > *tb.created;
+            return ta.created.has_value();
+        }
+    } else if (m_sortMode == SortByPage) {
+        if (const int c = titles(); c != 0)
+            return c < 0;
+        if (a.ref.path != b.ref.path)
+            return a.ref.path < b.ref.path;
+        return ta.line < tb.line;
+    }
+    if (const int c = compareOptionalSpecs(a.date, b.date); c != 0)
+        return c < 0;
+    if (a.priority != b.priority)
+        return a.priority < b.priority;
+    if (const int c = titles(); c != 0)
+        return c < 0;
+    if (a.ref.path != b.ref.path)
+        return a.ref.path < b.ref.path;
+    return ta.line < tb.line;
+}
+
 void TaskListModel::rebuild()
 {
     m_refreshTimer.stop();
     m_rebuildPending = false;
     const QDate today = currentDay();
     const Qt::DayOfWeek ws = weekStartDay();
-    QList<Item> items;
     int vaultTasks = 0;
+    m_sortMode = m_sort == u"priority"  ? SortByPriority
+                 : m_sort == u"created" ? SortByCreated
+                 : m_sort == u"page"    ? SortByPage
+                                        : SortByDue;
+    const auto less = [this](const Item &a, const Item &b) { return itemLess(a, b); };
+    std::optional<Query> query;
     if (m_index) {
         vaultTasks = int(m_index->tasks().size());
-        const auto parsed = parseQuery(queryText());
-        if (std::holds_alternative<Query>(parsed)) {
-            QueryOptions options;
-            options.defaultLimit = std::numeric_limits<int>::max();
-            const QueryResult result = runQuery(std::get<Query>(parsed), *m_index, today, ws, options);
-            items.reserve(result.items.size());
-            for (const QueryItem &qi : result.items) {
+        const QString text = queryText();
+        auto parsed = parseQuery(text);
+        if (std::holds_alternative<Query>(parsed))
+            query = std::move(std::get<Query>(parsed));
+    }
+    if (!query) {
+        m_items.clear();
+        m_follower.reset();
+    } else {
+        QueryOptions options;
+        options.defaultLimit = std::numeric_limits<int>::max();
+        if (!m_query)
+            m_query = std::make_shared<QueryCache>();
+        m_query->update(*query, *m_index, today, ws, options);
+        // The items follow the index on their own (the cache may be shared): what changed since
+        // they were built. Their fields depend on the query (filters and sort), today and the
+        // week start; filters resolving names follow the cache's rule (queryResolvesNames()).
+        const QString key = query->source + u'\x1f' + today.toString(Qt::ISODate) + u'\x1f' + QString::number(int(ws));
+        const NoteCacheSync sync = m_follower.follow(*m_index, key, queryResolvesNames(*query));
+        // Only the changed notes: their items again (one pass over the cache's matches, however
+        // many notes changed), merged into the others' sorted ones — unless a title is new (its
+        // rank among the others is not known: everything again).
+        QList<Item> fresh;
+        bool full = sync.full;
+        QSet<VaultPath> changed;
+        if (!full && !sync.changed.isEmpty()) {
+            changed = QSet<VaultPath>(sync.changed.cbegin(), sync.changed.cend());
+            for (const QueryItem &qi : m_query->itemsOf(changed, *m_index)) {
                 if (!qi.task)
                     continue;
-                Item item;
-                item.ref = TaskRef{qi.path, qi.blockIndex, *qi.task};
-                item.folder = folderOf(qi.path);
-                if (const ParsedNote *note = m_index->note(qi.path)) {
-                    item.pageTitle = note->title;
-                    item.isJournal = note->journalDate.has_value();
-                    if (qi.blockIndex >= 0 && qi.blockIndex < note->blocks.size()) {
-                        const Block &block = note->blocks.at(qi.blockIndex);
-                        item.tags = block.tags;
-                        item.reminder = nextReminder(block.reminders, today);
-                    }
+                fresh.append(makeItem(qi, today, ws));
+                const auto rank = m_titleRank.constFind(fresh.last().pageTitle);
+                if (rank == m_titleRank.cend()) {
+                    full = true;
+                    break;
                 }
-                item.section = sectionOf(*qi.task, today, ws,
-                                         item.reminder ? std::optional<QDate>(item.reminder->at.date) : std::nullopt);
-                items.append(std::move(item));
+                fresh.last().title = *rank;
+            }
+        }
+        if (full) {
+            const QueryResult result = m_query->result(*m_index);
+            QList<Item> items;
+            items.reserve(result.items.size());
+            for (const QueryItem &qi : result.items) {
+                if (qi.task)
+                    items.append(makeItem(qi, today, ws));
+            }
+            rankTitles(items);
+            // Through a permutation: an item is too big to move around n log n times.
+            QList<qsizetype> order(items.size());
+            std::iota(order.begin(), order.end(), 0);
+            std::sort(order.begin(), order.end(),
+                      [&](qsizetype x, qsizetype y) { return itemLess(items[x], items[y]); });
+            QList<Item> sorted;
+            sorted.reserve(items.size());
+            for (const qsizetype i : std::as_const(order))
+                sorted.append(std::move(items[i]));
+            m_items = std::move(sorted);
+        } else if (!changed.isEmpty()) {
+            m_items.removeIf([&](const Item &item) { return changed.contains(item.ref.path); });
+            if (!fresh.isEmpty()) {
+                std::sort(fresh.begin(), fresh.end(), less);
+                QList<Item> merged;
+                merged.reserve(m_items.size() + fresh.size());
+                std::merge(std::make_move_iterator(m_items.begin()), std::make_move_iterator(m_items.end()),
+                           std::make_move_iterator(fresh.begin()), std::make_move_iterator(fresh.end()),
+                           std::back_inserter(merged), less);
+                m_items = std::move(merged);
             }
         }
     }
+    // The rich text shows links into other notes: rendered again when shown.
+    for (Item &item : m_items)
+        item.rendered = false;
 
-    // Sort by keys computed once per task (the comparison runs n log n times): the section's
-    // place, the dates, the priority rank and the page title's place in compareNames() order
-    // (collation keys of the distinct titles, sorted once).
-    const QStringList sections = sectionKeys();
-    const qsizetype done = sections.indexOf(u"done"_s);
-    enum class By { Due, Priority, Created, Page };
-    const By by = m_sort == u"priority"  ? By::Priority
-                  : m_sort == u"created" ? By::Created
-                  : m_sort == u"page"    ? By::Page
-                                         : By::Due;
-    QHash<QString, int> titleRank;
-    {
-        QList<std::pair<QCollatorSortKey, QString>> titles;
-        for (const Item &item : std::as_const(items)) {
-            if (!titleRank.contains(item.pageTitle)) {
-                titleRank.insert(item.pageTitle, 0);
-                titles.append({nameSortKey(item.pageTitle), item.pageTitle});
-            }
-        }
-        std::sort(titles.begin(), titles.end(), [](const auto &a, const auto &b) {
-            const int c = a.first.compare(b.first);
-            return c != 0 ? c < 0 : QString::compare(a.second, b.second) < 0;
-        });
-        for (int k = 0; k < titles.size(); ++k)
-            titleRank[titles.at(k).second] = k;
-    }
-    struct SortKey {
-        qsizetype section;
-        std::optional<QDate> finished; ///< done section
-        int priority;
-        std::optional<QDate> created;
-        std::optional<DateSpec> date; ///< sort date, else the reminder
-        int title;
-        int item;
-    };
-    QList<SortKey> order;
-    order.reserve(items.size());
-    for (int k = 0; k < items.size(); ++k) {
-        const Item &item = items.at(k);
-        const Task &t = item.ref.task;
-        std::optional<DateSpec> date = sortDate(t);
-        if (!date && item.reminder)
-            date = item.reminder->at;
-        order.append(SortKey{sections.indexOf(item.section), finishedDate(t), priorityRank(t.priority), t.created, date,
-                             titleRank.value(item.pageTitle), k});
-    }
-    std::stable_sort(order.begin(), order.end(), [&](const SortKey &a, const SortKey &b) {
-        if (a.section != b.section)
-            return a.section < b.section;
-        const Item &ia = items.at(a.item);
-        const Item &ib = items.at(b.item);
-        if (a.section == done) {
-            if (a.finished != b.finished) {
-                if (a.finished && b.finished)
-                    return *a.finished > *b.finished;
-                return a.finished.has_value();
-            }
-        } else if (by == By::Priority) {
-            if (a.priority != b.priority)
-                return a.priority < b.priority;
-        } else if (by == By::Created) {
-            if (a.created != b.created) {
-                if (a.created && b.created)
-                    return *a.created > *b.created;
-                return a.created.has_value();
-            }
-        } else if (by == By::Page) {
-            if (a.title != b.title)
-                return a.title < b.title;
-            if (ia.ref.path != ib.ref.path)
-                return ia.ref.path < ib.ref.path;
-            return ia.ref.task.line < ib.ref.task.line;
-        }
-        if (const int c = compareOptionalSpecs(a.date, b.date); c != 0)
-            return c < 0;
-        if (a.priority != b.priority)
-            return a.priority < b.priority;
-        if (a.title != b.title)
-            return a.title < b.title;
-        if (ia.ref.path != ib.ref.path)
-            return ia.ref.path < ib.ref.path;
-        return ia.ref.task.line < ib.ref.task.line;
-    });
-    QList<Item> sorted;
-    sorted.reserve(items.size());
-    for (const SortKey &k : std::as_const(order))
-        sorted.append(std::move(items[k.item]));
-    items = std::move(sorted);
-
-    m_items = std::move(items);
     m_sectionCounts.clear();
     m_total = int(m_items.size());
     m_open = 0;

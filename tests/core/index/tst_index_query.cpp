@@ -1,9 +1,10 @@
 // Query language (docs/SYNTAX.md §10): parseQuery and runQuery over the fixture vault.
 #include "fixture.h"
 
+#include "centraleuropeantime.h"
+#include "index/querycache.h"
 #include "index/textutil_p.h"
 #include "markdown/parse.h"
-#include "centraleuropeantime.h"
 
 #include <QElapsedTimer>
 #include <QTest>
@@ -35,6 +36,36 @@ QStringList describe(const VaultIndex &index, const QueryResult &result)
             out.append(item.path);
         else
             out.append(fixture::blockText(index, item.path, item.blockIndex).section(u'\n', 0, 0));
+    }
+    return out;
+}
+
+/// Everything of a result, for comparing a QueryCache with runQuery().
+QStringList full(const QueryResult &r)
+{
+    QStringList out{u"type %1 total %2"_s.arg(int(r.type)).arg(r.total)};
+    const auto item = [](const QueryItem &i) {
+        return u"%1#%2|%3|%4|%5"_s.arg(i.path, QString::number(i.blockIndex), i.task ? i.task->text : u"-"_s,
+                                       i.task ? QString::number(int(i.task->status)) : u"-"_s,
+                                       i.reminder ? i.reminder->at.toString() : u"-"_s);
+    };
+    for (const QueryItem &i : r.items)
+        out.append(item(i));
+    for (const QueryGroup &g : r.groups) {
+        out.append(u"group "_s + g.key + u'|' + g.label);
+        for (const QueryItem &i : g.items)
+            out.append(u"  "_s + item(i));
+    }
+    return out;
+}
+
+/// The pages of the items, in order (each once).
+QStringList pagesOf(const QueryResult &r)
+{
+    QStringList out;
+    for (const QueryItem &item : r.items) {
+        if (out.isEmpty() || out.last() != item.path)
+            out.append(item.path);
     }
     return out;
 }
@@ -583,6 +614,190 @@ private Q_SLOTS:
         QVERIFY(r.groups.isEmpty());
         // An empty query lists every block (frontmatter excluded, nested blocks collapsed).
         QVERIFY(run(QString()).total > 20);
+    }
+
+    // ---- QueryCache: runQuery() kept across index changes ------------------------------------------
+
+    // Which queries follow the index fully after a name change: the cache and the views beside it
+    // (the Tasks list) share one predicate.
+    void queryResolvesNames_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<bool>("resolves");
+        QTest::newRow("page") << u"page:Łódź"_s << true;
+        QTest::newRow("strona, negated") << u"-strona:\"Żółta łódź\" status:open"_s << true;
+        QTest::newRow("page:this") << u"page:this"_s << true;
+        QTest::newRow("ref") << u"ref:[[Zażółć gęślą jaźń]]"_s << true;
+        QTest::newRow("linki among others") << u"tag:praca linki:[[Ćma]] sort:due"_s << true;
+        QTest::newRow("tag") << u"tag:praca"_s << false;
+        QTest::newRow("path") << u"path:Projekty/ status:todo"_s << false;
+        QTest::newRow("dates and text") << u"due:<today \"źdźbło\" group:page"_s << false;
+        QTest::newRow("empty") << QString() << false;
+    }
+    void queryResolvesNames()
+    {
+        QFETCH(QString, source);
+        QFETCH(bool, resolves);
+        QCOMPARE(brulion::queryResolvesNames(parsed(source)), resolves);
+    }
+
+    void queryCacheFollowsEdits()
+    {
+        VaultIndex index;
+        index.update(u"A.md"_s, u"- [ ] pierwsze 📅 2026-10-15 #praca\n- [ ] drugie #praca"_s);
+        index.update(u"Łódź.md"_s, u"- [ ] w Łodzi 📅 2026-10-14 #praca"_s);
+        index.update(u"Lodz.md"_s, u"- [ ] w Lodz #praca\n- [x] zrobione #praca"_s);
+        index.update(u"Zebra.md"_s, u"- [ ] zebra #praca\n- [ ] bez tagu"_s);
+        const Query q = parsed(u"tag:praca sort:page"_s);
+        QueryCache cache;
+        QCOMPARE(full(cache.result(index)), full(QueryResult())); // nothing yet
+        QCOMPARE(full(cache.run(q, index, fixture::Today)), full(runQuery(q, index, fixture::Today)));
+        QVERIFY(cache.lastSync().full);
+        // Polish names: „Lodz” before „Łódź” (a letter with a mark after its base), „Zebra” last.
+        QCOMPARE(pagesOf(cache.result(index)), QStringList({u"A.md"_s, u"Lodz.md"_s, u"Łódź.md"_s, u"Zebra.md"_s}));
+        QCOMPARE(cache.total(), 6);
+
+        // An edit: only that note is evaluated again.
+        index.update(u"A.md"_s, u"- [ ] pierwsze zmienione #praca\n- [ ] trzecie #praca\n- [ ] czwarte"_s);
+        QCOMPARE(full(cache.run(q, index, fixture::Today)), full(runQuery(q, index, fixture::Today)));
+        QVERIFY(!cache.lastSync().full);
+        QCOMPARE(cache.lastSync().changed, QList<VaultPath>{u"A.md"_s});
+        QCOMPARE(cache.itemsOf(u"A.md"_s, index).size(), 2);
+        QVERIFY(cache.itemsOf(u"A.md"_s, index).first().task->text.startsWith(u"pierwsze zmienione"_s));
+        QVERIFY(cache.itemsOf(u"Nie ma.md"_s, index).isEmpty());
+        QCOMPARE(cache.total(), 6);
+        // Several notes at once (one pass over the matches): those notes' items in result order.
+        {
+            const QSet<VaultPath> some{u"Zebra.md"_s, u"A.md"_s, u"Łódź.md"_s, u"Nie ma.md"_s};
+            QueryResult expected = runQuery(q, index, fixture::Today);
+            expected.items.removeIf([&](const QueryItem &i) { return !some.contains(i.path); });
+            QueryResult got;
+            got.type = expected.type;
+            got.total = expected.total;
+            got.items = cache.itemsOf(some, index);
+            QCOMPARE(full(got), full(expected));
+            QCOMPARE(got.items.size(), 4);
+            QCOMPARE(pagesOf(got), QStringList({u"A.md"_s, u"Łódź.md"_s, u"Zebra.md"_s}));
+            QVERIFY(cache.itemsOf(QSet<VaultPath>(), index).isEmpty());
+            QVERIFY(cache.itemsOf(QSet<VaultPath>{u"Nie ma.md"_s}, index).isEmpty());
+            QVERIFY(QueryCache().itemsOf(some, index).isEmpty()); // before the first update()
+        }
+
+        // Nothing changed: nothing evaluated.
+        cache.update(q, index, fixture::Today);
+        QVERIFY(!cache.lastSync().any());
+
+        // A new page without page: / ref: filters: still incremental.
+        index.update(u"Ćma.md"_s, u"- [ ] ćma #praca/dom"_s);
+        QCOMPARE(full(cache.run(q, index, fixture::Today)), full(runQuery(q, index, fixture::Today)));
+        QVERIFY(!cache.lastSync().full);
+
+        // A rename moves the matches to the new page.
+        index.rename(u"Zebra.md"_s, u"Archiwum/Zebra.md"_s, u"- [ ] zebra #praca\n- [ ] bez tagu"_s);
+        const QueryResult renamed = cache.run(q, index, fixture::Today);
+        QCOMPARE(full(renamed), full(runQuery(q, index, fixture::Today)));
+        QCOMPARE(cache.lastSync().changed, QList<VaultPath>({u"Archiwum/Zebra.md"_s, u"Zebra.md"_s}));
+        QVERIFY(pagesOf(renamed).contains(u"Archiwum/Zebra.md"_s));
+        QVERIFY(!pagesOf(renamed).contains(u"Zebra.md"_s));
+
+        // Everything again: another day, week start, page, query, index; clear().
+        cache.update(q, index, fixture::Today.addDays(1));
+        QVERIFY(cache.lastSync().full);
+        cache.update(q, index, fixture::Today.addDays(1), Qt::Sunday);
+        QVERIFY(cache.lastSync().full);
+        QueryOptions here;
+        here.currentPath = u"A.md"_s;
+        cache.update(q, index, fixture::Today.addDays(1), Qt::Sunday, here);
+        QVERIFY(cache.lastSync().full);
+        cache.update(q, index, fixture::Today.addDays(1), Qt::Sunday, here);
+        QVERIFY(!cache.lastSync().any());
+        const Query other = parsed(u"tag:praca sort:-page"_s);
+        cache.update(other, index, fixture::Today.addDays(1), Qt::Sunday, here);
+        QVERIFY(cache.lastSync().full);
+        VaultIndex copy;
+        for (const VaultPath &p : index.paths())
+            copy.update(p, index.content(p));
+        QCOMPARE(full(cache.run(other, copy, fixture::Today)), full(runQuery(other, copy, fixture::Today)));
+        QVERIFY(cache.lastSync().full);
+        cache.clear();
+        QCOMPARE(cache.total(), 0);
+        cache.update(other, copy, fixture::Today);
+        QVERIFY(cache.lastSync().full);
+
+        // A moved-into QueryCache keeps its matches.
+        QueryCache moved(std::move(cache));
+        QCOMPARE(full(moved.result(copy)), full(runQuery(other, copy, fixture::Today)));
+    }
+
+    void queryCacheNamesAndClock()
+    {
+        VaultIndex index;
+        index.update(u"Notatka.md"_s, u"- [ ] o [[Jan]] #osoba\n- [ ] inne"_s);
+        index.update(u"Dziennik.md"_s, u"- dzwonić ⏰ 2026-10-13 09:00\n- jutro ⏰ 2026-10-15 09:00"_s);
+        QueryCache ref;
+        QueryCache tag;
+        QueryCache remind;
+        const Query refQuery = parsed(u"ref:[[Jan]]"_s);
+        const Query tagQuery = parsed(u"#osoba"_s);
+        const Query remindQuery = parsed(u"remind:overdue"_s);
+        QueryOptions options;
+        options.now = QTime(12, 0);
+        ref.update(refQuery, index, fixture::Today, Qt::Monday, options);
+        tag.update(tagQuery, index, fixture::Today, Qt::Monday, options);
+        remind.update(remindQuery, index, fixture::Today, Qt::Monday, options);
+        // A page named by the ref: filter appears: names change, ref: is evaluated everywhere.
+        index.update(u"Ludzie/Jan.md"_s, u"- osoba"_s);
+        QCOMPARE(full(ref.run(refQuery, index, fixture::Today, Qt::Monday, options)),
+                 full(runQuery(refQuery, index, fixture::Today, Qt::Monday, options)));
+        QVERIFY(ref.lastSync().full);
+        tag.update(tagQuery, index, fixture::Today, Qt::Monday, options);
+        QVERIFY(!tag.lastSync().full);
+        // A tag naming a page counts as a reference: #jan in another note.
+        index.update(u"Inna.md"_s, u"- spotkanie #jan"_s);
+        QCOMPARE(full(ref.run(refQuery, index, fixture::Today, Qt::Monday, options)),
+                 full(runQuery(refQuery, index, fixture::Today, Qt::Monday, options)));
+        QCOMPARE(ref.total(), 2);
+        // remind: depends on the time of day: every update evaluates everything.
+        QCOMPARE(remind.run(remindQuery, index, fixture::Today, Qt::Monday, options).total, 1);
+        QVERIFY(remind.lastSync().full);
+        options.now = QTime(8, 0);
+        QCOMPARE(full(remind.run(remindQuery, index, fixture::Today, Qt::Monday, options)),
+                 full(runQuery(remindQuery, index, fixture::Today, Qt::Monday, options)));
+        QVERIFY(remind.lastSync().full);
+    }
+
+    void queryCacheTiesAndGroups()
+    {
+        VaultIndex index;
+        index.update(u"b.md"_s, u"- dwa razy ⏰ 2026-10-14 08:00 i ⏰ 2026-10-14 08:00 #a\n- [ ] zadanie #a #b\n"
+                                u"  - [ ] podzadanie #c"_s);
+        index.update(u"a.md"_s, u"- rano ⏰ 2026-10-14 08:00 #b\n- [ ] też #b"_s);
+        index.update(u"c.md"_s, u"- [ ] bez tagu ⏰ 2026-10-14 07:00"_s);
+        QueryOptions here;
+        here.currentPath = u"b.md"_s;
+        for (const QString &source :
+             {u"type:reminders sort:remind"_s, u"type:reminders"_s, u"group:tag"_s, u"group:page limit:2"_s,
+              u"page:this"_s, u"type:blocks tag:a"_s, u"group:status sort:-page"_s}) {
+            const Query q = parsed(source);
+            QueryCache cache;
+            QCOMPARE(full(cache.run(q, index, fixture::Today, Qt::Monday, here)),
+                     full(runQuery(q, index, fixture::Today, Qt::Monday, here)));
+            index.update(u"a.md"_s, u"- rano ⏰ 2026-10-14 08:00 #b\n- [ ] też #b #c\n- znów ⏰ 2026-10-14 08:00"_s);
+            index.update(u"b.md"_s, index.content(u"b.md"_s) + u"\n- [ ] dopisane #a"_s);
+            QCOMPARE(full(cache.run(q, index, fixture::Today, Qt::Monday, here)),
+                     full(runQuery(q, index, fixture::Today, Qt::Monday, here)));
+            QVERIFY2(!cache.lastSync().full, qPrintable(source));
+            index.update(u"a.md"_s, u"- rano ⏰ 2026-10-14 08:00 #b\n- [ ] też #b"_s);
+            index.update(u"b.md"_s, index.content(u"b.md"_s).section(u"\n- [ ] dopisane"_s, 0, 0));
+        }
+        // Two reminders on one line keep their order (the line's reminders, then the next note).
+        QueryCache cache;
+        const QueryResult r = cache.run(parsed(u"type:reminders sort:remind"_s), index, fixture::Today);
+        QCOMPARE(r.total, 4);
+        QCOMPARE(r.items.at(0).path, u"c.md"_s);
+        QCOMPARE(r.items.at(1).path, u"a.md"_s);
+        QCOMPARE(r.items.at(2).path, u"b.md"_s);
+        QCOMPARE(r.items.at(3).path, u"b.md"_s);
     }
 
     // ---- Names in query blocks (renames and moves rewrite them) ------------------------------------

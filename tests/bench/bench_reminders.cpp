@@ -2,13 +2,15 @@
 // the in-app scheduler and the Android alarm sync), notificationsBetween() and calendarItems()
 // (month / year views) over vaults with 1k / 10k / 50k tasks carrying reminders (10 % recurring,
 // 20 % done), plus a typical mixed vault of 10k notes. afterEdit: what one save costs the core
-// once the index's derived lists are dropped (every VaultIndex change does that) and the
-// consumers that listen to VaultIndex::changed recompute (reminder scheduler, task list,
-// calendar, a query block on the open page).
+// with the consumers that listen to VaultIndex::changed (reminder scheduler, task list,
+// calendar, a query block on the open page): "all consumers" as the app runs them (the index
+// patches its lists, NotificationCache / CalendarCache / QueryCache compute the saved note only —
+// L3 of docs/PERFORMANCE.md), the "(stateless)" rows as the free functions compute everything.
 #include "benchdata.h"
 
 #include "index/index.h"
 #include "index/query.h"
+#include "index/querycache.h"
 #include "reminders/reminders.h"
 
 #include <QTest>
@@ -136,8 +138,11 @@ private Q_SLOTS:
         QTest::addColumn<QString>("then");
         for (int n : {-1, 10000}) {
             const QString name = n < 0 ? u"mixed vault 10000 notes"_s : u"%1 tasks"_s.arg(n);
-            for (const QString &then : {u"nothing"_s, u"reminders()"_s, u"upcomingNotifications"_s, u"tasks()"_s,
-                                        u"calendarMonth"_s, u"query open due this week"_s, u"all consumers"_s})
+            for (const QString &then :
+                 {u"nothing"_s, u"reminders()"_s, u"tasks()"_s, u"upcomingNotifications (stateless)"_s,
+                  u"upcoming (cache)"_s, u"calendarMonth (stateless)"_s, u"calendarMonth (cache)"_s,
+                  u"query open due this week (stateless)"_s, u"query open due this week (cache)"_s,
+                  u"all consumers (stateless)"_s, u"all consumers"_s})
                 QTest::newRow(qPrintable(u"%1, update + %2"_s.arg(name, then))) << n << then;
         }
     }
@@ -157,21 +162,39 @@ private Q_SLOTS:
         const auto parsed = parseQuery(u"status:open due:<=+7d sort:due"_s);
         QVERIFY(std::holds_alternative<Query>(parsed));
         const Query query = std::get<Query>(parsed);
-        const bool all = then == u"all consumers";
+        const bool stateless = then == u"all consumers (stateless)";
+        const bool cached = then == u"all consumers";
+        // The caches as the app keeps them (the scheduler's days, a month of the calendar, a
+        // query), synced once before the loop: the loop measures what one save costs them.
+        NotificationCache notifications;
+        notifications.setDays(now.date().addDays(-ReminderScheduler::HistoryDays - 1),
+                              now.date().addDays(ReminderScheduler::DefaultHorizonDays + 1));
+        CalendarCache calendar;
+        QueryCache queryCache;
+        const qsizetype warm =
+                notifications.upcoming(idx, now, 14, 64).size() + calendar.items(idx, from, from.addDays(41)).size()
+                + queryCache.run(query, idx, now.date()).items.size() + idx.tasks().size() + idx.reminders().size();
+        QVERIFY(warm >= 0);
         int flip = 0;
         qsizetype sink = 0;
         QBENCHMARK {
             idx.update(path, (flip++ & 1) ? original : edited);
             if (then == u"reminders()")
                 sink += idx.reminders().size();
-            if (all || then == u"upcomingNotifications")
+            if (stateless || then == u"upcomingNotifications (stateless)")
                 sink += brulion::upcomingNotifications(idx, now, 14, 64).size();
-            if (all || then == u"tasks()")
+            if (cached || then == u"upcoming (cache)")
+                sink += notifications.upcoming(idx, now, 14, 64).size();
+            if (stateless || cached || then == u"tasks()")
                 sink += idx.tasks().size();
-            if (all || then == u"calendarMonth")
+            if (stateless || then == u"calendarMonth (stateless)")
                 sink += brulion::calendarItems(idx, from, from.addDays(41)).size();
-            if (all || then == u"query open due this week")
+            if (cached || then == u"calendarMonth (cache)")
+                sink += calendar.items(idx, from, from.addDays(41)).size();
+            if (stateless || then == u"query open due this week (stateless)")
                 sink += runQuery(query, idx, now.date()).items.size();
+            if (cached || then == u"query open due this week (cache)")
+                sink += queryCache.run(query, idx, now.date()).items.size();
         }
         idx.update(path, original);
         QVERIFY(sink >= 0);

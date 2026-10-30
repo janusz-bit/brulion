@@ -131,7 +131,9 @@ VaultPath VaultIndex::Private::resolveTagPath(const QString &tag) const
 
 const QList<VaultPath> &VaultIndex::Private::queryNotes()
 {
+    cache.read();
     if (!cache.queryNotes) {
+        ++builds.queryNotes;
         QList<VaultPath> out;
         for (const Entry *e : sortedEntries()) {
             if (hasQueryBlocks(e->content, e->note))
@@ -144,7 +146,9 @@ const QList<VaultPath> &VaultIndex::Private::queryNotes()
 
 const TagTargets &VaultIndex::Private::tagTargets()
 {
+    cache.read();
     if (!cache.tagTargets) {
+        ++builds.tagTargets;
         TagTargets t;
         for (auto it = tagIndex.cbegin(); it != tagIndex.cend(); ++it) {
             const VaultPath page = resolveTagPath(it.key());
@@ -193,8 +197,11 @@ const ParsedNote *VaultIndex::note(const VaultPath &path) const
 
 QList<VaultPath> VaultIndex::paths() const
 {
+    d->cache.read();
     if (!d->cache.paths) {
+        ++d->builds.paths;
         QList<VaultPath> out;
+        out.reserve(qsizetype(d->entries.size()));
         for (const Private::Entry *e : d->sortedEntries())
             out.append(e->path);
         d->cache.paths = std::move(out);
@@ -202,9 +209,19 @@ QList<VaultPath> VaultIndex::paths() const
     return *d->cache.paths;
 }
 
+void VaultIndex::forEachNote(const std::function<void(const VaultPath &, const ParsedNote &)> &visit) const
+{
+    // A copy of the list: visit() may read lists that are built on first use.
+    const QList<const Private::Entry *> sorted = d->sortedEntries();
+    for (const Private::Entry *e : sorted)
+        visit(e->path, e->note);
+}
+
 QList<VaultPath> VaultIndex::attachments() const
 {
+    d->cache.read();
     if (!d->cache.attachments) {
+        ++d->builds.attachments;
         QList<VaultPath> out(d->attachmentSet.cbegin(), d->attachmentSet.cend());
         std::sort(out.begin(), out.end());
         d->cache.attachments = std::move(out);
@@ -380,8 +397,10 @@ QList<UnlinkedRef> VaultIndex::unlinkedReferences(const VaultPath &path) const
 
 QList<MissingPage> VaultIndex::missingPages() const
 {
+    d->cache.read();
     if (d->cache.missing)
         return *d->cache.missing;
+    ++d->builds.missing;
     QList<MissingPage> out;
     for (auto it = d->unresolved.cbegin(); it != d->unresolved.cend(); ++it) {
         QList<VaultPath> sources = it->keys();
@@ -439,8 +458,10 @@ std::optional<BlockRef> VaultIndex::blockById(const QString &id) const
 
 QList<TagCount> VaultIndex::tags() const
 {
+    d->cache.read();
     if (d->cache.tags)
         return *d->cache.tags;
+    ++d->builds.tags;
     QList<TagCount> out;
     out.reserve(d->tagIndex.size());
     for (auto it = d->tagIndex.cbegin(); it != d->tagIndex.cend(); ++it) {
@@ -542,44 +563,52 @@ QList<VaultPath> VaultIndex::tagsTo(const VaultPath &path) const
 
 QList<TaskRef> VaultIndex::tasks() const
 {
-    if (d->cache.tasks)
-        return *d->cache.tasks;
-    QList<TaskRef> out;
-    for (const Private::Entry *e : d->sortedEntries()) {
-        if (e->note.tasks.isEmpty())
-            continue;
-        const QList<Block> &blocks = e->note.blocks;
-        for (qsizetype i = 0; i < blocks.size(); ++i) {
-            if (blocks[i].task)
-                out.append(TaskRef{e->path, int(i), *blocks[i].task});
-        }
+    d->cache.read();
+    if (!d->cache.tasks) {
+        ++d->builds.tasks;
+        QList<TaskRef> out;
+        for (const Private::Entry *e : d->sortedEntries())
+            appendTasks(*e, out);
+        d->cache.tasks = std::move(out);
     }
-    d->cache.tasks = out;
-    return out;
+    return *d->cache.tasks;
 }
 
 QList<ReminderRef> VaultIndex::reminders() const
 {
-    if (d->cache.reminders)
-        return *d->cache.reminders;
-    QList<ReminderRef> out;
-    for (const Private::Entry *e : d->sortedEntries()) {
-        if (e->note.reminders.isEmpty())
-            continue;
-        const QList<Block> &blocks = e->note.blocks;
-        for (qsizetype i = 0; i < blocks.size(); ++i) {
-            for (const Reminder &r : blocks[i].reminders)
-                out.append(ReminderRef{e->path, int(i), r, blocks[i].task});
-        }
+    d->cache.read();
+    if (!d->cache.reminders) {
+        ++d->builds.reminders;
+        QList<ReminderRef> out;
+        for (const Private::Entry *e : d->sortedEntries())
+            appendReminders(*e, out);
+        d->cache.reminders = std::move(out);
     }
-    d->cache.reminders = out;
+    return *d->cache.reminders;
+}
+
+QList<TaskRef> VaultIndex::tasksOf(const VaultPath &path) const
+{
+    QList<TaskRef> out;
+    if (const Private::Entry *e = d->entry(path))
+        appendTasks(*e, out);
+    return out;
+}
+
+QList<ReminderRef> VaultIndex::remindersOf(const VaultPath &path) const
+{
+    QList<ReminderRef> out;
+    if (const Private::Entry *e = d->entry(path))
+        appendReminders(*e, out);
     return out;
 }
 
 QList<JournalRef> VaultIndex::journals() const
 {
+    d->cache.read();
     if (d->cache.journals)
         return *d->cache.journals;
+    ++d->builds.journals;
     QList<JournalRef> out;
     for (const auto &[path, e] : d->entries) {
         if (e->note.journalDate)

@@ -129,6 +129,9 @@ void WidgetPublisher::publish()
     options.favorites = pageRefs(ws->favorites());
     options.recent = pageRefs(ws->recentPages());
     options.reminders = ws->reminders()->enabled();
+    if (!m_caches)
+        m_caches = SnapshotCaches::create();
+    options.caches = m_caches;
     options.captureDays =
             captureDays(*vault, options.now.date(), CaptureDays, options.now, notebook::contentLocale(language));
     const int placed = platform::AndroidBridge::instance()->updateWidgets(buildSnapshot(*index, options));
@@ -138,6 +141,7 @@ void WidgetPublisher::publish()
 void WidgetPublisher::publishEmpty()
 {
     m_debounce.stop();
+    m_caches.reset(); // no notebook: nothing to keep
     const QString language = m_app ? m_app->settings()->language() : u"pl"_s;
     platform::AndroidBridge::instance()->updateWidgets(emptySnapshot(QDateTime::currentDateTime(), language));
     qCInfo(lcWidgets) << "Empty snapshot published (no notebook)";

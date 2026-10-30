@@ -2,12 +2,15 @@
 // writing (atomic, History, change signals), external changes, attachments and asset URLs,
 // templates and journals, quick capture, pages (create/rename with link rewriting/delete/restore),
 // index-backed suggestions and block ids, configuration, favourites, recent pages and the
-// sidebar's folder tree.
+// sidebar's folder tree; the calendar ranges and queries it keeps caches of.
 #include "foldertreemodel.h"
 #include "workspace.h"
 
 #include "filesystemtraits.h"
+#include "index/index.h"
 #include "markdown/markdown.h"
+#include "notebook/json.h"
+#include "reminders/calendar.h"
 #include "vault/vault.h"
 
 #include <QAbstractItemModelTester>
@@ -1676,6 +1679,98 @@ private Q_SLOTS:
         QCOMPARE(paths().first(), u"Notatki"_s);
         QCOMPARE(model.data(model.index(0), FolderTreeModel::SpecialRole).toString(), u"journals"_s);
         QCOMPARE(ws->pagesWithoutJournals(), 12);
+    }
+
+    // calendarItems() and runQuery() keep caches of the last ranges and queries: after writes they
+    // give what the stateless functions give; the oldest are dropped; close() forgets them.
+    void cachedListsFollowWrites()
+    {
+        auto ws = open({{u"journals/2026-10-14.md"_s, u"- [ ] Odebrać paczkę 📅 2026-10-14 ⏰ 2026-10-14 17:30\n"_s},
+                        {u"Dom.md"_s, u"- [ ] Malowanie #remont 📅 2026-10-16\n- Wizyta ⏰ 2026-10-15 09:00\n"_s}});
+        brulion::VaultIndex *index = ws->index();
+        const auto stateless = [&](const QString &from, const QString &to) {
+            QVariantList out;
+            for (const brulion::CalendarItem &item : brulion::calendarItems(
+                         *index, QDate::fromString(from, Qt::ISODate), QDate::fromString(to, Qt::ISODate)))
+                out.append(brulion::notebook::calendarItemJson(item).toVariantMap());
+            return out;
+        };
+        const auto query = [&](const QString &source, const QString &page = QString()) {
+            const auto parsed = brulion::parseQuery(source);
+            brulion::QueryOptions options;
+            options.currentPath = page;
+            options.now = QTime(10, 30);
+            const brulion::QueryResult r = brulion::runQuery(std::get<brulion::Query>(parsed), *index,
+                                                             QDate(2026, 10, 14), Qt::Monday, options);
+            QStringList out{QString::number(r.total)};
+            for (const brulion::QueryItem &item : r.items)
+                out << brulion::notebook::queryItemJson(*index, item).value(u"path"_s).toString()
+                                + brulion::notebook::queryItemJson(*index, item).value(u"text"_s).toString();
+            return out;
+        };
+        const auto shown = [&](const QVariantMap &result) {
+            QStringList out{QString::number(result.value(u"total"_s).toInt())};
+            for (const QVariant &v : result.value(u"items"_s).toList())
+                out << v.toMap().value(u"path"_s).toString() + v.toMap().value(u"text"_s).toString();
+            return out;
+        };
+        QCOMPARE(ws->calendarItems(u"2026-10-12"_s, u"2026-10-18"_s), stateless(u"2026-10-12"_s, u"2026-10-18"_s));
+        QCOMPARE(shown(ws->runQuery(u"tag:remont"_s)), query(u"tag:remont"_s));
+        QCOMPARE(shown(ws->runQuery(u"page:this"_s, u"Dom.md"_s)), query(u"page:this"_s, u"Dom.md"_s));
+        QVERIFY(ws->write(u"Dom.md"_s, u"- [ ] Malowanie salonu #remont 📅 2026-10-17\n- [ ] Żółw #remont\n"_s));
+        QVERIFY(ws->write(u"Nowa.md"_s, u"- [ ] W nowej #remont ⏰ 2026-10-13 08:00\n"_s));
+        QCOMPARE(ws->calendarItems(u"2026-10-12"_s, u"2026-10-18"_s), stateless(u"2026-10-12"_s, u"2026-10-18"_s));
+        QCOMPARE(shown(ws->runQuery(u"tag:remont"_s)), query(u"tag:remont"_s));
+        QCOMPARE(shown(ws->runQuery(u"page:this"_s, u"Dom.md"_s)), query(u"page:this"_s, u"Dom.md"_s));
+        QCOMPARE(ws->runQuery(u"tag:remont"_s).value(u"total"_s).toInt(), 3);
+        QCOMPARE(ws->cachedLists(), (QStringList{u"2026-10-12|2026-10-18"_s, u"tag:remont\x1f"_s,
+                                                 u"page:this\x1f"
+                                                 u"Dom.md"_s}));
+
+        // The most recently asked are kept: four ranges, eight queries.
+        for (int d = 1; d <= Workspace::MaxCachedRanges + 1; ++d) {
+            const QString day = u"2026-10-%1"_s.arg(d, 2, 10, QChar(u'0'));
+            QCOMPARE(ws->calendarItems(day, day), stateless(day, day));
+        }
+        for (int q = 0; q < Workspace::MaxCachedQueries + 2; ++q)
+            QCOMPARE(shown(ws->runQuery(u"tag:remont limit:%1"_s.arg(q + 1))),
+                     query(u"tag:remont limit:%1"_s.arg(q + 1)));
+        const QStringList kept = ws->cachedLists();
+        QCOMPARE(kept.size(), Workspace::MaxCachedRanges + Workspace::MaxCachedQueries);
+        QCOMPARE(kept.first(), u"2026-10-05|2026-10-05"_s);
+        QVERIFY(!kept.contains(u"2026-10-12|2026-10-18"_s));
+        QVERIFY(!kept.contains(u"tag:remont limit:1\x1f"_s));
+        QCOMPARE(kept.at(Workspace::MaxCachedRanges), u"tag:remont limit:10\x1f"_s);
+        // Errors are not cached; close() drops the caches.
+        QVERIFY(!ws->runQuery(u"limit:dużo"_s).value(u"ok"_s).toBool());
+        QCOMPARE(ws->cachedLists(), kept);
+        ws->close();
+        QVERIFY(ws->cachedLists().isEmpty());
+    }
+
+    // A query matching more than MaxCachedQueryMatches is not kept (its cache would hold every
+    // match for the session, whatever its limit:): computed afresh, the same result; smaller
+    // queries are kept.
+    void broadQueriesAreNotKept()
+    {
+        QString many;
+        for (int i = 0; i <= Workspace::MaxCachedQueryMatches; ++i)
+            many += u"- wiersz %1 o żółtej łodzi\n"_s.arg(i);
+        auto ws = open({{u"Łódź.md"_s, many}, {u"Dom.md"_s, u"- [ ] Malowanie #remont\n- inna łódź\n"_s}});
+        const QVariantMap broad = ws->runQuery(u"\"łodzi\" limit:3"_s);
+        QVERIFY(broad.value(u"ok"_s).toBool());
+        QCOMPARE(broad.value(u"total"_s).toInt(), Workspace::MaxCachedQueryMatches + 1);
+        QCOMPARE(broad.value(u"items"_s).toList().size(), 3);
+        QVERIFY(ws->cachedLists().isEmpty());
+        const QVariantMap narrow = ws->runQuery(u"tag:remont"_s);
+        QCOMPARE(narrow.value(u"total"_s).toInt(), 1);
+        QCOMPARE(ws->cachedLists(), QStringList{u"tag:remont\x1f"_s});
+        // Again after a write: computed afresh, still not kept.
+        QVERIFY(ws->write(u"Dom.md"_s, u"- [ ] Malowanie #remont\n- żółta łodzi przystań\n"_s));
+        const QVariantMap again = ws->runQuery(u"\"łodzi\" limit:3"_s);
+        QCOMPARE(again.value(u"total"_s).toInt(), Workspace::MaxCachedQueryMatches + 2);
+        QCOMPARE(again.value(u"items"_s).toList().size(), 3);
+        QCOMPARE(ws->cachedLists(), QStringList{u"tag:remont\x1f"_s});
     }
 };
 

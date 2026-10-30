@@ -144,7 +144,9 @@ struct QueryOptions {
 /// dates compare by day; `overdue` = before today on an open task (done/cancelled never are);
 /// `none` = missing, `any` = present; missing dates never satisfy a range. `type:blocks` drops
 /// blocks whose ancestor also matched (shown inside it), frontmatter and ```query blocks.
-/// Default order: tasks/blocks by path then line, reminders by time, pages by title.
+/// Default order: tasks/blocks by path then line, reminders by time, pages by title. A query run
+/// again and again (after every save) is cheaper through a QueryCache (index/querycache.h): the
+/// same result, only the changed notes evaluated again.
 QueryResult runQuery(const Query &query, const VaultIndex &index, QDate today, Qt::DayOfWeek weekStart = Qt::Monday,
                      const QueryOptions &options = {});
 

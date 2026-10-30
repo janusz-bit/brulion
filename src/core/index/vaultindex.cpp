@@ -11,6 +11,7 @@
 #include "util/paths.h"
 
 #include <algorithm>
+#include <atomic>
 
 namespace brulion {
 
@@ -34,6 +35,129 @@ bool parsingDiffers(const VaultConfig &a, const VaultConfig &b)
 bool isBlockReference(LinkKind kind)
 {
     return kind == LinkKind::BlockRef || kind == LinkKind::BlockEmbed;
+}
+
+quint64 nextSerial()
+{
+    static std::atomic<quint64> counter{0};
+    return ++counter;
+}
+
+// ---- what a change touches (VaultIndex::Private::noteChanged()) ------------------------------
+
+/// Tasks per tag of a note (blocks carrying it; VaultIndex::tags() counts).
+QHash<QString, int> tagBlockCounts(const ParsedNote &note)
+{
+    QHash<QString, int> out;
+    for (const Block &b : note.blocks) {
+        for (const QString &t : b.tags)
+            ++out[t];
+    }
+    return out;
+}
+
+/// Do the two versions of a note (null: absent) contribute the same to VaultIndex::tags():
+/// tags, blocks per tag and the spellings as first written?
+bool sameTagUse(const Entry *a, const Entry *b)
+{
+    const bool aTags = a && !a->note.tags.isEmpty();
+    const bool bTags = b && !b->note.tags.isEmpty();
+    if (!aTags && !bTags)
+        return true;
+    if (!aTags || !bTags || a->path != b->path || a->note.tags != b->note.tags)
+        return false;
+    return tagBlockCounts(a->note) == tagBlockCounts(b->note) && a->tagSpellings() == b->tagSpellings();
+}
+
+/// The unresolved path-based links of a note as VaultIndex::missingPages() reads them (key and
+/// target as written); empty for null.
+QStringList unresolvedLinks(const Entry *e)
+{
+    QStringList out;
+    if (!e)
+        return out;
+    for (const PathLink &l : e->links) {
+        if (l.target.isEmpty() && !l.key.isEmpty())
+            out.append(l.key + u'\x1f' + e->note.links[l.link].target);
+    }
+    return out;
+}
+
+bool hasPageProperties(const Entry *e)
+{
+    return e && (!e->note.frontmatter.isEmpty() || !e->note.properties.isEmpty());
+}
+
+/// Do the two versions of a note (null: absent) hold the same page properties (frontmatter and
+/// leading `key:: value` lines; VaultIndex::propertyKeys() / propertyValues())?
+bool samePageProperties(const Entry *a, const Entry *b)
+{
+    if (!hasPageProperties(a) && !hasPageProperties(b))
+        return true;
+    if (!a || !b || a->path != b->path)
+        return false;
+    return a->note.frontmatter == b->note.frontmatter && a->note.properties == b->note.properties;
+}
+
+/// Replace `old` by `now` in a sorted list (either may be absent; `old` removed when found).
+template<typename T, typename Less>
+void replaceSorted(QList<T> &list, const std::optional<T> &old, const std::optional<T> &now, Less less)
+{
+    if (old) {
+        const auto it = std::lower_bound(list.begin(), list.end(), *old, less);
+        if (it != list.end() && !less(*old, *it))
+            list.erase(it);
+    }
+    if (now)
+        list.insert(std::lower_bound(list.begin(), list.end(), *now, less), *now);
+}
+
+/// Replace the items of note `before` / `after` in a list ordered by path (then document order)
+/// with `after`'s (`append` lists them).
+template<typename Ref>
+void patchSegment(QList<Ref> &list, const Entry *before, const Entry *after,
+                  void (*append)(const Entry &, QList<Ref> &))
+{
+    const auto byPath = [](const Ref &r, const VaultPath &p) { return r.path < p; };
+    const auto pathBefore = [](const VaultPath &p, const Ref &r) { return p < r.path; };
+    const auto segment = [&](const VaultPath &path) {
+        const auto begin = list.begin(); // detaches a shared list first: iterators stay valid
+        const auto first = std::lower_bound(begin, list.end(), path, byPath);
+        const auto last = std::upper_bound(first, list.end(), path, pathBefore);
+        return std::pair<qsizetype, qsizetype>(first - begin, last - first);
+    };
+    if (before && !(after && after->path == before->path)) {
+        const auto [at, count] = segment(before->path);
+        if (count > 0)
+            list.remove(at, count);
+    }
+    if (!after)
+        return;
+    QList<Ref> fresh;
+    append(*after, fresh);
+    const auto [at, count] = segment(after->path);
+    if (fresh.isEmpty() && count == 0)
+        return;
+    if (fresh.size() > count)
+        list.insert(at + count, fresh.size() - count, Ref());
+    else if (fresh.size() < count)
+        list.remove(at + fresh.size(), count - fresh.size());
+    for (qsizetype i = 0; i < fresh.size(); ++i)
+        list[at + i] = std::move(fresh[i]);
+}
+
+bool journalLess(const JournalRef &a, const JournalRef &b)
+{
+    if (a.date != b.date)
+        return a.date > b.date;
+    return a.path < b.path;
+}
+
+std::optional<JournalRef> journalOf(const Entry *e)
+{
+    if (!e || !e->note.journalDate)
+        return std::nullopt;
+    return JournalRef{*e->note.journalDate, e->path};
 }
 
 } // namespace
@@ -112,6 +236,37 @@ const QStringList &Entry::pageTags() const
     return *m_pageTags;
 }
 
+const QList<int> &Entry::taskBlocks() const
+{
+    if (!m_taskBlocks) {
+        QList<int> out;
+        if (!note.tasks.isEmpty()) {
+            out.reserve(note.tasks.size());
+            for (qsizetype i = 0; i < note.blocks.size(); ++i) {
+                if (note.blocks[i].task)
+                    out.append(int(i));
+            }
+        }
+        m_taskBlocks = std::move(out);
+    }
+    return *m_taskBlocks;
+}
+
+const QList<int> &Entry::reminderBlocks() const
+{
+    if (!m_reminderBlocks) {
+        QList<int> out;
+        if (!note.reminders.isEmpty()) {
+            for (qsizetype i = 0; i < note.blocks.size(); ++i) {
+                if (!note.blocks[i].reminders.isEmpty())
+                    out.append(int(i));
+            }
+        }
+        m_reminderBlocks = std::move(out);
+    }
+    return *m_reminderBlocks;
+}
+
 const Entry *IndexAccess::entry(const VaultIndex &index, const VaultPath &path)
 {
     return index.d->entry(path);
@@ -125,6 +280,57 @@ const SearchIndex &IndexAccess::search(const VaultIndex &index)
 bool IndexAccess::searchComplete(const VaultIndex &index)
 {
     return index.d->searchDirty.isEmpty() && !index.d->searchElsewhere;
+}
+
+QList<const Entry *> IndexAccess::sortedEntries(const VaultIndex &index)
+{
+    return index.d->sortedEntries();
+}
+
+int IndexAccess::buildCount(const VaultIndex &index, std::string_view list)
+{
+    const BuildCounts &b = index.d->builds;
+    const std::pair<std::string_view, int> counts[] = {
+            {"sorted", b.sorted},
+            {"byRelevance", b.byRelevance},
+            {"paths", b.paths},
+            {"attachments", b.attachments},
+            {"tags", b.tags},
+            {"tasks", b.tasks},
+            {"reminders", b.reminders},
+            {"journals", b.journals},
+            {"missing", b.missing},
+            {"tagTargets", b.tagTargets},
+            {"queryNotes", b.queryNotes},
+            {"propertyKeys", b.propertyKeys},
+    };
+    for (const auto &[name, count] : counts) {
+        if (name == list)
+            return count;
+    }
+    return -1;
+}
+
+void appendTasks(const Entry &e, QList<TaskRef> &out)
+{
+    if (e.note.tasks.isEmpty())
+        return;
+    const QList<Block> &blocks = e.note.blocks;
+    for (qsizetype i = 0; i < blocks.size(); ++i) {
+        if (blocks[i].task)
+            out.append(TaskRef{e.path, int(i), *blocks[i].task});
+    }
+}
+
+void appendReminders(const Entry &e, QList<ReminderRef> &out)
+{
+    if (e.note.reminders.isEmpty())
+        return;
+    const QList<Block> &blocks = e.note.blocks;
+    for (qsizetype i = 0; i < blocks.size(); ++i) {
+        for (const Reminder &r : blocks[i].reminders)
+            out.append(ReminderRef{e.path, int(i), r, blocks[i].task});
+    }
 }
 
 std::unique_ptr<Entry> makeEntry(const VaultPath &path, const QString &content, ParsedNote note)
@@ -173,7 +379,7 @@ bool relevanceLess(const Entry &a, const Entry &b)
 // Private
 // ---------------------------------------------------------------------------------------------
 
-VaultIndex::Private::Private(VaultIndex *owner, const VaultConfig &cfg) : q(owner), config(cfg)
+VaultIndex::Private::Private(VaultIndex *owner, const VaultConfig &cfg) : q(owner), config(cfg), serial(nextSerial())
 {
     searchTimer = new QTimer(owner);
     searchTimer->setSingleShot(true);
@@ -209,7 +415,9 @@ VaultPath VaultIndex::Private::blockOwner(const QString &id) const
 
 const QList<const VaultIndex::Private::Entry *> &VaultIndex::Private::sortedEntries()
 {
+    cache.read();
     if (!cache.sorted) {
+        ++builds.sorted;
         QList<const Entry *> list;
         list.reserve(qsizetype(entries.size()));
         for (const auto &[path, e] : entries)
@@ -222,7 +430,9 @@ const QList<const VaultIndex::Private::Entry *> &VaultIndex::Private::sortedEntr
 
 const QList<const VaultIndex::Private::Entry *> &VaultIndex::Private::entriesByRelevance()
 {
+    cache.read();
     if (!cache.byRelevance) {
+        ++builds.byRelevance;
         QList<const Entry *> list = sortedEntries();
         std::stable_sort(list.begin(), list.end(),
                          [](const Entry *a, const Entry *b) { return relevanceLess(*a, *b); });
@@ -234,10 +444,100 @@ const QList<const VaultIndex::Private::Entry *> &VaultIndex::Private::entriesByR
 void VaultIndex::Private::markChanged()
 {
     ++version;
-    cache = IndexCaches();
+    pending.version = version;
+    loggedPaths += pending.notes.size();
+    changeLog.push_back(std::move(pending));
+    pending = ChangeRecord();
+    while (!changeLog.empty()
+           && (qsizetype(changeLog.size()) > VaultIndex::MaxLoggedChanges || loggedPaths > MaxLoggedPaths)) {
+        logStart = changeLog.front().version;
+        loggedPaths -= changeLog.front().notes.size();
+        changeLog.pop_front();
+    }
     notifyPending = true;
     if (batchDepth == 0 && !notifyTimer->isActive())
         notifyTimer->start();
+}
+
+void VaultIndex::Private::markEverythingChanged()
+{
+    ++version;
+    cache = IndexCaches();
+    changeLog.clear();
+    loggedPaths = 0;
+    logStart = version;
+    pending = ChangeRecord();
+    notifyPending = true;
+    if (batchDepth == 0 && !notifyTimer->isActive())
+        notifyTimer->start();
+}
+
+void VaultIndex::Private::namesChanged()
+{
+    pending.names = true;
+    cache.missing.reset();
+    cache.tagTargets.reset();
+}
+
+void VaultIndex::Private::noteChanged(const Entry *before, const Entry *after)
+{
+    // The log: the note, and the notes whose `((id))` show one of its blocks (a new note with a
+    // smaller path may also take over an id another note defines).
+    for (const Entry *e : {before, after}) {
+        if (!e)
+            continue;
+        pending.notes.insert(e->path);
+        for (auto id = e->note.blockIds.cbegin(); id != e->note.blockIds.cend(); ++id) {
+            const auto sources = blockRefSources.constFind(id.key());
+            if (sources != blockRefSources.constEnd())
+                sources->forEach([this](const VaultPath &s) { pending.notes.insert(s); });
+        }
+    }
+
+    // Lists the change touches are dropped (tagTargets: attachNote() / detachNote()).
+    IndexCaches &c = cache;
+    if (c.tags && !sameTagUse(before, after))
+        c.tags.reset();
+    if (c.missing && unresolvedLinks(before) != unresolvedLinks(after))
+        c.missing.reset();
+    if ((c.propertyKeys || !c.propertyValues.isEmpty()) && !samePageProperties(before, after)) {
+        c.propertyKeys.reset();
+        c.propertyValues.clear();
+    }
+
+    // The others are patched: the note's place by path (or relevance), its tasks and reminders.
+    if (!c.sorted && !c.byRelevance && !c.paths && !c.queryNotes && !c.journals && !c.tasks && !c.reminders)
+        return;
+    if (++c.unreadPatches > MaxUnreadPatches) {
+        cache = IndexCaches(); // many changes nobody read (a bulk load): built again when read
+        return;
+    }
+    const auto entryOf = [](const Entry *e) { return e ? std::optional<const Entry *>(e) : std::nullopt; };
+    if (c.sorted) {
+        replaceSorted(*c.sorted, entryOf(before), entryOf(after),
+                      [](const Entry *a, const Entry *b) { return a->path < b->path; });
+    }
+    if (c.byRelevance) {
+        replaceSorted(*c.byRelevance, entryOf(before), entryOf(after),
+                      [](const Entry *a, const Entry *b) { return relevanceLess(*a, *b); });
+    }
+    if (c.paths && !(before && after && before->path == after->path)) {
+        const auto pathOf = [](const Entry *e) { return e ? std::optional<VaultPath>(e->path) : std::nullopt; };
+        replaceSorted(*c.paths, pathOf(before), pathOf(after), std::less<VaultPath>());
+    }
+    if (c.queryNotes) {
+        const std::optional<VaultPath> old = before ? std::optional<VaultPath>(before->path) : std::nullopt;
+        const std::optional<VaultPath> now = after && hasQueryBlocks(after->content, after->note)
+                                                     ? std::optional<VaultPath>(after->path)
+                                                     : std::nullopt;
+        replaceSorted(*c.queryNotes, old, now, std::less<VaultPath>());
+    }
+    if (c.journals)
+        replaceSorted(*c.journals, journalOf(before), journalOf(after), journalLess);
+    if (c.tasks)
+        patchSegment<TaskRef>(*c.tasks, before, after, appendTasks);
+    if (c.reminders)
+        patchSegment<ReminderRef>(*c.reminders, before, after, appendReminders);
 }
 
 void VaultIndex::Private::emitIfPending()
@@ -255,6 +555,8 @@ void VaultIndex::Private::addAttachment(const VaultPath &path)
         return;
     attachmentSet.insert(path);
     names.addAttachment(path);
+    cache.attachments.reset();
+    namesChanged();
     relink({fileNameKey(path)}, {});
     markChanged();
 }
@@ -264,6 +566,8 @@ bool VaultIndex::Private::removeAttachment(const VaultPath &path)
     if (!attachmentSet.remove(path))
         return false;
     names.removeAttachment(path);
+    cache.attachments.reset();
+    namesChanged();
     return true;
 }
 
@@ -281,6 +585,7 @@ QSet<QString> VaultIndex::Private::putEntry(std::unique_ptr<Entry> e, bool updat
     e->seq = keepSeq.value_or(++seq);
     const QStringList aliases = e->note.aliases;
     QSet<QString> keys = prev ? QSet<QString>() : entryKeys(*e);
+    const Entry *added = e.get();
     attachNote(std::move(e));
     if (updateSearch)
         markSearch(path);
@@ -290,6 +595,9 @@ QSet<QString> VaultIndex::Private::putEntry(std::unique_ptr<Entry> e, bool updat
                 keys.insert(k);
         }
     }
+    noteChanged(prev.get(), added); // while `prev` is alive: the lists still point at it
+    if (!keys.isEmpty())
+        namesChanged();
     return keys;
 }
 
@@ -309,8 +617,14 @@ void VaultIndex::Private::attachNote(std::unique_ptr<Entry> owned)
             for (const QString &t : b.tags)
                 ++perTag[t];
         }
-        for (const QString &tag : std::as_const(e.note.tags))
-            tagIndex[tag].set(path, std::max(1, perTag.value(tag)));
+        for (const QString &tag : std::as_const(e.note.tags)) {
+            auto t = tagIndex.find(tag);
+            if (t == tagIndex.end()) {
+                t = tagIndex.insert(tag, PathCounts());
+                cache.tagTargets.reset(); // a tag in use more
+            }
+            t->set(path, std::max(1, perTag.value(tag)));
+        }
     }
     resolveLinks(e);
 }
@@ -334,8 +648,10 @@ std::unique_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(cons
         if (t == tagIndex.end())
             continue;
         t->remove(path);
-        if (t->isEmpty())
+        if (t->isEmpty()) {
             tagIndex.erase(t);
+            cache.tagTargets.reset(); // a tag in use less
+        }
     }
     if (discardSearch)
         markSearch(path);
@@ -413,6 +729,8 @@ void VaultIndex::Private::relink(const QSet<QString> &keys, const VaultPath &ski
             fileLink(s, l, false);
             l.target = next;
             fileLink(s, l, true);
+            pending.notes.insert(s);
+            cache.missing.reset();
         }
     }
 }
@@ -494,6 +812,7 @@ void VaultIndex::setConfig(const VaultConfig &config)
     d->config = config;
     if (!reparse || d->entries.empty())
         return;
+    d->cache = IndexCaches(); // nothing to patch: every note changes
     QList<VaultPath> all;
     for (const auto &[path, e] : d->entries)
         all.append(path);
@@ -504,7 +823,7 @@ void VaultIndex::setConfig(const VaultConfig &config)
         const quint64 seq = e->seq;
         d->relink(d->putNote(p, content, false, seq), p);
     }
-    d->markChanged();
+    d->markEverythingChanged();
 }
 
 void VaultIndex::update(const VaultPath &path, const QString &content)
@@ -525,7 +844,9 @@ void VaultIndex::remove(const VaultPath &path)
 {
     if (const Private::Entry *e = d->entry(path)) {
         const QSet<QString> keys = d->entryKeys(*e);
-        d->detachNote(path, true);
+        const std::unique_ptr<Private::Entry> gone = d->detachNote(path, true);
+        d->noteChanged(gone.get(), nullptr);
+        d->namesChanged();
         d->relink(keys, {});
         d->markChanged();
         return;
@@ -546,7 +867,9 @@ void VaultIndex::rename(const VaultPath &oldPath, const VaultPath &newPath, cons
     bool touched = false;
     if (const Private::Entry *old = d->entry(oldPath)) {
         keys.unite(d->entryKeys(*old));
-        d->detachNote(oldPath, true);
+        const std::unique_ptr<Private::Entry> gone = d->detachNote(oldPath, true);
+        d->noteChanged(gone.get(), nullptr);
+        d->namesChanged();
         touched = true;
     } else if (d->removeAttachment(oldPath)) {
         keys.insert(fileNameKey(oldPath));
@@ -560,6 +883,8 @@ void VaultIndex::rename(const VaultPath &oldPath, const VaultPath &newPath, cons
         } else if (!d->attachmentSet.contains(newPath)) {
             d->attachmentSet.insert(newPath);
             d->names.addAttachment(newPath);
+            d->cache.attachments.reset();
+            d->namesChanged();
             keys.insert(fileNameKey(newPath));
             touched = true;
         }
@@ -567,6 +892,8 @@ void VaultIndex::rename(const VaultPath &oldPath, const VaultPath &newPath, cons
     d->relink(keys, markdown ? newPath : VaultPath());
     if (touched)
         d->markChanged();
+    else
+        d->pending = ChangeRecord();
 }
 
 void VaultIndex::clear()
@@ -583,7 +910,7 @@ void VaultIndex::clear()
     d->searchTimer->stop();
     d->searchDirty.clear();
     d->search.clear();
-    d->markChanged();
+    d->markEverythingChanged();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -735,6 +1062,27 @@ void VaultIndex::endBatch()
 int VaultIndex::version() const
 {
     return d->version;
+}
+
+quint64 VaultIndex::serial() const
+{
+    return d->serial;
+}
+
+IndexChanges VaultIndex::changesSince(int version) const
+{
+    IndexChanges out;
+    if (version > d->version || version < d->logStart)
+        return out;
+    out.complete = true;
+    QSet<VaultPath> notes;
+    for (auto it = d->changeLog.crbegin(); it != d->changeLog.crend() && it->version > version; ++it) {
+        it->notes.forEach([&notes](const VaultPath &path) { notes.insert(path); });
+        out.names = out.names || it->names;
+    }
+    out.notes = QList<VaultPath>(notes.cbegin(), notes.cend());
+    std::sort(out.notes.begin(), out.notes.end());
+    return out;
 }
 
 void VaultIndex::flushSearch()

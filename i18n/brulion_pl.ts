@@ -15216,37 +15216,37 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::planning::TaskListModel</name>
     <message>
-        <location filename="../src/app/planning/tasklistmodel.cpp" line="146"/>
+        <location filename="../src/app/planning/tasklistmodel.cpp" line="149"/>
         <source>Overdue</source>
         <translation>Zaległe</translation>
     </message>
     <message>
-        <location filename="../src/app/planning/tasklistmodel.cpp" line="148"/>
+        <location filename="../src/app/planning/tasklistmodel.cpp" line="151"/>
         <source>Today</source>
         <translation>Dziś</translation>
     </message>
     <message>
-        <location filename="../src/app/planning/tasklistmodel.cpp" line="150"/>
+        <location filename="../src/app/planning/tasklistmodel.cpp" line="153"/>
         <source>Tomorrow</source>
         <translation>Jutro</translation>
     </message>
     <message>
-        <location filename="../src/app/planning/tasklistmodel.cpp" line="152"/>
+        <location filename="../src/app/planning/tasklistmodel.cpp" line="155"/>
         <source>This week</source>
         <translation>W tym tygodniu</translation>
     </message>
     <message>
-        <location filename="../src/app/planning/tasklistmodel.cpp" line="154"/>
+        <location filename="../src/app/planning/tasklistmodel.cpp" line="157"/>
         <source>Later</source>
         <translation>Później</translation>
     </message>
     <message>
-        <location filename="../src/app/planning/tasklistmodel.cpp" line="156"/>
+        <location filename="../src/app/planning/tasklistmodel.cpp" line="159"/>
         <source>No date</source>
         <translation>Bez daty</translation>
     </message>
     <message>
-        <location filename="../src/app/planning/tasklistmodel.cpp" line="158"/>
+        <location filename="../src/app/planning/tasklistmodel.cpp" line="161"/>
         <source>Done</source>
         <translation>Zrobione</translation>
     </message>
@@ -15737,36 +15737,36 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::Workspace</name>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="534"/>
-        <location filename="../src/app/shell/workspace.cpp" line="550"/>
+        <location filename="../src/app/shell/workspace.cpp" line="535"/>
+        <location filename="../src/app/shell/workspace.cpp" line="551"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="712"/>
-        <location filename="../src/app/shell/workspace.cpp" line="723"/>
+        <location filename="../src/app/shell/workspace.cpp" line="713"/>
+        <location filename="../src/app/shell/workspace.cpp" line="724"/>
         <source>Could not save the drawing %1: %2</source>
         <translation>Nie można zapisać rysunku %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="992"/>
+        <location filename="../src/app/shell/workspace.cpp" line="993"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1050"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1071"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1051"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1072"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="330"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1201"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1202"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1204"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1205"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
@@ -15876,22 +15876,22 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1218"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1219"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1233"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1234"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1264"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1265"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacequery.cpp" line="178"/>
+        <location filename="../src/app/shell/workspacequery.cpp" line="233"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="200"/>
         <source>No notebook is open.</source>
         <translation>Nie otwarto notatnika.</translation>

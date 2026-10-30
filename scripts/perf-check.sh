@@ -50,6 +50,8 @@ guards_full=(
   "bench_index:suggestBlocks:10000 notes 'kawa ogród'"
   "bench_index:suggestPages:10000 notes 'stro'"
   "bench_index:memory:10000 notes + search index"
+  # every save's fan-out as the app runs it: the index's patched lists and the consumers' caches
+  # (L3); the free functions' "(stateless)" rows are beside it in the suite
   "bench_reminders:afterEdit:mixed vault 10000 notes, update + all consumers"
   "bench_markdown:blockDocOps:5000 blocks keystroke"
   "bench_markdown:blockDocOps:5000 blocks undo+redo"

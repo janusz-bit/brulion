@@ -1,9 +1,12 @@
 // Internal helpers of the index module: name collation, excerpts, edit distance, name ranking,
-// link targets, the compact path sets of the lookup maps.
+// link targets, the compact path sets of the lookup maps; the derived lists patched instead of
+// built again, and the change log (changesSince()).
+#include "index/notecache.h"
 #include "index/resolve_p.h"
 #include "index/smallsets_p.h"
 #include "index/suggest_p.h"
 #include "index/textutil_p.h"
+#include "index/vaultindex_p.h"
 
 #include "text/text.h"
 #include "util/paths.h"
@@ -14,6 +17,9 @@
 #include <algorithm>
 
 using namespace brulion::index_detail;
+using brulion::IndexChanges;
+using brulion::VaultConfig;
+using brulion::VaultIndex;
 using brulion::VaultPath;
 using namespace Qt::StringLiterals;
 
@@ -741,6 +747,240 @@ private Q_SLOTS:
         QVERIFY(!isPageTarget(u"a#b.png"_s, TargetForm::Parsed));
         QCOMPARE(pickBest({u"b/Note.md"_s, u"a/Note.md"_s, u"long/Note.md"_s}), u"a/Note.md"_s);
         QCOMPARE(pickBest({}), QString());
+    }
+
+    // An edit that keeps the note's tags patches every list read before instead of building it
+    // again; the lists equal a fresh index's.
+    void listsArePatchedNotRebuilt()
+    {
+        const QHash<QString, QString> start = {
+                {u"journals/2026-10-14.md"_s,
+                 u"- [ ] zadanie 📅 2026-10-15 #praca\n- przypomnienie ⏰ 2026-10-16 10:00\n"_s},
+                {u"Żółw.md"_s, u"- [x] karmienie #zwierzęta\n```query\ntag:praca\n```\n"_s},
+                {u"Dom.md"_s, u"---\nstatus: aktywny\n---\n- [ ] malowanie ⏰ 2026-10-20 18:00\n"_s},
+                {u"zebra.md"_s, u"- tekst o Żółw\n"_s},
+        };
+        VaultIndex index;
+        for (auto it = start.cbegin(); it != start.cend(); ++it)
+            index.update(it.key(), it.value());
+        const auto readAll = [](const VaultIndex &i) {
+            QStringList out = i.paths();
+            for (const brulion::TaskRef &t : i.tasks())
+                out << t.path + u':' + QString::number(t.task.line) + u':' + t.task.text;
+            for (const brulion::ReminderRef &r : i.reminders())
+                out << r.path + u':' + r.reminder.at.toString() + u':' + r.reminder.text;
+            for (const brulion::JournalRef &j : i.journals())
+                out << j.date.toString(Qt::ISODate) + j.path;
+            for (const brulion::TagCount &t : i.tags())
+                out << t.tag + u'=' + QString::number(t.count) + t.display;
+            out << i.notesWithQueries();
+            for (const brulion::PropertyKeyInfo &k : i.propertyKeys())
+                out << k.key + QString::number(k.count);
+            out << QString::number(i.unlinkedReferences(u"Żółw.md"_s).size()); // byRelevance
+            return out;
+        };
+        readAll(index);
+        const QStringList lists = {u"sorted"_s,   u"byRelevance"_s, u"paths"_s,      u"tasks"_s,       u"reminders"_s,
+                                   u"journals"_s, u"tags"_s,        u"queryNotes"_s, u"propertyKeys"_s};
+        const auto counts = [&] {
+            QList<int> out;
+            for (const QString &l : lists)
+                out << IndexAccess::buildCount(index, l.toStdString());
+            return out;
+        };
+        const QList<int> built = counts();
+        for (const int c : built)
+            QCOMPARE(c, 1);
+        QCOMPARE(IndexAccess::buildCount(index, "no such list"), -1);
+
+        // Text edits keeping the tags and properties; a new task and a reminder.
+        QHash<QString, QString> files = start;
+        files.insert(u"journals/2026-10-14.md"_s,
+                     u"- [ ] zadanie zmienione 📅 2026-10-15 #praca\n- [ ] nowe ⏰ 2026-10-14 08:00\n"
+                     u"- przypomnienie ⏰ 2026-10-16 10:00\n"_s);
+        files.insert(u"Dom.md"_s, u"---\nstatus: aktywny\n---\n- [/] malowanie salonu ⏰ 2026-10-20 18:00\n"_s);
+        for (const QString &p : {u"journals/2026-10-14.md"_s, u"Dom.md"_s})
+            index.update(p, files.value(p));
+        const QStringList patched = readAll(index);
+        QCOMPARE(counts(), built);
+        VaultIndex fresh;
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+            fresh.update(it.key(), it.value());
+        QCOMPARE(patched, readAll(fresh));
+
+        // A new note and a removed one: patched too (tags change: built again).
+        files.insert(u"Ąbc.md"_s, u"- [ ] w nowej notatce\n"_s);
+        index.update(u"Ąbc.md"_s, files.value(u"Ąbc.md"_s));
+        files.remove(u"zebra.md"_s);
+        index.remove(u"zebra.md"_s);
+        files.insert(u"Żółw.md"_s, u"- [x] karmienie #zwierzeta\n"_s); // tag spelling and the query gone
+        index.update(u"Żółw.md"_s, files.value(u"Żółw.md"_s));
+        VaultIndex fresh2;
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+            fresh2.update(it.key(), it.value());
+        QCOMPARE(readAll(index), readAll(fresh2));
+        const QList<int> after = counts();
+        for (qsizetype i = 0; i < lists.size(); ++i)
+            QCOMPARE(after[i], built[i] + (lists[i] == u"tags" ? 1 : 0));
+
+        // Many changes nobody reads (a bulk load): dropped, built once at the next read.
+        for (int i = 0; i < MaxUnreadPatches + 5; ++i) {
+            files.insert(u"bulk/%1.md"_s.arg(i), u"- [ ] zadanie %1\n"_s.arg(i));
+            index.update(u"bulk/%1.md"_s.arg(i), files.value(u"bulk/%1.md"_s.arg(i)));
+        }
+        VaultIndex fresh3;
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+            fresh3.update(it.key(), it.value());
+        QCOMPARE(readAll(index), readAll(fresh3));
+        QCOMPARE(IndexAccess::buildCount(index, "tasks"), built[lists.indexOf(u"tasks"_s)] + 1);
+    }
+
+    // NoteCache: per-note values follow the index (full sync, the changed notes only, removed
+    // notes dropped); a fill gives the same values as computing note by note; forEachNote() visits
+    // the notes in path order.
+    void noteCacheFollowsTheIndex()
+    {
+        VaultIndex index;
+        index.update(u"b.md"_s, u"- [ ] jeden\n- [ ] dwa\n"_s);
+        index.update(u"a.md"_s, u"- bez zadań\n"_s);
+        index.update(u"Ż.md"_s, u"- [x] żółw\n"_s);
+        QStringList visited;
+        index.forEachNote([&](const VaultPath &path, const brulion::ParsedNote &) { visited << path; });
+        QCOMPARE(visited, index.paths());
+        const auto compute = [](const VaultPath &, const brulion::ParsedNote &note) { return int(note.tasks.size()); };
+        const auto keep = [](int count) { return count > 0; };
+        const auto fill = [&](std::map<VaultPath, int> &values) {
+            for (const brulion::TaskRef &t : index.tasks())
+                ++values[t.path];
+        };
+        const auto describe = [](const std::map<VaultPath, int> &values) {
+            QStringList out;
+            for (const auto &[path, count] : values)
+                out << path + u'=' + QString::number(count);
+            return out;
+        };
+        brulion::NoteCache<int> plain;
+        brulion::NoteCache<int> filled;
+        QVERIFY(plain.sync(index, u"k"_s, false, compute, keep).full);
+        QVERIFY(filled.sync(index, u"k"_s, false, compute, keep, fill).full);
+        QCOMPARE(describe(plain.values()), (QStringList{u"b.md=2"_s, u"Ż.md=1"_s}));
+        QCOMPARE(describe(filled.values()), describe(plain.values()));
+        QVERIFY(!plain.sync(index, u"k"_s, false, compute, keep).any());
+
+        index.update(u"a.md"_s, u"- [ ] teraz z zadaniem\n"_s);
+        index.remove(u"Ż.md"_s);
+        brulion::NoteCacheSync s = plain.sync(index, u"k"_s, false, compute, keep);
+        QVERIFY(!s.full);
+        QCOMPARE(s.changed, (QList<VaultPath>{u"a.md"_s, u"Ż.md"_s}));
+        QCOMPARE(describe(plain.values()), (QStringList{u"a.md=1"_s, u"b.md=2"_s}));
+        QVERIFY(!filled.sync(index, u"k"_s, false, compute, keep, fill).full);
+        QCOMPARE(describe(filled.values()), describe(plain.values()));
+        // Names changed (a note came and went): full for a consumer that resolves names.
+        QVERIFY(plain.sync(index, u"k"_s, true, compute, keep).full == false);
+        index.update(u"c.md"_s, u"- [ ] nowa\n"_s);
+        QVERIFY(plain.sync(index, u"k"_s, true, compute, keep).full);
+        // Another key, clear(): full.
+        QVERIFY(plain.sync(index, u"inny"_s, true, compute, keep).full);
+        plain.clear();
+        QVERIFY(plain.values().empty());
+        QVERIFY(plain.sync(index, u"inny"_s, true, compute, keep).full);
+        QCOMPARE(describe(plain.values()), (QStringList{u"a.md=1"_s, u"b.md=2"_s, u"c.md=1"_s}));
+    }
+
+    void changesSince()
+    {
+        VaultIndex index;
+        QCOMPARE(index.changesSince(0).complete, true);
+        QVERIFY(index.changesSince(0).notes.isEmpty());
+        QVERIFY(!index.changesSince(1).complete); // a future version
+        QVERIFY(!index.changesSince(-1).complete);
+        VaultIndex other;
+        QVERIFY(index.serial() != other.serial());
+
+        // A new note: names change.
+        int v = index.version();
+        index.update(u"Żółw.md"_s, u"- tekst ^blok\n- [[Brak]]\n"_s);
+        IndexChanges c = index.changesSince(v);
+        QVERIFY(c.complete);
+        QCOMPARE(c.notes, QList<VaultPath>({u"Żółw.md"_s}));
+        QVERIFY(c.names);
+        QCOMPARE(index.changesSince(index.version()).complete, true);
+        QVERIFY(index.changesSince(index.version()).notes.isEmpty());
+
+        // An edit keeping the names: just the note; with dependents through ((id)).
+        index.update(u"Ala.md"_s, u"- pokazuje ((blok))\n"_s);
+        index.update(u"Ola.md"_s, u"- nic\n"_s);
+        v = index.version();
+        index.update(u"Żółw.md"_s, u"- tekst zmieniony ^blok\n- [[Brak]]\n"_s);
+        c = index.changesSince(v);
+        QCOMPARE(c.notes, QList<VaultPath>({u"Ala.md"_s, u"Żółw.md"_s}));
+        QVERIFY(!c.names);
+        index.update(u"Żółw.md"_s, u"- tekst zmieniony ^blok\n- [[Brak]]\n"_s); // unchanged: no-op
+        QCOMPARE(index.changesSince(v).notes, c.notes);
+
+        // A relink: [[Brak]] resolves once Brak.md appears.
+        v = index.version();
+        index.update(u"Brak.md"_s, u"- jestem\n"_s);
+        c = index.changesSince(v);
+        QCOMPARE(c.notes, QList<VaultPath>({u"Brak.md"_s, u"Żółw.md"_s}));
+        QVERIFY(c.names);
+
+        // Aliases change names; a duplicate block id with a smaller path takes the block over.
+        v = index.version();
+        index.update(u"Ola.md"_s, u"---\naliases: [Ała]\n---\n- nic\n"_s);
+        QVERIFY(index.changesSince(v).names);
+        v = index.version();
+        index.update(u"A.md"_s, u"- inny ^blok\n"_s);
+        c = index.changesSince(v);
+        QVERIFY(c.notes.contains(u"Ala.md"_s));
+        QCOMPARE(index.blockById(u"blok"_s)->path, u"A.md"_s);
+
+        // Removal and rename: names, both paths.
+        v = index.version();
+        index.remove(u"Ola.md"_s);
+        c = index.changesSince(v);
+        QCOMPARE(c.notes, QList<VaultPath>({u"Ola.md"_s}));
+        QVERIFY(c.names);
+        v = index.version();
+        index.rename(u"Brak.md"_s, u"x/Nowy.md"_s, u"- jestem\n"_s);
+        c = index.changesSince(v);
+        QCOMPARE(c.notes, QList<VaultPath>({u"Brak.md"_s, u"x/Nowy.md"_s, u"Żółw.md"_s}));
+        QVERIFY(c.names);
+
+        // Attachments: names, no notes unless a link now resolves.
+        v = index.version();
+        index.update(u"zdjęcie.png"_s, QString());
+        c = index.changesSince(v);
+        QVERIFY(c.complete && c.names);
+        QVERIFY(c.notes.isEmpty());
+
+        // Accumulated: the union since an older version.
+        const int older = index.version();
+        index.update(u"Ala.md"_s, u"- inaczej\n"_s);
+        index.update(u"A.md"_s, u"- znowu ^blok\n"_s);
+        c = index.changesSince(older);
+        QCOMPARE(c.notes, QList<VaultPath>({u"A.md"_s, u"Ala.md"_s}));
+        QVERIFY(!c.names);
+
+        // A config change that parses again, clear(), and a log that no longer reaches back.
+        v = index.version();
+        VaultConfig config;
+        config.journalsFolder = u"dziennik"_s;
+        index.setConfig(config);
+        QVERIFY(!index.changesSince(v).complete);
+        QVERIFY(index.changesSince(index.version()).complete);
+        v = index.version();
+        config.newPagesFolder = u"strony"_s; // parsing unchanged: no change
+        index.setConfig(config);
+        QCOMPARE(index.version(), v);
+        index.clear();
+        QVERIFY(!index.changesSince(v).complete);
+        v = index.version();
+        for (int i = 0; i <= VaultIndex::MaxLoggedChanges; ++i)
+            index.update(u"n.md"_s, u"- wersja %1\n"_s.arg(i));
+        QVERIFY(!index.changesSince(v).complete);
+        QVERIFY(index.changesSince(v + 1).complete);
+        QCOMPARE(index.changesSince(v + 1).notes, QList<VaultPath>({u"n.md"_s}));
     }
 };
 
