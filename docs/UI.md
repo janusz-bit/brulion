@@ -477,7 +477,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `trash` | `TrashView` | — |
 | `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled | `section?` |
 | `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
-| `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path` |
+| `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path`, `open?` (screenshots: `style`, `more`, `paper`, `theme`, `shape`, `select`, `backdrop` — the page picker of the backdrop's PDF) |
 
 `OnboardingView` is shown before a notebook is open (pick or create a folder, or the sample
 notebook "Przykładowy brulion").
@@ -587,7 +587,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   ("Task: to do" … "Task: no status"; also found as todo, doing, done, czeka, odłożone, waiting,
   anulowane, cancel, bez statusu…), Przypomnienie…, Alarm…, Termin…, Zaplanuj…, Powtarzaj…, Dziś,
   Jutro, Data…, Tabela, Obliczenia, Zapytanie, Nagłówek 1–3, Cytat, Callout, Kod, Wzór
-  matematyczny, Szablon…, Obraz…, Rysunek (a new drawing, opened in the drawing editor), Osadź,
+  matematyczny, Szablon…, Obraz…, Rysunek (a new drawing, opened in the drawing editor), Rysunek na
+  obrazie lub PDF… (drawings on a picture or a PDF's pages: "Drawing editor" → Backdrop), Osadź,
   Odwołanie do bloku, Priorytet wysoki / niski, Linia
   pozioma, Aktualna godzina. Under each name: the syntax it writes ("⏰ data godzina", "- [ ]
   zadanie", "blok ```calc"). A status command sets the status of the block being edited
