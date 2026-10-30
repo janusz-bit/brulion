@@ -33,8 +33,8 @@
 //    Qt 5's pointer type 3 and its barrel button BUTTON_STYLUS_PRIMARY as ExtraButton3). The
 //    release's pressure (0: the pen lifted) is not the line's: it ends with the pressure it had.
 //    Qt Quick gives tablet events only to pointer handlers, and Qt makes mouse events of the
-//    unhandled ones only on some platforms (X11, the browser; not Android, whose stylus would
-//    never reach an item): the canvas takes the tablet events from its window (an event filter)
+//    unhandled ones (X11, the browser, Android: a line without pressure, as a mouse draws it):
+//    the canvas takes the tablet events from its window (an event filter)
 //    when it is the topmost item taking input under the pen — not under a popup, a toast or a
 //    bar (Qt Quick Controls' overlay itself only where a popup is or an item in it takes input),
 //    nor while a modal popup is open —, so no mouse events are made of

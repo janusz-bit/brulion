@@ -1225,8 +1225,9 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   kartkę zamiast rysować. Plik rysunku jest czytany po każdym kroku; zrzuty `st-*.png`.
   Sprawdzone 2026-10-30 (Android 16, Pixel 6). Test (i testy w przeglądarkach, docs/WEB.md „Rysik
   (nacisk)”) znalazł błędy, poprawione i sprawdzane w `tst_drawingcanvas`: host powiadomień
-  w warstwie popupów zasłaniał kartkę przed rysikiem w całej aplikacji (rysik nie rysował wcale albo
-  rysował jak mysz); Qt for Android podaje typ wskaźnika wartościami Qt 5 (pióro 1, gumka 3 — w Qt 6
+  w warstwie popupów zasłaniał kartkę przed rysikiem w całej aplikacji (rysik rysował jak mysz —
+  bez nacisku — a palec po rysiku dalej rysował; ten tryb z APK sprzed poprawki, 2026-10-30:
+  linia bez nacisku, gumka i przycisk boczny nie ścierały); Qt for Android podaje typ wskaźnika wartościami Qt 5 (pióro 1, gumka 3 — w Qt 6
   to nie `Eraser`), więc gumka rysowała, a przycisk boczny (`BUTTON_STYLUS_PRIMARY`) podaje jako
   `Qt::ExtraButton3`; zdarzenie podniesienia ma nacisk 0 i leży o piksel obok ostatniego ruchu
   (Android próbkuje ruchy na nowo), więc każda linia kończyła się naciskiem 0, a linia z jednym

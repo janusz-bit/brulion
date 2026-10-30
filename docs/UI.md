@@ -1060,8 +1060,9 @@ and diagrams (shapes, arrows, text), on every platform.
     Qt 5's pointer type 3 and passes `BUTTON_STYLUS_PRIMARY` as `Qt::ExtraButton3`). The pen's
     release reports pressure 0 (on Android a pixel beside the last move): a line ends with the
     pressure it had. Qt Quick hands an item no tablet events (only pointer handlers
-    get them, and Qt makes mouse events of the unhandled ones only on some platforms — not on
-    Android), so the canvas takes the stylus's tablet events from its window (an event filter) when
+    get them, and Qt makes mouse events of the unhandled ones — X11, the browser and Android too:
+    a line without pressure, as a mouse draws it), so the canvas takes the stylus's tablet events
+    from its window (an event filter) when
     it is the topmost item taking input under the pen: a menu, a popup, a toast or a bar over it
     gets the pen as before, and so does any modal popup that is open (the drawer opened). Qt Quick
     Controls' popup layer (`QQuickOverlay`), visible over the whole window whenever a Drawer exists
