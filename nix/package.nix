@@ -8,7 +8,9 @@
   stdenv,
   cmake,
   ninja,
+  pkg-config,
   qt6,
+  kdePackages,
   appstream,
   desktop-file-utils,
   tzdata,
@@ -40,6 +42,8 @@ stdenv.mkDerivation (finalAttrs: {
     ninja
     qt6.wrapQtAppsHook
     qt6.qttools
+    # poppler-qt6 is found through pkg-config (src/platform/CMakeLists.txt).
+    pkg-config
   ];
 
   buildInputs = [
@@ -49,6 +53,9 @@ stdenv.mkDerivation (finalAttrs: {
     # Qt's own Polish texts (dialog buttons, file dialogs): bundled into the app as resources
     # (also found by the dev shell, which takes its inputs from here).
     qt6.qttranslations
+    # PDF pages as a drawing's backdrop (src/platform/pdfpages_poppler.cpp): nixpkgs has Qt PDF only
+    # inside QtWebEngine (+615 MiB); poppler-qt6 adds some 26 MiB (docs/PERFORMANCE.md "Rozmiar").
+    kdePackages.poppler
   ]
   ++ lib.optionals stdenv.hostPlatform.isLinux [ qt6.qtwayland ];
 

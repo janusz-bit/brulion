@@ -33,13 +33,22 @@
 // elements: `p` the paper, `r` the rules, `k<n>` what is filled with ink — a pen stroke, text, a
 // filled arrowhead — (one per colour, first use first), `s<n>` what is stroked (outlines, hatch
 // lines), `f<n>` a shape's fill, `h<n>` a highlighter stroke (one per opacity in the dark).
+//
+// A drawing with a backdrop (backdrop.h: a slide, a PDF page under the ink) is drawn so the ink
+// stays readable on it: Auto gets no style sheet (a browser that turned only the ink light would
+// lose it on the light slide); Dark shows the backdrop dark ("document dark", the app's darkImage():
+// core cannot change pixels) only when the app passes that raster (SvgOptions::pictureImages) —
+// without it (a writer without Qt GUI: the Nextcloud merge, an import, brulion-cli) the picture is
+// the Light one, the scene keeps `brulionTheme: dark` and Brulion's next save writes it dark.
 #pragma once
 
 #include "drawing/drawing.h"
 
 #include <QByteArray>
 #include <QByteArrayView>
+#include <QHash>
 #include <QJsonObject>
+#include <QString>
 
 #include <optional>
 
@@ -51,9 +60,16 @@ inline constexpr double SvgMargin = 16;
 inline constexpr int EmptyWidth = 320;
 inline constexpr int EmptyHeight = 180;
 
+/// What the app adds to a drawing's picture.
+struct SvgOptions {
+    /// Pictures shown instead of the image elements' own (file id → a data URL of safeDataUrl()'s
+    /// kinds; others are ignored): the dark raster of a Dark drawing's backdrop.
+    QHash<QString, QString> pictureImages;
+};
+
 /// The file of a drawing (UTF-8). Foreign elements are kept in the scene but not drawn: write only
 /// editable() drawings.
-QByteArray toSvg(const Drawing &drawing);
+QByteArray toSvg(const Drawing &drawing, const SvgOptions &options = {});
 /// The scene area the picture shows (its root's width and height): the elements' bounds plus
 /// SvgMargin, out to whole units — 0, 0, EmptyWidth × EmptyHeight for a drawing without elements.
 QRectF pictureRect(const Drawing &drawing);
@@ -87,6 +103,8 @@ QString safeColor(const QString &color, const QString &fallback);
 /// The data URL of the picture `fileId` in a scene's files when it is one Brulion draws: a base64
 /// PNG, JPEG, GIF, WebP or SVG ("" anything else — a picture's placeholder is drawn instead).
 QString safeDataUrl(const QJsonObject &files, const QString &fileId);
+/// `url` when it is such a data URL, else "".
+QString safeImageDataUrl(const QString &url);
 /// The CSS font-family of Excalidraw's font family (1 Virgil, 2 Helvetica, 3 Cascadia,
 /// 5 Excalifont, 6 Nunito, 7 Lilita One, 8 Comic Shanns, 9 Liberation Sans; others sans-serif) —
 /// constants, never text from a scene.

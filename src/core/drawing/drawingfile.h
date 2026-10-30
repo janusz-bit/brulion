@@ -11,6 +11,7 @@
 
 #include "drawing/drawing.h"
 #include "drawing/excalidrawmd.h"
+#include "drawing/svgwrite.h"
 
 #include <QByteArrayView>
 #include <QString>
@@ -41,11 +42,12 @@ struct DrawingFile {
 /// be read).
 std::optional<DrawingFile> readDrawingFile(QByteArrayView bytes, ReadError *error = nullptr);
 
-/// The file of `drawing` in `file`'s format: Svg — toSvg(); Excalidraw — the scene as Excalidraw
-/// writes it (JSON with two spaces, "type", "version", "source", "elements", "appState", "files"
-/// in that order, a line break at the end); ExcalidrawMarkdown —
+/// The file of `drawing` in `file`'s format: Svg — toSvg(drawing, options); Excalidraw — the scene
+/// as Excalidraw writes it (JSON with two spaces, "type", "version", "source", "elements",
+/// "appState", "files" in that order, a line break at the end); ExcalidrawMarkdown —
 /// writeExcalidrawMarkdown(*file.markdown, drawing, now). Empty when `file` is not writable.
-QByteArray writeDrawingFile(const DrawingFile &file, const Drawing &drawing, qint64 now = 0);
+QByteArray writeDrawingFile(const DrawingFile &file, const Drawing &drawing, qint64 now = 0,
+                            const SvgOptions &options = {});
 
 /// A drawing file by its name and its start (HeadBytes): ".svg" with an embedded scene,
 /// ".excalidraw" with a scene's JSON, ".md" with the plugin's frontmatter key. Cheap: for lists.

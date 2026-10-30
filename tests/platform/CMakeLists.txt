@@ -6,3 +6,7 @@ brulion_add_test(tst_autostart SOURCES tst_autostart.cpp LIBS brulion_platform)
 # read or skipped above the limit, the reading stopped at the pick's total, an empty file, a
 # cancel — pure, so tested on every platform.
 brulion_add_test(tst_pickedfiles SOURCES tst_pickedfiles.cpp LIBS brulion_platform)
+# PDF pages as pictures (pdfpages.h) with this build's backend (poppler in the Nix dev shell, Qt PDF
+# on CI and Windows; none in the browser: skipped): a PDF written with QPdfWriter read and drawn,
+# broken and missing files refused.
+brulion_add_test(tst_pdfpages SOURCES tst_pdfpages.cpp LIBS brulion_platform)

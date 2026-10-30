@@ -1,5 +1,6 @@
 #include "drawing/svgwrite.h"
 
+#include "drawing/backdrop.h"
 #include "drawing/excalidraw.h"
 #include "drawing/geometry.h"
 #include "drawing/palette.h"
@@ -159,7 +160,11 @@ QString safeDataUrl(const QJsonObject &files, const QString &fileId)
 {
     if (fileId.isEmpty())
         return {};
-    const QString url = files.value(fileId).toObject().value(u"dataURL"_s).toString();
+    return safeImageDataUrl(files.value(fileId).toObject().value(u"dataURL"_s).toString());
+}
+
+QString safeImageDataUrl(const QString &url)
+{
     static const QStringList types = {u"png"_s, u"jpeg"_s, u"gif"_s, u"webp"_s, u"svg+xml"_s};
     for (const QString &type : types) {
         const QString prefix = u"data:image/"_s + type + u";base64,"_s;
@@ -197,7 +202,7 @@ bool isMonospaceFamily(int family)
     return family == 3 || family == 8;
 }
 
-QByteArray toSvg(const Drawing &drawing)
+QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
 {
     const QRectF picture = pictureRect(drawing);
     const double left = picture.left();
@@ -210,9 +215,16 @@ QByteArray toSvg(const Drawing &drawing)
     const double dy = -top;
     const QString w = QString::number(width);
     const QString h = QString::number(height);
-    // Light and Auto: the colours as drawn in the attributes; Dark: the dark theme's.
-    const bool dark = drawing.theme == PaperTheme::Dark;
-    const bool autoTheme = drawing.theme == PaperTheme::Auto;
+    // A backdrop (backdrop.h) and the dark raster of it the app passed, if any.
+    const qsizetype backdrop = backdropIndex(drawing);
+    const QString darkBackdrop = backdrop >= 0 && drawing.theme == PaperTheme::Dark
+                                         ? safeImageDataUrl(options.pictureImages.value(drawing.strokes.first().fileId))
+                                         : QString();
+    // Light and Auto: the colours as drawn in the attributes; Dark: the dark theme's — with a
+    // backdrop only when its dark raster is there (else the Light picture: never light ink over a
+    // light slide). Auto with a backdrop: no style sheet (svgwrite.h).
+    const bool dark = drawing.theme == PaperTheme::Dark && (backdrop < 0 || !darkBackdrop.isEmpty());
+    const bool autoTheme = drawing.theme == PaperTheme::Auto && backdrop < 0;
 
     const bool images = std::any_of(drawing.strokes.cbegin(), drawing.strokes.cend(),
                                     [](const Stroke &s) { return s.type == ElementType::Image; });
@@ -290,7 +302,8 @@ QByteArray toSvg(const Drawing &drawing)
     };
     // (The drawing's hatch lines counted: geometry.h DrawingHatchLines.)
     qsizetype hatchBudget = DrawingHatchLines;
-    for (const Stroke &s : drawing.strokes) {
+    for (qsizetype index = 0; index < drawing.strokes.size(); ++index) {
+        const Stroke &s = drawing.strokes.at(index);
         const QString color = safeColor(s.color, FallbackInk.toString());
         const QString fillColor = s.fill.trimmed() == u"transparent" ? QString() : safeColor(s.fill, QString());
         const int opacity = std::clamp(s.opacity, 0, 100);
@@ -398,7 +411,8 @@ QByteArray toSvg(const Drawing &drawing)
             const QString box = u"x=\""_s + formatNumber(s.box.x() + dx) + u"\" y=\""_s + formatNumber(s.box.y() + dy)
                                 + u"\" width=\""_s + formatNumber(s.box.width()) + u"\" height=\""_s
                                 + formatNumber(s.box.height()) + u'"';
-            const QString url = safeDataUrl(drawing.files, s.fileId);
+            // (The backdrop of a Dark drawing: its dark raster; other pictures keep their colours.)
+            const QString url = index == backdrop && dark ? darkBackdrop : safeDataUrl(drawing.files, s.fileId);
             if (!url.isEmpty()) {
                 part += u"<image "_s + box + u" preserveAspectRatio=\"none\" xlink:href=\""_s + url + u"\"/>\n"_s;
             } else {
