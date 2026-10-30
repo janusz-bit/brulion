@@ -20,12 +20,22 @@ using brulion::shell::Workspace;
 
 namespace {
 
-/// Write like another program (atomic replace, as Syncthing and brulion-cli do).
+/// Write like another program (atomic replace, as Syncthing and brulion-cli do). Windows may refuse
+/// the replace for a moment while something else has the file open (a virus scanner after the
+/// app's read): retried, as those programs retry, and the reason logged when it stays refused.
 bool writeBehind(const QString &file, const QByteArray &bytes)
 {
     QDir().mkpath(QFileInfo(file).absolutePath());
-    QSaveFile f(file);
-    return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size() && f.commit();
+    QString error;
+    for (int attempt = 0; attempt < 20; ++attempt) {
+        QSaveFile f(file);
+        if (f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size() && f.commit())
+            return true;
+        error = f.errorString();
+        QTest::qWait(50);
+    }
+    qWarning("writeBehind %s: %s", qPrintable(file), qPrintable(error));
+    return false;
 }
 
 QByteArray readRaw(const QString &file)
