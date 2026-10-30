@@ -31,6 +31,8 @@ BTextField {
     property var keyFilter: null
     /// The list is shown (the field has the focus and there is something to suggest).
     readonly property bool listShown: popupLoader.item !== null && (popupLoader.item as T.Popup).opened
+    /// The list's popup (null until first shown; self-tests check where it is).
+    readonly property T.Popup suggestionPopup: popupLoader.item as T.Popup
     readonly property real rowHeight: Theme.touchUi ? 44 : 32
 
     /// A suggestion was chosen: its value (or title).
