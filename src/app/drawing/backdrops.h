@@ -65,7 +65,8 @@ public:
     Q_INVOKABLE void cancel(int job);
     /// The sentence for a prepared item's error code (backdropimage.h backdroperror).
     Q_INVOKABLE QString errorText(const QString &code) const;
-    /// The pages a user typed ("1-3, 7", "wszystkie"; drawing::parsePageRanges) and back
+    /// The pages a user typed ("1-3, 7", "wszystkie"; drawing::parsePageRanges — one more than
+    /// MaxPagesPerInsert at most, so the dialog can say the text named too many) and back
     /// (drawing::formatPageRanges).
     Q_INVOKABLE QList<int> parsePages(const QString &text, int count) const;
     Q_INVOKABLE QString formatPages(const QList<int> &pages) const;

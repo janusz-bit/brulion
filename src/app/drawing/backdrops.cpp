@@ -76,7 +76,8 @@ void DrawingBackdrops::setImporter(std::function<QString(const QString &, const 
 
 QList<int> DrawingBackdrops::parsePages(const QString &text, int count) const
 {
-    return drawing::parsePageRanges(text, count);
+    // (One more than taken: the dialog says when the text named too many.)
+    return drawing::parsePageRanges(text, count, drawing::MaxPagesPerInsert + 1);
 }
 
 QString DrawingBackdrops::formatPages(const QList<int> &pages) const

@@ -92,8 +92,9 @@ bool setBackdrop(Drawing &d, const BackdropImage &image, const BackdropSource &s
 bool removeBackdrop(Drawing &d);
 /// The pages a user typed out of `count`: "1-3, 7"; "3–1" (en dash; reversed); "wszystkie",
 /// "all" or "*" — every page. Sorted, unique, within 1…count (a range is clipped to it), the first
-/// MaxPagesPerInsert of them; parts that are no number or range are ignored.
-QList<int> parsePageRanges(QStringView text, int count);
+/// `limit` of them (a caller may ask for one more to tell that the text named too many); parts
+/// that are no number or range are ignored.
+QList<int> parsePageRanges(QStringView text, int count, int limit = MaxPagesPerInsert);
 /// Sorted unique pages as a user would type them: runs of three or more as ranges ("1-3, 7, 9-10"
 /// → "1-3, 7, 9, 10"); "" for none. parsePageRanges() reads it back.
 QString formatPageRanges(const QList<int> &pages);

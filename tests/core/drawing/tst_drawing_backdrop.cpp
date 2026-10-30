@@ -134,6 +134,8 @@ private Q_SLOTS:
     void hostileBackdrop();
     void parsePageRanges_data();
     void parsePageRanges();
+    void formatPageRanges_data();
+    void formatPageRanges();
     void svgThemeWithBackdrop_data();
     void svgThemeWithBackdrop();
     void reorderKeepsBackdropAtBottom();
@@ -462,6 +464,32 @@ void TestDrawingBackdrop::parsePageRanges()
     QFETCH(int, count);
     QFETCH(QList<int>, expected);
     QCOMPARE(brulion::drawing::parsePageRanges(text, count), expected);
+    // Written back and read again: the same pages.
+    QCOMPARE(brulion::drawing::parsePageRanges(brulion::drawing::formatPageRanges(expected), count), expected);
+    // One more than the cap (the dialog's "Najwyżej 60 stron naraz"), or a smaller cap.
+    const QList<int> more = brulion::drawing::parsePageRanges(text, count, MaxPagesPerInsert + 1);
+    QCOMPARE(more.mid(0, MaxPagesPerInsert), expected);
+    QVERIFY(more.size() <= MaxPagesPerInsert + 1);
+    QCOMPARE(brulion::drawing::parsePageRanges(text, count, 2), expected.mid(0, 2));
+    QVERIFY(brulion::drawing::parsePageRanges(text, count, 0).isEmpty());
+}
+
+void TestDrawingBackdrop::formatPageRanges_data()
+{
+    QTest::addColumn<QList<int>>("pages");
+    QTest::addColumn<QString>("expected");
+    QTest::newRow("none") << QList<int>{} << QString();
+    QTest::newRow("one") << QList<int>{4} << u"4"_s;
+    QTest::newRow("two in a row: no range") << QList<int>{1, 2} << u"1, 2"_s;
+    QTest::newRow("a run and a page") << QList<int>{1, 2, 3, 7} << u"1-3, 7"_s;
+    QTest::newRow("unsorted, duplicates, bad") << QList<int>{9, 3, 2, 3, 1, 0, -5, 10} << u"1-3, 9, 10"_s;
+}
+
+void TestDrawingBackdrop::formatPageRanges()
+{
+    QFETCH(QList<int>, pages);
+    QFETCH(QString, expected);
+    QCOMPARE(brulion::drawing::formatPageRanges(pages), expected);
 }
 
 void TestDrawingBackdrop::svgThemeWithBackdrop_data()

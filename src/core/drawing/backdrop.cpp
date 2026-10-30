@@ -186,18 +186,18 @@ bool removeBackdrop(Drawing &d)
     return true;
 }
 
-QList<int> parsePageRanges(QStringView text, int count)
+QList<int> parsePageRanges(QStringView text, int count, int limit)
 {
-    if (count <= 0)
+    if (count <= 0 || limit <= 0)
         return {};
     const QString lower = text.trimmed().toString().toLower();
-    // The lowest MaxPagesPerInsert pages named (a huge range stops as soon as it cannot add any).
+    // The lowest `limit` pages named (a huge range stops as soon as it cannot add any).
     std::set<int> pages;
-    const auto add = [&pages](int p) {
-        if (int(pages.size()) >= MaxPagesPerInsert && p > *pages.rbegin())
+    const auto add = [&pages, limit](int p) {
+        if (int(pages.size()) >= limit && p > *pages.rbegin())
             return false;
         pages.insert(p);
-        if (int(pages.size()) > MaxPagesPerInsert)
+        if (int(pages.size()) > limit)
             pages.erase(std::prev(pages.end()));
         return true;
     };

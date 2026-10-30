@@ -3177,7 +3177,9 @@ private Q_SLOTS:
         } else if (kind == u"wykres.svg") {
             QFile f(file);
             QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(R"(<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><rect width="100" height="50" fill="#e03131"/></svg>)");
+            // (No raw string here: moc's tokenizer lost the class after this one.)
+            f.write("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\">"
+                    "<rect width=\"100\" height=\"50\" fill=\"#e03131\"/></svg>");
         } else if (kind == u"obrócone.jpg") {
             QImage image(200, 100, QImage::Format_RGB32);
             image.fill(Qt::green);
