@@ -507,7 +507,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   a changed block keeps its row (`dataChanged`: its delegate, fold, an open table-cell editor and
   a tracked handle survive — `undoKeepsChangedRowsInPlace`), only blocks the step adds or removes
   come and go, never a reset; undo costs about what the command cost (`largePageTouchesOneRow`
-  compares their medians). The caret goes back to the block and the place it had — also when the
+  compares their medians). Typing merges into one step per block (`BlockDocument::composed`); a
+  keystroke that also changed blocks far away — typing at the top of a page renumbers a loose
+  ordered list further down — stays a step of its own (`typingAfterAFarChangeIsAStepOfItsOwn`). The caret goes back to the block and the place it had — also when the
   undone step put a block at the very start of the page: Enter at the start of the first block, a
   pasted list, Alt+Up, below a hidden note-mode frontmatter (`tst_editor_controller`
   `undoOfAnInsertionAtTheStart` follows the rows as a view sees them from the model's signals).
