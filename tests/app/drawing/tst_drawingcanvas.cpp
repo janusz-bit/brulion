@@ -474,6 +474,27 @@ private Q_SLOTS:
         QCOMPARE(canvas->strokeCount(), 1);
     }
 
+    void eraserEndOfTheBrowsersPen()
+    {
+        // Qt for WebAssembly: one pen device; the eraser end is the web's button 5
+        // (`buttons & 32`), which Qt passes as ExtraButton3.
+        Pen pen(window.get());
+        pen.stroke({100, 200}, {400, 200}, 20, 0.2, 0.8);
+        QCOMPARE(canvas->strokeCount(), 1);
+        QSignalSpy history(canvas, &DrawingCanvas::historyChanged);
+        pen.stroke({250, 120}, {250, 280}, 12, 0.5, 0.5, Qt::ExtraButton3);
+        QCOMPARE(canvas->strokeCount(), 0);
+        canvas->undo(); // one step
+        QCOMPARE(canvas->strokeCount(), 1);
+        // On empty paper it draws nothing.
+        pen.stroke({100, 450}, {400, 450}, 12, 0.3, 0.9, Qt::ExtraButton3);
+        QCOMPARE(canvas->strokeCount(), 1);
+        // With the tip's button too (a browser that reports both).
+        pen.stroke({300, 120}, {300, 280}, 12, 0.5, 0.5, Qt::ExtraButton3 | Qt::LeftButton);
+        QCOMPARE(canvas->strokeCount(), 0);
+        QVERIFY(history.size() >= 2);
+    }
+
     void eraserToolWithMouse()
     {
         mouseStroke(window.get(), {100, 100}, {300, 100}, 10);

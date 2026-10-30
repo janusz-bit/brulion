@@ -979,8 +979,11 @@ bool DrawingCanvas::onTop(QPointF scenePos) const
 bool DrawingCanvas::handleTablet(QTabletEvent *event)
 {
     const QPointF pos = mapFromScene(event->position());
-    const bool eraser =
-            event->pointerType() == QPointingDevice::PointerType::Eraser || (event->buttons() & Qt::RightButton);
+    // The eraser end: Android and the desktops report an eraser device; Qt for WebAssembly has one
+    // pen device and passes the web's eraser button (button 5, `buttons & 32`) as ExtraButton3.
+    // A held barrel button (Right) erases too.
+    const bool eraser = event->pointerType() == QPointingDevice::PointerType::Eraser
+                        || (event->buttons() & (Qt::RightButton | Qt::ExtraButton3));
     const Pointer p{true, eraser, false, std::clamp(double(event->pressure()), 0.0, 1.0), event->modifiers()};
     const auto remember = [this, event] {
         m_lastTabletTime = event->timestamp();

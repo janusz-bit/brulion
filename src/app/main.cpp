@@ -58,6 +58,7 @@
 
 #ifdef Q_OS_WASM
 #include "wasm/wasmselftest.h"
+#include "webselftest.h"
 #include "wasm/wasmshare.h"
 #include "wasm/wasmshell.h"
 #include "wasm/wasmstorage.h"
@@ -459,7 +460,7 @@ int main(int argc, char *argv[])
                      });
     QObject::connect(
         &storage, &wasm::WasmStorage::ready, &engine,
-        [&storage, &controller, &createController, &startUi] {
+        [&storage, &controller, &createController, &startUi, &engine] {
             const QStringList args = QCoreApplication::arguments();
             if (args.contains(QStringLiteral("--selftest-storage")))
                 wasm::runStorageSelfTest(&storage);
@@ -469,6 +470,12 @@ int main(int argc, char *argv[])
             createController(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
                              + u"/settings.ini"_s);
             startUi();
+            // ?selftest=webpictures,pen (tests/web): pictures from the internet and the pen, in
+            // the real UI, once the notebook is open.
+            brulion::diag::startBrowserSelfTests(&engine, controller.get(), args,
+                                                 [](const char *name, const QJsonObject &result) {
+                                                     wasm::publishSelfTestResult(name, result);
+                                                 });
             wasm::hideShellLoadingScreen();
             // Private mode or blocked site data: nothing reaches IndexedDB. Say so before the
             // user writes anything — the notes would be gone with the tab.
