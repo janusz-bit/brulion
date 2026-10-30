@@ -416,6 +416,7 @@ FocusScope {
     }
     Connections {
         target: DrawingBackdrops
+        enabled: root.backdropPick > 0 || root.backdropJob > 0
         function onPicked(pick, path) {
             if (pick !== root.backdropPick)
                 return

@@ -115,6 +115,7 @@ BDialog {
 
     Connections {
         target: DrawingBackdrops
+        enabled: dialog.job !== 0
         function onProgress(job, done, total) {
             if (job === dialog.job) {
                 dialog.done = done

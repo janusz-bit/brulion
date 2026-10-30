@@ -358,6 +358,8 @@ Item {
 
     Connections {
         target: DrawingBackdrops
+        // (Every page and journal day has its editor: only the one waiting listens.)
+        enabled: root.backdropPick > 0 || root.backdropJob > 0
         function onPicked(pick, path) {
             if (pick !== root.backdropPick)
                 return
