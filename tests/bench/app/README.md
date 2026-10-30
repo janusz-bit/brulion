@@ -83,6 +83,9 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
 * `search` / `switcher`: key echo (`*_frame`) and `*_results` (key → the frame after the result
   model changed; the search field debounces 180 ms), `*_query_blocked` = GUI time blocked by
   the query.
+* `views` and `graph` activate the window first (`app_active`: an X server without a window
+  manager never focuses it, and an inactive app pauses the graph's layout — earlier runs of `views`
+  under Xvfb opened a graph that did not lay out).
 * `views`: per view and round (`r0` first open, `r1` again): `sync`, `frame`, `settled`; for the
   graph also `frames` (swapped between the navigation and settled) and `frame_p95_ms` /
   `frame_max_ms` (intervals between them).

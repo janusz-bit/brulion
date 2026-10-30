@@ -45,7 +45,7 @@ KEY = [
                             "graph_r0_stall_max", "graph_r0_frames", "graph_r0_frame_p95_ms",
                             "allPages_r0_frame_ms", "tags_r0_frame_ms", "tasks_r1_frame_ms", "calendar_r1_frame_ms",
                             "journals-after-tasks_r0_settled_ms"]),
-    ("graph", "graph-10k", ["frame_ms", "layout_ms", "settled_ms", "run_stall_max", "run_frames", "run_frame_p95_ms",
+    ("graph", "graph-10k", ["app_active_before", "app_active", "frame_ms", "layout_ms", "settled_ms", "run_stall_max", "run_frames", "run_frame_p95_ms",
                             "run_frame_max_ms", "run_pan_move_frame_med", "run_pan_move_frame_p95", "run_pan_frame_p95_ms",
                             "run_pan_stall_max", "zoom_frame_med", "settled_pan_move_frame_med",
                             "settled_pan_move_frame_p95", "settled_pan_frame_p95_ms", "rss_mb:graph"]),

@@ -915,8 +915,27 @@ private:
         waitSettled(u"switcher_done"_s, 800, 20000);
     }
 
+    /// Activates the window first: an X server without a window manager (Xvfb) never focuses it,
+    /// and an inactive app pauses what runs only while it is in front (the graph's layout). The
+    /// state before and after is in the "app_state" mark (2 = Qt::ApplicationActive).
+    void activateSteps()
+    {
+        action(u"activate"_s, [this] {
+            m_stateBefore = int(QGuiApplication::applicationState());
+            if (m_window)
+                m_window->requestActivate();
+        });
+        waitUntil(u"app_active"_s, [this] {
+            return QGuiApplication::applicationState() == Qt::ApplicationActive || monoNs() - m_stepStart > 3000000000LL;
+        }, 5000, false);
+        action(u"app_state"_s, [this] {
+            mark(u"app_state"_s, 0, {{u"before"_s, m_stateBefore}, {u"after"_s, int(QGuiApplication::applicationState())}});
+        });
+    }
+
     void viewSteps()
     {
+        activateSteps();
         const QList<QPair<QString, QVariantMap>> views = {
                 {u"tasks"_s, {{u"view"_s, u"tasks"_s}}},
                 {u"calendar"_s, {{u"view"_s, u"calendar"_s}}},
@@ -1005,6 +1024,7 @@ private:
     void graphSteps()
     {
         // Open the graph, pan and zoom while the layout still runs, then once it has settled.
+        activateSteps();
         action(u"nav:graph"_s, [this] {
             mark(u"nav_start:graph"_s);
             navigate({{u"view"_s, u"graph"_s}});
@@ -1182,6 +1202,7 @@ private:
     FILE *m_out = nullptr;
     QString m_scenario, m_page, m_startPage, m_status;
     QPointF m_panPos;
+    int m_stateBefore = -1;
     int m_row = 10;
     int m_idleMs = 30000;
     bool m_keep = false;

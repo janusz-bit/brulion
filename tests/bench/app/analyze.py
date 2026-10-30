@@ -278,8 +278,17 @@ def m_switcher(run):
     return out
 
 
+def app_state(run, out):
+    """Whether the app was active (in front) during the scenario: 1 yes, 0 no (Qt::ApplicationActive = 2)."""
+    m = run["marks"].get("app_state")
+    if m:
+        out["app_active_before"] = 1 if m.get("before") == 2 else 0
+        out["app_active"] = 1 if m.get("after") == 2 else 0
+
+
 def m_views(run):
     out = {}
+    app_state(run, out)
     mk = run["marks"]
     for name, m in mk.items():
         if not name.startswith("nav_start:"):
@@ -318,6 +327,7 @@ def frame_intervals(run, a, b, prefix):
 def m_graph(run):
     """The graph scenario: open, pan and zoom while the layout runs, pan again once settled."""
     out = {}
+    app_state(run, out)
     mk = run["marks"]
     nav = mk.get("nav_start:graph")
     if not nav:
