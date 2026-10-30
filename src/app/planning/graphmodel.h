@@ -274,7 +274,8 @@ private:
     bool m_running = false;
     int m_dragging = -1;
     QPointF m_dragPos;
-    /// The layout starts from fresh positions (no carried ones): `settling` with reduced motion.
+    /// The positions are start positions that never moved (a fresh build, relayout(); kept by a
+    /// rebuild that carries them over): `settling` with reduced motion. A frame or step() clears it.
     bool m_fresh = false;
 
     // The run on the worker.

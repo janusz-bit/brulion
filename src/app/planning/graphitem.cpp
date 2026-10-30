@@ -1335,20 +1335,30 @@ QSGNode *GraphItem::updatePaintNode(QSGNode *old, UpdatePaintNodeData *)
     return node;
 }
 
+void GraphItem::paintCanvas(QImage &canvas, qreal dpr)
+{
+    const QSize pixels(int(std::ceil(width() * dpr)), int(std::ceil(height() * dpr)));
+    if (canvas.size() != pixels || canvas.format() != QImage::Format_ARGB32_Premultiplied)
+        canvas = QImage(pixels, QImage::Format_ARGB32_Premultiplied); // uninitialised memory
+    canvas.setDevicePixelRatio(dpr);
+    QPainter painter(&canvas);
+    // render() fills the item's rect, which the raster engine rounds to whole pixels: with a
+    // fractional width or height (400.4 at 1×, 401 at 1.25×) the canvas's last column or row is
+    // left out. Fill those strips (logical units, rounded the same way) before every frame.
+    const QSizeF all = QSizeF(pixels) / dpr;
+    if (all.width() > width())
+        painter.fillRect(QRectF(width(), 0, all.width() - width(), all.height()), m_bg);
+    if (all.height() > height())
+        painter.fillRect(QRectF(0, height(), all.width(), all.height() - height()), m_bg);
+    render(&painter, size());
+}
+
 QSGNode *GraphItem::updateImageNode(QSGNode *old, QQuickWindow *window)
 {
     auto *node = static_cast<GraphImageNode *>(old);
     if (!node)
         node = new GraphImageNode(window);
-    const qreal dpr = window->effectiveDevicePixelRatio();
-    const QSize pixels(int(std::ceil(width() * dpr)), int(std::ceil(height() * dpr)));
-    if (node->canvas.size() != pixels)
-        node->canvas = QImage(pixels, QImage::Format_ARGB32_Premultiplied);
-    node->canvas.setDevicePixelRatio(dpr);
-    {
-        QPainter painter(&node->canvas);
-        render(&painter, size());
-    }
+    paintCanvas(node->canvas, window->effectiveDevicePixelRatio());
     // The new texture first, then the old one goes.
     QSGTexture *texture = window->createTextureFromImage(node->canvas);
     node->image->setTexture(texture);

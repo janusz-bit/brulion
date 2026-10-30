@@ -117,7 +117,8 @@ FocusScope {
 
     GraphModel {
         id: graphModel
-        vaultIndex: PlanningContext.vaultIndex
+        // The settings before the index (Qt applies the bindings in this order): opening the view
+        // builds the graph once, with them — not once per setting that differs from its default.
         showTags: root.showTags
         showMissing: root.showMissing
         showJournals: root.showJournals
@@ -131,6 +132,7 @@ FocusScope {
         frameInterval: DeviceInfo.platform === "wasm" ? 33 : 16
         reducedMotion: Theme.reducedMotion
         active: root.visible && Qt.application.state === Qt.ApplicationActive
+        vaultIndex: PlanningContext.vaultIndex
     }
 
     GraphItem {

@@ -3,9 +3,10 @@
 // journals / orphans, local graph depth 1 and 2, the node cap, positions kept across index
 // changes, search with Polish letters), the worker (GraphSimulation: threaded and inline runs equal
 // to manual steps, fast cooling, pause / resume, coalesced frames, dragging during a run, rebuilds
-// and destruction mid-run, reduced motion, pacing), the scene-graph geometry (discs, rings,
-// segments, chunks of 16-bit indices, label placement) and GraphItem (camera maths,
-// hit-testing, touch selection, painting — also 2000 nodes, with timings).
+// and destruction mid-run, reduced motion — also rebuilt before it is shown —, pacing, a new frame
+// interval mid-run), the scene-graph geometry (discs, rings, segments, chunks of 16-bit indices,
+// label placement) and GraphItem (camera maths, hit-testing, touch selection, painting — also 2000
+// nodes, with timings —, the software renderer's canvas painted all over).
 #include "forcelayout.h"
 #include "graphgeometry.h"
 #include "graphitem.h"
@@ -20,6 +21,7 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -742,6 +744,126 @@ private Q_SLOTS:
         QCOMPARE(frames.count(), 2);
     }
 
+    void reducedMotionSettlesThroughRebuilds_data()
+    {
+        QTest::addColumn<QString>("scenario");
+        QTest::addColumn<bool>("settles");
+        // GraphView's bindings: the index first, then a setting that differs from the default.
+        QTest::newRow("a phone opens the view (maxNodes after the index)") << u"maxNodes"_s << true;
+        QTest::newRow("an English UI (locale after the index)") << u"locale"_s << true;
+        QTest::newRow("tags shown (a saved toggle after the index)") << u"showTags"_s << true;
+        // Rebuilds while the spinner shows.
+        QTest::newRow("a local graph (focusPath after the whole graph)") << u"focusPath"_s << true;
+        QTest::newRow("a filter tapped while settling") << u"filter"_s << true;
+        QTest::newRow("the index changes while settling (żółta strona)") << u"index"_s << true;
+        // Positions the user has already seen moving jump once to the result, as carried ones do.
+        QTest::newRow("reduced motion turned on mid-animation") << u"midRun"_s << false;
+    }
+
+    void reducedMotionSettlesThroughRebuilds()
+    {
+        // The start positions of a build whose run has published nothing yet are no layout: a
+        // rebuild that carries them over keeps `settling` (a spinner, not a spiral that jumps).
+        QFETCH(QString, scenario);
+        QFETCH(bool, settles);
+        auto index = makeIndex(bigVault(200, 3));
+        GraphModel m;
+        m.setRefreshDelay(0);
+        m.setMinRunMs(2000); // "midRun": still moving after its first frames
+        const bool reducedFirst = scenario == u"focusPath" || scenario == u"filter" || scenario == u"index";
+        if (reducedFirst)
+            m.setReducedMotion(true);
+        m.setVaultIndex(index.get());
+        QVERIFY(m.running());
+        QCOMPARE(m.settling(), reducedFirst);
+        const int nodes = m.nodeCount();
+        if (scenario == u"maxNodes") {
+            m.setMaxNodes(150);
+            QCOMPARE(m.nodeCount(), 150);
+        } else if (scenario == u"locale") {
+            m.setLocale(u"en"_s);
+        } else if (scenario == u"showTags") {
+            m.setShowTags(true);
+        } else if (scenario == u"focusPath") {
+            m.setFocusPath(u"Strona 3.md"_s);
+            m.setDepth(2);
+            QVERIFY(m.nodeCount() < nodes);
+        } else if (scenario == u"filter") {
+            m.setShowOrphans(false);
+            m.setShowJournals(false);
+        } else if (scenario == u"index") {
+            index->update(u"Żółta strona.md"_s, u"Łączy [[Strona 3]] i [[Strona 4]]\n"_s);
+            m.refresh();
+            QCOMPARE(m.nodeCount(), nodes + 1);
+        } else if (scenario == u"midRun") {
+            QTRY_VERIFY_WITH_TIMEOUT(m.framesApplied() >= 2, 10000 * BRULION_TEST_SLOWDOWN);
+        }
+        // Everywhere else no event loop ran: no frame has been applied in between.
+        QVERIFY(m.running());
+        const int applied = m.framesApplied();
+        if (!reducedFirst)
+            m.setReducedMotion(true);
+        QCOMPARE(m.settling(), settles);
+        if (settles) {
+            QCOMPARE(m.framesApplied(), 0);
+            // Nothing drawn, nothing to hover or tap.
+            GraphItem item;
+            item.setSize(QSizeF(400, 300));
+            item.setModel(&m);
+            const QColor bg(u"#fbf7ee"_s);
+            item.setBackgroundColor(bg);
+            QImage img(400, 300, QImage::Format_ARGB32_Premultiplied);
+            {
+                QPainter p(&img);
+                item.render(&p, img.size());
+            }
+            QVERIFY(!hasInk(img, bg));
+            QCOMPARE(item.nodeAt(200, 150), QString());
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(!m.settling());
+        if (settles)
+            QCOMPARE(m.framesApplied(), 1); // one picture: the final layout
+        else
+            QVERIFY(m.framesApplied() > applied);
+        QVERIFY(m.alpha() < m.layout().params().alphaMin);
+    }
+
+    void frameIntervalReachesTheRunningLayout_data()
+    {
+        QTest::addColumn<bool>("inlineRuns");
+        QTest::newRow("worker thread") << false;
+        QTest::newRow("inline (the browser)") << true;
+    }
+
+    void frameIntervalReachesTheRunningLayout()
+    {
+        // GraphView sets frameInterval after the index: its first run already uses the new interval
+        // (the browser's 33 ms with 16.5 ms slices, not 16 ms with 8 ms ones).
+        QFETCH(bool, inlineRuns);
+        InlineRuns guard(inlineRuns);
+        auto index = makeIndex(smallVault());
+        GraphModel m;
+        m.setSlowTickMs(1e9);
+        m.setMinRunMs(5000); // paced: a frame per timer event for 5 s
+        m.setVaultIndex(index.get());
+        QVERIFY(m.running());
+        QCOMPARE(m.frameInterval(), 16);
+        m.setFrameInterval(250);
+        QSignalSpy frames(&m, &GraphModel::positionsChanged);
+        QTest::qWait(1000);
+        // At 16 ms some 60 frames; at 250 ms four (and one queued before the change).
+        QVERIFY2(frames.count() >= 2 && frames.count() <= 7, qPrintable(QString::number(frames.count())));
+        QVERIFY(m.running());
+        m.setActive(false); // a paused run takes the change too
+        m.setFrameInterval(16);
+        m.setActive(true);
+        frames.clear();
+        QTest::qWait(1000);
+        QVERIFY2(frames.count() >= 15, qPrintable(QString::number(frames.count())));
+        QVERIFY(m.running());
+    }
+
     void pacingUnfoldsSmallGraphs()
     {
         auto index = makeIndex(smallVault());
@@ -805,6 +927,53 @@ private Q_SLOTS:
         QVERIFY(still != moving);
         QCOMPARE(moving, bare);
         QVERIFY(item.lastPaintMs() > 0);
+    }
+
+    void softwareCanvasIsPaintedAllOver_data()
+    {
+        QTest::addColumn<QSizeF>("size");
+        QTest::addColumn<qreal>("dpr");
+        QTest::newRow("whole pixels at 1×") << QSizeF(400, 300) << qreal(1);
+        QTest::newRow("400.4 × 300.6 at 1×: a last column and row") << QSizeF(400.4, 300.6) << qreal(1);
+        QTest::newRow("401 × 299 at 1.25×") << QSizeF(401, 299) << qreal(1.25);
+        QTest::newRow("a phone: 411.43 × 914.3 at 2.625×") << QSizeF(411.43, 914.3) << qreal(2.625);
+        QTest::newRow("half a pixel") << QSizeF(0.5, 0.5) << qreal(1);
+    }
+
+    void softwareCanvasIsPaintedAllOver()
+    {
+        // The software renderer reuses its canvas, and a new one is uninitialised memory: every
+        // pixel is painted each frame, also those a fractional item size leaves out of render().
+        QFETCH(QSizeF, size);
+        QFETCH(qreal, dpr);
+        auto index = makeIndex(smallVault());
+        GraphModel m;
+        m.setActive(false);
+        m.setVaultIndex(index.get());
+        m.step(300);
+        GraphItem item;
+        item.setSize(size);
+        item.setModel(&m);
+        item.setBackgroundColor(QColor(u"#1c2130"_s));
+        const QSize pixels(int(std::ceil(size.width() * dpr)), int(std::ceil(size.height() * dpr)));
+        QImage canvas(pixels, QImage::Format_ARGB32_Premultiplied);
+        const QRgb leftover = qRgba(255, 0, 255, 255); // what the reused memory held
+        for (int frame = 0; frame < 2; ++frame) {
+            canvas.fill(leftover);
+            item.paintCanvas(canvas, dpr);
+            QCOMPARE(canvas.size(), pixels);
+            QCOMPARE(canvas.devicePixelRatio(), dpr);
+            int left = 0;
+            for (int y = 0; y < canvas.height(); ++y) {
+                const QRgb *line = reinterpret_cast<const QRgb *>(canvas.constScanLine(y));
+                left += int(std::count(line, line + canvas.width(), leftover));
+            }
+            QCOMPARE(left, 0);
+        }
+        // A canvas of another size is replaced.
+        QImage small(3, 3, QImage::Format_ARGB32_Premultiplied);
+        item.paintCanvas(small, dpr);
+        QCOMPARE(small.size(), pixels);
     }
 
     void movingRepaintInterval()

@@ -80,7 +80,8 @@ struct SimCommand {
         ReheatTo,    ///< alpha = max(value, alpha), a new run segment (pacing, cooling decision)
         Pause,       ///< stop stepping, keep the state (the view is hidden)
         Resume,
-        Cancel, ///< drop the run (no more frames)
+        Cancel,        ///< drop the run (no more frames)
+        FrameInterval, ///< frames (and inline slices) every `value` ms from now on
     };
     Kind kind = Fix;
     int node = -1;

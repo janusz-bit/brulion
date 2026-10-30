@@ -187,6 +187,10 @@ public:
 
     /// Draw the graph with QPainter for an item of `size` (the software renderer and tests).
     void render(QPainter *painter, const QSizeF &size);
+    /// The software renderer's frame: `canvas` (re)sized to the item in whole device pixels and
+    /// painted with render() — all of it, also the last column or row of a fractional item size
+    /// that render()'s background leaves out (the canvas is reused, so they would keep anything).
+    void paintCanvas(QImage &canvas, qreal dpr);
     /// The world-space meshes of the current state (edges, discs, rings; empty while settling)
     /// for a device pixel ratio (the scene-graph renderer and tests).
     void buildMesh(geometry::MeshChunks &out, qreal dpr) const;

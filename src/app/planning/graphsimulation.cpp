@@ -76,7 +76,8 @@ private:
                 m_paused = false;
                 m_runTicks = 0;
                 beginSegment();
-                m_timer.setInterval(std::clamp(m_run.frameIntervalMs, 1, 1000));
+                m_run.frameIntervalMs = std::clamp(m_run.frameIntervalMs, 1, 1000);
+                m_timer.setInterval(m_run.frameIntervalMs);
                 changed = true;
                 continue;
             }
@@ -126,6 +127,13 @@ private:
                     m_run.layout.setAlpha(std::max(c.value, m_run.layout.alpha()));
                     beginSegment();
                     changed = true;
+                }
+                break;
+            case SimCommand::FrameInterval:
+                if (m_has) {
+                    // The timer keeps running (restarted with the new interval) or starts later.
+                    m_run.frameIntervalMs = std::clamp(int(c.value), 1, 1000);
+                    m_timer.setInterval(m_run.frameIntervalMs);
                 }
                 break;
             }

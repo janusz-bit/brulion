@@ -751,7 +751,10 @@ a `QQuickPaintedItem`, rasterised on every frame of the moving layout while the 
   the drag's alpha target, reheat, pause while the view is hidden, cancel) apply before the
   worker's next step; the dragged node follows the pointer at once in the mirror. Only value
   copies cross threads (a run in, frames out; one mutex for the frame slot, one for the command
-  queue). `rebuild()` (`VaultIndex::graph()` and the filters) stays on the GUI thread.
+  queue). `rebuild()` (`VaultIndex::graph()` and the filters) stays on the GUI thread; the view
+  sets its settings before the index, so opening it builds the graph once (before: once more for
+  each setting that differs from its default — the phones' node cap, an English UI, saved
+  toggles).
 * **The browser** (single-threaded WebAssembly) runs the same worker on the GUI thread in slices of
   ≤ 16.5 ms per 33 ms timer event (never a 0 ms timer, N13), at least one step per slice.
 * **Pacing and fast cooling instead of time-boxing.** A run unfolds over at least `minRunMs`
@@ -762,7 +765,9 @@ a `QQuickPaintedItem`, rasterised on every frame of the moving layout while the 
   same `ForceLayout` steps taken by hand (threaded and inline, both coolings, a pause mid-run, a
   GUI thread blocked for 300 ms). The decision no longer depends on painting.
 * **Reduced motion**: the worker computes the run and publishes only its final frame; a layout from
-  fresh positions shows a spinner (`GraphModel.settling`) instead of a spiral that jumps.
+  positions that never moved (a fresh build, also rebuilt — a filter, the local graph, an index
+  change — before its first frame) shows a spinner (`GraphModel.settling`) instead of a spiral
+  that jumps.
 * **Drawing through the scene graph.** `GraphItem` is a `QQuickItem` with its own nodes
   (`GraphSceneNode`): edges, discs and rings as triangle meshes with a one-device-pixel fringe that
   fades to transparent (antialiasing without custom shaders: `QSGVertexColorMaterial`, so no
@@ -827,8 +832,9 @@ emulator were not measured (L16b).
 
 ### Budgets
 
-Desktop = the laptop above, phone = Pi 4 (floor) and the emulator (optimistic), web = headless
-Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current code).
+Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
+emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses
+(current code).
 
 | budget | target | desktop | phone | web |
 |---|---|---|---|---|
@@ -840,7 +846,7 @@ Chromium (×4 CPU = phone). ✅ meets, ⚠️ within 1.5×, ❌ misses (current 
 | autosave stall | < 50 ms desktop, < 100 ms phone | ✅ small page 41 ms; ❌ 500 KB page 88 ms | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
 | open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |
 | Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s before L3, not measured since (L3b, L10) | – |
-| Graph (4000 nodes; 1200 phones) | settled < 1.5 s desktop, < 3 s phone; GUI stall during the layout < 16 ms desktop, < 33 ms phone | ⚠️ GitHub runner, llvmpipe: stall 219 ms (was 958 ms), first frame 0.13 s (was 1.07 s), layout 9.2 s with drags (was 40 s) — CPU-rendered frames; the GUI thread's own sync 0.1–6 ms | ❌ Pi 2.6 s before L16, emulator 1.5 s; not measured since (L16b) | – |
+| Graph (4000 nodes; 1200 phones) | settled < 1.5 s desktop, < 3 s phone; GUI stall during the layout < 16 ms desktop, < 33 ms phone | ❌ not the laptop (unreachable): a GitHub runner with llvmpipe, CPU-rendered frames — stall 219 ms (was 958 ms), settled 2.0 s (`views`; was 8.3 s), 9.2 s with drags (was 40 s), first frame 0.13 s (was 1.07 s); the GUI thread's own sync 0.1–6 ms | ❌ Pi 2.6 s before L16, emulator 1.5 s; not measured since (L16b) | – |
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ✅ 6.0 ms (L3; base in the same session 112 ms) | ❌ Pi 0.95 s before L3, not measured since (L3b) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
 | memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 86 MB of linear memory at 1k (was 104 MB) |

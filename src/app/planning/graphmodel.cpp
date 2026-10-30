@@ -217,6 +217,9 @@ void GraphModel::setFrameInterval(int msec)
     if (m_frameInterval == msec)
         return;
     m_frameInterval = msec;
+    // Also for the run in progress (the view sets it after its first build has started one).
+    if (m_simOwned)
+        m_sim.command({SimCommand::FrameInterval, -1, 0, 0, double(msec)});
     Q_EMIT frameIntervalChanged();
 }
 
@@ -404,6 +407,7 @@ void GraphModel::onFrameReady()
         return;
     }
     ++m_framesApplied;
+    m_fresh = false; // these positions have moved (and are shown)
     m_x = std::move(frame.x);
     m_y = std::move(frame.y);
     m_alpha = frame.alpha;
@@ -422,10 +426,8 @@ void GraphModel::onFrameReady()
             m_layout.setAlphaTarget(m_reducedMotion ? 0 : 0.3);
         }
     }
-    if (!frame.running) {
-        m_fresh = false;
+    if (!frame.running)
         setSettling(false);
-    }
     setFastCooling(frame.fastCooling);
     Q_EMIT positionsChanged();
     updateRunning();
@@ -795,7 +797,10 @@ void GraphModel::rebuild()
     const bool changed = newIds != oldIds || m_layout.edges() != oldEdges;
     if (carried > 0)
         m_layout.setAlpha(changed ? std::max(oldAlpha, carried == nodes.size() ? 0.15 : 0.35) : oldAlpha);
-    m_fresh = carried == 0 && !nodes.isEmpty();
+    // Fresh start positions, or carried ones that never moved yet (the spiral of a build whose
+    // run has not published a frame: the bindings of a view that opens set several settings one
+    // by one, an index change or a filter while a reduced-motion layout settles).
+    m_fresh = !nodes.isEmpty() && (carried == 0 || m_fresh);
     setSettling(false);
     ensureRunning();
     Q_EMIT structureChanged();
