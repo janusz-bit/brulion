@@ -748,10 +748,16 @@ public:
     /// the notebook where it is, the same file in the attachments folder reused, else copied
     /// there). "" and attachmentFailed() when it cannot be read or stored.
     Q_INVOKABLE QString importBackdropSource(const QUrl &file);
-    /// New drawings on prepared backdrops (DrawingBackdrops.prepare(): { bytes, mimeType, width,
-    /// height, path, page, name, error }; an item with an error or bad data is attachmentFailed()):
-    /// each a drawing with that backdrop (core drawing/backdrop.h) — on a picture light ("Jasne"),
-    /// on a PDF page as the app ("Jak motyw") —, stored as "<name> s. <page>.svg" or "<name>
+    /// The pick of importBackdropSource() (or the browser's) that stored `path` was abandoned: no
+    /// drawing was made (cancelled, a locked or unreadable PDF, a picture this device cannot
+    /// decode) — the copy it stored is removed again (EditorHost::discardImport: never a file of
+    /// the notebook or one reused).
+    Q_INVOKABLE void discardBackdropSource(const QString &path);
+    /// New drawings on prepared backdrops (DrawingBackdrops.prepare(): { svg — the drawing's file,
+    /// made by the job when asked for —, or bytes, mimeType, width, height; path, page, name,
+    /// error }; an item with an error or bad data is attachmentFailed()): each a drawing with that
+    /// backdrop (core drawing/backdrop.h newDrawingOnBackdrop(): on a picture light ("Jasne"), on
+    /// a PDF page as the app ("Jak motyw")), stored as "<name> s. <page>.svg" or "<name>
     /// (rysunek).svg" (free names: " 2", …). The first is embedded at [from, to) of the row's edit
     /// text (as insertAttachment()), every further one in a block of its own after it, in order —
     /// one undo step (the files stay, as with insertDrawing()). Returns { row, cursor, paths } (row

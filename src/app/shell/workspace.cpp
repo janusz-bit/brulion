@@ -5,6 +5,8 @@
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
+#include "documentpaths.h"
+
 #include "dates/dates.h"
 #include "drawing/excalidrawmd.h"
 #include "index/vaultindex.h"
@@ -251,6 +253,7 @@ void Workspace::close()
     m_listCaches.reset();
     m_index.reset();
     m_vault.reset();
+    m_importedCopies.clear(); // (paths of that notebook)
     ++m_revision;
     Q_EMIT openChanged();
     Q_EMIT configChanged();
@@ -1012,29 +1015,53 @@ QString Workspace::importAttachment(const QString &fileName, const QByteArray &d
             if (!stat)
                 break;
             bool ok = false;
-            if (!stat->isDir && stat->size == data.size() && m_vault->readBinary(candidate, &ok) == data && ok)
+            if (!stat->isDir && stat->size == data.size() && m_vault->readBinary(candidate, &ok) == data && ok) {
+                // Used again: no longer the abandoned pick's own copy (discardImport() keeps it).
+                m_importedCopies.remove(candidate);
                 return candidate;
+            }
         }
     }
-    return saveAttachment(fileName, data);
+    const QString stored = saveAttachment(fileName, data);
+    if (!stored.isEmpty())
+        m_importedCopies.insert(stored);
+    return stored;
 }
 
 QString Workspace::importAttachment(const QUrl &file, qint64 maxBytes)
 {
     if (!m_vault)
         return {};
-    if (file.isLocalFile()) {
+    const QString root = QFileInfo(m_vault->rootPath()).canonicalFilePath();
+    // The picked file on disk: a local one, or the file an Android document's URI names (the
+    // system's picker gives content:// URIs also for the notebook's own files).
+    QString local;
+    if (file.isLocalFile())
+        local = file.toLocalFile();
+    else if (file.scheme() == u"content")
+        local = platform::localPathOfDocument(file, platform::primaryStorageOf(root));
+    if (!local.isEmpty() && !root.isEmpty()) {
         // A file of the notebook itself (the lecture's PDF synced into it): used where it is.
-        const QString absolute = QFileInfo(file.toLocalFile()).canonicalFilePath();
-        const QString root = QFileInfo(m_vault->rootPath()).canonicalFilePath();
-        if (!absolute.isEmpty() && !root.isEmpty()) {
+        const QString absolute = QFileInfo(local).canonicalFilePath();
+        if (!absolute.isEmpty()) {
             const QString relative = QDir(root).relativeFilePath(absolute);
             if (!relative.startsWith(u"../"_s) && relative != u".."_s && !QDir::isAbsolutePath(relative)
-                && QFileInfo(absolute).isFile())
-                return m_vault->existingCase(paths::normalize(relative));
+                && QFileInfo(absolute).isFile()) {
+                const QString path = m_vault->existingCase(paths::normalize(relative));
+                m_importedCopies.remove(path);
+                return path;
+            }
         }
     }
     return EditorHost::importAttachment(file, maxBytes);
+}
+
+void Workspace::discardImport(const QString &path)
+{
+    if (!m_vault || !m_importedCopies.remove(path))
+        return;
+    if (!m_vault->removePermanently(path, ChangeSource::User))
+        qCWarning(lcWorkspace).noquote() << "could not remove the abandoned attachment" << path << m_vault->errorString();
 }
 
 QString Workspace::absoluteFilePath(const QString &path) const

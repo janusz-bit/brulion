@@ -55,6 +55,7 @@
 #include <QElapsedTimer>
 #include <QHash>
 #include <QPointer>
+#include <QSet>
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
@@ -231,8 +232,13 @@ public:
     /// and bytes in the attachments folder, else stored as saveAttachment() stores it.
     Q_INVOKABLE QString importAttachment(const QString &fileName, const QByteArray &data) override;
     /// A picked local file or Android document: one inside the notebook's folder is used where it
-    /// is (its vault path), others imported as above (at most `maxBytes`, 200 MB by default).
-    Q_INVOKABLE QString importAttachment(const QUrl &file, qint64 maxBytes = 200LL * 1024 * 1024) override;
+    /// is (its vault path; an Android document by the file its URI names, platform/documentpaths.h),
+    /// others imported as above (at most `maxBytes`, MaxAttachmentBytes by default).
+    Q_INVOKABLE QString importAttachment(const QUrl &file, qint64 maxBytes = MaxAttachmentBytes) override;
+    /// The pick that imported `path` was abandoned: the copy importAttachment() stored for it is
+    /// deleted again (not to the trash: the picked file is still where it was) — only one stored in
+    /// this session that no later pick reused.
+    Q_INVOKABLE void discardImport(const QString &path) override;
     /// The file system path of the vault path `path` ("" without a notebook or a path): the
     /// drawing editor's PDF pages (DrawingBackdrops' path resolver).
     Q_INVOKABLE QString absoluteFilePath(const QString &path) const;
@@ -584,6 +590,8 @@ private:
     void notifyFolderChange(const QStringList &paths, bool byUser = true);
 
     std::unique_ptr<Vault> m_vault;
+    /// Copies importAttachment() stored in this session that discardImport() may still remove.
+    QSet<QString> m_importedCopies;
     std::unique_ptr<VaultIndex> m_index;
     /// CalendarCaches of the last ranges calendarItems() was asked for, QueryCaches of the last
     /// queries runQuery() ran (workspacequery.cpp; dropped by close()).

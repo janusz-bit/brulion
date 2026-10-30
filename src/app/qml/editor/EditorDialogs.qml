@@ -28,7 +28,9 @@ import Brulion
 //                                   picker; the browser's: pictures only) → a PDF's pages chosen in
 //                                   DrawingBackdropDialog → one drawing per page (a picture: one
 //                                   drawing) with it as the backdrop, embedded at the caret and
-//                                   after it; one drawing opens in the drawing editor
+//                                   after it; one drawing opens in the drawing editor. A copy of
+//                                   a picked file stored for nothing (cancelled, a locked PDF, a
+//                                   picture that cannot be shown) is removed again.
 // The page may change while a dialog is open (sync, Syncthing): a dialog tracks its block
 // (PageController.trackBlock) and acts on wherever that block is then — never on whatever block
 // moved into its row (and on nothing when the block itself changed or is gone).
@@ -62,6 +64,9 @@ Item {
     /// "Rysunek na obrazie lub PDF…": the browser's pick and a picture being prepared (0 none).
     property int backdropPick: 0
     property int backdropJob: 0
+    /// The picked file's vault path until a drawing uses it: abandoned, its copy goes again
+    /// (PageController.discardBackdropSource).
+    property string backdropImport: ""
     function reminderPopup(): BReminderDialog {
         if (!reminderDialog)
             reminderDialog = reminderComponent.createObject(root) as BReminderDialog
@@ -321,8 +326,10 @@ Item {
             backdropPicker = backdropPickerComponent.createObject(root) as FilePicker
         backdropPicker.open()
     }
-    /// The picked file (a vault path): a PDF's pages are chosen first, a picture is prepared now.
+    /// The picked file (a vault path): a PDF's pages are chosen first, a picture is prepared now
+    /// (with its drawing: off the GUI thread).
     function useBackdropSource(path) {
+        backdropImport = path
         if (path === "") {
             refocus()
             return
@@ -333,14 +340,22 @@ Item {
             backdropDialog.openFor(path, "insert", 1)
             return
         }
-        backdropJob = DrawingBackdrops.prepare(path, [])
+        backdropJob = DrawingBackdrops.prepare(path, [], true)
+    }
+    /// No drawing was made of the picked file: the copy stored for it goes (never a file of the
+    /// notebook or one reused).
+    function abandonBackdropSource() {
+        if (backdropImport !== "" && controller)
+            controller.discardBackdropSource(backdropImport)
+        backdropImport = ""
     }
     /// The prepared backdrops become drawings in the note: one opens in the drawing editor.
     function insertBackdrops(items) {
         const good = items.filter((item) => item.error === "")
         if (good.length < items.length)
             AppController.toast(DrawingBackdrops.errorText(items.find((item) => item.error !== "").error))
-        if (good.length === 0) {
+        if (good.length === 0 || !controller) {
+            abandonBackdropSource()
             refocus()
             return
         }
@@ -348,6 +363,9 @@ Item {
         const r = blockRow()
         const c = r >= 0 ? cursor : -1
         const out = controller.insertDrawingsOn(r, c, c, good)
+        if (out.paths.length === 0)
+            abandonBackdropSource()
+        backdropImport = "" // (used by the drawings: kept)
         if (out.paths.length === 1)
             controller.openDrawing(out.paths[0])
         else if (out.paths.length > 1)
@@ -379,6 +397,8 @@ Item {
             root.backdropJob = 0
             if (!cancelled)
                 root.insertBackdrops(items)
+            else
+                root.abandonBackdropSource()
         }
     }
 
@@ -398,7 +418,10 @@ Item {
         id: backdropDialogComponent
         DrawingBackdropDialog {
             onPrepared: (items) => root.insertBackdrops(items)
-            onRejected: root.refocus()
+            onRejected: {
+                root.abandonBackdropSource()
+                root.refocus()
+            }
         }
     }
 

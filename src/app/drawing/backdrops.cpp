@@ -5,9 +5,11 @@
 #include "pdfpages.h"
 
 #include "drawing/backdrop.h"
+#include "editorhost.h"
 #include "util/paths.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QFileInfo>
 #include <QPointer>
 #include <QSet>
@@ -23,6 +25,7 @@
 #endif
 
 #include <atomic>
+#include <cmath>
 #include <mutex>
 
 using namespace Qt::StringLiterals;
@@ -43,6 +46,9 @@ struct DrawingBackdrops::Job {
     QString file;
     /// The PDF's pages; {0}: the file as a picture.
     QList<int> pages;
+    /// The items become drawings' files too (prepare()'s `drawings`), stamped `now`.
+    bool drawings = false;
+    qint64 now = 0;
     qsizetype next = 0;
     QVariantList items;
     std::atomic_bool cancelled{false};
@@ -94,7 +100,7 @@ int DrawingBackdrops::pickInBrowser()
     QStringList pictures;
     for (const QString &ext : paths::pictureExtensions())
         pictures.append(u'*' + ext);
-    platform::wasm::openFiles({tr("Pictures (%1)").arg(pictures.join(u' '))}, false, MaxSourceBytes, MaxSourceBytes,
+    platform::wasm::openFiles({tr("Pictures (%1)").arg(pictures.join(u' '))}, false, MaxAttachmentBytes, MaxAttachmentBytes,
                               [self, pick](const QList<platform::PickedFile> &files) {
                                   if (!self || files.isEmpty())
                                       return; // cancelled
@@ -149,13 +155,20 @@ QVariantMap DrawingBackdrops::pdfInfo(const QString &vaultPath) const
         return {{u"pages"_s, -1}, {u"error"_s, errorText(backdroperror::NoPdf.toString())}, {u"locked"_s, false}};
     if (file.isEmpty() || !QFileInfo(file).isFile())
         return {{u"pages"_s, -1}, {u"error"_s, errorText(backdroperror::Unreadable.toString())}, {u"locked"_s, false}};
-    const platform::PdfInfo info = platform::pdfInfo(file, false); // (the count only: a long PDF opens fast)
+    // (The count and the first page's size only: a long PDF opens fast.)
+    const platform::PdfInfo info = platform::pdfInfo(file, false);
     QString error;
     if (info.locked)
         error = errorText(backdroperror::Locked.toString());
     else if (info.pages <= 0)
         error = errorText(backdroperror::Pdf.toString());
-    return {{u"pages"_s, info.pages}, {u"error"_s, error}, {u"locked"_s, info.locked}};
+    const QSizeF first = info.pages > 0 ? info.pagePoints.value(0) : QSizeF();
+    const bool sized = first.isValid() && !first.isEmpty() && std::isfinite(first.width()) && std::isfinite(first.height());
+    return {{u"pages"_s, info.pages},
+            {u"error"_s, error},
+            {u"locked"_s, info.locked},
+            {u"width"_s, sized ? first.width() : 0.0},
+            {u"height"_s, sized ? first.height() : 0.0}};
 }
 
 QUrl DrawingBackdrops::pageUrl(const QString &vaultPath, int page) const
@@ -185,12 +198,14 @@ QString DrawingBackdrops::errorText(const QString &code) const
     return code.isEmpty() ? QString() : tr("The backdrop could not be made.");
 }
 
-int DrawingBackdrops::prepare(const QString &vaultPath, const QList<int> &pages)
+int DrawingBackdrops::prepare(const QString &vaultPath, const QList<int> &pages, bool drawings)
 {
     auto job = std::make_shared<Job>();
     job->id = ++m_lastJob;
     job->path = vaultPath;
     job->file = resolve(vaultPath);
+    job->drawings = drawings;
+    job->now = QDateTime::currentMSecsSinceEpoch();
     QSet<int> seen;
     for (const int page : pages) {
         if (page >= 1 && !seen.contains(page) && job->pages.size() < drawing::MaxPagesPerInsert) {
@@ -225,14 +240,18 @@ void DrawingBackdrops::step(const std::shared_ptr<Job> &job)
     const int page = job->pages.at(job->next);
     const QString file = job->file;
     const QString path = job->path;
-    const auto work = [file, path, page] {
+    const bool drawings = job->drawings;
+    const qint64 now = job->now;
+    const auto work = [file, path, page, drawings, now] {
         if (file.isEmpty()) {
             PreparedBackdrop failed;
             failed.source = drawing::BackdropSource{path, page};
             failed.error = backdroperror::Unreadable.toString();
             return toVariant(failed);
         }
-        return toVariant(page == 0 ? prepareBackdropPicture(file, path) : prepareBackdropPdfPage(file, path, page));
+        const PreparedBackdrop prepared =
+                page == 0 ? prepareBackdropPicture(file, path) : prepareBackdropPdfPage(file, path, page);
+        return drawings ? toDrawingVariant(prepared, now) : toVariant(prepared);
     };
     const QPointer<DrawingBackdrops> self(this);
     const auto take = [self, job](const QVariantMap &item) {

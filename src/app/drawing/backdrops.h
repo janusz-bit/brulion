@@ -3,8 +3,10 @@
 // pages, their thumbnails (PdfPageImageProvider) and backdrops prepared from vault files in the
 // background (backdropimage.h).
 //
-//   const info = DrawingBackdrops.pdfInfo(path)          // { pages, error ("" | message), locked }
-//   const job = DrawingBackdrops.prepare(path, [1, 3])   // [] — the file is a picture
+//   const info = DrawingBackdrops.pdfInfo(path)          // { pages, error ("" | message), locked,
+//                                                        //   width, height (page 1, points) }
+//   const job = DrawingBackdrops.prepare(path, [1, 3])   // [] — the file is a picture; a third
+//                                                        // `true`: the drawings' files made too
 //   onProgress: (job, done, total) => …;  onFinished: (job, items) => controller.insertDrawingsOn(…)
 //
 // QML passes vault paths; the path resolver (setPathResolver(), main.cpp: Workspace's
@@ -52,15 +54,20 @@ public:
 
     /// The file at `vaultPath` is a PDF (by its name).
     Q_INVOKABLE bool isPdf(const QString &vaultPath) const;
-    /// A PDF's pages: { pages (−1: not readable), error (a sentence for the user, "" none), locked }.
+    /// A PDF's pages: { pages (−1: not readable), error (a sentence for the user, "" none), locked,
+    /// width, height (the first page's size in points; 0 unknown: the page picker's thumbnails take
+    /// its shape) }.
     Q_INVOKABLE QVariantMap pdfInfo(const QString &vaultPath) const;
     /// The thumbnail of a PDF page: image://pdfpage/<file>?page=N&v=<modified>; empty when the file
     /// is not there or PDFs cannot be drawn.
     Q_INVOKABLE QUrl pageUrl(const QString &vaultPath, int page) const;
     /// Start preparing backdrops of the file `vaultPath`: its PDF pages `pages` (1-based), or —
-    /// none given — the file as a picture. The job's id (> 0); progress() and finished() follow
-    /// (also for a file that cannot be read: its items carry the error).
-    Q_INVOKABLE int prepare(const QString &vaultPath, const QList<int> &pages);
+    /// none given — the file as a picture. `drawings`: each item also becomes a new drawing's file
+    /// (`svg`: core drawing::newDrawingOnBackdrop() written, its raster no longer in `bytes`) on
+    /// the worker thread — PageController::insertDrawingsOn() then only stores it, so 60 slides
+    /// do not freeze the window. The job's id (> 0); progress() and finished() follow (also for a
+    /// file that cannot be read: its items carry the error).
+    Q_INVOKABLE int prepare(const QString &vaultPath, const QList<int> &pages, bool drawings = false);
     /// Stop the job after the file being prepared: finished() comes with what was done, `cancelled`.
     Q_INVOKABLE void cancel(int job);
     /// The sentence for a prepared item's error code (backdropimage.h backdroperror).
@@ -78,7 +85,8 @@ public:
 
 Q_SIGNALS:
     void progress(int job, int done, int total);
-    /// `items`: { bytes, mimeType, width, height, path, page, name, error } in the order asked.
+    /// `items`: { bytes (or svg), mimeType, width, height, path, page, name, error } in the order
+    /// asked.
     void finished(int job, const QVariantList &items, bool cancelled);
     void picked(int pick, const QString &path);
     void pickFailed(int pick, const QString &name);

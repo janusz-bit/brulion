@@ -18,7 +18,7 @@ namespace brulion::drawingview {
 
 /// What went wrong while preparing (PreparedBackdrop::error).
 namespace backdroperror {
-/// The file cannot be read (missing, unreadable, larger than MaxSourceBytes).
+/// The file cannot be read (missing, unreadable, larger than MaxAttachmentBytes, editorhost.h).
 inline constexpr QStringView Unreadable = u"unreadable";
 /// No picture this device can decode (HEIC without a plugin, random bytes, an empty file).
 inline constexpr QStringView Format = u"format";
@@ -29,9 +29,6 @@ inline constexpr QStringView Pdf = u"pdf";
 /// This build has no PDF renderer (the browser).
 inline constexpr QStringView NoPdf = u"noPdf";
 } // namespace backdroperror
-
-/// A source file larger than this is not read (as attachments: 200 MB).
-inline constexpr qint64 MaxSourceBytes = 200LL * 1024 * 1024;
 
 struct PreparedBackdrop {
     drawing::BackdropImage image;
@@ -58,6 +55,12 @@ drawing::BackdropImage encodeBackdrop(const QImage &image);
 
 /// The prepared backdrop for QML: { bytes, mimeType, width, height, path, page, name, error }.
 QVariantMap toVariant(const PreparedBackdrop &prepared);
+/// The same with the new drawing on it made (`svg`: drawing::newDrawingOnBackdrop() written, stamped
+/// `now` — ms since the epoch) in place of `bytes`, which are inside it; a prepared backdrop with
+/// an error (or one the drawing refuses: "format") stays without `svg`. The heavy part of
+/// inserting drawings on slides (two base64 copies of the raster, the scene's deflate): made where
+/// the backdrop is prepared, off the GUI thread.
+QVariantMap toDrawingVariant(const PreparedBackdrop &prepared, qint64 now);
 /// …and back (missing or malformed entries: empty).
 PreparedBackdrop fromVariant(const QVariantMap &map);
 

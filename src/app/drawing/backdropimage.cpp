@@ -1,6 +1,9 @@
 #include "backdropimage.h"
 
+#include "editorhost.h"
 #include "pdfpages.h"
+
+#include "drawing/svgwrite.h"
 
 #include <QBuffer>
 #include <QFile>
@@ -116,7 +119,7 @@ drawing::BackdropImage encodeBackdrop(const QImage &source)
 PreparedBackdrop prepareBackdropPicture(const QString &absoluteFile, const QString &vaultPath)
 {
     QFile file(absoluteFile);
-    if (!file.open(QIODevice::ReadOnly) || file.size() > MaxSourceBytes)
+    if (!file.open(QIODevice::ReadOnly) || file.size() > MaxAttachmentBytes)
         return failed(vaultPath, 0, backdroperror::Unreadable);
     const QByteArray bytes = file.readAll();
     file.close();
@@ -207,6 +210,22 @@ QVariantMap toVariant(const PreparedBackdrop &p)
             {u"page"_s, p.source.page},
             {u"name"_s, p.name},
             {u"error"_s, p.error}};
+}
+
+QVariantMap toDrawingVariant(const PreparedBackdrop &prepared, qint64 now)
+{
+    QVariantMap out = toVariant(prepared);
+    if (!prepared.error.isEmpty())
+        return out;
+    const std::optional<drawing::Drawing> d =
+            drawing::newDrawingOnBackdrop(prepared.image, prepared.source, drawing::randomEditStamp(now));
+    if (!d) {
+        out.insert(u"error"_s, backdroperror::Format.toString());
+        return out;
+    }
+    out.insert(u"svg"_s, drawing::toSvg(*d));
+    out.remove(u"bytes"_s);
+    return out;
 }
 
 PreparedBackdrop fromVariant(const QVariantMap &map)

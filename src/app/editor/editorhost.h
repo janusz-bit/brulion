@@ -19,6 +19,11 @@
 
 namespace brulion {
 
+/// The largest file stored as an attachment or used as a drawing's backdrop (pictures, PDFs; not
+/// whole videos by mistake): one limit for the note's pickers, the drawing editor's and the
+/// backdrop's preparation (src/app/drawing/backdropimage.h).
+inline constexpr qint64 MaxAttachmentBytes = 200LL * 1024 * 1024;
+
 class EditorHost : public QObject
 {
     Q_OBJECT
@@ -181,6 +186,12 @@ public:
             name = file.fileName();
         return data.isEmpty() ? QString() : importAttachment(name, data);
     }
+    /// The pick that imported `path` was abandoned (the page picker cancelled; the file proved to be
+    /// a locked PDF, an unreadable one or a picture this device cannot decode): the copy
+    /// importAttachment() stored for it is removed again — only a copy it stored in this session
+    /// and no later pick reused; a file of the notebook itself or an attachment it reused stays.
+    /// Default: nothing.
+    virtual void discardImport(const QString &path) { Q_UNUSED(path) }
 
     // --- Pictures from the internet (`![alt](https://…)`, docs/SYNTAX.md §2) -------------------
     // The UI never loads them itself: the host fetches them (when the user allows it) into the

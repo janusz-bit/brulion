@@ -82,6 +82,10 @@ public:
     QUrl assetUrl(const QString &path) const override;
     bool canDecodePicture(const QString &path) const override;
     QString saveAttachment(const QString &fileName, const QByteArray &data) override;
+    /// Recorded (discardedImports()): the attachments stay.
+    void discardImport(const QString &path) override { m_discarded.append(path); }
+    /// The paths discardImport() was asked to remove (tests).
+    QStringList discardedImports() const { return m_discarded; }
     /// Pictures from the internet from an in-memory "internet" (setWebPicture()): fetched on the
     /// event loop, in the "always" setting (setWebPicturesShown()) by asking.
     QVariantMap webPicture(const QString &url) const override;
@@ -172,6 +176,7 @@ Q_SIGNALS:
 private:
     QHash<QString, QString> m_files;
     QHash<QString, QByteArray> m_assets;
+    QStringList m_discarded;
     mutable QHash<QString, QUrl> m_assetUrls;
     mutable std::unique_ptr<QTemporaryDir> m_assetDir;
     QHash<QString, QByteArray> m_webSources;

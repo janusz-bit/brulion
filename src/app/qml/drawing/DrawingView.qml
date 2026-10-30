@@ -46,7 +46,8 @@ import Brulion
 //  * A backdrop (DrawingCanvas.setBackdrop; core drawing/backdrop.h): "Podkład z obrazu lub PDF…"
 //    in the paper's menu picks a picture or a PDF (FilePicker; the browser's picker: pictures),
 //    imports it into the notebook (Workspace.importAttachment: a file of the notebook stays where
-//    it is) and puts it — a PDF's page chosen in DrawingBackdropDialog — under the drawing; "Inna
+//    it is) and puts it — a PDF's page chosen in DrawingBackdropDialog — under the drawing (a copy
+//    stored for nothing — cancelled, a locked PDF — is removed again: Workspace.discardImport); "Inna
 //    strona PDF…" chooses another page of the same PDF, "Usuń podkład" removes it. Undo takes each
 //    back.
 // route.open (screenshots): "style" (the colours and widths) and "more" on phones, "paper" (the
@@ -91,6 +92,8 @@ FocusScope {
     property int backdropPick: 0
     property int backdropJob: 0
     property DrawingBackdropDialog backdropDialog: null
+    /// The picked file's vault path until the backdrop is set: abandoned, its copy goes again.
+    property string backdropImport: ""
     /// The file the paper shows (follows renames; "" none).
     property string loadedPath: ""
     property bool _writing: false
@@ -311,8 +314,10 @@ FocusScope {
         else
             backdropPicker.open()
     }
-    /// The backdrop's file (a vault path): a PDF's page is chosen, a picture prepared at once.
+    /// The backdrop's file (a vault path, just imported): a PDF's page is chosen, a picture
+    /// prepared at once.
     function useBackdropFile(path) {
+        root.backdropImport = path
         if (path === "")
             return
         if (DrawingBackdrops.isPdf(path))
@@ -325,8 +330,16 @@ FocusScope {
             root.backdropDialog = backdropDialogComponent.createObject(root) as DrawingBackdropDialog
         root.backdropDialog.openFor(path, "single", page)
     }
+    /// No backdrop was set from the picked file: the copy stored for it goes (never a file of the
+    /// notebook or one reused).
+    function abandonBackdropFile() {
+        if (root.backdropImport !== "")
+            Workspace.discardImport(root.backdropImport)
+        root.backdropImport = ""
+    }
     /// "Inna strona PDF…": the backdrop's PDF again (renames do not follow it into the drawing).
     function otherBackdropPage() {
+        root.backdropImport = "" // (the file is the drawing's: never discarded)
         const path = canvas.backdropPath
         if (path === "" || !Workspace.exists(path)) {
             AppController.toast(qsTr("The file %1 is not in the notebook any more.").arg(path.slice(path.lastIndexOf("/") + 1)))
@@ -336,12 +349,12 @@ FocusScope {
     }
     function applyBackdrop(items) {
         const item = items.length > 0 ? items[0] : null
-        if (!item)
-            return
-        if (item.error !== "")
+        if (item && item.error !== "")
             AppController.toast(DrawingBackdrops.errorText(item.error))
+        if (item && item.error === "" && canvas.setBackdrop(item))
+            root.backdropImport = "" // (the drawing uses it: kept)
         else
-            canvas.setBackdrop(item)
+            root.abandonBackdropFile()
         root.forceActiveFocus()
     }
 
@@ -435,6 +448,8 @@ FocusScope {
             root.backdropJob = 0
             if (!cancelled)
                 root.applyBackdrop(items)
+            else
+                root.abandonBackdropFile()
         }
     }
     FilePicker {
@@ -455,7 +470,10 @@ FocusScope {
         id: backdropDialogComponent
         DrawingBackdropDialog {
             onPrepared: (items) => root.applyBackdrop(items)
-            onRejected: root.forceActiveFocus()
+            onRejected: {
+                root.abandonBackdropFile()
+                root.forceActiveFocus()
+            }
         }
     }
 
