@@ -247,12 +247,13 @@ sprawdza zbudowaną stronę w **Chromium i Firefoksie** — obrazy z internetu (
 z internetu”) i rysik w edytorze rysunków („Rysik (nacisk)”). GitHub Actions uruchamia go w
 `wasm.yml` (zadanie `browsers`, po `build`; wdrożenie na Pages na nie czeka, wydanie też — wywołuje
 `wasm.yml`); raport HTML, zrzuty i ślady nieudanych testów są w artefakcie `web-browser-tests`
-(7 dni). Lokalnie, po `scripts/wasm-build.sh`:
+(7 dni). W CI nieudany test powtarza się raz (`retries: 1`; udany za drugim razem raport oznacza
+jako „flaky”). Lokalnie, po `scripts/wasm-build.sh`:
 
 ```sh
 scripts/web-test.sh --install                     # npm ci + Chromium i Firefox Playwrighta
 scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `playwright test`
-npx --prefix tests/web playwright show-report tests/web/playwright-report
+(cd tests/web && npx playwright show-report)     # raport HTML (playwright-report/)
 ```
 
 * **Serwery** (`tests/web/lib/servers.mjs`, w procesie testu, porty wybiera system): strona pod
