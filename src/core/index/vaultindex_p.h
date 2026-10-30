@@ -94,9 +94,9 @@ struct IndexAccess {
 
 /// One change of the index in its change log (VaultIndex::changesSince()).
 struct ChangeRecord {
-    int version = 0;       ///< the version the change made
-    QSet<VaultPath> notes; ///< see IndexChanges::notes
-    bool names = false;    ///< see IndexChanges::names
+    int version = 0;    ///< the version the change made
+    PathSet notes;      ///< see IndexChanges::notes (compact: most changes name one note)
+    bool names = false; ///< see IndexChanges::names
 };
 
 /// Paths the change log keeps at most (over all its records); older records are dropped.

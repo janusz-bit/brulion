@@ -1077,7 +1077,7 @@ IndexChanges VaultIndex::changesSince(int version) const
     out.complete = true;
     QSet<VaultPath> notes;
     for (auto it = d->changeLog.crbegin(); it != d->changeLog.crend() && it->version > version; ++it) {
-        notes.unite(it->notes);
+        it->notes.forEach([&notes](const VaultPath &path) { notes.insert(path); });
         out.names = out.names || it->names;
     }
     out.notes = QList<VaultPath>(notes.cbegin(), notes.cend());
