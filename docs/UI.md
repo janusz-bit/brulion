@@ -1056,7 +1056,10 @@ and diagrams (shapes, arrows, text), on every platform.
     a stylus that reports one pressure only draws like a mouse), draws the lasso or a shape —; its
     **eraser end**, or the barrel button held, erases whatever tool is chosen (in the browser,
     whose pen is one device, the eraser end comes as the pen's `Qt::ExtraButton3` — the web's
-    button 5 —, the barrel button as `Qt::RightButton`). Qt Quick hands an item no tablet events (only pointer handlers
+    button 5 —, the barrel button as `Qt::RightButton`; Qt for Android names the eraser end with
+    Qt 5's pointer type 3 and passes `BUTTON_STYLUS_PRIMARY` as `Qt::ExtraButton3`). The pen's
+    release reports pressure 0 (on Android a pixel beside the last move): a line ends with the
+    pressure it had. Qt Quick hands an item no tablet events (only pointer handlers
     get them, and Qt makes mouse events of the unhandled ones only on some platforms — not on
     Android), so the canvas takes the stylus's tablet events from its window (an event filter) when
     it is the topmost item taking input under the pen: a menu, a popup, a toast or a bar over it
@@ -1236,7 +1239,7 @@ wins, deleted here / there, a backdrop at the bottom, an unknown base, versions,
 merges keeping their invariants; how two versions relate — counts, the same drawing, an older one;
 Nextcloud's merge of files: SVG, `.excalidraw`, plugin files with their Markdown, and everything it
 refuses — a frame, a broken scene, no base, other formats, an element changed without a new
-version, both sides' Markdown changed), `tst_drawingcanvas` (a preview no input reaches, stylus, eraser end — also the browser's `ExtraButton3` —, barrel button, a popup over the paper, the toasts' host in the overlay, Windows' mouse
+version, both sides' Markdown changed), `tst_drawingcanvas` (a preview no input reaches, stylus, eraser end — also the browser's `ExtraButton3` and Qt for Android's pointer type 3 —, the release's pressure, barrel button, a popup over the paper, the toasts' host in the overlay, Windows' mouse
 events of the pen, fingers, a pinch, a palm while the pen is down, mouse buttons and the wheel,
 undo, the SVG checked with Qt's SVG renderer, loading, merging — also during a stroke, the paper,
 the theme —, far-away strokes, painting light and dark, the app's theme as no edit, a stroke drawn

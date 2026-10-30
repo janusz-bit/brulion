@@ -1223,14 +1223,16 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   input stylus` (jeden nacisk) rysuje się bez nacisku; typ narzędzia gumki (`TOOL_TYPE_ERASER`)
   ściera pierwszą linię, przycisk boczny (`BUTTON_STYLUS_PRIMARY`) drugą; po rysiku palec przesuwa
   kartkę zamiast rysować. Plik rysunku jest czytany po każdym kroku; zrzuty `st-*.png`.
-  Test znalazł trzy błędy (poprawione, `tst_drawingcanvas`): host powiadomień w warstwie popupów
-  zasłaniał kartkę przed rysikiem w całej aplikacji (rysik nie rysował wcale albo rysował jak mysz),
-  Qt for Android podaje typ wskaźnika wartościami Qt 5 (pióro 1, gumka 3 — w Qt 6 to nie `Eraser`),
-  a przycisk boczny jako `Qt::ExtraButton3`; zdarzenie podniesienia ma nacisk 0 i leży o piksel
-  obok ostatniego ruchu (Android próbkuje ruchy na nowo), więc każda linia kończyła się naciskiem
-  0. GitHub Actions ma na `ubuntu-24.04` KVM (reguła udev, jak w `wasm.yml` zadanie
-  `keyboard-android`), więc ten tryb mógłby tam działać; uruchamia się go na laptopie (osobny
-  build APK x86_64 Debug).
+  Sprawdzone 2026-10-30 (Android 16, Pixel 6). Test (i testy w przeglądarkach, docs/WEB.md „Rysik
+  (nacisk)”) znalazł błędy, poprawione i sprawdzane w `tst_drawingcanvas`: host powiadomień
+  w warstwie popupów zasłaniał kartkę przed rysikiem w całej aplikacji (rysik nie rysował wcale albo
+  rysował jak mysz); Qt for Android podaje typ wskaźnika wartościami Qt 5 (pióro 1, gumka 3 — w Qt 6
+  to nie `Eraser`), więc gumka rysowała, a przycisk boczny (`BUTTON_STYLUS_PRIMARY`) podaje jako
+  `Qt::ExtraButton3`; zdarzenie podniesienia ma nacisk 0 i leży o piksel obok ostatniego ruchu
+  (Android próbkuje ruchy na nowo), więc każda linia kończyła się naciskiem 0, a linia z jednym
+  naciskiem liczyła się jak z naciskiem. GitHub Actions ma na `ubuntu-24.04` KVM (reguła udev, jak
+  w `wasm.yml` zadanie `keyboard-android`), więc ten tryb mógłby tam działać; uruchamia się go na
+  laptopie (osobny build APK x86_64 Debug).
 * Obrazy z internetu (ten sam APK debugowalny; potrzebny dostęp emulatora do internetu
   i `python3` na hoście):
   ```sh
