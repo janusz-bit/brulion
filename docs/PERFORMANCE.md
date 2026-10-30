@@ -811,14 +811,15 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L7 | cheaper page opening (header summary and linked references from the index) | Pi open 653 ms → ~400 ms |
 | L9b | the developer and self-test QML (`qml/dev`, `qml/content/*SelfTest.qml`) in a folder outside `src/app` (qmlimportscanner scans the target's source folder whole, and its `-exclude` does not work there), so that releases leave out QtTest, QuickTest and `Qt.labs.folderlistmodel` | APK −0.84 MB, wasm −0.27 MB (before wasm-opt) |
 | L10 | lazy cold views and dialogs, `BIcon` without a `Loader` | Pi demo first content −0.3 s |
-| L16 | graph layout on a worker, scene-graph rendering | smooth graph on phones |
+| L16b | measure the graph on the Raspberry Pi (`bench-matrix.sh views graph`, offscreen: the software renderer's image node, 3 000-note vault; must not regress) and in the Android emulator probe (`android-batch.sh probe`, the scene graph on GLES); check it by hand on a phone, on Windows with a GPU (Direct3D 11) and in a phone's browser; if `rebuild()` (VaultIndex::graph and the filters, GUI thread) costs a phone > 50 ms, move its pure part onto the worker | phone: GUI stall during the layout < 33 ms, settled < 3 s |
 | L12 | sync: size + mtime quick check for unchanged text files | no-change sync ≥ 3× faster (laptop 10k 419 ms, Pi 5k 1.35 s) |
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 
 Done in wave 5 (2026-10-29, above): L1 (parse on worker threads), L2 (the index cache), L8 (the
 memory diet); on 2026-10-30 L5 (delta undo/redo, above; the Pi still to be measured: L5b), L9 (native file
-pickers, one Qt Quick Controls style: APK −15.6 MB, wasm −2.3 MB gzip, above) and L3
-(incremental derived lists, above; the Pi: L3b). Also
+pickers, one Qt Quick Controls style: APK −15.6 MB, wasm −2.3 MB gzip, above), L3
+(incremental derived lists, above; the Pi: L3b) and L16 (the graph's layout on a worker thread,
+drawn through the scene graph, above; the phones: L16b). Also
 open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip only) and
 the ~90 ms later content on a desktop first start (above).
 
