@@ -2189,7 +2189,10 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   the paper page) and none in dark: there the well reads against the card and the selection's
   outline is the control's only one. An off `BSwitch` is a solid `borderControl` track (≥ 3:1
   on `bg`, `bgElevated` and `bgSunken`, WCAG 1.4.11; `fgFaint` under the mouse), an on one the
-  `link` colour; the gallery's "Podstawy" checks both marks live ("STANY KONTROLEK (≥ 3:1)").
+  `link` colour; its knob says the state as well (WCAG 1.4.1): a Lucide check when on, a cross when
+  off, in the track's colour (12 px in the 18-px touch knob, 10 px in the 14-px one; on: `link`
+  on the knob 5.7:1 in light and 8.7:1 in dark, off: `borderControl` 3.5:1 and 3.4:1); the
+  gallery's "Podstawy" checks both marks live and shows both states ("STANY KONTROLEK (≥ 3:1)").
   Touch keyboards: `BTextField` asks for the action key Done (`EnterKey.type: Qt.EnterKeyDone`).
   Qt on Android otherwise shows Next whenever something focusable lies below a field, and Next
   only moves the focus: Enter and `accepted()` never arrive. Forms whose fields lead to the next

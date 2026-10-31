@@ -11,7 +11,9 @@ import Brulion
 //
 // Keyboard: Space toggles. The whole row is the hit area (≥ 44 px high on touch UIs).
 // The track: on, the link colour; off, solid borderControl (≥ 3:1 on bg, bgElevated and bgSunken,
-// WCAG 1.4.11 — the off state is seen, not guessed), fgFaint under the mouse.
+// WCAG 1.4.11 — the off state is seen, not guessed), fgFaint under the mouse. The knob says the
+// state too, not only the track's colour and the knob's side (WCAG 1.4.1): a check when on, a cross
+// when off, in the track's colour (12 px in the 18-px touch knob, 10 px in the 14-px one).
 T.Switch {
     id: control
 
@@ -67,6 +69,14 @@ T.Switch {
             Behavior on x {
                 enabled: !control.down
                 NumberAnimation { duration: Theme.duration; easing.type: Theme.easing }
+            }
+
+            BIcon {
+                objectName: "switchStateIcon"
+                anchors.centerIn: parent
+                name: control.checked ? "check" : "x"
+                size: Theme.touchUi ? 12 : 10
+                color: track.color
             }
         }
 

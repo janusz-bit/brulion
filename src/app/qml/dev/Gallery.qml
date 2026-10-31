@@ -478,11 +478,19 @@ ApplicationWindow {
                             Item {
                                 width: parent.width
                                 height: 32
-                                BSwitch {
+                                // Both states: the knob's cross and check say it besides the colour.
+                                Row {
                                     visible: stateSwatch.modelData.kind === "switch"
                                     anchors.verticalCenter: parent.verticalCenter
-                                    checked: false
-                                    Accessible.name: "wyłączony"
+                                    spacing: Theme.space3
+                                    BSwitch {
+                                        checked: false
+                                        Accessible.name: "wyłączony"
+                                    }
+                                    BSwitch {
+                                        checked: true
+                                        Accessible.name: "włączony"
+                                    }
                                 }
                                 BSegmented {
                                     visible: stateSwatch.modelData.kind === "segmented"
