@@ -1764,7 +1764,10 @@ note mode switch or an inserted template), so it never runs on over the page.
   take "3,5" and "1 200" (an invalid one: the field's error, nothing written). A checkbox writes
   each toggle. Dates open the editor's date dialog (`EditorDialogs.pickPropertyDate`: the key as
   title, natural language "jutro", the clock for a date and time, "Wyczyść"). Lists, tags and
-  aliases are chips (× removes; a `[[Page]]` item and a tag open their page) with "+": a field
+  aliases are chips (a `[[Page]]` item and a tag open their page; × removes — on touch UIs the
+  chip's menu, as the page header's chips: a press and hold on any chip, a tap on one that opens
+  nothing, with its page or tag page, "Kopiuj" and "Usuń" and "Cofnij" in the toast; the chip has
+  no × there, its 44-px target made each chip 44 px wider; Delete on a focused chip everywhere) with "+": a field
   where Enter or "," adds (a pasted "a, b, c" adds three) and stays open, Backspace in the empty
   field takes the last chip, Ctrl+Z there undoes; what cannot be added (an alias with `|`, a tag
   that is none) is said under the field, and in a toast when the field is left. Fields commit on
@@ -1774,7 +1777,8 @@ note mode switch or an inserted template), so it never runs on over the page.
   pane, the page's own save) re-renders the rows and must not replace what is typed — and writes
   only what differs from it, so a value opened and left as it was keeps its form (a `|` text,
   `ilosc:: 1.50`).
-* The row's menu (its type icon, a right-click or a long press on the row, the Menu key /
+* The row's menu (its type icon, a right-click or a long press on the row — not on a chip, which
+  has its own menu —, the Menu key /
   Shift+F10): "Typ" (Tekst, Liczba, Pole wyboru, Data, Data i godzina, Lista; tags and aliases keep
   theirs — a value that cannot be converted is cleared with "Cofnij" in the toast; an empty value's
   type is remembered for the session, `BlockEditor.propertyTypeOverride`, a list is written `[]`),
@@ -1795,7 +1799,9 @@ note mode switch or an inserted template), so it never runs on over the page.
   "Edytuj jako tekst".
 * Layout: the type icon and the key in a column (as wide as the widest key, 96 px to 30 % of the
   panel; keys and values at the UI text size, so a value opened for editing keeps its size; list
-  items are filled chips, a page link marked by its page icon) beside the value — on phones too, rows 44 px on touch UIs (32 px,
+  items are filled chips, a page link marked by its page icon; on touch UIs a chip is at least
+  44 × 44, and the list's "+" never starts a line alone — the last chip goes down with it,
+  `PropertyListValue.placement`) beside the value — on phones too, rows 44 px on touch UIs (32 px,
   28 dense, with a mouse), list rows too: a value's line is centred in the row's height
   (`PropertyRow.valuePadding`; a list's chip line is its tallest item, `PropertyListValue.lineHeight`
   — the chips' 44-px targets on touch UIs, the 28-px "+" with a mouse), so a list of two lines is
@@ -1803,7 +1809,8 @@ note mode switch or an inserted template), so it never runs on over the page.
   side panel) stacks the key over the value. Every control and tap area is a 44 px target on touch
   UIs: the key's whole cell (a tap focuses the row, a double tap renames), the value's whole cell
   (a text, a number, a date button: the row's padding included). The open panel is a sunken surface
-  without a frame (the focus border while its text is edited), 24 px above the first block under
+  in light and a raised one in dark (`bgElevated`: lighter reads as raised there, the sunken fill
+  barely parted from the page), without a frame (the focus border while its text is edited), 24 px above the first block under
   it (folded or open, in both modes, also under a page title drawn above the panel;
   `BlockDelegate.belowProperties`). Heights are bindings (rule 1 of
   "Scrolling performance": the rows' heights summed, the chips' lines computed), rows live in a

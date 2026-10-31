@@ -16,6 +16,8 @@ import Brulion
 // outlined:    an interactive neutral chip is drawn as an outlined filter button (default); a
 //              chip that is an item of a list rather than a filter sets it false (filled)
 // removable:   an × button (signal removeClicked(); also Delete/Backspace when focused)
+// On touch UIs an interactive or removable chip is a touch target: 44 px tall (its visual part
+// centred) and at least 44 px wide.
 // size:        "small" (inline in text) | "normal"
 T.AbstractButton {
     id: control
@@ -26,6 +28,9 @@ T.AbstractButton {
     property bool interactive: false
     property bool selected: false
     property bool removable: false
+    /// Delete / Backspace on the focused chip emit removeClicked() (also without the ×: a chip
+    /// removed from its menu on touch UIs).
+    property bool removeKey: removable
     property string size: "normal"
 
     signal removeClicked()
@@ -36,6 +41,13 @@ T.AbstractButton {
     readonly property int visualHeight: size === "small" ? (Theme.touchUi ? 24 : 20) : (Theme.touchUi ? 32 : 26)
     readonly property int hitHeight: interactive || removable ? Math.max(visualHeight, Theme.touchUi ? Theme.touchTarget : 0) : visualHeight
 
+    /// On touch UIs a chip you can press is at least a touch target wide too (a one-letter item is
+    /// still 44 × 44): a shorter one grows its padding evenly, so its content stays centred.
+    readonly property real minWidth: Theme.touchUi && (interactive || removable) ? Theme.touchTarget : 0
+    readonly property real basePaddingLeft: size === "small" ? 7 : 10
+    readonly property real basePaddingRight: removable ? (Theme.touchUi ? 0 : 3) : (size === "small" ? 8 : 11)
+    readonly property real widthSlack: Math.max(0, minWidth - (implicitContentWidth + basePaddingLeft + basePaddingRight))
+
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: hitHeight
@@ -43,8 +55,8 @@ T.AbstractButton {
     bottomInset: topInset
     topPadding: topInset
     bottomPadding: bottomInset
-    leftPadding: size === "small" ? 7 : 10
-    rightPadding: removable ? (Theme.touchUi ? 0 : 3) : (size === "small" ? 8 : 11)
+    leftPadding: basePaddingLeft + widthSlack / 2
+    rightPadding: basePaddingRight + widthSlack / 2
 
     // A static chip must not swallow clicks meant for the row or card it sits in: disabled
     // items take no pointer events (and only disabled *interactive* chips are dimmed below).
@@ -60,7 +72,7 @@ T.AbstractButton {
     Accessible.checked: selected
 
     Keys.onPressed: (event) => {
-        if (control.removable && (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace)) {
+        if (control.removeKey && (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace)) {
             control.removeClicked()
             event.accepted = true
         } else if (control.interactive && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {

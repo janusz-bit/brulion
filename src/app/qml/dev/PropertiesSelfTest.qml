@@ -9,7 +9,9 @@ import Brulion
 // typed with real keys ("Zażółć gęślą jaźń") — only that line of the file changes, its comment
 // kept —; a number typed "3,5" (written 3.5), "abc" refused with the field's error and the file
 // untouched, Ctrl+Z; the checkbox toggled; a date from the dialog's natural language ("jutro");
-// a list item added with Enter and taken away with Backspace in the empty field, a chip's ×;
+// a list item added with Enter and taken away with Backspace in the empty field, a chip's × (on a
+// phone the chip's menu — a tap on a plain item, a press and hold, never the row's menu —; the
+// "+" never alone at the start of a line, the list's width swept px by px);
 // renaming through the row's menu (an existing name refused); a type changed in the menu's "Typ"
 // (text → list); a removal undone from the toast's "Cofnij"; a property added from the key
 // suggestions (another page's key) with its value typed at once — a key the page has is refused,
@@ -120,6 +122,11 @@ QtObject {
         const p = panel()
         return p !== null && p.menu !== null && p.menu.opened
     }
+    /// The chip menu of the list `key` is open.
+    function chipMenuOpen(key) {
+        const list = inRow(key, "propertyListValue")
+        return list !== null && list.chipMenu !== null && list.chipMenu.opened
+    }
     /// The row's menu from its type icon (a tap or a click).
     function openMenu(key) {
         return [
@@ -198,14 +205,61 @@ QtObject {
                           key + ": whole chip lines on the row's grid: " + r.height + " px, padding " + r.valuePadding)
                     if (Theme.touchUi) {
                         check(r.valuePadding === 0, key + ": on touch UIs the chips' 44-px line is the row's height")
-                        const chip = inRow(key, "propertyChip_0")
                         const add = inRow(key, "propertyListAdd")
-                        check(chip !== null && chip.height >= Theme.touchTarget && add !== null && add.height >= Theme.touchTarget
-                              && add.width >= Theme.touchTarget, key + ": the chips and “+” stay 44 px targets")
+                        check(add !== null && add.height >= Theme.touchTarget && add.width >= Theme.touchTarget,
+                              key + ": “+” stays a 44 px target")
+                        for (let i = 0; inRow(key, "propertyChip_" + i) !== null; ++i) {
+                            const chip = inRow(key, "propertyChip_" + i)
+                            check(chip.height >= Theme.touchTarget && chip.width >= Theme.touchTarget && chip.interactive
+                                  && !chip.removable, key + ": chip " + i + " is a 44 × 44 target without an ×: "
+                                  + chip.width + "×" + chip.height)
+                        }
                     } else {
                         check(Math.abs(r.height - p.rowHeight) < 0.5, key + ": one chip line, the row's height: "
                               + r.height + " / " + p.rowHeight)
+                        check(inRow(key, "propertyChip_0").removable, key + ": with a mouse a chip has its ×")
                     }
+                }
+                // ---- the "+" never starts a line alone: at every width the chip before it comes down
+                //      with it (when both fit) — the list's places for its width swept px by px.
+                for (const key of ["tags", "autorzy"]) {
+                    const list = inRow(key, "propertyListValue")
+                    const add = inRow(key, "propertyListAdd")
+                    const count = list.items.length
+                    const last = inRow(key, "propertyChip_" + (count - 1))
+                    const first = inRow(key, "propertyChip_0")
+                    const now = list.placementAt(list.width)
+                    const placeOf = (pl, item) => pl.items.find(e => e.item === item)
+                    check(Math.abs(placeOf(now, add).x - add.x) < 0.5 && Math.abs(placeOf(now, add).y - add.y) < 0.5
+                          && Math.abs(placeOf(now, last).x - last.x) < 0.5 && Math.abs(now.height - list.implicitHeight) < 0.5,
+                          key + ": the items stand where the list places them")
+                    let widest = 0
+                    let all = add.width
+                    for (let i = 0; i < count; ++i) {
+                        const c = inRow(key, "propertyChip_" + i)
+                        widest = Math.max(widest, c.width)
+                        all += c.width + Theme.space1
+                    }
+                    let pulled = 0
+                    const wrong = []
+                    for (let w = Math.ceil(widest + Theme.space1 + add.width); w <= all + 2; ++w) {
+                        const pl = list.placementAt(w)
+                        const a = placeOf(pl, add)
+                        const l = placeOf(pl, last)
+                        const f = placeOf(pl, first)
+                        const sameLine = Math.abs(l.y - a.y) < 0.5
+                        if (a.x < 0.5 && a.y > f.y && l.x > 0.5 && last.width + Theme.space1 + add.width <= w)
+                            wrong.push(w)
+                        if (!sameLine && a.x > 0.5)
+                            wrong.push(w)
+                        if (a.x + add.width > w + 0.5 || l.x + last.width > w + 0.5)
+                            wrong.push(w)
+                        if (count > 1 && sameLine && l.x < 0.5 && l.y > f.y)
+                            pulled += 1
+                    }
+                    check(wrong.length === 0, key + ": “+” never alone at the start of a line, nothing past the width: " + wrong.join(", "))
+                    check(count < 2 || pulled > 0, key + ": the last chip came down with “+” where it would wrap alone ("
+                          + pulled + " widths)")
                 }
                 // ---- a narrow window: the key over the value -----------------------------------------
                 widthBefore = window.width
@@ -304,13 +358,51 @@ QtObject {
             },
             wait(() => text().indexOf("autorzy:\n  - \"[[Jan Kowalski]]\"\n  - Anna\n---") > 0,
                  "Backspace in the empty field removes the last item"),
-            () => {
-                key(inRow("autorzy", "propertyListField"), Qt.Key_Escape)
-                const chip = inRow("autorzy", "propertyChip_1")
-                check(chip !== null && chip.removable, "the chips can be removed")
-                chip.removeClicked()
-            },
-            wait(() => text().indexOf("autorzy:\n  - \"[[Jan Kowalski]]\"\n---") > 0, "× removes an item"),
+            ...(Theme.touchUi ? [
+                // Touch UIs: no ×; a tap on a chip that opens nothing opens its menu, a press and
+                // hold on any chip too — not the row's menu —, and "Usuń" there removes it (a toast
+                // with "Cofnij").
+                () => {
+                    key(inRow("autorzy", "propertyListField"), Qt.Key_Escape)
+                    window.tapItem(inRow("autorzy", "propertyChip_1"))
+                },
+                wait(() => chipMenuOpen("autorzy"), "a tap on a plain item opens its menu"),
+                () => {
+                    const m = inRow("autorzy", "propertyListValue").chipMenu
+                    check(window.menuItemNamed(m, "propertyChipCopy").visible
+                          && !window.menuItemNamed(m, "propertyChipOpen").visible, "a plain item: Kopiuj, no Otwórz")
+                    m.close()
+                },
+                wait(() => !chipMenuOpen("autorzy"), "the menu closes"),
+                ...window.menuGesture(() => inRow("autorzy", "propertyChip_1"), () => chipMenuOpen("autorzy")),
+                () => {
+                    check(chipMenuOpen("autorzy") && !menuOpen(), "a press and hold opens the chip's menu, not the row's")
+                    const item = window.menuItemNamed(inRow("autorzy", "propertyListValue").chipMenu, "propertyChipRemove")
+                    check(item !== null && item.visible && item.text.indexOf("Anna") >= 0, "the menu removes “Anna”: "
+                          + (item ? item.text : "-"))
+                    window.tapItem(item)
+                },
+                wait(() => text().indexOf("autorzy:\n  - \"[[Jan Kowalski]]\"\n---") > 0, "“Usuń” in the chip's menu removes an item"),
+                () => check(window.lastNoticeAction !== null && window.lastNotice.indexOf("Anna") >= 0,
+                            "a toast says it, with “Cofnij”: " + window.lastNotice),
+                ...window.menuGesture(() => inRow("tags", "propertyChip_0"), () => chipMenuOpen("tags")),
+                () => {
+                    check(!menuOpen(), "a held tag opens its own menu, not the row's")
+                    const m = inRow("tags", "propertyListValue").chipMenu
+                    check(window.menuItemNamed(m, "propertyChipOpen").visible && window.menuItemNamed(m, "propertyChipRemove").visible,
+                          "a tag's menu: its page and Usuń")
+                    m.close()
+                },
+                wait(() => !chipMenuOpen("tags"), "the tag's menu closes"),
+            ] : [
+                () => {
+                    key(inRow("autorzy", "propertyListField"), Qt.Key_Escape)
+                    const chip = inRow("autorzy", "propertyChip_1")
+                    check(chip !== null && chip.removable, "the chips can be removed")
+                    chip.removeClicked()
+                },
+                wait(() => text().indexOf("autorzy:\n  - \"[[Jan Kowalski]]\"\n---") > 0, "× removes an item"),
+            ]),
             () => page.undo(),
             // ---- rename through the menu ----------------------------------------------------------------
             ...openMenu("koszt"),

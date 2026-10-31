@@ -341,7 +341,9 @@ FocusScope {
         border.color: Theme.alpha(Theme.focusRing, 0.6)
     }
     HoverHandler { id: rowHover; enabled: !Theme.touchUi }
-    // The row's menu: a right-click anywhere on it (a mouse), a long press with a finger.
+    // The row's menu: a right-click anywhere on it (a mouse), a long press with a finger — not on a
+    // list's chip: that opens the chip's own menu (PropertyListValue; this handler sees the press
+    // too, after the chip took it).
     TapHandler {
         acceptedButtons: Qt.RightButton
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
@@ -349,7 +351,13 @@ FocusScope {
     }
     TapHandler {
         acceptedDevices: PointerDevice.TouchScreen
-        onLongPressed: row.openMenu(row, point.position.x, point.position.y)
+        onLongPressed: {
+            const list = valueLoader.item as PropertyListValue
+            const at = list ? list.mapFromItem(row, point.position.x, point.position.y) : Qt.point(0, 0)
+            if (list && list.chipAt(at.x, at.y) !== null)
+                return
+            row.openMenu(row, point.position.x, point.position.y)
+        }
     }
 
     // The type icon: the menu.

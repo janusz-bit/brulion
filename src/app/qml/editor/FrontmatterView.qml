@@ -57,8 +57,10 @@ Rectangle {
                                      : expanded && panelLoader.active ? panelLoader.implicitHeight + Theme.space2 : 0)
     height: implicitHeight
     radius: Theme.radius
-    // Open: a sunken surface, framed only while its text is edited (the focus border).
-    color: root.open ? Theme.bgSunken : "transparent"
+    // Open: a sunken surface in light, a raised one in dark (lighter reads as raised there; the
+    // sunken fill barely parted from the page), framed only while its text is edited (the focus
+    // border).
+    color: !root.open ? "transparent" : Theme.dark ? Theme.bgElevated : Theme.bgSunken
     border.width: root.block.editing ? 1 : 0
     border.color: Theme.alpha(Theme.focusRing, 0.5)
 
