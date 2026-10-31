@@ -190,7 +190,7 @@ FocusScope {
             currentIndex: 0
             reuseItems: true
             boundsBehavior: Flickable.StopAtBounds
-            bottomMargin: Theme.narrow ? Theme.space16 + Theme.space8 : Theme.space6
+            bottomMargin: Theme.space6
             highlightMoveDuration: 0
             T.ScrollBar.vertical: BScrollBar {}
             Accessible.role: Accessible.List

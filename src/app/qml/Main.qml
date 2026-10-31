@@ -170,8 +170,8 @@ ApplicationWindow {
         parent: T.Overlay.overlay
         anchors.fill: parent
         z: 1000
-        // Above the bottom navigation, the quick-capture button (56 + its margin) and the
-        // Android navigation bar: an error toast stays until closed and must not hide them.
+        // Above the bottom navigation and the Android navigation bar: an error toast stays
+        // until closed and must not hide them.
         // While typing above the keyboard and the editing toolbar docked on it (AppShell).
         bottomMargin: Theme.space4 + (window.shell ? window.shell.toastClearance
                                                     : (parent ? parent.SafeArea.margins.bottom : 0) + KeyboardInsets.overlap)

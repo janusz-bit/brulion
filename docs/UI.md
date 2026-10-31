@@ -31,7 +31,8 @@ components — no Material/Fusion look, so all targets look identical.
   command palette and their shortcuts; ticked, Ulubione shows once a page is starred and
   Ostatnie once another page was opened); the phone's **bottom navigation**: four buttons, each
   from a menu of Dziennik, Kalendarz, Szukaj, Zadania, Strony, Tagi, Graf (a view already in
-  another slot swaps places with it), Menu always last; the **quick note button** on or off;
+  another slot swaps places with it), Menu always last; the bottom bar's **+ Notatka** (the
+  quick note button) on or off;
   "Przywróć domyślny wygląd" (colours, fonts, sizes, density, line spacing — the visibility of
   elements stays). A family chosen on another device or since uninstalled falls back to the
   default font. The browser has no font rows (Qt there sees only its bundled DejaVu fonts).
@@ -94,15 +95,18 @@ components — no Material/Fusion look, so all targets look identical.
   UI mode (`Theme.touchUi`), not the pointer: a mouse or touchpad in a touch UI (a narrow window
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
   touch UI it is Qt's default (the start-drag distance); the top bar keeps ☰, back (when there is history), title, Szukaj and Więcej;
-  a **bottom navigation** bar (by default Dziennik, Kalendarz, Szukaj, Zadania — four views
-  chosen in Settings → Wygląd → Układ — and Menu → drawer); a floating quick-capture button (a
-  raised round button on the page's surface — `ShellCaptureButton`: the popup surface, a 1-px
-  ring, a shadow, the "+" in the text colour —; hidden while editing, or by the setting). The navigation makes way while the on-screen
+  a **bottom navigation** bar: Dziennik, Kalendarz, Szukaj, Zadania by default — four views
+  chosen in Settings → Wygląd → Układ, sharing the width —, then **+ Notatka** (quick capture:
+  a fixed 56 px item whose "+" sits in a small ringed pill, the old floating button's popup
+  surface scaled down, so it reads as an action and never as the current view; off in the
+  settings, capture stays in the palette and under Ctrl+Shift+N) and Menu → drawer, always
+  last. Nothing floats over a phone's content; capture is wherever the bar is, settings, sync
+  and the graph included. The navigation makes way while the on-screen
   keyboard is up — when the keyboard goes while the editing goes on, it comes back and the
   editing toolbar docks right on it; a tap on one of its tabs then opens that view, the editing
-  ends as when leaving the page —, and for the drawing editor's tool bar, which takes its place;
-  the capture button makes way while typing: the keyboard up, or an editing toolbar docked
-  ("On-screen keyboard"). The Android back key /
+  ends as when leaving the page, and + Notatka ends the editing (the view's `endEditing()`, as
+  the toolbar's "Ukryj klawiaturę") before quick capture opens —, and for the drawing editor's
+  tool bar, which takes its place ("On-screen keyboard"). The Android back key /
   gesture walks back
   through the history; the app closes only from the home view. The drawer also lists
   **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
@@ -323,10 +327,9 @@ everything near the bottom, the same way on Android, in the browser and with a s
   where it was instead of dropping onto the keyboard after it came, and while it goes. In the
   browser the page is resized for the keyboard in one step: the navigation goes at once and
   comes back at once, fading in (`Theme.durationFast`; none with reduced motion) where the view
-  already made room for it, so the view and the toolbar move once. The floating capture button
-  makes way while typing — the keyboard is up, or an editing toolbar is docked in the view or
-  the side panel —;
-  without the bottom navigation (a wide touch window) the content then ends above the system's
+  already made room for it, so the view and the toolbar move once. While typing — the keyboard
+  is up, or an editing toolbar is docked in the view or the side panel —
+  without the bottom navigation (a wide touch window) the content ends above the system's
   navigation bar. That bar (`AppShell.navigationBar`, which the bottom navigation pads itself
   with) is the window's SafeArea margin — except one taller than any navigation bar (120 px, as
   `ViewportKeyboard::MinKeyboard`): on Android Qt's SafeArea counts the keyboard in at times (336
@@ -397,7 +400,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   toolbar on the keyboard, not at the day's bottom, while the list scrolls or is flicked),
   `tst_shell_qml` (the bottom navigation, the view's end, a sheet, a toast; editing with the
   keyboard hidden: the bottom navigation shown and the docked toolbar right on it, also over a
-  system navigation bar — the shell's `SafeArea.additionalMargins` —, the capture button away;
+  system navigation bar — the shell's `SafeArea.additionalMargins` —, + Notatka on the
+  navigation under it, a tap on it ending the editing and opening quick capture;
   the keyboard sliding in frame by frame leaving the navigation under it until covered, sliding
   away uncovering it, a keyboard shorter than the navigation leaving the toolbar where it was,
   a browser's keyboard — viewport samples, the page resized — taking it at
@@ -1306,7 +1310,7 @@ and diagrams (shapes, arrows, text), on every platform.
   never a blank picture. A `.md` file is read only when it is a plugin drawing. It runs in Qt
   Quick's image reader thread (the browser: the GUI thread) and only reads the file. A theme switch loads the other URL; `retainWhileLoading` keeps
   the shown picture — and the embed's frame its size — until it is there.
-* View contract: `title`, `editing` (no capture button over the paper), `toolbarDocked` (phones),
+* View contract: `title`, `editing` (always), `toolbarDocked` (phones),
   `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
 
 Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, the SVG, the dark

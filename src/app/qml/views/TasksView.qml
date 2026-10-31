@@ -141,7 +141,7 @@ FocusScope {
         reuseItems: true
         keyNavigationEnabled: true
         boundsBehavior: Flickable.StopAtBounds
-        bottomMargin: Theme.narrow ? Theme.space16 + Theme.space8 : Theme.space8
+        bottomMargin: Theme.space8
         currentIndex: -1
         BRowScrollBar { list: list }
         Accessible.role: Accessible.List
@@ -303,7 +303,6 @@ FocusScope {
         id: toasts
         anchors.fill: parent
         z: 100
-        // Phones: above the floating quick-capture button (56 px at the view's bottom edge).
-        bottomMargin: Theme.space4 + (Theme.narrow ? 56 + Theme.space4 : 0)
+        bottomMargin: Theme.space4
     }
 }

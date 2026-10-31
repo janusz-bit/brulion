@@ -54,8 +54,8 @@ import Brulion
 // paper's menu) on wide windows, "theme" (the background's menu; on phones "Więcej"), "shape"
 // (the shapes' menu), "select" (everything selected: the selection bar), "backdrop" (the page
 // picker of the backdrop's PDF; a picture's backdrop: the paper's menu).
-// View contract (ShellRouteView): `title` (the file's name), `editing` (no capture button over the
-// paper), `toolbarDocked` and `replacesBottomNav` (phones: the tool bar at the bottom — the
+// View contract (ShellRouteView): `title` (the file's name), `editing` (always: the paper is being
+// worked on), `toolbarDocked` and `replacesBottomNav` (phones: the tool bar at the bottom — the
 // bottom navigation makes way; no keyboard involved, unlike an editor's toolbar),
 // `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
 FocusScope {

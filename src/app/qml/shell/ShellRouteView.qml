@@ -9,11 +9,11 @@ import Brulion
 //
 // View contract: every view has `property var route`; optional `property string title` (top
 // bar), `property Component sidePanel` (context panel: backlinks, outline, mini calendar) and
-// `property bool editing` (text is being edited, or a picture fills the view: the floating capture
-// button hides),
+// `property bool editing` (text is being edited, or a picture fills the view: toasts go to the top
+// while a toolbar is docked), `function endEditing()` (the editing a docked touch toolbar is for
+// ends — the bottom navigation's quick capture, which would open over it),
 // `property bool toolbarDocked` (an editor's touch toolbar is docked at the view's bottom edge:
-// on the keyboard, or on the phone's bottom navigation once the keyboard went — the floating
-// capture button hides), `replacesBottomNav` (DrawingView on phones: the view's own bar at the
+// on the keyboard, or on the phone's bottom navigation once the keyboard went), `replacesBottomNav` (DrawingView on phones: the view's own bar at the
 // bottom takes the bottom navigation's place),
 // `pictureRoute` / `pictureAsText` (PageView: a picture is shown, as text or not — the top bar's
 // menu acts on it), `sourceMode` (PageView: the page is shown as Markdown source — the palette's
@@ -38,8 +38,7 @@ Item {
     readonly property string viewTitle: _view && typeof _view.title === "string" ? _view.title : ""
     /// The view's context panel, or null.
     readonly property Component viewSidePanel: (_view && _view.sidePanel) || null
-    /// The view is editing text (a block, source mode): the floating capture button would cover
-    /// the editor's toolbar and caret.
+    /// The view is editing text (a block, source mode) or shows a picture.
     readonly property bool viewEditing: !!_view && _view.editing === true
     /// The view's editing toolbar is docked at its bottom edge (touch UIs).
     readonly property bool viewToolbarDocked: !!_view && _view.toolbarDocked === true
@@ -52,6 +51,12 @@ Item {
     readonly property bool viewSourceMode: !!_view && _view.sourceMode === true
     /// The view swipes sideways from the left edge itself (the calendar's grids): no edge strip.
     readonly property bool viewEdgeSwipe: !!_view && _view.edgeSwipe === true
+
+    /// Ends the editing the view's docked touch toolbar is for (views without one: nothing).
+    function endEditing() {
+        if (_view && typeof _view.endEditing === "function")
+            _view.endEditing()
+    }
 
     function componentFor(view) {
         switch (view) {

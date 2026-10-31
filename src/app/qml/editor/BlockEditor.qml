@@ -979,6 +979,15 @@ FocusScope {
             table.startCell(r, c)
     }
 
+    /// Ends the editing the touch toolbar is docked for — a block, a table cell, the source's
+    /// keyboard — as its "Hide keyboard" does (the word being composed is kept): the shell's quick
+    /// capture from the bottom navigation would otherwise open over it. The selection's tools stay.
+    function endTouchEditing() {
+        const bar = toolbarLoader.item as MobileEditToolbar
+        if (bar && toolbarVisible && toolbarMode !== "selection")
+            bar.hideKeyboard()
+    }
+
     function releaseSourceKeyboard() {
         if (sourceLoader.item)
             (sourceLoader.item as SourceEditor).releaseKeyboard()

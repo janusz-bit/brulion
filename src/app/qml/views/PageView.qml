@@ -48,7 +48,7 @@ import Brulion
 // A picture takes "links" | "outline" | "calendar" and "text" (its text view).
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
-// (daily notes by their date), `sidePanel`, `editing`, `toolbarDocked` and `sourceMode`. `--editor-script <state>` drives the
+// (daily notes by their date), `sidePanel`, `editing`, `toolbarDocked`, `endEditing()` and `sourceMode`. `--editor-script <state>` drives the
 // editor for screenshots through qml/dev/PageScript.qml.
 FocusScope {
     id: root
@@ -61,12 +61,16 @@ FocusScope {
     readonly property string journalDate: page.path !== "" ? Workspace.journalDate(page.path) : ""
     /// Top bar title: daily notes by their date; other pages use the shell's default (file name).
     readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : ""
-    /// A block (or the source) is being edited, or a picture fills the view: the shell hides
-    /// its floating capture button (it would float over the photo).
+    /// A block (or the source) is being edited, or a picture fills the view.
     readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute
     /// The editor's touch toolbar is docked at the bottom (on the keyboard, or on the phone's
-    /// bottom navigation once the keyboard went): the shell hides its capture button.
+    /// bottom navigation once the keyboard went).
     readonly property bool toolbarDocked: editor.toolbarVisible
+    /// The shell's quick capture from the bottom navigation: the editing the docked toolbar is for
+    /// ends first, as when the page is left.
+    function endEditing() {
+        editor.endTouchEditing()
+    }
     /// The page is shown as Markdown source (the shell turns the palette's block commands off).
     readonly property bool sourceMode: page.sourceMode && !root.pictureRoute
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent

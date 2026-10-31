@@ -21,7 +21,7 @@ import Brulion
 // and copying"): Shift+click, Shift+↑/↓ past a day's edge, a drag, a tap in the touch selection
 // mode; such a selection is copied only.
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
-// (one day: its date), `sidePanel`, `editing`, `toolbarDocked` and `sourceMode`.
+// (one day: its date), `sidePanel`, `editing`, `toolbarDocked`, `endEditing()` and `sourceMode`.
 FocusScope {
     id: root
 
@@ -37,9 +37,19 @@ FocusScope {
     readonly property string title: single ? DatesHelper.formatLong(date) : ""
     readonly property bool editing: single ? (pageView !== null && pageView.editing)
                                            : (activeDay !== null && activeDay.editing)
-    /// A touch toolbar is docked at the bottom (the shell hides its capture button).
+    /// A touch toolbar is docked at the bottom (the shell keeps the content above it).
     readonly property bool toolbarDocked: single ? (pageView !== null && pageView.toolbarDocked)
                                                  : (activeDay !== null && activeDay.editor.toolbarVisible)
+    /// The shell's quick capture from the bottom navigation: the editing of the day written in
+    /// ends first.
+    function endEditing() {
+        if (single) {
+            if (pageView)
+                pageView.endEditing()
+        } else if (activeDay) {
+            activeDay.editor.endTouchEditing()
+        }
+    }
     /// One day as a page in source mode (the stream opens a day as a page for that).
     readonly property bool sourceMode: single && pageView !== null && pageView.sourceMode
     readonly property Component sidePanel: inSidePanel ? null : single ? (pageView ? pageView.sidePanel : null) : journalsPanel
@@ -247,9 +257,8 @@ FocusScope {
                 // of the day being edited (tst_content_journals_qml).
                 currentIndex: -1
                 boundsBehavior: Flickable.StopAtBounds
-                // Room for the floating capture button on phones, and for the docked toolbar.
-                bottomMargin: (Theme.narrow ? Theme.space16 + Theme.space8 : Theme.space12)
-                              + (journals.toolbarDocked ? Theme.editToolbarHeight : 0)
+                // Room for the docked toolbar.
+                bottomMargin: Theme.space12 + (journals.toolbarDocked ? Theme.editToolbarHeight : 0)
                 // The frame shrinks with the keyboard: the caret stays in view (growing, it covers
                 // nothing: the list stays where the user scrolled it).
                 property real lastHeight: 0

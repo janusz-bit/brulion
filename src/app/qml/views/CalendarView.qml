@@ -212,8 +212,7 @@ FocusScope {
                     Layout.leftMargin: Theme.space2
                     Layout.rightMargin: Theme.space2
                     Layout.topMargin: Theme.space3
-                    // Room for the shell's floating capture button.
-                    bottomMargin: Theme.space16 + Theme.space4
+                    bottomMargin: Theme.space4
                     calendar: cal
                     date: cal.anchorDate
                     onItemOpened: (entry) => root.openEntry(entry)
@@ -370,7 +369,6 @@ FocusScope {
         id: toasts
         anchors.fill: parent
         z: 100
-        // Phones: above the floating quick-capture button (56 px at the view's bottom edge).
-        bottomMargin: Theme.space4 + (Theme.narrow ? 56 + Theme.space4 : 0)
+        bottomMargin: Theme.space4
     }
 }

@@ -30,7 +30,7 @@ Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na ka�
 - Skrót: wpisz w dowolnej notatce `[[Nazwa nowej strony]]` i kliknij link — strona powstanie.
 
 ## Szybka notatka
-**Ctrl+Shift+N** (na telefonie przycisk „+” nad dolnym paskiem) otwiera jedno pole tekstowe. Wpisany tekst trafia na koniec dzisiejszego dziennika (z dokumentacji Brulion najpierw wraca do Twojego notatnika). Daty w nim stają się terminami i przypomnieniami: „zadzwonić do Ani jutro o 9”.
+**Ctrl+Shift+N** (na telefonie **+ Notatka** w dolnym pasku) otwiera jedno pole tekstowe. Wpisany tekst trafia na koniec dzisiejszego dziennika (z dokumentacji Brulion najpierw wraca do Twojego notatnika). Daty w nim stają się terminami i przypomnieniami: „zadzwonić do Ani jutro o 9”.
 
 ## Szukanie i przechodzenie
 - **Ctrl+O** — szybkie przejście do strony po kilku literach nazwy.
@@ -58,7 +58,7 @@ W *Ustawienia → Wygląd* dopasujesz Brulion do siebie — osobno na każdym ur
 - **Motyw** jasny, ciemny albo zgodny z systemem; **kolor akcentu** (czerwony, niebieski, zielony, morski, fioletowy, grafitowy albo **Własny…** — dowolny kolor z siatki lub wpisany jako `#3b7dd8`). Akcent wyróżnia dzisiejszy dzień, bieżącą kartę i zaznaczenia; tam, gdzie wybrany kolor byłby nieczytelny, Brulion sam bierze jego jaśniejszy albo ciemniejszy odcień. Ostrzeżenia i usuwanie zostają czerwone.
 - **Jasne tło**: papier albo białe; **ciemne tło**: granatowe albo czarne (oszczędza baterię na ekranach OLED).
 - **Rozmiar tekstu**, **czcionka interfejsu** (dowolna zainstalowana) i **gęstość** — zwarta mieści więcej na ekranie komputera (na telefonie przyciski zostają duże).
-- **Układ**: które pozycje i sekcje pokazuje pasek boczny, jakie cztery przyciski ma dolna nawigacja na telefonie i czy widać okrągły przycisk szybkiej notatki. Ukryte widoki zostają w palecie poleceń i pod skrótami.
+- **Układ**: które pozycje i sekcje pokazuje pasek boczny, jakie cztery przyciski ma dolna nawigacja na telefonie i czy jest w niej przycisk szybkiej notatki **+ Notatka**. Ukryte widoki zostają w palecie poleceń i pod skrótami.
 
 Czcionkę notatek (szeryfowa, bezszeryfowa albo **Inna…**), czcionkę kodu, rozmiar tekstu i **odstęp między wierszami** ustawisz w *Ustawienia → Edytor*. „Przywróć domyślny wygląd” wraca do kolorów i czcionek z początku. W przeglądarce nie ma wyboru czcionek — działają tylko jej wbudowane.
 

@@ -25,7 +25,7 @@ FocusScope {
     property bool scrollable: true
     /// The date heading (a sheet shows it in its own title).
     property bool showHeading: true
-    /// Empty space after the content (e.g. above a floating button).
+    /// Empty space after the content.
     property real bottomMargin: Theme.space4
 
     signal itemOpened(var entry)

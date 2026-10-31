@@ -3570,12 +3570,13 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
 ///     (quick capture) sit above it. Editing with the keyboard hidden by the system: the bottom
 ///     navigation is back and the editing toolbar docks right on it (also with a system
 ///     navigation bar under it), toasts show at the top, away from the line being written, the
-///     capture button stays away; the keyboard sliding in leaves the navigation under it until it
+///     navigation's "+ Notatka" stays under the toolbar; the keyboard sliding in leaves the navigation under it until it
 ///     covers it (the toolbar never drops first), sliding away uncovers it again, the toolbar
 ///     following the keyboard's top down to the navigation; a keyboard shorter than the navigation
 ///     takes its place but leaves the toolbar where it was; a browser's keyboard (the page resized
 ///     for it: no overlap, still settling) takes the navigation away at once; a tap on a navigation
-///     tab while editing opens that view and the editing ends. A settings field that gets the
+///     tab while editing opens that view and the editing ends, a tap on "+ Notatka" ends the
+///     editing and opens quick capture. A settings field that gets the
 ///     focus is scrolled above the keyboard; on a wide touch window a page in the side panel docks
 ///     its toolbar on the keyboard too.
 void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
@@ -3650,7 +3651,12 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     // docks right on it.
     const QString guide = u"Witaj w Brulionie.md"_s;
     QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+    // Quick capture's item on the bottom navigation ("+ Notatka").
     QQuickItem *captureButton = window->findChild<QQuickItem *>(u"shellCaptureButton"_s);
+    const auto captureOnNav = [&] {
+        return captureButton && captureButton->isVisible()
+               && captureButton->mapToScene(QPointF(0, 0)).y() >= nav->mapToScene(QPointF(0, 0)).y() - 1;
+    };
     const auto navTop = [&] { return nav->mapToScene(QPointF(0, 0)).y(); };
     const auto navAtBottom = [&] { return nav->isVisible() && near(navTop() + nav->height(), window->height()); };
     QQuickItem *editor = nullptr;
@@ -3685,8 +3691,8 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         // (Laid out with the shell's next polish.)
         check(waitFor([&] { return slot && near(slotBottom(), navTop()); }),
               "the docked toolbar sits right on the bottom navigation");
-        check(waitFor([&] { return !room->isVisible(); }) && captureButton && !captureButton->isVisible(),
-              "no keyboard's room under the navigation, no capture button over the toolbar");
+        check(waitFor([&] { return !room->isVisible(); }) && captureOnNav(),
+              "no keyboard's room under the navigation; “+ Notatka” is on it, under the toolbar");
         auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
         check(theme
                       && near(shellItem->property("toastClearance").toReal(),
@@ -3834,8 +3840,28 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
 
         QMetaObject::invokeMethod(page, "stopEditing");
         check(waitFor([&] { return !editor->property("toolbarVisible").toBool() && navAtBottom(); })
-                      && waitFor([&] { return captureButton && captureButton->isVisible(); }),
-              "editing stops: the toolbar goes, the bottom navigation stays, the capture button is back");
+                      && captureOnNav(),
+              "editing stops: the toolbar goes, the bottom navigation stays with “+ Notatka”");
+
+        // "+ Notatka" while editing without the keyboard: the editing ends (nothing written),
+        // quick capture opens.
+        {
+            const QString unchanged = app->workspace()->readFile(guide);
+            editLastRow();
+            check(waitFor([&] { return editor->property("toolbarVisible").toBool() && navAtBottom() && captureOnNav(); }),
+                  "editing again, the keyboard hidden: “+ Notatka” is on the bottom navigation");
+            if (captureButton)
+                tapOrClick(window, pointIn(captureButton), QCoreApplication::arguments().contains(u"--touch"_s));
+            check(waitFor([&] {
+                      return capture->property("opened").toBool() && !editor->property("toolbarVisible").toBool()
+                             && page->property("editingRow").toInt() < 0;
+                  }),
+                  "a tap on “+ Notatka” while editing ends the editing and opens quick capture");
+            sendKey(window, Qt::Key_Escape);
+            check(waitFor([&] { return !capture->property("visible").toBool(); })
+                          && app->workspace()->readFile(guide) == unchanged,
+                  "quick capture closes, the guide is left as it was");
+        }
 
         // A tap on a navigation tab while editing without the keyboard: that view opens, the
         // editing ends with the page (nothing written).
@@ -4065,7 +4091,14 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         check(capture && waitFor([&] { return app->currentView() == u"journals"; }) && !capture->isVisible(),
               "switched off, the quick note button is not shown");
         settings->setCaptureButtonShown(true);
-        check(capture && waitFor([&] { return capture->isVisible(); }), "switched on again, it is back");
+        QQuickItem *menuTab = window->findChild<QQuickItem *>(u"bottomNav_menu"_s);
+        // (Laid out with the bar's next polish.)
+        check(capture && menuTab && waitFor([&] {
+                  return capture->isVisible() && capture->width() > 0
+                         && capture->mapToScene(QPointF(capture->width(), 0)).x()
+                                    <= menuTab->mapToScene(QPointF(0, 0)).x() + 1;
+              }),
+              "switched on again, it is back on the bottom bar, before Menu");
         app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
     }
 

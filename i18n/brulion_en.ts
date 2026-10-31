@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="586"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="573"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
@@ -163,7 +163,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1605"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1614"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -224,7 +224,7 @@
 <context>
     <name>CalendarMonthGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="167"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="168"/>
         <source>%n entries</source>
         <translation>
             <numerusform>%n entry</numerusform>
@@ -232,7 +232,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="268"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="274"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -243,7 +243,7 @@
 <context>
     <name>CalendarWeekGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="208"/>
+        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="207"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -437,7 +437,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="313"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="312"/>
         <source>%n nodes</source>
         <translation>
             <numerusform>%n node</numerusform>
@@ -445,7 +445,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="313"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="312"/>
         <source>%n links</source>
         <translation>
             <numerusform>%n link</numerusform>
@@ -453,7 +453,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="315"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="314"/>
         <source>the %n best connected shown</source>
         <translation>
             <numerusform>the best connected one shown</numerusform>
@@ -634,7 +634,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="304"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="313"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -778,7 +778,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1064"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1068"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -924,7 +924,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3380"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3387"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1021,7 +1021,7 @@
 <context>
     <name>SyncSettings</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncSettings.qml" line="69"/>
+        <location filename="../src/app/qml/io/SyncSettings.qml" line="73"/>
         <source>%n note(s) changed on two devices at once.</source>
         <translation>
             <numerusform>%n note changed on two devices at once.</numerusform>
@@ -1029,7 +1029,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncSettings.qml" line="80"/>
+        <location filename="../src/app/qml/io/SyncSettings.qml" line="84"/>
         <source>%n warning(s) or error(s) since the app started. Every step of the sync, to check or to send.</source>
         <translation>
             <numerusform>%n warning or error since the app started. Every step of the sync, to check or to send.</numerusform>

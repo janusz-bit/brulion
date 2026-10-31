@@ -8,8 +8,8 @@ import Brulion
 //
 // Wide (≥ 900 px): SplitView — sidebar | top bar + current view | optional side panel.
 // Narrow: the sidebar is a Drawer (the menu button, or a swipe from the left edge — on touch UIs
-// from a strip beyond the zone Android's gesture navigation keeps for "back"), a bottom
-// navigation bar and a floating quick-capture button; the Android back key walks back through
+// from a strip beyond the zone Android's gesture navigation keeps for "back") and a bottom
+// navigation bar with quick capture ("+ Notatka") before Menu; the Android back key walks back through
 // AppController's history and only lets the app close from the home view.
 //
 // Owns the shell's popups (command palette, quick switcher, quick capture, new page or folder,
@@ -22,8 +22,8 @@ import Brulion
 // toolbar a view docks on its bottom edge sits on the keyboard, in the side panel too. While the
 // keyboard is up the bottom navigation makes way; when it goes (Back, the keyboard's own key)
 // the navigation comes back and a toolbar that stays — the editing goes on — docks right above
-// it. The capture button makes way while typing (the keyboard up or a toolbar docked); a bar a
-// view has at the bottom instead of the navigation (the drawing's tools) takes its place.
+// it (its "+ Notatka" then ends that editing before quick capture opens); a bar a view has at
+// the bottom instead of the navigation (the drawing's tools) takes its place.
 FocusScope {
     id: shell
 
@@ -87,10 +87,10 @@ FocusScope {
     readonly property real keyboardFloor: Theme.narrow && keyboardUp && KeyboardInsets.slidesOver && keyboardOverlap > 0
                                           && !routeView.viewReplacesBottomNav ? bottomNavHeight : 0
     /// What covers the window's bottom edge for toasts (Main.qml): on phones the bottom
-    /// navigation with a toolbar docked on it, or with the capture button; else the keyboard and
-    /// a docked toolbar while typing; else the system's navigation bar.
+    /// navigation, with a toolbar docked on it; else the keyboard and a docked toolbar while
+    /// typing; else the system's navigation bar.
     readonly property real toastClearance: bottomNavShown
-        ? keyboardRoom + bottomNavHeight + (toolbarDocked ? Theme.editToolbarHeight : 56 + Theme.space4)
+        ? keyboardRoom + bottomNavHeight + (toolbarDocked ? Theme.editToolbarHeight : 0)
         : typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0) : navigationBar + keyboardRoom
     /// Toasts go to the window's top (Main.qml) while text is typed on a touch screen — the
     /// on-screen keyboard up, or an editing toolbar docked while a view edits text: the caret's
@@ -383,6 +383,12 @@ FocusScope {
                 Layout.fillWidth: true
                 bottomInset: shell.navigationBar
                 onMenuClicked: drawer.open()
+                // "+ Notatka": a block still edited with the keyboard hidden (its toolbar docked on
+                // the bar) is ended first, as a tab's view change ends it.
+                onCaptureClicked: {
+                    routeView.endEditing()
+                    shell.openCapture()
+                }
             }
         }
 
@@ -409,25 +415,6 @@ FocusScope {
         visible: shell.keyboardRoom > 0
         // Magenta in the browser's keyboard self-test: a screenshot shows any gap above the keyboard.
         color: KeyboardInsets.marked ? "#ff00ff" : Theme.bgElevated
-    }
-
-    ShellCaptureButton {
-        objectName: "shellCaptureButton"
-        // Not while a view edits text: it would cover the editor's toolbar (and the caret), nor
-        // over a picture (the view's `editing`: it covered the photo). Nor
-        // on views of forms and tools (settings, sync, import/export, history, trash, the graph
-        // with its zoom buttons): there it covered their buttons and fields, and capturing a note
-        // is not what they are for.
-        // Hidden by the user (Ustawienia → Wygląd → Układ): quick capture stays in the menu,
-        // the palette and its shortcut.
-        visible: AppSettings.captureButtonShown && Theme.narrow && !routeView.viewEditing && !shell.typing
-                 && ["settings", "sync", "importExport", "history", "trash", "graph"].indexOf(shell.route.view) < 0
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.rightMargin: Theme.space4 + shell.safe.right
-        // Above the bottom navigation (and a keyboard still sliding away under it).
-        anchors.bottomMargin: shell.keyboardRoom + shell.bottomNavHeight + Theme.space4
-        onClicked: shell.openCapture()
     }
 
     Drawer {

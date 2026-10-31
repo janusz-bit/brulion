@@ -311,8 +311,7 @@ Item {
             Layout.fillHeight: true
             clip: true
             contentWidth: width
-            // Narrow: room below the last row for the floating capture button (56 + margin).
-            contentHeight: content.implicitHeight + 2 * margin + (Theme.narrow ? 56 + Theme.space4 : 0)
+            contentHeight: content.implicitHeight + 2 * margin
             boundsBehavior: Flickable.StopAtBounds
             T.ScrollBar.vertical: BScrollBar {}
 
@@ -571,7 +570,7 @@ Item {
                     objectName: "captureButtonSetting"
                     Layout.fillWidth: true
                     text: qsTr("Quick note button")
-                    description: qsTr("The round + button over the views of narrow windows and phones. Quick capture stays in the command palette and under Ctrl+Shift+N.")
+                    description: qsTr("The + Note button in the bottom bar of narrow windows and phones. Quick capture stays in the command palette and under Ctrl+Shift+N.")
                     checked: AppSettings.captureButtonShown
                     onToggled: AppSettings.captureButtonShown = checked
                 }
