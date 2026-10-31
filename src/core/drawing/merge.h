@@ -47,6 +47,8 @@ MergeBase mergeBase(const Drawing &base);
 ///  * an element in base and ours but not in theirs was deleted there: stays deleted;
 ///  * an element both have: known base — ours when ours changed it (version ≠ base's, also when
 ///    both changed it), else theirs; unknown base — the higher `version`, a tie keeps theirs;
+///  * a backdrop (backdrop.h) each side set of its own (two elements): the one set last (`updated`;
+///    a tie keeps theirs) at the bottom, the other left out;
 ///  * the paper's pattern and the theme: ours when the base is known and ours changed them, else
 ///    theirs;
 ///  * files: theirs plus the entries only ours has.
@@ -105,8 +107,9 @@ bool keepsMarkdownOf(const DrawingFile &into, const DrawingFile &other);
 /// card, the text entries) is the remote's — or the local one's when only that side changed it.
 /// nullopt — the caller keeps both versions (a conflict copy) — when any of the three is no
 /// drawing (no scene, a broken one, an empty base), a side is not editable() or not writable, the
-/// formats differ, both sides changed the plugin's Markdown differently, or an element changed
-/// without a new version (an edit by hand: no safe merge by versions).
+/// formats differ, both sides changed the plugin's Markdown differently, an element changed
+/// without a new version (an edit by hand: no safe merge by versions), or the merge would not read
+/// back (drawingfile.h readsBack(): the pictures of both together beyond the readers' limits).
 std::optional<QByteArray> mergeDrawingFiles(QByteArrayView base, QByteArrayView local, QByteArrayView remote,
                                             qint64 now = 0);
 

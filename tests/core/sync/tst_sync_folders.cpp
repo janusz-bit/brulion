@@ -1923,8 +1923,23 @@ private Q_SLOTS:
         const SyncReport r = p.a.sync();
         const qint64 adopted = timer.elapsed();
         QVERIFY2(!r.failed(), qPrintable(r.failureMessage()));
-        QCOMPARE(r.filesMovedHere, count);
-        QCOMPARE(counts(r), Counts{});
+        // (Windows runners missed every move once in a while, not reproduced elsewhere: what the
+        // run did instead.)
+        const auto what = [](const SyncReport &x) {
+            QString errors;
+            for (const SyncFileError &e : x.errors.mid(0, 3))
+                errors += u" | "_s + e.path + u": "_s + e.message;
+            return u"moved here %1, folders moved here %2, up %3, down %4, trashed here %5, deleted there %6%7"_s
+                    .arg(x.filesMovedHere)
+                    .arg(x.foldersMovedHere)
+                    .arg(x.uploaded)
+                    .arg(x.downloaded)
+                    .arg(x.deletedLocal)
+                    .arg(x.deletedRemote)
+                    .arg(errors);
+        };
+        QVERIFY2(r.filesMovedHere == count, qPrintable(what(r)));
+        QVERIFY2(counts(r) == Counts{}, qPrintable(what(r)));
         QCOMPARE(p.server.files(kFolder), p.a.files());
         for (int i = 0; i < count; ++i)
             QVERIFY(p.b.vault->rename(noteName(i), u"Archiwum ą/"_s + noteName(i)));

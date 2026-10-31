@@ -694,7 +694,16 @@ void TestWebPicture::tooManyRedirectsIsNoHttpError()
     QVERIFY(failed.wait(5000));
     QCOMPARE(failed.at(0).at(1).value<FetchError>(), FetchError::Redirect);
     QVERIFY(failed.at(0).at(2).toString() != u"301"_s);
-    QCOMPARE(server.requests.size(), 6); // the request and 5 redirects
+    // The request and 5 redirects: /hop/0 … /hop/5, never /hop/6. A hop may arrive twice: the
+    // server closes every connection after its answer, and Qt sends a request again on a new
+    // connection when the one it had picked was closed under it (seen under load: 7–8 requests).
+    QStringList hops;
+    for (const auto &r : std::as_const(server.requests)) {
+        if (!hops.contains(QString::fromLatin1(r.path)))
+            hops.append(QString::fromLatin1(r.path));
+    }
+    QCOMPARE(hops, (QStringList{u"/hop/0"_s, u"/hop/1"_s, u"/hop/2"_s, u"/hop/3"_s, u"/hop/4"_s, u"/hop/5"_s}));
+    QVERIFY2(server.requests.size() <= 2 * hops.size(), qPrintable(QString::number(server.requests.size())));
 }
 
 void TestWebPicture::cancelsOneUrl()

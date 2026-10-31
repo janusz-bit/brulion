@@ -49,6 +49,13 @@ std::optional<DrawingFile> readDrawingFile(QByteArrayView bytes, ReadError *erro
 QByteArray writeDrawingFile(const DrawingFile &file, const Drawing &drawing, qint64 now = 0,
                             const SvgOptions &options = {});
 
+/// `drawing` written as `file` (writeDrawingFile()) reads back (readDrawingFile()): no limit of
+/// the readers is crossed — MaxSceneBytes and MaxSceneContainers for the scene, MaxSceneBytes for
+/// an SVG's embedded payload (pictures grow it some 1.6 times: deflate, the payload's string
+/// escapes, base64) and for a plugin file. A scene within an eighth of MaxSceneBytes always does
+/// (no format grows one eightfold); a larger one is encoded (an SVG: its payload only) to know.
+/// For edits that add picture bytes (a backdrop) and merges.
+bool readsBack(const DrawingFile &file, const Drawing &drawing, qint64 now = 0);
 /// A drawing file by its name and its start (HeadBytes): ".svg" with an embedded scene,
 /// ".excalidraw" with a scene's JSON, ".md" with the plugin's frontmatter key. Cheap: for lists.
 bool looksLikeDrawingFile(QStringView path, QByteArrayView head);

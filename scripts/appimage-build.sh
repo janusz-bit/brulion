@@ -288,7 +288,6 @@ Exec=brulion --open %F
 Icon=io.github.januszbit.brulion
 Terminal=false
 Categories=Office;Utility;
-MimeType=text/plain;
 StartupNotify=true
 Keywords=notes;markdown;outliner;journal;calendar;reminders;notatki;dziennik;kalendarz;przypomnienia;
 StartupWMClass=brulion
@@ -393,14 +392,14 @@ done
 [[ -z $unused_qml ]] || die "unused Qt Quick styles, QtQuick.Dialogs or QtQuick.Pdf in the AppImage: $unused_qml"
 [[ -n $(find "$check_dir/squashfs-root/usr/lib" -maxdepth 1 -name 'libQt6Pdf.so*' -print -quit) ]] ||
   die "libQt6Pdf missing from the AppImage (the PDF pages of drawings' backdrops)"
-# "Otwórz za pomocą → Brulion" for Markdown and text files: the desktop entry AppImage integration
-# tools (Gear Lever, AppImageLauncher, appimaged) install keeps the files' types and --open %F —
-# text/plain only (text/markdown would make Brulion GNOME's default for .md files) — and
-# StartupNotify (the launcher's activation token: the running Brulion comes to the front).
+# "Otwórz za pomocą → Inny program → Brulion": the desktop entry AppImage integration tools (Gear
+# Lever, AppImageLauncher, appimaged) install keeps --open %F, declares no file types (a desktop
+# without a default program would make Brulion the default for every text file: docs/NIXOS.md) and
+# has StartupNotify (the launcher's activation token: the running Brulion comes to the front).
 entry=$(find "$check_dir/squashfs-root" -maxdepth 1 -name '*.desktop' -print -quit)
 [[ -n $entry ]] || die "no desktop entry at the top of the AppImage"
 grep -q -- '^Exec=.* --open %F$' "$entry" || die "the AppImage's desktop entry does not open files (Exec … --open %F)"
-grep -qx 'MimeType=text/plain;' "$entry" || die "the AppImage's desktop entry lists other types than text files (MimeType=text/plain;)"
+! grep -q '^MimeType=' "$entry" || die "the AppImage's desktop entry declares file types (it would become the default program on desktops without one)"
 grep -qx 'StartupNotify=true' "$entry" || die "the AppImage's desktop entry has no StartupNotify=true"
 (cd "$check_dir/squashfs-root/usr/plugins" && printf 'plugins: %s\n' "$(echo *)")
 # Start it headless: it must still be running after 10 s, without QML or plugin errors.

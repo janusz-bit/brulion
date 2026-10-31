@@ -72,7 +72,7 @@ brulion::drawing::Stroke line(const QString &id)
     brulion::drawing::Stroke s;
     s.id = id;
     const double y = 40 + 50 * (id.back().unicode() % 10);
-    s.points = { { 100, y, 0.5 }, { 200, y + 8, 0.5 }, { 300, y, 0.5 } };
+    s.points = {{100, y, 0.5}, {200, y + 8, 0.5}, {300, y, 0.5}};
     return s;
 }
 
@@ -90,7 +90,7 @@ QStringList idsOf(const QByteArray &bytes)
 {
     const std::optional<brulion::drawing::DrawingFile> file = brulion::drawing::readDrawingFile(bytes);
     if (!file)
-        return { u"<no drawing>"_s };
+        return {u"<no drawing>"_s};
     QStringList ids;
     for (const brulion::drawing::Stroke &s : file->drawing.strokes)
         ids.append(s.id);
@@ -383,16 +383,16 @@ private Q_SLOTS:
         QTest::addColumn<QString>("copy");
         QTest::addColumn<QString>("source");
         QTest::newRow("Syncthing") << SketchCopy << u"syncthing"_s;
-        QTest::newRow("Brulion (Nextcloud)") << u"assets/Szkic ćwiczeń.conflict-Telefon-Łucji-20261014-091500.svg"_s
-                                             << u"brulion"_s;
+        QTest::newRow("Brulion (Nextcloud)")
+                << u"assets/Szkic ćwiczeń.conflict-Telefon-Łucji-20261014-091500.svg"_s << u"brulion"_s;
     }
     void drawingConflictMerges()
     {
         QFETCH(QString, copy);
         QFETCH(QString, source);
-        const QByteArray original = drawingFile({ u"a"_s, u"b"_s, u"c"_s });
-        const QByteArray copied = drawingFile({ u"a"_s, u"b"_s, u"d"_s });
-        auto ws = open({ { Sketch, original }, { copy, copied } });
+        const QByteArray original = drawingFile({u"a"_s, u"b"_s, u"c"_s});
+        const QByteArray copied = drawingFile({u"a"_s, u"b"_s, u"d"_s});
+        auto ws = open({{Sketch, original}, {copy, copied}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -415,7 +415,7 @@ private Q_SLOTS:
         QCOMPARE(counts.value(u"onlyOurs"_s).toInt(), 1);
         QCOMPARE(counts.value(u"onlyTheirs"_s).toInt(), 1);
         QCOMPARE(counts.value(u"merged"_s).toInt(), 4);
-        QCOMPARE(idsOf(r.mergedBytes()), (QStringList{ u"a"_s, u"b"_s, u"c"_s, u"d"_s }));
+        QCOMPARE(idsOf(r.mergedBytes()), (QStringList{u"a"_s, u"b"_s, u"c"_s, u"d"_s}));
 
         QSignalSpy resolved(&r, &ConflictResolver::resolved);
         QVERIFY(r.mergeDrawings());
@@ -423,7 +423,7 @@ private Q_SLOTS:
         QVERIFY(!r.loaded());
         // The original has the lines of both, the copy is in the trash, the previous version in the
         // history.
-        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{ u"a"_s, u"b"_s, u"c"_s, u"d"_s }));
+        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{u"a"_s, u"b"_s, u"c"_s, u"d"_s}));
         QVERIFY(!ws->exists(copy));
         QCOMPARE(ws->sync()->conflictCount(), 0);
         bool trashed = false;
@@ -437,7 +437,7 @@ private Q_SLOTS:
 
     void drawingCopyIsOlder()
     {
-        auto ws = open({ { Sketch, drawingFile({ u"a"_s, u"b"_s, u"c"_s }) }, { SketchCopy, drawingFile({ u"a"_s, u"b"_s }) } });
+        auto ws = open({{Sketch, drawingFile({u"a"_s, u"b"_s, u"c"_s})}, {SketchCopy, drawingFile({u"a"_s, u"b"_s})}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -448,17 +448,17 @@ private Q_SLOTS:
         QVERIFY(r.canMergeDrawings());
         QVERIFY(r.keepMine());
         QVERIFY(!ws->exists(SketchCopy));
-        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{ u"a"_s, u"b"_s, u"c"_s }));
+        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{u"a"_s, u"b"_s, u"c"_s}));
     }
 
     void identicalDrawings()
     {
         // The same lines, the picture written by another program (other bytes).
-        const QByteArray original = drawingFile({ u"a"_s, u"ż"_s });
+        const QByteArray original = drawingFile({u"a"_s, u"ż"_s});
         QByteArray copied = original;
         copied.replace("</svg>", "<!-- zapisane gdzie indziej --></svg>");
         QVERIFY(copied != original);
-        auto ws = open({ { Sketch, original }, { SketchCopy, copied } });
+        auto ws = open({{Sketch, original}, {SketchCopy, copied}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -474,9 +474,9 @@ private Q_SLOTS:
     {
         // A copy with a frame from excalidraw.com (an element Brulion does not draw): shown, not
         // merged — keep one of them, the exact bytes.
-        const QByteArray original = drawingFile({ u"a"_s });
+        const QByteArray original = drawingFile({u"a"_s});
         const QByteArray framed = fixture(u"excalidraw_frame.svg"_s);
-        auto ws = open({ { Sketch, original }, { SketchCopy, framed } });
+        auto ws = open({{Sketch, original}, {SketchCopy, framed}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -500,8 +500,8 @@ private Q_SLOTS:
     void pictureAgainstADrawing()
     {
         // A plain SVG (no scene) against a drawing: shown as drawings, nothing to merge.
-        auto ws = open({ { Sketch, drawingFile({ u"a"_s }) },
-                         { SketchCopy, "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>" } });
+        auto ws = open({{Sketch, drawingFile({u"a"_s})},
+                        {SketchCopy, "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>"}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -510,9 +510,9 @@ private Q_SLOTS:
         QVERIFY(!r.canMergeDrawings());
         QVERIFY(!r.mergeDrawings());
         // Two plain pictures are text, as before.
-        auto plain = open({ { u"logo.svg"_s, "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n" },
-                            { u"logo.sync-conflict-20261014-093000-ABCDEFG.svg"_s,
-                              "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/></svg>\n" } });
+        auto plain = open({{u"logo.svg"_s, "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n"},
+                           {u"logo.sync-conflict-20261014-093000-ABCDEFG.svg"_s,
+                            "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/></svg>\n"}});
         QTRY_COMPARE(plain->sync()->conflictCount(), 1);
         ConflictResolver t;
         t.setWorkspace(plain.get());
@@ -523,7 +523,7 @@ private Q_SLOTS:
 
     void deletedDrawingRestoredFromTheCopy()
     {
-        auto ws = open({ { SketchCopy, drawingFile({ u"a"_s, u"d"_s }) } });
+        auto ws = open({{SketchCopy, drawingFile({u"a"_s, u"d"_s})}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -532,13 +532,13 @@ private Q_SLOTS:
         QVERIFY(!r.conflict().value(u"originalExists"_s).toBool());
         QVERIFY(!r.canMergeDrawings());
         QVERIFY(r.keepCopy());
-        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{ u"a"_s, u"d"_s }));
+        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{u"a"_s, u"d"_s}));
         QVERIFY(!ws->exists(SketchCopy));
     }
 
     void staleDrawingDecisionRefused()
     {
-        auto ws = open({ { Sketch, drawingFile({ u"a"_s, u"b"_s }) }, { SketchCopy, drawingFile({ u"a"_s, u"c"_s }) } });
+        auto ws = open({{Sketch, drawingFile({u"a"_s, u"b"_s})}, {SketchCopy, drawingFile({u"a"_s, u"c"_s})}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -546,21 +546,23 @@ private Q_SLOTS:
         QVERIFY(r.canMergeDrawings());
         QCOMPARE(r.drawingCounts().value(u"merged"_s).toInt(), 3);
         // Syncthing brings a newer copy meanwhile.
-        QVERIFY(ws->vault()->writeBinary(SketchCopy, drawingFile({ u"a"_s, u"c"_s, u"e"_s }), brulion::ChangeSource::External));
+        QVERIFY(ws->vault()->writeBinary(SketchCopy, drawingFile({u"a"_s, u"c"_s, u"e"_s}),
+                                         brulion::ChangeSource::External));
         QSignalSpy failed(&r, &ConflictResolver::failed);
         QVERIFY(!r.mergeDrawings());
         QCOMPARE(failed.size(), 1);
-        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{ u"a"_s, u"b"_s }));
+        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{u"a"_s, u"b"_s}));
         QVERIFY(ws->exists(SketchCopy));
         // Reloaded: the decision is made again on what is there now.
         QCOMPARE(r.drawingCounts().value(u"merged"_s).toInt(), 4);
         // The original changed under "Keep the copy": refused as well.
-        QVERIFY(ws->vault()->writeBinary(Sketch, drawingFile({ u"a"_s, u"b"_s, u"f"_s }), brulion::ChangeSource::External));
+        QVERIFY(ws->vault()->writeBinary(Sketch, drawingFile({u"a"_s, u"b"_s, u"f"_s}),
+                                         brulion::ChangeSource::External));
         QVERIFY(!r.keepCopy());
         QCOMPARE(failed.size(), 2);
-        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{ u"a"_s, u"b"_s, u"f"_s }));
+        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{u"a"_s, u"b"_s, u"f"_s}));
         QVERIFY(r.mergeDrawings());
-        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{ u"a"_s, u"b"_s, u"f"_s, u"c"_s, u"e"_s }));
+        QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)), (QStringList{u"a"_s, u"b"_s, u"f"_s, u"c"_s, u"e"_s}));
     }
 
     void pluginDrawingConflictMerges()
@@ -575,8 +577,8 @@ private Q_SLOTS:
         mine.strokes.append(line(u"tutaj"_s));
         brulion::drawing::Drawing theirs = file->drawing;
         theirs.strokes.append(line(u"tam-ż"_s));
-        auto ws = open({ { original, brulion::drawing::writeDrawingFile(*file, mine, 1761650000000) },
-                         { copy, brulion::drawing::writeDrawingFile(*file, theirs, 1761650000000) } });
+        auto ws = open({{original, brulion::drawing::writeDrawingFile(*file, mine, 1761650000000)},
+                        {copy, brulion::drawing::writeDrawingFile(*file, theirs, 1761650000000)}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -629,7 +631,7 @@ private Q_SLOTS:
         QByteArray noted = otherPaper ? brulion::drawing::writeDrawingFile(*file, theirs, 1761650000000) : base;
         noted.replace("Notatka z tyłu: Zażółć gęślą jaźń", "Notatka z tyłu: WAŻNE zmiany z laptopa, ąę");
         QVERIFY(noted != base);
-        auto ws = open({ { original, brulion::drawing::writeDrawingFile(*file, mine, 1761650000000) }, { copy, noted } });
+        auto ws = open({{original, brulion::drawing::writeDrawingFile(*file, mine, 1761650000000)}, {copy, noted}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -643,7 +645,8 @@ private Q_SLOTS:
         QVERIFY(!r.mergeDrawings());
         QVERIFY(r.oursNotes().contains(u"Notatka z tyłu: Zażółć gęślą jaźń"_s));
         QVERIFY(r.theirsNotes().contains(u"Notatka z tyłu: WAŻNE zmiany z laptopa, ąę"_s));
-        QVERIFY(!r.theirsNotes().contains(u"N4KAkARALgngDgUwgLgAQQQDwMYEMA2AlgCYBOuA7hADTgQBuCpAzoQPYB2KqATLZMzYBXUtiRoIACyhQ4zZAHoFAc"_s));
+        QVERIFY(!r.theirsNotes().contains(
+                u"N4KAkARALgngDgUwgLgAQQQDwMYEMA2AlgCYBOuA7hADTgQBuCpAzoQPYB2KqATLZMzYBXUtiRoIACyhQ4zZAHoFAc"_s));
         // Told, the user removes the copy (it goes to the trash).
         QVERIFY(r.keepMine());
         QVERIFY(!ws->exists(copy));
@@ -678,7 +681,7 @@ private Q_SLOTS:
         const QByteArray ours = brulion::drawing::writeDrawingFile(*file, mine, 1761650000000);
         QByteArray copied = brulion::drawing::writeDrawingFile(*file, theirs, 1761650000000);
         copied.replace("Notatka z tyłu: Zażółć gęślą jaźń", "Notatka z tyłu: WAŻNE zmiany z laptopa");
-        auto ws = open({ { original, ours }, { copy, copied } });
+        auto ws = open({{original, ours}, {copy, copied}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -729,12 +732,12 @@ private Q_SLOTS:
         // A drawing with pasted photos beyond what the vault holds in memory (16 MB): the version
         // replaced is in the history all the same, as the dialog and the toast say.
         QFETCH(bool, merge);
-        QByteArray original = drawingFile({ u"a"_s, u"b"_s });
+        QByteArray original = drawingFile({u"a"_s, u"b"_s});
         const QByteArray padding = QByteArray("<!-- ") + QByteArray(17 * 1024 * 1024, 'x') + QByteArray(" --></svg>");
         original.replace("</svg>", padding);
         QVERIFY(original.size() > 17 * 1024 * 1024);
-        const QByteArray copied = drawingFile({ u"a"_s, u"c"_s });
-        auto ws = open({ { Sketch, original }, { SketchCopy, copied } });
+        const QByteArray copied = drawingFile({u"a"_s, u"c"_s});
+        auto ws = open({{Sketch, original}, {SketchCopy, copied}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 1);
         ConflictResolver r;
         r.setWorkspace(ws.get());
@@ -743,12 +746,13 @@ private Q_SLOTS:
         QCOMPARE(r.canMergeDrawings(), true);
         QVERIFY(merge ? r.mergeDrawings() : r.keepCopy());
         QCOMPARE(idsOf(ws->vault()->readBinary(Sketch)),
-                 merge ? (QStringList{ u"a"_s, u"b"_s, u"c"_s }) : (QStringList{ u"a"_s, u"c"_s }));
+                 merge ? (QStringList{u"a"_s, u"b"_s, u"c"_s}) : (QStringList{u"a"_s, u"c"_s}));
         QVERIFY(!ws->exists(SketchCopy));
         const QVariantList versions = ws->history(Sketch);
         QCOMPARE(versions.size(), 1);
         bool ok = false;
-        const QByteArray kept = ws->vault()->history()->readBytes(versions.first().toMap().value(u"id"_s).toString(), &ok);
+        const QByteArray kept =
+                ws->vault()->history()->readBytes(versions.first().toMap().value(u"id"_s).toString(), &ok);
         QVERIFY(ok);
         QVERIFY(kept == original);
     }
@@ -807,10 +811,10 @@ private Q_SLOTS:
 
     void listMarksDrawings()
     {
-        auto ws = open({ { Sketch, drawingFile({ u"a"_s }) },
-                         { SketchCopy, drawingFile({ u"b"_s }) },
-                         { u"Zakupy.md"_s, "- a\n" },
-                         { Copy, "- b\n" } });
+        auto ws = open({{Sketch, drawingFile({u"a"_s})},
+                        {SketchCopy, drawingFile({u"b"_s})},
+                        {u"Zakupy.md"_s, "- a\n"},
+                        {Copy, "- b\n"}});
         QTRY_COMPARE(ws->sync()->conflictCount(), 2);
         for (const QVariant &v : ws->sync()->conflicts()) {
             const QVariantMap c = v.toMap();

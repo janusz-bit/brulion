@@ -291,7 +291,7 @@ void ConflictResolver::loadDrawings(const QString &original, const QString &copy
     const bool keepsNotes = drawing::keepsMarkdownOf(*mine, *other);
     if (!m_identical)
         m_identical = drawing::sameDrawing(mine->drawing, other->drawing) && keepsNotes
-                && drawing::keepsMarkdownOf(*other, *mine);
+                      && drawing::keepsMarkdownOf(*other, *mine);
     const bool contained = !m_identical && drawing::containsDrawing(mine->drawing, other->drawing);
     m_copyIsOlder = contained && keepsNotes;
     m_notesDiffer = !m_identical && !keepsNotes;
@@ -311,14 +311,18 @@ void ConflictResolver::loadDrawings(const QString &original, const QString &copy
     m_notesOnly = m_notesDiffer && (contained || (mergeable && drawing::sameDrawing(merged, mine->drawing)));
     if (m_notesOnly || !mergeable)
         return;
-    m_mergedBytes = drawing::writeDrawingFile(*mine, merged, m_workspace->now().toMSecsSinceEpoch());
+    // (The pictures of both together may be more than a file holds: then no merge is offered.)
+    const qint64 now = m_workspace->now().toMSecsSinceEpoch();
+    if (!drawing::readsBack(*mine, merged, now))
+        return;
+    m_mergedBytes = drawing::writeDrawingFile(*mine, merged, now);
     if (m_mergedBytes.isEmpty())
         return;
     m_canMergeDrawings = true;
     const drawing::MergeCounts c = drawing::mergeCounts(mine->drawing, other->drawing, merged);
-    m_drawingCounts = QVariantMap{ { u"ours"_s, c.ours },         { u"theirs"_s, c.theirs },
-                                   { u"common"_s, c.common },     { u"onlyOurs"_s, c.onlyOurs },
-                                   { u"onlyTheirs"_s, c.onlyTheirs }, { u"merged"_s, c.merged } };
+    m_drawingCounts =
+            QVariantMap{{u"ours"_s, c.ours},         {u"theirs"_s, c.theirs},         {u"common"_s, c.common},
+                        {u"onlyOurs"_s, c.onlyOurs}, {u"onlyTheirs"_s, c.onlyTheirs}, {u"merged"_s, c.merged}};
 }
 
 void ConflictResolver::finish(bool ok, const QString &message)
@@ -395,7 +399,7 @@ bool ConflictResolver::mergeDrawings()
     }
     const bool ok = m_workspace->sync()->resolveConflictBytes(original, m_copy, m_mergedBytes);
     finish(ok, ok ? tr("Merged the drawing “%1”. Your previous version is in the history, the copy in the trash.")
-                            .arg(title)
+                               .arg(title)
                   : tr("The merged drawing could not be saved."));
     return ok;
 }

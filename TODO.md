@@ -44,17 +44,17 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     wczytuje, link w tekście działa, notatki z tyłu nietknięte); zetrzeć kreskę w Brulionie, gdy
     Obsidian ma ten rysunek otwarty (powinna zniknąć i tam); otworzyć w Obsidianie rysunek na
     slajdzie (podkład widać pod pismem).
-* **Udostępnianie poza Androidem — sprawdzić na prawdziwych urządzeniach.** Automatycznie
-  sprawdzone (testy, CI): odczyt udostępnienia, okno, przekazanie do działającej kopii, wpis
-  `.desktop`, rejestr Windows (instalacja, aktualizacja, odinstalowanie), wersja webowa w Chromium
-  bez okna (`wasm-smoke.mjs --share`). Zostało ręcznie: Chrome lub Edge na Androidzie (wersja
-  webowa zainstalowana jako aplikacja → Udostępnij → Brulion ze strony i z zaznaczonego tekstu,
-  przy zamkniętym i otwartym Brulionie); Eksplorator Windows („Otwórz za pomocą → Brulion” na
-  `.md` i `.txt`, kilka plików naraz, okno na wierzchu, program domyślny bez zmian); menedżer
-  plików na Linuksie (GNOME Pliki, Dolphin: „Otwórz za pomocą”, okno wychodzi na wierzch pod
-  Waylandem, dwuklik na `.md` otwiera dalej dotychczasowy program; Cinnamon/Xfce pod X11: kursor
-  nie kręci się po otwarciu pliku w działającym Brulionie); AppImage zintegrowany przez Gear Lever
-  albo AppImageLauncher.
+* **Udostępnianie poza Androidem — sprawdzić na prawdziwych urządzeniach.** Automatycznie sprawdzone
+  (testy, CI): odczyt udostępnienia, okno, przekazanie do działającej kopii, wpis `.desktop`,
+  rejestr Windows (instalacja, aktualizacja, odinstalowanie), wersja webowa w Chromium bez okna
+  (`wasm-smoke.mjs --share`). Zostało ręcznie: Chrome lub Edge na Androidzie (wersja webowa
+  zainstalowana jako aplikacja → Udostępnij → Brulion ze strony i z zaznaczonego tekstu, przy
+  zamkniętym i otwartym Brulionie); Eksplorator Windows („Otwórz za pomocą → Brulion” na `.md` i
+  `.txt`, kilka plików naraz, okno na wierzchu, program domyślny bez zmian); menedżer plików na
+  Linuksie (GNOME Pliki, Dolphin: „Otwórz za pomocą → Inny program”, okno wychodzi na wierzch pod
+  Waylandem, dwuklik na `.md` otwiera dalej dotychczasowy program; Cinnamon/Xfce pod X11: kursor nie
+  kręci się po otwarciu pliku w działającym Brulionie); AppImage zintegrowany przez Gear Lever albo
+  AppImageLauncher.
 * **Dopracowanie interfejsu — porównanie z Obsidianem.** Przejść ekran po ekranie (edytor
   w trybie dokumentu i konspektu, pasek boczny, wyszukiwarka, kalendarz, ustawienia; telefon
   i komputer) z Obsidianem obok i spisać różnice w układzie, odstępach, typografii, kolorach,

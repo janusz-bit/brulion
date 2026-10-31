@@ -1443,9 +1443,9 @@ private Q_SLOTS:
                         canvasAttachment(u"x4"_s, u"zdjęcie.png"_s, u"image/png"_s, png),
                         canvasAttachment(u"x5"_s, u"notatki.txt"_s, u"text/plain"_s, "Notatki do szkicu: ąę")}));
         dump(u"canvas pictures"_s, r);
-        QCOMPARE(iotest::pathsOf(r),
-                 sorted({u"Trilium/Szkic ćwiczeń.md"_s, u"assets/Trilium/Szkic ćwiczeń.svg"_s,
-                         u"assets/Trilium/Szkic ćwiczeń/notatki.txt"_s, u"assets/Trilium/Szkic ćwiczeń/zdjęcie.png"_s}));
+        QCOMPARE(iotest::pathsOf(r), sorted({u"Trilium/Szkic ćwiczeń.md"_s, u"assets/Trilium/Szkic ćwiczeń.svg"_s,
+                                             u"assets/Trilium/Szkic ćwiczeń/notatki.txt"_s,
+                                             u"assets/Trilium/Szkic ćwiczeń/zdjęcie.png"_s}));
         QCOMPARE(iotest::textAt(r, u"Trilium/Szkic ćwiczeń.md"_s),
                  u"![[assets/Trilium/Szkic ćwiczeń.svg]]\n\n![[assets/Trilium/Szkic ćwiczeń/zdjęcie.png]]\n"
                  u"[[assets/Trilium/Szkic ćwiczeń/notatki.txt|notatki.txt]]\n"_s);

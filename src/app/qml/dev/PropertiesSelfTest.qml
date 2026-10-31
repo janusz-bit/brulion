@@ -324,6 +324,24 @@ QtObject {
                 const f = window.findItem(panel(), "propertiesKeyField")
                 return f !== null && f.listShown && f.suggestions.length === 1 && f.suggestions[0].title === "źródło"
             }, "another page's key is suggested (diacritics ignored), not the page's own"),
+            // The field moves under its list (scrolled above the keyboard, a flick): the list follows.
+            () => {
+                editor.listView.topMargin += 60
+                editor.listView.contentY -= 60
+            },
+            wait(() => {
+                const f = window.findItem(panel(), "propertiesKeyField")
+                const p = f ? f.suggestionPopup : null
+                if (!p || !p.opened)
+                    return false
+                const top = f.mapToItem(p.parent, 0, 0).y + f.topInset
+                const bottom = f.mapToItem(p.parent, 0, f.height).y - f.bottomInset
+                return Math.abs(p.y - (bottom + 4)) <= 1 || Math.abs(p.y + p.height - (top - 4)) <= 1
+            }, "the suggestions follow their field when it moves"),
+            () => {
+                editor.listView.contentY += 60
+                editor.listView.topMargin -= 60
+            },
             () => {
                 const f = window.findItem(panel(), "propertiesKeyField")
                 key(f, Qt.Key_Down)

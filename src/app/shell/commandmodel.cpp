@@ -228,11 +228,8 @@ static QList<Command> allCommands(const AppController *app)
     // note mode; not in source mode (the panel is hidden there).
     const auto mode = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"page.mode"; });
     qsizetype at = mode == out.cend() ? out.size() : std::distance(out.cbegin(), mode) + 1;
-    out.insert(at++, {u"page.addProperty"_s,
-                      CommandModel::tr("Add page property"),
-                      CommandModel::tr("Status, date, tags, aliases… in the page's properties"),
-                      u"plus"_s,
-                      u"Ctrl+;"_s,
+    out.insert(at++, {u"page.addProperty"_s, CommandModel::tr("Add page property"),
+                      CommandModel::tr("Status, date, tags, aliases… in the page's properties"), u"plus"_s, u"Ctrl+;"_s,
                       inEditor && !app->sourceModeShown()});
     // Copying links, after the page property: where it is available.
     for (const Command &c : linkCommands(inEditor, app->sourceModeShown()))

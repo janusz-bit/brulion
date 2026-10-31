@@ -2,10 +2,12 @@
 // `customData.brulionBackdrop` and its raster in `files`; set, replaced, removed; read back from
 // the scene and the SVG; only index 0 counts; hostile markers and files; the pages a user types;
 // the SVG's theme with a backdrop (no style sheet for Auto, the dark raster for Dark — or the Light
-// picture without it); a merge keeps a backdrop new here at the bottom; a new drawing on a backdrop
-// (its background by the source) and the random stamp both the editor and new drawings use.
+// picture without it); a merge keeps a backdrop new here at the bottom, and one of two set on both
+// sides; a new drawing on a backdrop (its background by the source) and the random stamp both the
+// editor and new drawings use; a drawing written in each format reads back (readsBack()).
 #include "drawing/backdrop.h"
 #include "drawing/drawing.h"
+#include "drawing/drawingfile.h"
 #include "drawing/edit.h"
 #include "drawing/excalidraw.h"
 #include "drawing/merge.h"
@@ -142,6 +144,9 @@ private Q_SLOTS:
     void svgThemeWithBackdrop();
     void reorderKeepsBackdropAtBottom();
     void backdropMerge();
+    void backdropsOfBothSides_data();
+    void backdropsOfBothSides();
+    void readsBackInEachFormat();
     void newDrawingOnBackdrop_data();
     void newDrawingOnBackdrop();
     void randomStampAndIds();
@@ -581,6 +586,91 @@ void TestDrawingBackdrop::backdropMerge()
     QVERIFY(merged.files.contains(ours.strokes.first().fileId));
     // The picture of the merge still shows the slide.
     QVERIFY(toSvg(merged).contains("slajd-PNG-bajty"_ba.toBase64()));
+}
+
+void TestDrawingBackdrop::backdropsOfBothSides_data()
+{
+    QTest::addColumn<bool>("known");
+    QTest::addColumn<qint64>("oursUpdated");
+    QTest::addColumn<qint64>("theirsUpdated");
+    QTest::addColumn<int>("page");
+    QTest::newRow("known base, theirs later") << true << qint64(1761700000000) << qint64(1761700005000) << 4;
+    QTest::newRow("known base, ours later") << true << qint64(1761700009000) << qint64(1761700005000) << 3;
+    QTest::newRow("known base, the same time: theirs") << true << qint64(1761700000000) << qint64(1761700000000) << 4;
+    QTest::newRow("union, theirs later") << false << qint64(1761700000000) << qint64(1761700005000) << 4;
+    QTest::newRow("union, ours later") << false << qint64(1761700009000) << qint64(1761700005000) << 3;
+}
+
+void TestDrawingBackdrop::backdropsOfBothSides()
+{
+    // From the same strokes, here page 3 of the lecture was set as the backdrop, there page 4: one
+    // backdrop at the bottom (the one set last), the strokes above — never one hidden under another.
+    QFETCH(bool, known);
+    QFETCH(qint64, oursUpdated);
+    QFETCH(qint64, theirsUpdated);
+    QFETCH(int, page);
+    Drawing base;
+    base.strokes = {ink(u"a"_s, 0, 0)};
+    Drawing ours = base;
+    QVERIFY(setBackdrop(ours, image("strona-3"_ba), {Lecture.path, 3}, testStamp(oursUpdated)));
+    EditStamp other = testStamp(theirsUpdated);
+    other.newId = [] { return u"tam"_s; };
+    Drawing theirs = base;
+    QVERIFY(setBackdrop(theirs, image("strona-4"_ba), {Lecture.path, 4}, other));
+    theirs.strokes.append(ink(u"c"_s, 200, 200));
+    const Drawing merged = merge(known ? mergeBase(base) : MergeBase{}, ours, theirs);
+    QCOMPARE(backdropIndex(merged), 0);
+    QCOMPARE(backdropSource(merged)->page, page);
+    QStringList ids;
+    int backdrops = 0;
+    for (const Stroke &s : merged.strokes) {
+        ids.append(s.id);
+        if (s.type == ElementType::Image)
+            ++backdrops;
+    }
+    QCOMPARE(backdrops, 1);
+    QCOMPARE(ids.mid(1), (QStringList{u"a"_s, u"c"_s}));
+    // The other way round: the same backdrop stays.
+    const Drawing back = merge(known ? mergeBase(base) : MergeBase{}, theirs, ours);
+    QCOMPARE(backdropSource(back)->page, oursUpdated == theirsUpdated ? 3 : page);
+}
+
+void TestDrawingBackdrop::readsBackInEachFormat()
+{
+    Drawing d;
+    d.strokes = {ink(u"a"_s, 0, 0)};
+    QVERIFY(setBackdrop(d, image(), Lecture, testStamp()));
+    DrawingFile svg;
+    QVERIFY(readsBack(svg, d));
+    DrawingFile json;
+    json.format = FileFormat::Excalidraw;
+    QVERIFY(readsBack(json, d));
+    DrawingFile unwritable;
+    unwritable.writable = false;
+    QVERIFY(!readsBack(unwritable, d));
+    // Past an eighth of the limit: written to know (here all of a 5 MB scene fits).
+    QByteArray big(5 * 1024 * 1024, 'x');
+    for (qsizetype i = 0; i < big.size(); i += 7)
+        big[i] = char('a' + i % 26);
+    d.files.insert(d.strokes.first().fileId,
+                   QJsonObject{{u"id"_s, d.strokes.first().fileId},
+                               {u"mimeType"_s, u"image/png"_s},
+                               {u"dataURL"_s, QString(u"data:image/png;base64,"_s + QString::fromLatin1(big))}});
+    QVERIFY(sceneJson(d).size() > MaxSceneBytes / 8);
+    QVERIFY(readsBack(svg, d));
+    QVERIFY(readsBack(json, d));
+    // More than a scene may hold: no format reads it.
+    d.files.insert(u"więcej"_s, QJsonObject{{u"id"_s, u"więcej"_s},
+                                            {u"mimeType"_s, u"image/png"_s},
+                                            {u"dataURL"_s, QString::fromLatin1(QByteArray(MaxSceneBytes, 'y'))}});
+    Stroke more;
+    more.type = ElementType::Image;
+    more.id = u"więcej"_s;
+    more.fileId = u"więcej"_s;
+    more.box = QRectF(0, 0, 10, 10);
+    d.strokes.append(more);
+    QVERIFY(!readsBack(svg, d));
+    QVERIFY(!readsBack(json, d));
 }
 
 void TestDrawingBackdrop::newDrawingOnBackdrop_data()

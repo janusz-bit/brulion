@@ -3027,6 +3027,28 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         };
         check(waitFor([&] { return texts() == QStringList{u"Ćma"_s}; }, 5000), "text written on the paper is saved");
         check(editor && !editor->hasActiveFocus(), "the keys go back to the drawing");
+        // A text low on the paper, then the window shrinks under it (a browser's keyboard resizes
+        // the page and reports no overlap): the view moves so the text stays on the paper.
+        {
+            const QSize full = window->size();
+            canvas->setProperty("tool", u"text"_s);
+            mouseClick(window, pointIn(canvas, 0.3, 0.85));
+            check(waitFor([&] { return editor && editor->hasActiveFocus(); }), "a text opens low on the paper");
+            const qreal paperHeight = canvas->height();
+            window->resize(full.width(), full.height() * 2 / 3);
+            check(waitFor([&] { return canvas->height() < paperHeight - full.height() / 4; }),
+                  "the paper shrinks with the window");
+            const auto onPaper = [&] {
+                const QRectF e = editor->mapRectToScene(QRectF(0, 0, editor->width(), editor->height()));
+                const QRectF c = canvas->mapRectToScene(QRectF(0, 0, canvas->width(), canvas->height()));
+                return e.bottom() <= c.bottom() + 1 && e.top() >= c.top() - 1;
+            };
+            check(waitFor(onPaper, 3000), "a window shrinking under a text being written keeps the text on the paper");
+            sendKey(window, Qt::Key_Escape);
+            window->resize(full);
+            settle(300);
+            check(texts() == QStringList{u"Ćma"_s}, "an empty text writes nothing");
+        }
         QMetaObject::invokeMethod(canvas, "undo");
     }
     QMetaObject::invokeMethod(canvas, "undo");
@@ -3076,8 +3098,13 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     // A version Brulion cannot edit (a frame added in excalidraw.com): shown as it is, never
     // written over; what was drawn here is kept in a new file beside it.
     drawing::Drawing shapes = drawing::readDrawing(workspace->readAttachment(path)).value_or(drawing::Drawing());
-    shapes.foreign.append(QJsonObject{{u"type"_s, u"frame"_s}, {u"id"_s, u"ramka"_s}, {u"x"_s, 10},
-                                      {u"y"_s, 10}, {u"width"_s, 50}, {u"height"_s, 40}, {u"name"_s, u"Ramka"_s}});
+    shapes.foreign.append(QJsonObject{{u"type"_s, u"frame"_s},
+                                      {u"id"_s, u"ramka"_s},
+                                      {u"x"_s, 10},
+                                      {u"y"_s, 10},
+                                      {u"width"_s, 50},
+                                      {u"height"_s, 40},
+                                      {u"name"_s, u"Ramka"_s}});
     const QByteArray shapesBytes = drawing::toSvg(shapes);
     drawStroke(0.8);
     check(waitFor([&] { return canvas->property("strokeCount").toInt() == 4; }) && writeBehind(shapes),

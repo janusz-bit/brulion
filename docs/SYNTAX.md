@@ -314,7 +314,10 @@ no PDF renderer exists. It is a PNG or a JPEG (the smaller; PNG when see-through
 element at index 0 counts: the same marker anywhere else, or an unlocked one, is an ordinary
 picture (an excalidraw.com user who unlocked and moved it up) — consistent and lossless. Brulion
 never selects, moves or erases it; reordering keeps it at the bottom; a merge puts a backdrop new
-on one side at the bottom (the leading locked elements). The picture has the raster too (an
+on one side at the bottom (the leading locked elements), and of two backdrops each side set of its
+own keeps the one set last (`updated`; a tie: theirs) — never one hidden under the other. Adding
+one never makes a file Brulion cannot read again (`drawingfile.h readsBack()`: a scene full of
+pictures is refused one more, a merge beyond the limits is left to a conflict copy). The picture has the raster too (an
 `<image>` under the ink: the file is self-contained, as excalidraw.com's "Embed scene" export, so
 the raster is in the file twice, the scene's copy deflated and base64-encoded twice more: a slide
 of 150–500 KB makes a drawing of about 0.5–1.7 MB, the largest backdrop one of about 15 MB). In the

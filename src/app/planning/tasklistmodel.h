@@ -256,10 +256,10 @@ private:
         std::optional<Reminder> reminder;
         // What the list is sorted by (itemLess()).
         qsizetype sectionRank = 0;
-        std::optional<QDate> finished;            ///< the done section's date
-        int priority = 0;                         ///< priorityRank()
-        std::optional<DateSpec> date;             ///< the sort date, else the reminder's
-        int title = 0;                            ///< m_titleRank of pageTitle
+        std::optional<QDate> finished; ///< the done section's date
+        int priority = 0;              ///< priorityRank()
+        std::optional<DateSpec> date;  ///< the sort date, else the reminder's
+        int title = 0;                 ///< m_titleRank of pageTitle
         mutable QString html; ///< rendered lazily
         mutable bool rendered = false;
     };

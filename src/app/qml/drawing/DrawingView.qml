@@ -94,6 +94,11 @@ FocusScope {
     property DrawingBackdropDialog backdropDialog: null
     /// The picked file's vault path until the backdrop is set: abandoned, its copy goes again.
     property string backdropImport: ""
+    /// The drawing the backdrop is chosen for (loadedPath then): another one loaded meanwhile
+    /// gets none.
+    property string backdropFor: ""
+    /// A prepared backdrop waiting for the stroke, shape or text in progress to end.
+    property var pendingBackdrop: null
     /// The file the paper shows (follows renames; "" none).
     property string loadedPath: ""
     property bool _writing: false
@@ -156,15 +161,21 @@ FocusScope {
             textEditor.commit() // (a text being written goes in first)
         if (root.loadedPath === "" || root.status !== "" || !canvas.modified)
             return true
-        // What the file holds now, on disk: another program may have written it a moment ago,
-        // before its change was reported (a folder watch that missed it, Android's shared
-        // storage) — taken in first, never written over.
-        if (Workspace.exists(root.loadedPath)) {
+        // Written first (with pictures that takes a moment), then compared with what the file
+        // holds now, on disk, right before the write: another program may have written it a
+        // moment ago, before its change was reported (a folder watch that missed it, Android's
+        // shared storage, Syncthing while this was written) — taken in first, never written over.
+        let bytes = canvas.fileBytes()
+        for (let checks = 0; checks < 3 && Workspace.exists(root.loadedPath); ++checks) {
             const disk = Workspace.readAttachment(root.loadedPath)
-            if (disk.byteLength > 0 && !canvas.isKnownFile(disk) && !root.takeIn(disk))
+            if (disk.byteLength === 0 || canvas.isKnownFile(disk))
+                break
+            if (!root.takeIn(disk))
                 return true // shown as it is now; what was drawn here kept in a copy beside it
+            if (!canvas.modified)
+                return true // (theirs as it is: nothing of this side to write)
+            bytes = canvas.fileBytes() // (the merge)
         }
-        const bytes = canvas.fileBytes()
         // The vault reports the write at once (Workspace.fileChanged, below): that is this save,
         // not another device's change to merge.
         root._writing = true
@@ -209,6 +220,7 @@ FocusScope {
 
     function load(path) {
         root.loadedPath = path
+        root.dropBackdropChoice()
         if (!Workspace.exists(path)) {
             canvas.load(new ArrayBuffer(0))
             root.status = "missing"
@@ -308,6 +320,7 @@ FocusScope {
     function pickBackdrop() {
         if (root.status !== "")
             return
+        root.backdropFor = root.loadedPath
         const pick = DrawingBackdrops.pickInBrowser()
         if (pick > 0)
             root.backdropPick = pick // (the browser's picker: picked() below)
@@ -340,6 +353,7 @@ FocusScope {
     /// "Inna strona PDF…": the backdrop's PDF again (renames do not follow it into the drawing).
     function otherBackdropPage() {
         root.backdropImport = "" // (the file is the drawing's: never discarded)
+        root.backdropFor = root.loadedPath
         const path = canvas.backdropPath
         if (path === "" || !Workspace.exists(path)) {
             AppController.toast(qsTr("The file %1 is not in the notebook any more.").arg(path.slice(path.lastIndexOf("/") + 1)))
@@ -348,14 +362,44 @@ FocusScope {
         root.openPageDialog(path, canvas.backdropPage)
     }
     function applyBackdrop(items) {
+        root.pendingBackdrop = null
+        if (root.backdropFor !== root.loadedPath) {
+            root.abandonBackdropFile() // (another drawing is open now)
+            return
+        }
         const item = items.length > 0 ? items[0] : null
         if (item && item.error !== "")
             AppController.toast(DrawingBackdrops.errorText(item.error))
-        if (item && item.error === "" && canvas.setBackdrop(item))
+        const result = item && item.error === "" ? canvas.setBackdrop(item) : "invalid"
+        if (result === "busy") {
+            root.pendingBackdrop = items // (set when the stroke, shape or text ends)
+            return
+        }
+        if (result === "") {
             root.backdropImport = "" // (the drawing uses it: kept)
-        else
+        } else {
+            if (result === "tooLarge")
+                AppController.toast(qsTr("This drawing's pictures leave no room for the backdrop: the file would be too large to open again."))
             root.abandonBackdropFile()
+        }
         root.forceActiveFocus()
+    }
+    /// Another drawing loaded: a backdrop being prepared or waiting for this one is not set.
+    function dropBackdropChoice() {
+        if (root.backdropJob > 0)
+            DrawingBackdrops.cancel(root.backdropJob) // (finished(): its copy goes)
+        if (root.pendingBackdrop !== null) {
+            root.pendingBackdrop = null
+            root.abandonBackdropFile()
+        }
+    }
+
+    function applyPendingBackdrop() {
+        if (root.pendingBackdrop !== null && !canvas.busy && !canvas.textEditing)
+            Qt.callLater(() => {
+                if (root.pendingBackdrop !== null && !canvas.busy && !canvas.textEditing)
+                    root.applyBackdrop(root.pendingBackdrop)
+            })
     }
 
     /// Gotowe: written, back to where the drawing was opened from.
@@ -393,6 +437,10 @@ FocusScope {
     Component.onDestruction: {
         alive = false
         save()
+        if (root.backdropJob > 0 || root.pendingBackdrop !== null) {
+            DrawingBackdrops.cancel(root.backdropJob)
+            root.abandonBackdropFile() // (no backdrop set: the copy stored for it goes)
+        }
     }
 
     Timer {
@@ -405,6 +453,8 @@ FocusScope {
     Connections {
         target: Workspace
         function onPathRenamed(oldPath, newPath) {
+            if (oldPath === root.backdropFor)
+                root.backdropFor = newPath
             if (oldPath === root.loadedPath)
                 root.loadedPath = newPath
         }
@@ -601,7 +651,12 @@ FocusScope {
                 selectionColor: Theme.info
                 onToolChanged: root.applyTool()
                 onContentChanged: if (canvas.modified) saveTimer.restart()
-                onTextEditingChanged: if (!canvas.textEditing && canvas.modified) saveTimer.restart()
+                onTextEditingChanged: {
+                    if (!canvas.textEditing && canvas.modified)
+                        saveTimer.restart()
+                    root.applyPendingBackdrop()
+                }
+                onBusyChanged: root.applyPendingBackdrop()
                 onStylusSeenChanged: {
                     if (canvas.stylusSeen && !root.stylusKnown) {
                         root.stylusKnown = true
@@ -617,6 +672,16 @@ FocusScope {
                 anchors.fill: parent
                 canvas: canvas
                 colors: root.penColors
+            }
+
+            // A backdrop being prepared (a large photo takes a moment) or waiting for a gesture.
+            BProgressBar {
+                objectName: "drawingBackdropProgress"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                visible: root.backdropJob > 0 || root.pendingBackdrop !== null
+                indeterminate: true
             }
 
             // Text being written on the paper.

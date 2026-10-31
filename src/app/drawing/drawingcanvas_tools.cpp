@@ -198,7 +198,7 @@ void DrawingCanvas::reorderSelection(const QString &how)
 {
     if (m_selected.isEmpty() || busy())
         return;
-    const drawing::Reorder order = how == u"forward"  ? drawing::Reorder::Forward
+    const drawing::Reorder order = how == u"forward"    ? drawing::Reorder::Forward
                                    : how == u"backward" ? drawing::Reorder::Backward
                                    : how == u"back"     ? drawing::Reorder::ToBack
                                                         : drawing::Reorder::ToFront;
@@ -326,8 +326,8 @@ void DrawingCanvas::cancelToolGesture()
 void DrawingCanvas::beginSelect(QPointF itemPos, const Pointer &p)
 {
     m_gestureStart = itemPos;
-    const QRectF box = selectionRect().adjusted(p.touch ? -10 : 0, p.touch ? -10 : 0, p.touch ? 10 : 0,
-                                                p.touch ? 10 : 0);
+    const QRectF box =
+            selectionRect().adjusted(p.touch ? -10 : 0, p.touch ? -10 : 0, p.touch ? 10 : 0, p.touch ? 10 : 0);
     if (!m_selected.isEmpty() && box.contains(itemPos) && !(p.modifiers & Qt::ShiftModifier)) {
         m_moveDelta = QPointF();
         setGesture(Gesture::Move);
@@ -465,8 +465,7 @@ qsizetype DrawingCanvas::textTargetAt(QPointF itemPos, const Pointer &p) const
 
 void DrawingCanvas::selectTap(QPointF itemPos, const Pointer &p)
 {
-    const bool twice = m_lastTap.isValid() && m_lastTap.elapsed() < 450
-                       && QLineF(m_lastTapPos, itemPos).length() < 12;
+    const bool twice = m_lastTap.isValid() && m_lastTap.elapsed() < 450 && QLineF(m_lastTapPos, itemPos).length() < 12;
     m_lastTap.start();
     m_lastTapPos = itemPos;
     const qsizetype i = elementAt(itemPos, p);
@@ -658,7 +657,8 @@ void DrawingCanvas::commitText(const QVariantMap &request, const QString &text)
     if (!id.isEmpty()) {
         editElements([&](drawing::Drawing &doc) { drawing::setText(doc, id, text, metrics, stamp()); });
     } else if (!containerId.isEmpty()) {
-        editElements([&](drawing::Drawing &doc) { drawing::addLabel(doc, containerId, text, style, metrics, stamp()); });
+        editElements(
+                [&](drawing::Drawing &doc) { drawing::addLabel(doc, containerId, text, style, metrics, stamp()); });
     } else if (!text.trimmed().isEmpty()) {
         const QPointF at(request.value(u"sceneX"_s).toDouble(), request.value(u"sceneY"_s).toDouble());
         if (!std::isfinite(at.x()) || !std::isfinite(at.y()))
