@@ -173,7 +173,9 @@ Item {
 
     // ---- Building blocks --------------------------------------------------------------------
 
-    /// A titled group of setting rows: a card, its rows divided by hairlines.
+    /// A titled group of setting rows: a card, its rows divided by hairlines. Below 600 px the
+    /// card is flat (no surface, border or padding): heading, note and rows share the page's
+    /// 16-px edge, and only the headings and the gap set the groups apart.
     component SettingsGroup: ColumnLayout {
         id: group
         property string heading
@@ -200,7 +202,8 @@ Item {
         BCard {
             Layout.fillWidth: true
             Layout.topMargin: Theme.space1
-            padding: Theme.compact ? Theme.space4 : Theme.space5
+            flat: Theme.compact
+            padding: Theme.space5
             // Two children: the content size is the rows' (a pane sizes itself by a lone child only).
             contentWidth: cardColumn.implicitWidth
             contentHeight: cardColumn.implicitHeight
@@ -420,7 +423,8 @@ Item {
                                                                                            : AppSettings.customAccent
                             color: custom !== "" ? ThemePalette.accentSwatch("custom", custom, Theme.dark,
                                                                              Theme.dark ? Theme.darkSurface : Theme.lightSurface)
-                                                 : Theme.bgSunken
+                                                 // (bgSunken is a black hole in the dark.)
+                                                 : Theme.dark ? Theme.bgElevated2 : Theme.bgSunken
                             iconName: custom !== "" ? "" : "plus"
                             label: qsTr("Custom…")
                             selected: Theme.accentName === "custom"
