@@ -4,9 +4,10 @@ import Brulion
 
 // CalendarMonthGrid — the month view: 6 weeks × 7 days of a CalendarModel (weekday names from
 // DatesHelper, starting on the model's first weekday). Wide cells list the day's entries as
-// coloured pills ("09:00 Spotkanie", "+3 więcej"); narrow cells (phones) show coloured dots per
-// kind. Today has a red disc, the selected day a tinted cell, days of other months are muted,
-// a daily note shows a small book.
+// rows without a fill — a dot in the kind's colour, "09:00 Spotkanie", "+3 więcej" (a click
+// opens the entry on mouse UIs, the row under the pointer highlighted); narrow cells (phones)
+// show coloured dots per kind. Today has a red disc, the selected day a tinted cell, days of
+// other months are muted, a daily note shows a small book.
 //
 //   CalendarMonthGrid { calendar: cal; onDayTapped: (date) => …; onItemOpened: (entry) => … }
 //
@@ -24,10 +25,11 @@ FocusScope {
     readonly property real headerHeight: Theme.touchUi ? 30 : 26
     readonly property real cellWidth: width / 7
     readonly property real cellHeight: Math.max(1, (height - headerHeight) / 6)
-    /// Dots instead of pills (narrow cells).
+    /// Dots instead of entry rows (narrow cells).
     readonly property bool dots: cellWidth < 96
     readonly property int pillHeight: Theme.touchUi ? 20 : 18
-    readonly property int pillsTop: Theme.touchUi ? 34 : 30
+    /// The entry rows start 4 px under the day number's disc (the 4-px grid).
+    readonly property int pillsTop: Theme.touchUi ? 36 : 32
     readonly property int maxPills: Math.max(0, Math.floor((cellHeight - pillsTop - 2) / (pillHeight + 2)))
     // (The locale passed for real: a method call is not tracked, and a bare `void DatesHelper.locale`
     // is compiled away with the dependency.)
@@ -148,6 +150,14 @@ FocusScope {
                     readonly property int row: Math.floor(index / 7)
                     readonly property bool overflow: items.length > root.maxPills
                     readonly property int shownPills: overflow ? Math.max(0, root.maxPills - 1) : items.length
+                    /// The entry row under the mouse pointer (-1: none): its hover fill.
+                    readonly property int hoveredRow: {
+                        if (!rowHover.hovered)
+                            return -1
+                        const y = rowHover.point.position.y
+                        const k = Math.floor((y - root.pillsTop) / (root.pillHeight + 2))
+                        return y >= root.pillsTop && k >= 0 && k < shownPills ? k : -1
+                    }
 
                     x: column * root.cellWidth
                     y: row * root.cellHeight
@@ -214,7 +224,12 @@ FocusScope {
                         color: Theme.fgFaint
                     }
 
-                    // Entries as pills (wide cells).
+                    // Entries as rows (wide cells): a dot in the kind's colour (an alarm clock or
+                    // repeat icon for alarms and recurring entries), the time in semibold and the
+                    // title — no fill, so the colour stays in the small marks. Done and cancelled:
+                    // a hollow dot and the title struck out in fgMuted; overdue: the title in
+                    // dangerText; days of other months: fgMuted (never fgFaint: below 4.5:1 on a
+                    // selected cell). Mouse UIs: the row under the pointer gets a hover fill.
                     Column {
                         visible: !root.dots
                         x: 4
@@ -223,48 +238,84 @@ FocusScope {
                         spacing: 2
                         Repeater {
                             model: cell.shownPills
-                            delegate: Rectangle {
-                                id: pill
+                            delegate: Item {
+                                id: entryRow
                                 required property int index
                                 readonly property var entry: cell.items[index]
-                                readonly property var colors: Theme.chip(entry.variant)
+                                readonly property bool closed: entry.variant === "done" || entry.closed === true
+                                readonly property color markColor: Theme.markColor(closed ? "done"
+                                                                                   : entry.variant === "neutral" ? "scheduled"
+                                                                                   : entry.variant)
+                                readonly property color textColor: closed || !cell.inMonth ? Theme.fgMuted
+                                                                 : entry.variant === "overdue" ? Theme.dangerText
+                                                                 : Theme.fg
+                                readonly property bool iconMark: entry.variant === "alarm" || entry.recurring === true
                                 width: parent ? parent.width : 0 // (null while the Repeater drops it: a new month)
                                 height: root.pillHeight
-                                radius: Theme.radiusSm
-                                // (Done and cancelled entries: struck out in the "done" chip's
-                                // colours, at full opacity — readable text, AA.)
-                                color: colors.bg
-                                Row {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    x: 5
-                                    width: parent.width - 8
-                                    spacing: 3
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: Theme.radiusSm
+                                    color: Theme.bgHover
+                                    visible: cell.hoveredRow === entryRow.index
+                                }
+                                // The text 16 px in (20 px from the cell's edge: the 4-px grid).
+                                Item {
+                                    id: marker
+                                    x: 3
+                                    width: 10
+                                    height: parent.height
+                                    Rectangle {
+                                        visible: !entryRow.iconMark
+                                        anchors.centerIn: parent
+                                        width: 6
+                                        height: 6
+                                        radius: 3
+                                        color: entryRow.closed ? "transparent" : entryRow.markColor
+                                        border.width: entryRow.closed ? 1.5 : 0
+                                        border.color: entryRow.markColor
+                                        antialiasing: true
+                                    }
                                     BIcon {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        visible: pill.entry.variant === "alarm" || pill.entry.recurring
-                                        name: pill.entry.variant === "alarm" ? "alarm-clock" : "repeat"
+                                        visible: entryRow.iconMark
+                                        anchors.centerIn: parent
+                                        name: entryRow.entry.variant === "alarm" ? "alarm-clock" : "repeat"
                                         size: 10
-                                        color: pill.colors.fg
+                                        color: entryRow.markColor
                                     }
-                                    Text {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        width: parent.width - (x > 0 ? 13 : 0)
-                                        text: (pill.entry.time !== "" ? "<b>" + pill.entry.time + "</b> " : "")
-                                              + TextHelper.escapeHtml(pill.entry.title)
-                                        textFormat: Text.StyledText
-                                        font.family: Theme.fontUi
-                                        font.pixelSize: Theme.textXs
-                                        font.strikeout: pill.entry.closed
-                                        color: pill.colors.fg
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 1
-                                    }
+                                }
+                                Text {
+                                    id: timeText
+                                    visible: entryRow.entry.time !== ""
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    x: marker.x + marker.width + 3
+                                    text: entryRow.entry.time
+                                    font.family: Theme.fontUi
+                                    font.pixelSize: Theme.textSm
+                                    font.weight: Theme.weightSemiBold
+                                    font.features: { "tnum": 1 }
+                                    color: entryRow.textColor
+                                }
+                                Text {
+                                    readonly property real textStart: timeText.visible ? timeText.x + timeText.implicitWidth + 4
+                                                                                       : marker.x + marker.width + 3
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    x: textStart
+                                    width: Math.max(0, parent.width - textStart - 3)
+                                    text: entryRow.entry.title
+                                    textFormat: Text.PlainText
+                                    font.family: Theme.fontUi
+                                    font.pixelSize: Theme.textSm
+                                    font.strikeout: entryRow.closed
+                                    color: entryRow.textColor
+                                    elide: Text.ElideRight
+                                    maximumLineCount: 1
                                 }
                             }
                         }
                         Text {
                             visible: cell.overflow
-                            leftPadding: 5
+                            leftPadding: cell.shownPills > 0 ? 16 : 5 // under the rows' text
                             text: qsTr("+%n more", "", cell.items.length - cell.shownPills)
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textXs
@@ -297,13 +348,20 @@ FocusScope {
                         targetRadius: 2
                     }
 
+                    // The cue that a click opens an entry (mouse UIs; the same rows as the click).
+                    HoverHandler {
+                        id: rowHover
+                        enabled: !Theme.touchUi && !root.dots
+                        cursorShape: cell.hoveredRow >= 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    }
+
                     TapHandler {
                         gesturePolicy: TapHandler.ReleaseWithinBounds
                         onTapped: (eventPoint) => {
                             root.forceActiveFocus(Qt.MouseFocusReason)
                             root.keyboardActive = false
                             root.calendar.anchorDate = cell.date
-                            // A click on a pill opens that entry (mouse UIs); elsewhere it selects the day.
+                            // A click on an entry row opens that entry (mouse UIs); elsewhere it selects the day.
                             if (!Theme.touchUi && !root.dots) {
                                 const p = eventPoint.position
                                 const k = Math.floor((p.y - root.pillsTop) / (root.pillHeight + 2))
