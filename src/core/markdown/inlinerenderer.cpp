@@ -403,7 +403,65 @@ std::function<std::optional<QString>(const QString &)> journalLinkTitle(const Va
     };
 }
 
+QString linkPartUrl(QStringView target, int part)
+{
+    return u"part:"_s + QString::number(part) + u':' + percentEncoded(target);
+}
+
+std::optional<LinkPartUrl> parseLinkPartUrl(QStringView url)
+{
+    constexpr QStringView scheme = u"part:";
+    if (!url.startsWith(scheme))
+        return std::nullopt;
+    const QStringView rest = url.sliced(scheme.size());
+    const qsizetype colon = rest.indexOf(u':');
+    // 1 … 9999, no sign, no leading zero.
+    if (colon < 1 || colon > 4 || rest[0] == u'0')
+        return std::nullopt;
+    int part = 0;
+    for (const QChar c : rest.first(colon)) {
+        if (c < u'0' || c > u'9')
+            return std::nullopt;
+        part = part * 10 + (c.unicode() - u'0');
+    }
+    LinkPartUrl out;
+    out.target = QUrl::fromPercentEncoding(rest.sliced(colon + 1).toUtf8());
+    const QList<LinkPathPart> parts = linkPathParts(out.target);
+    if (part >= parts.size())
+        return std::nullopt;
+    out.part = part;
+    out.prefix = out.target.left(parts[part - 1].to);
+    return out;
+}
+
 InlineRenderer::InlineRenderer(RenderContext context) : m_ctx(std::move(context)) { }
+
+QString InlineRenderer::withHoveredLink(QStringView html, QStringView href)
+{
+    if (href.isEmpty())
+        return html.toString();
+    const QString open = u"<a href=\""_s + href.toString().toHtmlEscaped() + u"\" style=\"color:"_s;
+    constexpr QStringView plain = u";text-decoration:none\">";
+    QString out;
+    qsizetype done = 0;
+    for (qsizetype at = html.indexOf(open); at >= 0; at = html.indexOf(open, at + open.size())) {
+        // The colour value: up to the first ';' (safeColor() keeps none in it), then exactly the
+        // end of a link()'s style — a tag's background or anything else does not follow.
+        const qsizetype colour = at + open.size();
+        const qsizetype semicolon = html.indexOf(u';', colour);
+        if (semicolon < 0)
+            break;
+        if (html.sliced(colour, semicolon - colour).contains(u'"') || !html.sliced(semicolon).startsWith(plain))
+            continue;
+        out += html.sliced(done, semicolon - done);
+        out += u";text-decoration:underline\">"_s;
+        done = semicolon + plain.size();
+    }
+    if (done == 0)
+        return html.toString();
+    out += html.sliced(done);
+    return out;
+}
 
 QString InlineRenderer::escape(QStringView text)
 {
@@ -542,21 +600,23 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             case InlineKind::Wiki: {
                 const WikiParts &w = item.wiki;
                 QString label = w.display;
+                QString fragLabel;
+                QString page;
                 if (label.isEmpty()) {
-                    QString frag = !w.heading.isEmpty()   ? w.heading
-                                   : !w.blockId.isEmpty() ? u'^' + w.blockId
-                                                          : QString();
+                    fragLabel = !w.heading.isEmpty()   ? w.heading
+                                : !w.blockId.isEmpty() ? u'^' + w.blockId
+                                                       : QString();
                     // [[Page#^id]] reads like ((id)): "Page › the block's text…" — the block of
                     // that page (ids are per page in Obsidian).
                     if (w.heading.isEmpty() && !w.blockId.isEmpty() && m_ctx.linkedBlockText) {
                         if (const auto blockText = m_ctx.linkedBlockText(w.target, w.blockId)) {
                             const QString shown = stripInlineMarkup(*blockText).simplified();
                             if (!shown.isEmpty())
-                                frag = elided(shown, MaxBlockLinkText);
+                                fragLabel = elided(shown, MaxBlockLinkText);
                         }
                     }
-                    const QString page = shownTarget(w.target);
-                    label = page.isEmpty() ? frag : frag.isEmpty() ? page : page + u" › "_s + frag;
+                    page = shownTarget(w.target);
+                    label = page.isEmpty() ? fragLabel : fragLabel.isEmpty() ? page : page + u" › "_s + fragLabel;
                 }
                 const bool resolved =
                         w.target.isEmpty() || !m_ctx.resolvePage || m_ctx.resolvePage(w.target).has_value();
@@ -567,7 +627,29 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 const QString href =
                         day ? QString(u"day:"_s + itemRange(item))
                             : QString(u"page:"_s + percentEncoded(w.target) + fragment(w.heading, w.blockId));
-                html = link(href, resolved ? pal.link : pal.unresolved, esc(label));
+                // A page in a folder ([[Firma/Adam]]): every path part a link of its own, the
+                // parent parts part: links (docs/SYNTAX.md §2 "Path parts").
+                const QList<LinkPathPart> parts = m_ctx.resolveLinkPart && !day && w.display.isEmpty()
+                                                                  && !w.target.isEmpty() && page == w.target
+                                                          ? linkPathParts(w.target)
+                                                          : QList<LinkPathPart>();
+                if (parts.size() < 2) {
+                    html = link(href, resolved ? pal.link : pal.unresolved, esc(label));
+                    break;
+                }
+                const QStringView target(w.target);
+                for (qsizetype k = 0; k + 1 < parts.size(); ++k) {
+                    const LinkPartTarget::Kind kind = m_ctx.resolveLinkPart(w.target, int(k + 1));
+                    html += link(linkPartUrl(target, int(k + 1)),
+                                 kind == LinkPartTarget::Kind::New ? pal.unresolved : pal.link,
+                                 esc(target.sliced(parts[k].from, parts[k].to - parts[k].from)));
+                    html += muted(pal, esc(target.sliced(parts[k].to, parts[k + 1].from - parts[k].to)));
+                }
+                const LinkPathPart &last = parts.constLast();
+                QString lastLabel = target.sliced(last.from, last.to - last.from).toString();
+                if (!fragLabel.isEmpty())
+                    lastLabel += u" › "_s + fragLabel;
+                html += link(href, resolved ? pal.link : pal.unresolved, esc(lastLabel));
                 break;
             }
             case InlineKind::Embed: {
@@ -860,6 +942,75 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
     case BlockKind::Frontmatter: return u"<pre>"_s + esc(body) + u"</pre>"_s;
     }
     return escapeText(body);
+}
+
+QString InlineRenderer::linkUrlAt(QStringView text, qsizetype position) const
+{
+    if (position < 0 || position > text.size())
+        return {};
+    // The text as renderInline() reads it: code spans and comments blanked, formulas first when
+    // they start first.
+    QString masked = text.toString();
+    for (const InlineSpan &span : inlineSpans(text)) {
+        for (qsizetype i = span.from; i < span.to; ++i) {
+            if (!isLineBreak(masked[i]))
+                masked[i] = u' ';
+        }
+    }
+    const auto pageUrl = [](const QString &target, const QString &heading, const QString &blockId) {
+        return u"page:"_s + percentEncoded(target) + fragment(heading, blockId);
+    };
+    const auto wikiUrl = [&](const InlineItem &item) -> QString {
+        const WikiParts &w = item.wiki;
+        const QString page = pageUrl(w.target, w.heading, w.blockId);
+        const bool day = m_ctx.dayLinks && w.heading.isEmpty() && w.blockId.isEmpty()
+                         && journalDateFromLinkTarget(w.target, m_ctx.journalConfig).has_value();
+        const bool renamed =
+                m_ctx.linkTitle && !w.target.isEmpty() && m_ctx.linkTitle(w.target).value_or(w.target) != w.target;
+        if (item.kind != InlineKind::Wiki || !m_ctx.resolveLinkPart || day || renamed || !w.display.isEmpty()
+            || w.target.isEmpty())
+            return page;
+        const QList<LinkPathPart> parts = linkPathParts(w.target);
+        if (parts.size() < 2)
+            return page;
+        // Where the target is written: the inner text before '|' and '#', without the blanks
+        // parseWikiInner() trimmed.
+        const qsizetype inner = item.from + 2;
+        qsizetype start = inner;
+        while (start < item.to && text[start].isSpace())
+            ++start;
+        for (qsizetype k = 0; k + 1 < parts.size(); ++k) {
+            if (position >= start + parts[k].from && position <= start + parts[k].to)
+                return linkPartUrl(w.target, int(k + 1));
+        }
+        return page;
+    };
+    QString url;
+    lexInlineOutsideMath(text, masked, findMathSpans(masked), [&](const InlineItem &item) {
+        if (position < item.from || position > item.to)
+            return;
+        QString found;
+        switch (item.kind) {
+        case InlineKind::Wiki:
+        case InlineKind::Embed: found = wikiUrl(item); break;
+        case InlineKind::Markdown:
+        case InlineKind::Image:
+            if (hasUrlScheme(item.dest.target))
+                found = allowedExternal(item.dest.target) ? externalHref(item.dest.target) : QString();
+            else
+                found = pageUrl(item.dest.target, item.dest.heading, item.dest.blockId);
+            break;
+        case InlineKind::BlockRef:
+        case InlineKind::BlockEmbed: found = u"block:"_s + item.target; break;
+        case InlineKind::Url:
+        case InlineKind::Autolink: found = allowedExternal(item.target) ? externalHref(item.target) : QString(); break;
+        case InlineKind::Tag: found = u"tag:"_s + percentEncoded(item.target); break;
+        }
+        // In order: the construct starting at `position` comes after the one ending there.
+        if (!found.isEmpty())
+            url = found;
+    });
+    return url;
 }
 
 } // namespace brulion::markdown

@@ -11,6 +11,10 @@
 // Links (handled by the QML delegate's onLinkActivated):
 //   page:<target>[#<heading> | #^<id>]  wiki links, embeds, relative Markdown links
 //                                        (target and fragment percent-encoded, as written)
+//   part:<k>:<target>                    part k (1 … n−1) of a page link's target split into
+//                                        path parts (RenderContext::resolveLinkPart): the whole
+//                                        target percent-encoded as written, without its fragment
+//                                        ([[Firma/Adam cośtam]] -> part:1:Firma%2FAdam%20co%C5%9Btam)
 //   tag:<name>                           #tags (percent-encoded, without '#')
 //   block:<id>                           ((id)) block references and !((id)) block embeds
 //   ext:<url>                            http(s)/mailto URLs only (other schemes stay text)
@@ -22,6 +26,7 @@
 #pragma once
 
 #include "dates/names.h"
+#include "markdown/inline.h"
 #include "types.h"
 
 #include <QDate>
@@ -102,7 +107,28 @@ struct RenderContext {
     bool dayLinks = false;
     /// The vault's journal settings for `dayLinks`.
     VaultConfig journalConfig;
+    /// Path parts of page links (docs/SYNTAX.md §2 "Path parts"): what parent part `part` (1-based)
+    /// of the link target `target` (as written) opens — the colour of that part (New: unresolved).
+    /// Set: a wiki link without display text whose target splits (linkPathParts()) and is shown as
+    /// written (not renamed by linkTitle, not a day: link) is shown as one part: link per parent
+    /// part, a muted separator (the text between the parts as written), and the link itself for
+    /// the last part. Unset (exports, the clipboard's HTML, brulion-cli): one link as before.
+    std::function<LinkPartTarget::Kind(const QString &target, int part)> resolveLinkPart;
 };
+
+/// The part: URL of part `part` (1-based, a parent part) of the page-link target `target`.
+QString linkPartUrl(QStringView target, int part);
+
+/// A part: URL taken apart (parseLinkPartUrl()).
+struct LinkPartUrl {
+    QString target; ///< the link's target as written (decoded)
+    int part = 0;   ///< 1 … linkPathParts(target).size() − 1
+    QString prefix; ///< target.left(parts[part − 1].to): "Firma", "A/B"
+};
+/// A part: URL taken apart. nullopt for anything else and for a malformed one: no ':' after the
+/// number; a number that is not 1 … 9999 written without a leading zero; a target that does not
+/// split (linkPathParts() empty) or has no such parent part.
+std::optional<LinkPartUrl> parseLinkPartUrl(QStringView url);
 
 /// A RenderContext::linkTitle for daily notes: a link naming a day (journalDateFromLinkTarget():
 /// `[[2026-10-13]]`, the vault's journalFileFormat) shows that date as dates::formatDateShort()
@@ -139,6 +165,23 @@ public:
 
     /// HTML-escape plain text for rich text (& < > " escaped, line breaks as <br/>).
     static QString escape(QStringView text);
+
+    /// `html` (this renderer's output) with the links whose href is `href` underlined: anchors as
+    /// links are written — `<a href="H" style="color:C;text-decoration:none">`, the colour value
+    /// without ';' — get `text-decoration:underline`. Chips (no colour), tags (a background) and
+    /// everything else stay as they are; "" or an href not in the text: `html` unchanged. The hover
+    /// and press feedback of rendered text (docs/UI.md "Links in rendered text").
+    static QString withHoveredLink(QStringView html, QStringView href);
+
+    /// The URL a click on the construct at `position` (UTF-16, 0 … size) of `text` follows, as
+    /// render() links it: a parent part of a page link (`part:`, when resolveLinkPart splits it —
+    /// the caret on the part's text or right after it, before its '/'); `page:` for the rest of a
+    /// wiki link (brackets, the last part, the fragment, a display text), an embed, a Markdown link
+    /// to a note, and a link to a day (its page: link here, never day:); tag:, block:, ext:
+    /// (allowed schemes only); "" outside links and in inline code, comments and formulas.
+    /// Positions are inclusive at both ends of a construct; the one that starts at `position`
+    /// wins over one that ends there. The keyboard's "follow the link at the caret" (Alt+Enter).
+    QString linkUrlAt(QStringView text, qsizetype position) const;
 
 private:
     /// Verbatim runs of a text derived from a block body: {position in the text, position in the

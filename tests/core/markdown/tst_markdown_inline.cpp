@@ -623,6 +623,68 @@ private Q_SLOTS:
         QCOMPARE(source.sliced(d.from, d.to - d.from), dest);
         QCOMPARE(d.angle, angle);
     }
+
+    // ---- path parts of a link (docs/SYNTAX.md §2 "Path parts") ----------------------------------
+
+    void linkPathParts_data()
+    {
+        QTest::addColumn<QString>("target");
+        QTest::addColumn<QString>("parts"); // "from-to,from-to"; "" — one link
+        QTest::newRow("two parts") << u"Firma/Adam cośtam"_s << u"0-5,6-17"_s;
+        QTest::newRow("three parts") << u"A/B/C"_s << u"0-1,2-3,4-5"_s;
+        QTest::newRow("spaces around the slash") << u"A / B"_s << u"0-1,4-5"_s;
+        QTest::newRow("Polish") << u"Zażółć/gęślą jaźń"_s << u"0-6,7-17"_s;
+        QTest::newRow("a single name") << u"Firma"_s << QString();
+        QTest::newRow("trailing slash") << u"Firma/"_s << QString();
+        QTest::newRow("leading slash") << u"/Firma/Adam"_s << QString();
+        QTest::newRow("explicitly relative") << u"./A/B"_s << QString();
+        QTest::newRow("up") << u"../A/B"_s << QString();
+        QTest::newRow("a dot part") << u"A/./B"_s << QString();
+        QTest::newRow("a dot-dot part") << u"A/../B"_s << QString();
+        QTest::newRow("an empty part") << u"A//B"_s << QString();
+        QTest::newRow("a blank part") << u"A/ /B"_s << QString();
+        QTest::newRow("a backslash") << u"A\\B/C"_s << QString();
+        QTest::newRow("a URL") << u"https://x.pl/a"_s << QString();
+        QTest::newRow("a Windows drive") << u"C:/x/y"_s << QString();
+        QTest::newRow("an attachment") << u"assets/plan.png"_s << QString();
+        QTest::newRow("an attachment in upper case") << u"assets/PLAN.PDF"_s << QString();
+        QTest::newRow("a date is no extension") << u"Raporty/2026.10"_s << u"0-7,8-15"_s;
+        QTest::newRow("Dr. Smith") << u"Dr. Smith/Notatki"_s << u"0-9,10-17"_s;
+        QTest::newRow("a written .md") << u"Firma/Adam.md"_s << u"0-5,6-13"_s;
+        QTest::newRow("an extension on a folder") << u"plan.pdf/x"_s << u"0-8,9-10"_s;
+        QString sixteen;
+        QString sixteenParts;
+        for (int k = 0; k < 16; ++k) {
+            sixteen += (k ? u"/"_s : QString()) + u"ą"_s;
+            sixteenParts += (k ? u","_s : QString()) + QString::number(2 * k) + u'-' + QString::number(2 * k + 1);
+        }
+        QTest::newRow("16 parts") << sixteen << sixteenParts;
+        QTest::newRow("17 parts") << sixteen + u"/ą"_s << QString();
+        QTest::newRow("empty") << QString() << QString();
+        QTest::newRow("only a slash") << u"/"_s << QString();
+    }
+    void linkPathParts()
+    {
+        QFETCH(QString, target);
+        QFETCH(QString, parts);
+        QStringList got;
+        for (const LinkPathPart &p : markdown::linkPathParts(target))
+            got.append(QString::number(p.from) + u'-' + QString::number(p.to));
+        QCOMPARE(got.join(u','), parts);
+    }
+
+    void pathologicalPathIsBounded()
+    {
+        // Thousands of parts: one link, found in linear time.
+        QString target;
+        for (int k = 0; k < 100000; ++k)
+            target += u"ż/"_s;
+        target += u"ż"_s;
+        QElapsedTimer t;
+        t.start();
+        QVERIFY(markdown::linkPathParts(target).isEmpty());
+        QVERIFY2(t.elapsed() < 1000, qPrintable(QString::number(t.elapsed())));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestInline)

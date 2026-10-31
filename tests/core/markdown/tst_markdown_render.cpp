@@ -39,7 +39,7 @@ RenderContext context(dates::UiLocale locale = dates::UiLocale::Polish)
     p.neutral = {u"NF"_s, u"NB"_s};
     c.palette = p;
     c.resolvePage = [](const QString &target) -> std::optional<QString> {
-        if (target == u"Brak")
+        if (target == u"Brak" || target == u"Projekty/Brak")
             return std::nullopt;
         return target + u".md"_s;
     };
@@ -73,6 +73,37 @@ RenderContext context(dates::UiLocale locale = dates::UiLocale::Polish)
 QString render(const QString &text)
 {
     return InlineRenderer(context()).render(text);
+}
+
+/// context() with the path parts of page links: the prefixes "Firma", "A", "A/B", "Zażółć" are
+/// pages, "Projekty" a folder, anything else ("Nowa") new.
+RenderContext partsContext()
+{
+    RenderContext c = context();
+    c.resolveLinkPart = [](const QString &target, int part) {
+        const QList<LinkPathPart> parts = linkPathParts(target);
+        if (part < 1 || part >= parts.size())
+            return LinkPartTarget::Kind::New;
+        const QString prefix = target.left(parts[part - 1].to);
+        if (prefix == u"Firma" || prefix == u"A" || prefix == u"A/B" || prefix == u"Zażółć")
+            return LinkPartTarget::Kind::Page;
+        if (prefix == u"Projekty")
+            return LinkPartTarget::Kind::Folder;
+        return LinkPartTarget::Kind::New;
+    };
+    return c;
+}
+
+/// A parent part's anchor (`enc`: the whole target percent-encoded).
+QString part(int k, const QString &enc, const QString &color, const QString &label)
+{
+    return u"<a href=\"part:%1:%2\" style=\"color:%3;text-decoration:none\">%4</a>"_s.arg(k).arg(enc, color, label);
+}
+
+/// The muted separator between two parts.
+QString sep(const QString &text = u"/"_s)
+{
+    return u"<span style=\"color:M\">%1</span>"_s.arg(text);
 }
 
 QString link(const QString &href, const QString &color, const QString &label)
@@ -264,6 +295,266 @@ private Q_SLOTS:
         c.linkTitle = journalLinkTitle(VaultConfig(), dates::UiLocale::Polish, QDate());
         QCOMPARE(InlineRenderer(c).render(u"[[2026-10-13]]"_s),
                  link(u"page:2026-10-13"_s, u"L"_s, u"13"_s + nb + u"paź"_s + nb + u"2026"_s));
+    }
+
+    void linkParts_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        const QString adam = u"Firma%2FAdam%20co%C5%9Btam"_s;
+        QTest::newRow("a page in a folder")
+                << u"[[Firma/Adam cośtam]]"_s
+                << part(1, adam, u"L"_s, u"Firma"_s) + sep() + link(u"page:"_s + adam, u"L"_s, u"Adam cośtam"_s);
+        QTest::newRow("a folder part, a missing page")
+                << u"[[Projekty/Brak]]"_s
+                << part(1, u"Projekty%2FBrak"_s, u"L"_s, u"Projekty"_s) + sep()
+                           + link(u"page:Projekty%2FBrak"_s, u"U"_s, u"Brak"_s);
+        QTest::newRow("a new part") << u"[[Nowa/Strona]]"_s
+                                    << part(1, u"Nowa%2FStrona"_s, u"U"_s, u"Nowa"_s) + sep()
+                                               + link(u"page:Nowa%2FStrona"_s, u"L"_s, u"Strona"_s);
+        QTest::newRow("three parts") << u"[[A/B/C]]"_s
+                                     << part(1, u"A%2FB%2FC"_s, u"L"_s, u"A"_s) + sep()
+                                                + part(2, u"A%2FB%2FC"_s, u"L"_s, u"B"_s) + sep()
+                                                + link(u"page:A%2FB%2FC"_s, u"L"_s, u"C"_s);
+        QTest::newRow("Polish") << u"[[Zażółć/gęślą jaźń]]"_s
+                                << part(1, u"Za%C5%BC%C3%B3%C5%82%C4%87%2Fg%C4%99%C5%9Bl%C4%85%20ja%C5%BA%C5%84"_s,
+                                        u"L"_s, u"Zażółć"_s)
+                                           + sep()
+                                           + link(u"page:Za%C5%BC%C3%B3%C5%82%C4%87%2Fg%C4%99%C5%9Bl%C4%85%20ja%C5%BA%C5%84"_s,
+                                                  u"L"_s, u"gęślą jaźń"_s);
+        QTest::newRow("a display text: one link")
+                << u"[[Firma/Adam|Adam]]"_s << link(u"page:Firma%2FAdam"_s, u"L"_s, u"Adam"_s);
+        QTest::newRow("a heading") << u"[[Firma/Adam#Plan]]"_s
+                                   << part(1, u"Firma%2FAdam"_s, u"L"_s, u"Firma"_s) + sep()
+                                              + link(u"page:Firma%2FAdam#Plan"_s, u"L"_s, u"Adam › Plan"_s);
+        QTest::newRow("a block") << u"[[Firma/Adam#^abc]]"_s
+                                 << part(1, u"Firma%2FAdam"_s, u"L"_s, u"Firma"_s) + sep()
+                                            + link(u"page:Firma%2FAdam#^abc"_s, u"L"_s,
+                                                   u"Adam › Treść &lt;b&gt;bloku&lt;/b&gt;"_s);
+        QTest::newRow("spaces as written") << u"[[ Firma / Adam ]]"_s
+                                           << part(1, u"Firma%20%2F%20Adam"_s, u"L"_s, u"Firma"_s) + sep(u" / "_s)
+                                                      + link(u"page:Firma%20%2F%20Adam"_s, u"L"_s, u"Adam"_s);
+        const QString firmaAdam =
+                part(1, u"Firma%2FAdam"_s, u"L"_s, u"Firma"_s) + sep() + link(u"page:Firma%2FAdam"_s, u"L"_s, u"Adam"_s);
+        QTest::newRow("in bold") << u"**[[Firma/Adam]]**"_s << u"<b>"_s + firmaAdam + u"</b>"_s;
+        QTest::newRow("two links") << u"[[Firma/Adam]] i [[Firma/Adam]]"_s << firmaAdam + u" i\u00a0"_s + firmaAdam;
+        QTest::newRow("an embed stays one") << u"![[Firma/Adam]]"_s
+                                            << link(u"page:Firma%2FAdam"_s, u"L"_s, u"⧉ Firma/Adam"_s);
+        QTest::newRow("a Markdown link stays one")
+                << u"[x](Firma/Adam.md)"_s << link(u"page:Firma%2FAdam.md"_s, u"L"_s, u"x"_s);
+        QTest::newRow("a tag stays one") << u"#Firma/Adam"_s << tag(u"Firma%2FAdam"_s, u"Firma/Adam"_s);
+        QTest::newRow("an attachment") << u"[[assets/plan.png]]"_s
+                                       << link(u"page:assets%2Fplan.png"_s, u"L"_s, u"assets/plan.png"_s);
+        QTest::newRow("a trailing slash") << u"[[Firma/]]"_s << link(u"page:Firma%2F"_s, u"L"_s, u"Firma/"_s);
+        QTest::newRow("an empty part") << u"[[A//B]]"_s << link(u"page:A%2F%2FB"_s, u"L"_s, u"A//B"_s);
+        QTest::newRow("relative") << u"[[../A/B]]"_s << link(u"page:..%2FA%2FB"_s, u"L"_s, u"../A/B"_s);
+        // Escaped part by part, the whole target percent-encoded in each URL.
+        const QString hostile = u"%3Cb%3E%2Fx%22%26%3C%2Fb%3E"_s;
+        QTest::newRow("hostile") << u"[[<b>/x\"&</b>]]"_s
+                                 << part(1, hostile, u"U"_s, u"&lt;b&gt;"_s) + sep()
+                                            + part(2, hostile, u"U"_s, u"x&quot;&amp;&lt;"_s) + sep()
+                                            + link(u"page:"_s + hostile, u"L"_s, u"b&gt;"_s);
+        QTest::newRow("code") << u"`[[Firma/Adam]]`"_s << Code + u"[[Firma/Adam]]</code>"_s;
+        // A long path (within a wiki link's 1000 characters): one link (render cost bounded).
+        QString many;
+        for (int k = 0; k < 399; ++k)
+            many += u"a/"_s;
+        many += u"a"_s;
+        QTest::newRow("400 parts") << u"[["_s + many + u"]]"_s
+                                   << link(u"page:"_s + QString(many).replace(u"/"_s, u"%2F"_s), u"L"_s, many);
+    }
+    void linkParts()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        QElapsedTimer t;
+        t.start();
+        QCOMPARE(InlineRenderer(partsContext()).render(input), expected);
+        QVERIFY2(t.elapsed() < 500, qPrintable(QString::number(t.elapsed())));
+        // Without the callback (exports, the clipboard): one link as before.
+        const QString single = render(input);
+        QVERIFY2(!single.contains(u"part:"), qPrintable(single));
+    }
+
+    void linkPartsNeedTheCallback()
+    {
+        QCOMPARE(render(u"[[Firma/Adam cośtam]]"_s),
+                 link(u"page:Firma%2FAdam%20co%C5%9Btam"_s, u"L"_s, u"Firma/Adam cośtam"_s));
+        QCOMPARE(render(u"[[Projekty/Dom#Plan|dom]]"_s), link(u"page:Projekty%2FDom#Plan"_s, u"L"_s, u"dom"_s));
+    }
+
+    void linkPartsNotForOtherTitles()
+    {
+        // A link shown by another name (a day by its date) stays one link.
+        RenderContext c = partsContext();
+        c.linkTitle = [](const QString &target) -> std::optional<QString> {
+            if (target == u"Firma/Adam")
+                return u"Adam N."_s;
+            return std::nullopt;
+        };
+        QCOMPARE(InlineRenderer(c).render(u"[[Firma/Adam]]"_s), link(u"page:Firma%2FAdam"_s, u"L"_s, u"Adam N."_s));
+        QCOMPARE(InlineRenderer(c).render(u"[[Firma/Ewa]]"_s),
+                 part(1, u"Firma%2FEwa"_s, u"L"_s, u"Firma"_s) + sep() + link(u"page:Firma%2FEwa"_s, u"L"_s, u"Ewa"_s));
+        c = partsContext();
+        c.dayLinks = true;
+        QCOMPARE(InlineRenderer(c).render(u"[[2026-10-13]]"_s), link(u"day:0-14"_s, u"L"_s, u"2026-10-13"_s));
+    }
+
+    void linkPartUrls_data()
+    {
+        QTest::addColumn<QString>("target");
+        QTest::addColumn<int>("part");
+        QTest::addColumn<QString>("url");
+        QTest::addColumn<QString>("prefix");
+        QTest::newRow("Polish") << u"Firma/Adam cośtam"_s << 1 << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s << u"Firma"_s;
+        QTest::newRow("second of three") << u"A/B/C"_s << 2 << u"part:2:A%2FB%2FC"_s << u"A/B"_s;
+        QTest::newRow("spaces") << u"Firma / Adam"_s << 1 << u"part:1:Firma%20%2F%20Adam"_s << u"Firma"_s;
+        QTest::newRow("deep Polish") << u"Projekty/Zażółć gęślą/Notatki"_s << 2
+                                     << u"part:2:Projekty%2FZa%C5%BC%C3%B3%C5%82%C4%87%20g%C4%99%C5%9Bl%C4%85%2FNotatki"_s
+                                     << u"Projekty/Zażółć gęślą"_s;
+    }
+    void linkPartUrls()
+    {
+        QFETCH(QString, target);
+        QFETCH(int, part);
+        QFETCH(QString, url);
+        QFETCH(QString, prefix);
+        QCOMPARE(linkPartUrl(target, part), url);
+        const auto parsed = parseLinkPartUrl(url);
+        QVERIFY(parsed);
+        QCOMPARE(parsed->target, target);
+        QCOMPARE(parsed->part, part);
+        QCOMPARE(parsed->prefix, prefix);
+    }
+
+    void malformedLinkPartUrls_data()
+    {
+        QTest::addColumn<QString>("url");
+        QTest::newRow("nothing") << u"part:"_s;
+        QTest::newRow("no target") << u"part:1"_s;
+        QTest::newRow("empty target") << u"part:1:"_s;
+        QTest::newRow("part 0") << u"part:0:A%2FB"_s;
+        QTest::newRow("the last part") << u"part:2:A%2FB"_s;
+        QTest::newRow("negative") << u"part:-1:A%2FB"_s;
+        QTest::newRow("leading zero") << u"part:01:A%2FB"_s;
+        QTest::newRow("not a number") << u"part:x:A%2FB"_s;
+        QTest::newRow("a plus sign") << u"part:+1:A%2FB"_s;
+        QTest::newRow("no path") << u"part:1:Firma"_s;
+        QTest::newRow("overflow") << u"part:99999999999:A%2FB"_s;
+        QTest::newRow("five digits") << u"part:10000:A%2FB"_s;
+        QTest::newRow("broken encoding") << u"part:1:%ZZ"_s;
+        QTest::newRow("a page link") << u"page:A%2FB"_s;
+        QTest::newRow("upper case") << u"PART:1:A%2FB"_s;
+        QTest::newRow("an attachment") << u"part:1:assets%2Fa.png"_s;
+        QTest::newRow("a trailing slash") << u"part:1:A%2FB%2F"_s;
+        QTest::newRow("empty") << QString();
+    }
+    void malformedLinkPartUrls()
+    {
+        QFETCH(QString, url);
+        QVERIFY(!parseLinkPartUrl(url));
+    }
+
+    void hoveredLink_data()
+    {
+        QTest::addColumn<QString>("html");
+        QTest::addColumn<QString>("href");
+        QTest::addColumn<QString>("expected");
+        const auto under = [](const QString &href, const QString &color, const QString &label) {
+            return u"<a href=\"%1\" style=\"color:%2;text-decoration:underline\">%3</a>"_s.arg(href, color, label);
+        };
+        const InlineRenderer parts(partsContext());
+        QTest::newRow("a link") << render(u"[[Strona]]"_s) << u"page:Strona"_s
+                                << under(u"page:Strona"_s, u"L"_s, u"Strona"_s);
+        QTest::newRow("the second of two")
+                << render(u"[[Strona]] i [[Brak]]"_s) << u"page:Brak"_s
+                << link(u"page:Strona"_s, u"L"_s, u"Strona"_s) + u" i\u00a0"_s + under(u"page:Brak"_s, u"U"_s, u"Brak"_s);
+        QTest::newRow("a path part") << parts.render(u"[[Firma/Adam]]"_s) << u"part:1:Firma%2FAdam"_s
+                                     << under(u"part:1:Firma%2FAdam"_s, u"L"_s, u"Firma"_s) + sep()
+                                                + link(u"page:Firma%2FAdam"_s, u"L"_s, u"Adam"_s);
+        QTest::newRow("the last part") << parts.render(u"[[Firma/Adam]]"_s) << u"page:Firma%2FAdam"_s
+                                       << part(1, u"Firma%2FAdam"_s, u"L"_s, u"Firma"_s) + sep()
+                                                  + under(u"page:Firma%2FAdam"_s, u"L"_s, u"Adam"_s);
+        QTest::newRow("a tag stays") << render(u"#zakupy"_s) << u"tag:zakupy"_s << tag(u"zakupy"_s, u"zakupy"_s);
+        const QString reminder = render(u"Zadzwonić ⏰ 2026-10-15 09:00"_s);
+        QTest::newRow("a reminder chip stays") << reminder << u"reminder:10-28"_s << reminder;
+        QTest::newRow("nothing hovered") << render(u"[[Strona]]"_s) << QString() << render(u"[[Strona]]"_s);
+        QTest::newRow("an unknown href") << render(u"[[Strona]]"_s) << u"page:Inna"_s << render(u"[[Strona]]"_s);
+        QTest::newRow("a prefix of the href") << render(u"[[Strona]]"_s) << u"page:Str"_s << render(u"[[Strona]]"_s);
+        QTest::newRow("an escaped address")
+                << render(u"[strona](https://a.pl/?b=c&d=e)"_s) << u"ext:https://a.pl/?b=c&d=e"_s
+                << under(u"ext:https://a.pl/?b=c&amp;d=e"_s, u"L"_s, u"strona"_s);
+        QTest::newRow("a quote in the href") << render(u"[[a\"b]]"_s) << u"page:a%22b"_s
+                                             << under(u"page:a%22b"_s, u"L"_s, u"a&quot;b"_s);
+        QTest::newRow("the same link twice")
+                << render(u"[[Strona]] [[Strona]]"_s) << u"page:Strona"_s
+                << under(u"page:Strona"_s, u"L"_s, u"Strona"_s) + u" "_s + under(u"page:Strona"_s, u"L"_s, u"Strona"_s);
+        QTest::newRow("hostile text is not html") << u"<a href=\"page:x\" style=\"color:L\" onclick=\";text-decoration:none\">"_s
+                                                  << u"page:x"_s
+                                                  << u"<a href=\"page:x\" style=\"color:L\" onclick=\";text-decoration:none\">"_s;
+    }
+    void hoveredLink()
+    {
+        QFETCH(QString, html);
+        QFETCH(QString, href);
+        QFETCH(QString, expected);
+        const QString hovered = InlineRenderer::withHoveredLink(html, href);
+        QCOMPARE(hovered, expected);
+        QCOMPARE(InlineRenderer::withHoveredLink(hovered, href), hovered); // idempotent
+    }
+
+    void linkUrlAt_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<int>("position");
+        QTest::addColumn<QString>("url");
+        const QString text = u"Zapytać się [[Firma/Adam cośtam]] o to"_s;
+        const QString page = u"page:Firma%2FAdam%20co%C5%9Btam"_s;
+        const QString part1 = u"part:1:Firma%2FAdam%20co%C5%9Btam"_s;
+        QTest::newRow("before the link") << text << 5 << QString();
+        QTest::newRow("on the brackets") << text << 12 << page;
+        QTest::newRow("at the part's start") << text << 14 << part1;
+        QTest::newRow("inside the part") << text << 16 << part1;
+        QTest::newRow("right after the part") << text << 19 << part1;
+        QTest::newRow("after the slash") << text << 20 << page;
+        QTest::newRow("inside the last part") << text << 25 << page;
+        QTest::newRow("at the link's end") << text << 33 << page;
+        QTest::newRow("after the link") << text << 34 << QString();
+        QTest::newRow("past the end") << text << int(text.size()) + 1 << QString();
+        QTest::newRow("negative") << text << -1 << QString();
+        QTest::newRow("far past the end") << text << int(text.size()) + 5 << QString();
+        QTest::newRow("a display text") << u"[[Firma/Adam|tekst]]"_s << 2 << u"page:Firma%2FAdam"_s;
+        QTest::newRow("an embed") << u"![[Firma/Adam]]"_s << 4 << u"page:Firma%2FAdam"_s;
+        QTest::newRow("a heading fragment") << u"[[Firma/Adam#Plan]]"_s << 15 << u"page:Firma%2FAdam#Plan"_s;
+        QTest::newRow("spaces as written") << u"[[ Firma / Adam ]]"_s << 3 << u"part:1:Firma%20%2F%20Adam"_s;
+        QTest::newRow("a tag") << u"#zakupy/spożywcze"_s << 3 << u"tag:zakupy%2Fspo%C5%BCywcze"_s;
+        QTest::newRow("a block reference") << u"((abc))"_s << 3 << u"block:abc"_s;
+        QTest::newRow("a bare URL") << u"https://example.com/x"_s << 5 << u"ext:https://example.com/x"_s;
+        QTest::newRow("a Markdown link to a note") << u"[x](Firma/Adam.md)"_s << 1 << u"page:Firma%2FAdam.md"_s;
+        QTest::newRow("a script link") << u"[x](javascript:alert(1))"_s << 1 << QString();
+        QTest::newRow("inline code") << u"`[[A/B]]`"_s << 3 << QString();
+        QTest::newRow("a formula") << u"$[[A/B]]$"_s << 3 << QString();
+        QTest::newRow("a day") << u"[[2026-10-13]]"_s << 4 << u"page:2026-10-13"_s;
+        QTest::newRow("the second of three parts") << u"[[A/B/C]]"_s << 4 << u"part:2:A%2FB%2FC"_s;
+        QTest::newRow("before the second slash") << u"[[A/B/C]]"_s << 5 << u"part:2:A%2FB%2FC"_s;
+        QTest::newRow("the last of three parts") << u"[[A/B/C]]"_s << 6 << u"page:A%2FB%2FC"_s;
+        QTest::newRow("the next link wins") << u"[[A/B]][[C]]"_s << 7 << u"page:C"_s;
+        QTest::newRow("plain text") << u"Zażółć gęślą jaźń"_s << 3 << QString();
+        QTest::newRow("empty") << QString() << 0 << QString();
+    }
+    void linkUrlAt()
+    {
+        QFETCH(QString, text);
+        QFETCH(int, position);
+        QFETCH(QString, url);
+        RenderContext c = partsContext();
+        c.dayLinks = true;
+        QCOMPARE(InlineRenderer(c).linkUrlAt(text, position), url);
+        // Without resolveLinkPart a part is the page link.
+        if (url.startsWith(u"part:")) {
+            const QString page = InlineRenderer(context()).linkUrlAt(text, position);
+            QVERIFY2(page.startsWith(u"page:"), qPrintable(page));
+        }
     }
 
     void oneLetterWordsKeepTheNextWord_data()

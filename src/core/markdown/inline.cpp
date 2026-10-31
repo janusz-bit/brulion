@@ -2,6 +2,7 @@
 
 #include "markdown/inline_p.h"
 #include "markdown/tokens_p.h"
+#include "util/paths.h"
 
 #include <QRegularExpression>
 #include <QSet>
@@ -823,6 +824,41 @@ QStringList uniqueTags(const QStringList &names)
         out.append(name);
     }
     return out;
+}
+
+QList<LinkPathPart> linkPathParts(QStringView target)
+{
+    // A single name, a backslash (a Windows path), a URL or a Windows drive: one link.
+    if (!target.contains(u'/') || target.contains(u'\\') || hasUrlScheme(target)
+        || (target.size() >= 2 && target[1] == u':' && target[0].unicode() < 0x80 && target[0].isLetter()))
+        return {};
+    QList<LinkPathPart> parts;
+    qsizetype start = 0;
+    while (start <= target.size()) {
+        qsizetype end = target.indexOf(u'/', start);
+        if (end < 0)
+            end = target.size();
+        if (parts.size() == MaxLinkPathParts)
+            return {}; // more parts than are split
+        qsizetype from = start;
+        qsizetype to = end;
+        while (from < to && target[from].isSpace())
+            ++from;
+        while (to > from && target[to - 1].isSpace())
+            --to;
+        const QStringView part = target.sliced(from, to - from);
+        // An empty or blank part ("/A", "A//B", "A/ /B", "A/"), "." or "..": one link.
+        if (part.isEmpty() || part == u"." || part == u"..")
+            return {};
+        parts.append({from, to});
+        start = end + 1;
+    }
+    // An attachment ("assets/plan.png") names a file, not a page in a namespace.
+    const QStringView last = target.sliced(parts.constLast().from, parts.constLast().to - parts.constLast().from);
+    const qsizetype dot = last.lastIndexOf(u'.');
+    if (dot > 0 && paths::isAttachmentExtension(last.sliced(dot)))
+        return {};
+    return parts;
 }
 
 QList<TagSpan> findTags(QStringView text)

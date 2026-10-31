@@ -607,6 +607,7 @@ void VaultIndex::Private::attachNote(std::unique_ptr<Entry> owned)
     const VaultPath path = e.path;
     entries[path] = std::move(owned);
     names.addNote(path, e.note.aliases);
+    countNoteFolders(path, 1);
     for (const int r : std::as_const(e.refs))
         multiAdd(blockRefSources, e.note.links[r].blockId, path);
     for (auto it = e.note.blockIds.cbegin(); it != e.note.blockIds.cend(); ++it)
@@ -629,6 +630,21 @@ void VaultIndex::Private::attachNote(std::unique_ptr<Entry> owned)
     resolveLinks(e);
 }
 
+void VaultIndex::Private::countNoteFolders(const VaultPath &path, int delta)
+{
+    for (qsizetype slash = path.lastIndexOf(u'/'); slash > 0; slash = path.lastIndexOf(u'/', slash - 1)) {
+        const VaultPath folder = path.left(slash);
+        const QString key = index_detail::pathKey(folder);
+        if (delta > 0) {
+            NoteFolder &f = noteFolders[key];
+            if (f.notes++ == 0)
+                f.spelled = folder;
+        } else if (const auto it = noteFolders.find(key); it != noteFolders.end() && (it->notes += delta) <= 0) {
+            noteFolders.erase(it);
+        }
+    }
+}
+
 std::unique_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(const VaultPath &path, bool discardSearch)
 {
     const auto it = entries.find(path);
@@ -639,6 +655,7 @@ std::unique_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(cons
     const Entry &e = *owned;
     unlinkOutgoing(e);
     names.removeNote(path, e.note.aliases);
+    countNoteFolders(path, -1);
     for (const int r : e.refs)
         multiRemove(blockRefSources, e.note.links[r].blockId, path);
     for (auto b = e.note.blockIds.cbegin(); b != e.note.blockIds.cend(); ++b)
@@ -907,6 +924,7 @@ void VaultIndex::clear()
     d->blockOwners.clear();
     d->blockRefSources.clear();
     d->tagIndex.clear();
+    d->noteFolders.clear();
     d->searchTimer->stop();
     d->searchDirty.clear();
     d->search.clear();

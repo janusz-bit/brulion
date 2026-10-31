@@ -99,17 +99,7 @@ QStringList aliasLinkKeys(const QString &alias)
 
 bool isAttachmentExtension(QStringView ext)
 {
-    constexpr qsizetype MaxExtensionLength = 10;
-    if (ext.size() < 2 || ext.size() > MaxExtensionLength + 1 || ext[0] != u'.' || isMarkdownExtension(ext))
-        return false;
-    bool letter = false;
-    for (const QChar c : ext.sliced(1)) {
-        const bool alpha = (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z');
-        if (!alpha && !(c >= u'0' && c <= u'9'))
-            return false;
-        letter = letter || alpha;
-    }
-    return letter;
+    return paths::isAttachmentExtension(ext);
 }
 
 bool isExternalTarget(QStringView target)
@@ -294,6 +284,16 @@ VaultPath NameTable::resolveNote(const QString &target, TargetForm form) const
     }
     // 3) aliases.
     return lookupAlias(t);
+}
+
+VaultPath NameTable::notePath(const QString &path) const
+{
+    const QString spelled = nfc(path);
+    if (spelled.isEmpty())
+        return {};
+    const QString key = lower(spelled);
+    const VaultPath md = lookupExact(key + u".md"_s, spelled + u".md"_s);
+    return md.isEmpty() ? lookupExact(key + u".markdown"_s, spelled + u".markdown"_s) : md;
 }
 
 VaultPath NameTable::resolveBare(const QString &target, const VaultPath &from) const

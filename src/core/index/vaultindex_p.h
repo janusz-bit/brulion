@@ -191,6 +191,14 @@ struct VaultIndex::Private {
     QHash<QString, index_detail::PathSet> blockOwners;     ///< block id -> notes defining it
     QHash<QString, index_detail::PathSet> blockRefSources; ///< block id -> notes with ((id))
     QHash<QString, index_detail::PathCounts> tagIndex;     ///< tag -> note -> occurrences
+    /// A folder holding notes (in it or below): its first spelling and how many notes it holds.
+    struct NoteFolder {
+        VaultPath spelled;
+        int notes = 0;
+    };
+    QHash<QString, NoteFolder> noteFolders; ///< pathKey(folder) -> (VaultIndex::noteFolder())
+    /// Count the note at `path` in its folders and their ancestors (`delta` +1 / −1).
+    void countNoteFolders(const VaultPath &path, int delta);
 
     SearchIndex search;
     QSet<VaultPath> searchDirty;

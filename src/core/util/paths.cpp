@@ -69,6 +69,24 @@ bool isMarkdown(const VaultPath &path)
     return ext == QLatin1String(".md") || ext == QLatin1String(".markdown");
 }
 
+bool isAttachmentExtension(QStringView ext)
+{
+    constexpr qsizetype MaxExtensionLength = 10;
+    if (ext.size() < 2 || ext.size() > MaxExtensionLength + 1 || ext[0] != u'.')
+        return false;
+    if (ext.compare(QLatin1StringView(".md"), Qt::CaseInsensitive) == 0
+        || ext.compare(QLatin1StringView(".markdown"), Qt::CaseInsensitive) == 0)
+        return false;
+    bool letter = false;
+    for (const QChar c : ext.sliced(1)) {
+        const bool alpha = (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z');
+        if (!alpha && !(c >= u'0' && c <= u'9'))
+            return false;
+        letter = letter || alpha;
+    }
+    return letter;
+}
+
 const QStringList &pictureExtensions()
 {
     using namespace Qt::StringLiterals;

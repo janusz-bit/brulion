@@ -4,6 +4,7 @@
 // index module — see index/index.h for the module overview.
 #pragma once
 
+#include "markdown/inline.h"
 #include "types.h"
 
 #include <QDate>
@@ -444,6 +445,27 @@ public:
     /// Resolve a link target (SYNTAX §2) written in note `from`; `#fragment` / `|display` are
     /// ignored. Attachments are found too (`photo.png`).
     std::optional<VaultPath> resolveLink(const QString &target, const VaultPath &from = {}) const;
+    /// The folder at `path` (case-insensitive, NFC; leading/trailing '/' ignored) when a note lies
+    /// in it or in one of its subfolders, spelled as the index spells it (the first note's
+    /// spelling); nullopt otherwise — "" (the root), a folder holding only attachments, an empty
+    /// folder.
+    std::optional<VaultPath> noteFolder(const QString &path) const;
+    /// What parent part `part` (1 … n−1) of the page-link target `target` (as written: `[[A/B/C]]`
+    /// part 2 = "A/B"), written in note `from`, opens (docs/SYNTAX.md §2 "Path parts"), in this
+    /// order:
+    ///  1. the note `<F>.md` (case-insensitive, NFC) next to folder F, the folder that holds the
+    ///     link's own page at that depth — when the whole link resolves (resolveLink(target, from))
+    ///     to a note whose path without `.md` ends with the target's parts (case-insensitive, NFC;
+    ///     a written `.md` ignored). For example `[[Firma/Adam]]` -> `Klienci/Firma/Adam.md` gives
+    ///     F = `Klienci/Firma`;
+    ///  2. the note the prefix resolves to as a link written in `from` (resolveLink(prefix, from):
+    ///     path, relative path, title, alias; an attachment does not count);
+    ///  3. a folder (noteFolder()): F of step 1, else the prefix from the vault root, else relative
+    ///     to `from`'s folder;
+    ///  4. New: nothing yet (a click creates the page like an unresolved [[prefix]]).
+    /// nullopt when the target does not split (markdown::linkPathParts()) or has no such part.
+    std::optional<markdown::LinkPartTarget> resolveLinkPart(const QString &target, int part,
+                                                            const VaultPath &from = {}) const;
     /// Links of a note with their current resolution, in document order: wiki links, embeds,
     /// Markdown links to files (URLs excluded) and block references.
     QList<ResolvedLink> outgoingLinks(const VaultPath &path) const;
