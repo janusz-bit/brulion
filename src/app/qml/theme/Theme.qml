@@ -107,6 +107,12 @@ QtObject {
     readonly property color borderSubtle: colors.borderSubtle
     readonly property color borderStrong: colors.borderStrong
     readonly property color borderControl: colors.borderControl // ≥ 3:1 (checkbox, switch)
+    /// Indent guides (the outline's level lines, the page tree's): quiet but seen, about
+    /// Obsidian's level (1.28:1 on paper, 1.46:1 on slate). Not text, not a control.
+    readonly property color guide: border
+    /// Indent guides on bgSunken (the sidebar's and the drawer's tree), where border is only
+    /// 1.18:1 in the light: borderStrong there (1.52:1), border in the dark (1.56:1).
+    readonly property color guideOnSunken: dark ? border : borderStrong
 
     // ---- Actions -------------------------------------------------------------------------
     readonly property color primary: dark ? "#e8e4da" : "#1f2430"        // primary buttons

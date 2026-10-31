@@ -669,6 +669,22 @@ Rectangle {
                 // stays). Created only there.
                 trailing: Theme.touchUi ? moreLoader : null
 
+                // Indent guides: a 1-px line under each ancestor's chevron, over the row's full
+                // height (rows touch, so the lines run on), below the row's background (z -1 in a
+                // Control). The selected row's pill covers them (its tint is translucent: none
+                // drawn there).
+                Repeater {
+                    model: row.selected ? 0 : row.depth
+                    delegate: Rectangle {
+                        required property int index
+                        z: -2
+                        x: Math.round((Theme.touchUi ? 14 : 10) + sidebar.indent(index) + Theme.iconSize / 2)
+                        width: 1
+                        height: row.height
+                        color: Theme.guideOnSunken
+                    }
+                }
+
                 onClicked: {
                     if (isDir)
                         tree.toggle(index)

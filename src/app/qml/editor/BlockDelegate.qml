@@ -238,7 +238,7 @@ Item {
             x: Math.round(block.editor.contentX + block.editor.gutter - block.editor.bulletColumn / 2 + index * block.editor.indentStep)
             width: 1
             height: block.height
-            color: Theme.borderSubtle
+            color: Theme.guide
         }
     }
     // From this bullet down to its (visible) children.
@@ -248,7 +248,7 @@ Item {
         y: Math.round(block.firstLineCenter + 9)
         width: 1
         height: Math.max(0, block.height - y)
-        color: Theme.borderSubtle
+        color: Theme.guide
     }
 
     // The parts below that only some blocks have — the fold arrow, the bullet, an ordered list

@@ -45,7 +45,9 @@ components — no Material/Fusion look, so all targets look identical.
   editor font at the UI's base size (`textBase`), so the editor's own text is the only larger
   size; search results show the page title (semibold, `fg`) and the snippet (`fgMuted`) both in
   the UI font at `textBase`, told apart by weight and colour.
-* Outliner look like Logseq: round bullets, thin vertical guide lines per nesting level, fold
+* Outliner look like Logseq: round bullets, thin vertical guide lines per nesting level
+  (`Theme.guide`, the `border` colour: visible but quiet, about Obsidian's 1.3:1; also from a
+  bullet down to its children), fold
   arrows, clicking a bullet zooms into the block (breadcrumb to zoom out; Enter in a zoomed
   heading or paragraph ends the zoom) — in outline mode; in document mode a note reads like an
   Obsidian page (see "Note modes" below).
@@ -221,7 +223,11 @@ rename and move").
   folders first, then pages, in Polish order with numbers by value (`text::compareNames`, the
   same in All pages and on every platform); the journals folder first, with a calendar icon,
   its days by readable dates ("śr, 14 paź"), newest first, closed by default; attachments hidden
-  unless "Pokaż załączniki". Vault changes reach it as inserted and removed rows (never a reset
+  unless "Pokaż załączniki". Indent guides as in the outline: a row at depth *d* draws a 1-px
+  line under each ancestor's chevron (x = 14 / 10 px + `indent(level)` + half an icon), over its
+  full height, so the lines run on from row to row, below the row's background (the selected
+  row's pill covers them), in `Theme.guideOnSunken` (`borderStrong` in the light, `border` in the
+  dark: the tree lies on `bgSunken`); both densities and the 8-px steps below the fourth level. Vault changes reach it as inserted and removed rows (never a reset
   while rows stay: the list keeps its place, Syncthing's deliveries included); open folders are
   remembered per notebook (device-local), follow renamed and moved folders and are forgotten
   with deleted ones. A tap opens or closes a folder and opens a page; the open page or daily
@@ -2060,6 +2066,7 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
 
 * **Theme** (`Theme` singleton): every colour, font, size, radius, duration comes from it —
   semantic colours (`bg`, `bgElevated`, `bgSunken`, `fg`, `fgMuted`, `fgFaint`, `border*`,
+  `guide` / `guideOnSunken` (indent guides; aliases of the border tokens),
   `accent`, `link`, `tag*`, `chip*` via `Theme.chip(kind)`, `selection`, `focusRing`,
   `danger*`/`warning*`/`success*`, `diff*`), typography (`fontUi`, `fontEditor`,
   `fontMono`, `text*` sizes), spacing `space1…space16`, radii, `elevation(level)`,
