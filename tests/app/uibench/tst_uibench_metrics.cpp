@@ -602,10 +602,17 @@ void TestUiBenchMetrics::manifest()
     QJsonObject first = screens.first().toObject();
     QJsonObject obsidian = first[u"obsidian"_s].toObject();
     QJsonObject brulion = first[u"brulion"_s].toObject();
+    // One step per array, appended: MSVC reads `QJsonArray{ QJsonArray{ x } }` as a copy of the
+    // inner array ([x], a step that is no array) where GCC and Clang make [[x]].
+    const auto oneStep = [](const QString &verb) {
+        QJsonArray steps;
+        steps.append(QJsonArray{ verb });
+        return steps;
+    };
     if (change == u"verb")
-        obsidian[u"steps"_s] = QJsonArray{ QJsonArray{ u"teleport"_s } };
+        obsidian[u"steps"_s] = oneStep(u"teleport"_s);
     else if (change == u"arity")
-        obsidian[u"steps"_s] = QJsonArray{ QJsonArray{ u"open"_s } };
+        obsidian[u"steps"_s] = oneStep(u"open"_s);
     else if (change == u"size")
         first[u"sizes"_s] = QJsonArray{ u"tablet"_s };
     else if (change == u"arg")
