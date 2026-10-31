@@ -1,6 +1,7 @@
 // PDF pages without a renderer (pdfpages.h): the browser build — Qt has no Qt PDF for WebAssembly
 // — and builds that found neither Qt PDF nor poppler-qt6. Pictures still become backdrops there,
-// and drawings with PDF pages made elsewhere show as they are (their pixels are in the file).
+// drawings with PDF pages made elsewhere show as they are (their pixels are in the file), and the
+// PDF viewer hands PDFs to the browser's own viewer (a new tab) or the system's app instead.
 #include "pdfpages.h"
 
 using namespace Qt::StringLiterals;
@@ -17,23 +18,19 @@ QString pdfBackendName()
     return u"none"_s;
 }
 
-PdfInfo pdfInfo(const QString &file, bool pageSizes)
+bool pdfTextAvailable()
 {
-    Q_UNUSED(file);
-    Q_UNUSED(pageSizes);
-    PdfInfo info;
-    info.error = u"This build has no PDF renderer"_s;
-    return info;
+    return false;
 }
 
-QImage renderPdfPage(const QString &file, int page, int maxSide, QString *error)
+std::unique_ptr<PdfReader> PdfReader::open(const QString &file, PdfInfo *info)
 {
     Q_UNUSED(file);
-    Q_UNUSED(page);
-    Q_UNUSED(maxSide);
-    if (error)
-        *error = u"This build has no PDF renderer"_s;
-    return {};
+    if (info) {
+        *info = PdfInfo();
+        info->error = u"This build has no PDF renderer"_s;
+    }
+    return nullptr;
 }
 
 } // namespace brulion::platform

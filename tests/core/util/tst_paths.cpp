@@ -104,6 +104,31 @@ private Q_SLOTS:
         QFETCH(bool, picture);
         QCOMPARE(paths::isPicturePath(path), picture);
     }
+    void isPdfPath_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<bool>("pdf");
+        QTest::newRow("in assets") << QStringLiteral("assets/umowa.pdf") << true;
+        QTest::newRow("upper case, Polish") << QStringLiteral("Wykład ąę.PDF") << true;
+        QTest::newRow("mixed case") << QStringLiteral("Ćwiczenia.Pdf") << true;
+        QTest::newRow("a hidden file named .pdf") << QStringLiteral(".pdf") << true;
+        QTest::newRow("deep folder") << QStringLiteral("Studia/Fizyka – wykład 3/slajdy żółw.pdf") << true;
+        QTest::newRow("a note named like a PDF") << QStringLiteral("notatka.pdf.md") << false;
+        QTest::newRow("a name, not an extension") << QStringLiteral("pdf") << false;
+        QTest::newRow("PDF folder") << QStringLiteral("folder.pdf/notatka.md") << false;
+        QTest::newRow("empty") << QString() << false;
+        QTest::newRow("longer extension") << QStringLiteral("plik.pdfx") << false;
+        QTest::newRow("picture") << QStringLiteral("assets/skan.png") << false;
+    }
+    void isPdfPath()
+    {
+        QFETCH(QString, path);
+        QFETCH(bool, pdf);
+        QCOMPARE(paths::isPdfPath(path), pdf);
+        // A PDF is never a picture (PageView: one route view each).
+        if (pdf)
+            QVERIFY(!paths::isPicturePath(path));
+    }
     void pictureExtensions()
     {
         // One list: what isPicturePath accepts is exactly what the file dialogs and the export

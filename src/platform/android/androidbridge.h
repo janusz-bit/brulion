@@ -156,6 +156,20 @@ public:
      */
     bool shareFile(const QString &path, const QString &mimeType, const QString &subject, const QString &chooserTitle);
 
+    /// What viewFile() did.
+    enum class ViewResult { Started, NoApp, Failed, Copying };
+    /**
+     * Opens the file at @p path in the app the system has for @p mimeType (ACTION_VIEW, no
+     * chooser: the system asks itself when there is no default) through a content:// URI of
+     * Qt's FileProvider "<package>.qtprovider" with a read grant (OpenWith.kt). A file outside
+     * the provider's roots (android/res/xml/qtprovider_paths.xml: the app's files and cache,
+     * the shared storage — not a memory card) is copied into the cache first, in the
+     * background (Copying; the app opens when the copy is there). NoApp: no app opens the type
+     * (the system's toast is not shown). The PDF viewer's "Otwórz w innej aplikacji"
+     * (platform/openexternal.h). Static: needs no bridge instance.
+     */
+    static ViewResult viewFile(const QString &path, const QString &mimeType);
+
     // Documents picked with the system's picker (content:// URIs) for imports: one
     // ContentResolver query per call. Static and thread-safe — import listings run on worker
     // threads (JNI attaches them); no bridge instance is needed. The bytes are read with QFile

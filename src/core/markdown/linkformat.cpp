@@ -268,4 +268,30 @@ QString formatReference(ReferenceKind kind, QStringView pageTarget, QStringView 
     return {};
 }
 
+int pdfFragmentPage(QStringView fragment)
+{
+    int page = 0;
+    for (const QStringView pair : fragment.split(u'&')) {
+        const qsizetype eq = pair.indexOf(u'=');
+        if (eq < 0 || pair.first(eq).trimmed().compare(u"page", Qt::CaseInsensitive) != 0)
+            continue;
+        const QStringView value = pair.sliced(eq + 1).trimmed();
+        // ASCII digits only (QString::toInt would take "+3" and full-width digits), at most 7.
+        if (value.isEmpty() || value.size() > 7)
+            continue;
+        int n = 0;
+        bool digits = true;
+        for (const QChar c : value) {
+            if (c < u'0' || c > u'9') {
+                digits = false;
+                break;
+            }
+            n = n * 10 + (c.unicode() - u'0');
+        }
+        if (digits && n >= 1 && n <= MaxPdfFragmentPage)
+            page = n;
+    }
+    return page;
+}
+
 } // namespace brulion::markdown

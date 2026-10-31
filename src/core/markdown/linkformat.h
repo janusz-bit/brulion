@@ -74,4 +74,13 @@ enum class ReferenceKind {
 QString formatReference(ReferenceKind kind, QStringView pageTarget, QStringView fragment = {},
                         QStringView blockId = {});
 
+/// The page a PDF link's or embed's fragment names (Obsidian: `![[doc.pdf#page=3]]`,
+/// `[[doc.pdf#page=3]]`, `![](doc.pdf#page=3)`): `fragment` is the text after '#', '&'-separated
+/// key=value pairs, keys case-insensitive, keys and values trimmed; "height=400" (Obsidian's embed
+/// height) and other keys are accepted and ignored. 0 when no valid page: missing, ≤ 0, not ASCII
+/// digits only ("3abc", "２"), or more than MaxPdfFragmentPage. The last valid `page=` counts.
+int pdfFragmentPage(QStringView fragment);
+/// The largest page pdfFragmentPage() takes.
+inline constexpr int MaxPdfFragmentPage = 1'000'000;
+
 } // namespace brulion::markdown

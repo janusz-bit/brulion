@@ -8,8 +8,13 @@ brulion_add_test(tst_autostart SOURCES tst_autostart.cpp LIBS brulion_platform)
 brulion_add_test(tst_pickedfiles SOURCES tst_pickedfiles.cpp LIBS brulion_platform)
 # PDF pages as pictures (pdfpages.h) with this build's backend (poppler in the Nix dev shell, Qt PDF
 # on CI and Windows; none in the browser: skipped): a PDF written with QPdfWriter read and drawn,
-# broken and missing files refused.
+# broken and missing files refused; PdfReader's parts of pages, text and search, the encrypted
+# fixtures of tests/data/pdf (make-fixtures.sh writes them), a rotated page, two threads.
 brulion_add_test(tst_pdfpages SOURCES tst_pdfpages.cpp LIBS brulion_platform)
+target_compile_definitions(tst_pdfpages PRIVATE BRULION_TEST_PDF_DIR="${PROJECT_SOURCE_DIR}/tests/data/pdf")
+# The PDF viewer's matcher (pdfsearch.h): Polish without diacritics, white space, soft hyphens,
+# surrogates, the rectangles of a match, Android's spellings — pure, so tested on every platform.
+brulion_add_test(tst_pdfsearch SOURCES tst_pdfsearch.cpp LIBS brulion_platform)
 # The file an Android document URI names (documentpaths.h: the phone's storage, a memory card,
 # Downloads' raw paths; anything else none) — pure, so tested on every platform.
 brulion_add_test(tst_documentpaths SOURCES tst_documentpaths.cpp LIBS brulion_platform)

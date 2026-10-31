@@ -82,6 +82,12 @@ bool isPicturePath(const VaultPath &path)
     return pictureExtensions().contains(extension(path));
 }
 
+bool isPdfPath(const VaultPath &path)
+{
+    // (Not extension(): a hidden file ".pdf" has none there, but it is a PDF by its name.)
+    return basename(path).endsWith(QLatin1StringView(".pdf"), Qt::CaseInsensitive);
+}
+
 QString stripMarkdownExtension(const VaultPath &path)
 {
     // (Called for every link and title: no regular expression.)

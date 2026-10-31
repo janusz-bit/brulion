@@ -1,12 +1,15 @@
 // PDF pages through poppler-qt6 (pdfpages.h): the Nix build (nixpkgs has Qt PDF only inside
-// QtWebEngine). poppler applies a page's /Rotate in pageSizeF() and when it renders.
+// QtWebEngine). poppler applies a page's /Rotate in pageSizeF(), when it renders and in the text
+// boxes of textList().
+//
+// Text: textList()'s words (their characters' boxes in points), a space after a word that has one,
+// a line break after the last word of a line; matched by pdfsearch.h.
 #include "pdfpages.h"
+#include "pdfsearch.h"
 
 #include "log/categories.h"
 
 #include <poppler-qt6.h>
-
-#include <QPainter>
 
 #include <memory>
 #include <mutex>
@@ -31,30 +34,106 @@ void quietPoppler()
     });
 }
 
-/// The document of `file`; null and `info` filled when it cannot be read.
-std::unique_ptr<Poppler::Document> load(const QString &file, PdfInfo *info)
-{
-    quietPoppler();
-    std::unique_ptr<Poppler::Document> doc = Poppler::Document::load(file);
-    info->pages = -1;
-    if (!doc) {
-        info->error = u"The PDF cannot be read"_s;
-        return nullptr;
+class PopplerReader final : public PdfReader {
+public:
+    explicit PopplerReader(std::unique_ptr<Poppler::Document> doc) : m_doc(std::move(doc)) { }
+
+    int pageCount() const override { return m_doc->numPages(); }
+
+    QSizeF pageSize(int page) override
+    {
+        const std::unique_ptr<Poppler::Page> p = pageAt(page);
+        return p ? p->pageSizeF() : QSizeF();
     }
-    if (doc->isLocked()) {
-        info->locked = true;
-        info->error = u"The PDF is protected with a password"_s;
-        return nullptr;
+
+    QImage render(int page, const QSize &full, const QRect &clip) override
+    {
+        const QRect part = clipOf(full, clip);
+        const std::unique_ptr<Poppler::Page> p = part.isEmpty() ? nullptr : pageAt(page);
+        if (!p)
+            return {};
+        const QSizeF points = p->pageSizeF();
+        if (!(points.width() > 0) || !(points.height() > 0))
+            return {};
+        // Each axis at the resolution that makes the page exactly `full` (a hostile 1000000 ×
+        // 0.001 pt page too: poppler draws only the part asked for, whatever its resolution).
+        const double xres = 72.0 * full.width() / points.width();
+        const double yres = 72.0 * full.height() / points.height();
+        const QImage rendered = part.size() == full
+                                        ? p->renderToImage(xres, yres)
+                                        : p->renderToImage(xres, yres, part.x(), part.y(), part.width(), part.height());
+        // Exactly the size asked for (the resolution rounds), on white.
+        return onWhite(rendered, part.size());
     }
-    if (doc->numPages() <= 0) {
-        info->error = u"The PDF has no pages"_s;
-        return nullptr;
+
+    QString pageText(int page) override
+    {
+        load(page);
+        return m_text;
     }
-    doc->setRenderHint(Poppler::Document::Antialiasing, true);
-    doc->setRenderHint(Poppler::Document::TextAntialiasing, true);
-    doc->setPaperColor(Qt::white);
-    return doc;
-}
+
+    QList<PdfTextHit> find(int page, QStringView query, int maxHits) override
+    {
+        QList<PdfTextHit> out;
+        load(page);
+        for (const PdfTextRange &range : findPdfText(m_text, query, std::min(maxHits, MaxPdfHitsPerPage))) {
+            PdfTextHit hit;
+            hit.start = int(range.start);
+            hit.length = int(range.length);
+            hit.rects = pdfRangeRects(m_boxes, range);
+            out.append(hit);
+        }
+        return out;
+    }
+
+private:
+    std::unique_ptr<Poppler::Page> pageAt(int page) const
+    {
+        return page >= 1 && page <= m_doc->numPages() ? m_doc->page(page - 1) : nullptr;
+    }
+
+    /// The page's text and a box for each of its units (kept for the last page asked: a search
+    /// reads the text, then finds in it).
+    void load(int page)
+    {
+        if (page == m_textPage)
+            return;
+        m_textPage = page;
+        m_text.clear();
+        m_boxes.clear();
+        const std::unique_ptr<Poppler::Page> p = pageAt(page);
+        if (!p)
+            return;
+        const std::vector<std::unique_ptr<Poppler::TextBox>> words = p->textList();
+        for (const std::unique_ptr<Poppler::TextBox> &word : words) {
+            const QString text = word->text();
+            const QRectF wordBox = word->boundingBox();
+            // charBoundingBox() counts characters (code points); a pair of surrogates shares one.
+            int character = 0;
+            for (qsizetype i = 0; i < text.size(); ++i) {
+                QRectF box = word->charBoundingBox(character);
+                if (box.isEmpty())
+                    box = wordBox;
+                m_text.append(text.at(i));
+                m_boxes.append(box);
+                if (!(text.at(i).isHighSurrogate() && i + 1 < text.size() && text.at(i + 1).isLowSurrogate()))
+                    ++character;
+            }
+            if (!word->nextWord()) {
+                m_text.append(u'\n'); // the line ends
+                m_boxes.append(QRectF());
+            } else if (word->hasSpaceAfter()) {
+                m_text.append(u' ');
+                m_boxes.append(QRectF());
+            }
+        }
+    }
+
+    std::unique_ptr<Poppler::Document> m_doc;
+    int m_textPage = 0;
+    QString m_text;
+    QList<QRectF> m_boxes;
+};
 
 } // namespace
 
@@ -68,57 +147,38 @@ QString pdfBackendName()
     return u"poppler"_s;
 }
 
-PdfInfo pdfInfo(const QString &file, bool pageSizes)
+bool pdfTextAvailable()
 {
-    PdfInfo info;
-    const std::unique_ptr<Poppler::Document> doc = load(file, &info);
-    if (!doc)
-        return info;
-    info.pages = doc->numPages();
-    const int sized = pageSizes ? info.pages : 1;
-    info.pagePoints.reserve(sized);
-    for (int i = 0; i < sized; ++i) {
-        const std::unique_ptr<Poppler::Page> page = doc->page(i);
-        info.pagePoints.append(page ? page->pageSizeF() : QSizeF());
-    }
-    return info;
+    return true;
 }
 
-QImage renderPdfPage(const QString &file, int page, int maxSide, QString *error)
+std::unique_ptr<PdfReader> PdfReader::open(const QString &file, PdfInfo *info)
 {
-    PdfInfo info;
-    const std::unique_ptr<Poppler::Document> doc = load(file, &info);
-    const std::unique_ptr<Poppler::Page> p =
-            doc && page >= 1 && page <= doc->numPages() ? doc->page(page - 1) : nullptr;
-    if (!p) {
-        if (error)
-            *error = doc ? u"No page %1"_s.arg(page) : info.error;
-        return {};
+    PdfInfo local;
+    PdfInfo &out = info ? *info : local;
+    out = PdfInfo();
+    quietPoppler();
+    std::unique_ptr<Poppler::Document> doc = Poppler::Document::load(file);
+    if (!doc) {
+        out.error = u"The PDF cannot be read"_s;
+        return nullptr;
     }
-    const QSizeF points = p->pageSizeF();
-    const QSize size = pdfPagePixels(points, maxSide);
-    if (size.isEmpty()) {
-        if (error)
-            *error = u"Page %1 has no size"_s.arg(page);
-        return {};
+    if (doc->isLocked()) {
+        out.locked = true;
+        out.error = u"The PDF is protected with a password"_s;
+        return nullptr;
     }
-    // At the resolution of the size asked for: a page far larger than A4 (a poster, a hostile
-    // MediaBox) costs no more memory than the picture asked for.
-    const double dpi = pdfRenderDpi(points, size);
-    const QImage rendered = dpi > 0 ? p->renderToImage(dpi, dpi) : QImage();
-    if (rendered.isNull()) {
-        if (error)
-            *error = u"Page %1 cannot be rendered"_s.arg(page);
-        return {};
+    if (doc->numPages() <= 0) {
+        out.error = u"The PDF has no pages"_s;
+        return nullptr;
     }
-    // Exactly the size asked for (the resolution rounds), on white.
-    QImage out(size, QImage::Format_RGB32);
-    out.fill(Qt::white);
-    QPainter painter(&out);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    painter.drawImage(QRect(QPoint(0, 0), size), rendered);
-    painter.end();
-    return out;
+    doc->setRenderHint(Poppler::Document::Antialiasing, true);
+    doc->setRenderHint(Poppler::Document::TextAntialiasing, true);
+    doc->setPaperColor(Qt::white);
+    out.pages = doc->numPages();
+    const std::unique_ptr<Poppler::Page> first = doc->page(0);
+    out.pagePoints = {first ? first->pageSizeF() : QSizeF()};
+    return std::make_unique<PopplerReader>(std::move(doc));
 }
 
 } // namespace brulion::platform

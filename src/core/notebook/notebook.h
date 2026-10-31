@@ -23,6 +23,9 @@
 //                blockLinks(content, line, page, isTaken) -> {id, ref ((id)), wikiLink
 //                [[Page#^id]], embed, headingLink} — the links the editor copies;
 //                copiedLink(url, from, …) -> {text, path}: a link menu's "Kopiuj link"
+//   embeds.h     insertBlockAfterEmbed(content, lineHint, embedsIt, body) -> {content, line,
+//                afterEmbed}: a block right after the block embedding an attachment (the PDF
+//                viewer's drawing under its PDF), else appended — pure, untouched bytes kept
 //   indexloader.h IndexLoader(vault, index, WorkerPool{threads, start}, {cachePath, firstFolder}):
 //                start(files), step(budgetMs) -> Done | More | Waiting (+ resultsReady()), finish(),
 //                forget(path), configChanged(), stats() — reads and parses on the pool's threads
@@ -54,6 +57,7 @@
 #pragma once
 
 #include "notebook/capture.h"
+#include "notebook/embeds.h"
 #include "notebook/indexcachekeeper.h"
 #include "notebook/indexloader.h"
 #include "notebook/itemref.h"
