@@ -1681,9 +1681,8 @@ note mode switch or an inserted template), so it never runs on over the page.
   it is open is a device setting (`AppSettings.propertiesExpanded`, key
   `editor/propertiesExpanded`; `BlockEditor.propertiesExpanded` bound by `PageView` and the
   journal days, `propertiesExpandedToggled` writes it), so a page stays open while it is edited,
-  undone or synced. Expanded, the header has "+" (add, Ctrl+; — on non-touch UIs only: touch UIs
-  add from the panel's labelled last row, "+ Dodaj właściwość", in the same card) and "⋯"
-  ("Edytuj jako tekst": the raw text in the block's inline editor, "Zwiń").
+  undone or synced. Expanded, the header has "+" (add, Ctrl+;) and "⋯" ("Edytuj jako tekst": the
+  raw text in the block's inline editor, "Zwiń").
 * A row: the type icon (Text `type`, Number `sigma`, Checkbox `square-check-big`, Date `calendar`,
   Date and time `calendar-clock`, List `list`, Tags `tags`, Aliases `bookmark`, other `code`), the
   key and the value's editor by type. Text is shown rendered (`[[links]]`, `#tags`, URLs work —
@@ -1693,9 +1692,7 @@ note mode switch or an inserted template), so it never runs on over the page.
   take "3,5" and "1 200" (an invalid one: the field's error, nothing written). A checkbox writes
   each toggle. Dates open the editor's date dialog (`EditorDialogs.pickPropertyDate`: the key as
   title, natural language "jutro", the clock for a date and time, "Wyczyść"). Lists, tags and
-  aliases are chips (× removes; a `[[Page]]` item and a tag open their page) with "+" after the
-  last chip — where it would start a line of its own (or the list is empty) a labelled text
-  button instead, "+ Dodaj tag" / "Dodaj alias" / "Dodaj element", never a lone "+" —: a field
+  aliases are chips (× removes; a `[[Page]]` item and a tag open their page) with "+": a field
   where Enter or "," adds (a pasted "a, b, c" adds three) and stays open, Backspace in the empty
   field takes the last chip, Ctrl+Z there undoes; what cannot be added (an alias with `|`, a tag
   that is none) is said under the field, and in a toast when the field is left. Fields commit on
@@ -2000,10 +1997,7 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 ## Shared components (`qml/components/`)
 
 `BButton`, `BIconButton`, `BTextField`, `BSuggestField` (a field with a suggestion list: key and value suggestions of the properties panel), `BTextArea`, `BSearchField`, `BSwitch`, `BCheckBox`,
-`BChip` (a tag chip whose text starts with "#" has no hash icon; on touch UIs a removable chip's
-pill ends 8 px after its ×, 4 px after the label, while the ×'s 44 × 44 target starts at the
-label's end and reaches past the pill — `rightInset` —, so the pill hugs its text), `BBadge`,
-`BTabBar`/`BTabButton`, `BSegmented`, `BBreadcrumb`, `BCard`, `BListItem`,
+`BChip`, `BBadge`, `BTabBar`/`BTabButton`, `BSegmented`, `BBreadcrumb`, `BCard`, `BListItem`,
 `BSectionHeader`, `BKbd`, `BText`, `BDialog` (bottom sheet on narrow windows),
 `BConfirmDialog`, `BMenu`/`BMenuItem`/`BMenuSeparator`, `BToast` (+ `BToastHost`; the message is
 plain text),

@@ -12,20 +12,16 @@ import Brulion
 // variant:  "tag" | "due" | "overdue" | "scheduled" | "reminder" | "alarm" | "recurrence" |
 //           "done" | "neutral" (default). Each has its colours and default icon
 //           (Theme.chip(variant)); `iconName` overrides ("" for none: set showIcon: false).
-//           A tag chip whose text starts with "#" has no hash icon (one "#", not "# #tag").
 // interactive: hover/press feedback, focusable, emits clicked(); `selected` = filter state
 // outlined:    an interactive neutral chip is drawn as an outlined filter button (default); a
 //              chip that is an item of a list rather than a filter sets it false (filled)
-// removable:   an × button (signal removeClicked(); also Delete/Backspace when focused). On touch
-//              UIs the pill ends 8 px after the ×, 4 px after the label; the ×'s 44 × 44 hit area
-//              starts at the label's end and reaches past the pill (its rightInset), so the pill
-//              hugs its text while the chip keeps its footprint.
+// removable:   an × button (signal removeClicked(); also Delete/Backspace when focused)
 // size:        "small" (inline in text) | "normal"
 T.AbstractButton {
     id: control
 
     property string variant: "neutral"
-    property string iconName: variant === "tag" && text.startsWith("#") ? "" : colors.icon
+    property string iconName: colors.icon
     property bool showIcon: true
     property bool interactive: false
     property bool selected: false
@@ -39,9 +35,6 @@ T.AbstractButton {
     readonly property color fgColor: selected && variant === "neutral" ? Theme.primaryFg : colors.fg
     readonly property int visualHeight: size === "small" ? (Theme.touchUi ? 24 : 20) : (Theme.touchUi ? 32 : 26)
     readonly property int hitHeight: interactive || removable ? Math.max(visualHeight, Theme.touchUi ? Theme.touchTarget : 0) : visualHeight
-    /// The × of a touch UI: a touch target wide, the glyph near its left end (see removable).
-    readonly property bool touchRemove: removable && Theme.touchUi
-    readonly property int removeGlyph: size === "small" ? 10 : 12
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
@@ -52,9 +45,6 @@ T.AbstractButton {
     bottomPadding: bottomInset
     leftPadding: size === "small" ? 7 : 10
     rightPadding: removable ? (Theme.touchUi ? 0 : 3) : (size === "small" ? 8 : 11)
-    // Touch: the pill ends 8 px after the × glyph (4 px after the label); the rest of the ×'s
-    // target lies beyond it, in the gap before the next item.
-    rightInset: touchRemove ? Math.max(0, removeButton.width - 4 - removeGlyph - 8) : 0
 
     // A static chip must not swallow clicks meant for the row or card it sits in: disabled
     // items take no pointer events (and only disabled *interactive* chips are dimmed below).
@@ -90,7 +80,7 @@ T.AbstractButton {
         readonly property bool iconShown: chipIcon.width > 0 && chipIcon.height > 0
         readonly property bool labelShown: chipLabel.width > 0 && chipLabel.height > 0
         readonly property real labelX: iconShown ? chipIcon.width + spacing : 0
-        readonly property real removeX: labelShown ? labelX + chipLabel.width + (control.touchRemove ? 0 : spacing) : labelX
+        readonly property real removeX: labelShown ? labelX + chipLabel.width + spacing : labelX
         implicitWidth: control.removable ? removeX + removeButton.width
                        : labelShown ? labelX + chipLabel.width
                        : iconShown ? chipIcon.width : 0
@@ -121,7 +111,7 @@ T.AbstractButton {
             anchors.verticalCenter: parent.verticalCenter
             // The × circle stays small; on touch UIs the hit area is a full touch target
             // (taller than the chip's visual part, which is fine: it is inside the chip's
-            // own touch-sized hit area) that starts at the label's end, the glyph 4 px in.
+            // own touch-sized hit area).
             readonly property real circle: control.visualHeight - 6
             width: Theme.touchUi ? Theme.touchTarget : circle
             height: Theme.touchUi ? control.hitHeight : circle
@@ -133,7 +123,7 @@ T.AbstractButton {
             background: Item {}
             contentItem: Item {
                 Rectangle {
-                    anchors.centerIn: removeIcon
+                    anchors.centerIn: parent
                     width: removeButton.circle
                     height: removeButton.circle
                     radius: width / 2
@@ -141,11 +131,9 @@ T.AbstractButton {
                            ? Qt.rgba(control.fgColor.r, control.fgColor.g, control.fgColor.b, 0.16) : "transparent"
                 }
                 BIcon {
-                    id: removeIcon
-                    x: control.touchRemove ? 4 : (parent.width - width) / 2
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.centerIn: parent
                     name: "x"
-                    size: control.removeGlyph
+                    size: control.size === "small" ? 10 : 12
                     color: control.fgColor
                 }
             }

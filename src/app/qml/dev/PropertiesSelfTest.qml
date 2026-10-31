@@ -18,9 +18,7 @@ import Brulion
 // above the blocks writes the frontmatter, also when only a hidden note-mode frontmatter and
 // `key::` lines are there; values opened and left unchanged keep their form (`|` text, `1.50`);
 // a Logseq text becomes a list of links; an alias no link can use is refused under the field and
-// in a toast; a map's row menu offers "Edytuj jako tekst"; a list's add is a "+" after its chips
-// or, on a line of its own, labelled ("Dodaj tag"), the header's "+" only without touch, a touch
-// chip's pill ending after its ×. The key stays beside the value (phones
+// in a toast; a map's row menu offers "Edytuj jako tekst". The key stays beside the value (phones
 // too) — a narrow window stacks it over the value —, its whole cell a tap area, and on a phone every
 // control and tap area is a 44 px target.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
@@ -64,25 +62,6 @@ QtObject {
     function view() { return window.findItem(window.delegateAt(0), "frontmatterView") }
     function panel() { return window.findItem(view(), "propertiesPanel") }
     function row(key) { return window.findItem(panel(), "propertyRow_" + key) }
-    /// The list row's add button that shows: the "+" after the chips or, on a line of its own,
-    /// the labelled one.
-    function listAdd(r) {
-        const icon = window.findItem(r, "propertyListAdd")
-        return icon && icon.visible ? icon : window.findItem(r, "propertyListAddLabelled")
-    }
-    /// No lone "+": the icon follows a chip on its line, an add on a line of its own is labelled.
-    function checkListAdd(key) {
-        const r = row(key)
-        const icon = window.findItem(r, "propertyListAdd")
-        const labelled = window.findItem(r, "propertyListAddLabelled")
-        check(icon !== null && labelled !== null && icon.visible !== labelled.visible,
-              "`" + key + "` shows one add button")
-        if (icon && icon.visible)
-            check(icon.x > 0, "`" + key + "`: the “+” follows a chip on its line (x " + icon.x + ")")
-        else if (labelled)
-            check(labelled.x === 0 && labelled.text !== "", "`" + key + "`: an add on a line of its own is labelled: "
-                  + labelled.text)
-    }
     function inRow(key, name) { return window.findItem(row(key), name) }
     /// The same for the properties block at row `blockRow` (a page with YAML and `key::` lines).
     function panelAt(blockRow) { return window.findItem(window.findItem(window.delegateAt(blockRow), "frontmatterView"), "propertiesPanel") }
@@ -195,17 +174,7 @@ QtObject {
                 const keyCell = inRow("status", "propertyKeyCell")
                 check(keyCell !== null && keyCell.height >= row("status").height && keyCell.width >= p.keyWidth,
                       "the key's tap area is its whole cell: " + (keyCell ? keyCell.width + "×" + keyCell.height : "-"))
-                // One add per panel on touch UIs (its labelled last row); the header's "+" on the desktop.
-                const headerAdd = window.findItem(view(), "propertiesHeaderAdd")
-                check(headerAdd !== null && headerAdd.visible === !Theme.touchUi,
-                      "the header's “+” only without touch: " + (headerAdd ? headerAdd.visible : "-"))
-                checkListAdd("tags")
-                checkListAdd("autorzy")
                 if (Theme.touchUi) {
-                    // A removable chip's pill hugs its text; its × keeps a 44 px target past the pill.
-                    const chip = inRow("tags", "propertyChip_0")
-                    check(chip !== null && chip.rightInset > 0 && chip.height >= Theme.touchTarget,
-                          "a touch chip's pill ends after its ×: inset " + (chip ? chip.rightInset : "-"))
                     const button = inRow("status", "propertyTypeButton")
                     check(button.height >= Theme.touchTarget && button.width >= Theme.touchTarget,
                           "the type icon is a 44 px target: " + button.width + "×" + button.height)
@@ -228,8 +197,6 @@ QtObject {
                 if (Theme.touchUi)
                     check(r.keyLineHeight >= Theme.touchTarget && inRow("status", "propertyKeyCell").height >= Theme.touchTarget,
                           "the stacked key's line is a 44 px target")
-                checkListAdd("tags")
-                checkListAdd("autorzy")
                 window.width = widthBefore
             },
             wait(() => panel() !== null && !panel().stacked, "wide again: the key beside the value"),
@@ -299,7 +266,7 @@ QtObject {
             wait(() => !editor.dialogs.dateDialog.opened, "the dialog closes"),
             () => check(line("termin:") === "termin: 2026-10-16", "“jutro” is written as a date: " + line("termin:")),
             // ---- list: Enter adds, Backspace in the empty field takes the last, × removes --------------
-            () => window.tapItem(listAdd(row("autorzy"))),
+            () => window.tapItem(inRow("autorzy", "propertyListAdd")),
             wait(() => focused(inRow("autorzy", "propertyListField")), "“+” opens the list's field"),
             () => {
                 const field = inRow("autorzy", "propertyListField")
@@ -554,7 +521,7 @@ QtObject {
                  () => "a Logseq text becomes a list of links: " + line("autorzy::")),
             () => {
                 check(inRowAt(1, "autorzy", "propertyChip_1") !== null, "shown as chips")
-                window.tapItem(listAdd(window.findItem(panelAt(0), "propertyRow_aliases")))
+                window.tapItem(inRowAt(0, "aliases", "propertyListAdd"))
             },
             wait(() => focused(inRowAt(0, "aliases", "propertyListField")), "the aliases' field"),
             () => {
