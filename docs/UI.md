@@ -2404,7 +2404,7 @@ Tags, sync, import (no Obsidian equivalent — no free wins).
 **Running it.** On the laptop (the data directory outside the rsynced tree):
 ```
 scripts/remote-build.sh -n uibench brulion brulion-uimetrics \
-  --run 'BRULION_GIT_REV=<rev> tests/app/uibench/bench.sh --out $HOME/work/brulion-uibench-data/round-00'
+  --run 'BRULION_GIT_REV=<rev> BRULION_GIT_DIRTY=false tests/app/uibench/bench.sh --out $HOME/work/brulion-uibench-data/round-00'
 rsync -a laptop:work/brulion-uibench-data/round-00/ /home/nixos/workspace/brulion-work/uibench/round-00/
 ```
 `--app brulion --reuse-obsidian <round-00>/shots/obsidian` re-shoots only Brulion (Obsidian is shot
