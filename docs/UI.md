@@ -2278,7 +2278,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--share <json>` | receive a share as Android's `ShareActivity` hands it over — `{"subject", "text", "url", "files": [{"path", "name", "mime"}]}` (`src/core/notebook/share.h`) — and open the share dialog once the notebook is ready (`AppController::receiveShare`; screenshots, manual checks, ctest `tst_shell_share`) |
 | `--share-query <query>` | the browser version's share target: `share-title=…&share-text=…&share-url=…` as `wasm/index.html` passes a share launch's parameters (`notebook::sharedContentFromQuery`, `AppController::receiveShareQuery`); works on every platform (ctest `tst_shell_share`) |
 | `--open <file>…` | the files to offer in the share dialog ("Otwórz za pomocą": the desktop entry's `Exec=brulion --open %F`, the Windows installer's `"…\brulion.exe" --open "%1"`): every argument after it is a file — paths relative to the working folder or `file://` URLs —, never an option, the options are the arguments before it (`notebook::splitOpenArguments`); a file of the open notebook opens as its page; copies are saved, the files are never changed; without files a plain start. A second launch sends them to the running Brulion (`share`, ipc/appmessage.h) |
-| `--popup <name[:query]>` | open a shell popup once the notebook is open and indexed (at most 3 s later without one): `palette`, `switcher`, `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer` |
+| `--popup <name[:query]>` | open a shell popup once the notebook is open and indexed (at most 3 s later without one): `palette`, `switcher` (the query as if typed, the caret after it), `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer` |
 | `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `select-range:<first>..<last>` — on touch UIs in the selection mode —, `mode-tooltip`, `properties` — the page's properties panel expanded, nothing focused, the view at the top: the `ui` benchmark's screen —, …) |
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--dump-layout <file>` | with `--screenshot`: write what the window shows (texts with colours and fonts, targets, boxes, theme tokens) as JSON for the UI benchmark (`src/app/ui/layoutdump.h`), from the same frame |
@@ -2380,9 +2380,10 @@ vault settings, the Calendar plugin's hashes).
 | Language | `--locale pl` | Polish (`localStorage.language`, else the setting and a restart; English is flagged) |
 | Clock | `--now "2026-10-14 10:00"`, `TZ=Europe/Warsaw` | a running `Date` shifted to that instant (`Page.addScriptToEvaluateOnNewDocument`) and the zone override |
 | Fonts | `FONTCONFIG_FILE=<out>/env/fonts.conf`: Noto Sans / Serif / Sans Mono, Noto Color Emoji, DejaVu (nixpkgs), grayscale antialiasing, slight hinting | the same file, `--disable-lcd-text` |
-| Rendering | offscreen + software (the realism check `--render xcb-gl`: Xvfb + OpenGL/llvmpipe) | `--disable-gpu`, `--force-color-profile=srgb` |
+| Rendering | offscreen + software (the realism check `--render xcb-gl`: Xvfb + OpenGL/llvmpipe) | `--disable-gpu`, `--force-color-profile=srgb`, on Xvfb's display (`--ozone-platform=x11`) without the caller's desktop session (no Wayland, session bus or keyring: `--password-store=basic`), a DevTools port of its own (read back from the profile: another Obsidian on the machine is never driven) |
 | Settings | defaults (fresh XDG home) | defaults (fresh `--user-data-dir`, `HOME`, `XDG_*`): Live Preview, readable line length; the settings screen in the main window (1.14 opens them in a window of their own: one 1280×800 picture like Brulion's) |
 | Pointer | none (offscreen) | desktop: moved outside the page before each shot (no hover highlight); phone: touch emulation (no pointer) |
+| State between screens | a fresh process and home per shot | one session per size; before each screen the session's starting state comes back: the phone's drawers closed by Obsidian itself (opening one slides the navigation bar aside, only closing slides it back), the workspace layout, `localStorage` (the explorer's unfolded folders, recent searches) and the explorer's folders — checked, and a screen whose light and dark shots show different texts is flagged (`light-dark` warning) |
 | Network | none needed | a dead proxy (`--proxy-server=http://127.0.0.1:9`), `updateDisabled` |
 
 **The notebook** (`prepare-vault.sh`): Brulion's sample notebook seeded at the bench's clock
@@ -2408,13 +2409,19 @@ rsync -a laptop:work/brulion-uibench-data/round-00/ /home/nixos/workspace/brulio
 ```
 `--app brulion --reuse-obsidian <round-00>/shots/obsidian` re-shoots only Brulion (Obsidian is shot
 once per bench configuration: the manifest's `benchConfigHash` changes with screens.json — Brulion's
-arguments aside —, the fonts, the overlay, the clock or Obsidian's version); `--only`, `--sizes`, `--themes` narrow it; `--render
+arguments aside —, the notes, the overlay, the fonts, the Obsidian driver, the clock or Obsidian's
+version, and the reuse is refused when the source round's hash differs); `--only`, `--sizes`,
+`--themes` narrow it (into an earlier round's folder: only those shots are replaced, the metrics
+are measured again from every picture there); `--render
 xcb-gl` is the realism check (doc and daily on the desktop under Xvfb with OpenGL, into
 `shots/brulion-gl/` and `metrics-gl.json`); `--dry-run` prints the commands (ctest
 `tst_uibench_bench_dryrun`). Output: `shots/<app>/<id>-<size>-<theme>.{png,layout.json}`,
 `metrics/<app>/*.json`, `metrics.json`, `manifest.json` (versions, fonts, the notes' hashes,
 Obsidian's environment and warnings, failures), `logs/`. The tools (Xvfb, fc-match, Node 22,
-appimage-run) come from the repository's nixpkgs. When the laptop is off: the workflow
+appimage-run) come from the repository's nixpkgs; the AppImage and the Calendar plugin are checked
+against their hashes before use and fetched again when they are not whole (without the plugin the
+calendar pairs are n/a, without Obsidian only Brulion is shot). The manifest's `dirty` is `null`
+(unknown) for a tree without `.git` unless `BRULION_GIT_DIRTY` says it. When the laptop is off: the workflow
 `ui-bench.yml` lives only on a throwaway branch `ui-bench` (never merged, artifact kept 3 days),
 `gh run download -n ui-bench`.
 
@@ -2424,7 +2431,11 @@ backgrounds), every target (buttons, mouse areas, tap handlers, fields — a mou
 button counts once), every filled box, and the theme's tokens, in window coordinates; a text or
 target is `occluded` under a later opaque box or a popup's dim. Obsidian's dump comes from the DOM
 in the same schema (text nodes grouped by their nearest non-inline element, so a paragraph with
-links and tags is one text with fragments, as in Brulion's rich text).
+links and tags is one text with fragments, as in Brulion's rich text; form fields' values — a
+property's key and value, a typed query, a select's choice — are texts as Brulion's fields are).
+The note's text itself is `inline` in both, as WCAG 2.5.8 treats targets in running text: Brulion's
+tap areas over a rendered block's text, Obsidian's CodeMirror content (a tap puts the caret into the
+line under it in both); a list property's empty field in Obsidian is its whole box.
 
 **Metrics** (`brulion-uimetrics measure`, each 0–10; `summarize` → `metrics.json`):
 
@@ -2434,19 +2445,23 @@ links and tags is one text with fragments, as in Brulion's rich text).
 | T | target size: desktop WCAG 2.5.8 (24 × 24, or a 24-px circle clear of neighbours — a target containing it does not count), phone 44 × 44 (Material's 48 reported) | 0.20 |
 | Y | type scale: sizes with ≥ 2 % of the characters (6 or fewer, 3 or more, none within 8 % of another), at most 3 weights | 0.15 |
 | A | alignment: share of left edges shared by ≥ 3 items (0.6) and of rows whose centres line up within 1.5 px (0.4) | 0.15 |
-| S | spacing: share of insets (from the smallest box around) and gaps between texts on a 4-px grid (±1) | 0.10 |
+| S | spacing: share of insets below 64 px (from the smallest box around; larger ones are positions, not padding) and gaps between texts on a 4-px grid (±1) | 0.10 |
 | K | token contrast: the theme's text colours on its page and sunken surfaces | 0.10 |
 | L | line length: share of body text in lines of 45–90 characters (desktop doc, doc-edit, daily, outline, backlinks) | 0.05 |
 
-O is their weighted mean (renormalised without L or K). Each measurement also lists the failing
+O is their weighted mean (renormalised without L or K); in a pair (`metrics.json` `pairs`) both
+apps' O use only the metrics both shots have (the shot's own O stays as `Oshot`). Each measurement also lists the failing
 texts and targets (30 worst) for the critic, and report-only extras (edge density, distinct
 colours, non-text contrast of targets).
 
 **Judging** (`judge.mjs`, `rubric.md`): a group is a screen at a size with its light and dark
 pair; `pack --round DIR --judges 3 --batch 4 --seed N` copies the images into blind batches
 (`judging/batches/bNN/gNN-<theme>-A.png`, A/B drawn per judge, group and theme, balanced over the
-panel; the key in `judging-keys/key.json`), `--only-changed PREV` packs only groups whose Brulion
-shots changed. Every judge scores both images of each pair 1–10 on eight anchored criteria
+panel; the key in `judging-keys/key.json`), `--only-changed PREV` packs only groups whose shots
+changed (either app's); the others keep the votes of the round that judged them last, through any
+number of rounds. `pack` refuses a round that has votes already (`--force` discards them). A vote
+file `judging/votes/bNN.json` belongs to the batch its name says (a `batch` field naming another
+one drops it); a re-judged batch saved as `bNN-<anything>.json` replaces those votes. Every judge scores both images of each pair 1–10 on eight anchored criteria
 (hierarchy, typography, spacing, colour, consistency, calm, affordance, appeal), with a strength
 and a weakness each, and guesses which one is Obsidian only after scoring. `score --round DIR
 [--prev PREV]` → `scores.json`, `report.md`: per pair J = the judges' median of the criteria's
@@ -2465,10 +2480,11 @@ px.
 **Regression guard** `tst_uibench_lint_qml` (`lint.sh`, slow): 8 Brulion shots (daily, doc,
 settings, palette × desktop light / phone dark; system fonts) fail on any enabled, visible text
 below its WCAG contrast or a target below its size that `lint-allow.json` does not excuse
-(`[{screen, kind, type, text|name, count, reason}]`: `count` excuses that many failures of a shot,
-so one more is caught). Its first entries are the round-0 baseline of Brulion's known failures
-(the bullet's zoom handle, short block rows and the settings' 38-px segmented choices on phones,
-the calculation block's faint caption): the loop removes them as it fixes them.
+(`[{screen, device, kind, type, text|name, count, reason}]`: `count` excuses that many failures of
+a shot of that device, so one more is caught). Its first entries are the round-0 baseline of
+Brulion's known failures (the bullet's zoom handle, the journal's day titles, its 12-px band under
+a day and the settings' 38-px segmented choices on phones, the calculation block's faint caption):
+the loop removes them as it fixes them.
 
 **README pictures** (`docs/images/`, Polish locale, the sample notebook) come from these scripts
 — `SIZES=<size> THEMES=<theme> tests/app/<area>/screenshots.sh <shot>` — and are optimised with
