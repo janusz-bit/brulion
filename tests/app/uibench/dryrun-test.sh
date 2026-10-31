@@ -37,6 +37,12 @@ grep -q -- 'brulion-uimetrics summarize' <<< "$listing" || fail "no metrics summ
 narrow="$(bash "$here/bench.sh" --dry-run --out "$work/round" --app brulion --only doc,palette --sizes phone)"
 [[ "$(grep -c -- '--dump-layout' <<< "$narrow" || true)" == 4 ]] || fail "--only doc,palette --sizes phone: not 4 commands"
 grep -q 'obsidian-shots.mjs' <<< "$narrow" && fail "--app brulion still runs Obsidian"
+# --app brulion --reuse-obsidian (the loop's rounds): Brulion shot, Obsidian's shots copied, not shot.
+reuse="$(bash "$here/bench.sh" --dry-run --out "$work/round" --app brulion --reuse-obsidian "$work/round-00/shots/obsidian")"
+[[ "$(grep -c -- '--dump-layout' <<< "$reuse" || true)" == 48 ]] || fail "--reuse-obsidian: not 48 Brulion commands"
+grep -q "^cp -a $work/round-00/shots/obsidian/\. $work/round/shots/obsidian/" <<< "$reuse" \
+  || fail "--app brulion --reuse-obsidian does not copy the Obsidian shots"
+grep -q 'obsidian-shots.mjs' <<< "$reuse" && fail "--reuse-obsidian still shoots Obsidian"
 # The realism check: 4 shots under Xvfb with xcb.
 gl="$(bash "$here/bench.sh" --dry-run --out "$work/round" --render xcb-gl)"
 [[ "$(grep -c -- 'QT_QPA_PLATFORM=xcb' <<< "$gl" || true)" == 4 ]] || fail "--render xcb-gl: not 4 xcb shots"

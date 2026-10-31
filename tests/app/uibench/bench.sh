@@ -122,6 +122,21 @@ vault_args=("$out")
 [[ "$app" == brulion ]] && vault_args+=(--no-obsidian)
 BRULION_BIN="$bin" NOW="$now" UIBENCH_CACHE="$cache" bash "$here/prepare-vault.sh" "${vault_args[@]}"
 
+# The bench configuration (notes, fonts, driver, …: the manifest's benchConfigHash); with
+# --reuse-obsidian the source round must have the same, checked before anything is shot.
+config_hash=""
+[[ $dry == 1 ]] || config_hash="$(uibench_config_hash "$screens" "$out" "$here/obsidian-shots.mjs" "$obsidian_version" "$now")"
+if [[ -n "$reuse" && -z "$suffix" && $dry == 0 ]]; then
+  [[ -d "$reuse" ]] || { echo "bench: --reuse-obsidian $reuse: no such folder" >&2; exit 2; }
+  reuse="$(cd "$reuse" && pwd)"
+  reuse_hash="$(node -e 'try { console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).benchConfigHash ?? "") } catch { console.log("") }' \
+    "$reuse/../../manifest.json")"
+  if [[ "$reuse_hash" != "$config_hash" ]]; then
+    echo "bench: $reuse was shot with another bench configuration (${reuse_hash:-no manifest} ≠ $config_hash): shoot Obsidian again" >&2
+    exit 2
+  fi
+fi
+
 # 4. Brulion.
 failures=()
 if [[ "$app" != obsidian ]]; then
@@ -169,8 +184,6 @@ fi
 obsidian_status=0
 obsidian_failures=()
 launch=""
-config_hash=""
-[[ $dry == 1 ]] || config_hash="$(uibench_config_hash "$screens" "$out" "$here/obsidian-shots.mjs" "$obsidian_version" "$now")"
 
 # The AppImage in the cache, checked: a partial or replaced download is fetched again (once).
 fetch_appimage() {
@@ -191,18 +204,10 @@ fetch_appimage() {
   [[ -s "$appimage" ]]
 }
 
-if [[ "$app" != brulion ]]; then
+# --reuse-obsidian (with --app brulion, as the loop runs it): an earlier round's Obsidian shots.
+if [[ -n "$reuse" && -z "$suffix" ]] || [[ "$app" != brulion ]]; then
   if [[ -n "$reuse" ]]; then
-    # Only shots of the same bench configuration: the source round's manifest says which.
-    if [[ $dry == 0 ]]; then
-      reuse="$(cd "$reuse" && pwd)"
-      reuse_hash="$(node -e 'try { console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).benchConfigHash ?? "") } catch { console.log("") }' \
-        "$reuse/../../manifest.json")"
-      if [[ "$reuse_hash" != "$config_hash" ]]; then
-        echo "bench: $reuse was shot with another bench configuration (${reuse_hash:-no manifest} ≠ $config_hash): shoot Obsidian again" >&2
-        exit 2
-      fi
-    fi
+    # (Its configuration was checked after the notebook was made.)
     if [[ $dry == 1 || "$reuse" != "$out/shots/obsidian" ]]; then
       uibench_run rm -rf "$out/shots/obsidian"
       uibench_run mkdir -p "$out/shots/obsidian"
