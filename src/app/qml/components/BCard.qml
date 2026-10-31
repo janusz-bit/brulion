@@ -10,7 +10,11 @@ import Brulion
 //   BCard { clickable: true; onClicked: open(); ... }   // hover + focus ring + Enter/Space
 //
 // elevation 0 (border only) … 3; `tone`: "default" | "sunken" | "accent" | "warning" |
-// "danger" | "success" (tinted background + border for callouts).
+// "danger" | "success" (tinted background + border for callouts). `flat`: no surface at all —
+// no background, border or shadow, and no padding, so the content sits on the page's own edge
+// (settings groups on phones: the rows and the group's heading share one left edge).
+//
+//   BCard { flat: Theme.compact; padding: Theme.space4; ColumnLayout { … } }
 T.Pane {
     id: control
 
@@ -18,6 +22,8 @@ T.Pane {
     property bool clickable: false
     property string tone: "default"
     property real radius: Theme.radiusLg
+    /// No surface (background, border, shadow) and no padding: the content on the page.
+    property bool flat: false
     /// Name for assistive technology (clickable cards: say what opens).
     property string accessibleName
 
@@ -28,6 +34,12 @@ T.Pane {
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                              contentHeight + topPadding + bottomPadding)
     padding: Theme.space4
+    // (Each side follows `padding` / `horizontalPadding` / `verticalPadding` as in any Control,
+    // except on a flat card.)
+    leftPadding: flat ? 0 : horizontalPadding
+    rightPadding: flat ? 0 : horizontalPadding
+    topPadding: flat ? 0 : verticalPadding
+    bottomPadding: flat ? 0 : verticalPadding
     focusPolicy: clickable ? Qt.StrongFocus : Qt.NoFocus
     hoverEnabled: clickable && !Theme.touchUi
     Accessible.role: clickable ? Accessible.Button : Accessible.Grouping
@@ -45,6 +57,7 @@ T.Pane {
     }
 
     background: Item {
+        visible: !control.flat
         BShadow {
             target: cardRect
             level: control.elevation

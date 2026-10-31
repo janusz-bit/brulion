@@ -10,6 +10,10 @@ import Brulion
 //             description: qsTr("Dzwoni, dopóki go nie wyłączysz") }
 //
 // Keyboard: Space toggles. The whole row is the hit area (≥ 44 px high on touch UIs).
+// The track: on, the link colour; off, solid borderControl (≥ 3:1 on bg, bgElevated and bgSunken,
+// WCAG 1.4.11 — the off state is seen, not guessed), fgFaint under the mouse. The knob says the
+// state too, not only the track's colour and the knob's side (WCAG 1.4.1): a check when on, a cross
+// when off, in the track's colour (12 px in the 18-px touch knob, 10 px in the 14-px one).
 T.Switch {
     id: control
 
@@ -22,7 +26,8 @@ T.Switch {
                              implicitIndicatorHeight + topPadding + bottomPadding,
                              Theme.touchUi ? Theme.touchTarget : 28)
     padding: 4
-    leftPadding: 2
+    // The title at the row's left edge, like every setting row's (the focus ring is on the track).
+    leftPadding: 0
     rightPadding: indicator.width + 14
     spacing: 10
     focusPolicy: Qt.StrongFocus
@@ -46,7 +51,7 @@ T.Switch {
         x: control.width - width - 2
         y: control.topPadding + (control.availableHeight - height) / 2
         radius: height / 2
-        color: control.checked ? Theme.link : control.hovered ? Theme.borderControl : Qt.rgba(Theme.borderControl.r, Theme.borderControl.g, Theme.borderControl.b, 0.75)
+        color: control.checked ? Theme.link : control.hovered ? Theme.fgFaint : Theme.borderControl
         antialiasing: true
         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
 
@@ -64,6 +69,14 @@ T.Switch {
             Behavior on x {
                 enabled: !control.down
                 NumberAnimation { duration: Theme.duration; easing.type: Theme.easing }
+            }
+
+            BIcon {
+                objectName: "switchStateIcon"
+                anchors.centerIn: parent
+                name: control.checked ? "check" : "x"
+                size: Theme.touchUi ? 12 : 10
+                color: track.color
             }
         }
 

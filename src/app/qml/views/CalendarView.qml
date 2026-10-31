@@ -32,7 +32,8 @@ FocusScope {
     property var route: ({})
     readonly property string title: qsTr("Calendar")
     /// The week and month grids reach the left edge and swipe sideways from there to the previous
-    /// period (touch UIs): the shell's drawer leaves that edge to them (☰ opens it).
+    /// period (touch UIs): the shell's drawer leaves that edge to them (the bottom navigation's
+    /// Menu opens it).
     readonly property bool edgeSwipe: Theme.touchUi && mode !== "agenda"
     /// A modal panel of the shell lies over the view (the drawer): the grids' swipe makes way for
     /// the panel's own (set by ShellRouteView).
@@ -212,8 +213,7 @@ FocusScope {
                     Layout.leftMargin: Theme.space2
                     Layout.rightMargin: Theme.space2
                     Layout.topMargin: Theme.space3
-                    // Room for the shell's floating capture button.
-                    bottomMargin: Theme.space16 + Theme.space4
+                    bottomMargin: Theme.space4
                     calendar: cal
                     date: cal.anchorDate
                     onItemOpened: (entry) => root.openEntry(entry)
@@ -370,7 +370,6 @@ FocusScope {
         id: toasts
         anchors.fill: parent
         z: 100
-        // Phones: above the floating quick-capture button (56 px at the view's bottom edge).
-        bottomMargin: Theme.space4 + (Theme.narrow ? 56 + Theme.space4 : 0)
+        bottomMargin: Theme.space4
     }
 }

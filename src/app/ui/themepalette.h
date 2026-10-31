@@ -86,7 +86,22 @@ struct TextColors {
 };
 TextColors textColors(bool dark);
 
-/// Every token above by its Theme.qml name, as "#rrggbb".
+/// A translucent colour (a scrim over the page).
+struct Scrim {
+    Rgb color;
+    double alpha = 0;
+};
+/// The scrim behind centred modal surfaces (the floating command palette and quick switcher, a
+/// centred dialog): the page recedes rather than darkens, so the panel holds the eye. Light: a wash
+/// of the page colour tinted 22 % toward the text (fg) at 62 % — page text falls from about 7:1 to
+/// about 2.5:1 while the panel's bgElevated stands out by its lighter fill (≥ 1.25:1); dark: the
+/// ink of Theme.scrim at 72 % instead of 62 % (page text about 2:1). Bottom sheets, the full-screen
+/// palette and the drawer keep Theme.scrim (an edge sheet dims the page).
+Scrim modalScrim(bool dark, const Surface &s, const TextColors &t);
+/// "#aarrggbb" (QML's colour string with alpha), lower case.
+QString toHexArgb(const Rgb &c, double alpha);
+
+/// Every token above by its Theme.qml name, as "#rrggbb" (scrimModal: "#aarrggbb").
 QVariantMap paletteMap(bool dark, QStringView lightSurface, QStringView darkSurface, QStringView accentName,
                        QStringView customAccent);
 

@@ -7,9 +7,10 @@ import Brulion
 // AppShell — the main UI once a vault is open (docs/UI.md "Window layout").
 //
 // Wide (≥ 900 px): SplitView — sidebar | top bar + current view | optional side panel.
-// Narrow: the sidebar is a Drawer (the menu button, or a swipe from the left edge — on touch UIs
-// from a strip beyond the zone Android's gesture navigation keeps for "back"), a bottom
-// navigation bar and a floating quick-capture button; the Android back key walks back through
+// Narrow: the sidebar is a Drawer (the bottom navigation's Menu, or a swipe from the left edge — on
+// touch UIs from a strip beyond the zone Android's gesture navigation keeps for "back"; the top
+// bar's ☰ only on a view that replaces the bottom navigation, the drawing editor) and a bottom
+// navigation bar with quick capture ("+ Notatka") before Menu; the Android back key walks back through
 // AppController's history and only lets the app close from the home view.
 //
 // Owns the shell's popups (command palette, quick switcher, quick capture, new page or folder,
@@ -22,8 +23,8 @@ import Brulion
 // toolbar a view docks on its bottom edge sits on the keyboard, in the side panel too. While the
 // keyboard is up the bottom navigation makes way; when it goes (Back, the keyboard's own key)
 // the navigation comes back and a toolbar that stays — the editing goes on — docks right above
-// it. The capture button makes way while typing (the keyboard up or a toolbar docked); a bar a
-// view has at the bottom instead of the navigation (the drawing's tools) takes its place.
+// it (its "+ Notatka" then ends that editing before quick capture opens); a bar a view has at
+// the bottom instead of the navigation (the drawing's tools) takes its place.
 FocusScope {
     id: shell
 
@@ -87,10 +88,10 @@ FocusScope {
     readonly property real keyboardFloor: Theme.narrow && keyboardUp && KeyboardInsets.slidesOver && keyboardOverlap > 0
                                           && !routeView.viewReplacesBottomNav ? bottomNavHeight : 0
     /// What covers the window's bottom edge for toasts (Main.qml): on phones the bottom
-    /// navigation with a toolbar docked on it, or with the capture button; else the keyboard and
-    /// a docked toolbar while typing; else the system's navigation bar.
+    /// navigation, with a toolbar docked on it; else the keyboard and a docked toolbar while
+    /// typing; else the system's navigation bar.
     readonly property real toastClearance: bottomNavShown
-        ? keyboardRoom + bottomNavHeight + (toolbarDocked ? Theme.editToolbarHeight : 56 + Theme.space4)
+        ? keyboardRoom + bottomNavHeight + (toolbarDocked ? Theme.editToolbarHeight : 0)
         : typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0) : navigationBar + keyboardRoom
     /// Toasts go to the window's top (Main.qml) while text is typed on a touch screen — the
     /// on-screen keyboard up, or an editing toolbar docked while a view edits text: the caret's
@@ -187,12 +188,12 @@ FocusScope {
     function openPalette(query) {
         palette.open()
         if (query)
-            palette.query = query
+            palette.typeQuery(query)
     }
     function openSwitcher(query) {
         switcher.open()
         if (query)
-            switcher.query = query
+            switcher.typeQuery(query)
     }
     function openCapture() {
         // Captured notes belong in the user's journal: from the documentation, AppController
@@ -347,6 +348,11 @@ FocusScope {
                 crumbs: shell.crumbs
                 topInset: shell.safe.top
                 sidebarVisible: shell.sidebarVisible
+                // Phones: one way to the drawer — the bottom navigation's Menu while that bar is
+                // shown; ☰ whenever it is not: a view with its own bar instead (the drawing
+                // editor) or the on-screen keyboard up (it takes the bar's place, and there is no
+                // edge strip while typing: dragMargin), so the drawer is never out of reach.
+                menuButtonShown: !Theme.narrow || !shell.bottomNavShown
                 picture: routeView.viewPicture
                 pictureAsText: routeView.viewPictureAsText
                 onMenuClicked: drawer.open()
@@ -383,6 +389,12 @@ FocusScope {
                 Layout.fillWidth: true
                 bottomInset: shell.navigationBar
                 onMenuClicked: drawer.open()
+                // "+ Notatka": a block still edited with the keyboard hidden (its toolbar docked on
+                // the bar) is ended first, as a tab's view change ends it.
+                onCaptureClicked: {
+                    routeView.endEditing()
+                    shell.openCapture()
+                }
             }
         }
 
@@ -411,25 +423,6 @@ FocusScope {
         color: KeyboardInsets.marked ? "#ff00ff" : Theme.bgElevated
     }
 
-    ShellCaptureButton {
-        objectName: "shellCaptureButton"
-        // Not while a view edits text: it would cover the editor's toolbar (and the caret), nor
-        // over a picture (the view's `editing`: it covered the photo). Nor
-        // on views of forms and tools (settings, sync, import/export, history, trash, the graph
-        // with its zoom buttons): there it covered their buttons and fields, and capturing a note
-        // is not what they are for.
-        // Hidden by the user (Ustawienia → Wygląd → Układ): quick capture stays in the menu,
-        // the palette and its shortcut.
-        visible: AppSettings.captureButtonShown && Theme.narrow && !routeView.viewEditing && !shell.typing
-                 && ["settings", "sync", "importExport", "history", "trash", "graph"].indexOf(shell.route.view) < 0
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.rightMargin: Theme.space4 + shell.safe.right
-        // Above the bottom navigation (and a keyboard still sliding away under it).
-        anchors.bottomMargin: shell.keyboardRoom + shell.bottomNavHeight + Theme.space4
-        onClicked: shell.openCapture()
-    }
-
     Drawer {
         id: drawer
         objectName: "shellDrawer"
@@ -451,7 +444,8 @@ FocusScope {
         // the drag of the selection's start grip, which lies at the left edge (its MouseArea's
         // preventStealing did not stop it). Nor on a view that swipes sideways from that edge
         // itself (`edgeSwipe`: the calendar's week and month grids, to the previous period): a
-        // swipe there is the view's. The ☰ button still opens it, a swipe on it still closes it. The strip follows
+        // swipe there is the view's. The bottom navigation's Menu (☰ in the top bar where a view
+        // replaces that bar or the keyboard hides it) still opens it, a swipe on it still closes it. The strip follows
         // the UI mode, not the pointer: a mouse in a touch UI gets it too.
         dragMargin: !Theme.touchUi ? Application.styleHints.startDragDistance
                     : shell.typing || routeView.viewEdgeSwipe ? 0
@@ -462,6 +456,14 @@ FocusScope {
         focus: true
         Overlay.modal: Rectangle { color: Theme.scrim }
         background: Rectangle { color: Theme.bgSunken }
+        // Edge to edge: the system bars are counted once, by the sidebar's own insets (topInset,
+        // bottomInset below), its bgSunken under the status and navigation bars. The Basic
+        // style pads a Drawer by the SafeArea margins itself (topPadding: SafeArea.margins.top
+        // …), which came on top of those insets: about 190 px of the tree lost on an Android
+        // phone, a band above the notebook row and a footer twice as tall. The side insets
+        // stay the style's (a cutout or a bar in landscape).
+        topPadding: 0
+        bottomPadding: 0
 
         Loader {
             id: drawerSidebar
@@ -507,6 +509,7 @@ FocusScope {
 
     BQuickSwitcher {
         id: switcher
+        objectName: "shellSwitcher"
         // Workspace.revision: refresh when pages come and go while it is open. Closed (visible
         // stays true until the exit transition ends), it neither queries nor follows the
         // revision: every save bumps it.
@@ -641,14 +644,43 @@ FocusScope {
         onActivated: shell.openRename(shell.route.path, false)
     }
 
-    // The navigation bar's first margin; --popup (screenshots and manual checks).
-    Component.onCompleted: {
-        noteNavigationBar()
-        const popup = AppController.devPopup
-        if (popup === "")
-            return
+    // The navigation bar's first margin.
+    Component.onCompleted: noteNavigationBar()
+
+    // --popup (screenshots, the UI benchmark, manual checks): opened once the notebook is open and
+    // indexed — a popup that lists pages (the switcher) then shows them, as a user sees it —, or
+    // after 3 s without one (onboarding).
+    Timer {
+        id: devPopupTimer
+        property int waited: 0
+        interval: 50
+        repeat: true
+        running: AppController.devPopup !== ""
+        onTriggered: {
+            waited += interval
+            if (!Workspace.ready && waited < 3000)
+                return
+            stop()
+            shell.openDevPopup(AppController.devPopup)
+        }
+    }
+    function openDevPopup(popup) {
         const name = popup.split(":")[0]
         const query = popup.indexOf(":") >= 0 ? popup.slice(popup.indexOf(":") + 1) : ""
+        // --screenshot waits until the popup has opened (its enter transition over), or at once
+        // when it is open already (DevTools.holdScreenshot).
+        const target = ({ palette: palette, switcher: switcher, capture: capture, newPage: newPage,
+                          newFolder: newPage, move: moveDialog, about: about, drawer: drawer })[name] || null
+        if (target && !target.opened) {
+            DevTools.holdScreenshot(true)
+            const release = () => {
+                if (!target.opened)
+                    return
+                target.openedChanged.disconnect(release)
+                DevTools.holdScreenshot(false)
+            }
+            target.openedChanged.connect(release)
+        }
         Qt.callLater(() => {
             switch (name) {
             case "palette": shell.openPalette(query); break

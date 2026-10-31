@@ -524,7 +524,13 @@ int AppSettings::editorWidth() const
     bool ok = false;
     const int px = m_settings->value(key(kEditorWidth)).toInt(&ok);
     if (!ok)
-        return 760;
+        return 680;
+    // The presets before 0.5.1 (Wąska 640, Normalna 760) read as today's (600, 680), so the
+    // setting shows the choice made; any other width stays as stored.
+    if (px == 760)
+        return 680;
+    if (px == 640)
+        return 600;
     return px <= 0 ? 0 : std::clamp(px, 480, 1600);
 }
 

@@ -65,6 +65,7 @@ namespace {
 using uidriver::closeMenus;
 using uidriver::enclosingFlickable;
 using uidriver::findShown;
+using uidriver::hasAncestor;
 using uidriver::isA;
 using uidriver::linkPoint;
 using uidriver::openMenus;
@@ -213,7 +214,7 @@ using Check = std::function<void(bool, const char *)>;
 ///      sideways from there, so on them there is no strip — a finger that starts at the edge (or,
 ///      with Android's back zone, just beyond it) and moves right shows the previous period, the
 ///      drawer stays closed. The drag is not a fast flick: such a swipe once did nothing (its
-///      length was read after Qt had reset it). ☰ still opens the drawer, a swipe on it closes it
+///      length was read after Qt had reset it). Menu still opens the drawer, a swipe on it closes it
 ///      (the grid under it took that swipe); the agenda (a vertical list) has the strip. Runs on
 ///      the calendar `calendarView` shows, switched between its modes and back, the drawer
 ///      closed.
@@ -601,6 +602,19 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     //      stays open after the choice. The day in two days has dated tasks.
     app->navigate({{u"view"_s, u"calendar"_s}, {u"mode"_s, u"week"_s}});
     settle(600);
+    // The week's finished entries (yesterday's done tasks) carry a check — a cancelled one an x —,
+    // as in the month: the state is never told by colour alone.
+    {
+        const auto stateIcons = [window] {
+            QQuickItem *grid = findShown(window->contentItem(), [](QQuickItem *i) { return isA(i, "CalendarWeekGrid"); });
+            const QList<QQuickItem *> items = grid ? uidriver::allItems(grid) : QList<QQuickItem *>();
+            return std::count_if(items.cbegin(), items.cend(), [](QQuickItem *i) {
+                const QString name = i->property("name").toString();
+                return isA(i, "BIcon") && shown(i) && (name == u"check" || name == u"x");
+            });
+        };
+        check(waitFor([&] { return stateIcons() > 0; }), "the week grid marks a done entry with a check");
+    }
     QQuickItem *calendarView =
             shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarView"); });
     QObject *daySheet = calendarView ? calendarView->findChild<QObject *>(u"calendarDaySheet"_s) : nullptr;
@@ -743,8 +757,9 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
 ///     opens a run's details, whose "Show in the event log" opens the page at the run's time.
 /// 3d. Tags name pages (docs/SYNTAX.md §3), with real input: a tap / click on a #tag in a journal
 ///     day opens the page the tag names — one not written yet opens empty, with the tagged blocks
-///     among its references and the tag strip in its header, ready to type on a desktop, waiting
-///     for a tap on a touch screen — and back returns; in Tasks a click
+///     among its references and, at every width, the tag overview's “#” among the page actions
+///     and “Zadania z tym tagiem” in the page menu (opening Tasks filtered by the tag), no row of
+///     buttons under the title, a tag's sub-tags as chips there; ready to type on a desktop, waiting for a tap on a touch screen — and back returns; in Tasks a click
 ///     on a tag filters the list while a Ctrl+click (desktop) or a long press (--touch) opens the
 ///     tag's page; a row of the tag list opens the tag's page, its trailing button the overview,
 ///     whose "Utwórz stronę" opens the page not written yet; the sidebar's rename dialog counts
@@ -781,7 +796,43 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
                                    [](QQuickItem *item) { return item->objectName() == u"pageTagOverview"; })
                          != nullptr;
               }),
-              "the page header has the tag strip (tag overview, tasks with the tag)");
+              "the page header offers the tag overview (a “#” among the page actions)");
+        // At every width: no row of two buttons under the title — "Zadania z tym tagiem" is in the
+        // page menu, and opens Tasks filtered by the tag.
+        {
+            check(!findShown(window->contentItem(),
+                             [](QQuickItem *item) { return item->objectName() == u"pageTagStrip"; }),
+                  "the page header has no strip row of buttons");
+            QQuickItem *menuButton = nullptr;
+            waitFor([&] {
+                QQuickItem *header = findShown(window->contentItem(), [&](QQuickItem *item) {
+                    return isA(item, "ContentPageHeader") && item->property("path").toString() == tagPage;
+                });
+                menuButton = header ? header->property("menuAnchor").value<QQuickItem *>() : nullptr;
+                return menuButton && menuButton->isVisible();
+            });
+            if (menuButton)
+                tapOrClick(window, pointIn(menuButton), touch);
+            QQuickItem *tagTasks = nullptr;
+            check(waitFor([&] {
+                      tagTasks = findShown(window->contentItem(),
+                                           [](QQuickItem *item) { return item->objectName() == u"pageMenuTagTasks"; });
+                      return tagTasks != nullptr;
+                  }),
+                  "the page menu offers “Zadania z tym tagiem”");
+            if (tagTasks) {
+                tapOrClick(window, pointIn(tagTasks), touch);
+                check(waitFor([&] {
+                          return view() == u"tasks"
+                                 && app->currentRoute().value(u"query"_s).toString() == u"tag:pomysł";
+                      }),
+                      "the page menu's “Zadania z tym tagiem” opens Tasks filtered by the tag");
+                app->back();
+                waitFor([&] { return view() == u"page" && routePath() == tagPage; });
+            } else {
+                closeMenus(window);
+            }
+        }
         // Not written yet: on a desktop it opens ready to type; on a touch screen it waits for a tap
         // (the keyboard would cover the tagged blocks it lists), which starts typing.
         QQuickItem *tagEditor = nullptr;
@@ -908,15 +959,16 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         }
     }
 
-    // ---- A page renamed (in its header) to a tag in use gets the tag's strip with the rename;
+    // ---- A page renamed (in its header) to a tag in use gets the tag overview's “#” with the rename;
     //      renamed again — the tags naming it rewritten in other notes — it keeps it.
     {
         const QString draft = u"Szkic pomysłów.md"_s;
         app->workspace()->writeFile(draft, u"- szkic\n"_s);
         app->openPage(draft);
+        // The tag's "#" among the page actions.
         const auto strip = [window] {
             return findShown(window->contentItem(),
-                             [](QQuickItem *item) { return item->objectName() == u"pageTagStrip"; });
+                             [](QQuickItem *item) { return item->objectName() == u"pageTagOverview"; });
         };
         const auto headerOf = [&](const QString &path) {
             QQuickItem *found = nullptr;
@@ -943,17 +995,35 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
             }
         };
         QQuickItem *header = headerOf(draft);
-        check(header && !strip(), "a page no tag names has no tag strip");
+        check(header && !strip(), "a page no tag names has no tag overview “#”");
         renameInHeader(header, u"pomysł"_s);
         check(strip() != nullptr && app->workspace()->exists(tagPage),
-              "renamed to a tag in use, the page has the tag's strip at once");
+              "renamed to a tag in use, the page has the tag overview's “#” at once");
         renameInHeader(headerOf(tagPage), u"Pomysły kuchenne"_s);
         const QString renamed = u"Pomysły kuchenne.md"_s;
         // (No waiting: the rename is done when the call returns. The strip used to come only with
         // some later change — its binding had lost its dependency on Workspace.revision.)
         check(app->workspace()->exists(renamed) && strip() != nullptr && !app->workspace()->exists(tagPage),
-              "renamed again, the tags naming it rewritten in other notes after it moved: the strip stays");
+              "renamed again, the tags naming it rewritten in other notes after it moved: the “#” stays");
         app->workspace()->deletePage(app->workspace()->exists(renamed) ? renamed : draft);
+        app->goHome();
+        settle(200);
+    }
+
+    // ---- A tag with sub-tags (#projekt/dom in the sample notebook): its page shows them as chips
+    //      under the title, at every width, beside the header's "#".
+    {
+        app->openTag(u"projekt"_s);
+        QQuickItem *subTags = nullptr;
+        check(waitFor([&] {
+                  subTags = findShown(window->contentItem(),
+                                      [](QQuickItem *item) { return item->objectName() == u"pageSubTags"; });
+                  return subTags && findShown(subTags, [](QQuickItem *item) {
+                             return isA(item, "BChip") && item->property("text").toString().startsWith(u"#projekt/dom"_s);
+                         }) != nullptr;
+              }) && findShown(window->contentItem(),
+                              [](QQuickItem *item) { return item->objectName() == u"pageTagOverview"; }),
+              "a tag's page shows its sub-tags as chips under the title, and the tag overview's “#”");
         app->goHome();
         settle(200);
     }
@@ -1217,10 +1287,12 @@ void checkNotebookSwitcher(QQuickWindow *window, AppController *app, const Check
 /// its back gesture (GestureInsets, simulated here as Android's gesture navigation reports it) the
 /// strip starts beyond that zone. What the strip must not take: a vertical scroll, a swipe that
 /// starts farther in, a tap on what lies under it, the drag of a selection grip lying in it (no
-/// strip while blocks are selected or the keyboard is up; a swipe still closes the drawer). Runs
-/// on a page (Remont mieszkania) with the drawer closed and stays there, without navigating: a
-/// view the shell leaves waits for its deferred deletion, which never comes while the self-test
-/// runs, and later findChild() calls would find its items.
+/// strip while blocks are selected or the keyboard is up — the top bar's ☰ opens the drawer then,
+/// the keyboard having taken the bottom navigation's place —; a swipe still closes it). Runs
+/// on a page (Remont mieszkania) with the drawer closed and stays there, without leaving the page
+/// view (the back button's check goes to another page and back, which keeps the view): a view the
+/// shell leaves waits for its deferred deletion, which never comes while the self-test runs, and
+/// later findChild() calls would find its items.
 void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer, const Check &check)
 {
     QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
@@ -1305,15 +1377,29 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
     check(waitFor([&] { return qAbs(margin() - (32 + plain)) <= 1; }), "the selection gone, the edge strip is back");
     run(u"GestureInsets.simulate(-1, -1)"_s);
 
-    // The on-screen keyboard up (simulated): no strip either, and the drawer opened by its button
-    // closes with a swipe.
+    // The on-screen keyboard up (simulated): no strip either, and no bottom navigation with its
+    // Menu — the top bar's ☰ opens the drawer then (it was out of reach until Back hid the
+    // keyboard), and the drawer closes with a swipe.
+    const auto menuButton = [window] {
+        return uidriver::topmost(window, [](QQuickItem *i) { return i->objectName() == u"topBarMenu"; });
+    };
     if (run(u"KeyboardInsets.simulated = 300"_s)) {
         check(waitFor([&] { return margin() <= 0; }), "while the keyboard is up there is no edge strip");
-        QMetaObject::invokeMethod(drawer, "open");
-        check(waitFor(opened, 3000), "the drawer opens while the keyboard is up");
+        QQuickItem *button = nullptr;
+        check(waitFor([&] { return (button = menuButton()) != nullptr; }),
+              "while the keyboard hides the bottom navigation the top bar shows ☰");
+        // (Laid out with the top bar's next polish: found again once it settled.)
+        settle(300);
+        if ((button = menuButton()))
+            tapOrClick(window, pointIn(button), true);
+        else
+            QMetaObject::invokeMethod(drawer, "open");
+        check(waitFor(opened, 3000), "☰ opens the drawer while the keyboard is up");
         check(swipeClose(), "with the keyboard up a swipe to the left closes the drawer");
         run(u"KeyboardInsets.simulated = -1"_s);
         check(waitFor([&] { return qAbs(margin() - plain) <= 1; }), "the keyboard gone, the edge strip is back");
+        check(waitFor([&] { return menuButton() == nullptr; }),
+              "the keyboard gone, ☰ leaves the top bar to the bottom navigation's Menu");
     } else {
         check(false, "the on-screen keyboard can be simulated");
     }
@@ -1325,18 +1411,38 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
     touchDrag(window, QPointF(margin() + 60, y), QPointF(window->width() * 0.5, 0));
     settle(400);
     check(closed(), "a swipe started beyond the edge strip does not open the drawer");
-    // The top bar's menu button lies in the strip: a tap there is the button's (it opens the
-    // drawer — by a tap, not a swipe).
-    QQuickItem *menuButton =
-            findShown(window->contentItem(), [](QQuickItem *item) { return item->objectName() == u"topBarMenu"; });
-    const QPointF inStrip = menuButton ? QPointF(margin() / 2, pointIn(menuButton).y()) : QPointF();
-    if (menuButton && menuButton->contains(menuButton->mapFromScene(inStrip))) {
+    // (A sideways swipe on a block's text that ends on it is a tap there — BlockText's
+    // ReleaseWithinBounds — and edits the block, which takes the strip away: end it.)
+    if (editor && editor->property("toolbarMode").toString() == u"block")
+        QMetaObject::invokeMethod(editor, "stopEditing", Q_ARG(QVariant, false));
+    waitFor([&] { return margin() > 0; });
+    // The top bar's first button lies in the strip — back (no ☰ while the bottom navigation has
+    // Menu): a tap there is the button's, not the drawer's. Back leads from another page to this
+    // one, so the page view stays (only its page changes).
+    const QString page = app->currentRoute().value(u"path"_s).toString();
+    const auto onPage = [app](const QString &path) {
+        return app->currentView() == u"page" && app->currentRoute().value(u"path"_s).toString() == path;
+    };
+    app->openPage(u"Książki 2026.md"_s);
+    check(waitFor([&] { return onPage(u"Książki 2026.md"_s); }) && app->canGoBack(),
+          "another page opens over this one, with history");
+    QQuickItem *backButton = nullptr;
+    waitFor([&] {
+        backButton = findShown(window->contentItem(), [](QQuickItem *item) {
+            return isA(item, "BIconButton") && item->property("iconName").toString() == u"arrow-left"
+                   && hasAncestor(item, "ShellTopBar");
+        });
+        return backButton != nullptr;
+    });
+    const QPointF inStrip = backButton ? QPointF(margin() / 2, pointIn(backButton).y()) : QPointF();
+    if (backButton && backButton->contains(backButton->mapFromScene(inStrip))) {
         touchTap(window, inStrip);
-        check(waitFor(opened, 3000), "a tap in the edge strip reaches the button under it");
-        sendKey(window, Qt::Key_Escape);
-        waitFor(closed);
+        check(waitFor([&] { return onPage(page); }, 3000) && closed(),
+              "a tap in the edge strip reaches the button under it (back), the drawer stays closed");
     } else {
-        check(false, "the top bar's menu button lies in the edge strip");
+        check(false, "the top bar's back button lies in the edge strip");
+        app->openPage(page);
+        waitFor([&] { return onPage(page); });
     }
 
     check(app->currentView() == u"page" && closed(), "the page is still shown, the drawer closed");
@@ -1497,13 +1603,24 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
                 : "a click on a page in the sidebar opens it, without a menu");
     if (narrow) {
         check(waitFor(drawerClosed), "opening a page from the drawer closes it");
-        // Through the top bar's menu button: a long press opens the row's context menu.
-        QQuickItem *menuButton = findNamed(u"topBarMenu"_s);
-        check(menuButton != nullptr, "the top bar has a menu button");
-        if (!menuButton)
+        // One way to the drawer while the bottom navigation is there: its Menu, no ☰ in the top
+        // bar (the drawing editor, whose bar replaces the bottom navigation, keeps ☰:
+        // checkDrawing). With no button before it the title starts on the content edge; the page
+        // has history, so back leads.
+        check(findNamed(u"topBarMenu"_s) == nullptr && findNamed(u"bottomNav_menu"_s) != nullptr,
+              "on a phone the top bar has no menu button while the bottom navigation has Menu");
+        if (QQuickItem *topBar = findType("ShellTopBar")) {
+            check(topBar->property("leadingButton").toBool() == app->canGoBack(),
+                  "the top bar's back button leads only with history");
+        } else {
+            check(false, "the top bar is shown");
+        }
+        // Through the bottom navigation's Menu: a long press opens the row's context menu.
+        QQuickItem *menuTab = findNamed(u"bottomNav_menu"_s);
+        if (!menuTab)
             return;
-        activate(menuButton);
-        check(waitFor(drawerOpen), "the top bar's menu button opens the drawer");
+        activate(menuTab);
+        check(waitFor(drawerOpen), "the bottom bar's Menu opens the drawer again");
         checkEmptyFolder();
         if (QQuickItem *pageRow = treeRow(page)) {
             openMenuOn(pageRow);
@@ -1714,9 +1831,16 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     // The row of `path` lies wholly in the tree's visible part, where the sidebar left it (not
     // placed by the test as treeRow() does): a row under the list's bottom edge is behind the
     // sync footer — a tap there opened the sync center (the Android emulator's --folders run).
+    // A row the list shows — not one of its pooled delegates (reuseItems): those are culled, not
+    // hidden, so they look shown, at the place they had when they were pooled.
+    const auto liveRow = [](QQuickItem *list, QQuickItem *item) {
+        QQuickItem *live = nullptr;
+        QMetaObject::invokeMethod(list, "itemAtIndex", qReturnArg(live), item->property("index").toInt());
+        return live == item;
+    };
     const auto rowIn = [&](QQuickItem *list, const QString &path) -> QQuickItem * {
         return !list ? nullptr : findShown(list, [&](QQuickItem *item) {
-            return item->objectName() == u"treeRow" && item->property("path").toString() == path;
+            return item->objectName() == u"treeRow" && item->property("path").toString() == path && liveRow(list, item);
         });
     };
     const auto rowInView = [&](const QString &path) {
@@ -1893,8 +2017,8 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     if (QQuickItem *list = treeList()) {
         for (QQuickItem *item : uidriver::allItems(list)) {
             const QString path = item->property("path").toString();
-            if (item->objectName() != u"treeRow" || !shown(item) || !path.startsWith(u"Przewijanie/Strona ")
-                || path == deepest)
+            if (item->objectName() != u"treeRow" || !shown(item) || !liveRow(list, item)
+                || !path.startsWith(u"Przewijanie/Strona ") || path == deepest)
                 continue;
             const qreal top = rowTop(path);
             if (top >= 0 && (clickedTop < 0 || top < clickedTop)) {
@@ -2891,6 +3015,23 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     if (phone) {
         check(nav && waitFor([&] { return !nav->isVisible(); }),
               "the drawing's tool bar at the bottom: the bottom navigation makes way");
+        // With the bottom navigation's Menu gone, the top bar's ☰ is the button to the drawer.
+        QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
+        QQuickItem *menuButton = nullptr;
+        waitFor([&] {
+            menuButton = uidriver::topmost(window, [](QQuickItem *i) { return i->objectName() == u"topBarMenu"; });
+            return menuButton != nullptr;
+        });
+        check(menuButton && drawer, "where the drawing's bar replaces the bottom navigation the top bar shows ☰");
+        if (menuButton && drawer) {
+            tapOrClick(window, pointIn(menuButton), touch);
+            check(waitFor([drawer] { return drawer->property("opened").toBool(); }, 3000),
+                  "the drawing editor's ☰ opens the drawer");
+            QMetaObject::invokeMethod(drawer, "close");
+            check(waitFor([drawer] { return !drawer->property("visible").toBool(); }, 3000)
+                          && app->currentRoute().value(u"view"_s).toString() == u"drawing",
+                  "the drawer closes over the drawing editor, still open");
+        }
         // A phone held upright: every tool, the swatch, "Więcej" and Gotowe on screen (two lines),
         // none behind the bar's edge.
         QStringList hidden;
@@ -3563,12 +3704,13 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
 ///     (quick capture) sit above it. Editing with the keyboard hidden by the system: the bottom
 ///     navigation is back and the editing toolbar docks right on it (also with a system
 ///     navigation bar under it), toasts show at the top, away from the line being written, the
-///     capture button stays away; the keyboard sliding in leaves the navigation under it until it
+///     navigation's "+ Notatka" stays under the toolbar; the keyboard sliding in leaves the navigation under it until it
 ///     covers it (the toolbar never drops first), sliding away uncovers it again, the toolbar
 ///     following the keyboard's top down to the navigation; a keyboard shorter than the navigation
 ///     takes its place but leaves the toolbar where it was; a browser's keyboard (the page resized
 ///     for it: no overlap, still settling) takes the navigation away at once; a tap on a navigation
-///     tab while editing opens that view and the editing ends. A settings field that gets the
+///     tab while editing opens that view and the editing ends, a tap on "+ Notatka" ends the
+///     editing and opens quick capture. A settings field that gets the
 ///     focus is scrolled above the keyboard; on a wide touch window a page in the side panel docks
 ///     its toolbar on the keyboard too.
 void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
@@ -3643,7 +3785,12 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     // docks right on it.
     const QString guide = u"Witaj w Brulionie.md"_s;
     QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+    // Quick capture's item on the bottom navigation ("+ Notatka").
     QQuickItem *captureButton = window->findChild<QQuickItem *>(u"shellCaptureButton"_s);
+    const auto captureOnNav = [&] {
+        return captureButton && captureButton->isVisible()
+               && captureButton->mapToScene(QPointF(0, 0)).y() >= nav->mapToScene(QPointF(0, 0)).y() - 1;
+    };
     const auto navTop = [&] { return nav->mapToScene(QPointF(0, 0)).y(); };
     const auto navAtBottom = [&] { return nav->isVisible() && near(navTop() + nav->height(), window->height()); };
     QQuickItem *editor = nullptr;
@@ -3678,8 +3825,8 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         // (Laid out with the shell's next polish.)
         check(waitFor([&] { return slot && near(slotBottom(), navTop()); }),
               "the docked toolbar sits right on the bottom navigation");
-        check(waitFor([&] { return !room->isVisible(); }) && captureButton && !captureButton->isVisible(),
-              "no keyboard's room under the navigation, no capture button over the toolbar");
+        check(waitFor([&] { return !room->isVisible(); }) && captureOnNav(),
+              "no keyboard's room under the navigation; “+ Notatka” is on it, under the toolbar");
         auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
         check(theme
                       && near(shellItem->property("toastClearance").toReal(),
@@ -3827,8 +3974,28 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
 
         QMetaObject::invokeMethod(page, "stopEditing");
         check(waitFor([&] { return !editor->property("toolbarVisible").toBool() && navAtBottom(); })
-                      && waitFor([&] { return captureButton && captureButton->isVisible(); }),
-              "editing stops: the toolbar goes, the bottom navigation stays, the capture button is back");
+                      && captureOnNav(),
+              "editing stops: the toolbar goes, the bottom navigation stays with “+ Notatka”");
+
+        // "+ Notatka" while editing without the keyboard: the editing ends (nothing written),
+        // quick capture opens.
+        {
+            const QString unchanged = app->workspace()->readFile(guide);
+            editLastRow();
+            check(waitFor([&] { return editor->property("toolbarVisible").toBool() && navAtBottom() && captureOnNav(); }),
+                  "editing again, the keyboard hidden: “+ Notatka” is on the bottom navigation");
+            if (captureButton)
+                tapOrClick(window, pointIn(captureButton), QCoreApplication::arguments().contains(u"--touch"_s));
+            check(waitFor([&] {
+                      return capture->property("opened").toBool() && !editor->property("toolbarVisible").toBool()
+                             && page->property("editingRow").toInt() < 0;
+                  }),
+                  "a tap on “+ Notatka” while editing ends the editing and opens quick capture");
+            sendKey(window, Qt::Key_Escape);
+            check(waitFor([&] { return !capture->property("visible").toBool(); })
+                          && app->workspace()->readFile(guide) == unchanged,
+                  "quick capture closes, the guide is left as it was");
+        }
 
         // A tap on a navigation tab while editing without the keyboard: that view opens, the
         // editing ends with the page (nothing written).
@@ -3971,6 +4138,82 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     };
 
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
+
+    // The rows' shape (docs/UI.md "Look & feel", Settings rows): beside its text a control ends at
+    // the row's right edge, centred on the title and description; compact windows stack only what
+    // does not fit — under its text a segmented control fills the row. Phones (412 px): the two
+    // background rows beside their text, Motyw and Rozmiar tekstu (three and four options) under
+    // it; 360 px: each row decides alone, either shape. No option's label is cut, every target
+    // is 44 px on touch UIs.
+    {
+        const auto rowOf = [](QQuickItem *item) {
+            while (item && !isA(item, "ShellSettingRow"))
+                item = item->parentItem();
+            return item;
+        };
+        const auto sceneRect = [](QQuickItem *item) {
+            return item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
+        };
+        // "" when the control's row has the shape asked for (`stacked`: -1 either, 0 beside, 1 under).
+        const auto shapeProblem = [&](const QString &name, int stacked) -> QString {
+            QQuickItem *control = shownNamed(window->contentItem(), name);
+            QQuickItem *settingRow = rowOf(control);
+            QQuickItem *text = settingRow ? settingRow->childItems().value(0) : nullptr;
+            if (!control || !text || !shown(control))
+                return name + u": not shown"_s;
+            const bool under = settingRow->property("stacked").toBool();
+            if (stacked >= 0 && under != (stacked == 1))
+                return name + (under ? u": under its text"_s : u": beside its text"_s);
+            const QRectF c = sceneRect(control), r = sceneRect(settingRow), t = sceneRect(text);
+            if (qAbs(c.right() - r.right()) > 1)
+                return name + u": ends at %1, its row at %2"_s.arg(c.right()).arg(r.right());
+            if (under ? qAbs(c.left() - r.left()) > 1 || c.top() < t.bottom()
+                      : qAbs(c.center().y() - t.center().y()) > 1 || c.left() < t.right())
+                return name + u": not placed %1 its text"_s.arg(under ? u"under"_s : u"beside"_s);
+            const QList<QQuickItem *> parts = uidriver::allItems(control);
+            for (QQuickItem *part : parts) {
+                if (part->property("truncated").toBool())
+                    return name + u": a cut label (%1)"_s.arg(part->property("text").toString());
+                if (touch && isA(part, "QQuickAbstractButton") && (part->height() < 44 || part->width() < 44))
+                    return name + u": a target under 44 px"_s;
+            }
+            if (touch && c.height() < 44)
+                return name + u": under 44 px high"_s;
+            return {};
+        };
+        const auto rowsShaped = [&](bool compact, bool roomy, QString *problem) {
+            const QList<std::pair<QString, int>> expected{
+                    {u"lightSurfaceSetting"_s, compact && !roomy ? -1 : 0},
+                    {u"darkSurfaceSetting"_s, compact && !roomy ? -1 : 0},
+                    {u"themeModeSetting"_s, compact ? 1 : 0},
+                    {u"fontScaleSetting"_s, compact ? 1 : 0}};
+            for (const auto &[name, stacked] : expected) {
+                *problem = shapeProblem(name, stacked);
+                if (!problem->isEmpty())
+                    return false;
+            }
+            return true;
+        };
+        const bool compact = window->width() < 600;
+        QString problem;
+        const bool shaped = waitFor([&] { return rowsShaped(compact, true, &problem); });
+        if (!shaped)
+            std::fprintf(stderr, "selftest: settings rows: %s\n", qPrintable(problem));
+        check(shaped, compact ? "phone settings: the background rows beside their text, Motyw and Rozmiar tekstu under it, filled"
+                              : "settings rows: every control beside its text, at the row's right edge");
+        if (compact) {
+            const QSize phone = window->size();
+            window->resize(360, 740);
+            const bool narrowShaped = waitFor([&] { return window->width() == 360 && rowsShaped(true, false, &problem); });
+            if (!narrowShaped)
+                std::fprintf(stderr, "selftest: settings rows at 360 px: %s\n", qPrintable(problem));
+            check(narrowShaped, "360 px settings: each row beside its text or under it, filled, no label cut");
+            window->resize(phone);
+            waitFor([&] { return window->size() == phone; });
+            settle(200);
+        }
+    }
+
     check(activate(shownItem(u"accentSwatch_green"_s)), "the appearance settings show the accent swatches");
     check(waitFor([&] { return settings->accentColor() == u"green" && color("accent") != u"#e2574c"; }),
           "a tap on a swatch changes the accent at once and saves it");
@@ -4058,7 +4301,41 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         check(capture && waitFor([&] { return app->currentView() == u"journals"; }) && !capture->isVisible(),
               "switched off, the quick note button is not shown");
         settings->setCaptureButtonShown(true);
-        check(capture && waitFor([&] { return capture->isVisible(); }), "switched on again, it is back");
+        QQuickItem *menuTab = window->findChild<QQuickItem *>(u"bottomNav_menu"_s);
+        // (Laid out with the bar's next polish.)
+        check(capture && menuTab && waitFor([&] {
+                  return capture->isVisible() && capture->width() > 0
+                         && capture->mapToScene(QPointF(capture->width(), 0)).x()
+                                    <= menuTab->mapToScene(QPointF(0, 0)).x() + 1;
+              }),
+              "switched on again, it is back on the bottom bar, before Menu");
+        // Larger text (Wygląd → Rozmiar tekstu: Większy): the six labels stay whole — a long one
+        // ("Kalendarz") takes room from the short ones; with "+ Notatka" in a fixed slot they were
+        // cut.
+        QQuickItem *bar = window->findChild<QQuickItem *>(u"shellBottomNav"_s);
+        const qreal scale = settings->fontScale();
+        settings->setFontScale(1.3);
+        QString cut;
+        int labels = 0;
+        const bool whole = bar && waitFor([&] {
+            cut.clear();
+            labels = 0;
+            bool scaled = true;
+            const QList<QQuickItem *> items = uidriver::allItems(bar);
+            for (QQuickItem *item : items) {
+                if (!item->inherits("QQuickText") || !shown(item))
+                    continue;
+                ++labels;
+                scaled = scaled && item->property("font").value<QFont>().pixelSize() == qRound(12 * 1.3);
+                if (item->property("truncated").toBool())
+                    cut += item->property("text").toString() + u' ';
+            }
+            return labels == 6 && scaled && cut.isEmpty();
+        });
+        if (!whole)
+            std::fprintf(stderr, "selftest: bottom bar labels %d, cut: %s\n", labels, qPrintable(cut));
+        check(whole, "at a larger text size the bottom bar's six labels stay whole");
+        settings->setFontScale(scale);
         app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
     }
 
@@ -4071,6 +4348,13 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     // serif / sans-serif choice, and "Other…" opens the picker again. A missing family names the
     // font used instead.
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"editor"_s}});
+    // The text width: Normalna (680 px, about 85 characters) by default.
+    {
+        QQuickItem *width = shownItem(u"editorWidthSetting"_s);
+        check(width && settings->editorWidth() == 680 && width->property("currentIndex").toInt() == 1
+                      && width->property("currentValue").toInt() == 680,
+              "Edytor → Szerokość tekstu: Normalna (680 px) by default");
+    }
     if (QQuickItem *fontSetting = shownItem(u"editorFontSetting"_s)) {
         uidriver::scrollIntoView(window, fontSetting);
         // The picker of the settings view shown (a window can hold more than one settings view).
@@ -4215,6 +4499,123 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     check(waitFor([&] { return !isOpen(palette); }) && view() == u"tasks", "Escape closes the palette");
     handled = sendKey(window, Qt::Key_Back);
     check(handled && view() == u"journals", "after the palette closed, back reaches the shell again");
+
+    // 4b. The rows of the palette and the quick switcher (docs/UI.md "Shared components",
+    //     BPalette): floating (wide windows) every row is one line high (Theme.listItemHeight), a
+    //     subtitle on the title's line after it; full screen (phones) a subtitled row has two lines,
+    //     the subtitle under the title. The query shows subtitled rows ("Nowy folder…" — "W głównym
+    //     folderze notatnika", the page "Remont mieszkania" in Projekty).
+    {
+        auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
+        const auto rowsLaidOut = [theme](QObject *popup, QString *detail) {
+            auto *content = popup->property("contentItem").value<QQuickItem *>();
+            if (!content || !theme) {
+                *detail = u"no list"_s;
+                return false;
+            }
+            const bool floating = !popup->property("fullScreen").toBool();
+            const qreal oneLine = theme->property("listItemHeight").toReal();
+            const qreal twoLine = theme->property("listItemHeightTwoLine").toReal();
+            int rows = 0;
+            int subtitled = 0;
+            const QList<QQuickItem *> items = uidriver::allItems(content);
+            for (QQuickItem *row : items) {
+                if (!isA(row, "BListItem") || !shown(row))
+                    continue;
+                ++rows;
+                const QString title = row->property("text").toString();
+                const QString subtitle = row->property("subtitle").toString();
+                const qreal expected = floating || subtitle.isEmpty() ? oneLine : twoLine;
+                if (qAbs(row->height() - expected) > 0.5) {
+                    *detail = u"“%1” is %2 px high, not %3"_s.arg(title).arg(row->height()).arg(expected);
+                    return false;
+                }
+                if (subtitle.isEmpty())
+                    continue;
+                QQuickItem *sub = nullptr;
+                const QList<QQuickItem *> parts = uidriver::allItems(row);
+                for (QQuickItem *part : parts) {
+                    if (part->inherits("QQuickText") && part->property("text").toString() == subtitle)
+                        sub = part;
+                }
+                QQuickItem *titleText = sub && sub->parentItem() ? sub->parentItem()->childItems().value(0) : nullptr;
+                if (!sub || !titleText || !shown(sub)) {
+                    *detail = u"“%1” does not show its subtitle"_s.arg(title);
+                    return false;
+                }
+                const QRectF t = titleText->mapRectToScene(QRectF(0, 0, titleText->width(), titleText->height()));
+                const QRectF u = sub->mapRectToScene(QRectF(0, 0, sub->width(), sub->height()));
+                const bool sameLine = qAbs(u.center().y() - t.center().y()) < t.height() / 2 && u.left() >= t.right();
+                const bool below = u.top() >= t.bottom() - 0.5;
+                if (floating ? !sameLine : !below) {
+                    *detail = u"“%1”: the subtitle is not %2 the title"_s.arg(title, floating ? u"beside"_s : u"under"_s);
+                    return false;
+                }
+                ++subtitled;
+            }
+            *detail = u"%1 rows, %2 with a subtitle"_s.arg(rows).arg(subtitled);
+            return rows > 0 && subtitled > 0;
+        };
+        // Every command (no query): a floating list fills its room with whole rows — it once stayed
+        // one row high when every row had the same height (nothing changed contentHeight to measure
+        // it again); full screen it fills the screen.
+        if (!palette->property("fullScreen").toBool()) {
+            QMetaObject::invokeMethod(palette, "open");
+            QQuickItem *list = nullptr;
+            const auto filled = [&] {
+                auto *content = palette->property("contentItem").value<QQuickItem *>();
+                const QList<QQuickItem *> items = content ? uidriver::allItems(content) : QList<QQuickItem *>();
+                const auto it = std::find_if(items.cbegin(), items.cend(),
+                                             [](QQuickItem *item) { return item->inherits("QQuickListView"); });
+                list = it != items.cend() ? *it : nullptr;
+                if (!list || !theme)
+                    return false;
+                const qreal room = palette->property("_listRoom").toReal();
+                const qreal all = list->property("contentHeight").toReal() + 12;
+                const qreal row = theme->property("listItemHeight").toReal();
+                return list->height() + row > std::min(all, room) && list->height() <= room + 0.5;
+            };
+            const bool full = waitFor([&] { return palette->property("opened").toBool() && filled(); });
+            if (!full && list)
+                std::fprintf(stderr, "selftest: palette list %g px high, room %g, content %g\n", list->height(),
+                             palette->property("_listRoom").toReal(), list->property("contentHeight").toReal());
+            check(full, "the floating command palette shows as many whole rows as fit, not one");
+            // Scrolled to its end (keys, the wheel), far past the first rows, which the view then
+            // releases: the list keeps its height — it once shrank to its margins, no row shown.
+            if (list)
+                QMetaObject::invokeMethod(list, "positionViewAtEnd");
+            const qreal room = palette->property("_listRoom").toReal();
+            const bool stillFull = waitFor([&] {
+                return list && list->property("contentY").toReal() > room && filled();
+            });
+            if (!stillFull && list)
+                std::fprintf(stderr, "selftest: scrolled palette list %g px high, room %g, contentY %g\n", list->height(),
+                             room, list->property("contentY").toReal());
+            check(stillFull, "the floating command palette keeps its rows when scrolled down");
+            QMetaObject::invokeMethod(palette, "close");
+            waitFor([&] { return !isOpen(palette); });
+        }
+        QObject *switcher = find("shellSwitcher");
+        const QList<std::pair<QObject *, QString>> popups{{palette, u"folder"_s}, {switcher, u"rem"_s}};
+        for (const auto &[popup, query] : popups) {
+            if (!popup) {
+                check(false, "the quick switcher exists");
+                continue;
+            }
+            const bool isPalette = popup == palette;
+            QMetaObject::invokeMethod(popup, "open");
+            const bool opened = waitFor([&] { return popup->property("opened").toBool(); });
+            QMetaObject::invokeMethod(popup, "typeQuery", Q_ARG(QVariant, query));
+            QString detail;
+            const bool laidOut = opened && waitFor([&] { return rowsLaidOut(popup, &detail); });
+            if (!laidOut)
+                std::fprintf(stderr, "selftest: %s rows: %s\n", isPalette ? "palette" : "switcher", qPrintable(detail));
+            check(laidOut, isPalette ? "the command palette's rows: one line when floating (a subtitle beside the title), two on a phone"
+                                     : "the quick switcher's rows: one line when floating (the folder beside the title), two on a phone");
+            QMetaObject::invokeMethod(popup, "close");
+            waitFor([&] { return !isOpen(popup); });
+        }
+    }
 
     // 5. The block editor in the shell: real keys reach the edited block and are saved, Ctrl+E
     //    and the "Markdown source" command switch source mode, a link to a missing page opens
@@ -4499,9 +4900,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             QMetaObject::invokeMethod(page, "save", qReturnArg(saved));
             check(saved && app->workspace()->readFile(guide).contains(u"żeby edytować. Żółw ąę"_s), "the edit is saved to the file");
 
-            // The note mode: the guide is a document; the header's toggle (a real click or tap)
-            // makes it an outline, the "Toggle note mode" command a document again — each switch
-            // rewrites only the `brulion:` line of the file.
+            // The note mode: the guide is a document; the header's toggle (a real click or tap; on
+            // a small header — a phone — the page menu's item instead: the toggle is not among the
+            // page actions there) makes it an outline, the "Toggle note mode" command a document
+            // again — each switch rewrites only the `brulion:` line of the file.
             {
                 const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
                 QMetaObject::invokeMethod(page, "stopEditing");
@@ -4513,13 +4915,39 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     if (t->isVisible() && editor->isAncestorOf(t))
                         toggle = t;
                 }
+                QQuickItem *pageHeader = findShown(window->contentItem(), [&](QQuickItem *item) {
+                    return isA(item, "ContentPageHeader") && item->property("path").toString() == guide;
+                });
+                const bool smallHeader = pageHeader && pageHeader->property("small").toBool();
                 const QString before = app->workspace()->readFile(guide);
                 const auto withKey = [&before](const QString &mode) {
                     return QString(before).replace(u"\nbrulion: document\n"_s, u"\nbrulion: "_s + mode + u'\n');
                 };
-                check(page->property("mode").toString() == u"document" && toggle != nullptr,
-                      "the guide is a document with a mode toggle in its header");
-                if (toggle) {
+                check(page->property("mode").toString() == u"document" && pageHeader != nullptr
+                              && (smallHeader ? toggle == nullptr : toggle != nullptr),
+                      smallHeader ? "the guide is a document; a small header leaves the mode toggle to the page menu"
+                                  : "the guide is a document with a mode toggle in its header");
+                if (smallHeader) {
+                    auto *menuButton = pageHeader->property("menuAnchor").value<QQuickItem *>();
+                    if (menuButton)
+                        tapOrClick(window, pointIn(menuButton), touch);
+                    QQuickItem *modeItem = nullptr;
+                    check(waitFor([&] {
+                              modeItem = findShown(window->contentItem(), [](QQuickItem *item) {
+                                  return item->objectName() == u"pageMenuNoteMode";
+                              });
+                              return modeItem != nullptr;
+                          }),
+                          "the page menu offers the note mode");
+                    if (modeItem) {
+                        tapOrClick(window, pointIn(modeItem), touch);
+                        check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
+                                      && app->workspace()->readFile(guide) == withKey(u"outline"_s),
+                              "the page menu's item switches to an outline, writing only the mode");
+                    } else {
+                        closeMenus(window);
+                    }
+                } else if (toggle) {
                     tapOrClick(window, toggle->mapToScene(QPointF(toggle->width() / 2, toggle->height() / 2)), touch);
                     check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
                                   && app->workspace()->readFile(guide) == withKey(u"outline"_s),
@@ -4562,7 +4990,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     check(waitFor([&] { return openMenus(window) == 1; }),
                           touch ? "a long press on the tag chip opens its menu"
                                 : "a right-click on the tag chip opens its menu");
-                    if (QQuickItem *remove = shownItem(u"headerChipRemove"_s)) {
+                    if (QQuickItem *remove = shownItem(u"propertyChipRemove"_s)) {
                         tapOrClick(window, pointIn(remove), touch);
                         check(waitFor([&] {
                                   return saveNow()

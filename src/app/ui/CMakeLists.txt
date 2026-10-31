@@ -71,6 +71,18 @@ target_link_libraries(brulion_ui_scroll PUBLIC Qt6::Core Qt6::Quick)
 qt_extract_metatypes(brulion_ui_scroll)
 brulion_set_warnings(brulion_ui_scroll)
 
+# brulion_ui_layoutdump — LayoutDump (layoutdump.h): what a window shows (texts with colours and
+# fonts, targets, boxes, the theme's tokens) as JSON for the UI benchmark (`--dump-layout`,
+# tests/app/uibench). Qt Quick's public API only; a static library so that
+# tests/app/uibench/tst_uibench_layoutdump checks it on a scene without the app. A few KB, linked
+# on every platform (only `--dump-layout` calls it).
+qt_add_library(brulion_ui_layoutdump STATIC
+    layoutdump.h layoutdump.cpp
+)
+target_include_directories(brulion_ui_layoutdump PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_layoutdump PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
+brulion_set_warnings(brulion_ui_layoutdump)
+
 # brulion_ui_network — the QML engine's network access manager (localnetwork.h): local URLs only,
 # so rich text never fetches a remote picture. A static library so that tests/app/network checks
 # it without the app.

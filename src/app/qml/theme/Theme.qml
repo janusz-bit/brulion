@@ -89,7 +89,13 @@ QtObject {
     readonly property color bgPressed: dark ? Qt.rgba(232/255, 228/255, 218/255, 0.11) : Qt.rgba(31/255, 36/255, 48/255, 0.10)
     readonly property color bgSelected: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.16) : Qt.rgba(159/255, 195/255, 230/255, 0.30)
     readonly property color bgInverse: dark ? "#e8e4da" : "#1f2430"
+    /// Behind edge sheets (bottom sheets, the full-screen palette, the drawer): the page dims.
     readonly property color scrim: dark ? Qt.rgba(8/255, 10/255, 16/255, 0.62) : Qt.rgba(31/255, 36/255, 48/255, 0.40)
+    /// Behind centred modal panels (the floating command palette and quick switcher, a centred
+    /// BDialog): the page recedes — light: a wash of the page tinted toward ink (paper about
+    /// #ddd9d3, page text about 2.5:1 instead of 7:1, the panel's lighter fill stands out); dark:
+    /// the scrim's ink at 72 % (page text about 2:1). ThemePalette.modalScrim, per surface.
+    readonly property color scrimModal: colors.scrimModal
 
     // ---- Text ----------------------------------------------------------------------------
     // fg #1f2430 / #e8e4da, fgMuted #535a6a / #a9aebb, fgFaint #676c7b / #8f96a7.
@@ -107,6 +113,12 @@ QtObject {
     readonly property color borderSubtle: colors.borderSubtle
     readonly property color borderStrong: colors.borderStrong
     readonly property color borderControl: colors.borderControl // ≥ 3:1 (checkbox, switch)
+    /// Indent guides (the outline's level lines, the page tree's): quiet but seen, about
+    /// Obsidian's level (1.28:1 on paper, 1.46:1 on slate). Not text, not a control.
+    readonly property color guide: border
+    /// Indent guides on bgSunken (the sidebar's and the drawer's tree), where border is only
+    /// 1.18:1 in the light: borderStrong there (1.52:1), border in the dark (1.56:1).
+    readonly property color guideOnSunken: dark ? border : borderStrong
 
     // ---- Actions -------------------------------------------------------------------------
     readonly property color primary: dark ? "#e8e4da" : "#1f2430"        // primary buttons
@@ -124,7 +136,8 @@ QtObject {
     readonly property color link: colors.link                             // #2c6aa3 / #9fc3e6
     readonly property color linkHover: dark ? "#c3daf1" : "#1f5486"
     readonly property color linkMissing: colors.linkMissing               // #7a5ea3 / #b9a3d8
-    readonly property color tagBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.16) : Qt.rgba(159/255, 195/255, 230/255, 0.32)
+    // Tags and due dates: a light tint, well apart from the selection (bgSelected) it used to match.
+    readonly property color tagBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.10) : Qt.rgba(159/255, 195/255, 230/255, 0.16)
     readonly property color tagFg: colors.tagFg                           // #2b5f8f / #b9d4ee
 
     // ---- Status --------------------------------------------------------------------------
@@ -144,7 +157,7 @@ QtObject {
     readonly property color infoBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.14) : Qt.rgba(159/255, 195/255, 230/255, 0.28)
 
     // ---- Chips (dates, reminders, tags inside rendered text) ------------------------------
-    readonly property color chipDueBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.14) : Qt.rgba(159/255, 195/255, 230/255, 0.28)
+    readonly property color chipDueBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.10) : Qt.rgba(159/255, 195/255, 230/255, 0.16)
     readonly property color chipDueFg: colors.chipDueFg                   // #2b5f8f / #b9d4ee
     readonly property color chipOverdueBg: dangerBg
     readonly property color chipOverdueFg: dangerText
@@ -274,13 +287,14 @@ QtObject {
     readonly property int iconSizeLg: touchUi ? 24 : 20
     readonly property int listItemHeight: touchUi ? 48 : dense ? 28 : 34
     readonly property int listItemHeightTwoLine: touchUi ? 64 : dense ? 42 : 48
-    /// Dense list rows (the sidebar's) with a mouse; touch UIs use listItemHeight.
+    /// Dense list rows (the sidebar's) with a mouse; on touch UIs dense rows are touchTarget.
     readonly property int listItemHeightDense: dense ? 26 : 30
     /// The touch editing toolbar docked on the keyboard (MobileEditToolbar): a row of small
     /// buttons with a hairline above.
     readonly property int editToolbarHeight: touchTarget + space2 + 1
 
-    readonly property int measure: 760          // editor's comfortable text width
+    readonly property int measure: 680          // editor's comfortable text width (~85 characters)
+    readonly property int measureList: 760      // a list of entries' width (the calendar's agenda: time, title, page)
     readonly property int sidebarWidth: dense ? 248 : 272
     readonly property int dialogWidthSm: 400
     readonly property int dialogWidth: 520

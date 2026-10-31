@@ -173,7 +173,9 @@ Item {
 
     // ---- Building blocks --------------------------------------------------------------------
 
-    /// A titled group of setting rows.
+    /// A titled group of setting rows: a card, its rows divided by hairlines. Below 600 px the
+    /// card is flat (no surface, border or padding): heading, note and rows share the page's
+    /// 16-px edge, and only the headings and the gap set the groups apart.
     component SettingsGroup: ColumnLayout {
         id: group
         property string heading
@@ -200,12 +202,18 @@ Item {
         BCard {
             Layout.fillWidth: true
             Layout.topMargin: Theme.space1
-            padding: Theme.compact ? Theme.space4 : Theme.space5
+            flat: Theme.compact
+            padding: Theme.space5
+            // Two children: the content size is the rows' (a pane sizes itself by a lone child only).
+            contentWidth: cardColumn.implicitWidth
+            contentHeight: cardColumn.implicitHeight
             ColumnLayout {
                 id: cardColumn
                 anchors.fill: parent
-                spacing: Theme.space5
+                // Room for the hairline between the rows: 16 / 12 px on each side of it.
+                spacing: Theme.compact ? Theme.space6 : Theme.space8
             }
+            ShellSettingDividers { column: cardColumn }
         }
     }
 
@@ -306,8 +314,7 @@ Item {
             Layout.fillHeight: true
             clip: true
             contentWidth: width
-            // Narrow: room below the last row for the floating capture button (56 + margin).
-            contentHeight: content.implicitHeight + 2 * margin + (Theme.narrow ? 56 + Theme.space4 : 0)
+            contentHeight: content.implicitHeight + 2 * margin
             boundsBehavior: Flickable.StopAtBounds
             T.ScrollBar.vertical: BScrollBar {}
 
@@ -380,6 +387,7 @@ Item {
                     title: qsTr("Theme")
                     description: qsTr("Light like paper, dark for the evening, or following the system.")
                     BSegmented {
+                        objectName: "themeModeSetting"
                         accessibleName: qsTr("Theme")
                         model: [
                             { value: "system", text: qsTr("System"), icon: "monitor" },
@@ -416,7 +424,8 @@ Item {
                                                                                            : AppSettings.customAccent
                             color: custom !== "" ? ThemePalette.accentSwatch("custom", custom, Theme.dark,
                                                                              Theme.dark ? Theme.darkSurface : Theme.lightSurface)
-                                                 : Theme.bgSunken
+                                                 // (bgSunken is a black hole in the dark.)
+                                                 : Theme.dark ? Theme.bgElevated2 : Theme.bgSunken
                             iconName: custom !== "" ? "" : "plus"
                             label: qsTr("Custom…")
                             selected: Theme.accentName === "custom"
@@ -457,6 +466,7 @@ Item {
                     title: qsTr("Text size")
                     description: qsTr("Size of all text in the app.")
                     BSegmented {
+                        objectName: "fontScaleSetting"
                         accessibleName: qsTr("Text size")
                         model: [
                             { value: 0.9, text: qsTr("Small") },
@@ -566,7 +576,7 @@ Item {
                     objectName: "captureButtonSetting"
                     Layout.fillWidth: true
                     text: qsTr("Quick note button")
-                    description: qsTr("The round + button over the views of narrow windows and phones. Quick capture stays in the command palette and under Ctrl+Shift+N.")
+                    description: qsTr("The + Note button in the bottom bar of narrow windows and phones. Quick capture stays in the command palette and under Ctrl+Shift+N.")
                     checked: AppSettings.captureButtonShown
                     onToggled: AppSettings.captureButtonShown = checked
                 }
@@ -664,10 +674,11 @@ Item {
                 title: qsTr("Text width")
                 description: qsTr("Long lines are hard to read; the editor keeps text within this width.")
                 BSegmented {
+                    objectName: "editorWidthSetting"
                     accessibleName: qsTr("Text width")
                     model: [
-                        { value: 640, text: qsTr("Narrow") },
-                        { value: 760, text: qsTr("Normal", "text width") },
+                        { value: 600, text: qsTr("Narrow") },
+                        { value: 680, text: qsTr("Normal", "text width") },
                         { value: 960, text: qsTr("Wide") },
                         { value: 0, text: qsTr("Full") }
                     ]

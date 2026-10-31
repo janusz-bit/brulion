@@ -33,10 +33,15 @@ ColumnLayout {
     BCard {
         Layout.fillWidth: true
         Layout.topMargin: Theme.space1
-        padding: Theme.compact ? Theme.space4 : Theme.space5
+        // Laid out like SettingsView's groups: rows divided by hairlines, flat on phones.
+        flat: Theme.compact
+        padding: Theme.space5
+        contentWidth: syncRows.implicitWidth
+        contentHeight: syncRows.implicitHeight
         ColumnLayout {
+            id: syncRows
             anchors.fill: parent
-            spacing: Theme.space5
+            spacing: Theme.compact ? Theme.space6 : Theme.space8
 
             ShellSettingRow {
                 visible: !AppController.isWasm
@@ -97,6 +102,7 @@ ColumnLayout {
                 }
             }
         }
+        ShellSettingDividers { column: syncRows }
     }
 
     SyncDeletionGuard {

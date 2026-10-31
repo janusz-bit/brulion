@@ -178,13 +178,14 @@ ColumnLayout {
             color: Theme.fgMuted
             wrapMode: Text.Wrap
         }
-        // The system's picker, briefly: where the places are, what Android refuses.
+        // The system's picker, briefly: where the places are, what Android refuses. (Its menu in
+        // words: Android's fonts have no ☰, U+2630.)
         BText {
             Layout.fillWidth: true
             visible: picker.phone
             text: picker.pick === "files"
-                  ? qsTr("The system's picker opens: ☰ switches between Downloads, the phone's storage, Google Drive and other apps; a long press selects several files.")
-                  : qsTr("The system's picker opens: ☰ switches between Downloads, the phone's storage, Google Drive and other apps. Android does not let apps take the whole Downloads folder or the top of the storage – choose a folder inside it, or type its path below.")
+                  ? qsTr("The system's picker opens: its menu (three lines in its top left corner) switches between Downloads, the phone's storage, Google Drive and other apps; a long press selects several files.")
+                  : qsTr("The system's picker opens: its menu (three lines in its top left corner) switches between Downloads, the phone's storage, Google Drive and other apps. Android does not let apps take the whole Downloads folder or the top of the storage – choose a folder inside it, or type its path below.")
             variant: "small"
             color: Theme.fgMuted
             wrapMode: Text.Wrap

@@ -442,6 +442,109 @@ ApplicationWindow {
                 }
             }
 
+            // What identifies a control's state (WCAG 1.4.11, ≥ 3:1), worst case over the
+            // surfaces it lies on: the off switch's solid track (pages, cards, sunken panels); in
+            // dark the segmented control's selection outline, its only frame there, against the
+            // track and the card (light: the white thumb); the calendar's discs on a day's number
+            // (the selected day, today) on the grids' page.
+            Specimen {
+                label: "STANY KONTROLEK (≥ 3:1)"
+                note: "najgorszy wynik na tłach, na których leżą"
+                Repeater {
+                    model: [
+                        { name: "przełącznik wyłączony", token: "borderControl", mark: Theme.borderControl, kind: "switch",
+                          on: [["bg", Theme.bg], ["bgElevated", Theme.bgElevated], ["bgSunken", Theme.bgSunken]] },
+                        { name: "wybrany segment", token: "borderControl", mark: Theme.borderControl, kind: "segmented", dark: true,
+                          on: [["bgSunken", Theme.bgSunken], ["bgElevated", Theme.bgElevated]] },
+                        { name: "kalendarz: wybrany dzień", token: "primary", mark: Theme.primary, fg: Theme.primaryFg, kind: "disc",
+                          on: [["bg", Theme.bg]] },
+                        { name: "kalendarz: dziś", token: "accentSolid", mark: Theme.accentSolid, fg: Theme.fgOnAccent, kind: "disc",
+                          on: [["bg", Theme.bg]] }
+                    ].filter(m => !m.dark || Theme.dark)
+                    delegate: Rectangle {
+                        id: stateSwatch
+                        required property var modelData
+                        width: 264
+                        height: 104
+                        radius: Theme.radius
+                        color: Theme.bgElevated
+                        border.width: 1
+                        border.color: Theme.border
+                        readonly property real worst: modelData.on.reduce((w, s) => Math.min(w, window.contrast(modelData.mark, s[1])), 99)
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 2
+                            Item {
+                                width: parent.width
+                                height: 32
+                                // Both states: the knob's cross and check say it besides the colour.
+                                Row {
+                                    visible: stateSwatch.modelData.kind === "switch"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: Theme.space3
+                                    BSwitch {
+                                        checked: false
+                                        Accessible.name: "wyłączony"
+                                    }
+                                    BSwitch {
+                                        checked: true
+                                        Accessible.name: "włączony"
+                                    }
+                                }
+                                BSegmented {
+                                    visible: stateSwatch.modelData.kind === "segmented"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    size: "small"
+                                    model: ["Miesiąc", "Tydzień"]
+                                    currentValue: "Miesiąc"
+                                    accessibleName: "Widok"
+                                }
+                                Rectangle {
+                                    visible: stateSwatch.modelData.kind === "disc"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 24
+                                    height: 24
+                                    radius: 12
+                                    color: stateSwatch.modelData.mark
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "14"
+                                        font.family: Theme.fontUi
+                                        font.pixelSize: Theme.textSm
+                                        font.weight: Theme.weightBold
+                                        color: stateSwatch.modelData.fg || Theme.fg
+                                    }
+                                }
+                            }
+                            Text {
+                                width: parent.width
+                                text: stateSwatch.modelData.name + " · " + stateSwatch.modelData.token
+                                color: Theme.fgMuted
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.textXs
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                text: "na " + stateSwatch.modelData.on.map(s => s[0]).join(", ")
+                                color: Theme.fgFaint
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.textXs
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: (stateSwatch.worst >= 3 ? "≥ 3:1 " : "✗ ") + stateSwatch.worst.toFixed(2) + ":1"
+                                color: stateSwatch.worst >= 3 ? Theme.successText : Theme.dangerText
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.textXs
+                                font.weight: Theme.weightSemiBold
+                            }
+                        }
+                    }
+                }
+            }
+
             Specimen {
                 label: "POWIERZCHNIE I MARKA"
                 Repeater {

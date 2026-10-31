@@ -48,7 +48,7 @@ import Brulion
 // A picture takes "links" | "outline" | "calendar" and "text" (its text view).
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
-// (daily notes by their date), `sidePanel`, `editing`, `toolbarDocked` and `sourceMode`. `--editor-script <state>` drives the
+// (daily notes by their date), `sidePanel`, `editing`, `toolbarDocked`, `endEditing()` and `sourceMode`. `--editor-script <state>` drives the
 // editor for screenshots through qml/dev/PageScript.qml.
 FocusScope {
     id: root
@@ -61,15 +61,28 @@ FocusScope {
     readonly property string journalDate: page.path !== "" ? Workspace.journalDate(page.path) : ""
     /// Top bar title: daily notes by their date; other pages use the shell's default (file name).
     readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : ""
-    /// A block (or the source) is being edited, or a picture fills the view: the shell hides
-    /// its floating capture button (it would float over the photo).
+    /// A block (or the source) is being edited, or a picture fills the view.
     readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute
     /// The editor's touch toolbar is docked at the bottom (on the keyboard, or on the phone's
-    /// bottom navigation once the keyboard went): the shell hides its capture button.
+    /// bottom navigation once the keyboard went).
     readonly property bool toolbarDocked: editor.toolbarVisible
+    /// The shell's quick capture from the bottom navigation: the editing the docked toolbar is for
+    /// ends first, as when the page is left.
+    function endEditing() {
+        editor.endTouchEditing()
+    }
     /// The page is shown as Markdown source (the shell turns the palette's block commands off).
     readonly property bool sourceMode: page.sourceMode && !root.pictureRoute
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
+    /// The tab this page's context panel showed last in the side panel ("": never shown).
+    property string sidePanelTab: ""
+    /// The side panel shows this page's linked references and unlinked mentions (wide windows,
+    /// the panel's rule in AppShell; no page pinned there; its Odnośniki tab): the section under
+    /// the blocks is not drawn a second time. Closing the panel, pinning a page there or another
+    /// tab brings it back at once.
+    readonly property bool refsInSidePanel: !root.inSidePanel && !Theme.narrow && AppController.sidePanelVisible
+                                            && !(AppController.sidePanelRoute && AppController.sidePanelRoute.view !== undefined)
+                                            && root.sidePanelTab === "links"
     readonly property alias controller: page
     readonly property alias editor: editor
 
@@ -377,6 +390,8 @@ FocusScope {
         // bound here for the rows made with the editor, then by the Binding below.
         propertiesExpanded: AppSettings.propertiesExpanded
         onPropertiesExpandedToggled: (expanded) => AppSettings.propertiesExpanded = expanded
+        // The header below shows the tags and aliases as chips while the panel is folded.
+        headerShowsListChips: true
         // The side panel is narrow: phone-like margins there.
         horizontalPadding: Theme.compact || root.inSidePanel ? Theme.space3 : Theme.space8
         bottomSpace: refsSection.visible ? root.refsGap + refsSection.height + Theme.space16 : Theme.space16 * 2
@@ -424,7 +439,9 @@ FocusScope {
         id: refsSection
         objectName: "pageReferences" // the shell's self-test reads linkedCount
         parent: editor.listView.contentItem
-        visible: page.loaded && !page.sourceMode && page.zoomBlock < 0 && page.path !== ""
+        // (Not drawn while the side panel shows the same references: refsInSidePanel. The model
+        // stays alive.)
+        visible: page.loaded && !page.sourceMode && page.zoomBlock < 0 && page.path !== "" && !root.refsInSidePanel
         x: editor.contentX + (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)
         y: (editor.listView.footerItem ? editor.listView.footerItem.y : 0) + root.refsGap
         width: editor.contentWidth - (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)
@@ -489,7 +506,18 @@ FocusScope {
             iconName: "panel-right"
             onTriggered: AppController.openPage(page.path, -1, true)
         }
+        // A page named by a tag in use: Zadania z tym tagiem (Widok tagu is the header's "#").
         BMenuItem {
+            objectName: "pageMenuTagTasks"
+            visible: root.pageHeader !== null && root.pageHeader.tagInUse
+            height: visible ? implicitHeight : 0
+            text: qsTr("Tasks with this tag")
+            iconName: "list-todo"
+            onTriggered: AppController.navigate({ view: "tasks", query: root.pageHeader.tagQuery(root.pageHeader.tagInfo.key) })
+        }
+        // The note mode (also the header's toggle on a wide header, Więcej, the palette).
+        BMenuItem {
+            objectName: "pageMenuNoteMode"
             text: page.documentMode ? qsTr("Switch to outline") : qsTr("Switch to document")
             iconName: page.documentMode ? "list" : "file-text"
             enabled: page.loaded
@@ -547,10 +575,15 @@ FocusScope {
     Component {
         id: sidePanelComponent
         ContentSidePanel {
+            id: contextPanel
             // A picture's references (the index knows the notes that embed it; nothing loads it).
             path: root.pictureRoute ? root.routePath : page.path
             controller: page
             editor: editor
+            // Its tab, for refsInSidePanel (made again with the remembered tab each time the side
+            // panel shows it).
+            onCurrentTabChanged: root.sidePanelTab = contextPanel.currentTab
+            Component.onCompleted: root.sidePanelTab = contextPanel.currentTab
         }
     }
 

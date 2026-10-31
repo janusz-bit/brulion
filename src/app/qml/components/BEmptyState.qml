@@ -12,7 +12,8 @@ import Brulion
 //   }
 //
 // Centre it in the empty area (anchors.centerIn / Layout.alignment). `compact` for small
-// panels (smaller icon, no circle).
+// panels (smaller icon, no circle); `alignStart` lines it up with a list's header above it
+// instead of centring it (a panel's empty section, usually without an icon: iconName "").
 ColumnLayout {
     id: root
 
@@ -23,6 +24,7 @@ ColumnLayout {
     property string actionIcon
     property string secondaryActionText
     property bool compact: false
+    property bool alignStart: false
     property int maximumWidth: 380
 
     signal actionTriggered()
@@ -35,7 +37,7 @@ ColumnLayout {
     Accessible.name: title
 
     Rectangle {
-        Layout.alignment: Qt.AlignHCenter
+        Layout.alignment: root.alignStart ? Qt.AlignLeft : Qt.AlignHCenter
         Layout.bottomMargin: root.compact ? 0 : Theme.space1
         visible: root.iconName !== ""
         implicitWidth: root.compact ? 40 : 64
@@ -56,7 +58,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.title !== ""
         text: root.title
-        horizontalAlignment: Text.AlignHCenter
+        horizontalAlignment: root.alignStart ? Text.AlignLeft : Text.AlignHCenter
         wrapMode: Text.Wrap
         font.family: Theme.fontUi
         font.pixelSize: root.compact ? Theme.textMd : Theme.textLg
@@ -68,7 +70,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.description !== ""
         text: root.description
-        horizontalAlignment: Text.AlignHCenter
+        horizontalAlignment: root.alignStart ? Text.AlignLeft : Text.AlignHCenter
         wrapMode: Text.Wrap
         lineHeightMode: Text.FixedHeight
         lineHeight: Theme.lineHeightPx(font.pixelSize)
@@ -78,7 +80,7 @@ ColumnLayout {
     }
 
     Flow {
-        Layout.alignment: Qt.AlignHCenter
+        Layout.alignment: root.alignStart ? Qt.AlignLeft : Qt.AlignHCenter
         Layout.topMargin: Theme.space2
         Layout.maximumWidth: root.width
         visible: root.actionText !== "" || root.secondaryActionText !== ""

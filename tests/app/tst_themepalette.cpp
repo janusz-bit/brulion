@@ -2,7 +2,8 @@
 // (every token of the default light and dark palettes), every accent preset and custom colour on
 // every surface of both modes passes the contrast checks (accent marks 3:1, accent text 4.5:1 on
 // each surface and on its own tint, white on the solid fill 4.5:1, text colours 4.5:1, control
-// borders 3:1 — on the page, cards and wells), malformed colours and unknown names fall back to the defaults, and the font
+// borders 3:1 — on the page, cards and wells), the modal scrim makes the page recede on every
+// surface, malformed colours and unknown names fall back to the defaults, and the font
 // pickers' family filter. GUI-free (QTEST_GUILESS_MAIN).
 #include "themepalette.h"
 
@@ -36,6 +37,8 @@ private Q_SLOTS:
     void unknownNamesGiveDefaults();
     void contrastOnEverySurface_data();
     void contrastOnEverySurface();
+    void modalScrimMakesThePageRecede_data();
+    void modalScrimMakesThePageRecede();
     void customAccentIsDerived_data();
     void customAccentIsDerived();
     void parseColor_data();
@@ -76,7 +79,8 @@ void TestThemePalette::defaultsAreTodaysColours_data()
                                                     {u"chipDueFg"_s, u"#2b5f8f"_s},
                                                     {u"chipScheduledFg"_s, u"#6a4f93"_s},
                                                     {u"chipReminderFg"_s, u"#7a4f00"_s},
-                                                    {u"chipRecurrenceFg"_s, u"#2a6e44"_s}};
+                                                    {u"chipRecurrenceFg"_s, u"#2a6e44"_s},
+                                                    {u"scrimModal"_s, u"#9ecbc9c4"_s}};
     QTest::newRow("dark slate red") << true
                                     << QVariantMap{{u"bg"_s, u"#1c2130"_s},
                                                    {u"bgElevated"_s, u"#232a3b"_s},
@@ -102,7 +106,8 @@ void TestThemePalette::defaultsAreTodaysColours_data()
                                                    {u"chipDueFg"_s, u"#b9d4ee"_s},
                                                    {u"chipScheduledFg"_s, u"#c7b5e2"_s},
                                                    {u"chipReminderFg"_s, u"#f5c66a"_s},
-                                                   {u"chipRecurrenceFg"_s, u"#8fd3a6"_s}};
+                                                   {u"chipRecurrenceFg"_s, u"#8fd3a6"_s},
+                                                   {u"scrimModal"_s, u"#b8080a10"_s}};
 }
 
 void TestThemePalette::defaultsAreTodaysColours()
@@ -214,6 +219,42 @@ void TestThemePalette::contrastOnEverySurface()
     const double l = relativeLuminance(a.accent), lh = relativeLuminance(a.accentHover);
     if (a.accent != Rgb{0, 0, 0} && a.accent != white)
         QVERIFY2(dark ? lh >= l : lh <= l, qPrintable(toHex(a.accent) + u" → "_s + toHex(a.accentHover)));
+}
+
+void TestThemePalette::modalScrimMakesThePageRecede_data()
+{
+    QTest::addColumn<bool>("dark");
+    QTest::addColumn<QString>("surfaceName");
+    for (const bool dark : {false, true}) {
+        for (const QString &s : surfaceNames(dark))
+            QTest::newRow(qPrintable(s)) << dark << s;
+    }
+}
+
+// The centred palette and dialogs: under scrimModal the page's text recedes (at most 3:1 against
+// the page under the same scrim — about 7:1 without it), and in light the panel's raised fill
+// stands out from the washed page by itself (dark: its borderStrong edge does that).
+void TestThemePalette::modalScrimMakesThePageRecede()
+{
+    QFETCH(bool, dark);
+    QFETCH(QString, surfaceName);
+    const Surface s = surface(surfaceName, dark);
+    const TextColors t = textColors(dark);
+    const Scrim scrim = modalScrim(dark, s, t);
+    const auto under = [&](const Rgb &c) { return over(scrim.color, scrim.alpha, c); };
+    const Rgb page = under(s.bg);
+    for (const auto &[name, fg] : {std::pair{"fg", t.fg}, std::pair{"fgMuted", t.fgMuted}}) {
+        QVERIFY2(contrast(under(fg), page) <= 3.0, qPrintable(describe(name, under(fg), page)));
+        QVERIFY2(contrast(under(fg), page) >= 1.4, qPrintable(describe(name, under(fg), page))); // still there
+    }
+    if (!dark)
+        QVERIFY2(contrast(s.bgElevated, page) >= 1.25, qPrintable(describe("bgElevated", s.bgElevated, page)));
+    else
+        QVERIFY2(contrast(s.borderStrong, page) >= 1.5, qPrintable(describe("borderStrong", s.borderStrong, page)));
+    // The map carries it as "#aarrggbb".
+    const QString expected = toHexArgb(scrim.color, scrim.alpha);
+    QCOMPARE(paletteMap(dark, surfaceName, surfaceName, u"red", u"").value(u"scrimModal"_s).toString(), expected);
+    QCOMPARE(expected.size(), 9);
 }
 
 void TestThemePalette::customAccentIsDerived_data()

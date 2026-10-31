@@ -30,6 +30,7 @@ qt_target_qml_sources(brulion
         qml/editor/PropertyRow.qml
         qml/editor/PropertyListValue.qml
         qml/editor/PropertyMenu.qml
+        qml/editor/PropertyChipMenu.qml
         qml/editor/EmbedView.qml
         qml/editor/TransclusionView.qml
         qml/editor/SuggestionPopup.qml

@@ -5,9 +5,10 @@ import QtQuick.Templates as T
 import Brulion
 
 // CalendarDayPanel — one day of the calendar: its date, the daily note (open / create), the
-// overdue tasks (on today), the day's entries as PlanningItemRows (tasks can be ticked off), and
-// "Add task" / "Add reminder" (both written into that day's journal by the view). Shown as a
-// side column on wide views and inside a bottom sheet on phones.
+// overdue tasks (on today), the day's entries as PlanningItemRows (open ones first; tasks can be
+// ticked off), and "Add task" / "Add reminder" (both written into that day's journal by the view)
+// — the day's actions as one even list of full-width rows under the date. Shown as a side column
+// on wide views and inside a bottom sheet on phones.
 //
 //   CalendarDayPanel { calendar: cal; date: cal.anchorDate
 //                      onItemOpened: (e) => AppController.openPage(e.path, e.line) … }
@@ -25,7 +26,7 @@ FocusScope {
     property bool scrollable: true
     /// The date heading (a sheet shows it in its own title).
     property bool showHeading: true
-    /// Empty space after the content (e.g. above a floating button).
+    /// Empty space after the content.
     property real bottomMargin: Theme.space4
 
     signal itemOpened(var entry)
@@ -44,6 +45,8 @@ FocusScope {
     readonly property var entries: date !== "" && calendar.revision >= 0 ? calendar.dayItems(date) : []
     readonly property var journal: entries.find(e => e.kind === "journal") || null
     readonly property var items: entries.filter(e => e.kind !== "journal")
+    /// The day's entries, open ones first (a stable partition: times keep their order).
+    readonly property var orderedItems: items.filter(e => !e.closed).concat(items.filter(e => e.closed))
     readonly property string heading: {
         const s = date !== "" ? DatesHelper.formatLong(date) : ""
         return s.length > 0 ? s.charAt(0).toLocaleUpperCase() + s.slice(1) : ""
@@ -101,27 +104,39 @@ FocusScope {
                 }
             }
 
-            // ---- Actions ---------------------------------------------------------------------
-            Flow {
+            // ---- Actions: one even list of full-width rows (icon and label), the icons in
+            // line with the date heading; 30 px rows with a mouse, 44 px on touch -------------
+            ColumnLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: Theme.space1
-                spacing: Theme.space1
-                BButton {
-                    size: "small"
+                spacing: 0
+                BListItem {
+                    objectName: "calendarDayJournal"
+                    Layout.fillWidth: true
+                    dense: true
+                    leftPadding: Theme.space2
                     iconName: "book-open"
                     text: root.journal ? qsTr("Open journal") : qsTr("Write in journal")
+                    Accessible.role: Accessible.Button
                     onClicked: root.journalOpened(root.date)
                 }
-                BButton {
-                    size: "small"
+                BListItem {
+                    objectName: "calendarDayAddTask"
+                    Layout.fillWidth: true
+                    dense: true
+                    leftPadding: Theme.space2
                     iconName: "plus"
                     text: qsTr("Add task")
+                    Accessible.role: Accessible.Button
                     onClicked: root.addTaskRequested(root.date)
                 }
-                BButton {
-                    size: "small"
+                BListItem {
+                    objectName: "calendarDayAddReminder"
+                    Layout.fillWidth: true
+                    dense: true
+                    leftPadding: Theme.space2
                     iconName: "bell"
                     text: qsTr("Add reminder")
+                    Accessible.role: Accessible.Button
                     onClicked: root.addReminderRequested(root.date)
                 }
             }
@@ -163,13 +178,14 @@ FocusScope {
 
             // ---- The day -----------------------------------------------------------------
             BSectionHeader {
+                id: dayHeader
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.space2
                 text: qsTr("Plan of the day")
                 count: root.items.length
             }
             Repeater {
-                model: root.items
+                model: root.orderedItems
                 delegate: PlanningItemRow {
                     required property var modelData
                     Layout.fillWidth: true
@@ -180,12 +196,16 @@ FocusScope {
                     onTokenMenuRequested: (item, x, y) => root.itemMenuRequested(modelData, item, x, y)
                 }
             }
+            // Nothing planned: a short note under "Plan dnia", in line with it (no picture: the
+            // panel stays a list, not an empty page).
             BEmptyState {
                 Layout.fillWidth: true
-                Layout.topMargin: Theme.space2
+                Layout.leftMargin: dayHeader.leftPadding
+                Layout.rightMargin: Theme.space2
                 visible: root.items.length === 0
                 compact: true
-                iconName: root.journal ? "book-open" : "calendar"
+                alignStart: true
+                iconName: ""
                 title: qsTr("Nothing planned")
                 description: root.journal ? qsTr("This day has a journal entry, but no dates or reminders.")
                                           : qsTr("Tasks and reminders you add here go into this day's journal.")

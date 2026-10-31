@@ -15,7 +15,10 @@ import Brulion
 // model: array of { value, text, icon } (or plain strings: value = text). One tab stop;
 // Left/Right/Home/End move the selection (activated(value) is emitted for user changes).
 // Bind currentValue to your state and update the state in onActivated (the binding is kept).
-// `fill: true` stretches segments to the control's width (equal widths).
+// `fill: true` stretches segments to the control's width, as evenly as their labels allow: the
+// narrow ones widen to one shared width, a wider label keeps its own (none is cut); when their
+// natural widths do not fit, the icons go first (the labels stay), then the labels share and elide.
+// `naturalWidth`: its width unfilled, icons included, whatever `fill` is (a settings row measures it).
 // `iconOnly: true` shows icons with the text as accessible name/tooltip.
 // `controlled: true`: the selection only ever follows currentValue's binding — for a segment
 // that may start an action instead of changing the state ("Other…" opening a picker that can
@@ -47,16 +50,48 @@ T.Control {
                 return i
         return -1
     }
-    /// Sum of the segments' natural widths (for `fill`).
-    readonly property real _implicitSum: {
+    /// The segments' natural widths (for `fill`; repeater.count: re-evaluated once they exist).
+    readonly property var _naturalWidths: {
+        const out = []
+        for (let i = 0; i < repeater.count; ++i) {
+            const segment = repeater.itemAt(i)
+            out.push(segment ? segment.implicitWidth : 0)
+        }
+        return out
+    }
+    /// Their sum.
+    readonly property real _implicitSum: _naturalWidths.reduce((sum, w) => sum + w, 0)
+    /// Filling: the width every narrower segment widens to, so that Σ max(natural, width) is the
+    /// available width (water-filling: the widest labels keep theirs, the rest share the room
+    /// left); -1 when the natural widths do not fit.
+    readonly property real _fillWidth: {
+        const widths = _naturalWidths.slice().sort((a, b) => b - a)
+        let room = availableWidth
+        let left = widths.length
+        if (left === 0 || _implicitSum > room)
+            return -1
+        for (let i = 0; i < widths.length && widths[i] > room / left; ++i) {
+            room -= widths[i]
+            --left
+        }
+        return room / left
+    }
+    /// The same with every segment's icon (whether it is shown or not).
+    readonly property real _withIconsSum: {
         let sum = 0
         for (let i = 0; i < repeater.count; ++i) {
             const segment = repeater.itemAt(i)
             if (segment)
-                sum += segment.implicitWidth
+                sum += segment.withIconWidth
         }
         return sum
     }
+    /// The width it takes unfilled, with every segment's icon — independent of `fill` (and of
+    /// the width it is given): what ShellSettingRow measures to put it beside its text.
+    readonly property real naturalWidth: _withIconsSum + leftPadding + rightPadding
+    /// The icons are shown: always, except a filling control whose segments would not fit with
+    /// them (a narrow phone) — the labels say the same.
+    readonly property bool iconsShown: iconOnly || !fill || _withIconsSum <= availableWidth
     readonly property int visualHeight: size === "small" ? Theme.controlHeightSm : Theme.controlHeight
     readonly property int hitHeight: Math.max(visualHeight, Theme.touchUi ? Theme.touchTarget : 0)
 
@@ -98,12 +133,15 @@ T.Control {
         }
     }
 
+    // The track: a sunken well. Dark: no frame — the well reads against the card and the
+    // selected thumb's outline is the control's only one; light: a quiet frame that keeps the
+    // control's shape on the paper page.
     background: Rectangle {
         implicitHeight: control.visualHeight
         radius: Theme.radius
         color: Theme.bgSunken
-        border.width: 1
-        border.color: Theme.border
+        border.width: Theme.dark ? 0 : 1
+        border.color: Theme.borderSubtle
     }
 
     contentItem: Item {
@@ -121,9 +159,13 @@ T.Control {
             width: target ? target.width : 0
             height: parent.height
             radius: Theme.radius - 2
-            color: Theme.dark ? Theme.bgElevated2 : Theme.bgElevated
+            // Dark: the raised surface lightened by 12 % of the text colour (slate ≈ #424858,
+            // ≈ 1.9:1 against the track instead of ≈ 1.36:1), so the choice reads at a glance as
+            // light's white thumb does; from tokens, so every surface and accent follows.
+            color: Theme.dark ? Qt.tint(Theme.bgElevated2, Theme.alpha(Theme.fg, 0.12)) : Theme.bgElevated
             border.width: 1
-            border.color: Theme.dark ? Theme.borderStrong : Theme.border
+            // Dark: a state border too (≥ 3:1 against the track, WCAG 1.4.11).
+            border.color: Theme.dark ? Theme.borderControl : Theme.border
             antialiasing: true
             Behavior on x { NumberAnimation { duration: Theme.duration; easing.type: Theme.easing } }
             Behavior on width { NumberAnimation { duration: Theme.duration; easing.type: Theme.easing } }
@@ -134,9 +176,13 @@ T.Control {
             }
         }
 
+        // The segments take the control's whole hit height (44 px on touch UIs: the insets and
+        // the padding above and below the track belong to them), while the thumb keeps the
+        // visual, padded rectangle.
         Row {
             id: row
-            height: parent.height
+            y: -control.topPadding
+            height: control.height
 
             Repeater {
                 id: repeater
@@ -148,18 +194,23 @@ T.Control {
                     readonly property bool isCurrent: index === control.currentIndex
 
                     height: row.height
-                    // Filling the width: every segment gets its own width plus an equal share of
-                    // what is left (or minus an equal share when they do not fit), so a long label
-                    // ("Cały notatnik") is not cut while short ones have room to spare.
-                    width: control.fill && control.items.length > 0
-                           ? (control._implicitSum > 0
-                              ? Math.max(0, implicitWidth + (control.availableWidth - control._implicitSum) / control.items.length)
-                              : control.availableWidth / control.items.length)
-                           : implicitWidth
+                    // Filling the width: every segment at least the shared width (_fillWidth), so
+                    // the short labels line up evenly and a long one ("Cały notatnik") is not cut;
+                    // when they do not fit, each its own width minus an equal share of the excess.
+                    width: !control.fill || control.items.length === 0 ? implicitWidth
+                           : control._implicitSum <= 0 ? control.availableWidth / control.items.length
+                           : control._fillWidth >= 0 ? Math.max(implicitWidth, control._fillWidth)
+                           : Math.max(0, implicitWidth + (control.availableWidth - control._implicitSum) / control.items.length)
                     // At least a touch target wide on touch UIs (icon-only and short labels).
                     implicitWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
-                                            (segmentIcon.width > 0 ? segmentIcon.width + (control.iconOnly ? 0 : segmentRow.spacing) : 0)
+                                            (segmentIcon.width > 0 ? iconRoom : 0)
                                             + (control.iconOnly ? 0 : segmentLabel.implicitWidth) + (control.iconOnly ? 16 : 24))
+                    /// The icon and the space after it (0 without an icon), shown or not.
+                    readonly property real iconRoom: (modelData.icon || "") === "" ? 0
+                        : (control.size === "small" ? Theme.iconSizeSm : Theme.iconSize) + (control.iconOnly ? 0 : segmentRow.spacing)
+                    readonly property real withIconWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
+                                                                   iconRoom + (control.iconOnly ? 0 : segmentLabel.implicitWidth)
+                                                                   + (control.iconOnly ? 16 : 24))
                     focusPolicy: Qt.NoFocus
                     hoverEnabled: !Theme.touchUi
                     text: modelData.text
@@ -180,7 +231,7 @@ T.Control {
                             BIcon {
                                 id: segmentIcon
                                 anchors.verticalCenter: parent.verticalCenter
-                                name: segment.modelData.icon || ""
+                                name: control.iconsShown ? (segment.modelData.icon || "") : ""
                                 size: control.size === "small" ? Theme.iconSizeSm : Theme.iconSize
                                 color: segment.isCurrent ? Theme.fg : Theme.fgMuted
                             }

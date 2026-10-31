@@ -28,22 +28,49 @@ components — no Material/Fusion look, so all targets look identical.
   UIs keep 44 px targets and never show the row), reduce motion. **Układ**: the sidebar's
   entries (Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj) and its sections
   Ulubione and Ostatnie can be unticked (the "Strony" tree stays; hidden views stay in the
-  command palette and their shortcuts); the phone's **bottom navigation**: four buttons, each
+  command palette and their shortcuts; ticked, Ulubione shows once a page is starred and
+  Ostatnie once another page was opened); the phone's **bottom navigation**: four buttons, each
   from a menu of Dziennik, Kalendarz, Szukaj, Zadania, Strony, Tagi, Graf (a view already in
-  another slot swaps places with it), Menu always last; the **quick note button** on or off;
+  another slot swaps places with it), Menu always last; the bottom bar's **+ Notatka** (the
+  quick note button) on or off;
   "Przywróć domyślny wygląd" (colours, fonts, sizes, density, line spacing — the visibility of
   elements stays). A family chosen on another device or since uninstalled falls back to the
   default font. The browser has no font rows (Qt there sees only its bundled DejaVu fonts).
 * Typography: system sans for UI (or a chosen family); the editor font is serif, sans or any
   installed family (Settings → Edytor → Czcionka → **Inna…**), the code font any monospaced
-  family (code blocks, source mode, formulas, calculations; inline `code` in rendered text keeps
-  Qt's own fixed font); line spacing Ciasny 1.45 | Normalny 1.65 | Luźny 1.9; configurable max
-  text width and text size.
-* Outliner look like Logseq: round bullets, thin vertical guide lines per nesting level, fold
+  family (code blocks, source mode, formulas; inline `code` in rendered text keeps Qt's own fixed
+  font); calculations are note text: the editor font at the editor's size, results with tabular
+  figures (`tnum`) so they still line up right-aligned, errors smaller in the UI font; line spacing Ciasny 1.45 | Normalny 1.65 | Luźny 1.9; configurable max
+  text width — Wąska 600, **Normalna 680** (the default, `Theme.measure`: about 85 characters of
+  16-px serif, Obsidian's comfortable measure), Szeroka 960, Pełna; the presets before 0.5.1
+  (640, 760) read as 600 and 680, other stored widths stay (the calendar's Agenda keeps 760,
+  `Theme.measureList`: its rows hold a time, a title and a page) — and text size. One type scale: note text quoted outside the editor (linked
+  references, tagged blocks under a page and in the side panel, `ContentRefRow`) is in the
+  editor font at the UI's base size (`textBase`), so the editor's own text is the only larger
+  size; search results show the page title (semibold, `fg`) and the snippet (`fgMuted`) both in
+  the UI font at `textBase`, told apart by weight and colour.
+* Inline tokens in rendered text are rounded shapes behind the words, not Qt's square text
+  backgrounds: `#tags` and the date / reminder / done / recurrence chips are pills (radius =
+  height / 2, the shape of the page header's tag chips, `BChip`), inline `code` and
+  `==highlights==` boxes with `Theme.radiusXs`; their colours, tints and the no-break space
+  inside each end are the renderer's ("The block editor"). Lists that cut their text (linked
+  references, Tasks, embeds, tables, query results) keep the square tint for now.
+* Backdrops of modal surfaces: sheets from an edge — bottom sheets, the full-screen palette on
+  phones, the drawer — dim the page (`Theme.scrim`: ink at 40 % in light, 62 % in dark); centred
+  panels that ask for a command or a decision — the floating command palette and quick switcher,
+  a centred `BDialog` — make it recede (`Theme.scrimModal`, `ThemePalette::modalScrim`: in light a
+  wash of the page colour tinted 22 % toward ink at 62 %, so page text falls from about 7:1 to
+  about 2.5:1 and the panel stands out by its lighter fill, ≥ 1.25:1, its shadow and its edge; in
+  dark the ink at 72 %, page text about 2:1). `tst_ui_themepalette` checks both on every surface.
+* Outliner look like Logseq: round bullets, thin vertical guide lines per nesting level
+  (`Theme.guide`, the `border` colour: visible but quiet, about Obsidian's 1.3:1; also from a
+  bullet down to its children), fold
   arrows, clicking a bullet zooms into the block (breadcrumb to zoom out; Enter in a zoomed
   heading or paragraph ends the zoom) — in outline mode; in document mode a note reads like an
-  Obsidian page (see "Note modes" below).
-* Touch (Android, `--touch`): targets ≥ 44 px, bottom navigation, drawer, an editing toolbar
+  Obsidian page (see "Note modes" below), its nested lists with the same guide lines.
+* Touch (Android, `--touch`): targets ≥ 44 px (the dense rows of navigation lists — the
+  sidebar and drawer's navigation, Ulubione, Ostatnie, the page tree — are exactly 44 px, the
+  iOS list minimum, other rows 48), bottom navigation, drawer, an editing toolbar
   docked on the on-screen keyboard (the bottom navigation makes way while the keyboard is up;
   when it goes, the navigation comes back and a toolbar that stays docks right on it), dialogs as
   bottom sheets on the keyboard ("On-screen keyboard" below).
@@ -51,23 +78,40 @@ components — no Material/Fusion look, so all targets look identical.
 ## Window layout (`qml/Main.qml`, `qml/shell/AppShell.qml`)
 
 * **Wide (≥ 900 px):** `SplitView` — left **sidebar** | **top bar** + current view | optional
-  right **side panel**.
+  right **side panel**. One 1-px hairline between them: the split handle's (`BSplitHandle`, which
+  also highlights on hover and while dragging); the sidebar and the side panel draw no edge of
+  their own there (the drawer keeps its edge).
   * Sidebar (`ShellSidebar`): the notebook's name, the **Przełącz notatnik** button (the
     `repeat` icon; a menu of the recent notebooks — the current one checked, one click switches
     — then „Dokumentacja Brulionu” and „Otwórz inny notatnik…” (the start screen); a recent
     notebook whose folder is gone is not recreated: a warning, and it leaves the list) and a
     new-page button; navigation Dziennik,
-    Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj; Ulubione; Ostatnie; Strony (the
-    folder tree — see "Folders" below); a sync status footer (opens the sync center).
+    Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj; Ulubione (shown once a page is
+    starred — the page header's ☆, the Więcej menu, a tree row's „Dodaj do ulubionych”, the
+    palette); Ostatnie (up to 5 pages opened lately, without the one shown — the tree highlights
+    that one —; hidden while there are none); Strony (the folder tree — see "Folders" below); a
+    sync status footer (opens the sync center).
   * Top bar (`ShellTopBar`): sidebar toggle, back / forward, the title (a breadcrumb for pages
     in folders), Szukaj, Paleta poleceń, Szybka notatka, side panel toggle and **Więcej** (⋮).
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's
     context — for pages and journals the tabs **Linki** (linked references and unlinked
     mentions), **Konspekt** (headings: a click scrolls to one, a right-click / long press copies
-    its link `[[Strona#Nagłówek]]` or its embed), **Kalendarz** (month with journal days).
-* **Narrow (< 900 px, phones):** the sidebar becomes a `Drawer` (the ☰ button, the bottom bar's
-  Menu, or a swipe to the right from the left edge; a swipe to the left on the drawer or the
-  scrim closes it). On touch UIs the swipe starts in a 24 px strip (`drawer.dragMargin`) that
+    its link `[[Strona#Nagłówek]]` or its embed), **Kalendarz** (month with journal days). While
+    the panel shows a page's **Linki** (`ContentSidePanel.currentTab`, copied into
+    `PageView.sidePanelTab`), the page does not draw its own references section under the blocks
+    (`PageView.refsInSidePanel`; the same linked references and unlinked mentions are on screen
+    in the panel, as the header's chips hide while the open properties panel shows them); closing
+    the panel, pinning a page there or switching to Konspekt / Kalendarz brings the section back
+    at once. Narrow windows have no side panel and always show the section.
+* **Narrow (< 900 px, phones):** the sidebar becomes a `Drawer` (the bottom bar's **Menu**, or a
+  swipe to the right from the left edge; the top bar's ☰ whenever the bottom navigation is not
+  there — a view whose own bar replaces it, the drawing editor, or the on-screen keyboard up; a
+  swipe to the left on the drawer or the scrim closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
+  navigation bars, and the sidebar's own insets (`topInset` = the SafeArea's top,
+  `bottomInset` = `AppShell.navigationBar`) keep the notebook row and the sync footer clear of
+  them — counted once: the Basic style pads a Drawer by the SafeArea margins itself, so the
+  shell sets its top and bottom padding to 0 (on Android the doubled bars cost about 190 px of
+  the tree). On touch UIs the swipe starts in a 24 px strip (`drawer.dragMargin`) that
   begins beyond what the system keeps at that edge: Android's gesture navigation takes a swipe
   from the very edge for "back" (`GestureInsets.left`, the system gesture insets reported by
   `ImeInsets.kt`, ~30 dp; 0 with button navigation), a display cutout or a system bar in
@@ -77,8 +121,9 @@ components — no Material/Fusion look, so all targets look identical.
   scrolling Flickable); Android's text selection handles are windows of their own above the app.
   While typing or selecting blocks (the keyboard up or an editing toolbar docked, also on the
   bottom navigation after the keyboard went) there is no strip: the drawer took the drag of the
-  selection's start grip, which lies at the left edge (☰ still opens it, a swipe on it still
-  closes it).
+  selection's start grip, which lies at the left edge (the top bar's ☰ opens it while the keyboard
+  is up, the bottom bar's Menu once the keyboard went, ☰ in the drawing editor; a swipe on it
+  still closes it).
   Nor on a view that swipes sideways from the left edge itself (the view's `edgeSwipe`,
   `ShellRouteView.viewEdgeSwipe`): the calendar's week and month grids reach that edge and a
   swipe to the right there shows the previous period; the agenda keeps the strip. While the
@@ -86,21 +131,38 @@ components — no Material/Fusion look, so all targets look identical.
   the drawer closes it instead of turning the period underneath. In a mobile browser
   (WebAssembly) nothing reports the system's zones, so the strip lies at the very edge, where
   Android's gesture navigation or the browser's own edge swipe (iOS Safari) may take the swipe
-  for "back" first — ☰ and the bottom bar's Menu open the drawer there. The strip follows the
+  for "back" first — the bottom bar's Menu opens the drawer there. The strip follows the
   UI mode (`Theme.touchUi`), not the pointer: a mouse or touchpad in a touch UI (a narrow window
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
-  touch UI it is Qt's default (the start-drag distance); the top bar keeps ☰, back (when there is history), title, Szukaj and Więcej;
-  a **bottom navigation** bar (by default Dziennik, Kalendarz, Szukaj, Zadania — four views
-  chosen in Settings → Wygląd → Układ — and Menu → drawer); a floating quick-capture button
-  (hidden while editing, or by the setting). The navigation makes way while the on-screen
+  touch UI it is Qt's default (the start-drag distance); the top bar keeps back (when there is
+  history), title, Szukaj and Więcej — no ☰ while the bottom navigation is shown, whose Menu
+  opens the same drawer (`ShellTopBar.menuButtonShown: !AppShell.bottomNavShown`); ☰ comes back
+  whenever that bar is away: a view replaces it (`viewReplacesBottomNav`: the drawing editor) or
+  the on-screen keyboard is up (it takes the bar's place, and there is no edge strip while
+  typing — without ☰ the drawer was out of reach until Back hid the keyboard; the title moves
+  over for it then); with no button before it the title starts on the views' content edge
+  (`Theme.space3` below 600 px, the editor's compact padding, `Theme.space4` up to 900 px);
+  a **bottom navigation** bar: Dziennik, Kalendarz, Szukaj, Zadania by default — four views
+  chosen in Settings → Wygląd → Układ —, then **+ Notatka** (quick capture, its accessible name
+  "Szybka notatka" holding the label: WCAG 2.5.3; its "+" sits in a small ringed pill, the old
+  floating button's popup surface scaled down, so it reads as an action and never as the
+  current view; off in the settings, capture stays in the palette and under Ctrl+Shift+N) and
+  Menu → drawer, always last. Every item is one `NavTab` (icon pill, label) of at least 48 px;
+  they share the width by their labels (`ShellBottomNav.widths`): evenly while every label fits
+  an even share, else a long label ("Kalendarz") gets what it needs (its semibold width and
+  4 px on each side, then 2 px) and the short ones ("Menu") share the rest, so at the larger text
+  sizes (Duży, Większy) and on 320-dp phones the names stay whole; only beyond that are the
+  widths scaled and the longest labels elide. Nothing floats over a phone's content; capture is wherever the bar is, settings, sync
+  and the graph included. The navigation makes way while the on-screen
   keyboard is up — when the keyboard goes while the editing goes on, it comes back and the
   editing toolbar docks right on it; a tap on one of its tabs then opens that view, the editing
-  ends as when leaving the page —, and for the drawing editor's tool bar, which takes its place;
-  the capture button makes way while typing: the keyboard up, or an editing toolbar docked
-  ("On-screen keyboard"). The Android back key /
+  ends as when leaving the page, and + Notatka ends the editing (the view's `endEditing()`, as
+  the toolbar's "Ukryj klawiaturę") before quick capture opens —, and for the drawing editor's
+  tool bar, which takes its place ("On-screen keyboard"). The Android back key /
   gesture walks back
   through the history; the app closes only from the home view. The drawer also lists
-  **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
+  **Importuj notatki** as the navigation's last entry (the import tab of `ImportExportView`), in
+  the same rhythm as the entries above it.
 * **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
   ulubionych, Zmień nazwę… (F2) and Przenieś do… (on a page route — a daily note opened as a page
   too —, not in the journal views by date: "Folders" below), Pokaż w drzewie (the
@@ -196,7 +258,11 @@ rename and move").
   folders first, then pages, in Polish order with numbers by value (`text::compareNames`, the
   same in All pages and on every platform); the journals folder first, with a calendar icon,
   its days by readable dates ("śr, 14 paź"), newest first, closed by default; attachments hidden
-  unless "Pokaż załączniki". Vault changes reach it as inserted and removed rows (never a reset
+  unless "Pokaż załączniki". Indent guides as in the outline: a row at depth *d* draws a 1-px
+  line under each ancestor's chevron (x = 14 / 10 px + `indent(level)` + half an icon), over its
+  full height, so the lines run on from row to row, below the row's background (the selected
+  row's pill covers them), in `Theme.guideOnSunken` (`borderStrong` in the light, `border` in the
+  dark: the tree lies on `bgSunken`); both densities and the 8-px steps below the fourth level. Vault changes reach it as inserted and removed rows (never a reset
   while rows stay: the list keeps its place, Syncthing's deliveries included); open folders are
   remembered per notebook (device-local), follow renamed and moved folders and are forgotten
   with deleted ones. A tap opens or closes a folder and opens a page; the open page or daily
@@ -220,7 +286,8 @@ rename and move").
   again (the drawer opened, the window's sidebar back) is placed too: a header that grew while
   it was hidden would leave the navigation scrolled out above the list.
 * **Menus**: right-click, press-and-hold, the Menu key, and on touch screens a "⋯" button on
-  every row (44 px; press-and-hold stays). A folder: Nowa strona tutaj, Nowy folder…, Pokaż
+  every row (44 px; press-and-hold stays), drawn faint (`fgFaint`, like the rows' icons; `fg`
+  while pressed) so the column of buttons stays quieter than the page titles. A folder: Nowa strona tutaj, Nowy folder…, Pokaż
   strony folderu (All pages in it), Szukaj w folderze (search in it), Przenieś do…, Eksportuj
   folder… (the export tab, folder scope), Zmień nazwę…, Przenieś do kosza (the confirmation
   counts its pages and warns for the notebook's special folders). A page: Otwórz w panelu
@@ -318,10 +385,9 @@ everything near the bottom, the same way on Android, in the browser and with a s
   where it was instead of dropping onto the keyboard after it came, and while it goes. In the
   browser the page is resized for the keyboard in one step: the navigation goes at once and
   comes back at once, fading in (`Theme.durationFast`; none with reduced motion) where the view
-  already made room for it, so the view and the toolbar move once. The floating capture button
-  makes way while typing — the keyboard is up, or an editing toolbar is docked in the view or
-  the side panel —;
-  without the bottom navigation (a wide touch window) the content then ends above the system's
+  already made room for it, so the view and the toolbar move once. While typing — the keyboard
+  is up, or an editing toolbar is docked in the view or the side panel —
+  without the bottom navigation (a wide touch window) the content ends above the system's
   navigation bar. That bar (`AppShell.navigationBar`, which the bottom navigation pads itself
   with) is the window's SafeArea margin — except one taller than any navigation bar (120 px, as
   `ViewportKeyboard::MinKeyboard`): on Android Qt's SafeArea counts the keyboard in at times (336
@@ -392,7 +458,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   toolbar on the keyboard, not at the day's bottom, while the list scrolls or is flicked),
   `tst_shell_qml` (the bottom navigation, the view's end, a sheet, a toast; editing with the
   keyboard hidden: the bottom navigation shown and the docked toolbar right on it, also over a
-  system navigation bar — the shell's `SafeArea.additionalMargins` —, the capture button away;
+  system navigation bar — the shell's `SafeArea.additionalMargins` —, + Notatka on the
+  navigation under it, a tap on it ending the editing and opening quick capture;
   the keyboard sliding in frame by frame leaving the navigation under it until covered, sliding
   away uncovering it, a keyboard shorter than the navigation leaving the toolbar where it was,
   a browser's keyboard — viewport samples, the page resized — taking it at
@@ -464,8 +531,8 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 |---|---|---|
 | `journals` (home) | `JournalsView` — the stream of daily notes, "Przejdź do dnia…", missed reminders banner (`ContentMissedBanner`: Otwórz, Drzemka, Zrobione — a task's reminder only: `reminders.complete(id)` marks the task done in the note like the status menu, the shell's toast "„…” — zrobione" confirms it; no undo step in an open editor, as with the snooze — and dismiss) | `date?` |
 | `journal` | `JournalsView`, one day (opened "jako strona") | `date`, `path?` |
-| `page` | `PageView` — page header (tags and aliases as chips, edited there: "Page properties"; note mode toggle, favourite, page menu with "Dodaj właściwość"; for a page named by a tag in use the tag strip: "Widok tagu", "Zadania z tym tagiem", its sub-tags as chips — with a rename at once), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "cała strona" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions. A page not written yet opens ready to type, except one opened from a `#tag` (`fromTag`, set by `Workspace::resolveRoute`) on a touch UI: the keyboard would cover the tagged blocks listed below, so the header's "Zacznij pisać" or a tap under it starts typing. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it | `path`, `line?`, `blockId?`, `heading?`, `open?`, `fromTag?` |
-| `calendar` | `CalendarView` — Miesiąc / Tydzień / Agenda, the day panel, add dialog | `date?`, `mode?` |
+| `page` | `PageView` — page header (tags and aliases as chips, edited there: "Page properties"; note mode toggle — on a wide header; a small one, phones and the side panel, leaves it to the page menu "⋯", the top bar's Więcej and the palette —, favourite, page menu with "Dodaj właściwość"; the page actions end the title row, and a page without one — it starts with its own "# Title" — puts them at the end of its chips' first line, the chips wrapping short of them, or on a row of their own when it has no chips; for a page named by a tag in use — with a rename at once, at every width — Widok tagu is a "#" button among the page actions before the note mode toggle, Zadania z tym tagiem is in the page menu "⋯" (also in Widok tagu and every `#tag`'s menu), and its sub-tags are chips under the title; no row of buttons comes between the title and the properties), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "cała strona" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions (that section is not drawn while the side panel shows them on its Linki tab: "Window layout"). A page not written yet opens ready to type, except one opened from a `#tag` (`fromTag`, set by `Workspace::resolveRoute`) on a touch UI: the keyboard would cover the tagged blocks listed below, so the header's "Zacznij pisać" or a tap under it starts typing. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it | `path`, `line?`, `blockId?`, `heading?`, `open?`, `fromTag?` |
+| `calendar` | `CalendarView` — Miesiąc / Tydzień / Agenda, the day panel, add dialog. In the month and week grids today is a red disc on its number (`accentSolid`) and the selected day a dark one (`Theme.primary` with `primaryFg`, as in `BDatePicker`; ≥ 3:1, WCAG 1.4.11 — today selected shows only the red one); no cell or header fills: the month's cells are one surface, days of other months have faint numbers (`fgFaint`, normal weight); an alarm's pill in the month is in the reminder's tint with its alarm clock. Done entries read as in Tasks and the editor: the "done" chip's fill and muted text with a small check, not struck out; cancelled ones are struck out with an x (the week grid's pills and the day panel's rows follow the same rule). In a month cell and in the day panel's "Plan dnia", open entries come first (a stable partition, times keep their order), so "+N więcej" hides finished ones first and a click on a pill opens the entry shown there. The day panel's actions (Otwórz dziennik / Pisz w dzienniku, Dodaj zadanie, Dodaj przypomnienie) are one even list of full-width rows (icon and label, buttons for accessibility; 30 px with a mouse, 44 px on touch) under the date, the icons in line with it. The day panel's empty "Plan dnia" is a short note in line with its header, without a picture | `date?`, `mode?` |
 | `tasks` | `TasksView` — quick add, filters, sections (Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione), "Pokaż jako zapytanie"; a click on a task's `#tag` filters the list, Ctrl+click opens the tag's page, a long press or right-click its menu (Filtruj po tagu, Otwórz stronę tagu, Widok tagu, Otwórz w panelu bocznym, Kopiuj tag); a right-click or long press on a chip: its token's menu ("Token and link menus") | `query?` |
 | `graph` | `GraphView` — whole / local graph (depth 1–2), toggles for tags (the "#tag" nodes of tags that name no page; a tag naming a page is an edge to it), missing pages, journals, templates. The layout is computed on a worker thread (in slices between frames in the browser) and unfolds over about a second at the display's frame rate (phones 60 fps): pan, zoom, select and drag work from the first frame, a dragged node follows the finger at once. Reduced motion: the layout is computed without animation and shown once; a fresh one shows a spinner (`graphModel.settling`) instead of a spiral that jumps — also when a filter, the local graph or the index changes before it is shown. Drawn through the scene graph (GPU) | `path?`, `depth?`, `select?` |
 | `search` | `SearchView` — results in a folder of any depth with `folder` (the tree's "Szukaj w folderze"; the route follows its renames and moves) | `query?`, `folder?` |
@@ -475,7 +542,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder (the system's picker, `FilePicker`; the browser's own, several files at once) / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles, what to export (notebook / folder / page), for the HTML and Pandoc formats **Obrazy z internetu**: Zostaw adresy / Dołącz kopie (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Pobieranie obrazów z internetu (1 z 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Eksportuj…, the progress card, save (the system's save picker, `FilePicker`; the browser's save picker or a download) | `tab?`, `importer?`, `files?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Zastąpiona z wiersza poleceń (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` | — |
-| `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled | `section?` |
+| `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |
 | `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
 | `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path`, `open?` (screenshots: `style`, `more`, `paper`, `theme`, `shape`, `select`, `backdrop` — the page picker of the backdrop's PDF) |
 
@@ -494,7 +561,17 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (no model resets).
 * `qml/editor/BlockEditor.qml`: a `ListView` of `BlockDelegate`s. An unfocused block shows its
   rendered rich text (links: `page:`, `tag:`, `block:`, `ext:`, `task:`, `reminder:` URLs; the
-  token menus' `date:`, `recur:`, `prio:` and `day:`).
+  token menus' `date:`, `recur:`, `prio:` and `day:`). A text with tinted spans (the renderer's
+  chips and tags, inline code, highlights: a `background-color` in its HTML) is shown by a
+  read-only rich-text `TextEdit` instead of a `Text` (`BlockText`): `RichTextPills`
+  (`src/app/editor/richtextpills.h`) gives its document the same fixed line height, takes the
+  spans' square background brushes off in the document's own change signal — before the next
+  frame — and keeps their colour and kind (a span with its own text colour is a pill, a
+  fixed-pitch one or any other a box) on the format, and lays one rectangle per line segment
+  out of the document's own layout, centred on the span's glyphs (its font's ascent and descent
+  around the baseline); a `Repeater` draws them under the text. Every other text stays a `Text`
+  (cheaper rows); clicks, long presses, right-clicks and the cursor shape go through the same
+  overlay for both (`BlockText.linkAt`).
   Clicking or tapping it edits it inline (`InlineEditor`: a `TextEdit` with the raw Markdown,
   minus the task marker / fences the delegate draws, and `MarkdownHighlighter`).
 * `PageController` executes commands (one undo step each, typing coalesced), saves debounced
@@ -663,7 +740,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   row's menu stays open unless its own task moves to another line.
 * A day without a note (journal stream or a single day) starts from the journal template; the
   note is created by the first change (`PageController.startNewPage`), never by looking at it.
-* Special block delegates: code (monospace), `calc` (input lines with right-aligned results),
+* Special block delegates: code (monospace), `calc` (input lines with right-aligned results, in
+  the note's font and size — results with tabular figures — on the sunken well with its
+  "Obliczenia" caption; the 1-px frame shows only while editing),
   table (grid editor with formula results; edits rewrite the Markdown table), `query` (live
   results with checkable tasks), math (`math`/`latex`/`tex` fences, the formula rendered from
   the LaTeX source, also as a list item of an outline or a journal; a formula between two `$$`
@@ -1301,7 +1380,7 @@ and diagrams (shapes, arrows, text), on every platform.
   never a blank picture. A `.md` file is read only when it is a plugin drawing. It runs in Qt
   Quick's image reader thread (the browser: the GUI thread) and only reads the file. A theme switch loads the other URL; `retainWhileLoading` keeps
   the shown picture — and the embed's frame its size — until it is there.
-* View contract: `title`, `editing` (no capture button over the paper), `toolbarDocked` (phones),
+* View contract: `title`, `editing` (always), `toolbarDocked` (phones),
   `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
 
 Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, the SVG, the dark
@@ -1669,10 +1748,17 @@ being typed ("```js" in the edited block) is closed first, as the save writes it
 note mode switch or an inserted template), so it never runs on over the page.
 
 **The panel** (`qml/editor/FrontmatterView.qml` → `PropertiesPanel.qml` → `PropertyRow.qml`,
-`PropertyListValue.qml`, `PropertyMenu.qml`, all for the leading frontmatter row's delegate):
+`PropertyListValue.qml`, `PropertyMenu.qml`, all for the leading frontmatter row's delegate; a
+chip's menu is `PropertyChipMenu.qml`, the page header's chips have the same one):
 
 * Folded (the default: the journal stream stays dense): "Właściwości", the count and a one-line
-  preview of the values ("status: w toku · koszt: 1200"). The header's tap switches it; whether
+  preview of the values ("status: w toku · koszt: 1200 · termin: czw, 29 paź" — a date or a date
+  and time as the open panel's date button shows it, `DatesHelper.formatShort`). On a page, whose
+  header shows the tags and aliases as chips while the panel is folded
+  (`BlockEditor.headerShowsListChips`, set by `PageView`), the preview leaves those properties out:
+  the tags are in the header while the panel is folded and in the panel while it is open, never
+  both (the count still counts them). A journal day in the stream has no such header and keeps
+  them in its preview. The header's tap switches it; whether
   it is open is a device setting (`AppSettings.propertiesExpanded`, key
   `editor/propertiesExpanded`; `BlockEditor.propertiesExpanded` bound by `PageView` and the
   journal days, `propertiesExpandedToggled` writes it), so a page stays open while it is edited,
@@ -1687,7 +1773,10 @@ note mode switch or an inserted template), so it never runs on over the page.
   take "3,5" and "1 200" (an invalid one: the field's error, nothing written). A checkbox writes
   each toggle. Dates open the editor's date dialog (`EditorDialogs.pickPropertyDate`: the key as
   title, natural language "jutro", the clock for a date and time, "Wyczyść"). Lists, tags and
-  aliases are chips (× removes; a `[[Page]]` item and a tag open their page) with "+": a field
+  aliases are chips (a `[[Page]]` item and a tag open their page; × removes — on touch UIs the
+  chip's menu, as the page header's chips: a press and hold on any chip, a tap on one that opens
+  nothing, with its page or tag page, "Kopiuj" and "Usuń" and "Cofnij" in the toast; the chip has
+  no × there, its 44-px target made each chip 44 px wider; Delete on a focused chip everywhere) with "+": a field
   where Enter or "," adds (a pasted "a, b, c" adds three) and stays open, Backspace in the empty
   field takes the last chip, Ctrl+Z there undoes; what cannot be added (an alias with `|`, a tag
   that is none) is said under the field, and in a toast when the field is left. Fields commit on
@@ -1697,7 +1786,8 @@ note mode switch or an inserted template), so it never runs on over the page.
   pane, the page's own save) re-renders the rows and must not replace what is typed — and writes
   only what differs from it, so a value opened and left as it was keeps its form (a `|` text,
   `ilosc:: 1.50`).
-* The row's menu (its type icon, a right-click or a long press on the row, the Menu key /
+* The row's menu (its type icon, a right-click or a long press on the row — not on a chip, which
+  has its own menu —, the Menu key /
   Shift+F10): "Typ" (Tekst, Liczba, Pole wyboru, Data, Data i godzina, Lista; tags and aliases keep
   theirs — a value that cannot be converted is cleared with "Cofnij" in the toast; an empty value's
   type is remembered for the session, `BlockEditor.propertyTypeOverride`, a list is written `[]`),
@@ -1716,11 +1806,27 @@ note mode switch or an inserted template), so it never runs on over the page.
 * A block Brulion cannot edit safely (an indented mapping, plain text between `---` lines) shows
   its values read-only: "Tych właściwości nie da się bezpiecznie zmieniać w polach." with
   "Edytuj jako tekst".
-* Layout: a wide panel puts the keys in a column (as wide as the widest key, 96 px to 30 % of the
-  panel; rows 32 px, 28 dense); a narrow one (`Theme.compact` or under 480 px: phones) stacks the
-  key over the value, every control a 44 px target. Heights are bindings (rule 1 of "Scrolling
-  performance": the rows' heights summed, the chips' lines computed), rows live in a `ListModel` by
-  key so an edit keeps them (a focused field too).
+* Layout: the type icon and the key in a column (as wide as the widest key, at least 96 px; keys
+  and values at the UI text size, so a value opened for editing keeps its size; list
+  items are filled chips, a page link marked by its page icon; on touch UIs a chip is at least
+  44 × 44, and the list's "+" never starts a line alone — the last chip goes down with it,
+  `PropertyListValue.placement`) beside the value — on phones too, rows 44 px on touch UIs (32 px,
+  28 dense, with a mouse), list rows too: a value's line is centred in the row's height
+  (`PropertyRow.valuePadding`; a list's chip line is its tallest item, `PropertyListValue.lineHeight`
+  — the chips' 44-px targets on touch UIs, the 28-px "+" with a mouse), so a list of two lines is
+  92 px on touch UIs, one line always the row's height. The key goes over the value (every row of
+  the panel) only where the two columns would cut a key or squeeze the value: the widest key does
+  not fit 40 % of the panel ("ostatnia aktualizacja" on a phone; a touch screen has no tooltip to
+  read a cut key), or the value column would be narrower than ~168 px (a narrow side panel) —
+  `PropertiesPanel.stacked`; a key is never elided beside its value. Every control and tap area is a 44 px target on touch
+  UIs: the key's whole cell (a tap focuses the row, a double tap renames), the value's whole cell
+  (a text, a number, a date button: the row's padding included). The open panel is a sunken surface
+  in light and a raised one in dark (`bgElevated`: lighter reads as raised there, the sunken fill
+  barely parted from the page), without a frame (the focus border while its text is edited), 24 px above the first block under
+  it (folded or open, in both modes, also under a page title drawn above the panel;
+  `BlockDelegate.belowProperties`). Heights are bindings (rule 1 of
+  "Scrolling performance": the rows' heights summed, the chips' lines computed), rows live in a
+  `ListModel` by key so an edit keeps them (a focused field too).
 * Keyboard: rows take the focus (Tab); ↓ / ↑ move between them (past the last: the add row), → or
   Enter edits the value, ← or F2 renames, Delete or Ctrl+Backspace removes, Alt+↓ goes to the first
   block, Ctrl+; adds, Ctrl+Z / Ctrl+Shift+Z undo and redo, Escape returns to the editor. A field
@@ -1747,7 +1853,11 @@ index's summary. A right-click or a long press on a chip from a property opens i
 alias" (a field at the end of the row — tags suggested —, Enter adds and stays open, Escape
 closes; leaving it adds what it holds, a refusal said in a toast) and "Dodaj właściwość…". The
 header is the editor list's header, so in source mode (Ctrl+E: the list is hidden) neither the
-chips nor "+" are shown — the source text is edited directly there.
+chips nor "+" are shown — the source text is edited directly there. While this page's properties
+panel is shown and open (`BlockEditor.propertiesExpanded`, `pageProperties.visibleRow` ≥ 0) the
+header's row is not shown either: the panel right below it has the same chips with the same actions
+(a tag opens its page, × removes, "+" on the tags and aliases rows adds, the panel's "+" adds a
+property, the row menu copies a value); folded, the header's row is back.
 
 **C++** (`PageController`, `src/app/editor/pagecontroller_properties.cpp`): `pageProperties`
 { items, tags, aliases, canAdd, addTarget, hasYaml, hasLogseq, editable, problem, visibleRow,
@@ -1777,14 +1887,22 @@ refusals, suggestions, the roles), QML `tst_editor_qml_properties` / `_touch` (r
 Every page and daily note has a mode — docs/SYNTAX.md §4 "Tryb notatki": the frontmatter key
 `brulion: document | outline`, else the notebook's journal / page default and a content
 heuristic (`markdown::resolveNoteMode`). Both modes edit the same `BlockDocument` with the same
-inline editor; only the layout and a few keys differ.
+inline editor; only the layout and a few keys differ. It is switched by the page header's toggle
+on a wide header (its icon shows the mode), the page menu "⋯" ("Przełącz na konspekt / dokument"
+— on phones and in the side panel the only place in the header), the top bar's Więcej and the
+palette ("Przełącz tryb notatki").
 
 * **Konspekt** (outline, like Logseq) — the block editor above: a bullet for every block, guide
   lines, folding, zoom into a bullet, Tab indents.
 * **Dokument** (document, like Obsidian's live preview) — the note reads as one continuous
   formatted document: no bullets or guide lines for paragraphs and headings; headings large with
-  document spacing; paragraphs as normal text; lists as ordinary Markdown lists inside the flow
-  (bullets, numbers, checkboxes, indented per nesting level); a comfortable maximum text width.
+  document spacing (`BlockEditor.headingGapAbove`: 1.8 / 1.5 / 1.25 / 1.05 em above an H1 / H2 /
+  H3 / smaller heading, `headingGapBelow` 0.6 em under every one — clearly closer to what follows,
+  with air on both sides); paragraphs as normal text; lists as ordinary Markdown lists inside the flow
+  (bullets, numbers, checkboxes, indented per nesting level, with a thin guide line per nesting
+  level — `Theme.guide`, as in the outline — at each ancestor level's marker centre, under a
+  number's column, and from a parent's marker down to its children; never through an item's own
+  marker); a comfortable maximum text width.
   Clicking a paragraph, heading or list item edits its raw Markdown in place, exactly like the
   block editor's inline editing (rendered text everywhere else, no layout jump). Tables, calc,
   code, callouts, embeds, queries and the frontmatter properties work as in outline mode. No
@@ -1819,8 +1937,9 @@ key as one undo step and save at once; `leaveList()` and `toggleList()` are the 
 commands (`BlockDocument::convertToParagraph`). In the document mode the model ignores folds
 (`BlockListModel::setFoldingEnabled(false)`; they come back in the outline) and there is no
 zoom. `BlockEditor.documentMode` switches the delegates' layout: `gutter` = `documentInset` (0
-on pages), a marker column of `listIndent` per list level (bullets drawn as disc / circle /
-square by depth, numbers from the `listMarker` role, task checkboxes in place of the bullet),
+on pages), a marker column of `listIndent` per list level (the same small round bullet at every
+depth — nesting shows in the indent —, numbers from the `listMarker` role, task checkboxes in
+place of the bullet),
 heading sizes relative to the text size, and spacing from the `prevKind` role (paragraph gaps,
 tight list items, air above headings, a little more above a frame right under a heading).
 Rendered text and the inline editor have the same line boxes (the rendered height is counted in
@@ -1980,7 +2099,10 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 ## Shared components (`qml/components/`)
 
 `BButton`, `BIconButton`, `BTextField`, `BSuggestField` (a field with a suggestion list: key and value suggestions of the properties panel), `BTextArea`, `BSearchField`, `BSwitch`, `BCheckBox`,
-`BChip`, `BBadge`, `BTabBar`/`BTabButton`, `BSegmented`, `BBreadcrumb`, `BCard`, `BListItem`,
+`BChip`, `BBadge`, `BTabBar`/`BTabButton`, `BSegmented`, `BBreadcrumb`, `BCard` (`elevation`,
+`tone`, `clickable`; `flat`: no surface, border, shadow or padding — settings groups on phones),
+`BListItem` (`subtitleInline`: the subtitle after the title on the title's baseline, the row one
+line high — the floating palette's rows),
 `BSectionHeader`, `BKbd`, `BText`, `BDialog` (bottom sheet on narrow windows),
 `BConfirmDialog`, `BMenu`/`BMenuItem`/`BMenuSeparator`, `BToast` (+ `BToastHost`; the message is
 plain text),
@@ -2003,7 +2125,11 @@ quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00
 `ThemePalette` makes of it), `BFontPickerDialog` (installed font families with fuzzy search, each
 row in its own font, the default first), `BDiffView`,
 `BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BPalette` with `BCommandPalette` and
-`BQuickSwitcher`, `BKeyboardFocusKeeper` (the focused form field above the on-screen keyboard,
+`BQuickSwitcher` (floating on wide windows: one-line rows, a subtitle such as a page's folder after
+the title, over `Theme.scrimModal`, the list as many whole rows high as fit — measured from the
+rows the view has created, a row it released after scrolling counting as one of those, so the
+list keeps its height however far it scrolls; full screen on compact ones: two-line rows over
+`Theme.scrim`), `BKeyboardFocusKeeper` (the focused form field above the on-screen keyboard,
 "On-screen keyboard"), `BKeyboardPlaceholder` (a simulated keyboard's grey block). Icons: SVGs in
 `assets/icons/` (Lucide, ISC licence) via `BIcon`.
 
@@ -2021,6 +2147,7 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
 
 * **Theme** (`Theme` singleton): every colour, font, size, radius, duration comes from it —
   semantic colours (`bg`, `bgElevated`, `bgSunken`, `fg`, `fgMuted`, `fgFaint`, `border*`,
+  `guide` / `guideOnSunken` (indent guides; aliases of the border tokens),
   `accent`, `link`, `tag*`, `chip*` via `Theme.chip(kind)`, `selection`, `focusRing`,
   `danger*`/`warning*`/`success*`, `diff*`), typography (`fontUi`, `fontEditor`,
   `fontMono`, `text*` sizes), spacing `space1…space16`, radii, `elevation(level)`,
@@ -2056,6 +2183,31 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   `onLongPressed`); a right-click `TapHandler` also sets `acceptedDevices: PointerDevice.Mouse |
   PointerDevice.TouchPad | PointerDevice.Stylus` — Qt hands finger touches (no buttons) to a
   TapHandler whatever its `acceptedButtons`, so without it every tap opened the menu.
+  Settings cards (`SettingsView`'s groups, the sync section) divide their rows with 1-px
+  `borderSubtle` hairlines (`ShellSettingDividers`, drawn over the card's column: none under a
+  row without controls that titles what follows, none above a plain note); every title — a
+  switch's too — starts at the card's one left edge; a control sits at the row's right edge,
+  vertically centred on the title and description, as the switches do. On compact windows
+  (< 600 px) a row puts its control under the text only when it does not fit beside it
+  (`ShellSettingRow.stacked`: the title, a gap and the controls' natural widths —
+  `naturalWidth` of `BSegmented` and `BButton`, which `fill` never changes — wider than the row,
+  the text left under 40 % of it, or a wrapping group such as the accent swatches, or a text
+  field); each row decides alone (at 412 px Jasne tło, Ciemne tło and Czcionka interfejsu stay
+  beside their text, Motyw, Rozmiar tekstu and the swatches go under it; at 360 px Ciemne tło
+  goes under too; a long translation stacks by itself). Under its text a control fills the row:
+  a segmented control (its segments as even as their labels allow: the narrow ones share one
+  width, none is cut) and a lone framed button (one beside a badge or another button, and a text
+  button, keep their width), so every row ends at the same right edge. A segmented control's selected segment
+  is a raised thumb on the sunken track: the raised surface in light; in dark that surface
+  lightened by 12 % of the text colour with a `borderControl` outline, clearly lighter than the
+  track. The track has a quiet `borderSubtle` frame in light (the control keeps its shape on
+  the paper page) and none in dark: there the well reads against the card and the selection's
+  outline is the control's only one. An off `BSwitch` is a solid `borderControl` track (≥ 3:1
+  on `bg`, `bgElevated` and `bgSunken`, WCAG 1.4.11; `fgFaint` under the mouse), an on one the
+  `link` colour; its knob says the state as well (WCAG 1.4.1): a Lucide check when on, a cross when
+  off, in the track's colour (12 px in the 18-px touch knob, 10 px in the 14-px one; on: `link`
+  on the knob 5.7:1 in light and 8.7:1 in dark, off: `borderControl` 3.5:1 and 3.4:1); the
+  gallery's "Podstawy" checks both marks live and shows both states ("STANY KONTROLEK (≥ 3:1)").
   Touch keyboards: `BTextField` asks for the action key Done (`EnterKey.type: Qt.EnterKeyDone`).
   Qt on Android otherwise shows Next whenever something focusable lies below a field, and Next
   only moves the focus: Enter and `accepted()` never arrive. Forms whose fields lead to the next
@@ -2278,14 +2430,15 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--share <json>` | receive a share as Android's `ShareActivity` hands it over — `{"subject", "text", "url", "files": [{"path", "name", "mime"}]}` (`src/core/notebook/share.h`) — and open the share dialog once the notebook is ready (`AppController::receiveShare`; screenshots, manual checks, ctest `tst_shell_share`) |
 | `--share-query <query>` | the browser version's share target: `share-title=…&share-text=…&share-url=…` as `wasm/index.html` passes a share launch's parameters (`notebook::sharedContentFromQuery`, `AppController::receiveShareQuery`); works on every platform (ctest `tst_shell_share`) |
 | `--open <file>…` | the files to offer in the share dialog ("Otwórz za pomocą": the desktop entry's `Exec=brulion --open %F`, the Windows installer's `"…\brulion.exe" --open "%1"`): every argument after it is a file — paths relative to the working folder or `file://` URLs —, never an option, the options are the arguments before it (`notebook::splitOpenArguments`); a file of the open notebook opens as its page; copies are saved, the files are never changed; without files a plain start. A second launch sends them to the running Brulion (`share`, ipc/appmessage.h) |
-| `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer` |
+| `--popup <name[:query]>` | open a shell popup once the notebook is open and indexed (at most 3 s later without one): `palette`, `switcher` (the query as if typed, the caret after it), `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer` |
 | `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `select-range:<first>..<last>` — on touch UIs in the selection mode —, `mode-tooltip`, `properties` — the page's properties panel expanded, nothing focused, the view at the top: the `ui` benchmark's screen —, …) |
-| `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
+| `--screenshot <file> [--delay <ms>]` | save the window after loading and quit; with `--popup` also once that popup has opened — its enter transition over, so a shot never catches it half faded in (`DevTools.holdScreenshot`; at most 5 s longer, then with a warning) |
+| `--dump-layout <file>` | with `--screenshot`: write what the window shows (texts with colours and fonts, targets, boxes, theme tokens) as JSON for the UI benchmark (`src/app/ui/layoutdump.h`), from the same frame |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--accent <name\|#rrggbb>`, `--surface paper\|white\|slate\|black`, `--density compact\|comfortable` | the appearance settings for this run (screenshots; the settings themselves stay): accent preset or custom colour, light or dark background, density |
 | `--keyboard <px>` | a simulated on-screen keyboard of that height (`KeyboardInsets.simulated`; 0 = none, and a real one is ignored), drawn as a grey block of keys |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the drawer's edge swipe (`--touch`: a finger from the left edge opens it, to the left closes it, with a simulated gesture-navigation zone (`GestureInsets.simulate`) from beyond it; a vertical scroll and a swipe farther in leave it closed, a tap in the strip reaches the button under it, no strip while blocks are selected or the keyboard is up, so the selection's start grip at the left edge keeps its drag — the drawer opened by its button still closes with a swipe —, nor on the calendar's week and month grids, whose swipe from the left edge — not a fast flick — shows the previous period, and the drawer opened over them closes with a swipe); the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click opens the tag's page, a long press its menu — "Filtruj po tagu", its "Otwórz stronę tagu" opens the page; a row of the tag list opens the page, its button the overview); in Tasks a due date's chip has the date menu, whose "Dzień później" writes the task's note; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); a drawing (a tap / click on its embed opens the drawing editor, a stroke drawn with a finger — `--touch` — or the mouse is saved by itself with its undo kept, Cofnij / Ctrl+Z is saved too, the page's embed shows the drawing saved again; a text being written low on the paper stays on it when the window shrinks — a browser's keyboard); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back); Settings → Wygląd (the logo's colours by default, a tap on an accent swatch recolours the app and is saved, a colour typed in the accent dialog, a sidebar entry unticked leaves the sidebar — the drawer on phones — and stays in the palette, a bottom navigation slot takes a view from its menu and the phone's bar shows it — the view it already has, picked again, stays checked —, the quick note button switched off and on, "Przywróć domyślny wygląd"; Edytor → Czcionka → "Inna…" cancelled leaves the selection where it was and opens the picker again, a missing family names the serif or sans-serif font used instead); the share dialog ("Udostępnij → Brulion": shared text saved to today's journal by a real tap / click on "Zapisz" without a reminder, a shared `.md` saved as a new page titled after it byte for byte and its copy removed, a file opened with Brulion from outside the notebook — the "to save in the notebook" subtitle and the copy hint, saved as a page byte for byte, the file itself left unchanged —, Escape dropping a share) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, the command palette's and quick switcher's rows (one line high while floating, a subtitle beside the title; two lines on a phone), and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the drawer's edge swipe (`--touch`: a finger from the left edge opens it, to the left closes it, with a simulated gesture-navigation zone (`GestureInsets.simulate`) from beyond it; a vertical scroll and a swipe farther in leave it closed, a tap in the strip reaches the button under it, no strip while blocks are selected or the keyboard is up, so the selection's start grip at the left edge keeps its drag — the drawer opened by its button still closes with a swipe —, nor on the calendar's week and month grids, whose swipe from the left edge — not a fast flick — shows the previous period, and the drawer opened over them closes with a swipe); the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag overview's "#" in its header — the page menu's "Zadania z tym tagiem" opening Tasks filtered by the tag, no row of buttons under the title, a tag's sub-tags as chips there —, back returns; in Tasks a click filters, Ctrl+click opens the tag's page, a long press its menu — "Filtruj po tagu", its "Otwórz stronę tagu" opens the page; a row of the tag list opens the page, its button the overview); in Tasks a due date's chip has the date menu, whose "Dzień później" writes the task's note; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); a drawing (a tap / click on its embed opens the drawing editor, a stroke drawn with a finger — `--touch` — or the mouse is saved by itself with its undo kept, Cofnij / Ctrl+Z is saved too, the page's embed shows the drawing saved again; a text being written low on the paper stays on it when the window shrinks — a browser's keyboard); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back); Settings → Wygląd (the logo's colours by default, a tap on an accent swatch recolours the app and is saved, a colour typed in the accent dialog, a sidebar entry unticked leaves the sidebar — the drawer on phones — and stays in the palette, a bottom navigation slot takes a view from its menu and the phone's bar shows it — the view it already has, picked again, stays checked —, the quick note button switched off and on, "Przywróć domyślny wygląd"; Edytor → Czcionka → "Inna…" cancelled leaves the selection where it was and opens the picker again, a missing family names the serif or sans-serif font used instead); the share dialog ("Udostępnij → Brulion": shared text saved to today's journal by a real tap / click on "Zapisz" without a reminder, a shared `.md` saved as a new page titled after it byte for byte and its copy removed, a file opened with Brulion from outside the notebook — the "to save in the notebook" subtitle and the copy hint, saved as a page byte for byte, the file itself left unchanged —, Escape dropping a share) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-row-bar`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — or the thumb of the view's `BRowScrollBar` jumps (against the content, or while it stands still) — with `--probe-row-bar` also when the view has no such bar over it —, ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
@@ -2349,6 +2502,171 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
 On the laptop: `scripts/remote-build.sh -n ui brulion --run 'BRULION_BIN=$BRULION_BUILD_DIR/src/app/brulion
 tests/app/shell/screenshots.sh' --pull tests/screenshots`. Fast QML iteration: configure a
 separate build directory with `-DQT_QML_NO_CACHEGEN=ON`.
+
+### UI benchmark (Brulion vs Obsidian)
+
+`tests/app/uibench/` compares Brulion's screens with the real Obsidian's, reproducibly: the same
+notebook, window sizes, themes, fonts, clock and language for both, a screenshot and a layout dump
+of every screen in both apps, objective metrics computed from them, and a blind judge panel
+scoring a fixed rubric. It drives the loop that improves Brulion's look screen by screen
+(Obsidian's binaries and screenshots never enter the repository: they live in
+`/home/nixos/workspace/brulion-work/uibench/round-NN/` on the development machine and, in the
+GitHub fallback, in a 3-day artifact of a throwaway branch).
+
+Files: `screens.json` (the screens: Brulion's command-line arguments, Obsidian's steps, the
+judges' context; checked by `brulion-uimetrics check-manifest`), `bench.sh` (runs everything),
+`prepare-vault.sh` (the notebook), `fonts.sh` (the pinned fonts), `obsidian-shots.mjs` (the
+Obsidian driver), `brulion-uimetrics` (`uimetrics.h`: the metrics), `judge.mjs` (packs blind
+batches, scores the judges' votes), `rubric.md` (the judges' instructions), `lint.sh` +
+`lint-allow.json` (the regression guard), `vault/` (the overlay notes), `obsidian/` (Obsidian's
+vault settings, the Calendar plugin's hashes).
+
+**Fair conditions.**
+
+| Condition | Brulion | Obsidian |
+|---|---|---|
+| Version | the working tree (git revision in the manifest) | the official 1.14.4 AppImage, sha256 checked (`appimage-run -w` on NixOS, `--appimage-extract` elsewhere) |
+| Notebook | a fresh copy of `vault-brulion` per shot | a copy without `.brulion/`, with `.obsidian/` (daily notes in `journals/`, the Calendar plugin 1.5.10) |
+| Sizes | desktop 1280×800 at 1×, phone 412×915 at 2× (`--size`, `--scale`, `--touch`) | the same viewport and scale through `Emulation.setDeviceMetricsOverride`; phone: `EmulateMobile` (the mobile layout, `body.is-phone`) |
+| Themes | `--theme light\|dark` | the setting "Schemat kolorów" set to Jasny / Ciemny (`app.vault.setConfig('theme')` + `app.updateTheme`; a "Use light/dark mode" command when the version has one, never the toggle) |
+| Language | `--locale pl` | Polish (`localStorage.language`, else the setting and a restart; English is flagged) |
+| Clock | `--now "2026-10-14 10:00"`, `TZ=Europe/Warsaw` | a running `Date` shifted to that instant (`Page.addScriptToEvaluateOnNewDocument`) and the zone override |
+| Fonts | `FONTCONFIG_FILE=<out>/env/fonts.conf`: Noto Sans / Serif / Sans Mono, Noto Color Emoji, DejaVu (nixpkgs), grayscale antialiasing, slight hinting | the same file, `--disable-lcd-text` |
+| Rendering | offscreen + software (the realism check `--render xcb-gl`: Xvfb + OpenGL/llvmpipe) | `--disable-gpu`, `--force-color-profile=srgb`, on Xvfb's display (`--ozone-platform=x11`) without the caller's desktop session (no Wayland, session bus or keyring: `--password-store=basic`), a DevTools port of its own (read back from the profile: another Obsidian on the machine is never driven) |
+| Settings | defaults (fresh XDG home) | defaults (fresh `--user-data-dir`, `HOME`, `XDG_*`): Live Preview, readable line length; the settings screen in the main window (1.14 opens them in a window of their own: one 1280×800 picture like Brulion's) |
+| Pointer | none (offscreen) | desktop: moved outside the page before each shot (no hover highlight); phone: touch emulation (no pointer) |
+| State between screens | a fresh process and home per shot | one session per size; before each screen the session's starting state comes back: the phone's drawers closed by Obsidian itself (opening one slides the navigation bar aside, only closing slides it back), the workspace layout, `localStorage` (the explorer's unfolded folders, recent searches) and the explorer's folders — checked, and a screen whose light and dark shots show different texts is flagged (`light-dark` warning) |
+| Network | none needed | a dead proxy (`--proxy-server=http://127.0.0.1:9`), `updateDisabled` |
+
+**The notebook** (`prepare-vault.sh`): Brulion's sample notebook seeded at the bench's clock
+(`--demo --vault`), plus the overlay `vault/`: `Wyprawa w Bieszczady.md` (a long document in plain
+Obsidian-compatible Markdown: headings, a callout, lists, tasks, a table of plain numbers, a quote,
+code, a picture; links to `[[Przeprowadzka]]` twice), `Projekty/Przeprowadzka.md` (an outline
+of list items only, three levels, tasks, links, tags) and `Projekty/Kuchnia.md` (front matter
+with a property of every type both apps edit as fields). The notes' sha256 go into the manifest:
+both apps start from byte-identical notes. A pristine notebook of another overlay or clock is
+never reused.
+
+**The screens** (24 groups × light and dark = 48 pairs): `daily`, `doc`, `doc-edit` (desktop),
+`outline`, `tree` (desktop), `drawer` (phone), `backlinks` (desktop), `search` (`remont`),
+`switcher` (`rem`), `palette`, `settings` (appearance), `graph`, `calendar` (Obsidian with the
+Calendar plugin; without it the pair is n/a) and `properties`. Not compared: Tasks, All pages,
+Tags, sync, import (no Obsidian equivalent — no free wins).
+
+**Running it.** On the laptop (the data directory outside the rsynced tree):
+```
+scripts/remote-build.sh -n uibench brulion brulion-uimetrics \
+  --run 'BRULION_GIT_REV=<rev> BRULION_GIT_DIRTY=false tests/app/uibench/bench.sh --out $HOME/work/brulion-uibench-data/round-00'
+rsync -a laptop:work/brulion-uibench-data/round-00/ /home/nixos/workspace/brulion-work/uibench/round-00/
+```
+`--app brulion --reuse-obsidian <round-00>/shots/obsidian` re-shoots only Brulion (Obsidian is shot
+once per bench configuration: the manifest's `benchConfigHash` changes with screens.json — Brulion's
+arguments aside —, the notes, the overlay, the fonts, the Obsidian driver, the clock or Obsidian's
+version, and the reuse is refused when the source round's hash differs); `--only`, `--sizes`,
+`--themes` narrow it (into an earlier round's folder: only those shots are replaced, the metrics
+are measured again from every picture there); `--render
+xcb-gl` is the realism check (doc and daily on the desktop under Xvfb with OpenGL, into
+`shots/brulion-gl/` and `metrics-gl.json`); `--dry-run` prints the commands (ctest
+`tst_uibench_bench_dryrun`). Output: `shots/<app>/<id>-<size>-<theme>.{png,layout.json}`,
+`metrics/<app>/*.json`, `metrics.json`, `manifest.json` (versions, fonts, the notes' hashes,
+Obsidian's environment and warnings, failures), `logs/`. The tools (Xvfb, fc-match, Node 22,
+appimage-run) come from the repository's nixpkgs; the AppImage and the Calendar plugin are checked
+against their hashes before use and fetched again when they are not whole (without the plugin the
+calendar pairs are n/a, without Obsidian only Brulion is shot). The manifest's `dirty` is `null`
+(unknown) for a tree without `.git` unless `BRULION_GIT_DIRTY` says it. When the laptop is off: the workflow
+`ui-bench.yml` lives only on a throwaway branch `ui-bench` (never merged, artifact kept 3 days),
+`gh run download -n ui-bench`.
+
+**Layout dumps** (schema 1, `src/app/ui/layoutdump.h`): every visible text (painted rectangle,
+colour, opacity, font size, weight and family, lines, rich-text colour fragments with their
+backgrounds), every target (buttons, mouse areas, tap handlers, fields — a mouse area filling its
+button counts once), every filled box, and the theme's tokens, in window coordinates; a text or
+target is `occluded` under a later opaque box or a popup's dim. Obsidian's dump comes from the DOM
+in the same schema (text nodes grouped by their nearest non-inline element, so a paragraph with
+links and tags is one text with fragments, as in Brulion's rich text; form fields' values — a
+property's key and value, a typed query, a select's choice — are texts as Brulion's fields are).
+The note's text itself is `inline` in both, as WCAG 2.5.8 treats targets in running text: Brulion's
+tap areas over a rendered block's text, Obsidian's CodeMirror content (a tap puts the caret into the
+line under it in both); a list property's empty field in Obsidian is its whole box.
+
+**Metrics** (`brulion-uimetrics measure`, each 0–10; `summarize` → `metrics.json`):
+
+| | Metric | Weight |
+|---|---|---|
+| C | text contrast: WCAG ratio of every enabled text (placeholders too; emoji skipped) on the background sampled from the PNG, the minimum over its fragments; 10 × Σ chars·min(1, ratio / required) / Σ chars (required 4.5, large text 3) | 0.25 |
+| T | target size: desktop WCAG 2.5.8 (24 × 24, or a 24-px circle clear of neighbours — a target containing it does not count), phone 44 × 44 (Material's 48 reported) | 0.20 |
+| Y | type scale: sizes with ≥ 2 % of the characters (6 or fewer, 3 or more, none within 8 % of another), at most 3 weights | 0.15 |
+| A | alignment: share of left edges shared by ≥ 3 items (0.6) and of rows whose centres line up within 1.5 px (0.4) | 0.15 |
+| S | spacing: share of insets below 64 px (from the smallest box around; larger ones are positions, not padding) and gaps between texts on a 4-px grid (±1) | 0.10 |
+| K | token contrast: the theme's text colours on its page and sunken surfaces | 0.10 |
+| L | line length: share of body text in lines of 45–90 characters (desktop doc, doc-edit, daily, outline, backlinks) | 0.05 |
+
+O is their weighted mean (renormalised without L or K); in a pair (`metrics.json` `pairs`) both
+apps' O use only the metrics both shots have (the shot's own O stays as `Oshot`). Each measurement also lists the failing
+texts and targets (30 worst) for the critic, and report-only extras (edge density, distinct
+colours, non-text contrast of targets).
+
+**Judging** (`judge.mjs`, `rubric.md`): a group is a screen at a size with its light and dark
+pair; `pack --round DIR --judges 3 --batch 4 --seed N` copies the images into blind batches
+(`judging/batches/bNN/gNN-<theme>-A.png`, A/B drawn per judge, group and theme, balanced over the
+panel; the key in `judging-keys/key.json`), `--only-changed PREV` packs only groups whose shots
+changed (either app's); the others keep the votes of the round that judged them last, through any
+number of rounds. `pack` refuses a round that has votes already (`--force` discards them). A vote
+file `judging/votes/bNN.json` belongs to the batch its name says (a `batch` field naming another
+one drops it); a re-judged batch saved as `bNN-<anything>.json` replaces those votes. Every judge scores both images of each pair 1–10 on eight anchored criteria
+(hierarchy, typography, spacing, colour, consistency, calm, affordance, appeal), with a strength
+and a weakness each, and guesses which one is Obsidian only after scoring. `score --round DIR
+[--prev PREV]` → `scores.json`, `report.md`: per pair J = the judges' median of the criteria's
+mean, O from the metrics, **P = 0.75·J + 0.25·O**, margin = P_Brulion − P_Obsidian, agreement,
+the overall means with a 95 % bootstrap interval, per-criterion means, the panel's blindness.
+
+**The loop and when it stops**: a baseline round, then at most 8 rounds of critic → changes →
+re-shoot → re-measure → re-judge; a round is kept when the overall P of Brulion rose by ≥ 0.05
+(or O rose and J fell by at most 0.1) and no pair's P fell by more than 0.5, else reverted and
+logged as rejected. Brulion wins when every valid pair has a margin ≥ 0.2, J at least Obsidian's
+and 2 of 3 judges agreeing, and overall the margin is ≥ 0.5 with the interval above 0, J higher
+and O not lower — confirmed by fresh judges; the loop also stops after 3 rounds without +0.05.
+Accessibility first: no change may lower C or T, remove a feature, or shrink touch targets below 44
+px.
+
+**Outcome (October 2026, branch `s2/ui`).** The loop ran its 8 rounds and met the win condition
+in round 8 and in the confirmation (all 24 groups re-judged by 3 fresh judges, new seed and A/B
+draws, on round 8's shots):
+
+| Round | P Brulion | P Obsidian | Margin (95 % CI) | J B / O | O B / O | Pairs won | Kept |
+|---|---:|---:|---|---|---|---:|---|
+| 0 (baseline) | 7.472 | 6.926 | 0.546 (0.368–0.755) | 7.065 / 6.508 | 8.691 / 8.179 | 30/48 | — |
+| 1 | 7.581 | 6.845 | 0.736 | 7.148 / 6.401 | 8.876 / 8.179 | 38/48 | yes |
+| 2 | 7.669 | 6.824 | 0.845 | 7.268 / 6.372 | 8.870 / 8.179 | 43/48 | yes |
+| 3 | 7.681 | 6.816 | 0.865 | 7.286 / 6.362 | 8.865 / 8.179 | 42/48 | no: +0.012 and O lower, reverted |
+| 4 | 7.635 | 6.830 | 0.805 | 7.221 / 6.380 | 8.875 / 8.179 | 40/48 | yes (O rose, J −0.047) |
+| 5 | 7.748 | 6.828 | 0.920 | 7.341 / 6.378 | 8.967 / 8.179 | 41/48 | yes |
+| 6 | 7.828 | 6.793 | 1.035 | 7.448 / 6.331 | 8.967 / 8.179 | 43/48 | yes |
+| 7 | 7.881 | 6.760 | 1.121 | 7.521 / 6.286 | 8.961 / 8.179 | 46/48 | yes |
+| 8 | 7.875 | 6.730 | 1.145 (1.013–1.307) | 7.513 / 6.247 | 8.962 / 8.179 | 48/48 | yes, without its change 4 |
+| confirmation | **7.997** | **6.808** | **1.189 (0.966–1.335)** | 7.674 / 6.352 | 8.962 / 8.179 | **48/48** | — |
+
+In the confirmation every criterion favours Brulion (hierarchy 7.81 vs 6.31, typography 7.60 vs
+6.54, spacing 7.41 vs 6.23, colour 7.68 vs 6.63, consistency 7.60 vs 6.09, calm 7.05 vs 6.81,
+affordance 7.97 vs 6.19, appeal 7.83 vs 6.10); calm is the closest, and the narrowest pairs are
+calendar-desktop (margins 0.37 / 0.40), settings-phone (0.39 / 0.41) and palette-desktop (0.54 /
+0.55). The panel was not blind in practice: the judges recognised Obsidian in 142 of 144 guesses
+(every round about the same), so J measures a preference between two known apps, not a blind
+one — O, from the metrics, is the part that cannot know. Rejected changes (round 3's five, round
+8's emoji-free date chips: `rejected.md`, `round-08/change4-dropped.patch`) and every round's
+plan, shots, votes and report stay in `/home/nixos/workspace/brulion-work/uibench/`; to check for
+a regression, run the bench again (`--app brulion --reuse-obsidian` on the confirmation round's
+Obsidian shots) and compare with the confirmation's row above.
+
+**Regression guard** `tst_uibench_lint_qml` (`lint.sh`, slow): 8 Brulion shots (daily, doc,
+settings, palette × desktop light / phone dark; system fonts) fail on any enabled, visible text
+below its WCAG contrast or a target below its size that `lint-allow.json` does not excuse
+(`[{screen, device, kind, type, text|name, count, reason}]`: `count` excuses that many failures of
+a shot of that device, so one more is caught). Its entries were the round-0 baseline of Brulion's
+known failures (the bullet's zoom handle, the journal's day titles, its 12-px band under a day and
+the settings' 38-px segmented choices on phones, the calculation block's faint caption); round 1
+fixed them but one: a parent's bullet beside its fold arrow on phones (28 × 44 — both cannot be
+44 px wide in the outline's gutter), accepted as an exception at the loop's end.
 
 **README pictures** (`docs/images/`, Polish locale, the sample notebook) come from these scripts
 — `SIZES=<size> THEMES=<theme> tests/app/<area>/screenshots.sh <shot>` — and are optimised with

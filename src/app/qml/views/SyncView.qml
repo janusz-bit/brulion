@@ -71,7 +71,7 @@ FocusScope {
         default property alias content: column.data
         readonly property int margin: Theme.compact ? Theme.space4 : Theme.space8
         contentWidth: width
-        contentHeight: column.implicitHeight + 2 * margin + (Theme.narrow ? 56 + Theme.space4 : 0)
+        contentHeight: column.implicitHeight + 2 * margin
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         T.ScrollBar.vertical: BScrollBar {}
@@ -367,8 +367,6 @@ FocusScope {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.margins: Theme.compact ? Theme.space4 : Theme.space6
-                        // The floating capture button sits at the right; the resolver's buttons
-                        // start at the left, so only a normal margin is needed.
                         Layout.bottomMargin: Theme.compact ? Theme.space4 : Theme.space6
                         visible: root.currentCopy !== ""
                         copy: root.currentCopy

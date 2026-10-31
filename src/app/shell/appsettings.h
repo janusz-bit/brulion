@@ -63,7 +63,7 @@ class AppSettings : public QObject {
     Q_PROPERTY(QStringList sidebarHidden READ sidebarHidden WRITE setSidebarHidden NOTIFY sidebarHiddenChanged FINAL)
     /// The phone's bottom navigation: exactly four views of BottomNavViews (the menu comes last).
     Q_PROPERTY(QStringList bottomNavTabs READ bottomNavTabs WRITE setBottomNavTabs NOTIFY bottomNavTabsChanged FINAL)
-    /// The floating quick-capture button of phones.
+    /// Quick capture's "+ Notatka" item on the phone's bottom navigation (before Menu).
     Q_PROPERTY(bool captureButtonShown READ captureButtonShown WRITE setCaptureButtonShown NOTIFY
                        captureButtonShownChanged FINAL)
 
@@ -72,7 +72,8 @@ class AppSettings : public QObject {
     Q_PROPERTY(QString editorFont READ editorFont WRITE setEditorFont NOTIFY editorFontChanged FINAL)
     /// Editor text size in px at 100 % (12 … 28, default 16).
     Q_PROPERTY(int editorFontSize READ editorFontSize WRITE setEditorFontSize NOTIFY editorFontSizeChanged FINAL)
-    /// Maximum width of the editor's text column in px (480 … 1600, default 760); 0 = full width.
+    /// Maximum width of the editor's text column in px (480 … 1600, default 680 — about 85
+    /// characters of 16-px serif); 0 = full width. The old presets 760 and 640 read as 680 and 600.
     Q_PROPERTY(int editorWidth READ editorWidth WRITE setEditorWidth NOTIFY editorWidthChanged FINAL)
     /// A font family for notes instead of serif / sans ("" = editorFont decides).
     Q_PROPERTY(QString editorFontFamily READ editorFontFamily WRITE setEditorFontFamily NOTIFY fontFamiliesChanged FINAL)

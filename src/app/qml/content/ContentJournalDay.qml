@@ -63,6 +63,10 @@ FocusScope {
     // scrolled up (docs/UI.md "Scrolling performance"). Its editor builds all its blocks at once
     // for the same reason (BlockEditor.autoHeight).
     implicitHeight: editor.y + editor.height
+    /// How far the editor's tap strip under the blocks is taller than the space it shows: on touch
+    /// UIs a touch target instead of 12 px. The journal stream lets it reach into the gap before
+    /// the next day by that much, so the days keep their spacing (0 while the day shows no blocks).
+    readonly property real footerOverhang: editor.height > 0 ? editor.bottomSpace - Theme.space3 : 0
 
     Accessible.role: Accessible.Grouping
     Accessible.name: DatesHelper.formatLong(day.date)
@@ -219,8 +223,14 @@ FocusScope {
                 color: Theme.fg
                 Accessible.role: Accessible.Heading
                 Accessible.name: headerRow.longDate
-                HoverHandler { id: dateHover; enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
-                TapHandler { onTapped: day.openAsPage(false) }
+                // The tap area: a touch target tall on touch UIs, centred on the date's line(s).
+                Item {
+                    width: parent.width
+                    height: Math.max(parent.height, Theme.touchUi ? Theme.touchTarget : 0)
+                    y: (parent.height - height) / 2
+                    HoverHandler { id: dateHover; enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: day.openAsPage(false) }
+                }
             }
         }
         BBadge {
@@ -342,7 +352,9 @@ FocusScope {
         propertiesExpanded: AppSettings.propertiesExpanded
         onPropertiesExpandedToggled: (expanded) => AppSettings.propertiesExpanded = expanded
         horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8
-        bottomSpace: Theme.space3
+        // The strip under the blocks (a tap adds a block at the end): a touch target on touch UIs,
+        // reaching into the space between the days (the stream takes `footerOverhang` off it).
+        bottomSpace: Theme.touchUi ? Theme.touchTarget : Theme.space3
         // Document days: headings stay below the date (the size of other days' dates).
         headingCap: day.compactHeader ? Theme.textXl : Theme.text2xl
         // A day switched to a document among outline days keeps their left edge (date, text);

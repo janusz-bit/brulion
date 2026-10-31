@@ -21,6 +21,10 @@ Item {
     property string initialTab: ""
 
     readonly property var tabs: ["links", "outline", "calendar"]
+    /// The tab shown now ("links" | "outline" | "calendar"): the page leaves out its own references
+    /// section while this panel shows them (PageView.refsInSidePanel). A property, not the
+    /// remembered setting: AppSettings.value() is not tracked by bindings.
+    readonly property string currentTab: tabs[tabBar.currentIndex] || "links"
     readonly property string journalDate: path !== "" ? Workspace.journalDate(path) : ""
 
     function rendererPalette() {

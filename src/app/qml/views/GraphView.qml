@@ -266,7 +266,7 @@ FocusScope {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: Theme.narrow ? Theme.space2 : Theme.space4
-        // Phones: above the shell's floating capture button.
+        // Phones: up from the bottom edge, within the thumb's reach and clear of the status line.
         anchors.bottomMargin: Theme.narrow ? Theme.space16 + Theme.space8 : Theme.space4
         elevation: 2
         padding: 2

@@ -170,7 +170,8 @@ T.ItemDelegate {
                 text: control.entry.title || ""
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textBase
-                font.strikeout: control.closed
+                // Done: muted (its ticked box says so); cancelled: struck out too — as in Tasks.
+                font.strikeout: control.entry.status === "cancelled"
                 color: control.closed ? Theme.fgMuted : Theme.fg
                 wrapMode: Text.Wrap
                 maximumLineCount: 2

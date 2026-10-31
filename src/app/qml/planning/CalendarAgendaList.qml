@@ -13,8 +13,9 @@ FocusScope {
     id: root
 
     required property CalendarModel calendar
-    /// Text width on wide windows.
-    property int maximumWidth: Theme.measure
+    /// Its width on wide windows (Theme.measureList: wider than the editor's text measure, a row
+    /// holds a time, a title and its page).
+    property int maximumWidth: Theme.measureList
 
     signal itemOpened(var entry)
     signal itemToggled(var entry)

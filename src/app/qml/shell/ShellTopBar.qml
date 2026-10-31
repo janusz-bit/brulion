@@ -6,7 +6,11 @@ import Brulion
 // ShellTopBar — the bar above the current view: sidebar/drawer button, back/forward, the title
 // (a breadcrumb for pages in folders and for All pages in a folder), search, command palette,
 // quick capture, side panel toggle and the "more" menu with page actions (Przenieś do…, Pokaż w
-// drzewie among them). On narrow windows it keeps only what fits a phone.
+// drzewie among them). On narrow windows it keeps only what fits a phone: back (with history),
+// the title, search and the menu; the drawer button ☰ only where the shell says so
+// (`menuButtonShown`: the bottom navigation's Menu opens the drawer, so ☰ only shows while that
+// bar is not there — a view replaces it, or the on-screen keyboard is up). With no button before
+// it, the title starts on the view's content edge.
 // On a picture attachment (`picture`) the menu's "Markdown source" is the picture bar's "Show as
 // text" / "Show picture" (Ctrl+E there too), and the note mode is not offered (no note to switch).
 // `topInset` extends the bar under the Android status bar (edge-to-edge).
@@ -18,6 +22,9 @@ Rectangle {
     property var crumbs: []
     property real topInset: 0
     property bool sidebarVisible: true
+    /// Narrow windows: the drawer button ☰ is shown (the shell turns it off while the bottom
+    /// navigation, whose Menu opens the same drawer, is shown).
+    property bool menuButtonShown: true
     /// The view shows a picture attachment, as text (`pictureAsText`) or as the picture.
     property bool picture: false
     property bool pictureAsText: false
@@ -48,6 +55,11 @@ Rectangle {
     readonly property bool inEditor: onPage || route.view === "journal" || route.view === "journals"
     readonly property string pagePath: route.view === "page" ? route.path : journalPagePath
     readonly property bool favorite: onPage && Workspace.favorites.some(f => f.path === bar.pagePath)
+    /// A button comes before the title (wide windows always have the sidebar toggle).
+    readonly property bool leadingButton: !Theme.narrow || bar.menuButtonShown || AppController.canGoBack
+    /// Where the title starts with nothing before it: the views' content edge (the editor's
+    /// compact padding on phones).
+    readonly property int contentEdge: Theme.compact ? Theme.space3 : Theme.space4
 
     implicitHeight: topInset + (Theme.touchUi ? 56 : 46)
     color: Theme.bg
@@ -68,7 +80,7 @@ Rectangle {
 
         BIconButton {
             objectName: "topBarMenu"
-            visible: Theme.narrow
+            visible: Theme.narrow && bar.menuButtonShown
             iconName: "menu"
             label: qsTr("Menu")
             onClicked: bar.menuClicked()
@@ -102,7 +114,8 @@ Rectangle {
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.leftMargin: Theme.narrow ? 4 : Theme.space2
+            // (The row itself starts 4 px in on narrow windows.)
+            Layout.leftMargin: !Theme.narrow ? Theme.space2 : bar.leadingButton ? 4 : bar.contentEdge - 4
 
             BText {
                 visible: bar.crumbs.length === 0

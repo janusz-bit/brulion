@@ -11,10 +11,12 @@ import Brulion
 // (rendered text / inline editor, code, calc, math, table, query, callout, quote, rule,
 // frontmatter) with image embeds and embedded pages / sections / blocks (TransclusionView) below.
 // Document mode (BlockEditor.documentMode): no guides, fold arrows or bullets for paragraphs and
-// headings; a list item shows its Markdown marker in its level's marker column — a bullet (disc,
-// circle, square by depth), its number ("3."), or the checkbox of a task — and the text starts
-// one column in per level. Spacing follows the previous block (`prevKind`): paragraph gaps,
-// tight list items, air above headings.
+// headings; a list item shows its Markdown marker in its level's marker column — a bullet (the
+// same round dot at every depth), its number ("3."), or the checkbox of a task — and the text starts
+// one column in per level. A nested list item draws a guide line per ancestor level at that
+// level's marker centre (under a number's column), and a list item with children one from under
+// its marker down, as the outline does. Spacing follows the previous block (`prevKind`):
+// paragraph gaps, tight list items, air above headings (inside the delegates, so the lines join).
 //
 // A selected block is drawn on a band (`selectionEdge`: one band over a range of blocks, rounded
 // at its ends, from the editor's left edge; a block alone from its own level — blocks picked one by
@@ -55,7 +57,15 @@ Item {
     // column before its text.
     readonly property real levelX: doc ? editor.contentX + editor.gutter + (listItem ? (depth + 1) * editor.listIndent : 0)
                                        : editor.contentX + editor.gutter + depth * editor.indentStep
-    readonly property real bulletX: doc ? levelX - Math.round(editor.listIndent * 0.55) : levelX - editor.bulletColumn / 2
+    readonly property real bulletX: markerX(doc && !listItem ? -1 : depth)
+    /// The centre of the marker column of list level `level` (the bullet's, a number's, a task's
+    /// box): the bullets and the guide lines through the ancestors' markers share it.
+    function markerX(level) {
+        return doc ? editor.contentX + editor.gutter + (level + 1) * editor.listIndent - Math.round(editor.listIndent * 0.55)
+                   : editor.contentX + editor.gutter + level * editor.indentStep - editor.bulletColumn / 2
+    }
+    /// The task checkbox's size (TaskBox.boxSize).
+    readonly property real taskBoxSize: Theme.touchUi ? 18 : 16
     readonly property real contentLeft: levelX + (isTask && !doc ? editor.taskBoxWidth : 0)
     readonly property real contentRight: editor.contentX + editor.contentWidth
     // Vertical rhythm: headings get air above them, framed blocks a little on both sides.
@@ -64,8 +74,15 @@ Item {
     // The title shown above the properties panel (see the file comment).
     readonly property bool titleFirst: editor.titleFirst && index === editor.controller.titleRow
     readonly property bool propertiesAfterTitle: editor.titleFirst && index === editor.controller.titleRow - 1
+    /// The first block drawn under the properties panel — the one after it in the file, or after
+    /// the title drawn above it —: 24 px under the panel in both modes (constant per row).
+    readonly property bool belowProperties: (prevKind === "frontmatter" && !titleFirst)
+                                            || (editor.titleFirst && index === editor.controller.titleRow + 1)
     readonly property real topPad: doc ? docTopPad : outlineTopPad
     readonly property real outlineTopPad: {
+        // With the panel's 8 px bottom padding: 24 px.
+        if (belowProperties)
+            return headingLevel === 1 ? Theme.space5 : Theme.space4
         if (headingLevel > 0 && index > 0 && !titleFirst)
             return headingLevel === 1 ? Theme.space5 : headingLevel === 2 ? Theme.space4 : Theme.space3
         if (framed)
@@ -80,6 +97,9 @@ Item {
             return Theme.space3 // the properties panel under the title
         if (prevKind === "" || titleFirst)
             return 0
+        if (belowProperties) // air between the properties panel and the page's text
+            return headingLevel > 0 && !listItem ? Math.max(Theme.space6, editor.headingGapAbove(headingLevel))
+                                                 : Theme.space6
         if (headingLevel > 0 && !listItem)
             return editor.headingGapAbove(headingLevel)
         // A frame (table, code, callout, …), a quote's bar or a picture right under a heading:
@@ -88,8 +108,6 @@ Item {
         if (prevKind === "heading")
             return framed || view === "quote" || (hasEmbeds && model.onlyEmbeds && !listItem)
                    ? editor.headingGapBelow + Theme.space2 : editor.headingGapBelow
-        if (prevKind === "frontmatter")
-            return Theme.space3
         if (listItem && prevKind === "listItem")
             return editor.listGap
         return editor.paragraphGap
@@ -223,24 +241,32 @@ Item {
     }
 
     // ---- Guide lines -------------------------------------------------------------------------
+    // One per ancestor level, over the row's full height. Outline: every block, at the bullets of
+    // its ancestors. Document: list items only (paragraphs and headings have none), at the marker
+    // centre of each ancestor list level — the bulletX of that level, so never through the row's
+    // own marker.
     Repeater {
-        model: block.shown && !block.doc ? block.depth : 0
+        model: !block.shown ? 0 : !block.doc || block.listItem ? block.depth : 0
         delegate: Rectangle {
             required property int index
-            x: Math.round(block.editor.contentX + block.editor.gutter - block.editor.bulletColumn / 2 + index * block.editor.indentStep)
+            objectName: "guideLine"
+            x: Math.round(block.markerX(index))
             width: 1
             height: block.height
-            color: Theme.borderSubtle
+            color: Theme.guide
         }
     }
-    // From this bullet down to its (visible) children.
+    // From this bullet (a document's marker: bullet, number or checkbox) down to its (visible)
+    // children.
     Rectangle {
-        visible: block.shown && !block.doc && block.listItem && block.model.hasChildren && !block.model.collapsed
+        objectName: "parentGuide"
+        visible: block.shown && block.listItem && block.model.hasChildren && !block.model.collapsed
         x: Math.round(block.bulletX)
-        y: Math.round(block.firstLineCenter + 9)
+        // (Under a document's task box: half its size and 3 px below its centre.)
+        y: Math.round(block.firstLineCenter + (block.doc && block.isTask ? block.taskBoxSize / 2 + 3 : 9))
         width: 1
         height: Math.max(0, block.height - y)
-        color: Theme.borderSubtle
+        color: Theme.guide
     }
 
     // The parts below that only some blocks have — the fold arrow, the bullet, an ordered list
@@ -255,7 +281,8 @@ Item {
         active: block.model.hasChildren && block.shown && !block.doc
         width: block.editor.arrowColumn
         height: Math.max(block.editor.arrowColumn, 24)
-        x: block.bulletX - block.editor.bulletColumn / 2 - width + 2
+        // Left of the bullet's hit area (with a mouse 24 px wide, a little wider than its column).
+        x: (Theme.touchUi ? block.bulletX - block.editor.bulletColumn / 2 : block.levelX - bulletBox.width) - width + 2
         y: block.firstLineCenter - height / 2
         sourceComponent: Item {
             visible: block.model.collapsed || block.hovered || Theme.touchUi || arrowTap.pressed
@@ -288,20 +315,33 @@ Item {
 
     // ---- Bullet --------------------------------------------------------------------------------
     Loader {
+        id: bulletBox
         // Document: tasks show their checkbox, numbered items their number instead.
         active: block.listItem && block.shown && !(block.doc && (block.isTask || block.ordered))
-        width: block.editor.bulletColumn + (Theme.touchUi ? 6 : 0)
-        height: Math.max(block.editor.bulletColumn, Theme.touchUi ? Theme.touchTarget : 22)
-        x: block.bulletX - width / 2
+        // The hit area: at least 24 × 24 with a mouse (WCAG 2.5.8), its right edge at the text
+        // column, so a click on the first letters still edits. Touch: a bullet without a fold
+        // arrow (a leaf; every bullet of a document) takes the empty column left of it too, 44 ×
+        // 44 — a document's first level on a phone has less room there and reaches under the
+        // item's first letters, which edit the item as well; a parent keeps the arrow / bullet
+        // split (both cannot be 44 wide in the outline's gutter).
+        readonly property bool besideArrow: !block.doc && block.model.hasChildren
+        width: Theme.touchUi ? (besideArrow ? block.editor.bulletColumn + 6 : Theme.touchTarget)
+                             : Math.max(24, block.editor.bulletColumn)
+        height: Theme.touchUi ? Theme.touchTarget : Math.max(24, block.editor.bulletColumn)
+        x: Theme.touchUi && besideArrow ? block.bulletX - width / 2
+                                        : block.doc ? Math.max(0, block.levelX - width) : block.levelX - width
         y: block.firstLineCenter - height / 2
         sourceComponent: Item {
             id: bullet
+            /// The bullet's centre in the hit area.
+            readonly property real dotX: block.bulletX - bulletBox.x
             Accessible.role: block.doc ? Accessible.Graphic : Accessible.Button
             Accessible.name: block.doc ? qsTr("List item") : qsTr("Zoom into block")
 
             // Folded blocks show a halo around the bullet (Logseq style); hover shows it too.
             Rectangle {
-                anchors.centerIn: parent
+                x: bullet.dotX - width / 2
+                anchors.verticalCenter: parent.verticalCenter
                 width: 16
                 height: 16
                 radius: 8
@@ -309,16 +349,13 @@ Item {
                 visible: !block.doc && (block.model.collapsed || bulletHover.hovered)
             }
             Rectangle {
-                // Outline: the round bullet. Document: a Markdown list's disc, circle, square by depth.
-                readonly property int shape: block.doc ? block.depth % 3 : 0
-                anchors.centerIn: parent
-                width: shape === 2 ? 5 : 6
+                // The same round bullet at every depth (a document too: nesting shows in the indent).
+                x: bullet.dotX - width / 2
+                anchors.verticalCenter: parent.verticalCenter
+                width: 6
                 height: width
-                radius: shape === 2 ? 1 : width / 2
-                color: shape === 1 ? "transparent"
-                       : block.closedTask ? Theme.fgFaint : bulletHover.hovered && !block.doc ? Theme.fg : Theme.fgMuted
-                border.width: shape === 1 ? 1.5 : 0
-                border.color: Theme.fgMuted
+                radius: width / 2
+                color: block.closedTask ? Theme.fgFaint : bulletHover.hovered && !block.doc ? Theme.fg : Theme.fgMuted
             }
             HoverHandler {
                 id: bulletHover
@@ -337,7 +374,7 @@ Item {
                     else
                         block.controller.zoomInto(block.index)
                 }
-                onLongPressed: block.openMenu(bullet, bullet.width / 2, bullet.height)
+                onLongPressed: block.openMenu(bullet, bullet.dotX, bullet.height)
             }
             TapHandler {
                 // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so a tap on
@@ -347,16 +384,18 @@ Item {
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                 acceptedButtons: Qt.RightButton
                 gesturePolicy: TapHandler.WithinBounds
-                onTapped: block.openMenu(bullet, bullet.width / 2, bullet.height)
+                onTapped: block.openMenu(bullet, bullet.dotX, bullet.height)
             }
         }
     }
 
     // ---- Number of an ordered list item (document mode) -----------------------------------------
     Loader {
+        id: numberBox
         active: block.doc && block.ordered && !block.isTask && block.shown
+        readonly property real gap: Math.round(block.editor.listIndent * 0.25)
         // Right-aligned in the marker column, on the first line's baseline (body font).
-        x: block.levelX - width - Math.round(block.editor.listIndent * 0.25)
+        x: block.levelX - width - gap
         y: block.firstLineCenter - block.editor.firstLineCenter(0)
         sourceComponent: Text {
             id: number
@@ -370,16 +409,27 @@ Item {
             lineHeight: block.editor.lineHeight
             color: block.closedTask ? Theme.fgFaint : Theme.fgMuted
             Accessible.ignored: true
-            TapHandler {
-                acceptedButtons: Qt.LeftButton
-                onTapped: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, 0)
-                onLongPressed: block.openMenu(number, 0, number.height)
-            }
-            TapHandler {
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus // not a finger
-                acceptedButtons: Qt.RightButton
-                gesturePolicy: TapHandler.WithinBounds // the number's press (as the bullet's)
-                onTapped: block.openMenu(number, 0, number.height)
+            // The hit area, as the bullet's: a touch target (24 px with a mouse) around the number,
+            // its right edge at the text column (with no room left of it, under the first
+            // letters, which edit the item as well).
+            Item {
+                readonly property real size: Theme.touchUi ? Theme.touchTarget : 24
+                readonly property real textEdge: number.width + numberBox.gap
+                width: Math.max(size, textEdge)
+                height: Math.max(size, number.height)
+                x: Math.max(-numberBox.x, textEdge - width)
+                y: (number.height - height) / 2
+                TapHandler {
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, 0)
+                    onLongPressed: block.openMenu(number, 0, number.height)
+                }
+                TapHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus // not a finger
+                    acceptedButtons: Qt.RightButton
+                    gesturePolicy: TapHandler.WithinBounds // the number's press (as the bullet's)
+                    onTapped: block.openMenu(number, 0, number.height)
+                }
             }
         }
     }
@@ -388,7 +438,7 @@ Item {
     Loader {
         active: block.isTask && block.shown
         // Outline: after the bullet; document: in the marker column, instead of the bullet.
-        readonly property real boxSize: Theme.touchUi ? 18 : 16
+        readonly property real boxSize: block.taskBoxSize
         x: block.doc ? block.bulletX - width / 2
                      : block.levelX + (block.editor.taskBoxWidth - boxSize) / 2 - 2 - (width - boxSize) / 2
         y: block.firstLineCenter - height / 2

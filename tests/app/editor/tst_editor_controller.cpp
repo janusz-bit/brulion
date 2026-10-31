@@ -3884,8 +3884,9 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY2(html.contains(u"<b>Płytki</b>"_s) && html.contains(u"href=\"page:Inna\""_s) && html.contains(u"tag:zakupy"_s),
                  qPrintable(html));
         // The visible text measures the column; the raw text stays what the cell editor edits.
-        // "z" keeps the next word on its line (a no-break space, measured as such).
-        QCOMPARE(tiles.value(u"plain"_s).toString(), u"Płytki z\u00a0Inna #zakupy"_s);
+        // "z" keeps the next word on its line (a no-break space, measured as such), and the tag's
+        // tint pads it with a no-break space on both sides, which the column's width includes.
+        QCOMPARE(tiles.value(u"plain"_s).toString(), u"Płytki z\u00a0Inna \u00a0#zakupy\u00a0"_s);
         QCOMPARE(tiles.value(u"text"_s).toString(), u"**Płytki** z [[Inna]] #zakupy"_s);
         // Note text that looks like HTML stays text; chips render.
         const QString hostile = rows[1].toList()[0].toMap().value(u"html"_s).toString();

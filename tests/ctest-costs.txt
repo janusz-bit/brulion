@@ -2,6 +2,7 @@ tst_editor_controller 1 260
 tst_markdown_mathsafety 1 130
 tst_content_qml 1 105
 tst_io_import_trilium 1 100
+tst_uibench_lint_qml 1 100
 tst_appio_qml 1 85
 tst_editor_calc 1 75
 tst_shell_qml 1 70

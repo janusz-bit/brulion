@@ -152,6 +152,12 @@ QString toHex(const Rgb &c)
     return u"#%1%2%3"_s.arg(c.r, 2, 16, QChar(u'0')).arg(c.g, 2, 16, QChar(u'0')).arg(c.b, 2, 16, QChar(u'0'));
 }
 
+QString toHexArgb(const Rgb &c, double alpha)
+{
+    const int a = std::clamp(int(std::lround(alpha * 255)), 0, 255);
+    return u"#%1"_s.arg(a, 2, 16, QChar(u'0')) + toHex(c).mid(1);
+}
+
 double relativeLuminance(const Rgb &c)
 {
     return 0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b);
@@ -265,6 +271,13 @@ TextColors textColors(bool dark)
             hex(0x2b5f8f), hex(0x6a4f93), hex(0x7a4f00), hex(0x2a6e44)};
 }
 
+Scrim modalScrim(bool dark, const Surface &s, const TextColors &t)
+{
+    if (dark)
+        return {hex(0x080a10), 0.72};
+    return {over(t.fg, 0.22, s.bg), 0.62};
+}
+
 QVariantMap paletteMap(bool dark, QStringView lightSurface, QStringView darkSurface, QStringView accentName,
                        QStringView customAccent)
 {
@@ -298,6 +311,8 @@ QVariantMap paletteMap(bool dark, QStringView lightSurface, QStringView darkSurf
     put("chipScheduledFg", t.chipScheduledFg);
     put("chipReminderFg", t.chipReminderFg);
     put("chipRecurrenceFg", t.chipRecurrenceFg);
+    const Scrim scrim = modalScrim(dark, s, t);
+    m.insert(u"scrimModal"_s, toHexArgb(scrim.color, scrim.alpha));
     return m;
 }
 

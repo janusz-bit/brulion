@@ -14,9 +14,16 @@ import Brulion
 //              never raw note content
 // subtitle:    second line (muted, plain text: a file name is never markup); the row grows to
 //              the two-line height
+// subtitleInline: the subtitle after the title on the same line instead (textSm, fgMuted,
+//              Theme.space2 apart, on the title's baseline): the row keeps the one-line height.
+//              The title keeps its width first; the subtitle elides and is dropped under 48 px
+//              (the accessible name still says it). The floating command palette's rows.
 // count:       badge on the right (≥ 0 shows); `trailing`: any item on the right
 // selected:    current item (tinted background, bold title, accent bar on the left when
 //              `selectionBar`); hover/press/keyboard focus states built in
+// dense:       a navigation list's row (sidebar, drawer, tree): listItemHeightDense with a
+//              mouse, exactly the touch target (44 px) on touch UIs; a two-line row keeps
+//              listItemHeightTwoLine
 T.ItemDelegate {
     id: control
 
@@ -24,6 +31,7 @@ T.ItemDelegate {
     property color iconColor: selected ? Theme.fg : Theme.fgMuted
     property string titleMarkup
     property string subtitle
+    property bool subtitleInline: false
     property int count: -1
     property bool selected: false
     property bool selectionBar: false
@@ -32,7 +40,9 @@ T.ItemDelegate {
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
-    implicitHeight: Math.max(subtitle !== "" ? Theme.listItemHeightTwoLine : (dense && !Theme.touchUi ? Theme.listItemHeightDense : Theme.listItemHeight),
+    implicitHeight: Math.max(subtitle !== "" && !subtitleInline ? Theme.listItemHeightTwoLine
+                             : dense ? (Theme.touchUi ? Theme.touchTarget : Theme.listItemHeightDense)
+                             : Theme.listItemHeight,
                              implicitContentHeight + topPadding + bottomPadding)
     leftPadding: Theme.touchUi ? 14 : 10
     rightPadding: Theme.touchUi ? 12 : 8
@@ -63,7 +73,9 @@ T.ItemDelegate {
 
     contentItem: Item {
         implicitHeight: Math.max(textColumn.implicitHeight, icon.height)
-        implicitWidth: (icon.width > 0 ? icon.width + control.spacing : 0) + Math.max(titleLabel.implicitWidth, subtitleLabel.implicitWidth)
+        implicitWidth: (icon.width > 0 ? icon.width + control.spacing : 0)
+                       + (textColumn.inline ? titleLabel.implicitWidth + Theme.space2 + subtitleLabel.implicitWidth
+                                            : Math.max(titleLabel.implicitWidth, subtitleLabel.implicitWidth))
                        + (trailingSlot.width > 0 ? trailingSlot.width + 8 : 0)
 
         BIcon {
@@ -74,16 +86,22 @@ T.ItemDelegate {
             color: control.iconColor
         }
 
-        Column {
+        // The title, and the subtitle under it (or after it: subtitleInline).
+        Item {
             id: textColumn
+            /// The subtitle sits on the title's line.
+            readonly property bool inline: control.subtitleInline && control.subtitle !== ""
             anchors.verticalCenter: parent.verticalCenter
             x: icon.width > 0 ? icon.width + control.spacing : 0
             width: parent.width - x - (trailingSlot.width > 0 ? trailingSlot.width + 8 : 0)
-            spacing: 1
+            implicitHeight: titleLabel.implicitHeight
+                            + (subtitleLabel.visible && !inline ? 1 + subtitleLabel.implicitHeight : 0)
+            height: implicitHeight
 
             Text {
                 id: titleLabel
-                width: parent.width
+                // Inline: its own width first (the subtitle takes what is left).
+                width: textColumn.inline ? Math.min(implicitWidth, parent.width) : parent.width
                 text: control.titleMarkup !== "" ? control.titleMarkup : control.text
                 textFormat: control.titleMarkup !== "" ? Text.StyledText : Text.PlainText
                 font.family: control.font.family
@@ -95,8 +113,13 @@ T.ItemDelegate {
             }
             Text {
                 id: subtitleLabel
-                width: parent.width
-                visible: control.subtitle !== ""
+                readonly property real room: textColumn.inline ? textColumn.width - titleLabel.width - Theme.space2
+                                                               : textColumn.width
+                x: textColumn.inline ? titleLabel.width + Theme.space2 : 0
+                // Inline: on the title's baseline.
+                y: textColumn.inline ? titleLabel.baselineOffset - baselineOffset : titleLabel.height + 1
+                width: Math.max(0, room)
+                visible: control.subtitle !== "" && (!textColumn.inline || room >= 48)
                 text: control.subtitle
                 textFormat: Text.PlainText
                 font.family: Theme.fontUi

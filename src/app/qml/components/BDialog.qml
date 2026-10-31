@@ -5,7 +5,8 @@ import QtQuick.Templates as T
 import Brulion
 
 // BDialog — modal dialog: a centred card on wide windows, a bottom sheet with a drag handle
-// on narrow ones (< Theme.narrowBreakpoint). Asynchronous: open() returns at once; react to
+// on narrow ones (< Theme.narrowBreakpoint); behind the card the page recedes (Theme.scrimModal),
+// behind a sheet it dims (Theme.scrim). Asynchronous: open() returns at once; react to
 // accepted() / rejected() (never a nested event loop — required on WebAssembly).
 //
 //   BDialog {
@@ -300,12 +301,14 @@ T.Dialog {
             radius: control.sheet ? Theme.radiusXl : Theme.radiusXl - 2
             color: Theme.bgElevated
             border.width: Theme.dark ? 1 : 0
-            border.color: Theme.border
+            // A clear edge against the dimmed page.
+            border.color: Theme.borderStrong
         }
     }
 
+    // A bottom sheet dims the page; a centred dialog makes it recede.
     T.Overlay.modal: Rectangle {
-        color: Theme.scrim
+        color: control.sheet ? Theme.scrim : Theme.scrimModal
         Behavior on opacity { NumberAnimation { duration: Theme.duration } }
     }
 
