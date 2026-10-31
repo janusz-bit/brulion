@@ -74,6 +74,8 @@ public:
     QString resolveLink(const QString &target, const QString &fromPath) const override;
     /// The real index's shortest target (VaultIndex::linkTarget(), as the shell's Workspace).
     QString linkTarget(const QString &path, const QString &fromPath) const override;
+    /// The real index's path parts (VaultIndex::resolveLinkPart(), as the shell's Workspace).
+    QVariantMap linkPart(const QString &target, int part, const QString &fromPath) const override;
     QString blockText(const QString &blockId) const override;
     bool blockIdTaken(const QString &blockId) const override;
     QString linkedBlockText(const QString &path, const QString &blockId) const override;

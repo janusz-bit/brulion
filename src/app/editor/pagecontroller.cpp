@@ -12,6 +12,7 @@
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
 #include "markdown/inline.h"
+#include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
 #include "markdown/notemode.h"
@@ -3248,6 +3249,12 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
             m_host->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, QUrl::fromPercentEncoding(rest.toUtf8())}}, newPane);
         return out;
     }
+    if (scheme == u"part") {
+        // A path part of a link: the host resolves what it opens (Workspace::resolveRoute).
+        if (const QVariantMap route = linkPartRoute(url, m_path); !route.isEmpty() && m_host)
+            m_host->navigate(route, newPane);
+        return out;
+    }
     const auto notFound = [](const QString &kind, const QString &name) {
         return QVariantMap{{u"action"_s, u"notFound"_s}, {u"kind"_s, kind}, {u"name"_s, name}};
     };
@@ -3319,13 +3326,30 @@ QVariantMap PageController::linkMenu(const QString &url, const QString &fromPath
 {
     const qsizetype colon = url.indexOf(u':');
     const QString scheme = colon > 0 ? url.left(colon) : QString();
-    if (scheme != u"tag" && scheme != u"block" && scheme != u"ext" && scheme != u"page")
+    if (scheme != u"tag" && scheme != u"block" && scheme != u"ext" && scheme != u"page" && scheme != u"part")
         return {};
     const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    const QString from = fromPath.isEmpty() ? m_path : fromPath;
+    if (scheme == u"part") {
+        const auto parsed = markdown::parseLinkPartUrl(url);
+        const auto part = parsed && m_host ? linkPartFromMap(m_host->linkPart(parsed->target, parsed->part, from))
+                                           : std::nullopt;
+        if (!part)
+            return {};
+        const notebook::CopiedLink copied = notebook::copiedLink(
+                url, from, config,
+                [this](const QString &target, const QString &f) { return m_host ? m_host->resolveLink(target, f) : QString(); },
+                [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); },
+                [&part](const QString &, int, const QString &) { return part; });
+        const QString target = linkPartToMap(part).value(u"kind"_s).toString();
+        return {{u"kind"_s, u"page"_s},  {u"part"_s, true},           {u"target"_s, target},
+                {u"unresolved"_s, target == u"new"}, {u"copyText"_s, copied.text}, {u"path"_s, part->path},
+                {u"folder"_s, copied.folder}};
+    }
     const notebook::CopiedLink copied = notebook::copiedLink(
-            url, fromPath.isEmpty() ? m_path : fromPath, config,
-            [this](const QString &target, const QString &from) {
-                return m_host ? m_host->resolveLink(target, from) : QString();
+            url, from, config,
+            [this](const QString &target, const QString &linkFrom) {
+                return m_host ? m_host->resolveLink(target, linkFrom) : QString();
             },
             [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); });
     QVariantMap out{{u"kind"_s, scheme}, {u"copyText"_s, copied.text}, {u"unresolved"_s, false}};
@@ -3334,6 +3358,33 @@ QVariantMap PageController::linkMenu(const QString &url, const QString &fromPath
     if (scheme == u"page")
         out.insert({{u"unresolved"_s, copied.path.isEmpty()}, {u"path"_s, copied.path}});
     return out;
+}
+
+QString PageController::linkAtCursor(int row, int position) const
+{
+    if (!validRow(row))
+        return {};
+    const BlockShape shape = m_model->shapeAt(row);
+    switch (shape.view) {
+    case BlockView::Code:
+    case BlockView::Calc:
+    case BlockView::Query:
+    case BlockView::Math:
+    case BlockView::Table:
+    case BlockView::Frontmatter:
+    case BlockView::Html:
+    case BlockView::Rule: return {}; // no links in the rendered text
+    default: break;
+    }
+    const int bodyPosition = shape.editOffset + std::clamp(position, 0, int(shape.editText.size()));
+    return m_model->linkUrlAt(row, m_model->document().at(row).body, bodyPosition);
+}
+
+QString PageController::linkInText(int row, const QString &text, int position) const
+{
+    if (!validRow(row) || position < 0 || position > text.size())
+        return {};
+    return m_model->linkUrlAt(row, text, position);
 }
 
 QVariantMap PageController::copyText(const QString &text)

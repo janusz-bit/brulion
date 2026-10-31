@@ -378,7 +378,10 @@ notebook::CopiedLink PlanningActions::copiedLink(const QString &url, const QStri
             [this](const QString &target, const QString &from) {
                 return m_host ? m_host->resolveLink(target, from) : QString();
             },
-            [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); });
+            [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); },
+            [this](const QString &target, int part, const QString &from) {
+                return m_host ? linkPartFromMap(m_host->linkPart(target, part, from)) : std::nullopt;
+            });
 }
 
 QString PlanningActions::linkText(const QString &url, const QString &fromPath) const
@@ -388,7 +391,17 @@ QString PlanningActions::linkText(const QString &url, const QString &fromPath) c
 
 bool PlanningActions::linkMissing(const QString &url, const QString &fromPath) const
 {
+    if (url.startsWith(u"part:"_s))
+        return linkPartTarget(url, fromPath) == u"new";
     return url.startsWith(u"page:"_s) && copiedLink(url, fromPath).path.isEmpty();
+}
+
+QString PlanningActions::linkPartTarget(const QString &url, const QString &fromPath) const
+{
+    const auto part = markdown::parseLinkPartUrl(url);
+    if (!part || !m_host)
+        return {};
+    return m_host->linkPart(part->target, part->part, fromPath).value(u"kind"_s).toString();
 }
 
 bool PlanningActions::copyText(const QString &text) const
@@ -417,6 +430,14 @@ bool PlanningActions::openLink(const QString &url, const QString &fromPath, bool
     }
     if (scheme == u"block") {
         m_host->navigate({{u"view"_s, u"page"_s}, {u"blockId"_s, rest}}, newPane);
+        return true;
+    }
+    if (scheme == u"part") {
+        // A path part of a link (the host opens the page, the folder or a new page).
+        const QVariantMap route = linkPartRoute(url, fromPath);
+        if (route.isEmpty())
+            return false;
+        m_host->navigate(route, newPane);
         return true;
     }
     if (scheme == u"page") {

@@ -142,6 +142,11 @@ QString FakeEditorHost::linkTarget(const QString &path, const QString &fromPath)
     return currentIndex().linkTarget(path, fromPath).value_or(QString());
 }
 
+QVariantMap FakeEditorHost::linkPart(const QString &target, int part, const QString &fromPath) const
+{
+    return linkPartToMap(currentIndex().resolveLinkPart(target, part, fromPath));
+}
+
 void FakeEditorHost::setNow(const QString &now)
 {
     if (m_now == now)

@@ -43,6 +43,11 @@ brulion_add_test(tst_editor_highlighter
 brulion_add_test(tst_editor_richpills
     SOURCES tst_editor_richpills.cpp
     LIBS brulion_editor brulion_core_markdown)
+# The links of a rendered text as accessible items (RichTextLinks): one per anchor — each path part
+# of [[A/B/C]] too —, their rectangles from the TextEdit's document or the Text's HTML laid out again.
+brulion_add_test(tst_editor_richlinks
+    SOURCES tst_editor_richlinks.cpp
+    LIBS brulion_editor brulion_core_markdown)
 brulion_add_test(tst_editor_queryresults
     SOURCES tst_editor_queryresults.cpp
     LIBS brulion_editor)

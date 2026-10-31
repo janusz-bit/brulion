@@ -35,7 +35,9 @@ qt_add_library(brulion_editor STATIC
     streamselection.h streamselection.cpp
     dayclock.h dayclock.cpp
     markdownhighlighter.h markdownhighlighter.cpp
+    richtext_p.h
     richtextpills.h richtextpills.cpp
+    richtextlinks.h richtextlinks.cpp
     suggestionmodel.h suggestionmodel.cpp
     fakeeditorhost.h fakeeditorhost.cpp
     editorinput.h editorinput.cpp

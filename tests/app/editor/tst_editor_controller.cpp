@@ -41,6 +41,8 @@ namespace {
 
 const QString Page = u"Notatki/Strona.md"_s;
 const QString Now = u"2026-10-15 10:00"_s;
+/// Pages of the path-part tests: a page beside its folder, a folder without its page.
+const QStringList PartFiles{u"Firma.md"_s, u"Firma/Adam cośtam.md"_s, u"Projekty/Zażółć gęślą jaźń.md"_s};
 
 /// A controller on `content` (with a model tester watching every signal, unless `NoModelTester`).
 struct Fixture {
@@ -2191,6 +2193,165 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, u"zakupy"_s}, {u"overview"_s, true}});
         QCOMPARE(f.host.lastRoute().value(u"overview"_s).toBool(), true);
         QCOMPARE(f.text(), u"- Zobacz [[Inna#Drugi blok]], [[Nowa strona]], #[[ważne sprawy]] i #zakupy\n"_s);
+    }
+
+    // --- path parts of a link (docs/SYNTAX.md §2 "Path parts") ---------------------------------------
+
+    void pathPartsRender()
+    {
+        Fixture f(u"- Zapytać się [[Firma/Adam cośtam]] o to\n- [[Projekty/Zażółć gęślą jaźń|Projekt]]\n"_s, 0, Page,
+                  PartFiles);
+        const QString html = f.role(0, "html").toString();
+        QVERIFY2(html.contains(u"href=\"part:1:Firma%2FAdam%20co%C5%9Btam\""_s), qPrintable(html));
+        QVERIFY2(html.contains(u"href=\"page:Firma%2FAdam%20co%C5%9Btam\""_s), qPrintable(html));
+        QVERIFY2(html.contains(u">Adam cośtam</a>"_s), qPrintable(html));
+        // The raw line is unchanged; a link with a display text stays one.
+        QCOMPARE(f.edit(0), u"Zapytać się [[Firma/Adam cośtam]] o to"_s);
+        QVERIFY(!f.role(1, "html").toString().contains(u"part:"_s));
+    }
+
+    void pathPartsActivate_data()
+    {
+        QTest::addColumn<QString>("url");
+        QTest::addColumn<bool>("newPane");
+        QTest::addColumn<QString>("route"); // "key=value;…" of the host's route, "" — no navigation
+        QTest::newRow("a part") << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s << false
+                                << u"from=Notatki/Strona.md;linkPart=1;linkTarget=Firma/Adam cośtam;target=Firma;view=page"_s;
+        QTest::newRow("in the side panel") << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s << true
+                                           << u"from=Notatki/Strona.md;linkPart=1;linkTarget=Firma/Adam cośtam;target=Firma;view=page"_s;
+        QTest::newRow("the second of three") << u"part:2:A%2FB%2FC"_s << false
+                                             << u"from=Notatki/Strona.md;linkPart=2;linkTarget=A/B/C;target=A/B;view=page"_s;
+        QTest::newRow("the last part") << u"page:Firma%2FAdam%20co%C5%9Btam"_s << false
+                                       << u"path=Firma/Adam cośtam.md;target=Firma/Adam cośtam;view=page"_s;
+        QTest::newRow("part 0") << u"part:0:Firma%2FAdam"_s << false << QString();
+        QTest::newRow("no parent part") << u"part:2:Firma%2FAdam"_s << false << QString();
+        QTest::newRow("no path") << u"part:1:Firma"_s << false << QString();
+        QTest::newRow("no number") << u"part:x:Firma%2FAdam"_s << false << QString();
+    }
+    void pathPartsActivate()
+    {
+        QFETCH(QString, url);
+        QFETCH(bool, newPane);
+        QFETCH(QString, route);
+        Fixture f(u"- [[Firma/Adam cośtam]] i [[A/B/C]]\n"_s, 0, Page, PartFiles);
+        QSignalSpy navigated(&f.host, &FakeEditorHost::navigated);
+        const QVariantMap out = f.page.activateLink(0, url, newPane);
+        QVERIFY(out.isEmpty());
+        if (route.isEmpty()) {
+            QCOMPARE(navigated.size(), 0);
+            return;
+        }
+        QCOMPARE(navigated.size(), 1);
+        QCOMPARE(navigated.first().at(1).toBool(), newPane);
+        const QVariantMap got = f.host.lastRoute();
+        QStringList pairs;
+        for (auto it = got.cbegin(); it != got.cend(); ++it)
+            pairs.append(it.key() + u'=' + it.value().toString());
+        QCOMPARE(pairs.join(u';'), route);
+    }
+
+    void pathPartsMenu_data()
+    {
+        QTest::addColumn<QString>("url");
+        QTest::addColumn<QString>("target");
+        QTest::addColumn<bool>("unresolved");
+        QTest::addColumn<QString>("copyText");
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("folder");
+        QTest::newRow("a page") << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s << u"page"_s << false << u"[[Firma]]"_s
+                                << u"Firma.md"_s << QString();
+        QTest::newRow("a folder") << u"part:1:Projekty%2FZa%C5%BC%C3%B3%C5%82%C4%87%20g%C4%99%C5%9Bl%C4%85%20ja%C5%BA%C5%84"_s
+                                  << u"folder"_s << false << u"Projekty/"_s << u"Projekty"_s << u"Projekty"_s;
+        QTest::newRow("a new page") << u"part:1:Nowa%2FStrona"_s << u"new"_s << true << u"[[Nowa]]"_s << QString()
+                                    << QString();
+    }
+    void pathPartsMenu()
+    {
+        QFETCH(QString, url);
+        QFETCH(QString, target);
+        QFETCH(bool, unresolved);
+        QFETCH(QString, copyText);
+        QFETCH(QString, path);
+        QFETCH(QString, folder);
+        Fixture f(u"- strona\n"_s, 0, Page, PartFiles);
+        const QVariantMap m = f.page.linkMenu(url);
+        QCOMPARE(m.value(u"kind"_s).toString(), u"page"_s);
+        QVERIFY(m.value(u"part"_s).toBool());
+        QCOMPARE(m.value(u"target"_s).toString(), target);
+        QCOMPARE(m.value(u"unresolved"_s).toBool(), unresolved);
+        QCOMPARE(m.value(u"copyText"_s).toString(), copyText);
+        QCOMPARE(m.value(u"path"_s).toString(), path);
+        QCOMPARE(m.value(u"folder"_s).toString(), folder);
+    }
+    void malformedPathPartMenus()
+    {
+        Fixture f(u"- strona\n"_s);
+        for (const QString &bad : {u"part:"_s, u"part:0:A%2FB"_s, u"part:2:A%2FB"_s, u"part:1:A"_s, u"part:01:A%2FB"_s})
+            QVERIFY2(f.page.linkMenu(bad).isEmpty(), qPrintable(bad));
+    }
+
+    void linkAtCursor_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("needle"); // the caret before its first character (edit text)
+        QTest::addColumn<int>("offset");     // … plus this
+        QTest::addColumn<QString>("url");
+        const QString task = u"- [ ] Zapytać się [[Firma/Adam cośtam]]\n"_s;
+        QTest::newRow("on the part") << task << u"Firma"_s << 2 << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s;
+        QTest::newRow("right after the part") << task << u"/Adam"_s << 0 << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s;
+        QTest::newRow("on the last part") << task << u"Adam"_s << 1 << u"page:Firma%2FAdam%20co%C5%9Btam"_s;
+        QTest::newRow("on the brackets") << task << u"[[Firma"_s << 0 << u"page:Firma%2FAdam%20co%C5%9Btam"_s;
+        QTest::newRow("outside") << task << u"Zapytać"_s << 3 << QString();
+        QTest::newRow("a heading") << u"## Plan [[A/B]]\n"_s << u"A/"_s << 0 << u"part:1:A%2FB"_s;
+        QTest::newRow("a quote") << u"> Cytat [[A/B]]\n"_s << u"A/"_s << 1 << u"part:1:A%2FB"_s;
+        QTest::newRow("a tag") << u"- #zakupy/spożywcze\n"_s << u"zakupy"_s << 0 << u"tag:zakupy%2Fspo%C5%BCywcze"_s;
+        QTest::newRow("inline code") << u"- `[[A/B]]`\n"_s << u"A/"_s << 0 << QString();
+        QTest::newRow("a code block") << u"```\n[[A/B]]\n```\n"_s << u"A/"_s << 0 << QString();
+    }
+    void linkAtCursor()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, needle);
+        QFETCH(int, offset);
+        QFETCH(QString, url);
+        Fixture f(content, 0, Page, PartFiles);
+        const QString edit = f.edit(0);
+        const int at = int(edit.indexOf(needle));
+        QVERIFY2(at >= 0, qPrintable(edit));
+        QCOMPARE(f.page.linkAtCursor(0, at + offset), url);
+        // Out of range: clamped, never a crash.
+        f.page.linkAtCursor(0, -5);
+        f.page.linkAtCursor(0, int(edit.size()) + 50);
+        QCOMPARE(f.page.linkAtCursor(7, 0), QString());
+    }
+
+    void linkInText()
+    {
+        Fixture f(u"| a |\n| - |\n| [[Firma/Adam cośtam]] x |\n"_s, 0, Page, PartFiles);
+        QCOMPARE(f.page.linkInText(0, u"[[Firma/Adam cośtam]] x"_s, 3), u"part:1:Firma%2FAdam%20co%C5%9Btam"_s);
+        QCOMPARE(f.page.linkInText(0, u"[[Firma/Adam cośtam]] x"_s, 10), u"page:Firma%2FAdam%20co%C5%9Btam"_s);
+        QCOMPARE(f.page.linkInText(0, u"[[Firma/Adam cośtam]] x"_s, 23), QString());
+        QCOMPARE(f.page.linkInText(0, u"x"_s, 5), QString());
+        QCOMPARE(f.page.linkInText(-1, u"[[A/B]]"_s, 2), QString());
+    }
+
+    void pathPartsInEmbedsAndResults()
+    {
+        // The text of another page (an embed, a query result) splits too, its parts resolved from
+        // that page.
+        Fixture f(u"- strona\n"_s);
+        f.host.setFile(u"Klienci/Notatka.md"_s, u"- [[Firma/Adam]]\n"_s);
+        f.host.setFile(u"Klienci/Firma/Adam.md"_s, u"- Adam\n"_s);
+        const markdown::InlineRenderer other(
+                f.model()->renderContextFor(u"Klienci/Notatka.md"_s, u"- [[Firma/Adam]]\n"_s, 0));
+        const QString html = other.render(u"[[Firma/Adam]]"_s);
+        QVERIFY2(html.contains(u"part:1:Firma%2FAdam"_s), qPrintable(html));
+        // From that page (relative) and from this one (by path suffix): the folder holding Adam.
+        QCOMPARE(linkPartFromMap(f.host.linkPart(u"Firma/Adam"_s, 1, u"Klienci/Notatka.md"_s))->path,
+                 u"Klienci/Firma"_s);
+        QCOMPARE(linkPartFromMap(f.host.linkPart(u"Firma/Adam"_s, 1, Page))->path, u"Klienci/Firma"_s);
+        // A part unknown on both pages is new.
+        QCOMPARE(linkPartFromMap(f.host.linkPart(u"Nowa/Strona"_s, 1, Page))->kind, markdown::LinkPartTarget::Kind::New);
     }
 
     void tokenMenusOfOtherFiles()

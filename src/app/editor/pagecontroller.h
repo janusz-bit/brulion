@@ -692,14 +692,28 @@ public:
     /// "heading" | "ref" (a `((id))`), name } when that block or heading is nowhere (a block moved
     /// to another page is opened there: EditorHost::blockIdTaken once the index is complete, the
     /// shell's route resolution).
+    /// A path part of a link (part:, docs/SYNTAX.md §2 "Path parts") navigates to
+    /// {view: "page", target: the part's prefix, linkTarget, linkPart, from: this page} — the host
+    /// resolves it to the page, the folder's pages or a new page; a malformed one does nothing.
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
+    /// The URL Alt+Enter follows at `position` of block `row`'s edit text (InlineEditor positions,
+    /// mapped onto the body past the hidden task marker): InlineRenderer::linkUrlAt() with the
+    /// row's render context — part: on a path part of a link, page: elsewhere in it, tag:, block:,
+    /// ext:; "" when no link is there (also in a code, table or frontmatter block).
+    Q_INVOKABLE QString linkAtCursor(int row, int position) const;
+    /// The same for a text that is not a block's body (a table cell being edited): `text` read
+    /// with block `row`'s render context.
+    Q_INVOKABLE QString linkInText(int row, const QString &text, int position) const;
     /// What the menu of a link (LinkMenu: a right-click or long press on a page:, tag:, block: or
     /// ext: link) needs — `fromPath`: the page the link is written on ("" = this one; query
     /// results and embeds of other pages): { kind ("page" | "tag" | "block" | "ext"), unresolved
     /// (a page that does not exist yet), path (the page it opens), tag, copyText (what "Kopiuj"
     /// puts on the clipboard: `[[Page#Heading]]` by the page's shortest link target — it works
     /// pasted on any page —, as written when it does not exist; `#tag` / `#[[tag with spaces]]`;
-    /// `((id))`; the address) }; empty for other links.
+    /// `((id))`; the address) }; empty for other links. A path part of a link (part:): { kind:
+    /// "page", part: true, target: "page" | "folder" | "new", unresolved (target "new"), path (the
+    /// page or the folder), folder (the folder's path, "" else), copyText ([[Page]], "Folder/",
+    /// [[prefix]]) }; {} for a malformed one.
     Q_INVOKABLE QVariantMap linkMenu(const QString &url, const QString &fromPath = QString()) const;
     /// Put `text` on the clipboard: { ok, text, reason ("noClipboard" when the platform has none
     /// or it did not take the text) } — as copyLink() reports it.

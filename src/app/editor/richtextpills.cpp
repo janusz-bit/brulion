@@ -1,5 +1,7 @@
 #include "richtextpills.h"
 
+#include "richtext_p.h"
+
 #include <QAbstractTextDocumentLayout>
 #include <QFontMetricsF>
 #include <QTextBlock>
@@ -215,35 +217,16 @@ void RichTextPills::refresh()
             }
             if (spans.isEmpty())
                 continue;
-            (void)layout->blockBoundingRect(block); // lays the block out (with the current width)
-            const QTextLayout *text = block.layout();
-            if (!text)
-                continue;
-            const QPointF origin = text->position();
-            const int at = block.position();
             for (const Span &span : std::as_const(spans)) {
                 const QFontMetricsF metrics(span.font);
-                for (int i = 0; i < text->lineCount(); ++i) {
-                    const QTextLine line = text->lineAt(i);
-                    const int lineEnd = line.textStart() + line.textLength();
-                    const int start = std::max(span.from - at, line.textStart());
-                    const int end = std::min(span.to - at, lineEnd);
-                    if (start >= end)
-                        continue;
-                    qreal x1 = line.cursorToX(start);
-                    qreal x2 = line.cursorToX(end);
-                    if (x2 < x1)
-                        std::swap(x1, x2);
-                    // A span going on in the next line: not the space the line broke at.
-                    if (span.to - at > lineEnd)
-                        x2 = std::min(x2, line.naturalTextRect().right());
-                    if (x2 - x1 < 0.5)
-                        continue;
+                for (const detail::LineSegment &segment : detail::lineSegments(layout, block, span.from, span.to)) {
+                    const QPointF origin = block.layout()->position();
                     // Centred on the span's glyphs, not on the fixed-height line box.
-                    const qreal baseline = line.y() + line.ascent();
+                    const qreal baseline = segment.line.y() + segment.line.ascent();
                     const qreal top = baseline - metrics.ascent() + m_inset;
                     const qreal bottom = baseline + metrics.descent() - m_inset;
-                    out.append({QRectF(origin.x() + x1, origin.y() + top, x2 - x1, std::max<qreal>(1, bottom - top)),
+                    out.append({QRectF(origin.x() + segment.x1, origin.y() + top, segment.x2 - segment.x1,
+                                       std::max<qreal>(1, bottom - top)),
                                 span.color, span.round, span.from, span.to});
                 }
             }

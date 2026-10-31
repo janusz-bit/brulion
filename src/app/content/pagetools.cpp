@@ -374,6 +374,14 @@ bool PageTools::openLink(const QString &url, const QString &fromPath, bool newPa
         m_workspace->navigate({ { u"view"_s, u"page"_s }, { u"blockId"_s, rest } }, newPane);
         return true;
     }
+    if (scheme == u"part") {
+        // A path part of a link (Workspace::resolveRoute opens the page, the folder or a new page).
+        const QVariantMap route = linkPartRoute(url, paths::normalize(fromPath));
+        if (route.isEmpty())
+            return false;
+        m_workspace->navigate(route, newPane);
+        return true;
+    }
     if (scheme != u"page")
         return false;
     QString target = rest;

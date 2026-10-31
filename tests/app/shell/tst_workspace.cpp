@@ -1031,6 +1031,73 @@ private Q_SLOTS:
         QCOMPARE(routeOf({{u"view"_s, u"tags"_s}}).value(u"view"_s).toString(), u"tags"_s);
     }
 
+    // A path part of a link ([[Projekty/Remont]]: "Projekty", docs/SYNTAX.md §2 "Path parts"): the
+    // route the editor sends becomes the page, the folder's pages or a new page — never with the
+    // part's keys, so history and the side panel see ordinary routes.
+    void linkPartRoutesResolve_data()
+    {
+        QTest::addColumn<QString>("target");
+        QTest::addColumn<int>("part");
+        QTest::addColumn<QString>("from");
+        QTest::addColumn<QString>("route"); // "key=value;…", "" — an empty route
+        QTest::newRow("a folder") << u"Projekty/Remont mieszkania"_s << 1 << u"journals/2026-10-14.md"_s
+                                  << u"path=Projekty;view=allPages"_s;
+        QTest::newRow("a page") << u"Firma/Adam Nowak"_s << 1 << QString() << u"path=Firma.md;view=page"_s;
+        QTest::newRow("a new page") << u"Nowa/Strona"_s << 1 << QString()
+                                    << u"path=strony/Nowa.md;target=Nowa;view=page"_s;
+        QTest::newRow("a new deeper page") << u"Nowa/Głęboka/Strona"_s << 2 << QString()
+                                           << u"path=strony/Nowa/Głęboka.md;target=Nowa/Głęboka;view=page"_s;
+        QTest::newRow("relative to the note") << u"Dział/Ewa"_s << 1 << u"Klienci/N.md"_s
+                                              << u"path=Klienci/Dział;view=allPages"_s;
+        QTest::newRow("the Polish folder's spelling") << u"zażółć/x"_s << 1 << QString()
+                                                      << u"path=Zażółć;view=allPages"_s;
+        QTest::newRow("no such part") << u"Projekty/Remont mieszkania"_s << 5 << QString() << QString();
+        QTest::newRow("no path") << u"Projekty"_s << 1 << QString() << QString();
+    }
+    void linkPartRoutesResolve()
+    {
+        QFETCH(QString, target);
+        QFETCH(int, part);
+        QFETCH(QString, from);
+        QFETCH(QString, route);
+        const QHash<QString, QString> files{{u"Projekty/Remont mieszkania.md"_s, u"- plan\n"_s},
+                                            {u"Firma.md"_s, u"- firma\n"_s},
+                                            {u"Firma/Adam Nowak.md"_s, u"- Adam\n"_s},
+                                            {u"Klienci/N.md"_s, u"- notatka\n"_s},
+                                            {u"Klienci/Dział/Stara.md"_s, u"- stara\n"_s},
+                                            {u"Zażółć/Gęślą.md"_s, u"- jaźń\n"_s},
+                                            {u".brulion/config.json"_s, uR"({"version": 1, "newPagesFolder": "strony"})"_s}};
+        // Right after opening, while the index is still being built: a click waits for it.
+        const QString root = m_tmp.filePath(u"vault-%1"_s.arg(++m_n));
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+            writeRaw(root + u'/' + it.key(), it.value().toUtf8());
+        Workspace ws;
+        QVERIFY(ws.open(root, m_tmp.filePath(u"state-%1"_s.arg(m_n))));
+        QSignalSpy nav(&ws, &Workspace::navigationRequested);
+        ws.navigate({{u"view"_s, u"page"_s},
+                     {u"target"_s, target.left(target.lastIndexOf(u'/'))},
+                     {u"linkTarget"_s, target},
+                     {u"linkPart"_s, part},
+                     {u"from"_s, from}},
+                    true);
+        QCOMPARE(nav.size(), 1);
+        QCOMPARE(nav.first().at(1).toBool(), true); // the side panel works for every kind
+        const QVariantMap got = nav.first().at(0).toMap();
+        QStringList pairs;
+        for (auto it = got.cbegin(); it != got.cend(); ++it)
+            pairs.append(it.key() + u'=' + it.value().toString());
+        QCOMPARE(pairs.join(u';'), route);
+        QVERIFY(!got.contains(u"linkPart"_s) && !got.contains(u"linkTarget"_s) && !got.contains(u"from"_s));
+        QVERIFY(!ws.exists(u"strony/Nowa.md"_s)); // created by its first content, not here
+        // The colour the link was shown in agrees (Workspace::linkPart, the same resolver).
+        const QString kind = ws.linkPart(target, part, from).value(u"kind"_s).toString();
+        const QString view = got.value(u"view"_s).toString();
+        QCOMPARE(kind, route.isEmpty() ? QString()
+                       : view == u"allPages"  ? u"folder"_s
+                       : got.contains(u"target"_s) ? u"new"_s
+                                                   : u"page"_s);
+    }
+
     // [[Page#^id]] after the block was moved to another page: the route follows the id (the
     // index knows where it is now); ids the linked page has, unknown ids and conflict copies do not
     // move it.

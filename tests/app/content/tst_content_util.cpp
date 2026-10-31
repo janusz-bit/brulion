@@ -4,6 +4,8 @@
 // Polish name order.
 #include "contentutil.h"
 
+#include "index/vaultindex.h"
+#include "markdown/inlinerenderer.h"
 #include "markdown/parse.h"
 
 #include <QTest>
@@ -159,6 +161,45 @@ private Q_SLOTS:
         QVERIFY(compareNames(u"a"_s, u"A"_s) != 0); // total order
         QCOMPARE(oneLine(u"  wiele\n  linii\ttekstu  "_s), u"wiele linii tekstu"_s);
         QCOMPARE(oneLine(u"abcdefghij"_s, 5), u"abcd…"_s);
+    }
+
+    // Linked references and tag pages split a path link too, its parts coloured by the index as
+    // seen from the referencing note (page and folder: link colour; nothing: unresolved).
+    void pathPartsInReferences_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<QString>("from");
+        QTest::addColumn<QString>("part"); // the part: anchor expected, with its colour
+        const QString link = u"<a href=\"part:1:%1\" style=\"color:#2c6aa3;text-decoration:none\">%2</a>"_s;
+        const QString missing = u"<a href=\"part:1:%1\" style=\"color:#7a5ea3;text-decoration:none\">%2</a>"_s;
+        QTest::newRow("a Polish folder") << u"[[Zażółć/Gęślą]]"_s << u"Notatka.md"_s
+                                         << link.arg(u"Za%C5%BC%C3%B3%C5%82%C4%87%2FG%C4%99%C5%9Bl%C4%85"_s, u"Zażółć"_s);
+        QTest::newRow("an alias") << u"[[Firma/Nowy]]"_s << u"Notatka.md"_s
+                                  << link.arg(u"Firma%2FNowy"_s, u"Firma"_s);
+        QTest::newRow("relative") << u"[[Dział/Nowy]]"_s << u"Klienci/N.md"_s
+                                  << link.arg(u"Dzia%C5%82%2FNowy"_s, u"Dział"_s);
+        QTest::newRow("nothing there") << u"[[Nowa/Strona]]"_s << u"Notatka.md"_s
+                                       << missing.arg(u"Nowa%2FStrona"_s, u"Nowa"_s);
+    }
+    void pathPartsInReferences()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(QString, from);
+        QFETCH(QString, part);
+        VaultIndex index;
+        index.update(u"Zażółć/Gęślą.md"_s, u"- jaźń\n"_s);
+        index.update(u"Spółki/ACME.md"_s, u"---\naliases: [Firma]\n---\n- acme\n"_s);
+        index.update(u"Klienci/Dział/Stary.md"_s, u"- stary\n"_s);
+        index.update(u"Klienci/N.md"_s, u"- n\n"_s);
+        const markdown::RenderContext ctx =
+                renderContext(&index, from, QDate(2026, 10, 14), dates::UiLocale::Polish, markdown::Palette());
+        const QString html = markdown::InlineRenderer(ctx).render(markdown);
+        QVERIFY2(html.contains(part), qPrintable(html));
+        // Without an index: one link as before.
+        const QString single = markdown::InlineRenderer(renderContext(nullptr, from, QDate(2026, 10, 14),
+                                                                      dates::UiLocale::Polish, markdown::Palette()))
+                                       .render(markdown);
+        QVERIFY2(!single.contains(u"part:"_s), qPrintable(single));
     }
 };
 

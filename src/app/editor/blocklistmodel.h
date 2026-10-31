@@ -229,6 +229,10 @@ public:
     /// from `path`, `((id))` through the host, inline calculations see the variables of
     /// `content` above `line`; embedded pages / sections / blocks are hidden (shown in frames).
     markdown::RenderContext renderContextFor(const QString &path, const QString &content, int line) const;
+    /// The URL a click on the construct at `position` of `text` (a row's body, or a table cell's
+    /// text) follows, read with row `row`'s render context (InlineRenderer::linkUrlAt(): part: for
+    /// a path part of a link); "" when no link is there. The keyboard's Alt+Enter.
+    QString linkUrlAt(int row, const QString &text, int position) const;
     /// The host's vault configuration (cached until the rendering is invalidated).
     const VaultConfig &vaultConfig() const;
     void setEnglish(bool english);

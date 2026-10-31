@@ -6,6 +6,8 @@
 // the editor and the shell are developed in parallel against it.
 #pragma once
 
+#include "markdown/inline.h"
+#include "markdown/inlinerenderer.h"
 #include "picturesize.h"
 
 #include <QFile>
@@ -16,6 +18,8 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
+
+#include <optional>
 
 namespace brulion {
 
@@ -95,6 +99,18 @@ public:
             stem.chop(3);
         const QString title = stem.mid(slash + 1);
         return resolveLink(title, fromPath) == path ? title : stem;
+    }
+    /// What parent part `part` (1-based) of the page-link target `target` (as written) written on
+    /// `fromPath` opens (docs/SYNTAX.md §2 "Path parts", VaultIndex::resolveLinkPart()):
+    /// { kind: "page" | "folder" | "new", path, prefix } (linkPartToMap() below); {} when the
+    /// target does not split. Never waits for the index (rendering asks). Default: {} (a host
+    /// that does not know parts: every part is shown as a new page).
+    virtual QVariantMap linkPart(const QString &target, int part, const QString &fromPath) const
+    {
+        Q_UNUSED(target)
+        Q_UNUSED(part)
+        Q_UNUSED(fromPath)
+        return {};
     }
     /// Text of the block with this id (for ((id)) rendering); "" when unknown.
     virtual QString blockText(const QString &blockId) const = 0;
@@ -266,5 +282,51 @@ Q_SIGNALS:
     /// all of them (the setting changed).
     void webPictureChanged(const QString &url);
 };
+
+/// What a path part of a link opens (markdown::LinkPartTarget) as EditorHost::linkPart() gives
+/// it: { kind: "page" | "folder" | "new", path, prefix }; {} for nullopt.
+inline QVariantMap linkPartToMap(const std::optional<markdown::LinkPartTarget> &part)
+{
+    if (!part)
+        return {};
+    using Kind = markdown::LinkPartTarget::Kind;
+    const QString kind = part->kind == Kind::Page     ? QStringLiteral("page")
+                         : part->kind == Kind::Folder ? QStringLiteral("folder")
+                                                      : QStringLiteral("new");
+    return {{QStringLiteral("kind"), kind}, {QStringLiteral("path"), part->path}, {QStringLiteral("prefix"), part->prefix}};
+}
+/// The route a path part of a link (a part: URL of rendered text, docs/SYNTAX.md §2 "Path parts")
+/// written on `fromPath` navigates to: {view: "page", target: the part's prefix, linkTarget,
+/// linkPart, from} — the shell's Workspace::resolveRoute() turns it into the page, the folder's
+/// pages or a new page; {} for a malformed URL. The editor, linked references and Tasks share it.
+inline QVariantMap linkPartRoute(const QString &url, const QString &fromPath)
+{
+    const auto part = markdown::parseLinkPartUrl(url);
+    if (!part)
+        return {};
+    return {{QStringLiteral("view"), QStringLiteral("page")},
+            {QStringLiteral("target"), part->prefix},
+            {QStringLiteral("linkTarget"), part->target},
+            {QStringLiteral("linkPart"), part->part},
+            {QStringLiteral("from"), fromPath}};
+}
+/// The inverse of linkPartToMap(); nullopt for {} and an unknown kind.
+inline std::optional<markdown::LinkPartTarget> linkPartFromMap(const QVariantMap &map)
+{
+    using Kind = markdown::LinkPartTarget::Kind;
+    const QString kind = map.value(QStringLiteral("kind")).toString();
+    markdown::LinkPartTarget out;
+    if (kind == QLatin1String("page"))
+        out.kind = Kind::Page;
+    else if (kind == QLatin1String("folder"))
+        out.kind = Kind::Folder;
+    else if (kind == QLatin1String("new"))
+        out.kind = Kind::New;
+    else
+        return std::nullopt;
+    out.path = map.value(QStringLiteral("path")).toString();
+    out.prefix = map.value(QStringLiteral("prefix")).toString();
+    return out;
+}
 
 } // namespace brulion

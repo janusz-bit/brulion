@@ -119,17 +119,23 @@ public:
     Q_INVOKABLE bool snoozeReminder(const QString &path, int line, const QString &text, const QString &value,
                                     const QString &at);
 
-    /// Follow a link of rendered text (markdown::InlineRenderer URLs: page:, tag:, block:, ext:)
-    /// written in `fromPath`, through the host's navigation (`newPane`: in the side panel). False
-    /// for unknown schemes.
+    /// Follow a link of rendered text (markdown::InlineRenderer URLs: page:, tag:, block:, ext:,
+    /// part: — a path part of a link, resolved by the host) written in `fromPath`, through the
+    /// host's navigation (`newPane`: in the side panel). False for unknown schemes and a
+    /// malformed part:.
     Q_INVOKABLE bool openLink(const QString &url, const QString &fromPath = QString(), bool newPane = false);
     /// What a link menu's "Kopiuj" copies for `url` written in `fromPath`: `[[Page#Heading]]` by the
     /// page's shortest link target (as written when the page does not exist), `#tag` /
-    /// `#[[tag with spaces]]`, `((id))`, the address; "" for other URLs.
+    /// `#[[tag with spaces]]`, `((id))`, the address; for a path part of a link `[[Page]]`, the
+    /// folder's path ("Projekty/") or `[[prefix]]` of a new page; "" for other URLs.
     Q_INVOKABLE QString linkText(const QString &url, const QString &fromPath = QString()) const;
-    /// A page: link written in `fromPath` that leads to no page (its menu offers "Utwórz stronę",
-    /// as in the editor); false for other links.
+    /// A page: link written in `fromPath` that leads to no page, or a path part of a link that
+    /// opens a new page (its menu offers "Utwórz stronę", as in the editor); false for other
+    /// links.
     Q_INVOKABLE bool linkMissing(const QString &url, const QString &fromPath = QString()) const;
+    /// What a path part of a link (part:) written in `fromPath` opens: "page", "folder" or "new"
+    /// (EditorHost::linkPart()); "" for any other URL and a malformed one.
+    Q_INVOKABLE QString linkPartTarget(const QString &url, const QString &fromPath = QString()) const;
     /// Put `text` on the clipboard; false when the platform has none or it did not take it.
     Q_INVOKABLE bool copyText(const QString &text) const;
 

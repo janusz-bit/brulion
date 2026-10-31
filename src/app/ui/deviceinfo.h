@@ -1,9 +1,10 @@
 // DeviceInfo — facts about the device the UI adapts to (QML singleton `DeviceInfo`):
 // touch screen presence, target platform, the system font families and the installed ones (the
-// font pickers of Ustawienia → Wygląd / Edytor). Theme.qml derives `touchUi` and the font tokens
-// from it.
+// font pickers of Ustawienia → Wygląd / Edytor), whether a screen reader is on. Theme.qml derives
+// `touchUi` and the font tokens from it.
 #pragma once
 
+#include <QAccessible>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -11,7 +12,7 @@
 
 namespace brulion::ui {
 
-class DeviceInfo : public QObject {
+class DeviceInfo : public QObject, public QAccessible::ActivationObserver {
     Q_OBJECT
     QML_ELEMENT
     QML_SINGLETON
@@ -26,15 +27,27 @@ class DeviceInfo : public QObject {
     Q_PROPERTY(QString systemFontFamily READ systemFontFamily CONSTANT FINAL)
     /// The system's fixed-width font family (code, diffs, keyboard hints).
     Q_PROPERTY(QString fixedFontFamily READ fixedFontFamily CONSTANT FINAL)
+    /// A screen reader or another accessibility client (TalkBack, Orca, NVDA, Narrator, Android's
+    /// UiAutomator) is active — QAccessible::isActive(), followed through an activation observer
+    /// — or simulated (simulateScreenReader; BRULION_SIMULATE_SCREEN_READER=1 for manual runs): the
+    /// accessible link items of rendered text exist only then (BLinkTargets.qml).
+    Q_PROPERTY(bool screenReader READ screenReader NOTIFY screenReaderChanged FINAL)
+    /// Behave as if a screen reader were on (self-tests; the environment variable sets it at start).
+    Q_PROPERTY(bool simulateScreenReader READ simulateScreenReader WRITE setSimulateScreenReader NOTIFY
+                       screenReaderChanged FINAL)
 
 public:
     explicit DeviceInfo(QObject *parent = nullptr);
+    ~DeviceInfo() override;
 
     QString platform() const;
     bool mobile() const;
     bool hasTouchScreen() const;
     QString systemFontFamily() const;
     QString fixedFontFamily() const;
+    bool screenReader() const { return m_simulated || m_accessible; }
+    bool simulateScreenReader() const { return m_simulated; }
+    void setSimulateScreenReader(bool on);
 
     /// The installed families a font picker offers (filterFontFamilies(): no emoji, symbol or
     /// private families; sorted for Polish readers); `fixedOnly`: monospaced ones only.
@@ -43,7 +56,14 @@ public:
     /// Theme.qml falls back to the default font then).
     Q_INVOKABLE bool hasFontFamily(const QString &family) const;
 
+Q_SIGNALS:
+    void screenReaderChanged();
+
 private:
+    void accessibilityActiveChanged(bool active) override;
+
+    bool m_accessible = false;
+    bool m_simulated = false;
     mutable QStringList m_families;
     mutable QStringList m_fixedFamilies;
 };
