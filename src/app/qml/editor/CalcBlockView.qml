@@ -48,7 +48,6 @@ Rectangle {
         x: Theme.space4
         y: Theme.space1 + 2
         spacing: Theme.space1
-        opacity: 0.85
         BIcon { name: "calculator"; size: Theme.iconSizeSm - 2; color: Theme.fgFaint; anchors.verticalCenter: parent.verticalCenter }
         Text {
             text: qsTr("Calculation")

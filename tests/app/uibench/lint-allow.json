@@ -1,16 +1,4 @@
 [
-  {"screen": "daily", "device": "desktop", "kind": "target", "type": "Item", "text": "Przybliż blok", "count": 12,
-   "reason": "Round-0 baseline: the bullet's zoom handle (20×22) next to the block's text or task box. The UI loop enlarges it or accepts it."},
-  {"screen": "daily", "device": "desktop", "kind": "contrast", "type": "Text", "text": "Obliczenia", "count": 1,
-   "reason": "Round-0 baseline: the calculation block's faint caption (11 px, 3.4:1)."},
-  {"screen": "daily", "device": "phone", "kind": "target", "type": "Item", "text": "Przybliż blok", "count": 12,
-   "reason": "Round-0 baseline: the bullet's zoom handle (28×44 on phones)."},
-  {"screen": "daily", "device": "phone", "kind": "target", "type": "Text", "count": 2,
-   "reason": "Round-0 baseline: the journal's day titles (29 px tall on phones) open the day as a page."},
-  {"screen": "daily", "device": "phone", "kind": "target", "type": "Item", "count": 1,
-   "reason": "Round-0 baseline: the 12-px band under a journal day's blocks (a tap adds a block at its end) on phones."},
-  {"screen": "doc", "device": "phone", "kind": "target", "type": "Text", "text": "1.", "count": 1,
-   "reason": "Round-0 baseline: a numbered list's number (14×28) on phones."},
-  {"screen": "settings", "device": "phone", "kind": "target", "type": "AbstractButton", "count": 11,
-   "reason": "Round-0 baseline: the appearance settings' segmented choices are 38 px tall on phones."}
+  {"screen": "daily", "device": "phone", "kind": "target", "type": "Item", "text": "Przybliż blok", "count": 2,
+   "reason": "A parent's bullet beside its fold arrow (28×44 on phones): both cannot be 44 px wide in the outline's gutter without a wider indent; leaves take the empty arrow column (round 1). A candidate to accept at the loop's end."}
 ]

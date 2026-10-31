@@ -231,8 +231,9 @@ FocusScope {
                                 width: parent ? parent.width : 0 // (null while the Repeater drops it: a new month)
                                 height: root.pillHeight
                                 radius: Theme.radiusSm
+                                // (Done and cancelled entries: struck out in the "done" chip's
+                                // colours, at full opacity — readable text, AA.)
                                 color: colors.bg
-                                opacity: entry.closed ? 0.75 : 1
                                 Row {
                                     anchors.verticalCenter: parent.verticalCenter
                                     x: 5

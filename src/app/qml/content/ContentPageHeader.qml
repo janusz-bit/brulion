@@ -315,14 +315,20 @@ Item {
                     Accessible.name: text
                     Accessible.description: !header.journal && header.exists ? qsTr("Click to rename") : ""
 
-                    HoverHandler {
-                        id: titleHover
-                        enabled: !Theme.touchUi && !header.journal && header.exists
-                        cursorShape: Qt.IBeamCursor
-                    }
-                    TapHandler {
-                        enabled: !header.journal && header.exists
-                        onTapped: header.startTitleEdit()
+                    // The tap area (rename): a touch target tall on touch UIs, centred on the title.
+                    Item {
+                        width: parent.width
+                        height: Math.max(parent.height, Theme.touchUi ? Theme.touchTarget : 0)
+                        y: (parent.height - height) / 2
+                        HoverHandler {
+                            id: titleHover
+                            enabled: !Theme.touchUi && !header.journal && header.exists
+                            cursorShape: Qt.IBeamCursor
+                        }
+                        TapHandler {
+                            enabled: !header.journal && header.exists
+                            onTapped: header.startTitleEdit()
+                        }
                     }
                     Rectangle {
                         // A hint that the title can be edited.

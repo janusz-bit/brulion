@@ -24,7 +24,8 @@ T.AbstractButton {
     signal expandedToggled(bool expanded)
 
     implicitWidth: Math.max(160, implicitContentWidth + leftPadding + rightPadding)
-    implicitHeight: Math.max(Theme.touchUi ? (collapsible ? Theme.touchTarget : 36) : 28,
+    // A touch target on touch UIs, collapsible or not (it is a button either way).
+    implicitHeight: Math.max(Theme.touchUi ? Theme.touchTarget : 28,
                              implicitContentHeight + topPadding + bottomPadding)
     leftPadding: Theme.touchUi ? 14 : 10
     rightPadding: 4

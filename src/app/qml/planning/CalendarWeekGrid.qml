@@ -198,8 +198,8 @@ FocusScope {
                             width: parent ? parent.width : 0 // (null while the Repeater drops it: a new week)
                             height: root.pillHeight
                             radius: Theme.radiusSm
+                            // (Done and cancelled: the "done" chip's colours at full opacity, AA.)
                             color: colors.bg
-                            opacity: !more && entry.closed ? 0.75 : 1
                             Text {
                                 anchors.fill: parent
                                 anchors.leftMargin: 4
@@ -380,7 +380,6 @@ FocusScope {
                             color: colors.bg
                             border.width: 1
                             border.color: Theme.alpha(colors.fg, 0.25)
-                            opacity: entry.closed ? 0.75 : 1
                             clip: true
                             Accessible.role: Accessible.Button
                             Accessible.name: entry.time + ", " + entry.title

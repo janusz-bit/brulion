@@ -134,9 +134,13 @@ T.Control {
             }
         }
 
+        // The segments take the control's whole hit height (44 px on touch UIs: the insets and
+        // the padding above and below the track belong to them), while the thumb keeps the
+        // visual, padded rectangle.
         Row {
             id: row
-            height: parent.height
+            y: -control.topPadding
+            height: control.height
 
             Repeater {
                 id: repeater

@@ -2481,10 +2481,11 @@ px.
 settings, palette × desktop light / phone dark; system fonts) fail on any enabled, visible text
 below its WCAG contrast or a target below its size that `lint-allow.json` does not excuse
 (`[{screen, device, kind, type, text|name, count, reason}]`: `count` excuses that many failures of
-a shot of that device, so one more is caught). Its first entries are the round-0 baseline of
-Brulion's known failures (the bullet's zoom handle, the journal's day titles, its 12-px band under
-a day and the settings' 38-px segmented choices on phones, the calculation block's faint caption):
-the loop removes them as it fixes them.
+a shot of that device, so one more is caught). Its entries were the round-0 baseline of Brulion's
+known failures (the bullet's zoom handle, the journal's day titles, its 12-px band under a day and
+the settings' 38-px segmented choices on phones, the calculation block's faint caption); round 1
+fixed them but one: a parent's bullet beside its fold arrow on phones (28 × 44 — both cannot be
+44 px wide in the outline's gutter).
 
 **README pictures** (`docs/images/`, Polish locale, the sample notebook) come from these scripts
 — `SIZES=<size> THEMES=<theme> tests/app/<area>/screenshots.sh <shot>` — and are optimised with

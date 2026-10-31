@@ -236,6 +236,9 @@ FocusScope {
                             Layout.fillWidth: true
                             source: hit.journal ? DatesHelper.formatLong(hit.model.journalDate) : hit.model.title
                             positions: hit.journal ? [] : hit.model.titleMatches
+                            // On the highlighted row the accent is too light: the text colour (the
+                            // matches stay bold).
+                            highlightColor: hit.highlighted ? Theme.fg : Theme.accentText
                             font.weight: Theme.weightSemiBold
                             font.pixelSize: Theme.textMd
                         }
@@ -244,7 +247,8 @@ FocusScope {
                             Layout.maximumWidth: hitColumn.width * 0.4
                             text: hit.model.folder
                             variant: "caption"
-                            color: Theme.fgFaint
+                            // (fgFaint is AA on the page, not on the highlighted row.)
+                            color: hit.highlighted ? Theme.fgMuted : Theme.fgFaint
                             elide: Text.ElideMiddle
                         }
                     }
@@ -253,6 +257,7 @@ FocusScope {
                         Layout.fillWidth: true
                         source: hit.model.excerpt
                         positions: hit.model.excerptMatches
+                        highlightColor: hit.highlighted ? Theme.fg : Theme.accentText
                         color: Theme.fgMuted
                         font.family: Theme.fontEditor
                         font.pixelSize: Theme.textBase

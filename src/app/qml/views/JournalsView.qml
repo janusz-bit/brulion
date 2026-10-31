@@ -329,7 +329,10 @@ FocusScope {
                     required property bool isToday
 
                     width: list.width
-                    implicitHeight: dayView.implicitHeight + (dayItem.index > 0 ? separator.height + 2 * gap : 0) + Theme.space2
+                    // The day's tap strip under its blocks reaches past this item into the next
+                    // day's gap (footerOverhang, on touch UIs): the spacing between days stays.
+                    implicitHeight: dayView.implicitHeight - dayView.footerOverhang
+                                    + (dayItem.index > 0 ? separator.height + 2 * gap : 0) + Theme.space2
                     height: implicitHeight
                     readonly property real gap: Theme.compact ? Theme.space5 : Theme.space8
 

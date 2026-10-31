@@ -255,7 +255,8 @@ Item {
         active: block.model.hasChildren && block.shown && !block.doc
         width: block.editor.arrowColumn
         height: Math.max(block.editor.arrowColumn, 24)
-        x: block.bulletX - block.editor.bulletColumn / 2 - width + 2
+        // Left of the bullet's hit area (with a mouse 24 px wide, a little wider than its column).
+        x: (Theme.touchUi ? block.bulletX - block.editor.bulletColumn / 2 : block.levelX - bulletBox.width) - width + 2
         y: block.firstLineCenter - height / 2
         sourceComponent: Item {
             visible: block.model.collapsed || block.hovered || Theme.touchUi || arrowTap.pressed
@@ -288,20 +289,33 @@ Item {
 
     // ---- Bullet --------------------------------------------------------------------------------
     Loader {
+        id: bulletBox
         // Document: tasks show their checkbox, numbered items their number instead.
         active: block.listItem && block.shown && !(block.doc && (block.isTask || block.ordered))
-        width: block.editor.bulletColumn + (Theme.touchUi ? 6 : 0)
-        height: Math.max(block.editor.bulletColumn, Theme.touchUi ? Theme.touchTarget : 22)
-        x: block.bulletX - width / 2
+        // The hit area: at least 24 × 24 with a mouse (WCAG 2.5.8), its right edge at the text
+        // column, so a click on the first letters still edits. Touch: a bullet without a fold
+        // arrow (a leaf; every bullet of a document) takes the empty column left of it too, 44 ×
+        // 44 — a document's first level on a phone has less room there and reaches under the
+        // item's first letters, which edit the item as well; a parent keeps the arrow / bullet
+        // split (both cannot be 44 wide in the outline's gutter).
+        readonly property bool besideArrow: !block.doc && block.model.hasChildren
+        width: Theme.touchUi ? (besideArrow ? block.editor.bulletColumn + 6 : Theme.touchTarget)
+                             : Math.max(24, block.editor.bulletColumn)
+        height: Theme.touchUi ? Theme.touchTarget : Math.max(24, block.editor.bulletColumn)
+        x: Theme.touchUi && besideArrow ? block.bulletX - width / 2
+                                        : block.doc ? Math.max(0, block.levelX - width) : block.levelX - width
         y: block.firstLineCenter - height / 2
         sourceComponent: Item {
             id: bullet
+            /// The bullet's centre in the hit area.
+            readonly property real dotX: block.bulletX - bulletBox.x
             Accessible.role: block.doc ? Accessible.Graphic : Accessible.Button
             Accessible.name: block.doc ? qsTr("List item") : qsTr("Zoom into block")
 
             // Folded blocks show a halo around the bullet (Logseq style); hover shows it too.
             Rectangle {
-                anchors.centerIn: parent
+                x: bullet.dotX - width / 2
+                anchors.verticalCenter: parent.verticalCenter
                 width: 16
                 height: 16
                 radius: 8
@@ -311,7 +325,8 @@ Item {
             Rectangle {
                 // Outline: the round bullet. Document: a Markdown list's disc, circle, square by depth.
                 readonly property int shape: block.doc ? block.depth % 3 : 0
-                anchors.centerIn: parent
+                x: bullet.dotX - width / 2
+                anchors.verticalCenter: parent.verticalCenter
                 width: shape === 2 ? 5 : 6
                 height: width
                 radius: shape === 2 ? 1 : width / 2
@@ -337,7 +352,7 @@ Item {
                     else
                         block.controller.zoomInto(block.index)
                 }
-                onLongPressed: block.openMenu(bullet, bullet.width / 2, bullet.height)
+                onLongPressed: block.openMenu(bullet, bullet.dotX, bullet.height)
             }
             TapHandler {
                 // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so a tap on
@@ -347,16 +362,18 @@ Item {
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                 acceptedButtons: Qt.RightButton
                 gesturePolicy: TapHandler.WithinBounds
-                onTapped: block.openMenu(bullet, bullet.width / 2, bullet.height)
+                onTapped: block.openMenu(bullet, bullet.dotX, bullet.height)
             }
         }
     }
 
     // ---- Number of an ordered list item (document mode) -----------------------------------------
     Loader {
+        id: numberBox
         active: block.doc && block.ordered && !block.isTask && block.shown
+        readonly property real gap: Math.round(block.editor.listIndent * 0.25)
         // Right-aligned in the marker column, on the first line's baseline (body font).
-        x: block.levelX - width - Math.round(block.editor.listIndent * 0.25)
+        x: block.levelX - width - gap
         y: block.firstLineCenter - block.editor.firstLineCenter(0)
         sourceComponent: Text {
             id: number
@@ -370,16 +387,27 @@ Item {
             lineHeight: block.editor.lineHeight
             color: block.closedTask ? Theme.fgFaint : Theme.fgMuted
             Accessible.ignored: true
-            TapHandler {
-                acceptedButtons: Qt.LeftButton
-                onTapped: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, 0)
-                onLongPressed: block.openMenu(number, 0, number.height)
-            }
-            TapHandler {
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus // not a finger
-                acceptedButtons: Qt.RightButton
-                gesturePolicy: TapHandler.WithinBounds // the number's press (as the bullet's)
-                onTapped: block.openMenu(number, 0, number.height)
+            // The hit area, as the bullet's: a touch target (24 px with a mouse) around the number,
+            // its right edge at the text column (with no room left of it, under the first
+            // letters, which edit the item as well).
+            Item {
+                readonly property real size: Theme.touchUi ? Theme.touchTarget : 24
+                readonly property real textEdge: number.width + numberBox.gap
+                width: Math.max(size, textEdge)
+                height: Math.max(size, number.height)
+                x: Math.max(-numberBox.x, textEdge - width)
+                y: (number.height - height) / 2
+                TapHandler {
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, 0)
+                    onLongPressed: block.openMenu(number, 0, number.height)
+                }
+                TapHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus // not a finger
+                    acceptedButtons: Qt.RightButton
+                    gesturePolicy: TapHandler.WithinBounds // the number's press (as the bullet's)
+                    onTapped: block.openMenu(number, 0, number.height)
+                }
             }
         }
     }
