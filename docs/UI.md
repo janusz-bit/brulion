@@ -2071,6 +2071,13 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   `onLongPressed`); a right-click `TapHandler` also sets `acceptedDevices: PointerDevice.Mouse |
   PointerDevice.TouchPad | PointerDevice.Stylus` — Qt hands finger touches (no buttons) to a
   TapHandler whatever its `acceptedButtons`, so without it every tap opened the menu.
+  Settings cards (`SettingsView`'s groups, the sync section) divide their rows with 1-px
+  `borderSubtle` hairlines (`ShellSettingDividers`, drawn over the card's column: none under a
+  row without controls that titles what follows, none above a plain note); every title — a
+  switch's too — starts at the card's one left edge; on compact windows the control goes under
+  its text and fills the row: a segmented control (its segments as even as their labels allow:
+  the narrow ones share one width, none is cut) and a lone framed button (one beside a badge or
+  another button, and a text button, keep their width).
   Touch keyboards: `BTextField` asks for the action key Done (`EnterKey.type: Qt.EnterKeyDone`).
   Qt on Android otherwise shows Next whenever something focusable lies below a field, and Next
   only moves the focus: Enter and `accepted()` never arrive. Forms whose fields lead to the next

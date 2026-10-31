@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
@@ -13,6 +14,8 @@ import Brulion
 // size:    "small" | "normal" (default) | "large"
 // iconName: Lucide icon before the text (after it with `iconRight`, e.g. "chevron-down")
 // busy:    shows a spinner instead of the icon and swallows clicks (keeps its size)
+// fill:    takes the width a layout gives it (Layout.fillWidth), the content centred — a lone
+//          framed button of a stacked ShellSettingRow, like the segmented controls there
 // On touch UIs the hit area is at least Theme.touchTarget high even for small buttons
 // (the visual part stays compact, the rest is inset).
 T.Button {
@@ -23,6 +26,7 @@ T.Button {
     property string iconName: ""
     property bool iconRight: false
     property bool busy: false
+    property bool fill: false
     property color textColor: {
         switch (variant) {
         case "primary": return Theme.primaryFg
@@ -52,6 +56,7 @@ T.Button {
     topPadding: topInset
     bottomPadding: bottomInset
 
+    Layout.fillWidth: fill
     focusPolicy: Qt.StrongFocus
     hoverEnabled: !Theme.touchUi
     font.family: Theme.fontUi

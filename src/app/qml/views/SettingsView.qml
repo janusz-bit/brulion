@@ -173,7 +173,7 @@ Item {
 
     // ---- Building blocks --------------------------------------------------------------------
 
-    /// A titled group of setting rows.
+    /// A titled group of setting rows: a card, its rows divided by hairlines.
     component SettingsGroup: ColumnLayout {
         id: group
         property string heading
@@ -201,11 +201,16 @@ Item {
             Layout.fillWidth: true
             Layout.topMargin: Theme.space1
             padding: Theme.compact ? Theme.space4 : Theme.space5
+            // Two children: the content size is the rows' (a pane sizes itself by a lone child only).
+            contentWidth: cardColumn.implicitWidth
+            contentHeight: cardColumn.implicitHeight
             ColumnLayout {
                 id: cardColumn
                 anchors.fill: parent
-                spacing: Theme.space5
+                // Room for the hairline between the rows: 16 / 12 px on each side of it.
+                spacing: Theme.compact ? Theme.space6 : Theme.space8
             }
+            ShellSettingDividers { column: cardColumn }
         }
     }
 

@@ -119,6 +119,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellQuickCapture.qml
     qml/shell/ShellRenameDialog.qml
     qml/shell/ShellRouteView.qml
+    qml/shell/ShellSettingDividers.qml
     qml/shell/ShellSettingRow.qml
     qml/shell/ShellShareDialog.qml
     qml/shell/ShellSidePanel.qml

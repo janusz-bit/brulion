@@ -15,8 +15,9 @@ import Brulion
 // model: array of { value, text, icon } (or plain strings: value = text). One tab stop;
 // Left/Right/Home/End move the selection (activated(value) is emitted for user changes).
 // Bind currentValue to your state and update the state in onActivated (the binding is kept).
-// `fill: true` stretches segments to the control's width (equal widths); when their natural
-// widths do not fit, the icons go first (the labels stay), then the labels share and elide.
+// `fill: true` stretches segments to the control's width, as evenly as their labels allow: the
+// narrow ones widen to one shared width, a wider label keeps its own (none is cut); when their
+// natural widths do not fit, the icons go first (the labels stay), then the labels share and elide.
 // `iconOnly: true` shows icons with the text as accessible name/tooltip.
 // `controlled: true`: the selection only ever follows currentValue's binding — for a segment
 // that may start an action instead of changing the state ("Other…" opening a picker that can
@@ -48,15 +49,31 @@ T.Control {
                 return i
         return -1
     }
-    /// Sum of the segments' natural widths (for `fill`).
-    readonly property real _implicitSum: {
-        let sum = 0
+    /// The segments' natural widths (for `fill`; repeater.count: re-evaluated once they exist).
+    readonly property var _naturalWidths: {
+        const out = []
         for (let i = 0; i < repeater.count; ++i) {
             const segment = repeater.itemAt(i)
-            if (segment)
-                sum += segment.implicitWidth
+            out.push(segment ? segment.implicitWidth : 0)
         }
-        return sum
+        return out
+    }
+    /// Their sum.
+    readonly property real _implicitSum: _naturalWidths.reduce((sum, w) => sum + w, 0)
+    /// Filling: the width every narrower segment widens to, so that Σ max(natural, width) is the
+    /// available width (water-filling: the widest labels keep theirs, the rest share the room
+    /// left); -1 when the natural widths do not fit.
+    readonly property real _fillWidth: {
+        const widths = _naturalWidths.slice().sort((a, b) => b - a)
+        let room = availableWidth
+        let left = widths.length
+        if (left === 0 || _implicitSum > room)
+            return -1
+        for (let i = 0; i < widths.length && widths[i] > room / left; ++i) {
+            room -= widths[i]
+            --left
+        }
+        return room / left
     }
     /// The same with every segment's icon (whether it is shown or not).
     readonly property real _withIconsSum: {
@@ -168,14 +185,13 @@ T.Control {
                     readonly property bool isCurrent: index === control.currentIndex
 
                     height: row.height
-                    // Filling the width: every segment gets its own width plus an equal share of
-                    // what is left (or minus an equal share when they do not fit), so a long label
-                    // ("Cały notatnik") is not cut while short ones have room to spare.
-                    width: control.fill && control.items.length > 0
-                           ? (control._implicitSum > 0
-                              ? Math.max(0, implicitWidth + (control.availableWidth - control._implicitSum) / control.items.length)
-                              : control.availableWidth / control.items.length)
-                           : implicitWidth
+                    // Filling the width: every segment at least the shared width (_fillWidth), so
+                    // the short labels line up evenly and a long one ("Cały notatnik") is not cut;
+                    // when they do not fit, each its own width minus an equal share of the excess.
+                    width: !control.fill || control.items.length === 0 ? implicitWidth
+                           : control._implicitSum <= 0 ? control.availableWidth / control.items.length
+                           : control._fillWidth >= 0 ? Math.max(implicitWidth, control._fillWidth)
+                           : Math.max(0, implicitWidth + (control.availableWidth - control._implicitSum) / control.items.length)
                     // At least a touch target wide on touch UIs (icon-only and short labels).
                     implicitWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
                                             (segmentIcon.width > 0 ? iconRoom : 0)

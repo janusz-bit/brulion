@@ -22,7 +22,8 @@ T.Switch {
                              implicitIndicatorHeight + topPadding + bottomPadding,
                              Theme.touchUi ? Theme.touchTarget : 28)
     padding: 4
-    leftPadding: 2
+    // The title at the row's left edge, like every setting row's (the focus ring is on the track).
+    leftPadding: 0
     rightPadding: indicator.width + 14
     spacing: 10
     focusPolicy: Qt.StrongFocus
