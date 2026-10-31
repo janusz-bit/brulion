@@ -602,6 +602,19 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     //      stays open after the choice. The day in two days has dated tasks.
     app->navigate({{u"view"_s, u"calendar"_s}, {u"mode"_s, u"week"_s}});
     settle(600);
+    // The week's finished entries (yesterday's done tasks) carry a check — a cancelled one an x —,
+    // as in the month: the state is never told by colour alone.
+    {
+        const auto stateIcons = [window] {
+            QQuickItem *grid = findShown(window->contentItem(), [](QQuickItem *i) { return isA(i, "CalendarWeekGrid"); });
+            const QList<QQuickItem *> items = grid ? uidriver::allItems(grid) : QList<QQuickItem *>();
+            return std::count_if(items.cbegin(), items.cend(), [](QQuickItem *i) {
+                const QString name = i->property("name").toString();
+                return isA(i, "BIcon") && shown(i) && (name == u"check" || name == u"x");
+            });
+        };
+        check(waitFor([&] { return stateIcons() > 0; }), "the week grid marks a done entry with a check");
+    }
     QQuickItem *calendarView =
             shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarView"); });
     QObject *daySheet = calendarView ? calendarView->findChild<QObject *>(u"calendarDaySheet"_s) : nullptr;
@@ -1274,7 +1287,8 @@ void checkNotebookSwitcher(QQuickWindow *window, AppController *app, const Check
 /// its back gesture (GestureInsets, simulated here as Android's gesture navigation reports it) the
 /// strip starts beyond that zone. What the strip must not take: a vertical scroll, a swipe that
 /// starts farther in, a tap on what lies under it, the drag of a selection grip lying in it (no
-/// strip while blocks are selected or the keyboard is up; a swipe still closes the drawer). Runs
+/// strip while blocks are selected or the keyboard is up — the top bar's ☰ opens the drawer then,
+/// the keyboard having taken the bottom navigation's place —; a swipe still closes it). Runs
 /// on a page (Remont mieszkania) with the drawer closed and stays there, without leaving the page
 /// view (the back button's check goes to another page and back, which keeps the view): a view the
 /// shell leaves waits for its deferred deletion, which never comes while the self-test runs, and
@@ -1363,15 +1377,29 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
     check(waitFor([&] { return qAbs(margin() - (32 + plain)) <= 1; }), "the selection gone, the edge strip is back");
     run(u"GestureInsets.simulate(-1, -1)"_s);
 
-    // The on-screen keyboard up (simulated): no strip either, and the drawer opened by its button
-    // closes with a swipe.
+    // The on-screen keyboard up (simulated): no strip either, and no bottom navigation with its
+    // Menu — the top bar's ☰ opens the drawer then (it was out of reach until Back hid the
+    // keyboard), and the drawer closes with a swipe.
+    const auto menuButton = [window] {
+        return uidriver::topmost(window, [](QQuickItem *i) { return i->objectName() == u"topBarMenu"; });
+    };
     if (run(u"KeyboardInsets.simulated = 300"_s)) {
         check(waitFor([&] { return margin() <= 0; }), "while the keyboard is up there is no edge strip");
-        QMetaObject::invokeMethod(drawer, "open");
-        check(waitFor(opened, 3000), "the drawer opens while the keyboard is up");
+        QQuickItem *button = nullptr;
+        check(waitFor([&] { return (button = menuButton()) != nullptr; }),
+              "while the keyboard hides the bottom navigation the top bar shows ☰");
+        // (Laid out with the top bar's next polish: found again once it settled.)
+        settle(300);
+        if ((button = menuButton()))
+            tapOrClick(window, pointIn(button), true);
+        else
+            QMetaObject::invokeMethod(drawer, "open");
+        check(waitFor(opened, 3000), "☰ opens the drawer while the keyboard is up");
         check(swipeClose(), "with the keyboard up a swipe to the left closes the drawer");
         run(u"KeyboardInsets.simulated = -1"_s);
         check(waitFor([&] { return qAbs(margin() - plain) <= 1; }), "the keyboard gone, the edge strip is back");
+        check(waitFor([&] { return menuButton() == nullptr; }),
+              "the keyboard gone, ☰ leaves the top bar to the bottom navigation's Menu");
     } else {
         check(false, "the on-screen keyboard can be simulated");
     }
@@ -4281,6 +4309,33 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                                     <= menuTab->mapToScene(QPointF(0, 0)).x() + 1;
               }),
               "switched on again, it is back on the bottom bar, before Menu");
+        // Larger text (Wygląd → Rozmiar tekstu: Większy): the six labels stay whole — a long one
+        // ("Kalendarz") takes room from the short ones; with "+ Notatka" in a fixed slot they were
+        // cut.
+        QQuickItem *bar = window->findChild<QQuickItem *>(u"shellBottomNav"_s);
+        const qreal scale = settings->fontScale();
+        settings->setFontScale(1.3);
+        QString cut;
+        int labels = 0;
+        const bool whole = bar && waitFor([&] {
+            cut.clear();
+            labels = 0;
+            bool scaled = true;
+            const QList<QQuickItem *> items = uidriver::allItems(bar);
+            for (QQuickItem *item : items) {
+                if (!item->inherits("QQuickText") || !shown(item))
+                    continue;
+                ++labels;
+                scaled = scaled && item->property("font").value<QFont>().pixelSize() == qRound(12 * 1.3);
+                if (item->property("truncated").toBool())
+                    cut += item->property("text").toString() + u' ';
+            }
+            return labels == 6 && scaled && cut.isEmpty();
+        });
+        if (!whole)
+            std::fprintf(stderr, "selftest: bottom bar labels %d, cut: %s\n", labels, qPrintable(cut));
+        check(whole, "at a larger text size the bottom bar's six labels stay whole");
+        settings->setFontScale(scale);
         app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
     }
 
@@ -4525,6 +4580,18 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                 std::fprintf(stderr, "selftest: palette list %g px high, room %g, content %g\n", list->height(),
                              palette->property("_listRoom").toReal(), list->property("contentHeight").toReal());
             check(full, "the floating command palette shows as many whole rows as fit, not one");
+            // Scrolled to its end (keys, the wheel), far past the first rows, which the view then
+            // releases: the list keeps its height — it once shrank to its margins, no row shown.
+            if (list)
+                QMetaObject::invokeMethod(list, "positionViewAtEnd");
+            const qreal room = palette->property("_listRoom").toReal();
+            const bool stillFull = waitFor([&] {
+                return list && list->property("contentY").toReal() > room && filled();
+            });
+            if (!stillFull && list)
+                std::fprintf(stderr, "selftest: scrolled palette list %g px high, room %g, contentY %g\n", list->height(),
+                             room, list->property("contentY").toReal());
+            check(stillFull, "the floating command palette keeps its rows when scrolled down");
             QMetaObject::invokeMethod(palette, "close");
             waitFor([&] { return !isOpen(palette); });
         }
@@ -4923,7 +4990,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     check(waitFor([&] { return openMenus(window) == 1; }),
                           touch ? "a long press on the tag chip opens its menu"
                                 : "a right-click on the tag chip opens its menu");
-                    if (QQuickItem *remove = shownItem(u"headerChipRemove"_s)) {
+                    if (QQuickItem *remove = shownItem(u"propertyChipRemove"_s)) {
                         tapOrClick(window, pointIn(remove), touch);
                         check(waitFor([&] {
                                   return saveNow()

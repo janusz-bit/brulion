@@ -8,8 +8,9 @@ import Brulion
 // quick capture, side panel toggle and the "more" menu with page actions (Przenieś do…, Pokaż w
 // drzewie among them). On narrow windows it keeps only what fits a phone: back (with history),
 // the title, search and the menu; the drawer button ☰ only where the shell says so
-// (`menuButtonShown`: the bottom navigation's Menu opens the drawer, so ☰ only shows where a view
-// replaces that bar). With no button before it, the title starts on the view's content edge.
+// (`menuButtonShown`: the bottom navigation's Menu opens the drawer, so ☰ only shows while that
+// bar is not there — a view replaces it, or the on-screen keyboard is up). With no button before
+// it, the title starts on the view's content edge.
 // On a picture attachment (`picture`) the menu's "Markdown source" is the picture bar's "Show as
 // text" / "Show picture" (Ctrl+E there too), and the note mode is not offered (no note to switch).
 // `topInset` extends the bar under the Android status bar (edge-to-edge).
@@ -22,7 +23,7 @@ Rectangle {
     property real topInset: 0
     property bool sidebarVisible: true
     /// Narrow windows: the drawer button ☰ is shown (the shell turns it off while the bottom
-    /// navigation, whose Menu opens the same drawer, is the layout's).
+    /// navigation, whose Menu opens the same drawer, is shown).
     property bool menuButtonShown: true
     /// The view shows a picture attachment, as text (`pictureAsText`) or as the picture.
     property bool picture: false

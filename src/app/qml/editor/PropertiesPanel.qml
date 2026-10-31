@@ -31,18 +31,26 @@ Item {
     readonly property bool editable: draft || info.editable !== false
     readonly property bool canAdd: draft ? (controller !== null && controller.pageProperties.canAdd !== false)
                                          : (editable && info.canAdd !== false)
-    /// The key above the value: only when the value column beside the key would be narrower than
-    /// ~168 px (a narrow side panel); phones keep the two columns (icon + key | value).
-    readonly property bool stacked: width - iconWidth - keyWidth - Theme.space2 < 168
+    /// The key above the value when the two columns (icon + key | value) would cut a key or
+    /// squeeze the value: the widest key does not fit 40 % of the panel, or the value column
+    /// beside it would be narrower than ~168 px (a narrow side panel). Short keys (tags, status,
+    /// termin) keep the two columns on phones too; a long one ("ostatnia aktualizacja") stacks
+    /// every row, so no key is ever cut (a touch screen has no tooltip to read it).
+    readonly property bool stacked: widestKey + 12 > width * 0.4 || width - iconWidth - keyWidth - Theme.space2 < 168
     readonly property real rowHeight: Theme.touchUi ? 44 : (Theme.dense ? 28 : 32)
     readonly property real iconWidth: Theme.touchUi ? Theme.touchTarget : 24
-    /// The key column: as wide as the widest key, 96 px to 30 % of the panel.
-    readonly property real keyWidth: {
+    /// The widest key's text (font.pixelSize read for real: it follows the text size).
+    readonly property real widestKey: {
         let widest = 0
+        if (keyMetrics.font.pixelSize <= 0)
+            return 0
         for (const p of properties)
             widest = Math.max(widest, keyMetrics.advanceWidth(p.key))
-        return Math.round(Math.max(96, Math.min(widest + 12, width * 0.3)))
+        return widest
     }
+    /// The key column beside the values: as wide as the widest key, at least 96 px (never cut:
+    /// a key wider than 40 % of the panel stacks the rows instead).
+    readonly property real keyWidth: Math.round(Math.max(96, widestKey + 12))
     /// The add field is open.
     property bool adding: draft
     property string addError: ""

@@ -5,8 +5,10 @@ import Brulion
 // CalendarWeekGrid — the week view: 7 day columns of a CalendarModel in "week" mode with a row
 // of all-day entries (due / scheduled dates without a time) and 24 hour rows where timed entries
 // (reminders, alarms, tasks with a time) sit at their time (drawn 45 minutes long); entries
-// starting within 45 minutes of each other share the width (cascade on narrow columns). A red line marks the current time in today's column. The hours
-// scroll to the first entry of the week (or 7:00).
+// starting within 45 minutes of each other share the width (cascade on narrow columns). A red
+// line marks the current time in today's column. The hours scroll to the first entry of the week
+// (or 7:00). A done entry has a check and a cancelled one an x (struck out), in the "done" chip's
+// colours, as in the month grid.
 //
 //   CalendarWeekGrid { calendar: cal; onDayTapped: (date) => …; onItemOpened: (entry) => … }
 //
@@ -55,6 +57,11 @@ FocusScope {
     Accessible.role: Accessible.Table
     Accessible.name: calendar.title
 
+    /// An entry's accessible name: its time (if any), its title and its state when finished.
+    function entryName(entry, time) {
+        const state = !entry.closed ? "" : entry.status === "cancelled" ? qsTr("cancelled") : qsTr("done")
+        return [time, entry.title, state].filter(s => s !== "").join(", ")
+    }
     function scrollToFirstEntry() {
         const first = calendar.itemCount > 0 ? calendar.firstHour : 7
         hours.contentY = Math.max(0, Math.min(hours.contentHeight - hours.height, (first - 0.6) * hourHeight))
@@ -197,21 +204,37 @@ FocusScope {
                             width: parent ? parent.width : 0 // (null while the Repeater drops it: a new week)
                             height: root.pillHeight
                             radius: Theme.radiusSm
-                            // (Done and cancelled: the "done" chip's colours at full opacity, AA;
-                            // only a cancelled one struck out, as in Tasks.)
+                            // (Done and cancelled: the "done" chip's colours at full opacity, AA,
+                            // with a check, or struck out with an x when cancelled — as in the
+                            // month and in Tasks: the state never by colour alone.)
                             color: colors.bg
-                            Text {
-                                anchors.fill: parent
-                                anchors.leftMargin: 4
-                                anchors.rightMargin: 2
-                                verticalAlignment: Text.AlignVCenter
-                                text: allDayPill.more ? qsTr("+%n more", "", dayHead.allDay.length - root.allDayRows + 1)
-                                                      : allDayPill.entry.title
-                                font.family: Theme.fontUi
-                                font.pixelSize: Theme.textXs
-                                font.strikeout: !allDayPill.more && allDayPill.entry.status === "cancelled"
-                                color: allDayPill.colors.fg
-                                elide: Text.ElideRight
+                            Accessible.role: Accessible.Button
+                            Accessible.name: allDayPill.more ? allDayText.text : root.entryName(allDayPill.entry, "")
+                            Row {
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: 4
+                                width: parent.width - 6
+                                spacing: 3
+                                BIcon {
+                                    id: allDayState
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: !allDayPill.more && allDayPill.entry.closed
+                                    name: allDayPill.entry.status === "cancelled" ? "x" : "check"
+                                    size: 10
+                                    color: allDayPill.colors.fg
+                                }
+                                Text {
+                                    id: allDayText
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width - (allDayState.visible ? allDayState.width + parent.spacing : 0)
+                                    text: allDayPill.more ? qsTr("+%n more", "", dayHead.allDay.length - root.allDayRows + 1)
+                                                          : allDayPill.entry.title
+                                    font.family: Theme.fontUi
+                                    font.pixelSize: Theme.textXs
+                                    font.strikeout: !allDayPill.more && allDayPill.entry.status === "cancelled"
+                                    color: allDayPill.colors.fg
+                                    elide: Text.ElideRight
+                                }
                             }
                             TapHandler {
                                 // Exclusive: the day header's handler must not also react.
@@ -383,21 +406,35 @@ FocusScope {
                             border.color: Theme.alpha(colors.fg, 0.25)
                             clip: true
                             Accessible.role: Accessible.Button
-                            Accessible.name: entry.time + ", " + entry.title
+                            Accessible.name: root.entryName(entry, entry.time)
 
                             Column {
                                 x: 4
                                 y: 2
                                 width: parent.width - 6
-                                Text {
+                                // The time, after a check (done) or an x (cancelled): the state
+                                // never by colour alone, as in the month.
+                                Row {
                                     width: parent.width
-                                    text: (event.entry.variant === "alarm" ? "⏰ " : "") + event.entry.time
-                                    font.family: Theme.fontUi
-                                    font.pixelSize: Theme.textXs
-                                    font.weight: Theme.weightSemiBold
-                                    font.features: { "tnum": 1 }
-                                    color: event.colors.fg
-                                    elide: Text.ElideRight
+                                    spacing: 3
+                                    BIcon {
+                                        id: eventState
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        visible: event.entry.closed
+                                        name: event.entry.status === "cancelled" ? "x" : "check"
+                                        size: 10
+                                        color: event.colors.fg
+                                    }
+                                    Text {
+                                        width: parent.width - (eventState.visible ? eventState.width + parent.spacing : 0)
+                                        text: (event.entry.variant === "alarm" ? "⏰ " : "") + event.entry.time
+                                        font.family: Theme.fontUi
+                                        font.pixelSize: Theme.textXs
+                                        font.weight: Theme.weightSemiBold
+                                        font.features: { "tnum": 1 }
+                                        color: event.colors.fg
+                                        elide: Text.ElideRight
+                                    }
                                 }
                                 Text {
                                     width: parent.width

@@ -348,11 +348,11 @@ FocusScope {
                 crumbs: shell.crumbs
                 topInset: shell.safe.top
                 sidebarVisible: shell.sidebarVisible
-                // One way to the drawer: the bottom navigation's Menu. ☰ only where a view has its
-                // own bar instead (the drawing editor). The layout decides, not the keyboard
-                // (bottomNavShown), so the title does not move when the keyboard opens; while it is
-                // up the drawer is one Back away (the keyboard goes, the bottom bar comes back).
-                menuButtonShown: !(Theme.narrow && !routeView.viewReplacesBottomNav)
+                // Phones: one way to the drawer — the bottom navigation's Menu while that bar is
+                // shown; ☰ whenever it is not: a view with its own bar instead (the drawing
+                // editor) or the on-screen keyboard up (it takes the bar's place, and there is no
+                // edge strip while typing: dragMargin), so the drawer is never out of reach.
+                menuButtonShown: !Theme.narrow || !shell.bottomNavShown
                 picture: routeView.viewPicture
                 pictureAsText: routeView.viewPictureAsText
                 onMenuClicked: drawer.open()
@@ -444,8 +444,8 @@ FocusScope {
         // the drag of the selection's start grip, which lies at the left edge (its MouseArea's
         // preventStealing did not stop it). Nor on a view that swipes sideways from that edge
         // itself (`edgeSwipe`: the calendar's week and month grids, to the previous period): a
-        // swipe there is the view's. The bottom navigation's Menu (☰ where a view replaces that bar)
-        // still opens it, a swipe on it still closes it. The strip follows
+        // swipe there is the view's. The bottom navigation's Menu (☰ in the top bar where a view
+        // replaces that bar or the keyboard hides it) still opens it, a swipe on it still closes it. The strip follows
         // the UI mode, not the pointer: a mouse in a touch UI gets it too.
         dragMargin: !Theme.touchUi ? Application.styleHints.startDragDistance
                     : shell.typing || routeView.viewEdgeSwipe ? 0

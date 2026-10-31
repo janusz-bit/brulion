@@ -21,7 +21,8 @@ import Brulion
 // `key::` lines are there; values opened and left unchanged keep their form (`|` text, `1.50`);
 // a Logseq text becomes a list of links; an alias no link can use is refused under the field and
 // in a toast; a map's row menu offers "Edytuj jako tekst". The key stays beside the value (phones
-// too) — a narrow window stacks it over the value —, its whole cell a tap area, and on a phone every
+// too) — a narrow window, or a key too long for its column ("ostatnia aktualizacja" on a phone),
+// stacks it over the value, so no key is cut —, its whole cell a tap area, and on a phone every
 // control and tap area is a 44 px target.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
@@ -44,6 +45,7 @@ QtObject {
     property string original: ""
     property real widthBefore: 0
     readonly property string path: "Projekty/Remont garażu.md"
+    readonly property string longKeysPath: "Długie klucze.md"
     readonly property string content: "---\n"
         + "status: w toku # wybrany\n"
         + "koszt: 1200\n"
@@ -174,8 +176,10 @@ QtObject {
             () => {
                 frontmatter = window.delegateAt(0)
                 const p = panel()
-                check(p.stacked === (p.width - p.iconWidth - p.keyWidth - Theme.space2 < 168),
-                      "the layout follows the value column's width: stacked " + p.stacked)
+                check(p.stacked === (p.widestKey + 12 > p.width * 0.4 || p.width - p.iconWidth - p.keyWidth - Theme.space2 < 168),
+                      "the layout follows the keys and the value column's width: stacked " + p.stacked)
+                const cut = p.properties.filter(q => inRow(q.key, "propertyKey").truncated).map(q => q.key)
+                check(cut.length === 0, "beside the values every key is whole: " + cut.join(", "))
                 check(!p.stacked && inRow("status", "propertyValue").mapToItem(row("status"), 0, 0).x >= p.iconWidth + p.keyWidth,
                       "the value is in a column beside the key (" + p.width + " px)")
                 const keyCell = inRow("status", "propertyKeyCell")
@@ -672,6 +676,26 @@ QtObject {
                 check(text() === original, "opening the text changes nothing")
                 const item = window.menuItemNamed(panelAt(1).menu, "propertyEditAsText")
                 check(item === null || !item.visible, "editable rows do not offer it")
+            },
+            // ---- long keys: stacked over their values, never cut ----------------------------------------
+            () => {
+                host.setFile(longKeysPath, "---\ndata utworzenia: 2026-10-01\nostatnia aktualizacja: 2026-10-28\n"
+                             + "odpowiedzialna osoba: Żaneta Łęcka\n---\n- treść\n")
+                editor.setPropertiesExpanded(true)
+                page.path = longKeysPath
+            },
+            wait(() => page.loaded && page.path === longKeysPath && row("ostatnia aktualizacja") !== null,
+                 "a page with long keys"),
+            () => {
+                const p = panel()
+                const keys = ["data utworzenia", "ostatnia aktualizacja", "odpowiedzialna osoba"]
+                const cut = keys.filter(k => inRow(k, "propertyKey").truncated)
+                check(p.stacked || p.widestKey + 12 <= p.width * 0.4, "a key too wide for its column stacks the rows ("
+                      + p.width + " px panel)")
+                check(cut.length === 0, "long keys are whole: " + cut.join(", "))
+                const r = row("odpowiedzialna osoba")
+                check(!p.stacked || inRow("odpowiedzialna osoba", "propertyValue").mapToItem(r, 0, 0).y >= r.keyLineHeight,
+                      "stacked, the value is under its key")
             },
             () => {
                 if (probe)

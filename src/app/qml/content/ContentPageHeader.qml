@@ -124,7 +124,7 @@ Item {
         if (!chipMenu)
             chipMenu = chipMenuComponent.createObject(header)
         chipMenu.kind = kind
-        chipMenu.name = name
+        chipMenu.item = name
         chipMenu.popup(item, 0, item.height)
     }
     function openAddMenu(item) {
@@ -140,45 +140,24 @@ Item {
             AppController.toast(r.reason, "error")
             return
         }
-        const text = kind === "tags" ? qsTr("Removed tag #%1 from this page").arg(name) : qsTr("Removed alias “%1”").arg(name)
+        const text = chipMenu.removedText(kind, name, name)
         const action = editor ? editor.undoAction(before) : null
         if (action)
             AppController.toastAction(text, "info", action.text, action.run)
         else
             AppController.toast(text, "info")
     }
+    // The same menu as the Właściwości panel's chips (PropertyChipMenu).
     Component {
         id: chipMenuComponent
-        BMenu {
+        PropertyChipMenu {
             id: chipMenuItem
-            property string kind
-            property string name
-            BMenuItem {
-                objectName: "headerTagOpen"
-                visible: chipMenuItem.kind === "tags"
-                height: visible ? implicitHeight : 0
-                text: qsTr("Open tag page")
-                iconName: "hash"
-                onTriggered: AppController.openTag(chipMenuItem.name)
+            onOpenRequested: AppController.openTag(chipMenuItem.item)
+            onCopyRequested: {
+                if (header.controller.copyText(chipMenuItem.item).ok)
+                    AppController.toast(qsTr("Copied %1").arg(chipMenuItem.item), "success")
             }
-            BMenuItem {
-                objectName: "headerAliasCopy"
-                visible: chipMenuItem.kind === "aliases"
-                height: visible ? implicitHeight : 0
-                text: qsTr("Copy")
-                iconName: "copy"
-                onTriggered: {
-                    if (header.controller.copyText(chipMenuItem.name).ok)
-                        AppController.toast(qsTr("Copied %1").arg(chipMenuItem.name), "success")
-                }
-            }
-            BMenuItem {
-                objectName: "headerChipRemove"
-                text: chipMenuItem.kind === "tags" ? qsTr("Remove from this page") : qsTr("Remove alias")
-                iconName: "x"
-                danger: true
-                onTriggered: header.removeListItem(chipMenuItem.kind, chipMenuItem.name)
-            }
+            onRemoveRequested: header.removeListItem(chipMenuItem.kind, chipMenuItem.item)
         }
     }
     Component {

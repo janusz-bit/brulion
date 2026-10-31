@@ -243,7 +243,7 @@
 <context>
     <name>CalendarWeekGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="208"/>
+        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="230"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -686,7 +686,7 @@
 <context>
     <name>PropertiesPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/PropertiesPanel.qml" line="305"/>
+        <location filename="../src/app/qml/editor/PropertiesPanel.qml" line="313"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -924,7 +924,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3493"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3521"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>

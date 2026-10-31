@@ -63,7 +63,7 @@ class AppSettings : public QObject {
     Q_PROPERTY(QStringList sidebarHidden READ sidebarHidden WRITE setSidebarHidden NOTIFY sidebarHiddenChanged FINAL)
     /// The phone's bottom navigation: exactly four views of BottomNavViews (the menu comes last).
     Q_PROPERTY(QStringList bottomNavTabs READ bottomNavTabs WRITE setBottomNavTabs NOTIFY bottomNavTabsChanged FINAL)
-    /// The floating quick-capture button of phones.
+    /// Quick capture's "+ Notatka" item on the phone's bottom navigation (before Menu).
     Q_PROPERTY(bool captureButtonShown READ captureButtonShown WRITE setCaptureButtonShown NOTIFY
                        captureButtonShownChanged FINAL)
 

@@ -126,23 +126,30 @@ Item {
         const before = root.controller.undoToken()
         if (!removeAt(i))
             return
-        const text = root.type === "tags" ? qsTr("Removed tag #%1 from this page").arg(item)
-                   : root.type === "aliases" ? qsTr("Removed alias “%1”").arg(item)
-                   : qsTr("Removed “%1”").arg(root.display(item))
-        ed.notice(text, "info", ed.undoAction(before))
+        ed.notice(ensureChipMenu().removedText(root.type, item, root.display(item)), "info", ed.undoAction(before))
     }
 
-    // ---- a chip's menu (created when first needed: docs/UI.md "Scrolling performance") ----------
+    // ---- a chip's menu (created when first needed: docs/UI.md "Scrolling performance"; the
+    // page header's chips have the same one, PropertyChipMenu) ----------------------------------
     property var chipMenu: null
+    function ensureChipMenu() {
+        if (!chipMenu)
+            chipMenu = chipMenuComponent.createObject(root)
+        return chipMenu
+    }
     function openChipMenu(i, chip) {
         if (i < 0 || i >= root.items.length)
             return
-        if (!chipMenu)
-            chipMenu = chipMenuComponent.createObject(root)
-        chipMenu.index = i
-        chipMenu.item = root.items[i]
-        chipMenu.bottomMargin = root.editor.menuBottomMargin()
-        chipMenu.popup(chip, 0, chip.height)
+        const menu = ensureChipMenu()
+        const item = root.items[i]
+        menu.index = i
+        menu.kind = root.type === "tags" || root.type === "aliases" ? root.type : "list"
+        menu.item = item
+        menu.display = root.safe(root.display(item))
+        menu.opensItem = root.type === "list" && root.linkTarget(item) !== ""
+        menu.readOnly = root.readOnly
+        menu.bottomMargin = root.editor.menuBottomMargin()
+        menu.popup(chip, 0, chip.height)
     }
     /// Where the items would go in `width` (chips.placement; the self-test checks the "+" rule).
     function placementAt(width) {
@@ -160,39 +167,13 @@ Item {
     }
     Component {
         id: chipMenuComponent
-        BMenu {
+        PropertyChipMenu {
             id: chipMenuItem
             objectName: "propertyChipMenu"
             property int index: -1
-            property string item
-            readonly property bool opens: root.type === "tags" || (root.type === "list" && root.linkTarget(item) !== "")
-            BMenuItem {
-                objectName: "propertyChipOpen"
-                visible: chipMenuItem.opens
-                height: visible ? implicitHeight : 0
-                text: root.type === "tags" ? qsTr("Open tag page") : qsTr("Open")
-                iconName: root.type === "tags" ? "hash" : "file-text"
-                onTriggered: root.openItem(chipMenuItem.item)
-            }
-            BMenuItem {
-                objectName: "propertyChipCopy"
-                visible: root.type !== "tags"
-                height: visible ? implicitHeight : 0
-                text: qsTr("Copy")
-                iconName: "copy"
-                onTriggered: root.editor.copyText(chipMenuItem.item)
-            }
-            BMenuItem {
-                objectName: "propertyChipRemove"
-                visible: !root.readOnly
-                height: visible ? implicitHeight : 0
-                text: root.type === "tags" ? qsTr("Remove from this page")
-                    : root.type === "aliases" ? qsTr("Remove alias")
-                    : qsTr("Remove “%1”").arg(root.safe(root.display(chipMenuItem.item)))
-                iconName: "x"
-                danger: true
-                onTriggered: root.removeFromMenu(chipMenuItem.index)
-            }
+            onOpenRequested: root.openItem(chipMenuItem.item)
+            onCopyRequested: root.editor.copyText(chipMenuItem.item)
+            onRemoveRequested: root.removeFromMenu(chipMenuItem.index)
         }
     }
     function openAdd() {

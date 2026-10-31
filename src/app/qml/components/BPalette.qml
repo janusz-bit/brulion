@@ -106,20 +106,31 @@ T.Popup {
     readonly property real _chromeHeight: searchRow.implicitHeight + 1 + (hints.visible ? hints.implicitHeight : 0)
     /// The list's height (with its 6 + 6 px margins): all of it when it fits, else as many whole
     /// rows as fit in _listRoom — the rows' real heights (larger text, two-line rows), at least
-    /// one. The rows inside the room exist (the view creates what it shows and a buffer below);
-    /// each row created measures again (_rowsCreated: itemAtIndex() is not notifiable, and rows of
-    /// one height never change contentHeight, so the list once stayed one row high).
+    /// one. Each row created measures again (_rowsCreated: itemAtIndex() is not notifiable, and
+    /// rows of one height never change contentHeight, so the list once stayed one row high). A row
+    /// the view has released (scrolled past its buffer: the first ones, once the list scrolls)
+    /// counts with the height of a row that exists — the list once shrank to its margins there,
+    /// and a list that small creates no rows to measure it again.
     readonly property real _listHeight: {
         const all = list.contentHeight + 12
         if (fullScreen || all <= _listRoom || list.count === 0)
             return Math.min(all, 420)
-        let h = 12
         const created = _rowsCreated
-        for (let i = 0; i < list.count && created > 0; ++i) {
+        let known = 0
+        for (let i = 0; i < list.count && created > 0 && known <= 0; ++i) {
             const row = list.itemAtIndex(i)
-            if (!row || (i > 0 && h + row.height > _listRoom))
+            if (row)
+                known = row.height
+        }
+        if (known <= 0)
+            return 12
+        let h = 12
+        for (let i = 0; i < list.count; ++i) {
+            const row = list.itemAtIndex(i)
+            const rowHeight = row ? row.height : known
+            if (i > 0 && h + rowHeight > _listRoom)
                 break
-            h += row.height
+            h += rowHeight
         }
         return h
     }

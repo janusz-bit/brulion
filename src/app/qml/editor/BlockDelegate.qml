@@ -11,8 +11,8 @@ import Brulion
 // (rendered text / inline editor, code, calc, math, table, query, callout, quote, rule,
 // frontmatter) with image embeds and embedded pages / sections / blocks (TransclusionView) below.
 // Document mode (BlockEditor.documentMode): no guides, fold arrows or bullets for paragraphs and
-// headings; a list item shows its Markdown marker in its level's marker column — a bullet (disc,
-// circle, square by depth), its number ("3."), or the checkbox of a task — and the text starts
+// headings; a list item shows its Markdown marker in its level's marker column — a bullet (the
+// same round dot at every depth), its number ("3."), or the checkbox of a task — and the text starts
 // one column in per level. A nested list item draws a guide line per ancestor level at that
 // level's marker centre (under a number's column), and a list item with children one from under
 // its marker down, as the outline does. Spacing follows the previous block (`prevKind`):
@@ -57,7 +57,15 @@ Item {
     // column before its text.
     readonly property real levelX: doc ? editor.contentX + editor.gutter + (listItem ? (depth + 1) * editor.listIndent : 0)
                                        : editor.contentX + editor.gutter + depth * editor.indentStep
-    readonly property real bulletX: doc ? levelX - Math.round(editor.listIndent * 0.55) : levelX - editor.bulletColumn / 2
+    readonly property real bulletX: markerX(doc && !listItem ? -1 : depth)
+    /// The centre of the marker column of list level `level` (the bullet's, a number's, a task's
+    /// box): the bullets and the guide lines through the ancestors' markers share it.
+    function markerX(level) {
+        return doc ? editor.contentX + editor.gutter + (level + 1) * editor.listIndent - Math.round(editor.listIndent * 0.55)
+                   : editor.contentX + editor.gutter + level * editor.indentStep - editor.bulletColumn / 2
+    }
+    /// The task checkbox's size (TaskBox.boxSize).
+    readonly property real taskBoxSize: Theme.touchUi ? 18 : 16
     readonly property real contentLeft: levelX + (isTask && !doc ? editor.taskBoxWidth : 0)
     readonly property real contentRight: editor.contentX + editor.contentWidth
     // Vertical rhythm: headings get air above them, framed blocks a little on both sides.
@@ -242,9 +250,7 @@ Item {
         delegate: Rectangle {
             required property int index
             objectName: "guideLine"
-            x: block.doc ? Math.round(block.editor.contentX + block.editor.gutter + (index + 1) * block.editor.listIndent
-                                      - Math.round(block.editor.listIndent * 0.55))
-                         : Math.round(block.editor.contentX + block.editor.gutter - block.editor.bulletColumn / 2 + index * block.editor.indentStep)
+            x: Math.round(block.markerX(index))
             width: 1
             height: block.height
             color: Theme.guide
@@ -256,7 +262,8 @@ Item {
         objectName: "parentGuide"
         visible: block.shown && block.listItem && block.model.hasChildren && !block.model.collapsed
         x: Math.round(block.bulletX)
-        y: Math.round(block.firstLineCenter + (block.doc && block.isTask ? (Theme.touchUi ? 9 : 8) + 3 : 9))
+        // (Under a document's task box: half its size and 3 px below its centre.)
+        y: Math.round(block.firstLineCenter + (block.doc && block.isTask ? block.taskBoxSize / 2 + 3 : 9))
         width: 1
         height: Math.max(0, block.height - y)
         color: Theme.guide
@@ -431,7 +438,7 @@ Item {
     Loader {
         active: block.isTask && block.shown
         // Outline: after the bullet; document: in the marker column, instead of the bullet.
-        readonly property real boxSize: Theme.touchUi ? 18 : 16
+        readonly property real boxSize: block.taskBoxSize
         x: block.doc ? block.bulletX - width / 2
                      : block.levelX + (block.editor.taskBoxWidth - boxSize) / 2 - 2 - (width - boxSize) / 2
         y: block.firstLineCenter - height / 2
