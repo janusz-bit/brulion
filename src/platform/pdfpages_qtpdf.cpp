@@ -3,7 +3,8 @@
 // time (PdfReaderPool), pulled to it by attachToCurrentThread().
 //
 // Text: QPdfDocument::getAllText() per page, matched by pdfsearch.h; a match's rectangles from
-// getSelectionAtIndex() (pdfium's character indices are getAllText()'s UTF-16 units). Not
+// getSelectionAtIndex() (pdfium's character indices are getAllText()'s UTF-16 units; its glyph boxes
+// merged into one per line; on a /Rotate page they are the page as shown, as poppler's). Not
 // QPdfSearchModel: it searches on the GUI thread with timers and only case-insensitively.
 #include "pdfpages.h"
 #include "pdfsearch.h"
@@ -79,8 +80,11 @@ public:
             hit.start = int(range.start);
             hit.length = int(range.length);
             const QPdfSelection selection = m_doc->getSelectionAtIndex(page - 1, hit.start, hit.length);
+            // pdfium gives a box per glyph: one rectangle per line.
+            QList<QRectF> boxes;
             for (const QPolygonF &polygon : selection.bounds())
-                hit.rects.append(polygon.boundingRect());
+                boxes.append(polygon.boundingRect());
+            hit.rects = pdfRangeRects(boxes, {0, boxes.size()});
             out.append(hit);
         }
         return out;
