@@ -116,6 +116,23 @@ QString innerText(const QQuickItem *item, int depth = 0)
     return {};
 }
 
+/// A plain Item that only takes taps on a text it exactly covers (BlockText's overlay on a
+/// rendered block: a tap edits the text where it lands): the text itself is the target, sized by
+/// its line height — WCAG 2.5.8's inline exception, like a web editor's text, where a tap puts the
+/// caret into the line under it (Obsidian's CodeMirror content is one such field).
+bool tapsOnItsText(const QQuickItem *item, const QRectF &scene)
+{
+    if (qstrcmp(item->metaObject()->className(), "QQuickItem") != 0 || !item->parentItem())
+        return false;
+    for (const QQuickItem *sibling : item->parentItem()->childItems()) {
+        if (sibling == item || !sibling->isVisible() || !sibling->inherits("QQuickText"))
+            continue;
+        if (sameRect(sibling->mapRectToScene(QRectF(0, 0, sibling->width(), sibling->height())), scene))
+            return true;
+    }
+    return false;
+}
+
 QString targetLabel(const QQuickItem *item)
 {
     for (const char *prop : { "text", "label", "title" }) {
@@ -339,7 +356,7 @@ private:
                     { u"label"_s, targetLabel(item) },
                     { u"rect"_s, rectJson(hit) },
                     { u"enabled"_s, enabled },
-                    { u"inline"_s, false },
+                    { u"inline"_s, kind == u"tap" && tapsOnItsText(item, scene) },
                 };
                 m_targets.append(r);
                 target = hit;

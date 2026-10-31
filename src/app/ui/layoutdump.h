@@ -16,7 +16,9 @@
 // collapsed text; `alpha` the accumulated opacity of the item and its ancestors (the colour keeps
 // its own); `paint` the paint order (children by z after their parent, negative z before it). A
 // text's rectangle is its visible part, a target's its whole hit area (when any of it is visible;
-// its label: text, label, title, Accessible.name or the first text inside). A text or target is
+// its label: text, label, title, Accessible.name or the first text inside; `inline` for a plain
+// Item taking taps on the text it exactly covers — a rendered block's text, sized by its line
+// height, which the metrics leave out as WCAG 2.5.8 does inline targets). A text or target is
 // `occluded` when an opaque box painted later (alpha ≥ 0.9, or ≥ 0.3 for a popup's dim in the
 // overlay) covers its centre.
 #pragma once

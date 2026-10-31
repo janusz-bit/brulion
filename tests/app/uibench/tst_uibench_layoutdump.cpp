@@ -83,6 +83,9 @@ Window {
         Text { objectName: "covered"; x: 10; y: 200; text: "Zasłonięty"; font.pixelSize: 14 }
         Rectangle { objectName: "cover"; x: 0; y: 195; width: 120; height: 30; color: "#ffffff" }
         Text { objectName: "underDim"; x: 10; y: 260; text: "Pod przyciemnieniem"; font.pixelSize: 14 }
+        // A rendered block's text with the item taking its taps above it (BlockText): inline.
+        Text { id: blockText; objectName: "blockText"; x: 10; y: 330; width: 150; height: 24; text: "Blok do edycji"; font.pixelSize: 14 }
+        Item { objectName: "blockTap"; anchors.fill: blockText; TapHandler { } }
     }
     T.Popup {
         id: popup
@@ -265,7 +268,13 @@ void TestUiBenchLayoutDump::targets()
     }
     QCOMPARE(same, 1);
     QCOMPARE(byName(targets, u"tappable"_s)[u"kind"_s].toString(), u"tap"_s);
+    QCOMPARE(byName(targets, u"tappable"_s)[u"inline"_s].toBool(), false);
     QCOMPARE(byName(targets, u"input"_s)[u"kind"_s].toString(), u"field"_s);
+    // Taps on a text it exactly covers: the text is the target (WCAG 2.5.8's inline exception).
+    const QJsonObject blockTap = byName(targets, u"blockTap"_s);
+    QCOMPARE(blockTap[u"kind"_s].toString(), u"tap"_s);
+    QCOMPARE(blockTap[u"inline"_s].toBool(), true);
+    QCOMPARE(rectOf(blockTap), QRectF(10, 330, 150, 24));
 }
 
 void TestUiBenchLayoutDump::occlusion()
