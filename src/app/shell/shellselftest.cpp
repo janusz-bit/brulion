@@ -4288,6 +4288,13 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     // serif / sans-serif choice, and "Other…" opens the picker again. A missing family names the
     // font used instead.
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"editor"_s}});
+    // The text width: Normalna (680 px, about 85 characters) by default.
+    {
+        QQuickItem *width = shownItem(u"editorWidthSetting"_s);
+        check(width && settings->editorWidth() == 680 && width->property("currentIndex").toInt() == 1
+                      && width->property("currentValue").toInt() == 680,
+              "Edytor → Szerokość tekstu: Normalna (680 px) by default");
+    }
     if (QQuickItem *fontSetting = shownItem(u"editorFontSetting"_s)) {
         uidriver::scrollIntoView(window, fontSetting);
         // The picker of the settings view shown (a window can hold more than one settings view).

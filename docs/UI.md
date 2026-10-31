@@ -41,7 +41,9 @@ components — no Material/Fusion look, so all targets look identical.
   family (code blocks, source mode, formulas; inline `code` in rendered text keeps Qt's own fixed
   font); calculations are note text: the editor font at the editor's size, results with tabular
   figures (`tnum`) so they still line up right-aligned, errors smaller in the UI font; line spacing Ciasny 1.45 | Normalny 1.65 | Luźny 1.9; configurable max
-  text width and text size. One type scale: note text quoted outside the editor (linked
+  text width — Wąska 600, **Normalna 680** (the default, `Theme.measure`: about 85 characters of
+  16-px serif, Obsidian's comfortable measure), Szeroka 960, Pełna; the presets before 0.5.1
+  (640, 760) read as 600 and 680, other stored widths stay — and text size. One type scale: note text quoted outside the editor (linked
   references, tagged blocks under a page and in the side panel, `ContentRefRow`) is in the
   editor font at the UI's base size (`textBase`), so the editor's own text is the only larger
   size; search results show the page title (semibold, `fg`) and the snippet (`fgMuted`) both in

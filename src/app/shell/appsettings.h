@@ -72,7 +72,8 @@ class AppSettings : public QObject {
     Q_PROPERTY(QString editorFont READ editorFont WRITE setEditorFont NOTIFY editorFontChanged FINAL)
     /// Editor text size in px at 100 % (12 … 28, default 16).
     Q_PROPERTY(int editorFontSize READ editorFontSize WRITE setEditorFontSize NOTIFY editorFontSizeChanged FINAL)
-    /// Maximum width of the editor's text column in px (480 … 1600, default 760); 0 = full width.
+    /// Maximum width of the editor's text column in px (480 … 1600, default 680 — about 85
+    /// characters of 16-px serif); 0 = full width. The old presets 760 and 640 read as 680 and 600.
     Q_PROPERTY(int editorWidth READ editorWidth WRITE setEditorWidth NOTIFY editorWidthChanged FINAL)
     /// A font family for notes instead of serif / sans ("" = editorFont decides).
     Q_PROPERTY(QString editorFontFamily READ editorFontFamily WRITE setEditorFontFamily NOTIFY fontFamiliesChanged FINAL)

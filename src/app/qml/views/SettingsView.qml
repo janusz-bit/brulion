@@ -674,10 +674,11 @@ Item {
                 title: qsTr("Text width")
                 description: qsTr("Long lines are hard to read; the editor keeps text within this width.")
                 BSegmented {
+                    objectName: "editorWidthSetting"
                     accessibleName: qsTr("Text width")
                     model: [
-                        { value: 640, text: qsTr("Narrow") },
-                        { value: 760, text: qsTr("Normal", "text width") },
+                        { value: 600, text: qsTr("Narrow") },
+                        { value: 680, text: qsTr("Normal", "text width") },
                         { value: 960, text: qsTr("Wide") },
                         { value: 0, text: qsTr("Full") }
                     ]

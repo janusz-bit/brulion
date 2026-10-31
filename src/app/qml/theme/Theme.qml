@@ -293,7 +293,7 @@ QtObject {
     /// buttons with a hairline above.
     readonly property int editToolbarHeight: touchTarget + space2 + 1
 
-    readonly property int measure: 760          // editor's comfortable text width
+    readonly property int measure: 680          // editor's comfortable text width (~85 characters)
     readonly property int sidebarWidth: dense ? 248 : 272
     readonly property int dialogWidthSm: 400
     readonly property int dialogWidth: 520

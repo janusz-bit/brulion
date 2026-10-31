@@ -77,7 +77,7 @@ private Q_SLOTS:
         QCOMPARE(s.fontScale(), 1.0);
         QCOMPARE(s.editorFont(), u"serif"_s);
         QCOMPARE(s.editorFontSize(), 16);
-        QCOMPARE(s.editorWidth(), 760);
+        QCOMPARE(s.editorWidth(), 680);
         QVERIFY(!s.editorSourceMode());
         QVERIFY(s.currentVault().isEmpty());
         QVERIFY(s.recentVaults().isEmpty());
@@ -270,6 +270,46 @@ private Q_SLOTS:
         }
         AppSettings s(file, m_tmp.path());
         QCOMPARE(s.property(qPrintable(property)), expected);
+    }
+
+    /// The editor's text width as stored by any version: unset is today's default (680, about 85
+    /// characters), the presets before 0.5.1 read as their successors (Normalna 760 → 680, Wąska
+    /// 640 → 600) so the setting shows the choice made; full width (0), today's presets and
+    /// custom widths stay; out of range is clamped, malformed is the default.
+    void editorWidthStored_data()
+    {
+        QTest::addColumn<QVariant>("stored");
+        QTest::addColumn<int>("expected");
+        QTest::newRow("unset") << QVariant() << 680;
+        QTest::newRow("old Normalna") << QVariant(760) << 680;
+        QTest::newRow("old Wąska") << QVariant(640) << 600;
+        QTest::newRow("old Normalna as text") << QVariant(u"760"_s) << 680;
+        QTest::newRow("Wąska") << QVariant(600) << 600;
+        QTest::newRow("Normalna") << QVariant(680) << 680;
+        QTest::newRow("Szeroka") << QVariant(960) << 960;
+        QTest::newRow("Pełna") << QVariant(0) << 0;
+        QTest::newRow("negative") << QVariant(-5) << 0;
+        QTest::newRow("custom") << QVariant(700) << 700;
+        QTest::newRow("custom 761") << QVariant(761) << 761;
+        QTest::newRow("too narrow") << QVariant(200) << 480;
+        QTest::newRow("too wide") << QVariant(5000) << 1600;
+        QTest::newRow("malformed") << QVariant(u"szeroko"_s) << 680;
+    }
+
+    void editorWidthStored()
+    {
+        QFETCH(QVariant, stored);
+        QFETCH(int, expected);
+        const QString file = nextFile();
+        if (stored.isValid()) {
+            QSettings raw(file, QSettings::IniFormat);
+            raw.setValue(u"editor/maxWidth"_s, stored);
+        }
+        AppSettings s(file, m_tmp.path());
+        QCOMPARE(s.editorWidth(), expected);
+        // A preset picked again is written as it is shown.
+        s.setEditorWidth(expected);
+        QCOMPARE(s.editorWidth(), expected);
     }
 
     void appearanceEdits()
@@ -739,6 +779,8 @@ private Q_SLOTS:
         QCOMPARE(s.editorFontSize(), 28);
         s.setEditorWidth(100);
         QCOMPARE(s.editorWidth(), 480);
+        s.setEditorWidth(1601);
+        QCOMPARE(s.editorWidth(), 1600);
         s.setSnoozeMinutes(0);
         QCOMPARE(s.snoozeMinutes(), 1);
         s.setAlarmRingMinutes(600);
