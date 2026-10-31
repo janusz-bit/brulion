@@ -5,7 +5,9 @@ import Brulion
 // CalendarMonthGrid — the month view: 6 weeks × 7 days of a CalendarModel (weekday names from
 // DatesHelper, starting on the model's first weekday). Wide cells list the day's entries as
 // coloured pills ("09:00 Spotkanie", "+3 więcej"; an alarm in the reminder's tint with its
-// alarm clock, not a solid amber pill); narrow cells (phones) show coloured dots per kind. The
+// alarm clock, not a solid amber pill; open entries first, so "+N więcej" hides finished ones; a
+// done entry is muted with a check, not struck out — as in Tasks —, a cancelled one struck out
+// with an x); narrow cells (phones) show coloured dots per kind. The
 // cells are one surface (no weekend or other-month tint): today has a red disc on its number, the
 // selected day a dark disc (Theme.primary, as in BDatePicker; ≥ 3:1, WCAG 1.4.11) — today
 // selected shows only the red one —, days of other months have faint numbers, a daily note
@@ -149,8 +151,12 @@ FocusScope {
 
                     readonly property int column: index % 7
                     readonly property int row: Math.floor(index / 7)
-                    readonly property bool overflow: items.length > root.maxPills
-                    readonly property int shownPills: overflow ? Math.max(0, root.maxPills - 1) : items.length
+                    /// The day's entries, open ones first (a stable partition: times keep their
+                    /// order), so "+N więcej" hides finished ones first; the pills and a click
+                    /// on one read this order.
+                    readonly property var ordered: items.filter(e => !e.closed).concat(items.filter(e => e.closed))
+                    readonly property bool overflow: ordered.length > root.maxPills
+                    readonly property int shownPills: overflow ? Math.max(0, root.maxPills - 1) : ordered.length
 
                     x: column * root.cellWidth
                     y: row * root.cellHeight
@@ -230,15 +236,16 @@ FocusScope {
                             delegate: Rectangle {
                                 id: pill
                                 required property int index
-                                readonly property var entry: cell.items[index]
+                                readonly property var entry: cell.ordered[index]
                                 // An alarm in the reminder's tint: its alarm clock tells it apart (a
                                 // solid amber pill was the loudest thing on the month).
                                 readonly property var colors: Theme.chip(entry.variant === "alarm" ? "reminder" : entry.variant)
                                 width: parent ? parent.width : 0 // (null while the Repeater drops it: a new month)
                                 height: root.pillHeight
                                 radius: Theme.radiusSm
-                                // (Done and cancelled entries: struck out in the "done" chip's
-                                // colours, at full opacity — readable text, AA.)
+                                // (Done and cancelled entries: the "done" chip's colours at full
+                                // opacity — readable text, AA —, with a check, or struck out with
+                                // an x when cancelled, as in Tasks.)
                                 color: colors.bg
                                 Row {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -247,8 +254,9 @@ FocusScope {
                                     spacing: 3
                                     BIcon {
                                         anchors.verticalCenter: parent.verticalCenter
-                                        visible: pill.entry.variant === "alarm" || pill.entry.recurring
-                                        name: pill.entry.variant === "alarm" ? "alarm-clock" : "repeat"
+                                        visible: pill.entry.closed || pill.entry.variant === "alarm" || pill.entry.recurring
+                                        name: pill.entry.closed ? (pill.entry.status === "cancelled" ? "x" : "check")
+                                            : pill.entry.variant === "alarm" ? "alarm-clock" : "repeat"
                                         size: 10
                                         color: pill.colors.fg
                                     }
@@ -260,7 +268,7 @@ FocusScope {
                                         textFormat: Text.StyledText
                                         font.family: Theme.fontUi
                                         font.pixelSize: Theme.textXs
-                                        font.strikeout: pill.entry.closed
+                                        font.strikeout: pill.entry.status === "cancelled"
                                         color: pill.colors.fg
                                         elide: Text.ElideRight
                                         maximumLineCount: 1
@@ -271,7 +279,7 @@ FocusScope {
                         Text {
                             visible: cell.overflow
                             leftPadding: 5
-                            text: qsTr("+%n more", "", cell.items.length - cell.shownPills)
+                            text: qsTr("+%n more", "", cell.ordered.length - cell.shownPills)
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textXs
                             font.weight: Theme.weightMedium
@@ -314,7 +322,7 @@ FocusScope {
                                 const p = eventPoint.position
                                 const k = Math.floor((p.y - root.pillsTop) / (root.pillHeight + 2))
                                 if (p.y >= root.pillsTop && k >= 0 && k < cell.shownPills) {
-                                    root.itemOpened(cell.items[k])
+                                    root.itemOpened(cell.ordered[k])
                                     return
                                 }
                             }

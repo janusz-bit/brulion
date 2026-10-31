@@ -197,7 +197,8 @@ FocusScope {
                             width: parent ? parent.width : 0 // (null while the Repeater drops it: a new week)
                             height: root.pillHeight
                             radius: Theme.radiusSm
-                            // (Done and cancelled: the "done" chip's colours at full opacity, AA.)
+                            // (Done and cancelled: the "done" chip's colours at full opacity, AA;
+                            // only a cancelled one struck out, as in Tasks.)
                             color: colors.bg
                             Text {
                                 anchors.fill: parent
@@ -208,7 +209,7 @@ FocusScope {
                                                       : allDayPill.entry.title
                                 font.family: Theme.fontUi
                                 font.pixelSize: Theme.textXs
-                                font.strikeout: !allDayPill.more && allDayPill.entry.closed
+                                font.strikeout: !allDayPill.more && allDayPill.entry.status === "cancelled"
                                 color: allDayPill.colors.fg
                                 elide: Text.ElideRight
                             }
@@ -404,7 +405,7 @@ FocusScope {
                                     text: event.entry.title
                                     font.family: Theme.fontUi
                                     font.pixelSize: Theme.textXs
-                                    font.strikeout: event.entry.closed
+                                    font.strikeout: event.entry.status === "cancelled"
                                     color: event.colors.fg
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
