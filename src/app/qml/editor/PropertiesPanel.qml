@@ -282,7 +282,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     text: qsTr("Add property")
                     font.family: Theme.fontUi
-                    font.pixelSize: Theme.textSm
+                    font.pixelSize: Theme.textBase
                     color: Theme.fgMuted
                 }
             }

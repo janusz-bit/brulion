@@ -489,7 +489,7 @@ FocusScope {
                 maximumLineCount: row.present && row.property.multiline ? 6 : 3
                 elide: Text.ElideRight
                 font.family: Theme.fontUi
-                font.pixelSize: Theme.textSm
+                font.pixelSize: Theme.textBase
                 font.italic: row.empty
                 color: row.empty || row.type === "unsupported" ? Theme.fgMuted : Theme.fg
                 linkColor: Theme.link
@@ -644,7 +644,7 @@ FocusScope {
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
                 font.family: Theme.fontUi
-                font.pixelSize: Theme.textSm
+                font.pixelSize: Theme.textBase
                 font.italic: row.empty
                 font.features: { "tnum": 1 }
                 color: row.empty ? Theme.fgMuted : Theme.fg
@@ -826,7 +826,7 @@ FocusScope {
                         textFormat: Text.PlainText
                         elide: Text.ElideRight
                         font.family: Theme.fontUi
-                        font.pixelSize: Theme.textSm
+                        font.pixelSize: Theme.textBase
                         font.italic: row.empty
                         color: row.empty ? Theme.fgMuted : Theme.fg
                     }

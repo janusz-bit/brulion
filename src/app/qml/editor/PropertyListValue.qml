@@ -134,6 +134,9 @@ Item {
                 showIcon: iconName !== ""
                 text: root.safe(root.type === "tags" ? "#" + modelData : target !== "" ? target : modelData)
                 interactive: root.type === "tags" || target !== ""
+                // An item of the list, not a filter: filled like the other items (the page icon
+                // marks a [[Page]]; a link colour would be too faint on the chip in light).
+                outlined: false
                 removable: !root.readOnly
                 Accessible.name: root.type === "tags" ? qsTr("Tag %1").arg(modelData) : modelData
                 onClicked: {

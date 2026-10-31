@@ -13,6 +13,8 @@ import Brulion
 //           "done" | "neutral" (default). Each has its colours and default icon
 //           (Theme.chip(variant)); `iconName` overrides ("" for none: set showIcon: false).
 // interactive: hover/press feedback, focusable, emits clicked(); `selected` = filter state
+// outlined:    an interactive neutral chip is drawn as an outlined filter button (default); a
+//              chip that is an item of a list rather than a filter sets it false (filled)
 // removable:   an × button (signal removeClicked(); also Delete/Backspace when focused)
 // size:        "small" (inline in text) | "normal"
 T.AbstractButton {
@@ -29,7 +31,7 @@ T.AbstractButton {
     signal removeClicked()
 
     readonly property var colors: Theme.chip(variant)
-    readonly property bool outlined: variant === "neutral" && interactive
+    property bool outlined: variant === "neutral" && interactive
     readonly property color fgColor: selected && variant === "neutral" ? Theme.primaryFg : colors.fg
     readonly property int visualHeight: size === "small" ? (Theme.touchUi ? 24 : 20) : (Theme.touchUi ? 32 : 26)
     readonly property int hitHeight: interactive || removable ? Math.max(visualHeight, Theme.touchUi ? Theme.touchTarget : 0) : visualHeight

@@ -66,6 +66,9 @@ Item {
     readonly property bool propertiesAfterTitle: editor.titleFirst && index === editor.controller.titleRow - 1
     readonly property real topPad: doc ? docTopPad : outlineTopPad
     readonly property real outlineTopPad: {
+        // The first block under the properties panel: 24 px with the panel's bottom padding.
+        if (prevKind === "frontmatter" && !titleFirst)
+            return headingLevel === 1 ? Theme.space5 : Theme.space4
         if (headingLevel > 0 && index > 0 && !titleFirst)
             return headingLevel === 1 ? Theme.space5 : headingLevel === 2 ? Theme.space4 : Theme.space3
         if (framed)
@@ -89,7 +92,7 @@ Item {
             return framed || view === "quote" || (hasEmbeds && model.onlyEmbeds && !listItem)
                    ? editor.headingGapBelow + Theme.space2 : editor.headingGapBelow
         if (prevKind === "frontmatter")
-            return Theme.space3
+            return Theme.space6 // air between the properties panel and the page's text
         if (listItem && prevKind === "listItem")
             return editor.listGap
         return editor.paragraphGap

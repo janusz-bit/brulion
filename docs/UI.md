@@ -1721,12 +1721,14 @@ note mode switch or an inserted template), so it never runs on over the page.
   its values read-only: "Tych właściwości nie da się bezpiecznie zmieniać w polach." with
   "Edytuj jako tekst".
 * Layout: the type icon and the key in a column (as wide as the widest key, 96 px to 30 % of the
-  panel; keys at the UI text size) beside the value — on phones too, rows 44 px on touch UIs (32 px,
+  panel; keys and values at the UI text size, so a value opened for editing keeps its size; list
+  items are filled chips, a page link marked by its page icon) beside the value — on phones too, rows 44 px on touch UIs (32 px,
   28 dense, with a mouse); only a panel whose value column would be narrower than ~168 px (a narrow
   side panel) stacks the key over the value. Every control and tap area is a 44 px target on touch
   UIs: the key's whole cell (a tap focuses the row, a double tap renames), the value's whole cell
   (a text, a number, a date button: the row's padding included). The open panel is a sunken surface
-  without a frame (the focus border while its text is edited). Heights are bindings (rule 1 of
+  without a frame (the focus border while its text is edited), 24 px above the page's first block
+  (folded or open, in both modes; `BlockDelegate` by `prevKind`). Heights are bindings (rule 1 of
   "Scrolling performance": the rows' heights summed, the chips' lines computed), rows live in a
   `ListModel` by key so an edit keeps them (a focused field too).
 * Keyboard: rows take the focus (Tab); ↓ / ↑ move between them (past the last: the add row), → or
