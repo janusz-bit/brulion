@@ -45,6 +45,12 @@ components — no Material/Fusion look, so all targets look identical.
   editor font at the UI's base size (`textBase`), so the editor's own text is the only larger
   size; search results show the page title (semibold, `fg`) and the snippet (`fgMuted`) both in
   the UI font at `textBase`, told apart by weight and colour.
+* Inline tokens in rendered text are rounded shapes behind the words, not Qt's square text
+  backgrounds: `#tags` and the date / reminder / done / recurrence chips are pills (radius =
+  height / 2, the shape of the page header's tag chips, `BChip`), inline `code` and
+  `==highlights==` boxes with `Theme.radiusXs`; their colours, tints and the no-break space
+  inside each end are the renderer's ("The block editor"). Lists that cut their text (linked
+  references, Tasks, embeds, tables, query results) keep the square tint for now.
 * Outliner look like Logseq: round bullets, thin vertical guide lines per nesting level
   (`Theme.guide`, the `border` colour: visible but quiet, about Obsidian's 1.3:1; also from a
   bullet down to its children), fold
@@ -525,7 +531,17 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (no model resets).
 * `qml/editor/BlockEditor.qml`: a `ListView` of `BlockDelegate`s. An unfocused block shows its
   rendered rich text (links: `page:`, `tag:`, `block:`, `ext:`, `task:`, `reminder:` URLs; the
-  token menus' `date:`, `recur:`, `prio:` and `day:`).
+  token menus' `date:`, `recur:`, `prio:` and `day:`). A text with tinted spans (the renderer's
+  chips and tags, inline code, highlights: a `background-color` in its HTML) is shown by a
+  read-only rich-text `TextEdit` instead of a `Text` (`BlockText`): `RichTextPills`
+  (`src/app/editor/richtextpills.h`) gives its document the same fixed line height, takes the
+  spans' square background brushes off in the document's own change signal — before the next
+  frame — and keeps their colour and kind (a span with its own text colour is a pill, a
+  fixed-pitch one or any other a box) on the format, and lays one rectangle per line segment
+  out of the document's own layout, centred on the span's glyphs (its font's ascent and descent
+  around the baseline); a `Repeater` draws them under the text. Every other text stays a `Text`
+  (cheaper rows); clicks, long presses, right-clicks and the cursor shape go through the same
+  overlay for both (`BlockText.linkAt`).
   Clicking or tapping it edits it inline (`InlineEditor`: a `TextEdit` with the raw Markdown,
   minus the task marker / fences the delegate draws, and `MarkdownHighlighter`).
 * `PageController` executes commands (one undo step each, typing coalesced), saves debounced

@@ -119,15 +119,24 @@ QString innerText(const QQuickItem *item, int depth = 0)
 /// A plain Item that only takes taps on a text it exactly covers (BlockText's overlay on a
 /// rendered block: a tap edits the text where it lands): the text itself is the target, sized by
 /// its line height — WCAG 2.5.8's inline exception, like a web editor's text, where a tap puts the
-/// caret into the line under it (Obsidian's CodeMirror content is one such field).
+/// caret into the line under it (Obsidian's CodeMirror content is one such field). The text: a
+/// Text, or the read-only TextEdit a block with chips is shown by (in its Loader).
 bool tapsOnItsText(const QQuickItem *item, const QRectF &scene)
 {
     if (qstrcmp(item->metaObject()->className(), "QQuickItem") != 0 || !item->parentItem())
         return false;
+    const auto isText = [](const QQuickItem *t) {
+        return t && (t->inherits("QQuickText") || (t->inherits("QQuickTextEdit") && t->property("readOnly").toBool()));
+    };
     for (const QQuickItem *sibling : item->parentItem()->childItems()) {
-        if (sibling == item || !sibling->isVisible() || !sibling->inherits("QQuickText"))
+        if (sibling == item || !sibling->isVisible())
             continue;
-        if (sameRect(sibling->mapRectToScene(QRectF(0, 0, sibling->width(), sibling->height())), scene))
+        const QQuickItem *text = sibling;
+        if (sibling->inherits("QQuickLoader"))
+            text = qobject_cast<const QQuickItem *>(sibling->property("item").value<QObject *>());
+        if (!isText(text))
+            continue;
+        if (sameRect(text->mapRectToScene(QRectF(0, 0, text->width(), text->height())), scene))
             return true;
     }
     return false;

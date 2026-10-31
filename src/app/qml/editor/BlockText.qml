@@ -8,6 +8,11 @@ import Brulion
 // move when it switches (the rendered text's height is counted in whole lines: a rich-text Text
 // gives its last line the font's own height, the editor the fixed one). `centered` centres both
 // (a formula block: the rendered formula and, while it is edited, its LaTeX source).
+// Tinted spans (InlineRenderer's chips and #tags, inline `code`, ==highlights==) are rounded
+// shapes under the text: a text with any is shown by a read-only rich-text TextEdit whose
+// RichTextPills takes Qt's square backgrounds off before they are painted and gives the
+// rectangles of a Repeater (pills for chips and tags, small radii for code and highlights);
+// the fixed line height is the same. Any other text stays a Text (cheaper rows).
 // Clicks on links are handled (page:, tag:, block:, ext:, task:,
 // reminder:, day:); a click elsewhere — also on a date, 🔁 or priority chip — starts editing with
 // the caret at the clicked position. Shift+click selects the blocks from the edited or selected one
@@ -36,19 +41,31 @@ Item {
     readonly property bool mono: block.view === "html"
     readonly property bool editing: live && block.editing
     readonly property int align: root.centered ? Text.AlignHCenter : Text.AlignLeft
+    readonly property string html: root.live ? root.block.model.html : ""
+    /// The text has a span with a background colour (InlineRenderer's chips and tags, inline code,
+    /// highlights): the TextEdit with rounded shapes shows it.
+    readonly property bool tinted: html.indexOf("background-color:") >= 0
+    /// The item showing the rendered text: linkAt(), the anchor of the token and link menus.
+    readonly property Item renderedItem: tinted && tintedLoader.item ? tintedLoader.item as Item : rendered
+
+    /// The link at a point of the rendered text ("" = none).
+    function linkAt(x: real, y: real): string {
+        const edit = tintedLoader.item as TextEdit
+        return root.tinted && edit ? edit.linkAt(x, y) : rendered.linkAt(x, y)
+    }
 
     /// The rendered text's height in whole fixed-height lines.
-    readonly property real renderedHeight: lineHeightPx > 0 ? Math.max(1, Math.round(rendered.implicitHeight / lineHeightPx)) * lineHeightPx
-                                                            : rendered.implicitHeight
+    readonly property real renderedHeight: lineHeightPx > 0 ? Math.max(1, Math.round(renderedItem.implicitHeight / lineHeightPx)) * lineHeightPx
+                                                            : renderedItem.implicitHeight
     implicitHeight: Math.max(lineHeightPx, editing && editorLoader.item ? (editorLoader.item as Item).implicitHeight : renderedHeight)
     height: implicitHeight
 
     Text {
         id: rendered
         width: parent.width
-        visible: !root.editing
+        visible: !root.editing && !root.tinted
         textFormat: Text.RichText
-        text: root.live ? root.block.model.html : ""
+        text: root.tinted ? "" : root.html
         wrapMode: Text.Wrap
         horizontalAlignment: root.align
         font.family: root.mono ? Theme.fontMono : Theme.fontEditor
@@ -62,14 +79,57 @@ Item {
         linkColor: Theme.link
         Accessible.role: Accessible.StaticText
         Accessible.name: root.live ? root.block.model.plainText : ""
+    }
+    // A text with tinted spans: the same text, font, colours and line height in a read-only
+    // rich-text TextEdit (it exposes its document), the spans' rounded shapes drawn under it.
+    Loader {
+        id: tintedLoader
+        width: parent.width
+        active: root.tinted
+        visible: !root.editing
+        sourceComponent: TextEdit {
+            id: tintedText
+            width: tintedLoader.width
+            readOnly: true
+            selectByMouse: false
+            selectByKeyboard: false
+            activeFocusOnPress: false
+            activeFocusOnTab: false
+            cursorVisible: false
+            textMargin: 0
+            textFormat: TextEdit.RichText
+            text: root.html
+            wrapMode: TextEdit.Wrap
+            horizontalAlignment: root.align
+            font.family: root.mono ? Theme.fontMono : Theme.fontEditor
+            font.pixelSize: root.mono ? Theme.textSm : root.fontSize
+            font.weight: root.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
+            font.italic: root.quoted
+            font.strikeout: root.block.taskStatus === "cancelled"
+            color: root.block.closedTask ? Theme.fgFaint : root.quoted ? Theme.fgMuted : Theme.fg
+            Accessible.role: Accessible.StaticText
+            Accessible.name: root.live ? root.block.model.plainText : ""
+            onWidthChanged: tints.refresh()
 
-        HoverHandler {
-            id: textHover
-            enabled: !Theme.touchUi
-            // (A click on a date, 🔁 or priority chip edits the text: its menu is the right button's.)
-            cursorShape: {
-                const link = rendered.linkAt(point.position.x, point.position.y)
-                return link !== "" && !root.editor.editsOnClick(link) ? Qt.PointingHandCursor : Qt.IBeamCursor
+            RichTextPills {
+                id: tints
+                textDocument: tintedText.textDocument
+                lineHeight: root.lineHeightPx
+            }
+            // Under the text: a child with a negative z is drawn below its parent's content.
+            Repeater {
+                model: tints.pills
+                delegate: Rectangle {
+                    required property var modelData
+                    z: -1
+                    x: modelData.x
+                    y: modelData.y
+                    width: modelData.width
+                    height: modelData.height
+                    radius: modelData.kind === "pill" ? height / 2 : Theme.radiusXs
+                    antialiasing: true
+                    color: modelData.color
+                }
             }
         }
     }
@@ -77,10 +137,21 @@ Item {
     // rich-text Text accepts the left mouse button and un-accepts every press it does not take
     // for a connected linkActivated, which handed the press to the editor's ListView: with a
     // mouse, clicks on text never started editing and links never opened (touch was not
-    // affected). The overlay takes the press first, so the Text never sees it.
+    // affected). The overlay takes the press first, so the Text (or the tinted text's TextEdit)
+    // never sees it.
     Item {
-        anchors.fill: rendered
+        width: root.renderedItem.width
+        height: root.renderedItem.height
         visible: !root.editing
+        HoverHandler {
+            id: textHover
+            enabled: !Theme.touchUi
+            // (A click on a date, 🔁 or priority chip edits the text: its menu is the right button's.)
+            cursorShape: {
+                const link = root.linkAt(point.position.x, point.position.y)
+                return link !== "" && !root.editor.editsOnClick(link) ? Qt.PointingHandCursor : Qt.IBeamCursor
+            }
+        }
         TapHandler {
             id: tap
             gesturePolicy: TapHandler.ReleaseWithinBounds
@@ -89,7 +160,7 @@ Item {
                 if (root.editor.blockTapped(root.block.index, tap.point.modifiers))
                     return
                 const p = eventPoint.position
-                const link = rendered.linkAt(p.x, p.y)
+                const link = root.linkAt(p.x, p.y)
                 if (link !== "" && !root.editor.editsOnClick(link))
                     root.editor.activateLink(root.block.index, link)
                 else
@@ -104,9 +175,9 @@ Item {
             gesturePolicy: TapHandler.WithinBounds
             onTapped: (eventPoint) => {
                 const p = eventPoint.position
-                const link = rendered.linkAt(p.x, p.y)
-                if (!root.editor.openDateMenu(root.block.index, link, rendered, p.x, p.y)
-                        && !root.editor.openBlockLinkMenu(root.block.index, link, rendered, p.x, p.y))
+                const link = root.linkAt(p.x, p.y)
+                if (!root.editor.openDateMenu(root.block.index, link, root.renderedItem, p.x, p.y)
+                        && !root.editor.openBlockLinkMenu(root.block.index, link, root.renderedItem, p.x, p.y))
                     root.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition)
             }
         }
@@ -118,10 +189,10 @@ Item {
             enabled: Theme.touchUi
             onLongPressed: {
                 const p = hold.point.position
-                const link = rendered.linkAt(p.x, p.y)
+                const link = root.linkAt(p.x, p.y)
                 if (!root.editor.selectionMode
-                        && (root.editor.openDateMenu(root.block.index, link, rendered, p.x, p.y)
-                            || root.editor.openBlockLinkMenu(root.block.index, link, rendered, p.x, p.y)))
+                        && (root.editor.openDateMenu(root.block.index, link, root.renderedItem, p.x, p.y)
+                            || root.editor.openBlockLinkMenu(root.block.index, link, root.renderedItem, p.x, p.y)))
                     return
                 root.editor.longPressText(root.block.index)
             }

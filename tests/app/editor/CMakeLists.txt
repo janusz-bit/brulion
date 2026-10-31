@@ -38,6 +38,11 @@ brulion_add_test(tst_editor_suggestions
 brulion_add_test(tst_editor_highlighter
     SOURCES tst_editor_highlighter.cpp
     LIBS brulion_editor)
+# The rounded shapes of the rendered text's chips, tags, code and highlights (RichTextPills) on
+# InlineRenderer's real HTML: brushes taken off, kinds, rectangles per line, the fixed line height.
+brulion_add_test(tst_editor_richpills
+    SOURCES tst_editor_richpills.cpp
+    LIBS brulion_editor brulion_core_markdown)
 brulion_add_test(tst_editor_queryresults
     SOURCES tst_editor_queryresults.cpp
     LIBS brulion_editor)

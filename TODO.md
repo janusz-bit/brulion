@@ -60,6 +60,11 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   i komputer) z Obsidianem obok i spisać różnice w układzie, odstępach, typografii, kolorach,
   animacjach i drobnych zachowaniach (kursor, zaznaczanie, menu, skróty). Z listy różnic
   wybrać te, które poprawiają odbiór interfejsu, i poprawić je w QML (docs/UI.md).
+* **Zaokrąglone `#tagi` i daty poza edytorem.** W blokach edytora są już zaokrąglonymi etykietami
+  (`RichTextPills`, docs/UI.md „The block editor”), ale listy, które przycinają tekst — linki
+  zwrotne (`ContentRefRow`), Zadania (`TasksRow`), osadzone strony (`TransclusionView`), tabele
+  (`TableBlockView`) i wyniki zapytań (`QueryBlockView`) — używają `Text` z `maximumLineCount` /
+  `elide`, których `TextEdit` nie ma, więc mają jeszcze kwadratowe tło.
 
 ## Windows
 
