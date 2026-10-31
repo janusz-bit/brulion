@@ -2,10 +2,10 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
-// ContentJournalDay — one day of JournalsView: the date as a heading ("środa, 15 października
-// 2026", a click opens the day as a page), "Otwórz jako stronę", and the day's note in an
-// embedded block editor (its own PageController; the editor's list does not scroll — the
-// journal list does — and is as tall as its blocks). A day without a note yet (today) shows a
+// ContentJournalDay — one day of JournalsView: an overline ("DZIŚ · ŚRODA") over the date as a
+// heading ("15 października 2026", a click opens the day as a page), "Otwórz jako stronę", and
+// the day's note in an embedded block editor (its own PageController; the editor's list does not
+// scroll — the journal list does — and is as tall as its blocks). A day without a note yet (today) shows a
 // prompt; the first edit creates the file — from the vault's journal template when there is one.
 //
 //   ContentJournalDay { date: model.date; path: model.path; exists: model.exists;
@@ -45,6 +45,8 @@ FocusScope {
             editor.spanFocusHere(stream.focusRow, false)
         }
     }
+    /// Compact windows: a smaller date and the open button as an icon (the overline shows at
+    /// every width).
     property bool compactHeader: Theme.compact
 
     /// This day's editor got the caret (JournalsView stops editing in the others).
@@ -169,8 +171,11 @@ FocusScope {
     }
 
     // ---- The date -------------------------------------------------------------------------------
-    // Wide: "środa, 14 października 2026" with a "Dziś" badge. Phones: the weekday (and "Dziś")
-    // as a small line above "14 października 2026", so the date fits on one line.
+    // At every width the relative day and the weekday as a small uppercase line ("DZIŚ · ŚRODA",
+    // "WCZORAJ · WTOREK", "PONIEDZIAŁEK"; today's in accentText) above "14 października 2026" —
+    // no badge: the journal opened as a page and the calendar's day panel say "Dziś" as quietly.
+    // Wide: today's date larger and "Otwórz jako stronę" at the right, centred on the heading;
+    // compact windows: a smaller date and the open button as an icon.
     Item {
         id: headerRow
         x: editor.contentX + editor.gutter
@@ -184,9 +189,8 @@ FocusScope {
         readonly property string restOfDate: comma > 0 ? longDate.slice(comma + 2) : longDate
         readonly property string relative: day.isToday ? qsTr("Today")
                                             : day.date === DatesHelper.addDays(DatesHelper.today, -1) ? qsTr("Yesterday") : ""
-        /// The badge and the button at the right end.
-        readonly property real actionsWidth: (badge.visible ? badge.implicitWidth + Theme.space2 : 0)
-                                             + (openButton.visible ? openButton.implicitWidth : 0)
+        /// The button at the right end.
+        readonly property real actionsWidth: (openButton.visible ? openButton.implicitWidth : 0)
                                              + (openIcon.visible ? openIcon.implicitWidth : 0)
 
         Item {
@@ -196,7 +200,7 @@ FocusScope {
             height: dateText.y + dateText.height
             BText {
                 id: weekdayLine
-                visible: day.compactHeader
+                visible: text !== ""
                 width: parent.width
                 text: (headerRow.relative !== "" ? headerRow.relative + " · " : "") + headerRow.weekday
                 variant: "caption"
@@ -208,9 +212,9 @@ FocusScope {
             }
             Text {
                 id: dateText
-                y: weekdayLine.visible ? weekdayLine.implicitHeight : 0
+                y: weekdayLine.visible ? weekdayLine.implicitHeight + (day.compactHeader ? 0 : Theme.space1) : 0
                 width: parent.width
-                text: day.compactHeader ? headerRow.restOfDate : headerRow.longDate
+                text: headerRow.restOfDate
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 font.family: Theme.fontEditor
@@ -232,15 +236,6 @@ FocusScope {
                     TapHandler { onTapped: day.openAsPage(false) }
                 }
             }
-        }
-        BBadge {
-            id: badge
-            visible: !day.compactHeader && headerRow.relative !== ""
-            x: dateColumn.width + Theme.space2
-            y: (headerRow.height - height) / 2
-            text: headerRow.relative
-            variant: day.isToday ? "accent" : "neutral"
-            solid: day.isToday
         }
         BButton {
             id: openButton
