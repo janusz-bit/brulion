@@ -14,7 +14,10 @@ import Brulion
 // gets a "Start writing" button; a page that does not exist yet says that typing creates it.
 // A page named by a tag that is in use (docs/SYNTAX.md §3: #tag is a link to this page) gets a
 // strip with "Widok tagu" (the tag overview), "Zadania z tym tagiem" and its sub-tags as chips
-// (#praca/raporty under Praca), each opening its own page.
+// (#praca/raporty under Praca), each opening its own page. A small header (phones, the side
+// panel) keeps the sub-tags but no row of two buttons: Widok tagu is a "#" button among the page
+// actions, Zadania z tym tagiem is in the page menu (PageView; also in Widok tagu and every
+// #tag's menu).
 //
 //   ContentPageHeader {
 //       controller: page; editor: editor; tools: tools
@@ -62,6 +65,14 @@ Item {
     readonly property var folderParts: summary.folderParts || []
     readonly property bool favorite: Workspace.favorites.some(f => f.path === header.path)
     readonly property bool showTitle: !startsWithTitle || journal
+    /// The tag that names this page ({ key, text, references, subTags }), or {}.
+    readonly property var tagInfo: summary.tag || ({})
+    /// That tag is in use (tagged blocks or sub-tags): the page gets the tag's strip.
+    readonly property bool tagInUse: (tagInfo.key || "") !== ""
+                                     && ((tagInfo.references || 0) > 0 || (tagInfo.subTags || []).length > 0)
+    /// The strip's buttons go elsewhere on a small header: Widok tagu among the page actions,
+    /// Zadania z tym tagiem in the page menu.
+    readonly property bool tagCompact: tagInUse && small
     readonly property real textX: editor ? editor.contentX + editor.gutter : 0
     readonly property real textWidth: editor ? editor.contentWidth - editor.gutter : width
 
@@ -199,6 +210,15 @@ Item {
         id: pageActions
         Row {
             spacing: 2
+            BIconButton {
+                objectName: "pageTagOverview"
+                visible: header.tagCompact
+                iconName: "hash"
+                label: qsTr("Tag overview")
+                Accessible.description: qsTr("Everything tagged %1").arg(header.tagInfo.text || "")
+                size: "small"
+                onClicked: AppController.navigate({ view: "tag", tag: header.tagInfo.key, overview: true })
+            }
             BIconButton {
                 objectName: "noteModeToggle"
                 visible: header.loaded
@@ -523,12 +543,13 @@ Item {
         }
 
         // ---- The tag that names this page -----------------------------------------------------------
+        // (Wide headers: a labelled row; small ones carry the two buttons elsewhere, tagCompact.)
         Flow {
             id: tagStrip
-            readonly property var tag: header.summary.tag || ({})
+            readonly property var tag: header.tagInfo
             readonly property var subTags: tagStrip.tag.subTags || []
             objectName: "pageTagStrip"
-            visible: (tagStrip.tag.key || "") !== "" && ((tagStrip.tag.references || 0) > 0 || tagStrip.subTags.length > 0)
+            visible: header.tagInUse && !header.small
             Layout.fillWidth: true
             Layout.topMargin: Theme.space1
             Layout.leftMargin: -Theme.space2
@@ -553,7 +574,7 @@ Item {
         }
         Flow {
             // The sub-tags (#praca/raporty under Praca), each a page of its own.
-            visible: tagStrip.visible && tagStrip.subTags.length > 0
+            visible: header.tagInUse && tagStrip.subTags.length > 0
             Layout.fillWidth: true
             spacing: Theme.space1
             Repeater {

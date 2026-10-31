@@ -493,6 +493,16 @@ FocusScope {
             iconName: "panel-right"
             onTriggered: AppController.openPage(page.path, -1, true)
         }
+        // A page named by a tag in use, on a small header (phones, the side panel): the tag
+        // strip's second button lives here (the first is the header's "#").
+        BMenuItem {
+            objectName: "pageMenuTagTasks"
+            visible: root.pageHeader !== null && root.pageHeader.tagCompact
+            height: visible ? implicitHeight : 0
+            text: qsTr("Tasks with this tag")
+            iconName: "list-todo"
+            onTriggered: AppController.navigate({ view: "tasks", query: root.pageHeader.tagQuery(root.pageHeader.tagInfo.key) })
+        }
         BMenuItem {
             text: page.documentMode ? qsTr("Switch to outline") : qsTr("Switch to document")
             iconName: page.documentMode ? "list" : "file-text"
