@@ -2,7 +2,7 @@
 // judge.mjs — the blind judging of the UI benchmark (docs/UI.md "UI benchmark (Brulion vs
 // Obsidian)", rubric.md). Node ≥ 22, no npm packages.
 //
-//   node judge.mjs pack  --round DIR [--judges 3] [--batch 4] [--seed N] [--only-changed PREV]
+//   node judge.mjs pack  --round DIR [--judges 3] [--batch 4] [--seed N] [--only-changed PREV] [--force]
 //   node judge.mjs score --round DIR [--prev PREV] [--seed N]
 //
 // pack: a group = screen × size (both themes). Every group goes to `--judges` different judges, a
@@ -10,17 +10,22 @@
 // seeded RNG, balanced over the panel (of 3 judges at least one sees Brulion as A and one as B).
 // Images are copied to DIR/judging/batches/bNN/gNN-<theme>-<A|B>.png (names without the apps);
 // DIR/judging/batches/bNN/batch.json lists them with each screen's context; the key lives outside
-// the batches, DIR/judging-keys/key.json. --only-changed PREV: only groups whose Brulion shots
-// differ from PREV's (> 0.1 % of the pixels by > 8/255; the graph: its texts and targets) are
-// packed; the others keep PREV's votes (DIR/judging/carried.json).
+// the batches, DIR/judging-keys/key.json. --only-changed PREV: only groups whose shots (either
+// app's) differ from PREV's (> 0.1 % of the pixels by > 8/255; the graph: its texts and targets)
+// are packed; the others keep PREV's votes — PREV's own and those PREV carried itself, so a
+// screen left alone for several rounds keeps its judgement (DIR/judging/carried.json: PREV's
+// absolute path and the groups' screens and sizes). pack refuses to run over a round that has
+// votes already (they would be deleted with the old batches) unless --force.
 //
-// score: reads the judges' outputs DIR/judging/votes/bNN.json (the rubric's JSON), maps them
-// through the key and writes DIR/scores.json and DIR/report.md: per vote J = mean of the 8
+// score: reads the judges' outputs DIR/judging/votes/bNN.json (the rubric's JSON; the file name
+// names the batch: a "batch" field that says otherwise drops the file; a re-judged batch saved as
+// bNN-<anything>.json replaces bNN.json's votes for the pairs it has), maps them through the key
+// and writes DIR/scores.json and DIR/report.md: per vote J = mean of the 8
 // criteria; per pair (screen, size, theme) J_B and J_O = median over the judges, agreement = share
 // of judges whose J_B > J_O; O from DIR/metrics.json; P = 0.75·J + 0.25·O; margin m = P_B − P_O;
 // overall means with a 95 % bootstrap interval of the margin; the win condition.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { inflateSync } from 'node:zlib';
 
 const CRITERIA = ['hierarchy', 'typography', 'spacing', 'color', 'consistency', 'calm', 'affordance', 'appeal'];
@@ -28,9 +33,10 @@ const here = new URL('.', import.meta.url).pathname;
 
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const args = { command, judges: 3, batch: 4, seed: 1 };
+  const args = { command, judges: 3, batch: 4, seed: 1, force: false };
   for (let i = 0; i < rest.length; i += 2) {
     const key = rest[i].replace(/^--/, '');
+    if (key === 'force') { args.force = true; --i; continue; }
     const value = rest[i + 1];
     if (value === undefined) throw new Error(`${rest[i]} needs a value`);
     if (['judges', 'batch', 'seed'].includes(key)) args[key] = Number(value);
@@ -176,24 +182,30 @@ function pack(args) {
   const round = resolve(args.round);
   const screens = args.screens ?? join(here, 'screens.json');
   let groups = groupsOf(round, screens);
+  const judging = join(round, 'judging');
+  const keys = join(round, 'judging-keys');
+  const votesDir = join(judging, 'votes');
+  const cast = existsSync(votesDir) ? readdirSync(votesDir).filter((f) => f.endsWith('.json')) : [];
+  if (cast.length && !args.force)
+    throw new Error(`${votesDir} has ${cast.length} vote file(s): packing again would delete them (--force to discard them)`);
   const carried = [];
+  let prev = null;
   if (args['only-changed']) {
-    const prev = resolve(args['only-changed']);
+    prev = resolve(args['only-changed']);
+    if (!existsSync(join(prev, 'judging-keys/key.json'))) throw new Error(`${prev} was never packed (no judging-keys/key.json)`);
     groups = groups.filter((g) => {
-      const changed = Object.keys(g.pairs).some((theme) => {
+      const changed = Object.keys(g.pairs).some((theme) => ['brulion', 'obsidian'].some((app) => {
         const name = `${g.screen}-${g.size}-${theme}`;
-        const now = join(round, 'shots/brulion', name);
-        const before = join(prev, 'shots/brulion', name);
+        const now = join(round, 'shots', app, name);
+        const before = join(prev, 'shots', app, name);
         return g.screen === 'graph' ? dumpChanged(`${now}.layout.json`, `${before}.layout.json`)
           : pngChanged(`${now}.png`, `${before}.png`);
-      });
-      if (!changed) carried.push(g.gid);
+      }));
+      if (!changed) carried.push({ gid: g.gid, screen: g.screen, size: g.size });
       return changed;
     });
   }
   const random = rng(args.seed);
-  const judging = join(round, 'judging');
-  const keys = join(round, 'judging-keys');
   rmSync(judging, { recursive: true, force: true });
   rmSync(keys, { recursive: true, force: true });
   mkdirSync(join(judging, 'batches'), { recursive: true });
@@ -240,7 +252,7 @@ function pack(args) {
     }
   }
   writeFileSync(join(keys, 'key.json'), JSON.stringify(key, null, 2) + '\n');
-  writeFileSync(join(judging, 'carried.json'), JSON.stringify({ from: args['only-changed'] ?? null, groups: carried }, null, 2) + '\n');
+  writeFileSync(join(judging, 'carried.json'), JSON.stringify({ from: prev, groups: carried }, null, 2) + '\n');
   console.log(`judge: ${groups.length} groups in ${b} batches (${args.judges} judges each)${carried.length ? `, ${carried.length} carried over` : ''}`);
 }
 
@@ -250,17 +262,30 @@ function validScores(s) {
   return s && CRITERIA.every((c) => Number.isInteger(s[c]) && s[c] >= 1 && s[c] <= 10);
 }
 
-/// Votes of a round as {screen, size, theme, judge, brulion: {…}, obsidian: {…}, guess, comments}.
+/// Votes of a round as {screen, size, theme, judge, brulion: {…}, obsidian: {…}, guess, comments}:
+/// the round's own vote files only. The file name names the batch (bNN.json, or
+/// bNN-<anything>.json for a re-judged batch, which replaces bNN.json's votes for its pairs).
 function votesOf(round) {
   const key = readJson(join(round, 'judging-keys/key.json'), null);
   if (!key) return { votes: [], dropped: [], guesses: [] };
-  const votes = [], dropped = [], guesses = [];
+  const dropped = [];
+  const byPair = new Map(), guessBy = new Map();
   const dir = join(round, 'judging/votes');
-  const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).sort() : [];
+  const plainFirst = (a, b) => {
+    const pa = /^b\d+\.json$/.test(a), pb = /^b\d+\.json$/.test(b);
+    return pa !== pb ? (pa ? -1 : 1) : a < b ? -1 : a > b ? 1 : 0;
+  };
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).sort(plainFirst) : [];
   for (const f of files) {
+    const named = f.match(/^(b\d+)(?:[-_.][^/]*)?\.json$/);
+    if (!named) { dropped.push({ file: f, reason: 'not a batch file name (bNN.json)' }); continue; }
+    const batchId = named[1];
     let out;
     try { out = JSON.parse(readFileSync(join(dir, f), 'utf8')); } catch { dropped.push({ file: f, reason: 'not JSON' }); continue; }
-    const batchId = out.batch ?? f.replace(/\.json$/, '');
+    if (out.batch !== undefined && out.batch !== batchId) {
+      dropped.push({ file: f, reason: `says batch ${J(out.batch)}, the file is ${batchId}'s` });
+      continue;
+    }
     const batch = key.batches[batchId];
     if (!batch) { dropped.push({ file: f, reason: `unknown batch ${batchId}` }); continue; }
     for (const g of out.groups ?? []) {
@@ -275,8 +300,10 @@ function votesOf(round) {
         }
         const bySide = { A: pair.A, B: pair.B };
         const appSide = sides.A === 'brulion' ? { brulion: 'A', obsidian: 'B' } : { brulion: 'B', obsidian: 'A' };
-        votes.push({
-          batch: batchId, screen: map.screen, size: map.size, theme: pair.theme,
+        const id = `${batchId}|${g.gid}|${pair.theme}`;
+        if (byPair.has(id)) dropped.push({ file: byPair.get(id).file, reason: `${g.gid} ${pair.theme}: replaced by ${f}` });
+        byPair.set(id, {
+          file: f, batch: batchId, screen: map.screen, size: map.size, theme: pair.theme,
           brulion: bySide[appSide.brulion], obsidian: bySide[appSide.obsidian],
           preferred: pair.preferred === appSide.brulion ? 'brulion' : pair.preferred === appSide.obsidian ? 'obsidian' : null,
           comments: {
@@ -290,26 +317,41 @@ function votesOf(round) {
       const sides = batch.groups[guess.gid]?.[guess.theme];
       if (!sides) continue;
       const truth = sides.A === 'obsidian' ? 'A' : 'B';
-      guesses.push({ gid: guess.gid, theme: guess.theme, guess: guess.obsidian, correct: guess.obsidian === truth });
+      guessBy.set(`${batchId}|${guess.gid}|${guess.theme}`,
+                  { gid: guess.gid, theme: guess.theme, guess: guess.obsidian, correct: guess.obsidian === truth });
     }
   }
-  return { votes, dropped, guesses, key };
+  return { votes: [...byPair.values()], dropped, guesses: [...guessBy.values()], key };
+}
+
+/// A round's votes with those it carried over (pack --only-changed), followed back through every
+/// earlier round that carried them in turn.
+function allVotes(round, screensFile, seen = new Set()) {
+  if (seen.has(round)) throw new Error(`carried votes loop back to ${round}`);
+  seen.add(round);
+  const own = votesOf(round);
+  const carried = readJson(join(round, 'judging/carried.json'), { from: null, groups: [] });
+  if (!carried.from || !carried.groups.length) return own;
+  // Older packs stored the path as given (relative): rounds are siblings.
+  const from = resolve(dirname(round), carried.from);
+  if (!existsSync(join(from, 'judging-keys/key.json')))
+    throw new Error(`${round} carries votes from ${from}, which has no judging`);
+  const gidMap = new Map(groupsOf(round, screensFile).map((g) => [g.gid, `${g.screen}|${g.size}`]));
+  const keys = new Set(carried.groups.map((g) => (typeof g === 'string' ? gidMap.get(g) : `${g.screen}|${g.size}`)));
+  const prev = allVotes(from, screensFile, seen);
+  return {
+    ...own,
+    votes: own.votes.concat(prev.votes.filter((v) => keys.has(`${v.screen}|${v.size}`))
+      .map((v) => ({ ...v, carried: v.carried ?? from }))),
+  };
 }
 
 const jOf = (s) => mean(CRITERIA.map((c) => s[c]));
 
 function score(args) {
   const round = resolve(args.round);
-  let { votes, dropped, guesses, key } = votesOf(round);
-  // Groups not re-judged keep the previous round's votes (pack --only-changed).
-  const carried = readJson(join(round, 'judging/carried.json'), { from: null, groups: [] });
-  if (carried.from && carried.groups.length) {
-    const prev = votesOf(resolve(carried.from));
-    const carriedKeys = new Set();
-    for (const b of Object.values(prev.key?.batches ?? {}))
-      for (const [gid, g] of Object.entries(b.groups)) if (carried.groups.includes(gid)) carriedKeys.add(`${g.screen}|${g.size}`);
-    votes = votes.concat(prev.votes.filter((v) => carriedKeys.has(`${v.screen}|${v.size}`)).map((v) => ({ ...v, carried: true })));
-  }
+  // Groups not re-judged keep the votes of the round that judged them last (pack --only-changed).
+  const { votes, dropped, guesses } = allVotes(round, args.screens ?? join(here, 'screens.json'));
   const metrics = readJson(join(round, 'metrics.json'), { pairs: [], means: {} });
   const prevScores = args.prev ? readJson(join(resolve(args.prev), 'scores.json'), null) : null;
 

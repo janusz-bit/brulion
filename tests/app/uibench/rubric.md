@@ -1,4 +1,4 @@
-# UI judging rubric (Brulion UI benchmark)
+# UI judging rubric
 
 You compare screenshots of **two note-taking apps showing the same notebook** in the same window
 size and theme. Each group shows one screen at one size, in a light and a dark pair; in each pair
@@ -35,15 +35,16 @@ the two apps are labelled **A** and **B** (the labels are drawn at random for ev
 
 ## Output
 
-One JSON object (integers 1–10 for every criterion of every image):
+One JSON object (integers 1–10 for every criterion of every image); `batch` is the `batch` of your
+batch.json and `gid` the groups' own ids — the values below only show the shape:
 
 ```json
-{"batch": "b07", "judge": 2,
- "groups": [{"gid": "g12", "pairs": [
+{"batch": "bNN", "judge": 2,
+ "groups": [{"gid": "gNN", "pairs": [
    {"theme": "light", "invalid": false,
     "A": {"hierarchy": 7, "typography": 6, "spacing": 7, "color": 8, "consistency": 7, "calm": 6, "affordance": 7, "appeal": 7},
     "B": {"hierarchy": 8, "typography": 7, "spacing": 7, "color": 7, "consistency": 8, "calm": 7, "affordance": 7, "appeal": 8},
     "preferred": "B", "strengthsA": "…", "weaknessesA": "…", "strengthsB": "…", "weaknessesB": "…"},
    {"theme": "dark", "invalid": false, "A": {}, "B": {}, "preferred": "A", "strengthsA": "…", "weaknessesA": "…", "strengthsB": "…", "weaknessesB": "…"}]}],
- "identityGuess": [{"gid": "g12", "theme": "light", "obsidian": "A"}]}
+ "identityGuess": [{"gid": "gNN", "theme": "light", "obsidian": "A"}]}
 ```

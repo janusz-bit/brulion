@@ -60,7 +60,7 @@
      "brulion": {"args": ["--route", "graph"], "delayMs": 4200},
      "obsidian": {"steps": [["command", "graph:open"], ["wait", 5000]], "settleMs": 300}},
     {"id": "calendar", "sizes": ["desktop", "phone"],
-     "context": "A month calendar for navigating daily notes (Obsidian: the popular Calendar plugin beside today's note).",
+     "context": "A month calendar for navigating daily notes.",
      "brulion": {"args": ["--route", "calendar"], "delayMs": 2000},
      "obsidian": {"steps": [["open", "journals/2026-10-14.md"], ["blur"], ["sidePane", "calendar"]], "settleMs": 800}},
     {"id": "properties", "sizes": ["desktop", "phone"],

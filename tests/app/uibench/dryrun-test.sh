@@ -2,8 +2,9 @@
 # dryrun-test.sh <work-dir> — ctest tst_uibench_bench_dryrun: bench.sh --dry-run lists, for
 # screens.json, one Brulion command per screen × size × theme (48) with the right --size, --scale
 # and --touch, the Obsidian driver's invocation and the metrics; an unknown screen in --only fails;
-# the Node scripts parse (node --check). Needs node (bench.sh reads screens.json with it): without
-# it the test is skipped (exit 77).
+# the Node scripts parse (node --check); judge.mjs scores three synthetic rounds right
+# (judge-test.mjs). Needs node (bench.sh reads screens.json with it): without it the test is
+# skipped (exit 77).
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 work="${1:?usage: dryrun-test.sh <work-dir>}"
@@ -64,4 +65,6 @@ for js in "${inline[@]}"; do
   node --check "$js" || fail "an inline Node script ($js) does not parse"
 done
 node --check "$here/judge.mjs" || fail "judge.mjs does not parse"
+# judge.mjs over three synthetic rounds (votes carried through two rounds, vote files, refusals).
+node "$here/judge-test.mjs" "$work/judge" || fail "judge-test.mjs failed"
 echo "dryrun-test: ok ($shots Brulion shots)"
