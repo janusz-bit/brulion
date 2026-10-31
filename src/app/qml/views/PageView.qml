@@ -74,6 +74,15 @@ FocusScope {
     /// The page is shown as Markdown source (the shell turns the palette's block commands off).
     readonly property bool sourceMode: page.sourceMode && !root.pictureRoute
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
+    /// The tab this page's context panel showed last in the side panel ("": never shown).
+    property string sidePanelTab: ""
+    /// The side panel shows this page's linked references and unlinked mentions (wide windows,
+    /// the panel's rule in AppShell; no page pinned there; its Odnośniki tab): the section under
+    /// the blocks is not drawn a second time. Closing the panel, pinning a page there or another
+    /// tab brings it back at once.
+    readonly property bool refsInSidePanel: !root.inSidePanel && !Theme.narrow && AppController.sidePanelVisible
+                                            && !(AppController.sidePanelRoute && AppController.sidePanelRoute.view !== undefined)
+                                            && root.sidePanelTab === "links"
     readonly property alias controller: page
     readonly property alias editor: editor
 
@@ -430,7 +439,9 @@ FocusScope {
         id: refsSection
         objectName: "pageReferences" // the shell's self-test reads linkedCount
         parent: editor.listView.contentItem
-        visible: page.loaded && !page.sourceMode && page.zoomBlock < 0 && page.path !== ""
+        // (Not drawn while the side panel shows the same references: refsInSidePanel. The model
+        // stays alive.)
+        visible: page.loaded && !page.sourceMode && page.zoomBlock < 0 && page.path !== "" && !root.refsInSidePanel
         x: editor.contentX + (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)
         y: (editor.listView.footerItem ? editor.listView.footerItem.y : 0) + root.refsGap
         width: editor.contentWidth - (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)
@@ -563,10 +574,15 @@ FocusScope {
     Component {
         id: sidePanelComponent
         ContentSidePanel {
+            id: contextPanel
             // A picture's references (the index knows the notes that embed it; nothing loads it).
             path: root.pictureRoute ? root.routePath : page.path
             controller: page
             editor: editor
+            // Its tab, for refsInSidePanel (made again with the remembered tab each time the side
+            // panel shows it).
+            onCurrentTabChanged: root.sidePanelTab = contextPanel.currentTab
+            Component.onCompleted: root.sidePanelTab = contextPanel.currentTab
         }
     }
 
