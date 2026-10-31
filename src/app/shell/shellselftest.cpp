@@ -4496,6 +4496,33 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             *detail = u"%1 rows, %2 with a subtitle"_s.arg(rows).arg(subtitled);
             return rows > 0 && subtitled > 0;
         };
+        // Every command (no query): a floating list fills its room with whole rows — it once stayed
+        // one row high when every row had the same height (nothing changed contentHeight to measure
+        // it again); full screen it fills the screen.
+        if (!palette->property("fullScreen").toBool()) {
+            QMetaObject::invokeMethod(palette, "open");
+            QQuickItem *list = nullptr;
+            const auto filled = [&] {
+                auto *content = palette->property("contentItem").value<QQuickItem *>();
+                const QList<QQuickItem *> items = content ? uidriver::allItems(content) : QList<QQuickItem *>();
+                const auto it = std::find_if(items.cbegin(), items.cend(),
+                                             [](QQuickItem *item) { return item->inherits("QQuickListView"); });
+                list = it != items.cend() ? *it : nullptr;
+                if (!list || !theme)
+                    return false;
+                const qreal room = palette->property("_listRoom").toReal();
+                const qreal all = list->property("contentHeight").toReal() + 12;
+                const qreal row = theme->property("listItemHeight").toReal();
+                return list->height() + row > std::min(all, room) && list->height() <= room + 0.5;
+            };
+            const bool full = waitFor([&] { return palette->property("opened").toBool() && filled(); });
+            if (!full && list)
+                std::fprintf(stderr, "selftest: palette list %g px high, room %g, content %g\n", list->height(),
+                             palette->property("_listRoom").toReal(), list->property("contentHeight").toReal());
+            check(full, "the floating command palette shows as many whole rows as fit, not one");
+            QMetaObject::invokeMethod(palette, "close");
+            waitFor([&] { return !isOpen(palette); });
+        }
         QObject *switcher = find("shellSwitcher");
         const QList<std::pair<QObject *, QString>> popups{{palette, u"folder"_s}, {switcher, u"rem"_s}};
         for (const auto &[popup, query] : popups) {
