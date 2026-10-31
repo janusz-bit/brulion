@@ -2082,12 +2082,7 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   another button, and a text button, keep their width). A segmented control's selected segment
   is a raised thumb on the sunken track: the raised surface in light; in dark that surface
   lightened by 12 % of the text colour with a `borderControl` outline, clearly lighter than the
-  track. A row's buttons have the default size (34 px with `textControl` on the desktop, 44 px
-  on touch): the height and label size of the segmented controls beside them, so a "Wybierz…"
-  reads as the same family. A switch that is off looks like an unticked check box (`BSwitch`,
-  `BCheckBox`): a card-coloured track inside a 1.5-px `borderControl` ring (≥ 3:1 on every
-  surface, WCAG 1.4.11; `fgMuted` on hover) and a smaller `fgMuted` knob; on, the track is `link`
-  with the light knob.
+  track.
   Touch keyboards: `BTextField` asks for the action key Done (`EnterKey.type: Qt.EnterKeyDone`).
   Qt on Android otherwise shows Next whenever something focusable lies below a field, and Next
   only moves the focus: Enter and `accepted()` never arrive. Forms whose fields lead to the next
