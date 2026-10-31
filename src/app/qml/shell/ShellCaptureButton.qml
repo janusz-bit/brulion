@@ -3,8 +3,10 @@ import QtQuick
 import QtQuick.Templates as T
 import Brulion
 
-// ShellCaptureButton — the floating quick-capture button of narrow windows (56 px, round, ink
-// fill like primary buttons). Adds a note to today's journal.
+// ShellCaptureButton — the floating quick-capture button of narrow windows (56 px, round): a
+// raised neutral button — the popup surface (bgElevated2) with a 1-px ring and a level-2 shadow,
+// a "+" in the text colour — so it stays obvious without being the loudest thing on the screen
+// (no ink / cream primary fill). Adds a note to today's journal.
 T.AbstractButton {
     id: control
 
@@ -21,7 +23,7 @@ T.AbstractButton {
             anchors.centerIn: parent
             name: "plus"
             size: Theme.iconSizeLg
-            color: Theme.primaryFg
+            color: Theme.fg
         }
     }
 
@@ -35,8 +37,19 @@ T.AbstractButton {
             anchors.fill: parent
             radius: width / 2
             antialiasing: true
-            color: control.down ? Theme.primaryPressed : control.hovered ? Theme.primaryHover : Theme.primary
-            Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+            color: Theme.bgElevated2
+            // The ring carries the edge where the surface is as light as the page (white paper).
+            border.width: 1
+            border.color: Theme.dark ? Theme.borderStrong : Theme.border
+
+            // Hover and press (as BChip): an overlay keeps the raised surface's colour.
+            Rectangle {
+                anchors.fill: parent
+                radius: parent.radius
+                antialiasing: true
+                color: control.down ? Theme.bgPressed : control.hovered ? Theme.bgHover : "transparent"
+                Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+            }
         }
         BFocusRing {
             target: control

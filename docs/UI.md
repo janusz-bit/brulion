@@ -95,8 +95,9 @@ components — no Material/Fusion look, so all targets look identical.
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
   touch UI it is Qt's default (the start-drag distance); the top bar keeps ☰, back (when there is history), title, Szukaj and Więcej;
   a **bottom navigation** bar (by default Dziennik, Kalendarz, Szukaj, Zadania — four views
-  chosen in Settings → Wygląd → Układ — and Menu → drawer); a floating quick-capture button
-  (hidden while editing, or by the setting). The navigation makes way while the on-screen
+  chosen in Settings → Wygląd → Układ — and Menu → drawer); a floating quick-capture button (a
+  raised round button on the page's surface — `ShellCaptureButton`: the popup surface, a 1-px
+  ring, a shadow, the "+" in the text colour —; hidden while editing, or by the setting). The navigation makes way while the on-screen
   keyboard is up — when the keyboard goes while the editing goes on, it comes back and the
   editing toolbar docks right on it; a tap on one of its tabs then opens that view, the editing
   ends as when leaving the page —, and for the drawing editor's tool bar, which takes its place;
