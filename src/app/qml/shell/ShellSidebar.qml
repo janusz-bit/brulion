@@ -33,9 +33,6 @@ Rectangle {
 
     property real topInset: 0
     property real bottomInset: 0
-    /// Views left out of the navigation list: the phone drawer's, which the bottom navigation
-    /// already shows (AppShell). The window's sidebar lists them all.
-    property var omitViews: []
 
     signal navigated()
     signal newPageRequested(string folder)
@@ -490,8 +487,7 @@ Rectangle {
                     bottomPadding: Theme.space2
 
                     Repeater {
-                        // Without the entries hidden in Ustawienia → Wygląd → Układ, nor (the
-                        // phone drawer) those the bottom navigation has.
+                        // Without the entries hidden in Ustawienia → Wygląd → Układ.
                         model: [
                             { view: "journals", also: "journal", title: qsTr("Journals"), icon: "book-open" },
                             { view: "calendar", title: qsTr("Calendar"), icon: "calendar" },
@@ -500,8 +496,7 @@ Rectangle {
                             { view: "tags", also: "tag", title: qsTr("Tags"), icon: "tags" },
                             { view: "graph", title: qsTr("Graph"), icon: "waypoints" },
                             { view: "search", title: qsTr("Search"), icon: "search" }
-                        ].filter(e => AppSettings.sidebarHidden.indexOf(e.view) < 0
-                                      && sidebar.omitViews.indexOf(e.view) < 0)
+                        ].filter(e => AppSettings.sidebarHidden.indexOf(e.view) < 0)
                         delegate: BListItem {
                             required property var modelData
                             objectName: "sidebarNav_" + modelData.view
@@ -666,7 +661,7 @@ Rectangle {
                 subtitle: isDir && expanded && !hasChildren ? qsTr("Empty folder") : ""
                 iconName: special === "journals" ? fileIcon
                           : isDir && hasChildren ? (expanded ? "chevron-down" : "chevron-right") : fileIcon
-                iconColor: Theme.fgFaint
+                iconColor: special === "journals" ? Theme.accent : Theme.fgFaint
                 selected: !isDir && sidebar.currentPath === path
                 opacity: sidebar.dragging && sidebar.dragPath === path ? 0.5 : 1
                 Accessible.description: isDir ? (expanded ? qsTr("expanded folder") : qsTr("collapsed folder")) : ""
