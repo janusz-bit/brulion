@@ -7,15 +7,21 @@
 //
 //   node tests/app/uibench/obsidian-shots.mjs --launch "<command…>" --vault <vault-obsidian> \
 //     --screens tests/app/uibench/screens.json [--only id,id] [--sizes desktop,phone] \
-//     [--themes light,dark] --out <out>/shots/obsidian --profile <out>/env/obsidian-profile \
-//     --now "2026-10-14 10:00" --lang pl --version 1.14.4 [--fonts <fonts.conf>] [--port 9333]
+//     [--themes light,dark] --out <out>/shots/obsidian --profile <out>/tmp/obsidian-profile \
+//     --now "2026-10-14 10:00" --lang pl --version 1.14.4 [--fonts <fonts.conf>] [--port N]
 //
 // --launch is split at whitespace (paths without spaces): `appimage-run -w <extracted AppImage>`
 // on NixOS (an FHS environment around the AppImage's files, extracted once by bench.sh), the
-// extracted `squashfs-root/obsidian` elsewhere. Obsidian's private API (app.commands, app.setting,
-// internalPlugins, the EmulateMobile key) is pinned by the version: every step checks its effect
-// and fails loudly. Writes <out>/obsidian-manifest.json: {environment per size, shots, failures,
-// warnings}.
+// extracted `squashfs-root/obsidian` elsewhere. Obsidian runs on X11 (the Xvfb display) without the
+// caller's desktop session (no Wayland, session bus or keyring) and with a DevTools port of its
+// own (--port, default 0: any free one, read back from the profile), so another Obsidian on the
+// machine is never driven. Obsidian's private API (app.commands, app.setting, internalPlugins,
+// the EmulateMobile key) is pinned by the version: every step checks its effect and fails loudly.
+// Every screen starts from the session's starting state (resetWorkspace: drawers closed by
+// Obsidian, the layout, localStorage, the explorer's folders). Writes
+// <out>/obsidian-manifest.json: {environment per size, shots, failures, warnings} — a narrowed run
+// keeps the other shots' records; a "light-dark" warning names a screen whose light and dark
+// shots show different texts (state leaking between screens).
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -25,7 +31,7 @@ const J = (v) => JSON.stringify(v);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function parseArgs(argv) {
-  const args = { port: 9333, lang: 'pl', sizes: null, themes: null, only: null };
+  const args = { port: 0, lang: 'pl', sizes: null, themes: null, only: null };
   for (let i = 0; i < argv.length; ++i) {
     const key = argv[i].replace(/^--/, '');
     const value = argv[i + 1];
@@ -111,10 +117,17 @@ function writeProfile(profile, vault) {
   }));
 }
 
+// The caller's desktop session stays out: no Wayland (Electron would open there instead of on
+// Xvfb's display), no session bus or keyring (a private profile, plain password store).
+const SESSION_VARS = ['WAYLAND_DISPLAY', 'WAYLAND_SOCKET', 'DBUS_SESSION_BUS_ADDRESS', 'XDG_SESSION_TYPE',
+  'XDG_CURRENT_DESKTOP', 'DESKTOP_SESSION', 'GNOME_KEYRING_CONTROL', 'SSH_AUTH_SOCK'];
+
 function launch(cmd, profile, port, fonts, lang) {
   const parts = cmd.trim().split(/\s+/);
+  const inherited = { ...process.env };
+  for (const v of SESSION_VARS) delete inherited[v];
   const env = {
-    ...process.env,
+    ...inherited,
     HOME: join(profile, 'home'),
     XDG_CONFIG_HOME: join(profile, 'xdg/config'),
     XDG_DATA_HOME: join(profile, 'xdg/data'),
@@ -127,6 +140,7 @@ function launch(cmd, profile, port, fonts, lang) {
   if (fonts) env.FONTCONFIG_FILE = fonts;
   const child = spawn(parts[0], [...parts.slice(1),
     `--user-data-dir=${join(profile, 'userdata')}`, `--remote-debugging-port=${port}`,
+    '--ozone-platform=x11', '--password-store=basic',
     '--no-sandbox', '--disable-gpu', '--force-device-scale-factor=1', '--force-color-profile=srgb',
     '--disable-lcd-text', `--lang=${lang}`, '--proxy-server=http://127.0.0.1:9', '--proxy-bypass-list=<-loopback>',
   ], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
@@ -143,21 +157,31 @@ function kill(child) {
   try { process.kill(-child.pid, 'SIGTERM'); } catch { /* gone */ }
 }
 
-async function pageTarget(port, timeoutMs = 60000) {
+// The DevTools port of the Obsidian just launched: Chromium writes it (the first line) into
+// <user-data-dir>/DevToolsActivePort, which startSession removed before the launch — so another
+// Obsidian on this machine (another bench run, one left over) is never driven by mistake.
+async function pageTarget(profile, child, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs;
-  let last = '';
+  const portFile = join(profile, 'userdata', 'DevToolsActivePort');
+  let last = '', port = 0;
   while (Date.now() < deadline) {
+    if (child.exitCode !== null) throw new Error(`Obsidian exited with ${child.exitCode}`);
     try {
-      const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-      const page = list.find((t) => t.type === 'page' && t.url.startsWith('app://obsidian.md') && !/starter/.test(t.url));
-      if (page) return page;
-      last = list.map((t) => `${t.type} ${t.url}`).join(', ');
+      if (!port) port = Number(readFileSync(portFile, 'utf8').split('\n')[0]) || 0;
+      if (port) {
+        const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+        const page = list.find((t) => t.type === 'page' && t.url.startsWith('app://obsidian.md') && !/starter/.test(t.url));
+        if (page) return { page, port };
+        last = list.map((t) => `${t.type} ${t.url}`).join(', ');
+      } else {
+        last = `no ${portFile} yet`;
+      }
     } catch (e) {
       last = e.message;
     }
     await sleep(500);
   }
-  throw new Error(`no Obsidian page on port ${port} in ${timeoutMs} ms (${last})`);
+  throw new Error(`no Obsidian page in ${timeoutMs} ms (${last})`);
 }
 
 async function evaluate(cdp, expr, timeoutMs = 60000) {
@@ -283,16 +307,47 @@ async function parkPointer(cdp) {
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: -40, y: -40 });
 }
 
+// The session's starting state, restored before every screen (resetWorkspace): the workspace
+// layout, Obsidian's localStorage (the file explorer's unfolded folders, recent searches, …) and
+// the explorer's unfolded folders.
+async function captureBaseline(cdp) {
+  return evaluate(cdp, `const fe = app.workspace.getLeavesOfType('file-explorer')[0]?.view;
+    return {layout: app.workspace.getLayout(),
+            storage: Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)])),
+            unfolded: Object.entries(fe?.fileItems ?? {}).filter(([, i]) => i.collapsible && !i.collapsed).map(([p]) => p)};`);
+}
+
 async function resetWorkspace(cdp, baseline, size) {
   await closeModals(cdp);
   await parkPointer(cdp);
-  await evaluate(cdp, `await app.workspace.changeLayout(${J(baseline)});
+  await evaluate(cdp, `const ws = app.workspace, base = ${J(baseline)};
+    // Phones: the drawers closed by Obsidian itself first. Opening one slides the navigation bar
+    // and the main split aside (slidingSidebar); only collapse() slides them back, a new layout
+    // alone would leave the bar off the screen.
+    ${size.touch ? `const open = !ws.leftSplit.collapsed || !ws.rightSplit.collapsed;
+      ws.leftSplit.collapse(); ws.rightSplit.collapse();
+      if (open) await new Promise(r => setTimeout(r, 500));` : ''}
+    localStorage.clear();
+    for (const [k, v] of Object.entries(base.storage)) localStorage.setItem(k, v);
+    await ws.changeLayout(base.layout);
     document.querySelectorAll('style[data-uibench]').forEach(s => s.remove());
-    ${size.touch ? 'app.workspace.leftSplit.collapse(); app.workspace.rightSplit.collapse();'
-      : `app.workspace.leftSplit.expand(); app.workspace.rightSplit.collapse();
-         const fe = app.workspace.getLeavesOfType('file-explorer')[0]; if (fe) app.workspace.setActiveLeaf?.(fe, {focus: false});
-         if (fe) fe.parent?.selectTab?.(fe);`}
-    await new Promise(r => setTimeout(r, 200));`);
+    ${size.touch ? 'ws.leftSplit.collapse(); ws.rightSplit.collapse();'
+      : `ws.leftSplit.expand(); ws.rightSplit.collapse();
+         const leaf = ws.getLeavesOfType('file-explorer')[0]; if (leaf) ws.setActiveLeaf?.(leaf, {focus: false});
+         if (leaf) leaf.parent?.selectTab?.(leaf);`}
+    // The explorer's folders as at the start (a screen's "reveal active file" unfolds one).
+    const fe = ws.getLeavesOfType('file-explorer')[0]?.view;
+    for (const [path, item] of Object.entries(fe?.fileItems ?? {})) {
+      if (!item.collapsible || typeof item.setCollapsed !== 'function') continue;
+      const collapsed = !base.unfolded.includes(path);
+      if (!!item.collapsed !== collapsed) item.setCollapsed(collapsed, false);
+    }
+    await new Promise(r => setTimeout(r, 200));
+    const unfolded = Object.entries(fe?.fileItems ?? {}).filter(([, i]) => i.collapsible && !i.collapsed).map(([p]) => p);
+    if (unfolded.sort().join('|') !== [...base.unfolded].sort().join('|')) throw new Error('the explorer keeps unfolded ' + unfolded.join(', '));
+    const shifted = [document.querySelector('.mobile-navbar'), ws.rootSplit.containerEl]
+      .filter(e => e && getComputedStyle(e).transform !== 'none').map(e => e.className);
+    if (shifted.length) throw new Error('still slid aside: ' + shifted.join(', '));`);
 }
 
 const KEYS = {
@@ -507,18 +562,54 @@ for (const b of blocks.values()) {
               px: r2(main.px), weight: main.weight, family: main.family, lines: Math.max(1, lines), enabled,
               placeholder: false, occluded: occluded(b.el, u), fragments});
 }
-// Placeholders of empty fields.
-for (const el of document.querySelectorAll('input[placeholder], textarea[placeholder]')) {
-  if (el.value || !el.placeholder.trim() || opacityOf(el) <= 0.01 || cs(el).visibility !== 'visible') continue;
+// The text shown by form fields, which no text node holds: an input's or a textarea's value (as
+// Brulion's dump has its TextInput / TextEdit text), a select's chosen option, the placeholder of
+// an empty field. The rectangle is the text's own line inside the field's content box.
+const valueTypes = new Set(['text', 'search', 'number', 'email', 'url', 'tel', 'date', 'datetime-local', 'time', 'month', 'week']);
+const shown = (el) => {
+  if (el.tagName === 'SELECT') return {text: el.selectedOptions[0]?.text ?? '', placeholder: false};
+  if (el.tagName === 'INPUT' && !valueTypes.has(el.type)) return {text: '', placeholder: false};
+  if (!el.value) return {text: el.placeholder ?? '', placeholder: true};
+  // Date fields show the value in the page's locale, not as ISO.
+  const lang = document.documentElement.lang || 'pl';
+  if (el.type === 'date' && el.valueAsDate) return {text: el.valueAsDate.toLocaleDateString(lang, {timeZone: 'UTC'}), placeholder: false};
+  if (el.type === 'datetime-local') {
+    const d = new Date(el.value);
+    if (!isNaN(d)) return {text: d.toLocaleString(lang, {dateStyle: 'short', timeStyle: 'short'}), placeholder: false};
+  }
+  return {text: el.value, placeholder: false};
+};
+for (const el of document.querySelectorAll('input, textarea, select')) {
+  const {text, placeholder} = shown(el);
+  const value = text.replace(/\s+/g, ' ').trim();
+  if (!value || opacityOf(el) <= 0.01 || cs(el).visibility !== 'visible') continue;
   const s = cs(el);
   const r0 = el.getBoundingClientRect();
-  const r = inter({left: r0.left + parseFloat(s.paddingLeft), top: r0.top + parseFloat(s.paddingTop),
-                   right: r0.right - parseFloat(s.paddingRight), bottom: r0.bottom - parseFloat(s.paddingBottom)}, clipOf(el));
+  const box = {left: r0.left + parseFloat(s.borderLeftWidth) + parseFloat(s.paddingLeft),
+               top: r0.top + parseFloat(s.borderTopWidth) + parseFloat(s.paddingTop),
+               right: r0.right - parseFloat(s.borderRightWidth) - parseFloat(s.paddingRight),
+               bottom: r0.bottom - parseFloat(s.borderBottomWidth) - parseFloat(s.paddingBottom)};
+  const px = fontPx(s);
+  const lineH = parseFloat(s.lineHeight) || px * 1.25;
+  let lines = 1, r;
+  if (el.tagName === 'TEXTAREA') {
+    lines = Math.max(1, Math.round((el.scrollHeight - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom)) / lineH));
+    r = inter(box, clipOf(el));
+  } else {
+    ctx.font = s.font || (s.fontWeight + ' ' + s.fontSize + ' ' + s.fontFamily);
+    const w = Math.min(box.right - box.left, ctx.measureText(text).width);
+    const h = Math.min(box.bottom - box.top, lineH);
+    const free = box.right - box.left - w;
+    const align = s.textAlign === 'center' ? free / 2 : (s.textAlign === 'right' || s.textAlign === 'end') ? free : 0;
+    const top = box.top + (box.bottom - box.top - h) / 2;
+    r = inter({left: box.left + align, top, right: box.left + align + w, bottom: top + h}, clipOf(el));
+  }
   if (empty(r)) continue;
-  texts.push({type: el.tagName.toLowerCase() + '::placeholder', name: el.id || '', text: el.placeholder.slice(0, 80),
-              chars: el.placeholder.length, rect: rectArr(r), color: hex(getComputedStyle(el, '::placeholder').color),
-              alpha: r2(opacityOf(el)), px: r2(fontPx(s)), weight: parseInt(s.fontWeight) || 400, family: s.fontFamily,
-              lines: 1, enabled: !el.disabled, placeholder: true, occluded: occluded(el, r), fragments: []});
+  const color = placeholder ? hex(getComputedStyle(el, '::placeholder').color) : hex(s.color);
+  texts.push({type: el.tagName.toLowerCase() + (el.classList[0] ? '.' + el.classList[0] : '') + (placeholder ? '::placeholder' : ''),
+              name: el.id || '', text: value.slice(0, 80), chars: value.length, rect: rectArr(r), color,
+              alpha: r2(opacityOf(el)), px: r2(px), weight: parseInt(s.fontWeight) || 400, family: s.fontFamily,
+              lines, enabled: !el.disabled, placeholder, occluded: occluded(el, r), fragments: []});
 }
 
 // ---- targets
@@ -537,8 +628,11 @@ for (const el of document.body.querySelectorAll('*')) {
   if (!candidates.has(el)) continue;
   const s = cs(el);
   if (s.visibility !== 'visible' || opacityOf(el) <= 0.01 || s.pointerEvents === 'none') continue;
-  // The whole hit area, when any of it is visible (as Brulion's dump).
-  const r = el.getBoundingClientRect();
+  // The whole hit area, when any of it is visible (as Brulion's dump). A list property's empty
+  // text field (8 px wide after its pills) is focused by a click anywhere in its box: that box is
+  // the target.
+  const pills = el.matches('.multi-select-input') ? el.closest('.multi-select-container') : null;
+  const r = (pills ?? el).getBoundingClientRect();
   if (empty(inter(r, clipOf(el.parentElement)))) continue;
   // A duplicate of its nearest candidate ancestor (a label filling its button) is the same target.
   let anc = el.parentElement;
@@ -549,7 +643,10 @@ for (const el of document.body.querySelectorAll('*')) {
   }
   targetRects.set(el, r);
   const field = el.matches('input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea, select, [contenteditable=true]');
-  const inline = s.display === 'inline' && !!el.closest('p, li, .cm-line, td, th');
+  // Inline (WCAG 2.5.8's exception, not counted): a link or tag in running text, and the note's
+  // text itself — CodeMirror's editable content, where a tap puts the caret into the line under
+  // it, as Brulion's rendered blocks (whose tap areas are their text; layoutdump.cpp).
+  const inline = (s.display === 'inline' && !!el.closest('p, li, .cm-line, td, th')) || el.matches('.cm-content');
   const label = (el.getAttribute('aria-label') || el.textContent || el.getAttribute('title') || '').replace(/\s+/g, ' ').trim().slice(0, 60);
   const enabled = !el.matches(':disabled') && !el.closest('[disabled], .is-disabled, [aria-disabled="true"]');
   targets.push({type: el.tagName.toLowerCase() + (el.classList[0] ? '.' + el.classList[0] : ''), name: el.id || '',
@@ -618,11 +715,11 @@ async function startSession(args, size) {
   rmSync(join(args.profile, 'userdata', 'DevToolsActivePort'), { force: true });
   const child = launch(args.launch, args.profile, args.port, args.fonts, args.lang);
   try {
-    const target = await pageTarget(args.port);
-    const cdp = new Cdp(target.webSocketDebuggerUrl);
+    const { page, port } = await pageTarget(args.profile, child);
+    const cdp = new Cdp(page.webSocketDebuggerUrl);
     await cdp.open();
     await boot(cdp, { size, lang: args.lang, now: args.now, version: args.version });
-    return { child, cdp };
+    return { child, cdp, port };
   } catch (e) {
     kill(child);
     throw new Error(`${e.message}\n--- Obsidian's output ---\n${child.log()}`);
@@ -674,6 +771,22 @@ async function main() {
 
   const result = { version: args.version, environment: {}, shots: [], failures: [], warnings: [] };
   const save = () => writeFileSync(join(args.out, 'obsidian-manifest.json'), JSON.stringify(result, null, 2));
+  // A narrowed run (--only, --sizes, --themes) into a folder with earlier shots of the same
+  // version keeps their records: only the shots taken now are replaced.
+  const now = new Set();
+  for (const size of sizes)
+    for (const screen of screens.filter((s) => s.sizes.includes(size.name)))
+      for (const theme of themes) now.add(`${screen.id}|${size.name}|${theme}`);
+  const runSizes = new Set([...now].map((k) => k.split('|')[1]));
+  const earlier = readJsonFile(join(args.out, 'obsidian-manifest.json'));
+  if (earlier?.version === args.version) {
+    const known = (r) => manifest.screens.some((s) => s.id === r.screen) && !now.has(`${r.screen}|${r.size}|${r.theme}`);
+    result.shots = (earlier.shots ?? []).filter(known);
+    result.failures = (earlier.failures ?? []).filter(known);
+    result.warnings = (earlier.warnings ?? []).filter((w) => !runSizes.has(w.size));
+    for (const [name, env] of Object.entries(earlier.environment ?? {}))
+      if (!runSizes.has(name)) result.environment[name] = env;
+  }
   for (const size of sizes) {
     const wanted = screens.filter((s) => s.sizes.includes(size.name));
     if (!wanted.length) continue;
@@ -690,7 +803,7 @@ async function main() {
         result.warnings.push({ size: size.name, warning: 'version', detail: `Obsidian ${env.appVersion}` });
       if (!env.plugins.includes('calendar'))
         result.warnings.push({ size: size.name, warning: 'calendar', detail: 'the Calendar plugin did not load' });
-      const baseline = await evaluate(session.cdp, 'return app.workspace.getLayout();');
+      const baseline = await captureBaseline(session.cdp);
       for (const theme of themes) {
         const used = await setTheme(session.cdp, theme);
         result.environment[size.name][`theme-${theme}`] = used;
@@ -700,6 +813,9 @@ async function main() {
             continue;
           }
           const base = join(args.out, `${screen.id}-${size.name}-${theme}`);
+          // A failed shot leaves no picture of an earlier run behind (it would be measured and judged).
+          rmSync(`${base}.png`, { force: true });
+          rmSync(`${base}.layout.json`, { force: true });
           let error = null;
           for (let attempt = 0; attempt < 2; ++attempt) {
             try {
@@ -710,7 +826,7 @@ async function main() {
               await settle(session.cdp, screen.obsidian.settleMs ?? 0);
               // UIBENCH_DEBUG_JS: evaluated before each shot, its result logged (developing steps).
               if (process.env.UIBENCH_DEBUG_JS) {
-                const targets = await (await fetch(`http://127.0.0.1:${args.port}/json/list`)).json();
+                const targets = await (await fetch(`http://127.0.0.1:${session.port}/json/list`)).json();
                 console.error(`obsidian: debug ${screen.id}: ${J(await evaluate(session.cdp, process.env.UIBENCH_DEBUG_JS))} targets ${J(targets.map((t) => `${t.type} ${t.url}`))}`);
               }
               await shoot(session.cdp, base, size);
@@ -742,9 +858,39 @@ async function main() {
       save();
     }
   }
+  // State that leaks from one screen into the next shows as a light and a dark shot of the same
+  // screen with different contents (theme switches change no text).
+  for (const w of lightDarkDifferences(args.out, result.shots.filter((s) => now.has(`${s.screen}|${s.size}|${s.theme}`))))
+    result.warnings.push(w);
   save();
-  console.error(`obsidian: ${result.shots.length} shots, ${result.failures.length} failures`);
+  console.error(`obsidian: ${result.shots.length} shots, ${result.failures.length} failures, ${result.warnings.length} warnings`);
+  for (const w of result.warnings) console.error(`obsidian: warning ${J(w)}`);
   process.exit(result.shots.length ? 0 : 1);
+}
+
+function readJsonFile(file) {
+  try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return null; }
+}
+
+/// Warnings for the screens whose light and dark dumps differ in their texts (each text with its
+/// position rounded to whole pixels; a select's shown choice aside: the theme setting names the theme).
+function lightDarkDifferences(dir, shots) {
+  const out = [];
+  const sig = (file) => {
+    const d = readJsonFile(file);
+    return d ? d.texts.filter((t) => !t.occluded && !t.type.startsWith('select'))
+      .map((t) => `${t.text}@${Math.round(t.rect[0])},${Math.round(t.rect[1])}`).sort() : null;
+  };
+  const pairs = new Map(shots.map((s) => [`${s.screen}-${s.size}`, s]));
+  for (const [pair, { screen, size }] of pairs) {
+    const light = sig(join(dir, `${pair}-light.layout.json`)), dark = sig(join(dir, `${pair}-dark.layout.json`));
+    if (!light || !dark) continue;
+    const onlyLight = light.filter((t) => !dark.includes(t)), onlyDark = dark.filter((t) => !light.includes(t));
+    if (onlyLight.length || onlyDark.length)
+      out.push({ size, screen, warning: 'light-dark',
+                 detail: `only light: ${J(onlyLight.slice(0, 5))}, only dark: ${J(onlyDark.slice(0, 5))}` });
+  }
+  return out;
 }
 
 main().catch((e) => {
