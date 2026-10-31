@@ -1,0 +1,96 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 14,
+            "items": 93,
+            "rows": 25,
+            "sharedLeftShare": 0.624
+        },
+        "contrast": {
+            "failing": [
+            ],
+            "min": 5.602,
+            "p10": 6.525,
+            "passShare": 1,
+            "passShareChars": 1,
+            "texts": 35
+        },
+        "extras": {
+            "distinctColours": 12,
+            "edgeDensity": 0.09,
+            "nonTextContrast": 0.524
+        },
+        "lineLength": {
+            "bodyPx": 16,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 93,
+            "offGrid": {
+                "10": 11,
+                "31": 3,
+                "38": 1,
+                "57": 1,
+                "6": 1,
+                "7": 4,
+                "9": 4
+            },
+            "onGridShare": 0.731
+        },
+        "targets": {
+            "failing": [
+            ],
+            "pass": 42,
+            "targets": 42
+        },
+        "tokens": {
+            "accent": "#8a5cf5ff",
+            "bg": "#1c1c1cff",
+            "bgElevated": "#232323ff",
+            "bgSunken": "#282828ff",
+            "fg": "#dadadaff",
+            "fgFaint": "#666666ff",
+            "fgMuted": "#b3b3b3ff",
+            "link": "#a68af9ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                12,
+                13,
+                16
+            ],
+            "weights": [
+                400,
+                500
+            ]
+        }
+    },
+    "device": "desktop",
+    "dump": "tree-desktop-dark.layout.json",
+    "png": "tree-desktop-dark.png",
+    "schema": 1,
+    "scores": {
+        "A": 5.982,
+        "C": 10,
+        "K": 8.717,
+        "L": null,
+        "O": 8.948,
+        "S": 7.312,
+        "T": 10,
+        "Y": 10
+    },
+    "screen": "tree",
+    "size": "desktop",
+    "theme": "dark",
+    "viewport": {
+        "dpr": 1,
+        "h": 800,
+        "w": 1280
+    }
+}

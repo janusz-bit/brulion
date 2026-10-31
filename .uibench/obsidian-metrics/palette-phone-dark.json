@@ -1,0 +1,326 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 19,
+            "items": 40,
+            "rows": 19,
+            "sharedLeftShare": 0.95
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#333333ff",
+                    "fg": "#666666ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 2.2,
+                    "required": 4.5,
+                    "text": "Wybierz polecenie...",
+                    "type": "input.prompt-input::placeholder"
+                }
+            ],
+            "min": 2.2,
+            "p10": 11.611,
+            "passShare": 0.95,
+            "passShareChars": 0.953,
+            "texts": 20
+        },
+        "extras": {
+            "distinctColours": 60,
+            "edgeDensity": 0.076,
+            "nonTextContrast": 0.65
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 64,
+            "offGrid": {
+                "50": 1
+            },
+            "onGridShare": 0.984
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "28×44 below 44×44",
+                    "rect": [
+                        360,
+                        825,
+                        28,
+                        44
+                    ],
+                    "type": "div.search-input-clear-button"
+                },
+                {
+                    "kind": "button",
+                    "label": "Aktywuj edytor",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        127,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Bazy danychStwórz nową bazę danych",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        164.8,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Bazy danychWstaw nową bazę danych",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        202.59,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Blok cytatu",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        240.39,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Blok kodu",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        278.19,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Blok matematyczny",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        315.98,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "CalendarOpen Weekly Note",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        353.78,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "CalendarReveal active note",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        391.58,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Cofnij",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        429.38,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Dodaj alias",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        467.17,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Dodaj atrybutCtrl + ;",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        504.97,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Dodaj kursor poniżej",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        542.77,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Dodaj kursor powyżej",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        580.56,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Dodaj lub usuń komentarzCtrl + /",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        618.36,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "Dodaj wcięcie elementu listy",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        656.16,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "DziennikOtwórz dzisiejszy dziennik",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        693.95,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "DziennikOtwórz późniejszy dziennik",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        731.75,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                },
+                {
+                    "kind": "button",
+                    "label": "DziennikOtwórz wcześniejszy dziennik",
+                    "reason": "376×37 below 44×44",
+                    "rect": [
+                        12,
+                        769.55,
+                        376,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                }
+            ],
+            "material48Share": 0.05,
+            "pass": 1,
+            "targets": 20
+        },
+        "tokens": {
+            "accent": "#8a5cf5ff",
+            "bg": "#000000ff",
+            "bgElevated": "#111111ff",
+            "bgSunken": "#1e1e1eff",
+            "fg": "#dadadaff",
+            "fgFaint": "#666666ff",
+            "fgMuted": "#b3b3b3ff",
+            "link": "#a68af9ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                16
+            ],
+            "weights": [
+                400
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "palette-phone-dark.layout.json",
+    "png": "palette-phone-dark.png",
+    "schema": 1,
+    "scores": {
+        "A": 9.7,
+        "C": 9.762,
+        "K": 9.097,
+        "L": null,
+        "O": 7.463,
+        "S": 9.844,
+        "T": 0.5,
+        "Y": 8
+    },
+    "screen": "palette",
+    "size": "phone",
+    "theme": "dark",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

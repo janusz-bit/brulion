@@ -1,0 +1,116 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 4,
+            "items": 29,
+            "rows": 7,
+            "sharedLeftShare": 0.621
+        },
+        "contrast": {
+            "failing": [
+            ],
+            "min": 6.188,
+            "p10": 6.687,
+            "passShare": 1,
+            "passShareChars": 1,
+            "texts": 19
+        },
+        "extras": {
+            "distinctColours": 28,
+            "edgeDensity": 0.084,
+            "nonTextContrast": 0.333
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 41,
+            "offGrid": {
+                "3": 3
+            },
+            "onGridShare": 0.927
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "44×40 below 44×44",
+                    "rect": [
+                        320,
+                        296.42,
+                        44,
+                        40
+                    ],
+                    "type": "input"
+                },
+                {
+                    "kind": "button",
+                    "label": "Otwórz folder motywów",
+                    "reason": "28×28 below 44×44",
+                    "rect": [
+                        36,
+                        476.52,
+                        28,
+                        28
+                    ],
+                    "type": "div.clickable-icon"
+                }
+            ],
+            "material48Share": 0.333,
+            "pass": 7,
+            "targets": 9
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#000000ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 1,
+            "sizes": [
+                13,
+                15,
+                16
+            ],
+            "weights": [
+                400,
+                500,
+                600
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "settings-phone-light.layout.json",
+    "png": "settings-phone-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 6.01,
+        "C": 10,
+        "K": 8.304,
+        "L": null,
+        "O": 8.41,
+        "S": 9.268,
+        "T": 7.778,
+        "Y": 8.5
+    },
+    "screen": "settings",
+    "size": "phone",
+    "theme": "light",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

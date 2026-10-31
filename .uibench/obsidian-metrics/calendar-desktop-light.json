@@ -1,0 +1,279 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 3,
+            "items": 175,
+            "rows": 19,
+            "sharedLeftShare": 0.686
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "28",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "29",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "30",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "1",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "2",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "3",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "4",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "5",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "6",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "7",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#c1c1c1ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 1.666,
+                    "required": 4.5,
+                    "text": "8",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#9873f7ff",
+                    "name": "",
+                    "px": 22.5,
+                    "ratio": 3.17,
+                    "required": 4.5,
+                    "text": "paź2026",
+                    "type": "h3.title"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#9873f7ff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 3.17,
+                    "required": 4.5,
+                    "text": "14",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Pierwszy dzień z Brulionem#przewodnik",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Pomysł na obiad: pierogi ruskie#pomysł",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 4.26,
+                    "required": 4.5,
+                    "text": "Przejrzeć Remont mieszkania i zamówić farbę 📅 2026-10-16",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 4.26,
+                    "required": 4.5,
+                    "text": "Przeczytane dziś: 40 stron „Lalki” — Książki 2026",
+                    "type": "div.cm-line"
+                }
+            ],
+            "min": 1.666,
+            "p10": 1.666,
+            "passShare": 0.77,
+            "passShareChars": 0.659,
+            "texts": 74
+        },
+        "extras": {
+            "distinctColours": 8,
+            "edgeDensity": 0.064,
+            "nonTextContrast": 0.333
+        },
+        "lineLength": {
+            "bodyPx": 16,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 153,
+            "offGrid": {
+                "10": 10,
+                "14": 1,
+                "15": 20,
+                "17": 1,
+                "27": 1,
+                "29": 1,
+                "31": 2,
+                "34": 4,
+                "37": 2,
+                "38": 1,
+                "46": 3,
+                "53": 5,
+                "57": 1,
+                "59": 1,
+                "6": 1,
+                "62": 7,
+                "7": 4,
+                "9": 4
+            },
+            "onGridShare": 0.549
+        },
+        "targets": {
+            "failing": [
+            ],
+            "pass": 84,
+            "targets": 84
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#222222ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                9,
+                12,
+                13,
+                16
+            ],
+            "weights": [
+                400,
+                500,
+                700
+            ]
+        }
+    },
+    "device": "desktop",
+    "dump": "calendar-desktop-light.layout.json",
+    "png": "calendar-desktop-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 4.746,
+        "C": 9.526,
+        "K": 8.304,
+        "L": null,
+        "O": 8.392,
+        "S": 5.49,
+        "T": 10,
+        "Y": 10
+    },
+    "screen": "calendar",
+    "size": "desktop",
+    "theme": "light",
+    "viewport": {
+        "dpr": 1,
+        "h": 800,
+        "w": 1280
+    }
+}

@@ -1,0 +1,201 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 8,
+            "items": 87,
+            "rows": 17,
+            "sharedLeftShare": 0.575
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 2.125,
+                    "required": 4.5,
+                    "text": "1",
+                    "type": "span.tree-item-flair"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 2.125,
+                    "required": 4.5,
+                    "text": "2",
+                    "type": "span.tree-item-flair"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 2.125,
+                    "required": 4.5,
+                    "text": "2",
+                    "type": "span.tree-item-flair"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 2.125,
+                    "required": 4.5,
+                    "text": "1",
+                    "type": "span.tree-item-flair"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 2.125,
+                    "required": 4.5,
+                    "text": "2",
+                    "type": "span.tree-item-flair"
+                },
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12,
+                    "ratio": 2.125,
+                    "required": 4.5,
+                    "text": "2",
+                    "type": "span.tree-item-flair"
+                },
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Pierwszy dzień z Brulionem#przewodnik",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Pomysł na obiad: pierogi ruskie#pomysł",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 4.26,
+                    "required": 4.5,
+                    "text": "Przejrzeć Remont mieszkania i zamówić farbę 📅 2026-10-16",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 4.26,
+                    "required": 4.5,
+                    "text": "Przeczytane dziś: 40 stron „Lalki” — Książki 2026",
+                    "type": "div.cm-line"
+                }
+            ],
+            "min": 2.125,
+            "p10": 2.125,
+            "passShare": 0.737,
+            "passShareChars": 0.841,
+            "texts": 38
+        },
+        "extras": {
+            "distinctColours": 15,
+            "edgeDensity": 0.104,
+            "nonTextContrast": 0.563
+        },
+        "lineLength": {
+            "bodyPx": 12,
+            "bodyTexts": 2,
+            "charsPerLine": [
+                30,
+                43
+            ],
+            "counted": false,
+            "share": 0
+        },
+        "spacing": {
+            "distances": 99,
+            "offGrid": {
+                "10": 3,
+                "18": 1,
+                "31": 2,
+                "38": 1,
+                "50": 2,
+                "53": 1,
+                "54": 1,
+                "57": 1,
+                "6": 1,
+                "7": 5,
+                "9": 4
+            },
+            "onGridShare": 0.778
+        },
+        "targets": {
+            "failing": [
+            ],
+            "pass": 32,
+            "targets": 32
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#222222ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                12,
+                13,
+                16
+            ],
+            "weights": [
+                400
+            ]
+        }
+    },
+    "device": "desktop",
+    "dump": "search-desktop-light.layout.json",
+    "png": "search-desktop-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 5.331,
+        "C": 9.829,
+        "K": 8.304,
+        "L": null,
+        "O": 8.805,
+        "S": 7.778,
+        "T": 10,
+        "Y": 10
+    },
+    "screen": "search",
+    "size": "desktop",
+    "theme": "light",
+    "viewport": {
+        "dpr": 1,
+        "h": 800,
+        "w": 1280
+    }
+}

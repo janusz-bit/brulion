@@ -1,0 +1,288 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 8,
+            "items": 45,
+            "rows": 12,
+            "sharedLeftShare": 0.689
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#f6f6f6ff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12.8,
+                    "ratio": 2.125,
+                    "required": 4.5,
+                    "text": "1",
+                    "type": "span.tree-item-flair"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12.8,
+                    "ratio": 2.296,
+                    "required": 4.5,
+                    "text": "2",
+                    "type": "span.tree-item-flair"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12.8,
+                    "ratio": 2.296,
+                    "required": 4.5,
+                    "text": "2",
+                    "type": "span.tree-item-flair"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12.8,
+                    "ratio": 2.296,
+                    "required": 4.5,
+                    "text": "1",
+                    "type": "span.tree-item-flair"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#abababff",
+                    "name": "",
+                    "px": 12.8,
+                    "ratio": 2.296,
+                    "required": 4.5,
+                    "text": "2",
+                    "type": "span.tree-item-flair"
+                }
+            ],
+            "min": 2.125,
+            "p10": 2.296,
+            "passShare": 0.762,
+            "passShareChars": 0.992,
+            "texts": 21
+        },
+        "extras": {
+            "distinctColours": 24,
+            "edgeDensity": 0.112,
+            "nonTextContrast": 0.727
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 57,
+            "offGrid": {
+                "10": 2,
+                "18": 1,
+                "38": 1,
+                "50": 1,
+                "57": 1
+            },
+            "onGridShare": 0.895
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "Wyczyść wyszukiwanie",
+                    "reason": "28×44 below 44×44",
+                    "rect": [
+                        260.23,
+                        75,
+                        28,
+                        44
+                    ],
+                    "type": "div.search-input-clear-button"
+                },
+                {
+                    "kind": "button",
+                    "label": "Rozróżniaj wielkość liter",
+                    "reason": "28×24 below 44×44",
+                    "rect": [
+                        226.23,
+                        85,
+                        28,
+                        24
+                    ],
+                    "type": "div.input-right-decorator"
+                },
+                {
+                    "kind": "button",
+                    "label": "Ustawienia wyszukiwania",
+                    "reason": "36×40 below 44×44",
+                    "rect": [
+                        298.23,
+                        75,
+                        35.84,
+                        40
+                    ],
+                    "type": "div.clickable-icon"
+                },
+                {
+                    "kind": "button",
+                    "label": "wyniki: 11",
+                    "reason": "88×25 below 44×44",
+                    "rect": [
+                        12,
+                        127,
+                        88.33,
+                        24.63
+                    ],
+                    "type": "div.clickable-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "wg nazwy (od A do Z)wg nazwy (od Z do A)wg daty edycji (od n",
+                    "reason": "193×24 below 44×44",
+                    "rect": [
+                        140.84,
+                        127.31,
+                        193.23,
+                        24
+                    ],
+                    "type": "select.dropdown"
+                },
+                {
+                    "kind": "button",
+                    "label": "2026-10-071",
+                    "reason": "310×37 below 44×44",
+                    "rect": [
+                        12,
+                        172.72,
+                        310.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "- Początek remontu! #projekt/dom",
+                    "reason": "310×33 below 44×44",
+                    "rect": [
+                        12,
+                        213.61,
+                        310.08,
+                        32.63
+                    ],
+                    "type": "div.search-result-file-match"
+                },
+                {
+                    "kind": "button",
+                    "label": "2026-10-132",
+                    "reason": "310×37 below 44×44",
+                    "rect": [
+                        12,
+                        254.23,
+                        310.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "2026-10-142",
+                    "reason": "310×37 below 44×44",
+                    "rect": [
+                        12,
+                        352.38,
+                        310.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Remont mieszkania1",
+                    "reason": "310×37 below 44×44",
+                    "rect": [
+                        12,
+                        500.77,
+                        310.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "# Remont mieszkania",
+                    "reason": "310×33 below 44×44",
+                    "rect": [
+                        12,
+                        541.66,
+                        310.08,
+                        32.63
+                    ],
+                    "type": "div.search-result-file-match"
+                },
+                {
+                    "kind": "button",
+                    "label": "Witaj w Brulionie2",
+                    "reason": "310×37 below 44×44",
+                    "rect": [
+                        12,
+                        582.28,
+                        310.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                }
+            ],
+            "material48Share": 0.318,
+            "pass": 10,
+            "targets": 22
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#000000ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                13,
+                16
+            ],
+            "weights": [
+                400,
+                500
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "search-phone-light.layout.json",
+    "png": "search-phone-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 6.8,
+        "C": 9.96,
+        "K": 8.304,
+        "L": null,
+        "O": 7.889,
+        "S": 8.947,
+        "T": 4.545,
+        "Y": 9
+    },
+    "screen": "search",
+    "size": "phone",
+    "theme": "light",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

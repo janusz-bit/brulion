@@ -1,0 +1,91 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 3,
+            "items": 9,
+            "rows": 3,
+            "sharedLeftShare": 0
+        },
+        "contrast": {
+            "failing": [
+            ],
+            "min": 8.128,
+            "p10": 8.128,
+            "passShare": 1,
+            "passShareChars": 1,
+            "texts": 7
+        },
+        "extras": {
+            "distinctColours": 21,
+            "edgeDensity": 0.05,
+            "nonTextContrast": 0
+        },
+        "lineLength": {
+            "bodyPx": 12,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 8,
+            "offGrid": {
+                "26": 1,
+                "27": 1,
+                "6": 1,
+                "62": 1
+            },
+            "onGridShare": 0.5
+        },
+        "targets": {
+            "failing": [
+            ],
+            "pass": 2,
+            "targets": 2
+        },
+        "tokens": {
+            "accent": "#8a5cf5ff",
+            "bg": "#1c1c1cff",
+            "bgElevated": "#232323ff",
+            "bgSunken": "#282828ff",
+            "fg": "#dadadaff",
+            "fgFaint": "#666666ff",
+            "fgMuted": "#b3b3b3ff",
+            "link": "#a68af9ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                12,
+                15
+            ],
+            "weights": [
+                400
+            ]
+        }
+    },
+    "device": "desktop",
+    "dump": "switcher-desktop-dark.layout.json",
+    "png": "switcher-desktop-dark.png",
+    "schema": 1,
+    "scores": {
+        "A": 4,
+        "C": 10,
+        "K": 8.717,
+        "L": null,
+        "O": 8.233,
+        "S": 5,
+        "T": 10,
+        "Y": 9
+    },
+    "screen": "switcher",
+    "size": "desktop",
+    "theme": "dark",
+    "viewport": {
+        "dpr": 1,
+        "h": 800,
+        "w": 1280
+    }
+}

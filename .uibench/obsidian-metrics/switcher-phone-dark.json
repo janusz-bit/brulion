@@ -1,0 +1,123 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 2,
+            "items": 6,
+            "rows": 2,
+            "sharedLeftShare": 0
+        },
+        "contrast": {
+            "failing": [
+            ],
+            "min": 9.038,
+            "p10": 9.161,
+            "passShare": 1,
+            "passShareChars": 1,
+            "texts": 2
+        },
+        "extras": {
+            "distinctColours": 49,
+            "edgeDensity": 0.015,
+            "nonTextContrast": 0.75
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 9,
+            "offGrid": {
+            },
+            "onGridShare": 1
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "36×32 below 44×44",
+                    "rect": [
+                        316,
+                        831,
+                        36,
+                        32
+                    ],
+                    "type": "button.clickable-icon"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "28×44 below 44×44",
+                    "rect": [
+                        360,
+                        825,
+                        28,
+                        44
+                    ],
+                    "type": "div.search-input-clear-button"
+                },
+                {
+                    "kind": "button",
+                    "label": "Projekty/Remont mieszkania",
+                    "reason": "388×37 below 44×44",
+                    "rect": [
+                        12,
+                        127,
+                        388,
+                        36.8
+                    ],
+                    "type": "div.suggestion-item"
+                }
+            ],
+            "material48Share": 0.25,
+            "pass": 1,
+            "targets": 4
+        },
+        "tokens": {
+            "accent": "#8a5cf5ff",
+            "bg": "#000000ff",
+            "bgElevated": "#111111ff",
+            "bgSunken": "#1e1e1eff",
+            "fg": "#dadadaff",
+            "fgFaint": "#666666ff",
+            "fgMuted": "#b3b3b3ff",
+            "link": "#a68af9ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                16
+            ],
+            "weights": [
+                400
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "switcher-phone-dark.layout.json",
+    "png": "switcher-phone-dark.png",
+    "schema": 1,
+    "scores": {
+        "A": 4,
+        "C": 10,
+        "K": 9.097,
+        "L": null,
+        "O": 7.063,
+        "S": 10,
+        "T": 2.5,
+        "Y": 8
+    },
+    "screen": "switcher",
+    "size": "phone",
+    "theme": "dark",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

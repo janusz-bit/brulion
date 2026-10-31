@@ -1,0 +1,90 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 15,
+            "items": 35,
+            "rows": 15,
+            "sharedLeftShare": 0.829
+        },
+        "contrast": {
+            "failing": [
+            ],
+            "min": 6.687,
+            "p10": 6.687,
+            "passShare": 1,
+            "passShareChars": 1,
+            "texts": 20
+        },
+        "extras": {
+            "distinctColours": 43,
+            "edgeDensity": 0.06,
+            "nonTextContrast": 0
+        },
+        "lineLength": {
+            "bodyPx": 15,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 51,
+            "offGrid": {
+                "14": 14,
+                "6": 3,
+                "62": 1
+            },
+            "onGridShare": 0.647
+        },
+        "targets": {
+            "failing": [
+            ],
+            "pass": 15,
+            "targets": 15
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#222222ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                12,
+                15
+            ],
+            "weights": [
+                400
+            ]
+        }
+    },
+    "device": "desktop",
+    "dump": "palette-desktop-light.layout.json",
+    "png": "palette-desktop-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 8.971,
+        "C": 10,
+        "K": 8.304,
+        "L": null,
+        "O": 9.13,
+        "S": 6.471,
+        "T": 10,
+        "Y": 9
+    },
+    "screen": "palette",
+    "size": "desktop",
+    "theme": "light",
+    "viewport": {
+        "dpr": 1,
+        "h": 800,
+        "w": 1280
+    }
+}

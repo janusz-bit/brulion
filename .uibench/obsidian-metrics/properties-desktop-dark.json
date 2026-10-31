@@ -1,0 +1,124 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 8,
+            "items": 95,
+            "rows": 17,
+            "sharedLeftShare": 0.642
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#1c1c1cff",
+                    "fg": "#7d69b7ff",
+                    "name": "",
+                    "px": 14,
+                    "ratio": 3.714,
+                    "required": 4.5,
+                    "text": "Jan Kowalski",
+                    "type": "div.multi-select-pill-content"
+                }
+            ],
+            "min": 3.714,
+            "p10": 7.032,
+            "passShare": 0.974,
+            "passShareChars": 0.982,
+            "texts": 38
+        },
+        "extras": {
+            "distinctColours": 8,
+            "edgeDensity": 0.068,
+            "nonTextContrast": 0.453
+        },
+        "lineLength": {
+            "bodyPx": 16,
+            "bodyTexts": 2,
+            "charsPerLine": [
+                73,
+                87
+            ],
+            "counted": false,
+            "share": 1
+        },
+        "spacing": {
+            "distances": 89,
+            "offGrid": {
+                "10": 10,
+                "13": 1,
+                "14": 3,
+                "15": 6,
+                "18": 1,
+                "26": 1,
+                "38": 1,
+                "6": 1,
+                "7": 4,
+                "9": 6
+            },
+            "onGridShare": 0.618
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "Otwórz dziennik",
+                    "reason": "22×22, its 24-px circle touches input.metadata-input",
+                    "rect": [
+                        709,
+                        358.73,
+                        22,
+                        22
+                    ],
+                    "type": "div.clickable-icon"
+                }
+            ],
+            "pass": 52,
+            "targets": 53
+        },
+        "tokens": {
+            "accent": "#8a5cf5ff",
+            "bg": "#1c1c1cff",
+            "bgElevated": "#232323ff",
+            "bgSunken": "#282828ff",
+            "fg": "#dadadaff",
+            "fgFaint": "#666666ff",
+            "fgMuted": "#b3b3b3ff",
+            "link": "#a68af9ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 1,
+            "sizes": [
+                12,
+                13,
+                14,
+                16
+            ],
+            "weights": [
+                400,
+                500
+            ]
+        }
+    },
+    "device": "desktop",
+    "dump": "properties-desktop-dark.layout.json",
+    "png": "properties-desktop-dark.png",
+    "schema": 1,
+    "scores": {
+        "A": 5.735,
+        "C": 9.968,
+        "K": 8.717,
+        "L": null,
+        "O": 8.504,
+        "S": 6.18,
+        "T": 9.811,
+        "Y": 8.5
+    },
+    "screen": "properties",
+    "size": "desktop",
+    "theme": "dark",
+    "viewport": {
+        "dpr": 1,
+        "h": 800,
+        "w": 1280
+    }
+}

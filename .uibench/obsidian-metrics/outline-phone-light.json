@@ -1,0 +1,204 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 4,
+            "items": 45,
+            "rows": 6,
+            "sharedLeftShare": 0.6
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Przeprowadzka na Żoliborz pod koniec października #projekt/dom",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Pomysły na nowe mieszkanie #pomysł",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 4.26,
+                    "required": 4.5,
+                    "text": "Spakować książki — spis w biblioteczka 📅 2026-10-20",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 4.26,
+                    "required": 4.5,
+                    "text": "Rower i narty wieziemy sami — sprawdzić w notatki z wyjazdu, co jeszcze wraca z ",
+                    "type": "div.cm-line"
+                }
+            ],
+            "min": 3.826,
+            "p10": 4.086,
+            "passShare": 0.765,
+            "passShareChars": 0.641,
+            "texts": 17
+        },
+        "extras": {
+            "distinctColours": 25,
+            "edgeDensity": 0.115,
+            "nonTextContrast": 0.5
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 33,
+            "offGrid": {
+                "31": 2,
+                "46": 1,
+                "54": 4
+            },
+            "onGridShare": 0.788
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        257.06,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        307.44,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        357.81,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        434.56,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        484.94,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        535.31,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                }
+            ],
+            "material48Share": 0.375,
+            "pass": 10,
+            "targets": 16
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#000000ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                16,
+                26
+            ],
+            "weights": [
+                400,
+                700
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "outline-phone-light.layout.json",
+    "png": "outline-phone-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 6.267,
+        "C": 9.664,
+        "K": 8.304,
+        "L": null,
+        "O": 7.973,
+        "S": 7.879,
+        "T": 6.25,
+        "Y": 9
+    },
+    "screen": "outline",
+    "size": "phone",
+    "theme": "light",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

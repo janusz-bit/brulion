@@ -1,0 +1,478 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 10,
+            "items": 63,
+            "rows": 12,
+            "sharedLeftShare": 0.73
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#fafafaff",
+                    "fg": "#ac8bf7ff",
+                    "name": "",
+                    "px": 14,
+                    "ratio": 2.583,
+                    "required": 4.5,
+                    "text": "Jan Kowalski",
+                    "type": "div.multi-select-pill-content"
+                },
+                {
+                    "bg": "#efecf9ff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 14,
+                    "ratio": 3.658,
+                    "required": 4.5,
+                    "text": "projekt",
+                    "type": "div.multi-select-pill-content"
+                },
+                {
+                    "bg": "#efecf9ff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 14,
+                    "ratio": 3.658,
+                    "required": 4.5,
+                    "text": "dom",
+                    "type": "div.multi-select-pill-content"
+                }
+            ],
+            "min": 2.583,
+            "p10": 4.208,
+            "passShare": 0.87,
+            "passShareChars": 0.954,
+            "texts": 23
+        },
+        "extras": {
+            "distinctColours": 18,
+            "edgeDensity": 0.086,
+            "nonTextContrast": 0.667
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 73,
+            "offGrid": {
+                "14": 2,
+                "17": 1,
+                "18": 2,
+                "19": 8,
+                "21": 1,
+                "26": 1,
+                "42": 1,
+                "46": 1,
+                "53": 1,
+                "6": 2,
+                "9": 2
+            },
+            "onGridShare": 0.699
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "24×36 below 44×44",
+                    "rect": [
+                        24,
+                        219.13,
+                        24,
+                        36
+                    ],
+                    "type": "span.metadata-property-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "96×36 below 44×44",
+                    "rect": [
+                        48,
+                        219.13,
+                        96,
+                        36
+                    ],
+                    "type": "input.metadata-property-key-input"
+                },
+                {
+                    "kind": "button",
+                    "label": "projekt",
+                    "reason": "82×25 below 44×44",
+                    "rect": [
+                        152,
+                        224.63,
+                        81.72,
+                        25
+                    ],
+                    "type": "div.multi-select-pill"
+                },
+                {
+                    "kind": "button",
+                    "label": "dom",
+                    "reason": "65×25 below 44×44",
+                    "rect": [
+                        239.72,
+                        224.63,
+                        65.27,
+                        25
+                    ],
+                    "type": "div.multi-select-pill"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "24×36 below 44×44",
+                    "rect": [
+                        24,
+                        255.13,
+                        24,
+                        36
+                    ],
+                    "type": "span.metadata-property-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "96×36 below 44×44",
+                    "rect": [
+                        48,
+                        255.13,
+                        96,
+                        36
+                    ],
+                    "type": "input.metadata-property-key-input"
+                },
+                {
+                    "kind": "button",
+                    "label": "Nowa kuchnia",
+                    "reason": "113×18 below 44×44",
+                    "rect": [
+                        152,
+                        264.03,
+                        112.95,
+                        18.19
+                    ],
+                    "type": "div.multi-select-pill"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "24×36 below 44×44",
+                    "rect": [
+                        24,
+                        291.13,
+                        24,
+                        36
+                    ],
+                    "type": "span.metadata-property-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "96×36 below 44×44",
+                    "rect": [
+                        48,
+                        291.13,
+                        96,
+                        36
+                    ],
+                    "type": "input.metadata-property-key-input"
+                },
+                {
+                    "kind": "field",
+                    "label": "w toku",
+                    "reason": "232×29 below 44×44",
+                    "rect": [
+                        144,
+                        294.63,
+                        232,
+                        29
+                    ],
+                    "type": "div.metadata-input-longtext"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "24×36 below 44×44",
+                    "rect": [
+                        24,
+                        327.13,
+                        24,
+                        36
+                    ],
+                    "type": "span.metadata-property-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "96×36 below 44×44",
+                    "rect": [
+                        48,
+                        327.13,
+                        96,
+                        36
+                    ],
+                    "type": "input.metadata-property-key-input"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "232×36 below 44×44",
+                    "rect": [
+                        144,
+                        327.13,
+                        232,
+                        36
+                    ],
+                    "type": "input.metadata-input"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "24×36 below 44×44",
+                    "rect": [
+                        24,
+                        363.13,
+                        24,
+                        36
+                    ],
+                    "type": "span.metadata-property-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "96×36 below 44×44",
+                    "rect": [
+                        48,
+                        363.13,
+                        96,
+                        36
+                    ],
+                    "type": "input.metadata-property-key-input"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        152,
+                        371.92,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.metadata-input-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "24×36 below 44×44",
+                    "rect": [
+                        24,
+                        399.13,
+                        24,
+                        36
+                    ],
+                    "type": "span.metadata-property-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "96×36 below 44×44",
+                    "rect": [
+                        48,
+                        399.13,
+                        96,
+                        36
+                    ],
+                    "type": "input.metadata-property-key-input"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "119×36 below 44×44",
+                    "rect": [
+                        144,
+                        399.13,
+                        119,
+                        36
+                    ],
+                    "type": "input.metadata-input"
+                },
+                {
+                    "kind": "button",
+                    "label": "Otwórz dziennik",
+                    "reason": "26×26 below 44×44",
+                    "rect": [
+                        263,
+                        404.13,
+                        26,
+                        26
+                    ],
+                    "type": "div.clickable-icon"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "24×36 below 44×44",
+                    "rect": [
+                        24,
+                        435.13,
+                        24,
+                        36
+                    ],
+                    "type": "span.metadata-property-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "96×36 below 44×44",
+                    "rect": [
+                        48,
+                        435.13,
+                        96,
+                        36
+                    ],
+                    "type": "input.metadata-property-key-input"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "232×36 below 44×44",
+                    "rect": [
+                        144,
+                        435.13,
+                        232,
+                        36
+                    ],
+                    "type": "input.metadata-input"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "24×36 below 44×44",
+                    "rect": [
+                        24,
+                        471.13,
+                        24,
+                        36
+                    ],
+                    "type": "span.metadata-property-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "96×36 below 44×44",
+                    "rect": [
+                        48,
+                        471.13,
+                        96,
+                        36
+                    ],
+                    "type": "input.metadata-property-key-input"
+                },
+                {
+                    "kind": "button",
+                    "label": "Jan Kowalski",
+                    "reason": "101×18 below 44×44",
+                    "rect": [
+                        152,
+                        480.03,
+                        101.09,
+                        18.19
+                    ],
+                    "type": "div.multi-select-pill"
+                },
+                {
+                    "kind": "button",
+                    "label": "Jan Kowalski",
+                    "reason": "81×18 below 44×44",
+                    "rect": [
+                        152,
+                        480.03,
+                        81.09,
+                        18.19
+                    ],
+                    "type": "div.multi-select-pill-content"
+                },
+                {
+                    "kind": "button",
+                    "label": "Pani Ania",
+                    "reason": "81×18 below 44×44",
+                    "rect": [
+                        259.09,
+                        480.03,
+                        81.3,
+                        18.19
+                    ],
+                    "type": "div.multi-select-pill"
+                },
+                {
+                    "kind": "button",
+                    "label": "Dodaj atrybut",
+                    "reason": "128×29 below 44×44",
+                    "rect": [
+                        24,
+                        514.13,
+                        128.41,
+                        29
+                    ],
+                    "type": "div.metadata-add-button"
+                }
+            ],
+            "material48Share": 0.154,
+            "pass": 10,
+            "targets": 39
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#000000ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                14,
+                16
+            ],
+            "weights": [
+                400,
+                500
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "properties-phone-light.layout.json",
+    "png": "properties-phone-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 7.714,
+        "C": 9.855,
+        "K": 8.304,
+        "L": null,
+        "O": 7.382,
+        "S": 6.986,
+        "T": 2.564,
+        "Y": 9
+    },
+    "screen": "properties",
+    "size": "phone",
+    "theme": "light",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

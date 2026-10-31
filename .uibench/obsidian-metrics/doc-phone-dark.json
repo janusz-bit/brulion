@@ -1,0 +1,212 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 5,
+            "items": 41,
+            "rows": 7,
+            "sharedLeftShare": 0.463
+        },
+        "contrast": {
+            "failing": [
+            ],
+            "min": 5.607,
+            "p10": 5.948,
+            "passShare": 1,
+            "passShareChars": 1,
+            "texts": 15
+        },
+        "extras": {
+            "distinctColours": 20,
+            "edgeDensity": 0.104,
+            "nonTextContrast": 0.737
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 56,
+            "offGrid": {
+                "14": 2,
+                "17": 1,
+                "19": 1,
+                "21": 1,
+                "42": 1,
+                "46": 1,
+                "50": 1,
+                "53": 2,
+                "6": 2,
+                "9": 2
+            },
+            "onGridShare": 0.75
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "24×36 below 44×44",
+                    "rect": [
+                        24,
+                        219.13,
+                        24,
+                        36
+                    ],
+                    "type": "span.metadata-property-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "96×36 below 44×44",
+                    "rect": [
+                        48,
+                        219.13,
+                        96,
+                        36
+                    ],
+                    "type": "input.metadata-property-key-input"
+                },
+                {
+                    "kind": "button",
+                    "label": "podróże",
+                    "reason": "89×25 below 44×44",
+                    "rect": [
+                        152,
+                        224.63,
+                        89.09,
+                        25
+                    ],
+                    "type": "div.multi-select-pill"
+                },
+                {
+                    "kind": "button",
+                    "label": "bieszczady",
+                    "reason": "105×25 below 44×44",
+                    "rect": [
+                        247.09,
+                        224.63,
+                        105.41,
+                        25
+                    ],
+                    "type": "div.multi-select-pill"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "24×36 below 44×44",
+                    "rect": [
+                        24,
+                        255.13,
+                        24,
+                        36
+                    ],
+                    "type": "span.metadata-property-icon"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "96×36 below 44×44",
+                    "rect": [
+                        48,
+                        255.13,
+                        96,
+                        36
+                    ],
+                    "type": "input.metadata-property-key-input"
+                },
+                {
+                    "kind": "field",
+                    "label": "",
+                    "reason": "119×36 below 44×44",
+                    "rect": [
+                        144,
+                        255.13,
+                        119,
+                        36
+                    ],
+                    "type": "input.metadata-input"
+                },
+                {
+                    "kind": "button",
+                    "label": "Otwórz dziennik",
+                    "reason": "26×26 below 44×44",
+                    "rect": [
+                        263,
+                        260.13,
+                        26,
+                        26
+                    ],
+                    "type": "div.clickable-icon"
+                },
+                {
+                    "kind": "button",
+                    "label": "Dodaj atrybut",
+                    "reason": "128×29 below 44×44",
+                    "rect": [
+                        24,
+                        298.13,
+                        128.41,
+                        29
+                    ],
+                    "type": "div.metadata-add-button"
+                }
+            ],
+            "material48Share": 0.316,
+            "pass": 10,
+            "targets": 19
+        },
+        "tokens": {
+            "accent": "#8a5cf5ff",
+            "bg": "#000000ff",
+            "bgElevated": "#111111ff",
+            "bgSunken": "#1e1e1eff",
+            "fg": "#dadadaff",
+            "fgFaint": "#666666ff",
+            "fgMuted": "#b3b3b3ff",
+            "link": "#a68af9ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                14,
+                16,
+                23.5,
+                26
+            ],
+            "weights": [
+                400,
+                500,
+                600,
+                680,
+                700
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "doc-phone-dark.layout.json",
+    "png": "doc-phone-dark.png",
+    "schema": 1,
+    "scores": {
+        "A": 5.638,
+        "C": 10,
+        "K": 9.097,
+        "L": null,
+        "O": 7.64,
+        "S": 7.5,
+        "T": 5.263,
+        "Y": 8
+    },
+    "screen": "doc",
+    "size": "phone",
+    "theme": "dark",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

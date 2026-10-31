@@ -1,0 +1,136 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 14,
+            "items": 93,
+            "rows": 25,
+            "sharedLeftShare": 0.624
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Przeprowadzka na Żoliborz pod koniec października #projekt/dom",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Pomysły na nowe mieszkanie #pomysł",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 4.26,
+                    "required": 4.5,
+                    "text": "Spakować książki — spis w biblioteczka 📅 2026-10-20",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 4.26,
+                    "required": 4.5,
+                    "text": "Rower i narty wieziemy sami — sprawdzić w notatki z wyjazdu, co jeszcze wraca z ",
+                    "type": "div.cm-line"
+                }
+            ],
+            "min": 3.826,
+            "p10": 5.031,
+            "passShare": 0.886,
+            "passShareChars": 0.743,
+            "texts": 35
+        },
+        "extras": {
+            "distinctColours": 11,
+            "edgeDensity": 0.091,
+            "nonTextContrast": 0.5
+        },
+        "lineLength": {
+            "bodyPx": 16,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 93,
+            "offGrid": {
+                "10": 11,
+                "31": 3,
+                "38": 1,
+                "57": 1,
+                "6": 1,
+                "7": 4,
+                "9": 4
+            },
+            "onGridShare": 0.731
+        },
+        "targets": {
+            "failing": [
+            ],
+            "pass": 42,
+            "targets": 42
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#222222ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                12,
+                13,
+                16
+            ],
+            "weights": [
+                400,
+                500
+            ]
+        }
+    },
+    "device": "desktop",
+    "dump": "tree-desktop-light.layout.json",
+    "png": "tree-desktop-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 5.982,
+        "C": 9.76,
+        "K": 8.304,
+        "L": null,
+        "O": 8.841,
+        "S": 7.312,
+        "T": 10,
+        "Y": 10
+    },
+    "screen": "tree",
+    "size": "desktop",
+    "theme": "light",
+    "viewport": {
+        "dpr": 1,
+        "h": 800,
+        "w": 1280
+    }
+}

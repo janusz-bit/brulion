@@ -1,0 +1,164 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 4,
+            "items": 45,
+            "rows": 6,
+            "sharedLeftShare": 0.6
+        },
+        "contrast": {
+            "failing": [
+            ],
+            "min": 6.46,
+            "p10": 7.159,
+            "passShare": 1,
+            "passShareChars": 1,
+            "texts": 17
+        },
+        "extras": {
+            "distinctColours": 23,
+            "edgeDensity": 0.117,
+            "nonTextContrast": 0.75
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 33,
+            "offGrid": {
+                "31": 2,
+                "46": 1,
+                "54": 4
+            },
+            "onGridShare": 0.788
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        257.06,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        307.44,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        357.81,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        434.56,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        484.94,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                },
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        67.33,
+                        535.31,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                }
+            ],
+            "material48Share": 0.375,
+            "pass": 10,
+            "targets": 16
+        },
+        "tokens": {
+            "accent": "#8a5cf5ff",
+            "bg": "#000000ff",
+            "bgElevated": "#111111ff",
+            "bgSunken": "#1e1e1eff",
+            "fg": "#dadadaff",
+            "fgFaint": "#666666ff",
+            "fgMuted": "#b3b3b3ff",
+            "link": "#a68af9ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                16,
+                26
+            ],
+            "weights": [
+                400,
+                700
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "outline-phone-dark.layout.json",
+    "png": "outline-phone-dark.png",
+    "schema": 1,
+    "scores": {
+        "A": 6.267,
+        "C": 10,
+        "K": 9.097,
+        "L": null,
+        "O": 8.145,
+        "S": 7.879,
+        "T": 6.25,
+        "Y": 9
+    },
+    "screen": "outline",
+    "size": "phone",
+    "theme": "dark",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

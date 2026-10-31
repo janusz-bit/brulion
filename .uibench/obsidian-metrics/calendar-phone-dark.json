@@ -1,0 +1,591 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 1,
+            "items": 105,
+            "rows": 11,
+            "sharedLeftShare": 0.81
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "28",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "29",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "30",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "1",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "2",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "3",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "4",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "5",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "6",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "7",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#4d4d4dff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 1.972,
+                    "required": 4.5,
+                    "text": "8",
+                    "type": "div.day"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 19.49,
+                    "ratio": 3.914,
+                    "required": 4.5,
+                    "text": "paź2026",
+                    "type": "h3.title"
+                },
+                {
+                    "bg": "#1e1e1eff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 11.99,
+                    "ratio": 3.914,
+                    "required": 4.5,
+                    "text": "14",
+                    "type": "div.day"
+                }
+            ],
+            "min": 1.972,
+            "p10": 1.972,
+            "passShare": 0.755,
+            "passShareChars": 0.824,
+            "texts": 53
+        },
+        "extras": {
+            "distinctColours": 14,
+            "edgeDensity": 0.029,
+            "nonTextContrast": 0.042
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 55,
+            "offGrid": {
+                "15": 18,
+                "18": 3,
+                "26": 1,
+                "31": 4,
+                "34": 2,
+                "46": 3
+            },
+            "onGridShare": 0.436
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "Previous Month",
+                    "reason": "32×16 below 44×44",
+                    "rect": [
+                        336,
+                        76.64,
+                        32,
+                        16
+                    ],
+                    "type": "div.arrow"
+                },
+                {
+                    "kind": "button",
+                    "label": "Next Month",
+                    "reason": "32×16 below 44×44",
+                    "rect": [
+                        368,
+                        76.64,
+                        32,
+                        16
+                    ],
+                    "type": "div.arrow"
+                },
+                {
+                    "kind": "button",
+                    "label": "28",
+                    "reason": "49×30 below 44×44",
+                    "rect": [
+                        78.92,
+                        132.98,
+                        49.38,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "29",
+                    "reason": "38×30 below 44×44",
+                    "rect": [
+                        130.3,
+                        132.98,
+                        37.56,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "30",
+                    "reason": "41×30 below 44×44",
+                    "rect": [
+                        169.86,
+                        132.98,
+                        41.09,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "1",
+                    "reason": "49×30 below 44×44",
+                    "rect": [
+                        212.95,
+                        132.98,
+                        48.83,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "2",
+                    "reason": "37×30 below 44×44",
+                    "rect": [
+                        263.78,
+                        132.98,
+                        37.31,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "3",
+                    "reason": "46×30 below 44×44",
+                    "rect": [
+                        303.09,
+                        132.98,
+                        46.14,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "4",
+                    "reason": "48×30 below 44×44",
+                    "rect": [
+                        351.23,
+                        132.98,
+                        47.77,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "5",
+                    "reason": "49×30 below 44×44",
+                    "rect": [
+                        78.92,
+                        164.58,
+                        49.38,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "6",
+                    "reason": "38×30 below 44×44",
+                    "rect": [
+                        130.3,
+                        164.58,
+                        37.56,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "7",
+                    "reason": "41×30 below 44×44",
+                    "rect": [
+                        169.86,
+                        164.58,
+                        41.09,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "8",
+                    "reason": "49×30 below 44×44",
+                    "rect": [
+                        212.95,
+                        164.58,
+                        48.83,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "9",
+                    "reason": "37×30 below 44×44",
+                    "rect": [
+                        263.78,
+                        164.58,
+                        37.31,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "10",
+                    "reason": "46×30 below 44×44",
+                    "rect": [
+                        303.09,
+                        164.58,
+                        46.14,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "11",
+                    "reason": "48×30 below 44×44",
+                    "rect": [
+                        351.23,
+                        164.58,
+                        47.77,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "12",
+                    "reason": "49×30 below 44×44",
+                    "rect": [
+                        78.92,
+                        196.17,
+                        49.38,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "13",
+                    "reason": "38×30 below 44×44",
+                    "rect": [
+                        130.3,
+                        196.17,
+                        37.56,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "14",
+                    "reason": "41×30 below 44×44",
+                    "rect": [
+                        169.86,
+                        196.17,
+                        41.09,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "15",
+                    "reason": "49×30 below 44×44",
+                    "rect": [
+                        212.95,
+                        196.17,
+                        48.83,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "16",
+                    "reason": "37×30 below 44×44",
+                    "rect": [
+                        263.78,
+                        196.17,
+                        37.31,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "17",
+                    "reason": "46×30 below 44×44",
+                    "rect": [
+                        303.09,
+                        196.17,
+                        46.14,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "18",
+                    "reason": "48×30 below 44×44",
+                    "rect": [
+                        351.23,
+                        196.17,
+                        47.77,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "19",
+                    "reason": "49×30 below 44×44",
+                    "rect": [
+                        78.92,
+                        227.77,
+                        49.38,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "20",
+                    "reason": "38×30 below 44×44",
+                    "rect": [
+                        130.3,
+                        227.77,
+                        37.56,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "21",
+                    "reason": "41×30 below 44×44",
+                    "rect": [
+                        169.86,
+                        227.77,
+                        41.09,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "22",
+                    "reason": "49×30 below 44×44",
+                    "rect": [
+                        212.95,
+                        227.77,
+                        48.83,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "23",
+                    "reason": "37×30 below 44×44",
+                    "rect": [
+                        263.78,
+                        227.77,
+                        37.31,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "24",
+                    "reason": "46×30 below 44×44",
+                    "rect": [
+                        303.09,
+                        227.77,
+                        46.14,
+                        29.59
+                    ],
+                    "type": "div.day"
+                },
+                {
+                    "kind": "button",
+                    "label": "25",
+                    "reason": "48×30 below 44×44",
+                    "rect": [
+                        351.23,
+                        227.77,
+                        47.77,
+                        29.59
+                    ],
+                    "type": "div.day"
+                }
+            ],
+            "material48Share": 0.042,
+            "pass": 4,
+            "targets": 48
+        },
+        "tokens": {
+            "accent": "#8a5cf5ff",
+            "bg": "#000000ff",
+            "bgElevated": "#111111ff",
+            "bgSunken": "#1e1e1eff",
+            "fg": "#dadadaff",
+            "fgFaint": "#666666ff",
+            "fgMuted": "#b3b3b3ff",
+            "link": "#a68af9ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 1,
+            "sizes": [
+                9,
+                12,
+                13,
+                15,
+                16,
+                19.5
+            ],
+            "weights": [
+                400,
+                600,
+                660,
+                700
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "calendar-phone-dark.layout.json",
+    "png": "calendar-phone-dark.png",
+    "schema": 1,
+    "scores": {
+        "A": 5.221,
+        "C": 9.31,
+        "K": 9.097,
+        "L": null,
+        "O": 6.051,
+        "S": 4.364,
+        "T": 0.833,
+        "Y": 7.5
+    },
+    "screen": "calendar",
+    "size": "phone",
+    "theme": "dark",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

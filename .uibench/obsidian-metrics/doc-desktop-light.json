@@ -1,0 +1,154 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 5,
+            "items": 78,
+            "rows": 13,
+            "sharedLeftShare": 0.436
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#e5f8f8ff",
+                    "fg": "#00bfbcff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 2.082,
+                    "required": 4.5,
+                    "text": "Przed wyjazdem",
+                    "type": "div.callout-title-inner"
+                },
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 14,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "podróże",
+                    "type": "div.multi-select-pill-content"
+                },
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 14,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "bieszczady",
+                    "type": "div.multi-select-pill-content"
+                },
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Cztery dni w Bieszczadach na przełomie października i listopada — połoniny w kol",
+                    "type": "div.cm-line"
+                }
+            ],
+            "min": 2.082,
+            "p10": 3.826,
+            "passShare": 0.862,
+            "passShareChars": 0.699,
+            "texts": 29
+        },
+        "extras": {
+            "distinctColours": 11,
+            "edgeDensity": 0.094,
+            "nonTextContrast": 0.55
+        },
+        "lineLength": {
+            "bodyPx": 16,
+            "bodyTexts": 2,
+            "charsPerLine": [
+                78.3,
+                74.7
+            ],
+            "counted": true,
+            "share": 1
+        },
+        "spacing": {
+            "distances": 84,
+            "offGrid": {
+                "10": 10,
+                "15": 1,
+                "18": 1,
+                "38": 1,
+                "50": 1,
+                "6": 1,
+                "7": 4,
+                "9": 4
+            },
+            "onGridShare": 0.726
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "Otwórz dziennik",
+                    "reason": "22×22, its 24-px circle touches input.metadata-input",
+                    "rect": [
+                        709,
+                        232.73,
+                        22,
+                        22
+                    ],
+                    "type": "div.clickable-icon"
+                }
+            ],
+            "pass": 39,
+            "targets": 40
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#222222ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 1,
+            "sizes": [
+                12,
+                13,
+                14,
+                16,
+                26
+            ],
+            "weights": [
+                400,
+                500,
+                700
+            ]
+        }
+    },
+    "device": "desktop",
+    "dump": "doc-desktop-light.layout.json",
+    "png": "doc-desktop-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 4.154,
+        "C": 9.488,
+        "K": 8.304,
+        "L": 10,
+        "O": 8.277,
+        "S": 7.262,
+        "T": 9.75,
+        "Y": 8.5
+    },
+    "screen": "doc",
+    "size": "desktop",
+    "theme": "light",
+    "viewport": {
+        "dpr": 1,
+        "h": 800,
+        "w": 1280
+    }
+}

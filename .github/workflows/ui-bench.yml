@@ -1,0 +1,98 @@
+# Throwaway (branch ui-bench only, never merged): the UI loop's round on GitHub Actions while the
+# laptop is off (ui.md §6 fallback). Builds like scripts/remote-build.sh (Debug, -Werror, dev
+# shell), runs the round's guards and the touched areas' screenshots, then the bench for Brulion
+# with Obsidian's metrics of round 00 (its pictures stay local: the reuse is done on the Pi).
+name: UI bench (Brulion vs Obsidian)
+on: {push: {branches: [ui-bench]}}
+permissions: {contents: read}
+concurrency: {group: ui-bench, cancel-in-progress: true}
+jobs:
+  bench:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 2500M
+      CCACHE_COMPILERCHECK: content
+      GUARDS: '^(tst_shell_qml|tst_editor_qml|tst_content_journals_qml|tst_shell_journey|tst_ui_themepalette|tst_scripts_check_qml_reads|tst_uibench|tst_planning_qml|tst_content_qml|tst_editor_calc|tst_editor_pageprops|tst_editor_notemode)'
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 2}
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: uibench-ccache-${{ github.sha }}
+          restore-keys: uibench-ccache-
+      - name: Build (dev shell, Debug, -Werror, as remote-build.sh)
+        run: |
+          nix develop -c bash -c 'cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBRULION_WERROR=ON && cmake --build build -j "$(nproc)" && ccache -s'
+      - name: Guards
+        id: guards
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          set -o pipefail
+          nix develop -c bash -c 'cd build && ctest -R "$GUARDS" --output-on-failure -j 3 --timeout 1200' 2>&1 | tee "$RUNNER_TEMP/out/guards.log"
+      - name: Screenshots of the touched areas
+        id: shots
+        continue-on-error: true
+        run: |
+          out="$RUNNER_TEMP/out/screenshots"
+          mkdir -p "$out"
+          nix develop -c bash -c '
+            set -u
+            status=0
+            export BRULION_BIN=build/src/app/brulion OUT_DIR="$1"
+            SIZES="desktop phone tablet" tests/app/shell/screenshots.sh drawer drawer-tree calendar-blue journals doc-long doc-long-heading page page-tags page-sidepanel || status=1
+            tests/app/editor/editor-screenshots.sh calc document document-heading || status=1
+            for theme in light dark; do
+              QML_DISABLE_DISK_CACHE=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+                "$BRULION_BIN" --editor --editor-script calc --size 600x900 --theme "$theme" --locale pl \
+                --now "2026-10-15 10:00" --delay 1600 --screenshot "$1/editor-calc-600-$theme.png" || status=1
+            done
+            exit $status' _ "$out" 2>&1 | tee "$RUNNER_TEMP/out/screenshots.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Bench (Brulion; Obsidian's metrics of round 00)
+        id: bench
+        run: |
+          out="$RUNNER_TEMP/uibench"
+          mkdir -p "$out/metrics"
+          cp -a .uibench/obsidian-metrics "$out/metrics/obsidian"
+          rev="$(git rev-parse HEAD^)"
+          nix develop -c env BRULION_BUILD_DIR="$PWD/build" BRULION_GIT_REV="$rev" BRULION_GIT_DIRTY=false \
+            tests/app/uibench/bench.sh --app brulion --out "$out" 2>&1 | tee "$RUNNER_TEMP/out/bench.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Calculation blocks edited in the shell (default fonts and the bench's)
+        if: always()
+        continue-on-error: true
+        run: |
+          out="$RUNNER_TEMP/out/diag"
+          mkdir -p "$out"
+          nix develop -c bash -c '
+            bin=build/src/app/brulion
+            route="{\"view\":\"page\",\"path\":\"Przepisy.md\"}"
+            for fonts in default bench; do
+              for script in none edit:mąka; do
+                for size in 1280x800:desktop 412x915:phone; do
+                  geometry="${size%%:*}"; name="${size##*:}"; extra=(); [[ $name == phone ]] && extra=(--touch)
+                  args=(--demo --route "$route" --size "$geometry" --theme light --locale pl --now "2026-10-14 10:00" --delay 2600 "${extra[@]}")
+                  [[ $script != none ]] && args+=(--editor-script "$script")
+                  home="$(mktemp -d)"
+                  envs=(XDG_CONFIG_HOME="$home/c" XDG_DATA_HOME="$home/d" XDG_CACHE_HOME="$home/k" XDG_STATE_HOME="$home/s" QML_DISABLE_DISK_CACHE=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software)
+                  [[ $fonts == bench ]] && envs+=(FONTCONFIG_FILE="$2")
+                  env "${envs[@]}" "$bin" "${args[@]}" --screenshot "$1/przepisy-$fonts-${script/:/-}-$name.png" || true
+                  rm -rf "$home"
+                done
+              done
+            done' _ "$out" "$RUNNER_TEMP/uibench/env/fonts.conf"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with: {name: ui-bench, path: "${{ runner.temp }}/uibench", retention-days: 3, if-no-files-found: warn}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with: {name: ui-checks, path: "${{ runner.temp }}/out", retention-days: 3, if-no-files-found: warn}
+      - name: A guard or a screenshot failed
+        if: steps.guards.outcome == 'failure' || steps.shots.outcome == 'failure'
+        run: exit 1

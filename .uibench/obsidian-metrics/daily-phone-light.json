@@ -1,0 +1,146 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 6,
+            "items": 34,
+            "rows": 9,
+            "sharedLeftShare": 0.412
+        },
+        "contrast": {
+            "failing": [
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Pierwszy dzień z Brulionem#przewodnik",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#f4f1feff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 3.826,
+                    "required": 4.5,
+                    "text": "Pomysł na obiad: pierogi ruskie#pomysł",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 4.26,
+                    "required": 4.5,
+                    "text": "Przejrzeć Remont mieszkania i zamówić farbę 📅 2026-10-16",
+                    "type": "div.cm-line"
+                },
+                {
+                    "bg": "#ffffffff",
+                    "fg": "#8a5cf5ff",
+                    "name": "",
+                    "px": 16,
+                    "ratio": 4.26,
+                    "required": 4.5,
+                    "text": "Przeczytane dziś: 40 stron „Lalki” — Książki 2026",
+                    "type": "div.cm-line"
+                }
+            ],
+            "min": 3.826,
+            "p10": 3.826,
+            "passShare": 0.556,
+            "passShareChars": 0.458,
+            "texts": 9
+        },
+        "extras": {
+            "distinctColours": 17,
+            "edgeDensity": 0.063,
+            "nonTextContrast": 0.545
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 38,
+            "offGrid": {
+                "45": 2,
+                "46": 1,
+                "53": 1,
+                "54": 1,
+                "55": 2
+            },
+            "onGridShare": 0.816
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "",
+                    "reason": "18×18 below 44×44",
+                    "rect": [
+                        31.33,
+                        206.69,
+                        18.39,
+                        18.39
+                    ],
+                    "type": "input.task-list-item-checkbox"
+                }
+            ],
+            "material48Share": 0.545,
+            "pass": 10,
+            "targets": 11
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#000000ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                16,
+                26
+            ],
+            "weights": [
+                400,
+                700
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "daily-phone-light.layout.json",
+    "png": "daily-phone-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 5.137,
+        "C": 9.494,
+        "K": 8.304,
+        "L": null,
+        "O": 8.377,
+        "S": 8.158,
+        "T": 9.091,
+        "Y": 9
+    },
+    "screen": "daily",
+    "size": "phone",
+    "theme": "light",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

@@ -1,0 +1,163 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 5,
+            "items": 20,
+            "rows": 6,
+            "sharedLeftShare": 0.4
+        },
+        "contrast": {
+            "failing": [
+            ],
+            "min": 9.306,
+            "p10": 10.616,
+            "passShare": 1,
+            "passShareChars": 1,
+            "texts": 6
+        },
+        "extras": {
+            "distinctColours": 14,
+            "edgeDensity": 0.046,
+            "nonTextContrast": 0.5
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 28,
+            "offGrid": {
+                "57": 1
+            },
+            "onGridShare": 0.964
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "Zamknij",
+                    "reason": "28×28 below 44×44",
+                    "rect": [
+                        363,
+                        130,
+                        28,
+                        28
+                    ],
+                    "type": "div.clickable-icon"
+                },
+                {
+                    "kind": "button",
+                    "label": "Przywróć ustawienia domyślne",
+                    "reason": "28×28 below 44×44",
+                    "rect": [
+                        335,
+                        130,
+                        28,
+                        28
+                    ],
+                    "type": "div.clickable-icon"
+                },
+                {
+                    "kind": "button",
+                    "label": "Filtry",
+                    "reason": "214×37 below 44×44",
+                    "rect": [
+                        173,
+                        130,
+                        214,
+                        37.47
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Grupy",
+                    "reason": "214×37 below 44×44",
+                    "rect": [
+                        173,
+                        180.47,
+                        214,
+                        37.47
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Wyświetlanie",
+                    "reason": "214×37 below 44×44",
+                    "rect": [
+                        173,
+                        230.94,
+                        214,
+                        37.47
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Siły",
+                    "reason": "214×37 below 44×44",
+                    "rect": [
+                        173,
+                        281.41,
+                        214,
+                        37.47
+                    ],
+                    "type": "div.tree-item-self"
+                }
+            ],
+            "material48Share": 0.429,
+            "pass": 8,
+            "targets": 14
+        },
+        "tokens": {
+            "accent": "#8a5cf5ff",
+            "bg": "#000000ff",
+            "bgElevated": "#111111ff",
+            "bgSunken": "#1e1e1eff",
+            "fg": "#dadadaff",
+            "fgFaint": "#666666ff",
+            "fgMuted": "#b3b3b3ff",
+            "link": "#a68af9ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 2,
+            "sizes": [
+                14.5,
+                15,
+                16
+            ],
+            "weights": [
+                500,
+                600
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "graph-phone-dark.layout.json",
+    "png": "graph-phone-dark.png",
+    "schema": 1,
+    "scores": {
+        "A": 5.733,
+        "C": 10,
+        "K": 9.097,
+        "L": null,
+        "O": 7.818,
+        "S": 9.643,
+        "T": 5.714,
+        "Y": 7
+    },
+    "screen": "graph",
+    "size": "phone",
+    "theme": "dark",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}

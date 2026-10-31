@@ -1,0 +1,220 @@
+{
+    "app": "obsidian",
+    "details": {
+        "alignment": {
+            "alignedRows": 12,
+            "items": 33,
+            "rows": 14,
+            "sharedLeftShare": 0.697
+        },
+        "contrast": {
+            "failing": [
+            ],
+            "min": 18.1,
+            "p10": 19.571,
+            "passShare": 1,
+            "passShareChars": 1,
+            "texts": 12
+        },
+        "extras": {
+            "distinctColours": 19,
+            "edgeDensity": 0.046,
+            "nonTextContrast": 0.5
+        },
+        "lineLength": {
+            "bodyPx": 0,
+            "bodyTexts": 0,
+            "charsPerLine": [
+            ],
+            "counted": false,
+            "share": null
+        },
+        "spacing": {
+            "distances": 40,
+            "offGrid": {
+            },
+            "onGridShare": 1
+        },
+        "targets": {
+            "failing": [
+                {
+                    "kind": "button",
+                    "label": "assets",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        71.09,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "journals",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        107.89,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Projekty",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        144.69,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Kuchnia",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        181.58,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Przeprowadzka",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        218.38,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Remont mieszkania",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        255.17,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "templates",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        291.97,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Książki 2026",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        328.77,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Przepisy",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        365.56,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Witaj w Brulionie",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        402.36,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                },
+                {
+                    "kind": "button",
+                    "label": "Wyprawa w Bieszczady",
+                    "reason": "322×37 below 44×44",
+                    "rect": [
+                        12,
+                        439.16,
+                        322.08,
+                        36.8
+                    ],
+                    "type": "div.tree-item-self"
+                }
+            ],
+            "material48Share": 0.1,
+            "pass": 9,
+            "targets": 20
+        },
+        "tokens": {
+            "accent": "#9873f7ff",
+            "bg": "#ffffffff",
+            "bgElevated": "#fafafaff",
+            "bgSunken": "#f6f6f6ff",
+            "fg": "#000000ff",
+            "fgFaint": "#abababff",
+            "fgMuted": "#5c5c5cff",
+            "link": "#8a5cf5ff"
+        },
+        "typeScale": {
+            "nearDuplicates": 0,
+            "sizes": [
+                16
+            ],
+            "weights": [
+                400,
+                600
+            ]
+        }
+    },
+    "device": "phone",
+    "dump": "drawer-phone-light.layout.json",
+    "png": "drawer-phone-light.png",
+    "schema": 1,
+    "scores": {
+        "A": 7.61,
+        "C": 10,
+        "K": 8.304,
+        "L": null,
+        "O": 7.971,
+        "S": 10,
+        "T": 4.5,
+        "Y": 8
+    },
+    "screen": "drawer",
+    "size": "phone",
+    "theme": "light",
+    "viewport": {
+        "dpr": 2,
+        "h": 915,
+        "w": 412
+    }
+}
