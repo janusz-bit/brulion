@@ -15,7 +15,8 @@ import Brulion
 // model: array of { value, text, icon } (or plain strings: value = text). One tab stop;
 // Left/Right/Home/End move the selection (activated(value) is emitted for user changes).
 // Bind currentValue to your state and update the state in onActivated (the binding is kept).
-// `fill: true` stretches segments to the control's width (equal widths).
+// `fill: true` stretches segments to the control's width (equal widths); when their natural
+// widths do not fit, the icons go first (the labels stay), then the labels share and elide.
 // `iconOnly: true` shows icons with the text as accessible name/tooltip.
 // `controlled: true`: the selection only ever follows currentValue's binding — for a segment
 // that may start an action instead of changing the state ("Other…" opening a picker that can
@@ -57,6 +58,19 @@ T.Control {
         }
         return sum
     }
+    /// The same with every segment's icon (whether it is shown or not).
+    readonly property real _withIconsSum: {
+        let sum = 0
+        for (let i = 0; i < repeater.count; ++i) {
+            const segment = repeater.itemAt(i)
+            if (segment)
+                sum += segment.withIconWidth
+        }
+        return sum
+    }
+    /// The icons are shown: always, except a filling control whose segments would not fit with
+    /// them (a narrow phone) — the labels say the same.
+    readonly property bool iconsShown: iconOnly || !fill || _withIconsSum <= availableWidth
     readonly property int visualHeight: size === "small" ? Theme.controlHeightSm : Theme.controlHeight
     readonly property int hitHeight: Math.max(visualHeight, Theme.touchUi ? Theme.touchTarget : 0)
 
@@ -123,7 +137,9 @@ T.Control {
             radius: Theme.radius - 2
             color: Theme.dark ? Theme.bgElevated2 : Theme.bgElevated
             border.width: 1
-            border.color: Theme.dark ? Theme.borderStrong : Theme.border
+            // Dark: a state border (≥ 3:1 against the track, WCAG 1.4.11) — the raised fill alone
+            // is barely lighter than the track.
+            border.color: Theme.dark ? Theme.borderControl : Theme.border
             antialiasing: true
             Behavior on x { NumberAnimation { duration: Theme.duration; easing.type: Theme.easing } }
             Behavior on width { NumberAnimation { duration: Theme.duration; easing.type: Theme.easing } }
@@ -162,8 +178,14 @@ T.Control {
                            : implicitWidth
                     // At least a touch target wide on touch UIs (icon-only and short labels).
                     implicitWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
-                                            (segmentIcon.width > 0 ? segmentIcon.width + (control.iconOnly ? 0 : segmentRow.spacing) : 0)
+                                            (segmentIcon.width > 0 ? iconRoom : 0)
                                             + (control.iconOnly ? 0 : segmentLabel.implicitWidth) + (control.iconOnly ? 16 : 24))
+                    /// The icon and the space after it (0 without an icon), shown or not.
+                    readonly property real iconRoom: (modelData.icon || "") === "" ? 0
+                        : (control.size === "small" ? Theme.iconSizeSm : Theme.iconSize) + (control.iconOnly ? 0 : segmentRow.spacing)
+                    readonly property real withIconWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
+                                                                   iconRoom + (control.iconOnly ? 0 : segmentLabel.implicitWidth)
+                                                                   + (control.iconOnly ? 16 : 24))
                     focusPolicy: Qt.NoFocus
                     hoverEnabled: !Theme.touchUi
                     text: modelData.text
@@ -184,7 +206,7 @@ T.Control {
                             BIcon {
                                 id: segmentIcon
                                 anchors.verticalCenter: parent.verticalCenter
-                                name: segment.modelData.icon || ""
+                                name: control.iconsShown ? (segment.modelData.icon || "") : ""
                                 size: control.size === "small" ? Theme.iconSizeSm : Theme.iconSize
                                 color: segment.isCurrent ? Theme.fg : Theme.fgMuted
                             }
