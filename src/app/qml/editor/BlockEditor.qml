@@ -102,9 +102,10 @@ FocusScope {
     readonly property real listIndent: Math.round(fontSize * (Theme.compact ? 1.5 : 1.7))
     readonly property int paragraphGap: Math.round(fontSize * (Theme.dense ? 0.6 : 0.75))
     readonly property int listGap: Theme.touchUi ? 4 : 2
-    readonly property int headingGapBelow: Math.round(fontSize * 0.3)
+    // A heading: clearly closer to what follows than to what precedes it, with air on both sides.
+    readonly property int headingGapBelow: Math.round(fontSize * 0.6)
     function headingGapAbove(level) {
-        return Math.round(fontSize * (level === 1 ? 1.6 : level === 2 ? 1.3 : level === 3 ? 1.05 : 0.85))
+        return Math.round(fontSize * (level === 1 ? 1.8 : level === 2 ? 1.5 : level === 3 ? 1.25 : 1.05))
     }
     readonly property real taskBoxWidth: Theme.touchUi ? 26 : 24
     readonly property real contentX: Math.max(horizontalPadding, (width - maxTextWidth) / 2)
@@ -247,6 +248,9 @@ FocusScope {
     /// switched: propertiesExpandedToggled()), folded by default.
     property bool propertiesExpanded: false
     signal propertiesExpandedToggled(bool expanded)
+    /// The editor's list header shows the page's tags and aliases as chips while the panel is
+    /// folded (PageView's ContentPageHeader): the folded panel's preview then leaves them out.
+    property bool headerShowsListChips: false
     function setPropertiesExpanded(on) {
         if (propertiesExpanded === on)
             return

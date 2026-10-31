@@ -1726,7 +1726,13 @@ note mode switch or an inserted template), so it never runs on over the page.
 `PropertyListValue.qml`, `PropertyMenu.qml`, all for the leading frontmatter row's delegate):
 
 * Folded (the default: the journal stream stays dense): "Właściwości", the count and a one-line
-  preview of the values ("status: w toku · koszt: 1200"). The header's tap switches it; whether
+  preview of the values ("status: w toku · koszt: 1200 · termin: czw, 29 paź" — a date or a date
+  and time as the open panel's date button shows it, `DatesHelper.formatShort`). On a page, whose
+  header shows the tags and aliases as chips while the panel is folded
+  (`BlockEditor.headerShowsListChips`, set by `PageView`), the preview leaves those properties out:
+  the tags are in the header while the panel is folded and in the panel while it is open, never
+  both (the count still counts them). A journal day in the stream has no such header and keeps
+  them in its preview. The header's tap switches it; whether
   it is open is a device setting (`AppSettings.propertiesExpanded`, key
   `editor/propertiesExpanded`; `BlockEditor.propertiesExpanded` bound by `PageView` and the
   journal days, `propertiesExpandedToggled` writes it), so a page stays open while it is edited,
@@ -1848,7 +1854,9 @@ inline editor; only the layout and a few keys differ.
   lines, folding, zoom into a bullet, Tab indents.
 * **Dokument** (document, like Obsidian's live preview) — the note reads as one continuous
   formatted document: no bullets or guide lines for paragraphs and headings; headings large with
-  document spacing; paragraphs as normal text; lists as ordinary Markdown lists inside the flow
+  document spacing (`BlockEditor.headingGapAbove`: 1.8 / 1.5 / 1.25 / 1.05 em above an H1 / H2 /
+  H3 / smaller heading, `headingGapBelow` 0.6 em under every one — clearly closer to what follows,
+  with air on both sides); paragraphs as normal text; lists as ordinary Markdown lists inside the flow
   (bullets, numbers, checkboxes, indented per nesting level); a comfortable maximum text width.
   Clicking a paragraph, heading or list item edits its raw Markdown in place, exactly like the
   block editor's inline editing (rendered text everywhere else, no layout jump). Tables, calc,

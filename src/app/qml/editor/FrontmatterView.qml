@@ -4,7 +4,8 @@ import Brulion
 
 // FrontmatterView — page properties (YAML frontmatter or Logseq `key:: value` lines at the top)
 // as the "Właściwości" panel (docs/UI.md "Page properties"). Folded: a header with the number of
-// properties and a one-line preview of their values ("status: w toku · termin: 2026-10-28").
+// properties and a one-line preview of their values ("status: w toku · termin: śr, 28 paź"; on a
+// page, without the tags and aliases its header shows as chips).
 // Expanded (a device setting, BlockEditor.propertiesExpanded — the header's tap switches it, so
 // a page that is edited or synced keeps it open): the properties as typed fields
 // (PropertiesPanel), with "+" (add a property) and "⋯" ("Edytuj jako tekst": the raw text in the
@@ -22,13 +23,30 @@ Rectangle {
     readonly property var info: block.model.propertiesInfo || ({})
     readonly property real firstLineCenter: header.height / 2
     readonly property real innerPad: Theme.space2
-    /// The folded header's preview of the values.
+    /// The tags and aliases properties the page header shows as chips while the panel is folded
+    /// ("source:key"; none where the editor has no such header — a journal day in the stream).
+    readonly property var headerListKeys: {
+        if (!editor.headerShowsListChips || !editor.controller)
+            return []
+        const pp = editor.controller.pageProperties
+        return (pp.tags || []).concat(pp.aliases || []).map(t => t.source + ":" + t.property)
+    }
+    /// The folded header's preview of the values: without the tags and aliases the page header
+    /// shows right above (never twice), dates as the open panel shows them ("czw, 29 paź").
     readonly property string preview: {
         const parts = []
         for (const p of properties) {
             if (parts.join(" · ").length > 160)
                 break
-            parts.push(p.key + ": " + (p.empty ? "–" : p.value))
+            if ((p.type === "tags" || p.type === "aliases") && headerListKeys.indexOf(p.source + ":" + p.key) >= 0)
+                continue
+            let value = p.value
+            if (!p.empty && (p.type === "date" || p.type === "datetime")) {
+                const shown = DatesHelper.formatShort(String(p.raw).replace("T", " "))
+                if (shown !== "")
+                    value = shown
+            }
+            parts.push(p.key + ": " + (p.empty ? "–" : value))
         }
         return parts.join(" · ")
     }

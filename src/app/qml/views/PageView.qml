@@ -381,6 +381,8 @@ FocusScope {
         // bound here for the rows made with the editor, then by the Binding below.
         propertiesExpanded: AppSettings.propertiesExpanded
         onPropertiesExpandedToggled: (expanded) => AppSettings.propertiesExpanded = expanded
+        // The header below shows the tags and aliases as chips while the panel is folded.
+        headerShowsListChips: true
         // The side panel is narrow: phone-like margins there.
         horizontalPadding: Theme.compact || root.inSidePanel ? Theme.space3 : Theme.space8
         bottomSpace: refsSection.visible ? root.refsGap + refsSection.height + Theme.space16 : Theme.space16 * 2
