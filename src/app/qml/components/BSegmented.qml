@@ -152,10 +152,12 @@ T.Control {
             width: target ? target.width : 0
             height: parent.height
             radius: Theme.radius - 2
-            color: Theme.dark ? Theme.bgElevated2 : Theme.bgElevated
+            // Dark: the raised surface lightened by 12 % of the text colour (slate ≈ #424858,
+            // ≈ 1.9:1 against the track instead of ≈ 1.36:1), so the choice reads at a glance as
+            // light's white thumb does; from tokens, so every surface and accent follows.
+            color: Theme.dark ? Qt.tint(Theme.bgElevated2, Theme.alpha(Theme.fg, 0.12)) : Theme.bgElevated
             border.width: 1
-            // Dark: a state border (≥ 3:1 against the track, WCAG 1.4.11) — the raised fill alone
-            // is barely lighter than the track.
+            // Dark: a state border too (≥ 3:1 against the track, WCAG 1.4.11).
             border.color: Theme.dark ? Theme.borderControl : Theme.border
             antialiasing: true
             Behavior on x { NumberAnimation { duration: Theme.duration; easing.type: Theme.easing } }
