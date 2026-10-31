@@ -13,8 +13,10 @@ import Brulion
 // Document mode (BlockEditor.documentMode): no guides, fold arrows or bullets for paragraphs and
 // headings; a list item shows its Markdown marker in its level's marker column — a bullet (disc,
 // circle, square by depth), its number ("3."), or the checkbox of a task — and the text starts
-// one column in per level. Spacing follows the previous block (`prevKind`): paragraph gaps,
-// tight list items, air above headings.
+// one column in per level. A nested list item draws a guide line per ancestor level at that
+// level's marker centre (under a number's column), and a list item with children one from under
+// its marker down, as the outline does. Spacing follows the previous block (`prevKind`):
+// paragraph gaps, tight list items, air above headings (inside the delegates, so the lines join).
 //
 // A selected block is drawn on a band (`selectionEdge`: one band over a range of blocks, rounded
 // at its ends, from the editor's left edge; a block alone from its own level — blocks picked one by
@@ -231,21 +233,30 @@ Item {
     }
 
     // ---- Guide lines -------------------------------------------------------------------------
+    // One per ancestor level, over the row's full height. Outline: every block, at the bullets of
+    // its ancestors. Document: list items only (paragraphs and headings have none), at the marker
+    // centre of each ancestor list level — the bulletX of that level, so never through the row's
+    // own marker.
     Repeater {
-        model: block.shown && !block.doc ? block.depth : 0
+        model: !block.shown ? 0 : !block.doc || block.listItem ? block.depth : 0
         delegate: Rectangle {
             required property int index
-            x: Math.round(block.editor.contentX + block.editor.gutter - block.editor.bulletColumn / 2 + index * block.editor.indentStep)
+            objectName: "guideLine"
+            x: block.doc ? Math.round(block.editor.contentX + block.editor.gutter + (index + 1) * block.editor.listIndent
+                                      - Math.round(block.editor.listIndent * 0.55))
+                         : Math.round(block.editor.contentX + block.editor.gutter - block.editor.bulletColumn / 2 + index * block.editor.indentStep)
             width: 1
             height: block.height
             color: Theme.guide
         }
     }
-    // From this bullet down to its (visible) children.
+    // From this bullet (a document's marker: bullet, number or checkbox) down to its (visible)
+    // children.
     Rectangle {
-        visible: block.shown && !block.doc && block.listItem && block.model.hasChildren && !block.model.collapsed
+        objectName: "parentGuide"
+        visible: block.shown && block.listItem && block.model.hasChildren && !block.model.collapsed
         x: Math.round(block.bulletX)
-        y: Math.round(block.firstLineCenter + 9)
+        y: Math.round(block.firstLineCenter + (block.doc && block.isTask ? (Theme.touchUi ? 9 : 8) + 3 : 9))
         width: 1
         height: Math.max(0, block.height - y)
         color: Theme.guide

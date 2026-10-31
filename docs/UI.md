@@ -66,7 +66,7 @@ components — no Material/Fusion look, so all targets look identical.
   bullet down to its children), fold
   arrows, clicking a bullet zooms into the block (breadcrumb to zoom out; Enter in a zoomed
   heading or paragraph ends the zoom) — in outline mode; in document mode a note reads like an
-  Obsidian page (see "Note modes" below).
+  Obsidian page (see "Note modes" below), its nested lists with the same guide lines.
 * Touch (Android, `--touch`): targets ≥ 44 px (the dense rows of navigation lists — the
   sidebar and drawer's navigation, Ulubione, Ostatnie, the page tree — are exactly 44 px, the
   iOS list minimum, other rows 48), bottom navigation, drawer, an editing toolbar
@@ -1887,7 +1887,10 @@ palette ("Przełącz tryb notatki").
   document spacing (`BlockEditor.headingGapAbove`: 1.8 / 1.5 / 1.25 / 1.05 em above an H1 / H2 /
   H3 / smaller heading, `headingGapBelow` 0.6 em under every one — clearly closer to what follows,
   with air on both sides); paragraphs as normal text; lists as ordinary Markdown lists inside the flow
-  (bullets, numbers, checkboxes, indented per nesting level); a comfortable maximum text width.
+  (bullets, numbers, checkboxes, indented per nesting level, with a thin guide line per nesting
+  level — `Theme.guide`, as in the outline — at each ancestor level's marker centre, under a
+  number's column, and from a parent's marker down to its children; never through an item's own
+  marker); a comfortable maximum text width.
   Clicking a paragraph, heading or list item edits its raw Markdown in place, exactly like the
   block editor's inline editing (rendered text everywhere else, no layout jump). Tables, calc,
   code, callouts, embeds, queries and the frontmatter properties work as in outline mode. No

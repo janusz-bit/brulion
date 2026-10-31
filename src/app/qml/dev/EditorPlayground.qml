@@ -1170,6 +1170,33 @@ ApplicationWindow {
                 check(hItem !== null && hItem.topPad > item.topPad && editor.headingSize(2) > editor.fontSize,
                       "headings are larger with air above them")
                 check(info(rowOf("Pociąg")).listMarker === "1.", "numbered items keep their numbers")
+                // Indent guides of nested lists, at each ancestor level's marker centre (as the
+                // outline's): the nested item has one at its parent's marker, never at its own; the
+                // parent one from under its marker down; paragraphs and headings none.
+                const guides = (d, name) => {
+                    const out = []
+                    for (let i = 0; d && i < d.children.length; ++i) {
+                        if (d.children[i].objectName === name && d.children[i].visible)
+                            out.push(d.children[i])
+                    }
+                    return out
+                }
+                const nestedLines = guides(nestedItem, "guideLine")
+                check(nestedItem !== null && nestedLines.length === 1 && Math.abs(nestedLines[0].x - Math.round(liItem.bulletX)) < 0.5
+                      && Math.abs(nestedLines[0].x - nestedItem.bulletX) > editor.listIndent / 2
+                      && nestedLines[0].y === 0 && nestedLines[0].height === nestedItem.height,
+                      "a nested list item draws its parent level's guide at the parent's marker, over its full height: "
+                      + nestedLines.map(l => l.x).join(", ") + " / " + (liItem ? liItem.bulletX : "-"))
+                const down = guides(liItem, "parentGuide")
+                check(down.length === 1 && Math.abs(down[0].x - Math.round(liItem.bulletX)) < 0.5
+                      && down[0].y > liItem.firstLineCenter && down[0].y + down[0].height === liItem.height,
+                      "a list item with children draws its guide from under its marker down")
+                check(guides(liItem, "guideLine").length === 0 && guides(item, "guideLine").length === 0
+                      && guides(hItem, "guideLine").length === 0 && guides(item, "parentGuide").length === 0,
+                      "top-level items, paragraphs and headings draw no guides")
+                const after = editor.listView.itemAtIndex(nested + 1) as BlockDelegate
+                check(after !== null && Math.abs(after.y - (nestedItem.y + nestedItem.height)) < 0.5,
+                      "the next nested item starts where this one ends: the guide runs on unbroken")
             },
             () => editor.startEditing(rowOf("Niedziela"), -1),
             () => realKey(Qt.Key_Return),
