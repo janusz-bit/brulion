@@ -30,7 +30,7 @@
       <br><sub><b>Strona i odnośniki</b> — tabela z formułami, blok obliczeń, a z boku wszystko, co linkuje do strony</sub>
     </td>
     <td width="50%" valign="top">
-      <img src="docs/images/kalendarz.png" alt="Kalendarz miesięczny z zadaniami, terminami, przypomnieniami i alarmem oraz planem wybranego dnia">
+      <img src="docs/images/kalendarz.png" alt="Kalendarz miesięczny z zadaniami, terminami, przypomnieniami i alarmem, ukończone wpisy z ptaszkiem, a obok panel wybranego dnia z jego przyciskami">
       <br><sub><b>Kalendarz</b> — miesiąc, tydzień albo agenda: terminy, przypomnienia, alarmy i zadania cykliczne</sub>
     </td>
   </tr>
@@ -63,7 +63,7 @@
 </table>
 
 <p align="center">
-  <img src="docs/images/telefon-dziennik.png" width="270" alt="Dziennik na telefonie z dolnym paskiem nawigacji i przyciskiem szybkiej notatki">
+  <img src="docs/images/telefon-dziennik.png" width="270" alt="Dziennik na telefonie z dolnym paskiem nawigacji: Dziennik, Kalendarz, Szukaj, Zadania, + Notatka i Menu">
   &nbsp;&nbsp;&nbsp;
   <img src="docs/images/telefon-edycja-ciemny.png" width="270" alt="Edycja strony na telefonie w ciemnym motywie z paskiem narzędzi tuż nad klawiaturą">
   &nbsp;&nbsp;&nbsp;
