@@ -58,7 +58,7 @@ Klawiatura w panelu: strzałki ↑ i ↓ przechodzą między właściwościami, 
 Brulion zmienia tylko tę jedną właściwość — reszta nagłówka (komentarze, kolejność, cudzysłowy, zakończenia linii) zostaje bez zmian. Działa to tak samo w nagłówku YAML, jak w liniach `klucz:: wartość`; w tych drugich klucz może mieć tylko litery a–z, cyfry, `-` i `_`. Nagłówek, którego nie da się bezpiecznie zmienić w polach (na przykład wcięty), panel pokazuje tylko do odczytu — zmienisz go przyciskiem **Edytuj jako tekst**. To samo polecenie ma menu właściwości, której pola nie obsłużą (na przykład zagnieżdżonej mapy). Wartość otwarta w polu i zostawiona bez zmian zostaje zapisana tak jak była.
 
 ### Tagi i aliasy w nagłówku strony
-Tagi i aliasy strony stoją też pod jej tytułem. Prawy przycisk na etykiecie (na telefonie przytrzymanie) otwiera menu: tag możesz otworzyć albo usunąć z tej strony, alias skopiować albo usunąć. Przycisk „+” na końcu dodaje tag albo alias bez otwierania panelu.
+Tagi i aliasy strony stoją też pod jej tytułem. Prawy przycisk na etykiecie (na telefonie przytrzymanie) otwiera menu: tag możesz otworzyć albo usunąć z tej strony, alias skopiować albo usunąć. Przycisk „+” na końcu dodaje tag albo alias bez otwierania panelu. Gdy panel **Właściwości** jest rozwinięty, tych etykiet pod tytułem nie ma — te same tagi i aliasy (z × i „+”) są w panelu tuż pod nimi; po zwinięciu panelu wracają.
 
 ## Właściwości bloków
 W stylu Logseq/Dataview: linia `klucz:: wartość` bezpośrednio w bloku.
