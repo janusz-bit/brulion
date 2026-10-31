@@ -449,6 +449,14 @@ FocusScope {
         focus: true
         Overlay.modal: Rectangle { color: Theme.scrim }
         background: Rectangle { color: Theme.bgSunken }
+        // Edge to edge: the system bars are counted once, by the sidebar's own insets (topInset,
+        // bottomInset below), its bgSunken under the status and navigation bars. The Basic
+        // style pads a Drawer by the SafeArea margins itself (topPadding: SafeArea.margins.top
+        // …), which came on top of those insets: about 190 px of the tree lost on an Android
+        // phone, a band above the notebook row and a footer twice as tall. The side insets
+        // stay the style's (a cutout or a bar in landscape).
+        topPadding: 0
+        bottomPadding: 0
 
         Loader {
             id: drawerSidebar

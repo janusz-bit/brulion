@@ -72,7 +72,12 @@ components — no Material/Fusion look, so all targets look identical.
     its link `[[Strona#Nagłówek]]` or its embed), **Kalendarz** (month with journal days).
 * **Narrow (< 900 px, phones):** the sidebar becomes a `Drawer` (the ☰ button, the bottom bar's
   Menu, or a swipe to the right from the left edge; a swipe to the left on the drawer or the
-  scrim closes it). On touch UIs the swipe starts in a 24 px strip (`drawer.dragMargin`) that
+  scrim closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
+  navigation bars, and the sidebar's own insets (`topInset` = the SafeArea's top,
+  `bottomInset` = `AppShell.navigationBar`) keep the notebook row and the sync footer clear of
+  them — counted once: the Basic style pads a Drawer by the SafeArea margins itself, so the
+  shell sets its top and bottom padding to 0 (on Android the doubled bars cost about 190 px of
+  the tree). On touch UIs the swipe starts in a 24 px strip (`drawer.dragMargin`) that
   begins beyond what the system keeps at that edge: Android's gesture navigation takes a swipe
   from the very edge for "back" (`GestureInsets.left`, the system gesture insets reported by
   `ImeInsets.kt`, ~30 dp; 0 with button navigation), a display cutout or a system bar in
