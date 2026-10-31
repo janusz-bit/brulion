@@ -187,12 +187,12 @@ FocusScope {
     function openPalette(query) {
         palette.open()
         if (query)
-            palette.query = query
+            palette.typeQuery(query)
     }
     function openSwitcher(query) {
         switcher.open()
         if (query)
-            switcher.query = query
+            switcher.typeQuery(query)
     }
     function openCapture() {
         // Captured notes belong in the user's journal: from the documentation, AppController

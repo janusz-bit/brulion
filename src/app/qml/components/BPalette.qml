@@ -57,6 +57,12 @@ T.Popup {
             close()
         itemActivated(entry.item)
     }
+    /// `text` in the field as if typed: the caret after it (a field that is not focused yet puts
+    /// its caret at the start of a text set from outside).
+    function typeQuery(text) {
+        field.text = text
+        field.cursorPosition = field.text.length
+    }
     function move(delta) {
         const n = allResults.length
         if (n === 0)
