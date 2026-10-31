@@ -111,8 +111,9 @@ struct TargetCheck {
 QList<TargetCheck> targetSizes(const LayoutDump &dump, Device device);
 
 /// Share (0–1) of the distances on the grid: the left and top insets of texts and targets from
-/// the smallest box containing them, the gaps between consecutive texts sharing a left edge
-/// (±2 px, 0 < gap < 64). On-grid: within `tolerance` of a multiple of `grid`. 1 without any.
+/// the smallest box containing them (0 ≤ inset < 64: larger ones are positions, not padding),
+/// the gaps between consecutive texts sharing a left edge (±2 px, 0 < gap < 64). On-grid: within
+/// `tolerance` of a multiple of `grid`. 1 without any.
 double spacingGridShare(const LayoutDump &dump, int grid = 4, double tolerance = 1.0, QList<double> *distances = nullptr);
 
 struct TypeScale {
@@ -162,7 +163,9 @@ QJsonObject measureJson(const LayoutDump &dump, const QImage &png, Device device
                         const QJsonObject &meta = {});
 
 /// metrics.json from the measure outputs: per app/screen/size/theme the scores, per app the
-/// means (all shots, and only the pairs both apps have).
+/// means (all shots, and only the pairs both apps have). In a pair, O is computed over the metrics
+/// both shots have (L or K n/a on one side is left out of the other's O as well; the shot's own O
+/// is kept as "Oshot").
 QJsonObject summarize(const QList<QJsonObject> &measurements);
 
 /// Errors of screens.json (empty when it is valid): known verbs and arities, unique ids, known
@@ -175,7 +178,8 @@ struct LintFailure {
     QString detail;
 };
 /// The accessibility failures of one shot that `allow` does not excuse: a JSON array of {screen
-/// ("" or "*": any), kind ("contrast" | "target"; "": both), type, text (a prefix of the text or the
+/// ("" or "*": any), device ("desktop" | "phone"; "": both), kind ("contrast" | "target"; "": both),
+/// type, text (a prefix of the text or the
 /// target's label), name, count (how many failures of the shot it excuses; none: any number),
 /// reason (required)}; an entry needs a type, a text or a name.
 QList<LintFailure> lint(const LayoutDump &dump, const QImage &png, Device device, const QString &screen,

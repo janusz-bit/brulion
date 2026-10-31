@@ -485,9 +485,13 @@ double spacingGridShare(const LayoutDump &dump, int grid, double tolerance, QLis
             if (!best || b.rect.width() * b.rect.height() < best->rect.width() * best->rect.height())
                 best = &b;
         }
-        if (best) {
-            d.append(std::max(0.0, r.left() - best->rect.left()));
-            d.append(std::max(0.0, r.top() - best->rect.top()));
+        if (!best)
+            return;
+        // An inset of 64 px or more is a position inside a large box (a page, a panel), not
+        // padding: on a grid or off it only by the coordinates' rounding.
+        for (const double v : { r.left() - best->rect.left(), r.top() - best->rect.top() }) {
+            if (std::max(0.0, v) < 64)
+                d.append(std::max(0.0, v));
         }
     };
     QList<const TextItem *> texts;
@@ -1053,7 +1057,9 @@ QJsonObject summarize(const QList<QJsonObject> &measurements)
             for (auto it = byPair.cbegin(); it != byPair.cend(); ++it) {
                 if (!it.value().contains(app) || (pairedOnly && it.value().size() < 2))
                     continue;
-                const QJsonValue v = it.value().value(app).value(k);
+                // All shots: each shot's own O; paired: O over the metrics both shots of the pair have.
+                const QJsonObject scores = it.value().value(app);
+                const QJsonValue v = k == u"O" && !pairedOnly && scores.contains(u"Oshot"_s) ? scores.value(u"Oshot"_s) : scores.value(k);
                 if (v.isDouble()) {
                     sum += v.toDouble();
                     ++n;
@@ -1066,6 +1072,33 @@ QJsonObject summarize(const QList<QJsonObject> &measurements)
         out.insert(u"shots"_s, count);
         return out;
     };
+    // A pair compares O over the metrics both shots have: L or K missing on one side (no body text
+    // long enough, no tokens) leaves it out of the other's O too. The shot's own O stays as "Oshot".
+    for (auto it = byPair.begin(); it != byPair.end(); ++it) {
+        if (it.value().size() < 2)
+            continue;
+        QSet<QString> missing;
+        for (const QJsonObject &scores : std::as_const(it.value())) {
+            for (const QString &k : { u"L"_s, u"K"_s }) {
+                if (!scores.value(k).isDouble())
+                    missing.insert(k);
+            }
+        }
+        for (auto a = it.value().begin(); a != it.value().end(); ++a) {
+            Objective o;
+            o.C = a.value().value(u"C"_s).toDouble();
+            o.T = a.value().value(u"T"_s).toDouble();
+            o.S = a.value().value(u"S"_s).toDouble();
+            o.Y = a.value().value(u"Y"_s).toDouble();
+            o.A = a.value().value(u"A"_s).toDouble();
+            if (!missing.contains(u"L"_s))
+                o.L = a.value().value(u"L"_s).toDouble();
+            if (!missing.contains(u"K"_s))
+                o.K = a.value().value(u"K"_s).toDouble();
+            a.value().insert(u"Oshot"_s, a.value().value(u"O"_s));
+            a.value().insert(u"O"_s, round3(objectiveScore(o)));
+        }
+    }
     QJsonArray pairs;
     for (auto it = byPair.cbegin(); it != byPair.cend(); ++it) {
         const QStringList parts = it.key().split(u'|');
@@ -1179,7 +1212,7 @@ QList<LintFailure> lint(const LayoutDump &dump, const QImage &png, Device device
                         const QByteArray &allow, QString *error)
 {
     struct Allowed {
-        QString screen, kind, type, text, name;
+        QString screen, device, kind, type, text, name;
         int count = -1; ///< failures it excuses in one shot, -1 = any number
         int used = 0;
     };
@@ -1199,19 +1232,27 @@ QList<LintFailure> lint(const LayoutDump &dump, const QImage &png, Device device
                     *error = u"allow list: every entry needs a reason"_s;
                 return {};
             }
-            Allowed a{ o.value(u"screen"_s).toString(), o.value(u"kind"_s).toString(), o.value(u"type"_s).toString(),
-                       o.value(u"text"_s).toString(), o.value(u"name"_s).toString(), o.value(u"count"_s).toInt(-1) };
+            Allowed a{ o.value(u"screen"_s).toString(), o.value(u"device"_s).toString(), o.value(u"kind"_s).toString(),
+                       o.value(u"type"_s).toString(), o.value(u"text"_s).toString(), o.value(u"name"_s).toString(),
+                       o.value(u"count"_s).toInt(-1) };
             if (a.type.isEmpty() && a.text.isEmpty() && a.name.isEmpty()) {
                 if (error)
                     *error = u"allow list: an entry needs a type, a text or a name"_s;
                 return {};
             }
+            if (!a.device.isEmpty() && a.device != u"desktop" && a.device != u"phone") {
+                if (error)
+                    *error = u"allow list: device is \"desktop\" or \"phone\", not \"%1\""_s.arg(a.device);
+                return {};
+            }
             allowed.append(a);
         }
     }
+    const QString deviceName = device == Device::Desktop ? u"desktop"_s : u"phone"_s;
     auto excused = [&](const QString &kind, const QString &type, const QString &text, const QString &name) {
         for (Allowed &a : allowed) {
-            if ((a.screen.isEmpty() || a.screen == u"*" || a.screen == screen) && (a.kind.isEmpty() || a.kind == kind)
+            if ((a.screen.isEmpty() || a.screen == u"*" || a.screen == screen) && (a.device.isEmpty() || a.device == deviceName)
+                && (a.kind.isEmpty() || a.kind == kind)
                 && (a.type.isEmpty() || a.type == type) && (a.text.isEmpty() || text.startsWith(a.text))
                 && (a.name.isEmpty() || a.name == name) && (a.count < 0 || a.used < a.count)) {
                 ++a.used;

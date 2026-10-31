@@ -135,6 +135,7 @@ private Q_SLOTS:
     void manifest_data();
     void manifest();
     void lintAllow();
+    void summarizePairs();
     void cli();
 };
 
@@ -304,6 +305,8 @@ void TestUiBenchMetrics::spacing_data()
     QTest::newRow("inset 9 (±1)") << 9.0 << -1.0 << 1.0 << 2;
     QTest::newRow("inset 10") << 10.0 << -1.0 << 0.0 << 2;
     QTest::newRow("inset 0") << 0.0 << -1.0 << 1.0 << 2;
+    QTest::newRow("inset 62 counted") << 62.0 << -1.0 << 0.0 << 2;
+    QTest::newRow("inset 66: a position, ignored") << 66.0 << -1.0 << 1.0 << 0;
     QTest::newRow("gap 12") << -1.0 << 12.0 << 1.0 << 1;
     QTest::newRow("gap 10") << -1.0 << 10.0 << 0.0 << 1;
     QTest::newRow("gap 64 ignored") << -1.0 << 64.0 << 1.0 << 0;
@@ -662,6 +665,46 @@ void TestUiBenchMetrics::lintAllow()
     const QByteArray two = R"([{"screen": "*", "kind": "contrast", "type": "BText", "count": 2, "reason": "x"},
                               {"kind": "target", "text": "Sła", "reason": "x"}])";
     QCOMPARE(lint(d, img, Device::Phone, u"doc"_s, two, &error).size(), 0);
+
+    // `device`: a phone baseline excuses nothing on the desktop.
+    const QByteArray phone = R"([{"screen": "doc", "device": "phone", "kind": "contrast", "type": "BText", "count": 2, "reason": "x"},
+                                {"kind": "target", "text": "Sła", "reason": "x"}])";
+    QCOMPARE(lint(d, img, Device::Phone, u"doc"_s, phone, &error).size(), 0);
+    QCOMPARE(lint(d, img, Device::Desktop, u"doc"_s, phone, &error).size(), 2);
+    QVERIFY(error.isEmpty());
+    lint(d, img, Device::Desktop, u"doc"_s, R"([{"device": "tablet", "type": "BText", "reason": "x"}])", &error);
+    QVERIFY(error.contains(u"device"));
+}
+
+void TestUiBenchMetrics::summarizePairs()
+{
+    // Brulion has L, Obsidian has none (no body text long enough): the pair's O leaves L out of
+    // both; the shot keeps its own O.
+    auto measurement = [](const QString &app, const QString &screen, const QJsonValue &l) {
+        QJsonObject scores{ { u"C"_s, 10 }, { u"T"_s, 10 }, { u"S"_s, 10 }, { u"Y"_s, 10 }, { u"A"_s, 0 },
+                            { u"K"_s, 10 }, { u"L"_s, l } };
+        Objective o{ 10, 10, 10, 10, 0, {}, 10.0, 0 };
+        if (l.isDouble())
+            o.L = l.toDouble();
+        scores.insert(u"O"_s, objectiveScore(o));
+        return QJsonObject{ { u"app"_s, app }, { u"screen"_s, screen }, { u"size"_s, u"desktop"_s },
+                            { u"theme"_s, u"light"_s }, { u"scores"_s, scores } };
+    };
+    // (doc: a Brulion shot without its Obsidian pair, counted only in "all".)
+    const QJsonObject m = summarize({ measurement(u"brulion"_s, u"backlinks"_s, 10),
+                                      measurement(u"obsidian"_s, u"backlinks"_s, QJsonValue::Null),
+                                      measurement(u"brulion"_s, u"doc"_s, 10) });
+    const QJsonArray pairs = m[u"pairs"_s].toArray();
+    QCOMPARE(pairs.size(), 2);
+    const QJsonObject backlinks = pairs.at(0)[u"screen"_s].toString() == u"backlinks"_s ? pairs.at(0).toObject() : pairs.at(1).toObject();
+    const double withoutL = (2.5 + 2 + 1.5 + 0 + 1 + 1) / 0.95;
+    QCOMPARE(backlinks[u"brulion"_s][u"Oshot"_s].toDouble(), 8.5);
+    QVERIFY(std::abs(backlinks[u"brulion"_s][u"O"_s].toDouble() - withoutL) < 0.001);
+    QVERIFY(std::abs(backlinks[u"obsidian"_s][u"O"_s].toDouble() - withoutL) < 0.001);
+    QCOMPARE(backlinks[u"deltaO"_s].toDouble(), 0.0);
+    // Means: every shot with its own O; the paired means with the pair's.
+    QVERIFY(std::abs(m[u"means"_s][u"brulion"_s][u"all"_s][u"O"_s].toDouble() - 8.5) < 0.001);
+    QVERIFY(std::abs(m[u"means"_s][u"brulion"_s][u"paired"_s][u"O"_s].toDouble() - withoutL) < 0.001);
 }
 
 void TestUiBenchMetrics::cli()
