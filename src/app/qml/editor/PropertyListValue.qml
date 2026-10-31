@@ -36,6 +36,9 @@ Item {
 
     implicitHeight: chips.height
     height: implicitHeight
+    /// The tallest item of a chip line (a chip — its touch target on touch UIs —, the "+", the add
+    /// field): PropertyRow centres the first line in the row's height, as the other values' lines.
+    readonly property real lineHeight: chips.lineHeight
 
     function safe(s) {
         return editor ? editor.autoTextSafe(s) : s
@@ -119,6 +122,15 @@ Item {
                 line = Math.max(line, c.height)
             }
             return total + line
+        }
+        readonly property real lineHeight: {
+            let tallest = 0
+            for (let i = 0; i < chips.children.length; ++i) {
+                const c = chips.children[i]
+                if (c.visible && c.width > 0)
+                    tallest = Math.max(tallest, c.height)
+            }
+            return tallest
         }
 
         Repeater {

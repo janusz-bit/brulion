@@ -744,9 +744,9 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
 ///     opens a run's details, whose "Show in the event log" opens the page at the run's time.
 /// 3d. Tags name pages (docs/SYNTAX.md §3), with real input: a tap / click on a #tag in a journal
 ///     day opens the page the tag names — one not written yet opens empty, with the tagged blocks
-///     among its references and the tag strip in its header (a small header: its “#” among the
-///     page actions, “Zadania z tym tagiem” in the page menu, opening Tasks filtered by the tag),
-///     ready to type on a desktop, waiting for a tap on a touch screen — and back returns; in Tasks a click
+///     among its references and, at every width, the tag overview's “#” among the page actions
+///     and “Zadania z tym tagiem” in the page menu (opening Tasks filtered by the tag), no row of
+///     buttons under the title, a tag's sub-tags as chips there; ready to type on a desktop, waiting for a tap on a touch screen — and back returns; in Tasks a click
 ///     on a tag filters the list while a Ctrl+click (desktop) or a long press (--touch) opens the
 ///     tag's page; a row of the tag list opens the tag's page, its trailing button the overview,
 ///     whose "Utwórz stronę" opens the page not written yet; the sidebar's rename dialog counts
@@ -783,13 +783,13 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
                                    [](QQuickItem *item) { return item->objectName() == u"pageTagOverview"; })
                          != nullptr;
               }),
-              "the page header offers the tag overview (the tag strip; on a small header a “#” among the page actions)");
-        // A small header (phones): no row of two buttons — "Zadania z tym tagiem" is in the page
-        // menu, and opens Tasks filtered by the tag.
-        if (window->width() < 600) {
+              "the page header offers the tag overview (a “#” among the page actions)");
+        // At every width: no row of two buttons under the title — "Zadania z tym tagiem" is in the
+        // page menu, and opens Tasks filtered by the tag.
+        {
             check(!findShown(window->contentItem(),
                              [](QQuickItem *item) { return item->objectName() == u"pageTagStrip"; }),
-                  "a small header has no strip row of buttons");
+                  "the page header has no strip row of buttons");
             QQuickItem *menuButton = nullptr;
             waitFor([&] {
                 QQuickItem *header = findShown(window->contentItem(), [&](QQuickItem *item) {
@@ -806,7 +806,7 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
                                            [](QQuickItem *item) { return item->objectName() == u"pageMenuTagTasks"; });
                       return tagTasks != nullptr;
                   }),
-                  "on a small header the page menu offers “Zadania z tym tagiem”");
+                  "the page menu offers “Zadania z tym tagiem”");
             if (tagTasks) {
                 tapOrClick(window, pointIn(tagTasks), touch);
                 check(waitFor([&] {
@@ -946,17 +946,16 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         }
     }
 
-    // ---- A page renamed (in its header) to a tag in use gets the tag's strip with the rename;
+    // ---- A page renamed (in its header) to a tag in use gets the tag overview's “#” with the rename;
     //      renamed again — the tags naming it rewritten in other notes — it keeps it.
     {
         const QString draft = u"Szkic pomysłów.md"_s;
         app->workspace()->writeFile(draft, u"- szkic\n"_s);
         app->openPage(draft);
-        // The tag's strip, or on a small header its "#" among the page actions.
+        // The tag's "#" among the page actions.
         const auto strip = [window] {
-            return findShown(window->contentItem(), [](QQuickItem *item) {
-                return item->objectName() == u"pageTagStrip" || item->objectName() == u"pageTagOverview";
-            });
+            return findShown(window->contentItem(),
+                             [](QQuickItem *item) { return item->objectName() == u"pageTagOverview"; });
         };
         const auto headerOf = [&](const QString &path) {
             QQuickItem *found = nullptr;
@@ -983,17 +982,35 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
             }
         };
         QQuickItem *header = headerOf(draft);
-        check(header && !strip(), "a page no tag names has no tag strip");
+        check(header && !strip(), "a page no tag names has no tag overview “#”");
         renameInHeader(header, u"pomysł"_s);
         check(strip() != nullptr && app->workspace()->exists(tagPage),
-              "renamed to a tag in use, the page has the tag's strip at once");
+              "renamed to a tag in use, the page has the tag overview's “#” at once");
         renameInHeader(headerOf(tagPage), u"Pomysły kuchenne"_s);
         const QString renamed = u"Pomysły kuchenne.md"_s;
         // (No waiting: the rename is done when the call returns. The strip used to come only with
         // some later change — its binding had lost its dependency on Workspace.revision.)
         check(app->workspace()->exists(renamed) && strip() != nullptr && !app->workspace()->exists(tagPage),
-              "renamed again, the tags naming it rewritten in other notes after it moved: the strip stays");
+              "renamed again, the tags naming it rewritten in other notes after it moved: the “#” stays");
         app->workspace()->deletePage(app->workspace()->exists(renamed) ? renamed : draft);
+        app->goHome();
+        settle(200);
+    }
+
+    // ---- A tag with sub-tags (#projekt/dom in the sample notebook): its page shows them as chips
+    //      under the title, at every width, beside the header's "#".
+    {
+        app->openTag(u"projekt"_s);
+        QQuickItem *subTags = nullptr;
+        check(waitFor([&] {
+                  subTags = findShown(window->contentItem(),
+                                      [](QQuickItem *item) { return item->objectName() == u"pageSubTags"; });
+                  return subTags && findShown(subTags, [](QQuickItem *item) {
+                             return isA(item, "BChip") && item->property("text").toString().startsWith(u"#projekt/dom"_s);
+                         }) != nullptr;
+              }) && findShown(window->contentItem(),
+                              [](QQuickItem *item) { return item->objectName() == u"pageTagOverview"; }),
+              "a tag's page shows its sub-tags as chips under the title, and the tag overview's “#”");
         app->goHome();
         settle(200);
     }

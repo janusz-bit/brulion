@@ -506,11 +506,10 @@ FocusScope {
             iconName: "panel-right"
             onTriggered: AppController.openPage(page.path, -1, true)
         }
-        // A page named by a tag in use, on a small header (phones, the side panel): the tag
-        // strip's second button lives here (the first is the header's "#").
+        // A page named by a tag in use: Zadania z tym tagiem (Widok tagu is the header's "#").
         BMenuItem {
             objectName: "pageMenuTagTasks"
-            visible: root.pageHeader !== null && root.pageHeader.tagCompact
+            visible: root.pageHeader !== null && root.pageHeader.tagInUse
             height: visible ? implicitHeight : 0
             text: qsTr("Tasks with this tag")
             iconName: "list-todo"

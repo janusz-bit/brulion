@@ -185,6 +185,28 @@ QtObject {
                     check(inRow("gotowe", "propertyCheckBox").height >= Theme.touchTarget, "the checkbox is a 44 px target")
                     check(window.findItem(p, "propertiesAdd").height >= Theme.touchTarget, "“Dodaj właściwość” is a 44 px target")
                 }
+                // ---- one row rhythm: a list's chip line is centred in the row's height as a text
+                //      line is — one line is the row's height (touch 44, mouse 32), more lines whole
+                //      chip lines apart (touch 44 / 92) —; the chips and "+" keep their targets.
+                check(Math.abs(row("status").height - p.rowHeight) < 0.5, "a text row is the row's height: "
+                      + row("status").height + " / " + p.rowHeight)
+                for (const key of ["tags", "autorzy"]) {
+                    const r = row(key)
+                    const line = p.rowHeight - 2 * r.valuePadding
+                    const lines = (r.height - 2 * r.valuePadding + Theme.space1) / (line + Theme.space1)
+                    check(line > 0 && lines >= 1 && Math.abs(lines - Math.round(lines)) < 0.01,
+                          key + ": whole chip lines on the row's grid: " + r.height + " px, padding " + r.valuePadding)
+                    if (Theme.touchUi) {
+                        check(r.valuePadding === 0, key + ": on touch UIs the chips' 44-px line is the row's height")
+                        const chip = inRow(key, "propertyChip_0")
+                        const add = inRow(key, "propertyListAdd")
+                        check(chip !== null && chip.height >= Theme.touchTarget && add !== null && add.height >= Theme.touchTarget
+                              && add.width >= Theme.touchTarget, key + ": the chips and “+” stay 44 px targets")
+                    } else {
+                        check(Math.abs(r.height - p.rowHeight) < 0.5, key + ": one chip line, the row's height: "
+                              + r.height + " / " + p.rowHeight)
+                    }
+                }
                 // ---- a narrow window: the key over the value -----------------------------------------
                 widthBefore = window.width
                 window.width = 300

@@ -65,8 +65,16 @@ FocusScope {
     /// The value's cell in the value's coordinates (valueLoader): beside the key the row's height
     /// (the padding above and below the value included), stacked the line under the key — a
     /// value's tap area covers it, so it is a touch target tall on touch UIs.
-    readonly property real cellTop: stacked ? 0 : -Theme.space1
+    readonly property real cellTop: stacked ? 0 : -valuePadding
     readonly property real cellHeight: height - valueY
+    /// Beside the key, the space above (and below) the value: its line centred in the row's height —
+    /// a text, number, date or checkbox line is rowHeight − 2 × space1; a list's chip line its
+    /// tallest item (touch: the chips' 44 px, so none; desktop: the 28-px "+", so 2). Every
+    /// one-line row is rowHeight high, a list row of two lines two chip lines and their spacing.
+    readonly property real valuePadding: {
+        const list = valueLoader.item as PropertyListValue
+        return list ? Math.max(0, (rowHeight - list.lineHeight) / 2) : Theme.space1
+    }
 
     /// The value is being edited in a field (text, number) / the key is being renamed.
     property bool editingValue: false
@@ -84,7 +92,7 @@ FocusScope {
     signal leaving()
 
     implicitHeight: stacked ? valueY + Math.max(valueLoader.implicitHeight, rowHeight)
-                            : Math.max(rowHeight, valueLoader.implicitHeight + 2 * Theme.space1)
+                            : Math.max(rowHeight, valueLoader.implicitHeight + 2 * valuePadding)
     height: implicitHeight
     activeFocusOnTab: true
 
@@ -454,7 +462,7 @@ FocusScope {
     Loader {
         id: valueLoader
         x: row.valueX + (row.stacked ? row.iconWidth : 0)
-        y: row.valueY + (row.stacked ? 0 : Theme.space1)
+        y: row.valueY + (row.stacked ? 0 : row.valuePadding)
         width: row.valueWidth - (row.stacked ? row.iconWidth : 0)
         sourceComponent: {
             switch (row.type) {

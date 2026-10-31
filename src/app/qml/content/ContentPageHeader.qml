@@ -12,12 +12,10 @@ import Brulion
 // properties in its "Właściwości" panel, docs/UI.md "Page properties"). Next to the star: the note mode toggle (document / outline; its icon
 // shows the current mode, a click asks for the other one: modeToggleRequested). An empty page
 // gets a "Start writing" button; a page that does not exist yet says that typing creates it.
-// A page named by a tag that is in use (docs/SYNTAX.md §3: #tag is a link to this page) gets a
-// strip with "Widok tagu" (the tag overview), "Zadania z tym tagiem" and its sub-tags as chips
-// (#praca/raporty under Praca), each opening its own page. A small header (phones, the side
-// panel) keeps the sub-tags but no row of two buttons: Widok tagu is a "#" button among the page
-// actions, Zadania z tym tagiem is in the page menu (PageView; also in Widok tagu and every
-// #tag's menu).
+// A page named by a tag that is in use (docs/SYNTAX.md §3: #tag is a link to this page) gets, at
+// every width, "Widok tagu" (the tag overview) as a "#" button among the page actions, "Zadania z
+// tym tagiem" in the page menu (PageView; also in Widok tagu and every #tag's menu), and its
+// sub-tags as chips under the title (#praca/raporty under Praca), each opening its own page.
 //
 //   ContentPageHeader {
 //       controller: page; editor: editor; tools: tools
@@ -67,12 +65,12 @@ Item {
     readonly property bool showTitle: !startsWithTitle || journal
     /// The tag that names this page ({ key, text, references, subTags }), or {}.
     readonly property var tagInfo: summary.tag || ({})
-    /// That tag is in use (tagged blocks or sub-tags): the page gets the tag's strip.
+    /// That tag is in use (tagged blocks or sub-tags): Widok tagu among the page actions, Zadania
+    /// z tym tagiem in the page menu, the sub-tags under the title.
     readonly property bool tagInUse: (tagInfo.key || "") !== ""
                                      && ((tagInfo.references || 0) > 0 || (tagInfo.subTags || []).length > 0)
-    /// The strip's buttons go elsewhere on a small header: Widok tagu among the page actions,
-    /// Zadania z tym tagiem in the page menu.
-    readonly property bool tagCompact: tagInUse && small
+    /// The tag's sub-tags ({ tag, display, count }).
+    readonly property var subTags: tagInfo.subTags || []
     readonly property real textX: editor ? editor.contentX + editor.gutter : 0
     readonly property real textWidth: editor ? editor.contentWidth - editor.gutter : width
 
@@ -212,7 +210,7 @@ Item {
             spacing: 2
             BIconButton {
                 objectName: "pageTagOverview"
-                visible: header.tagCompact
+                visible: header.tagInUse
                 iconName: "hash"
                 label: qsTr("Tag overview")
                 Accessible.description: qsTr("Everything tagged %1").arg(header.tagInfo.text || "")
@@ -543,42 +541,15 @@ Item {
         }
 
         // ---- The tag that names this page -----------------------------------------------------------
-        // (Wide headers: a labelled row; small ones carry the two buttons elsewhere, tagCompact.)
+        // Its sub-tags (#praca/raporty under Praca), each a page of its own (Widok tagu is the "#"
+        // among the page actions, Zadania z tym tagiem in the page menu).
         Flow {
-            id: tagStrip
-            readonly property var tag: header.tagInfo
-            readonly property var subTags: tagStrip.tag.subTags || []
-            objectName: "pageTagStrip"
-            visible: header.tagInUse && !header.small
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.space1
-            Layout.leftMargin: -Theme.space2
-            spacing: Theme.space1
-
-            BButton {
-                objectName: "pageTagOverview"
-                size: "small"
-                variant: "ghost"
-                iconName: "hash"
-                text: qsTr("Tag overview")
-                Accessible.description: qsTr("Everything tagged %1").arg(tagStrip.tag.text || "")
-                onClicked: AppController.navigate({ view: "tag", tag: tagStrip.tag.key, overview: true })
-            }
-            BButton {
-                size: "small"
-                variant: "ghost"
-                iconName: "list-todo"
-                text: qsTr("Tasks with this tag")
-                onClicked: AppController.navigate({ view: "tasks", query: header.tagQuery(tagStrip.tag.key) })
-            }
-        }
-        Flow {
-            // The sub-tags (#praca/raporty under Praca), each a page of its own.
-            visible: header.tagInUse && tagStrip.subTags.length > 0
+            objectName: "pageSubTags"
+            visible: header.tagInUse && header.subTags.length > 0
             Layout.fillWidth: true
             spacing: Theme.space1
             Repeater {
-                model: tagStrip.subTags
+                model: header.subTags
                 delegate: BChip {
                     required property var modelData
                     variant: "tag"
