@@ -2082,7 +2082,11 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   another button, and a text button, keep their width). A segmented control's selected segment
   is a raised thumb on the sunken track: the raised surface in light; in dark that surface
   lightened by 12 % of the text colour with a `borderControl` outline, clearly lighter than the
-  track.
+  track. The track has a quiet `borderSubtle` frame in light (the control keeps its shape on
+  the paper page) and none in dark: there the well reads against the card and the selection's
+  outline is the control's only one. An off `BSwitch` is a solid `borderControl` track (≥ 3:1
+  on `bg`, `bgElevated` and `bgSunken`, WCAG 1.4.11; `fgFaint` under the mouse), an on one the
+  `link` colour; the gallery's "Podstawy" checks both marks live ("STANY KONTROLEK (≥ 3:1)").
   Touch keyboards: `BTextField` asks for the action key Done (`EnterKey.type: Qt.EnterKeyDone`).
   Qt on Android otherwise shows Next whenever something focusable lies below a field, and Next
   only moves the focus: Enter and `accepted()` never arrive. Forms whose fields lead to the next

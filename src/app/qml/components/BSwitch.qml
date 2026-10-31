@@ -10,6 +10,8 @@ import Brulion
 //             description: qsTr("Dzwoni, dopóki go nie wyłączysz") }
 //
 // Keyboard: Space toggles. The whole row is the hit area (≥ 44 px high on touch UIs).
+// The track: on, the link colour; off, solid borderControl (≥ 3:1 on bg, bgElevated and bgSunken,
+// WCAG 1.4.11 — the off state is seen, not guessed), fgFaint under the mouse.
 T.Switch {
     id: control
 
@@ -47,7 +49,7 @@ T.Switch {
         x: control.width - width - 2
         y: control.topPadding + (control.availableHeight - height) / 2
         radius: height / 2
-        color: control.checked ? Theme.link : control.hovered ? Theme.borderControl : Qt.rgba(Theme.borderControl.r, Theme.borderControl.g, Theme.borderControl.b, 0.75)
+        color: control.checked ? Theme.link : control.hovered ? Theme.fgFaint : Theme.borderControl
         antialiasing: true
         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
 

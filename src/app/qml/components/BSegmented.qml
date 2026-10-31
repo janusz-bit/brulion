@@ -129,12 +129,15 @@ T.Control {
         }
     }
 
+    // The track: a sunken well. Dark: no frame — the well reads against the card and the
+    // selected thumb's outline is the control's only one; light: a quiet frame that keeps the
+    // control's shape on the paper page.
     background: Rectangle {
         implicitHeight: control.visualHeight
         radius: Theme.radius
         color: Theme.bgSunken
-        border.width: 1
-        border.color: Theme.border
+        border.width: Theme.dark ? 0 : 1
+        border.color: Theme.borderSubtle
     }
 
     contentItem: Item {

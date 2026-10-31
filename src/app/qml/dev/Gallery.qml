@@ -442,6 +442,80 @@ ApplicationWindow {
                 }
             }
 
+            // What identifies a control's state (WCAG 1.4.11, ≥ 3:1), worst case over the
+            // surfaces it lies on: the off switch's solid track (pages, cards, sunken panels); in
+            // dark the segmented control's selection outline, its only frame there, against the
+            // track and the card (light: the white thumb).
+            Specimen {
+                label: "STANY KONTROLEK (≥ 3:1)"
+                note: "najgorszy wynik na tłach, na których leżą"
+                Repeater {
+                    model: [
+                        { name: "przełącznik wyłączony", token: "borderControl", mark: Theme.borderControl, kind: "switch",
+                          on: [["bg", Theme.bg], ["bgElevated", Theme.bgElevated], ["bgSunken", Theme.bgSunken]] },
+                        { name: "wybrany segment", token: "borderControl", mark: Theme.borderControl, kind: "segmented", dark: true,
+                          on: [["bgSunken", Theme.bgSunken], ["bgElevated", Theme.bgElevated]] }
+                    ].filter(m => !m.dark || Theme.dark)
+                    delegate: Rectangle {
+                        id: stateSwatch
+                        required property var modelData
+                        width: 264
+                        height: 104
+                        radius: Theme.radius
+                        color: Theme.bgElevated
+                        border.width: 1
+                        border.color: Theme.border
+                        readonly property real worst: modelData.on.reduce((w, s) => Math.min(w, window.contrast(modelData.mark, s[1])), 99)
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 2
+                            Item {
+                                width: parent.width
+                                height: 32
+                                BSwitch {
+                                    visible: stateSwatch.modelData.kind === "switch"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    checked: false
+                                    Accessible.name: "wyłączony"
+                                }
+                                BSegmented {
+                                    visible: stateSwatch.modelData.kind === "segmented"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    size: "small"
+                                    model: ["Miesiąc", "Tydzień"]
+                                    currentValue: "Miesiąc"
+                                    accessibleName: "Widok"
+                                }
+                            }
+                            Text {
+                                width: parent.width
+                                text: stateSwatch.modelData.name + " · " + stateSwatch.modelData.token
+                                color: Theme.fgMuted
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.textXs
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                text: "na " + stateSwatch.modelData.on.map(s => s[0]).join(", ")
+                                color: Theme.fgFaint
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.textXs
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: (stateSwatch.worst >= 3 ? "≥ 3:1 " : "✗ ") + stateSwatch.worst.toFixed(2) + ":1"
+                                color: stateSwatch.worst >= 3 ? Theme.successText : Theme.dangerText
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.textXs
+                                font.weight: Theme.weightSemiBold
+                            }
+                        }
+                    }
+                }
+            }
+
             Specimen {
                 label: "POWIERZCHNIE I MARKA"
                 Repeater {
