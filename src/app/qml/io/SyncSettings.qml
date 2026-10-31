@@ -62,7 +62,6 @@ ColumnLayout {
                     visible: !!section.sync && section.sync.active
                     text: qsTr("Sync now")
                     iconName: "refresh-cw"
-                    size: "small"
                     busy: !!section.sync && section.sync.state === "syncing"
                     onClicked: section.sync.syncNow()
                 }
@@ -74,7 +73,6 @@ ColumnLayout {
                 BButton {
                     text: qsTr("Merge")
                     iconName: "git-merge"
-                    size: "small"
                     onClicked: AppController.navigate({ view: "sync", tab: "conflicts" })
                 }
             }
@@ -86,7 +84,6 @@ ColumnLayout {
                 BButton {
                     text: qsTr("Open")
                     iconName: "scroll-text"
-                    size: "small"
                     onClicked: AppController.navigate({ view: "logs", group: "sync" })
                 }
             }

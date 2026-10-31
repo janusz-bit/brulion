@@ -442,6 +442,52 @@ ApplicationWindow {
                 }
             }
 
+            // What identifies a control's state (WCAG 1.4.11, ≥ 3:1): the off switch's
+            // borderControl ring (the unticked check box's too) on every surface.
+            Specimen {
+                label: "STAN KONTROLEK (obwódka ≥ 3:1)"
+                Repeater {
+                    model: [
+                        { name: "bg", color: Theme.bg }, { name: "bgElevated", color: Theme.bgElevated },
+                        { name: "bgSunken", color: Theme.bgSunken }
+                    ]
+                    delegate: Rectangle {
+                        id: stateSwatch
+                        required property var modelData
+                        width: 196
+                        height: 88
+                        radius: Theme.radius
+                        color: modelData.color
+                        border.width: 1
+                        border.color: Theme.border
+                        readonly property real ring: window.contrast(Theme.borderControl, modelData.color)
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 2
+                            Row {
+                                spacing: Theme.space2
+                                BSwitch { Accessible.name: "wyłączony"; checked: false }
+                                BSwitch { Accessible.name: "włączony"; checked: true }
+                            }
+                            Text {
+                                text: "borderControl / " + stateSwatch.modelData.name
+                                color: Theme.fgMuted
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.textXs
+                            }
+                            Text {
+                                text: (stateSwatch.ring >= 3 ? "AA " : "✗ ") + stateSwatch.ring.toFixed(2) + ":1"
+                                color: stateSwatch.ring >= 3 ? Theme.successText : Theme.dangerText
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.textXs
+                                font.weight: Theme.weightSemiBold
+                            }
+                        }
+                    }
+                }
+            }
+
             Specimen {
                 label: "POWIERZCHNIE I MARKA"
                 Repeater {

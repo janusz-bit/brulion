@@ -38,6 +38,9 @@ T.Switch {
     Accessible.checkable: true
     Accessible.checked: checked
 
+    // Off: the unchecked check box's look (BCheckBox) — a card-coloured track with a
+    // borderControl ring (≥ 3:1 on every surface, WCAG 1.4.11) and a smaller fgMuted knob; the
+    // ring turns fgMuted on hover. On: the link-coloured track with the light knob.
     indicator: Rectangle {
         id: track
         readonly property int trackWidth: Theme.touchUi ? 40 : 34
@@ -47,25 +50,31 @@ T.Switch {
         x: control.width - width - 2
         y: control.topPadding + (control.availableHeight - height) / 2
         radius: height / 2
-        color: control.checked ? Theme.link : control.hovered ? Theme.borderControl : Qt.rgba(Theme.borderControl.r, Theme.borderControl.g, Theme.borderControl.b, 0.75)
+        color: control.checked ? Theme.link : Theme.bgElevated
+        border.width: control.checked ? 0 : 1.5
+        border.color: control.hovered ? Theme.fgMuted : Theme.borderControl
         antialiasing: true
         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
 
         Rectangle {
             id: thumb
-            readonly property int inset: 3
+            // 2 px smaller while off (inside the ring).
+            readonly property int inset: control.checked ? 3 : 4
             width: track.height - 2 * inset
             height: width
             radius: width / 2
-            y: inset
+            y: (track.height - height) / 2
             x: Math.max(inset, Math.min(track.width - width - inset,
                        control.visualPosition * (track.width - width - 2 * inset) + inset))
-            color: control.checked && Theme.dark ? Theme.bg : Theme.switchThumb
+            color: !control.checked ? Theme.fgMuted
+                 : Theme.dark ? Theme.bg : Theme.switchThumb
             antialiasing: true
             Behavior on x {
                 enabled: !control.down
                 NumberAnimation { duration: Theme.duration; easing.type: Theme.easing }
             }
+            Behavior on width { NumberAnimation { duration: Theme.durationFast } }
+            Behavior on color { ColorAnimation { duration: Theme.durationFast } }
         }
 
         BFocusRing {

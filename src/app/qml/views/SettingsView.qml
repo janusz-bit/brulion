@@ -258,7 +258,6 @@ Item {
         }
         BButton {
             visible: !permission.granted
-            size: "small"
             text: qsTr("Allow")
             onClicked: AppController.requestPermission(permission.name)
         }
@@ -482,7 +481,6 @@ Item {
                                  : qsTr("%1 is not installed on this device: the system font is used.").arg(AppSettings.uiFontFamily)
                     BButton {
                         objectName: "uiFontButton"
-                        size: "small"
                         text: qsTr("Choose…")
                         iconName: "type"
                         onClicked: fontPicker.openTarget("ui")
@@ -636,7 +634,6 @@ Item {
                              : qsTr("%1 is not installed on this device: the system's monospaced font is used.").arg(AppSettings.editorMonoFamily)
                 BButton {
                     objectName: "monoFontButton"
-                    size: "small"
                     text: qsTr("Choose…")
                     iconName: "code"
                     onClicked: fontPicker.openTarget("mono")
@@ -743,7 +740,6 @@ Item {
                 BButton {
                     text: qsTr("Open another…")
                     iconName: "folder-open"
-                    size: "small"
                     onClicked: AppController.closeVault()
                 }
             }
@@ -800,7 +796,6 @@ Item {
                     objectName: "saveObsidianSettings"
                     text: qsTr("Save to the notebook")
                     iconName: "check"
-                    size: "small"
                     onClicked: Workspace.saveAdoptedConfig()
                 }
             }
@@ -943,13 +938,11 @@ Item {
                 description: qsTr("Sound, vibration and Do Not Disturb of Brulion's notifications in Android — when a sound does not play as chosen here.")
                 BButton {
                     objectName: "reminderSystemSettings"
-                    size: "small"
                     text: qsTr("Reminders")
                     onClicked: ReminderSounds.openSystemSettings("reminder")
                 }
                 BButton {
                     objectName: "alarmSystemSettings"
-                    size: "small"
                     text: qsTr("Alarms")
                     onClicked: ReminderSounds.openSystemSettings("alarm")
                 }
@@ -1072,7 +1065,6 @@ Item {
                         objectName: "settingsOpenLog"
                         text: qsTr("Open")
                         iconName: "scroll-text"
-                        size: "small"
                         onClicked: AppController.navigate({ view: "logs" })
                     }
                 }
@@ -1091,7 +1083,6 @@ Item {
                     BButton {
                         text: qsTr("About")
                         iconName: "info"
-                        size: "small"
                         variant: "ghost"
                         onClicked: AppController.requestUiAction("about")
                     }
@@ -1102,7 +1093,6 @@ Item {
                     BButton {
                         text: qsTr("Read")
                         iconName: "external-link"
-                        size: "small"
                         variant: "ghost"
                         onClicked: Workspace.openUrl("https://www.gnu.org/licenses/agpl-3.0.html")
                     }
@@ -1113,7 +1103,6 @@ Item {
                     BButton {
                         text: qsTr("Open")
                         iconName: "external-link"
-                        size: "small"
                         variant: "ghost"
                         onClicked: Workspace.openUrl("https://github.com/janusz-bit/brulion")
                     }
