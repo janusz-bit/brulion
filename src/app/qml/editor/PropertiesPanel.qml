@@ -31,7 +31,9 @@ Item {
     readonly property bool editable: draft || info.editable !== false
     readonly property bool canAdd: draft ? (controller !== null && controller.pageProperties.canAdd !== false)
                                          : (editable && info.canAdd !== false)
-    readonly property bool stacked: Theme.compact || width < 480
+    /// The key above the value: only when the value column beside the key would be narrower than
+    /// ~168 px (a narrow side panel); phones keep the two columns (icon + key | value).
+    readonly property bool stacked: width - iconWidth - keyWidth - Theme.space2 < 168
     readonly property real rowHeight: Theme.touchUi ? 44 : (Theme.dense ? 28 : 32)
     readonly property real iconWidth: Theme.touchUi ? Theme.touchTarget : 24
     /// The key column: as wide as the widest key, 96 px to 30 % of the panel.
@@ -51,7 +53,7 @@ Item {
     FontMetrics {
         id: keyMetrics
         font.family: Theme.fontUi
-        font.pixelSize: Theme.textSm
+        font.pixelSize: Theme.textBase
     }
 
     function propertyOf(key) {

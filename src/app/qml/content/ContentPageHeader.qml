@@ -401,7 +401,11 @@ Item {
             /// The field adding "tags" | "aliases" is open ("": none).
             property string adding: ""
             property string addError: ""
-            visible: aliases.length + tags.length > 0 || adding !== ""
+            /// This page's properties panel is shown and open right below: it has every chip with
+            /// the same actions (a tag's page, ×, "+"), so the header does not repeat them.
+            readonly property bool panelOpen: live && header.editor !== null && header.editor.propertiesExpanded
+                                              && header.controller.pageProperties.visibleRow >= 0
+            visible: (aliases.length + tags.length > 0 || adding !== "") && !panelOpen
             Layout.fillWidth: true
             Layout.topMargin: Theme.space1
             spacing: Theme.space1

@@ -18,8 +18,9 @@ import Brulion
 // above the blocks writes the frontmatter, also when only a hidden note-mode frontmatter and
 // `key::` lines are there; values opened and left unchanged keep their form (`|` text, `1.50`);
 // a Logseq text becomes a list of links; an alias no link can use is refused under the field and
-// in a toast; a map's row menu offers "Edytuj jako tekst". On a phone the rows stack the key over
-// the value and every control is a 44 px target.
+// in a toast; a map's row menu offers "Edytuj jako tekst". The key stays beside the value (phones
+// too) — a narrow window stacks it over the value —, its whole cell a tap area, and on a phone every
+// control and tap area is a 44 px target.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -39,6 +40,7 @@ QtObject {
     property int indexBefore: 0
     property Item frontmatter: null
     property string original: ""
+    property real widthBefore: 0
     readonly property string path: "Projekty/Remont garażu.md"
     readonly property string content: "---\n"
         + "status: w toku # wybrany\n"
@@ -165,18 +167,40 @@ QtObject {
             () => {
                 frontmatter = window.delegateAt(0)
                 const p = panel()
-                check(p.stacked === (Theme.compact || p.width < 480), "the layout follows the width: stacked " + p.stacked)
+                check(p.stacked === (p.width - p.iconWidth - p.keyWidth - Theme.space2 < 168),
+                      "the layout follows the value column's width: stacked " + p.stacked)
+                check(!p.stacked && inRow("status", "propertyValue").mapToItem(row("status"), 0, 0).x >= p.iconWidth + p.keyWidth,
+                      "the value is in a column beside the key (" + p.width + " px)")
+                const keyCell = inRow("status", "propertyKeyCell")
+                check(keyCell !== null && keyCell.height >= row("status").height && keyCell.width >= p.keyWidth,
+                      "the key's tap area is its whole cell: " + (keyCell ? keyCell.width + "×" + keyCell.height : "-"))
                 if (Theme.touchUi) {
-                    check(p.stacked, "a phone stacks the key over the value")
                     const button = inRow("status", "propertyTypeButton")
                     check(button.height >= Theme.touchTarget && button.width >= Theme.touchTarget,
                           "the type icon is a 44 px target: " + button.width + "×" + button.height)
-                    check(row("status").height >= Theme.touchTarget + 28
-                          && inRow("status", "propertyValue").mapToItem(row("status"), 0, 0).y >= 28,
-                          "a stacked row holds the key over the value")
+                    check(keyCell !== null && keyCell.height >= Theme.touchTarget, "the key's cell is a 44 px target")
+                    const date = inRow("termin", "propertyDateButton")
+                    check(date !== null && date.height >= Theme.touchTarget, "the date button is a 44 px target: "
+                          + (date ? date.height : "-"))
                     check(inRow("gotowe", "propertyCheckBox").height >= Theme.touchTarget, "the checkbox is a 44 px target")
                     check(window.findItem(p, "propertiesAdd").height >= Theme.touchTarget, "“Dodaj właściwość” is a 44 px target")
                 }
+                // ---- a narrow window: the key over the value -----------------------------------------
+                widthBefore = window.width
+                window.width = 300
+            },
+            wait(() => panel() !== null && panel().stacked, "a narrow panel stacks the key over the value"),
+            () => {
+                const r = row("status")
+                check(inRow("status", "propertyValue").mapToItem(r, 0, 0).y >= r.keyLineHeight,
+                      "a stacked row holds the key over the value")
+                if (Theme.touchUi)
+                    check(r.keyLineHeight >= Theme.touchTarget && inRow("status", "propertyKeyCell").height >= Theme.touchTarget,
+                          "the stacked key's line is a 44 px target")
+                window.width = widthBefore
+            },
+            wait(() => panel() !== null && !panel().stacked, "wide again: the key beside the value"),
+            () => {
                 // ---- text: real keys, only that line changes -----------------------------------------
                 window.tapItem(inRow("status", "propertyValue"))
             },

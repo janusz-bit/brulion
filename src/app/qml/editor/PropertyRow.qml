@@ -10,9 +10,10 @@ import Brulion
 // several lines in a text area), number ("3,5" and "1 200" accepted), checkbox (each toggle one
 // undo step), date / date and time (the date dialog: a calendar, natural language "jutro"),
 // list / tags / aliases (PropertyListValue: chips). Every change goes through PageController
-// (one undo step, only that property's lines change). Wide panels put the key in a column beside
-// the value; narrow ones (phones) stack the key above the value, every control at least
-// Theme.touchTarget.
+// (one undo step, only that property's lines change). The key is in a column beside the value
+// (phones too); a panel too narrow for that (a value column under ~168 px) stacks the key above the
+// value. Every control and tap area — the key's cell, the value's — is at least Theme.touchTarget
+// tall on touch UIs.
 //
 // The row takes the keyboard focus (Tab, ↑/↓ in the panel): → or Enter edits the value, ← or F2
 // renames, Ctrl+Backspace / Delete removes, the Menu key / Shift+F10 opens the menu, Alt+↓ goes
@@ -54,13 +55,18 @@ FocusScope {
     }
     readonly property bool stacked: panel.stacked
     readonly property real rowHeight: panel.rowHeight
-    /// The key's line: the row's height beside the value; above it (stacked) a label's line —
-    /// the type icon's 44 px target reaches beyond it on the left, where the value does not go.
-    readonly property real keyLineHeight: stacked ? (Theme.touchUi ? 32 : 28) : rowHeight
+    /// The key's line: the row's height beside the value; above it (stacked) a label's line, a
+    /// touch target on touch UIs (the key's cell is its tap area).
+    readonly property real keyLineHeight: stacked ? (Theme.touchUi ? Theme.touchTarget : 28) : rowHeight
     readonly property real iconWidth: Theme.touchUi ? Theme.touchTarget : 24
     readonly property real valueX: stacked ? 0 : iconWidth + panel.keyWidth + Theme.space2
     readonly property real valueY: stacked ? keyLineHeight : 0
     readonly property real valueWidth: Math.max(60, width - valueX - Theme.space1)
+    /// The value's cell in the value's coordinates (valueLoader): beside the key the row's height
+    /// (the padding above and below the value included), stacked the line under the key — a
+    /// value's tap area covers it, so it is a touch target tall on touch UIs.
+    readonly property real cellTop: stacked ? 0 : -Theme.space1
+    readonly property real cellHeight: height - valueY
 
     /// The value is being edited in a field (text, number) / the key is being renamed.
     property bool editingValue: false
@@ -364,7 +370,8 @@ FocusScope {
         }
     }
 
-    // The key (a field while renaming).
+    // The key (a field while renaming). Its tap area is the whole key cell: the row's height
+    // beside the value (the key's line when stacked), up to the value.
     Text {
         id: keyText
         objectName: "propertyKey"
@@ -376,8 +383,15 @@ FocusScope {
         textFormat: Text.PlainText
         elide: Text.ElideRight
         font.family: Theme.fontUi
-        font.pixelSize: Theme.textSm
+        font.pixelSize: Theme.textBase
         color: Theme.fgMuted
+    }
+    Item {
+        objectName: "propertyKeyCell"
+        visible: !row.renaming
+        x: row.iconWidth
+        width: row.stacked ? row.width - x : row.valueX - x
+        height: row.stacked ? row.keyLineHeight : row.height
         TapHandler {
             enabled: row.editable
             acceptedButtons: Qt.LeftButton
@@ -479,12 +493,26 @@ FocusScope {
                 font.italic: row.empty
                 color: row.empty || row.type === "unsupported" ? Theme.fgMuted : Theme.fg
                 linkColor: Theme.link
+            }
+            // The tap area: the value's whole cell (a link opens, elsewhere the value is edited).
+            Item {
+                id: displayCell
+                visible: !row.editingValue
+                y: row.cellTop
+                width: parent.width
+                height: Math.max(textBox.implicitHeight, row.cellHeight)
                 HoverHandler {
-                    cursorShape: display.hoveredLink !== "" ? Qt.PointingHandCursor : row.editable ? Qt.IBeamCursor : Qt.ArrowCursor
+                    id: displayHover
+                    cursorShape: {
+                        const p = displayCell.mapToItem(display, displayHover.point.position.x, displayHover.point.position.y)
+                        return display.linkAt(p.x, p.y) !== "" ? Qt.PointingHandCursor
+                                                               : row.editable ? Qt.IBeamCursor : Qt.ArrowCursor
+                    }
                 }
                 TapHandler {
                     onTapped: (point) => {
-                        const link = display.linkAt(point.position.x, point.position.y)
+                        const p = displayCell.mapToItem(display, point.position.x, point.position.y)
+                        const link = display.linkAt(p.x, p.y)
                         if (link !== "")
                             row.editor.activateLink(row.blockRow, link)
                         else
@@ -620,6 +648,13 @@ FocusScope {
                 font.italic: row.empty
                 font.features: { "tnum": 1 }
                 color: row.empty ? Theme.fgMuted : Theme.fg
+            }
+            // The tap area: the value's whole cell.
+            Item {
+                visible: !row.editingValue
+                y: row.cellTop
+                width: parent.width
+                height: Math.max(numberBox.lineHeight, row.cellHeight)
                 TapHandler { onTapped: row.startValueEdit() }
                 HoverHandler { cursorShape: row.editable ? Qt.IBeamCursor : Qt.ArrowCursor }
             }
@@ -748,7 +783,14 @@ FocusScope {
             T.AbstractButton {
                 id: dateButton
                 objectName: "propertyDateButton"
-                height: parent.height
+                // The value's whole cell (the row's padding included): a touch target on touch UIs;
+                // what it shows keeps the value's line (insets).
+                y: row.cellTop
+                height: Math.max(parent.height, row.cellHeight)
+                topInset: Math.max(0, -y)
+                bottomInset: Math.max(0, y + height - parent.height)
+                topPadding: topInset
+                bottomPadding: bottomInset
                 width: Math.min(parent.width, dateLabel.implicitWidth + 2 * Theme.space2 + Theme.iconSizeSm + Theme.space1)
                 enabled: row.editable
                 focusPolicy: Qt.NoFocus

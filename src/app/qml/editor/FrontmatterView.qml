@@ -39,9 +39,10 @@ Rectangle {
                                      : expanded && panelLoader.active ? panelLoader.implicitHeight + Theme.space2 : 0)
     height: implicitHeight
     radius: Theme.radius
+    // Open: a sunken surface, framed only while its text is edited (the focus border).
     color: root.open ? Theme.bgSunken : "transparent"
-    border.width: root.open ? 1 : 0
-    border.color: root.block.editing ? Theme.alpha(Theme.focusRing, 0.5) : Theme.borderSubtle
+    border.width: root.block.editing ? 1 : 0
+    border.color: Theme.alpha(Theme.focusRing, 0.5)
 
     function toggle() {
         if (block.editing) {

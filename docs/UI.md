@@ -1716,11 +1716,15 @@ note mode switch or an inserted template), so it never runs on over the page.
 * A block Brulion cannot edit safely (an indented mapping, plain text between `---` lines) shows
   its values read-only: "Tych właściwości nie da się bezpiecznie zmieniać w polach." with
   "Edytuj jako tekst".
-* Layout: a wide panel puts the keys in a column (as wide as the widest key, 96 px to 30 % of the
-  panel; rows 32 px, 28 dense); a narrow one (`Theme.compact` or under 480 px: phones) stacks the
-  key over the value, every control a 44 px target. Heights are bindings (rule 1 of "Scrolling
-  performance": the rows' heights summed, the chips' lines computed), rows live in a `ListModel` by
-  key so an edit keeps them (a focused field too).
+* Layout: the type icon and the key in a column (as wide as the widest key, 96 px to 30 % of the
+  panel; keys at the UI text size) beside the value — on phones too, rows 44 px on touch UIs (32 px,
+  28 dense, with a mouse); only a panel whose value column would be narrower than ~168 px (a narrow
+  side panel) stacks the key over the value. Every control and tap area is a 44 px target on touch
+  UIs: the key's whole cell (a tap focuses the row, a double tap renames), the value's whole cell
+  (a text, a number, a date button: the row's padding included). The open panel is a sunken surface
+  without a frame (the focus border while its text is edited). Heights are bindings (rule 1 of
+  "Scrolling performance": the rows' heights summed, the chips' lines computed), rows live in a
+  `ListModel` by key so an edit keeps them (a focused field too).
 * Keyboard: rows take the focus (Tab); ↓ / ↑ move between them (past the last: the add row), → or
   Enter edits the value, ← or F2 renames, Delete or Ctrl+Backspace removes, Alt+↓ goes to the first
   block, Ctrl+; adds, Ctrl+Z / Ctrl+Shift+Z undo and redo, Escape returns to the editor. A field
@@ -1747,7 +1751,11 @@ index's summary. A right-click or a long press on a chip from a property opens i
 alias" (a field at the end of the row — tags suggested —, Enter adds and stays open, Escape
 closes; leaving it adds what it holds, a refusal said in a toast) and "Dodaj właściwość…". The
 header is the editor list's header, so in source mode (Ctrl+E: the list is hidden) neither the
-chips nor "+" are shown — the source text is edited directly there.
+chips nor "+" are shown — the source text is edited directly there. While this page's properties
+panel is shown and open (`BlockEditor.propertiesExpanded`, `pageProperties.visibleRow` ≥ 0) the
+header's row is not shown either: the panel right below it has the same chips with the same actions
+(a tag opens its page, × removes, "+" on the tags and aliases rows adds, the panel's "+" adds a
+property, the row menu copies a value); folded, the header's row is back.
 
 **C++** (`PageController`, `src/app/editor/pagecontroller_properties.cpp`): `pageProperties`
 { items, tags, aliases, canAdd, addTarget, hasYaml, hasLogseq, editable, problem, visibleRow,
