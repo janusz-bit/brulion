@@ -832,14 +832,8 @@ Rectangle {
         }
     }
 
-    // Right edge line on wide windows (the drawer has its own edge).
-    Rectangle {
-        visible: !Theme.narrow
-        anchors.right: parent.right
-        width: 1
-        height: parent.height
-        color: Theme.border
-    }
+    // No edge line of its own: on wide windows the SplitView's handle (BSplitHandle) is the one
+    // hairline beside the page; the drawer has its own edge.
 
     // Quick switch between notebooks: the recent ones, the documentation, any other folder.
     BMenu {

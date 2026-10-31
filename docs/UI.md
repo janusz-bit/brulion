@@ -77,7 +77,9 @@ components — no Material/Fusion look, so all targets look identical.
 ## Window layout (`qml/Main.qml`, `qml/shell/AppShell.qml`)
 
 * **Wide (≥ 900 px):** `SplitView` — left **sidebar** | **top bar** + current view | optional
-  right **side panel**.
+  right **side panel**. One 1-px hairline between them: the split handle's (`BSplitHandle`, which
+  also highlights on hover and while dragging); the sidebar and the side panel draw no edge of
+  their own there (the drawer keeps its edge).
   * Sidebar (`ShellSidebar`): the notebook's name, the **Przełącz notatnik** button (the
     `repeat` icon; a menu of the recent notebooks — the current one checked, one click switches
     — then „Dokumentacja Brulionu” and „Otwórz inny notatnik…” (the start screen); a recent

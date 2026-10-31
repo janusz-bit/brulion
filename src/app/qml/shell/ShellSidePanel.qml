@@ -25,17 +25,10 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("Side panel")
 
-    Rectangle {
-        anchors.left: parent.left
-        width: 1
-        height: parent.height
-        color: Theme.border
-        z: 2
-    }
-
+    // No edge line of its own: the SplitView's handle (BSplitHandle) is the one hairline beside
+    // the page, and it carries the hover and drag highlight.
     ColumnLayout {
         anchors.fill: parent
-        anchors.leftMargin: 1
         spacing: 0
 
         Rectangle {
