@@ -29,7 +29,7 @@ FocusScope {
     property string taskStatus
     property string sourcePath
     property int line: -1
-    /// Smaller text (side panel).
+    /// Fewer lines before the text is cut (side panel).
     property bool compact: false
     /// Text of the action button on the right ("" = none).
     property string actionText
@@ -45,7 +45,9 @@ FocusScope {
     signal actionTriggered()
 
     readonly property bool closed: taskStatus === "done" || taskStatus === "cancelled"
-    readonly property int fontSize: compact ? Theme.textBase : Theme.textMd
+    // Quoted note text at the UI's base size everywhere, so the page's own editor text (textEditor)
+    // stays the only larger size and the scale has no step between the UI and the editor.
+    readonly property int fontSize: Theme.textBase
 
     implicitHeight: layout.implicitHeight + 2 * Theme.space2
     activeFocusOnTab: true

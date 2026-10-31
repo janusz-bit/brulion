@@ -40,7 +40,11 @@ components — no Material/Fusion look, so all targets look identical.
   installed family (Settings → Edytor → Czcionka → **Inna…**), the code font any monospaced
   family (code blocks, source mode, formulas, calculations; inline `code` in rendered text keeps
   Qt's own fixed font); line spacing Ciasny 1.45 | Normalny 1.65 | Luźny 1.9; configurable max
-  text width and text size.
+  text width and text size. One type scale: note text quoted outside the editor (linked
+  references, tagged blocks under a page and in the side panel, `ContentRefRow`) is in the
+  editor font at the UI's base size (`textBase`), so the editor's own text is the only larger
+  size; search results show the page title (semibold, `fg`) and the snippet (`fgMuted`) both in
+  the UI font at `textBase`, told apart by weight and colour.
 * Outliner look like Logseq: round bullets, thin vertical guide lines per nesting level, fold
   arrows, clicking a bullet zooms into the block (breadcrumb to zoom out; Enter in a zoomed
   heading or paragraph ends the zoom) — in outline mode; in document mode a note reads like an

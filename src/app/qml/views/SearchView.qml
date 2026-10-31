@@ -239,8 +239,9 @@ FocusScope {
                             // On the highlighted row the accent is too light: the text colour (the
                             // matches stay bold).
                             highlightColor: hit.highlighted ? Theme.fg : Theme.accentText
+                            // The snippet's size: weight and colour set the title apart.
                             font.weight: Theme.weightSemiBold
-                            font.pixelSize: Theme.textMd
+                            font.pixelSize: Theme.textBase
                         }
                         BText {
                             visible: hit.model.folder !== "" && !hit.journal
@@ -259,7 +260,6 @@ FocusScope {
                         positions: hit.model.excerptMatches
                         highlightColor: hit.highlighted ? Theme.fg : Theme.accentText
                         color: Theme.fgMuted
-                        font.family: Theme.fontEditor
                         font.pixelSize: Theme.textBase
                         wrapMode: Text.Wrap
                         maximumLineCount: 2
