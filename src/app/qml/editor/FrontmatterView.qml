@@ -111,10 +111,12 @@ Rectangle {
             font.pixelSize: Theme.textSm
             color: Theme.fgFaint
         }
+        // Desktop: the header's "+" (its tooltip names Ctrl+;). Touch UIs add from the panel's
+        // labelled last row, "+ Dodaj właściwość", in the same card: one add, not two.
         BIconButton {
             id: addButton
             objectName: "propertiesHeaderAdd"
-            visible: root.expanded && root.info.canAdd !== false && root.info.editable !== false
+            visible: !Theme.touchUi && root.expanded && root.info.canAdd !== false && root.info.editable !== false
             anchors.right: moreButton.left
             anchors.verticalCenter: parent.verticalCenter
             size: "small"

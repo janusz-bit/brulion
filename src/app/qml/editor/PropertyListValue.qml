@@ -5,7 +5,8 @@ import Brulion
 // PropertyListValue — the value of a list property in the properties panel (PropertyRow): its
 // items as chips — a list's [[links]] open their page, tags (#chips) their tag page, aliases
 // carry a bookmark — each with × (removes it, one undo step), then a "+" that turns into a
-// BSuggestField: Enter or "," adds what is typed (a pasted "a, b, c" adds three) and the field
+// BSuggestField (where the "+" would start a line of its own, or the list is empty, it is a
+// labelled "+ Dodaj tag" / "Dodaj alias" / "Dodaj element" text button: no lone "+"): Enter or "," adds what is typed (a pasted "a, b, c" adds three) and the field
 // stays for the next one; Backspace in the empty field removes the last chip; Ctrl+Z there undoes;
 // Escape closes it. What cannot be added (an alias with `|`, a tag that is none) is said under
 // the field; leaving the field then says it in a toast (the field closes). Suggestions: tags for tags, the notebook's values of the key and, after "[[",
@@ -33,6 +34,21 @@ Item {
     /// The add field is open.
     property bool adding: false
     readonly property alias field: addLoader.item
+    readonly property string addLabel: type === "tags" ? qsTr("Add tag") : type === "aliases" ? qsTr("Add alias") : qsTr("Add item")
+    /// The icon "+" would start a line alone (or stand alone: no items): the labelled button
+    /// shows instead. The chips' lines as the Flow places them (its height below).
+    readonly property bool addAlone: {
+        let x = 0
+        for (let i = 0; i < chips.children.length; ++i) {
+            const c = chips.children[i]
+            if (c === iconAdd || c === labelAdd || c === addLoader || !c.visible || c.width <= 0)
+                continue
+            if (x > 0 && x + c.width > chips.width)
+                x = 0
+            x += c.width + chips.spacing
+        }
+        return x === 0 || x + iconAdd.width > chips.width
+    }
 
     implicitHeight: chips.height
     height: implicitHeight
@@ -149,11 +165,26 @@ Item {
             }
         }
         BIconButton {
+            id: iconAdd
             objectName: "propertyListAdd"
-            visible: !root.readOnly && !root.adding
+            visible: !root.readOnly && !root.adding && !root.addAlone
             size: "small"
             iconName: "plus"
-            label: root.type === "tags" ? qsTr("Add tag") : root.type === "aliases" ? qsTr("Add alias") : qsTr("Add item")
+            label: root.addLabel
+            focusPolicy: Qt.NoFocus
+            onClicked: root.openAdd()
+        }
+        // On a line of its own: labelled, like the panel's "+ Dodaj właściwość".
+        BButton {
+            id: labelAdd
+            objectName: "propertyListAddLabelled"
+            visible: !root.readOnly && !root.adding && root.addAlone
+            variant: "ghost"
+            size: "small"
+            iconName: "plus"
+            text: root.addLabel
+            textColor: Theme.fgMuted
+            font.weight: Theme.weightNormal
             focusPolicy: Qt.NoFocus
             onClicked: root.openAdd()
         }
