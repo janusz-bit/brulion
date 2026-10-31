@@ -74,9 +74,10 @@ components — no Material/Fusion look, so all targets look identical.
     context — for pages and journals the tabs **Linki** (linked references and unlinked
     mentions), **Konspekt** (headings: a click scrolls to one, a right-click / long press copies
     its link `[[Strona#Nagłówek]]` or its embed), **Kalendarz** (month with journal days).
-* **Narrow (< 900 px, phones):** the sidebar becomes a `Drawer` (the ☰ button, the bottom bar's
-  Menu, or a swipe to the right from the left edge; a swipe to the left on the drawer or the
-  scrim closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
+* **Narrow (< 900 px, phones):** the sidebar becomes a `Drawer` (the bottom bar's **Menu**, or a
+  swipe to the right from the left edge; the top bar's ☰ only on a view whose own bar replaces
+  the bottom navigation — the drawing editor; a swipe to the left on the drawer or the scrim
+  closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
   navigation bars, and the sidebar's own insets (`topInset` = the SafeArea's top,
   `bottomInset` = `AppShell.navigationBar`) keep the notebook row and the sync footer clear of
   them — counted once: the Basic style pads a Drawer by the SafeArea margins itself, so the
@@ -91,8 +92,8 @@ components — no Material/Fusion look, so all targets look identical.
   scrolling Flickable); Android's text selection handles are windows of their own above the app.
   While typing or selecting blocks (the keyboard up or an editing toolbar docked, also on the
   bottom navigation after the keyboard went) there is no strip: the drawer took the drag of the
-  selection's start grip, which lies at the left edge (☰ still opens it, a swipe on it still
-  closes it).
+  selection's start grip, which lies at the left edge (Menu still opens it once the keyboard went
+  — Back, then Menu —, ☰ in the drawing editor, a swipe on it still closes it).
   Nor on a view that swipes sideways from the left edge itself (the view's `edgeSwipe`,
   `ShellRouteView.viewEdgeSwipe`): the calendar's week and month grids reach that edge and a
   swipe to the right there shows the previous period; the agenda keeps the strip. While the
@@ -100,10 +101,16 @@ components — no Material/Fusion look, so all targets look identical.
   the drawer closes it instead of turning the period underneath. In a mobile browser
   (WebAssembly) nothing reports the system's zones, so the strip lies at the very edge, where
   Android's gesture navigation or the browser's own edge swipe (iOS Safari) may take the swipe
-  for "back" first — ☰ and the bottom bar's Menu open the drawer there. The strip follows the
+  for "back" first — the bottom bar's Menu opens the drawer there. The strip follows the
   UI mode (`Theme.touchUi`), not the pointer: a mouse or touchpad in a touch UI (a narrow window
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
-  touch UI it is Qt's default (the start-drag distance); the top bar keeps ☰, back (when there is history), title, Szukaj and Więcej;
+  touch UI it is Qt's default (the start-drag distance); the top bar keeps back (when there is
+  history), title, Szukaj and Więcej — no ☰ while the narrow layout has its bottom navigation,
+  whose Menu opens the same drawer (`ShellTopBar.menuButtonShown`, bound to the layout and not
+  to the keyboard, so the title never moves when the keyboard opens; ☰ comes back where a view
+  replaces the bottom bar, `viewReplacesBottomNav`: the drawing editor); with no button before
+  it the title starts on the views' content edge (`Theme.space3` below 600 px, the editor's
+  compact padding, `Theme.space4` up to 900 px);
   a **bottom navigation** bar: Dziennik, Kalendarz, Szukaj, Zadania by default — four views
   chosen in Settings → Wygląd → Układ, sharing the width —, then **+ Notatka** (quick capture:
   a fixed 56 px item whose "+" sits in a small ringed pill, the old floating button's popup

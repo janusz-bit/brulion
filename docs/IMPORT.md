@@ -1,6 +1,6 @@
 # Import notatek z innych aplikacji
 
-Ekran importu (**Więcej → Importuj notatki**, na telefonie też z szuflady ☰) przyjmuje pliki,
+Ekran importu (**Więcej → Importuj notatki**, na telefonie też z szuflady — **Menu** na dolnym pasku) przyjmuje pliki,
 archiwa ZIP i całe foldery. Wybierz aplikację, z której pochodzą notatki — pod jej nazwą są
 kroki eksportu — albo od razu wskaż pliki: Brulion sam rozpozna format. Przed zapisem pokazuje
 podgląd (strony, notatki dzienne, załączniki, zmienione nazwy, ostrzeżenia), a po imporcie raport.

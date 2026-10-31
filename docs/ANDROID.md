@@ -193,7 +193,7 @@ telefonów: <https://dontkillmyapp.com>.
 
 ## Import notatek (Obsidian, Logseq, Notion…)
 
-Gdzie: **Więcej (⋮) → Importuj notatki**, **☰ → Importuj notatki** (szuflada), przycisk
+Gdzie: **Więcej (⋮) → Importuj notatki**, **Menu → Importuj notatki** (szuflada), przycisk
 **Importuj notatki** pod pustym dziennikiem nowego notatnika i karta „Notatki w innej aplikacji?”
 na ekranie powitalnym (otwiera wybrany notatnik od razu na ekranie importu). Na ekranie importu
 wybierz aplikację, z której pochodzą notatki — pod jej opisem są kroki **na telefonie** (gdzie
@@ -488,7 +488,7 @@ klawiatura pływająca i prawdziwe telefony nie były sprawdzane.
 
 ## Boczne menu gestem
 
-Szufladę z drzewem stron otwiera — oprócz ☰ i „Menu” na dolnym pasku — przesunięcie palca
+Szufladę z drzewem stron otwiera — oprócz „Menu” na dolnym pasku — przesunięcie palca
 w prawo od lewej krawędzi ekranu; przesunięcie w lewo na szufladzie albo na przyciemnionym tle ją
 zamyka (docs/UI.md „Window layout”). Przy **nawigacji gestami** (Android 10+) system zabiera
 przesunięcie zaczęte przy samej krawędzi na gest „Wstecz” (pas ~30 dp, szerszy przy wyższej
@@ -496,10 +496,12 @@ czułości gestu „Wstecz” w ustawieniach systemu), więc palec trzeba poło�
 krawędzi: pas aplikacji (24 dp) zaczyna się tuż za strefą systemu. Przy nawigacji przyciskami
 pas leży przy samej krawędzi. Podczas pisania i zaznaczania bloków oraz na siatce tygodnia
 i miesiąca w kalendarzu (tam przesunięcie w prawo od krawędzi pokazuje poprzedni okres) gest nie
-otwiera szuflady (wtedy ☰). Pas zależy od trybu interfejsu, nie od wskaźnika: mysz albo touchpad
+otwiera szuflady (wtedy „Menu”: przy klawiaturze najpierw Wstecz). Pas zależy od trybu interfejsu, nie od wskaźnika: mysz albo touchpad
 w interfejsie dotykowym (np. telefon z myszą) też go dostaje. W przeglądarce na telefonie
 (WebAssembly) nikt nie zgłasza stref systemu: pas leży przy samej krawędzi, gdzie gest „Wstecz”
-systemu albo przeglądarki może przejąć przesunięcie — szufladę otwiera wtedy ☰ albo „Menu”.
+systemu albo przeglądarki może przejąć przesunięcie — szufladę otwiera wtedy „Menu”. Górny
+pasek na telefonie nie ma przycisku ☰, bo „Menu” na dolnym pasku otwiera tę samą szufladę; ☰
+wraca tylko w edytorze rysunku, którego pasek narzędzi zastępuje dolną nawigację.
 
 Jak to działa:
 
@@ -516,7 +518,7 @@ Jak to działa:
   Androida nad aplikacją — pas ich nie dotyczy. Podczas pisania i zaznaczania bloków (klawiatura
   albo zadokowany pasek edycji, także nad dolną nawigacją po schowaniu klawiatury) pasa nie ma:
   szuflada przejmowała przeciąganie uchwytu początku zaznaczenia bloków, który leży przy lewej krawędzi;
-  ☰ nadal ją otwiera. Z tego samego powodu pasa nie ma na widoku, który sam przesuwa w bok od
+  „Menu” nadal ją otwiera (przy klawiaturze po Wstecz). Z tego samego powodu pasa nie ma na widoku, który sam przesuwa w bok od
   lewej krawędzi (`edgeSwipe` widoku: siatki tygodnia i miesiąca w kalendarzu — przesunięcie od
   krawędzi należy do nich). Gdy szuflada jest otwarta, przesuwanie siatek jest wyłączone
   (`covered`), żeby przesunięcie w lewo zamykało szufladę, a nie zmieniało okresu pod nią.

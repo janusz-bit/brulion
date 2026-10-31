@@ -39,7 +39,7 @@ Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na ka�
 - **Alt+←** / **Alt+→** — wstecz i dalej, jak w przeglądarce.
 
 ## Pasek boczny
-Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf i Szukaj. Niżej ulubione strony, ostatnio otwarte oraz drzewo folderów. Na telefonie pasek boczny otwiera przycisk ☰ lub „Menu” w dolnej nawigacji.
+Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf i Szukaj. Niżej ulubione strony, ostatnio otwarte oraz drzewo folderów. Na telefonie pasek boczny otwiera „Menu” w dolnej nawigacji albo przesunięcie palca od lewej krawędzi ekranu (w edytorze rysunku, gdzie dolnej nawigacji nie ma, przycisk ☰ w górnym pasku).
 
 ## Foldery
 Foldery porządkują strony jak katalogi na dysku: strona `Projekty/Dom` to plik `Dom.md` w folderze `Projekty`.

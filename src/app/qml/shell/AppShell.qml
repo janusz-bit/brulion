@@ -7,8 +7,9 @@ import Brulion
 // AppShell — the main UI once a vault is open (docs/UI.md "Window layout").
 //
 // Wide (≥ 900 px): SplitView — sidebar | top bar + current view | optional side panel.
-// Narrow: the sidebar is a Drawer (the menu button, or a swipe from the left edge — on touch UIs
-// from a strip beyond the zone Android's gesture navigation keeps for "back") and a bottom
+// Narrow: the sidebar is a Drawer (the bottom navigation's Menu, or a swipe from the left edge — on
+// touch UIs from a strip beyond the zone Android's gesture navigation keeps for "back"; the top
+// bar's ☰ only on a view that replaces the bottom navigation, the drawing editor) and a bottom
 // navigation bar with quick capture ("+ Notatka") before Menu; the Android back key walks back through
 // AppController's history and only lets the app close from the home view.
 //
@@ -347,6 +348,11 @@ FocusScope {
                 crumbs: shell.crumbs
                 topInset: shell.safe.top
                 sidebarVisible: shell.sidebarVisible
+                // One way to the drawer: the bottom navigation's Menu. ☰ only where a view has its
+                // own bar instead (the drawing editor). The layout decides, not the keyboard
+                // (bottomNavShown), so the title does not move when the keyboard opens; while it is
+                // up the drawer is one Back away (the keyboard goes, the bottom bar comes back).
+                menuButtonShown: !(Theme.narrow && !routeView.viewReplacesBottomNav)
                 picture: routeView.viewPicture
                 pictureAsText: routeView.viewPictureAsText
                 onMenuClicked: drawer.open()
@@ -438,7 +444,8 @@ FocusScope {
         // the drag of the selection's start grip, which lies at the left edge (its MouseArea's
         // preventStealing did not stop it). Nor on a view that swipes sideways from that edge
         // itself (`edgeSwipe`: the calendar's week and month grids, to the previous period): a
-        // swipe there is the view's. The ☰ button still opens it, a swipe on it still closes it. The strip follows
+        // swipe there is the view's. The bottom navigation's Menu (☰ where a view replaces that bar)
+        // still opens it, a swipe on it still closes it. The strip follows
         // the UI mode, not the pointer: a mouse in a touch UI gets it too.
         dragMargin: !Theme.touchUi ? Application.styleHints.startDragDistance
                     : shell.typing || routeView.viewEdgeSwipe ? 0

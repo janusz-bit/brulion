@@ -65,6 +65,7 @@ namespace {
 using uidriver::closeMenus;
 using uidriver::enclosingFlickable;
 using uidriver::findShown;
+using uidriver::hasAncestor;
 using uidriver::isA;
 using uidriver::linkPoint;
 using uidriver::openMenus;
@@ -213,7 +214,7 @@ using Check = std::function<void(bool, const char *)>;
 ///      sideways from there, so on them there is no strip — a finger that starts at the edge (or,
 ///      with Android's back zone, just beyond it) and moves right shows the previous period, the
 ///      drawer stays closed. The drag is not a fast flick: such a swipe once did nothing (its
-///      length was read after Qt had reset it). ☰ still opens the drawer, a swipe on it closes it
+///      length was read after Qt had reset it). Menu still opens the drawer, a swipe on it closes it
 ///      (the grid under it took that swipe); the agenda (a vertical list) has the strip. Runs on
 ///      the calendar `calendarView` shows, switched between its modes and back, the drawer
 ///      closed.
@@ -1257,9 +1258,10 @@ void checkNotebookSwitcher(QQuickWindow *window, AppController *app, const Check
 /// strip starts beyond that zone. What the strip must not take: a vertical scroll, a swipe that
 /// starts farther in, a tap on what lies under it, the drag of a selection grip lying in it (no
 /// strip while blocks are selected or the keyboard is up; a swipe still closes the drawer). Runs
-/// on a page (Remont mieszkania) with the drawer closed and stays there, without navigating: a
-/// view the shell leaves waits for its deferred deletion, which never comes while the self-test
-/// runs, and later findChild() calls would find its items.
+/// on a page (Remont mieszkania) with the drawer closed and stays there, without leaving the page
+/// view (the back button's check goes to another page and back, which keeps the view): a view the
+/// shell leaves waits for its deferred deletion, which never comes while the self-test runs, and
+/// later findChild() calls would find its items.
 void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer, const Check &check)
 {
     QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
@@ -1364,18 +1366,33 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
     touchDrag(window, QPointF(margin() + 60, y), QPointF(window->width() * 0.5, 0));
     settle(400);
     check(closed(), "a swipe started beyond the edge strip does not open the drawer");
-    // The top bar's menu button lies in the strip: a tap there is the button's (it opens the
-    // drawer — by a tap, not a swipe).
-    QQuickItem *menuButton =
-            findShown(window->contentItem(), [](QQuickItem *item) { return item->objectName() == u"topBarMenu"; });
-    const QPointF inStrip = menuButton ? QPointF(margin() / 2, pointIn(menuButton).y()) : QPointF();
-    if (menuButton && menuButton->contains(menuButton->mapFromScene(inStrip))) {
+    // The top bar's first button lies in the strip — back (no ☰ while the bottom navigation has
+    // Menu): a tap there is the button's, not the drawer's. Back leads from another page to this
+    // one, so the page view stays (only its page changes).
+    const QString page = app->currentRoute().value(u"path"_s).toString();
+    const auto onPage = [app](const QString &path) {
+        return app->currentView() == u"page" && app->currentRoute().value(u"path"_s).toString() == path;
+    };
+    app->openPage(u"Książki 2026.md"_s);
+    check(waitFor([&] { return onPage(u"Książki 2026.md"_s); }) && app->canGoBack(),
+          "another page opens over this one, with history");
+    QQuickItem *backButton = nullptr;
+    waitFor([&] {
+        backButton = findShown(window->contentItem(), [](QQuickItem *item) {
+            return isA(item, "BIconButton") && item->property("iconName").toString() == u"arrow-left"
+                   && hasAncestor(item, "ShellTopBar");
+        });
+        return backButton != nullptr;
+    });
+    const QPointF inStrip = backButton ? QPointF(margin() / 2, pointIn(backButton).y()) : QPointF();
+    if (backButton && backButton->contains(backButton->mapFromScene(inStrip))) {
         touchTap(window, inStrip);
-        check(waitFor(opened, 3000), "a tap in the edge strip reaches the button under it");
-        sendKey(window, Qt::Key_Escape);
-        waitFor(closed);
+        check(waitFor([&] { return onPage(page); }, 3000) && closed(),
+              "a tap in the edge strip reaches the button under it (back), the drawer stays closed");
     } else {
-        check(false, "the top bar's menu button lies in the edge strip");
+        check(false, "the top bar's back button lies in the edge strip");
+        app->openPage(page);
+        waitFor([&] { return onPage(page); });
     }
 
     check(app->currentView() == u"page" && closed(), "the page is still shown, the drawer closed");
@@ -1536,13 +1553,24 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
                 : "a click on a page in the sidebar opens it, without a menu");
     if (narrow) {
         check(waitFor(drawerClosed), "opening a page from the drawer closes it");
-        // Through the top bar's menu button: a long press opens the row's context menu.
-        QQuickItem *menuButton = findNamed(u"topBarMenu"_s);
-        check(menuButton != nullptr, "the top bar has a menu button");
-        if (!menuButton)
+        // One way to the drawer while the bottom navigation is there: its Menu, no ☰ in the top
+        // bar (the drawing editor, whose bar replaces the bottom navigation, keeps ☰:
+        // checkDrawing). With no button before it the title starts on the content edge; the page
+        // has history, so back leads.
+        check(findNamed(u"topBarMenu"_s) == nullptr && findNamed(u"bottomNav_menu"_s) != nullptr,
+              "on a phone the top bar has no menu button while the bottom navigation has Menu");
+        if (QQuickItem *topBar = findType("ShellTopBar")) {
+            check(topBar->property("leadingButton").toBool() == app->canGoBack(),
+                  "the top bar's back button leads only with history");
+        } else {
+            check(false, "the top bar is shown");
+        }
+        // Through the bottom navigation's Menu: a long press opens the row's context menu.
+        QQuickItem *menuTab = findNamed(u"bottomNav_menu"_s);
+        if (!menuTab)
             return;
-        activate(menuButton);
-        check(waitFor(drawerOpen), "the top bar's menu button opens the drawer");
+        activate(menuTab);
+        check(waitFor(drawerOpen), "the bottom bar's Menu opens the drawer again");
         checkEmptyFolder();
         if (QQuickItem *pageRow = treeRow(page)) {
             openMenuOn(pageRow);
@@ -2937,6 +2965,23 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     if (phone) {
         check(nav && waitFor([&] { return !nav->isVisible(); }),
               "the drawing's tool bar at the bottom: the bottom navigation makes way");
+        // With the bottom navigation's Menu gone, the top bar's ☰ is the button to the drawer.
+        QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
+        QQuickItem *menuButton = nullptr;
+        waitFor([&] {
+            menuButton = uidriver::topmost(window, [](QQuickItem *i) { return i->objectName() == u"topBarMenu"; });
+            return menuButton != nullptr;
+        });
+        check(menuButton && drawer, "where the drawing's bar replaces the bottom navigation the top bar shows ☰");
+        if (menuButton && drawer) {
+            tapOrClick(window, pointIn(menuButton), touch);
+            check(waitFor([drawer] { return drawer->property("opened").toBool(); }, 3000),
+                  "the drawing editor's ☰ opens the drawer");
+            QMetaObject::invokeMethod(drawer, "close");
+            check(waitFor([drawer] { return !drawer->property("visible").toBool(); }, 3000)
+                          && app->currentRoute().value(u"view"_s).toString() == u"drawing",
+                  "the drawer closes over the drawing editor, still open");
+        }
         // A phone held upright: every tool, the swatch, "Więcej" and Gotowe on screen (two lines),
         // none behind the bar's edge.
         QStringList hidden;
