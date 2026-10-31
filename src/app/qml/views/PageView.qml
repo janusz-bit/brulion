@@ -515,7 +515,9 @@ FocusScope {
             iconName: "list-todo"
             onTriggered: AppController.navigate({ view: "tasks", query: root.pageHeader.tagQuery(root.pageHeader.tagInfo.key) })
         }
+        // The note mode (also the header's toggle on a wide header, Więcej, the palette).
         BMenuItem {
+            objectName: "pageMenuNoteMode"
             text: page.documentMode ? qsTr("Switch to outline") : qsTr("Switch to document")
             iconName: page.documentMode ? "list" : "file-text"
             enabled: page.loaded

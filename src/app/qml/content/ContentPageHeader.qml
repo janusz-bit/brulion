@@ -9,8 +9,12 @@ import Brulion
 // notes, the folder breadcrumb in the side panel (the shell's top bar shows it otherwise), and
 // the page's aliases and tags as chips — from the page's properties, editable there: a chip's menu
 // (a right-click, a long press) removes one, "+" adds a tag or an alias (the editor shows all
-// properties in its "Właściwości" panel, docs/UI.md "Page properties"). Next to the star: the note mode toggle (document / outline; its icon
-// shows the current mode, a click asks for the other one: modeToggleRequested). An empty page
+// properties in its "Właściwości" panel, docs/UI.md "Page properties"). Next to the star, on a wide
+// header: the note mode toggle (document / outline; its icon shows the current mode, a click asks
+// for the other one: modeToggleRequested) — a small header (phones, the side panel) leaves it to
+// the page menu ⋯, the top bar's Więcej and the palette. The page actions (the star, the menu)
+// stand at the end of the title row; a page without one (it starts with its own "# Title") puts
+// them at the end of its chips' first line, else on a row of their own. An empty page
 // gets a "Start writing" button; a page that does not exist yet says that typing creates it.
 // A page named by a tag that is in use (docs/SYNTAX.md §3: #tag is a link to this page) gets, at
 // every width, "Widok tagu" (the tag overview) as a "#" button among the page actions, "Zadania z
@@ -63,6 +67,11 @@ Item {
     readonly property var folderParts: summary.folderParts || []
     readonly property bool favorite: Workspace.favorites.some(f => f.path === header.path)
     readonly property bool showTitle: !startsWithTitle || journal
+    /// The side panel's folder breadcrumb row is shown (it carries the page actions then).
+    readonly property bool breadcrumbRow: inSidePanel && folderParts.length > 0
+    /// No title row and no other row for the page actions: they stand at the end of the aliases'
+    /// and tags' first line, beside the chips (without chips they keep a row of their own).
+    readonly property bool actionsWithChips: !showTitle && !breadcrumbRow && chips.visible
     /// The tag that names this page ({ key, text, references, subTags }), or {}.
     readonly property var tagInfo: summary.tag || ({})
     /// That tag is in use (tagged blocks or sub-tags): Widok tagu among the page actions, Zadania
@@ -219,7 +228,8 @@ Item {
             }
             BIconButton {
                 objectName: "noteModeToggle"
-                visible: header.loaded
+                // A small header leaves it to the page menu ⋯ (also the top bar's Więcej, the palette).
+                visible: header.loaded && !header.small
                 iconName: header.documentMode ? "file-text" : "list"
                 label: header.documentMode ? qsTr("Document mode") : qsTr("Outline mode")
                 // The name says the current mode; screen readers also hear what a press does.
@@ -259,14 +269,14 @@ Item {
         // ---- Day navigation / folder (side panel) · favourite · menu ---------------------------------
         // Pages show their folders in the shell's top bar; the side panel has none. The star and
         // the menu go here when there is no title row to carry them (daily notes, a page that
-        // starts with its own "# Title").
+        // starts with its own "# Title" and has no chips to stand beside: actionsWithChips).
         RowLayout {
-            visible: header.journal || !header.showTitle || (header.inSidePanel && header.folderParts.length > 0)
+            visible: header.journal || (!header.showTitle && !header.actionsWithChips) || header.breadcrumbRow
             Layout.fillWidth: true
             spacing: 2
 
             BBreadcrumb {
-                visible: !header.journal && header.inSidePanel && header.folderParts.length > 0
+                visible: !header.journal && header.breadcrumbRow
                 Layout.fillWidth: true
                 rootIcon: "folder"
                 model: header.folderParts.map(p => ({ title: p.title }))
@@ -296,11 +306,11 @@ Item {
                 }
             }
             Item {
-                visible: header.journal || !(header.inSidePanel && header.folderParts.length > 0)
+                visible: header.journal || !header.breadcrumbRow
                 Layout.fillWidth: true
             }
             Loader {
-                active: header.journal || !header.showTitle
+                active: header.journal || (!header.showTitle && !header.actionsWithChips)
                 visible: active
                 sourceComponent: pageActions
             }
@@ -407,7 +417,8 @@ Item {
         // once), else from the index's summary. A chip from a property has a menu (a right-click, a
         // long press; an alias's tap too): a tag's page or "Usuń z tej strony", an alias copied or
         // removed. "+" at the end of the row adds a tag or an alias in a field there (or opens the
-        // properties panel's add row).
+        // properties panel's add row). Without a title row the page actions stand at the end of
+        // the first line (chipsActions): the chips wrap short of them.
         Flow {
             id: chips
             objectName: "pageHeaderChips"
@@ -426,7 +437,18 @@ Item {
             visible: (aliases.length + tags.length > 0 || adding !== "") && !panelOpen
             Layout.fillWidth: true
             Layout.topMargin: Theme.space1
+            Layout.rightMargin: header.actionsWithChips && chipsActions.item ? chipsActions.width + Theme.space2 : 0
             spacing: Theme.space1
+            /// The height of the first line (the page actions are centred on it).
+            readonly property real firstLineHeight: {
+                let tallest = 0
+                for (let i = 0; i < chips.children.length; ++i) {
+                    const c = chips.children[i]
+                    if (c.visible && c.width > 0 && c.y < 1)
+                        tallest = Math.max(tallest, c.height)
+                }
+                return tallest
+            }
 
             Repeater {
                 model: chips.aliases
@@ -484,7 +506,7 @@ Item {
                 id: chipsField
                 active: chips.adding !== ""
                 visible: active
-                width: active ? Math.min(240, header.textWidth) : 0
+                width: active ? Math.min(240, chips.width) : 0
                 sourceComponent: BSuggestField {
                     id: chipField
                     objectName: "pageHeaderField"
@@ -572,5 +594,17 @@ Item {
             text: qsTr("Start writing")
             onClicked: header.editor.startEditing(header.controller.appendEmptyBlock(), -1)
         }
+    }
+
+    // The page actions at the end of the chips' first line (actionsWithChips): beside the column,
+    // not in it, so the chips keep their place in the column (one pageActions is active at a time:
+    // it sets menuAnchor).
+    Loader {
+        id: chipsActions
+        active: header.actionsWithChips
+        visible: active
+        x: column.x + column.width - width
+        y: column.y + chips.y + Math.max(0, (chips.firstLineHeight - height) / 2)
+        sourceComponent: pageActions
     }
 }

@@ -1383,6 +1383,11 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
     touchDrag(window, QPointF(margin() + 60, y), QPointF(window->width() * 0.5, 0));
     settle(400);
     check(closed(), "a swipe started beyond the edge strip does not open the drawer");
+    // (A sideways swipe on a block's text that ends on it is a tap there — BlockText's
+    // ReleaseWithinBounds — and edits the block, which takes the strip away: end it.)
+    if (editor && editor->property("toolbarMode").toString() == u"block")
+        QMetaObject::invokeMethod(editor, "stopEditing", Q_ARG(QVariant, false));
+    waitFor([&] { return margin() > 0; });
     // The top bar's first button lies in the strip — back (no ☰ while the bottom navigation has
     // Menu): a tap there is the button's, not the drawer's. Back leads from another page to this
     // one, so the page view stays (only its page changes).
@@ -4828,9 +4833,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             QMetaObject::invokeMethod(page, "save", qReturnArg(saved));
             check(saved && app->workspace()->readFile(guide).contains(u"żeby edytować. Żółw ąę"_s), "the edit is saved to the file");
 
-            // The note mode: the guide is a document; the header's toggle (a real click or tap)
-            // makes it an outline, the "Toggle note mode" command a document again — each switch
-            // rewrites only the `brulion:` line of the file.
+            // The note mode: the guide is a document; the header's toggle (a real click or tap; on
+            // a small header — a phone — the page menu's item instead: the toggle is not among the
+            // page actions there) makes it an outline, the "Toggle note mode" command a document
+            // again — each switch rewrites only the `brulion:` line of the file.
             {
                 const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
                 QMetaObject::invokeMethod(page, "stopEditing");
@@ -4842,13 +4848,39 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     if (t->isVisible() && editor->isAncestorOf(t))
                         toggle = t;
                 }
+                QQuickItem *pageHeader = findShown(window->contentItem(), [&](QQuickItem *item) {
+                    return isA(item, "ContentPageHeader") && item->property("path").toString() == guide;
+                });
+                const bool smallHeader = pageHeader && pageHeader->property("small").toBool();
                 const QString before = app->workspace()->readFile(guide);
                 const auto withKey = [&before](const QString &mode) {
                     return QString(before).replace(u"\nbrulion: document\n"_s, u"\nbrulion: "_s + mode + u'\n');
                 };
-                check(page->property("mode").toString() == u"document" && toggle != nullptr,
-                      "the guide is a document with a mode toggle in its header");
-                if (toggle) {
+                check(page->property("mode").toString() == u"document" && pageHeader != nullptr
+                              && (smallHeader ? toggle == nullptr : toggle != nullptr),
+                      smallHeader ? "the guide is a document; a small header leaves the mode toggle to the page menu"
+                                  : "the guide is a document with a mode toggle in its header");
+                if (smallHeader) {
+                    auto *menuButton = pageHeader->property("menuAnchor").value<QQuickItem *>();
+                    if (menuButton)
+                        tapOrClick(window, pointIn(menuButton), touch);
+                    QQuickItem *modeItem = nullptr;
+                    check(waitFor([&] {
+                              modeItem = findShown(window->contentItem(), [](QQuickItem *item) {
+                                  return item->objectName() == u"pageMenuNoteMode";
+                              });
+                              return modeItem != nullptr;
+                          }),
+                          "the page menu offers the note mode");
+                    if (modeItem) {
+                        tapOrClick(window, pointIn(modeItem), touch);
+                        check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
+                                      && app->workspace()->readFile(guide) == withKey(u"outline"_s),
+                              "the page menu's item switches to an outline, writing only the mode");
+                    } else {
+                        closeMenus(window);
+                    }
+                } else if (toggle) {
                     tapOrClick(window, toggle->mapToScene(QPointF(toggle->width() / 2, toggle->height() / 2)), touch);
                     check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
                                   && app->workspace()->readFile(guide) == withKey(u"outline"_s),

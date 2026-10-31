@@ -15,7 +15,7 @@ Ta strona jest dokumentem; [[Zadania|Zadania]] też. Dziennik domyślnie jest ko
 
 ## Wybór i przełączanie trybu
 - Przy tworzeniu strony (Ctrl+N) wybierasz tryb w oknie.
-- Później przełączysz go ikoną obok tytułu, w menu strony („Przełącz na dokument” / „Przełącz na konspekt”) albo poleceniem „Przełącz tryb notatki” w palecie.
+- Później przełączysz go na komputerze ikoną obok tytułu, a wszędzie w menu strony **⋯** („Przełącz na dokument” / „Przełącz na konspekt”) albo poleceniem „Przełącz tryb notatki” w palecie; na telefonie ikony obok tytułu nie ma — tryb zmienisz w menu strony.
 - Domyślne tryby nowych stron i dziennika ustawisz w *Ustawienia → Notatnik*.
 - Wybór zapisuje się w samej notatce jako właściwość `brulion: document` albo `brulion: outline`, więc na każdym urządzeniu wygląda tak samo.
 - Notatki bez tego klucza zgadują tryb po zawartości: strona z samych punktów otwiera się jako konspekt, strona z nagłówków i akapitów jako dokument.
