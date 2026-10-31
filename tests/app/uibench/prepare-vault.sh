@@ -14,7 +14,11 @@
 # Environment: BRULION_BIN (default build/src/app/brulion), NOW (default "2026-10-14 10:00"),
 # UIBENCH_CACHE (the Calendar plugin's files; default ~/.cache/brulion-uibench), UIBENCH_FONTS
 # (fonts.conf for the seeding run), UIBENCH_DRY=1 (print the commands only).
-# --no-obsidian: no Obsidian copy (lint.sh; no download).
+# --no-obsidian: no Obsidian copy (lint.sh, Brulion-only runs; no download): an existing
+# vault-obsidian/ — the notebook as Obsidian left it after its shots — stays as it is.
+# The Calendar plugin is fetched into the cache and checked against obsidian/plugins.sha256; when
+# it cannot be (no network, other files), the vault gets no plugin and Obsidian's calendar pairs
+# are n/a (the driver records it) — the rest of the bench goes on.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../../.." && pwd)"
@@ -72,26 +76,42 @@ else
 fi
 
 # 4. The copies.
-uibench_run rm -rf "$out/vault-brulion" "$out/vault-obsidian"
-uibench_run mkdir -p "$out/vault-brulion" "$out/vault-obsidian"
+uibench_run rm -rf "$out/vault-brulion"
+uibench_run mkdir -p "$out/vault-brulion"
 uibench_run cp -a "$pristine" "$out/vault-brulion/"
+
+# The Calendar plugin's files in the cache, checked; fetched (again) when missing or not matching.
+plugin_ok() { (cd "$1" && grep -v '^#' "$here/obsidian/plugins.sha256" | sha256sum -c --quiet - >/dev/null 2>&1); }
+fetch_plugin() {
+  local dir=$1 f
+  plugin_ok "$dir" && return 0
+  rm -rf "$dir" "$dir.part"
+  mkdir -p "$dir.part"
+  for f in main.js manifest.json; do
+    curl -fsSL --retry 3 -o "$dir.part/$f" \
+      "https://github.com/liamcain/obsidian-calendar-plugin/releases/download/1.5.10/$f" || break
+  done
+  if plugin_ok "$dir.part"; then
+    mv "$dir.part" "$dir"
+    return 0
+  fi
+  rm -rf "$dir.part"
+  return 1
+}
+
 if [[ $obsidian == 1 ]]; then
+  uibench_run rm -rf "$out/vault-obsidian"
+  uibench_run mkdir -p "$out/vault-obsidian"
   uibench_run cp -a "$pristine" "$out/vault-obsidian/"
   uibench_run rm -rf "$out/vault-obsidian/$name/.brulion"
   plugin="$cache/calendar-1.5.10"
-  if [[ "${UIBENCH_DRY:-0}" != 1 ]]; then
-    mkdir -p "$plugin"
-    for f in main.js manifest.json; do
-      [[ -s "$plugin/$f" ]] || curl -fsSL --retry 3 -o "$plugin/$f" \
-        "https://github.com/liamcain/obsidian-calendar-plugin/releases/download/1.5.10/$f"
-    done
-    (cd "$plugin" && grep -v '^#' "$here/obsidian/plugins.sha256" | sha256sum -c --quiet -) || {
-      echo "prepare-vault: the Calendar plugin's files do not match obsidian/plugins.sha256" >&2
-      exit 1
-    }
-  fi
   dot="$out/vault-obsidian/$name/.obsidian"
-  uibench_run mkdir -p "$dot/plugins/calendar"
+  uibench_run mkdir -p "$dot"
   uibench_run cp "$here/obsidian/daily-notes.json" "$here/obsidian/community-plugins.json" "$dot/"
-  uibench_run cp "$plugin/main.js" "$plugin/manifest.json" "$dot/plugins/calendar/"
+  if [[ "${UIBENCH_DRY:-0}" == 1 ]] || { mkdir -p "$cache" && fetch_plugin "$plugin"; }; then
+    uibench_run mkdir -p "$dot/plugins/calendar"
+    uibench_run cp "$plugin/main.js" "$plugin/manifest.json" "$dot/plugins/calendar/"
+  else
+    echo "prepare-vault: no Calendar plugin matching obsidian/plugins.sha256 (download failed or changed): Obsidian's calendar pairs will be n/a" >&2
+  fi
 fi

@@ -13,6 +13,12 @@
 #                           with a fresh copy of the vault folder VAULT, offscreen + software
 #                           (RENDER offscreen) or on the X server of $DISPLAY with OpenGL (RENDER
 #                           xcb-gl). FONTCONFIG_FILE is passed on when UIBENCH_FONTS is set.
+#   uibench_config_hash SCREENS OUT DRIVER VERSION NOW
+#                           the bench configuration's hash (the manifest's benchConfigHash; Obsidian
+#                           shots are reused only under the same one): screens.json without
+#                           Brulion's arguments, OUT/env/{vault,overlay}.sha256 (the notes),
+#                           OUT/env/fonts.conf (without its cache folder), the Obsidian driver
+#                           DRIVER, Obsidian's VERSION and the clock NOW.
 
 uibench_run() {
   if [[ "${UIBENCH_DRY:-0}" == 1 ]]; then
@@ -76,4 +82,23 @@ uibench_brulion_shot() {
   uibench_run env "${env[@]}" "$bin" --vault "$vault" "$@" --no-single-instance --size "${w}x${h}" \
     --scale "$scale" "${extra[@]}" --theme "$theme" --locale pl --now "$now" --delay "$delay" \
     --screenshot "$png" --dump-layout "$dump"
+}
+
+uibench_config_hash() {
+  node -e '
+const fs = require("node:fs"), crypto = require("node:crypto"), path = require("node:path");
+const [screens, out, driver, version, now] = process.argv.slice(1);
+const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
+const m = JSON.parse(read(screens));
+const parts = [
+  JSON.stringify({ ...m, screens: m.screens.map(({ brulion, ...rest }) => rest) }),
+  read(path.join(out, "env/vault.sha256")),
+  read(path.join(out, "env/overlay.sha256")),
+  read(path.join(out, "env/fonts.conf")).split("\n").filter((l) => !l.includes("<cachedir>")).join("\n"),
+  crypto.createHash("sha256").update(read(driver)).digest("hex"),
+  version,
+  now,
+];
+console.log(crypto.createHash("sha256").update(parts.join("\n---\n")).digest("hex"));
+' "$@"
 }

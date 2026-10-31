@@ -11,20 +11,26 @@
 #   UIMETRICS_BIN (default ${BRULION_BUILD_DIR:-build}/tests/app/uibench/brulion-uimetrics),
 #   NOW (default screens.json "now"), OBSIDIAN_VERSION (1.14.4), OBSIDIAN_SHA256 (its AppImage's),
 #   UIBENCH_CACHE (default ~/.cache/brulion-uibench: the AppImage, its extraction, the Calendar
-#   plugin), BRULION_GIT_REV / BRULION_GIT_DIRTY (the manifest's revision when the tree has no
-#   .git, e.g. on the laptop after scripts/remote-build.sh).
+#   plugin; each is checked before use and fetched again when it is not whole),
+#   BRULION_GIT_REV / BRULION_GIT_DIRTY (true|false: the manifest's revision when the tree has no
+#   .git, e.g. on the laptop after scripts/remote-build.sh; without them it says "unknown").
 #
 # Output in DIR: env/ (fonts.conf, the vault's hashes, the seed), vault-*/ (the notebook),
 # shots/brulion/<id>-<size>-<theme>.{png,layout.json}, shots/obsidian/… (+ obsidian-manifest.json),
 # metrics/<app>/<shot>.json, metrics.json, manifest.json, logs/. --render xcb-gl is the realism
 # check: Brulion only, doc and daily on the desktop (unless --only/--sizes say otherwise), on Xvfb
 # with OpenGL (Mesa llvmpipe) instead of offscreen + software, into shots/brulion-gl/,
-# metrics-gl/, metrics-gl.json, manifest-gl.json. --dry-run prints every command and runs none
-# (needs only node, to read screens.json). Exit 0 when every Brulion shot was taken (Obsidian's
-# failures are recorded in the manifest), 1 otherwise, 2 for bad options.
+# metrics-gl/, metrics-gl.json, manifest-gl.json. --reuse-obsidian DIR copies an earlier round's
+# Obsidian shots (DIR = <round>/shots/obsidian) only when that round's manifest has this run's
+# benchConfigHash (screens.json without Brulion's arguments, the notes, the overlay, the fonts,
+# the Obsidian driver, its version and the clock); else it refuses (exit 2). A narrowed run
+# (--only, --sizes, --themes) into an earlier round's folder replaces only those shots; the
+# metrics are measured again from every picture there. --dry-run prints every command and runs
+# none (needs only node, to read screens.json). Exit 0 when every Brulion shot was taken
+# (Obsidian's failures are recorded in the manifest), 1 otherwise, 2 for bad options.
 #
-# Laptop: scripts/remote-build.sh -n uibench brulion brulion-uimetrics \
-#   --run 'tests/app/uibench/bench.sh --out $HOME/work/brulion-uibench-data/round-00'
+# Laptop: scripts/remote-build.sh -n uibench brulion brulion-uimetrics --run \
+#   'BRULION_GIT_REV=<rev> BRULION_GIT_DIRTY=false tests/app/uibench/bench.sh --out $HOME/work/brulion-uibench-data/round-00'
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../../.." && pwd)"
@@ -161,37 +167,77 @@ fi
 
 # 5. Obsidian (the official AppImage, sha256 checked; under Xvfb, driven over CDP).
 obsidian_status=0
+obsidian_failures=()
 launch=""
+config_hash=""
+[[ $dry == 1 ]] || config_hash="$(uibench_config_hash "$screens" "$out" "$here/obsidian-shots.mjs" "$obsidian_version" "$now")"
+
+# The AppImage in the cache, checked: a partial or replaced download is fetched again (once).
+fetch_appimage() {
+  local appimage=$1 url
+  url="https://github.com/obsidianmd/obsidian-releases/releases/download/v$obsidian_version/Obsidian-$obsidian_version.AppImage"
+  mkdir -p "$cache"
+  for attempt in 1 2; do
+    if [[ -s "$appimage" ]] && echo "$obsidian_sha256  $appimage" | sha256sum -c --quiet - >/dev/null 2>&1; then
+      return 0
+    fi
+    [[ -s "$appimage" ]] && echo "bench: $appimage does not match OBSIDIAN_SHA256, fetching it again" >&2
+    rm -f "$appimage" "$appimage.part"
+    [[ $attempt == 1 ]] || break
+    curl -fL --retry 3 -o "$appimage.part" "$url" || { rm -f "$appimage.part"; break; }
+    echo "$obsidian_sha256  $appimage.part" | sha256sum -c --quiet - || { rm -f "$appimage.part"; break; }
+    mv "$appimage.part" "$appimage"
+  done
+  [[ -s "$appimage" ]]
+}
+
 if [[ "$app" != brulion ]]; then
   if [[ -n "$reuse" ]]; then
-    uibench_run mkdir -p "$out/shots/obsidian"
-    uibench_run cp -a "$reuse/." "$out/shots/obsidian/"
+    # Only shots of the same bench configuration: the source round's manifest says which.
+    if [[ $dry == 0 ]]; then
+      reuse="$(cd "$reuse" && pwd)"
+      reuse_hash="$(node -e 'try { console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).benchConfigHash ?? "") } catch { console.log("") }' \
+        "$reuse/../../manifest.json")"
+      if [[ "$reuse_hash" != "$config_hash" ]]; then
+        echo "bench: $reuse was shot with another bench configuration (${reuse_hash:-no manifest} ≠ $config_hash): shoot Obsidian again" >&2
+        exit 2
+      fi
+    fi
+    if [[ $dry == 1 || "$reuse" != "$out/shots/obsidian" ]]; then
+      uibench_run rm -rf "$out/shots/obsidian"
+      uibench_run mkdir -p "$out/shots/obsidian"
+      uibench_run cp -a "$reuse/." "$out/shots/obsidian/"
+    fi
   else
     appimage="$cache/Obsidian-$obsidian_version.AppImage"
     [[ "$cache" != *" "* ]] || { echo "bench: UIBENCH_CACHE must not contain spaces" >&2; exit 2; }
-    if [[ $dry == 0 ]]; then
-      mkdir -p "$cache"
-      if [[ ! -s "$appimage" ]]; then
-        curl -fL --retry 3 -o "$appimage.part" \
-          "https://github.com/obsidianmd/obsidian-releases/releases/download/v$obsidian_version/Obsidian-$obsidian_version.AppImage"
-        mv "$appimage.part" "$appimage"
-      fi
-      echo "$obsidian_sha256  $appimage" | sha256sum -c --quiet - || {
-        echo "bench: $appimage does not match OBSIDIAN_SHA256" >&2
-        exit 1
-      }
+    if [[ $dry == 0 ]] && ! fetch_appimage "$appimage"; then
+      obsidian_failures+=("obsidian: no AppImage matching OBSIDIAN_SHA256 (download failed or changed)")
     fi
+    # Extracted into a temporary folder and moved into place when whole.
     if [[ -e /etc/NIXOS ]]; then
       extracted="$cache/obsidian-$obsidian_version"
-      [[ $dry == 1 || -d "$extracted" ]] || appimage-run -x "$extracted" "$appimage" >/dev/null
+      if [[ $dry == 0 && ${#obsidian_failures[@]} == 0 && ! -d "$extracted" ]]; then
+        rm -rf "$extracted.part"
+        if appimage-run -x "$extracted.part" "$appimage" >/dev/null; then
+          mv "$extracted.part" "$extracted"
+        else
+          rm -rf "$extracted.part"
+          obsidian_failures+=("obsidian: the AppImage did not extract")
+        fi
+      fi
       launch="appimage-run -w $extracted --"
     else
       extracted="$cache/obsidian-$obsidian_version-root"
-      if [[ $dry == 0 && ! -x "$extracted/obsidian" ]]; then
+      if [[ $dry == 0 && ${#obsidian_failures[@]} == 0 && ! -x "$extracted/obsidian" ]]; then
         chmod +x "$appimage"
-        rm -rf "$cache/squashfs-root"
-        (cd "$cache" && "$appimage" --appimage-extract >/dev/null)
-        mv "$cache/squashfs-root" "$extracted"
+        rm -rf "$cache/squashfs-root" "$extracted"
+        if (cd "$cache" && "$appimage" --appimage-extract >/dev/null); then
+          mv "$cache/squashfs-root" "$extracted"
+        else
+          rm -rf "$cache/squashfs-root"
+          obsidian_failures+=("obsidian: the AppImage did not extract")
+        fi
       fi
       launch="$extracted/obsidian"
     fi
@@ -203,6 +249,9 @@ if [[ "$app" != brulion ]]; then
     [[ -n "$themes" ]] && obs_args+=(--themes "$themes")
     if [[ $dry == 1 ]]; then
       uibench_run "${xvfb[@]}" node "$here/obsidian-shots.mjs" "${obs_args[@]}"
+    elif [[ ${#obsidian_failures[@]} -gt 0 ]]; then
+      obsidian_status=1
+      printf 'bench: %s\n' "${obsidian_failures[@]}" >&2
     else
       mkdir -p "$out/shots/obsidian"
       "${xvfb[@]}" node "$here/obsidian-shots.mjs" "${obs_args[@]}" 2> >(tee "$out/logs/obsidian.log" >&2) \
@@ -221,6 +270,8 @@ for dir in "$brulion_dir" obsidian; do
     continue
   fi
   [[ -d "$out/shots/$dir" ]] || continue
+  # Measured again from the pictures there now: no measurement of a picture that is gone.
+  rm -rf "${out:?}/$metrics_dir/$dir"
   mkdir -p "$out/$metrics_dir/$dir"
   for png in "$out/shots/$dir"/*.png; do
     [[ -e "$png" ]] || continue
@@ -242,16 +293,24 @@ uibench_run "$uimetrics" summarize --dir "$out/$metrics_dir" --out "$out/metrics
 # 7. The manifest: what was compared, with which versions, fonts and notes.
 if [[ $dry == 0 ]]; then
   git_rev="${BRULION_GIT_REV:-$(git -C "$repo" rev-parse HEAD 2>/dev/null || echo unknown)}"
-  git_dirty="${BRULION_GIT_DIRTY:-$( [[ -n "$(git -C "$repo" status --porcelain 2>/dev/null)" ]] && echo true || echo false)}"
+  # Without a .git (rsynced trees) and without BRULION_GIT_DIRTY: unknown, never "clean".
+  if [[ -n "${BRULION_GIT_DIRTY:-}" ]]; then
+    git_dirty="$BRULION_GIT_DIRTY"
+  elif status="$(git -C "$repo" status --porcelain 2>/dev/null)"; then
+    [[ -n "$status" ]] && git_dirty=true || git_dirty=false
+  else
+    git_dirty=unknown
+  fi
   build_type="$(sed -n 's/^CMAKE_BUILD_TYPE:STRING=//p' "$(dirname "$(dirname "$(dirname "$bin")")")/CMakeCache.txt" 2>/dev/null || true)"
   fc_match=""
   for generic in sans-serif serif monospace; do
     fc_match+="$generic=$(FONTCONFIG_FILE="$UIBENCH_FONTS" fc-match -f '%{family[0]}' "$generic");"
   done
-  printf '%s\n' "${failures[@]+"${failures[@]}"}" "${measure_failures[@]+"${measure_failures[@]}"}" > "$out/tmp/failures.txt"
+  printf '%s\n' "${failures[@]+"${failures[@]}"}" "${measure_failures[@]+"${measure_failures[@]}"}" \
+    "${obsidian_failures[@]+"${obsidian_failures[@]}"}" > "$out/tmp/failures.txt"
   node -e '
 const fs = require("node:fs"), crypto = require("node:crypto"), path = require("node:path");
-const [out, suffix, started, now, gitRev, dirty, buildType, render, bin, version, sha, launch, fcMatch, screens, app] = process.argv.slice(1);
+const [out, suffix, started, now, gitRev, dirty, buildType, render, bin, version, sha, launch, fcMatch, screens, app, configHash, reuse] = process.argv.slice(1);
 const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return null; } };
 const sha256 = (s) => crypto.createHash("sha256").update(s ?? "").digest("hex");
 const obs = JSON.parse(read(path.join(out, "shots/obsidian/obsidian-manifest.json")) ?? "null");
@@ -263,21 +322,22 @@ const overlay = (read(path.join(out, "env/overlay.sha256")) ?? "").trim();
 const screensText = read(screens);
 const m = {
   schema: 1, date: started, finished: new Date().toISOString(), now, app,
-  brulion: { gitRev, dirty: dirty === "true", buildType, render, bin },
-  obsidian: obs ? { version, sha256: sha, launch, environment: obs.environment, warnings: obs.warnings, failures: obs.failures } : null,
+  brulion: { gitRev, dirty: dirty === "true" ? true : dirty === "false" ? false : null, buildType, render, bin },
+  obsidian: obs ? { version, sha256: sha, launch, reusedFrom: reuse || null, environment: obs.environment, warnings: obs.warnings,
+                    failures: obs.failures } : null,
   fonts: { dirs: fonts, fcMatch, conf: read(path.join(out, "env/fonts.conf")) },
   vault: { overlay, files: vault },
   screensHash: sha256(screensText),
-  // Obsidian shots stay valid while this is the same (--reuse-obsidian): screens.json without
-  // the Brulion arguments, the overlay, the fonts, the Obsidian version, the clock.
-  benchConfigHash: sha256([JSON.stringify({ ...JSON.parse(screensText), screens: JSON.parse(screensText).screens
-    .map(({ brulion, ...rest }) => rest) }), overlay, fonts.join("\n"), version, now].join("\n---\n")),
+  // Obsidian shots stay valid while this is the same (--reuse-obsidian checks it; lib.sh
+  // uibench_config_hash): screens.json without the Brulion arguments, the notes, the overlay,
+  // the fonts, the Obsidian driver, its version, the clock.
+  benchConfigHash: configHash,
   shots: { brulion: shots("brulion" + suffix), obsidian: suffix ? [] : shots("obsidian") },
   failures: (read(path.join(out, "tmp/failures.txt")) ?? "").split("\n").filter(Boolean),
 };
 fs.writeFileSync(path.join(out, "manifest" + suffix + ".json"), JSON.stringify(m, null, 2) + "\n");
 ' "$out" "$suffix" "$started" "$now" "$git_rev" "$git_dirty" "$build_type" "$render" "$bin" \
-    "$obsidian_version" "$obsidian_sha256" "$launch" "$fc_match" "$screens" "$app"
+    "$obsidian_version" "$obsidian_sha256" "$launch" "$fc_match" "$screens" "$app" "$config_hash" "$reuse"
   rm -rf "$out/tmp"
   echo "bench: $out/manifest$suffix.json" >&2
 fi
