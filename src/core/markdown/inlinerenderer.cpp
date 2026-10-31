@@ -631,9 +631,13 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 break;
             }
             case InlineKind::Tag:
+                // A no-break space inside the tint on both sides (as the chips have): the tag reads
+                // as a chip, not as highlighted letters, two tags next to each other stay apart, and
+                // it never wraps away from its padding. (Qt's HTML parser turns a narrow no-break
+                // space, U+202F, into a plain space that collapses, even written as an entity.)
                 html = u"<a href=\"tag:"_s + percentEncoded(item.target) + u"\" style=\"color:"_s
                        + safeColor(pal.tag.foreground) + u";background-color:"_s + safeColor(pal.tag.background)
-                       + u";text-decoration:none\">#"_s + esc(item.target) + u"</a>"_s;
+                       + u";text-decoration:none\">&nbsp;#"_s + esc(item.target) + u"&nbsp;</a>"_s;
                 break;
             }
             atoms.append({item.from, item.to, html});

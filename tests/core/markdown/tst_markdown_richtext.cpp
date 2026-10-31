@@ -105,7 +105,9 @@ private Q_SLOTS:
         QVERIFY(tag);
         QCOMPARE(tag->format.anchorHref(), u"tag:praca"_s);
         QCOMPARE(tag->format.background().color(), QColor(p.tag.background));
-        QCOMPARE(tag->format.background().color().alpha(), 0x52);
+        QCOMPARE(tag->format.background().color().alpha(), 0x29);
+        // Inside the tint, a no-break space on both sides.
+        QCOMPARE(tag->text, u"\u00A0#praca\u00A0"_s);
         const Fragment *due = find(frags, u"jutro"_s);
         QVERIFY(due);
         QVERIFY(due->text.startsWith(QChar(0x00a0)));

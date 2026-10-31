@@ -95,7 +95,7 @@ QString reminderChip(int from, int to, const QString &fg, const QString &bg, con
 
 QString tag(const QString &href, const QString &name)
 {
-    return u"<a href=\"tag:%1\" style=\"color:TF;background-color:TB;text-decoration:none\">#%2</a>"_s.arg(href, name);
+    return u"<a href=\"tag:%1\" style=\"color:TF;background-color:TB;text-decoration:none\">&nbsp;#%2&nbsp;</a>"_s.arg(href, name);
 }
 
 const QString Code = u"<code style=\"background-color:C\">"_s;

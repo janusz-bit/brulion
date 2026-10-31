@@ -124,7 +124,8 @@ QtObject {
     readonly property color link: colors.link                             // #2c6aa3 / #9fc3e6
     readonly property color linkHover: dark ? "#c3daf1" : "#1f5486"
     readonly property color linkMissing: colors.linkMissing               // #7a5ea3 / #b9a3d8
-    readonly property color tagBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.16) : Qt.rgba(159/255, 195/255, 230/255, 0.32)
+    // Tags and due dates: a light tint, well apart from the selection (bgSelected) it used to match.
+    readonly property color tagBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.10) : Qt.rgba(159/255, 195/255, 230/255, 0.16)
     readonly property color tagFg: colors.tagFg                           // #2b5f8f / #b9d4ee
 
     // ---- Status --------------------------------------------------------------------------
@@ -144,7 +145,7 @@ QtObject {
     readonly property color infoBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.14) : Qt.rgba(159/255, 195/255, 230/255, 0.28)
 
     // ---- Chips (dates, reminders, tags inside rendered text) ------------------------------
-    readonly property color chipDueBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.14) : Qt.rgba(159/255, 195/255, 230/255, 0.28)
+    readonly property color chipDueBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.10) : Qt.rgba(159/255, 195/255, 230/255, 0.16)
     readonly property color chipDueFg: colors.chipDueFg                   // #2b5f8f / #b9d4ee
     readonly property color chipOverdueBg: dangerBg
     readonly property color chipOverdueFg: dangerText

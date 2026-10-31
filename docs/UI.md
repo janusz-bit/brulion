@@ -1827,8 +1827,9 @@ key as one undo step and save at once; `leaveList()` and `toggleList()` are the 
 commands (`BlockDocument::convertToParagraph`). In the document mode the model ignores folds
 (`BlockListModel::setFoldingEnabled(false)`; they come back in the outline) and there is no
 zoom. `BlockEditor.documentMode` switches the delegates' layout: `gutter` = `documentInset` (0
-on pages), a marker column of `listIndent` per list level (bullets drawn as disc / circle /
-square by depth, numbers from the `listMarker` role, task checkboxes in place of the bullet),
+on pages), a marker column of `listIndent` per list level (the same small round bullet at every
+depth — nesting shows in the indent —, numbers from the `listMarker` role, task checkboxes in
+place of the bullet),
 heading sizes relative to the text size, and spacing from the `prevKind` role (paragraph gaps,
 tight list items, air above headings, a little more above a frame right under a heading).
 Rendered text and the inline editor have the same line boxes (the rendered height is counted in

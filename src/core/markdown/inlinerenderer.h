@@ -48,8 +48,8 @@ struct Palette {
     QString muted = QStringLiteral("#535a6a");      ///< property keys, Obsidian Tasks ids
     QString codeBackground = QStringLiteral("#f3eee2");
     QString highlightBackground = QStringLiteral("#61f2b33d"); ///< ==highlight==
-    ChipColors tag{QStringLiteral("#2b5f8f"), QStringLiteral("#529fc3e6")};
-    ChipColors due{QStringLiteral("#2b5f8f"), QStringLiteral("#479fc3e6")};
+    ChipColors tag{QStringLiteral("#2b5f8f"), QStringLiteral("#299fc3e6")};
+    ChipColors due{QStringLiteral("#2b5f8f"), QStringLiteral("#299fc3e6")};
     ChipColors overdue{QStringLiteral("#b23c31"), QStringLiteral("#1fe2574c")};
     ChipColors scheduled{QStringLiteral("#6a4f93"), QStringLiteral("#1f7a5ea3")};
     ChipColors reminder{QStringLiteral("#7a4f00"), QStringLiteral("#3df2b33d")};

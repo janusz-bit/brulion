@@ -323,17 +323,13 @@ Item {
                 visible: !block.doc && (block.model.collapsed || bulletHover.hovered)
             }
             Rectangle {
-                // Outline: the round bullet. Document: a Markdown list's disc, circle, square by depth.
-                readonly property int shape: block.doc ? block.depth % 3 : 0
+                // The same round bullet at every depth (a document too: nesting shows in the indent).
                 x: bullet.dotX - width / 2
                 anchors.verticalCenter: parent.verticalCenter
-                width: shape === 2 ? 5 : 6
+                width: 6
                 height: width
-                radius: shape === 2 ? 1 : width / 2
-                color: shape === 1 ? "transparent"
-                       : block.closedTask ? Theme.fgFaint : bulletHover.hovered && !block.doc ? Theme.fg : Theme.fgMuted
-                border.width: shape === 1 ? 1.5 : 0
-                border.color: Theme.fgMuted
+                radius: width / 2
+                color: block.closedTask ? Theme.fgFaint : bulletHover.hovered && !block.doc ? Theme.fg : Theme.fgMuted
             }
             HoverHandler {
                 id: bulletHover
