@@ -470,6 +470,11 @@ FocusScope {
             sourceComponent: ShellSidebar {
                 topInset: shell.safe.top
                 bottomInset: shell.navigationBar
+                // The views of the bottom navigation's tabs are one tap away there: the drawer
+                // starts with the others, its tree higher up. Not tied to the keyboard (the list
+                // would change while the drawer opens and the keyboard goes); where a view
+                // replaces the bar (the drawing editor) the drawer lists every view.
+                omitViews: Theme.narrow && !routeView.viewReplacesBottomNav ? AppSettings.bottomNavTabs : []
                 onNavigated: drawer.close()
                 onNewPageRequested: (folder) => {
                     drawer.close()

@@ -4012,12 +4012,19 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         std::fprintf(stderr, "selftest: hidden in the sidebar: %s\n", qPrintable(settings->sidebarHidden().join(u", ")));
     check(hidden, "unticking an entry hides it (saved)");
     QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
+    const auto navShown = [window](const QString &view) {
+        const QString name = u"sidebarNav_"_s + view;
+        return findShown(window->contentItem(), [&name](QQuickItem *i) { return i->objectName() == name; }) != nullptr;
+    };
     if (narrow && drawer)
         QMetaObject::invokeMethod(drawer, "open");
-    check(shownItem(u"sidebarNav_calendar"_s) != nullptr
-                  && !findShown(window->contentItem(),
-                                [](QQuickItem *i) { return i->objectName() == u"sidebarNav_graph"; }),
-          "the hidden entry is gone from the sidebar, the others stay");
+    // The phone's drawer leaves out the views of the bottom navigation (Dziennik, Kalendarz,
+    // Szukaj, Zadania by default): it starts with Wszystkie strony.
+    check(waitFor([&] { return navShown(u"allPages"_s); }) && navShown(u"calendar"_s) == !narrow
+                  && navShown(u"tasks"_s) == !narrow
+                  && !navShown(u"graph"_s),
+          narrow ? "the drawer lists the views the bottom bar lacks, without the hidden one"
+                 : "the hidden entry is gone from the sidebar, the others stay");
     if (narrow && drawer) {
         QMetaObject::invokeMethod(drawer, "close");
         waitFor([drawer] { return !drawer->property("visible").toBool(); });
@@ -4038,11 +4045,22 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                      == QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"graph"_s};
           }),
           "a view picked in a slot's menu takes the slot");
-    if (narrow)
+    if (narrow) {
         check(shownItem(u"bottomNav_graph"_s) != nullptr
                       && !findShown(window->contentItem(),
                                     [](QQuickItem *i) { return i->objectName() == u"bottomNav_tasks"; }),
               "the phone's bottom bar shows the view picked");
+        // Zadania, out of the bar, is back in the drawer; Kalendarz, still in it, is not.
+        closeMenus(window);
+        if (drawer)
+            QMetaObject::invokeMethod(drawer, "open");
+        check(drawer && waitFor([&] { return navShown(u"tasks"_s); }) && !navShown(u"calendar"_s),
+              "a view taken out of the bottom bar comes back into the drawer");
+        if (drawer) {
+            QMetaObject::invokeMethod(drawer, "close");
+            waitFor([drawer] { return !drawer->property("visible").toBool(); });
+        }
+    }
     // The view already in the slot, picked again: its menu still shows it checked.
     closeMenus(window);
     activate(shownItem(u"bottomNavSlot_3"_s));
