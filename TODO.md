@@ -55,11 +55,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   Waylandem, dwuklik na `.md` otwiera dalej dotychczasowy program; Cinnamon/Xfce pod X11: kursor nie
   kręci się po otwarciu pliku w działającym Brulionie); AppImage zintegrowany przez Gear Lever albo
   AppImageLauncher.
-* **Dopracowanie interfejsu — porównanie z Obsidianem.** Przejść ekran po ekranie (edytor
-  w trybie dokumentu i konspektu, pasek boczny, wyszukiwarka, kalendarz, ustawienia; telefon
-  i komputer) z Obsidianem obok i spisać różnice w układzie, odstępach, typografii, kolorach,
-  animacjach i drobnych zachowaniach (kursor, zaznaczanie, menu, skróty). Z listy różnic
-  wybrać te, które poprawiają odbiór interfejsu, i poprawić je w QML (docs/UI.md).
 * **Zaokrąglone `#tagi` i daty poza edytorem.** W blokach edytora są już zaokrąglonymi etykietami
   (`RichTextPills`, docs/UI.md „The block editor”), ale listy, które przycinają tekst — linki
   zwrotne (`ContentRefRow`), Zadania (`TasksRow`), osadzone strony (`TransclusionView`), tabele
@@ -79,6 +74,17 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   `Firma`, gdy takiej strony nie ma (widok folderu jak w „Wszystkie strony” albo nowa strona jak
   przy nierozwiązanym linku); link z własnym tekstem (`[[Firma/Adam cośtam|Adam]]`) zostaje
   jednym linkiem; na telefonie dotknięcie części tak samo.
+
+## Android
+
+* **Puste okno po ponownym utworzeniu aktywności w trakcie startu** — gdy Android tworzy
+  `BrulionActivity` od nowa, zanim Qt skończy start (zmiana konfiguracji, której aplikacja nie
+  może obsłużyć sama: `CONFIG_ASSETS_PATHS`, np. nakładki stosowane tuż po uruchomieniu emulatora
+  albo zmiana kolorów motywu systemu w tej chwili), okno zostaje puste, a notatnik się nie otwiera
+  (logcat: `finishDrawing of relaunch: Window{… BrulionActivity}`, potem żadnych wpisów
+  `brulion.*`). Zdarza się w emulatorze w kilka sekund po starcie systemu (było już przed zmianami
+  wyglądu 0.5.1); `scripts/android-emulator-test.sh` uruchamia wtedy aplikację drugi raz. Do zbadania w
+  `QtActivity` (Qt 6.11): ponowne podpięcie okna do aplikacji, która jeszcze startuje.
 
 ## Windows
 

@@ -17,10 +17,10 @@ Przy pierwszym uruchomieniu wybierasz folder, tworzysz nowy notatnik albo otwier
 Strona dnia powstaje dopiero przy pierwszej zmianie — samo zaglądanie niczego nie tworzy.
 
 ## Pisanie na telefonie
-Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na każdej stronie, także gdy przewijasz. Ma wcięcia, przenoszenie bloków, zadanie, link `[[`, tag `#`, polecenia `/`, termin, przypomnienie, obraz, cofanie i ponawianie oraz **Więcej** (⋯) — menu bloku, np. z kopiowaniem odnośnika do niego; gdy przycisków jest więcej, niż mieści się na ekranie, przesuń pasek palcem w bok. Dolna nawigacja chowa się, gdy klawiatura jest otwarta, a przycisk szybkiej notatki — na czas pisania.
+Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na każdej stronie, także gdy przewijasz. Ma wcięcia, przenoszenie bloków, zadanie, link `[[`, tag `#`, polecenia `/`, termin, przypomnienie, obraz, cofanie i ponawianie oraz **Więcej** (⋯) — menu bloku, np. z kopiowaniem odnośnika do niego; gdy przycisków jest więcej, niż mieści się na ekranie, przesuń pasek palcem w bok. Dolna nawigacja (razem z **+ Notatka** i **Menu**) chowa się, gdy klawiatura jest otwarta; pasek boczny otwiera wtedy przycisk menu (trzy kreski) w lewym górnym rogu.
 
 - **Ukryj klawiaturę** (ostatni przycisk paska) kończy pisanie: chowa klawiaturę i pasek, a dolna nawigacja wraca.
-- Gdy klawiaturę schowasz przyciskiem Wstecz albo klawiszem na samej klawiaturze, wraca dolna nawigacja (Dziennik, Kalendarz, Zadania…), a pasek zostaje tuż nad nią z wszystkimi narzędziami — dotknij tekstu, a klawiatura wróci. Przycisk nawigacji kończy pisanie i otwiera swój widok.
+- Gdy klawiaturę schowasz przyciskiem Wstecz albo klawiszem na samej klawiaturze, wraca dolna nawigacja (Dziennik, Kalendarz, Zadania…), a pasek zostaje tuż nad nią z wszystkimi narzędziami — dotknij tekstu, a klawiatura wróci. Przycisk nawigacji kończy pisanie i otwiera swój widok, a **+ Notatka** kończy pisanie i otwiera szybką notatkę.
 - W komórce tabeli pasek ma Cofnij, Ponów, **Następna komórka** i Ukryj klawiaturę; w źródle Markdown (Więcej → Źródło Markdown) — `[[`, `#`, `/`, Cofnij, Ponów i Ukryj klawiaturę.
 - Okna wyświetlane od dołu (szybka notatka, przypomnienie, zmiana nazwy), podpowiedzi przy pisaniu i pola formularzy (np. w ustawieniach) też zawsze leżą nad klawiaturą.
 
@@ -39,7 +39,7 @@ Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na ka�
 - **Alt+←** / **Alt+→** — wstecz i dalej, jak w przeglądarce.
 
 ## Pasek boczny
-Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf i Szukaj. Niżej ulubione strony, ostatnio otwarte oraz drzewo folderów. Na telefonie pasek boczny otwiera „Menu” w dolnej nawigacji albo przesunięcie palca od lewej krawędzi ekranu (w edytorze rysunku, gdzie dolnej nawigacji nie ma, przycisk ☰ w górnym pasku).
+Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf i Szukaj, a niżej drzewo folderów (**Strony**). Sekcja **Ulubione** pojawia się nad drzewem, gdy oznaczysz gwiazdką pierwszą stronę (gwiazdka w nagłówku strony, menu **Więcej** albo menu strony w drzewie), a **Ostatnie** — gdy otworzysz kolejną stronę (otwartej strony tam nie ma, pokazuje ją drzewo). Na telefonie pasek boczny otwiera „Menu” w dolnej nawigacji albo przesunięcie palca od lewej krawędzi ekranu; gdy dolnej nawigacji nie ma — przy otwartej klawiaturze i w edytorze rysunku — przycisk menu (trzy kreski) w lewym górnym rogu.
 
 ## Foldery
 Foldery porządkują strony jak katalogi na dysku: strona `Projekty/Dom` to plik `Dom.md` w folderze `Projekty`.

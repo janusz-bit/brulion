@@ -43,7 +43,8 @@ components — no Material/Fusion look, so all targets look identical.
   figures (`tnum`) so they still line up right-aligned, errors smaller in the UI font; line spacing Ciasny 1.45 | Normalny 1.65 | Luźny 1.9; configurable max
   text width — Wąska 600, **Normalna 680** (the default, `Theme.measure`: about 85 characters of
   16-px serif, Obsidian's comfortable measure), Szeroka 960, Pełna; the presets before 0.5.1
-  (640, 760) read as 600 and 680, other stored widths stay — and text size. One type scale: note text quoted outside the editor (linked
+  (640, 760) read as 600 and 680, other stored widths stay (the calendar's Agenda keeps 760,
+  `Theme.measureList`: its rows hold a time, a title and a page) — and text size. One type scale: note text quoted outside the editor (linked
   references, tagged blocks under a page and in the side panel, `ContentRefRow`) is in the
   editor font at the UI's base size (`textBase`), so the editor's own text is the only larger
   size; search results show the page title (semibold, `fg`) and the snippet (`fgMuted`) both in
@@ -103,9 +104,9 @@ components — no Material/Fusion look, so all targets look identical.
     the panel, pinning a page there or switching to Konspekt / Kalendarz brings the section back
     at once. Narrow windows have no side panel and always show the section.
 * **Narrow (< 900 px, phones):** the sidebar becomes a `Drawer` (the bottom bar's **Menu**, or a
-  swipe to the right from the left edge; the top bar's ☰ only on a view whose own bar replaces
-  the bottom navigation — the drawing editor; a swipe to the left on the drawer or the scrim
-  closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
+  swipe to the right from the left edge; the top bar's ☰ whenever the bottom navigation is not
+  there — a view whose own bar replaces it, the drawing editor, or the on-screen keyboard up; a
+  swipe to the left on the drawer or the scrim closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
   navigation bars, and the sidebar's own insets (`topInset` = the SafeArea's top,
   `bottomInset` = `AppShell.navigationBar`) keep the notebook row and the sync footer clear of
   them — counted once: the Basic style pads a Drawer by the SafeArea margins itself, so the
@@ -120,8 +121,9 @@ components — no Material/Fusion look, so all targets look identical.
   scrolling Flickable); Android's text selection handles are windows of their own above the app.
   While typing or selecting blocks (the keyboard up or an editing toolbar docked, also on the
   bottom navigation after the keyboard went) there is no strip: the drawer took the drag of the
-  selection's start grip, which lies at the left edge (Menu still opens it once the keyboard went
-  — Back, then Menu —, ☰ in the drawing editor, a swipe on it still closes it).
+  selection's start grip, which lies at the left edge (the top bar's ☰ opens it while the keyboard
+  is up, the bottom bar's Menu once the keyboard went, ☰ in the drawing editor; a swipe on it
+  still closes it).
   Nor on a view that swipes sideways from the left edge itself (the view's `edgeSwipe`,
   `ShellRouteView.viewEdgeSwipe`): the calendar's week and month grids reach that edge and a
   swipe to the right there shows the previous period; the agenda keeps the strip. While the
@@ -133,18 +135,24 @@ components — no Material/Fusion look, so all targets look identical.
   UI mode (`Theme.touchUi`), not the pointer: a mouse or touchpad in a touch UI (a narrow window
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
   touch UI it is Qt's default (the start-drag distance); the top bar keeps back (when there is
-  history), title, Szukaj and Więcej — no ☰ while the narrow layout has its bottom navigation,
-  whose Menu opens the same drawer (`ShellTopBar.menuButtonShown`, bound to the layout and not
-  to the keyboard, so the title never moves when the keyboard opens; ☰ comes back where a view
-  replaces the bottom bar, `viewReplacesBottomNav`: the drawing editor); with no button before
-  it the title starts on the views' content edge (`Theme.space3` below 600 px, the editor's
-  compact padding, `Theme.space4` up to 900 px);
+  history), title, Szukaj and Więcej — no ☰ while the bottom navigation is shown, whose Menu
+  opens the same drawer (`ShellTopBar.menuButtonShown: !AppShell.bottomNavShown`); ☰ comes back
+  whenever that bar is away: a view replaces it (`viewReplacesBottomNav`: the drawing editor) or
+  the on-screen keyboard is up (it takes the bar's place, and there is no edge strip while
+  typing — without ☰ the drawer was out of reach until Back hid the keyboard; the title moves
+  over for it then); with no button before it the title starts on the views' content edge
+  (`Theme.space3` below 600 px, the editor's compact padding, `Theme.space4` up to 900 px);
   a **bottom navigation** bar: Dziennik, Kalendarz, Szukaj, Zadania by default — four views
-  chosen in Settings → Wygląd → Układ, sharing the width —, then **+ Notatka** (quick capture:
-  a fixed 56 px item whose "+" sits in a small ringed pill, the old floating button's popup
-  surface scaled down, so it reads as an action and never as the current view; off in the
-  settings, capture stays in the palette and under Ctrl+Shift+N) and Menu → drawer, always
-  last. Nothing floats over a phone's content; capture is wherever the bar is, settings, sync
+  chosen in Settings → Wygląd → Układ —, then **+ Notatka** (quick capture, its accessible name
+  "Szybka notatka" holding the label: WCAG 2.5.3; its "+" sits in a small ringed pill, the old
+  floating button's popup surface scaled down, so it reads as an action and never as the
+  current view; off in the settings, capture stays in the palette and under Ctrl+Shift+N) and
+  Menu → drawer, always last. Every item is one `NavTab` (icon pill, label) of at least 48 px;
+  they share the width by their labels (`ShellBottomNav.widths`): evenly while every label fits
+  an even share, else a long label ("Kalendarz") gets what it needs (its semibold width and
+  4 px on each side, then 2 px) and the short ones ("Menu") share the rest, so at the larger text
+  sizes (Duży, Większy) and on 320-dp phones the names stay whole; only beyond that are the
+  widths scaled and the longest labels elide. Nothing floats over a phone's content; capture is wherever the bar is, settings, sync
   and the graph included. The navigation makes way while the on-screen
   keyboard is up — when the keyboard goes while the editing goes on, it comes back and the
   editing toolbar docks right on it; a tap on one of its tabs then opens that view, the editing
@@ -1740,7 +1748,8 @@ being typed ("```js" in the edited block) is closed first, as the save writes it
 note mode switch or an inserted template), so it never runs on over the page.
 
 **The panel** (`qml/editor/FrontmatterView.qml` → `PropertiesPanel.qml` → `PropertyRow.qml`,
-`PropertyListValue.qml`, `PropertyMenu.qml`, all for the leading frontmatter row's delegate):
+`PropertyListValue.qml`, `PropertyMenu.qml`, all for the leading frontmatter row's delegate; a
+chip's menu is `PropertyChipMenu.qml`, the page header's chips have the same one):
 
 * Folded (the default: the journal stream stays dense): "Właściwości", the count and a one-line
   preview of the values ("status: w toku · koszt: 1200 · termin: czw, 29 paź" — a date or a date
@@ -1797,16 +1806,19 @@ note mode switch or an inserted template), so it never runs on over the page.
 * A block Brulion cannot edit safely (an indented mapping, plain text between `---` lines) shows
   its values read-only: "Tych właściwości nie da się bezpiecznie zmieniać w polach." with
   "Edytuj jako tekst".
-* Layout: the type icon and the key in a column (as wide as the widest key, 96 px to 30 % of the
-  panel; keys and values at the UI text size, so a value opened for editing keeps its size; list
+* Layout: the type icon and the key in a column (as wide as the widest key, at least 96 px; keys
+  and values at the UI text size, so a value opened for editing keeps its size; list
   items are filled chips, a page link marked by its page icon; on touch UIs a chip is at least
   44 × 44, and the list's "+" never starts a line alone — the last chip goes down with it,
   `PropertyListValue.placement`) beside the value — on phones too, rows 44 px on touch UIs (32 px,
   28 dense, with a mouse), list rows too: a value's line is centred in the row's height
   (`PropertyRow.valuePadding`; a list's chip line is its tallest item, `PropertyListValue.lineHeight`
   — the chips' 44-px targets on touch UIs, the 28-px "+" with a mouse), so a list of two lines is
-  92 px on touch UIs, one line always the row's height; only a panel whose value column would be narrower than ~168 px (a narrow
-  side panel) stacks the key over the value. Every control and tap area is a 44 px target on touch
+  92 px on touch UIs, one line always the row's height. The key goes over the value (every row of
+  the panel) only where the two columns would cut a key or squeeze the value: the widest key does
+  not fit 40 % of the panel ("ostatnia aktualizacja" on a phone; a touch screen has no tooltip to
+  read a cut key), or the value column would be narrower than ~168 px (a narrow side panel) —
+  `PropertiesPanel.stacked`; a key is never elided beside its value. Every control and tap area is a 44 px target on touch
   UIs: the key's whole cell (a tap focuses the row, a double tap renames), the value's whole cell
   (a text, a number, a date button: the row's padding included). The open panel is a sunken surface
   in light and a raised one in dark (`bgElevated`: lighter reads as raised there, the sunken fill
@@ -2114,7 +2126,10 @@ quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00
 row in its own font, the default first), `BDiffView`,
 `BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BPalette` with `BCommandPalette` and
 `BQuickSwitcher` (floating on wide windows: one-line rows, a subtitle such as a page's folder after
-the title, over `Theme.scrimModal`; full screen on compact ones: two-line rows over `Theme.scrim`), `BKeyboardFocusKeeper` (the focused form field above the on-screen keyboard,
+the title, over `Theme.scrimModal`, the list as many whole rows high as fit — measured from the
+rows the view has created, a row it released after scrolling counting as one of those, so the
+list keeps its height however far it scrolls; full screen on compact ones: two-line rows over
+`Theme.scrim`), `BKeyboardFocusKeeper` (the focused form field above the on-screen keyboard,
 "On-screen keyboard"), `BKeyboardPlaceholder` (a simulated keyboard's grey block). Icons: SVGs in
 `assets/icons/` (Lucide, ISC licence) via `BIcon`.
 
@@ -2614,6 +2629,35 @@ and O not lower — confirmed by fresh judges; the loop also stops after 3 round
 Accessibility first: no change may lower C or T, remove a feature, or shrink touch targets below 44
 px.
 
+**Outcome (October 2026, branch `s2/ui`).** The loop ran its 8 rounds and met the win condition
+in round 8 and in the confirmation (all 24 groups re-judged by 3 fresh judges, new seed and A/B
+draws, on round 8's shots):
+
+| Round | P Brulion | P Obsidian | Margin (95 % CI) | J B / O | O B / O | Pairs won | Kept |
+|---|---:|---:|---|---|---|---:|---|
+| 0 (baseline) | 7.472 | 6.926 | 0.546 (0.368–0.755) | 7.065 / 6.508 | 8.691 / 8.179 | 30/48 | — |
+| 1 | 7.581 | 6.845 | 0.736 | 7.148 / 6.401 | 8.876 / 8.179 | 38/48 | yes |
+| 2 | 7.669 | 6.824 | 0.845 | 7.268 / 6.372 | 8.870 / 8.179 | 43/48 | yes |
+| 3 | 7.681 | 6.816 | 0.865 | 7.286 / 6.362 | 8.865 / 8.179 | 42/48 | no: +0.012 and O lower, reverted |
+| 4 | 7.635 | 6.830 | 0.805 | 7.221 / 6.380 | 8.875 / 8.179 | 40/48 | yes (O rose, J −0.047) |
+| 5 | 7.748 | 6.828 | 0.920 | 7.341 / 6.378 | 8.967 / 8.179 | 41/48 | yes |
+| 6 | 7.828 | 6.793 | 1.035 | 7.448 / 6.331 | 8.967 / 8.179 | 43/48 | yes |
+| 7 | 7.881 | 6.760 | 1.121 | 7.521 / 6.286 | 8.961 / 8.179 | 46/48 | yes |
+| 8 | 7.875 | 6.730 | 1.145 (1.013–1.307) | 7.513 / 6.247 | 8.962 / 8.179 | 48/48 | yes, without its change 4 |
+| confirmation | **7.997** | **6.808** | **1.189 (0.966–1.335)** | 7.674 / 6.352 | 8.962 / 8.179 | **48/48** | — |
+
+In the confirmation every criterion favours Brulion (hierarchy 7.81 vs 6.31, typography 7.60 vs
+6.54, spacing 7.41 vs 6.23, colour 7.68 vs 6.63, consistency 7.60 vs 6.09, calm 7.05 vs 6.81,
+affordance 7.97 vs 6.19, appeal 7.83 vs 6.10); calm is the closest, and the narrowest pairs are
+calendar-desktop (margins 0.37 / 0.40), settings-phone (0.39 / 0.41) and palette-desktop (0.54 /
+0.55). The panel was not blind in practice: the judges recognised Obsidian in 142 of 144 guesses
+(every round about the same), so J measures a preference between two known apps, not a blind
+one — O, from the metrics, is the part that cannot know. Rejected changes (round 3's five, round
+8's emoji-free date chips: `rejected.md`, `round-08/change4-dropped.patch`) and every round's
+plan, shots, votes and report stay in `/home/nixos/workspace/brulion-work/uibench/`; to check for
+a regression, run the bench again (`--app brulion --reuse-obsidian` on the confirmation round's
+Obsidian shots) and compare with the confirmation's row above.
+
 **Regression guard** `tst_uibench_lint_qml` (`lint.sh`, slow): 8 Brulion shots (daily, doc,
 settings, palette × desktop light / phone dark; system fonts) fail on any enabled, visible text
 below its WCAG contrast or a target below its size that `lint-allow.json` does not excuse
@@ -2622,7 +2666,7 @@ a shot of that device, so one more is caught). Its entries were the round-0 base
 known failures (the bullet's zoom handle, the journal's day titles, its 12-px band under a day and
 the settings' 38-px segmented choices on phones, the calculation block's faint caption); round 1
 fixed them but one: a parent's bullet beside its fold arrow on phones (28 × 44 — both cannot be
-44 px wide in the outline's gutter).
+44 px wide in the outline's gutter), accepted as an exception at the loop's end.
 
 **README pictures** (`docs/images/`, Polish locale, the sample notebook) come from these scripts
 — `SIZES=<size> THEMES=<theme> tests/app/<area>/screenshots.sh <shot>` — and are optimised with
