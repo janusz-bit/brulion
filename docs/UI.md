@@ -2666,7 +2666,9 @@ a shot of that device, so one more is caught). Its entries were the round-0 base
 known failures (the bullet's zoom handle, the journal's day titles, its 12-px band under a day and
 the settings' 38-px segmented choices on phones, the calculation block's faint caption); round 1
 fixed them but one: a parent's bullet beside its fold arrow on phones (28 × 44 — both cannot be
-44 px wide in the outline's gutter), accepted as an exception at the loop's end.
+44 px wide in the outline's gutter), accepted as an exception at the loop's end. It reads
+`screens.json` with node and is skipped where there is none (the AppImage build containers;
+GitHub's Ubuntu runners of `ci.yml` have it, the flake's dev shell does not bring it).
 
 **README pictures** (`docs/images/`, Polish locale, the sample notebook) come from these scripts
 — `SIZES=<size> THEMES=<theme> tests/app/<area>/screenshots.sh <shot>` — and are optimised with

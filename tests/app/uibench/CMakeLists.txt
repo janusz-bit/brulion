@@ -36,13 +36,13 @@ if(NOT WIN32)
     if(TARGET brulion)
         # Brulion-only regression guard: 8 shots of the real app (offscreen, software), every
         # visible text readable (WCAG contrast) and every target large enough, unless
-        # lint-allow.json excuses it.
+        # lint-allow.json excuses it. Skipped without node (screens.json), like the dry run.
         add_test(NAME tst_uibench_lint_qml COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/lint.sh
             $<TARGET_FILE:brulion> $<TARGET_FILE:brulion-uimetrics> ${CMAKE_CURRENT_BINARY_DIR}/lint)
         math(EXPR _uibench_lint_timeout "240 + 10 * ${BRULION_TEST_SLOWDOWN}")
         set_tests_properties(tst_uibench_lint_qml PROPERTIES
             ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-            TIMEOUT ${_uibench_lint_timeout} PROCESSORS 2 LABELS slow
+            TIMEOUT ${_uibench_lint_timeout} PROCESSORS 2 LABELS slow SKIP_RETURN_CODE 77
             FAIL_REGULAR_EXPRESSION "Binding loop detected")
     endif()
 endif()

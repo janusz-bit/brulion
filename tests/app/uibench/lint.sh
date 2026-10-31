@@ -5,9 +5,11 @@
 # fresh home each, the bench's notebook, the system's fonts) with --dump-layout, then
 # `brulion-uimetrics lint` with lint-allow.json: fails on an enabled, visible text below its WCAG
 # contrast or a target below its size (phone 44 px, desktop WCAG 2.5.8) that the allow list does
-# not excuse. Needs node (screens.json). BRULION_TEST_SLOWDOWN stretches the delays.
+# not excuse. Needs node (screens.json): without it (the AppImage build containers) the test is
+# skipped (exit 77, ctest SKIP_RETURN_CODE). BRULION_TEST_SLOWDOWN stretches the delays.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+command -v node >/dev/null 2>&1 || { echo "lint: no node (screens.json), skipped"; exit 77; }
 # shellcheck source-path=SCRIPTDIR source=lib.sh
 source "$here/lib.sh"
 
