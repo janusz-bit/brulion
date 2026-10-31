@@ -432,11 +432,20 @@ toolbar_on_keyboard_report() {
 }
 app_shot() { adb exec-out screencap -p >"$OUT/$1.png" || true; }
 start_app() { # <app arguments> [more am start arguments]
-  adb shell am force-stop "$PKG"
-  adb logcat -c
-  adb shell am start -W -n "$ACTIVITY" --es applicationArguments "'$1'" \
-    --es extraenvvars_QT_LOGGING_RULES "brulion.platform.debug=true" "${@:2}" >/dev/null
-  sleep 25
+  local try
+  for try in 1 2; do
+    adb shell am force-stop "$PKG"
+    adb logcat -c
+    adb shell am start -W -n "$ACTIVITY" --es applicationArguments "'$1'" \
+      --es extraenvvars_QT_LOGGING_RULES "brulion.platform.debug=true" "${@:2}" >/dev/null
+    sleep 25
+    # A freshly booted emulator still applies its overlays for a while: a configuration change no
+    # app can handle itself (CONFIG_ASSETS_PATHS, "Config changes=80000000"), so Android relaunches
+    # the activity — and Qt's activity relaunched while the app still starts keeps a blank window
+    # (TODO.md, Android). Not what a mode tests: started once more, with the system settled.
+    adb logcat -d | grep -q 'finishDrawing of relaunch: Window{[^}]*BrulionActivity' || return 0
+    ((try == 1)) && echo "    (Android relaunched the activity while the app started — started again)"
+  done
 }
 # Reports of the keyboard observer (ImeInsets.kt logs each one with this property set).
 ime_frames() { adb logcat -d -s BrulionIme:D | grep -c 'animating=true' || true; }
@@ -886,10 +895,12 @@ if ((PICKERS)); then
   # it lists the storage's folders (the folder picker opens at the storage's top), else the
   # Downloads root from its drawer of roots (the file pickers open in Recent or the root used last).
   documents_downloads() { # <ERE>
-    # (DocumentsUI lists the files a moment after it is in front.)
-    wait_for 15 ui_has "$1|Download|Pobrane|Show roots|Pokaż katalogi główne|Pokaż elementy główne" || true
+    # (DocumentsUI lists the files a moment after it is in front — on a freshly booted emulator
+    # its first scan of the storage took longer than 15 s, and the roots' drawer was tapped while
+    # the storage's folders were still coming: ui-final, 2026-10-31.)
+    wait_for 40 ui_has "$1|Download|Pobrane|Show roots|Pokaż katalogi główne|Pokaż elementy główne" || true
     ui_has "$1" && return 0
-    if ui_has 'Download|Pobrane'; then
+    if wait_for 5 ui_has 'Download|Pobrane'; then
       ui_tap 'Download|Pobrane' first 3 || return 1
     else
       ui_tap 'Show roots|Pokaż katalogi główne|Pokaż elementy główne' first 2 || return 1
@@ -900,13 +911,23 @@ if ((PICKERS)); then
   # The saved ZIP anywhere in Download (DocumentsUI's save picker opens in the folder used last).
   downloads_zip() { adb shell find /sdcard/Download -name "'*.zip'" 2>/dev/null | tr -d '\r' | head -n 1; }
   zip_saved() { [[ -n $(downloads_zip) ]]; }
-  # A finger drags the view up until the item so named lies above the bottom navigation (a node
-  # under the navigation is "on screen" for UiAutomator, and a tap there switches the view).
+  # A finger drags the view up until the item so named lies wholly above the bottom navigation —
+  # its top, read from its Dziennik tab, as toolbar_above_tabs does (a node under the navigation is
+  # "on screen" for UiAutomator, and a tap there switches the view) — and below the top bar.
   pk_show() { # <ERE>
-    local y _
+    local item nav _ y1 y2
     for _ in 1 2 3 4 5 6 7 8; do
-      y=$(ui_y "$1")
-      [[ -n $y ]] && ((y > SCREEN_H / 6 && y < SCREEN_H * 4 / 5)) && return 0
+      ui_dump
+      item=$(ui_nodes "$1" | head -n 1)
+      nav=$(ui_nodes 'Dziennik' | tail -n 1 | cut -d ' ' -f 2)
+      nav=${nav:-$((SCREEN_H * 4 / 5))}
+      if [[ -n $item ]]; then
+        read -r _ y1 _ y2 <<<"$item"
+        if (((y1 + y2) / 2 > SCREEN_H / 6 && y2 <= nav)); then
+          echo "    $1 at y=$y1…$y2, the bottom navigation from y=$nav (px)"
+          return 0
+        fi
+      fi
       adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 70 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) 500
       sleep 2
     done

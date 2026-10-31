@@ -1106,7 +1106,11 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   czeka w kolejce (`shared_prefs/…done.xml`, APK debugowalny) i C++ dostaje je przy następnym
   starcie. Sprawdzone 2026-10-28 (Android 16, Pixel 6; 24 sprawdzenia).
   APK testowy ma ten sam pakiet co aplikacja (zastępuje ją) — tylko na emulatorze/telefonie
-  testowym.
+  testowym. Świeżo uruchomiony emulator przez kilka sekund nakłada jeszcze nakładki systemu
+  (zmiana konfiguracji `CONFIG_ASSETS_PATHS`, której aplikacja nie obsłuży sama): Android tworzy
+  wtedy `BrulionActivity` od nowa, a aktywność Qt utworzona od nowa w trakcie startu zostaje z
+  pustym oknem (TODO.md, „Android”). Gdy w logcat jest `finishDrawing of relaunch` tej aktywności,
+  tryby uruchamiają aplikację drugi raz (`start_app`, „Android relaunched the activity…”).
 * Zaznaczanie i kopiowanie prawdziwym palcem (`adb shell input`, APK debugowalny jak niżej):
   ```sh
   scripts/android-emulator-test.sh --selection
