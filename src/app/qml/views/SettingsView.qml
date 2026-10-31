@@ -387,6 +387,7 @@ Item {
                     title: qsTr("Theme")
                     description: qsTr("Light like paper, dark for the evening, or following the system.")
                     BSegmented {
+                        objectName: "themeModeSetting"
                         accessibleName: qsTr("Theme")
                         model: [
                             { value: "system", text: qsTr("System"), icon: "monitor" },
@@ -465,6 +466,7 @@ Item {
                     title: qsTr("Text size")
                     description: qsTr("Size of all text in the app.")
                     BSegmented {
+                        objectName: "fontScaleSetting"
                         accessibleName: qsTr("Text size")
                         model: [
                             { value: 0.9, text: qsTr("Small") },

@@ -16,6 +16,7 @@ import Brulion
 // busy:    shows a spinner instead of the icon and swallows clicks (keeps its size)
 // fill:    takes the width a layout gives it (Layout.fillWidth), the content centred — a lone
 //          framed button of a stacked ShellSettingRow, like the segmented controls there
+//          (`naturalWidth`: the width without it)
 // On touch UIs the hit area is at least Theme.touchTarget high even for small buttons
 // (the visual part stays compact, the rest is inset).
 T.Button {
@@ -40,6 +41,9 @@ T.Button {
                                       : Theme.controlHeight
     readonly property int hitHeight: Math.max(visualHeight, Theme.touchUi ? Theme.touchTarget : 0)
     readonly property bool iconOnly: text === "" && (iconName !== "" || busy)
+    /// The width it takes unfilled (its implicit width, which `fill` never changes): what
+    /// ShellSettingRow measures to put it beside its text.
+    readonly property real naturalWidth: implicitWidth
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)

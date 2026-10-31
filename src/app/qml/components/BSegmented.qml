@@ -18,6 +18,7 @@ import Brulion
 // `fill: true` stretches segments to the control's width, as evenly as their labels allow: the
 // narrow ones widen to one shared width, a wider label keeps its own (none is cut); when their
 // natural widths do not fit, the icons go first (the labels stay), then the labels share and elide.
+// `naturalWidth`: its width unfilled, icons included, whatever `fill` is (a settings row measures it).
 // `iconOnly: true` shows icons with the text as accessible name/tooltip.
 // `controlled: true`: the selection only ever follows currentValue's binding — for a segment
 // that may start an action instead of changing the state ("Other…" opening a picker that can
@@ -85,6 +86,9 @@ T.Control {
         }
         return sum
     }
+    /// The width it takes unfilled, with every segment's icon — independent of `fill` (and of
+    /// the width it is given): what ShellSettingRow measures to put it beside its text.
+    readonly property real naturalWidth: _withIconsSum + leftPadding + rightPadding
     /// The icons are shown: always, except a filling control whose segments would not fit with
     /// them (a narrow phone) — the labels say the same.
     readonly property bool iconsShown: iconOnly || !fill || _withIconsSum <= availableWidth

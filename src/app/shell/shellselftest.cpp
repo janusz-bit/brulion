@@ -4088,6 +4088,82 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     };
 
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
+
+    // The rows' shape (docs/UI.md "Look & feel", Settings rows): beside its text a control ends at
+    // the row's right edge, centred on the title and description; compact windows stack only what
+    // does not fit — under its text a segmented control fills the row. Phones (412 px): the two
+    // background rows beside their text, Motyw and Rozmiar tekstu (three and four options) under
+    // it; 360 px: each row decides alone, either shape. No option's label is cut, every target
+    // is 44 px on touch UIs.
+    {
+        const auto rowOf = [](QQuickItem *item) {
+            while (item && !isA(item, "ShellSettingRow"))
+                item = item->parentItem();
+            return item;
+        };
+        const auto sceneRect = [](QQuickItem *item) {
+            return item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
+        };
+        // "" when the control's row has the shape asked for (`stacked`: -1 either, 0 beside, 1 under).
+        const auto shapeProblem = [&](const QString &name, int stacked) -> QString {
+            QQuickItem *control = shownNamed(window->contentItem(), name);
+            QQuickItem *settingRow = rowOf(control);
+            QQuickItem *text = settingRow ? settingRow->childItems().value(0) : nullptr;
+            if (!control || !text || !shown(control))
+                return name + u": not shown"_s;
+            const bool under = settingRow->property("stacked").toBool();
+            if (stacked >= 0 && under != (stacked == 1))
+                return name + (under ? u": under its text"_s : u": beside its text"_s);
+            const QRectF c = sceneRect(control), r = sceneRect(settingRow), t = sceneRect(text);
+            if (qAbs(c.right() - r.right()) > 1)
+                return name + u": ends at %1, its row at %2"_s.arg(c.right()).arg(r.right());
+            if (under ? qAbs(c.left() - r.left()) > 1 || c.top() < t.bottom()
+                      : qAbs(c.center().y() - t.center().y()) > 1 || c.left() < t.right())
+                return name + u": not placed %1 its text"_s.arg(under ? u"under"_s : u"beside"_s);
+            const QList<QQuickItem *> parts = uidriver::allItems(control);
+            for (QQuickItem *part : parts) {
+                if (part->property("truncated").toBool())
+                    return name + u": a cut label (%1)"_s.arg(part->property("text").toString());
+                if (touch && isA(part, "QQuickAbstractButton") && (part->height() < 44 || part->width() < 44))
+                    return name + u": a target under 44 px"_s;
+            }
+            if (touch && c.height() < 44)
+                return name + u": under 44 px high"_s;
+            return {};
+        };
+        const auto rowsShaped = [&](bool compact, bool roomy, QString *problem) {
+            const QList<std::pair<QString, int>> expected{
+                    {u"lightSurfaceSetting"_s, compact && !roomy ? -1 : 0},
+                    {u"darkSurfaceSetting"_s, compact && !roomy ? -1 : 0},
+                    {u"themeModeSetting"_s, compact ? 1 : 0},
+                    {u"fontScaleSetting"_s, compact ? 1 : 0}};
+            for (const auto &[name, stacked] : expected) {
+                *problem = shapeProblem(name, stacked);
+                if (!problem->isEmpty())
+                    return false;
+            }
+            return true;
+        };
+        const bool compact = window->width() < 600;
+        QString problem;
+        const bool shaped = waitFor([&] { return rowsShaped(compact, true, &problem); });
+        if (!shaped)
+            std::fprintf(stderr, "selftest: settings rows: %s\n", qPrintable(problem));
+        check(shaped, compact ? "phone settings: the background rows beside their text, Motyw and Rozmiar tekstu under it, filled"
+                              : "settings rows: every control beside its text, at the row's right edge");
+        if (compact) {
+            const QSize phone = window->size();
+            window->resize(360, 740);
+            const bool narrowShaped = waitFor([&] { return window->width() == 360 && rowsShaped(true, false, &problem); });
+            if (!narrowShaped)
+                std::fprintf(stderr, "selftest: settings rows at 360 px: %s\n", qPrintable(problem));
+            check(narrowShaped, "360 px settings: each row beside its text or under it, filled, no label cut");
+            window->resize(phone);
+            waitFor([&] { return window->size() == phone; });
+            settle(200);
+        }
+    }
+
     check(activate(shownItem(u"accentSwatch_green"_s)), "the appearance settings show the accent swatches");
     check(waitFor([&] { return settings->accentColor() == u"green" && color("accent") != u"#e2574c"; }),
           "a tap on a swatch changes the accent at once and saves it");

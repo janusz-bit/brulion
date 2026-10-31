@@ -2151,10 +2151,18 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   Settings cards (`SettingsView`'s groups, the sync section) divide their rows with 1-px
   `borderSubtle` hairlines (`ShellSettingDividers`, drawn over the card's column: none under a
   row without controls that titles what follows, none above a plain note); every title — a
-  switch's too — starts at the card's one left edge; on compact windows the control goes under
-  its text and fills the row: a segmented control (its segments as even as their labels allow:
-  the narrow ones share one width, none is cut) and a lone framed button (one beside a badge or
-  another button, and a text button, keep their width). A segmented control's selected segment
+  switch's too — starts at the card's one left edge; a control sits at the row's right edge,
+  vertically centred on the title and description, as the switches do. On compact windows
+  (< 600 px) a row puts its control under the text only when it does not fit beside it
+  (`ShellSettingRow.stacked`: the title, a gap and the controls' natural widths —
+  `naturalWidth` of `BSegmented` and `BButton`, which `fill` never changes — wider than the row,
+  the text left under 40 % of it, or a wrapping group such as the accent swatches, or a text
+  field); each row decides alone (at 412 px Jasne tło, Ciemne tło and Czcionka interfejsu stay
+  beside their text, Motyw, Rozmiar tekstu and the swatches go under it; at 360 px Ciemne tło
+  goes under too; a long translation stacks by itself). Under its text a control fills the row:
+  a segmented control (its segments as even as their labels allow: the narrow ones share one
+  width, none is cut) and a lone framed button (one beside a badge or another button, and a text
+  button, keep their width), so every row ends at the same right edge. A segmented control's selected segment
   is a raised thumb on the sunken track: the raised surface in light; in dark that surface
   lightened by 12 % of the text colour with a `borderControl` outline, clearly lighter than the
   track. The track has a quiet `borderSubtle` frame in light (the control keeps its shape on
