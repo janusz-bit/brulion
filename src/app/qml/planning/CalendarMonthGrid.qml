@@ -4,9 +4,12 @@ import Brulion
 
 // CalendarMonthGrid — the month view: 6 weeks × 7 days of a CalendarModel (weekday names from
 // DatesHelper, starting on the model's first weekday). Wide cells list the day's entries as
-// coloured pills ("09:00 Spotkanie", "+3 więcej"); narrow cells (phones) show coloured dots per
-// kind. Today has a red disc, the selected day a tinted cell, days of other months are muted,
-// a daily note shows a small book.
+// coloured pills ("09:00 Spotkanie", "+3 więcej"; an alarm in the reminder's tint with its
+// alarm clock, not a solid amber pill); narrow cells (phones) show coloured dots per kind. The
+// cells are one surface (no weekend or other-month tint): today has a red disc on its number, the
+// selected day a dark disc (Theme.primary, as in BDatePicker; ≥ 3:1, WCAG 1.4.11) — today
+// selected shows only the red one —, days of other months have faint numbers, a daily note
+// shows a small book.
 //
 //   CalendarMonthGrid { calendar: cal; onDayTapped: (date) => …; onItemOpened: (entry) => … }
 //
@@ -153,10 +156,8 @@ FocusScope {
                     y: row * root.cellHeight
                     width: root.cellWidth
                     height: root.cellHeight
-                    color: isSelected ? Theme.bgSelected
-                         : !inMonth ? Theme.alpha(Theme.bgSunken, Theme.dark ? 0.55 : 0.7)
-                         : isWeekend ? Theme.alpha(Theme.bgSunken, Theme.dark ? 0.3 : 0.4)
-                         : "transparent"
+                    // One surface: the selection is the disc on the day's number, not a fill.
+                    color: "transparent"
 
                     Accessible.role: Accessible.Cell
                     Accessible.name: {
@@ -186,7 +187,8 @@ FocusScope {
                         color: Theme.borderSubtle
                     }
 
-                    // Day number (today: a red disc).
+                    // Day number: today on a red disc, the selected day on a dark one (only the red
+                    // one when today is selected), another month's day faint.
                     Rectangle {
                         id: dayBadge
                         x: root.dots ? (parent.width - width) / 2 : 6
@@ -194,15 +196,17 @@ FocusScope {
                         width: Theme.touchUi ? 28 : 24
                         height: width
                         radius: width / 2
-                        color: cell.isToday ? Theme.accentSolid : "transparent"
+                        color: cell.isToday ? Theme.accentSolid : cell.isSelected ? Theme.primary : "transparent"
                         Text {
                             anchors.centerIn: parent
                             text: cell.day
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textSm
-                            font.weight: cell.isToday || cell.isSelected ? Theme.weightBold : Theme.weightMedium
+                            font.weight: cell.isToday || cell.isSelected ? Theme.weightBold
+                                       : cell.inMonth ? Theme.weightMedium : Theme.weightNormal
                             font.features: { "tnum": 1 }
-                            color: cell.isToday ? Theme.fgOnAccent : cell.inMonth ? Theme.fg : Theme.fgFaint
+                            color: cell.isToday ? Theme.fgOnAccent : cell.isSelected ? Theme.primaryFg
+                                 : cell.inMonth ? Theme.fg : Theme.fgFaint
                         }
                     }
                     BIcon {
@@ -227,7 +231,9 @@ FocusScope {
                                 id: pill
                                 required property int index
                                 readonly property var entry: cell.items[index]
-                                readonly property var colors: Theme.chip(entry.variant)
+                                // An alarm in the reminder's tint: its alarm clock tells it apart (a
+                                // solid amber pill was the loudest thing on the month).
+                                readonly property var colors: Theme.chip(entry.variant === "alarm" ? "reminder" : entry.variant)
                                 width: parent ? parent.width : 0 // (null while the Repeater drops it: a new month)
                                 height: root.pillHeight
                                 radius: Theme.radiusSm

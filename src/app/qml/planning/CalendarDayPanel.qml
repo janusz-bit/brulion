@@ -163,6 +163,7 @@ FocusScope {
 
             // ---- The day -----------------------------------------------------------------
             BSectionHeader {
+                id: dayHeader
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.space2
                 text: qsTr("Plan of the day")
@@ -180,12 +181,16 @@ FocusScope {
                     onTokenMenuRequested: (item, x, y) => root.itemMenuRequested(modelData, item, x, y)
                 }
             }
+            // Nothing planned: a short note under "Plan dnia", in line with it (no picture: the
+            // panel stays a list, not an empty page).
             BEmptyState {
                 Layout.fillWidth: true
-                Layout.topMargin: Theme.space2
+                Layout.leftMargin: dayHeader.leftPadding
+                Layout.rightMargin: Theme.space2
                 visible: root.items.length === 0
                 compact: true
-                iconName: root.journal ? "book-open" : "calendar"
+                alignStart: true
+                iconName: ""
                 title: qsTr("Nothing planned")
                 description: root.journal ? qsTr("This day has a journal entry, but no dates or reminders.")
                                           : qsTr("Tasks and reminders you add here go into this day's journal.")

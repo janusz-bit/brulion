@@ -139,10 +139,7 @@ FocusScope {
                 width: root.columnWidth
                 height: top.height
 
-                Rectangle {
-                    anchors.fill: parent
-                    color: dayHead.isSelected ? Theme.bgSelected : "transparent"
-                }
+                // (No fill for the selected day: its number's dark disc marks it, as in the month.)
                 Column {
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: 4
@@ -156,19 +153,21 @@ FocusScope {
                         font.capitalization: Font.AllUppercase
                         color: dayHead.isToday ? Theme.accentText : Theme.fgMuted
                     }
+                    // Today on a red disc, the selected day on a dark one (Theme.primary, ≥ 3:1;
+                    // only the red one when today is selected).
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: Theme.touchUi ? 28 : 24
                         height: width
                         radius: width / 2
-                        color: dayHead.isToday ? Theme.accentSolid : "transparent"
+                        color: dayHead.isToday ? Theme.accentSolid : dayHead.isSelected ? Theme.primary : "transparent"
                         Text {
                             anchors.centerIn: parent
                             text: dayHead.day
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textMd
                             font.weight: Theme.weightSemiBold
-                            color: dayHead.isToday ? Theme.fgOnAccent : Theme.fg
+                            color: dayHead.isToday ? Theme.fgOnAccent : dayHead.isSelected ? Theme.primaryFg : Theme.fg
                         }
                     }
                 }
@@ -251,6 +250,7 @@ FocusScope {
                 }
                 Accessible.role: Accessible.ColumnHeader
                 Accessible.name: longLabel
+                Accessible.selected: isSelected
             }
         }
         Rectangle {

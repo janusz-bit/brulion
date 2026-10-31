@@ -445,7 +445,8 @@ ApplicationWindow {
             // What identifies a control's state (WCAG 1.4.11, ≥ 3:1), worst case over the
             // surfaces it lies on: the off switch's solid track (pages, cards, sunken panels); in
             // dark the segmented control's selection outline, its only frame there, against the
-            // track and the card (light: the white thumb).
+            // track and the card (light: the white thumb); the calendar's discs on a day's number
+            // (the selected day, today) on the grids' page.
             Specimen {
                 label: "STANY KONTROLEK (≥ 3:1)"
                 note: "najgorszy wynik na tłach, na których leżą"
@@ -454,7 +455,11 @@ ApplicationWindow {
                         { name: "przełącznik wyłączony", token: "borderControl", mark: Theme.borderControl, kind: "switch",
                           on: [["bg", Theme.bg], ["bgElevated", Theme.bgElevated], ["bgSunken", Theme.bgSunken]] },
                         { name: "wybrany segment", token: "borderControl", mark: Theme.borderControl, kind: "segmented", dark: true,
-                          on: [["bgSunken", Theme.bgSunken], ["bgElevated", Theme.bgElevated]] }
+                          on: [["bgSunken", Theme.bgSunken], ["bgElevated", Theme.bgElevated]] },
+                        { name: "kalendarz: wybrany dzień", token: "primary", mark: Theme.primary, fg: Theme.primaryFg, kind: "disc",
+                          on: [["bg", Theme.bg]] },
+                        { name: "kalendarz: dziś", token: "accentSolid", mark: Theme.accentSolid, fg: Theme.fgOnAccent, kind: "disc",
+                          on: [["bg", Theme.bg]] }
                     ].filter(m => !m.dark || Theme.dark)
                     delegate: Rectangle {
                         id: stateSwatch
@@ -486,6 +491,22 @@ ApplicationWindow {
                                     model: ["Miesiąc", "Tydzień"]
                                     currentValue: "Miesiąc"
                                     accessibleName: "Widok"
+                                }
+                                Rectangle {
+                                    visible: stateSwatch.modelData.kind === "disc"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 24
+                                    height: 24
+                                    radius: 12
+                                    color: stateSwatch.modelData.mark
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "14"
+                                        font.family: Theme.fontUi
+                                        font.pixelSize: Theme.textSm
+                                        font.weight: Theme.weightBold
+                                        color: stateSwatch.modelData.fg || Theme.fg
+                                    }
                                 }
                             }
                             Text {
