@@ -17,7 +17,8 @@ import Brulion
 // subtitles match at half weight); matched characters are highlighted. `extraResults` are
 // appended after the matches (e.g. "Create page …"). Keyboard: Up/Down (wrapping),
 // PageUp/PageDown, Home/End with Ctrl, Enter activates, Escape closes. Wide windows: a
-// floating panel in the upper third; compact: full screen with a back button.
+// floating panel in the upper third whose list ends on a whole row (never half a row cut off);
+// compact: full screen with a back button. A list that scrolls shows its scroll bar from the start.
 T.Popup {
     id: control
 
@@ -93,8 +94,30 @@ T.Popup {
     readonly property real topEdge: fullScreen ? 0 : Math.round(overlayHeight * 0.12)
     padding: 0
 
-    implicitHeight: searchRow.implicitHeight + 1 + Math.min(list.contentHeight + 12, 420)
+    implicitHeight: searchRow.implicitHeight + 1 + _listHeight
                     + (allResults.length === 0 ? 150 : 0) + (hints.visible ? hints.implicitHeight : 0)
+
+    /// Floating: the most the list may take — 420 px, and what the popup's own limits (72 % of
+    /// the window, above the on-screen keyboard) leave under the search row and the key hints.
+    readonly property real _listRoom: Math.min(420, overlayHeight * 0.72 - _chromeHeight,
+                                               overlayHeight - KeyboardInsets.overlap - topEdge - Theme.space2 - _chromeHeight)
+    readonly property real _chromeHeight: searchRow.implicitHeight + 1 + (hints.visible ? hints.implicitHeight : 0)
+    /// The list's height (with its 6 + 6 px margins): all of it when it fits, else as many whole
+    /// rows as fit in _listRoom — the rows' real heights (two-line rows, larger text), at least
+    /// one. The rows inside the room exist (the view creates what it shows and a buffer below).
+    readonly property real _listHeight: {
+        const all = list.contentHeight + 12
+        if (fullScreen || all <= _listRoom || list.count === 0)
+            return Math.min(all, 420)
+        let h = 12
+        for (let i = 0; i < list.count; ++i) {
+            const row = list.itemAtIndex(i)
+            if (!row || (i > 0 && h + row.height > _listRoom))
+                break
+            h += row.height
+        }
+        return h
+    }
 
     onAboutToShow: {
         field.text = ""
@@ -166,7 +189,7 @@ T.Popup {
             id: list
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredHeight: Math.min(contentHeight + 12, 420)
+            Layout.preferredHeight: control._listHeight
             visible: control.allResults.length > 0
             clip: true
             topMargin: 6
@@ -177,7 +200,11 @@ T.Popup {
             currentIndex: control.currentIndex
             boundsBehavior: Flickable.StopAtBounds
             highlightMoveDuration: 0
-            T.ScrollBar.vertical: BScrollBar {}
+            // A list that scrolls says so from the start (its last row may sit at the edge).
+            T.ScrollBar.vertical: BScrollBar {
+                policy: list.contentHeight + list.topMargin + list.bottomMargin > list.height + 1
+                        ? T.ScrollBar.AlwaysOn : T.ScrollBar.AsNeeded
+            }
 
             delegate: BListItem {
                 id: row
@@ -216,15 +243,13 @@ T.Popup {
             visible: control.fullScreen && control.allResults.length > 0
         }
 
-        Rectangle {
+        // The key hints on the panel's own surface, under a hairline.
+        Item {
             id: hints
             Layout.fillWidth: true
             visible: !Theme.touchUi
             implicitHeight: 34
-            color: Theme.bgSunken
-            radius: Theme.radiusLg
             Rectangle { width: parent.width; height: 1; color: Theme.border }
-            Rectangle { y: 1; width: parent.width; height: parent.radius; color: parent.color }
 
             Row {
                 anchors.verticalCenter: parent.verticalCenter
@@ -268,7 +293,8 @@ T.Popup {
             radius: control.fullScreen ? 0 : Theme.radiusLg
             color: Theme.bgElevated
             border.width: control.fullScreen ? 0 : 1
-            border.color: Theme.border
+            // Dark: a clear edge against the dimmed page.
+            border.color: Theme.dark ? Theme.borderStrong : Theme.border
         }
     }
 

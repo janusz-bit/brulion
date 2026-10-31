@@ -300,7 +300,8 @@ T.Dialog {
             radius: control.sheet ? Theme.radiusXl : Theme.radiusXl - 2
             color: Theme.bgElevated
             border.width: Theme.dark ? 1 : 0
-            border.color: Theme.border
+            // A clear edge against the dimmed page.
+            border.color: Theme.borderStrong
         }
     }
 
