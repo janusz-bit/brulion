@@ -68,9 +68,10 @@ T.TabButton {
                 elide: Text.ElideRight
             }
             BBadge {
+                // Neutral in both states: the current tab says so with its underline.
                 anchors.verticalCenter: parent.verticalCenter
                 count: control.count
-                variant: control.checked ? "accent" : "neutral"
+                variant: "neutral"
             }
         }
     }

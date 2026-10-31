@@ -1714,9 +1714,16 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     // The row of `path` lies wholly in the tree's visible part, where the sidebar left it (not
     // placed by the test as treeRow() does): a row under the list's bottom edge is behind the
     // sync footer — a tap there opened the sync center (the Android emulator's --folders run).
+    // A row the list shows — not one of its pooled delegates (reuseItems): those are culled, not
+    // hidden, so they look shown, at the place they had when they were pooled.
+    const auto liveRow = [](QQuickItem *list, QQuickItem *item) {
+        QQuickItem *live = nullptr;
+        QMetaObject::invokeMethod(list, "itemAtIndex", qReturnArg(live), item->property("index").toInt());
+        return live == item;
+    };
     const auto rowIn = [&](QQuickItem *list, const QString &path) -> QQuickItem * {
         return !list ? nullptr : findShown(list, [&](QQuickItem *item) {
-            return item->objectName() == u"treeRow" && item->property("path").toString() == path;
+            return item->objectName() == u"treeRow" && item->property("path").toString() == path && liveRow(list, item);
         });
     };
     const auto rowInView = [&](const QString &path) {
@@ -1893,8 +1900,8 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     if (QQuickItem *list = treeList()) {
         for (QQuickItem *item : uidriver::allItems(list)) {
             const QString path = item->property("path").toString();
-            if (item->objectName() != u"treeRow" || !shown(item) || !path.startsWith(u"Przewijanie/Strona ")
-                || path == deepest)
+            if (item->objectName() != u"treeRow" || !shown(item) || !liveRow(list, item)
+                || !path.startsWith(u"Przewijanie/Strona ") || path == deepest)
                 continue;
             const qreal top = rowTop(path);
             if (top >= 0 && (clickedTop < 0 || top < clickedTop)) {

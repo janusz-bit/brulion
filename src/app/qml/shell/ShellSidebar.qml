@@ -50,6 +50,19 @@ Rectangle {
     /// The sections Ulubione and Ostatnie, unless hidden (Ustawienia → Wygląd → Układ).
     readonly property bool favoritesShown: AppSettings.sidebarHidden.indexOf("favorites") < 0
     readonly property bool recentShown: AppSettings.sidebarHidden.indexOf("recent") < 0
+    /// "Ostatnie": up to 5 recent pages, without the one shown (the tree highlights it). Set once
+    /// per change — a route change updates the recent pages and then the current path — and only
+    /// when the list differs, so the header above the tree is not rebuilt (and resized) twice while
+    /// the tree is placed for the new route.
+    property var recentOthers: []
+    function updateRecentOthers() {
+        const next = Workspace.recentPages.filter(p => p.path !== currentPath).slice(0, 5)
+        if (next.length === recentOthers.length
+                && next.every((p, i) => p.path === recentOthers[i].path && p.title === recentOthers[i].title))
+            return
+        recentOthers = next
+    }
+    onCurrentPathChanged: Qt.callLater(updateRecentOthers)
     /// Show the open page in the tree on every route change.
     property bool revealCurrent: flag(AppSettings.value("ui/sidebar/revealCurrent", true))
     /// The row `reveal()` keeps in view ("" = none): placed again on every change of the list's
@@ -299,7 +312,15 @@ Rectangle {
                 sidebar.revealedPath = ""
         }
     }
-    Component.onCompleted: if (revealCurrent) Qt.callLater(revealRoute)
+    Connections {
+        target: Workspace
+        function onRecentPagesChanged() { Qt.callLater(sidebar.updateRecentOthers) }
+    }
+    Component.onCompleted: {
+        updateRecentOthers()
+        if (revealCurrent)
+            Qt.callLater(revealRoute)
+    }
     // Shown (the drawer opens, the window's sidebar comes back): its list is laid out again —
     // placed again (the header may have grown meanwhile: the navigation stays in sight).
     onVisibleChanged: if (visible) Qt.callLater(placeList)
@@ -505,10 +526,11 @@ Rectangle {
                     onClicked: sidebar.go({ view: "importExport", tab: "import" })
                 }
 
-                // ---- Favourites --------------------------------------------------------
+                // ---- Favourites (once a page is starred: the page header's star, a row's menu,
+                // the palette) --------------------------------------------------------------------
                 BSectionHeader {
                     objectName: "sidebarFavoritesHeader"
-                    visible: sidebar.favoritesShown
+                    visible: sidebar.favoritesShown && Workspace.favorites.length > 0
                     width: parent.width
                     text: qsTr("Favorites")
                     count: Workspace.favorites.length
@@ -520,19 +542,10 @@ Rectangle {
                     }
                 }
                 Column {
-                    visible: sidebar.favoritesShown && sidebar.favoritesOpen
+                    visible: sidebar.favoritesShown && sidebar.favoritesOpen && Workspace.favorites.length > 0
                     width: parent.width
                     bottomPadding: Theme.space2
 
-                    BText {
-                        visible: Workspace.favorites.length === 0
-                        width: parent.width - 2 * Theme.space3
-                        x: Theme.space3
-                        text: qsTr("Pages you star appear here.")
-                        variant: "faint"
-                        font.pixelSize: Theme.textSm
-                        wrapMode: Text.Wrap
-                    }
                     Repeater {
                         model: Workspace.favorites
                         delegate: BListItem {
@@ -555,10 +568,11 @@ Rectangle {
                     }
                 }
 
-                // ---- Recent ------------------------------------------------------------
+                // ---- Recent: the pages opened lately other than the one shown (the tree
+                // highlights that one) ---------------------------------------------------------------
                 BSectionHeader {
                     objectName: "sidebarRecentHeader"
-                    visible: sidebar.recentShown && Workspace.recentPages.length > 0
+                    visible: sidebar.recentShown && sidebar.recentOthers.length > 0
                     width: parent.width
                     text: qsTr("Recent")
                     collapsible: true
@@ -569,19 +583,18 @@ Rectangle {
                     }
                 }
                 Column {
-                    visible: sidebar.recentShown && sidebar.recentOpen && Workspace.recentPages.length > 0
+                    visible: sidebar.recentShown && sidebar.recentOpen && sidebar.recentOthers.length > 0
                     width: parent.width
                     bottomPadding: Theme.space2
 
                     Repeater {
-                        model: Workspace.recentPages.slice(0, 5)
+                        model: sidebar.recentOthers
                         delegate: BListItem {
                             required property var modelData
                             width: parent.width
                             dense: true
                             text: modelData.title
                             iconName: "clock"
-                            selected: sidebar.route.view === "page" && sidebar.route.path === modelData.path
                             onClicked: sidebar.openPage(modelData.path)
                         }
                     }

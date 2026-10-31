@@ -28,7 +28,8 @@ components — no Material/Fusion look, so all targets look identical.
   UIs keep 44 px targets and never show the row), reduce motion. **Układ**: the sidebar's
   entries (Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj) and its sections
   Ulubione and Ostatnie can be unticked (the "Strony" tree stays; hidden views stay in the
-  command palette and their shortcuts); the phone's **bottom navigation**: four buttons, each
+  command palette and their shortcuts; ticked, Ulubione shows once a page is starred and
+  Ostatnie once another page was opened); the phone's **bottom navigation**: four buttons, each
   from a menu of Dziennik, Kalendarz, Szukaj, Zadania, Strony, Tagi, Graf (a view already in
   another slot swaps places with it), Menu always last; the **quick note button** on or off;
   "Przywróć domyślny wygląd" (colours, fonts, sizes, density, line spacing — the visibility of
@@ -57,8 +58,11 @@ components — no Material/Fusion look, so all targets look identical.
     — then „Dokumentacja Brulionu” and „Otwórz inny notatnik…” (the start screen); a recent
     notebook whose folder is gone is not recreated: a warning, and it leaves the list) and a
     new-page button; navigation Dziennik,
-    Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj; Ulubione; Ostatnie; Strony (the
-    folder tree — see "Folders" below); a sync status footer (opens the sync center).
+    Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj; Ulubione (shown once a page is
+    starred — the page header's ☆, the Więcej menu, a tree row's „Dodaj do ulubionych”, the
+    palette); Ostatnie (up to 5 pages opened lately, without the one shown — the tree highlights
+    that one —; hidden while there are none); Strony (the folder tree — see "Folders" below); a
+    sync status footer (opens the sync center).
   * Top bar (`ShellTopBar`): sidebar toggle, back / forward, the title (a breadcrumb for pages
     in folders), Szukaj, Paleta poleceń, Szybka notatka, side panel toggle and **Więcej** (⋮).
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's

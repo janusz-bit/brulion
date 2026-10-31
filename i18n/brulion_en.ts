@@ -232,7 +232,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="267"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="268"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -686,7 +686,7 @@
 <context>
     <name>PropertiesPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/PropertiesPanel.qml" line="303"/>
+        <location filename="../src/app/qml/editor/PropertiesPanel.qml" line="305"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -756,7 +756,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="272"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="277"/>
         <source>The filters hide %n result(s).</source>
         <translation>
             <numerusform>The filters hide %n result.</numerusform>
