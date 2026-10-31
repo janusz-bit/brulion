@@ -509,6 +509,7 @@ FocusScope {
 
     BQuickSwitcher {
         id: switcher
+        objectName: "shellSwitcher"
         // Workspace.revision: refresh when pages come and go while it is open. Closed (visible
         // stays true until the exit transition ends), it neither queries nor follows the
         // revision: every save bumps it.
@@ -666,6 +667,20 @@ FocusScope {
     function openDevPopup(popup) {
         const name = popup.split(":")[0]
         const query = popup.indexOf(":") >= 0 ? popup.slice(popup.indexOf(":") + 1) : ""
+        // --screenshot waits until the popup has opened (its enter transition over), or at once
+        // when it is open already (DevTools.holdScreenshot).
+        const target = ({ palette: palette, switcher: switcher, capture: capture, newPage: newPage,
+                          newFolder: newPage, move: moveDialog, about: about, drawer: drawer })[name] || null
+        if (target && !target.opened) {
+            DevTools.holdScreenshot(true)
+            const release = () => {
+                if (!target.opened)
+                    return
+                target.openedChanged.disconnect(release)
+                DevTools.holdScreenshot(false)
+            }
+            target.openedChanged.connect(release)
+        }
         Qt.callLater(() => {
             switch (name) {
             case "palette": shell.openPalette(query); break

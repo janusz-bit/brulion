@@ -4340,6 +4340,84 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     handled = sendKey(window, Qt::Key_Back);
     check(handled && view() == u"journals", "after the palette closed, back reaches the shell again");
 
+    // 4b. The rows of the palette and the quick switcher (docs/UI.md "Shared components",
+    //     BPalette): floating (wide windows) every row is one line high (Theme.listItemHeight), a
+    //     subtitle on the title's line after it; full screen (phones) a subtitled row has two lines,
+    //     the subtitle under the title. The query shows subtitled rows ("Nowy folder…" — "W głównym
+    //     folderze notatnika", the page "Remont mieszkania" in Projekty).
+    {
+        auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
+        const auto rowsLaidOut = [theme](QObject *popup, QString *detail) {
+            auto *content = popup->property("contentItem").value<QQuickItem *>();
+            if (!content || !theme) {
+                *detail = u"no list"_s;
+                return false;
+            }
+            const bool floating = !popup->property("fullScreen").toBool();
+            const qreal oneLine = theme->property("listItemHeight").toReal();
+            const qreal twoLine = theme->property("listItemHeightTwoLine").toReal();
+            int rows = 0;
+            int subtitled = 0;
+            const QList<QQuickItem *> items = uidriver::allItems(content);
+            for (QQuickItem *row : items) {
+                if (!isA(row, "BListItem") || !shown(row))
+                    continue;
+                ++rows;
+                const QString title = row->property("text").toString();
+                const QString subtitle = row->property("subtitle").toString();
+                const qreal expected = floating || subtitle.isEmpty() ? oneLine : twoLine;
+                if (qAbs(row->height() - expected) > 0.5) {
+                    *detail = u"“%1” is %2 px high, not %3"_s.arg(title).arg(row->height()).arg(expected);
+                    return false;
+                }
+                if (subtitle.isEmpty())
+                    continue;
+                QQuickItem *sub = nullptr;
+                const QList<QQuickItem *> parts = uidriver::allItems(row);
+                for (QQuickItem *part : parts) {
+                    if (part->inherits("QQuickText") && part->property("text").toString() == subtitle)
+                        sub = part;
+                }
+                QQuickItem *titleText = sub && sub->parentItem() ? sub->parentItem()->childItems().value(0) : nullptr;
+                if (!sub || !titleText || !shown(sub)) {
+                    *detail = u"“%1” does not show its subtitle"_s.arg(title);
+                    return false;
+                }
+                const QRectF t = titleText->mapRectToScene(QRectF(0, 0, titleText->width(), titleText->height()));
+                const QRectF u = sub->mapRectToScene(QRectF(0, 0, sub->width(), sub->height()));
+                const bool sameLine = qAbs(u.center().y() - t.center().y()) < t.height() / 2 && u.left() >= t.right();
+                const bool below = u.top() >= t.bottom() - 0.5;
+                if (floating ? !sameLine : !below) {
+                    *detail = u"“%1”: the subtitle is not %2 the title"_s.arg(title, floating ? u"beside"_s : u"under"_s);
+                    return false;
+                }
+                ++subtitled;
+            }
+            *detail = u"%1 rows, %2 with a subtitle"_s.arg(rows).arg(subtitled);
+            return rows > 0 && subtitled > 0;
+        };
+        QObject *switcher = find("shellSwitcher");
+        const QList<std::pair<QObject *, QString>> popups{{palette, u"folder"_s}, {switcher, u"rem"_s}};
+        for (const auto &[popup, query] : popups) {
+            if (!popup) {
+                check(false, "the quick switcher exists");
+                continue;
+            }
+            const bool isPalette = popup == palette;
+            QMetaObject::invokeMethod(popup, "open");
+            const bool opened = waitFor([&] { return popup->property("opened").toBool(); });
+            QMetaObject::invokeMethod(popup, "typeQuery", Q_ARG(QVariant, query));
+            QString detail;
+            const bool laidOut = opened && waitFor([&] { return rowsLaidOut(popup, &detail); });
+            if (!laidOut)
+                std::fprintf(stderr, "selftest: %s rows: %s\n", isPalette ? "palette" : "switcher", qPrintable(detail));
+            check(laidOut, isPalette ? "the command palette's rows: one line when floating (a subtitle beside the title), two on a phone"
+                                     : "the quick switcher's rows: one line when floating (the folder beside the title), two on a phone");
+            QMetaObject::invokeMethod(popup, "close");
+            waitFor([&] { return !isOpen(popup); });
+        }
+    }
+
     // 5. The block editor in the shell: real keys reach the edited block and are saved, Ctrl+E
     //    and the "Markdown source" command switch source mode, a link to a missing page opens
     //    that page ready to type (and typing creates it).

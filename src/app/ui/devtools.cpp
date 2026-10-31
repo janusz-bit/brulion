@@ -188,6 +188,15 @@ void DevTools::attach(QQmlApplicationEngine *engine)
     startScrollProbe(engine, m_probeArguments);
 }
 
+void DevTools::holdScreenshot(bool hold)
+{
+    if (hold == m_screenshotHeld)
+        return;
+    m_screenshotHeld = hold;
+    if (!hold)
+        m_screenshotReleased = true;
+}
+
 void DevTools::takeScreenshot(QObject *root)
 {
     auto *window = qobject_cast<QQuickWindow *>(root);
@@ -196,6 +205,19 @@ void DevTools::takeScreenshot(QObject *root)
         QCoreApplication::exit(1);
         return;
     }
+    // A --popup still opening (holdScreenshot): look again shortly, and once more after it opened.
+    constexpr int kPollMs = 50;
+    constexpr int kMaxHoldMs = 5000;
+    if ((m_screenshotHeld && m_screenshotHeldMs < kMaxHoldMs) || (m_screenshotReleased && m_screenshotHeldMs > 0)) {
+        if (!m_screenshotHeld)
+            m_screenshotReleased = false;
+        m_screenshotHeldMs += kPollMs;
+        QTimer::singleShot(kPollMs, this, [this, root] { takeScreenshot(root); });
+        return;
+    }
+    if (m_screenshotHeld)
+        std::fprintf(stderr, "brulion: --screenshot: the popup did not finish opening in %d ms; taking the shot anyway\n",
+                     kMaxHoldMs);
     const QImage image = window->grabWindow();
     if (image.isNull() || !image.save(m_screenshot)) {
         std::fprintf(stderr, "brulion: --screenshot: could not save %s\n", qPrintable(m_screenshot));

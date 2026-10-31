@@ -89,7 +89,13 @@ QtObject {
     readonly property color bgPressed: dark ? Qt.rgba(232/255, 228/255, 218/255, 0.11) : Qt.rgba(31/255, 36/255, 48/255, 0.10)
     readonly property color bgSelected: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.16) : Qt.rgba(159/255, 195/255, 230/255, 0.30)
     readonly property color bgInverse: dark ? "#e8e4da" : "#1f2430"
+    /// Behind edge sheets (bottom sheets, the full-screen palette, the drawer): the page dims.
     readonly property color scrim: dark ? Qt.rgba(8/255, 10/255, 16/255, 0.62) : Qt.rgba(31/255, 36/255, 48/255, 0.40)
+    /// Behind centred modal panels (the floating command palette and quick switcher, a centred
+    /// BDialog): the page recedes — light: a wash of the page tinted toward ink (paper about
+    /// #ddd9d3, page text about 2.5:1 instead of 7:1, the panel's lighter fill stands out); dark:
+    /// the scrim's ink at 72 % (page text about 2:1). ThemePalette.modalScrim, per surface.
+    readonly property color scrimModal: colors.scrimModal
 
     // ---- Text ----------------------------------------------------------------------------
     // fg #1f2430 / #e8e4da, fgMuted #535a6a / #a9aebb, fgFaint #676c7b / #8f96a7.

@@ -8,7 +8,9 @@
 //                          suggest, slash, date, zoom, source, reminder, …; see the playground)
 //   --screenshot <file>    after loading (+ --delay ms, default 800) save the window as an
 //                          image and quit (exit code 0 = saved, 1 = failed); the window is
-//                          activated first (also on an X server without a window manager)
+//                          activated first (also on an X server without a window manager); with
+//                          the app's --popup it also waits until that popup has opened (its enter
+//                          transition over: holdScreenshot), at most 5 s longer
 //   --delay <ms>           see --screenshot
 //   --dump-layout <file>   with --screenshot: also write what the window shows (texts with their
 //                          colours and fonts, targets, boxes, the theme's tokens) as JSON for the
@@ -123,6 +125,11 @@ public:
     /// Switch the UI language at run time ("pl" | "en"): (un)installs the translation (also Qt's
     /// own, QtTranslations) and retranslates every qsTr() binding.
     Q_INVOKABLE void setLanguage(const QString &language);
+    /// --screenshot waits while held (AppShell holds it from --popup until that popup emitted
+    /// `opened`, so the shot never catches its enter transition half done): it looks again every
+    /// 50 ms, takes the shot one poll after the release, and gives up waiting after 5 s with a
+    /// warning. No effect without --screenshot.
+    Q_INVOKABLE void holdScreenshot(bool hold);
 
 Q_SIGNALS:
     void languageChanged();
@@ -144,6 +151,11 @@ private:
     QString m_screenshot;
     QString m_dumpLayout;
     int m_delayMs = 800;
+    /// holdScreenshot(): held now / the shot already waited this long for it / the release came
+    /// after the last look (one more poll: the frame after the popup opened).
+    bool m_screenshotHeld = false;
+    int m_screenshotHeldMs = 0;
+    bool m_screenshotReleased = false;
     QSize m_size;
     bool m_touch = false;
     int m_keyboard = -1;

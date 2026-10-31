@@ -17,8 +17,10 @@ import Brulion
 // subtitles match at half weight); matched characters are highlighted. `extraResults` are
 // appended after the matches (e.g. "Create page …"). Keyboard: Up/Down (wrapping),
 // PageUp/PageDown, Home/End with Ctrl, Enter activates, Escape closes. Wide windows: a
-// floating panel in the upper third whose list ends on a whole row (never half a row cut off);
-// compact: full screen with a back button. A list that scrolls shows its scroll bar from the start.
+// floating panel in the upper third whose list ends on a whole row (never half a row cut off),
+// its rows one line high (a subtitle after the title: BListItem.subtitleInline), over a scrim that
+// makes the page recede (Theme.scrimModal); compact: full screen with a back button, two-line rows
+// and the dimming Theme.scrim. A list that scrolls shows its scroll bar from the start.
 T.Popup {
     id: control
 
@@ -216,6 +218,9 @@ T.Popup {
                 subtitle: modelData.item.subtitle || ""
                 iconName: modelData.item.icon || control.defaultIcon
                 selected: index === control.currentIndex
+                // Floating: one-line rows, the subtitle after the title (an even rhythm);
+                // full screen (phones): two lines.
+                subtitleInline: !control.fullScreen
                 focusPolicy: Qt.NoFocus
                 trailing: BKbd {
                     sequence: row.modelData.item.shortcut || ""
@@ -298,8 +303,9 @@ T.Popup {
         }
     }
 
+    // Floating: the page recedes (scrimModal); full screen covers it anyway.
     T.Overlay.modal: Rectangle {
-        color: Theme.scrim
+        color: control.fullScreen ? Theme.scrim : Theme.scrimModal
         Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
     }
 
