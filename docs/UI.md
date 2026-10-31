@@ -1728,8 +1728,9 @@ note mode switch or an inserted template), so it never runs on over the page.
   side panel) stacks the key over the value. Every control and tap area is a 44 px target on touch
   UIs: the key's whole cell (a tap focuses the row, a double tap renames), the value's whole cell
   (a text, a number, a date button: the row's padding included). The open panel is a sunken surface
-  without a frame (the focus border while its text is edited), 24 px above the page's first block
-  (folded or open, in both modes; `BlockDelegate` by `prevKind`). Heights are bindings (rule 1 of
+  without a frame (the focus border while its text is edited), 24 px above the first block under
+  it (folded or open, in both modes, also under a page title drawn above the panel;
+  `BlockDelegate.belowProperties`). Heights are bindings (rule 1 of
   "Scrolling performance": the rows' heights summed, the chips' lines computed), rows live in a
   `ListModel` by key so an edit keeps them (a focused field too).
 * Keyboard: rows take the focus (Tab); ↓ / ↑ move between them (past the last: the add row), → or

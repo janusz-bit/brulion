@@ -64,10 +64,14 @@ Item {
     // The title shown above the properties panel (see the file comment).
     readonly property bool titleFirst: editor.titleFirst && index === editor.controller.titleRow
     readonly property bool propertiesAfterTitle: editor.titleFirst && index === editor.controller.titleRow - 1
+    /// The first block drawn under the properties panel — the one after it in the file, or after
+    /// the title drawn above it —: 24 px under the panel in both modes (constant per row).
+    readonly property bool belowProperties: (prevKind === "frontmatter" && !titleFirst)
+                                            || (editor.titleFirst && index === editor.controller.titleRow + 1)
     readonly property real topPad: doc ? docTopPad : outlineTopPad
     readonly property real outlineTopPad: {
-        // The first block under the properties panel: 24 px with the panel's bottom padding.
-        if (prevKind === "frontmatter" && !titleFirst)
+        // With the panel's 8 px bottom padding: 24 px.
+        if (belowProperties)
             return headingLevel === 1 ? Theme.space5 : Theme.space4
         if (headingLevel > 0 && index > 0 && !titleFirst)
             return headingLevel === 1 ? Theme.space5 : headingLevel === 2 ? Theme.space4 : Theme.space3
@@ -83,6 +87,9 @@ Item {
             return Theme.space3 // the properties panel under the title
         if (prevKind === "" || titleFirst)
             return 0
+        if (belowProperties) // air between the properties panel and the page's text
+            return headingLevel > 0 && !listItem ? Math.max(Theme.space6, editor.headingGapAbove(headingLevel))
+                                                 : Theme.space6
         if (headingLevel > 0 && !listItem)
             return editor.headingGapAbove(headingLevel)
         // A frame (table, code, callout, …), a quote's bar or a picture right under a heading:
@@ -91,8 +98,6 @@ Item {
         if (prevKind === "heading")
             return framed || view === "quote" || (hasEmbeds && model.onlyEmbeds && !listItem)
                    ? editor.headingGapBelow + Theme.space2 : editor.headingGapBelow
-        if (prevKind === "frontmatter")
-            return Theme.space6 // air between the properties panel and the page's text
         if (listItem && prevKind === "listItem")
             return editor.listGap
         return editor.paragraphGap
