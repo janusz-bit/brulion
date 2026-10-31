@@ -255,7 +255,7 @@ if [[ -n "$reuse" && -z "$suffix" ]] || [[ "$app" != brulion ]]; then
     if [[ $dry == 1 ]]; then
       uibench_run "${xvfb[@]}" node "$here/obsidian-shots.mjs" "${obs_args[@]}"
     elif [[ ${#obsidian_failures[@]} -gt 0 ]]; then
-      obsidian_status=1
+      # Not run: the reason goes into the manifest's failures.
       printf 'bench: %s\n' "${obsidian_failures[@]}" >&2
     else
       mkdir -p "$out/shots/obsidian"
