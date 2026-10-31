@@ -38,8 +38,9 @@ components — no Material/Fusion look, so all targets look identical.
   default font. The browser has no font rows (Qt there sees only its bundled DejaVu fonts).
 * Typography: system sans for UI (or a chosen family); the editor font is serif, sans or any
   installed family (Settings → Edytor → Czcionka → **Inna…**), the code font any monospaced
-  family (code blocks, source mode, formulas, calculations; inline `code` in rendered text keeps
-  Qt's own fixed font); line spacing Ciasny 1.45 | Normalny 1.65 | Luźny 1.9; configurable max
+  family (code blocks, source mode, formulas; inline `code` in rendered text keeps Qt's own fixed
+  font); calculations are note text: the editor font at the editor's size, results with tabular
+  figures (`tnum`) so they still line up right-aligned, errors smaller in the UI font; line spacing Ciasny 1.45 | Normalny 1.65 | Luźny 1.9; configurable max
   text width and text size. One type scale: note text quoted outside the editor (linked
   references, tagged blocks under a page and in the side panel, `ContentRefRow`) is in the
   editor font at the UI's base size (`textBase`), so the editor's own text is the only larger
@@ -714,7 +715,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   row's menu stays open unless its own task moves to another line.
 * A day without a note (journal stream or a single day) starts from the journal template; the
   note is created by the first change (`PageController.startNewPage`), never by looking at it.
-* Special block delegates: code (monospace), `calc` (input lines with right-aligned results),
+* Special block delegates: code (monospace), `calc` (input lines with right-aligned results, in
+  the note's font and size — results with tabular figures — on the sunken well with its
+  "Obliczenia" caption; the 1-px frame shows only while editing),
   table (grid editor with formula results; edits rewrite the Markdown table), `query` (live
   results with checkable tasks), math (`math`/`latex`/`tex` fences, the formula rendered from
   the LaTeX source, also as a list item of an outline or a journal; a formula between two `$$`

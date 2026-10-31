@@ -6,12 +6,20 @@ import Brulion
 // result right-aligned on the same line (calcResults role, evaluated in C++ with the page's
 // variables). Assignments show their value muted, errors in red; a `sum` line is emphasised.
 // The inputs are edited in place (persistent InlineEditor); results follow while typing.
+// A calculation is note text, not code: inputs and results are in the editor's font and size
+// (results with tabular figures, so digits still line up right-aligned), errors smaller in the
+// UI font; the 1-px frame shows only while editing (as the properties panel's).
 Rectangle {
     id: root
 
     property BlockDelegate block
     readonly property var results: block.model.calcResults || []
-    readonly property int lineHeightPx: Theme.lineHeightPx(Theme.textSm, 1.6)
+    /// The note's text size (the editor's), and its line height for a list of lines.
+    readonly property int fontSize: root.block && root.block.editor ? root.block.editor.fontSize : Theme.textEditor
+    readonly property int lineHeightPx: Theme.lineHeightPx(fontSize, Theme.lineHeight)
+    /// The family the note's text is drawn in ("serif" resolved, e.g. "Noto Serif"): the inputs'
+    /// TextEdit gets that name, so its text stays in the note's font while it is edited.
+    readonly property string family: familyProbe.fontInfo.family !== "" ? familyProbe.fontInfo.family : Theme.fontEditor
     readonly property real firstLineCenter: input.y + lineHeightPx / 2
     /// Width reserved for the results column (widest result, at most 45 %).
     readonly property real resultsWidth: {
@@ -39,10 +47,28 @@ Rectangle {
     height: implicitHeight
     radius: Theme.radius
     color: Theme.bgSunken
-    border.width: 1
-    border.color: root.block.editing ? Theme.alpha(Theme.focusRing, 0.5) : Theme.borderSubtle
+    border.width: root.block.editing ? 1 : 0
+    border.color: Theme.alpha(Theme.focusRing, 0.5)
 
-    FontMetrics { id: metrics; font.family: Theme.fontMono; font.pixelSize: Theme.textSm; font.weight: Theme.weightSemiBold }
+    Text {
+        id: familyProbe
+        visible: false
+        text: "0"
+        font.family: Theme.fontEditor
+        font.pixelSize: root.fontSize
+    }
+    FontMetrics {
+        id: metrics
+        font.family: root.family
+        font.pixelSize: root.fontSize
+        font.weight: Theme.weightSemiBold
+        font.features: { "tnum": 1 }
+    }
+    FontMetrics {
+        id: errorMetrics
+        font.family: Theme.fontUi
+        font.pixelSize: Theme.textSm
+    }
 
     Row {
         x: Theme.space4
@@ -76,9 +102,10 @@ Rectangle {
         block: root.block
         persistent: true
         multiline: true
-        highlightMode: "code"
-        font.family: Theme.fontMono
-        font.pixelSize: Theme.textSm
+        highlightMode: "code" // (only colours comments: the font stays the note's)
+        font.family: root.family
+        font.pixelSize: root.fontSize
+        font.weight: Theme.weightNormal
         lineHeightPx: root.lineHeightPx
     }
 
@@ -105,14 +132,19 @@ Rectangle {
                 return input.y + (offset <= input.length ? input.positionToRectangle(offset).y : 0)
             }
             height: root.lineHeightPx
-            verticalAlignment: Text.AlignVCenter
+            // On the line's baseline: the input's lines have their text at the top of the line
+            // (a fixed line height); an error's smaller text moved down to the same baseline.
+            verticalAlignment: Text.AlignTop
+            topPadding: isError ? Math.max(0, Math.round(metrics.ascent - errorMetrics.ascent)) : 0
             horizontalAlignment: Text.AlignRight
             text: isError ? modelData.error : modelData.value
             textFormat: Text.PlainText
             elide: Text.ElideLeft
-            font.family: Theme.fontMono
-            font.pixelSize: isError ? Theme.textXs : Theme.textSm
+            // A message in the UI font, smaller; a number in the note's, with tabular figures.
+            font.family: isError ? Theme.fontUi : root.family
+            font.pixelSize: isError ? Theme.textSm : root.fontSize
             font.weight: isTotal ? Theme.weightSemiBold : Theme.weightNormal
+            font.features: { "tnum": 1 }
             color: isError ? Theme.dangerText : modelData.assigned !== "" && !isTotal ? Theme.fgMuted : Theme.fg
             Accessible.role: Accessible.StaticText
             Accessible.name: (isError ? qsTr("Error: %1") : qsTr("Result: %1")).arg(text)
