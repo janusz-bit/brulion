@@ -510,21 +510,23 @@ Rectangle {
                             onClicked: sidebar.go({ view: modelData.view })
                         }
                     }
+
+                    // ---- Import (the drawer on phones: notes from other apps, docs/UI.md):
+                    // the last navigation entry, so the column's bottom padding follows it ----
+                    BListItem {
+                        objectName: "drawerImportNotes"
+                        visible: Theme.narrow
+                        width: parent.width
+                        height: visible ? implicitHeight : 0
+                        dense: true
+                        text: qsTr("Import notes")
+                        iconName: "download"
+                        selected: sidebar.route.view === "importExport"
+                        selectionBar: true
+                        onClicked: sidebar.go({ view: "importExport", tab: "import" })
+                    }
                 }
 
-                // ---- Import (the drawer on phones: notes from other apps, docs/UI.md) --
-                BListItem {
-                    objectName: "drawerImportNotes"
-                    visible: Theme.narrow
-                    width: parent.width
-                    height: visible ? implicitHeight : 0
-                    dense: true
-                    text: qsTr("Import notes")
-                    iconName: "download"
-                    selected: sidebar.route.view === "importExport"
-                    selectionBar: true
-                    onClicked: sidebar.go({ view: "importExport", tab: "import" })
-                }
 
                 // ---- Favourites (once a page is starred: the page header's star, a row's menu,
                 // the palette) --------------------------------------------------------------------
@@ -721,8 +723,12 @@ Rectangle {
                     active: Theme.touchUi
                     visible: active
                     sourceComponent: BIconButton {
+                        id: moreButton
                         objectName: "treeRowMore"
                         iconName: "ellipsis"
+                        // Quieter than the row's title (one on every row): faint like the
+                        // row's icon (≥ 4.5:1 on bgSunken), the text colour while pressed.
+                        iconColor: moreButton.down ? Theme.fg : Theme.fgFaint
                         label: qsTr("More: %1").arg(row.text)
                         size: "small"
                         showToolTip: false

@@ -57,7 +57,9 @@ components — no Material/Fusion look, so all targets look identical.
   arrows, clicking a bullet zooms into the block (breadcrumb to zoom out; Enter in a zoomed
   heading or paragraph ends the zoom) — in outline mode; in document mode a note reads like an
   Obsidian page (see "Note modes" below).
-* Touch (Android, `--touch`): targets ≥ 44 px, bottom navigation, drawer, an editing toolbar
+* Touch (Android, `--touch`): targets ≥ 44 px (the dense rows of navigation lists — the
+  sidebar and drawer's navigation, Ulubione, Ostatnie, the page tree — are exactly 44 px, the
+  iOS list minimum, other rows 48), bottom navigation, drawer, an editing toolbar
   docked on the on-screen keyboard (the bottom navigation makes way while the keyboard is up;
   when it goes, the navigation comes back and a toolbar that stays docks right on it), dialogs as
   bottom sheets on the keyboard ("On-screen keyboard" below).
@@ -133,7 +135,8 @@ components — no Material/Fusion look, so all targets look identical.
   tool bar, which takes its place ("On-screen keyboard"). The Android back key /
   gesture walks back
   through the history; the app closes only from the home view. The drawer also lists
-  **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
+  **Importuj notatki** as the navigation's last entry (the import tab of `ImportExportView`), in
+  the same rhythm as the entries above it.
 * **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
   ulubionych, Zmień nazwę… (F2) and Przenieś do… (on a page route — a daily note opened as a page
   too —, not in the journal views by date: "Folders" below), Pokaż w drzewie (the
@@ -257,7 +260,8 @@ rename and move").
   again (the drawer opened, the window's sidebar back) is placed too: a header that grew while
   it was hidden would leave the navigation scrolled out above the list.
 * **Menus**: right-click, press-and-hold, the Menu key, and on touch screens a "⋯" button on
-  every row (44 px; press-and-hold stays). A folder: Nowa strona tutaj, Nowy folder…, Pokaż
+  every row (44 px; press-and-hold stays), drawn faint (`fgFaint`, like the rows' icons; `fg`
+  while pressed) so the column of buttons stays quieter than the page titles. A folder: Nowa strona tutaj, Nowy folder…, Pokaż
   strony folderu (All pages in it), Szukaj w folderze (search in it), Przenieś do…, Eksportuj
   folder… (the export tab, folder scope), Zmień nazwę…, Przenieś do kosza (the confirmation
   counts its pages and warns for the notebook's special folders). A page: Otwórz w panelu

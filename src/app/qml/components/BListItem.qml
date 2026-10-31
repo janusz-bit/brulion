@@ -17,6 +17,9 @@ import Brulion
 // count:       badge on the right (≥ 0 shows); `trailing`: any item on the right
 // selected:    current item (tinted background, bold title, accent bar on the left when
 //              `selectionBar`); hover/press/keyboard focus states built in
+// dense:       a navigation list's row (sidebar, drawer, tree): listItemHeightDense with a
+//              mouse, exactly the touch target (44 px) on touch UIs; a two-line row keeps
+//              listItemHeightTwoLine
 T.ItemDelegate {
     id: control
 
@@ -32,7 +35,9 @@ T.ItemDelegate {
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
-    implicitHeight: Math.max(subtitle !== "" ? Theme.listItemHeightTwoLine : (dense && !Theme.touchUi ? Theme.listItemHeightDense : Theme.listItemHeight),
+    implicitHeight: Math.max(subtitle !== "" ? Theme.listItemHeightTwoLine
+                             : dense ? (Theme.touchUi ? Theme.touchTarget : Theme.listItemHeightDense)
+                             : Theme.listItemHeight,
                              implicitContentHeight + topPadding + bottomPadding)
     leftPadding: Theme.touchUi ? 14 : 10
     rightPadding: Theme.touchUi ? 12 : 8

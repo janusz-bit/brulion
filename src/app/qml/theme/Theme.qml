@@ -281,7 +281,7 @@ QtObject {
     readonly property int iconSizeLg: touchUi ? 24 : 20
     readonly property int listItemHeight: touchUi ? 48 : dense ? 28 : 34
     readonly property int listItemHeightTwoLine: touchUi ? 64 : dense ? 42 : 48
-    /// Dense list rows (the sidebar's) with a mouse; touch UIs use listItemHeight.
+    /// Dense list rows (the sidebar's) with a mouse; on touch UIs dense rows are touchTarget.
     readonly property int listItemHeightDense: dense ? 26 : 30
     /// The touch editing toolbar docked on the keyboard (MobileEditToolbar): a row of small
     /// buttons with a hairline above.
