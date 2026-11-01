@@ -46,11 +46,12 @@ struct CopiedLink {
     QString path;   ///< page: the linked page's path ("" when it does not exist); part: the page's or the folder's
     QString folder; ///< part: naming a folder — its vault path (then `text` is "<folder>/")
 };
-CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultConfig &config,
-                      const std::function<QString(const QString &target, const QString &from)> &resolveLink,
-                      const std::function<QString(const VaultPath &path)> &shortestTarget,
-                      const std::function<std::optional<markdown::LinkPartTarget>(
-                              const QString &target, int part, const QString &from)> &resolvePart = {});
+CopiedLink
+copiedLink(const QString &url, const QString &fromPath, const VaultConfig &config,
+           const std::function<QString(const QString &target, const QString &from)> &resolveLink,
+           const std::function<QString(const VaultPath &path)> &shortestTarget,
+           const std::function<std::optional<markdown::LinkPartTarget>(const QString &target, int part,
+                                                                       const QString &from)> &resolvePart = {});
 
 struct BlockLinks {
     QString id;          ///< the block id (without '^')

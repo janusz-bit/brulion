@@ -90,8 +90,8 @@ QString pageLinkTarget(const VaultPath &path, const VaultConfig &config, const V
 CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultConfig &config,
                       const std::function<QString(const QString &target, const QString &from)> &resolveLink,
                       const std::function<QString(const VaultPath &path)> &shortestTarget,
-                      const std::function<std::optional<markdown::LinkPartTarget>(
-                              const QString &target, int part, const QString &from)> &resolvePart)
+                      const std::function<std::optional<markdown::LinkPartTarget>(const QString &target, int part,
+                                                                                  const QString &from)> &resolvePart)
 {
     const qsizetype colon = url.indexOf(u':');
     if (colon <= 0)
@@ -105,9 +105,10 @@ CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultCo
             return {};
         switch (part->kind) {
         case markdown::LinkPartTarget::Kind::Page: {
-            const QString page = pageLinkTarget(part->path, config, shortestTarget, [&resolveLink](const QString &title) {
-                return resolveLink ? resolveLink(title, QString()) : QString();
-            });
+            const QString page =
+                    pageLinkTarget(part->path, config, shortestTarget, [&resolveLink](const QString &title) {
+                        return resolveLink ? resolveLink(title, QString()) : QString();
+                    });
             return {u"[["_s + page + u"]]"_s, part->path, QString()};
         }
         case markdown::LinkPartTarget::Kind::Folder: return {part->path + u'/', part->path, part->path};

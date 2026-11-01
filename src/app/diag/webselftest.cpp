@@ -492,8 +492,8 @@ QJsonObject LinkPartsSelfTest::report() const
     const QVariantMap route = m_app ? m_app->currentRoute() : QVariantMap();
     return {{u"ready"_s, text != nullptr},
             {u"parts"_s, text ? linkBoxes(text) : QJsonArray()},
-            {u"route"_s,
-             QJsonObject{{u"view"_s, route.value(u"view"_s).toString()}, {u"path"_s, route.value(u"path"_s).toString()}}}};
+            {u"route"_s, QJsonObject{{u"view"_s, route.value(u"view"_s).toString()},
+                                     {u"path"_s, route.value(u"path"_s).toString()}}}};
 }
 
 void LinkPartsSelfTest::look()

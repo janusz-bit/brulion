@@ -287,13 +287,15 @@ Q_SIGNALS:
 /// it: { kind: "page" | "folder" | "new", path, prefix }; {} for nullopt.
 inline QVariantMap linkPartToMap(const std::optional<markdown::LinkPartTarget> &part)
 {
+    using namespace Qt::StringLiterals;
     if (!part)
         return {};
-    using Kind = markdown::LinkPartTarget::Kind;
-    const QString kind = part->kind == Kind::Page     ? QStringLiteral("page")
-                         : part->kind == Kind::Folder ? QStringLiteral("folder")
-                                                      : QStringLiteral("new");
-    return {{QStringLiteral("kind"), kind}, {QStringLiteral("path"), part->path}, {QStringLiteral("prefix"), part->prefix}};
+    QString kind = u"new"_s;
+    if (part->kind == markdown::LinkPartTarget::Kind::Page)
+        kind = u"page"_s;
+    else if (part->kind == markdown::LinkPartTarget::Kind::Folder)
+        kind = u"folder"_s;
+    return {{u"kind"_s, kind}, {u"path"_s, part->path}, {u"prefix"_s, part->prefix}};
 }
 /// The route a path part of a link (a part: URL of rendered text, docs/SYNTAX.md §2 "Path parts")
 /// written on `fromPath` navigates to: {view: "page", target: the part's prefix, linkTarget,
@@ -301,31 +303,33 @@ inline QVariantMap linkPartToMap(const std::optional<markdown::LinkPartTarget> &
 /// pages or a new page; {} for a malformed URL. The editor, linked references and Tasks share it.
 inline QVariantMap linkPartRoute(const QString &url, const QString &fromPath)
 {
+    using namespace Qt::StringLiterals;
     const auto part = markdown::parseLinkPartUrl(url);
     if (!part)
         return {};
-    return {{QStringLiteral("view"), QStringLiteral("page")},
-            {QStringLiteral("target"), part->prefix},
-            {QStringLiteral("linkTarget"), part->target},
-            {QStringLiteral("linkPart"), part->part},
-            {QStringLiteral("from"), fromPath}};
+    return {{u"view"_s, u"page"_s},
+            {u"target"_s, part->prefix},
+            {u"linkTarget"_s, part->target},
+            {u"linkPart"_s, part->part},
+            {u"from"_s, fromPath}};
 }
 /// The inverse of linkPartToMap(); nullopt for {} and an unknown kind.
 inline std::optional<markdown::LinkPartTarget> linkPartFromMap(const QVariantMap &map)
 {
+    using namespace Qt::StringLiterals;
     using Kind = markdown::LinkPartTarget::Kind;
-    const QString kind = map.value(QStringLiteral("kind")).toString();
+    const QString kind = map.value(u"kind"_s).toString();
     markdown::LinkPartTarget out;
-    if (kind == QLatin1String("page"))
+    if (kind == u"page")
         out.kind = Kind::Page;
-    else if (kind == QLatin1String("folder"))
+    else if (kind == u"folder")
         out.kind = Kind::Folder;
-    else if (kind == QLatin1String("new"))
+    else if (kind == u"new")
         out.kind = Kind::New;
     else
         return std::nullopt;
-    out.path = map.value(QStringLiteral("path")).toString();
-    out.prefix = map.value(QStringLiteral("prefix")).toString();
+    out.path = map.value(u"path"_s).toString();
+    out.prefix = map.value(u"prefix"_s).toString();
     return out;
 }
 

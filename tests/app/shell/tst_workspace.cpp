@@ -1047,10 +1047,10 @@ private Q_SLOTS:
                                     << u"path=strony/Nowa.md;target=Nowa;view=page"_s;
         QTest::newRow("a new deeper page") << u"Nowa/Głęboka/Strona"_s << 2 << QString()
                                            << u"path=strony/Nowa/Głęboka.md;target=Nowa/Głęboka;view=page"_s;
-        QTest::newRow("relative to the note") << u"Dział/Ewa"_s << 1 << u"Klienci/N.md"_s
-                                              << u"path=Klienci/Dział;view=allPages"_s;
-        QTest::newRow("the Polish folder's spelling") << u"zażółć/x"_s << 1 << QString()
-                                                      << u"path=Zażółć;view=allPages"_s;
+        QTest::newRow("relative to the note")
+                << u"Dział/Ewa"_s << 1 << u"Klienci/N.md"_s << u"path=Klienci/Dział;view=allPages"_s;
+        QTest::newRow("the Polish folder's spelling")
+                << u"zażółć/x"_s << 1 << QString() << u"path=Zażółć;view=allPages"_s;
         QTest::newRow("no such part") << u"Projekty/Remont mieszkania"_s << 5 << QString() << QString();
         QTest::newRow("no path") << u"Projekty"_s << 1 << QString() << QString();
     }
@@ -1060,13 +1060,14 @@ private Q_SLOTS:
         QFETCH(int, part);
         QFETCH(QString, from);
         QFETCH(QString, route);
-        const QHash<QString, QString> files{{u"Projekty/Remont mieszkania.md"_s, u"- plan\n"_s},
-                                            {u"Firma.md"_s, u"- firma\n"_s},
-                                            {u"Firma/Adam Nowak.md"_s, u"- Adam\n"_s},
-                                            {u"Klienci/N.md"_s, u"- notatka\n"_s},
-                                            {u"Klienci/Dział/Stara.md"_s, u"- stara\n"_s},
-                                            {u"Zażółć/Gęślą.md"_s, u"- jaźń\n"_s},
-                                            {u".brulion/config.json"_s, uR"({"version": 1, "newPagesFolder": "strony"})"_s}};
+        const QHash<QString, QString> files{
+                {u"Projekty/Remont mieszkania.md"_s, u"- plan\n"_s},
+                {u"Firma.md"_s, u"- firma\n"_s},
+                {u"Firma/Adam Nowak.md"_s, u"- Adam\n"_s},
+                {u"Klienci/N.md"_s, u"- notatka\n"_s},
+                {u"Klienci/Dział/Stara.md"_s, u"- stara\n"_s},
+                {u"Zażółć/Gęślą.md"_s, u"- jaźń\n"_s},
+                {u".brulion/config.json"_s, uR"({"version": 1, "newPagesFolder": "strony"})"_s}};
         // Right after opening, while the index is still being built: a click waits for it.
         const QString root = m_tmp.filePath(u"vault-%1"_s.arg(++m_n));
         for (auto it = files.cbegin(); it != files.cend(); ++it)
@@ -1092,8 +1093,8 @@ private Q_SLOTS:
         // The colour the link was shown in agrees (Workspace::linkPart, the same resolver).
         const QString kind = ws.linkPart(target, part, from).value(u"kind"_s).toString();
         const QString view = got.value(u"view"_s).toString();
-        QCOMPARE(kind, route.isEmpty() ? QString()
-                       : view == u"allPages"  ? u"folder"_s
+        QCOMPARE(kind, route.isEmpty()             ? QString()
+                       : view == u"allPages"       ? u"folder"_s
                        : got.contains(u"target"_s) ? u"new"_s
                                                    : u"page"_s);
     }

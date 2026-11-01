@@ -1001,7 +1001,7 @@ namespace {
 /// [[A/B/C]] in every rendered text of the editor (blocks, table cells, property values, embeds,
 /// query results). Without a host every part is new.
 std::function<markdown::LinkPartTarget::Kind(const QString &, int)> linkPartResolver(const QPointer<EditorHost> &host,
-                                                                                      const QString &path)
+                                                                                     const QString &path)
 {
     return [host, path](const QString &target, int part) {
         const auto p = host ? linkPartFromMap(host->linkPart(target, part, path)) : std::nullopt;

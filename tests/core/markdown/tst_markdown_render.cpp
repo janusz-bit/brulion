@@ -305,10 +305,9 @@ private Q_SLOTS:
         QTest::newRow("a page in a folder")
                 << u"[[Firma/Adam cośtam]]"_s
                 << part(1, adam, u"L"_s, u"Firma"_s) + sep() + link(u"page:"_s + adam, u"L"_s, u"Adam cośtam"_s);
-        QTest::newRow("a folder part, a missing page")
-                << u"[[Projekty/Brak]]"_s
-                << part(1, u"Projekty%2FBrak"_s, u"L"_s, u"Projekty"_s) + sep()
-                           + link(u"page:Projekty%2FBrak"_s, u"U"_s, u"Brak"_s);
+        QTest::newRow("a folder part, a missing page") << u"[[Projekty/Brak]]"_s
+                                                       << part(1, u"Projekty%2FBrak"_s, u"L"_s, u"Projekty"_s) + sep()
+                                                                  + link(u"page:Projekty%2FBrak"_s, u"U"_s, u"Brak"_s);
         QTest::newRow("a new part") << u"[[Nowa/Strona]]"_s
                                     << part(1, u"Nowa%2FStrona"_s, u"U"_s, u"Nowa"_s) + sep()
                                                + link(u"page:Nowa%2FStrona"_s, u"L"_s, u"Strona"_s);
@@ -316,12 +315,12 @@ private Q_SLOTS:
                                      << part(1, u"A%2FB%2FC"_s, u"L"_s, u"A"_s) + sep()
                                                 + part(2, u"A%2FB%2FC"_s, u"L"_s, u"B"_s) + sep()
                                                 + link(u"page:A%2FB%2FC"_s, u"L"_s, u"C"_s);
-        QTest::newRow("Polish") << u"[[Zażółć/gęślą jaźń]]"_s
-                                << part(1, u"Za%C5%BC%C3%B3%C5%82%C4%87%2Fg%C4%99%C5%9Bl%C4%85%20ja%C5%BA%C5%84"_s,
-                                        u"L"_s, u"Zażółć"_s)
-                                           + sep()
-                                           + link(u"page:Za%C5%BC%C3%B3%C5%82%C4%87%2Fg%C4%99%C5%9Bl%C4%85%20ja%C5%BA%C5%84"_s,
-                                                  u"L"_s, u"gęślą jaźń"_s);
+        QTest::newRow("Polish")
+                << u"[[Zażółć/gęślą jaźń]]"_s
+                << part(1, u"Za%C5%BC%C3%B3%C5%82%C4%87%2Fg%C4%99%C5%9Bl%C4%85%20ja%C5%BA%C5%84"_s, u"L"_s, u"Zażółć"_s)
+                           + sep()
+                           + link(u"page:Za%C5%BC%C3%B3%C5%82%C4%87%2Fg%C4%99%C5%9Bl%C4%85%20ja%C5%BA%C5%84"_s, u"L"_s,
+                                  u"gęślą jaźń"_s);
         QTest::newRow("a display text: one link")
                 << u"[[Firma/Adam|Adam]]"_s << link(u"page:Firma%2FAdam"_s, u"L"_s, u"Adam"_s);
         QTest::newRow("a heading") << u"[[Firma/Adam#Plan]]"_s
@@ -334,12 +333,12 @@ private Q_SLOTS:
         QTest::newRow("spaces as written") << u"[[ Firma / Adam ]]"_s
                                            << part(1, u"Firma%20%2F%20Adam"_s, u"L"_s, u"Firma"_s) + sep(u" / "_s)
                                                       + link(u"page:Firma%20%2F%20Adam"_s, u"L"_s, u"Adam"_s);
-        const QString firmaAdam =
-                part(1, u"Firma%2FAdam"_s, u"L"_s, u"Firma"_s) + sep() + link(u"page:Firma%2FAdam"_s, u"L"_s, u"Adam"_s);
+        const QString firmaAdam = part(1, u"Firma%2FAdam"_s, u"L"_s, u"Firma"_s) + sep()
+                                  + link(u"page:Firma%2FAdam"_s, u"L"_s, u"Adam"_s);
         QTest::newRow("in bold") << u"**[[Firma/Adam]]**"_s << u"<b>"_s + firmaAdam + u"</b>"_s;
         QTest::newRow("two links") << u"[[Firma/Adam]] i [[Firma/Adam]]"_s << firmaAdam + u" i\u00a0"_s + firmaAdam;
-        QTest::newRow("an embed stays one") << u"![[Firma/Adam]]"_s
-                                            << link(u"page:Firma%2FAdam"_s, u"L"_s, u"⧉ Firma/Adam"_s);
+        QTest::newRow("an embed stays one")
+                << u"![[Firma/Adam]]"_s << link(u"page:Firma%2FAdam"_s, u"L"_s, u"⧉ Firma/Adam"_s);
         QTest::newRow("a Markdown link stays one")
                 << u"[x](Firma/Adam.md)"_s << link(u"page:Firma%2FAdam.md"_s, u"L"_s, u"x"_s);
         QTest::newRow("a tag stays one") << u"#Firma/Adam"_s << tag(u"Firma%2FAdam"_s, u"Firma/Adam"_s);
@@ -409,9 +408,10 @@ private Q_SLOTS:
         QTest::newRow("Polish") << u"Firma/Adam cośtam"_s << 1 << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s << u"Firma"_s;
         QTest::newRow("second of three") << u"A/B/C"_s << 2 << u"part:2:A%2FB%2FC"_s << u"A/B"_s;
         QTest::newRow("spaces") << u"Firma / Adam"_s << 1 << u"part:1:Firma%20%2F%20Adam"_s << u"Firma"_s;
-        QTest::newRow("deep Polish") << u"Projekty/Zażółć gęślą/Notatki"_s << 2
-                                     << u"part:2:Projekty%2FZa%C5%BC%C3%B3%C5%82%C4%87%20g%C4%99%C5%9Bl%C4%85%2FNotatki"_s
-                                     << u"Projekty/Zażółć gęślą"_s;
+        QTest::newRow("deep Polish")
+                << u"Projekty/Zażółć gęślą/Notatki"_s << 2
+                << u"part:2:Projekty%2FZa%C5%BC%C3%B3%C5%82%C4%87%20g%C4%99%C5%9Bl%C4%85%2FNotatki"_s
+                << u"Projekty/Zażółć gęślą"_s;
     }
     void linkPartUrls()
     {
@@ -466,9 +466,9 @@ private Q_SLOTS:
         const InlineRenderer parts(partsContext());
         QTest::newRow("a link") << render(u"[[Strona]]"_s) << u"page:Strona"_s
                                 << under(u"page:Strona"_s, u"L"_s, u"Strona"_s);
-        QTest::newRow("the second of two")
-                << render(u"[[Strona]] i [[Brak]]"_s) << u"page:Brak"_s
-                << link(u"page:Strona"_s, u"L"_s, u"Strona"_s) + u" i\u00a0"_s + under(u"page:Brak"_s, u"U"_s, u"Brak"_s);
+        QTest::newRow("the second of two") << render(u"[[Strona]] i [[Brak]]"_s) << u"page:Brak"_s
+                                           << link(u"page:Strona"_s, u"L"_s, u"Strona"_s) + u" i\u00a0"_s
+                                                      + under(u"page:Brak"_s, u"U"_s, u"Brak"_s);
         QTest::newRow("a path part") << parts.render(u"[[Firma/Adam]]"_s) << u"part:1:Firma%2FAdam"_s
                                      << under(u"part:1:Firma%2FAdam"_s, u"L"_s, u"Firma"_s) + sep()
                                                 + link(u"page:Firma%2FAdam"_s, u"L"_s, u"Adam"_s);
@@ -484,14 +484,14 @@ private Q_SLOTS:
         QTest::newRow("an escaped address")
                 << render(u"[strona](https://a.pl/?b=c&d=e)"_s) << u"ext:https://a.pl/?b=c&d=e"_s
                 << under(u"ext:https://a.pl/?b=c&amp;d=e"_s, u"L"_s, u"strona"_s);
-        QTest::newRow("a quote in the href") << render(u"[[a\"b]]"_s) << u"page:a%22b"_s
-                                             << under(u"page:a%22b"_s, u"L"_s, u"a&quot;b"_s);
+        QTest::newRow("a quote in the href")
+                << render(u"[[a\"b]]"_s) << u"page:a%22b"_s << under(u"page:a%22b"_s, u"L"_s, u"a&quot;b"_s);
         QTest::newRow("the same link twice")
                 << render(u"[[Strona]] [[Strona]]"_s) << u"page:Strona"_s
                 << under(u"page:Strona"_s, u"L"_s, u"Strona"_s) + u" "_s + under(u"page:Strona"_s, u"L"_s, u"Strona"_s);
-        QTest::newRow("hostile text is not html") << u"<a href=\"page:x\" style=\"color:L\" onclick=\";text-decoration:none\">"_s
-                                                  << u"page:x"_s
-                                                  << u"<a href=\"page:x\" style=\"color:L\" onclick=\";text-decoration:none\">"_s;
+        QTest::newRow("hostile text is not html")
+                << u"<a href=\"page:x\" style=\"color:L\" onclick=\";text-decoration:none\">"_s << u"page:x"_s
+                << u"<a href=\"page:x\" style=\"color:L\" onclick=\";text-decoration:none\">"_s;
     }
     void hoveredLink()
     {

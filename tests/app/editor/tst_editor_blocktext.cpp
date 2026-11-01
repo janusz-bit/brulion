@@ -1271,7 +1271,8 @@ private Q_SLOTS:
         QCOMPARE(route.value(u"linkPart"_s).toInt(), 1);
         QCOMPARE(route.value(u"from"_s).toString(), u"journals/2026-10-14.md"_s);
         QVERIFY(!route.contains(u"path"_s));
-        for (const QString &bad : {u"part:"_s, u"part:2:Firma%2FAdam"_s, u"part:01:A%2FB"_s, u"page:Firma"_s, QString()})
+        for (const QString &bad :
+             {u"part:"_s, u"part:2:Firma%2FAdam"_s, u"part:01:A%2FB"_s, u"page:Firma"_s, QString()})
             QVERIFY2(linkPartRoute(bad, QString()).isEmpty(), qPrintable(bad));
     }
 };

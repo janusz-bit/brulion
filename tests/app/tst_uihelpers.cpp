@@ -216,7 +216,8 @@ private Q_SLOTS:
     void hoveredLinkHtml()
     {
         brulion::ui::TextHelper h;
-        const QString part = u"<a href=\"part:1:Firma%2FAdam\" style=\"color:#2c6aa3;text-decoration:none\">Firma</a>"_s;
+        const QString part =
+                u"<a href=\"part:1:Firma%2FAdam\" style=\"color:#2c6aa3;text-decoration:none\">Firma</a>"_s;
         const QString page = u"<a href=\"page:Firma%2FAdam\" style=\"color:#2c6aa3;text-decoration:none\">Adam</a>"_s;
         const QString html = part + u"<span style=\"color:#535a6a\">/</span>"_s + page;
         QCOMPARE(h.hoveredLinkHtml(html, u"part:1:Firma%2FAdam"_s),

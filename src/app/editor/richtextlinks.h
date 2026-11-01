@@ -37,7 +37,8 @@ class RichTextLinks : public QObject {
     /// Off: no links and nothing laid out (DeviceInfo.screenReader in BLinkTargets).
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged FINAL)
     /// The document of a rich-text TextEdit (its own layout is read).
-    Q_PROPERTY(QQuickTextDocument *textDocument READ textDocument WRITE setTextDocument NOTIFY textDocumentChanged FINAL)
+    Q_PROPERTY(
+            QQuickTextDocument *textDocument READ textDocument WRITE setTextDocument NOTIFY textDocumentChanged FINAL)
     /// The rich text of a Text item, laid out here with font, width, lineHeight and alignment
     /// (used when there is no textDocument).
     Q_PROPERTY(QString html READ html WRITE setHtml NOTIFY htmlChanged FINAL)

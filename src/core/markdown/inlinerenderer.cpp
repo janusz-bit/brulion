@@ -603,9 +603,7 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 QString fragLabel;
                 QString page;
                 if (label.isEmpty()) {
-                    fragLabel = !w.heading.isEmpty()   ? w.heading
-                                : !w.blockId.isEmpty() ? u'^' + w.blockId
-                                                       : QString();
+                    fragLabel = !w.heading.isEmpty() ? w.heading : !w.blockId.isEmpty() ? u'^' + w.blockId : QString();
                     // [[Page#^id]] reads like ((id)): "Page › the block's text…" — the block of
                     // that page (ids are per page in Obsidian).
                     if (w.heading.isEmpty() && !w.blockId.isEmpty() && m_ctx.linkedBlockText) {
@@ -629,10 +627,10 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                             : QString(u"page:"_s + percentEncoded(w.target) + fragment(w.heading, w.blockId));
                 // A page in a folder ([[Firma/Adam]]): every path part a link of its own, the
                 // parent parts part: links (docs/SYNTAX.md §2 "Path parts").
-                const QList<LinkPathPart> parts = m_ctx.resolveLinkPart && !day && w.display.isEmpty()
-                                                                  && !w.target.isEmpty() && page == w.target
-                                                          ? linkPathParts(w.target)
-                                                          : QList<LinkPathPart>();
+                const QList<LinkPathPart> parts =
+                        m_ctx.resolveLinkPart && !day && w.display.isEmpty() && !w.target.isEmpty() && page == w.target
+                                ? linkPathParts(w.target)
+                                : QList<LinkPathPart>();
                 if (parts.size() < 2) {
                     html = link(href, resolved ? pal.link : pal.unresolved, esc(label));
                     break;

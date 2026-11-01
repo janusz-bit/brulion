@@ -59,7 +59,7 @@ private Q_SLOTS:
         QTest::addColumn<int>("part");
         QTest::addColumn<QString>("from");
         QTest::addColumn<QString>("expected"); // "kind path | prefix", "none"
-        const QString nfd = u"FIRMA/żółw"_s; // żółw decomposed
+        const QString nfd = u"FIRMA/żółw"_s;   // żółw decomposed
         QTest::newRow("page at the root") << QStringList{u"Firma.md"_s, u"Firma/Adam cośtam.md"_s}
                                           << u"Firma/Adam cośtam"_s << 1 << QString() << u"page Firma.md | Firma"_s;
         QTest::newRow("folder only") << QStringList{u"Firma/Adam cośtam.md"_s} << u"Firma/Adam cośtam"_s << 1
@@ -67,13 +67,13 @@ private Q_SLOTS:
         QTest::newRow("nothing") << QStringList{u"Inne.md"_s} << u"Firma/Adam cośtam"_s << 1 << QString()
                                  << u"new  | Firma"_s;
         QTest::newRow("page beside the deeper folder")
-                << QStringList{u"Klienci/Firma.md"_s, u"Klienci/Firma/Adam.md"_s, u"Firma.md"_s} << u"Firma/Adam"_s
-                << 1 << QString() << u"page Klienci/Firma.md | Firma"_s;
+                << QStringList{u"Klienci/Firma.md"_s, u"Klienci/Firma/Adam.md"_s, u"Firma.md"_s} << u"Firma/Adam"_s << 1
+                << QString() << u"page Klienci/Firma.md | Firma"_s;
         QTest::newRow("deeper folder without its page") << QStringList{u"Klienci/Firma/Adam.md"_s} << u"Firma/Adam"_s
                                                         << 1 << QString() << u"folder Klienci/Firma | Firma"_s;
         QTest::newRow("title elsewhere beats the folder")
-                << QStringList{u"Archiwum/Firma.md"_s, u"Klienci/Firma/Adam.md"_s} << u"Firma/Adam"_s << 1
-                << QString() << u"page Archiwum/Firma.md | Firma"_s;
+                << QStringList{u"Archiwum/Firma.md"_s, u"Klienci/Firma/Adam.md"_s} << u"Firma/Adam"_s << 1 << QString()
+                << u"page Archiwum/Firma.md | Firma"_s;
         QTest::newRow("alias") << QStringList{u"Spółki/ACME.md|Firma"_s, u"Firma/Adam.md"_s} << u"Firma/Adam"_s << 1
                                << QString() << u"page Spółki/ACME.md | Firma"_s;
         QTest::newRow("alias with a slash") << QStringList{u"Ludzie/Adam.md|Firma/Adam"_s} << u"Firma/Adam"_s << 1
@@ -84,40 +84,39 @@ private Q_SLOTS:
                                      << u"page A/B.md | A/B"_s;
         QTest::newRow("first of three") << QStringList{u"A/B/C.md"_s} << u"A/B/C"_s << 1 << QString()
                                         << u"folder A | A"_s;
-        QTest::newRow("second of three, folder") << QStringList{u"A/B/C.md"_s} << u"A/B/C"_s << 2 << QString()
-                                                 << u"folder A/B | A/B"_s;
+        QTest::newRow("second of three, folder")
+                << QStringList{u"A/B/C.md"_s} << u"A/B/C"_s << 2 << QString() << u"folder A/B | A/B"_s;
         QTest::newRow("relative to the note")
                 << QStringList{u"Klienci/Notatka.md"_s, u"Klienci/Firma/Adam.md"_s} << u"Firma/Adam"_s << 1
                 << u"Klienci/Notatka.md"_s << u"folder Klienci/Firma | Firma"_s;
         QTest::newRow("relative, unresolved link")
                 << QStringList{u"Klienci/Notatka.md"_s, u"Klienci/Firma/Stara.md"_s} << u"Firma/Nowa"_s << 1
                 << u"Klienci/Notatka.md"_s << u"folder Klienci/Firma | Firma"_s;
-        QTest::newRow("root folder first")
-                << QStringList{u"Firma/X.md"_s, u"Klienci/Firma/Y.md"_s, u"Klienci/N.md"_s} << u"Firma/Nowa"_s << 1
-                << u"Klienci/N.md"_s << u"folder Firma | Firma"_s;
-        QTest::newRow("attachments-only folder") << QStringList{u"Zdjęcia/kot.png"_s} << u"Zdjęcia/Nowa"_s << 1
-                                                 << QString() << u"new  | Zdjęcia"_s;
+        QTest::newRow("root folder first") << QStringList{u"Firma/X.md"_s, u"Klienci/Firma/Y.md"_s, u"Klienci/N.md"_s}
+                                           << u"Firma/Nowa"_s << 1 << u"Klienci/N.md"_s << u"folder Firma | Firma"_s;
+        QTest::newRow("attachments-only folder")
+                << QStringList{u"Zdjęcia/kot.png"_s} << u"Zdjęcia/Nowa"_s << 1 << QString() << u"new  | Zdjęcia"_s;
         QTest::newRow("part named like an attachment") << QStringList{u"plan.pdf"_s, u"Inne.md"_s} << u"plan.pdf/x"_s
                                                        << 1 << QString() << u"new  | plan.pdf"_s;
         QTest::newRow("written .md") << QStringList{u"Firma.md"_s, u"Firma/Adam.md"_s} << u"Firma/Adam.md"_s << 1
                                      << QString() << u"page Firma.md | Firma"_s;
-        QTest::newRow(".markdown note") << QStringList{u"Firma.markdown"_s, u"Firma/Adam.md"_s} << u"Firma/Adam"_s
-                                        << 1 << QString() << u"page Firma.markdown | Firma"_s;
+        QTest::newRow(".markdown note") << QStringList{u"Firma.markdown"_s, u"Firma/Adam.md"_s} << u"Firma/Adam"_s << 1
+                                        << QString() << u"page Firma.markdown | Firma"_s;
         QTest::newRow("journals folder") << QStringList{u"journals/2026-10-14.md"_s} << u"journals/2026-10-15"_s << 1
                                          << QString() << u"folder journals | journals"_s;
-        QTest::newRow("Polish deep path") << QStringList{u"Projekty/Zażółć gęślą/Notatki.md"_s}
-                                          << u"Projekty/Zażółć gęślą/Notatki"_s << 2 << QString()
-                                          << u"folder Projekty/Zażółć gęślą | Projekty/Zażółć gęślą"_s;
-        QTest::newRow("spaces as written") << QStringList{u"Firma/Adam.md"_s} << u"Firma / Adam"_s << 1 << QString()
-                                           << u"folder Firma | Firma"_s;
+        QTest::newRow("Polish deep path")
+                << QStringList{u"Projekty/Zażółć gęślą/Notatki.md"_s} << u"Projekty/Zażółć gęślą/Notatki"_s << 2
+                << QString() << u"folder Projekty/Zażółć gęślą | Projekty/Zażółć gęślą"_s;
+        QTest::newRow("spaces as written")
+                << QStringList{u"Firma/Adam.md"_s} << u"Firma / Adam"_s << 1 << QString() << u"folder Firma | Firma"_s;
         QTest::newRow("not split") << QStringList{u"Firma.md"_s} << u"Firma"_s << 1 << QString() << u"none"_s;
         QTest::newRow("part out of range") << QStringList{u"A/B.md"_s} << u"A/B"_s << 2 << QString() << u"none"_s;
         QTest::newRow("part 0") << QStringList{u"A/B.md"_s} << u"A/B"_s << 0 << QString() << u"none"_s;
         QTest::newRow("negative part") << QStringList{u"A/B.md"_s} << u"A/B"_s << -1 << QString() << u"none"_s;
         QTest::newRow("trailing slash") << QStringList{u"Firma/Adam.md"_s} << u"Firma/Adam/"_s << 1 << QString()
                                         << u"none"_s;
-        QTest::newRow("attachment target") << QStringList{u"assets/plan.png"_s} << u"assets/plan.png"_s << 1
-                                           << QString() << u"none"_s;
+        QTest::newRow("attachment target")
+                << QStringList{u"assets/plan.png"_s} << u"assets/plan.png"_s << 1 << QString() << u"none"_s;
         QTest::newRow("empty index") << QStringList() << u"Firma/Adam"_s << 1 << QString() << u"new  | Firma"_s;
     }
     void resolveLinkPart()

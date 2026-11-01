@@ -215,8 +215,8 @@ private Q_SLOTS:
         QFETCH(QString, path);
         QFETCH(QString, folder);
         VaultIndex index;
-        for (const QString &p : {u"Firma.md"_s, u"Klienci/Firma/Adam.md"_s, u"Archiwum/Firma.md"_s,
-                                 u"Zwierzęta/Gady/Żółw.md"_s})
+        for (const QString &p :
+             {u"Firma.md"_s, u"Klienci/Firma/Adam.md"_s, u"Archiwum/Firma.md"_s, u"Zwierzęta/Gady/Żółw.md"_s})
             index.update(p, u"- notatka\n"_s);
         const auto resolve = [&index](const QString &target, const QString &from) {
             return index.resolveLink(target, from).value_or(QString());

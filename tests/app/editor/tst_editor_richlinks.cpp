@@ -132,7 +132,8 @@ private Q_SLOTS:
     void textModeMatchesTheDocument()
     {
         // A Text has no layout API: the HTML laid out here gives the TextEdit's rectangles.
-        const QString html = render(u"Zapytać się [[Firma/Adam cośtam]] o to, czego się pouczyć [[Nowa/Strona]] dziś"_s);
+        const QString html =
+                render(u"Zapytać się [[Firma/Adam cośtam]] o to, czego się pouczyć [[Nowa/Strona]] dziś"_s);
         const auto doc = documentOf(html, 260);
         const auto expected = RichTextLinks::linksOf(doc.get(), LineHeight);
         RichTextLinks links;

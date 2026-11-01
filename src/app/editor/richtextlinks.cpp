@@ -105,7 +105,8 @@ QVariantList RichTextLinks::links() const
     for (const Link &l : m_links) {
         QVariantList rects;
         for (const QRectF &r : l.rects)
-            rects.append(QVariantMap{{u"x"_s, r.x()}, {u"y"_s, r.y()}, {u"width"_s, r.width()}, {u"height"_s, r.height()}});
+            rects.append(
+                    QVariantMap{{u"x"_s, r.x()}, {u"y"_s, r.y()}, {u"width"_s, r.width()}, {u"height"_s, r.height()}});
         out.append(QVariantMap{{u"href"_s, l.href},
                                {u"text"_s, l.text},
                                {u"x"_s, l.rect.x()},

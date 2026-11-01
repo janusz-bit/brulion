@@ -2215,12 +2215,15 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QTest::addColumn<QString>("url");
         QTest::addColumn<bool>("newPane");
         QTest::addColumn<QString>("route"); // "key=value;…" of the host's route, "" — no navigation
-        QTest::newRow("a part") << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s << false
-                                << u"from=Notatki/Strona.md;linkPart=1;linkTarget=Firma/Adam cośtam;target=Firma;view=page"_s;
-        QTest::newRow("in the side panel") << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s << true
-                                           << u"from=Notatki/Strona.md;linkPart=1;linkTarget=Firma/Adam cośtam;target=Firma;view=page"_s;
-        QTest::newRow("the second of three") << u"part:2:A%2FB%2FC"_s << false
-                                             << u"from=Notatki/Strona.md;linkPart=2;linkTarget=A/B/C;target=A/B;view=page"_s;
+        QTest::newRow("a part")
+                << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s << false
+                << u"from=Notatki/Strona.md;linkPart=1;linkTarget=Firma/Adam cośtam;target=Firma;view=page"_s;
+        QTest::newRow("in the side panel")
+                << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s << true
+                << u"from=Notatki/Strona.md;linkPart=1;linkTarget=Firma/Adam cośtam;target=Firma;view=page"_s;
+        QTest::newRow("the second of three")
+                << u"part:2:A%2FB%2FC"_s << false
+                << u"from=Notatki/Strona.md;linkPart=2;linkTarget=A/B/C;target=A/B;view=page"_s;
         QTest::newRow("the last part") << u"page:Firma%2FAdam%20co%C5%9Btam"_s << false
                                        << u"path=Firma/Adam cośtam.md;target=Firma/Adam cośtam;view=page"_s;
         QTest::newRow("part 0") << u"part:0:Firma%2FAdam"_s << false << QString();
@@ -2260,8 +2263,9 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QTest::addColumn<QString>("folder");
         QTest::newRow("a page") << u"part:1:Firma%2FAdam%20co%C5%9Btam"_s << u"page"_s << false << u"[[Firma]]"_s
                                 << u"Firma.md"_s << QString();
-        QTest::newRow("a folder") << u"part:1:Projekty%2FZa%C5%BC%C3%B3%C5%82%C4%87%20g%C4%99%C5%9Bl%C4%85%20ja%C5%BA%C5%84"_s
-                                  << u"folder"_s << false << u"Projekty/"_s << u"Projekty"_s << u"Projekty"_s;
+        QTest::newRow("a folder")
+                << u"part:1:Projekty%2FZa%C5%BC%C3%B3%C5%82%C4%87%20g%C4%99%C5%9Bl%C4%85%20ja%C5%BA%C5%84"_s
+                << u"folder"_s << false << u"Projekty/"_s << u"Projekty"_s << u"Projekty"_s;
         QTest::newRow("a new page") << u"part:1:Nowa%2FStrona"_s << u"new"_s << true << u"[[Nowa]]"_s << QString()
                                     << QString();
     }
@@ -2351,7 +2355,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
                  u"Klienci/Firma"_s);
         QCOMPARE(linkPartFromMap(f.host.linkPart(u"Firma/Adam"_s, 1, Page))->path, u"Klienci/Firma"_s);
         // A part unknown on both pages is new.
-        QCOMPARE(linkPartFromMap(f.host.linkPart(u"Nowa/Strona"_s, 1, Page))->kind, markdown::LinkPartTarget::Kind::New);
+        QCOMPARE(linkPartFromMap(f.host.linkPart(u"Nowa/Strona"_s, 1, Page))->kind,
+                 markdown::LinkPartTarget::Kind::New);
     }
 
     void tokenMenusOfOtherFiles()

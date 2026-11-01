@@ -3332,18 +3332,21 @@ QVariantMap PageController::linkMenu(const QString &url, const QString &fromPath
     const QString from = fromPath.isEmpty() ? m_path : fromPath;
     if (scheme == u"part") {
         const auto parsed = markdown::parseLinkPartUrl(url);
-        const auto part = parsed && m_host ? linkPartFromMap(m_host->linkPart(parsed->target, parsed->part, from))
-                                           : std::nullopt;
+        const auto part =
+                parsed && m_host ? linkPartFromMap(m_host->linkPart(parsed->target, parsed->part, from)) : std::nullopt;
         if (!part)
             return {};
         const notebook::CopiedLink copied = notebook::copiedLink(
                 url, from, config,
-                [this](const QString &target, const QString &f) { return m_host ? m_host->resolveLink(target, f) : QString(); },
+                [this](const QString &target, const QString &f) {
+                    return m_host ? m_host->resolveLink(target, f) : QString();
+                },
                 [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); },
                 [&part](const QString &, int, const QString &) { return part; });
         const QString target = linkPartToMap(part).value(u"kind"_s).toString();
-        return {{u"kind"_s, u"page"_s},  {u"part"_s, true},           {u"target"_s, target},
-                {u"unresolved"_s, target == u"new"}, {u"copyText"_s, copied.text}, {u"path"_s, part->path},
+        return {{u"kind"_s, u"page"_s},       {u"part"_s, true},
+                {u"target"_s, target},        {u"unresolved"_s, target == u"new"},
+                {u"copyText"_s, copied.text}, {u"path"_s, part->path},
                 {u"folder"_s, copied.folder}};
     }
     const notebook::CopiedLink copied = notebook::copiedLink(

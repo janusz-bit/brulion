@@ -2402,9 +2402,12 @@ void checkLinkParts(QQuickWindow *window, AppController *app, const Check &check
     tapOrClick(window, linkPoint(text, u"part:1:Projekty"_s), touch);
     check(routeIs(u"allPages"_s, u"Projekty"_s), "a click or tap on “Projekty” opens the folder's pages");
     check(waitFor([&] {
-              return findShown(window->contentItem(), [](QQuickItem *item) {
-                         return item->property("text").toString() == u"Remont mieszkania" && item->isVisible();
-                     }) != nullptr;
+              return findShown(window->contentItem(),
+                               [](QQuickItem *item) {
+                                   return item->property("text").toString() == u"Remont mieszkania"
+                                          && item->isVisible();
+                               })
+                     != nullptr;
           }),
           "the folder's view lists its page");
     app->back();
@@ -2412,7 +2415,8 @@ void checkLinkParts(QQuickWindow *window, AppController *app, const Check &check
     // "Remont mieszkania": the page, as before.
     if (text)
         tapOrClick(window, linkPoint(text, u"page:Projekty%2FRemont"_s), touch);
-    check(text && routeIs(u"page"_s, u"Projekty/Remont mieszkania.md"_s), "a click or tap on “Remont mieszkania” opens the page");
+    check(text && routeIs(u"page"_s, u"Projekty/Remont mieszkania.md"_s),
+          "a click or tap on “Remont mieszkania” opens the page");
     app->back();
     text = open();
     // The part's menu.
