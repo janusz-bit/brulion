@@ -84,6 +84,8 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     (wpisanie hasła), adnotacje, widok dwóch stron obok siebie;
   * „Otwórz w innej aplikacji” dla innych załączników (DOCX, XLSX — z listą bezpiecznych typów;
     dziś otwierają się w Brulionie tylko do odczytu jako tekst).
+* **Normalne dodanie dowolnego pliku** — zwykłe dodanie do notatnika pliku dowolnego typu; zakres
+  do ustalenia.
 
 ## Windows
 
