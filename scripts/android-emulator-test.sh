@@ -1504,8 +1504,14 @@ if ((PDF)); then
   start_app "--vault /data/user/0/$PKG/$PD_VAULT --locale pl --route journals"
   check "the app is running" running
   check "the PDF's thumbnail is drawn (its page count known)" wait_for 30 ui_has 'PDF wyklad\.pdf, strona 1 z 3'
-  check "the locked PDF's tile names the password" wait_for 10 ui_has 'PDF chroniony hasłem'
   app_shot pdf-1-journal
+  # The locked PDF's tile is under the first one (its sentence below the screen's edge): scrolled
+  # into view, then back.
+  adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 75 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) 500
+  check "the locked PDF's tile names the password" wait_for 10 ui_has 'PDF chroniony hasłem'
+  app_shot pdf-1-locked
+  adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 75 / 100)) 500
+  check "… the first tile back in view" wait_for 10 ui_has 'PDF wyklad\.pdf, strona 1 z 3'
   check "a tap on the thumbnail opens the PDF viewer" ui_tap 'PDF wyklad\.pdf, strona 1 z 3' first 4
   check "… on page 1 of 3" wait_for 15 ui_has 'Strona 1 z 3'
   app_shot pdf-2-viewer
