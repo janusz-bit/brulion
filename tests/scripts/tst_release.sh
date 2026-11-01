@@ -87,7 +87,7 @@ hook() { # <clone or bare repository> <name> <bash code>: installs that git hook
   local dir=$1/.git/hooks
   [[ -d $1/.git ]] || dir=$1/hooks
   mkdir -p -- "$dir"
-  printf '#!/usr/bin/env bash\n%s\n' "$3" >"$dir/$2"
+  printf '#!%s\n%s\n' "$BASH" "$3" >"$dir/$2"
   chmod +x "$dir/$2"
 }
 bump_version() { # <clone> <version>: commits "Release v<version>" by hand (CMake + nix)

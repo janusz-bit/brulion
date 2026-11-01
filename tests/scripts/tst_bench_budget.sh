@@ -35,8 +35,9 @@ expect() { # <description> <command...>: the command succeeds
 # Stand-in suites: each run sleeps $FAKE_SLEEP s and writes a row "<function>","ąćęłńóśźż <n>".
 mkdir -p "$tmp/build/tests/bench"
 for suite in bench_text bench_index; do
-  cat >"$tmp/build/tests/bench/$suite" <<'SH'
-#!/usr/bin/env bash
+  # This bash, not /usr/bin/env (the Nix build sandbox has none).
+  printf '#!%s\n' "$BASH" >"$tmp/build/tests/bench/$suite"
+  cat >>"$tmp/build/tests/bench/$suite" <<'SH'
 csv=""
 while (($#)); do
   case $1 in
@@ -94,7 +95,7 @@ expect "budget used up: the summary keeps the Polish tag" grep -q 'ąćęłńó�
 # after its first call) is no second of the budget used up: the first repetition runs.
 mkdir -p "$tmp/tick"
 cat >"$tmp/tick/date" <<SH
-#!/usr/bin/env bash
+#!$BASH
 if [[ \$* == +%s ]]; then
   if [[ -e "$tmp/tick/called" ]]; then echo 1001; else : >"$tmp/tick/called"; echo 1000; fi
 else

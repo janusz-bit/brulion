@@ -2,7 +2,7 @@
 # for a push to main with "[ci]" in one of its commit messages, and for every release:
 # release.yml calls this workflow and publishes the release only when it passes. A push to main
 # without the marker runs nothing (its run shows up with every job skipped):
-#  * nix     — `nix flake check` + `nix build .#brulion` (builds the package; tests run in linux) on
+#  * nix     — `nix flake check` (with the whole ctest suite: checks.<system>.tests) + `nix build .#brulion` on
 #              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
 #  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
 #              UndefinedBehaviorSanitizer at -O1 (asserts on), ccache kept between runs, ctest
@@ -52,7 +52,7 @@ jobs:
     name: Nix (${{ matrix.system }})
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:

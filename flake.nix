@@ -130,6 +130,9 @@
           # the command line alone runs a capture on a notebook of its own.
           inherit (self.packages.${system}) brulion brulion-cli;
 
+          # The whole ctest suite, in the build sandbox (`nix build .#checks.<system>.tests -L`).
+          tests = self.packages.${system}.brulion.overrideAttrs { doCheck = true; };
+
           # The NixOS module evaluates; its nginx config and autostart entry build.
           nixos-module = import ./nix/tests/module-eval.nix {
             inherit pkgs lib nixpkgs;

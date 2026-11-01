@@ -130,7 +130,7 @@ nix run github:janusz-bit/brulion
 
 ### Okna wyboru plików
 
-Import, eksport („Zapisz…”), „Obraz…”, „Plik dźwiękowy…” i wybór folderu notatnika otwierają
+Import, eksport („Zapisz…”), „Obraz…”, „Plik…”, „Plik dźwiękowy…” i wybór folderu notatnika otwierają
 okno wyboru plików pulpitu, jeśli motyw platformy Qt je ma: GNOME (motyw `gtk3`, który Qt wybiera
 tam sam) — okno GTK, KDE Plasma (`plasma-integration`) — okno KDE. Na innych pulpitach (sway,
 Hyprland, i3…) Qt nie ma takiego motywu i Brulion pokazuje własne okno plików Qt (w kolorach
@@ -388,7 +388,8 @@ Polecenia Nixa:
 ```sh
 nix build .#brulion -L         # pakiet -> ./result (bez testów; walidacja .desktop/AppStream)
 nix build .#brulion-cli -L     # sam wiersz poleceń (BRULION_BUILD_APP=OFF, bez Qt Quick)
-nix flake check -L             # pakiet, moduł NixOS, formatowanie, test VM (x86_64)
+nix flake check -L             # pakiet, wszystkie testy, moduł NixOS, formatowanie, test VM (x86_64)
+nix build .#checks.x86_64-linux.tests -L   # same testy (ctest w piaskownicy Nixa)
 nix fmt                        # formatowanie plików .nix (nixfmt)
 ```
 
@@ -396,8 +397,9 @@ Co sprawdza `nix flake check`:
 
 | Check | Co robi |
 |---|---|
-| `brulion` | build pakietu, testy jednostkowe (`ctest`), `desktop-file-validate` i `appstreamcli validate-tree` na zainstalowanych plikach, `brulion-cli version` i zapis szybkiej notatki w próbnym notatniku |
+| `brulion` | build pakietu, `desktop-file-validate` i `appstreamcli validate-tree` na zainstalowanych plikach, `brulion-cli version` i zapis szybkiej notatki w próbnym notatniku |
 | `brulion-cli` | sam wiersz poleceń (bez Qt Quick): ten sam test zapisu |
+| `tests` | pakiet z `doCheck = true`: cały `ctest` — testy jednostkowe, samotesty QML i testy skryptów. Poza nim zostają testy, które potrzebują przeglądarek (`tests/web`), emulatora Androida, internetu albo prawdziwych urządzeń, oraz benchmarki |
 | `nixos-module` | minimalny system NixOS z `programs.brulion` (+ autostart) i `services.brulion-web` (+ pośrednik Nextcloud) się ewaluuje (`toplevel.drvPath`, bez budowania systemu); konfiguracja nginx przechodzi `gixy`, wpis autostartu `desktop-file-validate`; wariant z `release` i `basePath`; asercja przy braku pakietu |
 | `nixfmt` | wszystkie pliki `.nix` są sformatowane (`nix fmt`) |
 | `web-vm` (tylko x86_64, wymaga KVM) | maszyna wirtualna z modułem: typy MIME, gzip/brotli, nagłówki cache i ETag, przekierowanie `basePath`, pośrednik WebDAV (fałszywy Nextcloud: ścieżki z polskimi znakami, ciasteczka, duży `PUT`), wpis autostartu i start aplikacji bez ekranu |

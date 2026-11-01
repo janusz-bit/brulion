@@ -476,7 +476,7 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
 * Nix: `nix develop` (Qt 6.11 from nixpkgs, CMake, Ninja, ccache, clang-tools, gdb);
   `nix build .#brulion` (builds without the tests — doCheck = false —, validates the desktop file and AppStream
   metainfo, runs `brulion-cli`); `nix build .#brulion-cli` (the command line alone, `nix/cli.nix`); NixOS module `programs.brulion` (+ autostart hidden in the tray) and
-  `services.brulion-web` (the browser version behind nginx) — docs/NIXOS.md; `nix flake check`.
+  `services.brulion-web` (the browser version behind nginx) — docs/NIXOS.md; `nix flake check` (also the whole ctest suite: `checks.<system>.tests`).
 * Windows (test version): `scripts/windows-build.ps1` — MSVC 2022 (`/utf-8`, `/permissive-`,
   `/Zc:__cplusplus`, `/bigobj`, `/W4` without `/WX`), Qt 6.11.2 `win64_msvc2022_64`, `windeployqt`
   + the app-local MSVC runtime → portable ZIP + Inno Setup installer (`packaging/windows/`: the

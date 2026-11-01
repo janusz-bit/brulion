@@ -36,6 +36,8 @@ Read before changing code:
 * Run the app from the build dir: `./build/src/app/brulion` (`QT_QPA_PLATFORM=offscreen` for
   headless smoke runs; screenshots via the app's `--screenshot` option once it exists).
 * `nix build .#brulion` — the Nix package (no tests: `doCheck = false`, so installing never runs them).
+* `nix flake check -L` — also runs the whole ctest suite in the Nix sandbox (`checks.<system>.tests`);
+  on the laptop only, never on this Pi (`flock <lock> laptop-run …`).
 
 ## Resource limits on the dev machine (important)
 

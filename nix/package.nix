@@ -1,8 +1,8 @@
 # The Brulion desktop app (Qt 6 from nixpkgs): bin/brulion, bin/brulion-cli (the command line for
 # scripts and AI agents, docs/CLI.md; nix/cli.nix builds it alone), desktop entry, AppStream
-# metainfo, icons and the agent skill (share/brulion/agent-skills). `nix build .#brulion` builds it without the unit tests (they run in CI's Linux job
-# and with scripts/dev-build.sh / scripts/remote-build.sh; `brulion.overrideAttrs { doCheck = true; }`
-# turns them on here).
+# metainfo, icons and the agent skill (share/brulion/agent-skills). `nix build .#brulion` builds it without the unit tests; `nix flake check` runs them
+# (checks.<system>.tests: this package with doCheck = true), as do CI's Linux job,
+# scripts/dev-build.sh and scripts/remote-build.sh.
 {
   lib,
   stdenv,
@@ -14,6 +14,13 @@
   appstream,
   desktop-file-utils,
   tzdata,
+  git,
+  python3,
+  nodejs,
+  fontconfig,
+  hostname,
+  dejavu_fonts,
+  makeFontsConf,
 }:
 
 stdenv.mkDerivation (finalAttrs: {
@@ -23,16 +30,23 @@ stdenv.mkDerivation (finalAttrs: {
 
   src = lib.fileset.toSource {
     root = ../.;
-    fileset = lib.fileset.unions [
-      ../CMakeLists.txt
-      ../cmake
-      ../src
-      ../tests
-      ../i18n
-      ../assets
-      ../packaging
-      ../3rdparty
-    ];
+    fileset = lib.fileset.unions (
+      [
+        ../CMakeLists.txt
+        ../cmake
+        ../src
+        ../tests
+        ../i18n
+        ../assets
+        ../packaging
+        ../3rdparty
+      ]
+      # What the tests read besides their own folder; the package itself does not rebuild for these.
+      ++ lib.optionals finalAttrs.doCheck [
+        ../docs
+        ../scripts
+      ]
+    );
   };
 
   strictDeps = true;
@@ -66,11 +80,26 @@ stdenv.mkDerivation (finalAttrs: {
 
   # The QML smoke tests are `#!/usr/bin/env bash` scripts; the build sandbox has no /usr/bin/env.
   postPatch = ''
-    patchShebangs tests
+    patchShebangs tests ${lib.optionalString finalAttrs.doCheck "scripts"}
   '';
 
   doCheck = false;
+  # Without these the tests that need them skip themselves: git (tst_scripts_release), python3
+  # and hostname (tst_scripts_bench_budget), node (tst_uibench_*), fc-match and DejaVu
+  # (tst_fallback_fonts_*).
+  nativeCheckInputs = [
+    git
+    python3
+    nodejs
+    fontconfig
+    hostname
+  ];
+  env = lib.optionalAttrs finalAttrs.doCheck {
+    FONTCONFIG_FILE = makeFontsConf { fontDirectories = [ dejavu_fonts ]; };
+  };
   preCheck = ''
+    export CTEST_PARALLEL_LEVEL=$NIX_BUILD_CORES
+    export CTEST_OUTPUT_ON_FAILURE=1
     export QT_QPA_PLATFORM=offscreen
     export HOME=$TMPDIR
     # The sandbox has no time zone database; the import/export tests use Europe/Warsaw.
