@@ -594,6 +594,17 @@ private Q_SLOTS:
         QVERIFY(e[1].image);
         QCOMPARE(e[2].target, u"doc.pdf"_s);
         QVERIFY(!e[2].image);
+        QCOMPARE(e[2].fragment, QString());
+        // Obsidian's PDF fragments are kept (the parser splits them off the target).
+        const QList<Embed> pages = embedsOf(u"![[wykład.pdf#page=3]] ![s](assets/w%C5%82.pdf#page=2) ![[a.png#x]] ![w](https://example.com/a.png#f)"_s);
+        QCOMPARE(pages.size(), 4);
+        QCOMPARE(pages[0].target, u"wykład.pdf"_s);
+        QCOMPARE(pages[0].fragment, u"page=3"_s);
+        QCOMPARE(pages[1].target, u"assets/wł.pdf"_s);
+        QCOMPARE(pages[1].fragment, u"page=2"_s);
+        QCOMPARE(pages[2].fragment, u"x"_s);
+        QVERIFY(pages[3].web);
+        QCOMPARE(pages[3].fragment, QString());
         QVERIFY(onlyEmbeds(u"![[a.png]]"_s));
         QVERIFY(onlyEmbeds(u"  ![[a.png]] ![[b.png]] "_s));
         QVERIFY(!onlyEmbeds(u"tekst ![[a.png]]"_s));

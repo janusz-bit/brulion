@@ -452,6 +452,7 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
     {
         VaultIndex::Batch batch(*m_index);
         for (const VaultChange &c : changes) {
+            pdfFileChanged(c.path, c.oldPath);
             m_dataUrls.remove(c.path);
             m_dataUrlSizes.remove(c.path);
             if (!c.oldPath.isEmpty()) {

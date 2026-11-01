@@ -786,13 +786,14 @@ QList<Embed> embedsOf(QStringView body)
     const markdown::InlineScan scan = markdown::extractInline(body);
     for (const Link &link : scan.links) {
         if (link.kind == LinkKind::Embed && webpicture::isWebUrl(link.target)) {
-            out.append({link.target, link.display, true, true}); // `![[https://…]]` (Obsidian has none)
+            out.append({link.target, link.display, true, true, {}}); // `![[https://…]]` (Obsidian has none)
         } else if (link.kind == LinkKind::Embed && isAttachmentTarget(link.target)) {
-            out.append({link.target, link.display, isImageExtension(link.target)});
+            out.append({link.target, link.display, isImageExtension(link.target), false, link.heading});
         } else if (link.kind == LinkKind::Markdown && link.from >= 0 && link.from < body.size()
                    && body[link.from] == u'!' && shownPictureTarget(link.target)) {
             const bool web = webpicture::isWebUrl(link.target);
-            out.append({link.target, link.display, web || isImageExtension(link.target), web});
+            out.append({link.target, link.display, web || isImageExtension(link.target), web,
+                        web ? QString() : link.heading});
         }
     }
     return out;

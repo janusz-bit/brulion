@@ -220,6 +220,9 @@ public:
     /// The attachment at vault path `path` changed (a drawing saved again): the embeds showing it
     /// are computed again (a drawing's URL carries its version, EditorHost::drawingUrl).
     void attachmentChanged(const QString &path);
+    /// The thumbnail of the PDF at `path` changed (EditorHost::pdfThumbnailChanged): the embeds of
+    /// the rows naming it are computed again.
+    void pdfThumbnailChanged(const QString &path);
     EditorHost *host() const { return m_host; }
     void setPath(const QString &path) { m_path = path; }
     QString path() const { return m_path; }
@@ -310,6 +313,11 @@ private:
     void ensureEmbeds(int row) const;
     /// The embeds role entry of a picture from the internet (EditorHost::webPicture).
     QVariantMap webEmbed(const Embed &em) const;
+    /// The embed map of a PDF attachment at vault path `path` (docs/UI.md "PDF viewer"): {target,
+    /// alt, image false, pdf true, page (the fragment's, ≥ 1), viewable (EditorHost::pdfViewable),
+    /// state, url (the thumbnail when ready), width, height (its pixels), pages, pageWidth,
+    /// pageHeight, error, locked, name, path} — EditorHost::pdfThumbnail(), never assetUrl().
+    QVariantMap pdfEmbed(const Embed &em, const QString &path) const;
     void ensureTransclusions(int row) const;
     /// The vault path of the drawing a page embed `![[Plan]]` (no heading, no block) shows: a note
     /// that is an Obsidian Excalidraw plugin drawing (EditorHost::isDrawing) — an attachment

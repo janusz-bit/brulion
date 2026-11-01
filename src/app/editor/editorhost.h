@@ -8,6 +8,7 @@
 
 #include "picturesize.h"
 
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QObject>
@@ -222,6 +223,42 @@ public:
         return {};
     }
 
+    // --- PDFs (docs/UI.md "PDF viewer") ----------------------------------------------------------
+    /// The thumbnail of page `page` (1-based) of the PDF attachment at `path`: {state: "loading" |
+    /// "ready" | "failed" | "unsupported", url (the cached PNG, file://; "" until ready), width,
+    /// height (its pixels), pages (the PDF's page count, 0 unknown), pageWidth, pageHeight (points),
+    /// error (a sentence), locked}. pdfThumbnailChanged(path) follows a change. Default:
+    /// unsupported (tests, the playground).
+    virtual QVariantMap pdfThumbnail(const QString &path, int page) const
+    {
+        Q_UNUSED(path);
+        Q_UNUSED(page);
+        return {{QStringLiteral("state"), QStringLiteral("unsupported")}};
+    }
+    /// PDFs open in the app's own viewer here (a renderer is built in); else they are handed to
+    /// another app (openInOtherApp()).
+    virtual bool pdfViewable() const { return false; }
+    /// The attachment at `path` handed to another app — the system's PDF viewer, the browser's new
+    /// tab; only PDFs. False when it could not be (the host told the user why).
+    virtual bool openInOtherApp(const QString &path)
+    {
+        Q_UNUSED(path);
+        return false;
+    }
+    /// The file name, without ".svg", of a new drawing on page `page` of the PDF `name` ("Wykład 3
+    /// s. 4"), or on the picture `name` when `page` is 0 ("Plan (rysunek)"): the editor's "Rysunek na
+    /// obrazie lub PDF…" and the PDF viewer's "Rysuj na tej stronie" name them alike (translations
+    /// in PageController's context).
+    static QString drawingFileNameOn(const QString &name, int page)
+    {
+        // (Both at once: a name with "%1" in it keeps it, the page goes where %2 is.)
+        if (page > 0)
+            //: A drawing on page %2 of the PDF %1 ("Wykład 3 s. 4"); a file name, without the extension
+            return QCoreApplication::translate("brulion::editor::PageController", "%1 p. %2").arg(name, QString::number(page));
+        //: A drawing on the picture %1; a file name, without the extension
+        return QCoreApplication::translate("brulion::editor::PageController", "%1 (drawing)").arg(name);
+    }
+
     // --- Context -----------------------------------------------------------------------------
     /// Vault configuration as a map (journalsFolder, journalFileFormat, attachmentsFolder,
     /// templatesFolder, defaultReminderTime "HH:mm", weekStartsOn 1..7, journalMode / pageMode
@@ -265,6 +302,8 @@ Q_SIGNALS:
     /// The picture from the internet at `url` (as written) changed state (webPicture()); "" —
     /// all of them (the setting changed).
     void webPictureChanged(const QString &url);
+    /// The thumbnails of the PDF at `path` (a vault path) changed (pdfThumbnail()): drawn, failed.
+    void pdfThumbnailChanged(const QString &path);
 };
 
 } // namespace brulion

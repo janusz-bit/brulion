@@ -32,6 +32,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QTranslator>
 
 using namespace brulion;
 using namespace brulion::editor;
@@ -4641,6 +4642,115 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(!host.canDecodePicture(u"assets/łąka.WEBP"_s));
         host.setUndecodablePictureFormats({});
         QCOMPARE(host.canDecodePicture(u"assets/łąka.webp"_s), QImageReader::supportedImageFormats().contains("webp"));
+    }
+
+    void pdfEmbeds()
+    {
+        // A PDF embed (docs/UI.md "PDF viewer"): the thumbnail of its page as the host has it, the
+        // fragment's page, never assetUrl() (the browser's data: URL of the whole file); a thumbnail
+        // that became ready recomputes only the rows naming it.
+        FakeEditorHost host;
+        QCOMPARE(host.saveAttachment(u"wykład.pdf"_s, "%PDF-1.4\n"), u"assets/wykład.pdf"_s);
+        host.setFile(Page, u"- Slajdy ![[wykład.pdf#page=3]]\n- Tekst bez załącznika\n- Inny ![s](assets/wyk%C5%82ad.pdf)\n"_s);
+        PageController page;
+        page.setNow(Now);
+        page.setHost(&host);
+        page.setPath(Page);
+        const QHash<int, QByteArray> roles = page.blocks()->roleNames();
+        const auto embedsOfRow = [&](int row) {
+            return page.blocks()->data(page.blocks()->index(row), roles.key("embeds")).toList();
+        };
+        const QVariantMap first = embedsOfRow(0).value(0).toMap();
+        QVERIFY(first.value(u"pdf"_s).toBool());
+        QVERIFY(!first.value(u"image"_s).toBool());
+        QCOMPARE(first.value(u"page"_s).toInt(), 3);
+        QCOMPARE(first.value(u"state"_s).toString(), u"loading"_s);
+        QCOMPARE(first.value(u"name"_s).toString(), u"wykład.pdf"_s);
+        QCOMPARE(first.value(u"path"_s).toString(), u"assets/wykład.pdf"_s);
+        QVERIFY(!first.value(u"viewable"_s).toBool());
+        QVERIFY(first.value(u"url"_s).toUrl().isEmpty());
+        const QVariantMap third = embedsOfRow(2).value(0).toMap();
+        QVERIFY(third.value(u"pdf"_s).toBool());
+        QCOMPARE(third.value(u"page"_s).toInt(), 1);
+        QCOMPARE(host.assetUrlAsks(u"assets/wykład.pdf"_s), 0);
+        QVERIFY(host.pdfThumbnailAsks().contains(u"assets/wykład.pdf#3"_s));
+        QVERIFY(host.pdfThumbnailAsks().contains(u"assets/wykład.pdf#1"_s));
+        QSignalSpy changed(page.blocks(), &QAbstractItemModel::dataChanged);
+        host.setPdfThumbnail(u"assets/wykład.pdf"_s,
+                             {{u"state"_s, u"ready"_s}, {u"url"_s, QUrl::fromLocalFile(u"/tmp/miniatura.png"_s)},
+                              {u"width"_s, 297}, {u"height"_s, 420}, {u"pages"_s, 12}});
+        QSet<int> rows;
+        for (const QList<QVariant> &signal : std::as_const(changed)) {
+            const QModelIndex from = signal.at(0).value<QModelIndex>();
+            const QModelIndex to = signal.at(1).value<QModelIndex>();
+            for (int r = from.row(); r <= to.row(); ++r)
+                rows.insert(r);
+        }
+        QCOMPARE(rows, (QSet<int>{0, 2}));
+        const QVariantMap ready = embedsOfRow(0).value(0).toMap();
+        QCOMPARE(ready.value(u"state"_s).toString(), u"ready"_s);
+        QCOMPARE(ready.value(u"pages"_s).toInt(), 12);
+        QCOMPARE(ready.value(u"width"_s).toInt(), 297);
+        QCOMPARE(ready.value(u"url"_s).toUrl(), QUrl::fromLocalFile(u"/tmp/miniatura.png"_s));
+        host.setPdfViewable(true);
+        host.setPdfThumbnail(u"assets/wykład.pdf"_s, {{u"state"_s, u"failed"_s}, {u"error"_s, u"PDF chroniony hasłem"_s},
+                                                       {u"locked"_s, true}});
+        const QVariantMap failed = embedsOfRow(0).value(0).toMap();
+        QCOMPARE(failed.value(u"state"_s).toString(), u"failed"_s);
+        QVERIFY(failed.value(u"locked"_s).toBool());
+        QVERIFY(failed.value(u"viewable"_s).toBool());
+        QVERIFY(failed.value(u"url"_s).toUrl().isEmpty());
+        QCOMPARE(host.assetUrlAsks(u"assets/wykład.pdf"_s), 0);
+    }
+
+    void openPdf()
+    {
+        Fixture f(u"- Wstęp\n- Slajdy ![[wykład.pdf]] i [[wykład.pdf#page=2]]\n"_s);
+        QCOMPARE(f.host.saveAttachment(u"wykład.pdf"_s, "%PDF-1.4\n"), u"assets/wykład.pdf"_s);
+        f.host.setPdfViewable(true);
+        f.page.openPdf(1, u"assets/wykład.pdf"_s, 3);
+        QVariantMap route = f.host.lastRoute();
+        QCOMPARE(route.value(u"view"_s).toString(), u"page"_s);
+        QCOMPARE(route.value(u"path"_s).toString(), u"assets/wykład.pdf"_s);
+        QCOMPARE(route.value(u"pdfPage"_s).toInt(), 3);
+        QCOMPARE(route.value(u"from"_s).toString(), Page);
+        QCOMPARE(route.value(u"fromLine"_s).toInt(), 1);
+        f.page.openPdf(1, u"assets/wykład.pdf"_s, 1);
+        QVERIFY(!f.host.lastRoute().contains(u"pdfPage"_s));
+        // A link to a PDF: the viewer at the fragment's page, no heading.
+        QVERIFY(f.page.activateLink(1, u"page:wyk%C5%82ad.pdf#page=2"_s).isEmpty());
+        route = f.host.lastRoute();
+        QCOMPARE(route.value(u"path"_s).toString(), u"assets/wykład.pdf"_s);
+        QCOMPARE(route.value(u"pdfPage"_s).toInt(), 2);
+        QVERIFY(!route.contains(u"heading"_s));
+        QCOMPARE(route.value(u"from"_s).toString(), Page);
+        f.page.activateLink(1, u"page:wyk%C5%82ad.pdf#height=400"_s);
+        QVERIFY(!f.host.lastRoute().contains(u"pdfPage"_s));
+        QVERIFY(f.host.openedInOtherApp().isEmpty());
+        // Where PDFs cannot be shown (the browser): another app / a new tab, the route unchanged.
+        f.host.setPdfViewable(false);
+        const QVariantMap before = f.host.lastRoute();
+        f.page.openPdf(1, u"assets/wykład.pdf"_s, 3);
+        f.page.activateLink(1, u"page:wyk%C5%82ad.pdf#page=2"_s);
+        QCOMPARE(f.host.openedInOtherApp(), (QStringList{u"assets/wykład.pdf"_s, u"assets/wykład.pdf"_s}));
+        QCOMPARE(f.host.lastRoute(), before);
+        f.page.openPdf(1, QString(), 1); // nothing
+        QCOMPARE(f.host.openedInOtherApp().size(), 2);
+    }
+
+    void drawingFileNames()
+    {
+        QCOMPARE(PageController::drawingFileNameOn(u"Wykład 3"_s, 4), u"Wykład 3 p. 4"_s);
+        QCOMPARE(PageController::drawingFileNameOn(u"Plan mieszkania"_s, 0), u"Plan mieszkania (drawing)"_s);
+        QCOMPARE(PageController::drawingFileNameOn(u"100%1"_s, 2), u"100%1 p. 2"_s);
+        // With the app's Polish translation (built with the app: skipped without it).
+        QTranslator polish;
+        if (!polish.load(QStringLiteral(BRULION_APP_QM_DIR "/brulion_pl.qm")))
+            QSKIP("the app's Polish translation is not built");
+        QCoreApplication::installTranslator(&polish);
+        QCOMPARE(PageController::drawingFileNameOn(u"Wykład 3"_s, 4), u"Wykład 3 s. 4"_s);
+        QCOMPARE(PageController::drawingFileNameOn(u"Plan"_s, 0), u"Plan (rysunek)"_s);
+        QCoreApplication::removeTranslator(&polish);
     }
 
     void imageSlashCommand()

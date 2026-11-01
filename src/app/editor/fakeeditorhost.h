@@ -91,6 +91,11 @@ public:
     QVariantMap webPicture(const QString &url) const override;
     void loadWebPicture(const QString &url, bool forDownload = false) override;
     QByteArray webPictureData(const QString &url, QString *format) const override;
+    /// PDFs (setPdfThumbnail(), setPdfViewable()): what the test set, else "loading".
+    QVariantMap pdfThumbnail(const QString &path, int page) const override;
+    bool pdfViewable() const override { return m_pdfViewable; }
+    /// Recorded (openedInOtherApp()); true.
+    bool openInOtherApp(const QString &path) override;
     QVariantMap vaultConfig() const override;
     void navigate(const QVariantMap &route, bool newPane = false) override;
     void openUrl(const QUrl &url) override;
@@ -121,6 +126,16 @@ public:
     int attachmentCount() const { return int(m_assets.size()); }
     /// Ready pictures are handed out as data: URLs, as in the browser build.
     void setWebPictureDataUrls(bool on) { m_webDataUrls = on; }
+    /// PDFs open in the app's viewer (true) or go to another app (false, the default).
+    Q_INVOKABLE void setPdfViewable(bool viewable) { m_pdfViewable = viewable; }
+    /// The thumbnail pdfThumbnail(path, any page) answers with; emits pdfThumbnailChanged(path).
+    Q_INVOKABLE void setPdfThumbnail(const QString &path, const QVariantMap &thumbnail);
+    /// The pages pdfThumbnail() was asked for, "path#page" (tests).
+    QStringList pdfThumbnailAsks() const { return m_pdfAsks; }
+    /// The paths openInOtherApp() handed over (tests).
+    QStringList openedInOtherApp() const { return m_openedElsewhere; }
+    /// How many times assetUrl() was asked for `path` (tests: never for a PDF).
+    int assetUrlAsks(const QString &path) const { return m_assetAsks.value(path); }
     /// Fetches made so far (tests: nothing loads without being allowed).
     Q_INVOKABLE int webFetchCount() const { return m_webFetches; }
     int webFetches() const { return m_webFetches; }
@@ -198,6 +213,11 @@ private:
     int m_queryRuns = 0;
     bool m_queriesFail = false;
     QStringList m_undecodable;
+    bool m_pdfViewable = false;
+    QHash<QString, QVariantMap> m_pdfThumbnails;
+    mutable QStringList m_pdfAsks;
+    QStringList m_openedElsewhere;
+    mutable QHash<QString, int> m_assetAsks;
     /// The index for queries and link targets, rebuilt from the files after a change.
     mutable std::unique_ptr<VaultIndex> m_index;
     mutable bool m_indexDirty = true;

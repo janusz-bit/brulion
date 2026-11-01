@@ -95,7 +95,8 @@ QVariant FolderTreeModel::data(const QModelIndex &index, int role) const
             return m_expanded.contains(e.path) ? u"folder-open"_s : u"folder"_s;
         if (!e.journalDate.isEmpty())
             return u"calendar"_s;
-        if (paths::isMarkdown(e.path))
+        // (A PDF opens in the PDF viewer: the page icon, as in its embeds and its viewer's bar.)
+        if (paths::isMarkdown(e.path) || paths::isPdfPath(e.path))
             return u"file-text"_s;
         return paths::isPicturePath(e.path) ? u"image"_s : u"file"_s;
     case SpecialRole: return e.isDir && e.path == m_journalsFolder ? u"journals"_s : QString();

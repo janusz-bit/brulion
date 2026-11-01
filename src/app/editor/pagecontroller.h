@@ -743,6 +743,16 @@ public:
     /// Open the drawing editor on the drawing at vault path `path` (route "drawing"); the page is
     /// saved first.
     Q_INVOKABLE void openDrawing(const QString &path);
+    /// A PDF embed clicked (EmbedView.pdfClicked; docs/UI.md "PDF viewer"): its viewer — route
+    /// {view: "page", path, pdfPage (when > 1), from: this page, fromLine: the row's first line}, the
+    /// page saved first; where PDFs cannot be shown (the browser, a build without a renderer) the PDF
+    /// handed to another app / a new tab at once (EditorHost::openInOtherApp: this call runs inside
+    /// the click, the browser's user gesture).
+    Q_INVOKABLE void openPdf(int row, const QString &path, int page = 0, bool newPane = false);
+    /// The file name of a drawing on page `page` of `name` ("Wykład 3 s. 4"), or on a picture
+    /// ("… (rysunek)"): EditorHost::drawingFileNameOn (insertDrawingsOn() and the PDF viewer's
+    /// Workspace::addDrawingOnPdfPage() name them alike).
+    static QString drawingFileNameOn(const QString &name, int page);
     /// A file picked for drawings on a picture or a PDF ("Rysunek na obrazie lub PDF…", docs/UI.md
     /// "Drawing editor"): its vault path through the host (EditorHost::importAttachment: a file of
     /// the notebook where it is, the same file in the attachments folder reused, else copied

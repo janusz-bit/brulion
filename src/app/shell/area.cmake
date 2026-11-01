@@ -6,7 +6,8 @@
 # tests/app/shell without the app): AppController (appshare.cpp: shares from other apps), AppSettings, Workspace (implements the
 # editor's EditorHost and QueryHost; workspace*.cpp: index queries, history and trash, folders and
 # moves, quick capture — the last three through the core module notebook, shared with brulion-cli —,
-# the clipboard's HTML of copied blocks and pasted HTML (core io), reminders — WorkspaceReminders
+# the clipboard's HTML of copied blocks and pasted HTML (core io), PDFs (workspacepdf.cpp: thumbnails,
+# "Otwórz w innej aplikacji", a drawing on a PDF page), reminders — WorkspaceReminders
 # over the notifiers of src/app/notify —, sync —
 # WorkspaceSync: Nextcloud, Syncthing, conflicts — and their wiring to the app,
 # workspaceintegration), CommandModel, FolderTreeModel, the sample vault, the tray calendar's
@@ -55,6 +56,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacefolders.cpp
     ${_brulion_shell_dir}/workspaceclipboard.cpp
     ${_brulion_shell_dir}/workspacepictures.cpp
+    ${_brulion_shell_dir}/workspacepdf.cpp
     ${_brulion_shell_dir}/workspacereminders.h ${_brulion_shell_dir}/workspacereminders.cpp
     ${_brulion_shell_dir}/workspacesync.h ${_brulion_shell_dir}/workspacesync.cpp
     ${_brulion_shell_dir}/workspacesyncruns.cpp
@@ -78,8 +80,9 @@ target_link_libraries(brulion_shell
     PRIVATE Qt6::Network brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
             brulion_core_drawing brulion_notify)
 # Autostart ("Start when you sign in", Windows); AndroidBridge (permissions, test notification);
-# WasmStorage + WasmNotifier.
-target_link_libraries(brulion_shell PRIVATE brulion_platform)
+# WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,
+# src/app/pdf — its area is included before this one — and openexternal.h).
+target_link_libraries(brulion_shell PRIVATE brulion_platform brulion_pdfview)
 target_compile_definitions(brulion_shell PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
 qt_extract_metatypes(brulion_shell)
 brulion_set_warnings(brulion_shell)
