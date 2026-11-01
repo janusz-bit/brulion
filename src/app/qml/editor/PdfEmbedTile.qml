@@ -43,8 +43,8 @@ Item {
     /// The thumbnail is drawn (the shell's self-test).
     readonly property bool loaded: thumb.status === Image.Ready && thumb.implicitWidth > 0
 
-    width: frame.width
-    height: frame.height + Theme.space1 + caption.height
+    implicitWidth: frame.width
+    implicitHeight: frame.height + Theme.space1 + caption.height
 
     Accessible.role: Accessible.Button
     //: A PDF embedded in a note, for screen readers: its name, the page shown, the page count

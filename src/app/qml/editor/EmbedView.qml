@@ -337,8 +337,7 @@ Column {
                 id: pdfLoader
                 active: embed.pdfTile
                 visible: active
-                width: item ? item.width : 0
-                height: item ? item.height : 0
+                // (No size of its own: it takes the tile's, which sizes itself by its page.)
                 sourceComponent: PdfEmbedTile {
                     entry: embed.modelData
                     columnWidth: root.width

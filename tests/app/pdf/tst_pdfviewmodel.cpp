@@ -291,6 +291,27 @@ private Q_SLOTS:
         QCOMPARE(model->hitCount(), 0);
     }
 
+    void currentPageAtTheEnd()
+    {
+        // A tall view: the last pages cannot reach its top; at the end the last one is current,
+        // a jump to a page names it while the view stays.
+        auto model = opened(fixture(u"wyklad.pdf"_s), 400, 900);
+        QTRY_COMPARE(model->status(), Status::Ready);
+        QTRY_VERIFY(std::abs(model->pageRect(2).width() - (400 - 48)) < 0.5);
+        const qreal end = model->contentHeight() - 900;
+        QVERIFY(end > 0);
+        model->setViewport(0, end);
+        QCOMPARE(model->currentPage(), 3);
+        const QPointF two = model->positionForPage(2);
+        model->setViewport(two.x(), two.y());
+        model->pinPage(2);
+        QCOMPARE(model->currentPage(), 2);
+        model->setViewport(0, two.y() - 40); // scrolled: the pin goes
+        QVERIFY(model->currentPage() != 2 || model->pageRect(2).top() <= two.y() - 40 + 0.4 * 900);
+        model->pinPage(99);
+        QCOMPARE(model->currentPage(), 3);
+    }
+
     void newVersionKeepsPage()
     {
         auto model = opened(fixture(u"wyklad.pdf"_s));

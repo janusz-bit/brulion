@@ -254,6 +254,7 @@ void PdfViewModel::fail(const QString &message, bool locked)
 void PdfViewModel::open()
 {
     ++m_generation;
+    m_pinnedPage = 0;
     if (m_openCancel)
         m_openCancel->store(true);
     m_openCancel = std::make_shared<std::atomic_bool>(false);
@@ -328,6 +329,8 @@ void PdfViewModel::open()
                     const QPointF at = m.m_keepPage > 0 ? m.positionForPage(m.m_keepPage, m.m_keepFraction) : QPointF();
                     m.m_contentX = at.x();
                     m.m_contentY = at.y();
+                    if (m.m_keepPage > 0)
+                        m.pinPage(m.m_keepPage);
                     m.updateVisible();
                     m.updateCurrentPage();
                     Q_EMIT m.moveViewport(at.x(), at.y());
@@ -517,9 +520,18 @@ void PdfViewModel::setViewport(qreal contentX, qreal contentY)
         return;
     m_contentX = contentX;
     m_contentY = contentY;
+    if (m_pinnedPage > 0 && std::abs(contentY - m_pinnedY) > 1)
+        m_pinnedPage = 0; // scrolled away from the jump
     updateVisible();
     updateCurrentPage();
     m_settleTimer.start();
+}
+
+void PdfViewModel::pinPage(int page)
+{
+    m_pinnedPage = m_layout.count() > 0 ? std::clamp(page, 1, m_layout.count()) : 0;
+    m_pinnedY = m_contentY;
+    updateCurrentPage();
 }
 
 void PdfViewModel::updateVisible()
@@ -534,8 +546,13 @@ void PdfViewModel::updateVisible()
 
 void PdfViewModel::updateCurrentPage()
 {
-    const int index = m_status == Status::Ready ? m_layout.indexAt(m_contentY + 0.4 * m_viewportHeight) : -1;
-    const int page = index + 1;
+    // The page under 40 % of the view's height; scrolled to the end (the last pages may never get
+    // that high), the last one in view.
+    const qreal maxY = m_layout.contentSize().height() - m_viewportHeight;
+    const bool atEnd = maxY > 0 && m_contentY >= maxY - 0.5;
+    const qreal y = atEnd ? m_contentY + m_viewportHeight - 1 : m_contentY + 0.4 * m_viewportHeight;
+    const int index = m_status == Status::Ready ? m_layout.indexAt(y) : -1;
+    const int page = index >= 0 && m_pinnedPage > 0 ? m_pinnedPage : index + 1;
     if (page == m_currentPage)
         return;
     m_currentPage = page;

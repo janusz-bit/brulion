@@ -42,7 +42,9 @@ brulion_add_test(tst_shell_workspace_pdf SOURCES tst_workspace_pdf.cpp
 # a row's "⋯" / right-click menu, a root folder from the
 # "Strony" header, the desktop run's mouse drag and drop with Escape, All pages' folder rows and
 # breadcrumb), the block editor inside the shell (real keys, source mode, a link to a missing
-# page) and closing the notebook from the UI. Exit code = failures.
+# page), PDFs (the thumbnail, the viewer's keys, zoom, search, page jump, a drawing on a page, a
+# locked PDF from tests/data/pdf: BRULION_SELFTEST_PDF_DIR) and closing the notebook from the UI.
+# Exit code = failures.
 # A private XDG home keeps the sample notebook and settings out of the user's own.
 # Qt's QML modules are found as for tst_editor_qml (tests/app/editor/CMakeLists.txt).
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
@@ -72,7 +74,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/selftest-home-${_kind})
         brulion_test_profile(_profile shell-${_kind})
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state${_profile}"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state;BRULION_SELFTEST_PDF_DIR=${PROJECT_SOURCE_DIR}/tests/data/pdf${_profile}"
             FIXTURES_REQUIRED shell_qml_homes TIMEOUT ${_shell_qml_timeout} PROCESSORS 2
             # QML that ran on something already gone fails too, as in tst_editor_qml (a side
             # panel created from the context of the view the shell had just left did).

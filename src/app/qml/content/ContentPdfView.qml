@@ -178,7 +178,9 @@ Item {
     function jumpTo(page) {
         if (!root.ready)
             return
-        root.moveTo(pdf.positionForPage(Math.max(1, Math.min(pdf.pageCount, page)), 0))
+        const p = Math.max(1, Math.min(pdf.pageCount, page))
+        root.moveTo(pdf.positionForPage(p, 0))
+        pdf.pinPage(p) // (named also when it cannot reach the view's top)
         pdf.settle()
     }
     function scrollBy(dx, dy) {
@@ -195,6 +197,15 @@ Item {
     function zoomTo(percent) {
         if (root.ready)
             root.moveTo(pdf.setScaleAround(percent / 100 * 96 / 72, root.centre))
+    }
+    /// A double tap / click: fit width ↔ twice that, around `point` (in the view).
+    function toggleZoomAt(point) {
+        if (!root.ready)
+            return
+        if (pdf.fitWidth)
+            root.zoomBy(2, point)
+        else
+            root.moveTo(pdf.fitToWidth(point))
     }
     function fitWidth() {
         if (root.ready)
@@ -264,7 +275,18 @@ Item {
     function drawButtonAnchor() {
         return root.wide ? drawButton : moreButton
     }
+    /// The page shown, into the route now (the view is about to be left: Back returns here).
+    function rememberPage() {
+        writeRoute.stop()
+        writeRoute.triggered()
+    }
+    /// A drawing of this page the note has already, opened.
+    function openExisting(i) {
+        root.rememberPage()
+        AppController.navigate({ view: "drawing", path: root.existingDrawings[i].path })
+    }
     function startDrawing(page) {
+        root.rememberPage()
         root.drawPage = page
         root.drawJob = DrawingBackdrops.prepare(root.path, [page], true)
     }
@@ -536,21 +558,21 @@ Item {
             //: "Rysuj na tej stronie": a drawing of this page already in the note
             text: visible ? qsTr("Open the drawing “%1”").arg(root.existingDrawings[0].name) : ""
             iconName: "pen-tool"
-            onTriggered: AppController.navigate({ view: "drawing", path: root.existingDrawings[0].path })
+            onTriggered: root.openExisting(0)
         }
         BMenuItem {
             visible: root.existingDrawings.length > 1
             height: visible ? implicitHeight : 0
             text: visible ? qsTr("Open the drawing “%1”").arg(root.existingDrawings[1].name) : ""
             iconName: "pen-tool"
-            onTriggered: AppController.navigate({ view: "drawing", path: root.existingDrawings[1].path })
+            onTriggered: root.openExisting(1)
         }
         BMenuItem {
             visible: root.existingDrawings.length > 2
             height: visible ? implicitHeight : 0
             text: visible ? qsTr("Open the drawing “%1”").arg(root.existingDrawings[2].name) : ""
             iconName: "pen-tool"
-            onTriggered: AppController.navigate({ view: "drawing", path: root.existingDrawings[2].path })
+            onTriggered: root.openExisting(2)
         }
         BMenuSeparator {}
         BMenuItem {
@@ -599,11 +621,12 @@ Item {
                 Layout.minimumWidth: 80
                 size: "small"
                 debounce: 0 // (the model waits 250 ms itself)
+                // Esc closes the search (below), never only clears its text.
+                clearable: false
                 placeholderText: qsTr("Search in PDF")
                 onTextEdited: pdf.searchText = text
                 onCleared: pdf.searchText = ""
                 onAccepted: root.nextHit((searchField.lastModifiers & Qt.ShiftModifier) !== 0)
-                onEscapePressed: root.closeSearch()
                 property int lastModifiers: 0
                 Keys.priority: Keys.BeforeItem
                 Keys.onPressed: (event) => {
@@ -801,20 +824,37 @@ Item {
             }
 
             // Gestures on the pages (their points are mapped to the view, the preview's scale aside).
-            WheelHandler {
-                // Ctrl+wheel (and a touchpad's pinch on the desktop): a preview, then one zoom.
-                acceptedModifiers: Qt.ControlModifier
-                target: null
-                onWheel: (event) => {
-                    const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.pixelDelta.y
+            MouseArea {
+                // Ctrl+wheel (and a touchpad's pinch on the desktop, sent as Ctrl+wheel): a
+                // preview, then one zoom; a double click fits the width ↔ twice that. Other wheel
+                // turns go on to the Flickable (scrolling); a press and drag still pan it.
+                objectName: "pdfMouse"
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: root.pannedSideways ? Qt.OpenHandCursor : Qt.ArrowCursor
+                onWheel: (wheel) => {
+                    if (!(wheel.modifiers & Qt.ControlModifier)) {
+                        wheel.accepted = false
+                        return
+                    }
+                    wheel.accepted = true
+                    const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.pixelDelta.y
                     if (delta === 0)
                         return
                     if (root.previewScale === 1) {
-                        const p = flick.mapFromItem(null, point.scenePosition.x, point.scenePosition.y)
+                        const p = flick.mapFromItem(this, wheel.x, wheel.y)
                         root.previewOrigin = Qt.point(flick.contentX + p.x, flick.contentY + p.y)
                     }
                     root.previewScale = root.boundedPreview(root.previewScale * Math.pow(1.0015, delta))
                     wheelCommit.restart()
+                }
+                // A finger is the TapHandler's and the PinchHandler's (below), never this one's.
+                onPressed: (mouse) => mouse.accepted = mouse.source === Qt.MouseEventNotSynthesized
+                onDoubleClicked: (mouse) => {
+                    // (A finger's double tap: the TapHandler below.)
+                    if (mouse.source !== Qt.MouseEventNotSynthesized)
+                        return
+                    root.toggleZoomAt(flick.mapFromItem(this, mouse.x, mouse.y))
                 }
             }
             PinchHandler {
@@ -832,19 +872,10 @@ Item {
                 onActiveScaleChanged: if (active) root.previewScale = root.boundedPreview(activeScale)
             }
             TapHandler {
-                // A double tap: fit width ↔ twice that, around the tap.
-                acceptedButtons: Qt.LeftButton
-                onDoubleTapped: (eventPoint) => {
-                    const p = flick.mapFromItem(null, eventPoint.scenePosition.x, eventPoint.scenePosition.y)
-                    if (pdf.fitWidth)
-                        root.zoomBy(2, p)
-                    else
-                        root.moveTo(pdf.fitToWidth(p))
-                }
-            }
-            HoverHandler {
-                cursorShape: root.pannedSideways ? Qt.OpenHandCursor : Qt.ArrowCursor
-                enabled: !Theme.touchUi
+                // A finger's double tap: fit width ↔ twice that, around the tap.
+                acceptedDevices: PointerDevice.TouchScreen
+                onDoubleTapped: (eventPoint) => root.toggleZoomAt(
+                                    flick.mapFromItem(null, eventPoint.scenePosition.x, eventPoint.scenePosition.y))
             }
         }
 

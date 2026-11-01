@@ -652,6 +652,31 @@ Gesture touchDoubleTap(QQuickWindow *window, QPointF scenePos)
     return touchTap(window, scenePos, 40, 60) + touchTap(window, scenePos, 40, 250);
 }
 
+Gesture touchPinch(QQuickWindow *window, QPointF centre, qreal fromDistance, qreal toDistance, int steps, int stepMs)
+{
+    auto sequence = std::make_shared<TouchSequence>(window, touchDevice());
+    steps = qMax(1, steps);
+    const auto at = [centre](qreal distance, int finger) {
+        return (centre + QPointF(finger == 0 ? -distance / 2 : distance / 2, 0)).toPoint();
+    };
+    Gesture g{Step{[sequence, window, a = at(fromDistance, 0), b = at(fromDistance, 1)] {
+                       sequence->press(0, a, window).press(1, b, window).commit(false);
+                   },
+                   stepMs, true}};
+    for (int step = 1; step <= steps; ++step) {
+        const qreal distance = fromDistance + (toDistance - fromDistance) * step / steps;
+        g.append(Step{[sequence, window, a = at(distance, 0), b = at(distance, 1)] {
+                          sequence->move(0, a, window).move(1, b, window).commit(false);
+                      },
+                      step == steps ? 120 : stepMs, true});
+    }
+    g.append(Step{[sequence, window, a = at(toDistance, 0), b = at(toDistance, 1)] {
+                      sequence->release(0, a, window).release(1, b, window).commit(false);
+                  },
+                  300, true});
+    return g;
+}
+
 Gesture touchDrag(QQuickWindow *window, QPointF from, QPointF delta, int steps, int stepMs, int holdMs, int afterMs)
 {
     auto sequence = std::make_shared<TouchSequence>(window, touchDevice());

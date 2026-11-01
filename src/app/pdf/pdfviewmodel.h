@@ -97,6 +97,7 @@ private:
     Q_PROPERTY(qreal contentHeight READ contentHeight NOTIFY layoutChanged FINAL)
     Q_PROPERTY(qreal minScale READ minScale CONSTANT FINAL)
     Q_PROPERTY(qreal maxScale READ maxScale CONSTANT FINAL)
+    /// The page under 40 % of the view's height (scrolled to the end: the last one in view).
     Q_PROPERTY(int currentPage READ currentPage NOTIFY currentPageChanged FINAL)
     Q_PROPERTY(QAbstractListModel *pages READ pages CONSTANT FINAL)
     Q_PROPERTY(int detailRevision READ detailRevision NOTIFY detailChanged FINAL)
@@ -176,6 +177,9 @@ public:
     Q_INVOKABLE QRectF pageRect(int page) const;
     /// The Flickable's contentX/Y showing page `page` from `fraction` of its height.
     Q_INVOKABLE QPointF positionForPage(int page, qreal fraction = 0) const;
+    /// Page `page` is the current one while the view stays where it is now (a jump to a page that
+    /// cannot reach the view's top — the last ones, small pages — still names it).
+    Q_INVOKABLE void pinPage(int page);
     /// Zoom by `factor` keeping the point under `viewportPoint` (in the view) in place; returns the
     /// Flickable's new contentX/Y.
     Q_INVOKABLE QPointF zoomAround(qreal factor, QPointF viewportPoint);
@@ -261,6 +265,8 @@ private:
     qreal m_contentX = 0;
     qreal m_contentY = 0;
     int m_currentPage = 0;
+    int m_pinnedPage = 0;
+    qreal m_pinnedY = 0;
     PdfVisiblePages *m_pages = nullptr;
     QSet<int> m_failed;
     int m_generation = 0;
