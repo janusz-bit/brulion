@@ -42,7 +42,7 @@ components — no Material/Fusion look, so all targets look identical.
   font); calculations are note text: the editor font at the editor's size, results with tabular
   figures (`tnum`) so they still line up right-aligned, errors smaller in the UI font; line spacing Ciasny 1.45 | Normalny 1.65 | Luźny 1.9; configurable max
   text width — Wąska 600, **Normalna 680** (the default, `Theme.measure`: about 85 characters of
-  16-px serif, Obsidian's comfortable measure), Szeroka 960, Pełna; the presets before 0.5.1
+  16-px serif, Obsidian's comfortable measure), Szeroka 960, Pełna; the presets before 0.6.0
   (640, 760) read as 600 and 680, other stored widths stay (the calendar's Agenda keeps 760,
   `Theme.measureList`: its rows hold a time, a title and a page) — and text size. One type scale: note text quoted outside the editor (linked
   references, tagged blocks under a page and in the side panel, `ContentRefRow`) is in the

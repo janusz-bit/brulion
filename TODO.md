@@ -75,7 +75,7 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   albo zmiana kolorów motywu systemu w tej chwili), okno zostaje puste, a notatnik się nie otwiera
   (logcat: `finishDrawing of relaunch: Window{… BrulionActivity}`, potem żadnych wpisów
   `brulion.*`). Zdarza się w emulatorze w kilka sekund po starcie systemu (było już przed zmianami
-  wyglądu 0.5.1); `scripts/android-emulator-test.sh` uruchamia wtedy aplikację drugi raz. Do zbadania w
+  wyglądu 0.6.0); `scripts/android-emulator-test.sh` uruchamia wtedy aplikację drugi raz. Do zbadania w
   `QtActivity` (Qt 6.11): ponowne podpięcie okna do aplikacji, która jeszcze startuje.
 
 ## Windows
