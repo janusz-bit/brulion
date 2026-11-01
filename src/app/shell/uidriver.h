@@ -216,6 +216,12 @@ Gesture typeText(QQuickWindow *window, const QString &text, KeyDelivery delivery
 // ---- Synchronous helpers (run() of the gestures above) -----------------------------------------
 
 void touchTapNow(QQuickWindow *window, QPointF scenePos, int holdMs = 110);
+/// A finger pressed at `scenePos` and held until `until` is true (polled as waitFor() does, at
+/// most `timeoutMs`), then lifted, and `afterMs` to settle. A long press waits so for its effect
+/// rather than for a fixed time (on a slow, busy event loop the handler's timer fires late).
+/// Returns what `until` said last.
+bool touchHoldNow(QQuickWindow *window, QPointF scenePos, const std::function<bool()> &until, int timeoutMs,
+                  int afterMs = 100);
 void touchDragNow(QQuickWindow *window, QPointF from, QPointF delta);
 void mouseMoveNow(QQuickWindow *window, QPointF scenePos);
 void mouseClickNow(QQuickWindow *window, QPointF scenePos, Qt::MouseButton button = Qt::LeftButton,

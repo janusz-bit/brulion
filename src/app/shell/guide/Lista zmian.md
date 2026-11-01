@@ -18,6 +18,7 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 **Poprawki**
 - Kliknięcie PDF-a (i innego załącznika, który nie jest obrazem ani notatką, np. DOCX albo ZIP) nie otwiera już jego zawartości w edytorze jako tekstu — wpisany znak mógł nadpisać plik. Takie pliki otwierają się teraz tylko do odczytu.
 - W wersji w przeglądarce PDF osadzony w notatce nie zajmuje już pamięci kopią całego pliku.
+- **Android: puste okno przy starcie** — gdy system tworzy okno Brulionu od nowa w chwili, gdy aplikacja dopiero startuje (np. zmiana kolorów motywu systemu tuż po uruchomieniu albo zaraz po włączeniu telefonu), okno nie zostaje już puste: Brulion sam uruchamia się jeszcze raz i otwiera notatnik, także notatkę z dotkniętego powiadomienia albo okno tekstu udostępnionego z innej aplikacji.
 
 ## 0.6.0 — 1 listopada 2026
 

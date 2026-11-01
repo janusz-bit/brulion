@@ -1018,6 +1018,7 @@ JOBS=16 scripts/bench.sh -B -b ../build-bench                  # configure Relea
 scripts/bench.sh -n -b ../build-bench -r 5 -c 0-11 -q 3 -o ../r/new bench_index bench_markdown
 scripts/bench.sh -n -b ../build-bench bench_index:search       # one function
 scripts/bench.sh -n -b ../build-bench "bench_index:search:10000 notes fuzzy"   # one data row
+scripts/bench.sh -n -b ../build-bench -r 3 -T 600 bench_index    # at most 10 min (CI: -T 1500)
 scripts/bench.sh compare ../r/base ../r/new                    # % change against the noise
 scripts/bench.sh scaling ../r/new                              # exponent k between input sizes
 scripts/bench.sh -h
@@ -1160,6 +1161,16 @@ The `perf` job of `.github/workflows/ci.yml` builds `bench_text`, `bench_index`,
 (3 repetitions): only the scaling limits and the index heap, never absolute times, so the
 speed of a shared runner does not matter. It is **non-blocking** (`continue-on-error`): a failure
 becomes a warning annotation and a job summary, the results are uploaded as an artifact.
+
+It must not cancel anything either: a job that reaches its `timeout-minutes` ends "cancelled",
+`continue-on-error` does not cover that, and the run ends cancelled too — through
+`workflow_call` that skipped the whole v0.6.0 release once (the smoke takes 17–25 min, 30 with
+the setup, and runners differ by up to 1.45×: an AMD EPYC 7763 against a 9V45). So the
+benchmarks run with a time budget (`bench.sh -T 1500`: no repetition starts after 25 min, a
+running one finishes; what is left is listed and its rows are `MISSING`, a warning), the steps
+have timeouts of their own (Qt 15, build 20, the check 35 min) and the job's limit (80 min) is
+above their sum. `release.yml` calls `ci.yml` with `skip-perf-smoke: true`: a release never
+waits for the smoke, which runs in CI by hand and with `[ci]`.
 
 Why it can run on shared runners without flaking: on the laptop's 4 E-cores, 16 runs of
 `perf-check.sh -s` while other builds ran on the machine — 8 of them with a busy loop competing on

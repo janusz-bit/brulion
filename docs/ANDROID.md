@@ -991,7 +991,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 |---|---|
 | `android/AndroidManifest.xml` | manifest na bazie szablonu Qt 6.11.2 (`androiddeployqt` wypełnia znaczniki `%%INSERT_…%%`: pakiet, wersję, nazwę, bibliotekę i uprawnienia modułów Qt): uprawnienia, `BrulionActivity`, odbiorniki, `AlarmActivity`, `ShareActivity` (filtry `ACTION_SEND`/`ACTION_SEND_MULTIPLE` dla `text/*`), ikony |
 | `android/res/` | teksty (`values` — polski, domyślny; `values-en`), ikona powiadomień `ic_stat_brulion`, ikony aplikacji (`mipmap-*` z logo, adaptacyjna `mipmap-anydpi` z tłem `#283045` i warstwą monochromatyczną), motyw ekranu alarmu; widżety: układy `layout/widget_*.xml` (też podglądy dla wyboru widżetów), `xml/widget_*_info.xml`, kolory `widget_colors.xml` (`values` jasne, `values-night` ciemne), promień rogów (`values-v31`: systemowy), motyw okna szybkiego dodawania |
-| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka), `ImeInsets` (klawiatura ekranowa: ile widoku Qt zakrywa), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `DoneQueue` (kolejka „Zrobione” dla C++), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu), `ShareActivity` + `ShareIntent` („Udostępnij → Brulion”: odbiór, kopie w `files/share-in/`, JSON dla C++), widżety: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews i wiersze list), `WidgetSnapshot` (migawka, przekładanie zadań na nowy dzień), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (zapis, odświeżanie, północ, przyciski miesiąca), `WidgetDates` (nazwy dni i miesięcy aplikacji), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (szybkie dodawanie, zapis do dziennika), `WidgetInbox` (kolejka wpisów dla C++) |
+| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka) + `StartupRelaunch` (utworzona od nowa przed startem Qt: restart aplikacji), `ImeInsets` (klawiatura ekranowa: ile widoku Qt zakrywa), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `DoneQueue` (kolejka „Zrobione” dla C++), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu), `ShareActivity` + `ShareIntent` („Udostępnij → Brulion”: odbiór, kopie w `files/share-in/`, JSON dla C++), widżety: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews i wiersze list), `WidgetSnapshot` (migawka, przekładanie zadań na nowy dzień), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (zapis, odświeżanie, północ, przyciski miesiąca), `WidgetDates` (nazwy dni i miesięcy aplikacji), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (szybkie dodawanie, zapis do dziennika), `WidgetInbox` (kolejka wpisów dla C++) |
 | `android/tests/` | testy jednostkowe Kotlina (JVM) + skrypt init Gradle, który je dołącza |
 | `android/lint.xml` | konfiguracja Android lint (wyjątki dla `res/values/libs.xml` generowanego przez Qt) |
 | `android/settings.gradle`, `android/proguard-rules.pro` | R8 w buildach release i jego reguły (klasy wołane przez JNI) — [Rozmiar APK](#rozmiar-apk) |
@@ -1000,7 +1000,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków, części linku do strony w folderze i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--pickers`: systemowe okna wyboru plików (import plików i folderu, „Zapisz” eksportu); `--pdf`: miniatury PDF-ów, przeglądarka PDF, szczypanie, szukanie od Androida 15, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”, pamięć; `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków, części linku do strony w folderze i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--pickers`: systemowe okna wyboru plików (import plików i folderu, „Zapisz” eksportu); `--pdf`: miniatury PDF-ów, przeglądarka PDF, szczypanie, szukanie od Androida 15, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”, pamięć; `--relaunch`: aktywność utworzona od nowa w trakcie startu (restart zamiast pustego okna); `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
@@ -1010,6 +1010,39 @@ AGP 9 z wbudowaną obsługą Kotlina (`kotlin.srcDirs` obejmuje `src/`), więc p
 też jest już w szablonie. Buildy release zmniejsza R8 (`android/settings.gradle`, [Rozmiar
 APK](#rozmiar-apk)): klasy Kotlina wołane z C++ muszą leżeć w pakiecie
 `io.github.januszbit.brulion.android`, który `android/proguard-rules.pro` zachowuje w całości.
+
+### Aktywność utworzona od nowa w trakcie startu
+
+Zmiany konfiguracji, których aplikacja nie może obsłużyć sama (`CONFIG_ASSETS_PATHS`: nakładki
+systemu, np. zmiana kolorów motywu systemu albo nakładki, które świeżo uruchomiony emulator
+stosuje przez kilka sekund), Android obsługuje, tworząc aktywność od nowa. `QtActivity` z Qt
+6.11 uruchamia aplikację natywną dopiero przy pierwszym układzie (layout) widoku pierwszej
+aktywności. Gdy ta aktywność zniknie wcześniej, nowa zastaje biblioteki Qt już wczytane
+(`QtLoader.LoadingResult.AlreadyLoaded`) i niczego nie uruchamia: brak układu Qt, puste okno na
+zawsze, w logcat `finishDrawing of relaunch: Window{… BrulionActivity}` i żadnych wpisów
+`brulion.*`. (Utworzoną od nowa po starcie Qt aplikację Qt restartuje sam:
+`QtActivityBase.restartApplication` — z samą intencją launchera, więc dodatki pierwotnej intencji,
+np. notatka z powiadomienia czy argumenty APK debugowalnego, przepadają.)
+
+`BrulionActivity.onCreate` rozpoznaje ten przypadek po `super.onCreate`: wcześniejsza
+`BrulionActivity` tego procesu doszła już do `onCreate`, ta nie ma żadnego widoku w
+`android.R.id.content` (układ Qt) i nie jest kończona (Qt kończy ją, gdy bibliotek nie dało się
+wczytać). Wtedy — jak Qt — uruchamia aplikację od nowa: tę samą intencję (dodatki: argumenty APK
+debugowalnego) z `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK`, potem `finish()` i koniec
+procesu. Najwyżej dwa razy z rzędu (licznik w dodatku `io.github.januszbit.brulion.STARTUP_RESTARTS`
+intencji), więc przyczyna, która wraca, nie zapętli startu. W logcat: `BrulionActivity: recreated
+before Qt started (…): restart N`.
+
+Z procesem ginie to, co trzyma tylko pamięć (`BrulionAndroid.keepForRestart`): notatkę z
+dotkniętego powiadomienia pierwsza aktywność wyjęła już z intencji (`activationFrom` usuwa
+dodatki, żeby stuknięcia nie obsłużyć dwa razy), a Android przekazuje odtwarzanej aktywności ten
+sam, już okrojony obiekt intencji — ścieżka i wiersz wracają więc do intencji restartu (alarm
+jest już wyciszony, `NOTIFICATION_ID` nie wraca). Udostępnienie z innej aplikacji
+(`ShareActivity`, tylko w pamięci — nigdy dodatek intencji, który mogłaby podrobić inna aplikacja)
+trafia do prywatnego pliku `no_backup/startup-restart-share.json`; pierwsza aktywność
+zrestartowanego procesu (licznik > 0) wczytuje je z powrotem, każda inna pierwsza aktywność tylko
+usuwa pozostałość. Decyzja i te kroki to zwykły kod JVM w `StartupRelaunch` (`needsRestart`,
+`carriedNote`, `saveShare`/`takeSavedShare`; test `StartupRelaunchTest`).
 
 ### Most JNI (C++ ↔ Kotlin)
 
@@ -1164,9 +1197,34 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   APK testowy ma ten sam pakiet co aplikacja (zastępuje ją) — tylko na emulatorze/telefonie
   testowym. Świeżo uruchomiony emulator przez kilka sekund nakłada jeszcze nakładki systemu
   (zmiana konfiguracji `CONFIG_ASSETS_PATHS`, której aplikacja nie obsłuży sama): Android tworzy
-  wtedy `BrulionActivity` od nowa, a aktywność Qt utworzona od nowa w trakcie startu zostaje z
-  pustym oknem (TODO.md, „Android”). Gdy w logcat jest `finishDrawing of relaunch` tej aktywności,
-  tryby uruchamiają aplikację drugi raz (`start_app`, „Android relaunched the activity…”).
+  wtedy `BrulionActivity` od nowa, a utworzona od nowa przed startem Qt aplikacja uruchamia się
+  sama jeszcze raz ([Aktywność utworzona od nowa w trakcie
+  startu](#aktywność-utworzona-od-nowa-w-trakcie-startu)); `start_app` pisze wtedy „the app
+  restarted itself” i czeka na nią dłużej. Utworzoną od nowa po starcie Qt aplikację Qt restartuje
+  bez argumentów trybu: gdy w logcat jest `finishDrawing of relaunch` tej aktywności, a nie ma
+  wpisu o restarcie samej aplikacji, `start_app` uruchamia ją drugi raz („…Qt restarted the app
+  without its arguments — started again”).
+* Aktywność utworzona od nowa w trakcie startu (APK debugowalny jak niżej):
+  ```sh
+  scripts/android-emulator-test.sh --relaunch
+  ```
+  Uruchamia aplikację jak dotknięte powiadomienie (dodatki `PATH`/`LINE`: pierwsza strona
+  przewodnika). Zaraz po `am start` (w jednym `adb shell`, z opóźnieniami 0–2 s) włącza nakładkę frameworka
+  `com.android.internal.display.cutout.emulation.*` (`cmd overlay`): zmiana `CONFIG_ASSETS_PATHS`,
+  więc Android tworzy aktywność od nowa. Sprawdza, że co najmniej raz stało się to przed startem
+  Qt (`BrulionActivity: recreated before Qt started`) i że po każdej próbie na ekranie jest notatka
+  z powiadomienia (także po restarcie samej aplikacji; po restarcie przez Qt — po angielsku, bez
+  argumentów i notatki — wystarczy dolna nawigacja notatnika albo, gdy żaden notatnik nie był
+  jeszcze otwarty, ekran powitalny), wpisy Qt `brulion.*` w logcat —
+  żadnego pustego okna;
+  wypisuje wynik każdej próby (przed startem Qt / po nim / bez ponownego utworzenia). Zrzuty
+  `rl-*.png`, logcat każdej próby `rl-logcat-<n>.txt`. Sprawdzone 2026-11-01 na GitHub Actions
+  (Android 16): z poprawką 7 prób, 2 razy utworzona od nowa przed startem Qt — za każdym razem
+  restart i dziennik; bez niej (`BrulionActivity` sprzed poprawki) 12 prób, w jednej puste okno
+  bez żadnego wpisu `brulion.*`, w czterech restart przez Qt (dziennik po angielsku). Z notatką z
+  powiadomienia (te same dni, cztery przebiegi): z poprawką 8 restartów przed startem Qt, za
+  każdym razem otwarta notatka; z `BrulionActivity`, która restartowała bez `keepForRestart`, 7
+  takich restartów, w 6 z nich zamiast notatki sam notatnik.
 * Zaznaczanie i kopiowanie prawdziwym palcem (`adb shell input`, APK debugowalny jak niżej):
   ```sh
   scripts/android-emulator-test.sh --selection
