@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.6.2 — 2 listopada 2026
+
+**Nowe**
+- **Dowolny plik jako link** — polecenie `/Plik…` wstawia w miejscu kursora link `[[raport.docx]]` do pliku dowolnego typu; można wybrać kilka plików naraz, także w wersji w przeglądarce. Plik spoza notatnika trafia do folderu załączników (taki sam plik, który już tam jest, nie jest kopiowany drugi raz), a plik z notatnika zostaje na swoim miejscu. Notatka, obraz i PDF otwierają się po kliknięciu jak zwykle, a inne pliki w Brulionie tylko do odczytu, jako tekst. Zobacz [[Dokument i konspekt#Obrazy i pliki|Obrazy i pliki]].
+
 ## 0.6.1 — 1 listopada 2026
 
 **Nowe**
