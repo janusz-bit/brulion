@@ -211,12 +211,12 @@ private Q_SLOTS:
         layout.setScale(layout.fitWidthScale());
         const qint64 layoutMs = timer.elapsed();
         timer.restart();
-        int sum = 0;
+        qint64 sum = 0; // (20 000 pages × 10^6 lookups overflow an int)
         const qreal height = layout.contentSize().height();
         for (int i = 0; i < 1'000'000; ++i)
             sum += layout.indexAt(height * (i % 1000) / 1000.0);
         const qint64 lookupMs = timer.elapsed();
-        qInfo("20 000 pages: layout %lld ms, 10^6 lookups %lld ms (%d)", layoutMs, lookupMs, sum % 7);
+        qInfo("20 000 pages: layout %lld ms, 10^6 lookups %lld ms (%d)", layoutMs, lookupMs, int(sum % 7));
         QVERIFY2(layoutMs < 50, qPrintable(QString::number(layoutMs)));
         QVERIFY2(lookupMs < 2000, qPrintable(QString::number(lookupMs)));
         QCOMPARE(layout.indexAt(height - 30), 19999);

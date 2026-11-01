@@ -1586,7 +1586,9 @@ the file and says "Tylko do odczytu", at most its first 200 KB) — never in the
 C++: `src/app/pdf` (library `brulion_pdfview`): `PdfRenderPool` (at most two threads; priorities:
 a visible page, a detail picture, a thumbnail, page sizes, search), `PdfReaderPool` (open readers
 leased to one thread at a time, at most two idle per file and four in all, closed after 10 s idle —
-Syncthing on Windows can replace the file —, forgotten when the file changes), `PdfThumbnails`,
+Syncthing on Windows can replace the file —, forgotten when the file changes and before Brulion
+itself writes, moves or deletes it or a folder holding it: `Workspace::releasePdfReaders`, as
+Windows cannot replace, move or delete an open file), `PdfThumbnails`,
 `PdfPageLayout` (pure), `PdfViewModel` (QML `PdfViewModel`: status, error, locked, pageCount,
 scale, zoomPercent, fitWidth, contentWidth/Height, currentPage — the page under 40 % of the view's
 height —, pages, detailRevision, search properties; setViewport, settle, positionForPage,

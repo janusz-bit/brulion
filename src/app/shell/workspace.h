@@ -693,6 +693,10 @@ private:
     QString m_pdfThumbnailDir;
     /// A PDF changed or went: its open readers are closed, its thumbnails drawn again on the next ask.
     void pdfFileChanged(const QString &path, const QString &oldPath = QString());
+    /// Before Brulion itself writes, moves or deletes `path` (a file or a folder): the idle readers
+    /// of PDFs there closed (pdfview::PdfReaderPool) — Windows cannot replace, move or delete a file
+    /// that is open.
+    void releasePdfReaders(const QString &path);
     /// The vault path an embed's target names from `fromNote` (as the editor resolves it: the
     /// index's link resolution, else the attachments folder).
     QString attachmentPathOf(const QString &target, const QString &fromNote) const;

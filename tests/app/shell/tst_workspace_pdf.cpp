@@ -104,6 +104,8 @@ private Q_SLOTS:
         brulion::platform::setOpenFileHook({});
         if (QThreadPool *pool = brulion::pdfview::PdfRenderPool::pool())
             pool->waitForDone(10000);
+        // The files closed, so that the temporary folder goes (Windows keeps open files).
+        brulion::pdfview::PdfReaderPool::instance().closeIdle();
     }
 
     void namesAndVersions()
@@ -276,8 +278,10 @@ private Q_SLOTS:
         QVERIFY(locked.value(u"error"_s).toString().contains(u"password"_s));
         // A missing file fails at once.
         QCOMPARE(o.ws->pdfThumbnail(u"assets/brak.pdf"_s, 1).value(u"state"_s).toString(), u"failed"_s);
-        // The file changed: told again (a new mtime is a new thumbnail).
+        // The file changed: told again (a new mtime is a new thumbnail). Brulion's own write closes
+        // the idle reader the thumbnail left open first (Windows cannot replace an open file).
         changed.clear();
+        QVERIFY(brulion::pdfview::PdfReaderPool::instance().idleCount() > 0);
         QVERIFY(o.ws->writeAttachment(u"assets/wykład.pdf"_s, fixture(u"tylko-wlasciciel.pdf"_s)));
         QTRY_VERIFY_WITH_TIMEOUT(!changed.isEmpty(), 5000);
         QCOMPARE(changed.first().first().toString(), u"assets/wykład.pdf"_s);

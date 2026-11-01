@@ -151,6 +151,20 @@ void Workspace::pdfFileChanged(const QString &path, const QString &oldPath)
     }
 }
 
+void Workspace::releasePdfReaders(const QString &path)
+{
+    if (!m_vault || path.isEmpty())
+        return;
+    const QString file = m_vault->absolutePath(path);
+    if (paths::isPdfPath(path))
+        pdfview::PdfReaderPool::instance().forget(file);
+    else if (QFileInfo(file).isDir())
+        // A folder may hold open PDFs: every idle reader closed (at most PdfReaderPool::MaxIdle;
+        // the next page or thumbnail opens its file again). A reader drawing a page at this moment
+        // still holds its file until it is done.
+        pdfview::PdfReaderPool::instance().closeIdle();
+}
+
 bool Workspace::openInOtherApp(const QString &rawPath)
 {
     if (!m_vault || rawPath.isEmpty())
