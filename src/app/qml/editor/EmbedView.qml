@@ -360,8 +360,11 @@ Column {
                 }
                 BToolTip {
                     visible: chipHover.hovered
-                    // The browser's own viewer (no PDF renderer in Brulion there) or the system's.
-                    text: Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
+                    // Where the click goes (PageController::openPdf): Brulion's viewer where it
+                    // draws PDFs (the chip then means only that no thumbnail could be cached),
+                    // else the browser's own viewer or the system's app.
+                    text: embed.modelData.viewable === true ? qsTr("Open in the PDF viewer")
+                          : Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
                 }
             }
         }
