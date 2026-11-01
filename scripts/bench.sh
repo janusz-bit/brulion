@@ -15,6 +15,9 @@
 #                   Intel CPU, so the scheduler never moves a run to a slower E-core)
 #       -q LOAD     before every repetition wait (at most 10 min) until the 1-minute load average
 #                   is below LOAD (another build or benchmark on the machine distorts timings)
+#       -T SECONDS  time budget: no repetition starts once the run has taken SECONDS (a running
+#                   one finishes); what is left is skipped and listed, the exit status is 1 (a
+#                   run that has to end in time, e.g. the CI smoke under its job's timeout)
 #       -n          no configure/build (run what is built)
 #       -B          configure/build only (no run)
 #       suites: bench_text bench_dates bench_calc bench_markdown bench_index bench_vault bench_sync
@@ -91,8 +94,8 @@ if [[ -z "${BRULION_BUILD_LOCKED:-}" ]] && command -v flock >/dev/null 2>&1; the
 fi
 
 build_dir="build-bench"; reps=5; out=""; profile="full"; build_type="${BUILD_TYPE:-Release}"; build=1; run=1
-cpus=""; quiet=""
-while getopts "b:r:o:p:t:c:q:nBh" opt; do
+cpus=""; quiet=""; budget=""; budget_given=0
+while getopts "b:r:o:p:t:c:q:T:nBh" opt; do
   case "${opt}" in
     b) build_dir="${OPTARG}" ;;
     r) reps="${OPTARG}" ;;
@@ -101,6 +104,7 @@ while getopts "b:r:o:p:t:c:q:nBh" opt; do
     t) build_type="${OPTARG}" ;;
     c) cpus="${OPTARG}" ;;
     q) quiet="${OPTARG}" ;;
+    T) budget="${OPTARG}"; budget_given=1 ;;
     n) build=0 ;;
     B) run=0 ;;
     h) usage; exit 0 ;;
@@ -110,6 +114,10 @@ done
 shift $((OPTIND - 1))
 selected=("$@")
 [[ ${#selected[@]} -gt 0 ]] || selected=("${all_suites[@]}")
+if [[ ${budget_given} == 1 && ! "${budget}" =~ ^[0123456789]+$ ]]; then
+  echo "bench: -T takes whole seconds, not '${budget}'" >&2
+  exit 2
+fi
 
 if [[ ${build} == 1 ]]; then
   if [[ ! -f "${build_dir}/build.ninja" ]] || ! grep -q '^BRULION_BUILD_BENCHMARKS:BOOL=ON' "${build_dir}/CMakeCache.txt"; then
@@ -175,7 +183,7 @@ export LC_NUMERIC=C
   echo "host: ${host} ($(uname -m), $(nproc) CPUs)"
   echo "cpu: $(grep -m1 -E 'model name|Model' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')"
   echo "governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo unknown)"
-  echo "pinned: ${cpus:-no}; quiet below: ${quiet:-not waited}"
+  echo "pinned: ${cpus:-no}; quiet below: ${quiet:-not waited}; time budget: ${budget:+${budget} s}${budget:-none}"
   echo "load: $(cut -d' ' -f1-3 /proc/loadavg)"
   echo "profile: ${profile}; repetitions: ${reps}; build: $(grep -m1 '^CMAKE_BUILD_TYPE' "${build_dir}/CMakeCache.txt" | cut -d= -f2) (${build_dir})"
   echo "git: $(git rev-parse --short HEAD 2>/dev/null || echo none) $(git status --porcelain 2>/dev/null | wc -l | tr -d ' ') changed files"
@@ -184,6 +192,9 @@ export LC_NUMERIC=C
 } | tee -a "${out}/env.txt"
 
 status=0
+started=$(date +%s)
+skipped=() # what the time budget (-T) left out
+over_budget() { [[ -n "${budget}" ]] && (($(date +%s) - started >= budget)); }
 for sel in "${selected[@]}"; do
   suite="${sel%%:*}"
   args=()
@@ -194,6 +205,10 @@ for sel in "${selected[@]}"; do
   [[ "${sel}" == *:* ]] && tagname+="@$(printf '%s' "${sel#*:}" | tr -c 'A-Za-z0-9_-' '_')"
   for ((k = 1; k <= reps; k++)); do
     wait_quiet
+    if over_budget; then
+      if ((k == 1)); then skipped+=("${sel}"); else skipped+=("${sel} (repetitions ${k}-${reps})"); fi
+      break
+    fi
     echo "== ${sel} (${k}/${reps}) load $(cut -d' ' -f1 /proc/loadavg)" | tee -a "${out}/env.txt"
     mkdir -p "${BRULION_BENCH_TMP}"
     start=$(date +%s)
@@ -207,6 +222,13 @@ for sel in "${selected[@]}"; do
   done
 done
 rm -rf "${BRULION_BENCH_TMP}"
+if [[ ${#skipped[@]} -gt 0 ]]; then
+  {
+    echo "bench: time budget of ${budget} s used up after $(($(date +%s) - started)) s; not run:"
+    printf '  %s\n' "${skipped[@]}"
+  } | tee -a "${out}/env.txt" >&2
+  status=1
+fi
 
 python3 "${report_py}" summarize "${out}" > /dev/null || status=1
 echo "bench: results in ${out} (summary.csv)"

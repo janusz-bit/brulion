@@ -28,3 +28,11 @@ if(BRULION_BASH AND BRULION_OBJCOPY AND BRULION_READELF)
              COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_appimage_update_check.sh
                      ${PROJECT_SOURCE_DIR}/scripts/appimage-update-check.sh)
 endif()
+# scripts/bench.sh's time budget (-T, the CI performance smoke) with stand-in suites; its summary
+# needs python3 (skipped without it).
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_bench_budget
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_bench_budget.sh
+                     ${PROJECT_SOURCE_DIR}/scripts/bench.sh)
+    set_tests_properties(tst_scripts_bench_budget PROPERTIES SKIP_RETURN_CODE 77)
+endif()

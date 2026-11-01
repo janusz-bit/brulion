@@ -14,7 +14,10 @@
 #              (.clang-format; tools from the flake's nixpkgs, the same as `nix develop`);
 #  * perf    — non-blocking performance smoke: `scripts/perf-check.sh -s` (how running time
 #              scales with input size, and the index's memory; no absolute timings, so shared
-#              runners are fine — docs/PERFORMANCE.md). A failure warns, it never fails the run.
+#              runners are fine — docs/PERFORMANCE.md). A failure warns, it never fails the run;
+#              nor does a slow runner cancel it (a time budget and step timeouts well inside the
+#              job's). Not run for a release (release.yml: skip-perf-smoke), which never waits
+#              for it.
 # Android (android.yml) and the browser build (wasm.yml) have their own workflows.
 name: CI
 
@@ -25,6 +28,11 @@ on:
     branches: [main]
   workflow_dispatch:
   workflow_call:
+    inputs:
+      skip-perf-smoke:
+        description: Leave out the non-blocking performance smoke (a release does not wait for it)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -268,9 +276,17 @@ jobs:
 
   perf:
     name: Performance smoke (scaling + memory, non-blocking)
-    if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
+    # (`!= true`: a missing input is null, and GitHub's loose comparison has null == false.)
+    if: >-
+      inputs.skip-perf-smoke != true && (github.event_name != 'push' || github.ref_type == 'tag' ||
+      contains(join(github.event.commits.*.message, ' '), '[ci]'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # A job that reaches its timeout ends "cancelled", and so does the whole run (and, through
+    # workflow_call, a release used to) — continue-on-error does not cover that. So the job's
+    # limit stays above its steps' own (15 + 20 + 35 min), and the benchmarks have a time budget
+    # inside the last one: a slow runner (the smoke took 17-25 min, 30 min with the setup, on
+    # runners up to 1.45x apart) skips the rest of the benchmarks and warns.
+    timeout-minutes: 80
     # A regression warns (annotation + job summary) but never blocks a merge: shared runners are
     # noisy, so only machine-independent checks run here (docs/PERFORMANCE.md, "Regression guards").
     continue-on-error: true
@@ -278,6 +294,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: jurplel/install-qt-action@v4
+        timeout-minutes: 15
         with:
           version: ${{ env.QT_VERSION }}
           host: linux
@@ -287,22 +304,27 @@ jobs:
           cache: true
 
       - name: Build the benchmark suites (Release)
+        timeout-minutes: 20
         run: |
           cmake -S . -B build-bench -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
             -DCMAKE_BUILD_TYPE=Release -DBRULION_BUILD_BENCHMARKS=ON
           cmake --build build-bench --parallel --target bench_text bench_index bench_markdown bench_io
 
+      # The benchmarks get 25 min (bench.sh -T: no repetition starts after that; a running one
+      # finishes, at most ~4 min on a slow runner); what they had no time for is MISSING (a
+      # warning). The log goes to the job's output as it is written.
       - name: scripts/perf-check.sh -s
+        timeout-minutes: 35
         run: |
+          set -o pipefail
           status=0
-          scripts/perf-check.sh -n -s -b build-bench -o "$RUNNER_TEMP/perf" -- -r 3 \
-            > "$RUNNER_TEMP/perf.log" 2>&1 || status=$?
-          cat "$RUNNER_TEMP/perf.log"
+          scripts/perf-check.sh -n -s -b build-bench -o "$RUNNER_TEMP/perf" -- -r 3 -T 1500 \
+            2>&1 | tee "$RUNNER_TEMP/perf.log" || status=$?
           {
             echo '### Performance smoke: scripts/perf-check.sh -s'
             echo
             echo '```'
-            grep -E '^(ok|FAIL|MISSING) |^perf-check:' "$RUNNER_TEMP/perf.log" || true
+            grep -E '^(ok|FAIL|MISSING) |^perf-check:|^bench: time budget|^  bench_' "$RUNNER_TEMP/perf.log" || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$status" -ne 0 ]; then
