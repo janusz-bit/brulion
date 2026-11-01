@@ -71,13 +71,13 @@ FAKE_SLEEP=0 run none -r 2 bench_text bench_index
 expect "no budget: exit 0" test "$status" -eq 0
 expect "no budget: 2 suites x 2 repetitions" test "$(runs)" -eq 4
 expect "no budget: nothing reported as skipped" eval '! has "used up"'
-expect "no budget: env.txt says so" grep -q 'time budget: none' "$dir/env.txt"
+expect "no budget: env.txt says so" grep -qx '.*time budget: none' "$dir/env.txt"
 
 # 2. A budget the run stays within.
 FAKE_SLEEP=0 run plenty -r 2 -T 600 bench_text bench_index
 expect "budget not reached: exit 0" test "$status" -eq 0
 expect "budget not reached: every repetition" test "$(runs)" -eq 4
-expect "budget not reached: env.txt records it" grep -q 'time budget: 600 s' "$dir/env.txt"
+expect "budget not reached: env.txt records it" grep -qx '.*time budget: 600 s' "$dir/env.txt"
 
 # 3. Used up during the first suite: its repetition in progress finishes, the rest is skipped.
 FAKE_SLEEP=1.2 run cut -r 3 -T 1 bench_text "bench_index:bench_indexFn"

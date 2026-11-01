@@ -183,7 +183,7 @@ export LC_NUMERIC=C
   echo "host: ${host} ($(uname -m), $(nproc) CPUs)"
   echo "cpu: $(grep -m1 -E 'model name|Model' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')"
   echo "governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo unknown)"
-  echo "pinned: ${cpus:-no}; quiet below: ${quiet:-not waited}; time budget: ${budget:+${budget} s}${budget:-none}"
+  echo "pinned: ${cpus:-no}; quiet below: ${quiet:-not waited}; time budget: $([[ -n "${budget}" ]] && echo "${budget} s" || echo none)"
   echo "load: $(cut -d' ' -f1-3 /proc/loadavg)"
   echo "profile: ${profile}; repetitions: ${reps}; build: $(grep -m1 '^CMAKE_BUILD_TYPE' "${build_dir}/CMakeCache.txt" | cut -d= -f2) (${build_dir})"
   echo "git: $(git rev-parse --short HEAD 2>/dev/null || echo none) $(git status --porcelain 2>/dev/null | wc -l | tr -d ' ') changed files"
