@@ -1,5 +1,5 @@
 // The threads PDFs are drawn and searched on, and the open PDFs they share (docs/UI.md "PDF viewer",
-// docs/PERFORMANCE.md "Przeglądarka PDF"):
+// docs/PERFORMANCE.md "PDF viewer"):
 //
 //   PdfRenderPool::start(task, priority)   a QThreadPool of at most 2 threads (Android too: its
 //                                          PdfRenderer serialises pdfium; two keep a search from

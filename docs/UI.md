@@ -1513,7 +1513,7 @@ removed at its edges, so the Repeater keeps its pictures); their pictures come f
 provider `pdfview` (`image://pdfview/<file>?page=N&v=<mtime-size>&w=…&h=…[&clip=…]`,
 `PdfViewImageProvider`: asynchronous, cancelled when scrolled away, a page before a detail picture,
 `cache: false`). Memory stays at about four screenfuls of pixels at any zoom
-(docs/PERFORMANCE.md "Przeglądarka PDF"): a page's base picture has at most a screenful of pixels;
+(docs/PERFORMANCE.md "PDF viewer"): a page's base picture has at most a screenful of pixels;
 zoomed in, the visible part comes at full resolution as a detail picture once the view stops moving
 (150 ms). Under the last page the notes that embed or link the PDF (`ContentBacklinks`; not while
 the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyond that many.
@@ -1574,8 +1574,8 @@ the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyon
   `application/pdf`, `window.open` inside the click — browsers open tabs only on a user's gesture —,
   the opener cut, the last three blob URLs kept for the tab's reload and "Save"); a blocked tab
   downloads the file with a notice. A route to a PDF (the tree, the quick switcher, history) shows
-  "Brulion w przeglądarce nie rysuje PDF-ów — otworzy je w nowej karcie wbudowana przeglądarka PDF
-  (przewijanie, powiększanie, szukanie)." with **Otwórz w nowej karcie** (a real click). A desktop
+  "Brulion w przeglądarce nie rysuje PDF-ów: ten plik otworzy się w nowej karcie, we wbudowanej
+  przeglądarce PDF (przewijanie, powiększanie, szukanie)." with **Otwórz w nowej karcie** (a real click). A desktop
   build without a renderer says "Ta wersja Brulionu nie ma modułu PDF — otwórz plik w innej
   aplikacji." with that button.
 

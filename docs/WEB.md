@@ -642,8 +642,8 @@ starsze są zwalniane; giną z kartą Brulionu. Trasa aplikacji się nie zmienia
 * **Zablokowana karta** (Safari bywa surowszy, blokery wyskakujących okien): PDF się pobiera
   (`saveFile`), a aplikacja mówi „Przeglądarka zablokowała nową kartę — PDF został pobrany.”.
 * **Trasa do PDF-a** (drzewo, szybkie przełączanie, historia): panel „Brulion w przeglądarce nie
-  rysuje PDF-ów — otworzy je w nowej karcie wbudowana przeglądarka PDF (przewijanie, powiększanie,
-  szukanie).” z przyciskiem **Otwórz w nowej karcie** (prawdziwe kliknięcie: późniejsze Wstecz nie
+  rysuje PDF-ów: ten plik otworzy się w nowej karcie, we wbudowanej przeglądarce PDF (przewijanie,
+  powiększanie, szukanie).” z przyciskiem **Otwórz w nowej karcie** (prawdziwe kliknięcie: późniejsze Wstecz nie
   otwiera kart samo).
 * Plik większy niż limit załącznika (200 MB) — odmowa z komunikatem (pamięć: bajty i blob).
 * Brulion nigdy nie robi adresu `data:` z PDF-a (wcześniej robił go dla każdego osadzonego pliku).
@@ -653,7 +653,10 @@ w odnośnik otwiera kartę z adresem `blob:` tej witryny, `content-type` `applic
 w `tests/data/pdf/wyklad.pdf` (zaczynają się od `%PDF-`), `window.opener` pusty, trasa aplikacji
 wciąż dziennik; trasa do PDF-a pokazuje panel z „Otwórz w nowej karcie”; otwarcie bez kliknięcia
 (`?selftest=pdfauto`) kończy się kartą albo pobraniem z komunikatem — wynik dla każdej przeglądarki
-w adnotacji raportu. Lokalnie: `scripts/web-test.sh pdf.spec.mjs`. Ręcznie zostaje Safari na iOS.
+w adnotacji raportu. Firefox Playwrighta ma w profilu testowym wyłączone pdf.js, więc tam nowa karta
+zamienia się w pobranie tego samego adresu `blob:` i się zamyka: test sprawdza wtedy pobrany plik
+(adres, bajty, nazwa `wykład.pdf`) zamiast dokumentu karty. Lokalnie: `scripts/web-test.sh
+pdf.spec.mjs`. Ręcznie zostaje Safari na iOS i Firefox z włączonym pdf.js.
 
 ## Rozmiar
 

@@ -1,5 +1,5 @@
-# brulion_pdfview — the PDF viewer's C++ (docs/UI.md "PDF viewer", docs/PERFORMANCE.md "Przeglądarka
-# PDF"): the threads PDFs are drawn and searched on and the open PDFs they share (pdfrenderpool.h:
+# brulion_pdfview — the PDF viewer's C++ (docs/UI.md "PDF viewer", docs/PERFORMANCE.md "PDF
+# viewer"): the threads PDFs are drawn and searched on and the open PDFs they share (pdfrenderpool.h:
 # PdfRenderPool, PdfReaderPool), the thumbnails of embedded PDFs cached as PNG files (pdfthumbnails.h:
 # PdfThumbnails, owned by the shell's Workspace), the pages' exact layout (pdflayout.h, pure), the
 # viewer's state (pdfviewmodel.h: PdfViewModel, PdfVisiblePages) and its image provider "pdfview"

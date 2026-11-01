@@ -5,7 +5,7 @@
 // at a point, the page under 40 % of the view's height, the pictures' URLs (PdfViewImageProvider)
 // with a memory cap, and the search.
 //
-// Memory (docs/PERFORMANCE.md "Przeglądarka PDF"): a page's base picture is drawn at
+// Memory (docs/PERFORMANCE.md "PDF viewer"): a page's base picture is drawn at
 // k = min(1, sqrt(viewport pixels / page pixels)) of its shown size (baseWidth/baseHeight), so it
 // never has more than a screenful of pixels; zoomed in (k < 0.98) detail() names the visible part of
 // the page at full resolution, after the view settled (150 ms without movement, or settle()). With
