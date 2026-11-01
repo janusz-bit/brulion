@@ -60,12 +60,19 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   zwrotne (`ContentRefRow`), Zadania (`TasksRow`), osadzone strony (`TransclusionView`), tabele
   (`TableBlockView`) i wyniki zapytań (`QueryBlockView`) — używają `Text` z `maximumLineCount` /
   `elide`, których `TextEdit` nie ma, więc mają jeszcze kwadratowe tło.
-* **Podgląd PDF** — PDF w notatniku (`![[doc.pdf]]`, docs/SYNTAX.md) jest dziś w bloku tylko
-  kafelkiem pliku (`EmbedView`). Do zrobienia: w osadzeniu miniatura pierwszej strony, a po
-  kliknięciu przeglądarka PDF w aplikacji (przewijanie stron, powiększanie, wyszukiwanie
-  w tekście, „Otwórz w innej aplikacji”), jak widok zdjęcia dla obrazów; na telefonie,
-  komputerze i w przeglądarce (sprawdzić moduł Qt PDF, `QtQuick.Pdf`, także w WebAssembly).
-  Podstawa dla rysowania na PDF-ach z wykładu (punkt „Rysunki — dalsze kroki”).
+* **Przeglądarka PDF — sprawdzić na urządzeniach i dalsze pomysły.** Miniatury PDF-ów w notatkach
+  i przeglądarka PDF (docs/UI.md „PDF viewer”) są sprawdzone automatycznie: testy z Qt PDF i
+  popplerem, samotest powłoki (`tst_shell_qml`), emulator Androida (`--pdf`: szczypanie, szukanie
+  na API 36, brak szukania na API 30, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”,
+  pamięć), Chromium i Firefox (`tests/web/pdf.spec.mjs`: nowa karta). Zostaje:
+  * ręcznie na prawdziwym telefonie i tablecie: płynność szczypania i przewijania, gest Wstecz
+    z krawędzi, szukanie na Androidzie 15+, „Otwórz w innej aplikacji” z prawdziwymi aplikacjami
+    do PDF-ów (Android, domyślna aplikacja Windows, GNOME i KDE), Safari na iOS (nowa karta albo
+    pobranie), duże skany z wykładów (100+ MB);
+  * zaznaczanie i kopiowanie tekstu z PDF-a, spis treści PDF-a, linki w PDF-ie, PDF-y z hasłem
+    (wpisanie hasła), adnotacje, widok dwóch stron obok siebie;
+  * „Otwórz w innej aplikacji” dla innych załączników (DOCX, XLSX — z listą bezpiecznych typów;
+    dziś otwierają się w Brulionie tylko do odczytu jako tekst).
 * **Klikalne części linku do strony w folderze** — w tekście
   `Zapytać się [[Firma/Adam cośtam]] o to czego się pouczyć` kliknięcie w `Firma` ma otwierać
   stronę `Firma`, a w `Adam cośtam` stronę `Firma/Adam cośtam` (dziś cały link prowadzi do

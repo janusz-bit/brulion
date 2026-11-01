@@ -108,3 +108,21 @@ W edytorze rysunku (gdy nie piszesz tekstu). Więcej: [[Rysunki|Rysunki]].
 | Ctrl++ / Ctrl+- | powiększ / pomniejsz |
 
 Pisząc tekst na rysunku: Enter — nowy wiersz, Esc albo Ctrl+Enter — koniec pisania.
+
+## Przeglądarka PDF
+Gdy otwarty jest PDF. Więcej: [[Dokument i konspekt#PDF-y|PDF-y]].
+
+| Skrót | Działanie |
+|---|---|
+| Ctrl+F | szukaj w PDF-ie (gdzie szukanie działa) |
+| Enter / F3 | następne trafienie |
+| Shift+Enter / Shift+F3 | poprzednie trafienie |
+| Ctrl+G | przejdź do strony |
+| Ctrl++ / Ctrl+- | powiększ / pomniejsz |
+| Ctrl+0 | dopasuj do szerokości |
+| Ctrl + kółko myszy | powiększanie wokół kursora |
+| PageDown / Spacja, PageUp / Shift+Spacja | ekran niżej / wyżej |
+| ↑ ↓ (← → po powiększeniu) | przewijanie |
+| Home / End | pierwsza / ostatnia strona |
+| Esc | zamknij szukanie, potem przeglądarkę |
+| Alt+← | wróć (zamyka przeglądarkę) |

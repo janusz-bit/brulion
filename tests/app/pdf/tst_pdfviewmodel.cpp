@@ -368,14 +368,19 @@ private Q_SLOTS:
                     p.drawText(QPointF(50, 60 + line * 24), u"Strona %1, wiersz %2: zażółć gęślą jaźń"_s.arg(page).arg(line));
             }
         }
+        PdfReaderPool::instance().closeIdle();
         QElapsedTimer timer;
         timer.start();
         auto model = opened(path, 360, 740);
-        QTRY_COMPARE_WITH_TIMEOUT(model->status(), Status::Ready, 20000);
+        QSignalSpy status(model.get(), &PdfViewModel::statusChanged);
+        while (model->status() == Status::Loading && timer.elapsed() < 20000)
+            status.wait(20000);
         const qint64 ready = timer.elapsed();
+        QCOMPARE(model->status(), Status::Ready);
         QCOMPARE(model->pageCount(), 300);
         timer.restart();
         brulion::platform::PdfInfo info;
+        // Another version: a reader of its own, opened cold (not the model's idle one).
         PdfReaderPool::Lease lease = PdfReaderPool::instance().acquire(path, u"t"_s, &info);
         QVERIFY(lease);
         const qint64 open = timer.elapsed();
@@ -388,9 +393,16 @@ private Q_SLOTS:
         timer.restart();
         const int hits = int(lease->find(300, u"GESLA"_s).size());
         const qint64 search = timer.elapsed();
+        lease = {};
+        // The whole PDF searched by the model (one hit a page; the 250 ms debounce included).
+        timer.restart();
+        model->setSearchText(u"wiersz 29:"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!model->searching() && model->searchedPages() == 300, 60000);
+        const qint64 searchAll = timer.elapsed();
+        QCOMPARE(model->hitCount(), 300);
         qInfo("%s, 300 pages: Ready %lld ms, open %lld ms, page 1 at 1080 px %lld ms, a thumbnail %lld ms, "
-              "search of a page %lld ms (%d hits)",
-              qPrintable(brulion::platform::pdfBackendName()), ready, open, render, thumbnail, search, hits);
+              "search of a page %lld ms (%d hits), search of all pages %lld ms",
+              qPrintable(brulion::platform::pdfBackendName()), ready, open, render, thumbnail, search, hits, searchAll);
         QVERIFY(!page.isNull());
         QVERIFY(!thumb.isNull());
         QVERIFY(ready < 10000);
