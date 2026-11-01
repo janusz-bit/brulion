@@ -1505,10 +1505,10 @@ if ((PDF)); then
   check "the app is running" running
   check "the PDF's thumbnail is drawn (its page count known)" wait_for 30 ui_has 'PDF wyklad\.pdf, strona 1 z 3'
   app_shot pdf-1-journal
-  # The locked PDF's tile is under the first one (its sentence below the screen's edge): scrolled
-  # into view, then back.
+  # The locked PDF's tile is under the first one: scrolled into view (a screenshot), then back. Its
+  # accessible name says why it shows no page.
   adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 75 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) 500
-  check "the locked PDF's tile names the password" wait_for 10 ui_has 'PDF chroniony hasłem'
+  check "the locked PDF's tile names the password" wait_for 10 ui_has 'PDF zaszyfrowany\.pdf: PDF chroniony hasłem'
   app_shot pdf-1-locked
   adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 75 / 100)) 500
   check "… the first tile back in view" wait_for 10 ui_has 'PDF wyklad\.pdf, strona 1 z 3'

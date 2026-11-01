@@ -2563,7 +2563,7 @@
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="421"/>
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="423"/>
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="768"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3061"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3068"/>
         <source>Page %1 of %2</source>
         <extracomment>The PDF viewer&apos;s page indicator (&quot;Strona 3 z 12&quot;); a click jumps to a page</extracomment>
         <translation>Strona %1 z %2</translation>
@@ -6702,13 +6702,19 @@
 <context>
     <name>PdfEmbedTile</name>
     <message>
-        <location filename="../src/app/qml/editor/PdfEmbedTile.qml" line="51"/>
+        <location filename="../src/app/qml/editor/PdfEmbedTile.qml" line="54"/>
+        <source>PDF %1: %2</source>
+        <extracomment>A PDF embedded in a note that cannot be shown, for screen readers: its name, why (&quot;PDF chroniony hasłem&quot;)</extracomment>
+        <translation>PDF %1: %2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/PdfEmbedTile.qml" line="56"/>
         <source>PDF %1, page %2 of %3</source>
         <extracomment>A PDF embedded in a note, for screen readers: its name, the page shown, the page count</extracomment>
         <translation>PDF %1, strona %2 z %3</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/PdfEmbedTile.qml" line="144"/>
+        <location filename="../src/app/qml/editor/PdfEmbedTile.qml" line="149"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n strona</numerusform>
@@ -6717,7 +6723,7 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/PdfEmbedTile.qml" line="147"/>
+        <location filename="../src/app/qml/editor/PdfEmbedTile.qml" line="152"/>
         <source>p. %1</source>
         <extracomment>The page of a PDF an embed shows (&quot;s. 3&quot;)</extracomment>
         <translation>s. %1</translation>
@@ -9084,7 +9090,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4088"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4102"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -9211,7 +9217,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3849"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3863"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -9230,7 +9236,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3783"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3797"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -9651,7 +9657,7 @@
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="179"/>
         <location filename="../src/app/io/ioselftest.cpp" line="371"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="2669"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3220"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3231"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -9787,13 +9793,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5579"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5593"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="114"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5569"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5583"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -14419,7 +14425,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>%1 s. %2</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/editorhost.h" line="259"/>
+        <location filename="../src/app/editor/editorhost.h" line="260"/>
         <source>%1 (drawing)</source>
         <extracomment>A drawing on the picture %1; a file name, without the extension</extracomment>
         <translation>%1 (rysunek)</translation>
@@ -14486,7 +14492,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="74"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5393"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5407"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
@@ -15603,23 +15609,23 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::pdfview::PdfViewModel</name>
     <message>
-        <location filename="../src/app/pdf/pdfviewmodel.cpp" line="280"/>
+        <location filename="../src/app/pdf/pdfviewmodel.cpp" line="285"/>
         <source>The file is no longer in the notebook.</source>
         <translation>Tego pliku nie ma już w notatniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/pdf/pdfviewmodel.cpp" line="302"/>
+        <location filename="../src/app/pdf/pdfviewmodel.cpp" line="307"/>
         <source>This PDF is protected with a password: Brulion cannot open it.</source>
         <translation>Ten PDF jest chroniony hasłem — Brulion go nie otworzy.</translation>
     </message>
     <message>
-        <location filename="../src/app/pdf/pdfviewmodel.cpp" line="303"/>
-        <location filename="../src/app/pdf/pdfviewmodel.cpp" line="315"/>
+        <location filename="../src/app/pdf/pdfviewmodel.cpp" line="308"/>
+        <location filename="../src/app/pdf/pdfviewmodel.cpp" line="320"/>
         <source>This PDF has no pages.</source>
         <translation>Ten PDF nie ma stron.</translation>
     </message>
     <message>
-        <location filename="../src/app/pdf/pdfviewmodel.cpp" line="304"/>
+        <location filename="../src/app/pdf/pdfviewmodel.cpp" line="309"/>
         <source>This PDF cannot be read.</source>
         <translation>Nie można odczytać tego PDF-a.</translation>
     </message>
@@ -16189,44 +16195,44 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="717"/>
-        <location filename="../src/app/shell/workspace.cpp" line="728"/>
+        <location filename="../src/app/shell/workspace.cpp" line="718"/>
+        <location filename="../src/app/shell/workspace.cpp" line="729"/>
         <source>Could not save the drawing %1: %2</source>
         <translation>Nie można zapisać rysunku %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="997"/>
+        <location filename="../src/app/shell/workspace.cpp" line="998"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1130"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1151"/>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="330"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1132"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1153"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="331"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1281"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1283"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1284"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1286"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
     <message>
         <location filename="../src/app/shell/workspacefolders.cpp" line="147"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="301"/>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="362"/>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="380"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="363"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="381"/>
         <source>A folder named “%1” would be hidden — choose another name.</source>
         <translation>Folder o nazwie „%1” byłby ukryty — wybierz inną nazwę.</translation>
     </message>
     <message>
         <location filename="../src/app/shell/workspacefolders.cpp" line="148"/>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="399"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="400"/>
         <source>“%1” is a file, not a folder.</source>
         <translation>„%1” to plik, nie folder.</translation>
     </message>
@@ -16272,67 +16278,67 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Plik o nazwie „%1” już tu istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="318"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="319"/>
         <source>Could not move the folder: %1</source>
         <translation>Nie udało się przenieść folderu: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="319"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="320"/>
         <source>Could not rename the folder: %1</source>
         <translation>Nie udało się zmienić nazwy folderu: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="320"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="321"/>
         <source>Could not move the page: %1</source>
         <translation>Nie udało się przenieść strony: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="321"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="322"/>
         <source>Could not rename the page: %1</source>
         <translation>Nie udało się zmienić nazwy strony: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="335"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="336"/>
         <source>journals folder → “%1”</source>
         <translation>folder dziennika → „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="337"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="338"/>
         <source>templates folder → “%1”</source>
         <translation>folder szablonów → „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="339"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="340"/>
         <source>attachments folder → “%1”</source>
         <translation>folder załączników → „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="341"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="342"/>
         <source>folder for new pages → “%1”</source>
         <translation>folder nowych stron → „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="343"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="344"/>
         <source>journal template → “%1”</source>
         <translation>szablon dziennika → „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacefolders.cpp" line="345"/>
+        <location filename="../src/app/shell/workspacefolders.cpp" line="346"/>
         <source>Notebook settings updated: %1</source>
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1298"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1301"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1313"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1316"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1344"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1347"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
@@ -16429,38 +16435,38 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Brak podglądu</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepdf.cpp" line="165"/>
+        <location filename="../src/app/shell/workspacepdf.cpp" line="179"/>
         <source>“%1” is not a PDF file.</source>
         <translation>„%1” nie jest plikiem PDF.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepdf.cpp" line="172"/>
+        <location filename="../src/app/shell/workspacepdf.cpp" line="186"/>
         <source>“%1” is too large to open here.</source>
         <translation>Plik „%1” jest za duży, żeby go tu otworzyć.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepdf.cpp" line="177"/>
-        <location filename="../src/app/shell/workspacepdf.cpp" line="189"/>
+        <location filename="../src/app/shell/workspacepdf.cpp" line="191"/>
+        <location filename="../src/app/shell/workspacepdf.cpp" line="203"/>
         <source>Could not open “%1” in another app.</source>
         <translation>Nie udało się otworzyć „%1” w innej aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepdf.cpp" line="184"/>
+        <location filename="../src/app/shell/workspacepdf.cpp" line="198"/>
         <source>The browser blocked the new tab: the PDF was downloaded instead.</source>
         <translation>Przeglądarka zablokowała nową kartę — PDF został pobrany.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepdf.cpp" line="186"/>
+        <location filename="../src/app/shell/workspacepdf.cpp" line="200"/>
         <source>No app on this device opens PDF files.</source>
         <translation>Na tym urządzeniu nie ma aplikacji do otwierania PDF-ów.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepdf.cpp" line="216"/>
+        <location filename="../src/app/shell/workspacepdf.cpp" line="230"/>
         <source>The drawing could not be made.</source>
         <translation>Nie udało się zrobić rysunku.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepdf.cpp" line="223"/>
+        <location filename="../src/app/shell/workspacepdf.cpp" line="237"/>
         <source>Drawing</source>
         <translation>Rysunek</translation>
     </message>

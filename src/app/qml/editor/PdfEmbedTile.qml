@@ -47,8 +47,13 @@ Item {
     implicitHeight: frame.height + Theme.space1 + caption.height
 
     Accessible.role: Accessible.Button
-    //: A PDF embedded in a note, for screen readers: its name, the page shown, the page count
-    Accessible.name: qsTr("PDF %1, page %2 of %3").arg(entry.name || "").arg(tile.page).arg(tile.pages > 0 ? tile.pages : "?")
+    // A tile that cannot show its page says why (its sentence is inside the button, which screen
+    // readers and UiAutomator do not read).
+    Accessible.name: tile.state_ === "failed"
+                     //: A PDF embedded in a note that cannot be shown, for screen readers: its name, why ("PDF chroniony hasłem")
+                     ? qsTr("PDF %1: %2").arg(entry.name || "").arg(entry.error || "")
+                     //: A PDF embedded in a note, for screen readers: its name, the page shown, the page count
+                     : qsTr("PDF %1, page %2 of %3").arg(entry.name || "").arg(tile.page).arg(tile.pages > 0 ? tile.pages : "?")
     Accessible.onPressAction: tile.clicked(entry.path || "", tile.page)
 
     Rectangle {

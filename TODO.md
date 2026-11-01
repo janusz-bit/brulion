@@ -64,11 +64,13 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   i przeglądarka PDF (docs/UI.md „PDF viewer”) są sprawdzone automatycznie: testy z Qt PDF i
   popplerem, samotest powłoki (`tst_shell_qml`), emulator Androida (`--pdf`: szczypanie, szukanie
   na API 36, brak szukania na API 30, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”,
-  pamięć), Chromium i Firefox (`tests/web/pdf.spec.mjs`: nowa karta). Zostaje:
+  pamięć), Chromium i Firefox (`tests/web/pdf.spec.mjs`: nowa karta; Firefox Playwrighta ma
+  wyłączone pdf.js, więc tam sprawdzane jest pobranie). Zostaje:
   * ręcznie na prawdziwym telefonie i tablecie: płynność szczypania i przewijania, gest Wstecz
     z krawędzi, szukanie na Androidzie 15+, „Otwórz w innej aplikacji” z prawdziwymi aplikacjami
     do PDF-ów (Android, domyślna aplikacja Windows, GNOME i KDE), Safari na iOS (nowa karta albo
-    pobranie), duże skany z wykładów (100+ MB);
+    pobranie), zwykły Firefox z pdf.js (nowa karta), duże skany z wykładów (100+ MB) — pamięć na
+    telefonie (docs/PERFORMANCE.md, L19);
   * zaznaczanie i kopiowanie tekstu z PDF-a, spis treści PDF-a, linki w PDF-ie, PDF-y z hasłem
     (wpisanie hasła), adnotacje, widok dwóch stron obok siebie;
   * „Otwórz w innej aplikacji” dla innych załączników (DOCX, XLSX — z listą bezpiecznych typów;

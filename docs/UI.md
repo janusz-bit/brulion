@@ -879,7 +879,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `calendar`.
 * PDFs (`![[wykład.pdf]]`, `![[wykład.pdf#page=3]]`): the page's thumbnail (`PdfEmbedTile`), a
   click opens the PDF viewer — "PDF viewer" below; without a renderer the file's chip, whose click
-  opens a new browser tab / the system's viewer.
+  opens a new browser tab / the system's viewer. Screen readers hear "PDF wykład.pdf, strona 1 z 3",
+  or for a tile that cannot show its page the reason ("PDF sejf.pdf: PDF chroniony hasłem").
 * Pictures from the internet (`![alt](https://…)`, docs/SYNTAX.md §2): the embeds' entry has
   `web`, `state` ("ask" | "loading" | "ready" | "failed"), `host`, `error` and, once ready, the
   cached file's `url`, `format` (the cached picture's as the host tells it, "PNG", "SVG" — not
