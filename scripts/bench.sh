@@ -114,7 +114,8 @@ done
 shift $((OPTIND - 1))
 selected=("$@")
 [[ ${#selected[@]} -gt 0 ]] || selected=("${all_suites[@]}")
-if [[ ${budget_given} == 1 && ! "${budget}" =~ ^[0123456789]+$ ]]; then
+# Whole seconds without a leading zero (bash arithmetic would read "010" as octal, "08" not at all).
+if [[ ${budget_given} == 1 && ! "${budget}" =~ ^(0|[123456789][0123456789]*)$ ]]; then
   echo "bench: -T takes whole seconds, not '${budget}'" >&2
   exit 2
 fi
@@ -192,9 +193,17 @@ export LC_NUMERIC=C
 } | tee -a "${out}/env.txt"
 
 status=0
-started=$(date +%s)
+# Milliseconds since the epoch: the budget is checked to the millisecond, not across whole seconds
+# (a second ticking over just after the start would count as one). $EPOCHREALTIME (bash 5) with
+# its locale's decimal separator dropped; else date's whole seconds.
+now_ms() {
+  local t=${EPOCHREALTIME:-}
+  t=${t//[!0123456789]/}
+  if [[ ${#t} -gt 6 ]]; then echo $((10#${t} / 1000)); else echo $(($(date +%s) * 1000)); fi
+}
+started=$(now_ms)
 skipped=() # what the time budget (-T) left out
-over_budget() { [[ -n "${budget}" ]] && (($(date +%s) - started >= budget)); }
+over_budget() { [[ -n "${budget}" ]] && (($(now_ms) - started >= budget * 1000)); }
 for sel in "${selected[@]}"; do
   suite="${sel%%:*}"
   args=()
@@ -224,7 +233,7 @@ done
 rm -rf "${BRULION_BENCH_TMP}"
 if [[ ${#skipped[@]} -gt 0 ]]; then
   {
-    echo "bench: time budget of ${budget} s used up after $(($(date +%s) - started)) s; not run:"
+    echo "bench: time budget of ${budget} s used up after $((($(now_ms) - started) / 1000)) s; not run:"
     printf '  %s\n' "${skipped[@]}"
   } | tee -a "${out}/env.txt" >&2
   status=1

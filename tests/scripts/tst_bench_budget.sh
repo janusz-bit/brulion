@@ -80,6 +80,7 @@ expect "budget not reached: every repetition" test "$(runs)" -eq 4
 expect "budget not reached: env.txt records it" grep -qx '.*time budget: 600 s' "$dir/env.txt"
 
 # 3. Used up during the first suite: its repetition in progress finishes, the rest is skipped.
+# (Measured to the millisecond: a second ticking over right after the start does not count.)
 FAKE_SLEEP=1.2 run cut -r 3 -T 1 bench_text "bench_index:bench_indexFn"
 expect "budget used up: exit 1" test "$status" -eq 1
 expect "budget used up: only the first repetition ran" test "$(runs)" -eq 1
@@ -89,6 +90,23 @@ expect "budget used up: the message is kept in env.txt" grep -q 'time budget of 
 expect "budget used up: the summary has what was measured" test "$(summary_n bench_text)" = 1
 expect "budget used up: the summary keeps the Polish tag" grep -q 'ąćęłńóśźż 1000' "$dir/summary.csv"
 
+# 3b. A second ticking over right after the start (here: a `date` whose whole seconds jump by one
+# after its first call) is no second of the budget used up: the first repetition runs.
+mkdir -p "$tmp/tick"
+cat >"$tmp/tick/date" <<SH
+#!/usr/bin/env bash
+if [[ \$* == +%s ]]; then
+  if [[ -e "$tmp/tick/called" ]]; then echo 1001; else : >"$tmp/tick/called"; echo 1000; fi
+else
+  exec "$(command -v date)" "\$@"
+fi
+SH
+chmod +x "$tmp/tick/date"
+PATH="$tmp/tick:$PATH" FAKE_SLEEP=0 run tick -r 1 -T 1 bench_text
+expect "a second ticking over: exit 0" test "$status" -eq 0
+expect "a second ticking over: the repetition ran" test "$(runs)" -eq 1
+expect "a second ticking over: nothing reported as skipped" eval '! has "used up"'
+
 # 4. A budget of 0: nothing starts.
 FAKE_SLEEP=0 run zero -r 2 -T 0 bench_text
 expect "budget 0: exit 1" test "$status" -eq 1
@@ -97,7 +115,8 @@ expect "budget 0: the suite is listed" has "  bench_text"
 
 # 5. Malformed budgets are usage errors (exit 2), nothing runs.
 i=0
-for bad in abc -5 1.5 '' ' 3' '١٢' 'ąę'; do
+# Leading zeros: bash arithmetic would read 010 as octal (8 s) and 08 not at all (no budget).
+for bad in abc -5 1.5 '' ' 3' '١٢' 'ąę' 08 09 010 00 0600; do
   i=$((i + 1))
   FAKE_SLEEP=0 run "bad$i" -r 1 -T "$bad" bench_text
   expect "budget '$bad': usage error" test "$status" -eq 2
