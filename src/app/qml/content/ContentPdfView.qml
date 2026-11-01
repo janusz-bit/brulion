@@ -66,9 +66,13 @@ Item {
     property int _routePage: -1
     property string _opened: ""
     property string _scaled: ""
+    /// The path the model has opened (set once it is ready): until then the route's page and zoom
+    /// wait — right after a rename the model still shows the old file as Ready for a moment.
+    property string _readyPath: ""
     // Another file in the same view (a rename or a move — the route keeps its pdfPage —, the quick
     // switcher, Back to the PDF before): its route page and zoom applied afresh once it is ready.
     onPathChanged: {
+        root._readyPath = ""
         root._routePage = -1
         root._opened = ""
         root._scaled = ""
@@ -105,6 +109,7 @@ Item {
     function whenReady() {
         if (!root || !root.ready)
             return
+        root._readyPath = root.path
         root.applyRouteScale()
         root.applyRoutePage()
         root.openRequested()
@@ -124,7 +129,7 @@ Item {
     }
     /// route.pdfScale (a zoom in percent): once per path and value, before the page is jumped to.
     function applyRouteScale() {
-        if (!root || !root.ready || !root.route || !(root.route.pdfScale > 0))
+        if (!root || !root.ready || root._readyPath !== root.path || !root.route || !(root.route.pdfScale > 0))
             return
         const key = root.path + "\n" + root.route.pdfScale
         if (key === root._scaled)
@@ -133,7 +138,7 @@ Item {
         root.moveTo(pdf.setScaleAround(root.route.pdfScale / 100 * 96 / 72, Qt.point(flick.width / 2, 0)))
     }
     function applyRoutePage() {
-        if (!root || !root.ready)
+        if (!root || !root.ready || root._readyPath !== root.path)
             return
         const page = Math.max(1, Math.min(pdf.pageCount, root.routePage(root.route)))
         if (page === root._routePage)
@@ -148,7 +153,8 @@ Item {
         interval: 500
         onTriggered: {
             const current = AppController.currentRoute
-            if (root.inSidePanel || !root.ready || !current || current.path !== root.path)
+            if (root.inSidePanel || !root.ready || root._readyPath !== root.path || !current
+                    || current.path !== root.path)
                 return
             const page = pdf.currentPage
             if (page < 1 || root.routePage(current) === page)
@@ -161,7 +167,7 @@ Item {
     }
     /// route.open: once per path and value.
     function openRequested() {
-        if (!root.route || !root.route.open || !root.ready)
+        if (!root.route || !root.route.open || !root.ready || root._readyPath !== root.path)
             return
         const key = root.path + "\n" + root.route.open
         if (key === root._opened)

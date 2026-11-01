@@ -3265,9 +3265,16 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         const QString moved = workspace->movePath(pdf, u"Dokumenty żółte"_s);
         if (!moved.isEmpty())
             pdf = moved; // (opened() reads it)
-        check(!moved.isEmpty() && waitFor([&] { return opened(2); }, 15000), "a moved PDF reopens on the same page");
-        waitFor([] { return false; }, 900); // (longer than the route write's 500 ms)
-        check(opened(2) && app->currentRoute().value(u"pdfPage"_s).toInt() == 2, "and its page stays in the route");
+        // (The model opens the new file a moment later: until then it still shows the old one.)
+        const QString movedFile = moved.isEmpty() ? QString() : workspace->absoluteFilePath(moved);
+        check(!moved.isEmpty() && waitFor([&] {
+            return app->currentRoute().value(u"path"_s).toString() == moved
+                   && modelValue("file").toString() == movedFile;
+        }),
+              "the route and the viewer follow the moved PDF");
+        waitFor([] { return false; }, 1500); // (reopened, and longer than the route write's 500 ms)
+        check(waitFor([&] { return opened(2); }, 15000) && app->currentRoute().value(u"pdfPage"_s).toInt() == 2,
+              "it reopens on the same page, kept in the route");
         // A route naming only a zoom (remote control, tests): applied without route.open.
         app->navigate(QVariantMap{{u"view"_s, u"page"_s}, {u"path"_s, pdf}, {u"pdfScale"_s, 250}});
         check(waitFor([&] { return opened(0) && qAbs(modelValue("zoomPercent").toInt() - 250) <= 1; }, 15000),
