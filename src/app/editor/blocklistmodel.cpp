@@ -996,6 +996,30 @@ const VaultConfig &BlockListModel::vaultConfig() const
     return *m_config;
 }
 
+namespace {
+
+/// RenderContext::resolveLinkPart through the host (EditorHost::linkPart()): the path parts of
+/// [[A/B/C]] in every rendered text of the editor (blocks, table cells, property values, embeds,
+/// query results). Without a host every part is new.
+std::function<markdown::LinkPartTarget::Kind(const QString &, int)> linkPartResolver(const QPointer<EditorHost> &host,
+                                                                                     const QString &path)
+{
+    return [host, path](const QString &target, int part) {
+        const auto p = host ? linkPartFromMap(host->linkPart(target, part, path)) : std::nullopt;
+        return p ? p->kind : markdown::LinkPartTarget::Kind::New;
+    };
+}
+
+} // namespace
+
+QString BlockListModel::linkUrlAt(int row, const QString &text, int position) const
+{
+    const int docIndex = docIndexOfRow(row);
+    if (docIndex < 0)
+        return {};
+    return markdown::InlineRenderer(renderContext(docIndex)).linkUrlAt(text, position);
+}
+
 markdown::RenderContext BlockListModel::renderContext(int docIndex) const
 {
     markdown::RenderContext ctx;
@@ -1020,6 +1044,7 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
             return resolved;
         };
     }
+    ctx.resolveLinkPart = linkPartResolver(host, path);
     ctx.blockText = [this, host](const QString &id) -> std::optional<QString> {
         for (int k = 0; k < m_doc.count(); ++k) {
             if (m_doc.at(k).blockId == id)
@@ -1074,6 +1099,7 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
     ctx.hideTransclusions = true; // nested embeds get their own rows in a transclusion
     ctx.dateLinks = true;         // token menus (PageController::tokenChipIn; ranges in the block's body)
     const QPointer<EditorHost> host = m_host;
+    ctx.resolveLinkPart = linkPartResolver(host, path);
     if (host) {
         ctx.resolvePage = [host, path](const QString &target) -> std::optional<QString> {
             if (!host)
@@ -1564,6 +1590,7 @@ QVariantMap BlockListModel::get(int row) const
             {u"blockId"_s, data(idx, BlockIdRole)},
             {u"headingLevel"_s, data(idx, HeadingLevelRole)},
             {u"plainText"_s, data(idx, PlainTextRole)},
+            {u"editText"_s, data(idx, EditTextRole)},
             {u"listMarker"_s, data(idx, ListMarkerRole)}};
 }
 

@@ -123,7 +123,7 @@ FocusScope {
                 id: textItem
                 Layout.fillWidth: true
                 textFormat: Text.RichText
-                text: row.html
+                text: TextHelper.hoveredLinkHtml(row.html, row.hoveredLink)
                 wrapMode: Text.Wrap
                 maximumLineCount: row.compact ? 6 : 12
                 elide: Text.ElideRight
@@ -135,6 +135,20 @@ FocusScope {
                 linkColor: Theme.link
                 font.strikeout: row.taskStatus === "cancelled"
                 Accessible.ignored: true
+                // Screen readers: the text's links as link items of their own (the row stays the
+                // link to the reference; the task checkbox is TaskBox).
+                BLinkTargets {
+                    x: 0
+                    y: 0
+                    textItem: textItem
+                    html: row.html
+                    lineHeight: textItem.lineHeight
+                    maxHeight: textItem.height
+                    onActivated: (href, x, y) => {
+                        if (!row.tools || !row.tools.openLink(href, row.sourcePath, false))
+                            row.opened(false)
+                    }
+                }
             }
         }
 
@@ -150,14 +164,32 @@ FocusScope {
         }
     }
 
+    /// The link of the text under the mouse or the pressing finger, underlined (as in the editor).
+    property string hoveredLink: ""
+    function trackLink(pos) {
+        const p = textItem.mapFromItem(row, pos.x, pos.y)
+        const link = textItem.linkAt(p.x, p.y)
+        const h = link.startsWith("task:") ? "" : link
+        if (h !== row.hoveredLink)
+            row.hoveredLink = h
+    }
+
     HoverHandler {
         id: hover
         enabled: !Theme.touchUi
         cursorShape: Qt.PointingHandCursor
+        onPointChanged: row.trackLink(point.position)
+        onHoveredChanged: if (!hovered && !tap.pressed) row.hoveredLink = ""
     }
     TapHandler {
         id: tap
         gesturePolicy: TapHandler.ReleaseWithinBounds
+        onPressedChanged: {
+            if (pressed)
+                row.trackLink(tap.point.position)
+            else if (!hover.hovered)
+                row.hoveredLink = ""
+        }
         onTapped: (eventPoint, button) => {
             const p = textItem.mapFromItem(row, eventPoint.position.x, eventPoint.position.y)
             const link = textItem.linkAt(p.x, p.y)

@@ -222,6 +222,10 @@ public:
     /// The shortest [[target]] reaching `path` from `fromPath` (VaultIndex::linkTarget(): "Dom",
     /// "Projekty/Dom" when the title alone names another page); "" when unknown.
     Q_INVOKABLE QString linkTarget(const QString &path, const QString &fromPath = QString()) const override;
+    /// What a path part of a link opens (VaultIndex::resolveLinkPart()); never waits for the
+    /// index (rendering asks: colours may lag while it is built, a click finishes it first —
+    /// resolveRoute()).
+    Q_INVOKABLE QVariantMap linkPart(const QString &target, int part, const QString &fromPath) const override;
     Q_INVOKABLE QString blockText(const QString &blockId) const override;
     /// The index knows a block with this id (blockById: `^id` or Logseq `id::`, any text).
     bool blockIdTaken(const QString &blockId) const override;
@@ -333,7 +337,11 @@ public:
     /// will have — newPagesFolder/<target>.md, or the journal page for a date — without creating
     /// it (the editor creates it with its first content). A tag route {view: "tag", tag} — a
     /// click on #tag — becomes the page the tag names (tagPage()); with `overview: true` it stays
-    /// the tag overview. Other routes are returned unchanged.
+    /// the tag overview. A path part of a link {view: "page", target: prefix, linkTarget, linkPart,
+    /// from} (docs/SYNTAX.md §2 "Path parts") becomes what it opens: {view: "page", path} of the
+    /// page, {view: "allPages", path} of the folder, or {view: "page", path, target} of the new
+    /// page (newPagePath()) — never with the part keys; {} for a part the target does not have.
+    /// Other routes are returned unchanged.
     QVariantMap resolveRoute(const QVariantMap &route);
     /// The page a tag names (docs/SYNTAX.md §3, VaultIndex::resolveTag(): like [[tag]] written at
     /// the vault root), else the path the page gets when written (newPagePath(): nested tags are

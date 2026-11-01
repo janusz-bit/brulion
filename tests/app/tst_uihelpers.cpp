@@ -212,6 +212,20 @@ private Q_SLOTS:
         QCOMPARE(h.escapeHtml(u"<script>\"x\"</script>"_s), u"&lt;script&gt;&quot;x&quot;&lt;/script&gt;"_s);
     }
 
+    // The hover and press feedback of rendered text (InlineRenderer::withHoveredLink).
+    void hoveredLinkHtml()
+    {
+        brulion::ui::TextHelper h;
+        const QString part =
+                u"<a href=\"part:1:Firma%2FAdam\" style=\"color:#2c6aa3;text-decoration:none\">Firma</a>"_s;
+        const QString page = u"<a href=\"page:Firma%2FAdam\" style=\"color:#2c6aa3;text-decoration:none\">Adam</a>"_s;
+        const QString html = part + u"<span style=\"color:#535a6a\">/</span>"_s + page;
+        QCOMPARE(h.hoveredLinkHtml(html, u"part:1:Firma%2FAdam"_s),
+                 QString(part).replace(u"none"_s, u"underline"_s) + u"<span style=\"color:#535a6a\">/</span>"_s + page);
+        QCOMPARE(h.hoveredLinkHtml(html, QString()), html);
+        QCOMPARE(h.hoveredLinkHtml(html, u"page:Inna"_s), html);
+    }
+
     // ---- DiffHelper ------------------------------------------------------------------------
     void diffSequencesMinimal_data()
     {

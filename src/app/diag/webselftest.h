@@ -1,7 +1,8 @@
 // Self-tests of the browser build that need the running app (tests/web, the Playwright harness;
-// docs/WEB.md "Testy w przeglądarkach"): `?selftest=webpictures`, `?selftest=pen`, `?selftest=pdf`
-// and `?selftest=pdfauto` (wasm/index.html → --selftest-webpictures / --selftest-pen /
-// --selftest-pdf / --selftest-pdfauto; main.cpp starts them once the notebook is open).
+// docs/WEB.md "Testy w przeglądarkach"): `?selftest=webpictures`, `?selftest=pen`, `?selftest=pdf`,
+// `?selftest=pdfauto` and `?selftest=linkparts` (wasm/index.html → --selftest-webpictures /
+// --selftest-pen / --selftest-pdf / --selftest-pdfauto / --selftest-linkparts; main.cpp starts them
+// once the notebook is open).
 //
 //   WebPicturesSelfTest   the pictures from the internet of one page as the editor fetches them
 //                         (published as "brulionWebPictureSelfTest"), then an export with copies
@@ -12,6 +13,9 @@
 //                         link to it are on screen, the route, the viewer's message; with
 //                         `openNow` "brulionPdfOpenSelfTest": a PDF handed to the browser outside
 //                         any click)
+//   LinkPartsSelfTest     the links of the rendered text holding a path part of a link
+//                         ("brulionLinkPartsSelfTest": where each part is on screen) and the route
+//                         shown
 //   startBrowserSelfTests the flows named by the app's arguments, once the app is ready
 //
 // Platform-neutral: results go through `publish` (in the browser platform::publishSelfTestResult:
@@ -22,6 +26,7 @@
 
 #include <QElapsedTimer>
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QPointer>
@@ -200,10 +205,36 @@ private:
     int m_durationMs = 120000;
 };
 
+/// The path parts of a link (docs/SYNTAX.md §2 "Path parts") on screen, for a real browser's mouse
+/// and touch: every 250 ms it looks for the shown rich text holding a part: link (the first one in
+/// the visual tree), samples linkAt() over it on a 2-px grid and publishes "brulionLinkPartsSelfTest"
+/// when anything changed — {ready (such a text is shown), parts: [{href, x, y, width, height}]
+/// (window coordinates, one box per href: the links of that text), route: {view, path}
+/// (AppController::currentRoute)}. It writes nothing: the test seeds the notes.
+class LinkPartsSelfTest : public QObject {
+    Q_OBJECT
+public:
+    LinkPartsSelfTest(QQuickWindow *window, shell::AppController *app, PublishFn publish, QObject *parent = nullptr);
+
+    void start();
+    QJsonObject report() const;
+    /// The boxes of the links of `text` (a rich Text / TextEdit with linkAt()), window coordinates.
+    static QJsonArray linkBoxes(QQuickItem *text);
+
+private:
+    void look();
+
+    QPointer<QQuickWindow> m_window;
+    QPointer<shell::AppController> m_app;
+    PublishFn m_publish;
+    QTimer m_timer;
+    QJsonObject m_last;
+};
+
 /// main.cpp, the browser: starts the flows `args` names (--selftest-webpictures: the pictures of
 /// today's journal; --selftest-pen; --selftest-pdf; --selftest-pdfauto: the PDF test opening
-/// `assets/wykład.pdf` itself 2 s after) once `app`'s status is "ready" (at once when it already is).
-/// Nothing without those arguments.
+/// `assets/wykład.pdf` itself 2 s after; --selftest-linkparts) once `app`'s status is "ready" (at
+/// once when it already is). Nothing without those arguments.
 void startBrowserSelfTests(QQmlApplicationEngine *engine, shell::AppController *app, const QStringList &args,
                            PublishFn publish);
 

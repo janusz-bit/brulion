@@ -3,6 +3,7 @@
 // text. Part of the notebook module — see notebook/notebook.h.
 #pragma once
 
+#include "markdown/inline.h"
 #include "types.h"
 
 #include <QString>
@@ -34,15 +35,24 @@ QString pageLinkTarget(const VaultPath &path, const VaultConfig &config, const V
 /// URL) written on `fromPath`: `#tag` / `#[[tag with spaces]]` for tag:, `((id))` for block:, the
 /// address for ext:, and for page: `[[target#fragment]]` with the page by pageLinkTarget() (a
 /// `[[#Heading]]` names `fromPath`) — as written when no page has that name (`path` "" then).
+/// For a path part of a link (part:, docs/SYNTAX.md §2 "Path parts"; `resolvePart(target, part,
+/// from)`: VaultIndex::resolveLinkPart()): a page by `[[pageLinkTarget()]]`, a folder by its path
+/// with a trailing '/' as a `path:` query filter takes it (`Klienci/Firma/`; quoted when it is not
+/// one token: `"Projekty/Zażółć gęślą/"`), a new page by `[[prefix]]` as written; empty for a
+/// malformed part: URL or without `resolvePart`.
 /// `resolveLink(target, from)`: a link target written on `from` -> the page's path, "" when none.
 /// Empty `text` for other URLs.
 struct CopiedLink {
     QString text;
-    QString path; ///< page: the linked page's path ("" when it does not exist)
+    QString path;   ///< page: the linked page's path ("" when it does not exist); part: the page's or the folder's
+    QString folder; ///< part: naming a folder — its vault path (then `text` is "<folder>/", maybe quoted)
 };
-CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultConfig &config,
-                      const std::function<QString(const QString &target, const QString &from)> &resolveLink,
-                      const std::function<QString(const VaultPath &path)> &shortestTarget);
+CopiedLink
+copiedLink(const QString &url, const QString &fromPath, const VaultConfig &config,
+           const std::function<QString(const QString &target, const QString &from)> &resolveLink,
+           const std::function<QString(const VaultPath &path)> &shortestTarget,
+           const std::function<std::optional<markdown::LinkPartTarget>(const QString &target, int part,
+                                                                       const QString &from)> &resolvePart = {});
 
 struct BlockLinks {
     QString id;          ///< the block id (without '^')

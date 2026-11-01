@@ -26,7 +26,10 @@
 //                           links that will resolve to it), linksTo(path) (files to rewrite on
 //                           rename), unlinkedReferences(path) -> UnlinkedRef{path, line,
 //                           excerpt} (title/aliases as whole words, ≤ 200), missingPages(),
-//                           linkTarget(path, from) (the shortest [[target]] reaching `path`)
+//                           linkTarget(path, from) (the shortest [[target]] reaching `path`),
+//                           resolveLinkPart(target, part, from) -> LinkPartTarget{Page | Folder |
+//                           New, path, prefix} (what a path part of [[A/B/C]] opens, SYNTAX §2
+//                           "Path parts"), noteFolder(path) (a folder holding notes, as spelled)
 //                  moves:   planRelocation([FileMove{from, to}]) -> RelocationPlan{files{path,
 //                           newPath, before, after, links, tags}, rewrite(path, content)} —
 //                           the notes to rewrite so every link and tag keeps its target

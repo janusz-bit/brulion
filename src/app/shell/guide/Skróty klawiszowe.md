@@ -31,6 +31,8 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | Shift+Enter | nowa linia w bloku |
 | Tab / Shift+Tab | wcięcie / wysunięcie z dziećmi |
 | Alt+↑ / Alt+↓ | przeniesienie bloku z dziećmi |
+| Alt+Enter | otwórz link pod kursorem (w linku `[[Folder/Strona]]` — część pod kursorem) |
+| Alt+Shift+Enter | to samo w panelu bocznym (szerokie okno) |
 | Ctrl+Enter | zmiana statusu zadania (po kolei) |
 | Ctrl+Shift+Enter | menu statusu zadania (dowolny status albo bez statusu) |
 | Ctrl+. | zwiń / rozwiń |

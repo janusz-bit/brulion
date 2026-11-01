@@ -3,6 +3,7 @@
 // [[Page#Heading]] / ![[Page#Heading]] — or, when its name is not unique, the links through its id
 // ![[Page#^id]], as the editor copies them (the editor's own parity check: tests/app/editor
 // tst_editor_controller copiedLinksMatchTheCommandLine) — and the page part of a link.
+#include "index/query.h"
 #include "index/vaultindex.h"
 #include "notebook/links.h"
 #include "util/paths.h"
@@ -182,6 +183,75 @@ private Q_SLOTS:
             QCOMPARE(index.resolveLink(notebook::pageLinkTarget(path, index.config(), &index)).value_or(QString()),
                      path);
         QCOMPARE(notebook::pageLinkTarget(path, index.config(), nullptr), paths::pageTitle(path));
+    }
+
+    // A path part of a link (part:, docs/SYNTAX.md §2 "Path parts"): what it opens, as a link
+    // pasted anywhere reaches it — a page by its shortest target, a folder by its path for a
+    // `path:` filter, a new page as written.
+    void copiedPartLinks_data()
+    {
+        QTest::addColumn<QString>("url");
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("folder");
+        QTest::newRow("a page") << u"part:1:Firma%2FNowa"_s << u"[[Firma]]"_s << u"Firma.md"_s << QString();
+        QTest::newRow("a page named like another")
+                << u"part:2:Archiwum%2FFirma%2FX"_s << u"[[Archiwum/Firma]]"_s << u"Archiwum/Firma.md"_s << QString();
+        QTest::newRow("a folder") << u"part:2:Klienci%2FFirma%2FAdam"_s << u"Klienci/Firma/"_s << u"Klienci/Firma"_s
+                                  << u"Klienci/Firma"_s;
+        QTest::newRow("a Polish folder") << u"part:1:Zwierz%C4%99ta%2F%C5%BB%C3%B3%C5%82w"_s << u"Zwierzęta/"_s
+                                         << u"Zwierzęta"_s << u"Zwierzęta"_s;
+        // Not one token of a query: quoted, so that `path:` + the copied text filters that folder.
+        QTest::newRow("a folder with a space")
+                << u"part:2:Projekty%2FZa%C5%BC%C3%B3%C5%82%C4%87%20g%C4%99%C5%9Bl%C4%85%2FNowa"_s
+                << u"\"Projekty/Zażółć gęślą/\""_s << u"Projekty/Zażółć gęślą"_s << u"Projekty/Zażółć gęślą"_s;
+        QTest::newRow("a folder with a comma")
+                << u"part:1:Stare%2C%20nowe%2FX"_s << u"\"Stare, nowe/\""_s << u"Stare, nowe"_s << u"Stare, nowe"_s;
+        QTest::newRow("a folder with a quote")
+                << u"part:1:Cytat%20%22A%22%2FX"_s << u"«Cytat \"A\"/»"_s << u"Cytat \"A\""_s << u"Cytat \"A\""_s;
+        QTest::newRow("a folder with „”")
+                << u"part:1:%E2%80%9EDom%E2%80%9D%2FX"_s << u"\"„Dom”/\""_s << u"„Dom”"_s << u"„Dom”"_s;
+        QTest::newRow("a new page") << u"part:1:Nowa%2FStrona"_s << u"[[Nowa]]"_s << QString() << QString();
+        QTest::newRow("a new deeper page")
+                << u"part:2:Nowa%2FG%C5%82%C4%99boka%2FStrona"_s << u"[[Nowa/Głęboka]]"_s << QString() << QString();
+        QTest::newRow("part 0") << u"part:0:Firma%2FAdam"_s << QString() << QString() << QString();
+        QTest::newRow("the last part") << u"part:2:Firma%2FAdam"_s << QString() << QString() << QString();
+        QTest::newRow("no path") << u"part:1:Firma"_s << QString() << QString() << QString();
+        QTest::newRow("no number") << u"part::Firma%2FAdam"_s << QString() << QString() << QString();
+    }
+    void copiedPartLinks()
+    {
+        QFETCH(QString, url);
+        QFETCH(QString, text);
+        QFETCH(QString, path);
+        QFETCH(QString, folder);
+        VaultIndex index;
+        for (const QString &p :
+             {u"Firma.md"_s, u"Klienci/Firma/Adam.md"_s, u"Archiwum/Firma.md"_s, u"Zwierzęta/Gady/Żółw.md"_s,
+              u"Projekty/Zażółć gęślą/Notatki.md"_s, u"Stare, nowe/a.md"_s, u"Cytat \"A\"/b.md"_s, u"„Dom”/c.md"_s})
+            index.update(p, u"- notatka\n"_s);
+        const auto resolve = [&index](const QString &target, const QString &from) {
+            return index.resolveLink(target, from).value_or(QString());
+        };
+        const auto shortest = [&index](const VaultPath &p) { return index.linkTarget(p).value_or(QString()); };
+        const auto part = [&index](const QString &target, int k, const QString &from) {
+            return index.resolveLinkPart(target, k, from);
+        };
+        const CopiedLink copied = notebook::copiedLink(url, u"Notatka.md"_s, index.config(), resolve, shortest, part);
+        QCOMPARE(copied.text, text);
+        QCOMPARE(copied.path, path);
+        QCOMPARE(copied.folder, folder);
+        if (!folder.isEmpty()) {
+            // The copied folder path is one `path:` value: the folder with its trailing '/'.
+            const auto query = parseQuery(u"path:"_s + copied.text);
+            QVERIFY(std::holds_alternative<Query>(query));
+            const Query &q = std::get<Query>(query);
+            QCOMPARE(q.filters.size(), 1);
+            QCOMPARE(q.filters.first().kind, QueryFilterKind::Path);
+            QCOMPARE(q.filters.first().values, QStringList{folder + u'/'});
+        }
+        // Without the part resolver nothing is copied.
+        QCOMPARE(notebook::copiedLink(url, u"Notatka.md"_s, index.config(), resolve, shortest).text, QString());
     }
 };
 

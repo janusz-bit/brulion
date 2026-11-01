@@ -144,6 +144,38 @@ private Q_SLOTS:
         QVERIFY(ext.contains(u".ico"_s));
         QVERIFY(!ext.contains(u".md"_s));
     }
+    void isAttachmentExtension_data()
+    {
+        QTest::addColumn<QString>("ext");
+        QTest::addColumn<bool>("attachment");
+        QTest::newRow("png") << u".png"_s << true;
+        QTest::newRow("upper case") << u".PDF"_s << true;
+        QTest::newRow("letters and digits") << u".mp3"_s << true;
+        QTest::newRow("a letter and a digit") << u".v2"_s << true;
+        QTest::newRow("ten letters") << u".excalidraw"_s << true;
+        QTest::newRow("eleven letters") << u".abcdefghijk"_s << false;
+        QTest::newRow("markdown") << u".md"_s << false;
+        QTest::newRow("markdown upper case") << u".MD"_s << false;
+        QTest::newRow("markdown long") << u".markdown"_s << false;
+        QTest::newRow("none") << QString() << false;
+        QTest::newRow("only the dot") << u"."_s << false;
+        QTest::newRow("no dot") << u"png"_s << false;
+        QTest::newRow("Dr. Smith") << u". smith"_s << false;
+        QTest::newRow("date: Raporty/2026.10") << u".10"_s << false;
+        QTest::newRow("version: v1.2") << u".2"_s << false;
+        QTest::newRow("a Polish letter") << u".ż"_s << false;
+        QTest::newRow("Polish letters among ASCII") << u".łódź"_s << false;
+        QTest::newRow("punctuation") << u".a-b"_s << false;
+    }
+    void isAttachmentExtension()
+    {
+        QFETCH(QString, ext);
+        QFETCH(bool, attachment);
+        QCOMPARE(paths::isAttachmentExtension(ext), attachment);
+        // What extension() gives for a file name with it.
+        if (attachment)
+            QVERIFY(paths::isAttachmentExtension(paths::extension(u"assets/plan"_s + ext)));
+    }
     void uniquePath()
     {
         const QSet<QString> taken = {QStringLiteral("żółw.md"), QStringLiteral("żółw 2.md")};

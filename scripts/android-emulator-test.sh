@@ -31,7 +31,10 @@
 # Screenshots of each step (sel-*.png); the same debuggable APK.
 # With --folders instead: folders, links and tags with a real finger — a tap on a #tag in the
 # journal opens its page (not created by looking at it; the drawer opened on it shows the page's
-# row in the tree, within the list's view) and Back returns; the editing toolbar's "Więcej" opens
+# row in the tree, within the list's view) and Back returns; the path parts of a link
+# [[Projekty/Remont mieszkania]] appended to today's journal are link nodes of their own — a tap
+# on "Projekty" opens the folder's pages, on "Remont mieszkania" the page, a long press on
+# "Projekty" its menu ("Pokaż folder", "Kopiuj ścieżkę folderu"); the editing toolbar's "Więcej" opens
 # the block menu, "Kopiuj odnośnik" copies a reference to the block (its id written into the
 # note, the copy pasted back into another block with Ctrl+V on Android 13+); the drawer's
 # "Strony" header "+" makes a folder (its name typed on the keyboard, "Utwórz" tapped while the
@@ -714,6 +717,9 @@ vault_grep() { vault_cat "$1" | grep -qE -- "$2"; } # <file> <ERE>
 # The notebook's top-level entry named so in any letter case (a keyboard capitalizes a field's
 # first letter or not).
 vault_name() { adb shell run-as "$PKG" ls "\"$VAULT\"" 2>/dev/null | tr -d '\r' | grep -ix -- "$1" | head -n 1; }
+vault_append() { # <file> <line>: the line appended to a note, as another program (Syncthing) writes it
+  printf '%s\n' "$2" | adb exec-in "run-as $PKG sh -c 'cat >> \"$VAULT/$1\"'"
+}
 
 # --- selecting and copying with a finger (--selection) -------------------------------------------
 
@@ -810,6 +816,12 @@ if ((FOLDERS)); then
   bar_y=$(ui_y 'Narzędzia edycji')
   [[ -n $bar_y ]] && adb shell input swipe $((SCREEN_W * 85 / 100)) "$bar_y" $((SCREEN_W * 10 / 100)) "$bar_y" 300
   sleep 2
+  # A swipe that fell short (a slow emulator takes it for a tap or a short drag) leaves the
+  # toolbar's "Więcej" out of view (only the top bar's is there): the chevron at the row's right
+  # edge scrolls to its end.
+  if (($(ui_find_all 'Więcej' | wc -l) < 2)) && ui_has 'Więcej narzędzi edycji'; then
+    ui_tap 'Więcej narzędzi edycji' last 2
+  fi
   app_shot fl-4-toolbar-end
   # (The top bar has a "Więcej" too: the toolbar's is the lower one.)
   check "the toolbar's Więcej opens the block menu" ui_tap 'Więcej' last
@@ -838,6 +850,66 @@ if ((FOLDERS)); then
   else
     echo "    (no paste: \`input keycombination\` needs Android 13+)"
   fi
+
+  # A link to a page in a folder: each path part a link of its own (docs/SYNTAX.md §2 "Path
+  # parts"). UiAutomator turns Qt's accessibility on, so the parts are link nodes named by their
+  # text (BLinkTargets) — what a screen reader (TalkBack) gets too. The block comes from "another
+  # program"; the app reads it when it comes back to the foreground.
+  parts_line='- Zapytać się [[Projekty/Remont mieszkania]] o plan'
+  # Escape ends the edited block (the paste above) and selects it; Back ends the selection mode
+  # (a tap in it would move the selection's end instead of following a link).
+  adb shell input keyevent 111
+  sleep 2
+  if ui_has 'Kopiuj, Ctrl\+C'; then
+    adb shell input keyevent 4
+    sleep 2
+  fi
+  check "no block is selected (the selection's tools are gone)" ui_lacks 'Kopiuj, Ctrl\+C'
+  check "no keyboard" wait_for 6 ime_hidden
+  vault_append "$today_journal" "$parts_line"
+  journal_unchanged() {
+    local now
+    now=$(vault_cat "$today_journal")
+    [[ $now == "$journal_before" ]] && return 0
+    diff <(printf '%s\n' "$journal_before") <(printf '%s\n' "$now") | head -n 20
+    return 1
+  }
+  adb shell input keyevent 3 # Home
+  sleep 2
+  adb shell am start -n "$ACTIVITY" >/dev/null
+  check "the journal shows the block with the link" wait_for 30 ui_has 'Zapytać się .*o plan'
+  journal_before=$(vault_cat "$today_journal") # as the app read it (the appended line in it)
+  check "UiAutomator sees its path part as a link of its own" wait_for 10 ui_has 'Projekty'
+  check "and its page part" ui_has 'Remont mieszkania'
+  app_shot fl-lp-1-journal
+  check "a tap on Projekty opens the folder's pages" ui_tap 'Projekty' first 3
+  app_shot fl-lp-2-folder
+  check "the folder's view lists Remont mieszkania" wait_for 10 ui_has 'Remont mieszkania.*'
+  check "and not the journal" ui_lacks 'Zapytać się .*o plan'
+  check "Back returns to the journal" back_to 'Zapytać się .*o plan'
+  # The page part of that block: the "Remont mieszkania" node nearest to its "Projekty" (the journal
+  # links the page by name elsewhere too).
+  # (One dump at a time: two uiautomator dumps at once make the second one crash.)
+  parts_y=$(ui_y 'Projekty')
+  near_xy=$(ui_find_all 'Remont mieszkania' | awk -v y="${parts_y:-0}" '{ d = $2 - y; if (d < 0) d = -d; print d, $1, $2 }' |
+    sort -n | head -n 1 | cut -d ' ' -f 2-)
+  check "a tap on Remont mieszkania opens the page" test -n "$near_xy"
+  if [[ -n $near_xy ]]; then
+    adb shell input tap "$near_xy"
+  fi
+  sleep 3
+  app_shot fl-lp-3-page
+  check "the page Remont mieszkania is shown" wait_for 10 ui_has 'Budżet całkowity to .*'
+  check "Back returns to the journal" back_to 'Zapytać się .*o plan'
+  long_press "$(ui_find_all 'Projekty' | head -n 1)"
+  sleep 2
+  app_shot fl-lp-4-menu
+  check "the menu offers Pokaż folder" ui_has 'Pokaż folder'
+  check "and Kopiuj ścieżkę folderu" ui_has 'Kopiuj ścieżkę folderu'
+  adb shell input keyevent 4 # Back: the menu closes
+  sleep 2
+  check "the journal is unchanged apart from the appended line" journal_unchanged
+  check "with the line as written" vault_grep "$today_journal" '^- Zapytać się \[\[Projekty/Remont mieszkania\]\] o plan$'
 
   # A new folder from the drawer's "Strony" header: its "+" → "Nowy folder", the name typed.
   # Whatever is tapped in the drawer's list is first brought into its view (drawer_tap).
@@ -877,7 +949,9 @@ if ((FOLDERS)); then
   # (Its "Zaktualizowane linki: 1 (w 1 notatce)" is plain text: the screenshot shows it.)
   app_shot fl-13-move-sheet
   check "Przenieś tutaj moves it" ui_tap 'Przenieś tutaj' last
-  moved_toast='Przeniesiono do „'"$folder"'”, zaktualizowano 1 link'
+  # Two links: the query's path:Projekty filter and the path link [[Projekty/Remont mieszkania]]
+  # appended above (the bare [[Remont mieszkania]] still names the page).
+  moved_toast='Przeniesiono do „'"$folder"'”, zaktualizowano 2 linki'
   check "the toast says what the move rewrote, with Cofnij" wait_for 6 ui_has "$moved_toast"
   app_shot fl-14-moved
   check "the page is in $folder" vault_has "$folder/Remont mieszkania.md"
@@ -885,6 +959,7 @@ if ((FOLDERS)); then
   check "its query's filter path:Projekty follows it (path:$folder)" \
     vault_grep "$folder/Remont mieszkania.md" "^type:tasks path:$folder status:open sort:due\$"
   check "the journal's links to it are unchanged" vault_grep "$today_journal" '\[\[Remont mieszkania\]\]'
+  check "its path link follows it" vault_grep "$today_journal" "^- Zapytać się \\[\\[$folder/Remont mieszkania\\]\\] o plan\$"
 
   adb logcat -d >"$OUT/folders-logcat.txt"
   check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/folders-logcat.txt'"

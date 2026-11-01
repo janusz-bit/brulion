@@ -254,6 +254,14 @@ Column {
                         readonly property int fontSize: entry.level > 0 ? root.headingSize(entry.level) : root.bodySize
                         readonly property int lineHeightPx: Theme.lineHeightPx(fontSize, entry.level > 0 ? 1.4 : 1.55)
                         readonly property real indent: Math.min(6, modelData.depth || 0) * root.indentStep
+                        /// The link under the mouse or the pressing finger, underlined (BlockText.qml).
+                        property string hoveredLink: ""
+                        function trackLink(x: real, y: real) {
+                            const link = body.linkAt(x, y)
+                            const h = link !== "" && !link.startsWith("task:") && !root.editor.editsOnClick(link) ? link : ""
+                            if (h !== entry.hoveredLink)
+                                entry.hoveredLink = h
+                        }
                         width: frameColumn.width
                         height: nested ? nestedHeader.topPadding + Math.max(Theme.iconSizeSm - 3, nestedTitle.implicitHeight) + Theme.space1
                               : rule ? Theme.space4
@@ -339,7 +347,7 @@ Column {
                             y: 1
                             width: parent.width - x
                             textFormat: Text.RichText
-                            text: entry.nested || entry.rule ? "" : entry.modelData.html
+                            text: entry.nested || entry.rule ? "" : TextHelper.hoveredLinkHtml(entry.modelData.html, entry.hoveredLink)
                             wrapMode: Text.Wrap
                             font.family: entry.modelData.view === "code" ? Theme.fontMono : Theme.fontEditor
                             font.pixelSize: entry.modelData.view === "code" ? Theme.textSm : entry.fontSize
@@ -353,8 +361,23 @@ Column {
                             Accessible.name: text
 
                             HoverHandler {
+                                id: bodyHover
                                 enabled: !Theme.touchUi
                                 cursorShape: body.linkAt(point.position.x, point.position.y) !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
+                                onPointChanged: entry.trackLink(point.position.x, point.position.y)
+                                onHoveredChanged: if (!hovered && !bodyTap.pressed) entry.hoveredLink = ""
+                            }
+                        }
+                        BLinkTargets {
+                            textItem: body
+                            html: entry.nested || entry.rule ? "" : entry.modelData.html
+                            lineHeight: entry.lineHeightPx
+                            shown: body.visible
+                            onActivated: (href, x, y) => {
+                                if (root.editor.editsOnClick(href)) // a date chip: its menu
+                                    root.linkMenu(entry.modelData, body, x, y)
+                                else
+                                    root.activate(href, entry.modelData.path || "", entry.modelData.line)
                             }
                         }
                         // Clicks go to an item above the rich text, not to the Text (which would
@@ -363,7 +386,14 @@ Column {
                             anchors.fill: body
                             visible: body.visible
                             TapHandler {
+                                id: bodyTap
                                 gesturePolicy: TapHandler.ReleaseWithinBounds
+                                onPressedChanged: {
+                                    if (pressed)
+                                        entry.trackLink(bodyTap.point.position.x, bodyTap.point.position.y)
+                                    else if (!bodyHover.hovered)
+                                        entry.hoveredLink = ""
+                                }
                                 onTapped: (eventPoint) => {
                                     if (root.editor.blockTapped(root.block.index))
                                         return // the touch selection mode

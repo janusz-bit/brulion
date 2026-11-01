@@ -1000,7 +1000,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--pickers`: systemowe okna wyboru plików (import plików i folderu, „Zapisz” eksportu); `--pdf`: miniatury PDF-ów, przeglądarka PDF, szczypanie, szukanie od Androida 15, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”, pamięć; `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków, części linku do strony w folderze i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--pickers`: systemowe okna wyboru plików (import plików i folderu, „Zapisz” eksportu); `--pdf`: miniatury PDF-ów, przeglądarka PDF, szczypanie, szukanie od Androida 15, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”, pamięć; `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
@@ -1196,7 +1196,14 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   oznaczonych bloków (pliku nie tworzy), Wstecz wraca; „Więcej” paska edycji (przewiniętego
   palcem) otwiera menu bloku, „Kopiuj odnośnik” → „Odwołanie do bloku” dopisuje id bloku
   w notatce i kopiuje `((id))` (komunikat „Skopiowano ((id))”; na Androidzie 13+ Ctrl+V —
-  `input keycombination` — wkleja je na końcu innego bloku, co widać w pliku); „+” nagłówka
+  `input keycombination` — wkleja je na końcu innego bloku, co widać w pliku); blok
+  `- Zapytać się [[Projekty/Remont mieszkania]] o plan` dopisany do dzisiejszego dziennika „przez
+  inny program” (`vault_append`, aplikacja czyta go po powrocie na pierwszy plan) ma części ścieżki
+  jako osobne węzły linków `Projekty` i `Remont mieszkania` (UiAutomator włącza dostępność, więc
+  `BLinkTargets` tworzy elementy linków — jak dla TalkBack): stuknięcie w `Projekty` otwiera listę
+  stron folderu, w `Remont mieszkania` — stronę, przytrzymanie `Projekty` — menu z „Pokaż folder”
+  i „Kopiuj ścieżkę folderu”; plik dziennika poza dopisanym wierszem się nie zmienia (zrzuty
+  `fl-lp-*.png`); „+” nagłówka
   „Strony” w szufladzie → „Nowy folder”: nazwa wpisana na klawiaturze i „Utwórz” stuknięte, gdy
   klawiatura jeszcze składa słowo, a szuflada pokazuje nowy folder nad stopką synchronizacji;
   „⋯” strony w drzewie → „Przenieś do…” (arkusz, folder

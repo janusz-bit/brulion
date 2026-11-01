@@ -45,6 +45,11 @@ brulion_add_test(tst_editor_highlighter
 brulion_add_test(tst_editor_richpills
     SOURCES tst_editor_richpills.cpp
     LIBS brulion_editor brulion_core_markdown)
+# The links of a rendered text as accessible items (RichTextLinks): one per anchor — each path part
+# of [[A/B/C]] too —, their rectangles from the TextEdit's document or the Text's HTML laid out again.
+brulion_add_test(tst_editor_richlinks
+    SOURCES tst_editor_richlinks.cpp
+    LIBS brulion_editor brulion_core_markdown)
 brulion_add_test(tst_editor_queryresults
     SOURCES tst_editor_queryresults.cpp
     LIBS brulion_editor)
@@ -149,6 +154,23 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 COMMAND brulion --editor --editor-script propstest --no-single-instance
                     --size ${_props_size} ${_props_touch} --now "2026-10-15 10:00" --locale pl)
             set_tests_properties(${_props_test} PROPERTIES
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+        endforeach()
+        # Path parts of a link to a page in a folder (`--editor-script linkpartstest`,
+        # qml/dev/LinkPartsSelfTest.qml): [[Firma/Adam cośtam]] as two links — hover (one part
+        # underlined), clicks / taps on a part, the page and the separator, the menus of a folder's
+        # and a page's part (copied text read back), parts in a table cell, a property, an embed and
+        # a query result, Alt+Enter (also in a cell), a simulated screen reader's link items; a phone
+        # (--touch): the press underline, a long press, a flick that opens nothing.
+        foreach(_parts "tst_editor_qml_linkparts;1280x800;" "tst_editor_qml_linkparts_touch;412x915;--touch")
+            list(GET _parts 0 _parts_test)
+            list(GET _parts 1 _parts_size)
+            list(GET _parts 2 _parts_touch)
+            add_test(NAME ${_parts_test}
+                COMMAND brulion --editor --editor-script linkpartstest --no-single-instance
+                    --size ${_parts_size} ${_parts_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_parts_test} PROPERTIES
                 ENVIRONMENT "${_playground_env}"
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()

@@ -52,6 +52,10 @@ public:
                                     const QString &color = {}) const;
     /// HTML-escape (&, <, >, ") for rich-text Text items.
     Q_INVOKABLE QString escapeHtml(const QString &text) const;
+    /// Rendered rich text (markdown::InlineRenderer) with the links to `href` underlined — the
+    /// hover and press feedback of rendered text (docs/UI.md "Links in rendered text",
+    /// InlineRenderer::withHoveredLink()); `html` unchanged for "" and an href not in it.
+    Q_INVOKABLE QString hoveredLinkHtml(const QString &html, const QString &href) const;
 };
 
 } // namespace brulion::ui

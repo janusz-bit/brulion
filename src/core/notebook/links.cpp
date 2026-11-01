@@ -3,6 +3,7 @@
 #include "index/vaultindex.h"
 #include "markdown/blockdocument.h"
 #include "markdown/inline.h"
+#include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
 #include "markdown/tasks.h"
@@ -15,6 +16,24 @@ using namespace Qt::StringLiterals;
 namespace brulion::notebook {
 
 namespace {
+
+/// A folder's path as a `path:` query value (docs/SYNTAX.md §10): bare when it is one token,
+/// else quoted ("Projekty/Zażółć gęślą/" with its quotes), by « » when it holds a '"'.
+QString queryPathValue(const QString &path)
+{
+    bool bare = !path.startsWith(u"//"_s) && !path.contains(u"[["_s) && !path.contains(u"]]"_s);
+    for (qsizetype k = 0; bare && k < path.size(); ++k) {
+        const QChar c = path[k];
+        bare = !c.isSpace() && c != u',' && c != u'"' && c != u'„' && c != u'“' && c != u'«';
+    }
+    if (bare)
+        return path;
+    if (!path.contains(u'"'))
+        return u'"' + path + u'"';
+    if (!path.contains(u'»'))
+        return u'«' + path + u'»';
+    return path; // no quote can hold it
+}
 
 /// "## Title" -> 2: an ATX heading marker (up to three spaces before it, a space or the end after).
 int atxLevel(QStringView line)
@@ -88,19 +107,39 @@ QString pageLinkTarget(const VaultPath &path, const VaultConfig &config, const V
 
 CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultConfig &config,
                       const std::function<QString(const QString &target, const QString &from)> &resolveLink,
-                      const std::function<QString(const VaultPath &path)> &shortestTarget)
+                      const std::function<QString(const VaultPath &path)> &shortestTarget,
+                      const std::function<std::optional<markdown::LinkPartTarget>(const QString &target, int part,
+                                                                                  const QString &from)> &resolvePart)
 {
     const qsizetype colon = url.indexOf(u':');
     if (colon <= 0)
         return {};
     const QStringView scheme = QStringView(url).left(colon);
     const QString rest = url.mid(colon + 1);
+    if (scheme == u"part") {
+        const auto parsed = markdown::parseLinkPartUrl(url);
+        const auto part = parsed && resolvePart ? resolvePart(parsed->target, parsed->part, fromPath) : std::nullopt;
+        if (!part)
+            return {};
+        switch (part->kind) {
+        case markdown::LinkPartTarget::Kind::Page: {
+            const QString page =
+                    pageLinkTarget(part->path, config, shortestTarget, [&resolveLink](const QString &title) {
+                        return resolveLink ? resolveLink(title, QString()) : QString();
+                    });
+            return {u"[["_s + page + u"]]"_s, part->path, QString()};
+        }
+        case markdown::LinkPartTarget::Kind::Folder: return {queryPathValue(part->path + u'/'), part->path, part->path};
+        case markdown::LinkPartTarget::Kind::New: return {u"[["_s + part->prefix + u"]]"_s, QString(), QString()};
+        }
+        return {};
+    }
     if (scheme == u"tag")
-        return {markdown::tagSyntax(QUrl::fromPercentEncoding(rest.toUtf8())), QString()};
+        return {markdown::tagSyntax(QUrl::fromPercentEncoding(rest.toUtf8())), QString(), QString()};
     if (scheme == u"block")
-        return {u"(("_s + rest + u"))"_s, QString()};
+        return {u"(("_s + rest + u"))"_s, QString(), QString()};
     if (scheme == u"ext")
-        return {rest, QString()};
+        return {rest, QString(), QString()};
     if (scheme != u"page")
         return {};
     QString target = rest;
@@ -112,12 +151,12 @@ CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultCo
     target = QUrl::fromPercentEncoding(target.toUtf8());
     const QString resolved = target.isEmpty() ? fromPath : resolveLink ? resolveLink(target, fromPath) : QString();
     if (resolved.isEmpty())
-        return {target.isEmpty() ? QString() : u"[["_s + target + suffix + u"]]"_s, QString()};
+        return {target.isEmpty() ? QString() : u"[["_s + target + suffix + u"]]"_s, QString(), QString()};
     // The page by the target every copied link uses: a link pasted on any page reaches it.
     const QString page = pageLinkTarget(resolved, config, shortestTarget, [&resolveLink](const QString &title) {
         return resolveLink ? resolveLink(title, QString()) : QString();
     });
-    return {u"[["_s + page + suffix + u"]]"_s, resolved};
+    return {u"[["_s + page + suffix + u"]]"_s, resolved, QString()};
 }
 
 std::optional<BlockLinks> blockLinks(const QString &content, int line, const QString &pageTarget,

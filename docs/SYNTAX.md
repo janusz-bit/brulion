@@ -89,6 +89,7 @@ Obsidiana bez importu") — in memory, until the settings are saved.
 | Syntax | Meaning |
 |---|---|
 | `[[Page]]` | link to page |
+| `[[Folder/Page]]` | link to a page in a folder; each path part is a link of its own (below, "Path parts") |
 | `[[Page\|Alias]]` | link with display text |
 | `[[Page#Heading]]` | link to heading |
 | `[[Page#Parent#Heading]]` | Obsidian heading path: the heading under that parent (below) |
@@ -107,6 +108,38 @@ case-insensitive); 2) path relative to the linking file's folder; 3) unique base
 match (case-insensitive, Unicode NFC); if several, the one with the shortest path, then
 alphabetical; 4) frontmatter `aliases`. Unresolved links point to a page that will be
 created on click (in `newPagesFolder`).
+
+**Path parts / Części ścieżki** (rendering only; the Markdown and the file never change). Folders
+act as namespaces, as in Logseq: in rendered text a wiki link without display text whose target
+is a path — `[[Firma/Adam Nowak]]`, `[[Projekty/Dom/Kuchnia]]` — shows each path part as a link of
+its own, the parts separated by the `/` as written (spaces kept) in a muted colour; the separator
+is no link (a click on it edits the block). The last part (with its `› Heading` / `› block text`)
+is the link itself and opens the page as before (`page:` URL). Part *k* of *n* (1 ≤ *k* < *n*)
+names the first *k* parts as written (`Projekty/Dom` in `[[Projekty/Dom/Kuchnia]]`) and opens, in
+this order (`VaultIndex::resolveLinkPart()`, the same resolver for the part's colour and its click):
+1. the page beside the folder that holds the link's own page at that depth — when the whole link
+   resolves to a note whose path ends with the link's parts (a path suffix or a relative path:
+   `[[Firma/Adam]]` → `Klienci/Firma/Adam.md` gives the folder `Klienci/Firma` and its page
+   `Klienci/Firma.md`);
+2. the page the prefix names as a link written in that note (path, relative path, title, alias;
+   an attachment does not count) — `[[Firma]]`;
+3. a folder: the one of step 1, else the prefix from the vault root, else relative to the note's
+   folder. A folder counts when a note lies in it or below (an empty folder or one with only
+   attachments does not); it opens in **All pages** with its path (the folder browser);
+4. nothing yet: a click creates the page as an unresolved `[[prefix]]` would (in `newPagesFolder`),
+   and the part has the unresolved colour.
+
+Not split (one link as before): a link with display text (`[[Firma/Adam|Adam]]`), a single name,
+a target starting with `/`, `./` or `../`, with a `.` / `..` or an empty or blank part
+(`[[A//B]]`, `[[A/ /B]]`), a trailing `/`, a backslash, a URL or a Windows drive, an attachment
+(the last part with a real file extension: `[[assets/plan.png]]`; `[[Raporty/2026.10]]` and
+`[[Firma/Adam.md]]` split), more than 16 parts, a link shown by another name (a day of the
+journal by its date), embeds, Markdown links and tags (`#Projekty/Dom` keeps its sub-tags).
+Exports (HTML, Pandoc, the clipboard's HTML) and `brulion-cli` keep one link. In the app a parent
+part is a `part:<k>:<target>` URL (`markdown::linkPartUrl()`); copying it ("Kopiuj link") gives
+`[[Page]]` by its shortest target, a folder's path with a trailing `/` (what a `path:` query
+filter takes: quoted when it is not one token — a space, a comma, a quote —, `"Projekty/Zażółć
+gęślą/"`, `«…»` when it holds a `"`) or `[[prefix]]` of a page not written yet.
 
 **Rewriting on rename and move** (`VaultIndex::planRelocation()`): before files move, every link
 that the move can affect — wiki links, embeds and Markdown links to the moved files or to files of

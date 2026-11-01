@@ -491,6 +491,15 @@ FocusScope {
         Item {
             id: textBox
             readonly property real lineHeight: row.rowHeight - 2 * Theme.space1
+            readonly property string valueHtml: !row.present || row.empty ? "" : (row.property.html || "")
+            /// The link under the mouse or the pressing finger, underlined (BlockText.qml).
+            property string hoveredLink: ""
+            function trackLink(x: real, y: real) {
+                const p = displayCell.mapToItem(display, x, y)
+                const link = row.editingValue || valueHtml === "" ? "" : display.linkAt(p.x, p.y)
+                if (link !== textBox.hoveredLink)
+                    textBox.hoveredLink = link
+            }
             implicitHeight: row.editingValue && fieldLoader.item ? (fieldLoader.item as Item).implicitHeight
                                                                   : Math.max(lineHeight, display.implicitHeight)
             Text {
@@ -499,7 +508,7 @@ FocusScope {
                 visible: !row.editingValue
                 width: parent.width
                 y: Math.max(0, (textBox.lineHeight - Math.min(implicitHeight, textBox.lineHeight)) / 2)
-                text: !row.present ? "" : row.empty ? qsTr("Empty") : (row.property.html || "")
+                text: !row.present ? "" : row.empty ? qsTr("Empty") : TextHelper.hoveredLinkHtml(textBox.valueHtml, textBox.hoveredLink)
                 textFormat: row.present && !row.empty ? Text.RichText : Text.PlainText
                 wrapMode: Text.Wrap
                 maximumLineCount: row.present && row.property.multiline ? 6 : 3
@@ -524,8 +533,17 @@ FocusScope {
                         return display.linkAt(p.x, p.y) !== "" ? Qt.PointingHandCursor
                                                                : row.editable ? Qt.IBeamCursor : Qt.ArrowCursor
                     }
+                    onPointChanged: textBox.trackLink(point.position.x, point.position.y)
+                    onHoveredChanged: if (!hovered && !displayTap.pressed) textBox.hoveredLink = ""
                 }
                 TapHandler {
+                    id: displayTap
+                    onPressedChanged: {
+                        if (pressed)
+                            textBox.trackLink(displayTap.point.position.x, displayTap.point.position.y)
+                        else if (!displayHover.hovered)
+                            textBox.hoveredLink = ""
+                    }
                     onTapped: (point) => {
                         const p = displayCell.mapToItem(display, point.position.x, point.position.y)
                         const link = display.linkAt(p.x, p.y)
@@ -535,6 +553,14 @@ FocusScope {
                             row.startValueEdit()
                     }
                 }
+            }
+            // Screen readers: the value's links as link items of their own.
+            BLinkTargets {
+                textItem: display
+                html: textBox.valueHtml
+                maxHeight: display.height
+                shown: !row.editingValue
+                onActivated: (href, x, y) => row.editor.activateLink(row.blockRow, href)
             }
             Loader {
                 id: fieldLoader

@@ -191,6 +191,18 @@ struct VaultIndex::Private {
     QHash<QString, index_detail::PathSet> blockOwners;     ///< block id -> notes defining it
     QHash<QString, index_detail::PathSet> blockRefSources; ///< block id -> notes with ((id))
     QHash<QString, index_detail::PathCounts> tagIndex;     ///< tag -> note -> occurrences
+    /// A folder holding notes (in it or below), counted per spelling: `spelled` is the spelling
+    /// noteFolder() answers with, kept while a note under it is left; when its last note goes
+    /// (a case-only rename, `Firma/` beside `firma/` on a case-sensitive file system) the
+    /// spelling with the most notes in `others` takes its place.
+    struct NoteFolder {
+        VaultPath spelled;
+        int notes = 0;                           ///< notes under `spelled`
+        QList<std::pair<VaultPath, int>> others; ///< other spellings (nearly always empty)
+    };
+    QHash<QString, NoteFolder> noteFolders; ///< pathKey(folder) -> (VaultIndex::noteFolder())
+    /// Count the note at `path` in its folders and their ancestors (`delta` +1 / −1).
+    void countNoteFolders(const VaultPath &path, int delta);
 
     SearchIndex search;
     QSet<VaultPath> searchDirty;
@@ -253,9 +265,12 @@ struct VaultIndex::Private {
                           std::optional<quint64> keepSeq = std::nullopt);
     /// putNote() of a prepared record (its seq is set here).
     QSet<QString> putEntry(std::unique_ptr<Entry> e, bool updateSearch, std::optional<quint64> keepSeq);
-    void attachNote(std::unique_ptr<Entry> e);
-    /// Remove a note from every map; returns it (nullptr when unknown).
-    std::unique_ptr<Entry> detachNote(const VaultPath &path, bool discardSearch);
+    /// Add a note to every map; `countFolders` false: its folders still count it (re-put at the
+    /// same path after detachNote(…, countFolders = false)).
+    void attachNote(std::unique_ptr<Entry> e, bool countFolders = true);
+    /// Remove a note from every map; returns it (nullptr when unknown). `countFolders` false
+    /// leaves it in noteFolders, for a note put back at the same path.
+    std::unique_ptr<Entry> detachNote(const VaultPath &path, bool discardSearch, bool countFolders = true);
     QSet<QString> entryKeys(const Entry &e) const;
     void fileLink(const VaultPath &source, const index_detail::PathLink &link, bool add);
     void resolveLinks(Entry &e);

@@ -63,4 +63,34 @@ QString maskInlineCode(QStringView text);
 /// Deduplicate tag names case-insensitively, keeping the first spelling.
 QStringList uniqueTags(const QStringList &names);
 
+/// One path part of a wiki-link target split at '/' (docs/SYNTAX.md §2 "Path parts"): the part's
+/// text in the target, trimmed (UTF-16 range).
+struct LinkPathPart {
+    qsizetype from = 0;
+    qsizetype to = 0;
+    friend bool operator==(const LinkPathPart &, const LinkPathPart &) = default;
+};
+/// The most parts a target is split into; a longer path stays one link (render cost bounded).
+inline constexpr qsizetype MaxLinkPathParts = 16;
+
+/// The path parts of the wiki-link target `target` (WikiParts::target: as written, trimmed) when
+/// they are shown as separate links: 2 … MaxLinkPathParts parts. Empty, meaning one link as
+/// before, for a single name; a target starting with '/', "./" or "../"; a '.' or '..' part; an
+/// empty or blank part ("A//B", "A/ /B"); a trailing '/'; a backslash; a URL scheme or a Windows
+/// drive ("https://…", "C:/…"); a last part with a real file extension (an attachment,
+/// paths::isAttachmentExtension(): "assets/plan.png" — "Raporty/2026.10" and "Firma/Adam.md"
+/// split); more than MaxLinkPathParts parts. The prefix named by part k (1-based, 1 … n−1) is
+/// target.left(parts[k-1].to).
+QList<LinkPathPart> linkPathParts(QStringView target);
+
+/// What a parent part of a page link opens (docs/SYNTAX.md §2 "Path parts";
+/// VaultIndex::resolveLinkPart()).
+struct LinkPartTarget {
+    enum class Kind { Page, Folder, New };
+    Kind kind = Kind::New;
+    QString path;   ///< Page: the note's vault path; Folder: the folder's, as the index spells it; New: ""
+    QString prefix; ///< the part's target as written ("Firma", "Firma/Adam"): what New creates, like [[prefix]]
+    friend bool operator==(const LinkPartTarget &, const LinkPartTarget &) = default;
+};
+
 } // namespace brulion::markdown

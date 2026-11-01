@@ -500,6 +500,54 @@ private Q_SLOTS:
         QVERIFY(!actions.openLink(u"nonsense"_s));
     }
 
+    // A path part of a link in Tasks and the calendar (part:, docs/SYNTAX.md §2 "Path parts").
+    void linkParts_data()
+    {
+        QTest::addColumn<QString>("url");
+        QTest::addColumn<QString>("target"); // linkPartTarget()
+        QTest::addColumn<bool>("missing");
+        QTest::addColumn<QString>("text"); // linkText()
+        QTest::newRow("a page") << u"part:1:Firma%2FAdam"_s << u"page"_s << false << u"[[Firma]]"_s;
+        QTest::newRow("a folder") << u"part:1:Projekty%2FZa%C5%BC%C3%B3%C5%82%C4%87"_s << u"folder"_s << false
+                                  << u"Projekty/"_s;
+        QTest::newRow("a new page") << u"part:1:Nowa%2FStrona"_s << u"new"_s << true << u"[[Nowa]]"_s;
+        QTest::newRow("malformed") << u"part:2:Firma%2FAdam"_s << QString() << false << QString();
+        QTest::newRow("a page link") << u"page:Firma"_s << QString() << false << u"[[Firma]]"_s;
+    }
+    void linkParts()
+    {
+        QFETCH(QString, url);
+        QFETCH(QString, target);
+        QFETCH(bool, missing);
+        QFETCH(QString, text);
+        FakeEditorHost host;
+        host.setFile(u"Firma.md"_s, u"- firma\n"_s);
+        host.setFile(u"Firma/Adam.md"_s, u"- Adam\n"_s);
+        host.setFile(u"Projekty/Zażółć/Notatki.md"_s, u"- notatki\n"_s);
+        PlanningActions actions;
+        actions.setHost(&host);
+        QCOMPARE(actions.linkPartTarget(url, u"journals/2026-10-14.md"_s), target);
+        QCOMPARE(actions.linkMissing(url, u"journals/2026-10-14.md"_s), missing);
+        QCOMPARE(actions.linkText(url, u"journals/2026-10-14.md"_s), text);
+    }
+    void openLinkParts()
+    {
+        FakeEditorHost host;
+        PlanningActions actions;
+        actions.setHost(&host);
+        QSignalSpy navigated(&host, &FakeEditorHost::navigated);
+        QVERIFY(actions.openLink(u"part:1:Firma%2FAdam%20co%C5%9Btam"_s, u"journals/2026-10-14.md"_s, true));
+        QCOMPARE(navigated.size(), 1);
+        QCOMPARE(navigated.first().at(1).toBool(), true);
+        QCOMPARE(host.lastRoute().value(u"target"_s).toString(), u"Firma"_s);
+        QCOMPARE(host.lastRoute().value(u"linkTarget"_s).toString(), u"Firma/Adam cośtam"_s);
+        QCOMPARE(host.lastRoute().value(u"linkPart"_s).toInt(), 1);
+        QCOMPARE(host.lastRoute().value(u"from"_s).toString(), u"journals/2026-10-14.md"_s);
+        QVERIFY(!actions.openLink(u"part:0:Firma%2FAdam"_s));
+        QVERIFY(!actions.openLink(u"part:1:Firma"_s));
+        QCOMPARE(navigated.size(), 1);
+    }
+
     void plainTextHelper()
     {
         using brulion::planning::plainText;

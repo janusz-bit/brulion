@@ -18,6 +18,11 @@ QString basename(const VaultPath &path);
 /// "a/b/c.md" -> ".md" (lower-case), "" when none.
 QString extension(const VaultPath &path);
 bool isMarkdown(const VaultPath &path);
+/// Is `ext` (as returned by extension(), with the dot) a real file extension: 1-10 ASCII
+/// letters/digits with at least one letter, not Markdown? ".png", ".pdf", ".mp3" are; "",
+/// ". smith" ("Dr. Smith"), ".10" ("Spotkanie 14.10"), ".2" ("v1.2") are not. A link target with
+/// one names an attachment (link resolution, the path parts of a link: docs/SYNTAX.md §2).
+bool isAttachmentExtension(QStringView ext);
 /// An attachment picture (png, jpg, jpeg, gif, webp, svg, bmp, avif, ico): opened as a picture,
 /// not as text (the file's bytes are not a note), embedded as a picture, exported as <img>.
 bool isPicturePath(const VaultPath &path);

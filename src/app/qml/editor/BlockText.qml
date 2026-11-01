@@ -19,8 +19,11 @@ import Brulion
 // to this one; on touch UIs a long press selects the block (the editor's selection mode, where a
 // tap moves the selection's end instead). A right-click or a long press on a token (📅 ⏳ 🛫 ➕ ✅
 // ❌ ⏰ 🔁, a priority, a [[day]] link) opens its menu (DateChipMenu), on another link
-// ([[page]], #tag, ((block)), a web address) the link's menu (LinkMenu); a right-click elsewhere
-// the block menu.
+// ([[page]], a path part of [[Folder/Page]], #tag, ((block)), a web address) the link's menu
+// (LinkMenu); a right-click elsewhere the block menu. The link under the mouse — or under the
+// finger or button while it presses — is underlined (hoveredLink, TextHelper.hoveredLinkHtml: the
+// shown text only), so each path part of [[A/B/C]] shows what a click opens; with a screen reader
+// on every link is an accessible item of its own (BLinkTargets).
 Item {
     id: root
 
@@ -53,6 +56,18 @@ Item {
         const edit = tintedLoader.item as TextEdit
         return root.tinted && edit ? edit.linkAt(x, y) : rendered.linkAt(x, y)
     }
+    /// The link under the mouse, or under the finger / button while it presses ("" = none): shown
+    /// underlined. Not the task checkbox nor a chip a click edits (dates, 🔁, priorities).
+    property string hoveredLink: ""
+    /// The shown rich text: the rendered HTML with hoveredLink underlined.
+    readonly property string shownHtml: TextHelper.hoveredLinkHtml(root.html, root.hoveredLink)
+    function trackLink(x: real, y: real) {
+        const link = root.editing ? "" : root.linkAt(x, y)
+        const hovered = link !== "" && !link.startsWith("task:") && !root.editor.editsOnClick(link) ? link : ""
+        if (hovered !== root.hoveredLink)
+            root.hoveredLink = hovered
+    }
+    onEditingChanged: root.hoveredLink = ""
 
     /// The rendered text's height in whole fixed-height lines.
     readonly property real renderedHeight: lineHeightPx > 0 ? Math.max(1, Math.round(renderedItem.implicitHeight / lineHeightPx)) * lineHeightPx
@@ -65,7 +80,7 @@ Item {
         width: parent.width
         visible: !root.editing && !root.tinted
         textFormat: Text.RichText
-        text: root.tinted ? "" : root.html
+        text: root.tinted ? "" : root.shownHtml
         wrapMode: Text.Wrap
         horizontalAlignment: root.align
         font.family: root.mono ? Theme.fontMono : Theme.fontEditor
@@ -98,7 +113,7 @@ Item {
             cursorVisible: false
             textMargin: 0
             textFormat: TextEdit.RichText
-            text: root.html
+            text: root.shownHtml
             wrapMode: TextEdit.Wrap
             horizontalAlignment: root.align
             font.family: root.mono ? Theme.fontMono : Theme.fontEditor
@@ -151,10 +166,20 @@ Item {
                 const link = root.linkAt(point.position.x, point.position.y)
                 return link !== "" && !root.editor.editsOnClick(link) ? Qt.PointingHandCursor : Qt.IBeamCursor
             }
+            onPointChanged: root.trackLink(point.position.x, point.position.y)
+            onHoveredChanged: if (!hovered && !tap.pressed) root.hoveredLink = ""
         }
         TapHandler {
             id: tap
             gesturePolicy: TapHandler.ReleaseWithinBounds
+            // The press feedback (phones have no hover): the link under the finger is underlined
+            // until it lifts or the press turns into a flick.
+            onPressedChanged: {
+                if (pressed)
+                    root.trackLink(tap.point.position.x, tap.point.position.y)
+                else if (!textHover.hovered)
+                    root.hoveredLink = ""
+            }
             onTapped: (eventPoint, button) => {
                 // Shift+click, the touch selection mode (BlockEditor.blockTapped).
                 if (root.editor.blockTapped(root.block.index, tap.point.modifiers))
@@ -196,6 +221,21 @@ Item {
                     return
                 root.editor.longPressText(root.block.index)
             }
+        }
+    }
+
+    // Screen readers: every link of the shown text an accessible link item (a press does what a
+    // click does; a date chip opens its menu).
+    BLinkTargets {
+        textItem: root.renderedItem
+        html: root.html
+        lineHeight: root.lineHeightPx
+        shown: root.live && !root.editing
+        onActivated: (href, x, y) => {
+            if (root.editor.editsOnClick(href))
+                root.editor.openDateMenu(root.block.index, href, root.renderedItem, x, y)
+            else
+                root.editor.activateLink(root.block.index, href)
         }
     }
 

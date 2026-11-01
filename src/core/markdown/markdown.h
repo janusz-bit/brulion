@@ -20,7 +20,8 @@
 //   inline.h       extractInline(text, baseOffset, line) -> {links, tags}; findTags(text) ->
 //                  TagSpan{name, from, to} (every occurrence, for renderers/exporters);
 //                  tagSyntax(name) -> "#name" | "#[[name with spaces]]" | "" (the tag naming a
-//                  page, SYNTAX §3); maskInlineCode(text)
+//                  page, SYNTAX §3); maskInlineCode(text); linkPathParts(target) (the path
+//                  parts of [[A/B/C]], SYNTAX §2 "Path parts"), LinkPartTarget{Page|Folder|New}
 //   tokens.h       tokens::Due "📅", Scheduled "⏳", Start "🛫", Created "➕", Done "✅",
 //                  Cancelled "❌", Recurrence "🔁", Reminder "⏰", Alarm "⏰!", priorityEmoji(p)
 //                  findTokens(masked) -> QList<Token>, stripTokens(text),
@@ -106,7 +107,10 @@
 //                  escaped Qt rich text with page:/tag:/block:/ext:/task:/reminder:/date: links and
 //                  coloured chips for dates, reminders and recurrence (reminder:FROM-TO and
 //                  date:FROM-TO are the token's UTF-16 range in the text given to render() / the
-//                  body given to renderBlock())
+//                  body given to renderBlock()); with resolveLinkPart a link [[A/B/C]] is one
+//                  part:K:TARGET link per parent part (linkPartUrl / parseLinkPartUrl);
+//                  withHoveredLink(html, href) (the hover underline), linkUrlAt(text, position)
+//                  (the link at a caret)
 #pragma once
 
 #include "markdown/blockclipboard.h"

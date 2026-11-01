@@ -10,6 +10,7 @@ Linki łączą notatki w sieć. Każda strona pokazuje w panelu bocznym (zakład
 | Zapis | Znaczenie |
 |---|---|
 | `[[Strona]]` | link do strony |
+| `[[Folder/Strona]]` | link do strony w folderze — każda część ścieżki to osobny link |
 | `[[Strona\|podpis]]` | link z własnym tekstem |
 | `[[Strona#Nagłówek]]` | link do nagłówka |
 | `[[Strona#Rozdział#Nagłówek]]` | link do nagłówka „Nagłówek” w rozdziale „Rozdział” (gdy nazwa się powtarza) |
@@ -25,6 +26,17 @@ Przykłady: [[Spis treści|Spis treści]], [[Zadania#Powtarzanie]], oraz strona,
 
 ## Jak Brulion znajduje stronę
 Nazwa z linku jest dopasowywana do plików po kolei: pełna ścieżka w notatniku, ścieżka względem bieżącego folderu, sama nazwa pliku (bez względu na wielkość liter), a na końcu aliasy z nagłówka strony (`aliases: [Skrót]`). Przy kilku pasujących wygrywa strona o najkrótszej ścieżce. Gdy dwie strony mają tę samą nazwę w różnych folderach, użyj ścieżki: `[[Projekty/Dom]]`.
+
+## Linki do stron w folderach
+Foldery działają jak przestrzenie nazw (jak w Logsequ). W linku do strony w folderze, np. `[[Firma/Adam Nowak]]`, każda część ścieżki to osobny link — części dzieli szary ukośnik:
+- **Adam Nowak** (ostatnia część) otwiera, jak dotąd, stronę `Firma/Adam Nowak`;
+- **Firma** otwiera stronę „Firma” — tę obok folderu, w którym leży `Adam Nowak`, a gdy jej nie ma, stronę, którą znalazłby link `[[Firma]]` (po ścieżce, nazwie albo aliasie);
+- gdy takiej strony nie ma, a w folderze **Firma** są strony, otwiera się lista jego stron we **Wszystkich stronach**;
+- gdy nie ma ani strony, ani folderu, kliknięcie tworzy stronę „Firma” jak każdy link do nieistniejącej strony.
+
+Przy głębszych ścieżkach (`[[Projekty/Dom/Kuchnia]]`) tak samo: **Dom** prowadzi do strony albo folderu `Projekty/Dom`. Część pod kursorem myszy jest podkreślona, a na telefonie część pod palcem — wystarczy ją stuknąć. Prawy przycisk myszy (na telefonie przytrzymanie) na części otwiera jej menu: **Otwórz** (przy folderze **Pokaż folder**, przy brakującej stronie **Utwórz stronę**), **Otwórz w panelu bocznym** i **Kopiuj link** (przy folderze **Kopiuj ścieżkę folderu**, np. `Projekty/Dom/` do filtra `path:` w [[Zapytania|zapytaniu]]; nazwę ze spacją kopiuje w cudzysłowie: `"Projekty/Mój dom/"`).
+
+Link z własnym tekstem (`[[Firma/Adam Nowak|Adam]]`) zostaje jednym linkiem. Podczas edycji bloku widać zwykły zapis linku, a plik się nie zmienia. Tak samo działają linki w wynikach zapytań, tabelach, osadzonych stronach, właściwościach, **Zadaniach** i odnośnikach. Z klawiatury: w edytowanym bloku ustaw kursor na części linku i naciśnij **Alt+Enter** (**Alt+Shift+Enter** otwiera ją w panelu bocznym). Czytniki ekranu (TalkBack, Orca, NVDA) widzą każdą część — i każdy link w tekście — jako osobny link.
 
 ## Osadzanie
 Wykrzyknik przed linkiem wstawia treść zamiast odnośnika:

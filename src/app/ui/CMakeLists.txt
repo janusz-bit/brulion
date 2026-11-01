@@ -19,7 +19,8 @@ qt_add_library(brulion_ui_helpers STATIC
     themepalette.h themepalette.cpp
 )
 target_include_directories(brulion_ui_helpers PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(brulion_ui_helpers PUBLIC Qt6::Core PRIVATE brulion_core_dates brulion_core_text brulion_core_log)
+target_link_libraries(brulion_ui_helpers PUBLIC Qt6::Core PRIVATE brulion_core_dates brulion_core_text brulion_core_log
+    brulion_core_markdown)
 qt_extract_metatypes(brulion_ui_helpers)
 brulion_set_warnings(brulion_ui_helpers)
 

@@ -12,7 +12,34 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::ui {
 
-DeviceInfo::DeviceInfo(QObject *parent) : QObject(parent) { }
+DeviceInfo::DeviceInfo(QObject *parent)
+    : QObject(parent)
+    , m_accessible(QAccessible::isActive())
+    , m_simulated(qEnvironmentVariableIntValue("BRULION_SIMULATE_SCREEN_READER") == 1)
+{
+    QAccessible::installActivationObserver(this);
+}
+
+DeviceInfo::~DeviceInfo()
+{
+    QAccessible::removeActivationObserver(this);
+}
+
+void DeviceInfo::accessibilityActiveChanged(bool active)
+{
+    const bool before = screenReader();
+    m_accessible = active;
+    if (screenReader() != before)
+        Q_EMIT screenReaderChanged();
+}
+
+void DeviceInfo::setSimulateScreenReader(bool on)
+{
+    if (m_simulated == on)
+        return;
+    m_simulated = on;
+    Q_EMIT screenReaderChanged();
+}
 
 QString DeviceInfo::platform() const
 {

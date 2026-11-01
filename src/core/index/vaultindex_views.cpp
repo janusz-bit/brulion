@@ -257,6 +257,61 @@ std::optional<VaultPath> VaultIndex::resolveLink(const QString &target, const Va
     return hit;
 }
 
+std::optional<VaultPath> VaultIndex::noteFolder(const QString &path) const
+{
+    const VaultPath folder = paths::normalize(path);
+    if (folder.isEmpty())
+        return std::nullopt;
+    const auto it = d->noteFolders.constFind(pathKey(folder));
+    if (it == d->noteFolders.cend())
+        return std::nullopt;
+    return it->spelled;
+}
+
+std::optional<markdown::LinkPartTarget> VaultIndex::resolveLinkPart(const QString &target, int part,
+                                                                    const VaultPath &from) const
+{
+    using Kind = markdown::LinkPartTarget::Kind;
+    const QList<markdown::LinkPathPart> parts = markdown::linkPathParts(target);
+    if (part < 1 || part >= parts.size())
+        return std::nullopt;
+    const QString prefix = target.left(parts[part - 1].to);
+    // 1. The folder holding the link's own page at this depth (a path suffix or a relative path:
+    // `[[Firma/Adam]]` -> Klienci/Firma/Adam.md gives Klienci/Firma), and the page beside it.
+    VaultPath folder;
+    if (const auto page = resolveLink(target, from); page && paths::isMarkdown(*page)) {
+        const QStringList written = paths::stripMarkdownExtension(*page).split(u'/');
+        const qsizetype offset = written.size() - parts.size();
+        bool same = offset >= 0;
+        for (qsizetype k = 0; same && k < parts.size(); ++k) {
+            QString segment = target.sliced(parts[k].from, parts[k].to - parts[k].from);
+            if (k + 1 == parts.size())
+                segment = paths::stripMarkdownExtension(segment);
+            same = pathKey(segment) == pathKey(written[offset + k]);
+        }
+        if (same)
+            folder = written.mid(0, offset + part).join(u'/');
+    }
+    if (!folder.isEmpty()) {
+        if (const VaultPath beside = d->names.notePath(folder); !beside.isEmpty() && contains(beside))
+            return markdown::LinkPartTarget{Kind::Page, beside, prefix};
+    }
+    // 2. The page the prefix names as a link written in `from` (path, title, alias).
+    if (const auto page = resolveLink(prefix, from); page && paths::isMarkdown(*page))
+        return markdown::LinkPartTarget{Kind::Page, *page, prefix};
+    // 3. A folder with notes: the one holding the page, from the root, relative to `from`.
+    if (!folder.isEmpty())
+        return markdown::LinkPartTarget{Kind::Folder, folder, prefix};
+    if (const auto f = noteFolder(prefix))
+        return markdown::LinkPartTarget{Kind::Folder, *f, prefix};
+    if (const QString dir = paths::dirname(from); !dir.isEmpty()) {
+        if (const auto f = noteFolder(dir + u'/' + prefix))
+            return markdown::LinkPartTarget{Kind::Folder, *f, prefix};
+    }
+    // 4. Nothing yet: a click creates the page as an unresolved [[prefix]] would.
+    return markdown::LinkPartTarget{Kind::New, QString(), prefix};
+}
+
 QList<ResolvedLink> VaultIndex::outgoingLinks(const VaultPath &path) const
 {
     QList<ResolvedLink> out;

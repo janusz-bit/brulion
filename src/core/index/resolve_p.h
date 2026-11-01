@@ -53,9 +53,7 @@ QString linkKey(const QString &target, TargetForm form = TargetForm::Raw);
 QStringList aliasLinkKeys(const QString &alias);
 /// Does the target carry a URL scheme (`https:`, `mailto:`, …)? Windows drives excluded.
 bool isExternalTarget(QStringView target);
-/// Is `ext` (as returned by paths::extension(), with the dot) a real file extension: 1-10 ASCII
-/// letters/digits with at least one letter, not Markdown? ".png", ".pdf", ".mp3" are; "",
-/// ". smith" ("Dr. Smith"), ".10" ("Spotkanie 14.10"), ".2" ("v1.2") are not.
+/// paths::isAttachmentExtension() (shared with the markdown module's path parts of a link).
 bool isAttachmentExtension(QStringView ext);
 /// Is an unresolved target a page (no real extension, or `.md`) rather than a missing attachment?
 bool isPageTarget(const QString &target, TargetForm form = TargetForm::Raw);
@@ -84,6 +82,10 @@ public:
     /// path, then alphabetical), aliases. An attachment of that name (a `TODO` file next to
     /// Projekty/TODO.md) never hides a note. Empty when no note matches.
     VaultPath resolveNote(const QString &target, TargetForm form = TargetForm::Raw) const;
+    /// The note at exactly vault path `path` with `.md` / `.markdown` added (case-insensitive,
+    /// NFC; among case variants the exact spelling wins), never an attachment; empty when none.
+    /// The page beside a folder (VaultIndex::resolveLinkPart()).
+    VaultPath notePath(const QString &path) const;
 
 private:
     VaultPath resolveBare(const QString &target, const VaultPath &from) const;

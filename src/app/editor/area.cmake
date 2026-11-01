@@ -44,7 +44,7 @@ qt_target_qml_sources(brulion
 if(BRULION_DEV_QML_ENABLED)
     qt_target_qml_sources(brulion QML_FILES qml/dev/EditorPlayground.qml qml/dev/PageScript.qml
         qml/dev/SelectionSelfTest.qml qml/dev/RefreshSelfTest.qml qml/dev/DateChipSelfTest.qml
-        qml/dev/PropertiesSelfTest.qml)
+        qml/dev/PropertiesSelfTest.qml qml/dev/LinkPartsSelfTest.qml)
 else()
     qt_target_qml_sources(brulion QML_FILES qml/stubs/PageScript.qml)
 endif()

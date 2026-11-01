@@ -134,6 +134,11 @@ markdown::RenderContext renderContext(const VaultIndex *index, const VaultPath &
         ctx.resolvePage = [index, fromPath](const QString &target) -> std::optional<QString> {
             return index->resolveLink(target, fromPath);
         };
+        // [[Firma/Adam]]: every path part a link (docs/SYNTAX.md §2 "Path parts").
+        ctx.resolveLinkPart = [index, fromPath](const QString &target, int part) {
+            const auto p = index->resolveLinkPart(target, part, fromPath);
+            return p ? p->kind : markdown::LinkPartTarget::Kind::New;
+        };
         ctx.blockText = [index](const QString &id) -> std::optional<QString> {
             const auto ref = index->blockById(id);
             if (!ref)

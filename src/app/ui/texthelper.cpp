@@ -1,5 +1,6 @@
 #include "texthelper.h"
 
+#include "markdown/inlinerenderer.h"
 #include "text/text.h"
 
 #include <algorithm>
@@ -249,6 +250,11 @@ QString TextHelper::markMatches(const QString &text, const QVariantList &positio
 QString TextHelper::escapeHtml(const QString &text) const
 {
     return text.toHtmlEscaped();
+}
+
+QString TextHelper::hoveredLinkHtml(const QString &html, const QString &href) const
+{
+    return href.isEmpty() ? html : markdown::InlineRenderer::withHoveredLink(html, href);
 }
 
 } // namespace brulion::ui

@@ -821,6 +821,11 @@ QString Workspace::resolveLink(const QString &target, const QString &fromPath) c
     return m_index->resolveLink(target, fromPath).value_or(QString());
 }
 
+QVariantMap Workspace::linkPart(const QString &target, int part, const QString &fromPath) const
+{
+    return linkPartToMap(m_index ? m_index->resolveLinkPart(target, part, fromPath) : std::nullopt);
+}
+
 QString Workspace::blockText(const QString &blockId) const
 {
     if (!m_index)
@@ -1200,6 +1205,27 @@ QVariantMap Workspace::resolveRoute(const QVariantMap &route)
     // Right after opening the index is still being built: what looks unresolved may exist.
     if (indexing())
         finishIndexing();
+    // A path part of a link ([[Firma/Adam]]: "Firma"): the page, the folder's pages or a new page
+    // (VaultIndex::resolveLinkPart() — what its colour said).
+    if (route.contains(u"linkPart"_s)) {
+        const auto part = m_index ? m_index->resolveLinkPart(route.value(u"linkTarget"_s).toString(),
+                                                             route.value(u"linkPart"_s).toInt(),
+                                                             route.value(u"from"_s).toString())
+                                  : std::nullopt;
+        if (!part)
+            return {};
+        switch (part->kind) {
+        case markdown::LinkPartTarget::Kind::Page: return {{u"view"_s, u"page"_s}, {u"path"_s, part->path}};
+        case markdown::LinkPartTarget::Kind::Folder: return {{u"view"_s, u"allPages"_s}, {u"path"_s, part->path}};
+        case markdown::LinkPartTarget::Kind::New: {
+            const QString path = newPagePath(part->prefix);
+            if (path.isEmpty())
+                return {};
+            return {{u"view"_s, u"page"_s}, {u"path"_s, path}, {u"target"_s, part->prefix}};
+        }
+        }
+        return {};
+    }
     const QString blockId = route.value(u"blockId"_s).toString();
     if (!blockId.isEmpty() && m_index) {
         if (const auto ref = m_index->blockById(blockId)) {

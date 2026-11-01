@@ -418,6 +418,94 @@ void PenSelfTest::publish()
         m_publish("brulionPenSelfTest", report());
 }
 
+// ---- LinkPartsSelfTest ------------------------------------------------------------------------
+
+namespace {
+
+/// The first shown rich text under `item` (a Text or TextEdit with linkAt()) whose text holds `needle`.
+QQuickItem *richTextHolding(QQuickItem *item, const QString &needle)
+{
+    if (!item || !item->isVisible())
+        return nullptr;
+    if (item->metaObject()->indexOfMethod("linkAt(double,double)") >= 0
+        && item->property("text").toString().contains(needle) && item->width() > 0 && item->height() > 0)
+        return item;
+    for (QQuickItem *child : item->childItems()) {
+        if (QQuickItem *found = richTextHolding(child, needle))
+            return found;
+    }
+    return nullptr;
+}
+
+} // namespace
+
+LinkPartsSelfTest::LinkPartsSelfTest(QQuickWindow *window, shell::AppController *app, PublishFn publish,
+                                     QObject *parent)
+    : QObject(parent), m_window(window), m_app(app), m_publish(std::move(publish))
+{
+    m_timer.setInterval(250);
+    connect(&m_timer, &QTimer::timeout, this, &LinkPartsSelfTest::look);
+}
+
+void LinkPartsSelfTest::start()
+{
+    m_timer.start();
+    look();
+}
+
+QJsonArray LinkPartsSelfTest::linkBoxes(QQuickItem *text)
+{
+    struct Box {
+        qreal x1, y1, x2, y2;
+    };
+    QList<std::pair<QString, Box>> boxes; // in order of first sight
+    for (qreal y = 1; text && y < text->height(); y += 2) {
+        for (qreal x = 1; x < text->width(); x += 2) {
+            QString link;
+            QMetaObject::invokeMethod(text, "linkAt", qReturnArg(link), x, y);
+            if (link.isEmpty())
+                continue;
+            auto it = std::find_if(boxes.begin(), boxes.end(), [&](const auto &b) { return b.first == link; });
+            if (it == boxes.end()) {
+                boxes.append({link, Box{x, y, x, y}});
+            } else {
+                it->second.x1 = std::min(it->second.x1, x);
+                it->second.y1 = std::min(it->second.y1, y);
+                it->second.x2 = std::max(it->second.x2, x);
+                it->second.y2 = std::max(it->second.y2, y);
+            }
+        }
+    }
+    QJsonArray out;
+    for (const auto &[href, b] : boxes) {
+        const QPointF origin = text->mapToScene(QPointF(b.x1, b.y1));
+        QJsonObject box = rectJson(QRectF(origin, QSizeF(b.x2 - b.x1, b.y2 - b.y1)));
+        box.insert(u"href"_s, href);
+        out.append(box);
+    }
+    return out;
+}
+
+QJsonObject LinkPartsSelfTest::report() const
+{
+    QQuickItem *text = m_window ? richTextHolding(m_window->contentItem(), u"href=\"part:"_s) : nullptr;
+    const QVariantMap route = m_app ? m_app->currentRoute() : QVariantMap();
+    return {{u"ready"_s, text != nullptr},
+            {u"parts"_s, text ? linkBoxes(text) : QJsonArray()},
+            {u"route"_s, QJsonObject{{u"view"_s, route.value(u"view"_s).toString()},
+                                     {u"path"_s, route.value(u"path"_s).toString()}}}};
+}
+
+void LinkPartsSelfTest::look()
+{
+    const QJsonObject now = report();
+    if (now == m_last)
+        return;
+    m_last = now;
+    if (m_publish)
+        m_publish("brulionLinkPartsSelfTest", now);
+}
+
 // ---- main.cpp --------------------------------------------------------------------------------
 
 // ---- PdfSelfTest -------------------------------------------------------------------------------
@@ -551,9 +639,10 @@ void startBrowserSelfTests(QQmlApplicationEngine *engine, shell::AppController *
     const bool pen = args.contains(u"--selftest-pen"_s);
     const bool pdfAuto = args.contains(u"--selftest-pdfauto"_s);
     const bool pdf = pdfAuto || args.contains(u"--selftest-pdf"_s);
-    if (!app || (!pictures && !pen && !pdf))
+    const bool linkParts = args.contains(u"--selftest-linkparts"_s);
+    if (!app || (!pictures && !pen && !pdf && !linkParts))
         return;
-    const auto run = [engine, app, pictures, pen, pdf, pdfAuto, publish] {
+    const auto run = [engine, app, pictures, pen, pdf, pdfAuto, linkParts, publish] {
         QQuickWindow *window = engine ? qobject_cast<QQuickWindow *>(engine->rootObjects().value(0)) : nullptr;
         if (pictures) {
             WebPicturesSelfTest::Options options;
@@ -571,6 +660,10 @@ void startBrowserSelfTests(QQmlApplicationEngine *engine, shell::AppController *
             test->start();
             if (pdfAuto)
                 QTimer::singleShot(2000, test, [test] { test->openNow(u"assets/wykład.pdf"_s); });
+        }
+        if (linkParts) {
+            auto *test = new LinkPartsSelfTest(window, app, publish, app);
+            test->start();
         }
     };
     if (app->status() == u"ready") {

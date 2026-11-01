@@ -57,6 +57,7 @@ set(BRULION_UI_QML
     qml/components/BKbd.qml
     qml/components/BKeyboardFocusKeeper.qml
     qml/components/BKeyboardPlaceholder.qml
+    qml/components/BLinkTargets.qml
     qml/components/BListItem.qml
     qml/components/BMenu.qml
     qml/components/BMenuItem.qml

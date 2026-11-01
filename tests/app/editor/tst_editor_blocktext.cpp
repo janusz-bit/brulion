@@ -1,6 +1,7 @@
 // Pure helpers of the block editor (src/app/editor/blocktext.h): block shapes and the inline
 // edit mapping, fences, token edits, completion triggers, slash commands, query/frontmatter data.
 #include "blocktext.h"
+#include "editorhost.h"
 
 #include "dates/local.h"
 #include "markdown/blockdocument.h"
@@ -1233,6 +1234,58 @@ private Q_SLOTS:
         QVERIFY(d.removed.size() + d.inserted.size() <= std::abs(before.size() - after.size()) + 4);
         if (before == after)
             QVERIFY(d.removed.isEmpty() && d.inserted.isEmpty());
+    }
+
+    // What a path part of a link opens, as EditorHost::linkPart() gives it (editorhost.h).
+    void linkPartMaps_data()
+    {
+        QTest::addColumn<int>("kind"); // -1: nullopt
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("prefix");
+        QTest::addColumn<QString>("name");
+        QTest::newRow("page") << int(markdown::LinkPartTarget::Kind::Page) << u"Klienci/Firma.md"_s << u"Firma"_s
+                              << u"page"_s;
+        QTest::newRow("folder") << int(markdown::LinkPartTarget::Kind::Folder) << u"Projekty/Zażółć gęślą"_s
+                                << u"Projekty/Zażółć gęślą"_s << u"folder"_s;
+        QTest::newRow("new") << int(markdown::LinkPartTarget::Kind::New) << QString() << u"Nowa"_s << u"new"_s;
+        QTest::newRow("none") << -1 << QString() << QString() << QString();
+    }
+    void linkPartMaps()
+    {
+        QFETCH(int, kind);
+        QFETCH(QString, path);
+        QFETCH(QString, prefix);
+        QFETCH(QString, name);
+        std::optional<markdown::LinkPartTarget> part;
+        if (kind >= 0)
+            part = markdown::LinkPartTarget{markdown::LinkPartTarget::Kind(kind), path, prefix};
+        const QVariantMap map = linkPartToMap(part);
+        QCOMPARE(map.value(u"kind"_s).toString(), name);
+        QCOMPARE(map.isEmpty(), kind < 0);
+        QCOMPARE(linkPartFromMap(map), part);
+    }
+    void malformedLinkPartMaps()
+    {
+        QVERIFY(!linkPartFromMap({}));
+        QVERIFY(!linkPartFromMap({{u"kind"_s, u"nonsense"_s}, {u"path"_s, u"a.md"_s}}));
+        QVERIFY(!linkPartFromMap({{u"kind"_s, u"PAGE"_s}}));
+        QVERIFY(!linkPartFromMap({{u"path"_s, u"a.md"_s}}));
+        QCOMPARE(linkPartFromMap({{u"kind"_s, u"folder"_s}})->path, QString());
+    }
+
+    // The route a path part of a link navigates to (editorhost.h linkPartRoute()).
+    void linkPartRoutes()
+    {
+        const QVariantMap route = linkPartRoute(u"part:1:Firma%2FAdam%20co%C5%9Btam"_s, u"journals/2026-10-14.md"_s);
+        QCOMPARE(route.value(u"view"_s).toString(), u"page"_s);
+        QCOMPARE(route.value(u"target"_s).toString(), u"Firma"_s);
+        QCOMPARE(route.value(u"linkTarget"_s).toString(), u"Firma/Adam cośtam"_s);
+        QCOMPARE(route.value(u"linkPart"_s).toInt(), 1);
+        QCOMPARE(route.value(u"from"_s).toString(), u"journals/2026-10-14.md"_s);
+        QVERIFY(!route.contains(u"path"_s));
+        for (const QString &bad :
+             {u"part:"_s, u"part:2:Firma%2FAdam"_s, u"part:01:A%2FB"_s, u"page:Firma"_s, QString()})
+            QVERIFY2(linkPartRoute(bad, QString()).isEmpty(), qPrintable(bad));
     }
 };
 
