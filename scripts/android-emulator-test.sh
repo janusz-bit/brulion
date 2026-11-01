@@ -2486,8 +2486,8 @@ adb logcat -c
 adb shell am start -W -n "$ACTIVITY" --es "$EXTRA.PATH" dziennik/zimny-start.md --ei "$EXTRA.LINE" 5 >/dev/null
 started=$SECONDS
 check "scheduleReminders round 1: 3 armed (past one skipped)" wait_for 20 log_has "SELFTEST schedule round=1 ok=1 scheduled=3 exact=1"
-check "scheduleReminders round 2: idempotent" log_has "SELFTEST schedule round=2 ok=1 scheduled=3 exact=1"
-check "permissions reported (notifications granted, exact alarms)" log_has "SELFTEST permissions(start) allFiles=0 notifications=1 exact=1"
+check "scheduleReminders round 2: idempotent" wait_for 10 log_has "SELFTEST schedule round=2 ok=1 scheduled=3 exact=1"
+check "permissions reported (notifications granted, exact alarms)" wait_for 10 log_has "SELFTEST permissions(start) allFiles=0 notifications=1 exact=1"
 # A PDF page through Android's PdfRenderer (src/platform/pdfpages_android.cpp, PdfPages.kt).
 # (Waited for: the self-test writes and draws the PDFs after the lines above.)
 check "PDF page drawn by PdfRenderer (red square, white corner)" \
