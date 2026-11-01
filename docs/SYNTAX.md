@@ -137,7 +137,8 @@ journal by its date), embeds, Markdown links and tags (`#Projekty/Dom` keeps its
 Exports (HTML, Pandoc, the clipboard's HTML) and `brulion-cli` keep one link. In the app a parent
 part is a `part:<k>:<target>` URL (`markdown::linkPartUrl()`); copying it ("Kopiuj link") gives
 `[[Page]]` by its shortest target, a folder's path with a trailing `/` (what a `path:` query
-filter takes) or `[[prefix]]` of a page not written yet.
+filter takes: quoted when it is not one token — a space, a comma, a quote —, `"Projekty/Zażółć
+gęślą/"`, `«…»` when it holds a `"`) or `[[prefix]]` of a page not written yet.
 
 **Rewriting on rename and move** (`VaultIndex::planRelocation()`): before files move, every link
 that the move can affect — wiki links, embeds and Markdown links to the moved files or to files of

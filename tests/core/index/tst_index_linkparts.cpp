@@ -171,6 +171,56 @@ private Q_SLOTS:
         QVERIFY(!index.noteFolder(u"A"_s));
     }
 
+    void folderSpellingFollowsTheNotes()
+    {
+        // A case-only folder rename, one note at a time (Workspace renames file by file): the
+        // folder's spelling moves with its notes, so a folder part opens the folder that exists.
+        VaultIndex index;
+        index.update(u"projekty/a.md"_s, u"- a"_s);
+        index.update(u"projekty/b.md"_s, u"- b"_s);
+        index.update(u"projekty/żółw/c.md"_s, u"- c"_s);
+        QCOMPARE(index.noteFolder(u"Projekty"_s).value_or(QString()), u"projekty"_s);
+        index.rename(u"projekty/a.md"_s, u"Projekty/a.md"_s, u"- a"_s);
+        QCOMPARE(index.noteFolder(u"Projekty"_s).value_or(QString()), u"projekty"_s); // two notes left
+        index.rename(u"projekty/b.md"_s, u"Projekty/b.md"_s, u"- b"_s);
+        QCOMPARE(index.noteFolder(u"Projekty"_s).value_or(QString()), u"projekty"_s); // c is left
+        index.rename(u"projekty/żółw/c.md"_s, u"Projekty/Żółw/c.md"_s, u"- c"_s);
+        QCOMPARE(index.noteFolder(u"projekty"_s).value_or(QString()), u"Projekty"_s);
+        QCOMPARE(index.noteFolder(u"PROJEKTY/ŻÓŁW"_s).value_or(QString()), u"Projekty/Żółw"_s);
+        QCOMPARE(describe(index.resolveLinkPart(u"Projekty/Nowy pomysł"_s, 1)), u"folder Projekty | Projekty"_s);
+        // Edits in place do not change the spelling.
+        index.update(u"Projekty/a.md"_s, u"- zmienione"_s);
+        QCOMPARE(index.noteFolder(u"projekty"_s).value_or(QString()), u"Projekty"_s);
+
+        // Two folders differing only in case (a case-sensitive file system after a sync): the
+        // first keeps the spelling while it has notes, then the one with the most notes left.
+        VaultIndex two;
+        two.update(u"Firma/a.md"_s, u"- a"_s);
+        two.update(u"firma/b.md"_s, u"- b"_s);
+        two.update(u"FIRMA/c.md"_s, u"- c"_s);
+        two.update(u"FIRMA/d.md"_s, u"- d"_s);
+        QCOMPARE(two.noteFolder(u"firma"_s).value_or(QString()), u"Firma"_s);
+        two.update(u"Firma/a.md"_s, u"- zmienione"_s); // its only note edited: no flip
+        QCOMPARE(two.noteFolder(u"firma"_s).value_or(QString()), u"Firma"_s);
+        two.remove(u"Firma/a.md"_s);
+        QCOMPARE(two.noteFolder(u"firma"_s).value_or(QString()), u"FIRMA"_s);
+        two.remove(u"FIRMA/c.md"_s);
+        two.remove(u"FIRMA/d.md"_s);
+        QCOMPARE(two.noteFolder(u"Firma"_s).value_or(QString()), u"firma"_s);
+        two.remove(u"firma/b.md"_s);
+        QVERIFY(!two.noteFolder(u"Firma"_s));
+        // A spelling that comes back after it was gone starts counting again.
+        two.update(u"Firma/e.md"_s, u"- e"_s);
+        two.update(u"firma/f.md"_s, u"- f"_s);
+        two.remove(u"firma/f.md"_s);
+        two.remove(u"Firma/e.md"_s);
+        QVERIFY(!two.noteFolder(u"firma"_s));
+        // A removal of a note the index does not know leaves the counts alone.
+        two.update(u"Firma/g.md"_s, u"- g"_s);
+        two.remove(u"firma/brak.md"_s);
+        QCOMPARE(two.noteFolder(u"firma"_s).value_or(QString()), u"Firma"_s);
+    }
+
     void partsFollowTheIndex()
     {
         // The folder gets its first note or loses its last: the part's target follows.

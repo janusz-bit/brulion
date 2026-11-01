@@ -446,8 +446,10 @@ public:
     /// ignored. Attachments are found too (`photo.png`).
     std::optional<VaultPath> resolveLink(const QString &target, const VaultPath &from = {}) const;
     /// The folder at `path` (case-insensitive, NFC; leading/trailing '/' ignored) when a note lies
-    /// in it or in one of its subfolders, spelled as the index spells it (the first note's
-    /// spelling); nullopt otherwise — "" (the root), a folder holding only attachments, an empty
+    /// in it or in one of its subfolders, spelled as the index spells it (the spelling of the
+    /// first note still there; after a case-only rename the new spelling, once the last note
+    /// under the old one has moved; of two folders differing only in case, the one that came
+    /// first while it holds notes); nullopt otherwise — "" (the root), a folder holding only attachments, an empty
     /// folder.
     std::optional<VaultPath> noteFolder(const QString &path) const;
     /// What parent part `part` (1 … n−1) of the page-link target `target` (as written: `[[A/B/C]]`

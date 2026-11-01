@@ -581,12 +581,13 @@ QSet<QString> VaultIndex::Private::putNote(const VaultPath &path, const QString 
 QSet<QString> VaultIndex::Private::putEntry(std::unique_ptr<Entry> e, bool updateSearch, std::optional<quint64> keepSeq)
 {
     const VaultPath path = e->path;
-    const std::unique_ptr<Entry> prev = detachNote(path, false);
+    // The same path: its folders keep counting it (the spelling stays put while it is edited).
+    const std::unique_ptr<Entry> prev = detachNote(path, false, false);
     e->seq = keepSeq.value_or(++seq);
     const QStringList aliases = e->note.aliases;
     QSet<QString> keys = prev ? QSet<QString>() : entryKeys(*e);
     const Entry *added = e.get();
-    attachNote(std::move(e));
+    attachNote(std::move(e), !prev);
     if (updateSearch)
         markSearch(path);
     if (prev && prev->note.aliases != aliases) {
@@ -601,13 +602,14 @@ QSet<QString> VaultIndex::Private::putEntry(std::unique_ptr<Entry> e, bool updat
     return keys;
 }
 
-void VaultIndex::Private::attachNote(std::unique_ptr<Entry> owned)
+void VaultIndex::Private::attachNote(std::unique_ptr<Entry> owned, bool countFolders)
 {
     Entry &e = *owned;
     const VaultPath path = e.path;
     entries[path] = std::move(owned);
     names.addNote(path, e.note.aliases);
-    countNoteFolders(path, 1);
+    if (countFolders)
+        countNoteFolders(path, 1);
     for (const int r : std::as_const(e.refs))
         multiAdd(blockRefSources, e.note.links[r].blockId, path);
     for (auto it = e.note.blockIds.cbegin(); it != e.note.blockIds.cend(); ++it)
@@ -637,15 +639,46 @@ void VaultIndex::Private::countNoteFolders(const VaultPath &path, int delta)
         const QString key = index_detail::pathKey(folder);
         if (delta > 0) {
             NoteFolder &f = noteFolders[key];
-            if (f.notes++ == 0)
-                f.spelled = folder;
-        } else if (const auto it = noteFolders.find(key); it != noteFolders.end() && (it->notes += delta) <= 0) {
-            noteFolders.erase(it);
+            if (f.notes == 0 || f.spelled == folder) {
+                if (f.notes++ == 0)
+                    f.spelled = folder;
+                continue;
+            }
+            const auto o = std::find_if(f.others.begin(), f.others.end(),
+                                        [&](const auto &other) { return other.first == folder; });
+            if (o != f.others.end())
+                ++o->second;
+            else
+                f.others.append({folder, 1});
+            continue;
+        }
+        const auto it = noteFolders.find(key);
+        if (it == noteFolders.end())
+            continue;
+        NoteFolder &f = *it;
+        if (f.spelled == folder) {
+            if (--f.notes > 0)
+                continue;
+            if (f.others.isEmpty()) {
+                noteFolders.erase(it);
+                continue;
+            }
+            // The spelling with the most notes left takes over (the earliest of equals).
+            const auto best = std::max_element(f.others.cbegin(), f.others.cend(),
+                                               [](const auto &a, const auto &b) { return a.second < b.second; });
+            f.spelled = best->first;
+            f.notes = best->second;
+            f.others.removeAt(best - f.others.cbegin());
+        } else if (const auto o = std::find_if(f.others.begin(), f.others.end(),
+                                               [&](const auto &other) { return other.first == folder; });
+                   o != f.others.end() && --o->second <= 0) {
+            f.others.erase(o);
         }
     }
 }
 
-std::unique_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(const VaultPath &path, bool discardSearch)
+std::unique_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(const VaultPath &path, bool discardSearch,
+                                                                          bool countFolders)
 {
     const auto it = entries.find(path);
     if (it == entries.end())
@@ -655,7 +688,8 @@ std::unique_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(cons
     const Entry &e = *owned;
     unlinkOutgoing(e);
     names.removeNote(path, e.note.aliases);
-    countNoteFolders(path, -1);
+    if (countFolders)
+        countNoteFolders(path, -1);
     for (const int r : e.refs)
         multiRemove(blockRefSources, e.note.links[r].blockId, path);
     for (auto b = e.note.blockIds.cbegin(); b != e.note.blockIds.cend(); ++b)

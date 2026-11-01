@@ -17,6 +17,24 @@ namespace brulion::notebook {
 
 namespace {
 
+/// A folder's path as a `path:` query value (docs/SYNTAX.md §10): bare when it is one token,
+/// else quoted ("Projekty/Zażółć gęślą/" with its quotes), by « » when it holds a '"'.
+QString queryPathValue(const QString &path)
+{
+    bool bare = !path.startsWith(u"//"_s) && !path.contains(u"[["_s) && !path.contains(u"]]"_s);
+    for (qsizetype k = 0; bare && k < path.size(); ++k) {
+        const QChar c = path[k];
+        bare = !c.isSpace() && c != u',' && c != u'"' && c != u'„' && c != u'“' && c != u'«';
+    }
+    if (bare)
+        return path;
+    if (!path.contains(u'"'))
+        return u'"' + path + u'"';
+    if (!path.contains(u'»'))
+        return u'«' + path + u'»';
+    return path; // no quote can hold it
+}
+
 /// "## Title" -> 2: an ATX heading marker (up to three spaces before it, a space or the end after).
 int atxLevel(QStringView line)
 {
@@ -111,7 +129,8 @@ CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultCo
                     });
             return {u"[["_s + page + u"]]"_s, part->path, QString()};
         }
-        case markdown::LinkPartTarget::Kind::Folder: return {part->path + u'/', part->path, part->path};
+        case markdown::LinkPartTarget::Kind::Folder:
+            return {queryPathValue(part->path + u'/'), part->path, part->path};
         case markdown::LinkPartTarget::Kind::New: return {u"[["_s + part->prefix + u"]]"_s, QString(), QString()};
         }
         return {};

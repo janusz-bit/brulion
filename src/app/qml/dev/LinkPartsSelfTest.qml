@@ -364,6 +364,9 @@ QtObject {
             // ---- 7. a (simulated) screen reader: every link an accessible link item ----------------------
             () => {
                 editor.listView.positionViewAtIndex(row, ListView.Center)
+                // Without a screen reader no text (a block, a table cell, a query result, an
+                // embed) carries a link layer: nothing lays the text out again.
+                check(window.findAll(editor, "linkLayer").length === 0, "no link layers without a screen reader")
                 DeviceInfo.simulateScreenReader = true
             },
             wait(() => window.findAll(window.delegateAt(row), "linkTarget").length === 2, "the screen reader sees two links"),
@@ -385,6 +388,7 @@ QtObject {
             wait(() => navigated() && route().linkPart === 1, "its press action follows the part"),
             () => DeviceInfo.simulateScreenReader = false,
             wait(() => window.findAll(window.delegateAt(row), "linkTarget").length === 0, "without a screen reader no items"),
+            () => check(window.findAll(editor, "linkLayer").length === 0, "and no link layers"),
             // ---- 8. a phone: the press underline, a flick opens nothing ----------------------------------
             () => {
                 if (!Theme.touchUi)

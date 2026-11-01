@@ -37,14 +37,15 @@ QString pageLinkTarget(const VaultPath &path, const VaultConfig &config, const V
 /// `[[#Heading]]` names `fromPath`) — as written when no page has that name (`path` "" then).
 /// For a path part of a link (part:, docs/SYNTAX.md §2 "Path parts"; `resolvePart(target, part,
 /// from)`: VaultIndex::resolveLinkPart()): a page by `[[pageLinkTarget()]]`, a folder by its path
-/// with a trailing '/' ("Klienci/Firma/", what a `path:` query filter takes), a new page by
-/// `[[prefix]]` as written; empty for a malformed part: URL or without `resolvePart`.
+/// with a trailing '/' as a `path:` query filter takes it (`Klienci/Firma/`; quoted when it is not
+/// one token: `"Projekty/Zażółć gęślą/"`), a new page by `[[prefix]]` as written; empty for a
+/// malformed part: URL or without `resolvePart`.
 /// `resolveLink(target, from)`: a link target written on `from` -> the page's path, "" when none.
 /// Empty `text` for other URLs.
 struct CopiedLink {
     QString text;
     QString path;   ///< page: the linked page's path ("" when it does not exist); part: the page's or the folder's
-    QString folder; ///< part: naming a folder — its vault path (then `text` is "<folder>/")
+    QString folder; ///< part: naming a folder — its vault path (then `text` is "<folder>/", maybe quoted)
 };
 CopiedLink
 copiedLink(const QString &url, const QString &fromPath, const VaultConfig &config,

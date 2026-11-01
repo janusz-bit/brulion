@@ -597,9 +597,10 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
     anchor of rendered text — each part too — is an `Accessible.Link` item of its own
     (`BLinkTargets` + `RichTextLinks`: the anchors' rectangles from a `TextEdit`'s document or the
     `Text`'s HTML laid out again), named by its text, with a focus ring; its press action does
-    what a click does. Nothing of it exists without a screen reader. Alt+Enter on the edited raw
-    line follows the link (part) at the caret (`PageController.linkAtCursor`, the shortcuts
-    above). The same in table cells, query results, embeds (`TransclusionView`), the properties'
+    what a click does. Nothing of it exists without a screen reader (an inactive `Loader` per
+    text; the layer, laid out once all its properties are set, comes and goes with the reader).
+    Alt+Enter on the edited raw line follows the link (part) at the caret
+    (`PageController.linkAtCursor`, the shortcuts above). The same in table cells, query results, embeds (`TransclusionView`), the properties'
     text values (`PropertyRow`), Tasks and calendar rows (`TasksRow`) and linked references
     (`ContentRefRow`); the embed frame's header and list-property chips stay single links.
 * `PageController` executes commands (one undo step each, typing coalesced), saves debounced
@@ -815,7 +816,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `PlanningActions.linkText` / `linkMissing`); on a path part of `[[Folder/Page]]` (a `part:`
   link): Otwórz (its page), **Pokaż folder** (a folder: its All pages) or Utwórz stronę (nothing
   there yet), Otwórz w panelu bocznym, Kopiuj link (`[[Strona]]`) or **Kopiuj ścieżkę folderu**
-  (`Projekty/Dom/`, what a `path:` filter takes; `LinkMenu.folder`, `PlanningActions.linkPartTarget`); on a
+  (`Projekty/Dom/`, what a `path:` filter takes — quoted when not one token,
+  `"Zażółć gęślą/"`; `LinkMenu.folder`, `PlanningActions.linkPartTarget`); on a
   `#tag`: Otwórz stronę tagu, Otwórz w panelu bocznym, Widok tagu, Zadania z tym tagiem, Kopiuj tag
   (`#tag`, `#[[tag ze spacjami]]`); on a `((block))`: Otwórz, Otwórz w panelu bocznym, Kopiuj link;
   on a web address: Otwórz w przeglądarce, Kopiuj adres. Every copy says "Skopiowano …" or that the

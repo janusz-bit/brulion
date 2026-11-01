@@ -28,7 +28,7 @@ Item {
     /// The link items exist (shown, a screen reader is on and the text has links).
     readonly property bool active: shown && DeviceInfo.screenReader && root.html.indexOf("<a ") >= 0
     /// The current link items' data [{href, text, x, y, width, height}] (self-tests).
-    readonly property var linkData: richLinks.links
+    readonly property var linkData: loader.item ? (loader.item as LinkLayer).links : []
 
     /// A link item was activated: do what a click on `href` at (x, y) of the text item does.
     signal activated(string href, real x, real y)
@@ -39,53 +39,88 @@ Item {
     height: textItem ? textItem.height : 0
     visible: active
 
-    RichTextLinks {
-        id: richLinks
-        enabled: root.active
-        textDocument: root.textItem instanceof TextEdit ? (root.textItem as TextEdit).textDocument : null
-        html: root.textItem instanceof TextEdit ? "" : root.html
-        font: root.textItem instanceof TextEdit ? (root.textItem as TextEdit).font
-              : root.textItem instanceof Text ? (root.textItem as Text).font : Qt.font({})
-        width: root.width
-        lineHeight: root.lineHeight
-        alignment: root.textItem instanceof Text ? (root.textItem as Text).horizontalAlignment
-                   : root.textItem instanceof TextEdit ? (root.textItem as TextEdit).horizontalAlignment : Text.AlignLeft
-        maxHeight: root.maxHeight
+    // Created only while active: a table cell, a query result or a Tasks row without a screen
+    // reader carries this Item and an inactive Loader, nothing that lays the text out again or
+    // follows its document.
+    Loader {
+        id: loader
+        anchors.fill: parent
+        active: root.active
+        sourceComponent: LinkLayer {
+            textItem: root.textItem
+            html: root.html
+            lineHeight: root.lineHeight
+            maxHeight: root.maxHeight
+            onActivated: (href, x, y) => root.activated(href, x, y)
+        }
     }
 
-    Repeater {
-        model: root.active ? richLinks.links : []
-        delegate: Item {
-            id: target
-            required property var modelData
-            objectName: "linkTarget"
-            x: modelData.x
-            y: modelData.y
-            width: modelData.width
-            height: modelData.height
-            activeFocusOnTab: false
-            Accessible.role: Accessible.Link
-            Accessible.name: modelData.text
-            Accessible.focusable: true
-            Accessible.onPressAction: target.activate()
-            Keys.onReturnPressed: target.activate()
-            Keys.onEnterPressed: target.activate()
-            Keys.onSpacePressed: target.activate()
-            function activate() {
-                root.activated(target.modelData.href, target.x + target.width / 2, target.y + target.height / 2)
-            }
-            /// The href (self-tests).
-            readonly property string href: modelData.href
+    /// The link items over the text (BLinkTargets' properties, the item's size).
+    component LinkLayer: Item {
+        id: layer
+        objectName: "linkLayer"
 
-            // Which link the keyboard or screen-reader focus is on.
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: -2
-                visible: target.activeFocus
-                color: "transparent"
-                radius: Theme.radiusXs
-                border.color: Theme.focusRing
-                border.width: Theme.focusRingWidth
+        property Item textItem
+        property string html
+        property real lineHeight: 0
+        property real maxHeight: 0
+        readonly property var links: richLinks.links
+        // Every property set first, then one layout (each setter of an enabled RichTextLinks
+        // lays the text out).
+        property bool ready: false
+
+        signal activated(string href, real x, real y)
+
+        Component.onCompleted: ready = true
+
+        RichTextLinks {
+            id: richLinks
+            enabled: layer.ready
+            textDocument: layer.textItem instanceof TextEdit ? (layer.textItem as TextEdit).textDocument : null
+            html: layer.textItem instanceof TextEdit ? "" : layer.html
+            font: layer.textItem instanceof TextEdit ? (layer.textItem as TextEdit).font
+                  : layer.textItem instanceof Text ? (layer.textItem as Text).font : Qt.font({})
+            width: layer.width
+            lineHeight: layer.lineHeight
+            alignment: layer.textItem instanceof Text ? (layer.textItem as Text).horizontalAlignment
+                       : layer.textItem instanceof TextEdit ? (layer.textItem as TextEdit).horizontalAlignment : Text.AlignLeft
+            maxHeight: layer.maxHeight
+        }
+
+        Repeater {
+            model: richLinks.links
+            delegate: Item {
+                id: target
+                required property var modelData
+                objectName: "linkTarget"
+                x: modelData.x
+                y: modelData.y
+                width: modelData.width
+                height: modelData.height
+                activeFocusOnTab: false
+                Accessible.role: Accessible.Link
+                Accessible.name: modelData.text
+                Accessible.focusable: true
+                Accessible.onPressAction: target.activate()
+                Keys.onReturnPressed: target.activate()
+                Keys.onEnterPressed: target.activate()
+                Keys.onSpacePressed: target.activate()
+                function activate() {
+                    layer.activated(target.modelData.href, target.x + target.width / 2, target.y + target.height / 2)
+                }
+                /// The href (self-tests).
+                readonly property string href: modelData.href
+
+                // Which link the keyboard or screen-reader focus is on.
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: -2
+                    visible: target.activeFocus
+                    color: "transparent"
+                    radius: Theme.radiusXs
+                    border.color: Theme.focusRing
+                    border.width: Theme.focusRingWidth
+                }
             }
         }
     }
