@@ -1158,7 +1158,8 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   więc Android tworzy aktywność od nowa. Sprawdza, że co najmniej raz stało się to przed startem
   Qt (`BrulionActivity: recreated before Qt started`) i że po każdej próbie na ekranie jest notatka
   z powiadomienia (także po restarcie samej aplikacji; po restarcie przez Qt — po angielsku, bez
-  argumentów i notatki — wystarczy dolna nawigacja notatnika), wpisy Qt `brulion.*` w logcat —
+  argumentów i notatki — wystarczy dolna nawigacja notatnika albo, gdy żaden notatnik nie był
+  jeszcze otwarty, ekran powitalny), wpisy Qt `brulion.*` w logcat —
   żadnego pustego okna;
   wypisuje wynik każdej próby (przed startem Qt / po nim / bez ponownego utworzenia). Zrzuty
   `rl-*.png`, logcat każdej próby `rl-logcat-<n>.txt`. Sprawdzone 2026-11-01 na GitHub Actions

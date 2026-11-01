@@ -636,8 +636,9 @@ if ((RELAUNCH)); then
   rl_note() { ui_has 'Witaj w Brulionie' || ui_has 'Brulion to notatnik w zwykłych plikach Markdown[^"]*'; }
   # The bottom navigation: the shell with a notebook. In English after Qt's own restart (a relaunch
   # once Qt runs: QtActivity restarts the app with a bare launcher intent — the arguments and the
-  # note are gone).
-  rl_journal() { ui_has 'Kalendarz|Calendar'; }
+  # note are gone), or its welcome screen when no notebook was opened yet (the first attempt after
+  # the install: --demo never ran).
+  rl_journal() { ui_has 'Kalendarz|Calendar' || ui_has 'Welcome to Brulion'; }
   before=0 after=0 none=0 blank=0 shown=0 note_lost=0
   attempt=0
   # The start: the process, Qt's libraries loaded in onCreate, Qt started at the first layout. The
@@ -672,7 +673,7 @@ if ((RELAUNCH)); then
       [[ $outcome != relaunched\ before* ]] || app_shot "rl-restarted-$attempt"
     elif rl_qt_logged && rl_journal; then
       shown=$((shown + 1))
-      outcome+="; the notebook is on screen, not the notification's note"
+      outcome+="; the notebook (or the welcome screen) is on screen, not the notification's note"
       # Lost only through Qt's own restart (after Qt started).
       [[ $outcome == relaunched\ after* ]] || note_lost=$((note_lost + 1))
       app_shot "rl-no-note-$attempt"
