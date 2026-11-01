@@ -10,7 +10,11 @@
 #include "pdfviewimageprovider.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QPageSize>
+#include <QPainter>
+#include <QPdfWriter>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -340,6 +344,56 @@ private Q_SLOTS:
         PdfReaderPool::instance().reportFailure(fixture(u"wyklad.pdf"_s), u"stara"_s, 2);
         QTest::qWait(20);
         QVERIFY(!pages->data(pages->index(1), PdfVisiblePages::FailedRole).toBool());
+    }
+
+    void timingsOfALongPdf()
+    {
+        // docs/PERFORMANCE.md "PDF viewer": a 300-page lecture (text on every page) opened (Ready),
+        // its sizes all known, the first page drawn at a phone's fit width (1080 px), a thumbnail
+        // (768 px). Informative: the times are printed; only gross regressions fail.
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"długi wykład.pdf"_s);
+        {
+            QPdfWriter writer(path);
+            writer.setResolution(72);
+            writer.setPageSize(QPageSize(QPageSize::A4));
+            QPainter p(&writer);
+            QFont font;
+            font.setPointSize(14);
+            p.setFont(font);
+            for (int page = 1; page <= 300; ++page) {
+                if (page > 1)
+                    writer.newPage();
+                for (int line = 0; line < 30; ++line)
+                    p.drawText(QPointF(50, 60 + line * 24), u"Strona %1, wiersz %2: zażółć gęślą jaźń"_s.arg(page).arg(line));
+            }
+        }
+        QElapsedTimer timer;
+        timer.start();
+        auto model = opened(path, 360, 740);
+        QTRY_COMPARE_WITH_TIMEOUT(model->status(), Status::Ready, 20000);
+        const qint64 ready = timer.elapsed();
+        QCOMPARE(model->pageCount(), 300);
+        timer.restart();
+        brulion::platform::PdfInfo info;
+        PdfReaderPool::Lease lease = PdfReaderPool::instance().acquire(path, u"t"_s, &info);
+        QVERIFY(lease);
+        const qint64 open = timer.elapsed();
+        timer.restart();
+        const QImage page = lease->render(1, QSize(1080, 1527));
+        const qint64 render = timer.elapsed();
+        timer.restart();
+        const QImage thumb = lease->render(150, QSize(543, 768));
+        const qint64 thumbnail = timer.elapsed();
+        timer.restart();
+        const int hits = int(lease->find(300, u"GESLA"_s).size());
+        const qint64 search = timer.elapsed();
+        qInfo("%s, 300 pages: Ready %lld ms, open %lld ms, page 1 at 1080 px %lld ms, a thumbnail %lld ms, "
+              "search of a page %lld ms (%d hits)",
+              qPrintable(brulion::platform::pdfBackendName()), ready, open, render, thumbnail, search, hits);
+        QVERIFY(!page.isNull());
+        QVERIFY(!thumb.isNull());
+        QVERIFY(ready < 10000);
     }
 
     void readerPoolReuses()

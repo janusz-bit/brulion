@@ -96,6 +96,7 @@ Obsidiana bez importu") — in memory, until the settings are saved.
 | `[[#^abc123]]` / `[[#Heading]]` | same-page link |
 | `![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]` | embed (transclusion) |
 | `![[photo.png]]`, `![[doc.pdf]]` | attachment embed |
+| `![[doc.pdf#page=3]]`, `[[doc.pdf#page=3]]` | a PDF's page: its thumbnail / the PDF viewer at that page (Obsidian) |
 | `((abc123))` | Logseq-style block reference — resolves the id **vault-wide** |
 | `!((abc123))` | block embed |
 | `[text](url)`, `[text](relative/path.md)`, `<https://..>`, bare `https://...` | standard links |
@@ -166,6 +167,16 @@ Attachments inside a moved folder are covered too (`![[Projekty/plan.png]]`,
 picture view, the file dialog and the HTML export share) is embedded as a picture; any other
 attachment as a file. Whether the app can draw it depends on the device's image decoders (WebP
 and AVIF are often missing): the picture view then names the format instead of a load error.
+
+**PDFs:** an attachment named `.pdf` (any case; `paths::isPdfPath`) is embedded as the thumbnail of
+its first page — `![[wykład.pdf#page=3]]` (Obsidian's syntax; also `![](assets/wyk%C5%82ad.pdf#page=3)`)
+the third page's; `#height=400` (Obsidian's embed height) and other `key=value` pairs, joined with
+`&`, are accepted and ignored; a page that is no number, 0 or beyond the end shows page 1
+(`markdown::pdfFragmentPage`). A click on it, or a link `[[wykład.pdf]]` / `[[wykład.pdf#page=3]]`,
+opens the PDF viewer at that page (docs/UI.md "PDF viewer"); where no PDF renderer is built in (the
+browser) the PDF opens in a new browser tab. PDFs are ordinary attachments otherwise: moves and
+renames rewrite their links like any other file's. A drawing made on a page of a PDF ("Rysuj na tej
+stronie") is embedded as a block of its own right after the block embedding the PDF.
 
 **Drawings / Rysunki:** a drawing is an ordinary SVG attachment, embedded like any picture
 (`![[Rysunek 2026-10-27 14.32.svg]]`; "/Rysunek" creates `Rysunek <yyyy-MM-dd HH.mm>.svg` in
