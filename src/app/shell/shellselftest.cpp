@@ -2361,6 +2361,94 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     settle(200);
 }
 
+/// 5k. The path parts of a link to a page in a folder (docs/SYNTAX.md §2 "Path parts"), with real
+///     input: in [[Projekty/Remont mieszkania]] a click or tap on "Projekty" (a folder of the
+///     sample notebook without a page of that name) opens the folder's pages (All pages with its
+///     path, the breadcrumb "Projekty"), on "Remont mieszkania" the page; the part's menu (a
+///     right-click, a long press) offers "Pokaż folder", and on the desktop its "Otwórz w panelu
+///     bocznym" shows the folder in the side panel. The note's text is never changed.
+void checkLinkParts(QQuickWindow *window, AppController *app, const Check &check,
+                    const std::function<QObject *(const QString &)> &controllerFor)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    const QString path = u"Linki/Części ścieżki.md"_s;
+    const QString content = u"- Zapytać się [[Projekty/Remont mieszkania]] o plan\n"_s;
+    ws->write(path, content);
+    const auto open = [&]() -> QQuickItem * {
+        app->openPage(path);
+        QQuickItem *text = nullptr;
+        waitFor([&] {
+            QObject *page = controllerFor(path);
+            text = page && page->property("loaded").toBool() && app->currentRoute().value(u"path"_s).toString() == path
+                           ? renderedTextContaining(window->contentItem(), u"part:1:Projekty"_s)
+                           : nullptr;
+            return text != nullptr;
+        });
+        settle(200);
+        return text;
+    };
+    const auto routeIs = [app](const QString &view, const QString &routePath) {
+        return waitFor([&] {
+            return app->currentRoute().value(u"view"_s).toString() == view
+                   && app->currentRoute().value(u"path"_s).toString() == routePath;
+        });
+    };
+    QQuickItem *text = open();
+    check(text != nullptr, "[[Projekty/Remont mieszkania]] is drawn with its path part as a link");
+    if (!text)
+        return;
+    // "Projekty": the folder's pages.
+    tapOrClick(window, linkPoint(text, u"part:1:Projekty"_s), touch);
+    check(routeIs(u"allPages"_s, u"Projekty"_s), "a click or tap on “Projekty” opens the folder's pages");
+    check(waitFor([&] {
+              return findShown(window->contentItem(), [](QQuickItem *item) {
+                         return item->property("text").toString() == u"Remont mieszkania" && item->isVisible();
+                     }) != nullptr;
+          }),
+          "the folder's view lists its page");
+    app->back();
+    text = open();
+    // "Remont mieszkania": the page, as before.
+    if (text)
+        tapOrClick(window, linkPoint(text, u"page:Projekty%2FRemont"_s), touch);
+    check(text && routeIs(u"page"_s, u"Projekty/Remont mieszkania.md"_s), "a click or tap on “Remont mieszkania” opens the page");
+    app->back();
+    text = open();
+    // The part's menu.
+    if (text) {
+        const QPointF at = linkPoint(text, u"part:1:Projekty"_s);
+        if (touch)
+            touchTap(window, at, 1000);
+        else
+            mouseClick(window, at, Qt::RightButton);
+    }
+    const auto menuItem = [window](const QString &name) {
+        return findShown(window->contentItem(), [&](QQuickItem *item) { return item->objectName() == name; });
+    };
+    check(text && waitFor([&] { return openMenus(window) == 1 && menuItem(u"linkMenuOpen"_s) != nullptr; }),
+          touch ? "a long press on “Projekty” opens its menu" : "a right-click on “Projekty” opens its menu");
+    QQuickItem *openItem = menuItem(u"linkMenuOpen"_s);
+    check(openItem && openItem->property("text").toString() == QCoreApplication::translate("LinkMenu", "Show folder"),
+          "the folder's menu says “Pokaż folder”");
+    QQuickItem *side = menuItem(u"linkMenuOpenSide"_s);
+    if (!touch && app->sidePanelAllowed() && side) {
+        tapOrClick(window, pointIn(side), false);
+        check(waitFor([&] {
+                  return app->sidePanelRoute().value(u"view"_s).toString() == u"allPages"
+                         && app->sidePanelRoute().value(u"path"_s).toString() == u"Projekty" && app->sidePanelVisible();
+              }),
+              "its “Otwórz w panelu bocznym” shows the folder's pages in the side panel");
+        app->clearSidePanelRoute(); // back to the page's own panel (the later steps use it)
+        app->setSidePanelVisible(false);
+    }
+    closeMenus(window);
+    settle(200);
+    check(ws->readFile(path) == content, "the note with the link is unchanged");
+    app->goHome();
+    settle(200);
+}
+
 /// 5g. Links to blocks and headings (docs/SYNTAX.md §2 "Copied links"), with real input: a link
 ///     to a block of this page whose block was moved to another page opens that page with the
 ///     block selected; a heading the page lacks is said (followed from the text and as a route),
@@ -5156,6 +5244,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
 
             // 5g. Links to blocks and headings: followed, missing, copied from the palette.
             checkBlockLinks(window, app, check, controllerFor);
+            // 5k. The path parts of a link to a page in a folder.
+            checkLinkParts(window, app, check, controllerFor);
             // 5b. A picture opens as a picture (checkPictureView).
             checkPictureView(window, app, check, controllerFor);
             // 5i. A drawing: opened from its embed, drawn with real input, saved by itself.
