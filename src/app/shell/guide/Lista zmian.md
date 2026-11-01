@@ -14,6 +14,7 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 **Zmiany**
 
 **Poprawki**
+- **Android: puste okno przy starcie** — gdy system tworzy okno Brulionu od nowa w chwili, gdy aplikacja dopiero startuje (np. zmiana kolorów motywu systemu tuż po uruchomieniu albo zaraz po włączeniu telefonu), okno nie zostaje już puste: Brulion sam uruchamia się jeszcze raz i otwiera notatnik, także notatkę z dotkniętego powiadomienia.
 
 ## 0.6.0 — 1 listopada 2026
 

@@ -432,20 +432,19 @@ toolbar_on_keyboard_report() {
 }
 app_shot() { adb exec-out screencap -p >"$OUT/$1.png" || true; }
 start_app() { # <app arguments> [more am start arguments]
-  local try
-  for try in 1 2; do
-    adb shell am force-stop "$PKG"
-    adb logcat -c
-    adb shell am start -W -n "$ACTIVITY" --es applicationArguments "'$1'" \
-      --es extraenvvars_QT_LOGGING_RULES "brulion.platform.debug=true" "${@:2}" >/dev/null
-    sleep 25
-    # A freshly booted emulator still applies its overlays for a while: a configuration change no
-    # app can handle itself (CONFIG_ASSETS_PATHS, "Config changes=80000000"), so Android relaunches
-    # the activity — and Qt's activity relaunched while the app still starts keeps a blank window
-    # (TODO.md, Android). Not what a mode tests: started once more, with the system settled.
-    adb logcat -d | grep -q 'finishDrawing of relaunch: Window{[^}]*BrulionActivity' || return 0
-    ((try == 1)) && echo "    (Android relaunched the activity while the app started — started again)"
-  done
+  adb shell am force-stop "$PKG"
+  adb logcat -c
+  adb shell am start -W -n "$ACTIVITY" --es applicationArguments "'$1'" \
+    --es extraenvvars_QT_LOGGING_RULES "brulion.platform.debug=true" "${@:2}" >/dev/null
+  sleep 25
+  # A freshly booted emulator still applies its overlays for a while: a configuration change no
+  # app can handle itself (CONFIG_ASSETS_PATHS, "Config changes=80000000"), so Android relaunches
+  # the activity. Relaunched before Qt started, the app restarts itself (BrulionActivity,
+  # StartupRelaunch.kt) — with the same intent, so the arguments stay; it needs a few more seconds.
+  if adb logcat -d -s BrulionActivity:W | grep -q 'recreated before Qt started'; then
+    echo "    (Android relaunched the activity while the app started: the app restarted itself)"
+    sleep 15
+  fi
 }
 # Reports of the keyboard observer (ImeInsets.kt logs each one with this property set).
 ime_frames() { adb logcat -d -s BrulionIme:D | grep -c 'animating=true' || true; }

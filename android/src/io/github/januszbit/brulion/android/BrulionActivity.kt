@@ -5,19 +5,48 @@ package io.github.januszbit.brulion.android
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
+import android.util.Log
+import android.view.ViewGroup
 import org.qtproject.qt.android.bindings.QtActivity
 
 /**
  * Brulion's main activity: Qt's activity plus the hooks [BrulionAndroid] needs — the note a
  * tapped notification points at (launch intent or `onNewIntent`, launch mode singleTop), the
  * answers of runtime permission dialogs and of the ringtone pickers —, the on-screen keyboard's
- * observer ([ImeInsets]) and the system bars' icons after the app's theme.
+ * observer ([ImeInsets]) and the system bars' icons after the app's theme. Recreated before Qt
+ * started, it restarts the app ([StartupRelaunch]).
  */
 class BrulionActivity : QtActivity() {
+  private var restarting = false
+
   override fun onCreate(savedInstanceState: Bundle?) {
+    val createdBefore = createdInProcess
+    createdInProcess = true
     super.onCreate(savedInstanceState)
+    val content = findViewById<ViewGroup>(android.R.id.content)
+    val restarts = intent?.getIntExtra(StartupRelaunch.EXTRA_RESTARTS, 0) ?: 0
+    if (StartupRelaunch.needsRestart(createdBefore, content?.childCount ?: 0, isFinishing, restarts)) {
+      restartApp(restarts + 1)
+      return
+    }
     BrulionAndroid.onActivityCreated(this)
     ImeInsets.install(this)
+  }
+
+  /**
+   * The app started afresh with this activity's intent (its extras: a notification's note, a
+   * debuggable build's arguments), as QtActivity restarts it after a relaunch once Qt runs.
+   */
+  private fun restartApp(restarts: Int) {
+    Log.w(TAG, "recreated before Qt started (a configuration change during the start): restart $restarts")
+    restarting = true
+    val restart = Intent(intent ?: Intent())
+      .setComponent(componentName)
+      .putExtra(StartupRelaunch.EXTRA_RESTARTS, restarts)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    startActivity(restart)
+    finish()
+    Runtime.getRuntime().exit(0)
   }
 
   // Qt sets the system bars' icons after the system's day/night mode here: the app's theme wins.
@@ -45,8 +74,17 @@ class BrulionActivity : QtActivity() {
   }
 
   override fun onDestroy() {
-    ImeInsets.uninstall(this)
-    BrulionAndroid.onActivityDestroyed(this)
+    if (!restarting) {
+      ImeInsets.uninstall(this)
+      BrulionAndroid.onActivityDestroyed(this)
+    }
     super.onDestroy()
+  }
+
+  private companion object {
+    const val TAG = "BrulionActivity"
+
+    /** A BrulionActivity of this process got as far as onCreate (Qt's libraries are loaded). */
+    var createdInProcess = false
   }
 }

@@ -84,17 +84,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   przy nierozwiązanym linku); link z własnym tekstem (`[[Firma/Adam cośtam|Adam]]`) zostaje
   jednym linkiem; na telefonie dotknięcie części tak samo.
 
-## Android
-
-* **Puste okno po ponownym utworzeniu aktywności w trakcie startu** — gdy Android tworzy
-  `BrulionActivity` od nowa, zanim Qt skończy start (zmiana konfiguracji, której aplikacja nie
-  może obsłużyć sama: `CONFIG_ASSETS_PATHS`, np. nakładki stosowane tuż po uruchomieniu emulatora
-  albo zmiana kolorów motywu systemu w tej chwili), okno zostaje puste, a notatnik się nie otwiera
-  (logcat: `finishDrawing of relaunch: Window{… BrulionActivity}`, potem żadnych wpisów
-  `brulion.*`). Zdarza się w emulatorze w kilka sekund po starcie systemu (było już przed zmianami
-  wyglądu 0.6.0); `scripts/android-emulator-test.sh` uruchamia wtedy aplikację drugi raz. Do zbadania w
-  `QtActivity` (Qt 6.11): ponowne podpięcie okna do aplikacji, która jeszcze startuje.
-
 ## Windows
 
 * **Podpisane pliki** — instalator i programy podpisane certyfikatem, bez ostrzeżenia SmartScreen;
