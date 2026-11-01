@@ -1,5 +1,6 @@
 #include "workspacesync.h"
 
+#include "pdfrenderpool.h"
 #include "picturesize.h"
 #include "workspace.h"
 
@@ -322,6 +323,7 @@ void WorkspaceSync::teardown()
     m_scheduler.reset();
     m_engine.reset();
     m_client.reset();
+    suspendPdfReaders(false); // (a run abandoned: no runFinished)
     m_liveTimer.stop();
     m_liveTick.stop();
     if (!m_live.isEmpty()) {
@@ -376,6 +378,8 @@ void WorkspaceSync::rebuild()
     });
     connect(m_scheduler.get(), &sync::SyncScheduler::progressChanged, this, &WorkspaceSync::scheduleLive);
     connect(m_scheduler.get(), &sync::SyncScheduler::runStarted, this, &WorkspaceSync::scheduleLive);
+    // The run may replace, move or delete a PDF: no reader keeps one open meanwhile (Windows).
+    connect(m_scheduler.get(), &sync::SyncScheduler::runStarted, this, [this] { suspendPdfReaders(true); });
     connect(m_scheduler.get(), &sync::SyncScheduler::runFinished, this, &WorkspaceSync::onRunFinished);
     connect(m_scheduler.get(), &sync::SyncScheduler::synced, this, &WorkspaceSync::onSynced);
     // Which account and folder (never the password): the first lines to look at in a log.
@@ -389,6 +393,17 @@ void WorkspaceSync::rebuild()
         m_startTimer.start();
     Q_EMIT configurationChanged();
     Q_EMIT statusChanged();
+}
+
+void WorkspaceSync::suspendPdfReaders(bool suspend)
+{
+    if (suspend == m_pdfReadersSuspended)
+        return;
+    m_pdfReadersSuspended = suspend;
+    if (suspend)
+        pdfview::PdfReaderPool::instance().suspendIdle();
+    else
+        pdfview::PdfReaderPool::instance().resumeIdle();
 }
 
 void WorkspaceSync::notifyLocalChange()

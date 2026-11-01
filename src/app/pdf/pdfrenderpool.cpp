@@ -148,6 +148,8 @@ PdfReaderPool::Lease PdfReaderPool::acquire(const QString &file, const QString &
 void PdfReaderPool::giveBack(const QString &file, const QString &version, std::unique_ptr<platform::PdfReader> reader)
 {
     std::list<Idle> closed; // closed outside the lock
+    if (reader->lost() || m_suspended.load() > 0)
+        return; // (closed here: never given to the next thread / kept open while a sync runs)
     {
         const std::lock_guard lock(m_lock);
         // A reader of an older version of the file is not kept.
@@ -212,6 +214,18 @@ void PdfReaderPool::forget(const QString &file)
         else
             ++it;
     }
+}
+
+void PdfReaderPool::suspendIdle()
+{
+    ++m_suspended;
+    closeIdle();
+}
+
+void PdfReaderPool::resumeIdle()
+{
+    if (m_suspended.load() > 0)
+        --m_suspended;
 }
 
 void PdfReaderPool::closeIdle()

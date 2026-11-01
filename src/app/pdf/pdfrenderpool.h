@@ -22,6 +22,7 @@
 #include <QString>
 #include <QTimer>
 
+#include <atomic>
 #include <functional>
 #include <list>
 #include <memory>
@@ -84,6 +85,13 @@ public:
     void forget(const QString &file);
     /// Every idle reader closed (the viewer closed; tests; the app quits).
     void closeIdle();
+    /// While suspended (counted: suspendIdle() / resumeIdle() in pairs) no reader waits idle: the
+    /// idle ones are closed now and a lease given back is closed — Brulion's own sync run may
+    /// replace, move or delete a PDF, which Windows refuses while a reader holds it open
+    /// (WorkspaceSync: from the run's start to its end). Any thread.
+    void suspendIdle();
+    void resumeIdle();
+    bool idleSuspended() const { return m_suspended.load() > 0; }
     /// The idle readers (tests).
     int idleCount() const;
     /// A page that could not be drawn (the image provider; any thread): pageFailed() on the GUI
@@ -110,6 +118,7 @@ private:
     std::list<Idle> m_idle; ///< the most recently given back first
     QTimer m_closer;        ///< (GUI thread; a child, moves with the pool) closes readers idle for IdleCloseMs
     int m_opened = 0;
+    std::atomic_int m_suspended = 0;
 };
 
 } // namespace brulion::pdfview

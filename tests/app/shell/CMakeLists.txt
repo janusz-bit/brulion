@@ -155,7 +155,7 @@ set_tests_properties(tst_shell_workspace_wiring_inline PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;BRULION_INDEX_THREADS=0;QTEST_FUNCTION_TIMEOUT=${_wiring_timeout_ms}")
 if(TARGET brulion_sync_testsupport)
     brulion_add_test(tst_shell_workspace_sync SOURCES tst_workspace_sync.cpp
-        LIBS brulion_shell brulion_sync_testsupport)
+        LIBS brulion_shell brulion_sync_testsupport brulion_pdfview)
     # Nextcloud per notebook through AppController and the in-memory server: the settings of
     # 0.3.0 and older going to the notebook that was synced (never mixing two notebooks in one
     # server folder), the same notebook through a symlink or a relative path, the start screen.

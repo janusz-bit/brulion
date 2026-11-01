@@ -70,6 +70,7 @@ void WorkspaceSync::openHistory()
 
 void WorkspaceSync::onRunFinished(const sync::SyncReport &report, bool stalled)
 {
+    suspendPdfReaders(false);
     if (m_history)
         m_history->add(report, stalled);
     QStringList folders;
