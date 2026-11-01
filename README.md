@@ -180,7 +180,9 @@
   jako `[[Projekty/Dom]]`. Dzień dziennika to też plik: źle zapisany przeniesiesz albo zmienisz mu
   nazwę tak samo. Nowy folder zakładasz z „+” przy „Strony”, nowa strona trafia do folderu
   otwartej strony, drzewo samo pokazuje otwartą stronę i sortuje po polsku („Rozdział 2” przed
-  „Rozdział 10”), a „Wszystkie strony” przeglądasz folder po folderze.
+  „Rozdział 10”), a „Wszystkie strony” przeglądasz folder po folderze. W linku
+  `[[Projekty/Dom]]` każda część ścieżki to osobny link: „Projekty” otwiera stronę albo folder
+  Projekty.
 * **Wiersz poleceń i agenci AI.** `brulion-cli` dopisuje do dziennika, dodaje zadania
   i przypomnienia, szuka i przenosi strony z terminala albo skryptu — dokładnie tak jak
   aplikacja — a `brulion-cli mcp` udostępnia to samo agentom AI (MCP). Na komputerze agent może
@@ -347,6 +349,7 @@ usuwa go w całości.
 | `Enter` / `Shift+Enter` | nowy blok (na początku tekstu: pusty blok nad nim, przy zadaniu puste zadanie) / nowa linia w bloku |
 | `Tab` / `Shift+Tab` | wcięcie / wysunięcie bloku z dziećmi |
 | `Alt+↑` / `Alt+↓` | przeniesienie bloku z dziećmi |
+| `Alt+Enter` | otwórz link (część linku) pod kursorem; z `Shift` — w panelu bocznym |
 | `Ctrl+Enter` | zmiana statusu zadania po kolei (brak → do zrobienia → w toku → zrobione → brak) |
 | `Ctrl+Shift+Enter` | menu statusu zadania (dowolny status albo bez statusu) |
 | `Ctrl+.` | zwiń / rozwiń |
@@ -462,6 +465,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   `[[Projects/Home]]`, and moving the journals or templates folder updates the notebook's
   settings. A daily note is a file too: a misfiled day is moved or renamed the same way. The tree reveals the
   open page and sorts in Polish order with numbers by value; All pages browses folder by folder.
+  In a link `[[Projects/Home]]` each path part is a link of its own (Logseq-like namespaces):
+  "Projects" opens that page, or the folder when there is none.
 * Copy a link to any block or heading — `((id))`, `[[Page#^id]]`, `[[Page#Heading]]` or an embed
   — from the block menu (a right-click, a long press on the bullet, or "More" on the phone's
   editing toolbar); `Ctrl+Shift+C` copies the reference `((id))`. Following one scrolls to it and

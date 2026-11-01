@@ -265,7 +265,8 @@ Chromium: `$CHROME` albo `chromium`/`google-chrome` z `PATH`; WebGL 2 przez Swif
 
 `tests/web/` (osobny projekt npm: `@playwright/test` 1.64.1 i `pngjs` 7.0.0; CMake go pomija)
 sprawdza zbudowaną stronę w **Chromium i Firefoksie** — obrazy z internetu (niżej, „Obrazy
-z internetu”) i rysik w edytorze rysunków („Rysik (nacisk)”). GitHub Actions uruchamia go w
+z internetu”), rysik w edytorze rysunków („Rysik (nacisk)”) i części linku do strony w folderze
+(`linkparts.spec.mjs`, niżej). GitHub Actions uruchamia go w
 `wasm.yml` (zadanie `browsers`, po `build`; wdrożenie na Pages na nie czeka, wydanie też — wywołuje
 `wasm.yml`); raport HTML, zrzuty i ślady nieudanych testów są w artefakcie `web-browser-tests`
 (7 dni). W CI nieudany test powtarza się raz (`retries: 1`; udany za drugim razem raport oznacza
@@ -300,7 +301,7 @@ scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `play
   wcześnie, edytor rysunków i tak zapisuje linię po 1,2 s bez żadnego wejścia (niżej,
   „Ograniczenia techniczne”: zegary Qt).
 * **Wyniki aplikacji** (`src/app/diag/webselftest.h`, biblioteka `brulion_webselftest`, w aplikacji
-  tylko w wersji webowej; bez `?selftest=webpictures`/`pen` w karcie testowej nic nie robi) są
+  tylko w wersji webowej; bez `?selftest=webpictures`/`pen`/`linkparts` w karcie testowej nic nie robi) są
   globalami JavaScriptu:
   * `?selftest=webpictures` → `brulionWebPictureSelfTest` `{page, pageScheme, done, refused,
     timedOut, elapsedMs, pictures: [{url, state, error, format, width, height, uiFetched}],
@@ -317,7 +318,15 @@ scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `play
     simulatePressure, points, pressureMin, pressureMax, pressureFirst, pressureLast, width,
     bounds}]}` — płótno edytora rysunków (`modified`: zmiany jeszcze niezapisane do pliku;
     `strokeCount` liczy linie odręczne, `elements` wszystkie elementy) i jego linie odręczne
-    (współrzędne okna, by porównać z miejscem rysowania), po każdej zmianie.
+    (współrzędne okna, by porównać z miejscem rysowania), po każdej zmianie;
+  * `?selftest=linkparts` → `brulionLinkPartsSelfTest` `{ready, parts: [{href, x, y, width,
+    height}], route: {view, path}}` — linki tekstu, w którym jest część ścieżki linku
+    (`part:…`, docs/SYNTAX.md §2 „Path parts”), z ich miejscem w oknie (próbki `linkAt` co 2 px),
+    i pokazana trasa; publikowane przy każdej zmianie. `linkparts.spec.mjs` zapisuje w
+    dzisiejszym dzienniku `- Zapytać się [[Projekty/Remont mieszkania]] o plan` (i stronę
+    `Projekty/Remont mieszkania.md`), klika prawdziwą myszą przeglądarki w środek „Projekty” →
+    trasa `{view: allPages, path: Projekty}`, po Alt+← w „Remont mieszkania” → strona; to samo
+    stuknięciem w Chromium z dotykiem (412×915, `isMobile`); plik dziennika się nie zmienia.
 * **Plik z eksportu**: w Chromium na `https://` Qt zapisuje przez File System Access
   (`showSaveFilePicker`), który wymaga gestu użytkownika — test podmienia go na stronie testowej
   na rejestrator; w Firefoksie i na stronie `http://` przychodzi zwykłe pobranie pliku.
