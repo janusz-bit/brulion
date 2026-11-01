@@ -800,10 +800,11 @@ if ((FOLDERS)); then
   bar_y=$(ui_y 'Narzędzia edycji')
   [[ -n $bar_y ]] && adb shell input swipe $((SCREEN_W * 85 / 100)) "$bar_y" $((SCREEN_W * 10 / 100)) "$bar_y" 300
   sleep 2
-  # A swipe that fell short (a slow emulator takes it for a tap or a short drag): the chevron at the
-  # row's right edge scrolls to its end.
-  if ui_has 'Więcej narzędzi edycji'; then
-    ui_tap 'Więcej narzędzi edycji' first 2
+  # A swipe that fell short (a slow emulator takes it for a tap or a short drag) leaves the
+  # toolbar's "Więcej" out of view (only the top bar's is there): the chevron at the row's right
+  # edge scrolls to its end.
+  if (($(ui_find_all 'Więcej' | wc -l) < 2)) && ui_has 'Więcej narzędzi edycji'; then
+    ui_tap 'Więcej narzędzi edycji' last 2
   fi
   app_shot fl-4-toolbar-end
   # (The top bar has a "Więcej" too: the toolbar's is the lower one.)
