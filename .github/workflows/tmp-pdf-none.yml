@@ -1,0 +1,220 @@
+# TEMPORARY (s2/pdfview only; removed before the branch is merged): a desktop build without a PDF
+# renderer (-DBRULION_PDF_BACKEND=none), so the PDF tests skip where they must and the shell's
+# self-test checks the fallbacks (the file chip, "Otwórz w innej aplikacji", the viewer's message).
+name: PDF without a renderer (temporary)
+
+on:
+  push:
+    branches: [s2/pdfview]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tmp-pdf-none-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: 6.11.2
+
+jobs:
+  none:
+    name: Linux, PDF backend none
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 1500M
+      CCACHE_COMPILERCHECK: content
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          aqtversion: ==3.3.0
+          cache: true
+
+      - name: Install ccache
+        run: command -v ccache || { sudo apt-get update -qq && sudo apt-get install -y -qq ccache; }
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .ccache
+          key: ccache-pdfnone-${{ env.QT_VERSION }}-${{ github.sha }}
+          restore-keys: ccache-pdfnone-${{ env.QT_VERSION }}-
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DBRULION_WERROR=ON
+          -DBRULION_PDF_BACKEND=none
+
+      - name: Build
+        id: build
+        run: cmake --build build --parallel
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.build.outcome != 'skipped' }}
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: ccache-pdfnone-${{ env.QT_VERSION }}-${{ github.sha }}
+
+      - name: PDF tests and the shell's self-test without a renderer
+        run: >-
+          ctest --test-dir build --output-on-failure --parallel "$(nproc)" --timeout 300
+          -R "pdf|shell_qml|workspace_pdf|drawing_qml|editor_controller|editor_blocktext|notebook_embeds"
+          --output-junit "$RUNNER_TEMP/ctest-junit.xml"
+
+      - name: Upload the test output
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ctest-junit-pdf-none
+          path: ${{ runner.temp }}/ctest-junit.xml
+          if-no-files-found: ignore
+
+  # The PDF viewer on the Android emulator (scripts/android-emulator-test.sh --pdf: API 36 with
+  # search, API 30 without) and the bridge self-test's PDF reader lines (the default mode), from a
+  # debuggable x86_64 APK.
+  apk:
+    name: Debuggable x86_64 APKs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      AQT_VERSION: 3.3.0
+      NDK_VERSION: 27.2.12479018
+      SDK_CMAKE_VERSION: 3.31.6
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: false
+
+      - id: sdk
+        name: Android SDK paths
+        run: |
+          sdk=${ANDROID_SDK_ROOT:-$ANDROID_HOME}
+          echo "ndk=$sdk/ndk/$NDK_VERSION" >> "$GITHUB_OUTPUT"
+          echo "cmake=$sdk/cmake/$SDK_CMAKE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the NDK r27c and the SDK's CMake
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ steps.sdk.outputs.ndk }}
+            ${{ steps.sdk.outputs.cmake }}
+          key: android-ndk-${{ env.NDK_VERSION }}-cmake-${{ env.SDK_CMAKE_VERSION }}
+
+      - name: Cache the host Qt
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/brulion-qt/${{ env.QT_VERSION }}/gcc_64
+          key: qt-${{ env.QT_VERSION }}-linux_gcc_64-aqt${{ env.AQT_VERSION }}
+
+      - name: Cache Qt for Android x86_64
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/brulion-qt/${{ env.QT_VERSION }}/android_x86_64
+          key: qt-${{ env.QT_VERSION }}-android_x86_64-aqt${{ env.AQT_VERSION }}
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: on-failure
+
+      - name: Build the app and the bridge self-test (Debug, x86_64)
+        env:
+          ANDROID_NDK_ROOT: ${{ steps.sdk.outputs.ndk }}
+          BRULION_ANDROID_ABIS: x86_64
+          BRULION_ANDROID_BUILD_TYPE: Debug
+          BRULION_ANDROID_SELFTEST: 1
+        run: bash scripts/android-build.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: brulion-android-x86_64-debug
+          path: dist-android/
+          if-no-files-found: error
+          retention-days: 7
+
+  emulator:
+    name: Emulator (${{ matrix.name }})
+    needs: apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: --pdf, API 36
+            mode: --pdf
+            image: system-images;android-36;google_apis;x86_64
+          - name: --pdf, API 30
+            mode: --pdf
+            image: system-images;android-30;google_apis;x86_64
+          - name: bridge self-test, API 36
+            mode: ''
+            image: system-images;android-36;google_apis;x86_64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: brulion-android-x86_64-debug
+          path: dist-android
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: The emulator test
+        env:
+          BRULION_EMULATOR_OUT: ${{ runner.temp }}/emulator
+          BRULION_EMULATOR_IMAGE: ${{ matrix.image }}
+          MODE: ${{ matrix.mode }}
+        run: |
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          app=''
+          selftest=''
+          for f in dist-android/brulion-*-x86_64.apk; do
+            case "$f" in
+              */brulion-selftest-*) selftest=$f ;;
+              *) app=$f ;;
+            esac
+          done
+          if [ -n "$MODE" ]; then
+            scripts/android-emulator-test.sh "$MODE" "$app"
+          else
+            scripts/android-emulator-test.sh "$app" "$selftest"
+          fi
+
+      - name: Upload the screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: emulator-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/emulator/
+          if-no-files-found: ignore
+          retention-days: 7
