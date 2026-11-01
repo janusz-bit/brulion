@@ -364,5 +364,5 @@ na bezwzględne (od swojego bieżącego folderu) i wysyła działającej kopii k
 (`AllowSetForegroundWindow`, `platform::allowForegroundActivation()`): okno Brulionu przychodzi
 na wierzch, a nie tylko miga na pasku zadań. Kilka plików zaznaczonych naraz to kilka uruchomień —
 pierwsze, gdy Brulion nie działa, staje się główną kopią, pozostałe czekają, aż zacznie słuchać,
-a pliki trafiają do jednego okna. Brulion starszy niż 0.5.1, gdy jeszcze działa, komunikatu
+a pliki trafiają do jednego okna. Brulion starszy niż 0.6.0, gdy jeszcze działa, komunikatu
 `share` nie zna i go pomija — wtedy pomaga zamknięcie go i ponowne „Otwórz za pomocą”.

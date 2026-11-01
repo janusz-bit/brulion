@@ -273,7 +273,7 @@ private Q_SLOTS:
     }
 
     /// The editor's text width as stored by any version: unset is today's default (680, about 85
-    /// characters), the presets before 0.5.1 read as their successors (Normalna 760 → 680, Wąska
+    /// characters), the presets before 0.6.0 read as their successors (Normalna 760 → 680, Wąska
     /// 640 → 600) so the setting shows the choice made; full width (0), today's presets and
     /// custom widths stay; out of range is clamped, malformed is the default.
     void editorWidthStored_data()

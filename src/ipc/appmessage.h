@@ -26,7 +26,7 @@
 //
 // The channel is one-way (nothing is answered). Unknown verbs are ignored by the app
 // (AppController::handleInstanceMessage: not even the window comes up), so newer senders stay
-// harmless — a Brulion older than 0.5.1 ignores `share` (the files are not offered until it is
+// harmless — a Brulion older than 0.6.0 ignores `share` (the files are not offered until it is
 // restarted); the full remote control of the running app (state, navigate, screenshot, click,
 // type …) has request/response verbs on a socket of its own (controlprotocol.h).
 #pragma once
