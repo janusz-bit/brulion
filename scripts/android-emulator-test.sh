@@ -639,6 +639,7 @@ if ((RELAUNCH)); then
   # note are gone), or its welcome screen when no notebook was opened yet (the first attempt after
   # the install: --demo never ran).
   rl_journal() { ui_has 'Kalendarz|Calendar' || ui_has 'Welcome to Brulion'; }
+  rl_any() { rl_note || rl_journal; }
   before=0 after=0 none=0 blank=0 shown=0 note_lost=0
   attempt=0
   # The start: the process, Qt's libraries loaded in onCreate, Qt started at the first layout. The
@@ -666,6 +667,9 @@ if ((RELAUNCH)); then
     else
       none=$((none + 1))
     fi
+    # The first start after the install on a freshly booted emulator can take longer than 25 s
+    # (Qt started and logged, the window still black): up to 30 s more for something on screen.
+    wait_for 30 rl_any || true
     adb logcat -d >"$OUT/rl-logcat-$attempt.txt"
     if rl_qt_logged && rl_note; then
       shown=$((shown + 1))
