@@ -850,7 +850,7 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
   `QEventLoop::exec()`); dialogi i operacje muszą być asynchroniczne (sygnały, `open()`).
 * Pliki od/do użytkownika: własny wybór plików przeglądarki (`platform/wasm/wasmfiles.h` nad
   prywatnym `QWasmLocalFileAccess` z Qt; `showOpenFilePicker`, a gdzie go nie ma — `<input
-  type=file>`): kilka plików naraz przy imporcie i przy „Obraz…”, pliki ponad limit (jak na
+  type=file>`): kilka plików naraz przy imporcie, „Obraz…” i „Plik…”, pliki ponad limit (jak na
   komputerze: 512 MB importu, 200 MB obrazu) pominięte bez czytania, a czytanie kończy się na
   pliku, z którym wybrane przekroczyłyby sumę (import: 1,5 GB jak na komputerze, obrazy: 512 MB
   — przeglądarka trzyma wszystkie wczytane pliki w pamięci, zanim trafią do notatnika;

@@ -74,6 +74,8 @@ Wpisz `/` na początku bloku, a pojawi się lista poleceń: zadanie, przypomnien
 ## Obrazy i pliki
 Wklej obraz (Ctrl+V), upuść pliki na stronę albo użyj `/Obraz…` — okno wyboru plików przyjmie kilka obrazów naraz, także w przeglądarce. Pliki trafiają do folderu załączników (`assets/`) i są osadzane jako `![[plik.png]]`.
 
+Plik dowolnego typu wstawisz jako link poleceniem `/Plik…`: w tekście pojawi się `[[raport.docx]]` (kilka wybranych plików — kilka linków). Plik spoza notatnika trafia do folderu załączników, a plik, który już jest w notatniku, zostaje na swoim miejscu. Notatka, obraz i PDF otwierają się po kliknięciu jak zwykle, a inne pliki w Brulionie tylko do odczytu, jako tekst.
+
 Kliknięcie osadzonego obrazu pokazuje samo zdjęcie dopasowane do widoku (mały obraz zostaje w naturalnej wielkości, bez rozmywającego powiększania). Gdy zdjęcie jest większe od widoku, kliknięcie na nim albo przycisk „Pokaż naturalny rozmiar” (na telefonie i w wąskim widoku ikona lupy) pokazuje je w naturalnej wielkości z możliwością przeciągania. Pod zdjęciem są notatki, które je osadzają albo do niego linkują (na szerokim ekranie także w panelu bocznym, w zakładce Linki).
 
 „Pokaż jako tekst” w pasku albo w menu Więcej (albo Ctrl+E) pokazuje plik jako tekst — tylko do odczytu, przydatne dla plików SVG (treść binarnego obrazu to nieczytelne znaki; z dużego pliku widać pierwsze 200 KB; zmiana pliku, np. z synchronizacji, od razu się tu pokazuje); „Pokaż obraz” albo ponownie Ctrl+E wraca do zdjęcia. Jeśli urządzenie nie ma dekodera danego formatu (np. WebP albo AVIF na telefonie lub w przeglądarce), Brulion pisze o tym zamiast pokazywać błąd — także w obrazie osadzonym w notatce.

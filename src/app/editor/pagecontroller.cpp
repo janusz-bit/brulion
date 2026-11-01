@@ -3012,8 +3012,8 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         const int r = currentRow();
         focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
     } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
-               || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"webImage" || cmd == u"drawing"
-               || cmd == u"drawingOn") {
+               || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"fileLink" || cmd == u"webImage"
+               || cmd == u"drawing" || cmd == u"drawingOn") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -3802,6 +3802,44 @@ void PageController::finishWebDownload(const QString &url, bool ready)
     Q_EMIT webPicturesDownloaded(count, failed);
 }
 
+QString PageController::linkToFile(const QString &path) const
+{
+    const QString target = m_host ? m_host->linkTarget(path, m_path) : QString();
+    if (!target.isEmpty())
+        return u"[["_s + target + u"]]"_s;
+    // No wiki link can hold the name ("C#.pdf", "a|b.pdf", a file of the notebook keeps its name):
+    // a Markdown link to its path does.
+    static const QRegularExpression notInWikiLink(u"[#|\\n\\r]|\\[\\[|\\]\\]"_s);
+    if (!path.contains(notInWikiLink))
+        return u"[["_s + path + u"]]"_s;
+    QString text = paths::basename(path);
+    text.replace(u'\\', u"\\\\"_s).replace(u'[', u"\\["_s).replace(u']', u"\\]"_s);
+    return u'[' + text + u"]("_s + QString::fromLatin1(QUrl::toPercentEncoding(path, "/")) + u')';
+}
+
+QVariantMap PageController::insertFileLinks(int row, int from, int to, const QList<QUrl> &urls)
+{
+    QStringList stored;
+    for (const QUrl &url : urls) {
+        const QString path = importPickedFile(url);
+        if (!path.isEmpty())
+            stored.append(path);
+    }
+    QVariantMap out = insertLinks(row, from, to, stored);
+    out.insert(u"count"_s, stored.size());
+    return out;
+}
+
+QVariantMap PageController::insertLinks(int row, int from, int to, const QStringList &stored)
+{
+    QStringList links;
+    for (const QString &path : stored)
+        links.append(linkToFile(path));
+    if (links.isEmpty())
+        return {{u"row"_s, -1}, {u"cursor"_s, -1}};
+    return insertEmbedText(row, from, to, links.join(u' '), false);
+}
+
 QVariantMap PageController::insertAttachment(int row, int from, int to, const QString &fileName, const QByteArray &data)
 {
     const QString name = fileName.trimmed().isEmpty() ? tr("Attachment") : fileName.trimmed();
@@ -3827,6 +3865,11 @@ QVariantMap PageController::insertDrawing(int row, int from, int to)
 }
 
 QString PageController::importBackdropSource(const QUrl &file)
+{
+    return importPickedFile(file);
+}
+
+QString PageController::importPickedFile(const QUrl &file)
 {
     if (!isFileUrl(file))
         return {};
@@ -3997,11 +4040,36 @@ bool PageController::pickImageInBrowser(int row, int from, int to)
 #endif
 }
 
+bool PageController::pickFileLinksInBrowser(int row, int from, int to)
+{
+#ifdef Q_OS_WASM
+    // Any file (no filter); the limits of pickImageInBrowser().
+    platform::wasm::openFiles({}, true, MaxAttachmentBytes, MaxPickedAttachmentBytes, fileLinkReceiver(row, from, to));
+    return true;
+#else
+    Q_UNUSED(row);
+    Q_UNUSED(from);
+    Q_UNUSED(to);
+    return false;
+#endif
+}
+
 std::function<void(const QList<platform::PickedFile> &)> PageController::pictureReceiver(int row, int from, int to)
+{
+    return pickReceiver(row, from, to, false);
+}
+
+std::function<void(const QList<platform::PickedFile> &)> PageController::fileLinkReceiver(int row, int from, int to)
+{
+    return pickReceiver(row, from, to, true);
+}
+
+std::function<void(const QList<platform::PickedFile> &)> PageController::pickReceiver(int row, int from, int to,
+                                                                                      bool links)
 {
     const int handle = trackBlock(row); // the block may move or go while the picker is open
     const QPointer<PageController> self(this);
-    return [self, handle, from, to](const QList<platform::PickedFile> &picked) {
+    return [self, handle, from, to, links](const QList<platform::PickedFile> &picked) {
         if (!self)
             return;
         const int current = self->trackedRow(handle);
@@ -4015,17 +4083,24 @@ std::function<void(const QList<platform::PickedFile> &)> PageController::picture
                 name = tr("Attachment");
             // As storeFiles() on the desktop: one too large (or not read: over the pick's total),
             // empty or not stored is refused; the others still come.
-            const QString path = self->m_host && file.isRead() && !file.data.isEmpty()
-                                         ? self->m_host->saveAttachment(name, file.data)
-                                         : QString();
+            const bool readable = self->m_host && file.isRead() && !file.data.isEmpty();
+            const QString path = !readable ? QString()
+                                 : links   ? self->m_host->importAttachment(name, file.data)
+                                           : self->m_host->saveAttachment(name, file.data);
             if (path.isEmpty()) {
                 Q_EMIT self->attachmentFailed(name);
                 continue;
             }
             stored.append(path);
         }
-        if (!stored.isEmpty())
-            self->insertEmbeds(current, current >= 0 ? from : -1, current >= 0 ? to : -1, stored);
+        if (stored.isEmpty())
+            return;
+        const int at = current >= 0 ? from : -1;
+        const int end = current >= 0 ? to : -1;
+        if (links)
+            self->insertLinks(current, at, end, stored);
+        else
+            self->insertEmbeds(current, at, end, stored);
     };
 }
 

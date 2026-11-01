@@ -22,6 +22,8 @@ import Brulion
 //   pickTemplate(row)               Szablon…: insert a template from the templates folder
 //   pickImage(row, cursor)          Obraz…: pictures from the system's file picker (desktop,
 //                                   Android) or the browser's, stored as attachments, `![[…]]`
+//   pickFileLink(row, cursor)       Plik…: any files from the system's file picker or the browser's,
+//                                   kept in the notebook, `[[…]]` links at the caret
 //   pickWebImage(row, cursor)       Obraz z internetu…: a picture's address → `![](https://…)`,
 //                                   with "Zapisz w notatniku" stored as an attachment right away
 //   pickDrawingBackdrop(row, cursor)  Rysunek na obrazie lub PDF…: a picture or a PDF (the system's
@@ -47,6 +49,7 @@ Item {
                                     || (recurrenceDialog !== null && recurrenceDialog.opened)
                                     || (templateDialog !== null && templateDialog.opened)
                                     || (imageDialog !== null && imageDialog.visible)
+                                    || (fileLinkDialog !== null && fileLinkDialog.visible)
                                     || (webImageDialog !== null && webImageDialog.opened)
                                     || (backdropPicker !== null && backdropPicker.visible)
                                     || (backdropDialog !== null && backdropDialog.opened)
@@ -58,6 +61,7 @@ Item {
     property var recurrenceDialog: null
     property var templateDialog: null
     property FilePicker imageDialog: null
+    property FilePicker fileLinkDialog: null
     property var webImageDialog: null
     property FilePicker backdropPicker: null
     property DrawingBackdropDialog backdropDialog: null
@@ -461,6 +465,35 @@ Item {
                     root.controller.insertFiles(r, c, c, selectedFiles)
                 else
                     root.controller.insertFilesAfter(r, selectedFiles)
+                root.refocus()
+            }
+            onRejected: root.refocus()
+        }
+    }
+
+    function pickFileLink(r, c) {
+        if (!controller)
+            return
+        remember(r)
+        cursor = c
+        // The browser has its own picker (asynchronous, inserted by the controller).
+        if (controller.pickFileLinksInBrowser(r, c, c))
+            return
+        if (!fileLinkDialog)
+            fileLinkDialog = fileLinkComponent.createObject(root) as FilePicker
+        fileLinkDialog.open()
+    }
+
+    Component {
+        id: fileLinkComponent
+        FilePicker {
+            title: qsTr("Link to a file")
+            fileMode: FilePicker.OpenFiles
+            dark: Theme.dark
+            colors: Theme.colors
+            onAccepted: {
+                const r = root.blockRow()
+                root.controller.insertFileLinks(r, r >= 0 ? root.cursor : -1, r >= 0 ? root.cursor : -1, selectedFiles)
                 root.refocus()
             }
             onRejected: root.refocus()

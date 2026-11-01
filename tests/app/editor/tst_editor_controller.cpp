@@ -4729,6 +4729,130 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         }
     }
 
+    void fileLinkSlashCommand()
+    {
+        Fixture f(u"- Umowa /plik\n"_s);
+        const QVariantMap r = f.page.applySlashCommand(0, 6, 11, u"fileLink"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"fileLink"_s);
+        QCOMPARE(f.text(), u"- Umowa \n"_s);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 6);
+        QVERIFY(!f.page.pickFileLinksInBrowser(0, 0, 0)); // a FilePicker outside the browser
+    }
+
+    void insertFileLinks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<int>("at");
+        QTest::addColumn<QStringList>("files"); // created in a temporary folder; "!" first: missing
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<QStringList>("failed");
+        QTest::newRow("w tekście") << u"- Umowa najmu\n"_s << 0 << 5 << QStringList{u"żółta umowa.docx"_s}
+                                   << u"- Umowa [[żółta umowa.docx]] najmu\n"_s << QStringList();
+        QTest::newRow("kilka plików, każdy typ")
+                << u"- Pliki: \n"_s << 0 << 7
+                << QStringList{u"dane.zip"_s, u"zdjęcie.png"_s, u"wykład.pdf"_s, u"film.mp4"_s}
+                << u"- Pliki: [[dane.zip]] [[zdjęcie.png]] [[wykład.pdf]] [[film.mp4]]\n"_s << QStringList();
+        QTest::newRow("notatka z zewnątrz")
+                << u"- Zobacz \n"_s << 0 << 7 << QStringList{u"Żółw.md"_s} << u"- Zobacz [[Żółw]]\n"_s << QStringList();
+        QTest::newRow("brakujący plik") << u"- Tekst\n"_s << 0 << -1 << QStringList{u"!brak.docx"_s, u"jest.docx"_s}
+                                        << u"- Tekst [[jest.docx]]\n"_s << QStringList{u"brak.docx"_s};
+        QTest::newRow("tylko brakujący") << u"- Tekst\n"_s << 0 << -1 << QStringList{u"!brak.docx"_s} << u"- Tekst\n"_s
+                                         << QStringList{u"brak.docx"_s};
+        QTest::newRow("blok usunięty: na końcu strony") << u"- Tekst\n"_s << -1 << -1 << QStringList{u"raport.xlsx"_s}
+                                                        << u"- Tekst\n- [[raport.xlsx]]\n"_s << QStringList();
+    }
+    void insertFileLinks()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, row);
+        QFETCH(int, at);
+        QFETCH(QStringList, files);
+        QFETCH(QString, expected);
+        QFETCH(QStringList, failed);
+        Fixture f(content);
+        QSignalSpy failedSpy(&f.page, &PageController::attachmentFailed);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QList<QUrl> urls;
+        int present = 0;
+        for (const QString &entry : std::as_const(files)) {
+            const bool missing = entry.startsWith(u'!');
+            const QString path = dir.filePath(missing ? entry.mid(1) : entry);
+            if (!missing) {
+                QFile file(path);
+                QVERIFY(file.open(QIODevice::WriteOnly));
+                file.write("dane");
+                ++present;
+            }
+            urls.append(QUrl::fromLocalFile(path));
+        }
+        const QString before = f.text();
+        const QVariantMap r = f.page.insertFileLinks(row, at, at, urls);
+        QCOMPARE(r.value(u"count"_s).toInt(), present);
+        QCOMPARE(f.text(), expected);
+        QStringList failedNames;
+        for (const QList<QVariant> &args : std::as_const(failedSpy))
+            failedNames.append(args.at(0).toString());
+        QCOMPARE(failedNames, failed);
+        if (expected != before) {
+            f.page.undo();
+            QCOMPARE(f.text(), before);
+        }
+        // Not a file: refused, nothing inserted.
+        QCOMPARE(f.page.insertFileLinks(row, at, at, {QUrl(u"https://example.org/a.pdf"_s)}).value(u"row"_s).toInt(),
+                 -1);
+        QCOMPARE(f.text(), before);
+    }
+
+    void linkToFile()
+    {
+        Fixture f(u"- Tekst\n"_s);
+        QCOMPARE(f.host.saveAttachment(u"umowa.docx"_s, "a"), u"assets/umowa.docx"_s);
+        QCOMPARE(f.page.linkToFile(u"assets/umowa.docx"_s), u"[[umowa.docx]]"_s);
+        // The same name in a folder with a shorter path: the bare name now reaches that one, so
+        // the first file needs its path.
+        f.host.setFile(u"inne/umowa.docx"_s, u"b"_s);
+        QCOMPARE(f.page.linkToFile(u"inne/umowa.docx"_s), u"[[umowa.docx]]"_s);
+        QCOMPARE(f.page.linkToFile(u"assets/umowa.docx"_s), u"[[assets/umowa.docx]]"_s);
+        // Names no wiki link can hold (a file of the notebook keeps its name): a Markdown link, read back.
+        f.host.setFile(u"assets/C#.pdf"_s, u"c"_s);
+        f.host.setFile(u"assets/a|b [v2].txt"_s, u"d"_s);
+        QCOMPARE(f.page.linkToFile(u"assets/C#.pdf"_s), u"[C#.pdf](assets/C%23.pdf)"_s);
+        QCOMPARE(f.page.linkToFile(u"assets/a|b [v2].txt"_s), u"[a|b \\[v2\\].txt](assets/a%7Cb%20%5Bv2%5D.txt)"_s);
+        // Not indexed yet: its path.
+        QCOMPARE(f.page.linkToFile(u"assets/nowy.bin"_s), u"[[assets/nowy.bin]]"_s);
+    }
+
+    /// The browser's pick for "/Plik…": as pictureReceiver(), linked, with the same file reused.
+    void fileLinkReceiver()
+    {
+        Fixture f(u"- Pierwszy\n- Drugi\n"_s);
+        QSignalSpy failedSpy(&f.page, &PageController::attachmentFailed);
+        const auto receive = f.page.fileLinkReceiver(1, 2, 2);
+        QVERIFY(f.page.insertBlockAfter(0, u"wstawiony"_s) >= 0); // the block moves meanwhile
+        const QString before = f.text();
+        platform::PickedFile read;
+        read.name = u"katalog/łąka.docx"_s;
+        read.data = "dane";
+        read.size = read.data.size();
+        platform::PickedFile large;
+        large.name = u"film.mp4"_s;
+        large.tooLarge = true;
+        large.size = 300LL * 1024 * 1024;
+        platform::PickedFile empty;
+        empty.name = u"pusty.txt"_s;
+        receive({read, large, empty});
+        QCOMPARE(f.text(), u"- Pierwszy\n- wstawiony\n- Dr [[łąka.docx]] ugi\n"_s);
+        QCOMPARE(failedSpy.size(), 2);
+        f.page.undo();
+        QCOMPARE(f.text(), before);
+        // Cancelled: nothing.
+        const auto cancelled = f.page.fileLinkReceiver(0, -1, -1);
+        cancelled({});
+        QCOMPARE(f.text(), before);
+    }
+
     void pastingPictures()
     {
         Fixture f(u"- Zrzut: \n"_s);

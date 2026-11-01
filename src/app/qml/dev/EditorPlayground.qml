@@ -411,6 +411,7 @@ ApplicationWindow {
     property int countBefore: 0
     property int realRow: -1
     property int farRow: -1
+    property string fileLinkBefore: ""
     /// The paragraph zoomed into for Enter at its end.
     property int zoomTextRow: -1
     property string textBefore: ""
@@ -1449,6 +1450,22 @@ ApplicationWindow {
                 window.checkWebPlaceholder(item, true)
                 page.deleteBlock(window.farRow)
             },
+            // "/Plik…": the picker of any files, several at once; cancelled, nothing changes.
+            () => {
+                window.fileLinkBefore = page.blocks.get(window.realRow).editText
+                editor.dialogs.pickFileLink(window.realRow, -1)
+            },
+            waitStep(() => editor.dialogs.fileLinkDialog !== null && editor.dialogs.fileLinkDialog.visible,
+                     "“Plik…” opens the file picker"),
+            () => {
+                const d = editor.dialogs.fileLinkDialog
+                check(d.fileMode === FilePicker.OpenFiles && d.nameFilters.length === 0,
+                      "it takes several files of any type")
+                d.reject()
+            },
+            waitStep(() => !editor.dialogs.fileLinkDialog.visible, "cancelling closes it"),
+            () => check(page.blocks.get(window.realRow).editText === window.fileLinkBefore,
+                        "cancelling leaves the block as it was"),
             // "/Obraz z internetu…": "Zapisz w notatniku" checked each time it opens (the dialog
             // is reused), an address without http:// or https:// refused with both named.
             () => editor.dialogs.pickWebImage(window.realRow, -1),

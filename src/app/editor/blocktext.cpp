@@ -1215,6 +1215,8 @@ const QList<SlashCommand> &slashCommands()
             {u"template"_s, u"Szablon…"_s, u"Template…"_s, u"sparkles"_s, u"{{ }}"_s,
              u"z folderu szablonów"_s, u"from the templates folder"_s,
              {u"wzór"_s, u"szablony"_s}},
+            {u"fileLink"_s, u"Plik…"_s, u"File…"_s, u"file"_s, u"[[…]]"_s, u"[[plik.docx]]"_s, u"[[file.docx]]"_s,
+             {u"załącznik"_s, u"dokument"_s, u"link do pliku"_s, u"attachment"_s, u"document"_s, u"link to a file"_s}},
             {u"image"_s, u"Obraz…"_s, u"Image…"_s, u"image"_s, u"![[…]]"_s, u"![[obraz.png]]"_s, u"![[image.png]]"_s,
              {u"zdjęcie"_s, u"obrazek"_s, u"foto"_s, u"grafika"_s, u"załącznik"_s, u"plik"_s, u"picture"_s,
               u"photo"_s, u"attachment"_s, u"file"_s}},

@@ -37,7 +37,7 @@ import Brulion
 // keyboard's top (KeyboardInsets) — for a block, a table cell or the source (toolbarMode).
 // Pictures: Ctrl+V pastes a copied picture (or copied files) as an attachment `![[…]]`, files
 // dropped on the page are stored and embedded (in the block being edited at the caret, else in
-// a new block after the one under the drop), "/Obraz…" and the toolbar pick files.
+// a new block after the one under the drop), "/Obraz…" and the toolbar pick files ("/Plik…" links them instead).
 // A leading "# Title" repeating the page title is shown above the page properties
 // (PageController.titleRow, see BlockDelegate); Up/Down follow that on-screen order.
 // `message(text, kind, action)` (emitted by notice()) tells what the host should show as a toast;
@@ -1053,6 +1053,7 @@ FocusScope {
         case "date": dialogs.pickJournalDate(row, result.cursor); break
         case "template": dialogs.pickTemplate(row); break
         case "image": dialogs.pickImage(row, result.cursor); break
+        case "fileLink": dialogs.pickFileLink(row, result.cursor); break
         case "webImage": dialogs.pickWebImage(row, result.cursor); break
         case "drawing": insertDrawing(row, result.cursor); break
         case "drawingOn": dialogs.pickDrawingBackdrop(row, result.cursor); break

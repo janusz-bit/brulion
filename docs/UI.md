@@ -693,7 +693,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   ("Task: to do" … "Task: no status"; also found as todo, doing, done, czeka, odłożone, waiting,
   anulowane, cancel, bez statusu…), Przypomnienie…, Alarm…, Termin…, Zaplanuj…, Powtarzaj…, Dziś,
   Jutro, Data…, Tabela, Obliczenia, Zapytanie, Nagłówek 1–3, Cytat, Callout, Kod, Wzór
-  matematyczny, Szablon…, Obraz…, Rysunek (a new drawing, opened in the drawing editor), Rysunek na
+  matematyczny, Szablon…, Plik… (any files as links), Obraz…, Rysunek (a new drawing, opened in the drawing editor), Rysunek na
   obrazie lub PDF… (drawings on a picture or a PDF's pages: "Drawing editor" → Backdrop), Osadź,
   Odwołanie do bloku, Priorytet wysoki / niski, Linia
   pozioma, Aktualna godzina. Under each name: the syntax it writes ("⏰ data godzina", "- [ ]
@@ -880,6 +880,13 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   at once: its URL carries its version (`Workspace::drawingUrl` / `assetUrl` add
   `v=<mtime>-<size>`; Qt's pixmap cache keys by the URL) and the embeds of the page follow the
   file's change (`PageController` on `fileChanged` → `BlockListModel::attachmentChanged`).
+* Files as links: "/Plik…" (`fileLink`, "File…") opens the file picker (several files, any type,
+  the browser's too) and writes a link for each at the caret (`PageController::insertFileLinks`):
+  `[[raport.docx]]` by the shortest target (`EditorHost::linkTarget`), `[C#.pdf](assets/C%23.pdf)`
+  when a wiki link cannot hold the name. A file of the notebook stays where it is; another one
+  is copied to the attachments folder, or the same file there is reused
+  (`EditorHost::importAttachment`). A click opens it as any link to that file: a note, a picture,
+  the PDF viewer, otherwise read-only as text.
 * Pictures: Ctrl+V pastes a copied picture as an attachment, files dropped on the page are
   stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files (the
   pictures: `paths::pictureExtensions()`, docs/SYNTAX.md §2). Opening one (a click on the embed,

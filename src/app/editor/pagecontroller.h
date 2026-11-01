@@ -802,6 +802,24 @@ public:
     /// The embed for an attachment at vault path `path`: "![[name]]" when the name finds it,
     /// else "![[path]]".
     Q_INVOKABLE QString embedFor(const QString &path) const;
+    /// A link to the file at vault path `path`: `[[target]]` by the shortest target that reaches it
+    /// (EditorHost::linkTarget), or `[name](path)` percent-encoded when a wiki link cannot hold its
+    /// name (a file of the notebook named "C#.pdf").
+    Q_INVOKABLE QString linkToFile(const QString &path) const;
+    /// "/Plik…" (docs/UI.md "Pictures and files"): picked files of any type (file:// URLs, Android
+    /// content:// documents), imported like importBackdropSource() — a file of the notebook where it
+    /// is, the same file in the attachments folder reused, else copied there; one that cannot be
+    /// read or stored is attachmentFailed() — and linked, separated by spaces, into [from, to) of
+    /// the row's edit text (row -1 or a block that is not text: a new block, as
+    /// insertAttachment()). One undo step. Returns { row, cursor, count }.
+    Q_INVOKABLE QVariantMap insertFileLinks(int row, int from, int to, const QList<QUrl> &urls);
+    /// Browser (WebAssembly): the browser's file picker for any files (several at once, the limits
+    /// of pickImageInBrowser()), linked asynchronously by fileLinkReceiver(). False elsewhere — QML
+    /// uses FilePicker and insertFileLinks().
+    Q_INVOKABLE bool pickFileLinksInBrowser(int row, int from, int to);
+    /// What a browser pick for "/Plik…" does with the picked files (pickFileLinksInBrowser();
+    /// tests): as pictureReceiver(), each read one imported (the same file reused) and all linked.
+    std::function<void(const QList<platform::PickedFile> &)> fileLinkReceiver(int row, int from, int to);
 
     // --- Pictures from the internet (`![alt](https://…)`, docs/SYNTAX.md §2) --------------------
     /// `url` is the address of a picture from the internet (http or https with a host).
@@ -1023,6 +1041,14 @@ private:
     QVariantMap insertEmbeds(int row, int from, int to, const QStringList &paths, bool newBlock = false);
     /// Read and store files as attachments (attachmentFailed() for each one that fails).
     QStringList storeFiles(const QList<QUrl> &urls);
+    /// Insert links to stored files (see insertFileLinks()).
+    QVariantMap insertLinks(int row, int from, int to, const QStringList &paths);
+    /// A picked file's vault path through the host (EditorHost::importAttachment); "" and
+    /// attachmentFailed() when it cannot be read or stored.
+    QString importPickedFile(const QUrl &file);
+    /// pictureReceiver() / fileLinkReceiver(): `links` imports the files and links them, else they
+    /// are stored and embedded.
+    std::function<void(const QList<platform::PickedFile> &)> pickReceiver(int row, int from, int to, bool links);
     /// Resolve the note mode: `force` from scratch (loading), else only when the frontmatter key
     /// changed since the last resolution (edits, undo, source mode, external changes); without
     /// the key the page gets the mode it had without it in this session. `current`: the page's

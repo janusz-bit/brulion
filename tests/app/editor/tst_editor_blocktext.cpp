@@ -1082,6 +1082,11 @@ private Q_SLOTS:
         QTest::newRow("obraz") << u"obraz"_s << u"image"_s;
         QTest::newRow("zdjęcie") << u"zdjecie"_s << u"image"_s;
         QTest::newRow("image") << u"image"_s << u"image"_s;
+        QTest::newRow("plik") << u"plik"_s << u"fileLink"_s;
+        QTest::newRow("file") << u"file"_s << u"fileLink"_s;
+        QTest::newRow("załącznik") << u"zalacznik"_s << u"fileLink"_s;
+        QTest::newRow("attachment") << u"attach"_s << u"fileLink"_s;
+        QTest::newRow("dokument") << u"dokument"_s << u"fileLink"_s;
         // Task statuses: Polish and English names and aliases (the filter is one word).
         QTest::newRow("zadanie") << u"zadanie"_s << u"task"_s;
         QTest::newRow("todo") << u"todo"_s << u"task"_s;
