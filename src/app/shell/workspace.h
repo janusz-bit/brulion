@@ -289,6 +289,9 @@ public:
     /// "<mtime ms>-<size>" of the vault's file ("" when there is none): the PDF viewer reloads
     /// when it changes.
     Q_INVOKABLE QString fileVersion(const QString &path) const;
+    /// The vault file's size as people read it ("1.4 MB" in the locale; "" when there is none):
+    /// the PDF viewer's panel when it cannot show the pages.
+    Q_INVOKABLE QString fileSizeText(const QString &path) const;
     /// The thumbnail of page `page` of the PDF at `path` (EditorHost::pdfThumbnail): drawn and cached
     /// by pdfview::PdfThumbnails (<app cache>/pdf-thumbnails, 64 MiB — 32 MiB on Android —, the long
     /// side for the primary screen's ratio); pdfThumbnailChanged(path) when one is ready or failed.

@@ -2949,9 +2949,9 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
 /// drawing editor on a drawing whose backdrop is page 2, embedded right after the PDF's block, Back
 /// returns to the viewer on page 2; again on page 2 the existing drawing is offered and opened (no
 /// second file); the More menu's "Otwórz w innej aplikacji" hands the file over (a recording hook);
-/// a locked PDF says why (BRULION_SELFTEST_PDF_DIR: tests/data/pdf); a ZIP opens read-only, never in
-/// the editor. Builds without a renderer: the chip, its click hands the file over, the viewer's
-/// message with its button.
+/// the PDF moved to another folder while open reopens on the same page; a locked PDF says why
+/// (BRULION_SELFTEST_PDF_DIR: tests/data/pdf); a ZIP opens read-only, never in the editor. Builds without a renderer:
+/// the chip, its click hands the file over, the viewer's message with its button.
 void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check,
                     const std::function<QObject *(const QString &)> &controllerFor)
 {
@@ -3021,6 +3021,19 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         check(waitFor([&] { return shownNamed(window->contentItem(), u"pdfOpenElsewhere"_s) != nullptr; })
                       && controllerFor(pdf) == nullptr,
               "the PDF's route says it is opened elsewhere, with its button, never in the editor");
+        // Its name, size and the notes embedding it under the message (unless the side panel
+        // lists them).
+        check(waitFor(
+                      [&] {
+                          QQuickItem *v = pdfView();
+                          QQuickItem *name = v ? shownNamed(v, u"pdfMessageName"_s) : nullptr;
+                          return name && name->property("text").toString() == paths::basename(pdf)
+                                 && shownNamed(v, u"pdfMessageSize"_s) != nullptr
+                                 && (v->property("refsInSidePanel").toBool()
+                                     || shownNamed(v, u"pdfMessageReferences"_s) != nullptr);
+                      },
+                      10000),
+              "the panel names the file, its size and the notes embedding it");
         app->goHome();
         return;
     }
@@ -3245,6 +3258,24 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         closeMenus(window);
     }
 
+    // Moved to another folder while it is open (the route keeps pdfPage): the viewer opens the
+    // new path on the same page, and writes no other page into the route afterwards.
+    {
+        check(opened(2), "the viewer is on page 2 before the move");
+        const QString moved = workspace->movePath(pdf, u"Dokumenty żółte"_s);
+        if (!moved.isEmpty())
+            pdf = moved; // (opened() reads it)
+        check(!moved.isEmpty() && waitFor([&] { return opened(2); }, 15000), "a moved PDF reopens on the same page");
+        waitFor([] { return false; }, 900); // (longer than the route write's 500 ms)
+        check(opened(2) && app->currentRoute().value(u"pdfPage"_s).toInt() == 2, "and its page stays in the route");
+        // A route naming only a zoom (remote control, tests): applied without route.open.
+        app->navigate(QVariantMap{{u"view"_s, u"page"_s}, {u"path"_s, pdf}, {u"pdfScale"_s, 250}});
+        check(waitFor([&] { return opened(0) && qAbs(modelValue("zoomPercent").toInt() - 250) <= 1; }, 15000),
+              "the route's pdfScale 250 zooms to 250 %");
+        app->back();
+        check(waitFor([&] { return opened(2); }, 15000), "Back returns to page 2");
+    }
+
     // A PDF protected with a password: its reason and the button, no password prompt.
     const QString data = qEnvironmentVariable("BRULION_SELFTEST_PDF_DIR");
     QFile lockedFile(QDir(data).filePath(u"zaszyfrowany.pdf"_s));
@@ -3258,6 +3289,12 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
                       },
                       15000),
               "a PDF protected with a password says so, with “Open in another app”");
+        check(waitFor([&] {
+                  QQuickItem *name = pdfView() ? shownNamed(pdfView(), u"pdfMessageName"_s) : nullptr;
+                  return name && name->property("text").toString() == u"sejf.pdf"_s
+                         && shownNamed(pdfView(), u"pdfMessageSize"_s) != nullptr;
+              }),
+              "and names the file with its size");
     }
 
     // Another attachment that is no note (a ZIP): read-only text, never the editor.

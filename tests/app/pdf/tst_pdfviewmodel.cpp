@@ -452,7 +452,9 @@ private Q_SLOTS:
         // A sync run of Brulion's own: no reader keeps a PDF open between pages (Windows).
         PdfReaderPool &pool = PdfReaderPool::instance();
         pool.closeIdle();
-        { PdfReaderPool::Lease lease = pool.acquire(fixture(u"wyklad.pdf"_s), u"v"_s); }
+        {
+            PdfReaderPool::Lease lease = pool.acquire(fixture(u"wyklad.pdf"_s), u"v"_s);
+        }
         QCOMPARE(pool.idleCount(), 1);
         pool.suspendIdle();
         QVERIFY(pool.idleSuspended());
@@ -465,12 +467,16 @@ private Q_SLOTS:
         }
         QCOMPARE(pool.idleCount(), 0); // given back = closed
         pool.resumeIdle();
-        { PdfReaderPool::Lease lease = pool.acquire(fixture(u"wyklad.pdf"_s), u"v"_s); }
+        {
+            PdfReaderPool::Lease lease = pool.acquire(fixture(u"wyklad.pdf"_s), u"v"_s);
+        }
         QCOMPARE(pool.idleCount(), 0);
         pool.resumeIdle();
         pool.resumeIdle(); // (an unpaired resume does nothing)
         QVERIFY(!pool.idleSuspended());
-        { PdfReaderPool::Lease lease = pool.acquire(fixture(u"wyklad.pdf"_s), u"v"_s); }
+        {
+            PdfReaderPool::Lease lease = pool.acquire(fixture(u"wyklad.pdf"_s), u"v"_s);
+        }
         QCOMPARE(pool.idleCount(), 1);
         pool.closeIdle();
     }

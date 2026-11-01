@@ -136,7 +136,7 @@ declare -A shot_args=(
   # searching without diacritics, the page jump) and a PDF protected with a password.
   [pdf-embed]="--route {\"view\":\"page\",\"path\":\"Wykład\u00203.md\"}"
   [pdf-viewer]="--route {\"view\":\"page\",\"path\":\"assets/wykład.pdf\"}"
-  [pdf-zoom]="--route {\"view\":\"page\",\"path\":\"assets/wykład.pdf\",\"pdfScale\":250,\"open\":\"zoom\"}"
+  [pdf-zoom]="--route {\"view\":\"page\",\"path\":\"assets/wykład.pdf\",\"pdfScale\":250}"
   [pdf-search]="--route {\"view\":\"page\",\"path\":\"assets/wykład.pdf\",\"open\":\"search\",\"search\":\"gęślą\"}"
   [pdf-jump]="--route {\"view\":\"page\",\"path\":\"assets/wykład.pdf\",\"open\":\"jump\"}"
   [pdf-locked]="--route {\"view\":\"page\",\"path\":\"assets/sejf.pdf\"}"

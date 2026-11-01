@@ -21,6 +21,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QLocale>
 #include <QScreen>
 #include <QStandardPaths>
 
@@ -74,6 +75,16 @@ QString Workspace::fileVersion(const QString &path) const
     if (!st || st->isDir)
         return {};
     return QString::number(st->mtime) + u'-' + QString::number(st->size);
+}
+
+QString Workspace::fileSizeText(const QString &path) const
+{
+    if (!m_vault || path.isEmpty())
+        return {};
+    const std::optional<FileStat> st = m_vault->stat(paths::normalize(path));
+    if (!st || st->isDir)
+        return {};
+    return QLocale().formattedDataSize(st->size, 1, QLocale::DataSizeTraditionalFormat);
 }
 
 pdfview::PdfThumbnails *Workspace::pdfThumbnails() const

@@ -21,10 +21,10 @@ import Brulion
 // only) so Back from the drawing editor or another page returns to it, and jumps to route.pdfPage
 // when the PDF is ready and whenever the route's page changes from outside (a link to another page
 // of the same PDF) — never for its own writes.
-// Where no renderer is built in (the browser, a desktop build without one) it explains that and
-// offers "Otwórz w nowej karcie" / "Otwórz w innej aplikacji" (a real click: the gesture the
-// browser wants); a PDF that cannot be shown (a password, a broken file) says why, with the same
-// button.
+// Where no renderer is built in (the browser, a desktop build without one) it shows the file's name
+// and size, explains that and offers "Otwórz w nowej karcie" / "Otwórz w innej aplikacji" (a real
+// click: the gesture the browser wants); a PDF that cannot be shown (a password, a broken file) says
+// why, with the same button; the notes that embed or link it follow in both cases.
 //   route.open (screenshots, tests): "search" (with route.search typed), "jump", "draw" (its menu or
 //   the drawing); route.pdfScale: a zoom in percent.
 Item {
@@ -65,6 +65,14 @@ Item {
     /// The route page applied last (also the page this view wrote into the route itself).
     property int _routePage: -1
     property string _opened: ""
+    property string _scaled: ""
+    // Another file in the same view (a rename or a move — the route keeps its pdfPage —, the quick
+    // switcher, Back to the PDF before): its route page and zoom applied afresh once it is ready.
+    onPathChanged: {
+        root._routePage = -1
+        root._opened = ""
+        root._scaled = ""
+    }
 
     Component.onDestruction: if (root.drawJob !== 0) DrawingBackdrops.cancel(root.drawJob)
 
@@ -97,6 +105,7 @@ Item {
     function whenReady() {
         if (!root || !root.ready)
             return
+        root.applyRouteScale()
         root.applyRoutePage()
         root.openRequested()
     }
@@ -108,7 +117,21 @@ Item {
         const m = r && r.heading ? /(?:^|&)\s*page\s*=\s*(\d{1,7})\s*(?:&|$)/i.exec(r.heading) : null
         return m ? parseInt(m[1]) : 1
     }
-    onRouteChanged: Qt.callLater(root.applyRoutePage)
+    onRouteChanged: Qt.callLater(root.applyRouteFromOutside)
+    function applyRouteFromOutside() {
+        root.applyRouteScale()
+        root.applyRoutePage()
+    }
+    /// route.pdfScale (a zoom in percent): once per path and value, before the page is jumped to.
+    function applyRouteScale() {
+        if (!root || !root.ready || !root.route || !(root.route.pdfScale > 0))
+            return
+        const key = root.path + "\n" + root.route.pdfScale
+        if (key === root._scaled)
+            return
+        root._scaled = key
+        root.moveTo(pdf.setScaleAround(root.route.pdfScale / 100 * 96 / 72, Qt.point(flick.width / 2, 0)))
+    }
     function applyRoutePage() {
         if (!root || !root.ready)
             return
@@ -144,8 +167,6 @@ Item {
         if (key === root._opened)
             return
         root._opened = key
-        if (root.route.pdfScale > 0)
-            root.moveTo(pdf.setScaleAround(root.route.pdfScale / 100 * 96 / 72, Qt.point(flick.width / 2, 0)))
         switch (root.route.open) {
         case "search":
             root.openSearch()
@@ -929,39 +950,112 @@ Item {
         visible: running
     }
 
-    Column {
+    // A PDF that cannot be shown here (no renderer, a password, a broken file): the file's name and
+    // size, why, the button that opens it elsewhere, and the notes that embed or link it below (a
+    // phone has no side panel to list them) — scrolling when they are long.
+    Flickable {
+        id: messageFlick
         objectName: "pdfMessage"
         visible: pdf.status === PdfViewModel.Failed || pdf.status === PdfViewModel.Unsupported
-        anchors.centerIn: flick
-        width: Math.min(flick.width - 2 * Theme.space6, 440)
-        spacing: Theme.space3
+        anchors.fill: flick
+        clip: true
+        contentWidth: width
+        contentHeight: messageColumn.height
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        TouchFlick.enabled: true
+        T.ScrollBar.vertical: BScrollBar {}
 
-        BIcon {
-            anchors.horizontalCenter: parent.horizontalCenter
-            name: pdf.status === PdfViewModel.Unsupported ? "file-text" : pdf.locked ? "lock" : "triangle-alert"
-            size: Theme.iconSizeLg * 1.5
-            color: Theme.fgMuted
-        }
-        Text {
-            objectName: "pdfMessageText"
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.Wrap
-            textFormat: Text.PlainText
-            font.family: Theme.fontUi
-            font.pixelSize: Theme.textBase
-            color: Theme.fg
-            text: pdf.status === PdfViewModel.Failed ? pdf.error
-                  : root.browser ? qsTr("Brulion here does not draw PDFs: the browser's own viewer opens it in a new tab (scrolling, zoom, search).")
-                  : qsTr("This version of Brulion has no PDF renderer: open it in another app.")
-        }
-        BButton {
-            objectName: "pdfOpenElsewhere"
-            anchors.horizontalCenter: parent.horizontalCenter
-            variant: "primary"
-            iconName: "external-link"
-            text: root.openElsewhereText
-            onClicked: root.openElsewhere()
+        Column {
+            id: messageColumn
+            width: messageFlick.width
+            // Centred while it fits; the references start under the card.
+            topPadding: messageRefs.visible ? Theme.space12
+                                            : Math.max(Theme.space8, (messageFlick.height - card.height) / 2)
+            bottomPadding: Theme.space8
+            spacing: Theme.space8
+
+            Column {
+                id: card
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(messageFlick.width - 2 * Theme.space6, 440)
+                spacing: Theme.space3
+
+                BIcon {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    name: pdf.status === PdfViewModel.Unsupported ? "file-text" : pdf.locked ? "lock" : "triangle-alert"
+                    size: Theme.iconSizeLg * 1.5
+                    color: Theme.fgMuted
+                }
+                Text {
+                    objectName: "pdfMessageName"
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textLg
+                    font.weight: Font.DemiBold
+                    color: Theme.fg
+                    text: root.fileName
+                }
+                Text {
+                    objectName: "pdfMessageSize"
+                    width: parent.width
+                    visible: text !== ""
+                    horizontalAlignment: Text.AlignHCenter
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textSm
+                    color: Theme.fgMuted
+                    text: root.revision >= 0 && root.path !== "" && messageFlick.visible
+                          ? Workspace.fileSizeText(root.path) : ""
+                }
+                Text {
+                    objectName: "pdfMessageText"
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textBase
+                    color: Theme.fg
+                    text: pdf.status === PdfViewModel.Failed ? pdf.error
+                          : root.browser ? qsTr("Brulion here does not draw PDFs: the browser's own viewer opens it in a new tab (scrolling, zoom, search).")
+                          : qsTr("This version of Brulion has no PDF renderer: open it in another app.")
+                }
+                BButton {
+                    objectName: "pdfOpenElsewhere"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    variant: "primary"
+                    iconName: "external-link"
+                    text: root.openElsewhereText
+                    onClicked: root.openElsewhere()
+                }
+            }
+
+            // The notes that embed or link the PDF (not when the wide window's side panel shows them).
+            Loader {
+                id: messageRefs
+                anchors.horizontalCenter: parent.horizontalCenter
+                active: messageFlick.visible && !root.refsInSidePanel
+                visible: active && item !== null && !item.empty
+                sourceComponent: ContentBacklinks {
+                    objectName: "pdfMessageReferences"
+                    width: Math.min(messageFlick.width - 2 * Theme.space4, 760)
+                    path: root.path
+                    rendererPalette: root.rendererPalette
+                    compact: Theme.compact || root.inSidePanel
+                    showUnlinked: false
+
+                    Rectangle {
+                        y: -Theme.space4
+                        width: parent.width
+                        height: 1
+                        color: Theme.borderSubtle
+                    }
+                }
+            }
         }
     }
 

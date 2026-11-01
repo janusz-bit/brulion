@@ -19,6 +19,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QLocale>
 #include <QSaveFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -122,6 +123,12 @@ private Q_SLOTS:
         QVERIFY(before.endsWith(u'-' + QString::number(fixture(u"wyklad.pdf"_s).size())));
         QVERIFY(o.ws->fileVersion(u"assets/brak.pdf"_s).isEmpty());
         QVERIFY(o.ws->fileVersion(u"assets/katalog.pdf"_s).isEmpty());
+        // The size as people read it (the viewer's panel when it cannot draw the pages).
+        QCOMPARE(o.ws->fileSizeText(u"assets/wykład.pdf"_s),
+                 QLocale().formattedDataSize(fixture(u"wyklad.pdf"_s).size(), 1, QLocale::DataSizeTraditionalFormat));
+        QVERIFY(o.ws->fileSizeText(u"assets/brak.pdf"_s).isEmpty());
+        QVERIFY(o.ws->fileSizeText(u"assets/katalog.pdf"_s).isEmpty());
+        QVERIFY(o.ws->fileSizeText(QString()).isEmpty());
         QVERIFY(o.ws->writeAttachment(u"assets/wykład.pdf"_s, fixture(u"tylko-wlasciciel.pdf"_s)));
         QVERIFY(o.ws->fileVersion(u"assets/wykład.pdf"_s) != before);
     }

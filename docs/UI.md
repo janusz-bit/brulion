@@ -1494,12 +1494,16 @@ the browser that was a data: URL of the whole file. The shell's `Workspace` draw
 `pdfview::PdfThumbnails`: off the GUI thread (`PdfRenderPool`, a reader leased from
 `PdfReaderPool`), once per (file, size, mtime, page, pixel size), cached as PNG files in
 `<app cache>/pdf-thumbnails` (PNG text chunks `Brulion-Pages`, `Brulion-PageWidth`,
-`Brulion-PageHeight` read back without decoding; a failure as `<key>.err`, so a locked or broken PDF
-is not opened again on every scroll; a new mtime is a new key; 64 MiB, 32 MiB on Android, the oldest
+`Brulion-PageHeight` read back without decoding; a locked, unreadable or page-less PDF as
+`<key>.err`, so it is not opened again on every scroll, while a failed drawing — out of memory — is
+kept in memory only and tried again after a restart; a remembered thumbnail whose PNG was pruned is
+drawn again; a new mtime is a new key; 64 MiB, 32 MiB on Android, the oldest
 pruned 2 s after a store; the long side 420 px × the primary screen's ratio, rounded up to 512 / 768
-/ 1024 / 1280 / 1536). A folder that cannot be written, a build without a renderer, the browser: the
-file's chip with the page icon ("Otwórz w nowej karcie" / "Otwórz w innej aplikacji" in its tooltip);
-its click opens the PDF in a new browser tab / the system's viewer, inside the click.
+/ 1024 / 1280 / 1536). A build without a renderer, the browser: the file's chip with the page icon
+("Otwórz w nowej karcie" / "Otwórz w innej aplikacji" in its tooltip); its click opens the PDF in a
+new browser tab / the system's viewer, inside the click. A thumbnail folder that cannot be written
+(a renderer is there): the same chip, its tooltip "Otwórz w przeglądarce PDF" and its click the
+viewer.
 
 **The viewer.** A bar like the picture view's: the page icon and the file's name, then — at 600 px
 and wider — "Strona 3 z 12" (a click: the page jump), Pomniejsz, the zoom "85 %" (its menu: Dopasuj
@@ -1561,14 +1565,17 @@ the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyon
   menu offers "Otwórz rysunek „…”" (up to three) and "Nowy rysunek na tej stronie".
 * **States**: a spinner while it opens; a PDF that cannot be shown — "Ten PDF jest chroniony hasłem
   — Brulion go nie otworzy." (a lock; no password prompt), "Nie można odczytać tego PDF-a.", "Ten PDF
-  nie ma stron.", "Tego pliku nie ma już w notatniku." — with **Otwórz w innej aplikacji** (another
-  app may know the password or repair it); a page that fails alone says "Nie można pokazać strony
+  nie ma stron.", "Tego pliku nie ma już w notatniku." — under the file's name and size, with
+  **Otwórz w innej aplikacji** (another app may know the password or repair it) and the notes that
+  embed or link it below (as in every state without pages; not while the side panel lists them);
+  a page that fails alone says "Nie można pokazać strony
   N." on its white page. The file changed on disk (sync, another program): opened again at the same
-  page and zoom; renamed or moved: the shell's route follows it.
+  page and zoom; renamed or moved: the shell's route follows it and the viewer reopens on the
+  route's page.
 * **Route**: `pdfPage` (the page shown; the viewer writes it half a second after it settles, in the
   main pane only, and jumps to it when the route's page changes from outside — never for its own
   writes), `from`, `fromLine`, `open` (screenshots and tests: `search` with `search` typed, `jump`,
-  `draw`), `pdfScale` (a zoom in percent). Ctrl+E does nothing on a PDF; the top bar's Więcej has no
+  `draw`), `pdfScale` (a zoom in percent, on its own too: once per path and value). Ctrl+E does nothing on a PDF; the top bar's Więcej has no
   Markdown source, note mode, properties or history there.
 * **In the browser** (no renderer): the embed is the file's chip; a click opens the PDF in a **new
   browser tab** (`wasm/wasmopen.cpp`: the bytes from IndexedDB as a blob: URL typed
@@ -1589,7 +1596,9 @@ a visible page, a detail picture, a thumbnail, page sizes, search), `PdfReaderPo
 leased to one thread at a time, at most two idle per file and four in all, closed after 10 s idle —
 Syncthing on Windows can replace the file —, forgotten when the file changes and before Brulion
 itself writes, moves or deletes it or a folder holding it: `Workspace::releasePdfReaders`, as
-Windows cannot replace, move or delete an open file), `PdfThumbnails`,
+Windows cannot replace, move or delete an open file; during a Nextcloud sync run, which may do the
+same to any PDF, no reader waits idle at all — `PdfReaderPool::suspendIdle()` from the run's start
+to its end, `WorkspaceSync`), `PdfThumbnails`,
 `PdfPageLayout` (pure), `PdfViewModel` (QML `PdfViewModel`: status, error, locked, pageCount,
 scale, zoomPercent, fitWidth, contentWidth/Height, currentPage — the page under 40 % of the view's
 height —, pages, detailRevision, search properties; setViewport, settle, positionForPage,
