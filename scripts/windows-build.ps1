@@ -372,7 +372,7 @@ function Invoke-Packaged([string] $Dir, [string] $Label) {
             if ($failed) { "Failed checks:`n" + ($failed -join "`n--`n") | Write-Host }
             # Timings of the checks that wait on this runner's event loop (the long press in the
             # Markdown source: after how long it selected, the loop's longest pause), pass or fail.
-            $timings = $lines | Where-Object { $_ -match '^selftest: a long press in the source|sourceTouchTap' }
+            $timings = $lines | Where-Object { $_ -match '^selftest: a long press in the source' }
             if ($timings) { "Timings:`n" + ($timings -join "`n") | Write-Host }
             ($lines | Select-Object -Last 60) -join "`n" | Write-Host
         }

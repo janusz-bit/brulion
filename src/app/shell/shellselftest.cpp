@@ -4867,28 +4867,38 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                         QMetaObject::invokeMethod(sourceEdit, "getText", qReturnArg(text), from, to);
                         return text;
                     };
-                    QPointF onWord = pointIn(sourceView, 0.5, 0.4);
+                    // A point inside a word, read where the finger lands: on a whole pixel (touch
+                    // points are) in the middle of its line. A fractional point checked here was
+                    // rounded onto the next line by the touch event when a line's edge lay between
+                    // them (with the source scrolled to 504 px on Windows runners: the finger landed
+                    // after the end of a short wrapped line, "listę.", where there is no word).
+                    QPointF onWord = QPointF(pointIn(sourceView, 0.5, 0.4).toPoint());
                     for (qreal fy = 0.3; fy < 0.7; fy += 0.05) {
-                        const QPointF p = pointIn(sourceView, 0.35, fy);
+                        const QPointF p = QPointF(pointIn(sourceView, 0.35, fy).toPoint());
                         const QPointF l = sourceEdit->mapFromScene(p);
                         int pos = -1;
                         QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), l.x(), l.y());
+                        QRectF lineRect;
+                        QMetaObject::invokeMethod(sourceEdit, "positionToRectangle", qReturnArg(lineRect), pos);
+                        const QPointF centred =
+                                QPointF(sourceEdit->mapToScene(QPointF(l.x(), lineRect.center().y())).toPoint());
+                        const QPointF lc = sourceEdit->mapFromScene(centred);
+                        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), lc.x(), lc.y());
                         const QString around = textAt(pos - 1, pos + 1);
                         if (around.size() == 2 && around.at(0).isLetter() && around.at(1).isLetter()) {
-                            onWord = p;
+                            onWord = centred;
                             break;
                         }
                     }
                     // The finger stays down until the long press has selected (or the handler let
-                    // go of it), not for a fixed time (it failed on Windows runners with a fixed
-                    // 1.3 s hold). What happened is logged: when the handler's long press moved the
-                    // cursor (onLongPressed puts it under the finger, then selects the word), the
-                    // handler's state before and during the hold, the event loop's longest pause.
+                    // go of it), not for a fixed time. What happened is logged: when the handler's
+                    // long press moved the cursor (onLongPressed puts it under the finger, then
+                    // selects the word), the handler's state, the event loop's longest pause.
                     QObject *const handler = sourceView->findChild<QObject *>(u"sourceTouchTap"_s);
                     const bool pressedBefore = handler && handler->property("pressed").toBool();
                     int underFinger = -1;
                     {
-                        const QPointF l = sourceEdit->mapFromScene(QPointF(onWord.toPoint()));
+                        const QPointF l = sourceEdit->mapFromScene(onWord);
                         QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(underFinger), l.x(), l.y());
                     }
                     const int cursorBeforeHold = sourceEdit->property("cursorPosition").toInt();
@@ -4899,15 +4909,6 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     qint64 letGoAfter = -1;
                     qint64 cursorMovedAfter = -1;
                     qreal timeHeld = 0;
-                    // Qt's own account of the handler (pressed, long press, grabs) during the hold.
-                    static QLoggingCategory::CategoryFilter previousFilter = nullptr;
-                    previousFilter = QLoggingCategory::installFilter([](QLoggingCategory *category) {
-                        if (previousFilter)
-                            previousFilter(category);
-                        if (qstrcmp(category->categoryName(), "qt.quick.handler.tap") == 0
-                            || qstrcmp(category->categoryName(), "qt.quick.handler.grab") == 0)
-                            category->setEnabled(QtDebugMsg, true);
-                    });
                     held.start();
                     uidriver::touchHoldNow(
                             window, onWord,
@@ -4931,7 +4932,6 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                                 return false;
                             },
                             10000);
-                    QLoggingCategory::installFilter(previousFilter);
                     const QString word = sourceEdit->property("selectedText").toString();
                     std::fprintf(
                             stderr,
