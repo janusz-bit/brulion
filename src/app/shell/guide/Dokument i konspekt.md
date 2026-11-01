@@ -92,7 +92,7 @@ Kliknięcie miniatury, odnośnik `[[wykład.pdf]]` (albo `[[wykład.pdf#page=3]]
 - **Otwórz w innej aplikacji** (w menu **⋯** albo **Więcej**) — przekazuje PDF systemowej aplikacji do PDF-ów, np. żeby go wydrukować albo dopisać adnotacje;
 - **Wstecz**, `Esc` albo `Alt+←` zamyka przeglądarkę. Pod ostatnią stroną są notatki, które osadzają PDF albo do niego linkują.
 
-PDF **chroniony hasłem** pokazuje kłódkę i „PDF chroniony hasłem” — Brulion nie pyta o hasło, ale **Otwórz w innej aplikacji** przekaże go programowi, który to umie. Uszkodzony PDF pokazuje tyle, ile się da, a strona, której nie da się narysować, mówi o tym zamiast zawieszać aplikację.
+PDF **chroniony hasłem** pokazuje kłódkę i „PDF chroniony hasłem” (z nazwą i rozmiarem pliku, a pod spodem notatki, które go osadzają albo linkują) — Brulion nie pyta o hasło, ale **Otwórz w innej aplikacji** przekaże go programowi, który to umie. Uszkodzony PDF pokazuje tyle, ile się da, a strona, której nie da się narysować, mówi o tym zamiast zawieszać aplikację.
 
 **W przeglądarce** Brulion nie rysuje PDF-ów: osadzony PDF jest kafelkiem pliku, a kliknięcie go albo odnośnika otwiera PDF w **nowej karcie**, gdzie przewijanie, powiększanie i szukanie daje wbudowana przeglądarka PDF. Gdy przeglądarka zablokuje nową kartę, PDF się pobiera, a Brulion to mówi.
 
