@@ -618,7 +618,9 @@ if ((RELAUNCH)); then
   # Qt's log lines carry their category as the tag (brulion.platform…; the package's name does not
   # end in a tag's ": ").
   rl_qt_logged() { adb logcat -d | grep -qE ' brulion\.[a-z.]+ *: '; }
-  rl_journal() { ui_has 'Kalendarz'; } # the bottom navigation: the shell with a notebook (--demo)
+  # The bottom navigation: the shell with a notebook. In English after Qt's own restart (a relaunch
+  # once Qt runs: QtActivity restarts the app with a bare launcher intent — the arguments are gone).
+  rl_journal() { ui_has 'Kalendarz|Calendar'; }
   before=0 after=0 none=0 blank=0 shown=0
   attempt=0
   # The start: the process, Qt's libraries loaded in onCreate, Qt started at the first layout. The
@@ -641,7 +643,7 @@ if ((RELAUNCH)); then
       sleep 15
     elif adb logcat -d | grep -q 'finishDrawing of relaunch: Window{[^}]*BrulionActivity'; then
       after=$((after + 1))
-      outcome="relaunched (Qt restarts the app itself once it runs)"
+      outcome="relaunched after Qt started (Qt restarted the app, without its arguments)"
     else
       none=$((none + 1))
     fi

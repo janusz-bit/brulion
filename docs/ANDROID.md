@@ -972,7 +972,8 @@ aktywności. Gdy ta aktywność zniknie wcześniej, nowa zastaje biblioteki Qt j
 (`QtLoader.LoadingResult.AlreadyLoaded`) i niczego nie uruchamia: brak układu Qt, puste okno na
 zawsze, w logcat `finishDrawing of relaunch: Window{… BrulionActivity}` i żadnych wpisów
 `brulion.*`. (Utworzoną od nowa po starcie Qt aplikację Qt restartuje sam:
-`QtActivityBase.restartApplication`.)
+`QtActivityBase.restartApplication` — z samą intencją launchera, więc dodatki pierwotnej intencji,
+np. notatka z powiadomienia czy argumenty APK debugowalnego, przepadają.)
 
 `BrulionActivity.onCreate` rozpoznaje ten przypadek po `super.onCreate`: wcześniejsza
 `BrulionActivity` tego procesu doszła już do `onCreate`, ta nie ma żadnego widoku w
@@ -1142,9 +1143,13 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   `com.android.internal.display.cutout.emulation.*` (`cmd overlay`): zmiana `CONFIG_ASSETS_PATHS`,
   więc Android tworzy aktywność od nowa. Sprawdza, że co najmniej raz stało się to przed startem
   Qt (`BrulionActivity: recreated before Qt started`) i że po każdej próbie na ekranie jest dziennik
-  przykładowego notatnika (dolna nawigacja, wpisy Qt `brulion.*` w logcat) — żadnego pustego okna;
+  przykładowego notatnika (dolna nawigacja — po restarcie przez Qt po angielsku, bez argumentów —,
+  wpisy Qt `brulion.*` w logcat) — żadnego pustego okna;
   wypisuje wynik każdej próby (przed startem Qt / po nim / bez ponownego utworzenia). Zrzuty
-  `rl-*.png`, logcat każdej próby `rl-logcat-<n>.txt`.
+  `rl-*.png`, logcat każdej próby `rl-logcat-<n>.txt`. Sprawdzone 2026-11-01 na GitHub Actions
+  (Android 16): z poprawką 7 prób, 2 razy utworzona od nowa przed startem Qt — za każdym razem
+  restart i dziennik; bez niej (`BrulionActivity` sprzed poprawki) 12 prób, w jednej puste okno
+  bez żadnego wpisu `brulion.*`, w czterech restart przez Qt (dziennik po angielsku).
 * Zaznaczanie i kopiowanie prawdziwym palcem (`adb shell input`, APK debugowalny jak niżej):
   ```sh
   scripts/android-emulator-test.sh --selection
