@@ -1,8 +1,10 @@
 // PDF pages through Android's own PdfRenderer (pdfpages.h): JNI to
 // android/src/io/github/januszbit/brulion/android/BrulionAndroid.kt (pdfOpen, pdfPageSizes,
 // pdfRenderInto, pdfPageText, pdfSearch, pdfClose → PdfPages.kt). Nothing added to the APK (Qt PDF
-// would add 4.5 MB). A reader is a session of the Kotlin side — a PdfRenderer kept open, at most six
-// of them (the oldest closed: a leak here cannot exhaust file descriptors). Any thread: QJniObject
+// would add 4.5 MB). A reader is a session of the Kotlin side — a PdfRenderer kept open, at most 16
+// of them (the oldest closed: a leak here cannot exhaust file descriptors; well above the app's
+// PdfReaderPool and its short-lived readers). A call that fails asks whether the session is still
+// open; a reader whose session was closed under it is lost() and the pool drops it. Any thread: QJniObject
 // attaches it and finds the class through the app's class loader.
 //
 // Pages are drawn straight into the QImage's pixels (a direct ByteBuffer over them: one copy, by
@@ -54,6 +56,8 @@ public:
 
     int pageCount() const override { return m_pages; }
 
+    bool lost() const override { return m_lost; }
+
     QSizeF pageSize(int page) override
     {
         if (page < 1 || page > m_pages)
@@ -67,6 +71,8 @@ public:
         if (threw() || !answer.isValid())
             return {};
         const QJsonArray sizes = QJsonDocument::fromJson(answer.toString().toUtf8()).array();
+        if (sizes.isEmpty())
+            checkSession();
         for (qsizetype i = 0; i < sizes.size(); ++i) {
             const QJsonArray wh = sizes.at(i).toArray();
             m_sizes.insert(from + int(i), QSizeF(wh.at(0).toDouble(), wh.at(1).toDouble()));
@@ -91,8 +97,10 @@ public:
                 jint(full.width()), jint(full.height()), jint(part.x()), jint(part.y()), jint(part.width()),
                 jint(part.height()), buffer);
         env->DeleteLocalRef(buffer);
-        if (threw() || !ok)
+        if (threw() || !ok) {
+            checkSession();
             return {};
+        }
         return image;
     }
 
@@ -106,6 +114,11 @@ public:
                                                                      jint(m_session), jint(page));
         m_textPage = page;
         m_text = threw() || !answer.isValid() ? QString() : answer.toString();
+        if (m_text.isEmpty()) {
+            checkSession();
+            if (m_lost)
+                m_textPage = 0; // (not remembered as a page without text)
+        }
         return m_text;
     }
 
@@ -156,7 +169,18 @@ public:
     }
 
 private:
+    /// After a failed call: is the Kotlin session still there? (Pushed out by its cap: lost.)
+    void checkSession()
+    {
+        if (m_lost)
+            return;
+        const jboolean open = QJniObject::callStaticMethod<jboolean>(kClass, "pdfIsOpen", "(I)Z", jint(m_session));
+        if (!threw() && !open)
+            m_lost = true;
+    }
+
     int m_session = 0;
+    bool m_lost = false;
     int m_pages = 0;
     QHash<int, QSizeF> m_sizes;
     int m_textPage = 0;

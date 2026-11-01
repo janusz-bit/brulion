@@ -2500,6 +2500,8 @@ if [[ "${sdk:-0}" -ge 35 ]]; then
 else
   check "no PDF text on API $sdk (search hidden)" log_has "SELFTEST pdf-reader region=1 text=0 hits=0"
 fi
+check "PdfRenderer sessions over the cap: the oldest reader is lost, the newest draws" \
+  log_has "SELFTEST pdf-sessions opened=1 oldest-lost=1 newest-draws=1"
 check "cold-start tap delivered to C++" wait_for 10 log_has "SELFTEST activated path=dziennik/zimny-start.md line=5"
 # A tap while the app runs: onNewIntent -> nativeActivated (Polish path).
 adb shell am start -n "$ACTIVITY" --es "$EXTRA.PATH" "'strony/Łódź.md'" --ei "$EXTRA.LINE" 7 >/dev/null

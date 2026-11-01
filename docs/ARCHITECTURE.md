@@ -134,7 +134,8 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   per build, chosen by `src/platform/CMakeLists.txt` (`BRULION_PDF_BACKEND`, default `auto`):
   Android `pdfpages_android.cpp` (JNI to `BrulionAndroid.pdfOpen` / `pdfPageSizes` /
   `pdfRenderInto` / `pdfPageText` / `pdfSearch` / `pdfClose` → `PdfPages.kt`: sessions of the
-  system's `android.graphics.pdf.PdfRenderer`, at most six open, a page drawn straight into the
+  system's `android.graphics.pdf.PdfRenderer`, at most 16 open — well above the reader pool; a
+  reader whose session was closed under it is `lost()` and dropped —, a page drawn straight into the
   QImage's pixels through a direct ByteBuffer; no library in the APK), else Qt PDF when Qt has the
   module (`pdfpages_qtpdf.cpp`, `QPdfDocument`: Windows, the AppImage, CI — aqt's `qtpdf`; text
   from `getAllText`, rectangles from `getSelectionAtIndex`), else poppler-qt6 through pkg-config

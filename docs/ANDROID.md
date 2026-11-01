@@ -688,7 +688,9 @@ była przeglądarka) i jego osadzenie zaraz pod linią PDF-a w dzienniku; Wstecz
 Wstecz → dziennik. Zrzuty `pdf-*.png`. Test mostu (APK testowy) dodaje wiersz
 `SELFTEST pdf-reader region=1 text=… hits=… rect=… api=…`: część strony narysowana osobno równa się
 wycinkowi całej strony; na API ≥ 35 `find("GESLA")` znajduje jedno trafienie w miejscu tekstu, poniżej
-— żadnego (`text=0`).
+— żadnego (`text=0`). Wiersz `SELFTEST pdf-sessions opened=1 oldest-lost=1 newest-draws=1`: przy 17
+otwartych sesjach (limit `PdfPages.MAX_SESSIONS` to 16) najstarsza zostaje zamknięta, jej czytnik
+zgłasza `lost()` (pula go odrzuca, zamiast użyć ponownie), a najnowszy dalej rysuje.
 
 Zostaje do sprawdzenia na prawdziwym telefonie: płynność szczypania i gest Wstecz z krawędzi,
 szukanie na Androidzie 15+ na prawdziwym urządzeniu, „Otwórz w innej aplikacji” z prawdziwymi

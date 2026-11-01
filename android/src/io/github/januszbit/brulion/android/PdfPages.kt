@@ -24,7 +24,10 @@ import java.nio.ByteBuffer
  * A session is an open PDF (its descriptor and renderer, opened once); its pages are opened per
  * call (PdfRenderer allows one open page at a time: every call is synchronized on its session). At
  * most [MAX_SESSIONS] are open — the oldest is closed — so a leak on the C++ side cannot exhaust the
- * process's file descriptors. Called from C++ worker threads: nothing here needs the main thread.
+ * process's file descriptors. The cap is well above what C++ keeps open (PdfReaderPool: 4 idle and
+ * one leased per thread of its 2, plus the short-lived readers of a drawing's backdrop and the page
+ * picker), so a session in use is not closed under it; should one be, [isOpen] tells C++, which then
+ * drops that reader instead of using it again. Called from C++ worker threads: nothing here needs the main thread.
  *
  * Text (the viewer's search) needs Android 15 (API 35: [PdfRenderer.Page.getTextContents],
  * [PdfRenderer.Page.searchText]); [textAvailable] probes once whether this system has them (an OEM
@@ -35,7 +38,7 @@ internal object PdfPages {
   private const val TAG = "BrulionPdfPages"
 
   /** The most sessions open at once (each holds a file descriptor and pdfium's document). */
-  const val MAX_SESSIONS = 6
+  const val MAX_SESSIONS = 16
 
   /** The largest picture one [renderInto] draws (src/platform/pdfpages.h MaxPdfClipPixels). */
   private const val MAX_PIXELS = 16_000_000L
@@ -249,6 +252,9 @@ internal object PdfPages {
     val s = synchronized(sessions) { sessions.remove(id) } ?: return
     synchronized(s) { s.close() }
   }
+
+  /** Session [id] is still open (not closed by C++ nor pushed out by [MAX_SESSIONS]). */
+  fun isOpen(id: Int): Boolean = synchronized(sessions) { sessions.containsKey(id) }
 
   /** Sessions open (tests, the bridge self-test). */
   fun openSessions(): Int = synchronized(sessions) { sessions.size }

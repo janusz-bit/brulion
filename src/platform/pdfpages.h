@@ -110,6 +110,9 @@ public:
     /// pulling an object without thread affinity). Default: nothing.
     virtual void attachToCurrentThread() { }
     virtual void detachFromThread() { }
+    /// The reader cannot be used any more (Android: its PdfRenderer session was closed under it);
+    /// the pool drops it instead of keeping it idle. Default: never.
+    virtual bool lost() const { return false; }
 
 protected:
     PdfReader() = default;

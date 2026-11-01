@@ -24,7 +24,9 @@
 #include <QPdfWriter>
 #include <QStandardPaths>
 
+#include <algorithm>
 #include <memory>
+#include <vector>
 
 using namespace Qt::StringLiterals;
 using brulion::platform::AndroidBridge;
@@ -163,6 +165,16 @@ int main(int argc, char *argv[])
         qCWarning(lcSelfTest, "SELFTEST pdf-reader region=%d text=%d hits=%d rect=%d api=%d", difference <= 6,
                   brulion::platform::pdfTextAvailable(), hits, inText,
                   QNativeInterface::QAndroidApplication::sdkVersion());
+        // More sessions than PdfPages.MAX_SESSIONS (16): the oldest is closed under its reader,
+        // which then fails and says it is lost (the pool drops it); the newest still draws.
+        std::vector<std::unique_ptr<brulion::platform::PdfReader>> many;
+        for (int i = 0; i < 17; ++i)
+            many.push_back(brulion::platform::PdfReader::open(pdf));
+        const bool allOpen = std::all_of(many.begin(), many.end(), [](const auto &r) { return r != nullptr; });
+        const bool oldestFails = allOpen && many.front()->render(1, QSize(60, 84)).isNull();
+        qCWarning(lcSelfTest, "SELFTEST pdf-sessions opened=%d oldest-lost=%d newest-draws=%d", allOpen,
+                  oldestFails && many.front()->lost(),
+                  allOpen && !many.back()->lost() && !many.back()->render(1, QSize(60, 84)).isNull());
     }
     return QGuiApplication::exec();
 }

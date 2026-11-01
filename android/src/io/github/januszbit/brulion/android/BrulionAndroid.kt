@@ -491,6 +491,10 @@ object BrulionAndroid {
   @JvmStatic
   fun pdfClose(session: Int) = PdfPages.close(session)
 
+  /** The session is still open (false: pushed out by PdfPages.MAX_SESSIONS — the reader is dropped). */
+  @JvmStatic
+  fun pdfIsOpen(session: Int): Boolean = PdfPages.isOpen(session)
+
   /**
    * "Otwórz w innej aplikacji": the file at [path] (type [mime]) in the app the system has for it
    * (OpenWith.kt): 0 started, 1 no app, 2 failed, 3 being copied first (a memory card).
