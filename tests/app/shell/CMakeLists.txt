@@ -23,6 +23,11 @@ brulion_add_test(tst_shell_workspace_editor SOURCES tst_workspace_editor.cpp LIB
 # saved again and shown again (their versioned URL).
 brulion_add_test(tst_shell_workspace_pictures SOURCES tst_workspace_pictures.cpp ../minihttpserver.h
     LIBS brulion_shell brulion_editor brulion_core_drawing Qt6::Network)
+# PDFs on the real Workspace (workspacepdf.cpp): "Otwórz w innej aplikacji" through a recording hook
+# (what is refused and why), "Rysuj na tej stronie" (the drawing embedded after the PDF's block, or
+# in today's journal), the drawings of a page, the thumbnails with this build's renderer.
+brulion_add_test(tst_shell_workspace_pdf SOURCES tst_workspace_pdf.cpp
+    LIBS brulion_shell brulion_platform brulion_pdfview brulion_core_drawing)
 
 # The real shell in its QML, headless (`brulion --selftest-shell`, src/app/shell/shellselftest.h):
 # key routing and focus (Escape/back with the drawer and the palette open, back through the
