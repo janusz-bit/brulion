@@ -95,6 +95,17 @@
 # the barrel button (BUTTON_STYLUS_PRIMARY) the second, and once a stylus was seen a finger moves
 # the paper instead of drawing. The drawing file is read back after each step; screenshots st-*.png;
 # the same debuggable APK.
+# With --pdf instead: PDFs (docs/UI.md "PDF viewer", docs/ANDROID.md "PDF") — tests/data/pdf/wyklad.pdf
+# and zaszyfrowany.pdf in a notebook whose journal embeds both: the thumbnail is drawn (its tile's
+# accessible name has the page count), the locked one names the password; a tap opens the viewer
+# ("Strona 1 z 3"), a swipe up reaches page 2, a pinch (two fingers injected by BrulionPen) zooms in;
+# on Android 15+ (API 35) the search button is there and "gesla" finds "gęślą" once, below it there
+# is none; TOTAL PSS after zooming in and scrolling through every page stays under 350 MB;
+# "Otwórz w innej aplikacji" starts ACTION_VIEW of the FileProvider's content:// URI (or, with no
+# PDF app in the image, the app's message); "Rysuj na tej stronie" opens the drawing editor, its file
+# in assets/ and its embed right after the PDF's line of the journal; Back → the viewer, Back → the
+# journal. Screenshots pdf-*.png; the same debuggable APK
+# (BRULION_EMULATOR_IMAGE="system-images;android-30;google_apis;x86_64": the search hidden).
 # With --web-keyboard SITE_DIR instead: the web build (scripts/wasm-build.sh -> dist-wasm) in Android's
 # browsers — Chrome (in the google_apis image), Brave 1.97.59 and Firefox 157.0.1 (pinned APKs,
 # SHA-256 checked, cached in ~/.cache/brulion-web-browsers): the site served from the host under
@@ -133,6 +144,7 @@
 #        scripts/android-emulator-test.sh --drawing [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --stylus [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --pickers [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --pdf [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-keyboard [SITE_DIR]   (default dist-wasm)
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
@@ -189,6 +201,7 @@ DONE=0
 DRAWING=0
 STYLUS=0
 PICKERS=0
+PDF=0
 WEBKEYBOARD=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
@@ -217,6 +230,9 @@ elif [[ ${1:-} == --stylus ]]; then
 elif [[ ${1:-} == --pickers ]]; then
   PICKERS=1
   shift
+elif [[ ${1:-} == --pdf ]]; then
+  PDF=1
+  shift
 elif [[ ${1:-} == --web-pictures ]]; then
   WEBPICTURES=1
   shift
@@ -232,7 +248,7 @@ else
   APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || DRAWING || STYLUS || PICKERS)) ||
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || DRAWING || STYLUS || PICKERS || PDF)) ||
     [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
 fi
@@ -1456,6 +1472,121 @@ if ((DRAWING)); then
   exit 0
 fi
 
+# --- PDFs: the thumbnail, the viewer, its search, open elsewhere, a drawing on a page (--pdf) -------
+
+if ((PDF)); then
+  info "PDFs: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  PD_VAULT=files/Wyklady
+  today=$(adb shell date +%F | tr -d '\r')
+  printf -- '- Wykład ![[wyklad.pdf]]\n- Sejf ![[zaszyfrowany.pdf]]\n' >"$OUT/journal.md"
+  adb push "$OUT/journal.md" /data/local/tmp/brulion-journal.md >/dev/null
+  adb push tests/data/pdf/wyklad.pdf /data/local/tmp/brulion-wyklad.pdf >/dev/null
+  adb push tests/data/pdf/zaszyfrowany.pdf /data/local/tmp/brulion-sejf.pdf >/dev/null
+  adb shell run-as "$PKG" mkdir -p "$PD_VAULT/journals" "$PD_VAULT/assets"
+  adb shell run-as "$PKG" cp /data/local/tmp/brulion-journal.md "$PD_VAULT/journals/$today.md"
+  adb shell run-as "$PKG" cp /data/local/tmp/brulion-wyklad.pdf "$PD_VAULT/assets/wyklad.pdf"
+  adb shell run-as "$PKG" cp /data/local/tmp/brulion-sejf.pdf "$PD_VAULT/assets/zaszyfrowany.pdf"
+  # The pinch: two fingers injected as the shell user (scripts/android-stylus/BrulionPen.java).
+  platform_jar=$(find "$SDK/platforms" -maxdepth 2 -name android.jar | sort -V | tail -n 1)
+  d8=$(find "$SDK/build-tools" -maxdepth 2 -name d8 | sort -V | tail -n 1)
+  [[ -n $platform_jar && -n $d8 ]] || die "--pdf needs an SDK platform (android.jar) and build-tools (d8)"
+  pen_build=$(mktemp -d)
+  javac --release 17 -nowarn -cp "$platform_jar" -d "$pen_build" scripts/android-stylus/BrulionPen.java
+  bash "$d8" --min-api 30 --lib "$platform_jar" --output "$pen_build" "$pen_build/BrulionPen.class"
+  adb push "$pen_build/classes.dex" /data/local/tmp/brulion-pen.dex >/dev/null
+  pinch() { adb shell CLASSPATH=/data/local/tmp/brulion-pen.dex app_process / BrulionPen pinch "$@" | tr -d '\r'; }
+  zoom() { ui_find_all 'Powiększenie [0-9]+ %' >/dev/null; sed 's/<node /\n<node /g' "$OUT/ui.xml" |
+    sed -nE 's/.*content-desc="Powiększenie ([0-9]+) %".*/\1/p' | head -n 1; }
+  journal_text() { adb shell run-as "$PKG" cat "$PD_VAULT/journals/$today.md" | tr -d '\r'; }
+
+  start_app "--vault /data/user/0/$PKG/$PD_VAULT --locale pl --route journals"
+  check "the app is running" running
+  check "the PDF's thumbnail is drawn (its page count known)" wait_for 30 ui_has 'PDF wyklad\.pdf, strona 1 z 3'
+  app_shot pdf-1-journal
+  # The locked PDF's tile is under the first one: scrolled into view (a screenshot), then back. Its
+  # accessible name says why it shows no page.
+  adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 75 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) 500
+  check "the locked PDF's tile names the password" wait_for 10 ui_has 'PDF zaszyfrowany\.pdf: PDF chroniony hasłem'
+  app_shot pdf-1-locked
+  adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 75 / 100)) 500
+  check "… the first tile back in view" wait_for 10 ui_has 'PDF wyklad\.pdf, strona 1 z 3'
+  check "a tap on the thumbnail opens the PDF viewer" ui_tap 'PDF wyklad\.pdf, strona 1 z 3' first 4
+  check "… on page 1 of 3" wait_for 15 ui_has 'Strona 1 z 3'
+  app_shot pdf-2-viewer
+  adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 80 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 25 / 100)) 400
+  check "a swipe up reaches page 2" wait_for 10 ui_has 'Strona [23] z 3'
+  before=$(zoom)
+  echo "    zoom before the pinch: ${before:-?} %"
+  pinch $((SCREEN_W / 2)) $((SCREEN_H / 2)) $((SCREEN_W / 6)) $((SCREEN_W * 2 / 3)) 500 >/dev/null
+  sleep 2
+  after=$(zoom)
+  echo "    zoom after the pinch: ${after:-?} %"
+  check "a pinch zooms in" bash -c "[[ -n '$before' && -n '$after' ]] && ((${after:-0} > ${before:-0} * 12 / 10))"
+  app_shot pdf-3-pinched
+  if ((android_api >= 35)); then
+    check "Android $android_api: the search button is there" ui_tap 'Szukaj w PDF-ie(, Ctrl\+F)?' first 2
+    adb shell input text gesla
+    check "… 'gesla' finds 'gęślą' once" wait_for 10 ui_has '1 z 1'
+    app_shot pdf-4-search
+    adb shell input keyevent KEYCODE_BACK # (closes the search while it has the keyboard)
+    sleep 2
+  else
+    check "Android $android_api: no search (PdfRenderer has no text before 15)" ui_lacks 'Szukaj w PDF-ie(, Ctrl\+F)?'
+  fi
+  # Memory after zooming to 400 % and scrolling through every page.
+  for _ in 1 2 3 4 5 6; do pinch $((SCREEN_W / 2)) $((SCREEN_H / 2)) $((SCREEN_W / 8)) $((SCREEN_W * 3 / 4)) 300 >/dev/null; done
+  for _ in 1 2 3 4 5 6 7 8; do
+    adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 75 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 25 / 100)) 300
+  done
+  sleep 3
+  adb shell dumpsys meminfo "$PKG" >"$OUT/pdf-meminfo.txt"
+  pss=$(sed -nE 's/^ *TOTAL PSS: *([0-9]+).*/\1/p; s/^ *TOTAL *([0-9]+) .*/\1/p' "$OUT/pdf-meminfo.txt" | head -n 1)
+  echo "    memory at $(zoom) % after scrolling every page: TOTAL PSS ${pss:-?} KB (budget 350 MB)"
+  check "memory stays under 350 MB" bash -c "((${pss:-999999} < 350 * 1024))"
+  app_shot pdf-5-zoomed
+  # "Otwórz w innej aplikacji": ACTION_VIEW of the FileProvider's content:// URI, or — no PDF app in
+  # the image — the app's message.
+  adb logcat -c
+  check "the viewer's ⋯ opens its menu" ui_tap 'Więcej' last 2
+  check "… with 'Otwórz w innej aplikacji'" ui_tap 'Otwórz w innej aplikacji' first 3
+  adb logcat -d >"$OUT/pdf-open-logcat.txt"
+  if grep -qE "act=android.intent.action.VIEW.*dat=content://$PKG.qtprovider/" "$OUT/pdf-open-logcat.txt"; then
+    check "the PDF went to another app through the FileProvider" true
+    adb shell input keyevent KEYCODE_BACK
+    sleep 2
+    adb shell am start -n "$ACTIVITY" >/dev/null
+    sleep 3
+  else
+    check "no PDF app in this image: the app says so" wait_for 5 ui_has '.*Na tym urządzeniu nie ma aplikacji do otwierania PDF-ów.*'
+  fi
+  # "Rysuj na tej stronie": the drawing editor; the drawing embedded after the PDF's line.
+  check "the viewer's ⋯ again" ui_tap 'Więcej' last 2
+  check "… 'Rysuj na tej stronie'" ui_tap 'Rysuj na tej stronie' first 6
+  check "the drawing editor opens" wait_for 20 ui_has 'Gotowe'
+  app_shot pdf-6-drawing
+  drawing=$(adb shell run-as "$PKG" ls "$PD_VAULT/assets" | tr -d '\r' | grep -E '^wyklad s\. [0-9]+\.svg$' | head -n 1)
+  echo "    the drawing: ${drawing:-none}"
+  check "its file is in assets/" bash -c "[[ -n '$drawing' ]]"
+  line2=$(journal_text | sed -n 2p)
+  check "the journal embeds it right after the PDF's line" bash -c "[[ \"$line2\" == *\"${drawing:-?}\"* ]]"
+  journal_text | sed 's/^/      /'
+  adb shell input keyevent KEYCODE_BACK
+  check "Back returns to the viewer" wait_for 10 ui_has 'Strona [0-9]+ z 3'
+  adb shell input keyevent KEYCODE_BACK
+  check "Back again returns to the journal" wait_for 10 ui_has 'PDF wyklad\.pdf, strona 1 z 3'
+  app_shot pdf-7-journal
+
+  adb logcat -d >"$OUT/pdf-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/pdf-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/pdf-logcat.txt'"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
 # --- a stylus's pressure in the drawing editor (--stylus) -----------------------------------------
 
 if ((STYLUS)); then
@@ -2355,11 +2486,23 @@ adb logcat -c
 adb shell am start -W -n "$ACTIVITY" --es "$EXTRA.PATH" dziennik/zimny-start.md --ei "$EXTRA.LINE" 5 >/dev/null
 started=$SECONDS
 check "scheduleReminders round 1: 3 armed (past one skipped)" wait_for 20 log_has "SELFTEST schedule round=1 ok=1 scheduled=3 exact=1"
-check "scheduleReminders round 2: idempotent" log_has "SELFTEST schedule round=2 ok=1 scheduled=3 exact=1"
-check "permissions reported (notifications granted, exact alarms)" log_has "SELFTEST permissions(start) allFiles=0 notifications=1 exact=1"
+check "scheduleReminders round 2: idempotent" wait_for 10 log_has "SELFTEST schedule round=2 ok=1 scheduled=3 exact=1"
+check "permissions reported (notifications granted, exact alarms)" wait_for 10 log_has "SELFTEST permissions(start) allFiles=0 notifications=1 exact=1"
 # A PDF page through Android's PdfRenderer (src/platform/pdfpages_android.cpp, PdfPages.kt).
+# (Waited for: the self-test writes and draws the PDFs after the lines above.)
 check "PDF page drawn by PdfRenderer (red square, white corner)" \
-  log_has "SELFTEST pdf backend=Android PdfRenderer pages=1 first=59[0-9]x84[0-9] width=59[0-9] height=84[0-9] centre=#ff0000 corner=#ffffff"
+  wait_for 15 log_has "SELFTEST pdf backend=Android PdfRenderer pages=1 first=59[0-9]x84[0-9] width=59[0-9] height=84[0-9] centre=#ff0000 corner=#ffffff"
+# The PDF viewer's reader: a session's part of a page equals the whole page's crop; its text and
+# search only on Android 15+ (API 35), none below.
+check "PdfRenderer session: a part of a page equals the whole page's crop" wait_for 10 log_has "SELFTEST pdf-reader region=1"
+sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+if [[ "${sdk:-0}" -ge 35 ]]; then
+  check "PDF text on API $sdk: 'GESLA' found once, where the text is" log_has "SELFTEST pdf-reader region=1 text=1 hits=1 rect=1"
+else
+  check "no PDF text on API $sdk (search hidden)" log_has "SELFTEST pdf-reader region=1 text=0 hits=0"
+fi
+check "PdfRenderer sessions over the cap: the oldest reader is lost, the newest draws" \
+  wait_for 10 log_has "SELFTEST pdf-sessions opened=1 oldest-lost=1 newest-draws=1"
 check "cold-start tap delivered to C++" wait_for 10 log_has "SELFTEST activated path=dziennik/zimny-start.md line=5"
 # A tap while the app runs: onNewIntent -> nativeActivated (Polish path).
 adb shell am start -n "$ACTIVITY" --es "$EXTRA.PATH" "'strony/Łódź.md'" --ei "$EXTRA.LINE" 7 >/dev/null

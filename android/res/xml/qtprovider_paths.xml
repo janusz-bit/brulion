@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Brulion's FileProvider "<package>.qtprovider" (AndroidManifest.xml; Qt's template has only the
+     files dir): the share sheet of exports (the app's files dir), "Otwórz w innej aplikacji" of the
+     PDF viewer (OpenWith.kt: the notebook on the shared storage; a copy in the cache for one on a
+     memory card). The provider is not exported; every URI is granted to one app for one file, on the
+     user's action only. -->
+<paths>
+    <files-path name="files" path="." />
+    <cache-path name="cache" path="." />
+    <external-path name="external" path="." />
+</paths>

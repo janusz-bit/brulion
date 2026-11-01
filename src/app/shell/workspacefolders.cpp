@@ -312,6 +312,7 @@ QString Workspace::relocate(const QString &from, const QString &to)
     // Every note that links to a moved file must be indexed before the plan asks (right after
     // opening the index is still being built in the background).
     finishIndexing();
+    releasePdfReaders(paths::normalize(from));
     const notebook::Relocation moved = notebook::relocate(*m_vault, m_index.get(), from, to, ChangeSource::User);
     if (moved.path.isEmpty()) {
         if (moved.problem.kind == notebook::PathProblem::Failed) {

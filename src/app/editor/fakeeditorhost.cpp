@@ -492,8 +492,27 @@ QVariantList FakeEditorHost::templates() const
     return out;
 }
 
+QVariantMap FakeEditorHost::pdfThumbnail(const QString &path, int page) const
+{
+    m_pdfAsks.append(path + u'#' + QString::number(page));
+    return m_pdfThumbnails.value(path, {{u"state"_s, u"loading"_s}});
+}
+
+bool FakeEditorHost::openInOtherApp(const QString &path)
+{
+    m_openedElsewhere.append(path);
+    return true;
+}
+
+void FakeEditorHost::setPdfThumbnail(const QString &path, const QVariantMap &thumbnail)
+{
+    m_pdfThumbnails.insert(path, thumbnail);
+    Q_EMIT pdfThumbnailChanged(path);
+}
+
 QUrl FakeEditorHost::assetUrl(const QString &path) const
 {
+    ++m_assetAsks[path];
     const auto cached = m_assetUrls.constFind(path);
     if (cached != m_assetUrls.constEnd())
         return *cached;

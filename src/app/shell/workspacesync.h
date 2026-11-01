@@ -352,6 +352,9 @@ private:
     void scheduleLive();
     void updateLive();
     void onRunFinished(const sync::SyncReport &report, bool stalled);
+    /// From a run's start to its end no PDF reader waits idle (PdfReaderPool::suspendIdle(): the
+    /// run may replace a PDF, which Windows refuses while it is open). Paired; teardown resumes.
+    void suspendPdfReaders(bool suspend);
     void openHistory();
     QVariantMap historyRow(const sync::SyncRunRecord &record) const;
     QString phaseText(const QString &phase) const;
@@ -380,6 +383,7 @@ private:
     std::function<QDateTime()> m_clock;
     std::function<bool()> m_onlineCheck;
     bool m_automatic = true;
+    bool m_pdfReadersSuspended = false;
     bool m_discovery = true;
     bool m_appActive = true;
     int m_testing = 0;

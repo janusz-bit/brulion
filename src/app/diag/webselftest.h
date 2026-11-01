@@ -1,13 +1,17 @@
 // Self-tests of the browser build that need the running app (tests/web, the Playwright harness;
-// docs/WEB.md "Testy w przeglądarkach"): `?selftest=webpictures` and `?selftest=pen`
-// (wasm/index.html → --selftest-webpictures / --selftest-pen; main.cpp starts them once the
-// notebook is open).
+// docs/WEB.md "Testy w przeglądarkach"): `?selftest=webpictures`, `?selftest=pen`, `?selftest=pdf`
+// and `?selftest=pdfauto` (wasm/index.html → --selftest-webpictures / --selftest-pen /
+// --selftest-pdf / --selftest-pdfauto; main.cpp starts them once the notebook is open).
 //
 //   WebPicturesSelfTest   the pictures from the internet of one page as the editor fetches them
 //                         (published as "brulionWebPictureSelfTest"), then an export with copies
 //                         of them ("brulionExportSelfTest")
 //   PenSelfTest           the drawing editor's canvas under a pen ("brulionPenSelfTest": its
 //                         freehand lines with their pressures, where they are on screen)
+//   PdfSelfTest           PDFs without a renderer ("brulionPdfSelfTest": where a PDF's chip and a
+//                         link to it are on screen, the route, the viewer's message; with
+//                         `openNow` "brulionPdfOpenSelfTest": a PDF handed to the browser outside
+//                         any click)
 //   startBrowserSelfTests the flows named by the app's arguments, once the app is ready
 //
 // Platform-neutral: results go through `publish` (in the browser platform::publishSelfTestResult:
@@ -24,6 +28,7 @@
 #include <QSet>
 #include <QStringList>
 #include <QTimer>
+#include <QVariantMap>
 
 #include <functional>
 
@@ -162,8 +167,42 @@ private:
     int m_changes = 0;
 };
 
+/// PDFs in the browser build (docs/WEB.md "PDF w przeglądarce"): every 250 ms for two minutes,
+/// when it changed, publishes "brulionPdfSelfTest" — {route: {view, path} (routeSource()), chip:
+/// {x, y, w, h, icon, text} (the first PDF chip on screen, "pdfEmbedChip", window coordinates) or
+/// null, link: {x, y, w, h} (the first rendered text on screen whose rich text links "<a href" a
+/// `.pdf`, outside a chip) or null, message (the PDF viewer's sentence, "pdfMessageText") and button
+/// (its button's text, "pdfOpenElsewhere"), "" without them}. openNow(path): the PDF handed to the
+/// browser at once (Workspace::openInOtherApp, outside any user gesture — a browser may block the
+/// tab) → "brulionPdfOpenSelfTest" {path, opened, notices, errors}.
+class PdfSelfTest : public QObject {
+    Q_OBJECT
+public:
+    PdfSelfTest(QQuickWindow *window, shell::Workspace *workspace, PublishFn publish, QObject *parent = nullptr);
+
+    void setRouteSource(std::function<QVariantMap()> route) { m_route = std::move(route); }
+    void start();
+    QJsonObject report() const;
+    void openNow(const QString &path);
+    /// How long start() keeps looking (tests).
+    void setDurationMs(int ms) { m_durationMs = ms; }
+
+private:
+    void look();
+
+    QPointer<QQuickWindow> m_window;
+    QPointer<shell::Workspace> m_workspace;
+    PublishFn m_publish;
+    std::function<QVariantMap()> m_route;
+    QTimer m_timer;
+    QElapsedTimer m_clock;
+    QJsonObject m_last;
+    int m_durationMs = 120000;
+};
+
 /// main.cpp, the browser: starts the flows `args` names (--selftest-webpictures: the pictures of
-/// today's journal; --selftest-pen) once `app`'s status is "ready" (at once when it already is).
+/// today's journal; --selftest-pen; --selftest-pdf; --selftest-pdfauto: the PDF test opening
+/// `assets/wykład.pdf` itself 2 s after) once `app`'s status is "ready" (at once when it already is).
 /// Nothing without those arguments.
 void startBrowserSelfTests(QQmlApplicationEngine *engine, shell::AppController *app, const QStringList &args,
                            PublishFn publish);

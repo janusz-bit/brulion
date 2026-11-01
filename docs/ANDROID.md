@@ -543,9 +543,12 @@ następne uruchomienie odnotowuje taką sesję). Wysłać go można:
 
 * **Udostępnij** — kopia eksportu trafia do `files/share/` (stara jest usuwana) i idzie przez
   systemowy arkusz udostępniania (`ACTION_SEND`, `EXTRA_STREAM` z adresem `content://` z
-  FileProvidera Qt `<pakiet>.qtprovider`, który obejmuje tylko `files-path`, stąd katalog pod
-  `files/`; odbiorca dostaje jednorazowe prawo odczytu) — `AndroidBridge::shareFile()`, JNI bez
-  kodu Kotlina;
+  FileProvidera `<pakiet>.qtprovider`; odbiorca dostaje jednorazowe prawo odczytu) —
+  `AndroidBridge::shareFile()`, JNI bez kodu Kotlina. Korzenie dostawcy wyznacza nasz
+  `android/res/xml/qtprovider_paths.xml` (zastępuje szablon Qt, który obejmował tylko `files-path`):
+  pliki i pamięć podręczna aplikacji oraz pamięć współdzielona (`external-path`, tam zwykle leży
+  notatnik — „Otwórz w innej aplikacji” przeglądarki PDF); dostawca nie jest eksportowany, a każdy
+  adres dostaje jedna aplikacja, na wyraźne polecenie użytkownika;
 * **Zapisz w Pobranych** (`MediaStore`, jak eksport) albo **Zapisz jako…** (systemowe okno);
 * **Kopiuj** — do schowka (najnowsze 256 KB).
 
@@ -646,6 +649,52 @@ Zostaje do sprawdzenia na prawdziwym telefonie: przesuwanie palcem powiększoneg
 i gest **Wstecz** z krawędzi ekranu (emulator dostaje tylko klawisz Wstecz i proste przeciągnięcia),
 wklejenie adresu skopiowanego w Chrome przez **Wklej** z menu tekstu Brulionu, eksport HTML
 z „Dołącz kopie”, prawdziwa sieć komórkowa / Wi-Fi zamiast sieci emulatora.
+
+## PDF
+
+PDF-y rysuje systemowy `android.graphics.pdf.PdfRenderer` (bez bibliotek w APK, docs/UI.md
+„PDF viewer”): miniatury PDF-ów osadzonych w notatkach, przeglądarka PDF i strony PDF jako podkład
+rysunku. `PdfPages.kt` trzyma **sesje** — otwarty plik i jego `PdfRenderer` — najwyżej sześć naraz
+(najstarszą zamyka, żeby wyciek po stronie C++ nie zużył deskryptorów plików); każde wywołanie jest
+zsynchronizowane na swojej sesji (PdfRenderer otwiera jedną stronę naraz). Strona albo jej część
+(szczegół powiększonej strony) rysuje się wprost w piksele obrazu C++ (`pdfRenderInto`: bezpośredni
+`ByteBuffer` na pamięci `QImage`, jedna kopia przez `Bitmap.copyPixelsToBuffer`).
+
+**Szukanie** działa od **Androida 15** (API 35: `PdfRenderer.Page.getTextContents()` i
+`searchText()`); `pdfTextAvailable()` sprawdza raz, czy system ma te metody (kompilacja OEM bez
+nich — przycisk szukania znika). Własne szukanie PdfRenderera rozróżnia polskie litery, więc
+Brulion szuka po swojemu w tekście strony (bez wielkości liter i polskich znaków,
+`src/platform/pdfsearch.h`), a PdfRenderera prosi tylko o prostokąty każdej znalezionej pisowni.
+Na Androidzie 14 i starszych przycisku szukania nie ma; reszta przeglądarki działa.
+
+**Otwórz w innej aplikacji** (`OpenWith.kt`, `AndroidBridge::viewFile`): `ACTION_VIEW` z adresem
+`content://<pakiet>.qtprovider/…` i prawem odczytu tylko tego pliku, bez okna wyboru (system sam
+pyta, gdy nie ma domyślnej aplikacji). Plik spoza korzeni dostawcy (notatnik na karcie pamięci)
+najpierw kopiuje się w tle do `cache/open/` (starsze kopie znikają), potem otwiera się aplikacja.
+Bez aplikacji do PDF-ów Brulion mówi „Na tym urządzeniu nie ma aplikacji do otwierania PDF-ów.”.
+
+Na emulatorze (`scripts/android-emulator-test.sh --pdf`, ten sam debugowalny APK): miniatura
+`tests/data/pdf/wyklad.pdf` w dzienniku (nazwa dostępności kafelka z liczbą stron), zamknięty hasłem
+`zaszyfrowany.pdf` z „PDF chroniony hasłem”, dotknięcie otwiera przeglądarkę („Strona 1 z 3”),
+przesunięcie w górę — stronę 2, uszczypnięcie (dwa palce wstrzyknięte przez
+`scripts/android-stylus/BrulionPen.java pinch`) powiększa; na API 36 szukanie „gesla” znajduje
+„gęślą” raz, na obrazie `system-images;android-30;google_apis;x86_64`
+(`BRULION_EMULATOR_IMAGE`) przycisku szukania nie ma; pamięć (`dumpsys meminfo`, TOTAL PSS) po
+powiększeniu do 400 % i przewinięciu wszystkich stron — poniżej 350 MB; „Otwórz w innej aplikacji”
+to `START … act=android.intent.action.VIEW dat=content://io.github.januszbit.brulion.qtprovider/…
+typ=application/pdf` w logcat (albo, bez aplikacji do PDF-ów w obrazie, komunikat aplikacji);
+„Rysuj na tej stronie” otwiera edytor rysunku, plik `assets/wyklad s. 1.svg` (strona, na której
+była przeglądarka) i jego osadzenie zaraz pod linią PDF-a w dzienniku; Wstecz → przeglądarka,
+Wstecz → dziennik. Zrzuty `pdf-*.png`. Test mostu (APK testowy) dodaje wiersz
+`SELFTEST pdf-reader region=1 text=… hits=… rect=… api=…`: część strony narysowana osobno równa się
+wycinkowi całej strony; na API ≥ 35 `find("GESLA")` znajduje jedno trafienie w miejscu tekstu, poniżej
+— żadnego (`text=0`). Wiersz `SELFTEST pdf-sessions opened=1 oldest-lost=1 newest-draws=1`: przy 17
+otwartych sesjach (limit `PdfPages.MAX_SESSIONS` to 16) najstarsza zostaje zamknięta, jej czytnik
+zgłasza `lost()` (pula go odrzuca, zamiast użyć ponownie), a najnowszy dalej rysuje.
+
+Zostaje do sprawdzenia na prawdziwym telefonie: płynność szczypania i gest Wstecz z krawędzi,
+szukanie na Androidzie 15+ na prawdziwym urządzeniu, „Otwórz w innej aplikacji” z prawdziwymi
+aplikacjami do PDF-ów, duże skany z wykładów.
 
 ## Budowanie APK
 
@@ -951,7 +1000,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--pickers`: systemowe okna wyboru plików (import plików i folderu, „Zapisz” eksportu); `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--pickers`: systemowe okna wyboru plików (import plików i folderu, „Zapisz” eksportu); `--pdf`: miniatury PDF-ów, przeglądarka PDF, szczypanie, szukanie od Androida 15, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”, pamięć; `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
@@ -999,8 +1048,13 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | sygnał `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | natywna `nativeImeChanged(Int, Boolean, Boolean)` (z `ImeInsets`, piksele fizyczne, każda klatka wysuwania na Androidzie 11+) / `requestImeState()` — raport jeszcze raz |
 | sygnał `systemGesturesChanged(int left, int right)` | natywna `nativeGestureInsetsChanged(Int, Int)` (z `ImeInsets`, piksele fizyczne stref gestów systemu przy krawędziach widoku Qt; raport jeszcze raz też przez `requestImeState()`) |
 | `void setSystemBarsLight(bool light)` | `setSystemBarsLight(Boolean)` — ikony pasków systemu ciemne nad jasnym oknem (Android 11+, okno pod paskami) |
-| `platform::pdfInfo(file, pageSizes)` (`src/platform/pdfpages_android.cpp`, nie `AndroidBridge`; każdy wątek) | `pdfInfo(String, Boolean): String` — `{"pages", "sizes": [[w, h], …] (punkty, tylko z `pageSizes`), "error", "locked"}` (`PdfPages.kt`: systemowy `android.graphics.pdf.PdfRenderer`) |
-| `platform::renderPdfPage(file, page, maxSide)` (j.w.) | `renderPdfPage(String, Int, Int): ByteArray?` — 8 bajtów nagłówka (szerokość, wysokość, big-endian) i piksele RGBA_8888 strony na białym tle, dłuższy bok `maxSide`; `null` przy błędzie |
+| `platform::PdfReader::open(file)` (`src/platform/pdfpages_android.cpp`, nie `AndroidBridge`; każdy wątek) | `pdfOpen(String): String` — `{"session", "pages", "size": [w, h] (pierwsza strona, punkty), "locked", "error"}` (`PdfPages.kt`: sesja systemowego `android.graphics.pdf.PdfRenderer`; `session` 0 — nie otwarto) |
+| `PdfReader::pageSize(page)` (j.w., po 64 strony) | `pdfPageSizes(Int, Int, Int): String` — `[[w, h], …]` |
+| `PdfReader::render(page, full, clip)` (j.w.) | `pdfRenderInto(Int, Int, Int, Int, Int, Int, Int, Int, ByteBuffer): Boolean` — strona przeskalowana do `full`, jej część `clip` na białym tle wprost w piksele RGBA_8888 obrazu C++ |
+| `platform::pdfTextAvailable()` | `pdfTextAvailable(): Boolean` — Android 15+ i metody tekstu PdfRenderera są w systemie |
+| `PdfReader::pageText(page)` / `find(page, query)` | `pdfPageText(Int, Int): String?` / `pdfSearch(Int, Int, Array<String>): String` — `[{"start", "rects": [[l, t, r, b], …]}, …]` każdej podanej pisowni |
+| `~PdfReader` | `pdfClose(Int)` |
+| `AndroidBridge::viewFile(path, mime)` (statyczna) | `viewFile(Context, String, String): Int` — `OpenWith.kt`: 0 uruchomiono, 1 brak aplikacji, 2 błąd, 3 kopiowanie (karta pamięci) |
 
 * Element `scheduleReminders`: `{id: int, title, body, at: ms od epoki, alarm: bool,
   ringMinutes: int (alarmy, 1–60, domyślnie 10), path: ścieżka notatki w notatniku, line: int,
@@ -1077,7 +1131,9 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   nowy dzień, wiersze list, siatka miesiąca, daty: `WidgetSnapshotTest`; wiersz szybkiego
   dodawania, dopisywanie do dziennika, zapis atomowy i ścieżki spoza notatnika (`..`, dowiązanie),
   plik nie w UTF-8, brakujący folder notatnika: `JournalAppendTest`; kolejka dla C++ i powrót
-  do niej: `WidgetInboxTest`. Przypadki
+  do niej: `WidgetInboxTest`; PDF-y — JSON sesji i trafień, rozmiary rysowane: `PdfJsonTest`;
+  „Otwórz w innej aplikacji” — czy plik leży w korzeniach FileProvidera, nazwa kopii:
+  `OpenWithTest`. Przypadki
   `tests/data/widgets/*.json` sprawdza też C++ — `tst_widgets` —, więc obie strony piszą
   i przekładają tak samo; skrypt init podaje ich folder we właściwości `brulion.testData`):
   `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (uruchamia

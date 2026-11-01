@@ -23,6 +23,11 @@ brulion_add_test(tst_shell_workspace_editor SOURCES tst_workspace_editor.cpp LIB
 # saved again and shown again (their versioned URL).
 brulion_add_test(tst_shell_workspace_pictures SOURCES tst_workspace_pictures.cpp ../minihttpserver.h
     LIBS brulion_shell brulion_editor brulion_core_drawing Qt6::Network)
+# PDFs on the real Workspace (workspacepdf.cpp): "Otwórz w innej aplikacji" through a recording hook
+# (what is refused and why), "Rysuj na tej stronie" (the drawing embedded after the PDF's block, or
+# in today's journal), the drawings of a page, the thumbnails with this build's renderer.
+brulion_add_test(tst_shell_workspace_pdf SOURCES tst_workspace_pdf.cpp
+    LIBS brulion_shell brulion_platform brulion_pdfview brulion_core_drawing)
 
 # The real shell in its QML, headless (`brulion --selftest-shell`, src/app/shell/shellselftest.h):
 # key routing and focus (Escape/back with the drawer and the palette open, back through the
@@ -37,7 +42,9 @@ brulion_add_test(tst_shell_workspace_pictures SOURCES tst_workspace_pictures.cpp
 # a row's "⋯" / right-click menu, a root folder from the
 # "Strony" header, the desktop run's mouse drag and drop with Escape, All pages' folder rows and
 # breadcrumb), the block editor inside the shell (real keys, source mode, a link to a missing
-# page) and closing the notebook from the UI. Exit code = failures.
+# page), PDFs (the thumbnail, the viewer's keys, zoom, search, page jump, a drawing on a page, a
+# locked PDF from tests/data/pdf: BRULION_SELFTEST_PDF_DIR) and closing the notebook from the UI.
+# Exit code = failures.
 # A private XDG home keeps the sample notebook and settings out of the user's own.
 # Qt's QML modules are found as for tst_editor_qml (tests/app/editor/CMakeLists.txt).
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
@@ -67,7 +74,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/selftest-home-${_kind})
         brulion_test_profile(_profile shell-${_kind})
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state${_profile}"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state;BRULION_SELFTEST_PDF_DIR=${PROJECT_SOURCE_DIR}/tests/data/pdf${_profile}"
             FIXTURES_REQUIRED shell_qml_homes TIMEOUT ${_shell_qml_timeout} PROCESSORS 2
             # QML that ran on something already gone fails too, as in tst_editor_qml (a side
             # panel created from the context of the view the shell had just left did).
@@ -148,7 +155,7 @@ set_tests_properties(tst_shell_workspace_wiring_inline PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;BRULION_INDEX_THREADS=0;QTEST_FUNCTION_TIMEOUT=${_wiring_timeout_ms}")
 if(TARGET brulion_sync_testsupport)
     brulion_add_test(tst_shell_workspace_sync SOURCES tst_workspace_sync.cpp
-        LIBS brulion_shell brulion_sync_testsupport)
+        LIBS brulion_shell brulion_sync_testsupport brulion_pdfview)
     # Nextcloud per notebook through AppController and the in-memory server: the settings of
     # 0.3.0 and older going to the notebook that was synced (never mixing two notebooks in one
     # server folder), the same notebook through a symlink or a relative path, the start screen.

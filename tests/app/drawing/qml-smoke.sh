@@ -7,9 +7,10 @@
 # (`*.excalidraw.md`: an editable one, one with a frame and one in the plugin's oldest form —
 # read-only —, a plugin file without the suffix embedded as a page; a plugin file opened as a page
 # shows its drawing), a drawing on a slide (a backdrop, "Podkład": the drawing, its PDF's page
-# picker, the paper's menu, its embed), in the real app at desktop and phone sizes in
+# picker, the paper's menu, its embed), a PDF embedded as its thumbnail and the PDF viewer (with
+# its search and page jump opened), in the real app at desktop and phone sizes in
 # the light and the dark theme, headless; fails when the app does not start or QML reports a
-# warning or error from the drawing editor's files, the embeds or the picture view.
+# warning or error from the drawing editor's files, the embeds, the picture view or the PDF viewer.
 #
 #   tests/app/drawing/qml-smoke.sh <brulion binary> <scratch dir> <tests/data/drawing>
 set -uo pipefail
@@ -35,7 +36,7 @@ cp "$data/obsidian_mixed.excalidraw.md" "$vault/Plan ogrodu.md"
 # A drawing on page 2 of a lecture's PDF (its backdrop names the PDF, which is there).
 cp "$data/backdrop.svg" "$vault/assets/Slajd z notatkami.svg"
 cp "$data/slajdy.pdf" "$vault/Załączniki/Wykład 3 – ruch falowy.pdf"
-printf -- '- Ćwiczenie: ![[Rysunek ćwiczenia.svg]]\n- ![[Schemat.svg]]\n- ![[Ramka.svg]]\n- ![[logo.svg]]\n- ![[Szkic.excalidraw]]\n- ![[Ramka z Obsidiana.excalidraw.md]]\n- ![[Plan ogrodu]]\n- Slajd: ![[Slajd z notatkami.svg]]\n' > "$vault/Zajęcia.md"
+printf -- '- Ćwiczenie: ![[Rysunek ćwiczenia.svg]]\n- ![[Schemat.svg]]\n- ![[Ramka.svg]]\n- ![[logo.svg]]\n- ![[Szkic.excalidraw]]\n- ![[Ramka z Obsidiana.excalidraw.md]]\n- ![[Plan ogrodu]]\n- Slajd: ![[Slajd z notatkami.svg]]\n- Wykład: ![[Wykład 3 – ruch falowy.pdf]]\n- Strona 2: ![[Wykład 3 – ruch falowy.pdf#page=2]]\n' > "$vault/Zajęcia.md"
 
 routes=(
   '{"view":"drawing","path":"assets/Rysunek ćwiczenia.svg"}'
@@ -57,8 +58,11 @@ routes=(
   '{"view":"drawing","path":"assets/Slajd z notatkami.svg"}'
   '{"view":"drawing","path":"assets/Slajd z notatkami.svg","open":"backdrop"}'
   '{"view":"drawing","path":"assets/Slajd z notatkami.svg","open":"paper"}'
+  '{"view":"page","path":"Załączniki/Wykład 3 – ruch falowy.pdf"}'
+  '{"view":"page","path":"Załączniki/Wykład 3 – ruch falowy.pdf","pdfPage":2,"open":"search","search":"fala"}'
+  '{"view":"page","path":"Załączniki/Wykład 3 – ruch falowy.pdf","open":"jump"}'
 )
-pattern='qml/(drawing/|editor/EmbedView|content/ContentPictureView|views/PageView|shell/(ShellRouteView|AppShell))'
+pattern='qml/(drawing/|editor/(EmbedView|PdfEmbedTile)|content/(ContentPictureView|ContentPdfView)|views/PageView|shell/(ShellRouteView|AppShell))'
 
 failed=0
 for theme in light dark; do

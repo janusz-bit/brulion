@@ -4,7 +4,10 @@
 #                Windows AppUserModelID of the toasts; pure helpers everywhere), pickedfiles (the
 #                bookkeeping of the browser's file picker, wasm/wasmfiles.h; pure, tested
 #                everywhere), pdfpages (PDF pages as pictures: a drawing's backdrop — one backend per
-#                build, below), documentpaths (the file an Android document URI names: a picked file
+#                build, below; PdfReader: an open PDF drawing parts of pages and finding text for the
+#                PDF viewer), pdfsearch (its matcher: pure, tested everywhere), openexternal (a file
+#                handed to the system's app: desktop, Android, a browser tab — one per build, below),
+#                documentpaths (the file an Android document URI names: a picked file
 #                of the notebook used where it is; pure, tested everywhere). Tests: tests/platform.
 qt_add_library(brulion_platform STATIC
     platform.h platform.cpp
@@ -12,6 +15,8 @@ qt_add_library(brulion_platform STATIC
     appidentity.h appidentity.cpp
     pickedfiles.h pickedfiles.cpp
     pdfpages.h pdfpages.cpp
+    pdfsearch.h pdfsearch.cpp
+    openexternal.h openexternal.cpp
     documentpaths.h documentpaths.cpp
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -73,6 +78,14 @@ else()
 endif()
 message(STATUS "Brulion: PDF pages through ${_pdf_backend} (src/platform/pdfpages.h)")
 
+# A file handed to the system's app (openexternal.h): Android's ACTION_VIEW, the browser's new tab
+# (wasm/wasmopen.cpp, below), the desktop's default app.
+if(ANDROID)
+    target_sources(brulion_platform PRIVATE openexternal_android.cpp)
+elseif(NOT EMSCRIPTEN)
+    target_sources(brulion_platform PRIVATE openexternal_desktop.cpp)
+endif()
+
 # Android: JNI bridge to the Kotlin side in android/src (alarms, permissions, notification
 # taps) — docs/ANDROID.md. Include as "android/androidbridge.h".
 if(ANDROID)
@@ -98,6 +111,7 @@ if(EMSCRIPTEN)
         wasm/wasmshell.h wasm/wasmshell.cpp
         wasm/wasmfiles.h wasm/wasmfiles.cpp
         wasm/wasmselftest.h wasm/wasmselftest.cpp
+        wasm/wasmopen.h wasm/wasmopen.cpp
     )
     set(QT_NO_PRIVATE_MODULE_WARNING ON)
     find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)

@@ -265,7 +265,7 @@ Chromium: `$CHROME` albo `chromium`/`google-chrome` z `PATH`; WebGL 2 przez Swif
 
 `tests/web/` (osobny projekt npm: `@playwright/test` 1.64.1 i `pngjs` 7.0.0; CMake go pomija)
 sprawdza zbudowaną stronę w **Chromium i Firefoksie** — obrazy z internetu (niżej, „Obrazy
-z internetu”) i rysik w edytorze rysunków („Rysik (nacisk)”). GitHub Actions uruchamia go w
+z internetu”), rysik w edytorze rysunków („Rysik (nacisk)”) i PDF-y („PDF w przeglądarce”). GitHub Actions uruchamia go w
 `wasm.yml` (zadanie `browsers`, po `build`; wdrożenie na Pages na nie czeka, wydanie też — wywołuje
 `wasm.yml`); raport HTML, zrzuty i ślady nieudanych testów są w artefakcie `web-browser-tests`
 (7 dni). W CI nieudany test powtarza się raz (`retries: 1`; udany za drugim razem raport oznacza
@@ -317,7 +317,13 @@ scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `play
     simulatePressure, points, pressureMin, pressureMax, pressureFirst, pressureLast, width,
     bounds}]}` — płótno edytora rysunków (`modified`: zmiany jeszcze niezapisane do pliku;
     `strokeCount` liczy linie odręczne, `elements` wszystkie elementy) i jego linie odręczne
-    (współrzędne okna, by porównać z miejscem rysowania), po każdej zmianie.
+    (współrzędne okna, by porównać z miejscem rysowania), po każdej zmianie;
+  * `?selftest=pdf` → `brulionPdfSelfTest` `{route: {view, path}, chip: {x, y, w, h, icon, text},
+    link: {x, y, w, h}, message, button}` — gdzie na ekranie jest kafelek PDF-a i odnośnik do niego
+    (test klika w nie prawdziwą myszą), trasa aplikacji, komunikat i przycisk panelu PDF-a; po każdej
+    zmianie przez dwie minuty. `?selftest=pdfauto` dodatkowo po 2 s sam otwiera `assets/wykład.pdf`
+    poza jakimkolwiek kliknięciem → `brulionPdfOpenSelfTest` `{path, opened, notices, errors}`
+    (przeglądarka może zablokować kartę — wtedy plik się pobiera, a aplikacja to mówi).
 * **Plik z eksportu**: w Chromium na `https://` Qt zapisuje przez File System Access
   (`showSaveFilePicker`), który wymaga gestu użytkownika — test podmienia go na stronie testowej
   na rejestrator; w Firefoksie i na stronie `http://` przychodzi zwykłe pobranie pliku.
@@ -618,6 +624,39 @@ przeglądarce zawsze instaluje je przy starcie jako czcionki zapasowe: tekst zos
 tylko brakujące znaki biorą się z nich. Emoji są jednokolorowe, w kolorze tekstu. Szczegóły,
 zasady na innych platformach i lista znaków: docs/UI.md, „Emoji and symbol fonts”. Test:
 `scripts/wasm-smoke.mjs --glyphs`.
+
+## PDF w przeglądarce
+
+Przeglądarka nie ma modułu PDF Qt (Qt PDF nie ma wersji dla WebAssembly), a pdf.js byłby kilka MB
+więcej; za to każda przeglądarka ma własną przeglądarkę PDF. Dlatego PDF osadzony w notatce
+(`![[wykład.pdf]]`) jest kafelkiem pliku z ikoną strony, a kliknięcie go — albo odnośnika
+`[[wykład.pdf]]` — otwiera PDF w **nowej karcie** (docs/UI.md „PDF viewer”): bajty pliku z IndexedDB
+jako adres `blob:` typu `application/pdf` (`src/platform/wasm/wasmopen.cpp`; typ podany wprost,
+więc plik, który w środku jest HTML-em, nigdy nie stanie się stroną z pochodzenia Brulionu),
+`window.open` w obsłudze kliknięcia (przeglądarki otwierają karty tylko na gest użytkownika; Qt
+obsługuje zdarzenia wejścia w procedurze obsługi przeglądarki), `opener` odcięty. Przewijanie,
+powiększanie, szukanie i „Zapisz” daje przeglądarka (Chrome, Firefox — pdf.js —, Safari). Trzy
+ostatnie adresy `blob:` zostają (przeładowanie karty z PDF-em i jej „Zapisz” ich potrzebują),
+starsze są zwalniane; giną z kartą Brulionu. Trasa aplikacji się nie zmienia.
+
+* **Zablokowana karta** (Safari bywa surowszy, blokery wyskakujących okien): PDF się pobiera
+  (`saveFile`), a aplikacja mówi „Przeglądarka zablokowała nową kartę — PDF został pobrany.”.
+* **Trasa do PDF-a** (drzewo, szybkie przełączanie, historia): panel „Brulion w przeglądarce nie
+  rysuje PDF-ów: ten plik otworzy się w nowej karcie, we wbudowanej przeglądarce PDF (przewijanie,
+  powiększanie, szukanie).” z przyciskiem **Otwórz w nowej karcie** (prawdziwe kliknięcie: późniejsze Wstecz nie
+  otwiera kart samo).
+* Plik większy niż limit załącznika (200 MB) — odmowa z komunikatem (pamięć: bajty i blob).
+* Brulion nigdy nie robi adresu `data:` z PDF-a (wcześniej robił go dla każdego osadzonego pliku).
+
+Testy: `tests/web/pdf.spec.mjs` (Chromium i Firefox; `?selftest=pdf`, wyżej): klik w kafelek i
+w odnośnik otwiera kartę z adresem `blob:` tej witryny, `content-type` `application/pdf`, bajty jak
+w `tests/data/pdf/wyklad.pdf` (zaczynają się od `%PDF-`), `window.opener` pusty, trasa aplikacji
+wciąż dziennik; trasa do PDF-a pokazuje panel z „Otwórz w nowej karcie”; otwarcie bez kliknięcia
+(`?selftest=pdfauto`) kończy się kartą albo pobraniem z komunikatem — wynik dla każdej przeglądarki
+w adnotacji raportu. Firefox Playwrighta ma w profilu testowym wyłączone pdf.js, więc tam nowa karta
+zamienia się w pobranie tego samego adresu `blob:` i się zamyka: test sprawdza wtedy pobrany plik
+(adres, bajty, nazwa `wykład.pdf`) zamiast dokumentu karty. Lokalnie: `scripts/web-test.sh
+pdf.spec.mjs`. Ręcznie zostaje Safari na iOS i Firefox z włączonym pdf.js.
 
 ## Rozmiar
 

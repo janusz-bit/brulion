@@ -6,7 +6,9 @@
 # quick switcher, quick capture, the phone drawer and folders (tree, drawer-tree, move,
 # move-chosen, newpage-folder, newpage-root, newfolder, allpages, allpages-folder), the appearance
 # settings and a few looks they make (settings-appearance*, journals-<accent>-<background>,
-# journals-custom, journals-compact, calendar-blue) — × {desktop
+# journals-custom, journals-compact, calendar-blue), PDFs (pdf-embed: a note with a PDF's thumbnail
+# and a locked one; pdf-viewer, pdf-zoom, pdf-search, pdf-jump, pdf-locked: the PDF viewer, on the
+# PDFs of tests/data/pdf added to the sample notebook) — × {desktop
 # 1280×800, phone 412×915 --touch} × {light, dark} — into
 # tests/screenshots/shell-<shot>-<size>-<theme>.png.
 #
@@ -130,6 +132,14 @@ declare -A shot_args=(
   [doc-long-toggle]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script mode-tooltip"
   [doc-journal]="--route journals"
   [doc-journal-mixed]="--route journals"
+  # PDFs (docs/UI.md "PDF viewer"): the thumbnails in a note, the viewer (fit width, zoomed in,
+  # searching without diacritics, the page jump) and a PDF protected with a password.
+  [pdf-embed]="--route {\"view\":\"page\",\"path\":\"Wykład\u00203.md\"}"
+  [pdf-viewer]="--route {\"view\":\"page\",\"path\":\"assets/wykład.pdf\"}"
+  [pdf-zoom]="--route {\"view\":\"page\",\"path\":\"assets/wykład.pdf\",\"pdfScale\":250}"
+  [pdf-search]="--route {\"view\":\"page\",\"path\":\"assets/wykład.pdf\",\"open\":\"search\",\"search\":\"gęślą\"}"
+  [pdf-jump]="--route {\"view\":\"page\",\"path\":\"assets/wykład.pdf\",\"open\":\"jump\"}"
+  [pdf-locked]="--route {\"view\":\"page\",\"path\":\"assets/sejf.pdf\"}"
 )
 # Shots on a notebook of their own: the sample notebook seeded by a first run, then the files of
 # tests/app/shell/notemode/ added ("journal": today's journal replaced by a document-like day and
@@ -139,11 +149,13 @@ declare -A shot_notemode=(
   [doc-long]=page [doc-long-paragraph]=page [doc-long-list]=page [doc-long-task]=page [doc-long-outline]=page
   [doc-long-heading]=page [doc-long-number]=page [doc-long-select]=page [doc-long-toggle]=page [doc-journal]=journal
   [doc-journal-mixed]=journal-mixed
+  [pdf-embed]=pdf [pdf-viewer]=pdf [pdf-zoom]=pdf [pdf-search]=pdf [pdf-jump]=pdf [pdf-locked]=pdf
 )
 all_shots=(onboarding journals page page-editing page-editing-keyboard journals-editing-keyboard capture-keyboard
   page-editing-toast page-toolbar-menu page-tag-new page-suggest page-tags page-slash page-date page-reminder
   page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
-  page-menu page-project page-selection page-picture page-picture-text page-picture-links doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
+  page-menu page-project page-selection page-picture page-picture-text page-picture-links
+  pdf-embed pdf-viewer pdf-zoom pdf-search pdf-jump pdf-locked doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
   doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-appearance settings-appearance-black journals-teal-white journals-violet-black
   journals-custom journals-compact calendar-blue settings-editor settings-vault settings-reminders settings-app
   palette switcher capture newpage about drawer tree drawer-tree move move-chosen newpage-folder newpage-root newfolder
@@ -165,7 +177,7 @@ for shot in "${shots[@]}"; do
   read -r -a args <<< "${shot_args[$shot]}"
   # Editor states are scripted after the page loaded (typing, scrolling): give them time.
   shot_delay="$delay"
-  [[ "$shot" == page-* || "$shot" == doc-* || "$shot" == journals-editing-* ]] && shot_delay=$((delay + 800))
+  [[ "$shot" == page-* || "$shot" == doc-* || "$shot" == pdf-* || "$shot" == journals-editing-* ]] && shot_delay=$((delay + 800))
   for size in "${sizes[@]}"; do
     case "$size" in
       desktop) geometry=1280x800; extra=() ;;
@@ -191,9 +203,18 @@ for shot in "${shots[@]}"; do
           QML_DISABLE_DISK_CACHE=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
           "$bin" --demo --vault "$vault" --size "$geometry" --locale "$locale" --now "$now" \
           --delay 600 --screenshot "$home/prep.png" >/dev/null 2>&1 || true
-        cp "$fixtures/Wyprawa w Bieszczady.md" "$vault/"
         mkdir -p "$vault/assets"
+        if [[ "${shot_notemode[$shot]}" == pdf ]]; then
+          # The lecture PDF and a locked one (tests/data/pdf), embedded in a note.
+          cp tests/data/pdf/wyklad.pdf "$vault/assets/wykład.pdf"
+          cp tests/data/pdf/zaszyfrowany.pdf "$vault/assets/sejf.pdf"
+          printf -- '- Slajdy z wykładu ![[wykład.pdf]]\n- Strona trzecia: [[wykład.pdf#page=3]]\n- Sejf ![[sejf.pdf]]\n' \
+            > "$vault/Wykład 3.md"
+          vault_args=(--vault "$vault")
+        else
+        cp "$fixtures/Wyprawa w Bieszczady.md" "$vault/"
         cp "$fixtures/bieszczady-trasa.svg" "$vault/assets/"
+        fi
         if [[ "${shot_notemode[$shot]}" == journal ]]; then
           cp "$fixtures/journal-document.md" "$vault/journals/${now%% *}.md"
           mkdir -p "$vault/.brulion"

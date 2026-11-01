@@ -161,6 +161,10 @@ Gesture mouseDrag(QQuickWindow *window, QPointF from, QPointF to, int holdMs = 0
 Gesture touchTap(QQuickWindow *window, QPointF scenePos, int holdMs = 110, int afterMs = 100);
 /// Two taps within the double-tap interval.
 Gesture touchDoubleTap(QQuickWindow *window, QPointF scenePos);
+/// Two fingers put down `fromDistance` apart (side by side around `centre`), moved apart or
+/// together to `toDistance` in `steps` moves `stepMs` apart, held, then lifted: a pinch.
+Gesture touchPinch(QQuickWindow *window, QPointF centre, qreal fromDistance, qreal toDistance, int steps = 12,
+                   int stepMs = 16);
 /// A finger dragged from `from` by `delta` (scene coordinates) in `steps` moves `stepMs` apart,
 /// held there `holdMs`, then lifted.
 Gesture touchDrag(QQuickWindow *window, QPointF from, QPointF delta, int steps = 12, int stepMs = 16, int holdMs = 0,

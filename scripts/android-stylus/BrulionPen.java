@@ -14,6 +14,11 @@
 // Coordinates in the display's pixels; the pressure goes from P0 to P1 over STEPS moves (8 ms
 // apart), the pen lifts exactly where the last move was (pressure 0). BUTTONS: MotionEvent's button
 // state (32 = BUTTON_STYLUS_PRIMARY, the barrel button). Prints "ok <events>" or fails.
+//
+//   … app_process / BrulionPen pinch CX CY D0 D1 MS
+//
+// Two fingers side by side around (CX, CY), D0 apart, moved to D1 apart over MS milliseconds, then
+// lifted (the PDF viewer's pinch zoom: --pdf).
 import android.os.SystemClock;
 import android.view.InputDevice;
 import android.view.InputEvent;
@@ -27,6 +32,11 @@ public final class BrulionPen {
     private BrulionPen() { }
 
     public static void main(String[] args) throws Exception {
+        if (args.length >= 6 && "pinch".equals(args[0])) {
+            pinch(Float.parseFloat(args[1]), Float.parseFloat(args[2]), Float.parseFloat(args[3]),
+                  Float.parseFloat(args[4]), Integer.parseInt(args[5]));
+            return;
+        }
         if (args.length < 8 || !"stroke".equals(args[0])) {
             System.err.println("usage: BrulionPen stroke X0 Y0 X1 Y1 STEPS P0 P1 [stylus|eraser|finger] [BUTTONS]");
             System.exit(2);
@@ -80,6 +90,56 @@ public final class BrulionPen {
         Thread.sleep(8);
         sent += send(manager, inject, down, MotionEvent.ACTION_UP, x, y, 0f, toolType, source, 0);
         System.out.println("ok " + sent);
+    }
+
+    /** Two fingers from `d0` to `d1` apart around (cx, cy) in about `ms` milliseconds. */
+    private static void pinch(float cx, float cy, float d0, float d1, int ms) throws Exception {
+        final Object manager = inputManager();
+        final Method inject = manager.getClass().getMethod("injectInputEvent", InputEvent.class, int.class);
+        final long down = SystemClock.uptimeMillis();
+        final int steps = Math.max(2, ms / 16);
+        int sent = 0;
+        sent += sendTwo(manager, inject, down, MotionEvent.ACTION_DOWN, 1, cx, cy, d0);
+        sent += sendTwo(manager, inject, down,
+                        MotionEvent.ACTION_POINTER_DOWN | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2, cx, cy, d0);
+        float d = d0;
+        for (int i = 1; i <= steps; i++) {
+            Thread.sleep(16);
+            d = d0 + (d1 - d0) * i / steps;
+            sent += sendTwo(manager, inject, down, MotionEvent.ACTION_MOVE, 2, cx, cy, d);
+        }
+        Thread.sleep(120);
+        sent += sendTwo(manager, inject, down,
+                        MotionEvent.ACTION_POINTER_UP | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2, cx, cy, d);
+        sent += sendTwo(manager, inject, down, MotionEvent.ACTION_UP, 1, cx, cy, d);
+        System.out.println("ok " + sent);
+    }
+
+    /** A finger event with the first `count` of the two fingers (`distance` apart around cx, cy). */
+    private static int sendTwo(Object manager, Method inject, long down, int action, int count, float cx, float cy,
+                               float distance) throws Exception {
+        final MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[count];
+        final MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[count];
+        for (int i = 0; i < count; i++) {
+            properties[i] = new MotionEvent.PointerProperties();
+            properties[i].id = i;
+            properties[i].toolType = MotionEvent.TOOL_TYPE_FINGER;
+            coords[i] = new MotionEvent.PointerCoords();
+            coords[i].x = cx + (i == 0 ? -distance / 2 : distance / 2);
+            coords[i].y = cy;
+            coords[i].pressure = 1f;
+            coords[i].size = 0.05f;
+        }
+        final MotionEvent event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, count, properties, coords,
+                0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0);
+        try {
+            final Object ok = inject.invoke(manager, event, INJECT_WAIT_FOR_FINISH);
+            if (!Boolean.TRUE.equals(ok))
+                throw new IllegalStateException("injectInputEvent refused " + MotionEvent.actionToString(action));
+        } finally {
+            event.recycle();
+        }
+        return 1;
     }
 
     /** InputManagerGlobal (Android 14+) or InputManager (before): the hidden injectInputEvent's owner. */

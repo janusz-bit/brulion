@@ -470,6 +470,24 @@ bool AndroidBridge::shareFile(const QString &path, const QString &mimeType, cons
     return !failed("startActivity");
 }
 
+AndroidBridge::ViewResult AndroidBridge::viewFile(const QString &path, const QString &mimeType)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return ViewResult::Failed;
+    const jint code = QJniObject::callStaticMethod<jint>(
+            kClass, "viewFile", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)I", context.object(),
+            QJniObject::fromString(path).object<jstring>(), QJniObject::fromString(mimeType).object<jstring>());
+    if (failed("viewFile"))
+        return ViewResult::Failed;
+    switch (code) {
+    case 0: return ViewResult::Started;
+    case 1: return ViewResult::NoApp;
+    case 3: return ViewResult::Copying;
+    default: return ViewResult::Failed;
+    }
+}
+
 DownloadResult AndroidBridge::saveToDownloads(const QString &name, const QString &mimeType, const QByteArray &data)
 {
     DownloadResult result;

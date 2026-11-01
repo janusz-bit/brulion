@@ -157,10 +157,13 @@ bool onlyNoteModeKey(const QString &body);
 /// One image or attachment embedded in a block body: `![[photo.png]]`, `![alt](assets/a.png)`,
 /// or a picture from the internet `![alt](https://example.com/a.jpg)`, `![[https://…]]` (`web`).
 struct Embed {
-    QString target;  ///< as written
+    QString target;  ///< as written (as the parser reads it: without a `#fragment`)
     QString alt;     ///< alt text / alias
     bool image = false;
     bool web = false; ///< an http(s) picture (webpicture::isWebUrl): always an image
+    /// The fragment after '#' of an attachment's embed (`![[wykład.pdf#page=3]]`, `![s](w.pdf#page=2)`:
+    /// "page=3", markdown::pdfFragmentPage); "" none.
+    QString fragment;
     friend bool operator==(const Embed &, const Embed &) = default;
 };
 /// Attachment embeds of a body (embeds of pages and blocks are not included); Markdown pictures

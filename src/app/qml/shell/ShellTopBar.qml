@@ -28,6 +28,11 @@ Rectangle {
     /// The view shows a picture attachment, as text (`pictureAsText`) or as the picture.
     property bool picture: false
     property bool pictureAsText: false
+    /// The view shows a PDF in the PDF viewer / another file that is no note, read-only: the
+    /// Markdown, note mode, properties and history items are none of theirs; a PDF offers "Otwórz w
+    /// innej aplikacji" (the browser: "Otwórz w nowej karcie").
+    property bool pdf: false
+    property bool fileOnly: false
 
     signal menuClicked()
     signal sidebarToggled()
@@ -211,14 +216,22 @@ Rectangle {
             onTriggered: bar.revealRequested(bar.pagePath)
         }
         BMenuItem {
-            visible: bar.onPage
+            objectName: "menuOpenInOtherApp"
+            visible: bar.onPage && bar.pdf
+            height: visible ? implicitHeight : 0
+            text: Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
+            iconName: "external-link"
+            onTriggered: Workspace.openInOtherApp(bar.pagePath)
+        }
+        BMenuItem {
+            visible: bar.onPage && !bar.pdf && !bar.fileOnly
             height: visible ? implicitHeight : 0
             text: qsTr("Page history")
             iconName: "history"
             onTriggered: AppController.navigate({ view: "history", path: bar.pagePath })
         }
         BMenuItem {
-            visible: bar.inEditor
+            visible: bar.inEditor && !bar.pdf && !bar.fileOnly
             height: visible ? implicitHeight : 0
             // A picture: its two views (PageView switches them for this action too).
             text: !bar.picture ? qsTr("Markdown source")
@@ -230,7 +243,7 @@ Rectangle {
         BMenuItem {
             // Document (like Obsidian) / outline (like Logseq): the page shown, in the journal
             // stream the day being written in (docs/UI.md "Note modes"). A picture is no note.
-            visible: bar.inEditor && !bar.picture
+            visible: bar.inEditor && !bar.picture && !bar.pdf && !bar.fileOnly
             height: visible ? implicitHeight : 0
             text: qsTr("Toggle note mode")
             iconName: "file-text"
@@ -239,7 +252,7 @@ Rectangle {
         BMenuItem {
             // The properties panel's add row of the page shown (the day being written in).
             objectName: "menuAddProperty"
-            visible: bar.inEditor && !bar.picture
+            visible: bar.inEditor && !bar.picture && !bar.pdf && !bar.fileOnly
             height: visible ? implicitHeight : 0
             text: qsTr("Add property")
             iconName: "plus"

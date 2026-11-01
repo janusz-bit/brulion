@@ -452,6 +452,7 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
     {
         VaultIndex::Batch batch(*m_index);
         for (const VaultChange &c : changes) {
+            pdfFileChanged(c.path, c.oldPath);
             m_dataUrls.remove(c.path);
             m_dataUrlSizes.remove(c.path);
             if (!c.oldPath.isEmpty()) {
@@ -711,6 +712,7 @@ bool Workspace::writeAttachment(const QString &rawPath, const QByteArray &data)
         m_vault->readBinary(path, &ok);
         return false;
     }
+    releasePdfReaders(path);
     if (m_vault->writeBinary(path, data, ChangeSource::User))
         return true;
     Q_EMIT errorOccurred(tr("Could not save the drawing %1: %2").arg(paths::basename(path), m_vault->errorString()));
@@ -1060,6 +1062,7 @@ void Workspace::discardImport(const QString &path)
 {
     if (!m_vault || !m_importedCopies.remove(path))
         return;
+    releasePdfReaders(path);
     if (!m_vault->removePermanently(path, ChangeSource::User))
         qCWarning(lcWorkspace).noquote() << "could not remove the abandoned attachment" << path
                                          << m_vault->errorString();
@@ -1291,6 +1294,7 @@ QString Workspace::deletePage(const QString &rawPath)
     const QString path = paths::normalize(rawPath);
     if (path.isEmpty() || !m_vault->exists(path))
         return {};
+    releasePdfReaders(path);
     const notebook::DeletedPath deleted = notebook::deletePath(*m_vault, path, ChangeSource::User);
     if (deleted.trashPath.isEmpty()) {
         Q_EMIT errorOccurred(

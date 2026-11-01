@@ -10,12 +10,15 @@
 #include "workspace.h"
 #include "workspacesync.h"
 
+#include "drawing/backdrop.h"
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/redact.h"
 #include "notebook/share.h"
+#include "openexternal.h"
+#include "pdfpages.h"
 #include "sync/synchistory.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -37,12 +40,16 @@
 #include <QJsonObject>
 #include <QKeyEvent>
 #include <QLocale>
+#include <QPageSize>
+#include <QPainter>
+#include <QPdfWriter>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlExpression>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QScreen>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -2931,6 +2938,385 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
           "the picture comes back and the editor stays unloaded");
 }
 
+/// 5k. PDFs (docs/UI.md "PDF viewer"): a note embedding a lecture written here (QPdfWriter, three
+/// pages) shows its first page's thumbnail on a white page; a tap / click opens the PDF viewer
+/// (route path = the PDF, the block editor holds no controller for it: no bytes loaded), "Strona 1 z
+/// 3"; Ctrl+G 3 Enter goes to page 3, Home back, PageDown moves; Ctrl++ zooms (the page's picture
+/// asked for larger, sideways panning — the drawer's edge strip yields), Ctrl+0 fits the width again;
+/// a pinch (phone run) or Ctrl+wheel (desktop) zooms, a double tap fits / doubles; Ctrl+F "gesla"
+/// finds "gęślą" once with a highlight; Esc closes the search, Esc again returns to the note; the
+/// note's link with #page=3 opens the viewer at page 3; "Rysuj na tej stronie" on page 2 opens the
+/// drawing editor on a drawing whose backdrop is page 2, embedded right after the PDF's block, Back
+/// returns to the viewer on page 2; again on page 2 the existing drawing is offered and opened (no
+/// second file); the More menu's "Otwórz w innej aplikacji" hands the file over (a recording hook);
+/// the PDF moved to another folder while open reopens on the same page; a locked PDF says why
+/// (BRULION_SELFTEST_PDF_DIR: tests/data/pdf); a ZIP opens read-only, never in the editor. Builds without a renderer:
+/// the chip, its click hands the file over, the viewer's message with its button.
+void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check,
+                    const std::function<QObject *(const QString &)> &controllerFor)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *workspace = app->workspace();
+    const QString note = u"PDF próba.md"_s;
+    QString pdf = u"assets/Wykład – ćwiczenia.pdf"_s;
+    {
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly);
+        QPdfWriter writer(&buffer);
+        writer.setResolution(72);
+        writer.setPageSize(QPageSize(QPageSize::A4));
+        writer.setPageMargins(QMarginsF(0, 0, 0, 0));
+        QPainter p(&writer);
+        QFont font;
+        font.setPointSize(24);
+        p.setFont(font);
+        p.drawText(QPointF(60, 120), u"Wykład 3 — Zażółć gęślą jaźń"_s);
+        writer.setPageOrientation(QPageLayout::Landscape);
+        writer.newPage();
+        p.fillRect(QRectF(113, 85, 57, 57), Qt::red);
+        writer.setPageOrientation(QPageLayout::Portrait);
+        writer.newPage();
+        p.drawText(QPointF(60, 120), u"Strona trzecia: żółw"_s);
+        p.end();
+        pdf = workspace->createAttachment(pdf, buffer.data());
+    }
+    check(!pdf.isEmpty()
+                  && workspace->writeFile(
+                          note,
+                          u"- Slajdy ![[Wykład – ćwiczenia.pdf]]\n- Trzecia [[Wykład – ćwiczenia.pdf#page=3]]\n"_s),
+          "a note embeds a three-page PDF");
+    const QString absolute = workspace->absoluteFilePath(pdf);
+    QStringList handed;
+    platform::setOpenFileHook([&handed](const QString &file, const QString &mime) {
+        handed.append(file + u'|' + mime);
+        return platform::OpenResult::Opened;
+    });
+    const auto restoreHook = qScopeGuard([] { platform::setOpenFileHook({}); });
+    const auto pdfView = [window]() { return shownNamed(window->contentItem(), u"pdfView"_s); };
+    const auto viewModel = [&]() -> QObject * {
+        QQuickItem *view = pdfView();
+        return view ? view->property("model").value<QObject *>() : nullptr;
+    };
+    const auto modelValue = [&](const char *name) {
+        QObject *m = viewModel();
+        return m ? m->property(name) : QVariant();
+    };
+    const auto opened = [&](int page) {
+        return app->currentRoute().value(u"path"_s).toString() == pdf && pdfView()
+               && pdfView()->property("ready").toBool() && (page == 0 || modelValue("currentPage").toInt() == page);
+    };
+
+    if (!platform::pdfAvailable()) {
+        std::fprintf(stderr, "selftest: this build has no PDF renderer\n");
+        app->openPage(note);
+        QQuickItem *chip = nullptr;
+        check(waitFor([&] { return (chip = shownNamed(window->contentItem(), u"pdfEmbedChip"_s)) != nullptr; }),
+              "without a renderer the PDF is embedded as its chip");
+        if (chip)
+            tapOrClick(window, pointIn(chip), touch);
+        check(waitFor([&] { return handed.contains(absolute + u"|application/pdf"_s); })
+                      && app->currentRoute().value(u"path"_s).toString() == note,
+              "a click on the chip hands the PDF to another app, the note stays");
+        app->openPage(pdf);
+        check(waitFor([&] { return shownNamed(window->contentItem(), u"pdfOpenElsewhere"_s) != nullptr; })
+                      && controllerFor(pdf) == nullptr,
+              "the PDF's route says it is opened elsewhere, with its button, never in the editor");
+        // Its name, size and the notes embedding it under the message (unless the side panel
+        // lists them).
+        check(waitFor(
+                      [&] {
+                          QQuickItem *v = pdfView();
+                          QQuickItem *name = v ? shownNamed(v, u"pdfMessageName"_s) : nullptr;
+                          return name && name->property("text").toString() == paths::basename(pdf)
+                                 && shownNamed(v, u"pdfMessageSize"_s) != nullptr
+                                 && (v->property("refsInSidePanel").toBool()
+                                     || shownNamed(v, u"pdfMessageReferences"_s) != nullptr);
+                      },
+                      10000),
+              "the panel names the file, its size and the notes embedding it");
+        app->goHome();
+        return;
+    }
+
+    // The thumbnail: drawn, white page with a hairline frame (also in the dark theme).
+    app->openPage(note);
+    QQuickItem *tile = nullptr;
+    check(waitFor(
+                  [&] {
+                      tile = shownNamed(window->contentItem(), u"pdfEmbedTile"_s);
+                      return tile && tile->property("loaded").toBool();
+                  },
+                  15000),
+          "the PDF's thumbnail is drawn in the note");
+    if (tile) {
+        QQuickItem *frame = shownNamed(tile, u"pdfEmbedFrame"_s);
+        const QImage grab = window->grabWindow();
+        const QPointF inside =
+                frame ? frame->mapToScene(QPointF(frame->width() / 2, frame->height() * 0.8)) : QPointF();
+        const qreal dpr = window->effectiveDevicePixelRatio();
+        const QColor paper = frame ? grab.pixelColor((inside * dpr).toPoint()) : QColor();
+        std::fprintf(stderr, "selftest: PDF thumbnail %.0f × %.0f, paper %s\n", frame ? frame->width() : 0.0,
+                     frame ? frame->height() : 0.0, qPrintable(paper.name()));
+        check(frame && frame->property("color").value<QColor>() == QColor(Qt::white) && paper.lightness() > 245,
+              "the thumbnail is a white page with a frame");
+        // Opened by a tap / click on it.
+        tapOrClick(window, pointIn(tile, 0.5, 0.3), touch);
+    }
+    const bool viewerOpened = waitFor([&] { return opened(1); }, 15000);
+
+    std::fprintf(stderr, "selftest: PDF route %s, viewer %d, ready %d, page %d of %d\n",
+                 qPrintable(app->currentRoute().value(u"path"_s).toString()), pdfView() != nullptr,
+                 pdfView() ? pdfView()->property("ready").toBool() : false, modelValue("currentPage").toInt(),
+                 modelValue("pageCount").toInt());
+    check(viewerOpened && modelValue("pageCount").toInt() == 3,
+          "a tap on the thumbnail opens the PDF viewer at page 1 of 3");
+    check(controllerFor(pdf) == nullptr, "the PDF's bytes are not loaded into the block editor");
+    QQuickItem *view = pdfView();
+    if (!view) {
+        check(false, "the page view has a PDF viewer");
+        return;
+    }
+    {
+        QQuickItem *pageButton = shownNamed(view, u"pdfPageButton"_s);
+        const QString wanted = QCoreApplication::translate("ContentPdfView", "Page %1 of %2").arg(1).arg(3);
+        check(pageButton
+                      && (pageButton->property("text").toString() == wanted
+                          || pageButton->property("text").toString() == u"1/3"_s),
+              "the bar says “Page 1 of 3”");
+    }
+    view->forceActiveFocus();
+
+    // The page jump.
+    sendKey(window, Qt::Key_G, Qt::ControlModifier);
+    QQuickItem *jumpField = nullptr;
+    check(waitFor([&] { return (jumpField = shownNamed(window->contentItem(), u"pdfJumpField"_s)) != nullptr; }),
+          "Ctrl+G opens the page jump");
+    if (jumpField) {
+        jumpField->forceActiveFocus();
+        jumpField->setProperty("text", u"3"_s);
+        sendKey(window, Qt::Key_Return);
+    }
+    check(waitFor([&] { return opened(3); }), "the page jump goes to page 3");
+    view->forceActiveFocus();
+    sendKey(window, Qt::Key_Home);
+    check(waitFor([&] { return opened(1); }), "Home goes to the first page");
+    QQuickItem *flick = shownNamed(view, u"pdfFlick"_s);
+    const qreal top = flick ? flick->property("contentY").toReal() : 0;
+    sendKey(window, Qt::Key_PageDown);
+    check(flick && waitFor([&] { return flick->property("contentY").toReal() > top + 50; }), "PageDown scrolls down");
+
+    // Zoom: the keys, then a pinch or Ctrl+wheel; the page's picture asked for larger.
+    const int fitPercent = modelValue("zoomPercent").toInt();
+    const auto pageImageWidth = [&] {
+        QQuickItem *image = shownNamed(view, u"pdfPageImage"_s);
+        return image ? image->property("sourceSize").toSizeF().width() : 0.0;
+    };
+    const qreal fitImage = pageImageWidth();
+    sendKey(window, Qt::Key_Plus, Qt::ControlModifier);
+    sendKey(window, Qt::Key_Plus, Qt::ControlModifier);
+    check(waitFor([&] { return modelValue("zoomPercent").toInt() > fitPercent * 1.4; })
+                  && view->property("pannedSideways").toBool(),
+          "Ctrl++ zooms in, the pages pan sideways");
+    check(waitFor([&] { return pageImageWidth() > fitImage; }) || modelValue("detailRevision").toInt() > 0,
+          "the page's picture is asked for at the new size");
+    sendKey(window, Qt::Key_0, Qt::ControlModifier);
+    check(waitFor([&] { return modelValue("fitWidth").toBool() && modelValue("zoomPercent").toInt() == fitPercent; }),
+          "Ctrl+0 fits the width again");
+    if (flick) {
+        const QPointF centre = flick->mapToScene(QPointF(flick->width() / 2, flick->height() / 2));
+        if (touch)
+            uidriver::run(uidriver::touchPinch(window, centre, 80, 240));
+        else
+            uidriver::run(uidriver::wheel(window, centre, QPointF(0, -240), Qt::ControlModifier));
+        const bool zoomed = waitFor([&] { return modelValue("zoomPercent").toInt() > fitPercent * 1.2; });
+        if (!zoomed) {
+            QQuickItem *target = uidriver::pressTargetAt(window, centre);
+            std::fprintf(stderr, "selftest: PDF zoom gesture: %s; press target %s %s; zoom %d, preview %g\n",
+                         qPrintable(uidriver::itemsAt(window, centre)), target ? target->metaObject()->className() : "",
+                         target ? qPrintable(target->objectName()) : "", modelValue("zoomPercent").toInt(),
+                         view->property("previewScale").toReal());
+        }
+        check(zoomed, touch ? "a pinch zooms in" : "Ctrl+wheel zooms in");
+        uidriver::run(touch ? uidriver::touchDoubleTap(window, centre) : uidriver::mouseDoubleClick(window, centre));
+        check(waitFor([&] { return modelValue("fitWidth").toBool(); }), "a double tap fits the width again");
+        settle(700); // (past the double-tap interval: two taps of their own)
+        uidriver::run(touch ? uidriver::touchDoubleTap(window, centre) : uidriver::mouseDoubleClick(window, centre));
+        check(waitFor([&] { return modelValue("zoomPercent").toInt() >= fitPercent * 1.9; }),
+              "and another one zooms in twice");
+        view->forceActiveFocus();
+        sendKey(window, Qt::Key_0, Qt::ControlModifier);
+        waitFor([&] { return modelValue("fitWidth").toBool(); });
+    }
+
+    // Search without diacritics, with a highlight; Esc closes it, Esc again goes back.
+    view->forceActiveFocus();
+    sendKey(window, Qt::Key_F, Qt::ControlModifier);
+    QQuickItem *searchField = nullptr;
+    check(waitFor([&] { return (searchField = shownNamed(view, u"pdfSearchField"_s)) != nullptr; }),
+          "Ctrl+F opens the PDF's search");
+    for (const QChar ch : u"gesla"_s)
+        sendKey(window, 0, Qt::NoModifier, QString(ch));
+    check(waitFor([&] { return modelValue("hitCount").toInt() == 1 && !modelValue("searching").toBool(); }, 10000)
+                  && waitFor([&] { return shownNamed(view, u"pdfHit"_s) != nullptr; }),
+          "“gesla” finds “gęślą” once, highlighted");
+    sendKey(window, Qt::Key_Escape);
+    check(waitFor([&] { return !view->property("searchOpen").toBool() && modelValue("hitCount").toInt() == 0; }),
+          "Esc closes the search and its highlights");
+    sendKey(window, Qt::Key_Escape);
+    check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == note; }),
+          "Esc again returns to the note");
+
+    // The note's link to page 3.
+    if (QObject *page = controllerFor(note)) {
+        waitFor([&] { return page->property("loaded").toBool(); });
+        QVariantMap result;
+        QMetaObject::invokeMethod(page, "activateLink", qReturnArg(result), 1,
+                                  u"page:Wyk%C5%82ad%20%E2%80%93%20%C4%87wiczenia.pdf#page=3"_s, false);
+        check(waitFor([&] { return opened(3); }, 15000), "the link with #page=3 opens the viewer at page 3");
+    } else {
+        check(false, "the note is in the editor");
+    }
+
+    // "Rysuj na tej stronie" on page 2.
+    view = pdfView();
+    const auto drawOnPage = [&] {
+        QQuickItem *v = pdfView();
+        if (!v)
+            return false;
+        if (QQuickItem *button = shownNamed(v, u"pdfDrawButton"_s)) {
+            tapOrClick(window, pointIn(button), touch);
+            return true;
+        }
+        QQuickItem *more = shownNamed(v, u"pdfMoreButton"_s);
+        if (!more)
+            return false;
+        tapOrClick(window, pointIn(more), touch);
+        QQuickItem *item = nullptr;
+        if (!waitFor([&] { return (item = shownNamed(window->contentItem(), u"pdfMenuDraw"_s)) != nullptr; }))
+            return false;
+        tapOrClick(window, pointIn(item), touch);
+        return true;
+    };
+    QString drawingPath;
+    if (view) {
+        QMetaObject::invokeMethod(view, "jumpTo", QVariant(2));
+        check(waitFor([&] { return opened(2); }), "the viewer goes to page 2");
+        check(drawOnPage(), "“Draw on this page” is offered");
+        check(waitFor(
+                      [&] {
+                          drawingPath = app->currentRoute().value(u"view"_s).toString() == u"drawing"
+                                                ? app->currentRoute().value(u"path"_s).toString()
+                                                : QString();
+                          return !drawingPath.isEmpty();
+                      },
+                      15000),
+              "“Draw on this page” opens the drawing editor");
+        const std::optional<drawing::Drawing> made = drawing::readDrawing(workspace->readAttachment(drawingPath));
+        const std::optional<drawing::BackdropSource> source = made ? drawing::backdropSource(*made) : std::nullopt;
+        check(source && source->page == 2 && source->path == pdf, "the drawing's backdrop is page 2 of the PDF");
+        const QStringList lines = workspace->readFile(note).split(u'\n');
+        check(lines.size() >= 3 && lines.at(0).contains(u"Wykład – ćwiczenia.pdf"_s)
+                      && lines.at(1).startsWith(u"- ![["_s) && lines.at(1).contains(paths::basename(drawingPath))
+                      && lines.at(2).contains(u"#page=3"_s),
+              "the drawing is embedded right after the PDF's block");
+        app->back();
+        check(waitFor([&] { return opened(2); }, 15000), "Back returns to the viewer on page 2");
+        // Again on page 2: the drawing there is offered (no second file).
+        const int svgs = int(QDir(workspace->absoluteFilePath(u"assets"_s)).entryList({u"*.svg"_s}).size());
+        check(drawOnPage(), "“Draw on this page” again");
+        QQuickItem *existing = nullptr;
+        check(waitFor([&] { return (existing = shownNamed(window->contentItem(), u"pdfDrawExisting"_s)) != nullptr; }),
+              "the drawing of page 2 is offered first");
+        if (existing)
+            tapOrClick(window, pointIn(existing), touch);
+        check(waitFor([&] {
+                  return app->currentRoute().value(u"view"_s).toString() == u"drawing"
+                         && app->currentRoute().value(u"path"_s).toString() == drawingPath;
+              }) && QDir(workspace->absoluteFilePath(u"assets"_s)).entryList({u"*.svg"_s}).size() == svgs,
+              "choosing it opens the same drawing, no second file");
+        closeMenus(window);
+        app->back();
+        check(waitFor([&] { return opened(2); }, 15000), "and Back returns to the viewer");
+    }
+
+    // The More menu's "Otwórz w innej aplikacji" (the shell's top bar).
+    {
+        const QString more = QCoreApplication::translate("ShellTopBar", "More");
+        QQuickItem *button = findShown(window->contentItem(), [&](QQuickItem *item) {
+            return isA(item, "BIconButton") && item->property("label").toString() == more;
+        });
+        if (button)
+            tapOrClick(window, pointIn(button), touch);
+        QQuickItem *item = nullptr;
+        check(waitFor([&] { return (item = shownNamed(window->contentItem(), u"menuOpenInOtherApp"_s)) != nullptr; }),
+              "the More menu offers “Open in another app” on a PDF");
+        handed.clear();
+        if (item)
+            tapOrClick(window, pointIn(item), touch);
+        check(waitFor([&] { return handed == QStringList{absolute + u"|application/pdf"_s}; }),
+              "“Open in another app” hands the PDF over");
+        closeMenus(window);
+    }
+
+    // Moved to another folder while it is open (the route keeps pdfPage): the viewer opens the
+    // new path on the same page, and writes no other page into the route afterwards.
+    {
+        check(opened(2), "the viewer is on page 2 before the move");
+        const QString moved = workspace->movePath(pdf, u"Dokumenty żółte"_s);
+        if (!moved.isEmpty())
+            pdf = moved; // (opened() reads it)
+        // (The model opens the new file a moment later: until then it still shows the old one.)
+        const QString movedFile = moved.isEmpty() ? QString() : workspace->absoluteFilePath(moved);
+        check(!moved.isEmpty() && waitFor([&] {
+            return app->currentRoute().value(u"path"_s).toString() == moved
+                   && modelValue("file").toString() == movedFile;
+        }),
+              "the route and the viewer follow the moved PDF");
+        waitFor([] { return false; }, 1500); // (reopened, and longer than the route write's 500 ms)
+        check(waitFor([&] { return opened(2); }, 15000) && app->currentRoute().value(u"pdfPage"_s).toInt() == 2,
+              "it reopens on the same page, kept in the route");
+        // A route naming only a zoom (remote control, tests): applied without route.open.
+        app->navigate(QVariantMap{{u"view"_s, u"page"_s}, {u"path"_s, pdf}, {u"pdfScale"_s, 250}});
+        check(waitFor([&] { return opened(0) && qAbs(modelValue("zoomPercent").toInt() - 250) <= 1; }, 15000),
+              "the route's pdfScale 250 zooms to 250 %");
+        app->back();
+        check(waitFor([&] { return opened(2); }, 15000), "Back returns to page 2");
+    }
+
+    // A PDF protected with a password: its reason and the button, no password prompt.
+    const QString data = qEnvironmentVariable("BRULION_SELFTEST_PDF_DIR");
+    QFile lockedFile(QDir(data).filePath(u"zaszyfrowany.pdf"_s));
+    if (!data.isEmpty() && lockedFile.open(QIODevice::ReadOnly)) {
+        const QString locked = workspace->createAttachment(u"assets/sejf.pdf"_s, lockedFile.readAll());
+        app->openPage(locked);
+        check(waitFor(
+                      [&] {
+                          return pdfView() && modelValue("locked").toBool()
+                                 && shownNamed(pdfView(), u"pdfOpenElsewhere"_s) != nullptr;
+                      },
+                      15000),
+              "a PDF protected with a password says so, with “Open in another app”");
+        check(waitFor([&] {
+                  QQuickItem *name = pdfView() ? shownNamed(pdfView(), u"pdfMessageName"_s) : nullptr;
+                  return name && name->property("text").toString() == u"sejf.pdf"_s
+                         && shownNamed(pdfView(), u"pdfMessageSize"_s) != nullptr;
+              }),
+              "and names the file with its size");
+    }
+
+    // Another attachment that is no note (a ZIP): read-only text, never the editor.
+    const QString zip =
+            workspace->createAttachment(u"assets/archiwum.zip"_s, QByteArray("PK\x03\x04 Zażółć\0\1\2", 18));
+    app->openPage(zip);
+    check(waitFor([&] {
+              QQuickItem *picture = shownNamed(window->contentItem(), u"pictureView"_s);
+              return picture && picture->property("textOnly").toBool()
+                     && shownNamed(picture, u"pictureReadOnly"_s) != nullptr;
+          }) && controllerFor(zip) == nullptr,
+          "a ZIP opens read-only, not in the block editor");
+    app->goHome();
+}
+
 /// 5e. The default reminder time in the notebook's settings, set on the clock: saved at once, and
 /// the field keeps following the notebook's config afterwards — a value synced from another
 /// device shows (assigning the picked text once ended that binding: the field kept the old value
@@ -5158,6 +5544,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             checkBlockLinks(window, app, check, controllerFor);
             // 5b. A picture opens as a picture (checkPictureView).
             checkPictureView(window, app, check, controllerFor);
+            // 5k. PDFs: the thumbnail, the viewer, drawing on a page (checkPdfViewer).
+            checkPdfViewer(window, app, check, controllerFor);
             // 5i. A drawing: opened from its embed, drawn with real input, saved by itself.
             checkDrawing(window, app, check);
             // 5j. A drawing another program wrote: its embed's frame never moves.

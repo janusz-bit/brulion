@@ -78,4 +78,22 @@ Kliknięcie osadzonego obrazu pokazuje samo zdjęcie dopasowane do widoku (mały
 
 „Pokaż jako tekst” w pasku albo w menu Więcej (albo Ctrl+E) pokazuje plik jako tekst — tylko do odczytu, przydatne dla plików SVG (treść binarnego obrazu to nieczytelne znaki; z dużego pliku widać pierwsze 200 KB; zmiana pliku, np. z synchronizacji, od razu się tu pokazuje); „Pokaż obraz” albo ponownie Ctrl+E wraca do zdjęcia. Jeśli urządzenie nie ma dekodera danego formatu (np. WebP albo AVIF na telefonie lub w przeglądarce), Brulion pisze o tym zamiast pokazywać błąd — także w obrazie osadzonym w notatce.
 
+Inne pliki, które nie są notatką, obrazem ani PDF-em (np. DOCX albo ZIP), otwierają się tylko do odczytu jako tekst — nic, co wpiszesz, ich nie nadpisze.
+
+## PDF-y
+PDF osadzony w notatce (`![[wykład.pdf]]`, tak jak obraz: wklejony, upuszczony albo wybrany przez `/Obraz…`) pokazuje **miniaturę pierwszej strony** — białą kartkę w cienkiej ramce, także w ciemnym motywie — a pod nią nazwę pliku i liczbę stron. `![[wykład.pdf#page=3]]` (zapis z Obsidiana) pokazuje trzecią stronę. Miniatura rysuje się raz i zostaje w pamięci podręcznej urządzenia, więc dziennik przewija się płynnie, a po ponownym uruchomieniu widać ją od razu.
+
+Kliknięcie miniatury, odnośnik `[[wykład.pdf]]` (albo `[[wykład.pdf#page=3]]` — od razu na trzeciej stronie) lub plik wybrany w drzewie czy szybkim przełączaniu otwiera **przeglądarkę PDF**:
+- strony przewijasz w pionie; rysują się dopiero, gdy do nich dojdziesz, więc nawet gruby skrypt otwiera się od razu;
+- **powiększanie**: dwoma palcami, `Ctrl` + kółko myszy, przyciski **+** i **−** albo procent w pasku (np. 100 %, 200 %, **Dopasuj do szerokości**); dwukrotne stuknięcie przełącza między szerokością strony a dwukrotnym powiększeniem; powiększoną stronę przesuwasz palcem albo myszą;
+- **„Strona 3 z 12”** w pasku (na telefonie „3/12”) — stuknij, żeby przejść do wybranej strony;
+- **szukanie** (lupa, `Ctrl+F`) bez polskich znaków i wielkości liter: „gesla” znajdzie „gęślą”; trafienia są podświetlone, a `Enter` / strzałki przechodzą do następnego. W skanie (PDF bez warstwy tekstu) nie ma czego szukać — Brulion to powie. Na Androidzie szukanie działa od wersji 15; na starszych lupy nie ma;
+- **Rysuj na tej stronie** — robi rysunek, którego podkładem jest bieżąca strona (zobacz [[Rysunki#Notatki na slajdach i PDF-ach|Notatki na slajdach i PDF-ach]]);
+- **Otwórz w innej aplikacji** (w menu **⋯** albo **Więcej**) — przekazuje PDF systemowej aplikacji do PDF-ów, np. żeby go wydrukować albo dopisać adnotacje;
+- **Wstecz**, `Esc` albo `Alt+←` zamyka przeglądarkę. Pod ostatnią stroną są notatki, które osadzają PDF albo do niego linkują.
+
+PDF **chroniony hasłem** pokazuje kłódkę i „PDF chroniony hasłem” (z nazwą i rozmiarem pliku, a pod spodem notatki, które go osadzają albo linkują) — Brulion nie pyta o hasło, ale **Otwórz w innej aplikacji** przekaże go programowi, który to umie. Uszkodzony PDF pokazuje tyle, ile się da, a strona, której nie da się narysować, mówi o tym zamiast zawieszać aplikację.
+
+**W przeglądarce** Brulion nie rysuje PDF-ów: osadzony PDF jest kafelkiem pliku, a kliknięcie go albo odnośnika otwiera PDF w **nowej karcie**, gdzie przewijanie, powiększanie i szukanie daje wbudowana przeglądarka PDF. Gdy przeglądarka zablokuje nową kartę, PDF się pobiera, a Brulion to mówi.
+
 Zobacz też: [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]], [[Skróty klawiszowe|Skróty klawiszowe]].

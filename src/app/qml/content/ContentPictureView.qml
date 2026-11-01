@@ -25,6 +25,9 @@ import Brulion
 // (the drawing editor, route "drawing"); the picture follows the file when it is saved again, and
 // the app's theme (light or dark paper, as the drawing chooses: Workspace.drawingUrl, the drawing
 // image provider).
+// `textOnly` (PageView's safety net for attachments that are no note, no picture and no PDF —
+// DOCX, ZIP, MP3…): the bar names the file and says "Tylko do odczytu", the view is the file read
+// as text, nothing else — no file's bytes ever reach the block editor.
 // The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
 // never read whole for it), again whenever the file changes (sync, another program).
 //
@@ -49,6 +52,8 @@ Item {
     property string path
     /// The file read as text (read-only) instead of the picture.
     property bool asText: false
+    /// Not a picture at all (PageView.fileRoute): only its text, read-only (asText with it).
+    property bool textOnly: false
     /// Renderer colours for the references (BlockEditor.rendererPalette).
     property var rendererPalette: ({})
     /// The bar's "Pokaż jako tekst" / "Pokaż obraz" (PageView switches `asText`).
@@ -65,9 +70,9 @@ Item {
         return i < 0 ? root.path : root.path.slice(i + 1)
     }
     /// Drawn to fill the view: an SVG, a drawing (its preview, drawn at any size).
-    readonly property bool scalable: root.drawing || /\.svg$/i.test(root.fileName)
+    readonly property bool scalable: !root.textOnly && (root.drawing || /\.svg$/i.test(root.fileName))
     /// This device can decode the picture's format (see above); a drawing's preview always.
-    readonly property bool decodable: root.drawing || (root.path !== "" && Workspace.canDecodePicture(root.path))
+    readonly property bool decodable: !root.textOnly && (root.drawing || (root.path !== "" && Workspace.canDecodePicture(root.path)))
     /// "WEBP" for assets/łąka.webp (the message for a format this device cannot show).
     readonly property string formatName: {
         const i = root.fileName.lastIndexOf(".")
@@ -81,7 +86,7 @@ Item {
                                   : Workspace.assetUrl(root.path)
     /// A drawing (docs/SYNTAX.md §2 "Drawings": an SVG with a scene, a `.excalidraw` scene, an
     /// Obsidian Excalidraw plugin file): the bar offers the drawing editor.
-    readonly property bool drawing: root.path !== "" && root.fileRevision >= 0 && Workspace.isDrawing(root.path)
+    readonly property bool drawing: !root.textOnly && root.path !== "" && root.fileRevision >= 0 && Workspace.isDrawing(root.path)
 
     Connections {
         target: Workspace
@@ -92,7 +97,7 @@ Item {
     }
     /// The picture's pixels from its header (≤ 0: not in the header — the loaded picture's then);
     /// a drawing's preview size (again when the file changes).
-    readonly property size headerSize: root.fileRevision >= 0 ? Workspace.pictureSize(root.path) : Qt.size(0, 0)
+    readonly property size headerSize: root.fileRevision >= 0 && !root.textOnly ? Workspace.pictureSize(root.path) : Qt.size(0, 0)
     readonly property bool headerKnown: headerSize.width > 0 && headerSize.height > 0
     /// The picture's own pixels in the pixels view (the loaded size when the header has none).
     readonly property size shownSize: headerKnown ? headerSize
@@ -171,7 +176,7 @@ Item {
             spacing: Theme.space3
 
             BIcon {
-                name: root.drawing ? "pen-tool" : "image"
+                name: root.textOnly ? "file" : root.drawing ? "pen-tool" : "image"
                 size: Theme.iconSize
                 color: Theme.fgMuted
                 Layout.alignment: Qt.AlignVCenter
@@ -217,8 +222,16 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: AppController.navigate({ view: "drawing", path: root.path })
             }
+            BText {
+                objectName: "pictureReadOnly"
+                visible: root.textOnly
+                text: qsTr("Read-only")
+                variant: "muted"
+                Layout.alignment: Qt.AlignVCenter
+            }
             BButton {
                 objectName: "pictureTextButton"
+                visible: !root.textOnly
                 size: "small"
                 variant: "ghost"
                 iconName: root.asText ? "image" : "code"

@@ -139,6 +139,40 @@ private Q_SLOTS:
         QCOMPARE(headingMatches(fragment, heading), match);
     }
 
+    void pdfFragmentPage_data()
+    {
+        QTest::addColumn<QString>("fragment");
+        QTest::addColumn<int>("page");
+        QTest::newRow("page=3") << u"page=3"_s << 3;
+        QTest::newRow("upper-case key") << u"PAGE=3"_s << 3;
+        QTest::newRow("spaces around") << u" page = 7 "_s << 7;
+        QTest::newRow("zero") << u"page=0"_s << 0;
+        QTest::newRow("negative") << u"page=-2"_s << 0;
+        QTest::newRow("plus sign") << u"page=+4"_s << 0;
+        QTest::newRow("letters") << u"page=abc"_s << 0;
+        QTest::newRow("digits then letters") << u"page=3abc"_s << 0;
+        QTest::newRow("too large") << u"page=99999999999"_s << 0;
+        QTest::newRow("the largest") << u"page=1000000"_s << 1000000;
+        QTest::newRow("one more than the largest") << u"page=1000001"_s << 0;
+        QTest::newRow("Obsidian's height only") << u"height=400"_s << 0;
+        QTest::newRow("page and height") << u"page=3&height=400"_s << 3;
+        QTest::newRow("height and page") << u"height=400&page=5"_s << 5;
+        QTest::newRow("empty") << QString() << 0;
+        QTest::newRow("key only") << u"page"_s << 0;
+        QTest::newRow("no value") << u"page="_s << 0;
+        QTest::newRow("Polish key") << u"strona=3"_s << 0;
+        QTest::newRow("full-width digit") << u"page=２"_s << 0;
+        QTest::newRow("a heading, not a page") << u"Zażółć gęślą jaźń"_s << 0;
+        QTest::newRow("empty pairs") << u"&&page=2&"_s << 2;
+        QTest::newRow("leading zeros") << u"page=007"_s << 7;
+    }
+    void pdfFragmentPage()
+    {
+        QFETCH(QString, fragment);
+        QFETCH(int, page);
+        QCOMPARE(markdown::pdfFragmentPage(fragment), page);
+    }
+
     void find_data()
     {
         QTest::addColumn<QString>("fragment");

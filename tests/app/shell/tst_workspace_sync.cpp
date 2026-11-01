@@ -10,6 +10,7 @@
 #include "workspacesync.h"
 
 #include "fakewebdavserver.h"
+#include "pdfrenderpool.h"
 #include "synctest.h"
 
 #include "sync/sync.h"
@@ -673,18 +674,32 @@ private Q_SLOTS:
         WorkspaceSync *sync = ws->sync();
         sync->setNextcloud(account(server));
         sync->cancelSync(); // idle: nothing to cancel
+        auto &readers = brulion::pdfview::PdfReaderPool::instance();
+        QVERIFY(!readers.idleSuspended());
         sync->syncNow();
         QVERIFY(synctest::waitFor([&] { return !server.requests("PUT").isEmpty(); }));
         QCOMPARE(sync->state(), u"syncing"_s);
+        // While the run may replace a PDF, no reader keeps one open (Windows).
+        QVERIFY(readers.idleSuspended());
         sync->cancelSync();
         QVERIFY(synctest::waitFor([&] { return !sync->scheduler()->isRunning(); }));
         QCOMPARE(sync->state(), u"idle"_s);
+        QVERIFY(!readers.idleSuspended());
         QVERIFY(sync->lastError().isEmpty());
         const qsizetype uploaded = server.files(u"Brulion"_s).size();
         QVERIFY2(uploaded > 0 && uploaded < 30, qPrintable(QString::number(uploaded)));
         QVERIFY(syncAndWait(sync));
         QCOMPARE(server.files(u"Brulion"_s).size(), 30);
         QCOMPARE(sync->state(), u"idle"_s);
+        QVERIFY(!readers.idleSuspended());
+        // A run abandoned by the account going away (no runFinished): resumed all the same.
+        server.setLatency("PROPFIND", 200);
+        sync->syncNow();
+        QVERIFY(synctest::waitFor([&] { return readers.idleSuspended(); }));
+        NextcloudSettings off = account(server);
+        off.enabled = false;
+        sync->setNextcloud(off);
+        QVERIFY(!readers.idleSuspended());
     }
 
     void syncthingStatus()

@@ -277,6 +277,7 @@ void PageController::setHost(EditorHost *host)
         connect(m_host, &EditorHost::indexChanged, m_model, &BlockListModel::invalidateRendering);
         connect(m_host, &EditorHost::indexChanged, this, [this] { m_notebookTypes.reset(); });
         connect(m_host, &EditorHost::webPictureChanged, this, &PageController::onWebPictureChanged);
+        connect(m_host, &EditorHost::pdfThumbnailChanged, m_model, &BlockListModel::pdfThumbnailChanged);
         connect(m_host, &QObject::destroyed, this, [this] { m_host = nullptr; });
     }
     Q_EMIT hostChanged();
@@ -3288,6 +3289,25 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
             route[u"path"_s] = resolved;
             route[u"target"_s] = target;
         }
+        // A link to a PDF (`[[wykład.pdf#page=3]]`, docs/UI.md "PDF viewer"): its viewer at that
+        // page, or — where PDFs cannot be shown — another app / a new tab, inside this click.
+        if (m_host && !resolved.isEmpty() && paths::isPdfPath(resolved)) {
+            if (!m_host->pdfViewable()) {
+                m_host->openInOtherApp(resolved);
+                return out;
+            }
+            flush();
+            route.remove(u"target"_s);
+            if (const int page = markdown::pdfFragmentPage(fragment); page > 1)
+                route.insert(u"pdfPage"_s, page);
+            if (!m_path.isEmpty()) {
+                route.insert(u"from"_s, m_path);
+                if (validRow(row))
+                    route.insert(u"fromLine"_s, m_model->document().at(row).line);
+            }
+            m_host->navigate(route, newPane);
+            return out;
+        }
         // A block or heading of this page — `[[#^id]]`, or a link naming this page as a copied one
         // does — scrolls here every time: the route would not change, so the shell would ignore it.
         const bool here = !newPane && !m_path.isEmpty() && resolved == m_path;
@@ -3782,12 +3802,7 @@ QVariantMap PageController::insertDrawingsOn(int row, int from, int to, const QV
             name = QFileInfo(source.path).completeBaseName().trimmed();
         if (name.isEmpty())
             name = tr("Drawing");
-        // (Both at once: a name with "%1" in it keeps it, the page goes where %2 is.)
-        //: A drawing on page %2 of the PDF %1 ("Wykład 3 s. 4"); a file name, without the extension
-        const QString fileName = (source.page > 0 ? tr("%1 p. %2").arg(name, QString::number(source.page))
-                                                  //: A drawing on the picture %1; a file name, without the extension
-                                                  : tr("%1 (drawing)").arg(name))
-                                 + u".svg"_s;
+        const QString fileName = drawingFileNameOn(name, source.page) + u".svg"_s;
         // The drawing's file as DrawingBackdrops prepared it (off the GUI thread: 60 slides do not
         // freeze the window), else made here from the raster.
         QByteArray svg = m.value(u"error"_s).toString().isEmpty() ? m.value(u"svg"_s).toByteArray() : QByteArray();
@@ -3817,6 +3832,32 @@ QVariantMap PageController::insertDrawingsOn(int row, int from, int to, const QV
         stopEditing(); // (several drawings: the note stays, its blocks shown)
     out.insert(u"paths"_s, stored);
     return out;
+}
+
+QString PageController::drawingFileNameOn(const QString &name, int page)
+{
+    return EditorHost::drawingFileNameOn(name, page);
+}
+
+void PageController::openPdf(int row, const QString &path, int page, bool newPane)
+{
+    if (!m_host || path.isEmpty())
+        return;
+    if (!m_host->pdfViewable()) {
+        m_host->openInOtherApp(path);
+        return;
+    }
+    flush();
+    QVariantMap route{{u"view"_s, u"page"_s}, {u"path"_s, path}};
+    if (page > 1)
+        route.insert(u"pdfPage"_s, page);
+    // Where it was opened from: "Rysuj na tej stronie" embeds the drawing right after this block.
+    if (!m_path.isEmpty()) {
+        route.insert(u"from"_s, m_path);
+        if (validRow(row))
+            route.insert(u"fromLine"_s, m_model->document().at(row).line);
+    }
+    m_host->navigate(route, newPane);
 }
 
 void PageController::openDrawing(const QString &path)

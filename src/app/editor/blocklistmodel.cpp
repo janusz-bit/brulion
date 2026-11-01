@@ -5,6 +5,7 @@
 
 #include "calc/calc.h"
 #include "markdown/inline.h"
+#include "markdown/linkformat.h"
 #include "markdown/math.h"
 #include "util/paths.h"
 
@@ -1285,7 +1286,7 @@ void BlockListModel::ensureEmbeds(int row) const
         for (const Transclusion &t : transclusionsOf(e.body)) {
             if (!drawingPageOf(t).isEmpty()) {
                 pageDrawings.insert(embeds.size());
-                embeds.append({t.target, t.display, false, false});
+                embeds.append({t.target, t.display, false, false, {}});
             }
         }
     }
@@ -1324,6 +1325,12 @@ void BlockListModel::ensureEmbeds(int row) const
                 const QString decoded = QUrl::fromPercentEncoding(em.target.toUtf8());
                 path = decoded.contains(u'/') ? paths::normalize(decoded) : paths::join(attachments, decoded);
             }
+            // A PDF (docs/UI.md "PDF viewer"): the thumbnail of its page as the host has it — never
+            // its bytes (assetUrl(): a data: URL of the whole file in the browser).
+            if (paths::isPdfPath(path) && !em.image) {
+                st.embeds.append(pdfEmbed(em, path));
+                continue;
+            }
             drawing = (em.image || isDrawingTarget(em.target) || pageDrawings.contains(k)) && m_host->isDrawing(path);
             // (A scene file is no picture: its preview is the drawing provider's, never a data:
             // URL of its bytes in the browser.)
@@ -1361,6 +1368,38 @@ void BlockListModel::ensureEmbeds(int row) const
                                      {u"width"_s, size.width()},
                                      {u"height"_s, size.height()}});
     }
+}
+
+QVariantMap BlockListModel::pdfEmbed(const Embed &em, const QString &path) const
+{
+    const int asked = markdown::pdfFragmentPage(em.fragment);
+    const int page = std::max(1, asked);
+    const QVariantMap thumb = m_host->pdfThumbnail(path, page);
+    const QString state = thumb.value(u"state"_s, u"unsupported"_s).toString();
+    return QVariantMap{{u"target"_s, em.target},
+                       {u"alt"_s, em.alt},
+                       {u"image"_s, false},
+                       {u"pdf"_s, true},
+                       {u"page"_s, page},
+                       {u"viewable"_s, m_host->pdfViewable()},
+                       {u"state"_s, state},
+                       {u"url"_s, state == u"ready" ? thumb.value(u"url"_s).toUrl() : QUrl()},
+                       {u"width"_s, thumb.value(u"width"_s).toInt()},
+                       {u"height"_s, thumb.value(u"height"_s).toInt()},
+                       {u"pages"_s, thumb.value(u"pages"_s).toInt()},
+                       {u"pageWidth"_s, thumb.value(u"pageWidth"_s).toDouble()},
+                       {u"pageHeight"_s, thumb.value(u"pageHeight"_s).toDouble()},
+                       {u"error"_s, thumb.value(u"error"_s).toString()},
+                       {u"locked"_s, thumb.value(u"locked"_s).toBool()},
+                       {u"name"_s, paths::basename(path.isEmpty() ? em.target : path)},
+                       {u"path"_s, path},
+                       {u"drawing"_s, false}};
+}
+
+void BlockListModel::pdfThumbnailChanged(const QString &path)
+{
+    // As attachmentChanged(): only the rows whose embeds name the PDF compute them again.
+    attachmentChanged(path);
 }
 
 QString BlockListModel::drawingPageOf(const Transclusion &t) const

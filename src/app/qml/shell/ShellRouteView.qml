@@ -47,6 +47,10 @@ Item {
     /// The view shows a picture attachment (not a note), and that picture's text instead.
     readonly property bool viewPicture: !!_view && _view.pictureRoute === true
     readonly property bool viewPictureAsText: viewPicture && _view.pictureAsText === true
+    /// The view shows a PDF in the PDF viewer (PageView.pdfRoute), or another file that is no note
+    /// read-only (PageView.fileRoute): no Markdown, no note actions.
+    readonly property bool viewPdf: !!_view && _view.pdfRoute === true
+    readonly property bool viewFile: !!_view && _view.fileRoute === true
     /// The view's editor shows the page's Markdown source (source mode).
     readonly property bool viewSourceMode: !!_view && _view.sourceMode === true
     /// The view swipes sideways from the left edge itself (the calendar's grids): no edge strip.

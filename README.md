@@ -156,6 +156,12 @@
   `/Rysunek na obrazie lub PDF` kładzie pod rysunek obraz, slajd albo strony PDF z wykładu (po
   jednym rysunku na stronę; na Androidzie, Windows i Linuksie — w przeglądarce obrazy), a podkład
   ciemnieje razem z ciemną kartką.
+* **Podgląd PDF.** PDF osadzony w notatce (`![[wykład.pdf]]`, także `#page=3` jak w Obsidianie)
+  pokazuje miniaturę strony; kliknięcie otwiera przeglądarkę PDF w aplikacji: przewijanie,
+  powiększanie palcami, `Ctrl` + kółkiem i przyciskami, „Strona 3 z 12” z przejściem do strony,
+  szukanie bez polskich znaków i wielkości liter (na Androidzie od wersji 15), **Otwórz w innej
+  aplikacji** i **Rysuj na tej stronie** — notatki na slajdach prosto z PDF-a. W przeglądarce PDF
+  otwiera się w nowej karcie.
 * **Zapytania.** Blok ` ```query ` pokazuje na żywo np. wszystkie otwarte zadania z tagiem
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
@@ -413,8 +419,8 @@ do C++ w `src/core/drawing/stroke.cpp`. Rysunki wtyczki Excalidraw dla Obsidiana
 [lz-string](https://github.com/pieroxy/lz-string) (MIT, © 2013 Pieroxy), przeniesiona do C++
 w `src/core/drawing/lzstring.cpp`. Emoji i symbole tam, gdzie system nie ma
 czcionki z nimi (przeglądarka, część Linuksów): fragmenty [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji)
-i Noto Sans Math (SIL OFL 1.1, [assets/fonts](assets/fonts/README.md)). Strony PDF jako podkład
-rysunku: Qt PDF (pdfium, BSD-3-Clause; Windows, AppImage), [poppler](https://poppler.freedesktop.org)
+i Noto Sans Math (SIL OFL 1.1, [assets/fonts](assets/fonts/README.md)). Miniatury i przeglądarka PDF
+oraz strony PDF jako podkład rysunku: Qt PDF (pdfium, BSD-3-Clause; Windows, AppImage), [poppler](https://poppler.freedesktop.org)
 (GPL-2.0-or-later, zgodna z AGPL; pakiet Nix), a na Androidzie systemowy `PdfRenderer`.
 
 ---
@@ -516,6 +522,11 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   PDF" puts a picture, a slide or a lecture's PDF pages under a drawing (one drawing per page; on
   Android, Windows and Linux — pictures in the browser), and the backdrop turns dark with dark
   paper.
+* **PDF preview.** A PDF embedded in a note (`![[lecture.pdf]]`, also Obsidian's `#page=3`) shows
+  a thumbnail of the page; a click opens the app's own PDF viewer: scrolling, zoom (pinch,
+  Ctrl+wheel, buttons, fit width), "Page 3 of 12" with a page jump, search ignoring case and
+  Polish diacritics (Android 15+), **Open in another app** and **Draw on this page** — notes on
+  slides straight from the PDF. In the browser the PDF opens in a new tab.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Something not working? Settings → Application → **Event log** shows what the app and the sync
   did (live sync progress and the history of runs are in the sync center); share or save it
@@ -533,7 +544,7 @@ English): [architecture](docs/ARCHITECTURE.md), [Markdown dialect](docs/SYNTAX.m
 outline of drawings ported from perfect-freehand (MIT, © Stephen Ruiz Ltd), the compression of
 Obsidian Excalidraw plugin drawings ported from lz-string (MIT, © 2013 Pieroxy), emoji and
 symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`); PDF
-pages of drawing backdrops: Qt PDF (pdfium, BSD-3-Clause; Windows, AppImage), poppler
+thumbnails, the PDF viewer and PDF pages of drawing backdrops: Qt PDF (pdfium, BSD-3-Clause; Windows, AppImage), poppler
 (GPL-2.0-or-later, compatible with the AGPL; the Nix package), Android's own `PdfRenderer`.
 
 Performance (numbers per platform, budgets, how to benchmark, regression guards): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).

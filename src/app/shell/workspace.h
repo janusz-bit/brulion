@@ -72,6 +72,10 @@ struct FileMove;
 struct QueryItem;
 } // namespace brulion
 
+namespace brulion::pdfview {
+class PdfThumbnails;
+} // namespace brulion::pdfview
+
 namespace brulion::shell {
 
 /// Write `content` to `path` so that the text it replaces is kept in the vault's version history
@@ -134,6 +138,11 @@ class Workspace : public EditorHost, public QueryHost {
     /// webPicturesShown; workspacepictures.cpp). Off: each waits for "Pokaż".
     Q_PROPERTY(
             bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
+    /// PDFs open in the app's own viewer (a PDF renderer is built in: platform::pdfAvailable();
+    /// workspacepdf.cpp). Off (the browser): they go to another app / a new tab.
+    Q_PROPERTY(bool pdfViewable READ pdfViewable CONSTANT FINAL)
+    /// The PDF viewer can search (platform::pdfTextAvailable(): Qt PDF, poppler, Android 15+).
+    Q_PROPERTY(bool pdfSearchable READ pdfSearchable CONSTANT FINAL)
 
 public:
     static constexpr int MaxRecentPages = 20;
@@ -271,6 +280,46 @@ public:
     void setWebPageScheme(const QString &scheme);
     QString webPageScheme() const { return m_webPageScheme; }
     QVariantMap vaultConfig() const override;
+
+    // ---- PDFs (workspacepdf.cpp; docs/UI.md "PDF viewer") ------------------------------------
+    bool pdfViewable() const override;
+    bool pdfSearchable() const;
+    /// The file is a PDF by its name (paths::isPdfPath): PageView opens it in the PDF viewer.
+    Q_INVOKABLE bool isPdf(const QString &path) const;
+    /// "<mtime ms>-<size>" of the vault's file ("" when there is none): the PDF viewer reloads
+    /// when it changes.
+    Q_INVOKABLE QString fileVersion(const QString &path) const;
+    /// The vault file's size as people read it ("1.4 MB" in the locale; "" when there is none):
+    /// the PDF viewer's panel when it cannot show the pages.
+    Q_INVOKABLE QString fileSizeText(const QString &path) const;
+    /// The thumbnail of page `page` of the PDF at `path` (EditorHost::pdfThumbnail): drawn and cached
+    /// by pdfview::PdfThumbnails (<app cache>/pdf-thumbnails, 64 MiB — 32 MiB on Android —, the long
+    /// side for the primary screen's ratio); pdfThumbnailChanged(path) when one is ready or failed.
+    QVariantMap pdfThumbnail(const QString &path, int page) const override;
+    /// The thumbnails' folder (tests: a temporary one; "" — the default) and its size cap (0 — the
+    /// default).
+    void setPdfThumbnailCacheDir(const QString &dir) { m_pdfThumbnailDir = dir; }
+    /// A PDF of the notebook handed to the system's viewer / a new browser tab
+    /// (platform::openFileExternally): the path normalised, inside the vault (no "..", a file), named
+    /// .pdf AND starting with "%PDF-" within its first 1024 bytes (a renamed program is never handed
+    /// to ShellExecute / xdg-open). Messages: errorOccurred (not a PDF, no app, could not be opened),
+    /// noticeOccurred (the browser blocked the tab: downloaded instead). The browser reads the bytes
+    /// (at most MaxAttachmentBytes) for the tab's blob. False when it was not opened.
+    Q_INVOKABLE bool openInOtherApp(const QString &path) override;
+    /// "Rysuj na tej stronie": the drawing DrawingBackdrops prepared (`prepared`: {svg, path, page,
+    /// name, error}) stored as "<name> s. <page>.svg" (EditorHost::drawingFileNameOn; a free name)
+    /// and embedded (`![[<link target>]]`) right after the block of `fromNote` that embeds the PDF
+    /// (around line `fromLine`; notebook::insertBlockAfterEmbed, written with writeIfUnchanged, three
+    /// tries), or — no `fromNote`, or it is gone — as a block of today's journal (captureToJournal).
+    /// {path (the drawing), note (where it was embedded), journal (bool)}; {} and errorOccurred on
+    /// failure.
+    Q_INVOKABLE QVariantMap addDrawingOnPdfPage(const QString &pdfPath, const QVariantMap &prepared,
+                                                const QString &fromNote, int fromLine);
+    /// The drawings `note` embeds whose backdrop is page `page` of `pdfPath` (core
+    /// drawing::backdropSource of each embedded drawing file, at most 50 read): [{path, name}] —
+    /// "Rysuj na tej stronie" offers to open one instead of making a second.
+    Q_INVOKABLE QVariantList drawingsOnPdfPage(const QString &pdfPath, int page, const QString &note) const;
+
     /// Copied blocks as HTML (io::clipboardHtml: attachments as file links — none in the browser,
     /// whose assets are data: URLs —, block references as their text); workspaceclipboard.cpp.
     QString renderHtml(const QString &markdown, const QString &fromPath) const override;
@@ -639,6 +688,21 @@ private:
     QString m_webPageScheme;
     bool m_remindersPaused = false;
     bool m_wasInactive = false; ///< the app left the foreground since the last rescan
+    /// The thumbnails of embedded PDFs (workspacepdf.cpp; a child, created on first use) and the
+    /// vault paths asked for, by their absolute paths (PdfThumbnails::changed names those).
+    pdfview::PdfThumbnails *pdfThumbnails() const;
+    mutable pdfview::PdfThumbnails *m_pdfThumbnails = nullptr;
+    mutable QHash<QString, QString> m_pdfAsked;
+    QString m_pdfThumbnailDir;
+    /// A PDF changed or went: its open readers are closed, its thumbnails drawn again on the next ask.
+    void pdfFileChanged(const QString &path, const QString &oldPath = QString());
+    /// Before Brulion itself writes, moves or deletes `path` (a file or a folder): the idle readers
+    /// of PDFs there closed (pdfview::PdfReaderPool) — Windows cannot replace, move or delete a file
+    /// that is open.
+    void releasePdfReaders(const QString &path);
+    /// The vault path an embed's target names from `fromNote` (as the editor resolves it: the
+    /// index's link resolution, else the attachments folder).
+    QString attachmentPathOf(const QString &target, const QString &fromNote) const;
     mutable QHash<QString, QUrl> m_dataUrls;
     mutable QHash<QString, QSize> m_dataUrlSizes; // pictures among them (picturesize.h)
     /// Pages shown by editors (editorOpened()), and by how many.

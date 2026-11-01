@@ -24,6 +24,9 @@ bool isPicturePath(const VaultPath &path);
 /// The extensions isPicturePath() accepts (".png", ".jpg", …: lower-case, with the dot), for
 /// lists that name them (the picture file dialog's filter).
 const QStringList &pictureExtensions();
+/// An attachment PDF by its name (".pdf", any case; also a hidden file named ".pdf"): opened in the
+/// PDF viewer, embedded as its first page's thumbnail (docs/UI.md "PDF viewer").
+bool isPdfPath(const VaultPath &path);
 /// "a/b/Page.md" -> "a/b/Page".
 QString stripMarkdownExtension(const VaultPath &path);
 /// "a/b/Page.md" -> "Page".
