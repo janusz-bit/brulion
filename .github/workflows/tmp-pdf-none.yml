@@ -1,0 +1,85 @@
+# TEMPORARY (s2/pdfview only; removed before the branch is merged): a desktop build without a PDF
+# renderer (-DBRULION_PDF_BACKEND=none), so the PDF tests skip where they must and the shell's
+# self-test checks the fallbacks (the file chip, "Otwórz w innej aplikacji", the viewer's message).
+name: PDF without a renderer (temporary)
+
+on:
+  push:
+    branches: [s2/pdfview]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tmp-pdf-none-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: 6.11.2
+
+jobs:
+  none:
+    name: Linux, PDF backend none
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 1500M
+      CCACHE_COMPILERCHECK: content
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          aqtversion: ==3.3.0
+          cache: true
+
+      - name: Install ccache
+        run: command -v ccache || { sudo apt-get update -qq && sudo apt-get install -y -qq ccache; }
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .ccache
+          key: ccache-pdfnone-${{ env.QT_VERSION }}-${{ github.sha }}
+          restore-keys: ccache-pdfnone-${{ env.QT_VERSION }}-
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DBRULION_WERROR=ON
+          -DBRULION_PDF_BACKEND=none
+
+      - name: Build
+        id: build
+        run: cmake --build build --parallel
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.build.outcome != 'skipped' }}
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: ccache-pdfnone-${{ env.QT_VERSION }}-${{ github.sha }}
+
+      - name: PDF tests and the shell's self-test without a renderer
+        run: >-
+          ctest --test-dir build --output-on-failure --parallel "$(nproc)" --timeout 300
+          -R "pdf|shell_qml|workspace_pdf|drawing_qml|editor_controller|editor_blocktext|notebook_embeds"
+          --output-junit "$RUNNER_TEMP/ctest-junit.xml"
+
+      - name: Upload the test output
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ctest-junit-pdf-none
+          path: ${{ runner.temp }}/ctest-junit.xml
+          if-no-files-found: ignore
