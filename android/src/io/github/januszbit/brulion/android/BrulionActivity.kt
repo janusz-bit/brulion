@@ -29,13 +29,15 @@ class BrulionActivity : QtActivity() {
       restartApp(restarts + 1)
       return
     }
+    if (!createdBefore) BrulionAndroid.restoreAfterRestart(this, restarts)
     BrulionAndroid.onActivityCreated(this)
     ImeInsets.install(this)
   }
 
   /**
-   * The app started afresh with this activity's intent (its extras: a notification's note, a
-   * debuggable build's arguments), as QtActivity restarts it after a relaunch once Qt runs.
+   * The app started afresh with this activity's intent (its extras: a debuggable build's
+   * arguments; the notification's note and a share go along, [BrulionAndroid.keepForRestart]), as
+   * QtActivity restarts it after a relaunch once Qt runs.
    */
   private fun restartApp(restarts: Int) {
     Log.w(TAG, "recreated before Qt started (a configuration change during the start): restart $restarts")
@@ -44,6 +46,7 @@ class BrulionActivity : QtActivity() {
       .setComponent(componentName)
       .putExtra(StartupRelaunch.EXTRA_RESTARTS, restarts)
       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    BrulionAndroid.keepForRestart(this, restart)
     startActivity(restart)
     finish()
     Runtime.getRuntime().exit(0)

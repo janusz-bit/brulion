@@ -112,11 +112,11 @@
 # tests/app/tst_keyboardinsets.cpp; screenshots wk-*.png. docs/WEB.md "Klawiatura ekranowa".
 # With --relaunch instead: Android recreates the activity while the app starts (a configuration
 # change no app can handle itself, CONFIG_ASSETS_PATHS: a display cutout overlay of the framework
-# toggled at once after `am start`, at a few delays) — before Qt started, the app restarts itself
-# with the same intent (BrulionActivity, StartupRelaunch.kt) instead of keeping a blank window:
-# the sample notebook's journal is on screen and Qt logs (brulion.*); every attempt's outcome is
-# listed (relaunched before Qt started / after / not at all). Screenshots rl-*.png; the same
-# debuggable APK.
+# toggled at once after `am start`, at a few delays; started as by a tapped notification) — before
+# Qt started, the app restarts itself with the same intent and the notification's note
+# (BrulionActivity, StartupRelaunch.kt) instead of keeping a blank window: that note is on screen
+# and Qt logs (brulion.*); every attempt's outcome is listed (relaunched before Qt started / after /
+# not at all). Screenshots rl-*.png; the same debuggable APK.
 # With --pickers instead: the system's file pickers that FilePicker shows (docs/UI.md "File pickers";
 # no QtQuick.Dialogs since L9) — files in the shared Download folder: Import → "Wybierz pliki…" brings
 # DocumentsUI to the front (ACTION_OPEN_DOCUMENT), a note tapped there comes back to the import's
@@ -444,19 +444,31 @@ toolbar_on_keyboard_report() {
 }
 app_shot() { adb exec-out screencap -p >"$OUT/$1.png" || true; }
 start_app() { # <app arguments> [more am start arguments]
-  adb shell am force-stop "$PKG"
-  adb logcat -c
-  adb shell am start -W -n "$ACTIVITY" --es applicationArguments "'$1'" \
-    --es extraenvvars_QT_LOGGING_RULES "brulion.platform.debug=true" "${@:2}" >/dev/null
-  sleep 25
-  # A freshly booted emulator still applies its overlays for a while: a configuration change no
-  # app can handle itself (CONFIG_ASSETS_PATHS, "Config changes=80000000"), so Android relaunches
-  # the activity. Relaunched before Qt started, the app restarts itself (BrulionActivity,
-  # StartupRelaunch.kt) — with the same intent, so the arguments stay; it needs a few more seconds.
-  if adb logcat -d -s BrulionActivity:W | grep -q 'recreated before Qt started'; then
-    echo "    (Android relaunched the activity while the app started: the app restarted itself)"
-    sleep 15
-  fi
+  local try
+  for try in 1 2; do
+    adb shell am force-stop "$PKG"
+    adb logcat -c
+    adb shell am start -W -n "$ACTIVITY" --es applicationArguments "'$1'" \
+      --es extraenvvars_QT_LOGGING_RULES "brulion.platform.debug=true" "${@:2}" >/dev/null
+    sleep 25
+    # A freshly booted emulator still applies its overlays for a while: a configuration change no
+    # app can handle itself (CONFIG_ASSETS_PATHS, "Config changes=80000000"), so Android relaunches
+    # the activity. Relaunched before Qt started, the app restarts itself (BrulionActivity,
+    # StartupRelaunch.kt) — with the same intent, so the arguments stay; it needs a few more seconds.
+    if adb logcat -d -s BrulionActivity:W | grep -q 'recreated before Qt started'; then
+      echo "    (Android relaunched the activity while the app started: the app restarted itself)"
+      sleep 15
+      return 0
+    fi
+    # Relaunched after Qt started, Qt restarts the app itself with a bare launcher intent: none of
+    # the arguments above (docs/ANDROID.md). Not what a mode tests: started once more, settled.
+    adb logcat -d | grep -q 'finishDrawing of relaunch: Window{[^}]*BrulionActivity' || return 0
+    if ((try == 1)); then
+      echo "    (Android relaunched the activity after Qt started: Qt restarted the app without its arguments — started again)"
+    else
+      echo "    (relaunched after Qt started again: the mode's checks go on with what is on screen)"
+    fi
+  done
 }
 # Reports of the keyboard observer (ImeInsets.kt logs each one with this property set).
 ime_frames() { adb logcat -d -s BrulionIme:D | grep -c 'animating=true' || true; }
@@ -618,10 +630,15 @@ if ((RELAUNCH)); then
   # Qt's log lines carry their category as the tag (brulion.platform…; the package's name does not
   # end in a tag's ": ").
   rl_qt_logged() { adb logcat -d | grep -qE ' brulion\.[a-z.]+ *: '; }
+  # The app is started as by a tapped notification: the note (the guide's first page) is opened.
+  # BrulionActivity takes it out of the intent in the first activity — which Android hands
+  # unchanged to the recreated one —, so the restart has to put it back (keepForRestart).
+  rl_note() { ui_has 'Witaj w Brulionie' || ui_has 'Brulion to notatnik w zwykłych plikach Markdown[^"]*'; }
   # The bottom navigation: the shell with a notebook. In English after Qt's own restart (a relaunch
-  # once Qt runs: QtActivity restarts the app with a bare launcher intent — the arguments are gone).
+  # once Qt runs: QtActivity restarts the app with a bare launcher intent — the arguments and the
+  # note are gone).
   rl_journal() { ui_has 'Kalendarz|Calendar'; }
-  before=0 after=0 none=0 blank=0 shown=0
+  before=0 after=0 none=0 blank=0 shown=0 note_lost=0
   attempt=0
   # The start: the process, Qt's libraries loaded in onCreate, Qt started at the first layout. The
   # relaunch has to come before that layout: delays (s) from the start request on.
@@ -632,8 +649,9 @@ if ((RELAUNCH)); then
     sleep 4
     adb logcat -c
     # One shell on the device: no adb round trip between the start and the change.
-    adb shell "am start -n $ACTIVITY --es applicationArguments '--demo --locale pl --route journals' \
-      --es extraenvvars_QT_LOGGING_RULES brulion.platform.debug=true >/dev/null; sleep $delay; \
+    adb shell "am start -n $ACTIVITY --es applicationArguments '--demo --locale pl' \
+      --es extraenvvars_QT_LOGGING_RULES brulion.platform.debug=true \
+      --es $EXTRA.PATH 'Witaj w Brulionie.md' --ei $EXTRA.LINE 0 >/dev/null; sleep $delay; \
       cmd overlay enable $overlay"
     sleep 25
     outcome="no relaunch"
@@ -648,10 +666,16 @@ if ((RELAUNCH)); then
       none=$((none + 1))
     fi
     adb logcat -d >"$OUT/rl-logcat-$attempt.txt"
-    if rl_qt_logged && rl_journal; then
+    if rl_qt_logged && rl_note; then
       shown=$((shown + 1))
-      outcome+="; the journal is on screen"
+      outcome+="; the notification's note is on screen"
       [[ $outcome != relaunched\ before* ]] || app_shot "rl-restarted-$attempt"
+    elif rl_qt_logged && rl_journal; then
+      shown=$((shown + 1))
+      outcome+="; the notebook is on screen, not the notification's note"
+      # Lost only through Qt's own restart (after Qt started).
+      [[ $outcome == relaunched\ after* ]] || note_lost=$((note_lost + 1))
+      app_shot "rl-no-note-$attempt"
     else
       blank=$((blank + 1))
       outcome+="; NO journal on screen (Qt logged: $(rl_qt_logged && echo yes || echo no))"
@@ -661,9 +685,10 @@ if ((RELAUNCH)); then
     ((before < 2)) || break
   done
   adb shell cmd overlay disable "$overlay" >/dev/null 2>&1 || true
-  echo "    $attempt attempts: relaunched before Qt started $before, after $after, not at all $none; journal shown $shown, not $blank"
+  echo "    $attempt attempts: relaunched before Qt started $before, after $after, not at all $none; notebook shown $shown, not $blank; the note lost $note_lost"
   check "Android recreated the activity before Qt started (at least once)" test "$before" -ge 1
   check "the app restarted itself each time and shows the notebook: no blank window" test "$blank" -eq 0
+  check "the tapped notification's note is open (also after the app restarted itself)" test "$note_lost" -eq 0
   check "no crash" bash -c "! cat '$OUT'/rl-logcat-*.txt 2>/dev/null | grep -E 'FATAL EXCEPTION|Fatal signal'"
   info "Result"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"

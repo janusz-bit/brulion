@@ -558,6 +558,31 @@ object BrulionAndroid {
   // BrulionActivity hooks (main thread)
   // -----------------------------------------------------------------------------------------
 
+  /**
+   * [BrulionActivity] is about to restart the process ([StartupRelaunch]): the note of a tapped
+   * notification not taken by C++ yet goes back into [restart] (the intent lost it in
+   * [activationFrom]), a share not taken yet into a private file for [restoreAfterRestart].
+   */
+  internal fun keepForRestart(context: Context, restart: Intent) {
+    synchronized(lock) {
+      StartupRelaunch.carriedNote(pendingActivation)?.let { (path, line) ->
+        restart.putExtra(Extras.PATH, path).putExtra(Extras.LINE, line)
+      }
+      if (!StartupRelaunch.saveShare(context.noBackupFilesDir, pendingShare)) {
+        Log.w(TAG, "cannot keep the share for the restart")
+      }
+    }
+  }
+
+  /**
+   * The first [BrulionActivity] of this process: a share [keepForRestart] kept comes back when the
+   * process is that restart ([restarts], the intent's [StartupRelaunch.EXTRA_RESTARTS]).
+   */
+  internal fun restoreAfterRestart(context: Context, restarts: Int) {
+    val share = StartupRelaunch.takeSavedShare(context.noBackupFilesDir, restarts) ?: return
+    synchronized(lock) { if (pendingShare == null) pendingShare = share }
+  }
+
   internal fun onActivityCreated(activity: Activity) {
     activityRef = WeakReference(activity)
     applySystemBars()

@@ -978,12 +978,22 @@ np. notatka z powiadomienia czy argumenty APK debugowalnego, przepadają.)
 `BrulionActivity.onCreate` rozpoznaje ten przypadek po `super.onCreate`: wcześniejsza
 `BrulionActivity` tego procesu doszła już do `onCreate`, ta nie ma żadnego widoku w
 `android.R.id.content` (układ Qt) i nie jest kończona (Qt kończy ją, gdy bibliotek nie dało się
-wczytać). Wtedy — jak Qt — uruchamia aplikację od nowa: tę samą intencję (dodatki: notatka
-z powiadomienia, argumenty APK debugowalnego) z `FLAG_ACTIVITY_NEW_TASK |
-FLAG_ACTIVITY_CLEAR_TASK`, potem `finish()` i koniec procesu. Najwyżej dwa razy z rzędu (licznik
-w dodatku `io.github.januszbit.brulion.STARTUP_RESTARTS` intencji), więc przyczyna, która wraca,
-nie zapętli startu. W logcat: `BrulionActivity: recreated before Qt started (…): restart N`.
-Decyzja to czysta funkcja `StartupRelaunch.needsRestart` (test `StartupRelaunchTest`).
+wczytać). Wtedy — jak Qt — uruchamia aplikację od nowa: tę samą intencję (dodatki: argumenty APK
+debugowalnego) z `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK`, potem `finish()` i koniec
+procesu. Najwyżej dwa razy z rzędu (licznik w dodatku `io.github.januszbit.brulion.STARTUP_RESTARTS`
+intencji), więc przyczyna, która wraca, nie zapętli startu. W logcat: `BrulionActivity: recreated
+before Qt started (…): restart N`.
+
+Z procesem ginie to, co trzyma tylko pamięć (`BrulionAndroid.keepForRestart`): notatkę z
+dotkniętego powiadomienia pierwsza aktywność wyjęła już z intencji (`activationFrom` usuwa
+dodatki, żeby stuknięcia nie obsłużyć dwa razy), a Android przekazuje odtwarzanej aktywności ten
+sam, już okrojony obiekt intencji — ścieżka i wiersz wracają więc do intencji restartu (alarm
+jest już wyciszony, `NOTIFICATION_ID` nie wraca). Udostępnienie z innej aplikacji
+(`ShareActivity`, tylko w pamięci — nigdy dodatek intencji, który mogłaby podrobić inna aplikacja)
+trafia do prywatnego pliku `no_backup/startup-restart-share.json`; pierwsza aktywność
+zrestartowanego procesu (licznik > 0) wczytuje je z powrotem, każda inna pierwsza aktywność tylko
+usuwa pozostałość. Decyzja i te kroki to zwykły kod JVM w `StartupRelaunch` (`needsRestart`,
+`carriedNote`, `saveShare`/`takeSavedShare`; test `StartupRelaunchTest`).
 
 ### Most JNI (C++ ↔ Kotlin)
 
@@ -1134,17 +1144,22 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   wtedy `BrulionActivity` od nowa, a utworzona od nowa przed startem Qt aplikacja uruchamia się
   sama jeszcze raz ([Aktywność utworzona od nowa w trakcie
   startu](#aktywność-utworzona-od-nowa-w-trakcie-startu)); `start_app` pisze wtedy „the app
-  restarted itself” i czeka na nią dłużej.
+  restarted itself” i czeka na nią dłużej. Utworzoną od nowa po starcie Qt aplikację Qt restartuje
+  bez argumentów trybu: gdy w logcat jest `finishDrawing of relaunch` tej aktywności, a nie ma
+  wpisu o restarcie samej aplikacji, `start_app` uruchamia ją drugi raz („…Qt restarted the app
+  without its arguments — started again”).
 * Aktywność utworzona od nowa w trakcie startu (APK debugowalny jak niżej):
   ```sh
   scripts/android-emulator-test.sh --relaunch
   ```
-  Zaraz po `am start` (w jednym `adb shell`, z opóźnieniami 0–2 s) włącza nakładkę frameworka
+  Uruchamia aplikację jak dotknięte powiadomienie (dodatki `PATH`/`LINE`: pierwsza strona
+  przewodnika). Zaraz po `am start` (w jednym `adb shell`, z opóźnieniami 0–2 s) włącza nakładkę frameworka
   `com.android.internal.display.cutout.emulation.*` (`cmd overlay`): zmiana `CONFIG_ASSETS_PATHS`,
   więc Android tworzy aktywność od nowa. Sprawdza, że co najmniej raz stało się to przed startem
-  Qt (`BrulionActivity: recreated before Qt started`) i że po każdej próbie na ekranie jest dziennik
-  przykładowego notatnika (dolna nawigacja — po restarcie przez Qt po angielsku, bez argumentów —,
-  wpisy Qt `brulion.*` w logcat) — żadnego pustego okna;
+  Qt (`BrulionActivity: recreated before Qt started`) i że po każdej próbie na ekranie jest notatka
+  z powiadomienia (także po restarcie samej aplikacji; po restarcie przez Qt — po angielsku, bez
+  argumentów i notatki — wystarczy dolna nawigacja notatnika), wpisy Qt `brulion.*` w logcat —
+  żadnego pustego okna;
   wypisuje wynik każdej próby (przed startem Qt / po nim / bez ponownego utworzenia). Zrzuty
   `rl-*.png`, logcat każdej próby `rl-logcat-<n>.txt`. Sprawdzone 2026-11-01 na GitHub Actions
   (Android 16): z poprawką 7 prób, 2 razy utworzona od nowa przed startem Qt — za każdym razem
