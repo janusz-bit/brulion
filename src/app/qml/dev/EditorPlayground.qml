@@ -24,7 +24,9 @@ import Brulion
 // keyboard (keyboardTest(): KeyboardInsets.simulated) and exits; `blocklinks` checks copying links
 // to blocks and headings and following them (blockLinksTest()) and exits; `refreshtest` checks
 // that views follow what they depend on (RefreshSelfTest.qml) and exits; `datechips` checks the
-// menu of date chips with real input (DateChipSelfTest.qml) and exits; `propstest` checks the
+// menu of date chips with real input (DateChipSelfTest.qml) and exits; `linkpartstest` checks the
+// path parts of [[Folder/Page]] links with real input (LinkPartsSelfTest.qml) and exits, `linkparts`
+// / `linkparts-menu` show them (a part hovered / a folder part's menu); `propstest` checks the
 // page properties panel with real input (PropertiesSelfTest.qml) and exits; `properties` /
 // `properties-phone` show the panel expanded on a page with every type; `copylink` /
 // `copylink-document` show the block menu's "Kopiuj odnośnik" (outline / document),
@@ -313,6 +315,17 @@ ApplicationWindow {
         id: dateChipTestLoader
         active: false
         sourceComponent: DateChipSelfTest {
+            window: window
+            editor: editor
+            page: page
+            host: host
+        }
+    }
+    // ---- Path parts of a link (`--editor-script linkpartstest`) ----------------------------------
+    Loader {
+        id: linkPartsTestLoader
+        active: false
+        sourceComponent: LinkPartsSelfTest {
             window: window
             editor: editor
             page: page
@@ -3427,6 +3440,36 @@ ApplicationWindow {
         case "propstest":
             propertiesTestLoader.active = true
             break
+        case "linkpartstest":
+            linkPartsTestLoader.active = true
+            break
+        case "linkparts":
+        case "linkparts-menu": {
+            // [[Firma/Adam cośtam]] as two links: the pointer resting on "Firma" (underlined) / the
+            // menu of a folder's part (screenshots).
+            host.setFile("Firma.md", "- Strona firmy\n")
+            host.setFile("Firma/Adam cośtam.md", "- Adam\n")
+            host.setFile("Projekty/Zażółć gęślą jaźń/Notatki.md", "- notatki\n")
+            host.setFile("Części linków.md", "- Zapytać się [[Firma/Adam cośtam]] o to czego się pouczyć\n"
+                + "- Notatki w [[Projekty/Zażółć gęślą jaźń/Notatki]] i [[Nowy dział/Plan]]\n"
+                + "- Z tekstem: [[Firma/Adam cośtam|Adam]]\n")
+            page.path = "Części linków.md"
+            scriptLater.run(() => {
+                const row = name === "linkparts" ? 0 : 1
+                const text = renderedIn(delegateAt(row))
+                const p = text ? linkPointIn(text, "part:1:") : null
+                if (!p)
+                    return
+                if (name === "linkparts") {
+                    const block = findWhere(delegateAt(row), (it) => it.shownHtml !== undefined && it.hoveredLink !== undefined)
+                    if (block)
+                        block.hoveredLink = text.linkAt(p.x, p.y)
+                } else {
+                    editor.openBlockLinkMenu(row, text.linkAt(p.x, p.y), text, p.x, p.y)
+                }
+            })
+            break
+        }
         case "properties":
         case "properties-phone": {
             // The page properties panel expanded on a page with every type (screenshots; the phone

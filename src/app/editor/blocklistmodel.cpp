@@ -1551,6 +1551,7 @@ QVariantMap BlockListModel::get(int row) const
             {u"blockId"_s, data(idx, BlockIdRole)},
             {u"headingLevel"_s, data(idx, HeadingLevelRole)},
             {u"plainText"_s, data(idx, PlainTextRole)},
+            {u"editText"_s, data(idx, EditTextRole)},
             {u"listMarker"_s, data(idx, ListMarkerRole)}};
 }
 

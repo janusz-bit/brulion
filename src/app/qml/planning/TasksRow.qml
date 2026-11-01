@@ -39,6 +39,15 @@ T.ItemDelegate {
 
     /// A long press opened a tag's page: the release that follows is no click on the link.
     property bool _tagOpened: false
+    /// The link under the mouse or the pressing finger, underlined (as in the editor). Followed
+    /// with linkAt: the Text's own hoveredLink would reset with each change of its text.
+    property string _hoveredLink: ""
+    function _trackLink(x, y) {
+        const link = label.linkAt(x, y)
+        const h = link.startsWith("task:") ? "" : link
+        if (h !== control._hoveredLink)
+            control._hoveredLink = h
+    }
     /// The tag of the link at (x, y) of the task text, "" when it is no #tag.
     function tagAt(x, y) {
         const link = label.linkAt(x, y)
@@ -161,7 +170,7 @@ T.ItemDelegate {
                 id: label
                 width: parent.width
                 // Escaped by the core InlineRenderer: notes never inject markup.
-                text: control.task.html || ""
+                text: TextHelper.hoveredLinkHtml(control.task.html || "", control._hoveredLink)
                 textFormat: Text.RichText
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textBase
@@ -180,7 +189,10 @@ T.ItemDelegate {
                         control.linkActivated(link)
                 }
                 HoverHandler {
+                    id: labelHover
                     cursorShape: label.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onPointChanged: control._trackLink(point.position.x, point.position.y)
+                    onHoveredChanged: if (!hovered) control._hoveredLink = ""
                 }
                 TapHandler {
                     // Ctrl+click on a #tag: its page (a plain click is the text's link: it filters
@@ -198,14 +210,31 @@ T.ItemDelegate {
                 }
                 TapHandler {
                     // A long press on a link (touch): its menu. The text keeps the press (a link).
+                    id: touchHold
                     acceptedDevices: PointerDevice.TouchScreen
-                    onPressedChanged: if (pressed) control._tagOpened = false
+                    onPressedChanged: {
+                        if (pressed) {
+                            control._tagOpened = false
+                            control._trackLink(touchHold.point.position.x, touchHold.point.position.y)
+                        } else {
+                            control._hoveredLink = ""
+                        }
+                    }
                     onLongPressed: {
                         if (!control._tagOpened)
                             control.openMenuAt(label.mapToItem(control, point.position.x, point.position.y).x,
                                                label.mapToItem(control, point.position.x, point.position.y).y)
                     }
                 }
+            }
+
+            // Screen readers: the task text's links as link items of their own (its 4 shown lines).
+            BLinkTargets {
+                textItem: label
+                html: control.task.html || ""
+                lineHeight: label.lineHeight
+                maxHeight: label.height
+                onActivated: (href, x, y) => control.linkActivated(href)
             }
 
             Flow {

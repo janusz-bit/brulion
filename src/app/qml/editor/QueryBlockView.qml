@@ -356,6 +356,18 @@ Rectangle {
                     readonly property bool group: kind === "group"
                     readonly property Text textItem: itemText
                     readonly property bool closed: status === "done" || status === "cancelled"
+                    /// The link under the mouse or the pressing finger, underlined (BlockText.qml).
+                    property string hoveredLink: ""
+                    function trackLink(pos) {
+                        const p = itemText.mapFromItem(row, pos.x, pos.y)
+                        const link = row.group ? "" : itemText.linkAt(p.x, p.y)
+                        const h = link !== "" && !link.startsWith("task:") && !root.editor.editsOnClick(link) ? link : ""
+                        if (h !== row.hoveredLink)
+                            row.hoveredLink = h
+                    }
+                    readonly property string itemHtml: row.group ? "" : row.html + (row.showPage && row.title !== ""
+                        ? "&nbsp;&nbsp;<a href=\"open:\" style=\"color:" + Theme.fgFaint + ";text-decoration:none\">·&nbsp;"
+                          + TextHelper.escapeHtml(root.pageLabel(row.title, row.journal)) + "</a>" : "")
                     /// Touch: one line of text centred in a 44 px row (the checkbox's target).
                     readonly property real pad: Theme.touchUi ? Math.max(3, Math.round((Theme.touchTarget - root.itemLineHeight) / 2)) : 1
                     width: resultList.width
@@ -420,9 +432,7 @@ Rectangle {
                         y: row.pad
                         width: parent.width - x
                         textFormat: Text.RichText
-                        text: row.group ? "" : row.html + (row.showPage && row.title !== ""
-                              ? "&nbsp;&nbsp;<a href=\"open:\" style=\"color:" + Theme.fgFaint + ";text-decoration:none\">·&nbsp;"
-                                + TextHelper.escapeHtml(root.pageLabel(row.title, row.journal)) + "</a>" : "")
+                        text: TextHelper.hoveredLinkHtml(row.itemHtml, row.hoveredLink)
                         wrapMode: Text.Wrap
                         maximumLineCount: 4
                         elide: Text.ElideRight
@@ -436,14 +446,38 @@ Rectangle {
                         Accessible.role: Accessible.Link
                         Accessible.name: row.text + (row.showPage ? " — " + row.title : "")
                     }
+                    // Screen readers: the item's links as link items of their own (the row stays a
+                    // link to the item; at most its 4 shown lines).
+                    BLinkTargets {
+                        textItem: itemText
+                        html: row.itemHtml
+                        lineHeight: root.itemLineHeight
+                        maxHeight: 4 * root.itemLineHeight
+                        shown: !row.group
+                        onActivated: (href, x, y) => {
+                            if (root.editor.editsOnClick(href))
+                                root.resultMenu(row, row.mapFromItem(itemText, x, y))
+                            else
+                                root.activateResultLink(row.index, href)
+                        }
+                    }
                     HoverHandler {
                         id: itemHover
                         enabled: !row.group && !Theme.touchUi
                         cursorShape: Qt.PointingHandCursor
+                        onPointChanged: row.trackLink(point.position)
+                        onHoveredChanged: if (!hovered && !itemTap.pressed) row.hoveredLink = ""
                     }
                     TapHandler {
+                        id: itemTap
                         enabled: !row.group
                         gesturePolicy: TapHandler.ReleaseWithinBounds
+                        onPressedChanged: {
+                            if (pressed)
+                                row.trackLink(itemTap.point.position)
+                            else if (!itemHover.hovered)
+                                row.hoveredLink = ""
+                        }
                         onTapped: (eventPoint) => {
                             const p = itemText.mapFromItem(row, eventPoint.position.x, eventPoint.position.y)
                             const link = itemText.linkAt(p.x, p.y)

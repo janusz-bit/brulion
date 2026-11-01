@@ -997,6 +997,24 @@ FocusScope {
             (sourceLoader.item as SourceEditor).releaseKeyboard()
     }
 
+    /// Alt+Enter while editing: follow the link at the caret (a path part of [[A/B/C]]: that
+    /// part — PageController.linkAtCursor); `newPane` (Alt+Shift+Enter on a wide window) in the side
+    /// panel. "There is no link at the cursor" when none is there; nothing is typed either way.
+    function followLinkAtCursor(row, position, newPane) {
+        followLink(row, controller ? controller.linkAtCursor(row, position) : "", newPane)
+    }
+    /// Follow `url` (a link at a caret: a block's or a table cell's) as a click on it would.
+    function followLink(row, url, newPane) {
+        if (!controller)
+            return
+        if (url === "" || editsOnClick(url) || url.startsWith("task:"))
+            notice(qsTr("There is no link at the cursor"), "info")
+        else if (newPane)
+            controller.activateLink(row, url, true)
+        else
+            activateLink(row, url)
+    }
+
     function activateLink(row, link) {
         if (!controller)
             return
@@ -1222,6 +1240,12 @@ FocusScope {
         if (alt && !ctrl) {
             if (event.key === Qt.Key_Up) { controller.moveUp(row); ensureRowVisible(controller.editingRow); return true }
             if (event.key === Qt.Key_Down) { controller.moveDown(row); ensureRowVisible(controller.editingRow); return true }
+            // Alt+Enter: follow the link (the path part) at the caret; with Shift in the side panel.
+            // Always taken: it never types a line break.
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                followLinkAtCursor(row, edit.cursorPosition, shift && !Theme.narrow)
+                return true
+            }
             return false
         }
 
@@ -2577,7 +2601,8 @@ FocusScope {
     property var linkMenuInfo: ({})
     property var linkMenuOpen: null
     function isLinkMenuLink(link) {
-        return link.startsWith("page:") || link.startsWith("tag:") || link.startsWith("block:") || link.startsWith("ext:")
+        return link.startsWith("page:") || link.startsWith("part:") || link.startsWith("tag:") || link.startsWith("block:")
+                || link.startsWith("ext:")
     }
     function openLinkMenu(link, fromPath, open, item, x, y) {
         if (!controller || !isLinkMenuLink(link))
@@ -2593,6 +2618,7 @@ FocusScope {
         linkMenuOpen = open
         linkMenu.kind = info.kind
         linkMenu.unresolved = info.unresolved === true
+        linkMenu.folder = info.target === "folder" // a path part naming a folder
         linkMenu.bottomMargin = menuBottomMargin()
         linkMenu.popup(item, x, y)
         return true

@@ -272,6 +272,15 @@ Item {
                                                                 : cellData && cellData.html !== undefined ? cellData.html : ""
                             readonly property string align: root.aligns[c] || ""
                             readonly property bool editingCell: root.editRow === rowItem.r && root.editColumn === c
+                            /// The link under the mouse or the pressing finger, underlined (BlockText.qml).
+                            property string hoveredLink: ""
+                            function trackLink(x: real, y: real) {
+                                const link = cell.editingCell ? "" : cellText.linkAt(x - cellText.x, y - cellText.y)
+                                const h = link !== "" && !link.startsWith("reminder:") && !root.block.editor.editsOnClick(link) ? link : ""
+                                if (h !== cell.hoveredLink)
+                                    cell.hoveredLink = h
+                            }
+                            onEditingCellChanged: cell.hoveredLink = ""
                             x: root.columnWidths.slice(0, c).reduce((a, b) => a + b, 0)
                             width: root.columnWidths[c] || 0
                             height: root.rowHeight
@@ -300,7 +309,7 @@ Item {
                                 horizontalAlignment: cell.align === "right" || (cell.formula && cell.align === "") ? Text.AlignRight
                                                    : cell.align === "center" ? Text.AlignHCenter : Text.AlignLeft
                                 // Rich text cannot elide: one line, clipped at the cell's edge.
-                                text: cell.shownHtml
+                                text: TextHelper.hoveredLinkHtml(cell.shownHtml, cell.hoveredLink)
                                 textFormat: Text.RichText
                                 wrapMode: Text.NoWrap
                                 clip: contentWidth > width
@@ -310,6 +319,20 @@ Item {
                                 color: cell.error !== "" ? Theme.dangerText : Theme.fg
                                 linkColor: Theme.link
                                 Accessible.ignored: true
+                            }
+                            // Screen readers: the cell's links as link items (the cell stays the
+                            // accessible Cell; its text item is ignored).
+                            BLinkTargets {
+                                textItem: cellText
+                                html: cell.shownHtml
+                                shown: !cell.editingCell
+                                maxHeight: cellText.height
+                                onActivated: (href, x, y) => {
+                                    if (href.startsWith("reminder:") || root.block.editor.editsOnClick(href))
+                                        root.cellMenu(rowItem.r, cell.c, cellText, x, y)
+                                    else
+                                        root.block.editor.activateLink(root.block.index, href)
+                                }
                             }
                             // Created when shown: a tooltip (a popup with its own items) in
                             // every cell made a table slow to create while scrolling.
@@ -326,6 +349,8 @@ Item {
                                 enabled: !Theme.touchUi
                                 cursorShape: cellText.linkAt(point.position.x - cellText.x, point.position.y - cellText.y) !== ""
                                              ? Qt.PointingHandCursor : Qt.IBeamCursor
+                                onPointChanged: cell.trackLink(point.position.x, point.position.y)
+                                onHoveredChanged: if (!hovered && !cellTap.pressed) cell.hoveredLink = ""
                             }
                             // A finger held on a cell selects the table (touch UIs) — on a token or a
                             // link of its text, outside the selection mode, opens its menu.
@@ -353,8 +378,15 @@ Item {
                                 }
                             }
                             TapHandler {
+                                id: cellTap
                                 enabled: !cell.editingCell
                                 gesturePolicy: TapHandler.ReleaseWithinBounds
+                                onPressedChanged: {
+                                    if (pressed)
+                                        cell.trackLink(cellTap.point.position.x, cellTap.point.position.y)
+                                    else if (!cellHover.hovered)
+                                        cell.hoveredLink = ""
+                                }
                                 onTapped: (eventPoint) => {
                                     if (root.block.editor.blockTapped(root.block.index))
                                         return // Shift+click, the touch selection mode
@@ -465,6 +497,15 @@ Item {
                                             controller.cancelTableCell(blockRow, r, c)
                                             controller.selectedRow = blockRow
                                             list.forceActiveFocus()
+                                            event.accepted = true
+                                        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                                                   && (event.modifiers & Qt.AltModifier) && !(event.modifiers & Qt.ControlModifier)) {
+                                            // Alt+Enter: follow the link (path part) at the caret;
+                                            // with Shift in the side panel.
+                                            const blockRow = root.block.index
+                                            const url = root.block.controller.linkInText(blockRow, input.text, input.cursorPosition)
+                                            root.block.editor.followLink(blockRow, url,
+                                                                         (event.modifiers & Qt.ShiftModifier) !== 0 && !Theme.narrow)
                                             event.accepted = true
                                         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                                             leave(r + 1, c)

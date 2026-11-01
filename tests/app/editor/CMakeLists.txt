@@ -155,6 +155,23 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 ENVIRONMENT "${_playground_env}"
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
+        # Path parts of a link to a page in a folder (`--editor-script linkpartstest`,
+        # qml/dev/LinkPartsSelfTest.qml): [[Firma/Adam cośtam]] as two links — hover (one part
+        # underlined), clicks / taps on a part, the page and the separator, the menus of a folder's
+        # and a page's part (copied text read back), parts in a table cell, a property, an embed and
+        # a query result, Alt+Enter (also in a cell), a simulated screen reader's link items; a phone
+        # (--touch): the press underline, a long press, a flick that opens nothing.
+        foreach(_parts "tst_editor_qml_linkparts;1280x800;" "tst_editor_qml_linkparts_touch;412x915;--touch")
+            list(GET _parts 0 _parts_test)
+            list(GET _parts 1 _parts_size)
+            list(GET _parts 2 _parts_touch)
+            add_test(NAME ${_parts_test}
+                COMMAND brulion --editor --editor-script linkpartstest --no-single-instance
+                    --size ${_parts_size} ${_parts_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_parts_test} PROPERTIES
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+        endforeach()
         # Links to blocks and headings (`--editor-script blocklinks`): the block menu's "Kopiuj
         # odnośnik" from right-clicks on text and frames (desktop; also a title drawn above the
         # page's properties), a bullet's right-click / long press and the touch toolbar's "Więcej"

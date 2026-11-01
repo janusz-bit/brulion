@@ -73,22 +73,29 @@ Item {
         return t.date + " " + (t.time || "09:00")
     }
 
-    /// The link menu of `url` (a tag:, page:, block: or ext: link of a task's text written on
-    /// `fromPath`); `filter(tag)`, when given, makes "Filtruj po tagu" its first item.
+    /// The link menu of `url` (a tag:, page:, part: — a path part of a link —, block: or ext: link
+    /// of a task's text written on `fromPath`); `filter(tag)`, when given, makes "Filtruj po tagu"
+    /// its first item.
     function openLink(url, fromPath, item, x, y, filter) {
         if (!actions)
             return false
-        const kind = url.startsWith("tag:") ? "tag" : url.startsWith("page:") ? "page"
+        const part = url.startsWith("part:")
+        const kind = url.startsWith("tag:") ? "tag" : url.startsWith("page:") || part ? "page"
                    : url.startsWith("block:") ? "block" : url.startsWith("ext:") ? "ext" : ""
         if (kind === "")
             return false
+        const partTarget = part ? actions.linkPartTarget(url, fromPath || "") : ""
+        if (part && partTarget === "")
+            return false // a malformed part: link
         linkTarget = { url: url, fromPath: fromPath || "", filter: filter || null,
                        tag: kind === "tag" ? decodeURIComponent(url.slice(4)) : "" }
         if (!linkMenu)
             linkMenu = linkMenuComponent.createObject(root) as LinkMenu
         linkMenu.kind = kind
-        // A [[link]] to a page that does not exist offers "Utwórz stronę", as in the editor.
+        // A [[link]] to a page that does not exist offers "Utwórz stronę", as in the editor; a
+        // path part naming a folder "Pokaż folder".
         linkMenu.unresolved = kind === "page" && actions.linkMissing(url, fromPath || "")
+        linkMenu.folder = partTarget === "folder"
         linkMenu.filterFirst = kind === "tag" && !!filter
         linkMenu.popup(item, x, y)
         return true

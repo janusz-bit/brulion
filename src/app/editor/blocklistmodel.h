@@ -161,7 +161,7 @@ public:
     /// The row of the `n`-th shown row (from 0); -1 when there is none.
     Q_INVOKABLE int visibleRowAt(int n) const;
     /// A few roles of `row` by name (view, kind, taskStatus, depth, hasChildren, collapsed,
-    /// visible, blockId, headingLevel, plainText); empty for an invalid row.
+    /// visible, blockId, headingLevel, plainText, editText, listMarker); empty for an invalid row.
     Q_INVOKABLE QVariantMap get(int row) const;
 
     // --- Document ----------------------------------------------------------------------------
