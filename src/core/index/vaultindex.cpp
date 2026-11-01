@@ -678,7 +678,7 @@ void VaultIndex::Private::countNoteFolders(const VaultPath &path, int delta)
 }
 
 std::unique_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(const VaultPath &path, bool discardSearch,
-                                                                          bool countFolders)
+                                                                            bool countFolders)
 {
     const auto it = entries.find(path);
     if (it == entries.end())

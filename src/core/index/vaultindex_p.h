@@ -197,7 +197,7 @@ struct VaultIndex::Private {
     /// spelling with the most notes in `others` takes its place.
     struct NoteFolder {
         VaultPath spelled;
-        int notes = 0; ///< notes under `spelled`
+        int notes = 0;                           ///< notes under `spelled`
         QList<std::pair<VaultPath, int>> others; ///< other spellings (nearly always empty)
     };
     QHash<QString, NoteFolder> noteFolders; ///< pathKey(folder) -> (VaultIndex::noteFolder())

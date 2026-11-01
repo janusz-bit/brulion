@@ -129,8 +129,7 @@ CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultCo
                     });
             return {u"[["_s + page + u"]]"_s, part->path, QString()};
         }
-        case markdown::LinkPartTarget::Kind::Folder:
-            return {queryPathValue(part->path + u'/'), part->path, part->path};
+        case markdown::LinkPartTarget::Kind::Folder: return {queryPathValue(part->path + u'/'), part->path, part->path};
         case markdown::LinkPartTarget::Kind::New: return {u"[["_s + part->prefix + u"]]"_s, QString(), QString()};
         }
         return {};

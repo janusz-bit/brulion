@@ -205,12 +205,12 @@ private Q_SLOTS:
         QTest::newRow("a folder with a space")
                 << u"part:2:Projekty%2FZa%C5%BC%C3%B3%C5%82%C4%87%20g%C4%99%C5%9Bl%C4%85%2FNowa"_s
                 << u"\"Projekty/Zażółć gęślą/\""_s << u"Projekty/Zażółć gęślą"_s << u"Projekty/Zażółć gęślą"_s;
-        QTest::newRow("a folder with a comma") << u"part:1:Stare%2C%20nowe%2FX"_s << u"\"Stare, nowe/\""_s
-                                               << u"Stare, nowe"_s << u"Stare, nowe"_s;
-        QTest::newRow("a folder with a quote") << u"part:1:Cytat%20%22A%22%2FX"_s << u"«Cytat \"A\"/»"_s
-                                               << u"Cytat \"A\""_s << u"Cytat \"A\""_s;
-        QTest::newRow("a folder with „”") << u"part:1:%E2%80%9EDom%E2%80%9D%2FX"_s << u"\"„Dom”/\""_s
-                                         << u"„Dom”"_s << u"„Dom”"_s;
+        QTest::newRow("a folder with a comma")
+                << u"part:1:Stare%2C%20nowe%2FX"_s << u"\"Stare, nowe/\""_s << u"Stare, nowe"_s << u"Stare, nowe"_s;
+        QTest::newRow("a folder with a quote")
+                << u"part:1:Cytat%20%22A%22%2FX"_s << u"«Cytat \"A\"/»"_s << u"Cytat \"A\""_s << u"Cytat \"A\""_s;
+        QTest::newRow("a folder with „”")
+                << u"part:1:%E2%80%9EDom%E2%80%9D%2FX"_s << u"\"„Dom”/\""_s << u"„Dom”"_s << u"„Dom”"_s;
         QTest::newRow("a new page") << u"part:1:Nowa%2FStrona"_s << u"[[Nowa]]"_s << QString() << QString();
         QTest::newRow("a new deeper page")
                 << u"part:2:Nowa%2FG%C5%82%C4%99boka%2FStrona"_s << u"[[Nowa/Głęboka]]"_s << QString() << QString();
