@@ -37,6 +37,7 @@
 #include <QJsonObject>
 #include <QKeyEvent>
 #include <QLocale>
+#include <QLoggingCategory>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlExpression>
@@ -4879,16 +4880,34 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                         }
                     }
                     // The finger stays down until the long press has selected (or the handler let
-                    // go of it), not for a fixed time: the handler's timer (800 ms) is an event
-                    // of the event loop, and on a slow runner (Windows) the loop was busy past a
-                    // fixed 1.3 s hold — the release came first and nothing was selected. The
-                    // longest stretch the loop did not get round to the check is logged with it.
+                    // go of it), not for a fixed time (it failed on Windows runners with a fixed
+                    // 1.3 s hold). What happened is logged: when the handler's long press moved the
+                    // cursor (onLongPressed puts it under the finger, then selects the word), the
+                    // handler's state before and during the hold, the event loop's longest pause.
                     QObject *const handler = sourceView->findChild<QObject *>(u"sourceTouchTap"_s);
+                    const bool pressedBefore = handler && handler->property("pressed").toBool();
+                    int underFinger = -1;
+                    {
+                        const QPointF l = sourceEdit->mapFromScene(QPointF(onWord.toPoint()));
+                        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(underFinger), l.x(), l.y());
+                    }
+                    const int cursorBeforeHold = sourceEdit->property("cursorPosition").toInt();
                     QElapsedTimer held;
                     qint64 lastPoll = -1;
                     qint64 longestGap = 0;
                     qint64 selectedAfter = -1;
                     qint64 letGoAfter = -1;
+                    qint64 cursorMovedAfter = -1;
+                    qreal timeHeld = 0;
+                    // Qt's own account of the handler (pressed, long press, grabs) during the hold.
+                    static QLoggingCategory::CategoryFilter previousFilter = nullptr;
+                    previousFilter = QLoggingCategory::installFilter([](QLoggingCategory *category) {
+                        if (previousFilter)
+                            previousFilter(category);
+                        if (qstrcmp(category->categoryName(), "qt.quick.handler.tap") == 0
+                            || qstrcmp(category->categoryName(), "qt.quick.handler.grab") == 0)
+                            category->setEnabled(QtDebugMsg, true);
+                    });
                     held.start();
                     uidriver::touchHoldNow(
                             window, onWord,
@@ -4896,6 +4915,11 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                                 const qint64 now = held.elapsed();
                                 longestGap = qMax(longestGap, now - qMax<qint64>(lastPoll, 0));
                                 lastPoll = now;
+                                if (handler)
+                                    timeHeld = qMax(timeHeld, handler->property("timeHeld").toReal());
+                                if (cursorMovedAfter < 0
+                                    && sourceEdit->property("cursorPosition").toInt() != cursorBeforeHold)
+                                    cursorMovedAfter = now;
                                 if (!sourceEdit->property("selectedText").toString().isEmpty()) {
                                     selectedAfter = now;
                                     return true;
@@ -4907,14 +4931,19 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                                 return false;
                             },
                             10000);
+                    QLoggingCategory::installFilter(previousFilter);
                     const QString word = sourceEdit->property("selectedText").toString();
-                    std::fprintf(stderr,
-                                 "selftest: a long press in the source at (%.1f, %.1f) selected \"%s\" after %lld ms "
-                                 "(handler %s, let go after %lld ms; the event loop's longest pause %lld ms), contentY "
-                                 "%.1f -> %.1f, view height %.1f -> %.1f\n",
-                                 onWord.x(), onWord.y(), qPrintable(word), qlonglong(selectedAfter),
-                                 handler ? "found" : "missing", qlonglong(letGoAfter), qlonglong(longestGap), scrolled,
-                                 sourceView->property("contentY").toReal(), settledHeight, sourceView->height());
+                    std::fprintf(
+                            stderr,
+                            "selftest: a long press in the source at (%.1f, %.1f) selected \"%s\" after %lld ms "
+                            "(handler %s, pressed before %d, held %.2f s by its count, let go after %lld ms; cursor "
+                            "%d -> %d after %lld ms, under the finger %d; the event loop's longest pause %lld ms), "
+                            "contentY %.1f -> %.1f, view height %.1f -> %.1f\n",
+                            onWord.x(), onWord.y(), qPrintable(word), qlonglong(selectedAfter),
+                            handler ? "found" : "missing", int(pressedBefore), timeHeld, qlonglong(letGoAfter),
+                            cursorBeforeHold, sourceEdit->property("cursorPosition").toInt(),
+                            qlonglong(cursorMovedAfter), underFinger, qlonglong(longestGap), scrolled,
+                            sourceView->property("contentY").toReal(), settledHeight, sourceView->height());
                     check(!word.isEmpty() && !word.contains(u' ') && !word.contains(u'\n')
                                   && qAbs(sourceView->property("contentY").toReal() - scrolled) < 1,
                           "a long press in the Markdown source selects the word under the finger");
