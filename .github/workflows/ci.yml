@@ -328,8 +328,14 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$status" -ne 0 ]; then
+            # Rows the time budget left out are MISSING too: said so, not "regression?".
+            title='performance regression?'
+            if grep -q '^bench: time budget' "$RUNNER_TEMP/perf.log"; then
+              echo "::warning title=performance smoke out of time::$(grep '^bench: time budget' "$RUNNER_TEMP/perf.log")"
+              title='not measured (time budget) or regression?'
+            fi
             grep -E '^(FAIL|MISSING) ' "$RUNNER_TEMP/perf.log" | while read -r line; do
-              echo "::warning title=performance regression?::$line"
+              case $line in MISSING*) echo "::warning title=$title::$line" ;; *) echo "::warning title=performance regression?::$line" ;; esac
             done
           fi
           exit "$status"
