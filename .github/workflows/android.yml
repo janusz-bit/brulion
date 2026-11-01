@@ -94,7 +94,7 @@ jobs:
           log-accepted-android-sdk-licenses: false
 
       # aqt runs through uvx (scripts/android-build.sh).
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: false
 

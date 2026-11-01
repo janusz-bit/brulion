@@ -84,7 +84,7 @@ jobs:
         run: echo "deploy=$DEPLOY" | tee -a "$GITHUB_OUTPUT"
 
       # aqt runs through uvx (scripts/wasm-build.sh).
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: false
 
