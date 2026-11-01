@@ -450,22 +450,53 @@ object BrulionAndroid {
   fun listDocuments(context: Context, uri: String): String = Documents.list(context, uri)
 
   // -----------------------------------------------------------------------------------------
-  // PDF pages as a drawing's backdrop (src/platform/pdfpages_android.cpp): any thread
+  // PDFs: a drawing's backdrop, the thumbnails of embeds, the PDF viewer (PdfPages.kt,
+  // src/platform/pdfpages_android.cpp: a PdfReader is a session here). Any thread.
   // -----------------------------------------------------------------------------------------
 
-  /**
-   * `{"pages", "sizes": [[w, h], ...] (points; every page's with [pageSizes], else the first
-   * page's only), "error", "locked"}` of the PDF at [path].
-   */
+  /** `{"session", "pages", "size": [w, h], "locked", "error"}` of the PDF at [path] (session 0: not opened). */
   @JvmStatic
-  fun pdfInfo(path: String, pageSizes: Boolean): String = PdfPages.info(path, pageSizes)
+  fun pdfOpen(path: String): String = PdfPages.open(path)
+
+  /** `[[w, h], …]` (points) of pages [from] … [from] + [count] − 1 of a session. */
+  @JvmStatic
+  fun pdfPageSizes(session: Int, from: Int, count: Int): String = PdfPages.pageSizes(session, from, count)
+
+  /** Page [page] at [fullW] × [fullH], its part [clipX], [clipY], [clipW] × [clipH], into [out]. */
+  @JvmStatic
+  fun pdfRenderInto(
+    session: Int,
+    page: Int,
+    fullW: Int,
+    fullH: Int,
+    clipX: Int,
+    clipY: Int,
+    clipW: Int,
+    clipH: Int,
+    out: java.nio.ByteBuffer
+  ): Boolean = PdfPages.renderInto(session, page, fullW, fullH, clipX, clipY, clipW, clipH, out)
+
+  /** PdfRenderer's text APIs are here (Android 15+): the PDF viewer's search. */
+  @JvmStatic
+  fun pdfTextAvailable(): Boolean = PdfPages.textAvailable()
+
+  /** The text of page [page] (null without the text APIs). */
+  @JvmStatic
+  fun pdfPageText(session: Int, page: Int): String? = PdfPages.pageText(session, page)
+
+  /** `[{"start", "rects": [[l, t, r, b], …]}, …]` of each of [spellings] on page [page]. */
+  @JvmStatic
+  fun pdfSearch(session: Int, page: Int, spellings: Array<String>): String = PdfPages.search(session, page, spellings)
+
+  @JvmStatic
+  fun pdfClose(session: Int) = PdfPages.close(session)
 
   /**
-   * Page [page] (1-based) of the PDF at [path] on white, its long side [maxSide] pixels: 8 bytes of
-   * header (width, height, big-endian) and the RGBA_8888 premultiplied pixels; null on failure.
+   * "Otwórz w innej aplikacji": the file at [path] (type [mime]) in the app the system has for it
+   * (OpenWith.kt): 0 started, 1 no app, 2 failed, 3 being copied first (a memory card).
    */
   @JvmStatic
-  fun renderPdfPage(path: String, page: Int, maxSide: Int): ByteArray? = PdfPages.render(path, page, maxSide)
+  fun viewFile(context: Context, path: String, mime: String): Int = OpenWith.view(context, path, mime)
 
   // -----------------------------------------------------------------------------------------
   // Sounds of reminders and alarms (ReminderSounds.kt; Settings → Reminders in the app)

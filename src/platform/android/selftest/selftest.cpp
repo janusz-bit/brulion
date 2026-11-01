@@ -24,6 +24,8 @@
 #include <QPdfWriter>
 #include <QStandardPaths>
 
+#include <memory>
+
 using namespace Qt::StringLiterals;
 using brulion::platform::AndroidBridge;
 
@@ -114,6 +116,10 @@ int main(int argc, char *argv[])
             writer.setPageMargins(QMarginsF(0, 0, 0, 0));
             QPainter painter(&writer);
             painter.fillRect(QRectF(100, 100, 200, 200), Qt::red);
+            QFont font;
+            font.setPointSize(24);
+            painter.setFont(font);
+            painter.drawText(QPointF(60, 500), u"Zażółć gęślą jaźń"_s);
         }
         const brulion::platform::PdfInfo info = brulion::platform::pdfInfo(pdf);
         // The count and the first page's size only (the page picker).
@@ -129,6 +135,33 @@ int main(int argc, char *argv[])
                   qUtf8Printable(page.isNull() ? QString() : page.pixelColor(200, 200).name()),
                   qUtf8Printable(page.isNull() ? QString() : page.pixelColor(5, 5).name()),
                   qUtf8Printable(error.isEmpty() ? info.error : error));
+        // The PDF viewer's reader (a PdfRenderer session): a part of the page drawn on its own
+        // equals the whole page's crop; text where Android has the APIs (15+, API 35).
+        const std::unique_ptr<brulion::platform::PdfReader> reader = brulion::platform::PdfReader::open(pdf);
+        const QSize full(595, 842);
+        const QRect clip(150, 150, 100, 100);
+        const QImage whole = reader ? reader->render(1, full).convertToFormat(QImage::Format_RGB32) : QImage();
+        const QImage part = reader ? reader->render(1, full, clip).convertToFormat(QImage::Format_RGB32) : QImage();
+        double difference = 255;
+        if (!whole.isNull() && part.size() == clip.size()) {
+            const QImage crop = whole.copy(clip);
+            double sum = 0;
+            for (int y = 0; y < part.height(); ++y) {
+                for (int x = 0; x < part.width(); ++x) {
+                    const QRgb a = part.pixel(x, y);
+                    const QRgb b = crop.pixel(x, y);
+                    sum += qAbs(qRed(a) - qRed(b)) + qAbs(qGreen(a) - qGreen(b)) + qAbs(qBlue(a) - qBlue(b));
+                }
+            }
+            difference = sum / (3.0 * part.width() * part.height());
+        }
+        const QList<brulion::platform::PdfTextHit> found =
+                reader ? reader->find(1, u"GESLA"_s) : QList<brulion::platform::PdfTextHit>();
+        const int hits = reader ? int(found.size()) : -1;
+        const bool inText = !found.isEmpty() && !found.first().rects.isEmpty()
+                            && found.first().rects.first().intersects(QRectF(40, 460, 400, 60));
+        qCWarning(lcSelfTest, "SELFTEST pdf-reader region=%d text=%d hits=%d rect=%d api=%d", difference <= 6,
+                  brulion::platform::pdfTextAvailable(), hits, inText, QNativeInterface::QAndroidApplication::sdkVersion());
     }
     return QGuiApplication::exec();
 }

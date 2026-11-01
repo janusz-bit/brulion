@@ -727,6 +727,9 @@ Item {
         onContentXChanged: pdf.setViewport(contentX, contentY)
         onContentYChanged: pdf.setViewport(contentX, contentY)
         onMovementEnded: pdf.settle()
+        Accessible.role: Accessible.Pane
+        //: The PDF viewer's pages for screen readers: the zoom ("Powiększenie 85 %")
+        Accessible.name: qsTr("Zoom %1 %").arg(pdf.zoomPercent)
 
         Item {
             id: pagesLayer
