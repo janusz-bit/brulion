@@ -7,13 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
-## 0.6.1 — w przygotowaniu
+## 0.6.1 — 1 listopada 2026
 
 **Nowe**
 - **Podgląd PDF** — PDF osadzony w notatce (`![[wykład.pdf]]`, także `![[wykład.pdf#page=3]]` jak w Obsidianie) pokazuje miniaturę strony na białej kartce, z nazwą pliku i liczbą stron. Kliknięcie otwiera przeglądarkę PDF w aplikacji: przewijanie stron, powiększanie (palcami, `Ctrl` + kółkiem, przyciskami, dopasowanie do szerokości, dwukrotne stuknięcie), „Strona 3 z 12” z przejściem do strony, szukanie w tekście bez polskich znaków i wielkości liter (na Androidzie od wersji 15), **Otwórz w innej aplikacji** i **Rysuj na tej stronie** — rysunek na czytanej stronie trafia do notatki zaraz pod PDF-em, więc notatki na slajdach robisz prosto z PDF-a. Odnośnik `[[wykład.pdf#page=3]]` otwiera PDF na tej stronie, a **Wstecz** albo `Esc` go zamyka. PDF chroniony hasłem pokazuje kłódkę zamiast błędu. W wersji w przeglądarce PDF otwiera się w nowej karcie z wbudowaną przeglądarką PDF. Zobacz [[Dokument i konspekt#PDF-y|PDF-y]].
 - **Klikalne części linku do strony w folderze** — w linku `[[Firma/Adam Nowak]]` każda część ścieżki to osobny link, jak przestrzenie nazw w Logsequ: **Firma** otwiera stronę „Firma” (po ścieżce, nazwie albo aliasie, jak zwykły link), a gdy takiej strony nie ma — listę stron folderu **Firma** we **Wszystkich stronach**; gdy nie ma ani strony, ani folderu, kliknięcie tworzy stronę jak link do nieistniejącej strony. **Adam Nowak** otwiera, jak dotąd, stronę `Firma/Adam Nowak`. Części dzieli szary ukośnik, a część pod kursorem jest podkreślona (na telefonie — pod palcem). Prawy przycisk albo przytrzymanie na części otwiera jej menu (**Otwórz** albo **Pokaż folder**, **Otwórz w panelu bocznym**, **Kopiuj link** albo **Kopiuj ścieżkę folderu**). Link z własnym tekstem (`[[Firma/Adam Nowak|Adam]]`) zostaje jednym linkiem, a podczas edycji bloku tekst wygląda jak dotąd. Działa też w wynikach zapytań, tabelach, osadzonych stronach, właściwościach, **Zadaniach** i odnośnikach. Z klawiatury: **Alt+Enter** w edytowanym bloku otwiera (część) linku pod kursorem, **Alt+Shift+Enter** — w panelu bocznym; czytniki ekranu widzą każdą część i każdy link w tekście jako osobny link. Zobacz [[Linki i odnośniki zwrotne#Linki do stron w folderach|Linki do stron w folderach]].
-
-**Zmiany**
 
 **Poprawki**
 - Kliknięcie PDF-a (i innego załącznika, który nie jest obrazem ani notatką, np. DOCX albo ZIP) nie otwiera już jego zawartości w edytorze jako tekstu — wpisany znak mógł nadpisać plik. Takie pliki otwierają się teraz tylko do odczytu.
