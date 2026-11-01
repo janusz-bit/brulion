@@ -534,7 +534,7 @@
           // marked for tests: sessionStorage "brulion-selftest" = "1", which tests/web sets
           // before the page loads (by hand: in the console, then reload). A link cannot set it, so
           // a link sent to someone never runs them on their notes nor moves their clock or view.
-          var testFlows = ['webpictures', 'pen', 'pickfiles', 'savefile'];
+          var testFlows = ['webpictures', 'pen', 'pickfiles', 'savefile', 'linkparts'];
           var testTab = false;
           try {
             testTab = window.sessionStorage.getItem('brulion-selftest') === '1';

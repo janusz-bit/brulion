@@ -554,6 +554,59 @@ private Q_SLOTS:
         none.start();
         QCOMPARE(published.results.size(), 2);
     }
+
+    // The path parts of a link on screen (?selftest=linkparts): the boxes of the links of the shown
+    // text holding a part: link, in window coordinates, one per href, left to right.
+    void linkPartsReportsTheBoxes()
+    {
+        QQuickWindow window;
+        window.resize(600, 300);
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData(R"(
+            import QtQuick
+            Item {
+                Text { text: "bez linków"; visible: false }
+                Text {
+                    x: 30; y: 50; width: 500
+                    textFormat: Text.RichText
+                    font.pixelSize: 18
+                    text: 'Zapytać się <a href="part:1:Firma%2FAdam%20co%C5%9Btam">Firma</a>'
+                          + '<span>/</span><a href="page:Firma%2FAdam%20co%C5%9Btam">Adam cośtam</a> o to'
+                }
+            }
+        )",
+                          QUrl());
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *item = qobject_cast<QQuickItem *>(object.get());
+        QVERIFY(item);
+        item->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        Published published;
+        brulion::diag::LinkPartsSelfTest test(&window, nullptr, published.fn());
+        test.start();
+        const QJsonObject report = published.last("brulionLinkPartsSelfTest");
+        QVERIFY(report.value(u"ready"_s).toBool());
+        const QJsonArray parts = report.value(u"parts"_s).toArray();
+        QCOMPARE(parts.size(), 2);
+        const QJsonObject part = parts.at(0).toObject();
+        const QJsonObject page = parts.at(1).toObject();
+        QCOMPARE(part.value(u"href"_s).toString(), u"part:1:Firma%2FAdam%20co%C5%9Btam"_s);
+        QCOMPARE(page.value(u"href"_s).toString(), u"page:Firma%2FAdam%20co%C5%9Btam"_s);
+        QVERIFY(part.value(u"x"_s).toDouble() > 30 + 40); // after "Zapytać się"
+        QVERIFY(part.value(u"x"_s).toDouble() + part.value(u"width"_s).toDouble() < page.value(u"x"_s).toDouble());
+        QVERIFY(part.value(u"y"_s).toDouble() >= 50 && part.value(u"y"_s).toDouble() < 80);
+        QCOMPARE(report.value(u"route"_s).toObject().value(u"view"_s).toString(), QString());
+        // Published once while nothing changes.
+        QTest::qWait(600);
+        QCOMPARE(published.names().count("brulionLinkPartsSelfTest"), 1);
+        // The text gone: not ready.
+        item->setVisible(false);
+        QTRY_VERIFY(!published.last("brulionLinkPartsSelfTest").value(u"ready"_s).toBool());
+    }
 };
 
 QTEST_MAIN(TestWebSelfTest)
