@@ -10,6 +10,10 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Rozszerzalność jak w Emacsie i TiddlyWiki** — użytkownik zmienia i rozszerza Brulion z poziomu
   notatnika (własne polecenia, widoki, makra, zachowania); zakres i bezpieczeństwo do ustalenia
   (notatki przychodzą z synchronizacji i importu).
+* **Ustawienia notatnika w notatkach** — ustawienia notatnika zapisane jako notatka (strona
+  w notatniku, edytowalna jak każda inna i synchronizowana razem z nim) zamiast
+  `.brulion/config.json`; do ustalenia format, przeniesienie istniejących ustawień i co zostaje
+  ustawieniem urządzenia.
 * **Zdjęcia z internetu — sprawdzić na prawdziwym telefonie.** Emulator Androida
   (`scripts/android-emulator-test.sh --web-pictures`) i przeglądarki Chromium i Firefox
   (`tests/web`, GitHub Actions) sprawdzają to automatycznie; zostaje prawdziwy telefon
