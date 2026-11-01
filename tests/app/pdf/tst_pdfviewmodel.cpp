@@ -365,7 +365,8 @@ private Q_SLOTS:
                 if (page > 1)
                     writer.newPage();
                 for (int line = 0; line < 30; ++line)
-                    p.drawText(QPointF(50, 60 + line * 24), u"Strona %1, wiersz %2: zażółć gęślą jaźń"_s.arg(page).arg(line));
+                    p.drawText(QPointF(50, 60 + line * 24),
+                               u"Strona %1, wiersz %2: zażółć gęślą jaźń"_s.arg(page).arg(line));
             }
         }
         PdfReaderPool::instance().closeIdle();

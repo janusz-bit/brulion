@@ -189,8 +189,8 @@ private Q_SLOTS:
         Opened o = open(u"rysunek"_s);
         QVERIFY(o.ws);
         const QString note = u"Wykład – ćwiczenia.md"_s;
-        const QVariantMap out = o.ws->addDrawingOnPdfPage(u"assets/wykład.pdf"_s,
-                                                          preparedDrawing(u"assets/wykład.pdf"_s, 2, u"wykład"_s), note, 1);
+        const QVariantMap out = o.ws->addDrawingOnPdfPage(
+                u"assets/wykład.pdf"_s, preparedDrawing(u"assets/wykład.pdf"_s, 2, u"wykład"_s), note, 1);
         QCOMPARE(out.value(u"path"_s).toString(), u"assets/wykład p. 2.svg"_s);
         QCOMPARE(out.value(u"note"_s).toString(), note);
         QVERIFY(!out.value(u"journal"_s).toBool());
@@ -219,8 +219,8 @@ private Q_SLOTS:
         Opened o = open(u"dziennik"_s);
         QVERIFY(o.ws);
         // Opened from the tree: no note.
-        const QVariantMap out = o.ws->addDrawingOnPdfPage(u"assets/wykład.pdf"_s,
-                                                          preparedDrawing(u"assets/wykład.pdf"_s, 1, u"wykład"_s), QString(), -1);
+        const QVariantMap out = o.ws->addDrawingOnPdfPage(
+                u"assets/wykład.pdf"_s, preparedDrawing(u"assets/wykład.pdf"_s, 1, u"wykład"_s), QString(), -1);
         QVERIFY(out.value(u"journal"_s).toBool());
         const QString journal = out.value(u"note"_s).toString();
         QCOMPARE(journal, o.ws->journalPath(u"2026-11-01"_s));
@@ -243,7 +243,8 @@ private Q_SLOTS:
         QVERIFY(o.ws->addDrawingOnPdfPage(u"assets/sejf.pdf"_s, broken, u"Wykład – ćwiczenia.md"_s, 1).isEmpty());
         QCOMPARE(errors.size(), 1);
         QVERIFY(o.ws->addDrawingOnPdfPage(u"assets/sejf.pdf"_s, {}, u"Wykład – ćwiczenia.md"_s, 1).isEmpty());
-        QCOMPARE(readFile(o.root + u"/Wykład – ćwiczenia.md"_s), u"- Wstęp\n- Slajdy ![[wykład.pdf]]\n  - uwaga\n- Dalej\n"_s);
+        QCOMPARE(readFile(o.root + u"/Wykład – ćwiczenia.md"_s),
+                 u"- Wstęp\n- Slajdy ![[wykład.pdf]]\n  - uwaga\n- Dalej\n"_s);
     }
 
     void thumbnails()

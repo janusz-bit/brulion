@@ -1522,7 +1522,7 @@ if ((PDF)); then
   if ((android_api >= 35)); then
     check "Android $android_api: the search button is there" ui_tap 'Szukaj w PDF-ie(, Ctrl\+F)?' first 2
     adb shell input text gesla
-    check "… “gesla” finds “gęślą” once" wait_for 10 ui_has '1 z 1'
+    check "… 'gesla' finds 'gęślą' once" wait_for 10 ui_has '1 z 1'
     app_shot pdf-4-search
     adb shell input keyevent KEYCODE_BACK # (closes the search while it has the keyboard)
     sleep 2
@@ -1544,7 +1544,7 @@ if ((PDF)); then
   # the image — the app's message.
   adb logcat -c
   check "the viewer's ⋯ opens its menu" ui_tap 'Więcej' last 2
-  check "… with “Otwórz w innej aplikacji”" ui_tap 'Otwórz w innej aplikacji' first 3
+  check "… with 'Otwórz w innej aplikacji'" ui_tap 'Otwórz w innej aplikacji' first 3
   adb logcat -d >"$OUT/pdf-open-logcat.txt"
   if grep -qE "act=android.intent.action.VIEW.*dat=content://$PKG.qtprovider/" "$OUT/pdf-open-logcat.txt"; then
     check "the PDF went to another app through the FileProvider" true
@@ -1557,7 +1557,7 @@ if ((PDF)); then
   fi
   # "Rysuj na tej stronie": the drawing editor; the drawing embedded after the PDF's line.
   check "the viewer's ⋯ again" ui_tap 'Więcej' last 2
-  check "… “Rysuj na tej stronie”" ui_tap 'Rysuj na tej stronie' first 6
+  check "… 'Rysuj na tej stronie'" ui_tap 'Rysuj na tej stronie' first 6
   check "the drawing editor opens" wait_for 20 ui_has 'Gotowe'
   app_shot pdf-6-drawing
   drawing=$(adb shell run-as "$PKG" ls "$PD_VAULT/assets" | tr -d '\r' | grep -E '^wyklad s\. [0-9]+\.svg$' | head -n 1)
@@ -2490,7 +2490,7 @@ check "PDF page drawn by PdfRenderer (red square, white corner)" \
 check "PdfRenderer session: a part of a page equals the whole page's crop" log_has "SELFTEST pdf-reader region=1"
 sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 if [[ "${sdk:-0}" -ge 35 ]]; then
-  check "PDF text on API $sdk: “GESLA” found once, where the text is" log_has "SELFTEST pdf-reader region=1 text=1 hits=1 rect=1"
+  check "PDF text on API $sdk: 'GESLA' found once, where the text is" log_has "SELFTEST pdf-reader region=1 text=1 hits=1 rect=1"
 else
   check "no PDF text on API $sdk (search hidden)" log_has "SELFTEST pdf-reader region=1 text=0 hits=0"
 fi

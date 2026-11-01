@@ -32,8 +32,7 @@ bool blockEmbeds(const markdown::BlockDocument &doc, int i, const std::function<
 } // namespace
 
 EmbedInsertion insertBlockAfterEmbed(const QString &content, int lineHint,
-                                     const std::function<bool(QStringView target)> &embedsIt,
-                                     const QString &blockBody)
+                                     const std::function<bool(QStringView target)> &embedsIt, const QString &blockBody)
 {
     EmbedInsertion out;
     markdown::BlockDocument doc(content);

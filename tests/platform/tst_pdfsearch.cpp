@@ -57,8 +57,8 @@ private Q_SLOTS:
         QTest::newRow("an emoji itself") << u"a😀b"_s << u"😀"_s << 10 << Ranges{{1, 2}};
         QTest::newRow("lone surrogate") << (u"x"_s + QChar(0xd800) + u"łódź"_s) << u"lodz"_s << 10 << Ranges{{2, 4}};
         QTest::newRow("soft hyphen") << u"wy\u00adkład"_s << u"wykład"_s << 10 << Ranges{{0, 7}};
-        QTest::newRow("pdfium's hyphen marker") << (u"wy"_s + QChar(0x0002) + u"kład"_s) << u"wykład"_s << 10
-                                                 << Ranges{{0, 7}};
+        QTest::newRow("pdfium's hyphen marker")
+                << (u"wy"_s + QChar(0x0002) + u"kład"_s) << u"wykład"_s << 10 << Ranges{{0, 7}};
         QTest::newRow("cap") << u"ab ab ab ab ab ab ab ab ab ab"_s << u"ab"_s << 3 << Ranges{{0, 2}, {3, 2}, {6, 2}};
         QTest::newRow("no hits allowed") << u"ab"_s << u"ab"_s << 0 << Ranges{};
         QTest::newRow("one character") << u"żółw"_s << u"o"_s << 10 << Ranges{{1, 1}};
@@ -109,19 +109,17 @@ private Q_SLOTS:
         // "ab" / "cd" on two lines, a line break between them.
         const QList<QRectF> two{QRectF(0, 0, 10, 12), QRectF(10, 0, 10, 12), QRectF(), QRectF(0, 20, 10, 12),
                                 QRectF(10, 20, 10, 12)};
-        QTest::newRow("across a line break") << two << PdfTextRange{1, 3}
-                                             << QList<QRectF>{QRectF(10, 0, 10, 12), QRectF(0, 20, 10, 12)};
+        QTest::newRow("across a line break")
+                << two << PdfTextRange{1, 3} << QList<QRectF>{QRectF(10, 0, 10, 12), QRectF(0, 20, 10, 12)};
         // Letters of differing heights on one line (a capital, a small letter, a subscript).
         const QList<QRectF> heights{QRectF(0, 0, 10, 14), QRectF(10, 4, 10, 10), QRectF(20, 6, 6, 9)};
         QTest::newRow("differing heights") << heights << PdfTextRange{0, 3} << QList<QRectF>{QRectF(0, 0, 26, 15)};
-        QTest::newRow("only synthetic boxes") << QList<QRectF>{QRectF(), QRectF()} << PdfTextRange{0, 2}
-                                              << QList<QRectF>{};
-        QTest::newRow("range beyond the boxes") << line << PdfTextRange{5, 100}
-                                                << QList<QRectF>{QRectF(50, 0, 20, 12)};
+        QTest::newRow("only synthetic boxes")
+                << QList<QRectF>{QRectF(), QRectF()} << PdfTextRange{0, 2} << QList<QRectF>{};
+        QTest::newRow("range beyond the boxes") << line << PdfTextRange{5, 100} << QList<QRectF>{QRectF(50, 0, 20, 12)};
         QTest::newRow("negative range") << line << PdfTextRange{-3, 2} << QList<QRectF>{};
-        QTest::newRow("not a number")
-                << QList<QRectF>{QRectF(qQNaN(), 0, 10, 12), QRectF(10, 0, 10, 12)} << PdfTextRange{0, 2}
-                << QList<QRectF>{QRectF(10, 0, 10, 12)};
+        QTest::newRow("not a number") << QList<QRectF>{QRectF(qQNaN(), 0, 10, 12), QRectF(10, 0, 10, 12)}
+                                      << PdfTextRange{0, 2} << QList<QRectF>{QRectF(10, 0, 10, 12)};
     }
 
     void rangeRects()
@@ -140,8 +138,8 @@ private Q_SLOTS:
         QTest::addColumn<QStringList>("expected");
         QTest::newRow("three spellings") << u"Żółw, żółw, ŻÓŁW, żółw"_s << u"zolw"_s << 16
                                          << QStringList{u"Żółw"_s, u"żółw"_s, u"ŻÓŁW"_s};
-        QTest::newRow("white space as in the text") << u"wykład\n3 i wykład 3"_s << u"wykład 3"_s << 16
-                                                    << QStringList{u"wykład\n3"_s, u"wykład 3"_s};
+        QTest::newRow("white space as in the text")
+                << u"wykład\n3 i wykład 3"_s << u"wykład 3"_s << 16 << QStringList{u"wykład\n3"_s, u"wykład 3"_s};
         QTest::newRow("capped") << u"a A a A"_s << u"a"_s << 1 << QStringList{u"a"_s};
         QTest::newRow("none") << u"tekst"_s << u"żółw"_s << 16 << QStringList{};
     }

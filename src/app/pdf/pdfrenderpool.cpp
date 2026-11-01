@@ -77,8 +77,10 @@ PdfReaderPool::PdfReaderPool() : m_closer(this)
 }
 
 PdfReaderPool::Lease::Lease(Lease &&other) noexcept
-    : m_pool(other.m_pool), m_file(std::move(other.m_file)), m_version(std::move(other.m_version)),
-      m_reader(std::move(other.m_reader))
+    : m_pool(other.m_pool)
+    , m_file(std::move(other.m_file))
+    , m_version(std::move(other.m_version))
+    , m_reader(std::move(other.m_reader))
 {
     other.m_pool = nullptr;
 }
@@ -175,10 +177,13 @@ void PdfReaderPool::giveBack(const QString &file, const QString &version, std::u
         }
     }
     // The closer runs on the GUI thread (a timer is started on its own thread).
-    QMetaObject::invokeMethod(this, [this] {
-        if (!m_closer.isActive())
-            m_closer.start();
-    }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+            this,
+            [this] {
+                if (!m_closer.isActive())
+                    m_closer.start();
+            },
+            Qt::QueuedConnection);
 }
 
 void PdfReaderPool::closeExpired()
@@ -230,8 +235,8 @@ int PdfReaderPool::openedCount() const
 
 void PdfReaderPool::reportFailure(const QString &file, const QString &version, int page)
 {
-    QMetaObject::invokeMethod(this, [this, file, version, page] { Q_EMIT pageFailed(file, version, page); },
-                              Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+            this, [this, file, version, page] { Q_EMIT pageFailed(file, version, page); }, Qt::QueuedConnection);
 }
 
 } // namespace brulion::pdfview

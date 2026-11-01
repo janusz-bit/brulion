@@ -25,10 +25,13 @@ void post(const std::shared_ptr<bool> &alive, std::function<void()> task)
     QCoreApplication *app = QCoreApplication::instance();
     if (!app)
         return;
-    QMetaObject::invokeMethod(app, [alive, task = std::move(task)] {
-        if (*alive)
-            task();
-    }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+            app,
+            [alive, task = std::move(task)] {
+                if (*alive)
+                    task();
+            },
+            Qt::QueuedConnection);
 }
 
 QString number(qreal value)
@@ -150,7 +153,6 @@ struct PdfViewModel::SizeJob {
     QPointer<PdfViewModel> self;
 };
 
-
 PdfViewModel::PdfViewModel(QObject *parent) : QObject(parent), m_settleTimer(this), m_searchTimer(this)
 {
     m_pages = new PdfVisiblePages(this);
@@ -215,10 +217,13 @@ void PdfViewModel::scheduleReload()
         return;
     m_reloadQueued = true;
     // (One open for a file and a version set one after the other by QML's bindings.)
-    QMetaObject::invokeMethod(this, [this] {
-        m_reloadQueued = false;
-        open();
-    }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+            this,
+            [this] {
+                m_reloadQueued = false;
+                open();
+            },
+            Qt::QueuedConnection);
 }
 
 void PdfViewModel::reload()
@@ -352,7 +357,6 @@ void PdfViewModel::open()
             },
             PdfRenderPool::Sizes);
 }
-
 
 void PdfViewModel::readSizes(const std::shared_ptr<SizeJob> &job, int from)
 {

@@ -45,7 +45,16 @@ class PdfVisiblePages : public QAbstractListModel {
     Q_OBJECT
 
 public:
-    enum Role { PageRole = Qt::UserRole + 1, XRole, YRole, WidthRole, HeightRole, BaseWidthRole, BaseHeightRole, FailedRole };
+    enum Role {
+        PageRole = Qt::UserRole + 1,
+        XRole,
+        YRole,
+        WidthRole,
+        HeightRole,
+        BaseWidthRole,
+        BaseHeightRole,
+        FailedRole
+    };
     explicit PdfVisiblePages(PdfViewModel *model);
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;

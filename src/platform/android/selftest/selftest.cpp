@@ -161,7 +161,8 @@ int main(int argc, char *argv[])
         const bool inText = !found.isEmpty() && !found.first().rects.isEmpty()
                             && found.first().rects.first().intersects(QRectF(40, 460, 400, 60));
         qCWarning(lcSelfTest, "SELFTEST pdf-reader region=%d text=%d hits=%d rect=%d api=%d", difference <= 6,
-                  brulion::platform::pdfTextAvailable(), hits, inText, QNativeInterface::QAndroidApplication::sdkVersion());
+                  brulion::platform::pdfTextAvailable(), hits, inText,
+                  QNativeInterface::QAndroidApplication::sdkVersion());
     }
     return QGuiApplication::exec();
 }

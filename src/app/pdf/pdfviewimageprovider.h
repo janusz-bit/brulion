@@ -32,8 +32,8 @@ public:
         QString file;
         int page = 0;
         QString version;
-        QSizeF full;  ///< logical
-        QRectF clip;  ///< logical, page-local; empty: the whole page
+        QSizeF full; ///< logical
+        QRectF clip; ///< logical, page-local; empty: the whole page
     };
     static Request parse(const QString &id);
     /// The pixel sizes for `request` and Qt's `requestedSize`: the page drawn at `full`, its part

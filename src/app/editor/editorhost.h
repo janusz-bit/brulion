@@ -254,7 +254,8 @@ public:
         // (Both at once: a name with "%1" in it keeps it, the page goes where %2 is.)
         if (page > 0)
             //: A drawing on page %2 of the PDF %1 ("Wykład 3 s. 4"); a file name, without the extension
-            return QCoreApplication::translate("brulion::editor::PageController", "%1 p. %2").arg(name, QString::number(page));
+            return QCoreApplication::translate("brulion::editor::PageController", "%1 p. %2")
+                    .arg(name, QString::number(page));
         //: A drawing on the picture %1; a file name, without the extension
         return QCoreApplication::translate("brulion::editor::PageController", "%1 (drawing)").arg(name);
     }

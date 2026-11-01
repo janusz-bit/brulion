@@ -477,21 +477,25 @@ QJsonObject PdfSelfTest::report() const
     QList<QQuickItem *> messages;
     QList<QQuickItem *> buttons;
     if (m_window) {
-        visibleItems(m_window->contentItem(), [&](QQuickItem *item) {
-            const QString name = item->objectName();
-            if (name == u"pdfEmbedChip")
-                chips.append(item);
-            else if (name == u"pdfMessageText")
-                messages.append(item);
-            else if (name == u"pdfOpenElsewhere")
-                buttons.append(item);
-            else if ((item->inherits("QQuickText") || item->inherits("QQuickTextEdit")) && !under(item, u"pdfEmbedChip"_s)) {
-                const QString text = item->property("text").toString();
-                if (text.contains(u"<a "_s) && text.contains(u".pdf"_s, Qt::CaseInsensitive))
-                    links.append(item);
-            }
-            return false;
-        }, &chips);
+        visibleItems(
+                m_window->contentItem(),
+                [&](QQuickItem *item) {
+                    const QString name = item->objectName();
+                    if (name == u"pdfEmbedChip")
+                        chips.append(item);
+                    else if (name == u"pdfMessageText")
+                        messages.append(item);
+                    else if (name == u"pdfOpenElsewhere")
+                        buttons.append(item);
+                    else if ((item->inherits("QQuickText") || item->inherits("QQuickTextEdit"))
+                             && !under(item, u"pdfEmbedChip"_s)) {
+                        const QString text = item->property("text").toString();
+                        if (text.contains(u"<a "_s) && text.contains(u".pdf"_s, Qt::CaseInsensitive))
+                            links.append(item);
+                    }
+                    return false;
+                },
+                &chips);
     }
     if (QQuickItem *chip = chips.value(0)) {
         QJsonObject c = sceneRect(chip);

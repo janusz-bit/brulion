@@ -99,8 +99,8 @@ private Q_SLOTS:
         QTest::newRow("another page") << base << qint64(1000) << qint64(5) << 2 << 768 << false;
         QTest::newRow("another side") << base << qint64(1000) << qint64(5) << 1 << 1024 << false;
         // NFD spelling of the same name: another key (the vault normalises to NFC first).
-        QTest::newRow("NFD name") << u"/notatnik/assets/Wykład a\u0328e\u0328.pdf"_s << qint64(1000) << qint64(5) << 1 << 768
-                                  << false;
+        QTest::newRow("NFD name") << u"/notatnik/assets/Wykład a\u0328e\u0328.pdf"_s << qint64(1000) << qint64(5) << 1
+                                  << 768 << false;
     }
 
     void cacheKey()

@@ -127,9 +127,8 @@ public:
             const QJniObject s = QJniObject::fromString(spellings.at(i));
             env->SetObjectArrayElement(array, jsize(i), s.object<jstring>());
         }
-        const QJniObject answer =
-                QJniObject::callStaticObjectMethod(kClass, "pdfSearch", "(II[Ljava/lang/String;)Ljava/lang/String;",
-                                                   jint(m_session), jint(page), array);
+        const QJniObject answer = QJniObject::callStaticObjectMethod(
+                kClass, "pdfSearch", "(II[Ljava/lang/String;)Ljava/lang/String;", jint(m_session), jint(page), array);
         env->DeleteLocalRef(array);
         env->DeleteLocalRef(stringClass);
         // PdfRenderer's matches by where they start in the page's text.
@@ -192,8 +191,8 @@ std::unique_ptr<PdfReader> PdfReader::open(const QString &file, PdfInfo *info)
     PdfInfo &out = info ? *info : local;
     out = PdfInfo();
     const QJniObject path = QJniObject::fromString(file);
-    const QJniObject answer = QJniObject::callStaticObjectMethod(kClass, "pdfOpen", "(Ljava/lang/String;)Ljava/lang/String;",
-                                                                 path.object<jstring>());
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, "pdfOpen", "(Ljava/lang/String;)Ljava/lang/String;", path.object<jstring>());
     if (threw() || !answer.isValid()) {
         out.error = u"BrulionAndroid.pdfOpen failed"_s;
         return nullptr;

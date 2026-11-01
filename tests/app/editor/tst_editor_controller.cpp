@@ -4651,7 +4651,9 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // that became ready recomputes only the rows naming it.
         FakeEditorHost host;
         QCOMPARE(host.saveAttachment(u"wykład.pdf"_s, "%PDF-1.4\n"), u"assets/wykład.pdf"_s);
-        host.setFile(Page, u"- Slajdy ![[wykład.pdf#page=3]]\n- Tekst bez załącznika\n- Inny ![s](assets/wyk%C5%82ad.pdf)\n"_s);
+        host.setFile(
+                Page,
+                u"- Slajdy ![[wykład.pdf#page=3]]\n- Tekst bez załącznika\n- Inny ![s](assets/wyk%C5%82ad.pdf)\n"_s);
         PageController page;
         page.setNow(Now);
         page.setHost(&host);
@@ -4676,9 +4678,11 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(host.pdfThumbnailAsks().contains(u"assets/wykład.pdf#3"_s));
         QVERIFY(host.pdfThumbnailAsks().contains(u"assets/wykład.pdf#1"_s));
         QSignalSpy changed(page.blocks(), &QAbstractItemModel::dataChanged);
-        host.setPdfThumbnail(u"assets/wykład.pdf"_s,
-                             {{u"state"_s, u"ready"_s}, {u"url"_s, QUrl::fromLocalFile(u"/tmp/miniatura.png"_s)},
-                              {u"width"_s, 297}, {u"height"_s, 420}, {u"pages"_s, 12}});
+        host.setPdfThumbnail(u"assets/wykład.pdf"_s, {{u"state"_s, u"ready"_s},
+                                                      {u"url"_s, QUrl::fromLocalFile(u"/tmp/miniatura.png"_s)},
+                                                      {u"width"_s, 297},
+                                                      {u"height"_s, 420},
+                                                      {u"pages"_s, 12}});
         QSet<int> rows;
         for (const QList<QVariant> &signal : std::as_const(changed)) {
             const QModelIndex from = signal.at(0).value<QModelIndex>();
@@ -4693,8 +4697,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(ready.value(u"width"_s).toInt(), 297);
         QCOMPARE(ready.value(u"url"_s).toUrl(), QUrl::fromLocalFile(u"/tmp/miniatura.png"_s));
         host.setPdfViewable(true);
-        host.setPdfThumbnail(u"assets/wykład.pdf"_s, {{u"state"_s, u"failed"_s}, {u"error"_s, u"PDF chroniony hasłem"_s},
-                                                       {u"locked"_s, true}});
+        host.setPdfThumbnail(u"assets/wykład.pdf"_s,
+                             {{u"state"_s, u"failed"_s}, {u"error"_s, u"PDF chroniony hasłem"_s}, {u"locked"_s, true}});
         const QVariantMap failed = embedsOfRow(0).value(0).toMap();
         QCOMPARE(failed.value(u"state"_s).toString(), u"failed"_s);
         QVERIFY(failed.value(u"locked"_s).toBool());

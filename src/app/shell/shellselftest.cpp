@@ -39,10 +39,10 @@
 #include <QJSValue>
 #include <QJsonObject>
 #include <QKeyEvent>
+#include <QLocale>
 #include <QPageSize>
 #include <QPainter>
 #include <QPdfWriter>
-#include <QLocale>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlExpression>
@@ -2980,7 +2980,10 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         p.end();
         pdf = workspace->createAttachment(pdf, buffer.data());
     }
-    check(!pdf.isEmpty() && workspace->writeFile(note, u"- Slajdy ![[Wykład – ćwiczenia.pdf]]\n- Trzecia [[Wykład – ćwiczenia.pdf#page=3]]\n"_s),
+    check(!pdf.isEmpty()
+                  && workspace->writeFile(
+                          note,
+                          u"- Slajdy ![[Wykład – ćwiczenia.pdf]]\n- Trzecia [[Wykład – ćwiczenia.pdf#page=3]]\n"_s),
           "a note embeds a three-page PDF");
     const QString absolute = workspace->absoluteFilePath(pdf);
     QStringList handed;
@@ -3025,15 +3028,18 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     // The thumbnail: drawn, white page with a hairline frame (also in the dark theme).
     app->openPage(note);
     QQuickItem *tile = nullptr;
-    check(waitFor([&] {
-              tile = shownNamed(window->contentItem(), u"pdfEmbedTile"_s);
-              return tile && tile->property("loaded").toBool();
-          }, 15000),
+    check(waitFor(
+                  [&] {
+                      tile = shownNamed(window->contentItem(), u"pdfEmbedTile"_s);
+                      return tile && tile->property("loaded").toBool();
+                  },
+                  15000),
           "the PDF's thumbnail is drawn in the note");
     if (tile) {
         QQuickItem *frame = shownNamed(tile, u"pdfEmbedFrame"_s);
         const QImage grab = window->grabWindow();
-        const QPointF inside = frame ? frame->mapToScene(QPointF(frame->width() / 2, frame->height() * 0.8)) : QPointF();
+        const QPointF inside =
+                frame ? frame->mapToScene(QPointF(frame->width() / 2, frame->height() * 0.8)) : QPointF();
         const qreal dpr = window->effectiveDevicePixelRatio();
         const QColor paper = frame ? grab.pixelColor((inside * dpr).toPoint()) : QColor();
         std::fprintf(stderr, "selftest: PDF thumbnail %.0f × %.0f, paper %s\n", frame ? frame->width() : 0.0,
@@ -3049,7 +3055,8 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
                  qPrintable(app->currentRoute().value(u"path"_s).toString()), pdfView() != nullptr,
                  pdfView() ? pdfView()->property("ready").toBool() : false, modelValue("currentPage").toInt(),
                  modelValue("pageCount").toInt());
-    check(viewerOpened && modelValue("pageCount").toInt() == 3, "a tap on the thumbnail opens the PDF viewer at page 1 of 3");
+    check(viewerOpened && modelValue("pageCount").toInt() == 3,
+          "a tap on the thumbnail opens the PDF viewer at page 1 of 3");
     check(controllerFor(pdf) == nullptr, "the PDF's bytes are not loaded into the block editor");
     QQuickItem *view = pdfView();
     if (!view) {
@@ -3059,8 +3066,9 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     {
         QQuickItem *pageButton = shownNamed(view, u"pdfPageButton"_s);
         const QString wanted = QCoreApplication::translate("ContentPdfView", "Page %1 of %2").arg(1).arg(3);
-        check(pageButton && (pageButton->property("text").toString() == wanted
-                             || pageButton->property("text").toString() == u"1/3"_s),
+        check(pageButton
+                      && (pageButton->property("text").toString() == wanted
+                          || pageButton->property("text").toString() == u"1/3"_s),
               "the bar says “Page 1 of 3”");
     }
     view->forceActiveFocus();
@@ -3181,19 +3189,22 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         QMetaObject::invokeMethod(view, "jumpTo", QVariant(2));
         check(waitFor([&] { return opened(2); }), "the viewer goes to page 2");
         check(drawOnPage(), "“Draw on this page” is offered");
-        check(waitFor([&] {
-                  drawingPath = app->currentRoute().value(u"view"_s).toString() == u"drawing"
-                                        ? app->currentRoute().value(u"path"_s).toString()
-                                        : QString();
-                  return !drawingPath.isEmpty();
-              }, 15000),
+        check(waitFor(
+                      [&] {
+                          drawingPath = app->currentRoute().value(u"view"_s).toString() == u"drawing"
+                                                ? app->currentRoute().value(u"path"_s).toString()
+                                                : QString();
+                          return !drawingPath.isEmpty();
+                      },
+                      15000),
               "“Draw on this page” opens the drawing editor");
         const std::optional<drawing::Drawing> made = drawing::readDrawing(workspace->readAttachment(drawingPath));
         const std::optional<drawing::BackdropSource> source = made ? drawing::backdropSource(*made) : std::nullopt;
         check(source && source->page == 2 && source->path == pdf, "the drawing's backdrop is page 2 of the PDF");
         const QStringList lines = workspace->readFile(note).split(u'\n');
-        check(lines.size() >= 3 && lines.at(0).contains(u"Wykład – ćwiczenia.pdf"_s) && lines.at(1).startsWith(u"- ![["_s)
-                      && lines.at(1).contains(paths::basename(drawingPath)) && lines.at(2).contains(u"#page=3"_s),
+        check(lines.size() >= 3 && lines.at(0).contains(u"Wykład – ćwiczenia.pdf"_s)
+                      && lines.at(1).startsWith(u"- ![["_s) && lines.at(1).contains(paths::basename(drawingPath))
+                      && lines.at(2).contains(u"#page=3"_s),
               "the drawing is embedded right after the PDF's block");
         app->back();
         check(waitFor([&] { return opened(2); }, 15000), "Back returns to the viewer on page 2");
@@ -3240,15 +3251,18 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     if (!data.isEmpty() && lockedFile.open(QIODevice::ReadOnly)) {
         const QString locked = workspace->createAttachment(u"assets/sejf.pdf"_s, lockedFile.readAll());
         app->openPage(locked);
-        check(waitFor([&] {
-                  return pdfView() && modelValue("locked").toBool()
-                         && shownNamed(pdfView(), u"pdfOpenElsewhere"_s) != nullptr;
-              }, 15000),
+        check(waitFor(
+                      [&] {
+                          return pdfView() && modelValue("locked").toBool()
+                                 && shownNamed(pdfView(), u"pdfOpenElsewhere"_s) != nullptr;
+                      },
+                      15000),
               "a PDF protected with a password says so, with “Open in another app”");
     }
 
     // Another attachment that is no note (a ZIP): read-only text, never the editor.
-    const QString zip = workspace->createAttachment(u"assets/archiwum.zip"_s, QByteArray("PK\x03\x04 Zażółć\0\1\2", 18));
+    const QString zip =
+            workspace->createAttachment(u"assets/archiwum.zip"_s, QByteArray("PK\x03\x04 Zażółć\0\1\2", 18));
     app->openPage(zip);
     check(waitFor([&] {
               QQuickItem *picture = shownNamed(window->contentItem(), u"pictureView"_s);

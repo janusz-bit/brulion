@@ -247,8 +247,10 @@ PdfThumbnails::Entry PdfThumbnails::entry(const QString &file, qint64 size, qint
                         if (f.open(QIODevice::WriteOnly)) {
                             QImageWriter writer(&f, "png");
                             writer.setText(QString::fromLatin1(PagesKey), QString::number(r.pages));
-                            writer.setText(QString::fromLatin1(WidthKey), QString::number(r.pagePoints.width(), 'g', 8));
-                            writer.setText(QString::fromLatin1(HeightKey), QString::number(r.pagePoints.height(), 'g', 8));
+                            writer.setText(QString::fromLatin1(WidthKey),
+                                           QString::number(r.pagePoints.width(), 'g', 8));
+                            writer.setText(QString::fromLatin1(HeightKey),
+                                           QString::number(r.pagePoints.height(), 'g', 8));
                             stored = writer.write(r.image) && f.commit();
                         }
                     }
@@ -264,10 +266,13 @@ PdfThumbnails::Entry PdfThumbnails::entry(const QString &file, qint64 size, qint
                 QCoreApplication *app = QCoreApplication::instance();
                 if (!app)
                     return;
-                QMetaObject::invokeMethod(app, [self, alive, key, file, out] {
-                    if (*alive && self)
-                        self->finished(key, file, out);
-                }, Qt::QueuedConnection);
+                QMetaObject::invokeMethod(
+                        app,
+                        [self, alive, key, file, out] {
+                            if (*alive && self)
+                                self->finished(key, file, out);
+                        },
+                        Qt::QueuedConnection);
             },
             PdfRenderPool::Thumbnail);
     return {};

@@ -22,7 +22,7 @@ private Q_SLOTS:
     {
         QTest::addColumn<QString>("content");
         QTest::addColumn<int>("hint");
-        QTest::addColumn<QString>("pdf");  // the file the predicate accepts (by name, or any folder/name)
+        QTest::addColumn<QString>("pdf"); // the file the predicate accepts (by name, or any folder/name)
         QTest::addColumn<QString>("body");
         QTest::addColumn<QString>("expected");
         QTest::addColumn<int>("line");
@@ -43,21 +43,18 @@ private Q_SLOTS:
                 << u"- Slajdy ![[wykład.pdf]]\n\t- uwaga\n- Inny\n"_s << 0 << u"wykład.pdf"_s << drawing
                 << u"- Slajdy ![[wykład.pdf]]\n\t- uwaga\n- ![[wykład s. 2.svg]]\n- Inny\n"_s << 2 << true;
         // The later items are numbered on, as the editor's Enter does.
-        QTest::newRow("ordered list")
-                << u"1. ![[a.pdf]]\n2. Dalej\n"_s << 0 << u"a.pdf"_s << drawing
-                << u"1. ![[a.pdf]]\n2. ![[wykład s. 2.svg]]\n3. Dalej\n"_s << 1 << true;
+        QTest::newRow("ordered list") << u"1. ![[a.pdf]]\n2. Dalej\n"_s << 0 << u"a.pdf"_s << drawing
+                                      << u"1. ![[a.pdf]]\n2. ![[wykład s. 2.svg]]\n3. Dalej\n"_s << 1 << true;
         QTest::newRow("document paragraphs")
                 << u"Slajdy:\n\n![[wykład.pdf]]\n\nKoniec\n"_s << 2 << u"wykład.pdf"_s << drawing
                 << u"Slajdy:\n\n![[wykład.pdf]]\n\n![[wykład s. 2.svg]]\n\nKoniec\n"_s << 4 << true;
-        QTest::newRow("CRLF")
-                << u"- A ![[w.pdf]]\r\n- B\r\n"_s << 0 << u"w.pdf"_s << drawing
-                << u"- A ![[w.pdf]]\r\n- ![[wykład s. 2.svg]]\r\n- B\r\n"_s << 1 << true;
-        QTest::newRow("no final newline")
-                << u"- A ![[w.pdf]]"_s << 0 << u"w.pdf"_s << drawing
-                << u"- A ![[w.pdf]]\n- ![[wykład s. 2.svg]]"_s << 1 << true;
-        QTest::newRow("frontmatter")
-                << u"---\ntytuł: Wykład\n---\n- ![[w.pdf]]\n"_s << 3 << u"w.pdf"_s << drawing
-                << u"---\ntytuł: Wykład\n---\n- ![[w.pdf]]\n- ![[wykład s. 2.svg]]\n"_s << 4 << true;
+        QTest::newRow("CRLF") << u"- A ![[w.pdf]]\r\n- B\r\n"_s << 0 << u"w.pdf"_s << drawing
+                              << u"- A ![[w.pdf]]\r\n- ![[wykład s. 2.svg]]\r\n- B\r\n"_s << 1 << true;
+        QTest::newRow("no final newline") << u"- A ![[w.pdf]]"_s << 0 << u"w.pdf"_s << drawing
+                                          << u"- A ![[w.pdf]]\n- ![[wykład s. 2.svg]]"_s << 1 << true;
+        QTest::newRow("frontmatter") << u"---\ntytuł: Wykład\n---\n- ![[w.pdf]]\n"_s << 3 << u"w.pdf"_s << drawing
+                                     << u"---\ntytuł: Wykład\n---\n- ![[w.pdf]]\n- ![[wykład s. 2.svg]]\n"_s << 4
+                                     << true;
         QTest::newRow("stale hint") << u"- Nowy\n- Drugi\n- Slajdy ![[w.pdf]]\n"_s << 0 << u"w.pdf"_s << drawing
                                     << u"- Nowy\n- Drugi\n- Slajdy ![[w.pdf]]\n- ![[wykład s. 2.svg]]\n"_s << 3 << true;
         QTest::newRow("no hint") << u"- Nowy\n- Slajdy ![[w.pdf]]\n"_s << -1 << u"w.pdf"_s << drawing
@@ -71,9 +68,8 @@ private Q_SLOTS:
                 << two << 2 << u"w.pdf"_s << drawing
                 << u"- ![[w.pdf]] pierwszy\n- ![[wykład s. 2.svg]]\n- a\n- b\n- c\n- ![[w.pdf]] drugi\n- d\n"_s << 1
                 << true;
-        QTest::newRow("page fragment")
-                << u"- ![[wykład.pdf#page=3]]\n"_s << 0 << u"wykład.pdf"_s << drawing
-                << u"- ![[wykład.pdf#page=3]]\n- ![[wykład s. 2.svg]]\n"_s << 1 << true;
+        QTest::newRow("page fragment") << u"- ![[wykład.pdf#page=3]]\n"_s << 0 << u"wykład.pdf"_s << drawing
+                                       << u"- ![[wykład.pdf#page=3]]\n- ![[wykład s. 2.svg]]\n"_s << 1 << true;
         QTest::newRow("percent-encoded Markdown picture")
                 << u"- ![slajd](assets/wyk%C5%82ad.pdf)\n"_s << 0 << u"wykład.pdf"_s << drawing
                 << u"- ![slajd](assets/wyk%C5%82ad.pdf)\n- ![[wykład s. 2.svg]]\n"_s << 1 << true;
@@ -103,8 +99,8 @@ private Q_SLOTS:
                                         << u"- ![[wykład.pdf\n- B\n- ![[wykład s. 2.svg]]\n"_s << 2 << false;
         QTest::newRow("another PDF") << u"- ![[inny.pdf]]\n"_s << 0 << u"wykład.pdf"_s << drawing
                                      << u"- ![[inny.pdf]]\n- ![[wykład s. 2.svg]]\n"_s << 1 << false;
-        QTest::newRow("hint far beyond the end") << u"Tekst\n"_s << 999 << u"w.pdf"_s << drawing
-                                                 << u"Tekst\n\n![[wykład s. 2.svg]]\n"_s << 2 << false;
+        QTest::newRow("hint far beyond the end")
+                << u"Tekst\n"_s << 999 << u"w.pdf"_s << drawing << u"Tekst\n\n![[wykład s. 2.svg]]\n"_s << 2 << false;
     }
 
     void insertBlockAfterEmbed()

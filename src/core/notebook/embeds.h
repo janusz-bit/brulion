@@ -15,9 +15,9 @@
 namespace brulion::notebook {
 
 struct EmbedInsertion {
-    QString content;          ///< the new text (untouched bytes and line endings preserved)
-    int line = -1;            ///< first line of the inserted block
-    bool afterEmbed = false;  ///< false: no block embeds the file (any more) — appended at the end
+    QString content;         ///< the new text (untouched bytes and line endings preserved)
+    int line = -1;           ///< first line of the inserted block
+    bool afterEmbed = false; ///< false: no block embeds the file (any more) — appended at the end
 };
 
 /// `blockBody` (e.g. "![[Wykład 3 s. 4.svg]]") as a block of its own right after the block that
@@ -33,7 +33,6 @@ struct EmbedInsertion {
 /// Embeds inside code blocks and the frontmatter never count (nor inside inline code or formulas:
 /// markdown::extractInline skips them).
 EmbedInsertion insertBlockAfterEmbed(const QString &content, int lineHint,
-                                     const std::function<bool(QStringView target)> &embedsIt,
-                                     const QString &blockBody);
+                                     const std::function<bool(QStringView target)> &embedsIt, const QString &blockBody);
 
 } // namespace brulion::notebook

@@ -127,7 +127,7 @@ QVariantMap Workspace::pdfThumbnail(const QString &rawPath, int page) const
     case State::Failed:
         // A cache that cannot be written: the file's chip (a click still opens the viewer).
         out.insert(u"state"_s, e.error == u"cache" ? u"unsupported"_s : u"failed"_s);
-        out.insert(u"error"_s, e.error == u"locked"     ? tr("PDF protected with a password")
+        out.insert(u"error"_s, e.error == u"locked"       ? tr("PDF protected with a password")
                                : e.error == u"unreadable" ? tr("This PDF cannot be read.")
                                : e.error == u"nopages"    ? tr("This PDF has no pages.")
                                                           : tr("No preview"));
@@ -240,10 +240,14 @@ QVariantMap Workspace::addDrawingOnPdfPage(const QString &rawPdfPath, const QVar
             const QString content = m_vault->readText(fromNote, &ok);
             if (!ok)
                 break;
-            const notebook::EmbedInsertion insertion = notebook::insertBlockAfterEmbed(content, fromLine, embedsIt, body);
+            const notebook::EmbedInsertion insertion =
+                    notebook::insertBlockAfterEmbed(content, fromLine, embedsIt, body);
             const WriteResult written = writeIfUnchanged(fromNote, insertion.content, content);
             if (written == WriteResult::Written)
-                return {{u"path"_s, drawing}, {u"note"_s, fromNote}, {u"journal"_s, false}, {u"line"_s, insertion.line}};
+                return {{u"path"_s, drawing},
+                        {u"note"_s, fromNote},
+                        {u"journal"_s, false},
+                        {u"line"_s, insertion.line}};
             if (written == WriteResult::Failed)
                 return {{u"path"_s, drawing}, {u"note"_s, QString()}, {u"journal"_s, false}};
         }
@@ -285,7 +289,8 @@ QVariantList Workspace::drawingsOnPdfPage(const QString &rawPdfPath, int page, c
         const std::optional<drawing::Drawing> d = drawing::readDrawing(readAttachment(path));
         const std::optional<drawing::BackdropSource> source = d ? drawing::backdropSource(*d) : std::nullopt;
         if (source && source->page == page && paths::normalize(source->path) == pdfPath)
-            out.append(QVariantMap{{u"path"_s, path}, {u"name"_s, QFileInfo(paths::basename(path)).completeBaseName()}});
+            out.append(
+                    QVariantMap{{u"path"_s, path}, {u"name"_s, QFileInfo(paths::basename(path)).completeBaseName()}});
     }
     return out;
 }
