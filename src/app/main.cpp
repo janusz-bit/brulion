@@ -14,6 +14,7 @@
 #include "localnetwork.h"         // QML loads nothing from the network (src/app/ui)
 #include "logcontroller.h"        // the event log page's controller (src/app/diag)
 #include "pdfpageimageprovider.h" // the thumbnails of PDF pages (src/app/drawing)
+#include "pdfviewimageprovider.h" // the PDF viewer's pages (src/app/pdf)
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -321,6 +322,10 @@ int main(int argc, char *argv[])
     engine.addImageProvider(u"drawing"_s, new brulion::drawingview::DrawingImageProvider);
     // image://pdfpage/…: the thumbnails of a PDF's pages in the backdrop's page picker.
     engine.addImageProvider(u"pdfpage"_s, new brulion::drawingview::PdfPageImageProvider);
+    // image://pdfview/…: the PDF viewer's pages and detail pictures (docs/UI.md "PDF viewer"), drawn
+    // asynchronously on its own threads; only where a renderer is built in (the browser has none).
+    if (brulion::platform::pdfAvailable())
+        engine.addImageProvider(u"pdfview"_s, new brulion::pdfview::PdfViewImageProvider);
     // A drawing's backdrop (DrawingBackdrops): vault paths are files of the open notebook.
     brulion::drawingview::DrawingBackdrops::setPathResolver([&controller](const QString &path) {
         return controller && controller->workspace() ? controller->workspace()->absoluteFilePath(path) : QString();

@@ -495,6 +495,7 @@ Item {
         embeds: block.hasEmbeds ? block.embeds : []
         onClicked: (target) => block.controller.activateLink(block.index, "page:" + encodeURIComponent(target), false)
         onDrawingClicked: (path) => block.controller.openDrawing(path)
+        onPdfClicked: (path, page) => block.controller.openPdf(block.index, path, page)
         onBackgroundClicked: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, -1)
         onBackgroundLongPressed: block.editor.longPressText(block.index)
         onShowWeb: (url) => block.controller.showWebPicture(url)

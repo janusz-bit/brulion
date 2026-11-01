@@ -23,7 +23,12 @@ import Brulion
 //     view, a click — or the size button — its own pixels, the notes that embed it below; the
 //     bar's "Pokaż jako tekst" / "Pokaż obraz" and Ctrl+E switch to the file read as text and
 //     back — read-only, for text-like assets: a picture's bytes never reach the editor, where a
-//     typed character would have been saved over them; the side panel lists its references).
+//     typed character would have been saved over them; the side panel lists its references);
+//   * a PDF (assets/wykład.pdf) in the PDF viewer (ContentPdfView, docs/UI.md "PDF viewer": its
+//     pages, zoom, the page jump, search, "Otwórz w innej aplikacji", "Rysuj na tej stronie";
+//     route.pdfPage, route.from / fromLine — where it was opened from —, its own route.open values),
+//     never loaded into the editor; any other attachment that is no note (DOCX, ZIP, MP3…) read-only
+//     as text (ContentPictureView's `textOnly`): no file's bytes reach the block editor.
 // Kept from the first version (and checked by the shell's self-test, objectNames "pageController"
 // and "pageEditor"): the route's path is applied one event-loop turn late and
 // Workspace.pathRenamed goes to followRename(), so a rename never saves unsaved edits under the
@@ -61,8 +66,9 @@ FocusScope {
     readonly property string journalDate: page.path !== "" ? Workspace.journalDate(page.path) : ""
     /// Top bar title: daily notes by their date; other pages use the shell's default (file name).
     readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : ""
-    /// A block (or the source) is being edited, or a picture fills the view.
-    readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute
+    /// A block (or the source) is being edited, or a picture, a PDF or another file fills the view.
+    readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute || root.pdfRoute
+                                    || root.fileRoute
     /// The editor's touch toolbar is docked at the bottom (on the keyboard, or on the phone's
     /// bottom navigation once the keyboard went).
     readonly property bool toolbarDocked: editor.toolbarVisible
@@ -72,7 +78,7 @@ FocusScope {
         editor.endTouchEditing()
     }
     /// The page is shown as Markdown source (the shell turns the palette's block commands off).
-    readonly property bool sourceMode: page.sourceMode && !root.pictureRoute
+    readonly property bool sourceMode: page.sourceMode && !root.pictureRoute && !root.pdfRoute && !root.fileRoute
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
     /// The tab this page's context panel showed last in the side panel ("": never shown).
     property string sidePanelTab: ""
@@ -96,6 +102,15 @@ FocusScope {
     /// ("Pokaż jako tekst", Ctrl+E).
     readonly property bool pictureRoute: Workspace.isPicture(root.routePath) || root.drawingPage
     property bool pictureAsText: false
+    /// A PDF opens in the PDF viewer (its bytes never reach the editor).
+    readonly property bool pdfRoute: root.routePath !== "" && Workspace.isPdf(root.routePath)
+    /// Any other file that is no note (DOCX, ZIP, MP3…): read-only as text — a typed character
+    /// would have been saved over its bytes.
+    readonly property bool fileRoute: root.routePath !== "" && !root.pictureRoute && !root.pdfRoute
+                                      && !/\.(md|markdown)$/i.test(root.routePath)
+    /// The view swipes sideways from the left edge itself: a PDF zoomed past the view's width pans
+    /// (the drawer's edge strip yields to it, ShellRouteView.viewEdgeSwipe).
+    readonly property bool edgeSwipe: root.pdfRoute && pdfLoader.item !== null && pdfLoader.item.pannedSideways
     property string _revealed: ""
     property string _opened: ""
     property bool _openedMissing: false
@@ -153,9 +168,10 @@ FocusScope {
     function applyRoute() {
         if (root.routePath === "")
             return
-        // A picture's bytes are not a note: the editor stays unloaded (page.path "" saves the
-        // previous page without loading anything); ContentPictureView shows the picture.
-        if (root.pictureRoute) {
+        // A picture's, a PDF's or another file's bytes are not a note: the editor stays unloaded
+        // (page.path "" saves the previous page without loading anything); ContentPictureView /
+        // ContentPdfView shows it.
+        if (root.pictureRoute || root.pdfRoute || root.fileRoute) {
             if (page.path !== "") {
                 root._revealed = ""
                 root._foldsFor = ""
@@ -233,14 +249,17 @@ FocusScope {
 
     /// route.open: a dialog or section opened right away (screenshots, smoke tests).
     function openRequested() {
-        if (!route || !route.open || (!root.pictureRoute && !page.loaded))
+        if (!route || !route.open || (!root.pictureRoute && !root.pdfRoute && !root.fileRoute && !page.loaded))
             return
         const key = root.routePath + "\n" + route.open
         if (key === root._opened)
             return
         root._opened = key
-        // A picture has no title, menu or editor: its text view, or the side panel's tabs.
-        if (root.pictureRoute && ["text", "links", "outline", "calendar"].indexOf(route.open) < 0)
+        // A picture has no title, menu or editor: its text view, or the side panel's tabs (a PDF's own
+        // values — search, jump, draw — are ContentPdfView's).
+        if ((root.pictureRoute || root.fileRoute) && ["text", "links", "outline", "calendar"].indexOf(route.open) < 0)
+            return
+        if (root.pdfRoute && ["links", "outline", "calendar"].indexOf(route.open) < 0)
             return
         switch (route.open) {
         case "text":
@@ -378,13 +397,14 @@ FocusScope {
         id: editor
         objectName: "pageEditor"
         anchors.fill: parent
-        // A picture fills the view instead (its bytes are never loaded into the editor).
-        visible: !root.pictureRoute
+        // A picture, a PDF or another file fills the view instead (its bytes are never loaded into
+        // the editor).
+        visible: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
+        focus: !root.pdfRoute
         controller: page
         // Problems the editor reports (a picture that could not be added) as the window's toast.
         onMessage: (text, kind, action) => action ? AppController.toastAction(text, kind, action.text, action.run)
                                                   : AppController.toast(text, kind)
-        focus: true
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
         // The properties panel open or folded: a device setting (the panel's header switches it);
         // bound here for the rows made with the editor, then by the Binding below.
@@ -424,13 +444,33 @@ FocusScope {
     // stays unloaded — page.path "" — and hidden). Created for pictures only.
     Loader {
         anchors.fill: parent
-        active: root.pictureRoute
+        active: root.pictureRoute || root.fileRoute
         sourceComponent: ContentPictureView {
             path: root.routePath
-            asText: root.pictureAsText
+            // Another file than a picture: only its text, read-only.
+            textOnly: root.fileRoute
+            asText: root.pictureAsText || root.fileRoute
             rendererPalette: editor.rendererPalette
             onTextToggleRequested: root.togglePictureText()
         }
+    }
+
+    // A PDF: the PDF viewer (the editor behind it stays unloaded and hidden). Created for PDFs only.
+    Loader {
+        id: pdfLoader
+        objectName: "pdfLoader"
+        anchors.fill: parent
+        active: root.pdfRoute
+        focus: root.pdfRoute
+        sourceComponent: ContentPdfView {
+            path: root.routePath
+            route: root.route
+            inSidePanel: root.inSidePanel
+            rendererPalette: editor.rendererPalette
+            refsInSidePanel: root.refsInSidePanel
+        }
+        // The viewer takes the keys (PageDown, Ctrl+F, Esc…) when it opens in the main pane.
+        onLoaded: if (!root.inSidePanel) Qt.callLater(() => { if (item) item.forceActiveFocus() })
     }
 
     // The references live in the editor's scrolling content, right under the blocks (in the
@@ -577,7 +617,7 @@ FocusScope {
         ContentSidePanel {
             id: contextPanel
             // A picture's references (the index knows the notes that embed it; nothing loads it).
-            path: root.pictureRoute ? root.routePath : page.path
+            path: root.pictureRoute || root.pdfRoute || root.fileRoute ? root.routePath : page.path
             controller: page
             editor: editor
             // Its tab, for refsInSidePanel (made again with the remembered tab each time the side
@@ -602,18 +642,20 @@ FocusScope {
         target: AppController
         function onUiActionRequested(action) {
             if (action === "toggleSourceMode" && root.visible && !root.inSidePanel) {
-                // A picture: Ctrl+E / "Markdown source" switch between the picture and its text.
+                // A picture: Ctrl+E / "Markdown source" switch between the picture and its text;
+                // a PDF and another file have no Markdown.
                 if (root.pictureRoute)
                     root.togglePictureText()
-                else
+                else if (!root.pdfRoute && !root.fileRoute)
                     editor.toggleSourceMode()
             } else if (action === "toggleNoteMode" && root.visible && !root.inSidePanel) {
                 root.toggleNoteMode()
-            } else if (action.startsWith("copyLink:") && root.visible && !root.inSidePanel && !root.pictureRoute) {
+            } else if (action.startsWith("copyLink:") && root.visible && !root.inSidePanel && !root.pictureRoute
+                       && !root.pdfRoute && !root.fileRoute) {
                 editor.copyCurrentLink(action.slice(9))
-            } else if (action === "saveWebPictures" && root.visible && !root.inSidePanel && !root.pictureRoute) {
+            } else if (action === "saveWebPictures" && root.visible && !root.inSidePanel && editor.visible) {
                 editor.downloadWebPictures("")
-            } else if (action === "addProperty" && root.visible && !root.inSidePanel && !root.pictureRoute) {
+            } else if (action === "addProperty" && root.visible && !root.inSidePanel && editor.visible) {
                 editor.addProperty()
             }
         }
@@ -622,14 +664,19 @@ FocusScope {
     // "Dodaj właściwość" (docs/UI.md "Page properties"): the panel's add row.
     Shortcut {
         sequence: "Ctrl+;"
-        enabled: root.visible && !root.inSidePanel && !root.pictureRoute && page.loaded && !page.sourceMode
+        enabled: root.visible && !root.inSidePanel && editor.visible && page.loaded && !page.sourceMode
         onActivated: editor.addProperty()
     }
 
     Shortcut {
         sequence: "Ctrl+E"
         enabled: root.visible && !root.inSidePanel // one per window (two would be ambiguous)
-        // A picture: the picture ⇄ its text (read-only).
-        onActivated: root.pictureRoute ? root.togglePictureText() : editor.toggleSourceMode()
+        // A picture: the picture ⇄ its text (read-only); a PDF, another file: nothing.
+        onActivated: {
+            if (root.pictureRoute)
+                root.togglePictureText()
+            else if (!root.pdfRoute && !root.fileRoute)
+                editor.toggleSourceMode()
+        }
     }
 }

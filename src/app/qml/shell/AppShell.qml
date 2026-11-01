@@ -355,6 +355,8 @@ FocusScope {
                 menuButtonShown: !Theme.narrow || !shell.bottomNavShown
                 picture: routeView.viewPicture
                 pictureAsText: routeView.viewPictureAsText
+                pdf: routeView.viewPdf
+                fileOnly: routeView.viewFile
                 onMenuClicked: drawer.open()
                 onSidebarToggled: shell.toggleSidebar()
                 onPaletteRequested: shell.openPalette()

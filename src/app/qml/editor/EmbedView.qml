@@ -31,6 +31,11 @@ import Brulion
 // attachment), a right-click or a long press its menu (webMenu: WebPictureMenu). Its frame grows
 // to fit what it says (a phone's narrow column, a long alt text), and keeps that height while the
 // picture loads, so the row changes once: when the picture is there.
+// A PDF (`pdf`: `![[wykład.pdf]]`, `#page=3`; docs/UI.md "PDF viewer") is its page's thumbnail
+// (PdfEmbedTile) where this build draws PDFs (`viewable`), a click emits pdfClicked(path, page):
+// the PDF viewer. Without a renderer (the browser) or a thumbnail cache it is the file's chip with a
+// page icon; its click opens the PDF in a new browser tab / the system's viewer (pdfClicked too:
+// PageController.openPdf decides, inside the click — the browser's user gesture).
 Column {
     id: root
 
@@ -38,6 +43,8 @@ Column {
     signal clicked(string target)
     /// A click on a drawing (`drawing`: an SVG with an embedded scene): the drawing editor.
     signal drawingClicked(string path)
+    /// A click on a PDF's thumbnail or chip: page `page` of the PDF at vault path `path`.
+    signal pdfClicked(string path, int page)
     /// A picture from the internet: "Pokaż" / "Spróbuj ponownie", "Zapisz w notatniku", its menu.
     signal showWeb(string url)
     signal downloadWeb(string url)
@@ -78,7 +85,10 @@ Column {
             id: embed
             required property var modelData
             readonly property bool web: modelData.web === true
-            readonly property bool image: modelData.image && (web || modelData.url.toString() !== "")
+            /// A PDF (BlockListModel's PDF embed); shown as its thumbnail where PDFs are drawn.
+            readonly property bool pdf: modelData.pdf === true
+            readonly property bool pdfTile: pdf && modelData.viewable === true && modelData.state !== "unsupported"
+            readonly property bool image: !pdf && modelData.image && (web || modelData.url.toString() !== "")
             /// A picture from the internet not shown (yet): the frame tells why and what to do.
             readonly property bool webPending: web && modelData.state !== "ready"
             readonly property bool decodable: modelData.decodable !== false
@@ -106,12 +116,12 @@ Column {
                 return { width: Math.floor(w * k) / dpr, height: Math.floor(h * k) / dpr }
             }
             width: root.width
-            height: image ? picture.height : chip.height
+            height: embed.pdfTile ? pdfLoader.height : image ? picture.height : chip.height
 
             // Beside the picture / chip: a click there edits the block (an embed-only paragraph of
             // a document has no text line to click).
             Item {
-                x: embed.image ? picture.width : chip.width
+                x: embed.pdfTile ? pdfLoader.width : embed.image ? picture.width : chip.width
                 width: Math.max(0, embed.width - x)
                 height: embed.height
                 HoverHandler { cursorShape: Qt.IBeamCursor; enabled: !Theme.touchUi }
@@ -322,13 +332,38 @@ Column {
                 }
             }
 
+            // A PDF where this build draws them: its page's thumbnail.
+            Loader {
+                id: pdfLoader
+                active: embed.pdfTile
+                visible: active
+                width: item ? item.width : 0
+                height: item ? item.height : 0
+                sourceComponent: PdfEmbedTile {
+                    entry: embed.modelData
+                    columnWidth: root.width
+                    onClicked: (path, page) => root.pdfClicked(path, page)
+                }
+            }
+
             BChip {
                 id: chip
-                visible: !embed.image
+                objectName: embed.pdf ? "pdfEmbedChip" : ""
+                visible: !embed.image && !embed.pdfTile
                 interactive: true
-                iconName: embed.modelData.image ? "image" : "file"
+                iconName: embed.pdf ? "file-text" : embed.modelData.image ? "image" : "file"
                 text: root.autoTextSafe(embed.modelData.name)
-                onClicked: root.clicked(embed.modelData.target)
+                onClicked: embed.pdf ? root.pdfClicked(embed.modelData.path || "", embed.modelData.page || 1)
+                                     : root.clicked(embed.modelData.target)
+                HoverHandler {
+                    id: chipHover
+                    enabled: embed.pdf && !Theme.touchUi
+                }
+                BToolTip {
+                    visible: chipHover.hovered
+                    // The browser's own viewer (no PDF renderer in Brulion there) or the system's.
+                    text: Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
+                }
             }
         }
     }
