@@ -7,6 +7,9 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 * **Wsparcie dla AI** — zakres do ustalenia (dziś agenci AI korzystają z `brulion-cli`, serwera
   MCP i sterowania aplikacją: docs/CLI.md).
+* **Rozszerzalność jak w Emacsie i TiddlyWiki** — użytkownik zmienia i rozszerza Brulion z poziomu
+  notatnika (własne polecenia, widoki, makra, zachowania); zakres i bezpieczeństwo do ustalenia
+  (notatki przychodzą z synchronizacji i importu).
 * **Zdjęcia z internetu — sprawdzić na prawdziwym telefonie.** Emulator Androida
   (`scripts/android-emulator-test.sh --web-pictures`) i przeglądarki Chromium i Firefox
   (`tests/web`, GitHub Actions) sprawdzają to automatycznie; zostaje prawdziwy telefon
