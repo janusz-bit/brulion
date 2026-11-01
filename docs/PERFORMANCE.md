@@ -107,6 +107,13 @@ zmierzyliśmy).
 **W przeglądarce**: pierwsza wizyta pobiera ok. 13,5 MB (później strona działa z pamięci
 podręcznej i offline), powrót do strony z 1000 notatek rysuje pierwszą klatkę po ok. 0,6 s.
 
+**PDF-y**: miniatura PDF-a w notatce rysuje się raz i zostaje w pamięci podręcznej urządzenia
+(najwyżej 64 MB, na telefonie 32 MB), więc dziennik przewija się bez rysowania jej od nowa.
+Przeglądarka PDF trzyma najwyżej ok. czterech ekranów obrazu (telefon ok. 41 MB, monitor
+2560 × 1440 ok. 59 MB), bez względu na to, jak duży jest PDF i jak bardzo go powiększysz; PDF
+z 300 stron otwiera się od razu. Wersja w przeglądarce pobiera ok. 0,14 MB więcej, APK jest
+o ok. 0,3 MB większy.
+
 ### Znane wolne miejsca
 
 * **Indeksowanie dużych notatników na telefonie** — było ok. 15 s dla 10 000 notatek; teraz
@@ -874,6 +881,76 @@ memory).
 The Raspberry Pi (software renderer: the image node, the same work as before) and the Android
 emulator were not measured (L16b).
 
+### PDF viewer: memory, thumbnails and what they cost (2026-11-01)
+
+The thumbnails of embedded PDFs and the in-app PDF viewer (docs/UI.md "PDF viewer") draw with the
+renderers drawing backdrops brought (above: Qt PDF, poppler, Android's `PdfRenderer`); nothing new
+is shipped, and the browser has no renderer (a PDF opens in a new tab there).
+
+**The viewer's memory is bounded by the screen, not by the PDF or the zoom** (`PdfViewModel`,
+`src/app/pdf/pdfviewmodel.h`):
+
+* a page's base picture is drawn at `k = min(1, sqrt(viewport pixels / page pixels))` of its shown
+  size: at most one screenful of pixels per page, at any zoom;
+* zoomed in (`k < 0.98`) the visible part of each page (+64 logical px on each side, snapped to 64)
+  comes at full resolution as a detail picture once the view stops moving (150 ms); together they
+  cover at most the viewport;
+* only the pages within half a viewport above and below the view have delegates (rows inserted and
+  removed at the model's edges), and the pictures use `cache: false`, so Qt's pixmap cache keeps
+  nothing that scrolled away;
+* ≈ 4 × the viewport's pixels × 4 B of decoded pictures: a phone at 1080 × 2400 ≈ 41 MB, a desktop
+  at 2560 × 1440 ≈ 59 MB, whatever the PDF (a 200 MB scan included) and the zoom (10–800 %);
+  pdfium's and poppler's own caches come on top (the whole app on the emulator: below);
+* open readers (`PdfReaderPool`): at most two idle per file and four in all, closed after 10 s
+  idle, when the file changes and before Brulion itself writes, moves or deletes it; at most two
+  pages drawn at once (`PdfRenderPool`: visible pages first, then detail pictures, thumbnails, page
+  sizes, search last); the search is cancelled between pages when the text changes (250 ms
+  debounce);
+* hostile files: page aspect clamped to [1/32, 32], a page drawn larger than 32 768 px or a picture
+  above 16 MP is not drawn (`MaxPdfFullSide`, `MaxPdfClipPixels`), at most 20 000 pages laid out and
+  5000 hits kept.
+
+**Thumbnails** (`PdfThumbnails`, owned by the Workspace): drawn once per file, size, mtime, page
+and pixel size, off the GUI thread, at 420 logical px × the screen's ratio rounded up to 512 / 768
+/ 1024 / 1280 / 1536 px, and stored as PNG files whose text chunks carry the page count and size
+(the GUI thread only stats the PDF and reads a PNG's header: no decode, no PDF opened); a failure
+is stored as `<key>.err`, so a locked or broken PDF is not opened again on every scroll. The disk
+cache is capped at 64 MiB (32 MiB on Android; the oldest pruned 2 s after a store), the memory map
+at 512 entries. The browser no longer builds a `data:` URL of an embedded PDF (before: a base64
+copy of the whole file per embed, 1.33 × its size, for a chip that never used it).
+
+**Timings** (`tst_pdfviewmodel timingsOfALongPdf`: a 300-page PDF with 30 lines of Polish text on every page,
+written by QPdfWriter; informative — it fails only above 10 s to "Ready"):
+
+| | Qt PDF, GitHub runner (x86_64, ASan + UBSan, -O1; one run) | poppler (nixpkgs), Raspberry Pi 4 (Brulion Debug; median of 5) |
+|---|---:|---:|
+| opened: "Ready" (page count, the first page's size, the layout) | 6 ms | 11 ms |
+| a reader opened cold | 6 ms | 2 ms |
+| page 1 drawn at a phone's fit width (1080 px) | 32 ms | 59 ms |
+| a thumbnail (768 px) | 16 ms | 26 ms |
+| one page searched (30 hits, their rectangles) | 264 ms | 17 ms |
+| all 300 pages searched by the model (one hit a page; the 250 ms debounce included) | 4.9 s | 3.4 s |
+| `tst_pdflayout manyPagesFast`: 20 000 pages laid out / 10⁶ `indexAt` | — | 1 ms / 272 ms |
+
+The Raspberry Pi stands for a slower phone: a 300-page lecture is ready at once and a page drawn
+in about 60 ms; the whole PDF is searched in about 3 s while the pages keep drawing. The search's
+cost is the renderer's: Qt PDF asks pdfium for every hit's rectangles (`getSelectionAtIndex`;
+264 ms for 30 hits under the sanitizers), poppler gives every character's box once per page; it
+runs at the lowest priority, so pages keep drawing meanwhile, and the first hit at or after the
+current page shows as soon as it is found.
+
+**On the Android emulator** (`scripts/android-emulator-test.sh --pdf`, API 36 x86_64 image on a
+GitHub runner, 1080 × 2400): TOTAL PSS 174 MB (`dumpsys meminfo`) after zooming the 3-page
+`wyklad.pdf` to 800 % and scrolling through every page — the whole app, under the 350 MB budget.
+
+**Sizes** (the feature's whole cost, against `sweep2` 422c14df built the day before):
+
+| | before | after | change |
+|---|---:|---:|---:|
+| `brulion.wasm` raw / gzip -9 / brotli -q 11 (`wasm.yml`; no renderer: the code and QML only) | 42 700 155 / 13 740 047 / 9 395 509 B | 43 238 485 / 13 883 483 / 9 482 864 B | +538 330 B (+1.26 %) / +143 436 B / +87 355 B |
+| APK arm64 release (`android.yml`'s artifact, zipped) | 29 450 612 B | 29 746 852 B | +296 240 B (+1.0 %) |
+| Windows ZIP + installer (`windows.yml`'s artifact, zipped; Qt PDF was already shipped) | 80 169 509 B | 80 583 602 B | +414 093 B (+0.5 %) |
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -912,6 +989,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L16b | measure the graph on the Raspberry Pi (`bench-matrix.sh views graph`, offscreen: the software renderer's image node, 3 000-note vault; must not regress) and in the Android emulator probe (`android-batch.sh probe`, the scene graph on GLES); check it by hand on a phone, on Windows with a GPU (Direct3D 11) and in a phone's browser; if `rebuild()` (VaultIndex::graph and the filters, GUI thread) costs a phone > 50 ms, move its pure part onto the worker | phone: GUI stall during the layout < 33 ms, settled < 3 s |
 | L12 | sync: size + mtime quick check for unchanged text files | no-change sync ≥ 3× faster (laptop 10k 419 ms, Pi 5k 1.35 s) |
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
+| L19 | measure the PDF viewer on real devices (the emulator: 174 MB PSS at 800 %, above): PSS with a 100+ MB scanned lecture zoomed in on a phone (if above 350 MB, base pictures at half resolution on touch devices), time to the first page of a 300-page lecture, Qt PDF timings in a Release build | phone PSS < 350 MB; first page < 0.5 s |
 
 Done in wave 5 (2026-10-29, above): L1 (parse on worker threads), L2 (the index cache), L8 (the
 memory diet); on 2026-10-30 L5 (delta undo/redo, above; the Pi still to be measured: L5b), L9 (native file
