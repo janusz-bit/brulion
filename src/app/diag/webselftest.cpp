@@ -420,14 +420,136 @@ void PenSelfTest::publish()
 
 // ---- main.cpp --------------------------------------------------------------------------------
 
+// ---- PdfSelfTest -------------------------------------------------------------------------------
+
+namespace {
+
+/// The visible items under `root` (the visual tree, depth first) for which `pred` holds.
+void visibleItems(QQuickItem *root, const std::function<bool(QQuickItem *)> &pred, QList<QQuickItem *> *out)
+{
+    if (!root || !root->isVisible() || root->opacity() <= 0.01)
+        return;
+    if (pred(root))
+        out->append(root);
+    for (QQuickItem *child : root->childItems())
+        visibleItems(child, pred, out);
+}
+
+bool under(const QQuickItem *item, const QString &objectName)
+{
+    for (const QQuickItem *p = item; p; p = p->parentItem()) {
+        if (p->objectName() == objectName)
+            return true;
+    }
+    return false;
+}
+
+QJsonObject sceneRect(const QQuickItem *item)
+{
+    const QRectF r = item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
+    return {{u"x"_s, r.x()}, {u"y"_s, r.y()}, {u"w"_s, r.width()}, {u"h"_s, r.height()}};
+}
+
+} // namespace
+
+PdfSelfTest::PdfSelfTest(QQuickWindow *window, shell::Workspace *workspace, PublishFn publish, QObject *parent)
+    : QObject(parent), m_window(window), m_workspace(workspace), m_publish(std::move(publish)), m_timer(this)
+{
+    m_timer.setInterval(250);
+    connect(&m_timer, &QTimer::timeout, this, &PdfSelfTest::look);
+}
+
+void PdfSelfTest::start()
+{
+    m_clock.start();
+    m_timer.start();
+    look();
+}
+
+QJsonObject PdfSelfTest::report() const
+{
+    QJsonObject out;
+    const QVariantMap route = m_route ? m_route() : QVariantMap();
+    out.insert(u"route"_s, QJsonObject{{u"view"_s, route.value(u"view"_s).toString()},
+                                       {u"path"_s, route.value(u"path"_s).toString()}});
+    QList<QQuickItem *> chips;
+    QList<QQuickItem *> links;
+    QList<QQuickItem *> messages;
+    QList<QQuickItem *> buttons;
+    if (m_window) {
+        visibleItems(m_window->contentItem(), [&](QQuickItem *item) {
+            const QString name = item->objectName();
+            if (name == u"pdfEmbedChip")
+                chips.append(item);
+            else if (name == u"pdfMessageText")
+                messages.append(item);
+            else if (name == u"pdfOpenElsewhere")
+                buttons.append(item);
+            else if ((item->inherits("QQuickText") || item->inherits("QQuickTextEdit")) && !under(item, u"pdfEmbedChip"_s)) {
+                const QString text = item->property("text").toString();
+                if (text.contains(u"<a "_s) && text.contains(u".pdf"_s, Qt::CaseInsensitive))
+                    links.append(item);
+            }
+            return false;
+        }, &chips);
+    }
+    if (QQuickItem *chip = chips.value(0)) {
+        QJsonObject c = sceneRect(chip);
+        c.insert(u"icon"_s, chip->property("iconName").toString());
+        c.insert(u"text"_s, chip->property("text").toString());
+        out.insert(u"chip"_s, c);
+    } else {
+        out.insert(u"chip"_s, QJsonValue::Null);
+    }
+    out.insert(u"link"_s, links.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(sceneRect(links.first())));
+    out.insert(u"message"_s, messages.isEmpty() ? QString() : messages.first()->property("text").toString());
+    out.insert(u"button"_s, buttons.isEmpty() ? QString() : buttons.first()->property("text").toString());
+    return out;
+}
+
+void PdfSelfTest::look()
+{
+    if (m_clock.elapsed() >= m_durationMs)
+        m_timer.stop();
+    const QJsonObject now = report();
+    if (now == m_last)
+        return;
+    m_last = now;
+    if (m_publish)
+        m_publish("brulionPdfSelfTest", now);
+}
+
+void PdfSelfTest::openNow(const QString &path)
+{
+    QStringList notices;
+    QStringList errors;
+    bool opened = false;
+    if (m_workspace) {
+        const QMetaObject::Connection n = connect(m_workspace, &shell::Workspace::noticeOccurred, this,
+                                                  [&notices](const QString &text) { notices.append(text); });
+        const QMetaObject::Connection e = connect(m_workspace, &shell::Workspace::errorOccurred, this,
+                                                  [&errors](const QString &text) { errors.append(text); });
+        opened = m_workspace->openInOtherApp(path);
+        disconnect(n);
+        disconnect(e);
+    }
+    if (m_publish)
+        m_publish("brulionPdfOpenSelfTest", {{u"path"_s, path},
+                                             {u"opened"_s, opened},
+                                             {u"notices"_s, QJsonArray::fromStringList(notices)},
+                                             {u"errors"_s, QJsonArray::fromStringList(errors)}});
+}
+
 void startBrowserSelfTests(QQmlApplicationEngine *engine, shell::AppController *app, const QStringList &args,
                            PublishFn publish)
 {
     const bool pictures = args.contains(u"--selftest-webpictures"_s);
     const bool pen = args.contains(u"--selftest-pen"_s);
-    if (!app || (!pictures && !pen))
+    const bool pdfAuto = args.contains(u"--selftest-pdfauto"_s);
+    const bool pdf = pdfAuto || args.contains(u"--selftest-pdf"_s);
+    if (!app || (!pictures && !pen && !pdf))
         return;
-    const auto run = [engine, app, pictures, pen, publish] {
+    const auto run = [engine, app, pictures, pen, pdf, pdfAuto, publish] {
         QQuickWindow *window = engine ? qobject_cast<QQuickWindow *>(engine->rootObjects().value(0)) : nullptr;
         if (pictures) {
             WebPicturesSelfTest::Options options;
@@ -438,6 +560,13 @@ void startBrowserSelfTests(QQmlApplicationEngine *engine, shell::AppController *
         if (pen) {
             auto *test = new PenSelfTest(window, publish, app);
             test->start();
+        }
+        if (pdf) {
+            auto *test = new PdfSelfTest(window, app->workspace(), publish, app);
+            test->setRouteSource([app] { return app->currentRoute(); });
+            test->start();
+            if (pdfAuto)
+                QTimer::singleShot(2000, test, [test] { test->openNow(u"assets/wykład.pdf"_s); });
         }
     };
     if (app->status() == u"ready") {

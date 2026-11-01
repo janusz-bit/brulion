@@ -534,7 +534,7 @@
           // marked for tests: sessionStorage "brulion-selftest" = "1", which tests/web sets
           // before the page loads (by hand: in the console, then reload). A link cannot set it, so
           // a link sent to someone never runs them on their notes nor moves their clock or view.
-          var testFlows = ['webpictures', 'pen', 'pickfiles', 'savefile'];
+          var testFlows = ['webpictures', 'pen', 'pdf', 'pdfauto', 'pickfiles', 'savefile'];
           var testTab = false;
           try {
             testTab = window.sessionStorage.getItem('brulion-selftest') === '1';
@@ -550,7 +550,7 @@
               testing = true;
             }
           });
-          // With ?selftest=webpictures|pen in a test tab only, each one argument "--option=value"
+          // With ?selftest=webpictures|pen|pdf|pdfauto in a test tab only, each one argument "--option=value"
           // (a value is never an option of its own: ?route=--vault=… stays the route):
           //   ?route=<view> | <route JSON>  → --route (the first route after the notebook opens)
           //   ?now=yyyy-MM-dd HH:mm         → --now (a fixed clock: the journal's day is known)
