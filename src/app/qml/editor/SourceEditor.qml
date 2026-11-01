@@ -173,6 +173,7 @@ Flickable {
 
         TapHandler {
             id: touchTap
+            objectName: "sourceTouchTap" // the shell self-test holds a long press until it selected
             gesturePolicy: TapHandler.ReleaseWithinBounds
             onTapped: (eventPoint) => {
                 source.forceActiveFocus()

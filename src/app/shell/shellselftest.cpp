@@ -4878,13 +4878,42 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                             break;
                         }
                     }
-                    // Held well past the long-press threshold (800 ms).
-                    touchTap(window, onWord, 1300);
+                    // The finger stays down until the long press has selected (or the handler let
+                    // go of it), not for a fixed time: the handler's timer (800 ms) is an event
+                    // of the event loop, and on a slow runner (Windows) the loop was busy past a
+                    // fixed 1.3 s hold — the release came first and nothing was selected. The
+                    // longest stretch the loop did not get round to the check is logged with it.
+                    QObject *const handler = sourceView->findChild<QObject *>(u"sourceTouchTap"_s);
+                    QElapsedTimer held;
+                    qint64 lastPoll = -1;
+                    qint64 longestGap = 0;
+                    qint64 selectedAfter = -1;
+                    qint64 letGoAfter = -1;
+                    held.start();
+                    uidriver::touchHoldNow(
+                            window, onWord,
+                            [&] {
+                                const qint64 now = held.elapsed();
+                                longestGap = qMax(longestGap, now - qMax<qint64>(lastPoll, 0));
+                                lastPoll = now;
+                                if (!sourceEdit->property("selectedText").toString().isEmpty()) {
+                                    selectedAfter = now;
+                                    return true;
+                                }
+                                if (handler && !handler->property("pressed").toBool()) {
+                                    letGoAfter = now;
+                                    return true;
+                                }
+                                return false;
+                            },
+                            10000);
                     const QString word = sourceEdit->property("selectedText").toString();
                     std::fprintf(stderr,
-                                 "selftest: a long press in the source at (%.1f, %.1f) selected \"%s\", contentY %.1f "
-                                 "-> %.1f, view height %.1f -> %.1f\n",
-                                 onWord.x(), onWord.y(), qPrintable(word), scrolled,
+                                 "selftest: a long press in the source at (%.1f, %.1f) selected \"%s\" after %lld ms "
+                                 "(handler %s, let go after %lld ms; the event loop's longest pause %lld ms), contentY "
+                                 "%.1f -> %.1f, view height %.1f -> %.1f\n",
+                                 onWord.x(), onWord.y(), qPrintable(word), qlonglong(selectedAfter),
+                                 handler ? "found" : "missing", qlonglong(letGoAfter), qlonglong(longestGap), scrolled,
                                  sourceView->property("contentY").toReal(), settledHeight, sourceView->height());
                     check(!word.isEmpty() && !word.contains(u' ') && !word.contains(u'\n')
                                   && qAbs(sourceView->property("contentY").toReal() - scrolled) < 1,

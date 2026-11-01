@@ -933,6 +933,20 @@ void touchTapNow(QQuickWindow *window, QPointF scenePos, int holdMs)
     run(touchTap(window, scenePos, holdMs, 100));
 }
 
+bool touchHoldNow(QQuickWindow *window, QPointF scenePos, const std::function<bool()> &until, int timeoutMs,
+                  int afterMs)
+{
+    TouchSequence sequence(window, touchDevice());
+    const QPoint p = scenePos.toPoint();
+    sequence.press(0, p, window).commit(false);
+    QCoreApplication::processEvents();
+    const bool reached = waitFor(until, timeoutMs);
+    sequence.release(0, p, window).commit(false);
+    QCoreApplication::processEvents();
+    settle(afterMs);
+    return reached;
+}
+
 void touchDragNow(QQuickWindow *window, QPointF from, QPointF delta)
 {
     run(touchDrag(window, from, delta, 12, 16, 0, 300));
