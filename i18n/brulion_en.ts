@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="589"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="591"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
@@ -684,6 +684,17 @@
     </message>
 </context>
 <context>
+    <name>PdfEmbedTile</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/PdfEmbedTile.qml" line="144"/>
+        <source>%n page(s)</source>
+        <translation>
+            <numerusform>%n page</numerusform>
+            <numerusform>%n pages</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>PropertiesPanel</name>
     <message numerus="yes">
         <location filename="../src/app/qml/editor/PropertiesPanel.qml" line="313"/>
@@ -924,7 +935,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3521"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3849"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
