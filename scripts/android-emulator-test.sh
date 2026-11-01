@@ -31,7 +31,10 @@
 # Screenshots of each step (sel-*.png); the same debuggable APK.
 # With --folders instead: folders, links and tags with a real finger — a tap on a #tag in the
 # journal opens its page (not created by looking at it; the drawer opened on it shows the page's
-# row in the tree, within the list's view) and Back returns; the editing toolbar's "Więcej" opens
+# row in the tree, within the list's view) and Back returns; the path parts of a link
+# [[Projekty/Remont mieszkania]] appended to today's journal are link nodes of their own — a tap
+# on "Projekty" opens the folder's pages, on "Remont mieszkania" the page, a long press on
+# "Projekty" its menu ("Pokaż folder", "Kopiuj ścieżkę folderu"); the editing toolbar's "Więcej" opens
 # the block menu, "Kopiuj odnośnik" copies a reference to the block (its id written into the
 # note, the copy pasted back into another block with Ctrl+V on Android 13+); the drawer's
 # "Strony" header "+" makes a folder (its name typed on the keyboard, "Utwórz" tapped while the
@@ -698,6 +701,9 @@ vault_grep() { vault_cat "$1" | grep -qE -- "$2"; } # <file> <ERE>
 # The notebook's top-level entry named so in any letter case (a keyboard capitalizes a field's
 # first letter or not).
 vault_name() { adb shell run-as "$PKG" ls "\"$VAULT\"" 2>/dev/null | tr -d '\r' | grep -ix -- "$1" | head -n 1; }
+vault_append() { # <file> <line>: the line appended to a note, as another program (Syncthing) writes it
+  printf '%s\n' "$2" | adb exec-in "run-as $PKG sh -c 'cat >> \"$VAULT/$1\"'"
+}
 
 # --- selecting and copying with a finger (--selection) -------------------------------------------
 
@@ -822,6 +828,43 @@ if ((FOLDERS)); then
   else
     echo "    (no paste: \`input keycombination\` needs Android 13+)"
   fi
+
+  # A link to a page in a folder: each path part a link of its own (docs/SYNTAX.md §2 "Path
+  # parts"). UiAutomator turns Qt's accessibility on, so the parts are link nodes named by their
+  # text (BLinkTargets) — what a screen reader (TalkBack) gets too. The block comes from "another
+  # program"; the app reads it when it comes back to the foreground.
+  parts_line='- Zapytać się [[Projekty/Remont mieszkania]] o plan'
+  adb shell input keyevent 111 # Escape: the edited block (the paste above) ends, the keyboard goes
+  sleep 1
+  wait_for 6 ime_hidden || adb shell input keyevent 4
+  sleep 1
+  vault_append "$today_journal" "$parts_line"
+  journal_before=$(vault_cat "$today_journal")
+  adb shell input keyevent 3 # Home
+  sleep 2
+  adb shell am start -n "$ACTIVITY" >/dev/null
+  check "the journal shows the block with the link" wait_for 30 ui_has 'Zapytać się .*o plan'
+  check "UiAutomator sees its path part as a link of its own" wait_for 10 ui_has 'Projekty'
+  check "and its page part" ui_has 'Remont mieszkania'
+  app_shot fl-lp-1-journal
+  check "a tap on Projekty opens the folder's pages" ui_tap 'Projekty' first 3
+  app_shot fl-lp-2-folder
+  check "the folder's view lists Remont mieszkania" wait_for 10 ui_has 'Remont mieszkania.*'
+  check "and not the journal" ui_lacks 'Zapytać się .*o plan'
+  check "Back returns to the journal" back_to 'Zapytać się .*o plan'
+  check "a tap on Remont mieszkania opens the page" ui_tap 'Remont mieszkania' last 3
+  app_shot fl-lp-3-page
+  check "the page Remont mieszkania is shown" wait_for 10 ui_has 'Budżet całkowity to 12 000 zł.*'
+  check "Back returns to the journal" back_to 'Zapytać się .*o plan'
+  long_press "$(ui_find_all 'Projekty' | head -n 1)"
+  sleep 2
+  app_shot fl-lp-4-menu
+  check "the menu offers Pokaż folder" ui_has 'Pokaż folder'
+  check "and Kopiuj ścieżkę folderu" ui_has 'Kopiuj ścieżkę folderu'
+  adb shell input keyevent 4 # Back: the menu closes
+  sleep 2
+  check "the journal is unchanged apart from the appended line" test "$(vault_cat "$today_journal")" = "$journal_before"
+  check "with the line as written" vault_grep "$today_journal" '^- Zapytać się \[\[Projekty/Remont mieszkania\]\] o plan$'
 
   # A new folder from the drawer's "Strony" header: its "+" → "Nowy folder", the name typed.
   # Whatever is tapped in the drawer's list is first brought into its view (drawer_tap).
