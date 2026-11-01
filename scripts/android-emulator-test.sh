@@ -110,6 +110,13 @@
 # ?keyboard=visual (the browser's default), for the record (Brave's brave-browser#60074: a gap).
 # The app's readings are kept (samples-<browser>-<mode>.jsonl) and printed as rows of
 # tests/app/tst_keyboardinsets.cpp; screenshots wk-*.png. docs/WEB.md "Klawiatura ekranowa".
+# With --relaunch instead: Android recreates the activity while the app starts (a configuration
+# change no app can handle itself, CONFIG_ASSETS_PATHS: a display cutout overlay of the framework
+# toggled at once after `am start`, at a few delays) — before Qt started, the app restarts itself
+# with the same intent (BrulionActivity, StartupRelaunch.kt) instead of keeping a blank window:
+# the sample notebook's journal is on screen and Qt logs (brulion.*); every attempt's outcome is
+# listed (relaunched before Qt started / after / not at all). Screenshots rl-*.png; the same
+# debuggable APK.
 # With --pickers instead: the system's file pickers that FilePicker shows (docs/UI.md "File pickers";
 # no QtQuick.Dialogs since L9) — files in the shared Download folder: Import → "Wybierz pliki…" brings
 # DocumentsUI to the front (ACTION_OPEN_DOCUMENT), a note tapped there comes back to the import's
@@ -133,6 +140,7 @@
 #        scripts/android-emulator-test.sh --drawing [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --stylus [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --pickers [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --relaunch [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-keyboard [SITE_DIR]   (default dist-wasm)
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
@@ -189,6 +197,7 @@ DONE=0
 DRAWING=0
 STYLUS=0
 PICKERS=0
+RELAUNCH=0
 WEBKEYBOARD=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
@@ -217,6 +226,9 @@ elif [[ ${1:-} == --stylus ]]; then
 elif [[ ${1:-} == --pickers ]]; then
   PICKERS=1
   shift
+elif [[ ${1:-} == --relaunch ]]; then
+  RELAUNCH=1
+  shift
 elif [[ ${1:-} == --web-pictures ]]; then
   WEBPICTURES=1
   shift
@@ -232,7 +244,7 @@ else
   APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || DRAWING || STYLUS || PICKERS)) ||
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || DRAWING || STYLUS || PICKERS || RELAUNCH)) ||
     [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
 fi
@@ -593,6 +605,70 @@ back_to() { # <ERE>: Back until the item shows (the keyboard first, then the his
   done
   ui_has "$1"
 }
+if ((RELAUNCH)); then
+  info "Relaunch: $APP_APK, the activity recreated while the app starts (API $android_api)"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  # An overlay of the framework ("android"): enabling or disabling it changes every app's assets
+  # paths (CONFIG_ASSETS_PATHS), which no activity can handle itself — Android recreates it.
+  overlay=$(adb shell cmd overlay list android | tr -d '\r' |
+    sed -nE 's/^\[[ x]\] (com\.android\.internal\.display\.cutout\.emulation\.[a-z]+)$/\1/p' | head -n 1)
+  [[ -n $overlay ]] || die "no display cutout overlay of the framework to toggle (cmd overlay list android)"
+  echo "    toggling $overlay"
+  # Qt's log lines carry their category as the tag (brulion.platform…; the package's name does not
+  # end in a tag's ": ").
+  rl_qt_logged() { adb logcat -d | grep -qE ' brulion\.[a-z.]+ *: '; }
+  rl_journal() { ui_has 'Kalendarz'; } # the bottom navigation: the shell with a notebook (--demo)
+  before=0 after=0 none=0 blank=0 shown=0
+  attempt=0
+  # The start: the process, Qt's libraries loaded in onCreate, Qt started at the first layout. The
+  # relaunch has to come before that layout: delays (s) from the start request on.
+  for delay in 0.3 0.6 0.9 1.2 0.15 0.45 0.75 1.05 1.5 2.0 0 0.05; do
+    attempt=$((attempt + 1))
+    adb shell am force-stop "$PKG"
+    adb shell cmd overlay disable "$overlay" >/dev/null 2>&1 || true
+    sleep 4
+    adb logcat -c
+    # One shell on the device: no adb round trip between the start and the change.
+    adb shell "am start -n $ACTIVITY --es applicationArguments '--demo --locale pl --route journals' \
+      --es extraenvvars_QT_LOGGING_RULES brulion.platform.debug=true >/dev/null; sleep $delay; \
+      cmd overlay enable $overlay"
+    sleep 25
+    outcome="no relaunch"
+    if adb logcat -d -s BrulionActivity:W | grep -q 'recreated before Qt started'; then
+      before=$((before + 1))
+      outcome="relaunched before Qt started: the app restarted itself"
+      sleep 15
+    elif adb logcat -d | grep -q 'finishDrawing of relaunch: Window{[^}]*BrulionActivity'; then
+      after=$((after + 1))
+      outcome="relaunched (Qt restarts the app itself once it runs)"
+    else
+      none=$((none + 1))
+    fi
+    adb logcat -d >"$OUT/rl-logcat-$attempt.txt"
+    if rl_qt_logged && rl_journal; then
+      shown=$((shown + 1))
+      outcome+="; the journal is on screen"
+      [[ $outcome != relaunched\ before* ]] || app_shot "rl-restarted-$attempt"
+    else
+      blank=$((blank + 1))
+      outcome+="; NO journal on screen (Qt logged: $(rl_qt_logged && echo yes || echo no))"
+      app_shot "rl-blank-$attempt"
+    fi
+    echo "    attempt $attempt (+${delay} s): $outcome"
+    ((before < 2)) || break
+  done
+  adb shell cmd overlay disable "$overlay" >/dev/null 2>&1 || true
+  echo "    $attempt attempts: relaunched before Qt started $before, after $after, not at all $none; journal shown $shown, not $blank"
+  check "Android recreated the activity before Qt started (at least once)" test "$before" -ge 1
+  check "the app restarted itself each time and shows the notebook: no blank window" test "$blank" -eq 0
+  check "no crash" bash -c "! cat '$OUT'/rl-logcat-*.txt 2>/dev/null | grep -E 'FATAL EXCEPTION|Fatal signal'"
+  info "Result"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
 if ((KEYBOARD)); then
   info "Keyboard: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
   adb install -r -g "$APP_APK" >/dev/null
