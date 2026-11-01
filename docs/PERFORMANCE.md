@@ -914,7 +914,10 @@ is shipped, and the browser has no renderer (a PDF opens in a new tab there).
 and pixel size, off the GUI thread, at 420 logical px × the screen's ratio rounded up to 512 / 768
 / 1024 / 1280 / 1536 px, and stored as PNG files whose text chunks carry the page count and size
 (the GUI thread only stats the PDF and reads a PNG's header: no decode, no PDF opened); a failure
-is stored as `<key>.err`, so a locked or broken PDF is not opened again on every scroll. The disk
+that the same bytes give again (locked, unreadable, no pages) is stored as `<key>.err`, so a locked
+or broken PDF is not opened again on every scroll; a failed drawing (out of memory) is remembered in
+memory only and tried again after a restart, and a remembered thumbnail whose PNG was pruned is drawn
+again. The disk
 cache is capped at 64 MiB (32 MiB on Android; the oldest pruned 2 s after a store), the memory map
 at 512 entries. The browser no longer builds a `data:` URL of an embedded PDF (before: a base64
 copy of the whole file per embed, 1.33 × its size, for a chip that never used it).

@@ -63,6 +63,12 @@ QString errorFile(const QString &dir, const QString &key)
     return QDir(dir).filePath(key + u".err"_s);
 }
 
+/// Errors the same bytes give again (kept as `.err`); "render" and "cache" are not.
+bool persistentError(const QString &error)
+{
+    return error == u"locked" || error == u"nopages" || error == u"unreadable";
+}
+
 QString pngFile(const QString &dir, const QString &key)
 {
     return QDir(dir).filePath(key + u".png"_s);
@@ -147,6 +153,15 @@ void PdfThumbnails::remember(const QString &key, const Entry &entry)
     }
 }
 
+void PdfThumbnails::forget(const QString &key)
+{
+    if (const auto it = m_positions.find(key); it != m_positions.end()) {
+        m_order.erase(it.value());
+        m_positions.erase(it);
+    }
+    m_entries.remove(key);
+}
+
 PdfThumbnails::Entry PdfThumbnails::fromDisk(const QString &key)
 {
     Entry entry;
@@ -201,8 +216,12 @@ PdfThumbnails::Entry PdfThumbnails::entry(const QString &file, qint64 size, qint
     const QString key = cacheKey(file, size, mtimeMs, page, side);
     if (const auto it = m_entries.constFind(key); it != m_entries.constEnd()) {
         const Entry found = it.value();
-        remember(key, found); // (most recently asked)
-        return found;
+        // The pruning (or the user) may have deleted its PNG since: drawn again then.
+        if (found.state != State::Ready || found.file.isEmpty() || QFileInfo::exists(found.file)) {
+            remember(key, found); // (most recently asked)
+            return found;
+        }
+        forget(key);
     }
     if (m_pending.contains(key))
         return {};
@@ -229,7 +248,9 @@ PdfThumbnails::Entry PdfThumbnails::entry(const QString &file, qint64 size, qint
                 } else if (r.image.isNull()) {
                     out.state = State::Failed;
                     out.error = r.error.isEmpty() ? u"render"_s : r.error;
-                    if (!dir.isEmpty() && QDir().mkpath(dir)) {
+                    // Only what the same file gives again is kept on the disk; a failed drawing
+                    // (out of memory, a reader lost) stays in memory: drawn again after a restart.
+                    if (persistentError(out.error) && !dir.isEmpty() && QDir().mkpath(dir)) {
                         QSaveFile f(errorFile(dir, key));
                         if (f.open(QIODevice::WriteOnly)) {
                             f.write(QJsonDocument(QJsonObject{{u"error"_s, out.error}, {u"pages"_s, out.pages}})

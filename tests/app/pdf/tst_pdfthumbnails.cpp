@@ -1,7 +1,8 @@
 // The thumbnails of embedded PDFs (src/app/pdf/pdfthumbnails.h) with an injected renderer that counts
 // its calls and a temporary cache folder: cache keys, Loading → changed → Ready with the PNG's text
 // chunks read back, a second instance on the same folder ready at once without drawing, a new mtime a
-// new key, failures cached as .err (not drawn again), a truncated PNG drawn again, pruning to the cap,
+// new key, deterministic failures cached as .err (not drawn again; a failed drawing only in memory), a
+// truncated or pruned PNG drawn again, pruning to the cap,
 // an unwritable folder, no renderer, many asks for one key drawn once; one real case with this
 // build's renderer.
 #include "pdfthumbnails.h"
@@ -164,13 +165,26 @@ private Q_SLOTS:
         QCOMPARE(renderer.calls->load(), 2);
     }
 
+    void failuresCached_data()
+    {
+        QTest::addColumn<QString>("error");
+        QTest::addColumn<bool>("persisted");
+        QTest::newRow("locked") << u"locked"_s << true;
+        QTest::newRow("unreadable") << u"unreadable"_s << true;
+        QTest::newRow("no pages") << u"nopages"_s << true;
+        // A failed drawing (out of memory, a lost Android session): tried again after a restart.
+        QTest::newRow("render") << u"render"_s << false;
+    }
+
     void failuresCached()
     {
+        QFETCH(QString, error);
+        QFETCH(bool, persisted);
         QTemporaryDir dir;
         FakeRenderer renderer;
-        renderer.error = u"locked"_s;
+        renderer.error = error;
         renderer.pages = 0;
-        const QString pdf = u"/notatnik/Sejf.pdf"_s;
+        const QString pdf = u"/notatnik/Sejf źdźbło.pdf"_s;
         {
             PdfThumbnails thumbs(dir.path(), nullptr, renderer.make());
             QSignalSpy changed(&thumbs, &PdfThumbnails::changed);
@@ -178,14 +192,43 @@ private Q_SLOTS:
             QTRY_COMPARE(changed.size(), 1);
             const PdfThumbnails::Entry e = thumbs.entry(pdf, 10, 1, 1);
             QCOMPARE(e.state, State::Failed);
-            QCOMPARE(e.error, u"locked"_s);
-            QCOMPARE(QDir(dir.path()).entryList({u"*.err"_s}).size(), 1);
+            QCOMPARE(e.error, error);
+            QCOMPARE(QDir(dir.path()).entryList({u"*.err"_s}).size(), persisted ? 1 : 0);
+            // Remembered in memory either way: not drawn again on every scroll.
+            QCOMPARE(thumbs.entry(pdf, 10, 1, 1).state, State::Failed);
+            QCOMPARE(renderer.calls->load(), 1);
         }
         PdfThumbnails again(dir.path(), nullptr, renderer.make());
         const PdfThumbnails::Entry e = again.entry(pdf, 10, 1, 1);
-        QCOMPARE(e.state, State::Failed);
-        QCOMPARE(e.error, u"locked"_s);
-        QCOMPARE(renderer.calls->load(), 1);
+        if (persisted) {
+            QCOMPARE(e.state, State::Failed);
+            QCOMPARE(e.error, error);
+            QCOMPARE(renderer.calls->load(), 1);
+        } else {
+            QCOMPARE(e.state, State::Loading);
+            waitForPool();
+            QTRY_COMPARE(again.entry(pdf, 10, 1, 1).state, State::Failed);
+            QCOMPARE(renderer.calls->load(), 2);
+        }
+    }
+
+    void prunedPngDrawnAgain()
+    {
+        QTemporaryDir dir;
+        FakeRenderer renderer;
+        const QString pdf = u"/notatnik/Wykład żółw.pdf"_s;
+        PdfThumbnails thumbs(dir.path(), nullptr, renderer.make());
+        thumbs.entry(pdf, 3, 3, 1);
+        waitForPool();
+        QTRY_COMPARE(thumbs.entry(pdf, 3, 3, 1).state, State::Ready);
+        const QString png = thumbs.entry(pdf, 3, 3, 1).file;
+        QVERIFY(QFile::remove(png)); // what the pruning does to the oldest
+        // The memory entry is not trusted any more: drawn again, never a URL of a missing file.
+        QCOMPARE(thumbs.entry(pdf, 3, 3, 1).state, State::Loading);
+        waitForPool();
+        QTRY_COMPARE(thumbs.entry(pdf, 3, 3, 1).state, State::Ready);
+        QVERIFY(QFileInfo(thumbs.entry(pdf, 3, 3, 1).file).isFile());
+        QCOMPARE(renderer.calls->load(), 2);
     }
 
     void truncatedPngDrawnAgain()
@@ -228,6 +271,12 @@ private Q_SLOTS:
         // 2 s after the last store, on the pool: the oldest go, the newest stay.
         QTRY_VERIFY_WITH_TIMEOUT(total() <= 1024 * 1024, 10000);
         QCOMPARE(thumbs.entry(u"/notatnik/plik 39.pdf"_s, 100, 39, 1).state, State::Ready);
+        // The pruned ones are no Ready entries with a missing PNG.
+        for (int i = 0; i < 40; ++i) {
+            const PdfThumbnails::Entry e = thumbs.entry(u"/notatnik/plik %1.pdf"_s.arg(i), 100, i, 1);
+            QVERIFY2(e.state != State::Ready || QFileInfo(e.file).isFile(), qPrintable(QString::number(i)));
+        }
+        waitForPool();
         QVERIFY(QDir(dir.path()).entryList(QDir::Files).size() > 0);
     }
 

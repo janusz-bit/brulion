@@ -10,9 +10,12 @@
 //   connect(&thumbs, &PdfThumbnails::changed, …)                       // a thumbnail became ready / failed
 //
 // Ready: "<key>.png" with tEXt chunks Brulion-Pages, Brulion-PageWidth, Brulion-PageHeight (read back
-// with QImageReader::text(), without decoding). Failed: "<key>.err" (JSON {error, pages}): a locked or
-// broken PDF is not opened again on every scroll; a new mtime is a new key (sync delivered a repaired
-// file). A cached PNG whose header cannot be read is deleted and drawn again; a cache folder that
+// with QImageReader::text(), without decoding). Failed: "<key>.err" (JSON {error, pages}) for what the
+// same bytes give again (locked, unreadable, nopages): a locked or broken PDF is not opened again on
+// every scroll; a new mtime is a new key (sync delivered a repaired file). A failed drawing ("render":
+// out of memory, a lost reader) is remembered in memory only, so it is drawn again after a restart. A
+// remembered Ready entry whose PNG is gone (pruned) is drawn again. A cached PNG whose header cannot
+// be read is deleted and drawn again; a cache folder that
 // cannot be written makes the entry Failed "cache" (the editor shows the file's chip then). Pruning:
 // 2 s after a store the folder is listed (on the pool) and the oldest files deleted until it holds at
 // most setCacheBytes(); a hit read from the disk touches its PNG when it is older than a day. At most
@@ -93,6 +96,7 @@ Q_SIGNALS:
 private:
     struct Job;
     void remember(const QString &key, const Entry &entry);
+    void forget(const QString &key);
     Entry fromDisk(const QString &key);
     void finished(const QString &key, const QString &file, const Entry &entry);
     void schedulePrune();
