@@ -2489,11 +2489,12 @@ check "scheduleReminders round 1: 3 armed (past one skipped)" wait_for 20 log_ha
 check "scheduleReminders round 2: idempotent" log_has "SELFTEST schedule round=2 ok=1 scheduled=3 exact=1"
 check "permissions reported (notifications granted, exact alarms)" log_has "SELFTEST permissions(start) allFiles=0 notifications=1 exact=1"
 # A PDF page through Android's PdfRenderer (src/platform/pdfpages_android.cpp, PdfPages.kt).
+# (Waited for: the self-test writes and draws the PDFs after the lines above.)
 check "PDF page drawn by PdfRenderer (red square, white corner)" \
-  log_has "SELFTEST pdf backend=Android PdfRenderer pages=1 first=59[0-9]x84[0-9] width=59[0-9] height=84[0-9] centre=#ff0000 corner=#ffffff"
+  wait_for 15 log_has "SELFTEST pdf backend=Android PdfRenderer pages=1 first=59[0-9]x84[0-9] width=59[0-9] height=84[0-9] centre=#ff0000 corner=#ffffff"
 # The PDF viewer's reader: a session's part of a page equals the whole page's crop; its text and
 # search only on Android 15+ (API 35), none below.
-check "PdfRenderer session: a part of a page equals the whole page's crop" log_has "SELFTEST pdf-reader region=1"
+check "PdfRenderer session: a part of a page equals the whole page's crop" wait_for 10 log_has "SELFTEST pdf-reader region=1"
 sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 if [[ "${sdk:-0}" -ge 35 ]]; then
   check "PDF text on API $sdk: 'GESLA' found once, where the text is" log_has "SELFTEST pdf-reader region=1 text=1 hits=1 rect=1"
@@ -2501,7 +2502,7 @@ else
   check "no PDF text on API $sdk (search hidden)" log_has "SELFTEST pdf-reader region=1 text=0 hits=0"
 fi
 check "PdfRenderer sessions over the cap: the oldest reader is lost, the newest draws" \
-  log_has "SELFTEST pdf-sessions opened=1 oldest-lost=1 newest-draws=1"
+  wait_for 10 log_has "SELFTEST pdf-sessions opened=1 oldest-lost=1 newest-draws=1"
 check "cold-start tap delivered to C++" wait_for 10 log_has "SELFTEST activated path=dziennik/zimny-start.md line=5"
 # A tap while the app runs: onNewIntent -> nativeActivated (Polish path).
 adb shell am start -n "$ACTIVITY" --es "$EXTRA.PATH" "'strony/Łódź.md'" --ei "$EXTRA.LINE" 7 >/dev/null
