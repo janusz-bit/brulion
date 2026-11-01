@@ -5,6 +5,8 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 ## Funkcje
 
+* **Wsparcie dla AI** — zakres do ustalenia (dziś agenci AI korzystają z `brulion-cli`, serwera
+  MCP i sterowania aplikacją: docs/CLI.md).
 * **Zdjęcia z internetu — sprawdzić na prawdziwym telefonie.** Emulator Androida
   (`scripts/android-emulator-test.sh --web-pictures`) i przeglądarki Chromium i Firefox
   (`tests/web`, GitHub Actions) sprawdzają to automatycznie; zostaje prawdziwy telefon
