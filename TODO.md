@@ -86,6 +86,7 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     dziś otwierają się w Brulionie tylko do odczytu jako tekst).
 * **Normalne dodanie dowolnego pliku** — zwykłe dodanie do notatnika pliku dowolnego typu; zakres
   do ustalenia.
+* **Dowolny kolor tła** — tło w kolorze wybranym przez użytkownika; zakres do ustalenia.
 
 ## Windows
 
