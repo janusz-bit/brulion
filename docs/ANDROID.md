@@ -1167,8 +1167,8 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   restart i dziennik; bez niej (`BrulionActivity` sprzed poprawki) 12 prób, w jednej puste okno
   bez żadnego wpisu `brulion.*`, w czterech restart przez Qt (dziennik po angielsku). Z notatką z
   powiadomienia (te same dni, cztery przebiegi): z poprawką 8 restartów przed startem Qt, za
-  każdym razem otwarta notatka; z `BrulionActivity`, która restartowała bez `keepForRestart`, 5
-  takich restartów i ani razu notatka (tylko notatnik).
+  każdym razem otwarta notatka; z `BrulionActivity`, która restartowała bez `keepForRestart`, 7
+  takich restartów, w 6 z nich zamiast notatki sam notatnik.
 * Zaznaczanie i kopiowanie prawdziwym palcem (`adb shell input`, APK debugowalny jak niżej):
   ```sh
   scripts/android-emulator-test.sh --selection
