@@ -3,6 +3,7 @@
 // identical files untouched, History and the trash make it reversible, and the sync's mass-deletion
 // guard still stands between a restore's deletions and the server.
 #include "backuptest.h"
+#include "filesystemtraits.h"
 #include "synctest.h"
 
 #include <QSet>
@@ -94,32 +95,39 @@ private Q_SLOTS:
         QTest::addColumn<QStringList>("recreate");
         QTest::addColumn<QStringList>("trash");
         QTest::addColumn<int>("identical");
+        QTest::addColumn<bool>("caseInsensitive");
 
         QTest::newRow("identical bytes are skipped") << QList{fileEntry(u"a.md"_s, 3, 11)} << QList{file(u"a.md"_s, 3)}
-                                                     << QStringList() << QStringList() << QStringList() << 1;
+                                                     << QStringList() << QStringList() << QStringList() << 1 << false;
         QTest::newRow("another size changes") << QList{fileEntry(u"a.md"_s, 3, 11)} << QList{file(u"a.md"_s, 4)}
-                                              << QStringList{u"a.md"_s} << QStringList() << QStringList() << 0;
+                                              << QStringList{u"a.md"_s} << QStringList() << QStringList() << 0 << false;
         QTest::newRow("the same size, another checksum changes")
                 << QList{fileEntry(u"a.md"_s, 3, 99)} << QList{file(u"a.md"_s, 3)} << QStringList{u"a.md"_s}
-                << QStringList() << QStringList() << 0;
+                << QStringList() << QStringList() << 0 << false;
         QTest::newRow("gone comes back, extra goes")
                 << QList{fileEntry(u"Żółw.md"_s, 3, 11)} << QList{file(u"nowa.md"_s, 3)} << QStringList()
-                << QStringList{u"Żółw.md"_s} << QStringList{u"nowa.md"_s} << 0;
+                << QStringList{u"Żółw.md"_s} << QStringList{u"nowa.md"_s} << 0 << false;
         QTest::newRow("settings are never trashed")
                 << QList{fileEntry(u"a.md"_s, 3, 11)} << QList{file(u"a.md"_s, 3), file(u".brulion/config.json"_s, 2)}
-                << QStringList() << QStringList() << QStringList() << 1;
+                << QStringList() << QStringList() << QStringList() << 1 << false;
         QTest::newRow("settings are restored when the backup has them")
                 << QList{fileEntry(u".brulion/config.json"_s, 3, 99)} << QList{file(u".brulion/config.json"_s, 2)}
-                << QStringList{u".brulion/config.json"_s} << QStringList() << QStringList() << 0;
+                << QStringList{u".brulion/config.json"_s} << QStringList() << QStringList() << 0 << false;
         QTest::newRow("letter case: the notebook's spelling, not a second file")
                 << QList{fileEntry(u"Dom.md"_s, 3, 99)} << QList{file(u"dom.md"_s, 3)} << QStringList{u"dom.md"_s}
-                << QStringList() << QStringList() << 0;
-        QTest::newRow("twins differing in letter case stay apart")
+                << QStringList() << QStringList() << 0 << true;
+        QTest::newRow("twins on case-sensitive storage stay apart")
                 << QList{fileEntry(u"Dom.md"_s, 3, 11)} << QList{file(u"Dom.md"_s, 3), file(u"dom.md"_s, 3)}
-                << QStringList() << QStringList() << QStringList{u"dom.md"_s} << 1;
+                << QStringList() << QStringList() << QStringList{u"dom.md"_s} << 1 << false;
         QTest::newRow("an empty backup empties the notebook")
                 << QList<ArchiveEntry>() << QList{file(u"a.md"_s, 1)} << QStringList() << QStringList()
-                << QStringList{u"a.md"_s} << 0;
+                << QStringList{u"a.md"_s} << 0 << false;
+        QTest::newRow("case-sensitive: another spelling is another file")
+                << QList{fileEntry(u"Dom.md"_s, 3, 99)} << QList{file(u"dom.md"_s, 3)} << QStringList()
+                << QStringList{u"Dom.md"_s} << QStringList{u"dom.md"_s} << 0 << false;
+        QTest::newRow("case-insensitive: an entry of that very name keeps its own")
+                << QList{fileEntry(u"Plan.md"_s, 3, 99), fileEntry(u"plan.md"_s, 3, 11)} << QList{file(u"plan.md"_s, 3)}
+                << QStringList() << QStringList{u"Plan.md"_s} << QStringList() << 1 << true;
     }
     void plan()
     {
@@ -129,10 +137,11 @@ private Q_SLOTS:
         QFETCH(QStringList, recreate);
         QFETCH(QStringList, trash);
         QFETCH(int, identical);
+        QFETCH(bool, caseInsensitive);
         QHash<VaultPath, quint32> crcs;
         for (const NotebookFile &f : current)
             crcs.insert(f.path, 11);
-        const RestorePlan result = planRestore(entries, current, {}, crcs);
+        const RestorePlan result = planRestore(entries, current, {}, crcs, caseInsensitive);
         QCOMPARE(targets(result.toChange), change);
         QCOMPARE(targets(result.toRecreate), recreate);
         QCOMPARE(result.toTrash, trash);
@@ -150,7 +159,7 @@ private Q_SLOTS:
     {
         const RestorePlan result = planRestore({fileEntry(u"a.md"_s, 10, 1), fileEntry(u"b.md"_s, 20, 1),
                                                 fileEntry(u"film.mp4"_s, 5000, 1), fileEntry(u"nowy.mp4"_s, 5000, 1)},
-                                               {file(u"a.md"_s, 3), file(u"film.mp4"_s, 7)}, {}, {}, 100);
+                                               {file(u"a.md"_s, 3), file(u"film.mp4"_s, 7)}, {}, {}, false, 100);
         QCOMPARE(result.bytesToWrite, qint64(30));
         QCOMPARE(result.tooLarge, (QStringList{u"film.mp4"_s, u"nowy.mp4"_s}));
         QVERIFY(result.toTrash.isEmpty()); // what could not be restored stays
@@ -172,6 +181,78 @@ private Q_SLOTS:
         QCOMPARE(result.removeFirst, (QStringList{u"a"_s, u"b"_s}));
         QCOMPARE(result.toTrash, (QStringList{u"a/x.md"_s, u"b"_s}));
         QCOMPARE(targets(result.toRecreate), (QStringList{u"a"_s, u"b/c.md"_s}));
+    }
+
+    void identicalBelowABlockerIsWrittenBack()
+    {
+        // Only case-insensitive storage gets here, and the checker refuses such a backup there: the
+        // plan is right all the same.
+        const RestorePlan result = planRestore({fileEntry(u"Notes"_s, 1, 1), fileEntry(u"notes/x.md"_s, 3, 11)},
+                                               {file(u"notes/x.md"_s, 3)}, {u"notes"_s}, {{u"notes/x.md"_s, 11}}, true);
+        QCOMPARE(result.removeFirst, QStringList{u"notes"_s});
+        QCOMPARE(result.identical, 0);
+        QVERIFY(targets(result.toRecreate).contains(u"notes/x.md"_s));
+    }
+
+    void anArchiveCollidingOnThisStorageIsRefused_data()
+    {
+        QTest::addColumn<QByteArray>("zip");
+        QTest::newRow("two files") << rawZip({{"Plan.md", "a"}, {"plan.md", "b"}});
+        QTest::newRow("a file and a folder") << rawZip({{"Notes", "a"}, {"notes/x.md", "b"}});
+        QTest::newRow("a file and an empty folder") << rawZip({{"Notes", "a"}, {"notes/", ""}});
+    }
+    void anArchiveCollidingOnThisStorageIsRefused()
+    {
+        QFETCH(QByteArray, zip);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"z.zip"_s);
+        writeFile(path, zip);
+        RestoreCheckOptions options;
+        options.caseInsensitive = true;
+        QCOMPARE(runChecker(poolOn(nullptr), path, {}, {}, options).problem, ArchiveProblem::CaseCollision);
+        options.caseInsensitive = false; // case-sensitive storage holds them apart
+        QVERIFY(runChecker(poolOn(nullptr), path, {}, {}, options).ok());
+    }
+
+    void anArchiveWithoutAFileOfTheNotebookIsRefused_data()
+    {
+        QTest::addColumn<QByteArray>("zip");
+        QTest::newRow("no entries") << rawZip({});
+        QTest::newRow("only a folder") << rawZip({{"pusty/", ""}});
+        QTest::newRow("only the settings") << rawZip({{".brulion/config.json", "{}"}});
+    }
+    void anArchiveWithoutAFileOfTheNotebookIsRefused()
+    {
+        QFETCH(QByteArray, zip);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"z.zip"_s);
+        writeFile(path, withManifest(zip));
+        const RestoreCheck check = runChecker(poolOn(nullptr), path, {file(u"a.md"_s, 1)}, {});
+        QCOMPARE(check.problem, ArchiveProblem::NoFiles);
+        QVERIFY(check.plan.toTrash.isEmpty());
+    }
+
+    void anIncompleteBackupSendsNothingToTheTrash_data()
+    {
+        QTest::addColumn<QByteArray>("zip");
+        QTest::newRow("it says so") << withManifest(rawZip({{"a.md", "a"}}), {}, false);
+        QTest::newRow("it says nothing") << rawZip({{"a.md", "a"}});
+    }
+    void anIncompleteBackupSendsNothingToTheTrash()
+    {
+        QFETCH(QByteArray, zip);
+        QTemporaryDir dir;
+        const QString root = dir.filePath(u"N"_s);
+        writeFile(root + u"/b.md"_s, "b");
+        Vault vault(root);
+        QVERIFY(vault.open());
+        const QString path = dir.filePath(u"z.zip"_s);
+        writeFile(path, zip);
+        const RestoreCheck check = runChecker(poolOn(nullptr), path, notebookFiles(vault), notebookFolders(vault));
+        QVERIFY2(check.ok(), qPrintable(check.detail));
+        QVERIFY(check.plan.incomplete);
+        QVERIFY(check.plan.toTrash.isEmpty());
+        QCOMPARE(targets(check.plan.toRecreate), QStringList{u"a.md"_s});
     }
 
     void modes_data()
@@ -381,7 +462,7 @@ private Q_SLOTS:
         Vault vault(root);
         QVERIFY(vault.open());
         const QString zip = dir.filePath(u"z.zip"_s);
-        writeFile(zip, rawZip({{"Zamknięty/a.md", "nowa"}, {"b.md", "b"}}));
+        writeFile(zip, withManifest(rawZip({{"Zamknięty/a.md", "nowa"}, {"b.md", "b"}})));
         const RestoreCheck check = runChecker(poolOn(nullptr), zip, notebookFiles(vault), notebookFolders(vault));
         QVERIFY2(check.ok(), qPrintable(check.detail));
         QFile::setPermissions(root + u"/Zamknięty"_s, QFileDevice::ReadOwner | QFileDevice::ExeOwner);
@@ -420,6 +501,73 @@ private Q_SLOTS:
         QVERIFY(vault.files().size() < 300);
     }
 
+    void twinsDifferingInLetterCaseBothComeBack()
+    {
+        // Linux: the backup has Plan.md and plan.md, the notebook only plan.md.
+        QTemporaryDir dir;
+        if (!brulion::test::isCaseSensitive(dir.path()))
+            QSKIP("this storage does not tell letter case apart");
+        const QString root = dir.filePath(u"N"_s);
+        writeFile(root + u"/Plan.md"_s, "wielka");
+        writeFile(root + u"/plan.md"_s, "mała");
+        Vault vault(root);
+        QVERIFY(vault.open());
+        const QString zip = backupOf(vault, dir.filePath(u"kopie"_s));
+        QVERIFY(QFile::remove(root + u"/Plan.md"_s));
+        vault.rescan();
+        const RestoreCheck check = runChecker(poolOn(nullptr), zip, notebookFiles(vault), notebookFolders(vault));
+        QVERIFY2(check.ok(), qPrintable(check.detail));
+        const RestoreResult result = applyTo(vault, poolOn(nullptr), check.plan, zip);
+        QVERIFY2(result.ok(), qPrintable(result.detail));
+        QCOMPARE(readFile(root + u"/Plan.md"_s), QByteArray("wielka"));
+        QCOMPARE(readFile(root + u"/plan.md"_s), QByteArray("mała"));
+    }
+
+    void aFileAndAFolderDifferingInLetterCaseStayApart()
+    {
+        // The backup has the file Notes and notes/x.md; the notebook only notes/x.md, identical.
+        QTemporaryDir dir;
+        if (!brulion::test::isCaseSensitive(dir.path()))
+            QSKIP("this storage does not tell letter case apart");
+        const QString root = dir.filePath(u"N"_s);
+        writeFile(root + u"/Notes"_s, "plik");
+        writeFile(root + u"/notes/x.md"_s, "w folderze");
+        Vault vault(root);
+        QVERIFY(vault.open());
+        const QString zip = backupOf(vault, dir.filePath(u"kopie"_s));
+        QVERIFY(QFile::remove(root + u"/Notes"_s));
+        vault.rescan();
+        const RestoreCheck check = runChecker(poolOn(nullptr), zip, notebookFiles(vault), notebookFolders(vault));
+        QVERIFY2(check.ok(), qPrintable(check.detail));
+        const RestoreResult result = applyTo(vault, poolOn(nullptr), check.plan, zip);
+        QVERIFY2(result.ok(), qPrintable(result.detail));
+        QCOMPARE(readFile(root + u"/Notes"_s), QByteArray("plik"));
+        QCOMPARE(readFile(root + u"/notes/x.md"_s), QByteArray("w folderze"));
+    }
+
+    void aFileThatCannotBeReadIsNotReplaced()
+    {
+        if (!brulion::test::hasUnixPermissions())
+            QSKIP("no Unix file modes here");
+        QTemporaryDir dir;
+        QTemporaryDir state;
+        const QString root = dir.filePath(u"N"_s);
+        writeFile(root + u"/tajne.md"_s, "treść bieżąca");
+        Vault vault(root, state.path());
+        QVERIFY(vault.open());
+        const QString zip = dir.filePath(u"z.zip"_s);
+        writeFile(zip, rawZip({{"tajne.md", "z kopii"}}));
+        const RestoreCheck check = runChecker(poolOn(nullptr), zip, notebookFiles(vault), notebookFolders(vault));
+        QVERIFY2(check.ok(), qPrintable(check.detail));
+        QFile::setPermissions(root + u"/tajne.md"_s, QFileDevice::WriteOwner);
+        if (QFile probe(root + u"/tajne.md"_s); probe.open(QIODevice::ReadOnly))
+            QSKIP("this user can read everything");
+        const RestoreResult result = applyTo(vault, poolOn(nullptr), check.plan, zip);
+        QFile::setPermissions(root + u"/tajne.md"_s, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        QCOMPARE(result.failed, QStringList{u"tajne.md"_s});
+        QCOMPARE(readFile(root + u"/tajne.md"_s), QByteArray("treść bieżąca"));
+    }
+
     void aMassDeletionByARestoreIsHeldBackBySync()
     {
         // A backup that holds little restored into a notebook that grew: the deletions reach the
@@ -433,7 +581,7 @@ private Q_SLOTS:
 
         QTemporaryDir dir;
         const QString zip = dir.filePath(u"z.zip"_s);
-        writeFile(zip, rawZip({{"Notatka 0.md", "- treść\n"}}));
+        writeFile(zip, withManifest(rawZip({{"Notatka 0.md", "- treść\n"}})));
         const RestoreCheck check =
                 runChecker(poolOn(nullptr), zip, notebookFiles(*device.vault), notebookFolders(*device.vault));
         QVERIFY2(check.ok(), qPrintable(check.detail));

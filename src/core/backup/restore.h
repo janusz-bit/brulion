@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
 
 class QTimer;
 
@@ -48,6 +49,9 @@ struct RestorePlan {
     QStringList tooLarge;        ///< entries above the limit: left alone (the file stays as it is)
     int identical = 0;           ///< same bytes: not touched
     qint64 bytesToWrite = 0;
+    /// The backup left files out, or does not say: what it lacks may just have been missed, so only
+    /// blockers go to the trash (RestoreChecker). planRestore() itself does not decide this.
+    bool incomplete = false;
 
     bool hasChanges() const
     {
@@ -60,16 +64,23 @@ constexpr qint64 MaxRestoredEntryBytes = qint64(1) << 30;
 
 /// The plan (pure). `crcOf`: the CRC-32 of the notebook's files whose size equals their entry's
 /// (a file without one counts as different). .brulion/config.json is compared and written like a
-/// file, but never trashed: a backup without it leaves the settings alone.
+/// file, but never trashed: a backup without it leaves the settings alone. Names differing only in
+/// letter case are different files unless `caseInsensitive` (the notebook's storage holds one file
+/// for both); then an entry takes the notebook's spelling, unless another entry has that very name.
 RestorePlan planRestore(const QList<ArchiveEntry> &entries, const QList<NotebookFile> &current,
                         const QStringList &currentFolders, const QHash<VaultPath, quint32> &crcOf,
-                        qint64 maxEntryBytes = MaxRestoredEntryBytes);
+                        bool caseInsensitive = false, qint64 maxEntryBytes = MaxRestoredEntryBytes);
 
 /// The notebook's files as a restore compares them. On the vault's thread, from its cache.
 QList<NotebookFile> notebookFiles(const Vault &vault);
 QStringList notebookFolders(const Vault &vault);
 
 /// What checking a backup found.
+struct RestoreCheckOptions {
+    QString notebookRoot;                ///< its storage is probed (isCaseInsensitiveFolder())
+    std::optional<bool> caseInsensitive; ///< tests: instead of the probe
+    ArchiveLimits limits;
+};
 struct RestoreCheck {
     ArchiveProblem problem = ArchiveProblem::None;
     bool cancelled = false;
@@ -90,7 +101,7 @@ public:
     ~RestoreChecker() override;
 
     void start(const QString &archivePath, const QList<NotebookFile> &current, const QStringList &currentFolders,
-               const ArchiveLimits &limits = {});
+               const RestoreCheckOptions &options = {});
     void cancel();
     bool isRunning() const;
 
@@ -132,6 +143,8 @@ public:
 
 Q_SIGNALS:
     void finished(const brulion::backup::RestoreResult &result);
+    /// `path` (a file or a folder) goes to the trash now: an editor showing it must not save it back.
+    void aboutToRemove(const QString &path);
 
 private:
     struct ReadBatch;

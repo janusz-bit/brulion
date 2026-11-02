@@ -228,6 +228,19 @@ void SyncScheduler::syncNow(RunCallback done, SyncTrigger why)
     trigger(why);
 }
 
+void SyncScheduler::setHeld(bool held)
+{
+    if (m_held == held)
+        return;
+    m_held = held;
+    if (held)
+        return;
+    const bool asked = std::exchange(m_triggerAfterHold, false);
+    const SyncTrigger why = std::exchange(m_afterHoldTrigger, SyncTrigger::LocalChange);
+    if (asked || m_started)
+        trigger(why);
+}
+
 void SyncScheduler::syncNowConfirmingDeletions(RunCallback done)
 {
     m_confirmDeletions = true;
@@ -348,6 +361,11 @@ void SyncScheduler::trigger(SyncTrigger why)
             qCDebug(logging::lcSync).noquote() << u"joined the running sync (%1)"_s.arg(syncTriggerName(why));
         }
         return; // joins the running sync
+    }
+    if (m_held) {
+        m_triggerAfterHold = true;
+        m_afterHoldTrigger = why;
+        return;
     }
     // A confirmation is for this run only (never for a later automatic one).
     const bool confirmDeletions = std::exchange(m_confirmDeletions, false);

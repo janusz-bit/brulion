@@ -122,6 +122,11 @@ public:
     /// std::nullopt when offline, failed or cancelled (see status().lastError); it may run
     /// synchronously when offline. Joins a running sync.
     void syncNow(RunCallback done = {}, SyncTrigger trigger = SyncTrigger::Manual);
+    /// While held no run starts, whatever asks for one (a restore: a run in its middle would see
+    /// its deletions in steps, each under the mass-deletion guard). A run in progress goes on: wait
+    /// for isRunning() to end. On release one run starts when anything asked, or when started.
+    void setHeld(bool held);
+    bool isHeld() const { return m_held; }
     /// Sync now applying the deletions the mass-deletion guard held back (the user confirmed
     /// status().lastReport->pendingDeletions): SyncRunOptions::confirmDeletions for one run.
     /// While a sync is running, it runs right after it.
@@ -195,6 +200,9 @@ private:
     bool m_running = false;
     bool m_cancelling = false;     ///< stop() cancelled the running run
     bool m_rerun = false;          ///< a local change arrived during a run
+    bool m_held = false;           ///< setHeld()
+    bool m_triggerAfterHold = false; ///< something asked for a run while held
+    SyncTrigger m_afterHoldTrigger = SyncTrigger::LocalChange;
     bool m_triggerAfterRun = false; ///< restarted while the cancelled run was still finishing
     bool m_confirmDeletions = false; ///< the next run confirms held-back deletions
     bool m_networkConnected = false;

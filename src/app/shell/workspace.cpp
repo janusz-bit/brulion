@@ -120,6 +120,10 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_backups = new WorkspaceBackups([this] { return now(); }, this);
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });
+    m_backups->setSyncControl([this](std::function<void()> ready) { m_sync->holdSync(std::move(ready)); },
+                              [this] { m_sync->releaseSync(); });
+    connect(m_backups, &WorkspaceBackups::saveOpenEditors, this, &EditorHost::saveOpenEditorsRequested);
+    connect(m_backups, &WorkspaceBackups::aboutToRemove, this, &EditorHost::editsDiscarded);
     connect(m_sync, &WorkspaceSync::errorOccurred, this, &Workspace::errorOccurred);
     connect(m_sync, &WorkspaceSync::foldersChanged, this,
             [this](const QStringList &paths) { notifyFolderChange(paths, false); });
@@ -255,8 +259,8 @@ void Workspace::close()
     // Reminders and sync let go of the vault and the index first (a running sync is abandoned:
     // what it finished stays synced, the rest is synced next time).
     m_reminders->detach();
+    m_backups->detach(); // before sync: it releases its hold there
     m_sync->detach();
-    m_backups->detach();
     m_indexTimer.stop();
     cancelMoveImpact(); // its planner reads the index
     m_impacts = ImpactCache();

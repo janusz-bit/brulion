@@ -314,6 +314,11 @@ public:
 Q_SIGNALS:
     /// A file changed outside this editor (sync, Syncthing, another editor/view, import).
     void fileChanged(const QString &path);
+    /// Write what editors hold, now: a backup of the notebook follows.
+    void saveOpenEditorsRequested();
+    /// A restore moves `path` (a file or a folder) to the trash on purpose: an editor showing it
+    /// drops its edits (they are in the safety backup) and writes nothing back.
+    void editsDiscarded(const QString &path);
     /// The index changed (link targets, block texts, tags may render differently).
     void indexChanged();
     /// The picture from the internet at `url` (as written) changed state (webPicture()); "" —

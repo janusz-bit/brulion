@@ -188,6 +188,64 @@ private Q_SLOTS:
         f.scheduler.stop();
     }
 
+    void heldNoRunStartsAndOneFollowsTheRelease()
+    {
+        Fixture f(60'000);
+        f.scheduler.start();
+        f.timers->advance(0);
+        QCOMPARE(f.runner.calls, 1);
+
+        // Whatever asks while held — an edit's debounce, the interval, a button — starts nothing.
+        f.scheduler.setHeld(true);
+        QVERIFY(f.scheduler.isHeld());
+        f.scheduler.notifyLocalChange();
+        f.timers->advance(20'000);
+        f.timers->advance(120'000);
+        f.scheduler.syncNow();
+        QCOMPARE(f.runner.calls, 1);
+
+        // One run, however much asked; the schedule goes on after it.
+        f.scheduler.setHeld(false);
+        QCOMPARE(f.runner.calls, 2);
+        f.timers->advance(60'000);
+        QCOMPARE(f.runner.calls, 3);
+        f.scheduler.stop();
+    }
+
+    void aRunInProgressGoesOnWhileHeld()
+    {
+        Fixture f;
+        f.runner.autoComplete = false;
+        f.scheduler.start();
+        f.timers->advance(0);
+        QVERIFY(f.scheduler.isRunning());
+        f.scheduler.setHeld(true);
+        QVERIFY(f.scheduler.isRunning());
+        f.runner.release();
+        QVERIFY(!f.scheduler.isRunning());
+        f.scheduler.notifyLocalChange(); // arrives once it ended: waits for the release
+        f.timers->advance(20'000);
+        QCOMPARE(f.runner.calls, 1);
+        f.scheduler.setHeld(false);
+        QCOMPARE(f.runner.calls, 2);
+        f.runner.release();
+        f.scheduler.stop();
+    }
+
+    void aHoldWithNothingToDoStartsNothingWhenNotStarted()
+    {
+        Fixture f;
+        f.scheduler.setHeld(true);
+        f.scheduler.setHeld(false);
+        QCOMPARE(f.runner.calls, 0);
+        // A button pressed while held runs on release, started or not.
+        f.scheduler.setHeld(true);
+        f.scheduler.syncNow();
+        QCOMPARE(f.runner.calls, 0);
+        f.scheduler.setHeld(false);
+        QCOMPARE(f.runner.calls, 1);
+    }
+
     void syncsPeriodically()
     {
         Fixture f(60'000);

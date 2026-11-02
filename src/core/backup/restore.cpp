@@ -7,6 +7,7 @@
 #include "vault/vaultconfig.h"
 
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QTimer>
@@ -27,41 +28,87 @@ constexpr qsizetype BatchFiles = 64;
 /// History keeps text; anything larger is compared by size elsewhere in the vault as well.
 constexpr qint64 MaxHistoryBytes = 16 << 20;
 
-/// The notebook's path an entry's file lands on: its own, or a spelling in another letter case.
+/// The notebook's path an entry's file lands on: its own; on case-insensitive storage also a
+/// spelling in another letter case, unless another entry has that very name.
 class TargetLookup {
 public:
-    explicit TargetLookup(const QList<NotebookFile> &current)
+    TargetLookup(const QList<NotebookFile> &current, const QList<ArchiveEntry> &entries, bool caseInsensitive)
+        : m_caseInsensitive(caseInsensitive)
     {
         for (const NotebookFile &file : current) {
             m_sizes.insert(file.path, file.size);
-            m_folded.insert(file.path.toCaseFolded(), file.path);
+            if (caseInsensitive)
+                m_folded.insert(file.path.toCaseFolded(), file.path);
+        }
+        if (caseInsensitive) {
+            for (const ArchiveEntry &entry : entries)
+                m_entries.insert(entry.path);
         }
     }
     std::optional<VaultPath> find(const VaultPath &path) const
     {
         if (m_sizes.contains(path))
             return path;
+        if (!m_caseInsensitive)
+            return std::nullopt;
         const auto folded = m_folded.constFind(path.toCaseFolded());
-        return folded == m_folded.cend() ? std::nullopt : std::optional<VaultPath>(*folded);
+        if (folded == m_folded.cend() || m_entries.contains(*folded))
+            return std::nullopt;
+        return *folded;
     }
     qint64 size(const VaultPath &path) const { return m_sizes.value(path); }
 
 private:
+    bool m_caseInsensitive;
     QHash<VaultPath, qint64> m_sizes;
     QHash<QString, VaultPath> m_folded;
+    QSet<VaultPath> m_entries;
 };
+
+bool isSameOrBelow(const VaultPath &path, const VaultPath &folder)
+{
+    return path == folder || path.startsWith(folder + u'/');
+}
+
+/// Names one case-insensitive storage cannot hold apart: two files, or a file and a folder.
+std::optional<QString> caseCollision(const QList<ArchiveEntry> &entries)
+{
+    QHash<QString, VaultPath> files;
+    QSet<QString> folders;
+    for (const ArchiveEntry &entry : entries) {
+        const QString folded = entry.path.toCaseFolded();
+        if (entry.folder) {
+            folders.insert(folded);
+        } else if (const auto twin = files.constFind(folded); twin != files.cend()) {
+            return entry.path;
+        } else {
+            files.insert(folded, entry.path);
+        }
+        for (qsizetype slash = folded.indexOf(u'/'); slash > 0; slash = folded.indexOf(u'/', slash + 1))
+            folders.insert(folded.first(slash));
+    }
+    for (auto it = files.cbegin(); it != files.cend(); ++it) {
+        if (folders.contains(it.key()))
+            return it.value();
+    }
+    return std::nullopt;
+}
 
 } // namespace
 
 RestorePlan planRestore(const QList<ArchiveEntry> &entries, const QList<NotebookFile> &current,
-                        const QStringList &currentFolders, const QHash<VaultPath, quint32> &crcOf, qint64 maxEntryBytes)
+                        const QStringList &currentFolders, const QHash<VaultPath, quint32> &crcOf, bool caseInsensitive,
+                        qint64 maxEntryBytes)
 {
     RestorePlan plan;
-    const TargetLookup lookup(current);
+    const TargetLookup lookup(current, entries, caseInsensitive);
     QSet<VaultPath> kept;
-    QSet<QString> foldersFolded;
+    const auto folderKey = [caseInsensitive](const QString &path) {
+        return caseInsensitive ? path.toCaseFolded() : path;
+    };
+    QHash<QString, QString> folders;
     for (const QString &folder : currentFolders)
-        foldersFolded.insert(folder.toCaseFolded());
+        folders.insert(folderKey(folder), folder);
     QSet<VaultPath> blockers;
     const auto noteBlockers = [&](const VaultPath &path, bool entryIsFile) {
         // A file of the notebook where the entry needs a folder…
@@ -70,20 +117,19 @@ RestorePlan planRestore(const QList<ArchiveEntry> &entries, const QList<Notebook
                 blockers.insert(*file);
         }
         // … and for a file, a folder of the notebook where it would go.
-        if (entryIsFile && foldersFolded.contains(path.toCaseFolded()) && !lookup.find(path)) {
-            const auto folder = std::find_if(currentFolders.cbegin(), currentFolders.cend(),
-                                             [&](const QString &f) { return f.toCaseFolded() == path.toCaseFolded(); });
-            if (folder != currentFolders.cend())
+        if (entryIsFile && !lookup.find(path)) {
+            if (const auto folder = folders.constFind(folderKey(path)); folder != folders.cend())
                 blockers.insert(*folder);
         }
     };
 
+    QList<PlannedWrite> identical;
     for (const ArchiveEntry &entry : entries) {
         if (entry.folder) {
             noteBlockers(entry.path, false);
             if (const auto file = lookup.find(entry.path))
                 blockers.insert(*file);
-            if (!foldersFolded.contains(entry.path.toCaseFolded()))
+            if (!folders.contains(folderKey(entry.path)))
                 plan.foldersToCreate.append(entry.path);
             continue;
         }
@@ -102,7 +148,7 @@ RestorePlan planRestore(const QList<ArchiveEntry> &entries, const QList<Notebook
         }
         const auto crc = crcOf.constFind(*target);
         if (lookup.size(*target) == entry.size && crc != crcOf.cend() && *crc == entry.crc32) {
-            ++plan.identical;
+            identical.append(PlannedWrite{entry, *target});
         } else {
             plan.toChange.append(PlannedWrite{entry, *target});
             plan.bytesToWrite += entry.size;
@@ -114,6 +160,17 @@ RestorePlan planRestore(const QList<ArchiveEntry> &entries, const QList<Notebook
     }
     plan.removeFirst = blockers.values();
     plan.removeFirst.sort();
+    // A blocker goes with all it holds: what is identical below it must be written back.
+    for (const PlannedWrite &write : std::as_const(identical)) {
+        const bool blocked = std::any_of(plan.removeFirst.cbegin(), plan.removeFirst.cend(),
+                                         [&](const VaultPath &b) { return isSameOrBelow(write.target, b); });
+        if (blocked) {
+            plan.toRecreate.append(write);
+            plan.bytesToWrite += write.entry.size;
+        } else {
+            ++plan.identical;
+        }
+    }
     return plan;
 }
 
@@ -143,8 +200,11 @@ namespace detail {
 
 class CheckTask : public Task {
 public:
-    CheckTask(QString archive, QList<NotebookFile> current, QStringList folders, ArchiveLimits limits)
-        : m_archive(std::move(archive)), m_current(std::move(current)), m_folders(std::move(folders)), m_limits(limits)
+    CheckTask(QString archive, QList<NotebookFile> current, QStringList folders, RestoreCheckOptions options)
+        : m_archive(std::move(archive))
+        , m_current(std::move(current))
+        , m_folders(std::move(folders))
+        , m_options(std::move(options))
     { }
 
     bool step(int budgetMs) override
@@ -167,7 +227,8 @@ public:
                 break;
             case Phase::Hash:
                 if (m_next >= m_toHash.size()) {
-                    m_result.plan = planRestore(m_entries, m_current, m_folders, m_crcs);
+                    m_result.plan = planRestore(m_entries, m_current, m_folders, m_crcs, m_caseInsensitive);
+                    applyManifest();
                     m_toVerify = m_result.plan.toChange + m_result.plan.toRecreate;
                     m_next = 0;
                     m_phase = Phase::Verify;
@@ -201,14 +262,32 @@ private:
     void readEntries()
     {
         m_reader = std::make_unique<ArchiveReader>(m_archive);
-        const ArchiveInfo info = m_reader->readEntries(m_limits);
+        const ArchiveInfo info = m_reader->readEntries(m_options.limits);
         if (!info.ok()) {
             m_result.problem = info.problem;
             m_result.detail = info.detail;
             return;
         }
         m_entries = info.entries;
-        const TargetLookup lookup(m_current);
+        // Restoring an archive without a single file of a notebook would only empty this one.
+        const bool hasFiles = std::any_of(m_entries.cbegin(), m_entries.cend(), [](const ArchiveEntry &entry) {
+            return !entry.folder && entry.path != vaultConfigPath();
+        });
+        if (!hasFiles) {
+            m_result.problem = ArchiveProblem::NoFiles;
+            m_result.detail = u"no files in the archive"_s;
+            return;
+        }
+        m_caseInsensitive = m_options.caseInsensitive.value_or(!m_options.notebookRoot.isEmpty()
+                                                               && isCaseInsensitiveFolder(m_options.notebookRoot));
+        if (m_caseInsensitive) {
+            if (const std::optional<QString> collision = caseCollision(m_entries)) {
+                m_result.problem = ArchiveProblem::CaseCollision;
+                m_result.detail = u"“%1” collides on this storage"_s.arg(*collision);
+                return;
+            }
+        }
+        const TargetLookup lookup(m_current, m_entries, m_caseInsensitive);
         QHash<VaultPath, QString> absolute;
         for (const NotebookFile &file : std::as_const(m_current))
             absolute.insert(file.path, file.absolutePath);
@@ -218,6 +297,21 @@ private:
                 m_toHash.append({*target, absolute.value(*target)});
         }
         m_phase = Phase::Hash;
+    }
+
+    /// A backup that left files out (or does not say) cannot tell what the notebook should not
+    /// hold: of the trash only what stands in the way of its files stays in the plan.
+    void applyManifest()
+    {
+        const BackupManifest manifest = readBackupManifest(m_archive);
+        if (manifest.valid && manifest.complete)
+            return;
+        RestorePlan &plan = m_result.plan;
+        plan.incomplete = true;
+        plan.toTrash.removeIf([&plan](const VaultPath &path) {
+            return std::none_of(plan.removeFirst.cbegin(), plan.removeFirst.cend(),
+                                [&path](const VaultPath &b) { return isSameOrBelow(path, b); });
+        });
     }
 
     void hashNext()
@@ -230,7 +324,8 @@ private:
     QString m_archive;
     QList<NotebookFile> m_current;
     QStringList m_folders;
-    ArchiveLimits m_limits;
+    RestoreCheckOptions m_options;
+    bool m_caseInsensitive = false;
     std::atomic_bool m_cancel{false};
     Phase m_phase = Phase::Entries;
     std::unique_ptr<ArchiveReader> m_reader;
@@ -257,11 +352,11 @@ RestoreChecker::~RestoreChecker()
 }
 
 void RestoreChecker::start(const QString &archivePath, const QList<NotebookFile> &current,
-                           const QStringList &currentFolders, const ArchiveLimits &limits)
+                           const QStringList &currentFolders, const RestoreCheckOptions &options)
 {
     if (m_task)
         return;
-    m_task = std::make_shared<detail::CheckTask>(archivePath, current, currentFolders, limits);
+    m_task = std::make_shared<detail::CheckTask>(archivePath, current, currentFolders, options);
     m_runner->start(m_task, [this] {
         const RestoreCheck check = m_task->result();
         m_task.reset();
@@ -369,6 +464,7 @@ qreal RestoreApplier::progress() const
 void RestoreApplier::removeBlockers()
 {
     for (const VaultPath &path : std::as_const(m_plan.removeFirst)) {
+        Q_EMIT aboutToRemove(path);
         if (!m_vault.remove(path, ChangeSource::Import))
             m_result.failed.append(path);
     }
@@ -452,19 +548,28 @@ void RestoreApplier::writeSlice()
 
 bool RestoreApplier::writeOne(const PlannedWrite &write, const QByteArray &bytes)
 {
-    // The vault snapshots what it holds in memory; what a restore replaces is recorded from the
-    // disk. Binary files have no History: the safety backup holds them.
-    if (History *history = m_vault.history()) {
-        const std::optional<FileStat> stat = m_vault.stat(write.target);
-        if (stat && !stat->isDir && stat->size <= MaxHistoryBytes) {
-            bool read = false;
-            const QByteArray current = m_vault.readBinary(write.target, &read);
-            if (read && current != bytes && !current.contains('\0')
-                && !history->snapshotBytes(write.target, current, changeSourceName(ChangeSource::Import))) {
-                qCWarning(logging::lcVault).noquote()
-                        << u"Restore: no history of %1: %2"_s.arg(write.target, history->errorString());
-                return false;
-            }
+    // A file that exists but cannot be read is never replaced: neither History nor a safety
+    // backup could have its bytes. The vault snapshots what it holds in memory; what a restore
+    // replaces is recorded from the disk. Binary files have no History: the safety backup holds them.
+    if (const std::optional<FileStat> stat = m_vault.stat(write.target); stat && !stat->isDir) {
+        bool read = false;
+        QByteArray current;
+        if (stat->size <= MaxHistoryBytes) {
+            current = m_vault.readBinary(write.target, &read);
+        } else {
+            QFile file(m_vault.absolutePath(write.target));
+            read = file.open(QIODevice::ReadOnly);
+        }
+        if (!read) {
+            qCWarning(logging::lcVault).noquote() << u"Restore: %1 cannot be read: not replaced"_s.arg(write.target);
+            return false;
+        }
+        History *history = m_vault.history();
+        if (history && stat->size <= MaxHistoryBytes && current != bytes && !current.contains('\0')
+            && !history->snapshotBytes(write.target, current, changeSourceName(ChangeSource::Import))) {
+            qCWarning(logging::lcVault).noquote()
+                    << u"Restore: no history of %1: %2"_s.arg(write.target, history->errorString());
+            return false;
         }
     }
     if (!m_vault.writeBinary(write.target, bytes, ChangeSource::Import)) {
@@ -515,6 +620,8 @@ void RestoreApplier::trashSlice()
         // Already there with its blocker; what the backup put in its place is not to be touched.
         const bool gone = std::any_of(m_plan.removeFirst.cbegin(), m_plan.removeFirst.cend(),
                                       [&](const VaultPath &b) { return path == b || path.startsWith(b + u'/'); });
+        if (!gone)
+            Q_EMIT aboutToRemove(path);
         if (gone || m_vault.remove(path, ChangeSource::Import))
             ++m_result.trashed;
         else

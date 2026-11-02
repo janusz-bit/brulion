@@ -661,6 +661,63 @@ private Q_SLOTS:
         QCOMPARE(sync->fileMovesText(1, 2), u"Files: 1 moved on the server, 2 moved here"_s);
     }
 
+    void aRestoreHoldsSyncAndItsDeletionsMeetTheGuard()
+    {
+        // Runs in the middle would see the trashing in steps, each under the 25 % guard.
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        QMap<QString, QString> files;
+        for (int i = 0; i < 4; ++i)
+            files.insert(u"Stara %1.md"_s.arg(i), u"- treść\n"_s);
+        auto ws = open(&server, files);
+        WorkspaceSync *sync = ws->sync();
+        auto *backups = ws->backups();
+        QVERIFY(backups->createNow());
+        QVERIFY(synctest::waitFor([&] { return !backups->running() && backups->backups().size() == 1; }));
+        const QString source = backups->backups().first().toMap().value(u"name"_s).toString();
+        // The notebook grows, and all of it reaches the server.
+        for (int i = 0; i < 36; ++i)
+            QVERIFY(ws->writeFile(u"Nowa %1.md"_s.arg(i), u"- nowa\n"_s));
+        sync->setNextcloud(account(server));
+        QVERIFY(syncAndWait(sync));
+        QCOMPARE(server.files(u"Brulion"_s).size(), 40);
+
+        QSignalSpy planned(backups, &brulion::shell::WorkspaceBackups::restorePlanReady);
+        QVERIFY(backups->prepareRestore(source));
+        QVERIFY(planned.wait(30000));
+        QCOMPARE(planned.first().first().toMap().value(u"trashed"_s).toInt(), 36);
+
+        // A sync in flight is waited for, not cancelled and not overlapped.
+        auto *scheduler = sync->scheduler();
+        QSignalSpy runs(scheduler, &brulion::sync::SyncScheduler::runStarted);
+        sync->syncNow();
+        QVERIFY(scheduler->isRunning());
+        QCOMPARE(runs.size(), 1);
+        m_clock.advance(120'000);
+        backups->confirmRestore();
+        QCOMPARE(backups->phase(), u"sync"_s);
+        QVERIFY(synctest::waitFor([&] { return backups->phase() != u"sync"; }));
+        QVERIFY(!scheduler->isRunning());
+
+        // Asked for in the middle of the trashing: nothing starts until the restore has ended.
+        int duringRestore = -1;
+        QObject::connect(backups, &brulion::shell::WorkspaceBackups::aboutToRemove, sync, [&] {
+            if (duringRestore < 0) {
+                sync->syncNow();
+                duringRestore = int(runs.size());
+            }
+        });
+        QVERIFY(synctest::waitFor([&] { return !backups->running(); }, 30000));
+        QCOMPARE(duringRestore, 1);
+        QVERIFY(synctest::waitFor([&] { return runs.size() == 2 && !scheduler->isRunning(); }));
+
+        // One run saw all 36 deletions at once: the guard holds them, the server keeps its files.
+        const std::optional<brulion::sync::SyncReport> report = scheduler->status().lastReport;
+        QVERIFY(report.has_value());
+        QVERIFY(report->needsConfirmation);
+        QCOMPARE(report->deletedRemote, 0);
+        QCOMPARE(server.files(u"Brulion"_s).size(), 40);
+    }
+
     void cancelMidSync()
     {
         // A long first sync (slow uploads) stopped with cancelSync(): what is done stays synced,

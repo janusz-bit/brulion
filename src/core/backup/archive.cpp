@@ -127,6 +127,7 @@ private:
     bool m_writeFailed = false;
     bool m_tooLarge = false;
     bool m_started = false;
+    int m_archivedNotebookFiles = 0; ///< .brulion/config.json not counted
     qsizetype m_nextFile = 0;
     qsizetype m_nextFolder = 0;
 };
@@ -247,7 +248,7 @@ WriteTask::Added WriteTask::addOnce(const SourceFile &source)
     QFile file(source.absolutePath);
     const QFileInfo info(source.absolutePath);
     if (!info.exists()) {
-        ++m_result.vanished;
+        m_result.vanished.append(source.path);
         return Added::Skip;
     }
     if (!file.open(QIODevice::ReadOnly | QIODevice::Unbuffered)) {
@@ -305,6 +306,8 @@ void WriteTask::addFile(const SourceFile &source)
         const Added added = addOnce(source);
         if (added == Added::Done) {
             ++m_result.files;
+            if (source.path != vaultConfigPath())
+                ++m_archivedNotebookFiles;
             return;
         }
         if (added != Added::Retry)
@@ -315,13 +318,28 @@ void WriteTask::addFile(const SourceFile &source)
 
 bool WriteTask::finishArchive()
 {
+    if (m_archivedNotebookFiles == 0) {
+        // The storage went, or nothing could be read: this is no copy of the notebook.
+        fail(WriteError::NothingArchived, u"none of %1 files could be read"_s.arg(m_sources.notebookFileCount()));
+        return false;
+    }
     if (!mz_zip_writer_finalize_archive(&m_zip)) {
         fail(m_tooLarge ? WriteError::TooLarge : WriteError::WriteFailed, m_file->errorString());
         return false;
     }
     // An entry given up may have reached further than the archive's end.
-    const qint64 size = qint64(m_zip.m_archive_size);
+    qint64 size = qint64(m_zip.m_archive_size);
     closeArchive();
+    // The manifest: the ZIP's comment follows the end-of-directory record, whose last field is its
+    // length (miniz writes none). Everything is known only now, whether anything was left out too.
+    const QByteArray manifest = backupManifest(
+            m_options.notebookId, m_result.skipped.isEmpty() && m_result.vanished.isEmpty(), m_result.files);
+    const char length[2] = {char(manifest.size() & 0xff), char((manifest.size() >> 8) & 0xff)};
+    if (!m_file->seek(size - 2) || m_file->write(length, 2) != 2 || m_file->write(manifest) != manifest.size()) {
+        fail(WriteError::WriteFailed, m_file->errorString());
+        return false;
+    }
+    size += manifest.size();
     if (!m_file->resize(size)) {
         fail(WriteError::WriteFailed, m_file->errorString());
         return false;

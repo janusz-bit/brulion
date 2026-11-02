@@ -504,7 +504,9 @@ int main(int argc, char *argv[])
             controller->workspace()->backups()->storageRefused(message);
     });
     QObject::connect(&storage, &wasm::WasmStorage::flushed, &app, [&controller, &storage](bool ok) {
-        if (ok && !storage.hasPendingChanges() && controller && controller->workspace())
+        // (A mount that could not be loaded is skipped by the write-back: its success says nothing.)
+        if (ok && storage.backupsLoadError().isEmpty() && !storage.hasPendingChanges() && controller
+            && controller->workspace())
             controller->workspace()->backups()->storageFlushed();
     });
     QObject::connect(
@@ -519,6 +521,9 @@ int main(int argc, char *argv[])
             createController(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
                              + u"/settings.ini"_s);
             controller->workspace()->backups()->setDeferUntilStored(storage.isBackedByIndexedDb());
+            // Reported before the controller existed.
+            if (!storage.backupsLoadError().isEmpty())
+                controller->workspace()->backups()->setStorageUnavailable(storage.backupsLoadError());
             startUi();
             wasm::hideShellLoadingScreen();
             // Private mode or blocked site data: nothing reaches IndexedDB. Say so before the

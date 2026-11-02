@@ -27,17 +27,20 @@ void touch(const QString &path, const QByteArray &bytes = "x")
     file.write(bytes);
 }
 
-QList<BackupFile> backupsAt(const QStringList &names)
-{
-    QList<BackupFile> out;
-    for (const QString &name : names)
-        out.append(BackupFile{name, name, *backupFileTime(name, u"Żółw"_s), 1});
-    return out;
-}
-
 QString named(int day)
 {
     return backupFileName(u"Żółw"_s, QDateTime(QDate(2026, 10, day), QTime(8, 0)));
+}
+
+/// The end of a ZIP (an empty one) with a manifest: all readBackupManifest() looks at.
+QByteArray withManifestOf(const QString &notebookId, bool complete = true)
+{
+    const QByteArray manifest = backupManifest(notebookId, complete, 1);
+    QByteArray end("PK\x05\x06", 4);
+    end += QByteArray(16, '\0');
+    end += char(manifest.size() & 0xff);
+    end += char((manifest.size() >> 8) & 0xff);
+    return end + manifest;
 }
 
 } // namespace
@@ -134,59 +137,99 @@ private Q_SLOTS:
 
     void pruneChoice_data()
     {
-        QTest::addColumn<QStringList>("backups"); // newest first
+        QTest::addColumn<QStringList>("backups"); // newest first; "x:" another notebook's, "!" incomplete
         QTest::addColumn<int>("keep");
-        QTest::addColumn<QStringList>("own");
         QTest::addColumn<QStringList>("protect");
+        QTest::addColumn<bool>("pruneComplete");
         QTest::addColumn<QStringList>("pruned");
         const QStringList three{named(3), named(2), named(1)};
-        QTest::newRow("under the limit") << three << 3 << three << QStringList() << QStringList();
-        QTest::newRow("oldest goes") << three << 2 << three << QStringList() << QStringList{named(1)};
-        QTest::newRow("keeps at least one") << three << 0 << three << QStringList() << QStringList{named(2), named(1)};
-        QTest::newRow("foreign ones are left alone and not counted")
-                << three << 1 << QStringList{named(3), named(1)} << QStringList() << QStringList{named(1)};
-        QTest::newRow("nothing of its own") << three << 1 << QStringList() << QStringList() << QStringList();
+        QTest::newRow("under the limit") << three << 3 << QStringList() << true << QStringList();
+        QTest::newRow("oldest goes") << three << 2 << QStringList() << true << QStringList{named(1)};
+        QTest::newRow("keeps at least one") << three << 0 << QStringList() << true << QStringList{named(2), named(1)};
+        QTest::newRow("another notebook's are left alone and not counted")
+                << QStringList{named(3), u"x:"_s + named(2), named(1)} << 1 << QStringList() << true
+                << QStringList{named(1)};
         QTest::newRow("protected is never pruned and counts")
-                << three << 1 << three << QStringList{named(1)} << QStringList{named(3), named(2)};
+                << three << 1 << QStringList{named(1)} << true << QStringList{named(3), named(2)};
         QTest::newRow("a new backup older by its name (clock set back) is protected")
-                << three << 2 << three << QStringList{named(1)} << QStringList{named(2)};
+                << three << 2 << QStringList{named(1)} << true << QStringList{named(2)};
+        QTest::newRow("after an incomplete run no complete one goes")
+                << QStringList{u"!"_s + named(3), named(2), named(1)} << 1 << QStringList{named(3)} << false
+                << QStringList();
+        QTest::newRow("incomplete ones are counted apart")
+                << QStringList{u"!"_s + named(4), u"!"_s + named(3), named(2), named(1)} << 1 << QStringList() << false
+                << QStringList{named(3)};
+        QTest::newRow("an incomplete copy does not push the only good one out")
+                << QStringList{u"!"_s + named(3), named(2)} << 1 << QStringList{named(3)} << true << QStringList();
     }
     void pruneChoice()
     {
         QFETCH(QStringList, backups);
         QFETCH(int, keep);
-        QFETCH(QStringList, own);
         QFETCH(QStringList, protect);
+        QFETCH(bool, pruneComplete);
         QFETCH(QStringList, pruned);
-        const QSet<QString> ownSet(own.cbegin(), own.cend());
+        QList<BackupFile> files;
+        for (QString name : backups) {
+            const bool foreign = name.startsWith(u"x:"_s);
+            const bool incomplete = name.startsWith(u'!');
+            name.remove(0, foreign ? 2 : incomplete ? 1 : 0);
+            files.append(BackupFile{name, name, *backupFileTime(name, u"Żółw"_s), 1, foreign ? u"inny"_s : u"mój"_s,
+                                    !incomplete});
+        }
         const QSet<QString> protectSet(protect.cbegin(), protect.cend());
-        QCOMPARE(backupsToPrune(backupsAt(backups), keep, ownSet, protectSet), pruned);
+        QCOMPARE(backupsToPrune(files, keep, u"mój"_s, protectSet, pruneComplete), pruned);
     }
 
     void pruneLeavesForeignFilesAlone()
     {
         QTemporaryDir dir;
         const QString folder = dir.path();
-        QSet<QString> own;
-        for (int day = 1; day <= 5; ++day) {
-            touch(folder + u'/' + named(day));
-            own.insert(named(day));
-        }
+        for (int day = 1; day <= 5; ++day)
+            touch(folder + u'/' + named(day), withManifestOf(u"mój"_s));
         const QStringList foreign{u"Brulion-Inny-2026-10-01-080000.zip"_s, u"Żółw.zip"_s, u"zdjęcia.zip"_s,
                                   u"Brulion-Żółw-ważne.zip"_s, u"notatka.md"_s};
         for (const QString &name : foreign)
             touch(folder + u'/' + name);
-        // The same notebook name, written by another notebook (not in `own`).
+        // The same notebook name: another notebook's, and a file with no manifest at all.
         const QString twin = named(9);
-        touch(folder + u'/' + twin);
+        touch(folder + u'/' + twin, withManifestOf(u"inny"_s));
+        const QString bare = named(8);
+        touch(folder + u'/' + bare);
 
-        const QStringList removed = pruneBackups(folder, u"Żółw"_s, 2, own, {});
+        const QStringList removed = pruneBackups(folder, u"Żółw"_s, 2, u"mój"_s, {});
         QCOMPARE(removed, (QStringList{named(3), named(2), named(1)}));
         for (const QString &name : foreign)
             QVERIFY2(QFileInfo::exists(folder + u'/' + name), qPrintable(name));
         QVERIFY(QFileInfo::exists(folder + u'/' + twin));
+        QVERIFY(QFileInfo::exists(folder + u'/' + bare));
         QVERIFY(QFileInfo::exists(folder + u'/' + named(5)));
         QVERIFY(QFileInfo::exists(folder + u'/' + named(4)));
+    }
+
+    void pruneNeverActsWithoutAnId()
+    {
+        QTemporaryDir dir;
+        touch(dir.filePath(named(1)));
+        touch(dir.filePath(named(2)));
+        QVERIFY(pruneBackups(dir.path(), u"Żółw"_s, 1, QString(), {}).isEmpty());
+    }
+
+    void configIsNotANotebookFile()
+    {
+        Sources sources;
+        sources.files = {SourceFile{u".brulion/config.json"_s, {}, 2, 0}};
+        QCOMPARE(sources.notebookFileCount(), 0);
+        sources.files.append(SourceFile{u"a.md"_s, {}, 2, 0});
+        QCOMPARE(sources.notebookFileCount(), 1);
+    }
+
+    void caseProbe()
+    {
+        QTemporaryDir dir;
+        QCOMPARE(isCaseInsensitiveFolder(dir.path()), !brulion::test::isCaseSensitive(dir.path()));
+        QCOMPARE(QDir(dir.path()).entryList(QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot), QStringList());
+        QVERIFY(!isCaseInsensitiveFolder(dir.filePath(u"brak"_s)));
     }
 
     void stalePartials()

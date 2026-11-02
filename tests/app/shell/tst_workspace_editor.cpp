@@ -5,6 +5,7 @@
 #include "pagecontroller.h"
 #include "workspace.h"
 
+#include "backup/archive.h"
 #include "vault/vault.h"
 
 #include <QDir>
@@ -53,6 +54,84 @@ class TestWorkspaceEditor : public QObject {
     QTemporaryDir m_tmp;
 
 private Q_SLOTS:
+    void aRestoreSavesOpenEditorsFirstAndDoesNotBringATrashedPageBack()
+    {
+        const QString root = m_tmp.filePath(u"Odtwarzane"_s);
+        QVERIFY(writeBehind(root + u"/Stała.md"_s, "- stała\n"));
+        Workspace ws;
+        ws.sync()->setSyncthingDiscovery(false);
+        QVERIFY(ws.open(root, root + u"-state"_s));
+        ws.finishIndexing();
+        auto *backups = ws.backups();
+        QVERIFY(backups->createNow());
+        QTRY_VERIFY(!backups->running());
+        QTRY_COMPARE(backups->backups().size(), 1);
+        const QString source = backups->backups().first().toMap().value(u"name"_s).toString();
+
+        // A page the backup does not hold, with edits waiting for their debounced save.
+        QVERIFY(ws.writeFile(u"Późniejsza.md"_s, u"- zapisane\n"_s));
+        auto editor = std::make_unique<PageController>();
+        editor->setSaveDelay(100000);
+        editor->setHost(&ws);
+        editor->setPath(u"Późniejsza.md"_s);
+        editor->setEditText(0, u"napisane, niezapisane"_s, 21);
+        const QString typed = editor->text();
+        QVERIFY(typed.contains(u"niezapisane"_s));
+        QVERIFY(editor->dirty());
+
+        QSignalSpy planned(backups, &brulion::shell::WorkspaceBackups::restorePlanReady);
+        QTest::qWait(1100); // another second in the safety backup's name
+        QVERIFY(backups->prepareRestore(source));
+        QVERIFY(planned.wait(30000));
+        QSignalSpy written(backups, &brulion::shell::WorkspaceBackups::backupWritten);
+        backups->confirmRestore();
+        // Typed on while the restore goes on: this page is about to go, and must stay gone.
+        editor->setEditText(0, u"pisane dalej"_s, 12);
+        QVERIFY(editor->dirty());
+        QTRY_VERIFY_WITH_TIMEOUT(!backups->running(), 30000);
+
+        // The typed text reached the safety backup, the page is gone, and nothing brings it back.
+        QCOMPARE(written.size(), 1);
+        brulion::backup::ArchiveReader reader(QDir(backups->folder()).filePath(written.first().first().toString()));
+        const brulion::backup::ArchiveInfo info = reader.readEntries();
+        QVERIFY2(info.ok(), qPrintable(info.detail));
+        bool found = false;
+        for (const brulion::backup::ArchiveEntry &entry : info.entries) {
+            if (entry.path == u"Późniejsza.md") {
+                found = true;
+                QCOMPARE(QString::fromUtf8(*reader.read(entry)), typed);
+            }
+        }
+        QVERIFY(found);
+        QVERIFY(!QFileInfo::exists(root + u"/Późniejsza.md"_s));
+        QVERIFY(!editor->dirty());
+        editor.reset(); // ~PageController flushes
+        QTest::qWait(10);
+        QVERIFY(!QFileInfo::exists(root + u"/Późniejsza.md"_s));
+    }
+
+    void aPageDeletedByAnotherProgramStillKeepsItsEdits()
+    {
+        // Not a restore: as before, an edit of a page deleted elsewhere is written back.
+        const QString root = m_tmp.filePath(u"Usuwane"_s);
+        QVERIFY(writeBehind(root + u"/Strona.md"_s, "- a\n"));
+        Workspace ws;
+        ws.sync()->setSyncthingDiscovery(false);
+        QVERIFY(ws.open(root, root + u"-state"_s));
+        ws.finishIndexing();
+        {
+            PageController editor;
+            editor.setSaveDelay(100000);
+            editor.setHost(&ws);
+            editor.setPath(u"Strona.md"_s);
+            editor.setEditText(0, u"edycja"_s, 6);
+            QVERIFY(QFile::remove(root + u"/Strona.md"_s));
+            ws.vault()->rescan();
+            QVERIFY(editor.dirty());
+        } // ~PageController flushes
+        QVERIFY(QFileInfo::exists(root + u"/Strona.md"_s));
+    }
+
     void externalAppendDuringADebouncedSaveIsKept()
     {
         const QString root = m_tmp.filePath(u"Notatki"_s);

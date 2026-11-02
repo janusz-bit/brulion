@@ -18,11 +18,16 @@ ColumnLayout {
     property var plan: ({})
     /// The backup a delete confirmation is about.
     property string deleting: ""
+    /// The confirmed delete is of a foreign backup.
+    property bool deletingForeign: false
+    /// The foreign backup a restore would start from, waiting for its own confirmation.
+    property string foreignRestore: ""
 
     function runningText() {
         switch (backups.phase) {
         case "backup": return qsTr("Creating a backup…")
         case "check": return qsTr("Checking the backup…")
+        case "sync": return qsTr("Waiting for the running sync to finish…")
         case "safety": return qsTr("Saving the notebook as it is now…")
         case "restore": return qsTr("Restoring…")
         default: return ""
@@ -99,6 +104,14 @@ ColumnLayout {
                 text: section.backups.statusText
                 wrapMode: Text.Wrap
                 color: section.backups.status === "failed" ? Theme.dangerText : Theme.fg
+            }
+            BButton {
+                objectName: "backupsDismissInterrupted"
+                visible: section.backups.interrupted
+                text: qsTr("I have dealt with it")
+                size: "small"
+                variant: "ghost"
+                onClicked: section.backups.dismissInterrupted()
             }
             ColumnLayout {
                 objectName: "backupsProgress"
@@ -224,7 +237,9 @@ ColumnLayout {
                 objectName: "backupRow"
                 iconName: "hard-drive"
                 text: modelData.when
-                subtitle: modelData.sizeText
+                subtitle: [modelData.sizeText,
+                           modelData.foreign ? qsTr("not from this notebook") : "",
+                           !modelData.foreign && !modelData.complete ? qsTr("incomplete") : ""].filter(s => s !== "").join(" · ")
                 Accessible.description: modelData.name
                 trailing: RowLayout {
                     spacing: 0
@@ -235,7 +250,14 @@ ColumnLayout {
                         iconName: "rotate-ccw"
                         label: qsTr("Restore the backup from %1").arg(row.modelData.when)
                         enabled: !section.backups.running
-                        onClicked: section.backups.prepareRestore(row.modelData.name)
+                        onClicked: {
+                            if (row.modelData.foreign) {
+                                section.foreignRestore = row.modelData.name
+                                foreignRestoreDialog.open()
+                            } else {
+                                section.backups.prepareRestore(row.modelData.name)
+                            }
+                        }
                     }
                     BIconButton {
                         objectName: "backupExport"
@@ -256,7 +278,10 @@ ColumnLayout {
                         enabled: !section.backups.running
                         onClicked: {
                             section.deleting = row.modelData.name
-                            deleteDialog.message = qsTr("The backup from %1 is deleted for good; it does not go to the trash.").arg(row.modelData.when)
+                            section.deletingForeign = row.modelData.foreign
+                            deleteDialog.message = row.modelData.foreign
+                                    ? qsTr("The backup from %1 was not made from this notebook: it may be the only copy of another one. It is deleted for good; it does not go to the trash.").arg(row.modelData.when)
+                                    : qsTr("The backup from %1 is deleted for good; it does not go to the trash.").arg(row.modelData.when)
                             deleteDialog.open()
                         }
                     }
@@ -283,8 +308,9 @@ ColumnLayout {
         message: [qsTr("%n file(s) will be replaced by the backup's version.", "", section.plan.changed || 0),
                   qsTr("%n file(s) will come back.", "", section.plan.recreated || 0),
                   qsTr("%n file(s) the backup does not hold will go to the trash.", "", section.plan.trashed || 0)].join(" ")
-        detail: (section.plan.tooLarge > 0 ? qsTr("%n file(s) are too large to restore and stay as they are.", "", section.plan.tooLarge) + " " : "")
-                + qsTr("A safety backup of the notebook as it is now is made first. What is replaced stays in the version history.")
+        detail: (section.plan.incomplete ? qsTr("This backup is not known to be complete, so files it does not hold stay where they are.") + " " : "")
+                + (section.plan.tooLarge > 0 ? qsTr("%n file(s) are too large to restore and stay as they are.", "", section.plan.tooLarge) + " " : "")
+                + qsTr("A safety backup of the notebook as it is now is made first. Replaced notes stay in the version history as well; other files only in the safety backup.")
         confirmText: qsTr("Restore")
         destructive: true
         onAccepted: section.backups.confirmRestore()
@@ -298,6 +324,17 @@ ColumnLayout {
         title: qsTr("Delete this backup?")
         confirmText: qsTr("Delete")
         destructive: true
-        onAccepted: section.backups.remove(section.deleting)
+        onAccepted: section.backups.remove(section.deleting, section.deletingForeign)
+    }
+
+    BConfirmDialog {
+        id: foreignRestoreDialog
+        objectName: "backupsForeignRestoreConfirm"
+        parent: T.Overlay.overlay
+        title: qsTr("Use a backup from another notebook?")
+        message: qsTr("This backup was not made from this notebook as it is now: it comes from another notebook of the same name, or from this one when it lay in another folder. Restoring it may replace this notebook's notes with another notebook's.")
+        confirmText: qsTr("Continue")
+        destructive: true
+        onAccepted: section.backups.prepareRestore(section.foreignRestore, true)
     }
 }
