@@ -554,9 +554,12 @@ private Q_SLOTS:
         QVERIFY(!ws->exists(u"Główna.md"_s));
         QVERIFY(!ws->exists(u"assets/stary skan.pdf"_s));
         ws->finishIndexing();
-        QTRY_VERIFY(std::any_of(ws->unreferencedFiles().cbegin(), ws->unreferencedFiles().cend(), [](const QVariant &f) {
-            return f.toMap().value(u"path"_s).toString() == u"assets/plan.png"_s;
-        }));
+        QTRY_VERIFY([&] {
+            const QVariantList left = ws->unreferencedFiles();
+            return std::any_of(left.cbegin(), left.cend(), [](const QVariant &f) {
+                return f.toMap().value(u"path"_s).toString() == u"assets/plan.png"_s;
+            });
+        }());
 
         QCOMPARE(ws->restoreAll(trashed), 2);
         QVERIFY(ws->exists(u"Główna.md"_s));
