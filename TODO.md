@@ -6,7 +6,9 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 ## Funkcje
 
 * **Wsparcie dla AI** — zakres do ustalenia (dziś agenci AI korzystają z `brulion-cli`, serwera
-  MCP i sterowania aplikacją: docs/CLI.md).
+  MCP i sterowania aplikacją: docs/CLI.md). U konkurencji: asystent w edytorze z własnym kluczem
+  API (AFFiNE), asystent pisania (SiYuan); do rozważenia też pytania do notatek i wyszukiwanie
+  semantyczne na lokalnym modelu.
 * **Rozszerzalność jak w Emacsie i TiddlyWiki** — użytkownik zmienia i rozszerza Brulion z poziomu
   notatnika (własne polecenia, widoki, makra, zachowania); zakres i bezpieczeństwo do ustalenia
   (notatki przychodzą z synchronizacji i importu).
@@ -86,6 +88,117 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     dziś otwierają się w Brulionie tylko do odczytu jako tekst).
 * **Usuwanie pliku** — możliwość usunięcia pliku; zakres do ustalenia.
 * **Usuwanie nieaktualnych załączników** — usuwanie załączników niepołączonych z żadną notatką.
+* **Znajdź i zamień** — szukanie w otwartej notatce (`Ctrl+F` działa dziś tylko w PDF-ie i grafie),
+  zamiana w notatce i w całym notatniku z podglądem zmian, bez polskich znaków i wielkości liter.
+* **Sprawdzanie pisowni** — podkreślanie błędów i podpowiedzi w edytorze, po polsku i angielsku
+  (na komputerze np. Hunspell, na Androidzie systemowe sprawdzanie klawiatury).
+* **Karty i wiele okien** — kilka otwartych stron w kartach, podział widoku na więcej niż główny i
+  boczny panel, strona w osobnym oknie (Obsidian).
+* **Podgląd linku po najechaniu** — treść strony lub bloku w dymku bez opuszczania notatki
+  (Obsidian, Logseq).
+* **Notatki tygodniowe i miesięczne** — strony okresowe obok dziennych, z własnym szablonem i
+  dostępem z kalendarza.
+* **Statystyki i tryb skupienia** — liczba słów i znaków, czas czytania; widok bez pasków bocznych,
+  kursor trzymany na środku ekranu.
+* **Własne skróty klawiszowe** — zmiana skrótów w ustawieniach, opcjonalnie tryb Vim (Obsidian).
+* **Wygląd stron** — ikona strony, okładka; kolorowe zakreślenia (Obsidian) obok dzisiejszego
+  `==…==`.
+
+## Widoki i dane
+
+* **Widoki baz danych z właściwości** — blok albo plik pokazujący strony jako edytowalną tabelę,
+  tablicę kanban (także zadania według statusu), galerię, kalendarz; filtry, grupy, kolumny,
+  formuły. Obsidian ma Bases (tabela, lista, mapa, kanban), Logseq tabelę i galerię, Anytype i
+  AFFiNE tablice i galerie. Bloki `query` pokazują dziś tylko listę i nie filtrują po właściwościach
+  stron (`status:: w toku`, `koszt > 100`).
+* **Zgodność z Obsidianem: `.base`, `.canvas`, Dataview** — pliki `.base` i `.canvas` ze wspólnego
+  skarbca oraz bloki `dataview` są dziś w Brulionie plikiem albo zwykłym tekstem
+  (docs/IMPORT.md); do ustalenia, co czytać, a co też edytować.
+* **Tablica (nieskończone płótno)** — notatki, obrazy, PDF-y i rysunki rozłożone na płótnie, z
+  połączeniami; najlepiej w formacie JSON Canvas (Obsidian Canvas, AFFiNE). Edytor rysunków
+  pokrywa szkice, ale nie osadza w nich notatek.
+* **Diagramy Mermaid** — rysowanie bloków ` ```mermaid ` w notatce i w eksporcie, kolory z motywu
+  (Obsidian). Dziś widać samo źródło; potrzebny renderer bez wykonywania skryptów z notatek, które
+  przychodzą z synchronizacji.
+* **Wykresy** — wykres z tabeli z formułami, bloku `calc` albo wyników zapytania.
+* **Sortowanie i filtrowanie tabel Markdown** — z nagłówka kolumny, bez ręcznego przestawiania
+  wierszy; import i eksport CSV pojedynczej tabeli.
+* **Fiszki z powtórkami** — karty z bloków (`pytanie :: odpowiedź`, ukrywane fragmenty), powtórki
+  w odstępach (np. FSRS), karty do powtórki na dziś, stan zapisany w plikach i scalany przez
+  synchronizację (Logseq, SiYuan).
+
+## Zadania i kalendarz
+
+* **Kalendarze CalDAV** — dwukierunkowa synchronizacja zadań i wydarzeń (Nextcloud, Google,
+  Thunderbird, DAVx⁵) i subskrypcja kalendarzy ICS tylko do podglądu w widoku kalendarza. Dziś
+  jest jednorazowy import i eksport iCalendar.
+* **Zależności zadań i postęp podzadań** — składnia Obsidian Tasks `🆔` / `⛔` jest rozpoznawana,
+  ale nic nie robi: zadania zablokowane w widokach i zapytaniach (`is:blocked`), licznik „3/5”
+  przy zadaniu nadrzędnym.
+* **Śledzenie czasu i historia statusów** — licznik czasu przy zadaniu, podsumowania; zapis zmian
+  statusu (Logseq; wpisy `LOGBOOK` z Logseq są dziś tylko rozpoznawane).
+* **Nawyki** — powtarzalne punkty dnia z serią i widokiem miesiąca, zapisane w dzienniku.
+
+## Przechwytywanie
+
+* **Web Clipper** — rozszerzenie Chrome i Firefoksa zapisujące artykuł, zaznaczenie albo zrzut
+  jako Markdown z obrazami, z wyborem miejsca i szablonem (Obsidian, Joplin). Dziś: „Udostępnij”
+  z tytułem i adresem, bez treści artykułu.
+* **Notatki głosowe** — nagranie w aplikacji jako załącznik i transkrypcja na urządzeniu, także
+  po polsku, bez wysyłania dźwięku do chmury (Joplin, Obsidian dla iOS w przygotowaniu).
+* **Dźwięk i wideo w notatkach** — odtwarzacz dla `![[nagranie.mp3]]` i `![[film.mp4]]`; dziś takie
+  pliki otwierają się tylko do odczytu jako tekst.
+* **Zdjęcie i skan z aparatu** — `/Zdjęcie` na telefonie, prostowanie i przycinanie dokumentu,
+  skan do PDF-a.
+* **Automatyzacja na urządzeniu** — adresy `brulion://` (otwórz stronę, dopisz pod nagłówkiem),
+  intencje dla Taskera na Androidzie, kafelek szybkich ustawień (Obsidian: URI, Siri i Skróty).
+* **Więcej źródeł importu** — Apple Notes, OneNote (Obsidian Importer), Todoist, Airtable i CSV
+  jako strony z właściwościami (Obsidian).
+
+## Wyszukiwanie
+
+* **Szukanie w załącznikach i OCR** — tekst PDF-ów i obrazów w wyszukiwarce całego notatnika, w
+  tle i bez sieci, z przejściem do trafienia na stronie (Joplin, SiYuan). Dziś PDF przeszukuje się
+  tylko po jego otwarciu.
+
+## Prywatność i bezpieczeństwo
+
+* **Szyfrowanie end-to-end synchronizacji** — pliki na serwerze Nextcloud lub WebDAV nieczytelne
+  bez hasła użytkownika (Joplin, SiYuan, Logseq, Anytype, Obsidian Sync); do ustalenia zgodność z
+  założeniem „zwykłe pliki”, klucz na urządzeniach, odzyskiwanie i scalanie konfliktów.
+* **Blokada aplikacji** — PIN albo biometria na telefonie, ukrycie treści na ekranie ostatnich
+  aplikacji i w widżetach.
+* **Zaszyfrowane notatki** — pojedyncze strony albo fragmenty pod hasłem, zgodne z synchronizacją
+  (Trilium: notatki chronione).
+* **Automatyczne kopie zapasowe** — kopie notatnika według harmonogramu, z limitem liczby, do
+  wskazanego folderu (Logseq, SiYuan: migawki). Historia wersji jest dziś osobna na każdym
+  urządzeniu, a w przeglądarce pełną kopią jest tylko eksport albo synchronizacja.
+
+## Udostępnianie i współpraca
+
+* **Publikowanie** — strona lub zaznaczone notatki pod adresem, opcjonalnie z hasłem, jednym
+  poleceniem: GitHub Pages, własny serwer albo publiczny link Nextclouda (Obsidian Publish, Logseq
+  Publish, Joplin). Dziś jest eksport statycznego HTML, który publikuje się ręcznie.
+* **Współdzielone notatniki** — notatnik wspólny z inną osobą: kto co zmienił, komentarze; do
+  ustalenia, czy wystarczy Nextcloud, czy edycja na żywo (Logseq RTC, AFFiNE, Obsidian:
+  „Multiplayer” w planach).
+* **Drukowanie i bezpośredni PDF/DOCX** — druk i eksport strony do PDF-a oraz DOCX bez
+  instalowania Pandoca i LaTeX-a, także na telefonie (Obsidian, SiYuan).
+* **Eksport jednej strony** — z menu strony, bez przechodzenia przez eksport notatnika.
+
+## Platformy i dystrybucja
+
+* **iOS, iPadOS i macOS** — dziś tylko wersja w przeglądarce; Obsidian, Joplin, Anytype i inni mają
+  tam aplikacje. Na iOS trzeba by rozwiązać alarmy, dostęp do folderu notatnika i Syncthing.
+* **Sklepy i repozytoria** — F-Droid, Flathub, winget, AUR, Homebrew. Google Play ogranicza dostęp
+  do wszystkich plików, którego wymaga folder Syncthinga (docs/ANDROID.md).
+* **Informacja o nowej wersji** — sprawdzanie wydań na GitHubie, bez telemetrii (czy domyślnie
+  włączone: do ustalenia), i link do pobrania na Androidzie i Windows, gdzie nic nie aktualizuje
+  się samo.
+* **Więcej języków interfejsu** — tłumaczenia poza polskim i angielskim, a z nimi daty w języku
+  naturalnym, kalkulator i wprowadzenie (Obsidian: wiele języków, także na start).
+* **Motywy** — pliki motywów wymieniane między użytkownikami (kolory, czcionki, odstępy), poza
+  ustawieniami wyglądu (Obsidian, Joplin); bez kodu z notatek.
 
 ## Windows
 
