@@ -841,6 +841,41 @@
     </message>
 </context>
 <context>
+    <name>ShellBackupSettings</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="283"/>
+        <source>%n file(s) will be replaced by the backup&apos;s version.</source>
+        <translation>
+            <numerusform>%n file will be replaced by the backup&apos;s version.</numerusform>
+            <numerusform>%n files will be replaced by the backup&apos;s version.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="284"/>
+        <source>%n file(s) will come back.</source>
+        <translation>
+            <numerusform>%n file will come back.</numerusform>
+            <numerusform>%n files will come back.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="285"/>
+        <source>%n file(s) the backup does not hold will go to the trash.</source>
+        <translation>
+            <numerusform>%n file the backup does not hold will go to the trash.</numerusform>
+            <numerusform>%n files the backup does not hold will go to the trash.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="286"/>
+        <source>%n file(s) are too large to restore and stay as they are.</source>
+        <translation>
+            <numerusform>%n file is too large to restore and stays as it is.</numerusform>
+            <numerusform>%n files are too large to restore and stay as they are.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ShellMoveWords</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="17"/>
@@ -1406,6 +1441,33 @@
         <translation>
             <numerusform>Saved %n page</numerusform>
             <numerusform>Saved %n pages</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::shell::WorkspaceBackups</name>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacebackups.cpp" line="358"/>
+        <source>The backup was made without %n file(s) that could not be read.</source>
+        <translation>
+            <numerusform>The backup was made without %n file that could not be read.</numerusform>
+            <numerusform>The backup was made without %n files that could not be read.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacebackups.cpp" line="601"/>
+        <source>The restore did not finish: %n file(s) could not be written. Nothing else went to the trash; the safety backup holds the notebook as it was.</source>
+        <translation>
+            <numerusform>The restore did not finish: %n file could not be written. Nothing else went to the trash; the safety backup holds the notebook as it was.</numerusform>
+            <numerusform>The restore did not finish: %n files could not be written. Nothing else went to the trash; the safety backup holds the notebook as it was.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacebackups.cpp" line="836"/>
+        <source>The last backup is missing %n file(s) that could not be read. The event log names them.</source>
+        <translation>
+            <numerusform>The last backup is missing %n file that could not be read. The event log names it.</numerusform>
+            <numerusform>The last backup is missing %n files that could not be read. The event log names them.</numerusform>
         </translation>
     </message>
 </context>

@@ -172,9 +172,9 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   aplikacji i w widżetach.
 * **Zaszyfrowane notatki** — pojedyncze strony albo fragmenty pod hasłem, zgodne z synchronizacją
   (Trilium: notatki chronione).
-* **Automatyczne kopie zapasowe** — kopie notatnika według harmonogramu, z limitem liczby, do
-  wskazanego folderu (Logseq, SiYuan: migawki). Historia wersji jest dziś osobna na każdym
-  urządzeniu, a w przeglądarce pełną kopią jest tylko eksport albo synchronizacja.
+* **Kopie zapasowe: dalsze kroki** — przywracanie ZIP-a spoza listy i plików ponad 1 GB (Vault
+  trzyma zapisywany plik w pamięci), folder Androida wskazany przez dokument w chmurze, w przeglądarce
+  dzielenie kompresji dużego pliku na kawałki (dziś plik ponad 4 MB jest zapisywany bez kompresji).
 
 ## Udostępnianie i współpraca
 

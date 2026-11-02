@@ -907,6 +907,7 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     // The documentation has no reminders: its scheduler must not replace the armed set of the
     // user's notebook with an empty one (Android would cancel every alarm of it).
     m_workspace->setRemindersPaused(docs);
+    m_workspace->backups()->setPaused(docs); // Brulion writes its pages again on every open
     // The sync settings are the notebook's: the previous notebook is closed and the new one is
     // current before sync attaches to the new folder, never the old notebook's server folder.
     // The documentation is current while it is open (its sync settings, the switcher), but it

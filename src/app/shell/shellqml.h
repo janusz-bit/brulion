@@ -5,7 +5,8 @@
 //   AppController    singleton — main()'s instance (AppController::instance())
 //   AppSettings      singleton — AppController.settings
 //   Workspace        singleton — AppController.workspace (the EditorHost for the editor)
-//   WorkspaceReminders, WorkspaceSync   uncreatable — Workspace.reminders / Workspace.sync
+//   WorkspaceReminders, WorkspaceSync, WorkspaceBackups   uncreatable — Workspace.reminders /
+//                                       Workspace.sync / Workspace.backups
 //   CommandModel     singleton — the command palette's commands
 //   FolderTreeModel  creatable — FolderTreeModel { workspace: Workspace }
 #pragma once
@@ -16,6 +17,7 @@
 #include "commandmodel.h"
 #include "foldertreemodel.h"
 #include "workspace.h"
+#include "workspacebackups.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
@@ -99,6 +101,13 @@ struct WorkspaceSyncForeign {
     QML_FOREIGN(brulion::shell::WorkspaceSync)
     QML_NAMED_ELEMENT(WorkspaceSync)
     QML_UNCREATABLE("Use Workspace.sync")
+};
+
+struct WorkspaceBackupsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::WorkspaceBackups)
+    QML_NAMED_ELEMENT(WorkspaceBackups)
+    QML_UNCREATABLE("Use Workspace.backups")
 };
 
 struct CommandModelForeign {

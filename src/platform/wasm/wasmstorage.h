@@ -37,6 +37,11 @@ struct WasmStorageJs;
 ///   settings down with it: a cache mount that fails is no storage error (no `error()`, nothing
 ///   left pending); its files are deleted from memory — the next write-back removes the stored
 ///   copies too, freeing their space — and `cacheNotSaved()` tells the app to stop writing them.
+/// * `backupsRoot()` is such a mount too (own database, own transaction), but its files are the
+///   user's: a failure deletes nothing — the failed transaction left IndexedDB's older copies
+///   as they were — and `backupsNotSaved()` tells the app, which removes only the new copy. A
+///   mount that could not be loaded is never written back in this session: its empty tree would
+///   delete what is stored.
 ///
 /// One instance per process (the mounts are global). The JavaScript side keeps running after a
 /// crash of the WebAssembly instance, so the HTML shell can still save the in-memory files.
@@ -55,7 +60,9 @@ public:
     static QStringList defaultMountPoints();
     /// The folder of the index caches (`<QStandardPaths::CacheLocation>/index`), a cache mount.
     static QString indexCacheRoot();
-    /// `indexCacheRoot()`.
+    /// The folder of the notebooks' backups (`<QStandardPaths::CacheLocation>/backups`).
+    static QString backupsRoot();
+    /// `indexCacheRoot()` and `backupsRoot()`.
     static QStringList defaultCacheMountPoints();
     /// Absolute, cleaned, de-duplicated paths without nesting (a path inside another one is
     /// dropped — IDBFS mounts must not nest). "/" and relative paths are rejected.
@@ -115,6 +122,8 @@ Q_SIGNALS:
     /// The cache mount `mountPoint` could not be written back (`message`, e.g. a quota error):
     /// its files were deleted; do not write new ones in this session.
     void cacheNotSaved(const QString &mountPoint, const QString &message);
+    /// The backups' mount could not be read or written back (`message`, e.g. a quota error).
+    void backupsNotSaved(const QString &message);
     void persistentStorageResult(bool persisted);
 
 private:

@@ -525,6 +525,32 @@ Uwagi:
     startuje) zdjęcie `http://` się wczytuje, a eksport przychodzi jako pobranie. Na prawdziwym
     telefonie zostaje to, co w docs/ANDROID.md „Obrazy z internetu”.
 
+### Kopie zapasowe w przeglądarce
+
+Kopie (`WorkspaceBackups`, docs/ARCHITECTURE.md „Data safety”) leżą w czwartym montażu,
+`WasmStorage::backupsRoot()` (`<CacheLocation>/backups`, podfolder na notatnik). Jest to montaż jak
+pamięć podręczna indeksu — osobna baza, osobna transakcja, więc `QuotaExceededError` nie dotyka notatek,
+historii ani ustawień — z trzema różnicami, bo te pliki należą do użytkownika:
+
+* nieudany zapis niczego nie kasuje z pamięci hurtowo: `backupsNotSaved()` usuwa tylko nową kopię
+  (nieudana transakcja zostawia starsze kopie w IndexedDB), a status i komunikat mówią, że się nie zmieściła;
+* usuwanie najstarszych kopii i przywracanie po kopii bezpieczeństwa czekają na zapis nowej kopii do
+  IndexedDB (`flushed(true)` bez oczekujących zmian → `WorkspaceBackups::storageFlushed()`), żeby
+  nieudany zapis nie kosztował starszych kopii; bez odpowiedzi przez 60 s przywracanie się przerywa;
+* montaż, którego nie udało się wczytać, nie jest zapisywany do końca sesji (`brulionStorage.unloaded`):
+  jego pusty stan skasowałby to, co jest w IndexedDB.
+
+Plik tymczasowy powstaje w `/tmp` (MEMFS poza montażami): śledzenie zmian zapisywałoby rosnący plik
+raz po raz. Na końcu jest kopiowany do montażu, więc przez chwilę archiwum jest w pamięci dwa razy.
+Największe archiwum: połowa wolnego miejsca z `estimate()`, najwyżej 512 MB. Zapis idzie po kawałku
+w wątku GUI: najmniejszym kawałkiem jest plik, a plik ponad 4 MB jest zapisywany bez kompresji, żeby
+kawałek nie trwał długo.
+
+Wszystkie pliki IDBFS są przy starcie wczytywane do pamięci karty, kopie też — dlatego kopie
+automatyczne są tu **domyślnie wyłączone**, domyślny limit to 2, a do wyboru są 1–3. Kopie chronią tu
+przed pomyłką, nie przed wyczyszczeniem danych przeglądarki; ustawienia mówią to wprost, a „Pobierz”
+oddaje kopię przez `wasmfiles.h`.
+
 ## Udostępnianie do Brulionu
 
 Wersja w przeglądarce **zainstalowana jako aplikacja** jest w systemowym menu **Udostępnij**:

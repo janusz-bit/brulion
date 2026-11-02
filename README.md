@@ -204,6 +204,9 @@
 * **Usuwanie.** Stronę, załącznik albo folder przeniesiesz do kosza z menu **Więcej**, z drzewka
   (także klawiszem `Delete`), ze „Wszystkich stron” i z palety poleceń, a „Cofnij” w powiadomieniu
   od razu je przywraca. Z kosza znikają na dobre dopiero, gdy o to poprosisz.
+* **Kopie zapasowe.** Automatyczne archiwa ZIP notatnika, codziennie albo co tydzień, z limitem
+  liczby, na urządzeniu lub we wskazanym folderze. Przywracanie pokazuje najpierw, co się zmieni,
+  robi kopię bezpieczeństwa i zostawia zastąpione wersje w historii, a nadmiarowe pliki w koszu.
 * **Sprzątanie.** Lista notatek i załączników, do których nie prowadzi żaden link, tag ani
   zapytanie. Wybierasz, co przenieść do kosza: same notatki, same załączniki albo pojedyncze pliki.
 * **Na start: przykładowy brulion.** Strona „Witaj w Brulionie” pokazuje wszystkie funkcje na

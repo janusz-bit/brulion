@@ -409,6 +409,20 @@ Gotowy plik eksportu (ZIP, HTML, iCalendar…) zapiszesz na dwa sposoby:
   plików”); zajęta nazwa dostaje od systemu dopisek „(1)”, a raport podaje nazwę pliku. Na
   Androidzie 9 plik jest zapisywany bezpośrednio w *Download* (potrzebne uprawnienie do pamięci).
 
+## Kopie zapasowe
+
+Domyślny folder kopii leży w prywatnych plikach aplikacji (`<dane>/…/backups`): nie wymaga uprawnień,
+ale nie widzi go żaden menedżer plików, a odinstalowanie Brulionu go usuwa. Dlatego przy każdej kopii
+jest **Udostępnij** (arkusz systemowy, `AndroidBridge::shareFile`: dostawca serwuje tylko pliki aplikacji,
+bajty płyną strumieniem, bez wczytywania ZIP-a do pamięci).
+
+Systemowy wybór folderu daje identyfikator `content://`, a kopia jest pisana zwykłymi plikami. Brulion
+przyjmuje więc tylko dokument nazywający folder (`platform::localPathOfDocument`: pamięć telefonu, karta)
+i sprawdza zapis próbnym plikiem. Bez „Dostępu do wszystkich plików” pokaże, że trzeba je włączyć; dysk
+w chmurze jest odrzucany z komunikatem, zamiast później po cichu zawodzić. Tło: Qt zatrzymuje pętlę
+zdarzeń w tle, więc harmonogram sprawdza też po powrocie aplikacji na pierwszy plan; pozostałość po
+przerwanym zapisie (`….zip.XXXXXX`) usuwa pierwszy zapis po dobie.
+
 ## Klawiatura ekranowa
 
 Pasek narzędzi edycji leży zawsze tuż nad klawiaturą ekranową — w dzienniku i na stronach, także

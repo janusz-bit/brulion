@@ -14,7 +14,7 @@ import Brulion
 // names, attachments, templates, default reminder time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
 // length, test notification), Synchronizacja (qml/io/SyncSettings: status,
-// the sync center, the Nextcloud account), Aplikacja (close to tray, the event log and its
+// the sync center, the Nextcloud account), Kopie zapasowe (qml/shell/ShellBackupSettings), Aplikacja (close to tray, the event log and its
 // detailed mode, version, licence, source code; on the desktop "Dla programistów": the switch
 // that lets AI agents drive the running app, AppController.remoteControl).
 //
@@ -58,6 +58,7 @@ Item {
         { id: "vault", title: qsTr("Notebook"), icon: "notebook-pen" },
         { id: "reminders", title: qsTr("Reminders"), icon: "bell" },
         { id: "sync", title: qsTr("Sync"), icon: "folder-sync" },
+        { id: "backups", title: qsTr("Backups"), icon: "hard-drive" },
         { id: "app", title: qsTr("Application"), icon: "info" }
     ]
 
@@ -68,6 +69,7 @@ Item {
         case "vault": return vaultSection
         case "reminders": return remindersSection
         case "sync": return syncSection
+        case "backups": return backupsSection
         case "app": return appSection
         default: return generalSection
         }
@@ -1004,6 +1006,11 @@ Item {
         // The sync area's section (qml/io/SyncSettings.qml): status of both ways, the sync
         // center, the Nextcloud account form.
         SyncSettings {}
+    }
+
+    Component {
+        id: backupsSection
+        ShellBackupSettings {}
     }
 
     Component {

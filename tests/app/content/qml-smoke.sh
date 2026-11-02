@@ -41,8 +41,9 @@ routes=(
   cleanup
   '{"view":"cleanup","kind":"attachments","selected":["brak.md"]}'
   '{"view":"history","path":"Witaj w Brulionie.md"}'
+  '{"view":"settings","section":"backups"}'
 )
-pattern='qml/(content/|views/(JournalsView|PageView|AllPagesView|TagsView|SearchView|TrashView|CleanupView|HistoryView))'
+pattern='qml/(content/|views/(JournalsView|PageView|AllPagesView|TagsView|SearchView|TrashView|CleanupView|HistoryView)|shell/ShellBackupSettings)'
 
 failed=0
 for size in desktop phone; do
