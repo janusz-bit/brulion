@@ -7,6 +7,16 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.7.0 — 2 listopada 2026
+
+**Nowe**
+- **Więcej kształtów w rysunkach** — lista kształtów ma 11 nowych pozycji: **Trójkąt**, **Trójkąt prostokątny**, **Równoległobok**, **Trapez**, **Pięciokąt**, **Sześciokąt**, **Gwiazda**, **Strzałka blokowa**, **Dymek**, **Serce** i **Chmurka**. W pliku to zwykłe zamknięte linie Excalidraw, więc excalidraw.com i Obsidian też je pokażą i pozwolą edytować. Zobacz [[Rysunki#Kształty i strzałki|Kształty i strzałki]].
+- **Zmiana rozmiaru i obracanie uchwytami** — zaznaczenie ma na ramce kwadraty do zmiany rozmiaru i kółko do obracania, przy `Shift` z zachowaniem proporcji albo co 15°. Narzędzie **Zaznacz** działa lassem albo prostokątem, a **Więcej** ma **Obróć o 90°**, **Odbij w poziomie** (`Shift+H`), **Odbij w pionie** (`Shift+V`), **Grupuj** (`Ctrl+G`) i **Rozgrupuj** (`Ctrl+Shift+G`). Zobacz [[Rysunki#Zmiana rozmiaru i obracanie|Zmiana rozmiaru i obracanie]].
+- **Styl zaznaczenia w rysunkach** — przycisk **Styl** nad zaznaczeniem: wypełnienie i jego wzór, grubość i rodzaj linii, rogi, początek i koniec linii, rozmiar tekstu i krycie. Każdy wybór to jeden krok cofania. Zobacz [[Rysunki#Styl zaznaczenia|Styl zaznaczenia]].
+- **Wiersze i kolumny tabel** — menu komórki (prawy przycisk, na telefonie **Więcej** na pasku nad klawiaturą) ma **Wiersz** i **Kolumna**: wstawianie, przenoszenie, usuwanie i wyrównanie kolumny. W komórce **Ctrl+Enter** wstawia wiersz poniżej, **Alt+↑/↓** przenosi wiersz, a **Alt+←/→** kolumnę. Formuły nadal wskazują te same komórki: po wstawieniu wiersza nad `B2` odwołanie zmieni się na `B3`, a odwołanie do usuniętego wiersza lub kolumny staje się `REF!`, co komórka pokazuje jako `#ERR`. Zobacz [[Obliczenia#Tabele z formułami|Tabele z formułami]] i [[Skróty klawiszowe#Komórka tabeli|Komórka tabeli]].
+- **Sprzątanie** — nowy widok (menu **Więcej** i paleta poleceń) z notatkami i załącznikami, do których nie prowadzi żaden link, tag ani zapytanie. Zaznaczasz, co przenieść do kosza: notatki, załączniki albo pojedyncze pliki, a **Cofnij** przywraca je wszystkie. Dzienników, szablonów, ulubionych i plików ukrytych tam nie ma. Zobacz [[Synchronizacja#Historia wersji i kosz|Historia wersji i kosz]].
+- **Komunikat o nowej wersji na Androidzie i Windows** — raz dziennie Brulion pyta GitHuba o najnowsze wydanie, a gdy jest nowsze, pod górnym paskiem pojawia się komunikat. **Zobacz na GitHubie** otwiera stronę wydania, a krzyżyk ukrywa komunikat do następnej wersji. GitHub widzi adres urządzenia, nic o notatkach nie jest wysyłane. Wyłączysz to w **Ustawienia → Aplikacja → Sprawdzaj nowe wersje**. Zobacz [[Pierwsze kroki#Nowa wersja|Nowa wersja]].
+
 ## 0.6.3 — 2 listopada 2026
 
 **Nowe**
