@@ -1091,6 +1091,16 @@ Item {
                     checked: Logs.detailed
                     onToggled: Logs.detailed = checked
                 }
+                BSwitch {
+                    objectName: "settingsCheckUpdates"
+                    visible: AppController.updates.supported
+                    Layout.fillWidth: true
+                    text: qsTr("Check for new versions")
+                    description: qsTr("Once a day Brulion asks GitHub for the latest release and shows a message when there is a newer one. GitHub sees this device's address; nothing about your notes is sent.")
+                    iconName: "download"
+                    checked: AppController.updates.enabled
+                    onToggled: AppController.updates.enabled = checked
+                }
                 ShellSettingRow {
                     title: qsTr("Version")
                     description: qsTr("Brulion %1 · %2").arg(AppController.version).arg(AppController.platform)

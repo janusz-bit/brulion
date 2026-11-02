@@ -349,6 +349,7 @@ int main(int argc, char *argv[])
         options.arguments = args;
         options.openFiles = launch.files;
         options.workingDirectory = QDir::currentPath();
+        options.checkForUpdates = !args.contains(u"--selftest-shell"_s);
         controller = std::make_unique<AppController>(options);
         // --now "2026-10-14 10:00": the same fixed clock as DatesHelper (reproducible screenshots).
         const QDateTime fixedNow = QDateTime::fromString(argValue(args, u"--now"_s), u"yyyy-MM-dd HH:mm"_s);

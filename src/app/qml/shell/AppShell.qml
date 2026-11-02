@@ -369,6 +369,14 @@ FocusScope {
                 onRevealRequested: (path) => shell.revealInTree(path)
                 onAboutRequested: shell.openAbout()
             }
+            // Not while typing: the room above the on-screen keyboard is the note's.
+            ShellUpdateBanner {
+                visible: !shell.keyboardUp && AppController.updates.availableVersion !== ""
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space2
+                Layout.rightMargin: Theme.space2
+                Layout.topMargin: Theme.space2
+            }
             ShellRouteView {
                 id: routeView
                 Layout.fillWidth: true

@@ -204,6 +204,12 @@ oddać mu aktywności: wtedy nie znika po kliknięciu obok i nie dostaje klawiat
 nie trafia) — zamkniesz je przyciskiem **×** w jego rogu, wybierając wpis albo **Otwórz Brulion**,
 albo ponownym kliknięciem ikony.
 
+## Nowa wersja
+
+Pod górnym paskiem pojawia się komunikat o nowszym wydaniu z przyciskiem **Zobacz na GitHubie**,
+tak samo jak na Androidzie ([docs/ANDROID.md](ANDROID.md#nowa-wersja)). Wyłącza go **Ustawienia →
+Aplikacja → Sprawdzaj nowe wersje**.
+
 ## Ograniczenia wersji testowej
 
 * **Niepodpisane pliki** (SmartScreen, wyżej) i **brak automatycznych aktualizacji** — nową wersję

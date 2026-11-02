@@ -195,9 +195,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   tam aplikacje. Na iOS trzeba by rozwiązać alarmy, dostęp do folderu notatnika i Syncthing.
 * **Sklepy i repozytoria** — F-Droid, Flathub, winget, AUR, Homebrew. Google Play ogranicza dostęp
   do wszystkich plików, którego wymaga folder Syncthinga (docs/ANDROID.md).
-* **Informacja o nowej wersji** — sprawdzanie wydań na GitHubie, bez telemetrii (czy domyślnie
-  włączone: do ustalenia), i link do pobrania na Androidzie i Windows, gdzie nic nie aktualizuje
-  się samo.
 * **Więcej języków interfejsu** — tłumaczenia poza polskim i angielskim, a z nimi daty w języku
   naturalnym, kalkulator i wprowadzenie (Obsidian: wiele języków, także na start).
 * **Motywy** — pliki motywów wymieniane między użytkownikami (kolory, czcionki, odstępy), poza

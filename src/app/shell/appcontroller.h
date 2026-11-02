@@ -35,6 +35,8 @@
 //                          notebook/share.h; appshare.cpp) once the notebook is ready
 //   --share-query <query>  the browser version's share target ("share-title=…&share-text=…&
 //                          share-url=…": wasm/index.html passes the launch's parameters so)
+//   --update-available <version>  show the message about a new version as if <version> were the
+//                          latest release, on any platform, without asking GitHub (this run only)
 //   --hidden               start minimised to the system tray (desktop; when a tray exists;
 //                          Windows' "Start when you sign in" starts Brulion so)
 //   --selftest-shell       drive the real shell with key events and exit with the number of
@@ -47,6 +49,7 @@
 #pragma once
 
 #include "appsettings.h"
+#include "appupdates.h"
 #include "navigation.h"
 #include "workspace.h"
 
@@ -85,6 +88,8 @@ class AppController : public QObject {
     Q_PROPERTY(QString errorString READ errorString NOTIFY statusChanged FINAL)
     Q_PROPERTY(brulion::shell::AppSettings *settings READ settings CONSTANT FINAL)
     Q_PROPERTY(brulion::shell::Workspace *workspace READ workspace CONSTANT FINAL)
+    /// The message about a newer version (appupdates.h).
+    Q_PROPERTY(brulion::shell::AppUpdates *updates READ updates CONSTANT FINAL)
 
     // ---- Navigation ---------------------------------------------------------------------
     Q_PROPERTY(QVariantMap currentRoute READ currentRoute NOTIFY currentRouteChanged FINAL)
@@ -185,6 +190,9 @@ public:
         /// to `workingDirectory` ("" = QDir::currentPath()) or file:// URLs.
         QStringList openFiles;
         QString workingDirectory;
+        /// Asks GitHub about new versions where the app tells about them (main(), not its
+        /// self-tests; off in tests).
+        bool checkForUpdates = false;
     };
 
     explicit AppController(const Options &options, QObject *parent = nullptr);
@@ -196,6 +204,7 @@ public:
 
     AppSettings *settings() const { return m_settings.get(); }
     Workspace *workspace() const { return m_workspace.get(); }
+    AppUpdates *updates() const { return m_updates.get(); }
     CommandModel *commands() const { return m_commands.get(); }
 
     /// Boot: open the last vault (or the one from --vault), else show onboarding. Call once,
@@ -500,6 +509,7 @@ private:
 
     std::unique_ptr<AppSettings> m_settings;
     std::unique_ptr<Workspace> m_workspace;
+    std::unique_ptr<AppUpdates> m_updates;
     std::unique_ptr<CommandModel> m_commands;
     std::unique_ptr<platform::Autostart> m_autostart;
     QString m_dataDir;

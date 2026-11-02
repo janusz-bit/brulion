@@ -696,6 +696,18 @@ Zostaje do sprawdzenia na prawdziwym telefonie: płynność szczypania i gest Ws
 szukanie na Androidzie 15+ na prawdziwym urządzeniu, „Otwórz w innej aplikacji” z prawdziwymi
 aplikacjami do PDF-ów, duże skany z wykładów.
 
+## Nowa wersja
+
+Android nie aktualizuje aplikacji zainstalowanej z pliku APK, więc Brulion mówi o nowej wersji sam:
+pod górnym paskiem pojawia się komunikat „Dostępny jest Brulion X.Y.Z”. **Zobacz na GitHubie**
+otwiera w przeglądarce stronę tego wydania, skąd pobierasz APK; instalacja nowego pliku na starym
+zachowuje dane, bo wydania są podpisane tym samym kluczem. Krzyżyk ukrywa komunikat o tej wersji,
+a kolejne wydanie pokaże go znowu. Bez sieci Brulion działa tak samo: pyta GitHuba przy starcie
+i co najwyżej raz dziennie, a nieudane pytanie zapisuje tylko w rejestrze zdarzeń i powtarza po
+kilku godzinach. Pomija wydania testowe (`-rc`). GitHub widzi adres urządzenia, ale żadnych
+danych o notatkach. Wyłącza to **Ustawienia → Aplikacja → Sprawdzaj nowe wersje**. Kod:
+`src/core/appupdate`, `src/app/shell/appupdates.h`, `qml/shell/ShellUpdateBanner.qml`.
+
 ## Budowanie APK
 
 Całość robi `scripts/android-build.sh` (lokalnie i w GitHub Actions): doinstalowuje brakujące

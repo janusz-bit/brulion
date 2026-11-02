@@ -176,6 +176,10 @@ Push taga uruchamia `release.yml`:
    `brulion-web-<wersja>.zip`) na GitHub Pages; wydanie testowe (`-rc.1`) i ręczne
    uruchomienie z gałęzi (nie z taga) zostawiają stronę bez zmian.
 
+Aplikacja na Androidzie i Windows pyta raz dziennie o najnowsze wydanie (`releases/latest`) i pokazuje
+komunikat ze stroną jego taga (`shell/appupdates.h`). Liczy się tylko tag `vX.Y.Z`: szkic i wydanie
+testowe nikomu go nie pokażą, a komunikat pojawia się dopiero po publikacji.
+
 Nieudany build: „Re-run failed jobs” w zakładce Actions (szkic wydania jest używany
 ponownie). Ręczne uruchomienie (Actions → Release → Run workflow) dla istniejącego taga trzeba
 uruchomić **z tego taga** („Use workflow from” → Tags); nowy tag powstaje na wybranej gałęzi

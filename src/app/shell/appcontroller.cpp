@@ -141,6 +141,16 @@ AppController::AppController(const Options &options, QObject *parent)
     m_startCapture = args.contains(u"--capture"_s);
     m_startToday = args.contains(u"--today"_s);
     m_devPopup = argValue(args, u"--popup"_s);
+    const QString devUpdate = argValue(args, u"--update-available"_s);
+    AppUpdates::Options updates;
+    updates.settings = m_settings.get();
+    updates.currentVersion = version();
+    updates.supported = !devUpdate.isEmpty() || (options.checkForUpdates && (isAndroid() || platform() == "windows"_L1));
+    updates.network = devUpdate.isEmpty();
+    updates.clock = [this] { return now(); };
+    m_updates = std::make_unique<AppUpdates>(updates);
+    if (!devUpdate.isEmpty())
+        m_updates->setLatestForThisRun(devUpdate);
     // Files opened with Brulion (--open: a file manager's "Otwórz za pomocą"), else --share.
     if (const notebook::SharedContent opened = notebook::openedFilesShare(options.openFiles, options.workingDirectory);
         !opened.files.isEmpty())
@@ -216,6 +226,7 @@ void AppController::start()
     if (m_started)
         return;
     m_started = true;
+    m_updates->start();
     // The documentation is never a recent notebook (the switcher opens it), but 0.3.0–0.3.5 listed
     // it there: the start screen and the switcher would offer it until it was opened again.
     if (const QString docs = docsVaultPath(); !docs.isEmpty())
