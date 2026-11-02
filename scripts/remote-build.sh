@@ -39,7 +39,7 @@ remote_root="work/brulion-${name}"
 
 ssh -o BatchMode=yes "${host}" "mkdir -p ${remote_root}/src ${remote_root}/build"
 rsync -a --delete --delete-excluded \
-  --exclude='/build*/' --exclude='/.git/' --exclude='/result*' --exclude='/.direnv/' \
+  --exclude='/build*/' --exclude='/.git/' --exclude='/.claude/' --exclude='/result*' --exclude='/.direnv/' \
   --exclude='/tests/screenshots/' --exclude='/dist-*/' --exclude='*.o' \
   ${excludes[@]+"${excludes[@]}"} \
   ./ "${host}:${remote_root}/src/"
