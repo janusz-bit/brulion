@@ -321,6 +321,23 @@ Rectangle {
             onTriggered: AppController.navigate({ view: "cleanup" })
         }
         BMenuItem {
+            objectName: "menuFindInNote"
+            visible: ["page", "journal", "journals"].indexOf(AppController.currentView) >= 0
+            height: visible ? implicitHeight : 0
+            text: qsTr("Find in note")
+            iconName: "search"
+            shortcut: "Ctrl+F"
+            onTriggered: AppController.requestUiAction("findInNote")
+        }
+        BMenuItem {
+            objectName: "menuReplaceInNotebook"
+            visible: !AppController.inDocsVault
+            height: visible ? implicitHeight : 0
+            text: qsTr("Replace in notebook")
+            iconName: "search"
+            onTriggered: AppController.navigate({ view: "replace" })
+        }
+        BMenuItem {
             text: qsTr("Settings")
             iconName: "settings"
             shortcut: "Ctrl+,"

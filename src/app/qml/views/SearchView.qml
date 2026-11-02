@@ -158,6 +158,16 @@ FocusScope {
                 onActivated: (value) => results.scope = value
             }
             BButton {
+                objectName: "searchReplace"
+                visible: !AppController.inDocsVault
+                size: "small"
+                variant: "ghost"
+                iconName: "pencil"
+                text: Theme.compact ? "" : qsTr("Replace…")
+                Accessible.name: qsTr("Replace in notebook")
+                onClicked: AppController.navigate({ view: "replace", query: root.query })
+            }
+            BButton {
                 id: folderButton
                 visible: results.folders.length > 1 || results.folder !== ""
                 Layout.maximumWidth: Theme.compact ? 120 : 260

@@ -174,6 +174,16 @@ public:
     /// and press feedback of rendered text (docs/UI.md "Links in rendered text").
     static QString withHoveredLink(QStringView html, QStringView href);
 
+    /// `html` (this renderer's output) with each occurrence of `query` (text/find.h, the three
+    /// options as FindOptions) in its shown text on a tinted
+    /// span (`background-color:<color>`, kind "box" for RichTextPills): the find bar's highlights
+    /// (docs/UI.md "Find and replace"). Text only: tags and their attributes are never looked at, an
+    /// entity counts as the character it shows and is never cut, a `<br/>` is a line break (nothing
+    /// matches across it); a match across inline tags ("**a** b") gets a span per piece. Empty query
+    /// or no match: `html` unchanged.
+    static QString withFindHighlight(QStringView html, QStringView query, bool matchCase, bool matchDiacritics,
+                                     bool wholeWord, QStringView color);
+
     /// The URL a click on the construct at `position` (UTF-16, 0 … size) of `text` follows, as
     /// render() links it: a parent part of a page link (`part:`, when resolveLinkPart splits it —
     /// the caret on the part's text or right after it, before its '/'); `page:` for the rest of a

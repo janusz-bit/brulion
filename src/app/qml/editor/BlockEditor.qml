@@ -124,7 +124,7 @@ FocusScope {
     /// and the editing goes on. One slot: another tool set docks the same way (a new mode).
     readonly property string toolbarMode: !touch || controller === null ? ""
                                           : controller.sourceMode ? (sourceEditing ? "source" : "")
-                                          : controller.editingRow >= 0 ? "block"
+                                          : controller.editingRow >= 0 ? (findKeepsKeyboard ? "" : "block")
                                           : editingTable !== null ? "cell"
                                           : (inSpan ? spanTools : selectionMode && selectionCount > 0) ? "selection" : ""
     readonly property bool toolbarVisible: toolbarMode !== ""
@@ -480,11 +480,94 @@ FocusScope {
         if (!controller || row < 0)
             return
         closeSuggestions()
+        findKeepsKeyboard = false
         const again = controller.editingRow === row
         controller.startEditing(row, cursor === undefined ? -1 : cursor)
         if (again && activeEditor && activeEditor.row === row)
             activeEditor.ensureFocus()
         ensureRowVisible(row)
+    }
+
+    // ---- The find bar (FindBar, NoteFind; docs/UI.md "Find and replace") ---------------------------
+    /// The note's find bar while it is open here: rendered blocks and inline editors tint its matches.
+    property NoteFind find: null
+    readonly property color findHitColor: Theme.alpha(Theme.link, 0.28)
+    /// The block going to a match does not take the keyboard from the bar (until it is tapped).
+    property bool findKeepsKeyboard: false
+    /// { row, from, to }: the match the block being edited has selected.
+    property var findSelection: null
+
+    /// Show a match (NoteFind.targetRequested): out of folds and zooms, scrolled to, selected in its
+    /// block's inline editor — or, where that cannot select it (a table, a list marker), the block
+    /// selected and flashed. Source mode: selected in the text.
+    function showFindTarget(target, keepKeyboard) {
+        if (!controller)
+            return
+        closeSuggestions()
+        if (target.source) {
+            const source = sourceLoader.item as SourceEditor
+            if (source)
+                source.showRange(target.sourceFrom, target.sourceTo, keepKeyboard)
+            return
+        }
+        const row = target.row
+        if (row < 0)
+            return
+        controller.reveal(row)
+        list.userMoved = true
+        if (target.editable) {
+            findKeepsKeyboard = keepKeyboard
+            controller.clearSelection()
+            controller.startEditing(row, target.from)
+            findSelection = { row: row, from: target.from, to: target.to }
+        } else {
+            findKeepsKeyboard = false
+            findSelection = null
+            controller.stopEditing()
+            controller.selectedRow = row
+        }
+        later(() => {
+            list.positionViewAtIndex(row, ListView.Contain)
+            list.forceLayout()
+            const item = list.itemAtIndex(row) as BlockDelegate
+            if (!item)
+                return
+            if (editor.scroller)
+                editor.scroller.ensureVisible(item, Qt.rect(0, 0, item.width, item.height))
+            if (!target.editable)
+                item.flash()
+            else if (editor.activeEditor && editor.activeEditor.row === row)
+                editor.ensureVisible(editor.activeEditor, editor.activeEditor.cursorRectangle)
+        })
+    }
+    /// Source mode's text: the replaces go through its own undo history.
+    function replaceInSource(ranges, text) {
+        const source = sourceLoader.item as SourceEditor
+        if (source)
+            source.replaceRanges(ranges, text)
+    }
+    /// The caret in source mode, where the bar starts searching (-1: not in source mode).
+    function sourcePosition() {
+        return sourceTextEdit ? sourceTextEdit.cursorPosition : -1
+    }
+    /// The find bar closed: the keyboard comes back to what was edited. On a touch screen a block
+    /// entered only to show a match is left again: no keyboard pops up for it.
+    function findClosed() {
+        findKeepsKeyboard = false
+        findSelection = null
+        if (!controller)
+            return
+        if (controller.sourceMode) {
+            if (sourceLoader.item)
+                (sourceLoader.item as SourceEditor).focusEditor()
+        } else if (controller.editingRow >= 0 && !touch) {
+            if (activeEditor)
+                activeEditor.ensureFocus()
+        } else {
+            if (touch)
+                controller.stopEditing()
+            list.forceActiveFocus()
+        }
     }
 
     /// Scroll to `row` (unfolding / leaving a zoom as needed), select it and flash it — for routes

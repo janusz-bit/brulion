@@ -20,6 +20,9 @@ import Brulion
 // Blocks may be selected across several days (StreamSelection `stream`, docs/UI.md "Selecting
 // and copying"): Shift+click, Shift+↑/↓ past a day's edge, a drag, a tap in the touch selection
 // mode; such a selection is copied only.
+// Ctrl+F (Ctrl+H: with replace) in the stream: the find bar (FindBar, docs/UI.md "Find and replace")
+// over the day being written in, named in its field; a tap in another day moves the search there.
+// One day as a page: its PageView has the bar. The notebook-wide search and replace cover all days.
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
 // (one day: its date), `sidePanel`, `editing`, `toolbarDocked`, `endEditing()` and `sourceMode`.
 FocusScope {
@@ -74,6 +77,10 @@ FocusScope {
                 root.activeDay.editor.downloadWebPictures("")
                 return
             }
+            if (action === "findInNote") {
+                root.openFind(false)
+                return
+            }
             if (action === "addProperty") {
                 root.activeDay.editor.addProperty()
                 return
@@ -91,6 +98,60 @@ FocusScope {
         enabled: !root.single && !root.inSidePanel && root.visible && root.activeDay !== null
                  && !root.activeDay.controller.sourceMode
         onActivated: root.activeDay.editor.addProperty()
+    }
+
+    // ---- The find bar over the stream ------------------------------------------------------------
+    property bool findOpen: false
+    function openFind(withReplace) {
+        if (root.single || !root.activeDay)
+            return
+        if (!root.findOpen) {
+            noteFind.setOriginHere(-1)
+            root.findOpen = true
+        }
+        const bar = findBarLoader.item as FindBar
+        if (!bar)
+            return
+        if (withReplace)
+            bar.openReplace()
+        else
+            bar.focusField()
+    }
+    function closeFind() {
+        root.findOpen = false
+        if (root.activeDay)
+            root.activeDay.editor.findClosed()
+    }
+    NoteFind {
+        id: noteFind
+        objectName: "journalFind"
+        controller: root.activeDay ? root.activeDay.controller : null
+        active: root.findOpen && !root.single
+    }
+    Loader {
+        id: findBarLoader
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        active: root.findOpen && !root.single
+        height: active && item ? item.implicitHeight : 0
+        z: 2
+        sourceComponent: FindBar {
+            find: noteFind
+            editor: root.activeDay ? root.activeDay.editor : null
+            scopeLabel: root.activeDay ? DatesHelper.formatLong(root.activeDay.date) : ""
+            onCloseRequested: root.closeFind()
+        }
+    }
+    Shortcut {
+        sequence: "Ctrl+F"
+        enabled: !root.single && !root.inSidePanel && root.visible && root.activeDay !== null
+        onActivated: root.openFind(false)
+    }
+    Shortcut {
+        sequence: "Ctrl+H"
+        enabled: !root.single && !root.inSidePanel && root.visible && root.activeDay !== null
+        onActivated: root.openFind(true)
     }
 
     // ---- One day ---------------------------------------------------------------------------------
@@ -116,7 +177,10 @@ FocusScope {
     // ---- The journal list ------------------------------------------------------------------------
     Loader {
         id: listLoader
-        anchors.fill: parent
+        anchors.top: findBarLoader.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         active: !root.single
         focus: !root.single
         sourceComponent: journalsComponent
@@ -355,6 +419,7 @@ FocusScope {
                         color: Theme.borderSubtle
                     }
                     ContentJournalDay {
+                        find: noteFind
                         id: dayView
                         y: dayItem.index > 0 ? separator.y + separator.height + dayItem.gap : 0
                         width: parent.width

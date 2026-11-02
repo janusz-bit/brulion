@@ -28,6 +28,9 @@
 //                viewer's drawing under its PDF), else appended — pure, untouched bytes kept
 //   cleanup.h    unreferencedFiles(index, config) -> notes and attachments nothing refers to (no
 //                daily notes, templates, hidden files), with their open tasks and reminders
+//   replace.h    text replaced in the whole notebook with a preview: planReplace / ReplaceScan (worker
+//                threads or slices) -> per-file hits with line and context, applyReplace (refuses a
+//                file changed since the plan), undoReplacedFile (only while it holds what was written)
 //   indexloader.h IndexLoader(vault, index, WorkerPool{threads, start}, {cachePath, firstFolder}):
 //                start(files), step(budgetMs) -> Done | More | Waiting (+ resultsReady()), finish(),
 //                forget(path), configChanged(), stats() — reads and parses on the pool's threads
@@ -68,5 +71,6 @@
 #include "notebook/json.h"
 #include "notebook/links.h"
 #include "notebook/pages.h"
+#include "notebook/replace.h"
 #include "notebook/session.h"
 #include "notebook/share.h"

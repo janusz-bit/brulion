@@ -507,6 +507,7 @@ everything near the bottom, the same way on Android, in the browser and with a s
 | Delete on a focused row of the sidebar's tree | move that page, file or folder to the trash (after the confirmation) |
 | Ctrl+, | settings |
 | Ctrl+E | Markdown source mode of the page / journal |
+| Ctrl+F / Ctrl+H | find in the note (the PDF viewer and the graph keep their own Ctrl+F) / with its replace row ("Find and replace") |
 | Ctrl+; | add a page property (the properties panel's add row; "Page properties") |
 | Ctrl+Enter | (in dialogs) accept |
 
@@ -625,6 +626,72 @@ guide: the page "Kopie zapasowe" of the documentation notebook.
 
 Tests: `tst_backup*`, `tst_shell_workspace_backups` (+ `_inline`), `--selftest-shell` (`checkBackups`: real
 taps through a backup, a restore's confirmation, a delete), `tst_content_qml` (the route).
+
+## Find and replace
+
+**In the open note** (`qml/editor/FindBar.qml`, `src/app/editor/notefind.h`). Ctrl+F, the page menu's
+"Znajdź i zamień…" (so phones reach it), Więcej's "Znajdź w notatce", the palette's `page.find`, route
+`open: "find"`; Ctrl+H opens the replace row as well. In the main pane only: a page in the side panel
+has none, the PDF viewer and the graph keep their own Ctrl+F. Enter / Shift+Enter (F3 / Shift+F3)
+go through the matches, Esc closes it and gives the keyboard back; Back on Android closes it first.
+Its buttons never take focus, so the field keeps the keyboard. Options: "Aa" (case), "ąa" (diacritics),
+"Słowo" (whole word), all off at first (`text/find.h`: "zolw" finds "ŻÓŁW", a no-break space equals a space).
+
+* **What is searched:** the note's actual Markdown (`PageController::text()`; in source mode
+  `sourceText`), so markup, link targets, hidden task markers and frontmatter count. Queries are
+  literal and one line. `NoteFind` recounts 120 ms after a change (400 ms over 200 KB) and leaves the
+  caret alone; only next, previous and the replaces move anything. A new query goes to the nearest
+  match from where the bar was opened.
+* **Showing a match in block mode:** delegates are virtual and rendered text is not the raw text, so
+  the current match is shown in the block's inline editor (`BlockEditor.showFindTarget`): the
+  block unfolds, a zoom that does not hold it ends (`PageController.reveal`), the list scrolls, the block
+  is edited with the match selected (`InlineEditor.selectFindMatch`) while `findKeepsKeyboard` keeps
+  the keyboard in the bar and the touch toolbar away. A tap in a block ends that. Closing on a touch
+  screen leaves the block again, so no keyboard pops up. `PageController::locateText` maps a text
+  offset to a row and edit-text range: a file line ends with the same line of the block's body.
+* **Limits:** a match in a list marker, a task marker, a fence line or a table (cells have their own
+  editors) cannot be selected: its block is selected and flashed, and the replace works all the same.
+  Source mode shows every one of them. A match in the frontmatter opens the block's "Edytuj jako tekst"
+  editor rather than a field of the properties panel.
+* **All matches:** tinted in rendered blocks (`InlineRenderer::withFindHighlight`: shown text only,
+  entities whole, escaped output untouched; such a row becomes a tinted `TextEdit`, see `RichTextPills`) and
+  in inline editors and source mode (`MarkdownHighlighter.findQuery`). What is only in the Markdown
+  (`**`, a link's target) is not tinted in rendered text, though counted. Text that tables, query
+  results and embeds draw themselves is not tinted either.
+* **Replacing:** `PageController::replaceTextRanges` applies the change to the whole text through
+  `applyText`: one undo step ("Zamień wszystko" too, with Cofnij in its toast), other blocks' bytes
+  untouched, the usual debounced save and merge. In source mode the TextEdit holds the text and its own
+  undo: `EditorInput.replaceRanges` is one edit block. `NoteFind` maps text offsets to TextEdit
+  positions there, as the TextEdit shows a CRLF as one line break.
+* **The journal stream** searches **one day**, the one being written in (`activeDay`, named in the
+  field; a tap in another day moves the search there): days are created and destroyed as they
+  scroll, each with its own controller and undo history. "W całym notatniku…" covers all days.
+
+**In the whole notebook** (`qml/views/ReplaceView.qml`, route `replace {query?, replacement?}`, palette
+`go.replace`, Więcej, SearchView's "Zamień…", the bar's "W całym notatniku…"; not in the documentation
+notebook). Core: `notebook/replace.h`; the app: `src/app/shell/replacesession.h`, `Workspace.replacing`.
+
+* **Plan:** 350 ms after typing stops (Enter: at once), editors save (`EditorHost::saveEditorsRequested`)
+  and `notebook::ReplaceScan` reads and searches on the index's worker threads (slices on WebAssembly), with
+  a progress bar. Only notes: never `.trash/` or ignored paths, hidden files, conflict copies, drawings
+  (`*.excalidraw.md`, or the plugin's frontmatter key), SVGs; a note that is not valid UTF-8 or is over 16 MB
+  is left out and counted. The preview holds the first 50 hits of a note and 2000 in all, and says how many
+  more there are: those go with their ticked note.
+* **Choosing:** everything is ticked at first; a tick per note and per hit, tristate where partial. A
+  hit shows "line: before ~~match~~ → **replacement** after", from the note, so escaped into `StyledText`;
+  "Inside a link: it will point elsewhere" under a hit in `[[…]]` or `](…)`: links are text here, keeping
+  them is the rename's job. A tap on the text opens the note at that line.
+* **Applying:** after a confirmation with hits and notes, in slices. Each file is read again; bytes that differ
+  from the plan are refused and named in a toast. The hits are found again in that same text, then
+  `Vault::writeTextIfUnchanged` writes with the History reason `replace`, which the 5-minute throttle
+  never drops. BOM, line endings and all other bytes stay. Open editors follow through `fileChanged`.
+* **Undo:** the toast's Cofnij (`ReplaceSession.undo(token)`, kept by the session, so it works from
+  another view; the old text is held in memory until the next replace or notebook) restores only files
+  still holding what was written; others stay and are named.
+
+Tests: `tst_text_find`, `tst_notebook_replace`, `tst_markdown_render`, `tst_editor_controller`,
+`tst_editor_highlighter`, `tst_shell_workspace_wiring`, `tst_shell_workspace_editor`, `--selftest-shell`
+(`checkFindAndReplace`), `tst_remote_control_qml` (the real Ctrl+F and Ctrl+H), `tst_content_qml`.
 
 ## The block editor (heart of the app)
 

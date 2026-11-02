@@ -21,6 +21,8 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | F2 | zmiana nazwy strony |
 | Ctrl+, | ustawienia |
 | Ctrl+E | tryb źródła Markdown |
+| Ctrl+F | znajdź w notatce (Enter: następne, Shift+Enter: poprzednie, Esc: zamknij) |
+| Ctrl+H | znajdź i zamień w notatce |
 | Ctrl+; | dodaj właściwość strony |
 | Ctrl+Enter | w oknach: zatwierdź |
 

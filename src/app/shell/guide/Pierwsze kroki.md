@@ -35,6 +35,8 @@ Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na ka�
 ## Szukanie i przechodzenie
 - **Ctrl+O** — szybkie przejście do strony po kilku literach nazwy.
 - **Ctrl+Shift+F** — wyszukiwanie w treści wszystkich notatek; polskie znaki można pomijać („zolw” znajdzie „żółw”).
+- **Ctrl+F** — znajdź w otwartej notatce (na telefonie: menu strony → **Znajdź i zamień…**), **Ctrl+H** — od razu z zamianą. Polskie znaki i wielkość liter można pomijać; przyciski „Aa”, „ąa” i „Słowo” zawężają wyniki. Szukanie obejmuje tekst Markdown notatki, także adresy linków. „Zamień wszystko” cofa jedno **Ctrl+Z**. W strumieniu dziennika szukasz w dniu, w którym piszesz.
+- **Zamień w notatniku** (menu **Więcej**, paleta poleceń, „Zamień…” w wyszukiwaniu) — zamiana we wszystkich notatkach. Najpierw widać każde trafienie „przed → po”; odznacz, czego nie chcesz zmieniać. Trafienie wewnątrz linku jest oznaczone, bo link zacznie prowadzić gdzie indziej: żeby zmienić nazwę strony razem z linkami, użyj zmiany nazwy. Po zamianie przycisk **Cofnij** przywraca notatki, a starą treść każdej zachowuje też **Historia wersji**. Kosz, rysunki i inne pliki pomijamy.
 - **Ctrl+K** — paleta poleceń.
 - **Alt+←** / **Alt+→** — wstecz i dalej, jak w przeglądarce.
 

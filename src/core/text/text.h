@@ -7,6 +7,10 @@
 //     foldDiacritics("Zażółć Łódź") == "Zazolc Lodz"      NFD, drop combining marks, ł/Ł -> l/L
 //     foldKey("ŻÓŁW")               == "zolw"             lower-case + foldDiacritics
 //     foldKeyWithMap(s)  -> FoldedText{text, map}         foldKey plus offsets back into `s`
+//     foldDiacriticsWithMap(s)                            foldDiacritics plus the same offsets
+//
+//   Finding and replacing literal text: find.h — findMatches(text, query, {matchCase,
+//     matchDiacritics, wholeWord}) -> ranges of the original text, replaceMatches(text, ranges, by)
 //
 //   Words (Polish letters are word characters)
 //     isWordChar(QChar / char32_t)                        letter, number, combining mark or '_'
@@ -75,6 +79,8 @@ struct FoldedText {
 /// foldKey() keeping an offset map, folding one code point at a time (combining marks fold to
 /// nothing and so belong to the preceding character). `result.text == foldKey(s)`.
 FoldedText foldKeyWithMap(QStringView s);
+/// The same for foldDiacritics(): `result.text == foldDiacritics(s)`.
+FoldedText foldDiacriticsWithMap(QStringView s);
 
 // ---------------------------------------------------------------------------------------------
 // Words

@@ -132,6 +132,41 @@ private Q_SLOTS:
         QVERIFY(QFileInfo::exists(root + u"/Strona.md"_s));
     }
 
+    void notebookReplaceSavesFirstAndOpenEditorsFollow()
+    {
+        const QString root = m_tmp.filePath(u"Zamiana"_s);
+        QVERIFY(writeBehind(root + u"/Otwarta.md"_s, "- kot\n"));
+        QVERIFY(writeBehind(root + u"/Inna.md"_s, "- kot\n"));
+        Workspace ws;
+        QVERIFY(ws.open(root, m_tmp.filePath(u"state-replace"_s)));
+        ws.finishIndexing();
+
+        PageController page;
+        page.setSaveDelay(10000); // an edit waits for its debounced save
+        page.setHost(&ws);
+        page.setPath(u"Otwarta.md"_s);
+        page.setEditText(0, u"kot napisany przed chwilą"_s, 3);
+        QVERIFY(page.dirty());
+
+        auto *session = ws.replacing();
+        QSignalSpy applied(session, &brulion::shell::ReplaceSession::applied);
+        QSignalSpy undone(session, &brulion::shell::ReplaceSession::undone);
+        session->setQuery(u"kot"_s);
+        session->setReplacement(u"pies"_s);
+        session->scanNow();
+        QVERIFY(!page.dirty()); // saved before the plan looked at the file
+        QTRY_VERIFY(!session->scanning() && session->fileCount() == 2);
+        QVERIFY(session->apply());
+        QTRY_COMPARE(applied.size(), 1);
+        QCOMPARE(readRaw(root + u"/Otwarta.md"_s), QStringLiteral(u"- pies napisany przed chwilą\n").toUtf8());
+        QTRY_COMPARE(page.text(), u"- pies napisany przed chwilą\n"_s); // the editor follows the file
+        QVERIFY(!page.dirty());
+
+        QVERIFY(session->undo(applied.first().at(0).toInt()));
+        QTRY_COMPARE(undone.size(), 1);
+        QTRY_COMPARE(page.text(), u"- kot napisany przed chwilą\n"_s);
+    }
+
     void externalAppendDuringADebouncedSaveIsKept()
     {
         const QString root = m_tmp.filePath(u"Notatki"_s);

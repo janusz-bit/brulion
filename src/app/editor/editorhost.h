@@ -314,7 +314,8 @@ public:
 Q_SIGNALS:
     /// A file changed outside this editor (sync, Syncthing, another editor/view, import).
     void fileChanged(const QString &path);
-    /// Write what editors hold, now: a backup of the notebook follows.
+    /// Write what editors hold, now: something is about to read many files (a backup, the
+    /// notebook-wide replace).
     void saveOpenEditorsRequested();
     /// A restore moves `path` (a file or a folder) to the trash on purpose: an editor showing it
     /// drops its edits (they are in the safety backup) and writes nothing back.

@@ -21,6 +21,8 @@
 // its own); leave it 0 for editors that rely on TextEdit's undo (source mode).
 #pragma once
 
+#include "text/find.h"
+
 #include <QColor>
 #include <QHash>
 #include <QPointer>
@@ -38,6 +40,13 @@ class MarkdownHighlighter : public QSyntaxHighlighter {
     Q_PROPERTY(QString mode READ mode WRITE setMode NOTIFY modeChanged FINAL)
     Q_PROPERTY(QString monoFamily READ monoFamily WRITE setMonoFamily NOTIFY monoFamilyChanged FINAL)
     Q_PROPERTY(qreal lineHeight READ lineHeight WRITE setLineHeight NOTIFY lineHeightChanged FINAL)
+    /// The find bar's matches in this text (docs/UI.md "Find and replace"): tinted on top of the
+    /// syntax with `findColor`. "": none.
+    Q_PROPERTY(QString findQuery READ findQuery WRITE setFindQuery NOTIFY findChanged FINAL)
+    Q_PROPERTY(bool findMatchCase READ findMatchCase WRITE setFindMatchCase NOTIFY findChanged FINAL)
+    Q_PROPERTY(bool findMatchDiacritics READ findMatchDiacritics WRITE setFindMatchDiacritics NOTIFY findChanged FINAL)
+    Q_PROPERTY(bool findWholeWord READ findWholeWord WRITE setFindWholeWord NOTIFY findChanged FINAL)
+    Q_PROPERTY(QColor findColor READ findColor WRITE setFindColor NOTIFY findChanged FINAL)
 
 public:
     explicit MarkdownHighlighter(QObject *parent = nullptr);
@@ -53,6 +62,16 @@ public:
     void setMonoFamily(const QString &family);
     qreal lineHeight() const { return m_lineHeight; }
     void setLineHeight(qreal px);
+    QString findQuery() const { return m_findQuery; }
+    void setFindQuery(const QString &query);
+    bool findMatchCase() const { return m_findOptions.matchCase; }
+    void setFindMatchCase(bool on);
+    bool findMatchDiacritics() const { return m_findOptions.matchDiacritics; }
+    void setFindMatchDiacritics(bool on);
+    bool findWholeWord() const { return m_findOptions.wholeWord; }
+    void setFindWholeWord(bool on);
+    QColor findColor() const { return m_findColor; }
+    void setFindColor(const QColor &color);
 
     /// Attach to a plain QTextDocument (C++/tests); same as QSyntaxHighlighter::setDocument plus
     /// the line-height handling.
@@ -70,6 +89,7 @@ Q_SIGNALS:
     void modeChanged();
     void monoFamilyChanged();
     void lineHeightChanged();
+    void findChanged();
 
 protected:
     void highlightBlock(const QString &text) override;
@@ -81,6 +101,8 @@ private:
     void rebuildFormats();
     void applyLineHeight(int from = 0, int charsAdded = -1);
     void highlightInline(const QString &text, int offset, int length);
+    void highlightLine(const QString &line);
+    void findChangedTo(const QString &query, const text::FindOptions &options);
     void setRange(int from, int length, const QTextCharFormat &format);
     void mergeRange(int from, int length, const QTextCharFormat &format);
 
@@ -92,6 +114,9 @@ private:
     bool m_applyingFormat = false;
     QMetaObject::Connection m_contentsConnection;
     QHash<QString, QTextCharFormat> m_formats;
+    QString m_findQuery;
+    text::FindOptions m_findOptions;
+    QColor m_findColor = QColor(255, 196, 0, 90);
 };
 
 } // namespace brulion::editor

@@ -39,6 +39,30 @@
             <numerusform>The folder “%1” and %n pages in it will be moved to the trash.</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/AppShell.qml" line="640"/>
+        <source>%n occurrence(s) replaced</source>
+        <translation>
+            <numerusform>%n occurrence replaced</numerusform>
+            <numerusform>%n occurrences replaced</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/AppShell.qml" line="640"/>
+        <source>%n note(s)</source>
+        <translation>
+            <numerusform>%n note</numerusform>
+            <numerusform>%n notes</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/AppShell.qml" line="640"/>
+        <source>%n note(s) restored</source>
+        <translation>
+            <numerusform>%n note restored</numerusform>
+            <numerusform>%n notes restored</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>BDatePicker</name>
@@ -459,6 +483,25 @@
     </message>
 </context>
 <context>
+    <name>FindBar</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/FindBar.qml" line="46"/>
+        <source>%n occurrence(s) replaced</source>
+        <translation>
+            <numerusform>%n occurrence replaced</numerusform>
+            <numerusform>%n occurrences replaced</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/FindBar.qml" line="172"/>
+        <source>%n result(s)</source>
+        <translation>
+            <numerusform>%n result</numerusform>
+            <numerusform>%n results</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>GraphNodeCard</name>
     <message numerus="yes">
         <location filename="../src/app/qml/planning/GraphNodeCard.qml" line="71"/>
@@ -788,6 +831,49 @@
         <translation>
             <numerusform>Show %n more</numerusform>
             <numerusform>Show %n more</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>ReplaceView</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="46"/>
+        <source>%n note(s)</source>
+        <translation>
+            <numerusform>%n note</numerusform>
+            <numerusform>%n notes</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="145"/>
+        <source>%n occurrence(s)</source>
+        <translation>
+            <numerusform>%n occurrence</numerusform>
+            <numerusform>%n occurrences</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="171"/>
+        <source>%n more not shown: they are replaced with their ticked note.</source>
+        <translation>
+            <numerusform>%n more not shown: it is replaced with its ticked note.</numerusform>
+            <numerusform>%n more not shown: they are replaced with their ticked note.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="173"/>
+        <source>%n note(s) left out: not UTF-8 text, or too large.</source>
+        <translation>
+            <numerusform>%n note left out: not UTF-8 text, or too large.</numerusform>
+            <numerusform>%n notes left out: not UTF-8 text, or too large.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="294"/>
+        <source>and %n more</source>
+        <translation>
+            <numerusform>and %n more</numerusform>
+            <numerusform>and %n more</numerusform>
         </translation>
     </message>
 </context>

@@ -1,3 +1,4 @@
+#include "text/find.h"
 #include "markdown/inlinerenderer.h"
 
 #include "dates/format.h"
@@ -465,6 +466,127 @@ QString InlineRenderer::withHoveredLink(QStringView html, QStringView href)
     }
     if (done == 0)
         return html.toString();
+    out += html.sliced(done);
+    return out;
+}
+
+namespace {
+
+/// The character an entity of rendered text shows (`end`: past the ';'), QChar::Null when `html`
+/// has no entity at `at`.
+char32_t entityAt(QStringView html, qsizetype at, qsizetype &end)
+{
+    const qsizetype semicolon = html.sliced(at, std::min<qsizetype>(html.size() - at, 12)).indexOf(u';');
+    if (semicolon < 2)
+        return 0;
+    end = at + semicolon + 1;
+    const QStringView name = html.sliced(at + 1, semicolon - 1);
+    if (name == u"amp")
+        return u'&';
+    if (name == u"lt")
+        return u'<';
+    if (name == u"gt")
+        return u'>';
+    if (name == u"quot")
+        return u'"';
+    if (name == u"apos")
+        return u'\'';
+    if (name == u"nbsp")
+        return 0xA0;
+    if (name.startsWith(u'#')) {
+        bool ok = false;
+        const bool hex = name.size() > 1 && (name.at(1) == u'x' || name.at(1) == u'X');
+        const uint code = (hex ? name.sliced(2) : name.sliced(1)).toUInt(&ok, hex ? 16 : 10);
+        if (ok && code > 0 && code <= 0x10FFFF)
+            return code;
+    }
+    return 0;
+}
+
+} // namespace
+
+QString InlineRenderer::withFindHighlight(QStringView html, QStringView query, bool matchCase, bool matchDiacritics,
+                                          bool wholeWord, QStringView color)
+{
+    if (query.isEmpty())
+        return html.toString();
+    // The shown text and, per unit of it, where it is in the HTML.
+    QString shown;
+    shown.reserve(html.size());
+    QList<qsizetype> from;
+    QList<qsizetype> to;
+    from.reserve(html.size());
+    to.reserve(html.size());
+    const auto add = [&](QChar c, qsizetype start, qsizetype end) {
+        shown += c;
+        from.append(start);
+        to.append(end);
+    };
+    for (qsizetype i = 0; i < html.size();) {
+        const QChar c = html.at(i);
+        if (c == u'<') {
+            qsizetype end = i + 1;
+            QChar quote;
+            for (; end < html.size(); ++end) {
+                const QChar t = html.at(end);
+                if (!quote.isNull()) {
+                    if (t == quote)
+                        quote = QChar();
+                } else if (t == u'"' || t == u'\'') {
+                    quote = t;
+                } else if (t == u'>') {
+                    break;
+                }
+            }
+            end = std::min(end + 1, html.size());
+            if (html.sliced(i, end - i).startsWith(u"<br"))
+                add(u'\n', end, end);
+            i = end;
+            continue;
+        }
+        if (c == u'&') {
+            qsizetype end = i;
+            if (const char32_t entity = entityAt(html, i, end)) {
+                if (QChar::requiresSurrogates(entity)) {
+                    add(QChar(QChar::highSurrogate(entity)), i, end);
+                    add(QChar(QChar::lowSurrogate(entity)), end, end);
+                } else {
+                    add(QChar(char16_t(entity)), i, end);
+                }
+                i = end;
+                continue;
+            }
+        }
+        add(c, i, i + 1);
+        ++i;
+    }
+    const QList<text::TextRange> matches = text::findMatches(shown, query, { matchCase, matchDiacritics, wholeWord });
+    if (matches.isEmpty())
+        return html.toString();
+    const QString open = u"<span style=\"background-color:"_s + safeColor(color.toString()) + u"\">"_s;
+    const QString close = u"</span>"_s;
+    QString out;
+    out.reserve(html.size() + matches.size() * (open.size() + close.size()));
+    qsizetype done = 0;
+    for (const text::TextRange &match : matches) {
+        // One span per piece of the HTML without a tag in between.
+        qsizetype first = match.start;
+        while (first < match.end()) {
+            qsizetype last = first;
+            while (last + 1 < match.end() && (to.at(last) == from.at(last + 1) || from.at(last + 1) == to.at(last)))
+                ++last;
+            const qsizetype start = from.at(first);
+            const qsizetype end = to.at(last);
+            if (end > start) {
+                out += html.sliced(done, start - done);
+                out += open;
+                out += html.sliced(start, end - start);
+                out += close;
+                done = end;
+            }
+            first = last + 1;
+        }
+    }
     out += html.sliced(done);
     return out;
 }

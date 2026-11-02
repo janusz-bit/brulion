@@ -396,6 +396,53 @@
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="183"/>
+        <source>Replace in notebook</source>
+        <translation>Zamień w notatniku</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/AppShell.qml" line="640"/>
+        <source>%n occurrence(s) replaced</source>
+        <translation>
+            <numerusform>Zamieniono %n trafienie</numerusform>
+            <numerusform>Zamieniono %n trafienia</numerusform>
+            <numerusform>Zamieniono %n trafień</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/AppShell.qml" line="640"/>
+        <source>%n note(s)</source>
+        <translation>
+            <numerusform>%n notatka</numerusform>
+            <numerusform>%n notatki</numerusform>
+            <numerusform>%n notatek</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="640"/>
+        <source>Left as they are, changed since the preview: %1</source>
+        <translation>Bez zmian, bo zmieniły się po podglądzie: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="640"/>
+        <source>Could not write: %1</source>
+        <translation>Nie udało się zapisać: %1</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/AppShell.qml" line="640"/>
+        <source>%n note(s) restored</source>
+        <translation>
+            <numerusform>Przywrócono %n notatkę</numerusform>
+            <numerusform>Przywrócono %n notatki</numerusform>
+            <numerusform>Przywrócono %n notatek</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="640"/>
+        <source>Changed since, left as they are: %1</source>
+        <translation>Zmienione w międzyczasie, zostają bez zmian: %1</translation>
+    </message>
 </context>
 <context>
     <name>BAccentDialog</name>
@@ -4637,6 +4684,107 @@
     </message>
 </context>
 <context>
+    <name>FindBar</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/FindBar.qml" line="46"/>
+        <source>%n occurrence(s) replaced</source>
+        <translation>
+            <numerusform>Zamieniono %n trafienie</numerusform>
+            <numerusform>Zamieniono %n trafienia</numerusform>
+            <numerusform>Zamieniono %n trafień</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="70"/>
+        <source>Find in note</source>
+        <translation>Znajdź w notatce</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="114"/>
+        <source>Hide replace</source>
+        <translation>Ukryj zamianę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="114"/>
+        <source>Replace</source>
+        <translation>Zamień</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="133"/>
+        <source>Find in %1</source>
+        <translation>Znajdź: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="170"/>
+        <source>No results</source>
+        <translation>Brak wyników</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/FindBar.qml" line="172"/>
+        <source>%n result(s)</source>
+        <translation>
+            <numerusform>%n wynik</numerusform>
+            <numerusform>%n wyniki</numerusform>
+            <numerusform>%n wyników</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="174"/>
+        <source>%1 of %2</source>
+        <translation>%1 z %2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="181"/>
+        <source>Previous result</source>
+        <translation>Poprzedni wynik</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="191"/>
+        <source>Next result</source>
+        <translation>Następny wynik</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="201"/>
+        <source>Close find</source>
+        <translation>Zamknij szukanie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="215"/>
+        <source>Match case</source>
+        <translation>Uwzględnij wielkość liter</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="222"/>
+        <source>Match Polish letters and other diacritics</source>
+        <translation>Uwzględnij polskie znaki i inne znaki diakrytyczne</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="228"/>
+        <source>Word</source>
+        <translation>Słowo</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="229"/>
+        <source>Whole words only</source>
+        <translation>Tylko całe słowa</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="237"/>
+        <source>In the whole notebook…</source>
+        <translation>W całym notatniku…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="255"/>
+        <source>Replace with</source>
+        <translation>Zamień na</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="277"/>
+        <source>Replace all</source>
+        <translation>Zamień wszystko</translation>
+    </message>
+</context>
+<context>
     <name>FrontmatterView</name>
     <message>
         <location filename="../src/app/qml/editor/FrontmatterView.qml" line="90"/>
@@ -7287,6 +7435,11 @@
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/views/PageView.qml" line="612"/>
+        <source>Find and replace…</source>
+        <translation>Znajdź i zamień…</translation>
+    </message>
 </context>
 <context>
     <name>PdfEmbedTile</name>
@@ -8007,6 +8160,144 @@
     </message>
 </context>
 <context>
+    <name>ReplaceView</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="46"/>
+        <source>%n note(s)</source>
+        <translation>
+            <numerusform>%n notatka</numerusform>
+            <numerusform>%n notatki</numerusform>
+            <numerusform>%n notatek</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="93"/>
+        <source>Find in every note</source>
+        <translation>Znajdź we wszystkich notatkach</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="103"/>
+        <source>Replace with</source>
+        <translation>Zamień na</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="112"/>
+        <source>Match case</source>
+        <translation>Uwzględnij wielkość liter</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="119"/>
+        <source>Match Polish letters and other diacritics</source>
+        <translation>Uwzględnij polskie znaki i inne znaki diakrytyczne</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="125"/>
+        <source>Word</source>
+        <translation>Słowo</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="126"/>
+        <source>Whole words only</source>
+        <translation>Tylko całe słowa</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="145"/>
+        <source>%n occurrence(s)</source>
+        <translation>
+            <numerusform>%n trafienie</numerusform>
+            <numerusform>%n trafienia</numerusform>
+            <numerusform>%n trafień</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="159"/>
+        <source>Replace (%1)</source>
+        <translation>Zamień (%1)</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="171"/>
+        <source>%n more not shown: they are replaced with their ticked note.</source>
+        <translation>
+            <numerusform>Jeszcze %n trafienie nie jest pokazane: zostanie zamienione razem ze swoją zaznaczoną notatką.</numerusform>
+            <numerusform>Jeszcze %n trafienia nie są pokazane: zostaną zamienione razem ze swoją zaznaczoną notatką.</numerusform>
+            <numerusform>Jeszcze %n trafień nie jest pokazanych: zostaną zamienione razem ze swoją zaznaczoną notatką.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="173"/>
+        <source>%n note(s) left out: not UTF-8 text, or too large.</source>
+        <translation>
+            <numerusform>Pominięto %n notatkę: to nie tekst UTF-8 albo jest za duża.</numerusform>
+            <numerusform>Pominięto %n notatki: to nie tekst UTF-8 albo są za duże.</numerusform>
+            <numerusform>Pominięto %n notatek: to nie tekst UTF-8 albo są za duże.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="193"/>
+        <source>Occurrences to replace</source>
+        <translation>Trafienia do zamiany</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="224"/>
+        <source>Replace in %1</source>
+        <translation>Zamień w: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="255"/>
+        <source>Replace on line %1</source>
+        <translation>Zamień w wierszu %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="283"/>
+        <source>Inside a link: it will point elsewhere.</source>
+        <translation>Wewnątrz linku: zacznie prowadzić gdzie indziej.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="294"/>
+        <source>and %n more</source>
+        <translation>
+            <numerusform>i jeszcze %n</numerusform>
+            <numerusform>i jeszcze %n</numerusform>
+            <numerusform>i jeszcze %n</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="304"/>
+        <source>No results</source>
+        <translation>Brak wyników</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="305"/>
+        <source>No note has this text. Trash, drawings and other files are not searched.</source>
+        <translation>Żadna notatka nie ma tego tekstu. Kosza, rysunków i innych plików nie przeszukujemy.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="313"/>
+        <source>Replace in notebook</source>
+        <translation>Zamień w notatniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="314"/>
+        <source>Type the text to find: nothing changes until you have seen the notes that have it and confirmed.</source>
+        <translation>Wpisz szukany tekst: nic się nie zmieni, dopóki nie zobaczysz notatek, w których występuje, i nie potwierdzisz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="323"/>
+        <source>Replace in notebook?</source>
+        <translation>Zamienić w notatniku?</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="325"/>
+        <source>You can undo right after, and each note's version history keeps its old text.</source>
+        <translation>Możesz od razu cofnąć zamianę, a historia wersji każdej notatki zachowa jej poprzednią treść.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/ReplaceView.qml" line="326"/>
+        <source>Replace</source>
+        <translation>Zamień</translation>
+    </message>
+</context>
+<context>
     <name>SearchView</name>
     <message>
         <location filename="../src/app/qml/views/SearchView.qml" line="117"/>
@@ -8134,6 +8425,16 @@
         <location filename="../src/app/qml/views/SearchView.qml" line="359"/>
         <source>Notebook root</source>
         <translation>Główny folder notatnika</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SearchView.qml" line="166"/>
+        <source>Replace…</source>
+        <translation>Zamień…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SearchView.qml" line="167"/>
+        <source>Replace in notebook</source>
+        <translation>Zamień w notatniku</translation>
     </message>
 </context>
 <context>
@@ -10660,6 +10961,16 @@
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="304"/>
         <source>Import notes</source>
         <translation>Importuj notatki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="327"/>
+        <source>Find in note</source>
+        <translation>Znajdź w notatce</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="336"/>
+        <source>Replace in notebook</source>
+        <translation>Zamień w notatniku</translation>
     </message>
 </context>
 <context>
@@ -15104,6 +15415,11 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <source>Yesterday</source>
         <translation>Wczoraj</translation>
     </message>
+    <message>
+        <location filename="../src/app/content/historymodel.cpp" line="69"/>
+        <source>Replaced by Find and replace in the notebook</source>
+        <translation>Zastąpione przez „Zamień w notatniku”</translation>
+    </message>
 </context>
 <context>
     <name>brulion::content::PageTools</name>
@@ -17106,6 +17422,26 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     <message>
         <source>The open page or file; you can restore it from the trash</source>
         <translation>Otwarta strona lub plik; można je przywrócić z kosza</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="92"/>
+        <source>Find in note</source>
+        <translation>Znajdź w notatce</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="92"/>
+        <source>And replace</source>
+        <translation>I zamień</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="94"/>
+        <source>Replace in notebook</source>
+        <translation>Zamień w notatniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="94"/>
+        <source>Find and replace in every note, with a preview</source>
+        <translation>Znajdź i zamień we wszystkich notatkach, z podglądem</translation>
     </message>
 </context>
 <context>

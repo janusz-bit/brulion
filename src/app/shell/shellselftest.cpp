@@ -3955,6 +3955,197 @@ QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
 /// "Sprzątanie": what nothing refers to is listed with nothing ticked, a tap ticks it, "Open" and
 /// Back keep the ticks, only what is shown and ticked goes to the trash, and the toast's Undo still
 /// works after leaving the view.
+/// Find and replace (docs/UI.md "Find and replace"): the bar in a page with real keys and taps, source
+/// mode, the journal stream, and the notebook-wide view with its ticks, confirmation and Undo.
+void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    const QString note = u"Szukanie żółwia.md"_s;
+    const QString other = u"Szukanie inne.md"_s;
+    ws->writeFile(note, u"- pierwszy żółw\n\t- ukryty ŻÓŁW\n- bez niczego\n- ostatni zolw\n"_s);
+    ws->writeFile(other, u"- zolw w innej notatce\n"_s);
+    app->navigate({ { u"view"_s, u"page"_s }, { u"path"_s, note } });
+    QObject *controller = nullptr;
+    QQuickItem *editor = nullptr;
+    check(waitFor([&] {
+              editor = shownNamed(window->contentItem(), u"pageEditor"_s);
+              controller = editor ? editor->property("controller").value<QObject *>() : nullptr;
+              return controller && controller->property("loaded").toBool()
+                     && controller->property("path").toString() == note;
+          }),
+          "the page to search is open");
+    if (!controller || !editor)
+        return;
+    const auto text = [&] { return controller->property("sourceText").toString(); };
+    const auto typeIn = [&](const QString &what) {
+        for (const QChar ch : what)
+            sendKey(window, 0, Qt::NoModifier, QString(ch));
+    };
+    // Ctrl+F and Ctrl+E as Shortcut objects (the keyboard's way: tst_remote_control_qml) ask the
+    // same actions.
+    const auto shortcut = [&](int key) {
+        if (key == Qt::Key_F)
+            app->requestUiAction(u"findInNote"_s);
+        else
+            app->requestUiAction(u"toggleSourceMode"_s);
+        settle(100);
+    };
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const auto press = [&](const QString &name) {
+        if (QQuickItem *item = named(name))
+            tapOrClick(window, pointIn(item), touch);
+    };
+    QMetaObject::invokeMethod(controller, "toggleFold", Q_ARG(int, 0)); // the second block hidden
+
+    // Ctrl+F opens the bar, the query goes to the nearest match; focus stays in the field.
+    shortcut(Qt::Key_F);
+    QQuickItem *field = nullptr;
+    check(waitFor([&] { return (field = named(u"findField"_s)) != nullptr; }), "the find bar opens");
+    if (!field)
+        return;
+    check(waitFor([&] { return field->hasActiveFocus(); }), "the find field has the keyboard");
+    typeIn(u"zolw"_s);
+    QQuickItem *status = nullptr;
+    check(waitFor([&] {
+              status = named(u"findStatus"_s);
+              return status && status->property("text").toString().contains(u'3');
+          }, 3000),
+          "the bar counts three matches, without Polish letters and letter case");
+    check(waitFor([&] { return controller->property("editingRow").toInt() == 0; }), "the first match is being shown");
+    check(field->hasActiveFocus(), "going to a match leaves the keyboard in the field");
+    sendKey(window, Qt::Key_Return);
+    check(waitFor([&] { return controller->property("editingRow").toInt() == 1; }),
+          "Enter goes to the next match, out of the folded block");
+    check(field->hasActiveFocus() && text().contains(u"pierwszy żółw"_s), "Enter only moved: nothing typed or split");
+    sendKey(window, Qt::Key_Return, Qt::ShiftModifier);
+    check(waitFor([&] { return controller->property("editingRow").toInt() == 0; }), "Shift+Enter goes back");
+    if (!touch) {
+        QQuickItem *next = named(u"findNext"_s);
+        if (next)
+            tapOrClick(window, pointIn(next), touch);
+        check(waitFor([&] { return controller->property("editingRow").toInt() == 1; }) && field->hasActiveFocus(),
+              "the next button keeps the keyboard in the field too");
+        sendKey(window, Qt::Key_Return, Qt::ShiftModifier);
+        waitFor([&] { return controller->property("editingRow").toInt() == 0; });
+    }
+
+    // Replace: one, then all as one undo step.
+    press(u"findReplaceToggle"_s);
+    QQuickItem *replacement = nullptr;
+    check(waitFor([&] { return (replacement = named(u"findReplacement"_s)) != nullptr && replacement->hasActiveFocus(); }),
+          "the replace row opens with the keyboard in it");
+    typeIn(u"kot"_s);
+    press(u"findReplaceOne"_s);
+    check(waitFor([&] { return text() == u"- pierwszy kot\n\t- ukryty ŻÓŁW\n- bez niczego\n- ostatni zolw\n"_s; }),
+          "Replace changes the current match");
+    check(waitFor([&] { return controller->property("editingRow").toInt() == 1; }), "and goes on to the next one");
+    press(u"findReplaceAll"_s);
+    check(waitFor([&] { return text() == u"- pierwszy kot\n\t- ukryty kot\n- bez niczego\n- ostatni kot\n"_s; }),
+          "Replace all changes the rest");
+    QMetaObject::invokeMethod(controller, "undo");
+    check(waitFor([&] { return text() == u"- pierwszy kot\n\t- ukryty ŻÓŁW\n- bez niczego\n- ostatni zolw\n"_s; }),
+          "one undo takes the whole Replace all back");
+
+    // Esc closes it and gives the keyboard back.
+    if (named(u"findField"_s))
+        named(u"findField"_s)->forceActiveFocus();
+    sendKey(window, Qt::Key_Escape);
+    check(waitFor([&] { return named(u"findBar"_s) == nullptr; }), "Esc closes the find bar");
+    check(controller->property("sourceText").toString().contains(u"ŻÓŁW"_s), "closing changes nothing");
+
+    // Source mode: the same bar on the whole text.
+    shortcut(Qt::Key_E);
+    check(waitFor([&] { return controller->property("sourceMode").toBool(); }), "source mode is on");
+    shortcut(Qt::Key_F);
+    check(waitFor([&] { return (field = named(u"findField"_s)) != nullptr && field->hasActiveFocus(); }),
+          "the bar opens in source mode");
+    QQuickItem *sourceEdit = editor->property("sourceTextEdit").value<QQuickItem *>();
+    check(sourceEdit != nullptr, "the source's text is there");
+    if (field) {
+        field->forceActiveFocus();
+        QMetaObject::invokeMethod(field, "selectAll");
+    }
+    typeIn(u"zolw"_s);
+    check(waitFor([&] { return sourceEdit && sourceEdit->property("selectedText").toString() == u"ŻÓŁW"_s; }, 3000),
+          "source mode selects the match in the text");
+    sendKey(window, Qt::Key_Escape);
+    check(waitFor([&] { return named(u"findBar"_s) == nullptr; }), "Esc closes it in source mode too");
+    shortcut(Qt::Key_E);
+    check(waitFor([&] { return !controller->property("sourceMode").toBool(); }), "back to the blocks");
+    QMetaObject::invokeMethod(controller, "save");
+
+    // The journal stream: not a dead key, over the day being written in.
+    app->navigate({ { u"view"_s, u"journals"_s } });
+    settle(300);
+    shortcut(Qt::Key_F);
+    check(waitFor([&] { return named(u"findField"_s) != nullptr; }), "the bar opens in the journal stream");
+    sendKey(window, Qt::Key_Escape);
+    check(waitFor([&] { return named(u"findBar"_s) == nullptr; }), "Esc closes the stream's bar");
+
+    // The whole notebook.
+    app->navigate({ { u"view"_s, u"replace"_s }, { u"query"_s, u"zolw"_s }, { u"replacement"_s, u"pies"_s } });
+    QQuickItem *apply = nullptr;
+    ReplaceSession *session = ws->replacing();
+    check(waitFor([&] { return (apply = named(u"replaceApply"_s)) != nullptr && !session->scanning() && session->fileCount() >= 2; }, 5000),
+          "the notebook-wide view previews the notes");
+    const int all = session->tickedHits();
+    check(all >= 3, "every hit is ticked at first");
+    QQuickItem *list = named(u"replaceList"_s);
+    settle(300); // the view fades in
+    QQuickItem *hitTick = nullptr;
+    if (list) {
+        const QList<QQuickItem *> items = uidriver::allItems(list);
+        for (QQuickItem *item : items) {
+            if (item->objectName() == u"replaceHitTick"_s && uidriver::shown(item)) {
+                hitTick = item;
+                break;
+            }
+        }
+    }
+    check(hitTick != nullptr, "a hit has its tick");
+    if (hitTick)
+        tapOrClick(window, pointIn(hitTick), touch);
+    check(waitFor([&] { return session->tickedHits() == all - 1; }), "a tap takes one hit out");
+    if (hitTick)
+        tapOrClick(window, pointIn(hitTick), touch);
+    check(waitFor([&] { return session->tickedHits() == all; }), "and puts it back");
+    if (apply)
+        tapOrClick(window, pointIn(apply), touch);
+    const QString accept = QCoreApplication::translate("ReplaceView", "Replace");
+    QQuickItem *acceptButton = nullptr;
+    check(waitFor([&] {
+              acceptButton = uidriver::findShown(window->contentItem(), [&](QQuickItem *item) {
+                  return isA(item, "BButton") && item != apply && item->property("text").toString() == accept;
+              });
+              return acceptButton != nullptr;
+          }),
+          "the confirmation asks first");
+    check(ws->readFile(other) == u"- zolw w innej notatce\n"_s, "nothing is written before the confirmation");
+    // (The note's Replace all has a toast with Undo of its own: this replace's is the one to press.)
+    if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
+        QMetaObject::invokeMethod(toasts, "clear");
+    settle(250);
+    if (acceptButton)
+        tapOrClick(window, pointIn(acceptButton), touch);
+    check(waitFor([&] { return ws->readFile(other) == u"- pies w innej notatce\n"_s; }, 5000), "the replace is written");
+    // Undo from another view: the toast outlives the view.
+    QQuickItem *undo = nullptr;
+    check(waitFor([&] { return (undo = named(u"toastAction"_s)) != nullptr; }), "the toast offers Undo");
+    app->navigate({ { u"view"_s, u"tasks"_s } });
+    settle(250);
+    undo = named(u"toastAction"_s);
+    if (undo)
+        tapOrClick(window, pointIn(undo), touch);
+    check(undo && waitFor([&] { return ws->readFile(other) == u"- zolw w innej notatce\n"_s; }, 5000),
+          "Undo restores the notes after leaving the view");
+    closeMenus(window);
+    ws->writeFile(note, QString());
+    ws->deletePage(note);
+    ws->deletePage(other);
+    app->goHome();
+}
+
 void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -5274,6 +5465,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         waitFor([&] { return !isOpen(drawer); });
     }
     app->goHome();
+    // 3g. Find and replace: the bar in a note, the notebook-wide view.
+    checkFindAndReplace(window, app, check);
+    closeMenus(window);
 
     // 4. The command palette: Escape closes it; the focus returns to the shell.
     app->navigate({ { u"view"_s, u"tasks"_s } });

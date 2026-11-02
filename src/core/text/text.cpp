@@ -217,6 +217,15 @@ FoldedText foldKeyWithMap(QStringView s)
     return folded;
 }
 
+FoldedText foldDiacriticsWithMap(QStringView s)
+{
+    FoldedText folded;
+    folded.map.reserve(s.size() + 1);
+    folded.text = foldPerCodePoint<false, true>(s, &folded.map);
+    folded.map.append(s.size());
+    return folded;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Words
 // ---------------------------------------------------------------------------------------------

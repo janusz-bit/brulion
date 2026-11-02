@@ -56,6 +56,10 @@ public:
     /// hover and press feedback of rendered text (docs/UI.md "Links in rendered text",
     /// InlineRenderer::withHoveredLink()); `html` unchanged for "" and an href not in it.
     Q_INVOKABLE QString hoveredLinkHtml(const QString &html, const QString &href) const;
+    /// Rendered rich text with the find bar's matches tinted `color`
+    /// (InlineRenderer::withFindHighlight(); docs/UI.md "Find and replace"). `html` unchanged for "".
+    Q_INVOKABLE QString findHighlightedHtml(const QString &html, const QString &query, bool matchCase,
+                                            bool matchDiacritics, bool wholeWord, const QString &color) const;
 };
 
 } // namespace brulion::ui

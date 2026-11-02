@@ -64,6 +64,7 @@
 #include "lazyhtmlmimedata.h"
 #include "markdown/pageprops.h"
 #include "markdown/tokenedit.h"
+#include "text/find.h"
 
 #include <QDateTime>
 #include <QObject>
@@ -862,6 +863,24 @@ public:
     Q_INVOKABLE QStringList webPictureUrls() const;
     /// Pictures being stored by downloadWebPictures().
     Q_INVOKABLE int webPictureDownloads() const { return int(m_webDownloads.size()); }
+
+    // --- Find and replace (NoteFind, pagecontroller_find.cpp) -----------------------------------------
+    /// Where [start, start + length) of text() is shown: its row and range in that row's edit text;
+    /// `editable` false when the block's inline editor cannot select it (a list or task marker, a
+    /// fence line, a table: the row alone is known).
+    struct TextLocation {
+        int row = -1;
+        int from = -1;
+        int to = -1;
+        bool editable = false;
+    };
+    TextLocation locateText(qsizetype start, qsizetype length) const;
+    /// Offset in text() of the first line of `row`.
+    qsizetype textOffsetOfRow(int row) const;
+    /// `ranges` of text() replaced as one undo step, in any block (also list markers: the text is
+    /// read again, what changed is what the ranges cover). False in source mode (the TextEdit holds
+    /// the text there) or when nothing changes.
+    bool replaceTextRanges(const QList<text::TextRange> &ranges, const QString &replacement);
 
     // --- Undo -------------------------------------------------------------------------------------
     Q_INVOKABLE void undo();

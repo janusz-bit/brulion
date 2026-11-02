@@ -5,10 +5,10 @@
 # (embeds.h: "Rysuj na tej stronie" of the PDF viewer), the files nothing refers to (cleanup.h),
 # and Notebook (a vault opened headless: lazy index, lock, compare-and-swap edits with History);
 # loading the index on worker threads (IndexLoader) and keeping its cache on the device
-# (IndexCacheKeeper).
+# (IndexCacheKeeper); text replaced in the whole notebook with a preview (replace.h).
 # The shell's Workspace delegates to it; brulion-cli (src/cli) is built on it.
 # Public headers: notebook.h (overview), capture.h, journals.h, pages.h, links.h, itemref.h,
-# json.h, session.h, share.h, embeds.h, cleanup.h.
+# json.h, session.h, share.h, embeds.h, cleanup.h, replace.h.
 brulion_add_core_module(notebook
     SOURCES
         notebook.h
@@ -22,6 +22,7 @@ brulion_add_core_module(notebook
         json.h json.cpp
         links.h links.cpp
         pages.h pages.cpp
+        replace.h replace.cpp
         session.h session.cpp
         share.h share.cpp
-    DEPS util text dates markdown vault index reminders log)
+    DEPS util text dates markdown vault index reminders log drawing)

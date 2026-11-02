@@ -252,6 +252,14 @@ QString TextHelper::escapeHtml(const QString &text) const
     return text.toHtmlEscaped();
 }
 
+QString TextHelper::findHighlightedHtml(const QString &html, const QString &query, bool matchCase, bool matchDiacritics,
+                                        bool wholeWord, const QString &color) const
+{
+    if (query.isEmpty())
+        return html;
+    return markdown::InlineRenderer::withFindHighlight(html, query, matchCase, matchDiacritics, wholeWord, color);
+}
+
 QString TextHelper::hoveredLinkHtml(const QString &html, const QString &href) const
 {
     return href.isEmpty() ? html : markdown::InlineRenderer::withHoveredLink(html, href);

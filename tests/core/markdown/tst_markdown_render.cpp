@@ -551,6 +551,49 @@ private Q_SLOTS:
         QCOMPARE(InlineRenderer::withHoveredLink(hovered, href), hovered); // idempotent
     }
 
+    void findHighlight_data()
+    {
+        const QString on = u"<span style=\"background-color:#ff0\">"_s;
+        const QString off = u"</span>"_s;
+        QTest::addColumn<QString>("html");
+        QTest::addColumn<QString>("query");
+        QTest::addColumn<QString>("result");
+        QTest::newRow("plain") << u"a żółw b"_s << u"zolw"_s << QString(u"a "_s + on + u"żółw"_s + off + u" b"_s);
+        QTest::newRow("no match") << u"a <b>b</b>"_s << u"z"_s << u"a <b>b</b>"_s;
+        QTest::newRow("empty query") << u"a"_s << u""_s << u"a"_s;
+        QTest::newRow("tag names and attributes are not text")
+                << u"<a href=\"page:kot\" style=\"color:#000\">pies</a>"_s << u"kot"_s
+                << u"<a href=\"page:kot\" style=\"color:#000\">pies</a>"_s;
+        QTest::newRow("a quote with > in an attribute") << u"<a title=\"x>kot\">kot</a>"_s << u"kot"_s
+                << QString(u"<a title=\"x>kot\">"_s + on + u"kot"_s + off + u"</a>"_s);
+        QTest::newRow("inside a tag's text") << u"<b>kot</b>"_s << u"kot"_s << QString(u"<b>"_s + on + u"kot"_s + off + u"</b>"_s);
+        QTest::newRow("across tags") << u"<b>ko</b>t"_s << u"kot"_s
+                                     << QString(u"<b>"_s + on + u"ko"_s + off + u"</b>"_s + on + u"t"_s + off);
+        QTest::newRow("entity whole") << u"a &amp; b"_s << u"&"_s << QString(u"a "_s + on + u"&amp;"_s + off + u" b"_s);
+        QTest::newRow("entity's name is not text") << u"&amp;"_s << u"amp"_s << u"&amp;"_s;
+        QTest::newRow("query with a less-than") << u"x &lt; y"_s << u"x < y"_s
+                                                << QString(on + u"x &lt; y"_s + off);
+        QTest::newRow("no-break space") << u"w&nbsp;domu"_s << u"w domu"_s << QString(on + u"w&nbsp;domu"_s + off);
+        QTest::newRow("numeric entity") << u"&#39;a&#x27;"_s << u"'a'"_s << QString(on + u"&#39;a&#x27;"_s + off);
+        QTest::newRow("line break stops a match") << u"a<br/>b"_s << u"a b"_s << u"a<br/>b"_s;
+        QTest::newRow("two") << u"kot kot"_s << u"kot"_s
+                             << QString(on + u"kot"_s + off + u" "_s + on + u"kot"_s + off);
+        QTest::newRow("emoji stays whole") << u"😀kot😀"_s << u"kot"_s << QString(u"😀"_s + on + u"kot"_s + off + u"😀"_s);
+        QTest::newRow("a bare ampersand") << u"a & b"_s << u"&"_s << QString(u"a "_s + on + u"&"_s + off + u" b"_s);
+    }
+    void findHighlight()
+    {
+        QFETCH(QString, html);
+        QFETCH(QString, query);
+        QFETCH(QString, result);
+        QCOMPARE(InlineRenderer::withFindHighlight(html, query, false, false, false, u"#ff0"), result);
+    }
+    void findHighlightColorIsSafe()
+    {
+        const QString out = InlineRenderer::withFindHighlight(u"kot", u"kot", false, false, false, u"#ff0\"><img src=x>");
+        QVERIFY(!out.contains(u"<img"));
+    }
+
     void linkUrlAt_data()
     {
         QTest::addColumn<QString>("text");

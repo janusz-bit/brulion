@@ -88,6 +88,11 @@ static QList<Command> buildCommands(const AppController *app)
         { u"go.tags"_s, CommandModel::tr("Tags"), {}, u"tags"_s, {}, ready },
         { u"go.graph"_s, CommandModel::tr("Graph"), {}, u"waypoints"_s, {}, ready },
         { u"go.search"_s, CommandModel::tr("Search"), {}, u"search"_s, u"Ctrl+Shift+F"_s, ready },
+        // (The open note's find bar; in the journal stream the day being written in.)
+        { u"page.find"_s, CommandModel::tr("Find in note"), CommandModel::tr("And replace"), u"search"_s, u"Ctrl+F"_s,
+          inEditor },
+        { u"go.replace"_s, CommandModel::tr("Replace in notebook"), CommandModel::tr("Find and replace in every note, with a preview"),
+          u"search"_s, {}, ready && !app->inDocsVault() },
         { u"page.favorite"_s, favorite ? CommandModel::tr("Remove from favorites") : CommandModel::tr("Add to favorites"),
           {}, u"star"_s, {}, onPage },
         { u"page.history"_s, CommandModel::tr("Page history"), {}, u"history"_s, {}, onPage },
@@ -328,6 +333,8 @@ bool CommandModel::run(const QString &id)
         m_app->workspace()->toggleFavorite(m_app->currentRoute().value(u"path"_s).toString());
     else if (id == u"page.history")
         m_app->navigate({ { u"view"_s, u"history"_s }, { u"path"_s, m_app->currentRoute().value(u"path"_s) } });
+    else if (id == u"page.find")
+        m_app->requestUiAction(u"findInNote"_s);
     else if (id == u"page.source")
         m_app->requestUiAction(u"toggleSourceMode"_s);
     else if (id == u"page.mode")

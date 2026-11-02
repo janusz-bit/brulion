@@ -37,6 +37,7 @@ qt_target_qml_sources(brulion
         qml/editor/EditorDialogs.qml
         qml/editor/MobileEditToolbar.qml
         qml/editor/SourceEditor.qml
+        qml/editor/FindBar.qml
         qml/editor/ZoomBreadcrumb.qml
         qml/editor/SelectionToolbar.qml
 )

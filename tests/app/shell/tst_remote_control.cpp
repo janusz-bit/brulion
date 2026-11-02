@@ -413,6 +413,32 @@ private Q_SLOTS:
         QCOMPARE(app({u"key"_s, u"Escape"_s}).code, 0);
     }
 
+    void ctrlFOpensTheFindBar()
+    {
+        QCOMPARE(app({u"key"_s, u"Escape, Escape"_s}).code, 0);
+        QCOMPARE(app({u"open"_s, u"Remont mieszkania"_s}).code, 0);
+        QTest::qWait(300);
+        Run r = app({u"key"_s, u"Ctrl+F"_s});
+        QCOMPARE(r.code, 0);
+        r = app({u"type"_s, u"remont"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"focusedItem"_s).toObject().value(u"text"_s).toString(), u"remont"_s);
+        QCOMPARE(app({u"key"_s, u"Escape"_s}).code, 0);
+        // Ctrl+H: with the replace row, its field has the keyboard.
+        QCOMPARE(app({u"key"_s, u"Ctrl+H"_s}).code, 0);
+        QTest::qWait(200);
+        r = app({u"type"_s, u"naprawa"_s});
+        QCOMPARE(r.result().value(u"focusedItem"_s).toObject().value(u"text"_s).toString(), u"naprawa"_s);
+        QCOMPARE(app({u"key"_s, u"Escape"_s}).code, 0);
+        // The journal stream: not a dead key.
+        QCOMPARE(app({u"navigate"_s, u"journals"_s}).code, 0);
+        QTest::qWait(300);
+        QCOMPARE(app({u"key"_s, u"Ctrl+F"_s}).code, 0);
+        r = app({u"type"_s, u"pierwszy"_s});
+        QCOMPARE(r.result().value(u"focusedItem"_s).toObject().value(u"text"_s).toString(), u"pierwszy"_s);
+        QCOMPARE(app({u"key"_s, u"Escape"_s}).code, 0);
+    }
+
     void ctrlKOpensThePalette()
     {
         QCOMPARE(app({u"key"_s, u"Escape, Escape"_s}).code, 0);
