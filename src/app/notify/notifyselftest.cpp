@@ -313,7 +313,9 @@ private:
               "the summary names the sound");
         check(item("alarmSoundMode")->property("currentValue").toString() == u"custom",
               "the selection shows “Ringtone”");
-        // The pick button opens the same menu; Escape closes it again.
+        // The pick button opens the same menu; Escape closes it again. (It has just appeared with
+        // the choice, and the menu has just closed: a tap at once can miss it on a loaded machine.)
+        settle(300);
         tap(item("alarmSoundPick"));
         check(waitFor([this] { return menuOpen("alarmSoundMenu"); }), "“Choose ringtone…” opens the sound menu");
         sendKey(m_window, Qt::Key_Escape);
