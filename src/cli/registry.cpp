@@ -204,8 +204,8 @@ Global options:
   --dry-run              compute changes, write nothing, print a unified diff
   --diff                 also print the diff of written changes
   --read-only            refuse every command that writes
-  --allow-destructive    allow page write/rename/move/delete, folder move/rename/delete,
-                         history restore (deletes go to .trash/)
+  --allow-destructive    allow page write/rename/move/delete, file delete, folder
+                         move/rename/delete, history restore (deletes go to .trash/)
   --now "YYYY-MM-DD HH:mm"   a fixed clock (local time)
   --lang pl|en           language of written dates and templates (default: the app's)
   --stdin                read the text argument from standard input

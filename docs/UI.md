@@ -504,6 +504,7 @@ everything near the bottom, the same way on Android, in the browser and with a s
 | Alt+← / Alt+→ | back / forward |
 | Ctrl+\\ | side panel on/off (wide windows) |
 | F2 | rename the current page |
+| Delete on a focused row of the sidebar's tree | move that page, file or folder to the trash (after the confirmation) |
 | Ctrl+, | settings |
 | Ctrl+E | Markdown source mode of the page / journal |
 | Ctrl+; | add a page property (the properties panel's add row; "Page properties") |

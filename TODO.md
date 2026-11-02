@@ -90,7 +90,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     (wpisanie hasła), adnotacje, widok dwóch stron obok siebie;
   * „Otwórz w innej aplikacji” dla innych załączników (DOCX, XLSX — z listą bezpiecznych typów;
     dziś otwierają się w Brulionie tylko do odczytu jako tekst).
-* **Usuwanie pliku** — możliwość usunięcia pliku; zakres do ustalenia.
 * **Znajdź i zamień** — szukanie w otwartej notatce (`Ctrl+F` działa dziś tylko w PDF-ie i grafie),
   zamiana w notatce i w całym notatniku z podglądem zmian, bez polskich znaków i wielkości liter.
 * **Sprawdzanie pisowni** — podkreślanie błędów i podpowiedzi w edytorze, po polsku i angielsku

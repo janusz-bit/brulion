@@ -76,7 +76,7 @@ clamp(cores − 1, 1, 4)).
 | `--no-history` | no version history, no device state |
 | `--format json\|text` | output; JSON by default |
 | `--compact` | JSON on one line |
-| `--dry-run` | compute changes, write nothing; the result has a unified `diff` (a daily note that does not exist yet: with its template). `page create`: the new page's text; `page rename`/`move`, `folder rename`/`move`: `changes` — `{path, newPath, diff}` of every note whose links or tags would be rewritten; `page`/`folder delete`: the `files` that would go to the trash (a page: its text as a diff) |
+| `--dry-run` | compute changes, write nothing; the result has a unified `diff` (a daily note that does not exist yet: with its template). `page create`: the new page's text; `page rename`/`move`, `folder rename`/`move`: `changes` — `{path, newPath, diff}` of every note whose links or tags would be rewritten; `page`/`file`/`folder delete`: the `files` that would go to the trash (a page: its text as a diff) |
 | `--diff` | also give the diff of written changes |
 | `--read-only` | refuse every command that writes (exit 7); the device's index cache (device state, not the notebook) may still be updated |
 | `--allow-destructive` | allow the destructive commands (see the table) |
@@ -187,6 +187,7 @@ Never compute a hash yourself.
 | `page rename <ref> <title>` | | rename in its folder; links, tags and the ```query filters naming it follow (`{links, tags, queries, notes}`) | destructive |
 | `page move <ref> <folder>` | `. = root` | move; links, tags and query filters follow | destructive |
 | `page delete <ref>` | | to `.trash/` | destructive |
+| `file delete <path>` | | any file of the notebook, an attachment too, to `.trash/` | destructive |
 | `folder list [<folder>]` | | folders with page / attachment counts and special roles | |
 | `folder create <path>` | | a folder (names sanitised, hidden names refused) | yes |
 | `folder move <path> <target>` | | move; links, tags, query filters (`path:` too) and the notebook's special folders follow | destructive |

@@ -697,6 +697,7 @@ Rectangle {
                 Keys.onRightPressed: if (isDir && !expanded) tree.toggle(index)
                 Keys.onLeftPressed: if (isDir && expanded) tree.toggle(index)
                 Keys.onMenuPressed: sidebar.showContextMenu(row, path, isDir)
+                Keys.onDeletePressed: sidebar.deleteRequested(path)
                 // The context menu on a right-click. Only for devices with buttons: a finger has
                 // none, so Qt hands touch points to a TapHandler whatever its acceptedButtons —
                 // every tap on a phone opened the (modal) menu, which then swallowed the release,

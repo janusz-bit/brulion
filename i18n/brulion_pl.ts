@@ -221,6 +221,10 @@
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
+    <message>
+        <source>Undo</source>
+        <translation>Cofnij</translation>
+    </message>
 </context>
 <context>
     <name>AppShell</name>
@@ -7278,6 +7282,10 @@
         <location filename="../src/app/qml/views/PageView.qml" line="611"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
+    </message>
+    <message>
+        <source>Undo</source>
+        <translation>Cofnij</translation>
     </message>
 </context>
 <context>
@@ -14698,8 +14706,8 @@ Global options:
   --dry-run              compute changes, write nothing, print a unified diff
   --diff                 also print the diff of written changes
   --read-only            refuse every command that writes
-  --allow-destructive    allow page write/rename/move/delete, folder move/rename/delete,
-                         history restore (deletes go to .trash/)
+  --allow-destructive    allow page write/rename/move/delete, file delete, folder
+                         move/rename/delete, history restore (deletes go to .trash/)
   --now &quot;YYYY-MM-DD HH:mm&quot;   a fixed clock (local time)
   --lang pl|en           language of written dates and templates (default: the app&apos;s)
   --stdin                read the text argument from standard input
@@ -14720,7 +14728,7 @@ Opcje globalne:
   --dry-run              oblicz zmiany, nic nie zapisuj, wypisz diff (format unified)
   --diff                 wypisz też diff zapisanych zmian
   --read-only            odmawiaj każdego polecenia, które zapisuje
-  --allow-destructive    pozwól na page write/rename/move/delete, folder move/rename/delete,
+  --allow-destructive    pozwól na page write/rename/move/delete, file delete, folder move/rename/delete,
                          history restore (usuwane trafiają do .trash/)
   --now &quot;YYYY-MM-DD HH:mm&quot;   stały zegar (czas lokalny)
   --lang pl|en           język zapisywanych dat i szablonów (domyślnie: jak w aplikacji)
@@ -14752,6 +14760,22 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/cli/output.cpp" line="125"/>
         <source>warning: %1</source>
         <translation>ostrzeżenie: %1</translation>
+    </message>
+    <message>
+        <source>Move a file of the notebook, an attachment too, to the trash</source>
+        <translation>Przenieś do kosza plik notatnika, także załącznik</translation>
+    </message>
+    <message>
+        <source>The file&apos;s path in the notebook</source>
+        <translation>Ścieżka pliku w notatniku</translation>
+    </message>
+    <message>
+        <source>No file %1</source>
+        <translation>Nie ma pliku %1</translation>
+    </message>
+    <message>
+        <source>%1 is a folder, not a file</source>
+        <translation>%1 to folder, a nie plik</translation>
     </message>
 </context>
 <context>
@@ -16780,6 +16804,14 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/shell/commandmodel.cpp" line="243"/>
         <source>Copies in the attachments folder instead of web addresses</source>
         <translation>Kopie w folderze załączników zamiast adresów internetowych</translation>
+    </message>
+    <message>
+        <source>Move to trash</source>
+        <translation>Przenieś do kosza</translation>
+    </message>
+    <message>
+        <source>The open page or file; you can restore it from the trash</source>
+        <translation>Otwarta strona lub plik; można je przywrócić z kosza</translation>
     </message>
 </context>
 <context>

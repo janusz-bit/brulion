@@ -1994,8 +1994,25 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
         check(folderInView, "the new folder is revealed in the tree's visible part");
         shortWindow(false);
         check(waitFor([&] { return treeRow(u"Zażółć"_s) != nullptr; }), "the new folder shows in the tree");
-        // An empty folder deleted leaves the tree at once (folders have no file changes).
-        check(!ws->deletePage(u"Zażółć"_s).isEmpty() && waitFor([&] { return treeRow(u"Zażółć"_s) == nullptr; }),
+        // The Delete key on a focused row asks first; then an empty folder leaves the tree at once
+        // (folders have no file changes).
+        if (QQuickItem *folderRow = treeRow(u"Zażółć"_s)) {
+            folderRow->forceActiveFocus(Qt::TabFocusReason);
+            sendKey(window, Qt::Key_Delete);
+        }
+        const QString trashText = QCoreApplication::translate("AppShell", "Move to trash");
+        QQuickItem *confirmTrash = nullptr;
+        check(waitFor([&] {
+                  confirmTrash = findShown(window->contentItem(), [&](QQuickItem *item) {
+                      return isA(item, "BButton") && item->property("text").toString() == trashText;
+                  });
+                  return confirmTrash != nullptr;
+              }),
+              "Delete on a row of the tree asks first");
+        check(ws->exists(u"Zażółć"_s), "nothing is deleted before the confirmation");
+        if (confirmTrash)
+            tap(confirmTrash);
+        check(waitFor([&] { return treeRow(u"Zażółć"_s) == nullptr; }) && !ws->exists(u"Zażółć"_s),
               "a deleted empty folder leaves the tree");
     }
     restore();

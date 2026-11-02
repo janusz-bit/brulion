@@ -201,6 +201,9 @@
   do historii na urządzeniu (przy pisaniu najwyżej co 5 minut, zawsze przed zmianami
   z synchronizacji i importu). Każdą wersję możesz porównać i przywrócić, a usunięte strony
   odzyskać z kosza.
+* **Usuwanie.** Stronę, załącznik albo folder przeniesiesz do kosza z menu **Więcej**, z drzewka
+  (także klawiszem `Delete`), ze „Wszystkich stron” i z palety poleceń, a „Cofnij” w powiadomieniu
+  od razu je przywraca. Z kosza znikają na dobre dopiero, gdy o to poprosisz.
 * **Sprzątanie.** Lista notatek i załączników, do których nie prowadzi żaden link, tag ani
   zapytanie. Wybierasz, co przenieść do kosza: same notatki, same załączniki albo pojedyncze pliki.
 * **Na start: przykładowy brulion.** Strona „Witaj w Brulionie” pokazuje wszystkie funkcje na

@@ -947,6 +947,47 @@ private Q_SLOTS:
         QVERIFY(QFileInfo::exists(dir + u"/Projekty/Dom.md"_s));
     }
 
+    void fileDelete()
+    {
+        const QString dir = vault({{u"Dom.md"_s, "- ![[plan żółwia.pdf]]\n"},
+                                   {u"plan żółwia.pdf"_s, "%PDF-1.4"},
+                                   {u"Załączniki/zdjęcie.png"_s, "png"}});
+        // `page delete` keeps refusing an attachment.
+        Run r = run(dir, {u"--allow-destructive"_s, u"page"_s, u"delete"_s, u"plan żółwia.pdf"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"not_a_page"_s);
+        // Destructive: not without the flag.
+        r = run(dir, {u"file"_s, u"delete"_s, u"plan żółwia.pdf"_s});
+        QVERIFY(r.code != 0);
+        QVERIFY(QFileInfo::exists(dir + u"/plan żółwia.pdf"_s));
+        // A dry run names the file and leaves it.
+        r = run(dir, {u"--dry-run"_s, u"--allow-destructive"_s, u"file"_s, u"delete"_s, u"plan żółwia.pdf"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"files"_s).toArray(), QJsonArray{u"plan żółwia.pdf"_s});
+        QVERIFY(QFileInfo::exists(dir + u"/plan żółwia.pdf"_s));
+        // The real run: to the trash, bytes kept.
+        r = run(dir, {u"--allow-destructive"_s, u"file"_s, u"delete"_s, u"plan żółwia.pdf"_s});
+        QCOMPARE(r.code, 0);
+        const QString trashPath = r.result().value(u"trashPath"_s).toString();
+        QVERIFY(trashPath.startsWith(u".trash/"_s));
+        QVERIFY(!QFileInfo::exists(dir + u"/plan żółwia.pdf"_s));
+        QCOMPARE(readFile(dir + u'/' + trashPath), "%PDF-1.4"_ba);
+        // A page is a file too.
+        QCOMPARE(run(dir, {u"--allow-destructive"_s, u"file"_s, u"delete"_s, u"Dom.md"_s}).code, 0);
+        QVERIFY(!QFileInfo::exists(dir + u"/Dom.md"_s));
+        // Neither a missing file, nor a folder, nor anything inside the trash (deleted for good there).
+        r = run(dir, {u"--allow-destructive"_s, u"file"_s, u"delete"_s, u"nie ma.pdf"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"file_not_found"_s);
+        r = run(dir, {u"--allow-destructive"_s, u"file"_s, u"delete"_s, u"Załączniki"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"not_a_file"_s);
+        QVERIFY(QFileInfo::exists(dir + u"/Załączniki/zdjęcie.png"_s));
+        r = run(dir, {u"--allow-destructive"_s, u"file"_s, u"delete"_s, trashPath});
+        QVERIFY(r.code != 0);
+        QVERIFY(QFileInfo::exists(dir + u'/' + trashPath));
+    }
+
     void pageWriteCanEmptyAPage()
     {
         const QString dir = vault({{u"Dom.md"_s, "- farba\n"}});

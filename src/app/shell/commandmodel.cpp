@@ -158,6 +158,12 @@ static QList<Command> folderCommands(const AppController *app)
              u"folder-tree"_s,
              {},
              onFile},
+            {u"page.trash"_s,
+             CommandModel::tr("Move to trash"),
+             CommandModel::tr("The open page or file; you can restore it from the trash"),
+             u"trash-2"_s,
+             {},
+             onFile},
     };
 }
 
@@ -170,6 +176,8 @@ static bool runFolderCommand(AppController *app, const QString &id)
         app->requestUiAction(u"movePage"_s);
     else if (id == u"page.reveal")
         app->requestUiAction(u"revealInTree"_s);
+    else if (id == u"page.trash")
+        app->requestUiAction(u"trashPage"_s);
     else
         return false;
     return true;

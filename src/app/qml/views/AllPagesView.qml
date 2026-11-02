@@ -595,8 +595,11 @@ FocusScope {
         confirmText: qsTr("Move to trash")
         destructive: true
         onAccepted: {
-            if (Workspace.deletePage(path) !== "")
-                AppController.toast(qsTr("Moved to trash"), "info")
+            const trashPath = Workspace.deletePage(path)
+            if (trashPath !== "") {
+                AppController.toastAction(qsTr("Moved to trash"), "info", qsTr("Undo"),
+                                          Workspace.restore.bind(Workspace, trashPath))
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 // Commands on pages and folders: page list/read/create/append/write/rename/move/delete, folder
-// list/create/move/rename/delete.
+// list/create/move/rename/delete, file delete.
 #include "commands_p.h"
 
 #include "index/vaultindex.h"
@@ -486,6 +486,25 @@ Result folderRename(Call &call)
             to);
 }
 
+/// `file delete`: any file of the notebook, an attachment too (`page delete` takes pages only).
+/// Hidden places (.trash/, where deleting is for good, .git/ …) are no files of the notebook.
+Result fileDelete(Call &call)
+{
+    const auto path = call.vaultPath(call.str(u"path"_s));
+    if (!path)
+        return call.failed();
+    Vault *v = call.vault();
+    if (!v)
+        return call.failed();
+    const VaultPath spelled = v->existingCase(*path);
+    const auto st = paths::isIgnored(spelled) ? std::nullopt : v->stat(spelled);
+    if (!st)
+        return call.fail(ExitNotFound, u"file_not_found"_s, tr("No file %1").arg(*path), {{u"path"_s, *path}});
+    if (st->isDir)
+        return call.fail(ExitUsage, u"not_a_file"_s, tr("%1 is a folder, not a file").arg(*path), {{u"path"_s, *path}});
+    return deletePath(call, spelled);
+}
+
 Result folderDelete(Call &call)
 {
     const auto path = existingFolder(call, call.str(u"path"_s), false);
@@ -583,6 +602,13 @@ void addPageCommands(QList<Command> &out)
     out.append(c);
     c = command(u"page.delete"_s, QT_TRANSLATE_NOOP("brulion::cli", "Move a page to the trash (.trash/)"), pageDelete,
                 {ref});
+    c.writes = c.destructive = true;
+    out.append(c);
+    c = command(u"file.delete"_s,
+                QT_TRANSLATE_NOOP("brulion::cli", "Move a file of the notebook, an attachment too, to the trash"),
+                fileDelete,
+                {positional(u"path"_s, ArgType::Path,
+                            QT_TRANSLATE_NOOP("brulion::cli", "The file's path in the notebook"))});
     c.writes = c.destructive = true;
     out.append(c);
 

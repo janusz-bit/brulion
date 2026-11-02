@@ -206,6 +206,7 @@ private Q_SLOTS:
                                "page.rename",
                                "page.move",
                                "page.delete",
+                               "file.delete",
                                "folder.list",
                                "folder.create",
                                "folder.move",
@@ -290,8 +291,8 @@ private Q_SLOTS:
         }
         destructive.sort();
         QCOMPARE(destructive,
-                 (QStringList{u"folder.delete"_s, u"folder.move"_s, u"folder.rename"_s, u"history.restore"_s,
-                              u"page.delete"_s, u"page.move"_s, u"page.rename"_s, u"page.write"_s}));
+                 (QStringList{u"file.delete"_s, u"folder.delete"_s, u"folder.move"_s, u"folder.rename"_s,
+                              u"history.restore"_s, u"page.delete"_s, u"page.move"_s, u"page.rename"_s, u"page.write"_s}));
     }
 
     void schema()

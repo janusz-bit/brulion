@@ -289,6 +289,7 @@ FocusScope {
         case "newFolder": openNewFolder(""); break
         case "movePage": if (route.view === "page") openMove(route.path, false); break
         case "revealInTree": revealInTree(currentFile); break
+        case "trashPage": if (currentFile !== "") confirmDelete(currentFile); break
         case "about": openAbout(); break
         case "toggleSidePanel": AppController.sidePanelVisible = !AppController.sidePanelVisible; break
         }
