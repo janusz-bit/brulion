@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.6.3 — 2 listopada 2026
+
+**Nowe**
+- **Własny kolor tła rysunku** — w menu **Tło rysunku** (na telefonie w **Więcej**) pozycja **Kolor tła…**: dowolny kolor z siatki albo wpisany jako `#fff9db`, z podglądem atramentu na tym tle i ostrzeżeniem, gdy atrament byłby słabo widoczny. Linie i kratka papieru dopasowują się do koloru. Kolor zapisuje się w rysunku, można go cofnąć, a przy scalaniu wersji z dwóch urządzeń zostaje ten zmieniony. Zobacz [[Rysunki#Jasne i ciemne tło|Jasne i ciemne tło]].
+
 ## 0.6.2 — 2 listopada 2026
 
 **Nowe**
