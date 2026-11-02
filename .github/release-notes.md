@@ -2,6 +2,8 @@
 
 **Nowości w {{VERSION}}**
 
+Wersja 0.7.0 nie została opublikowana, więc jej nowości trafiają do Ciebie dopiero w tym wydaniu.
+
 * **Więcej kształtów, uchwyty i styl w rysunkach** — 11 nowych kształtów (m.in. trójkąt, gwiazda, dymek, serce, chmurka), zmiana rozmiaru i obrót uchwytami na ramce zaznaczenia, zaznaczanie prostokątem, odbicia i grupowanie oraz panel **Styl**: wypełnienie, rodzaj i grubość linii, rogi, groty, rozmiar tekstu i krycie. excalidraw.com i Obsidian pokazują i edytują te rysunki dalej.
 * **Wiersze i kolumny tabel** — wstawianie, przenoszenie i usuwanie z menu komórki oraz wyrównanie kolumn; w komórce **Ctrl+Enter** wstawia wiersz poniżej, a **Alt+strzałki** przenoszą wiersz lub kolumnę. Formuły nadal wskazują te same komórki.
 * **Sprzątanie** — lista notatek i załączników, do których nic nie prowadzi (menu **Więcej** i paleta poleceń). Wybierasz, co przenieść do kosza, i możesz to cofnąć. Dzienników, szablonów i ulubionych tam nie ma.
