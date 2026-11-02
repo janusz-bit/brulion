@@ -314,6 +314,9 @@ public:
 Q_SIGNALS:
     /// A file changed outside this editor (sync, Syncthing, another editor/view, import).
     void fileChanged(const QString &path);
+    /// Every editor writes what it has not saved yet: something is about to read many files
+    /// (the notebook-wide replace).
+    void saveEditorsRequested();
     /// The index changed (link targets, block texts, tags may render differently).
     void indexChanged();
     /// The picture from the internet at `url` (as written) changed state (webPicture()); "" —

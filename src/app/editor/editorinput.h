@@ -17,6 +17,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QVariantList>
 
 class QQuickItem;
 class QQuickTextDocument;
@@ -38,6 +39,11 @@ public:
     /// when no input context took it (some keyboards, headless runs). Returns true when there
     /// was a composition.
     Q_INVOKABLE bool commitPreedit(QQuickItem *item) const;
+
+    /// `ranges` [{ from, to }] (ascending, not overlapping) of a TextEdit's document replaced by
+    /// `replacement` as one step of its undo history (source mode's Replace all).
+    Q_INVOKABLE void replaceRanges(QQuickTextDocument *document, const QVariantList &ranges,
+                                   const QString &replacement) const;
 
     /// The keyboard modifiers (Qt.KeyboardModifiers) of the input event being handled — a click's
     /// Shift for handlers whose signal does not carry it (a frame's, a bullet's tap).

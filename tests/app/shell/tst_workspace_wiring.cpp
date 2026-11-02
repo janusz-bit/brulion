@@ -30,6 +30,7 @@
 using namespace Qt::StringLiterals;
 using brulion::ScheduledNotification;
 using brulion::shell::AppController;
+using brulion::shell::ReplaceSession;
 using brulion::shell::Workspace;
 
 namespace {
@@ -516,6 +517,104 @@ private Q_SLOTS:
         ws->setFoldState(u"Sprawunki w Łodzi.md"_s, { 0 });
         QVERIFY(!ws->deletePage(u"Sprawunki w Łodzi.md"_s).isEmpty());
         QVERIFY(ws->foldState(u"Sprawunki w Łodzi.md"_s).isEmpty()); // forgotten with the page
+    }
+
+    void replaceInNotebook()
+    {
+        QString root;
+        auto ws = open({ { u"Żółw.md"_s, u"- żółw\r\n- [[żółw]] ZOLW\r\n"_s },
+                         { u"Inna.md"_s, u"zolw\n"_s },
+                         { u"Bez.md"_s, u"nic\n"_s } },
+                       &root);
+        ReplaceSession *session = ws->replacing();
+        QSignalSpy saving(ws.get(), &brulion::EditorHost::saveEditorsRequested);
+        QSignalSpy applied(session, &ReplaceSession::applied);
+        QSignalSpy undone(session, &ReplaceSession::undone);
+        session->setQuery(u"zolw"_s);
+        session->setReplacement(u"kot"_s);
+        QVERIFY(session->rowCount() == 0); // nothing on the keystroke: debounced
+        QTRY_VERIFY(!session->scanning() && session->fileCount() == 2);
+        QCOMPARE(saving.size(), 1);
+        QCOMPARE(session->hitCount(), 4);
+        QCOMPARE(session->tickedHits(), 4); // everything at first
+        const QHash<int, QByteArray> names = session->roleNames();
+        const auto value = [&](int row, const char *role) {
+            return session->data(session->index(row), names.key(role));
+        };
+        QCOMPARE(session->rowCount(), 6); // two files, four hits
+        QCOMPARE(value(0, "kind").toString(), u"file"_s);
+        QCOMPARE(value(0, "title").toString(), u"Inna"_s);
+        QCOMPARE(value(2, "title").toString(), u"Żółw"_s);
+        QCOMPARE(value(4, "kind").toString(), u"hit"_s);
+        QCOMPARE(value(4, "line").toInt(), 2);
+        QVERIFY(value(4, "inLink").toBool());
+        QVERIFY(!value(5, "inLink").toBool());
+        QCOMPARE(value(2, "tick").toInt(), 2);
+
+        // A hit and a whole file out.
+        session->setHitTicked(u"Żółw.md"_s, 1, false);
+        QCOMPARE(value(2, "tick").toInt(), 1);
+        QCOMPARE(value(4, "tick").toInt(), 0);
+        session->setFileTicked(u"Inna.md"_s, false);
+        QCOMPARE(session->tickedFiles(), 1);
+        QCOMPARE(session->tickedHits(), 2);
+
+        QVERIFY(session->apply());
+        QTRY_COMPARE(applied.size(), 1);
+        const int token = applied.first().at(0).toInt();
+        QCOMPARE(applied.first().at(1).toInt(), 2);
+        QCOMPARE(applied.first().at(2).toInt(), 1);
+        QFile file(root + u"/Żółw.md"_s);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(file.readAll()), u"- kot\r\n- [[żółw]] kot\r\n"_s);
+        file.close();
+        QFile other(root + u"/Inna.md"_s);
+        QVERIFY(other.open(QIODevice::ReadOnly));
+        QCOMPARE(other.readAll(), "zolw\n");
+        other.close();
+
+        // Undo restores; a stale token and a second undo do nothing.
+        QVERIFY(!session->undo(token + 1));
+        QVERIFY(session->undo(token));
+        QTRY_COMPARE(undone.size(), 1);
+        QCOMPARE(undone.first().at(0).toInt(), 1);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(file.readAll()), u"- żółw\r\n- [[żółw]] ZOLW\r\n"_s);
+        file.close();
+        QVERIFY(!session->undo(token));
+        session->reset();
+        QCOMPARE(session->rowCount(), 0);
+    }
+
+    void replaceRefusesWhatChangedAndUndoLeavesIt()
+    {
+        QString root;
+        auto ws = open({ { u"A.md"_s, u"kot\n"_s }, { u"B.md"_s, u"kot\n"_s } }, &root);
+        ReplaceSession *session = ws->replacing();
+        QSignalSpy applied(session, &ReplaceSession::applied);
+        QSignalSpy undone(session, &ReplaceSession::undone);
+        session->setQuery(u"kot"_s);
+        session->setReplacement(u"pies"_s);
+        session->scanNow();
+        QTRY_VERIFY(!session->scanning() && session->fileCount() == 2);
+        // Another program, after the preview.
+        writeRaw(root + u"/A.md"_s, "kot, ale inny\n");
+        QVERIFY(session->apply());
+        QTRY_COMPARE(applied.size(), 1);
+        QCOMPARE(applied.first().at(1).toInt(), 1);
+        QCOMPARE(applied.first().at(3).toStringList(), QStringList{ u"A.md"_s });
+        QFile a(root + u"/A.md"_s);
+        QVERIFY(a.open(QIODevice::ReadOnly));
+        QCOMPARE(a.readAll(), "kot, ale inny\n");
+
+        writeRaw(root + u"/B.md"_s, "pies i coś jeszcze\n");
+        QVERIFY(session->undo(applied.first().at(0).toInt()));
+        QTRY_COMPARE(undone.size(), 1);
+        QCOMPARE(undone.first().at(0).toInt(), 0);
+        QCOMPARE(undone.first().at(1).toStringList(), QStringList{ u"B.md"_s });
+        QFile b(root + u"/B.md"_s);
+        QVERIFY(b.open(QIODevice::ReadOnly));
+        QCOMPARE(b.readAll(), "pies i coś jeszcze\n");
     }
 
     void unreferencedFiles()

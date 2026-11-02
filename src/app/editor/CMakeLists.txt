@@ -31,6 +31,8 @@ qt_add_library(brulion_editor STATIC
     queryhost.h
     queryresultmodel.h queryresultmodel.cpp
     pagecontroller.h pagecontroller.cpp pagecontroller_selection.cpp pagecontroller_properties.cpp
+    pagecontroller_find.cpp
+    notefind.h notefind.cpp
     lazyhtmlmimedata.h lazyhtmlmimedata.cpp
     streamselection.h streamselection.cpp
     dayclock.h dayclock.cpp

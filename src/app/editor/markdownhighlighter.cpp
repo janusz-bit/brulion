@@ -236,7 +236,66 @@ void MarkdownHighlighter::mergeRange(int from, int length, const QTextCharFormat
     }
 }
 
+void MarkdownHighlighter::setFindQuery(const QString &query)
+{
+    findChangedTo(query, m_findOptions);
+}
+
+void MarkdownHighlighter::setFindMatchCase(bool on)
+{
+    text::FindOptions options = m_findOptions;
+    options.matchCase = on;
+    findChangedTo(m_findQuery, options);
+}
+
+void MarkdownHighlighter::setFindMatchDiacritics(bool on)
+{
+    text::FindOptions options = m_findOptions;
+    options.matchDiacritics = on;
+    findChangedTo(m_findQuery, options);
+}
+
+void MarkdownHighlighter::setFindWholeWord(bool on)
+{
+    text::FindOptions options = m_findOptions;
+    options.wholeWord = on;
+    findChangedTo(m_findQuery, options);
+}
+
+void MarkdownHighlighter::setFindColor(const QColor &color)
+{
+    if (m_findColor == color)
+        return;
+    m_findColor = color;
+    Q_EMIT findChanged();
+    if (!m_findQuery.isEmpty())
+        rehighlight();
+}
+
+void MarkdownHighlighter::findChangedTo(const QString &query, const text::FindOptions &options)
+{
+    if (m_findQuery == query && m_findOptions == options)
+        return;
+    const bool shown = !m_findQuery.isEmpty() || !query.isEmpty();
+    m_findQuery = query;
+    m_findOptions = options;
+    Q_EMIT findChanged();
+    if (shown)
+        rehighlight();
+}
+
 void MarkdownHighlighter::highlightBlock(const QString &line)
+{
+    highlightLine(line);
+    if (m_findQuery.isEmpty())
+        return;
+    QTextCharFormat hit;
+    hit.setBackground(m_findColor);
+    for (const text::TextRange &range : text::findMatches(line, m_findQuery, m_findOptions))
+        mergeRange(int(range.start), int(range.length), hit);
+}
+
+void MarkdownHighlighter::highlightLine(const QString &line)
 {
     const int prev = previousBlockState() < 0 ? Normal : previousBlockState();
     setCurrentBlockState(Normal);

@@ -14,6 +14,7 @@
 #include "markdown/inlinerenderer.h"
 #include "markdown/parse.h"
 #include "markdown/tokenedit.h"
+#include "notefind.h"
 #include "notebook/links.h"
 #include "pagecontroller.h"
 #include "pickedfiles.h"
@@ -6447,6 +6448,234 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(host->file(Page), u"- zapisz mnie\n"_s);
         delete page;
         delete host;
+    }
+
+    // ---- Find and replace (NoteFind, pagecontroller_find.cpp) ----------------------------------------
+
+    void findCountsTheSourceAndLocatesInBlocks()
+    {
+        const QString content = u"# Żółw\n\n- [ ] żółw na liście\n  dalej ZOLW\n- inny\n\n```js\nzolw()\n```\n"_s;
+        Fixture f(content);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"zolw"_s);
+        find.refresh();
+        QCOMPARE(find.count(), 4);
+        QCOMPARE(find.appliedQuery(), u"zolw"_s);
+
+        QSignalSpy targets(&find, &NoteFind::targetRequested);
+        const auto next = [&] {
+            find.next();
+            return targets.last().at(0).toMap();
+        };
+        QVariantMap t = next(); // the query's jump happened in refresh(): the second one now
+        QCOMPARE(find.current(), 1);
+        QCOMPARE(t.value(u"row"_s).toInt(), 1);
+        QVERIFY(t.value(u"editable"_s).toBool());
+        QCOMPARE(f.edit(1).mid(t.value(u"from"_s).toInt(), 4), u"żółw"_s);
+        t = next();
+        QCOMPARE(t.value(u"row"_s).toInt(), 1); // the continuation line, without its indentation
+        QCOMPARE(f.edit(1).mid(t.value(u"from"_s).toInt(), 4), u"ZOLW"_s);
+        t = next();
+        QCOMPARE(f.edit(t.value(u"row"_s).toInt()).mid(t.value(u"from"_s).toInt(), 4), u"zolw"_s); // in the code
+        t = next();
+        QCOMPARE(find.current(), 0); // round again
+        QCOMPARE(t.value(u"row"_s).toInt(), 0);
+        find.previous();
+        QCOMPARE(find.current(), 3);
+    }
+
+    void findInHiddenPartsSaysTheRowOnly()
+    {
+        Fixture f(u"- [ ] zadanie\n\n```js\nkod\n```\n\n| a | b |\n|---|---|\n| kot | 2 |\n"_s);
+        const QString text = f.text();
+        // The task marker, the fence's language, a table cell.
+        for (const auto &[what, row] : { std::pair{ u"[ ]"_s, 0 }, std::pair{ u"```js"_s, 1 }, std::pair{ u"kot"_s, 2 } }) {
+            const PageController::TextLocation place = f.page.locateText(text.indexOf(what), what.size());
+            QCOMPARE(place.row, row);
+            QVERIFY2(!place.editable, qPrintable(what));
+        }
+        const PageController::TextLocation inside = f.page.locateText(text.indexOf(u"kod"_s), 3);
+        QCOMPARE(inside.row, 1);
+        QVERIFY(inside.editable);
+        QCOMPARE(f.edit(1).mid(inside.from, 3), u"kod"_s);
+        // The list marker is the file's too.
+        const PageController::TextLocation marker = f.page.locateText(0, 1);
+        QCOMPARE(marker.row, 0);
+        QVERIFY(!marker.editable);
+        QCOMPARE(f.page.locateText(text.size(), 1).row, -1);
+    }
+
+    void replaceAllIsOneUndoStepOtherBlocksIntact()
+    {
+        const QString content = u"# Tytuł\r\n\r\n- żółw\r\n\t- ZOLW\r\n- bez zmian   \r\n\r\nakapit żółw i żółw"_s;
+        Fixture f(content, 10000);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"zolw"_s);
+        find.refresh();
+        QCOMPARE(find.count(), 4);
+        QCOMPARE(find.replaceAll(u"kot"_s), 4);
+        QCOMPARE(f.text(), u"# Tytuł\r\n\r\n- kot\r\n\t- kot\r\n- bez zmian   \r\n\r\nakapit kot i kot"_s);
+        QCOMPARE(find.count(), 0);
+        QVERIFY(f.page.dirty());
+        f.page.undo();
+        QCOMPARE(f.text(), content); // one Ctrl+Z
+        QVERIFY(!f.page.canUndo());
+        f.page.redo();
+        QCOMPARE(f.text(), u"# Tytuł\r\n\r\n- kot\r\n\t- kot\r\n- bez zmian   \r\n\r\nakapit kot i kot"_s);
+    }
+
+    void replaceOneGoesOn()
+    {
+        Fixture f(u"- a kot\n- kot kot\n"_s);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"kot"_s);
+        find.refresh();
+        QCOMPARE(find.current(), 0);
+        QSignalSpy targets(&find, &NoteFind::targetRequested);
+        QVERIFY(find.replaceCurrent(u"kot i pies"_s)); // what it writes has the query: not found again at once
+        QCOMPARE(f.text(), u"- a kot i pies\n- kot kot\n"_s);
+        QCOMPARE(find.count(), 3);
+        QCOMPARE(find.current(), 1);
+        QCOMPARE(targets.last().at(0).toMap().value(u"row"_s).toInt(), 1);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- a kot\n- kot kot\n"_s);
+    }
+
+    void replaceCurrentShowsFirstWithoutACurrentMatch()
+    {
+        Fixture f(u"- kot\n"_s);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"kot"_s);
+        find.refresh();
+        find.setActive(false);
+        find.setActive(true);
+        find.refresh();
+        // Counted without a jump: nothing shown yet, so nothing replaced.
+        QCOMPARE(find.count(), 1);
+        QCOMPARE(find.current(), -1);
+        QVERIFY(!find.replaceCurrent(u"pies"_s));
+        QCOMPARE(find.current(), 0);
+        QCOMPARE(f.text(), u"- kot\n"_s);
+    }
+
+    void replaceWhileEditingKeepsTheEditor()
+    {
+        Fixture f(u"- kot\n- drugi\n"_s);
+        f.page.startEditing(1, 2);
+        QSignalSpy resets(&f.page, &PageController::editTextReset);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"kot"_s);
+        find.refresh();
+        QCOMPARE(find.replaceAll(u"pies"_s), 1);
+        QCOMPARE(f.text(), u"- pies\n- drugi\n"_s);
+        QCOMPARE(f.page.editingRow(), 1);
+        QVERIFY(resets.size() >= 1);
+    }
+
+    void findRecountsAfterEditsWithoutMovingTheCaret()
+    {
+        Fixture f(u"- kot\n- drugi\n"_s);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"kot"_s);
+        find.refresh();
+        QCOMPARE(find.count(), 1);
+        QSignalSpy targets(&find, &NoteFind::targetRequested);
+        f.page.startEditing(1, 0);
+        f.page.setEditText(1, u"kot kot"_s, 7);
+        QTRY_COMPARE(find.count(), 3); // debounced
+        QCOMPARE(targets.size(), 0);
+        QCOMPARE(f.page.cursorPosition(), 7);
+        QCOMPARE(f.page.editingRow(), 1);
+    }
+
+    void findRevealsFoldedAndZoomedOut()
+    {
+        Fixture f(u"- a\n\t- b\n\t\t- kot\n- c\n\t- d\n"_s);
+        f.page.setFolded(0, true);
+        f.page.zoomInto(3);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"kot"_s);
+        find.refresh();
+        QCOMPARE(find.count(), 1);
+        const int row = f.page.locateText(f.text().indexOf(u"kot"_s), 3).row;
+        QCOMPARE(row, 2);
+        QVERIFY(!f.visible().at(row));
+        f.page.reveal(row);
+        QVERIFY(f.visible().at(row));
+        QCOMPARE(f.page.zoomBlock(), -1);
+    }
+
+    void findInSourceModeCountsTextEditPositions()
+    {
+        Fixture f(u"pierwsza\r\nżółw\r\n\r\nżółw\r\n"_s);
+        f.page.setSourceMode(true);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"zolw"_s);
+        QSignalSpy targets(&find, &NoteFind::targetRequested);
+        find.refresh();
+        QCOMPARE(find.count(), 2);
+        QVariantMap t = targets.last().at(0).toMap();
+        QVERIFY(t.value(u"source"_s).toBool());
+        QCOMPARE(t.value(u"sourceFrom"_s).toInt(), 9); // "pierwsza\n"
+        QCOMPARE(t.value(u"sourceTo"_s).toInt(), 13);
+        find.next();
+        t = targets.last().at(0).toMap();
+        QCOMPARE(t.value(u"sourceFrom"_s).toInt(), 15);
+
+        QSignalSpy replaced(&find, &NoteFind::sourceReplaceRequested);
+        QCOMPARE(find.replaceAll(u"kot"_s), 2);
+        const QVariantList ranges = replaced.last().at(0).toList();
+        QCOMPARE(ranges.size(), 2);
+        QCOMPARE(ranges.at(0).toMap().value(u"from"_s).toInt(), 9);
+        QCOMPARE(ranges.at(1).toMap().value(u"from"_s).toInt(), 15);
+        QCOMPARE(ranges.at(1).toMap().value(u"to"_s).toInt(), 19);
+        QVERIFY(!f.page.replaceTextRanges({ { 0, 1 } }, u"x"_s)); // the TextEdit holds the text
+    }
+
+    void findOptionsAndNoController()
+    {
+        NoteFind none;
+        none.setActive(true);
+        none.setQuery(u"a"_s);
+        none.refresh();
+        none.next();
+        QCOMPARE(none.count(), 0);
+        QCOMPARE(none.replaceAll(u"b"_s), 0);
+
+        Fixture f(u"- Żółw żółw zolw zółwik\n"_s);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"żółw"_s);
+        find.refresh();
+        QCOMPARE(find.count(), 4);
+        find.setWholeWord(true);
+        find.refresh();
+        QCOMPARE(find.count(), 3);
+        find.setMatchDiacritics(true);
+        find.refresh();
+        QCOMPARE(find.count(), 2);
+        find.setMatchCase(true);
+        find.refresh();
+        QCOMPARE(find.count(), 1);
+        find.setQuery(u"a\nb"_s); // pasted: one line
+        QCOMPARE(find.query(), u"a b"_s);
     }
 };
 

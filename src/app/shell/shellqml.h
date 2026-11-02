@@ -6,6 +6,7 @@
 //   AppSettings      singleton — AppController.settings
 //   Workspace        singleton — AppController.workspace (the EditorHost for the editor)
 //   WorkspaceReminders, WorkspaceSync   uncreatable — Workspace.reminders / Workspace.sync
+//   ReplaceSession   uncreatable — Workspace.replacing (the notebook-wide replace)
 //   CommandModel     singleton — the command palette's commands
 //   FolderTreeModel  creatable — FolderTreeModel { workspace: Workspace }
 #pragma once
@@ -15,6 +16,7 @@
 #include "appupdates.h"
 #include "commandmodel.h"
 #include "foldertreemodel.h"
+#include "replacesession.h"
 #include "workspace.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
@@ -99,6 +101,13 @@ struct WorkspaceSyncForeign {
     QML_FOREIGN(brulion::shell::WorkspaceSync)
     QML_NAMED_ELEMENT(WorkspaceSync)
     QML_UNCREATABLE("Use Workspace.sync")
+};
+
+struct ReplaceSessionForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ReplaceSession)
+    QML_NAMED_ELEMENT(ReplaceSession)
+    QML_UNCREATABLE("Use Workspace.replacing")
 };
 
 struct CommandModelForeign {

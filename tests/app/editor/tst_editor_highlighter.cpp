@@ -213,6 +213,29 @@ private Q_SLOTS:
         h.attach(nullptr);
         QVERIFY(!h.document());
     }
+
+    void findMatchesAreTinted()
+    {
+        QTextDocument document(u"plik żółw i ZOLW"_s);
+        MarkdownHighlighter highlighter;
+        highlighter.setDocument(&document);
+        const auto tinted = [&](int at) {
+            const QList<QTextLayout::FormatRange> formats = document.begin().layout()->formats();
+            return std::any_of(formats.cbegin(), formats.cend(), [&](const QTextLayout::FormatRange &r) {
+                return r.start <= at && at < r.start + r.length && r.format.background().style() != Qt::NoBrush;
+            });
+        };
+        QVERIFY(!tinted(5));
+        highlighter.setFindQuery(u"zolw"_s);
+        QVERIFY(tinted(5));
+        QVERIFY(tinted(12));
+        QVERIFY(!tinted(0));
+        highlighter.setFindMatchCase(true); // "ZOLW" no more, "żółw" still: diacritics are off
+        QVERIFY(tinted(5));
+        QVERIFY(!tinted(12));
+        highlighter.setFindQuery(QString());
+        QVERIFY(!tinted(5));
+    }
 };
 
 QTEST_MAIN(TestHighlighter)

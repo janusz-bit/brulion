@@ -48,6 +48,7 @@
 #include "notebook/indexloader.h"
 #include "notebook/pages.h"
 #include "queryhost.h"
+#include "replacesession.h"
 #include "types.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
@@ -119,6 +120,8 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(brulion::shell::WorkspaceReminders *reminders READ reminders CONSTANT FINAL)
     /// Nextcloud sync, Syncthing status and conflict copies: workspacesync.h.
     Q_PROPERTY(brulion::shell::WorkspaceSync *sync READ sync CONSTANT FINAL)
+    /// Find and replace in the whole notebook (replacesession.h).
+    Q_PROPERTY(brulion::shell::ReplaceSession *replacing READ replacing CONSTANT FINAL)
     /// Number of daily notes (grows while the index is built).
     Q_PROPERTY(int journalCount READ journalCount NOTIFY indexChanged FINAL)
     /// Number of items in the trash (a deleted folder counts once).
@@ -171,6 +174,9 @@ public:
     void setRemindersPaused(bool paused) { m_remindersPaused = paused; }
     bool remindersPaused() const { return m_remindersPaused; }
     WorkspaceSync *sync() const { return m_sync; }
+    ReplaceSession *replacing() const { return m_replacing; }
+    /// The threads for looking through notes (indexworkers.h); none on WebAssembly.
+    notebook::WorkerPool workerPool();
     int journalCount() const;
     int trashCount() const;
     int revision() const { return m_revision; }
@@ -691,6 +697,7 @@ private:
     // Children of this object (parented: QML never takes them over); detached by close().
     WorkspaceReminders *m_reminders = nullptr;
     WorkspaceSync *m_sync = nullptr;
+    ReplaceSession *m_replacing = nullptr;
     std::function<QDateTime()> m_clock;
     QString m_language = QStringLiteral("pl");
     bool m_dataUrlAssets = false;

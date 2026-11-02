@@ -117,6 +117,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     connect(m_reminders, &WorkspaceReminders::navigationRequested, this,
             [this](const QVariantMap &route) { navigate(route); });
     connect(m_reminders, &WorkspaceReminders::errorOccurred, this, &Workspace::errorOccurred);
+    m_replacing = new ReplaceSession(this);
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });
     connect(m_sync, &WorkspaceSync::errorOccurred, this, &Workspace::errorOccurred);
@@ -578,6 +579,17 @@ void Workspace::editorClosed(const QString &rawPath)
     m_editorFiles.erase(it);
     if (m_vault)
         m_vault->unwatchFile(path);
+}
+
+notebook::WorkerPool Workspace::workerPool()
+{
+    notebook::WorkerPool pool;
+#ifdef BRULION_INDEX_THREADS
+    if (!m_indexPool && indexWorkerCount() > 0)
+        m_indexPool = new QThreadPool(this);
+    pool = indexWorkerPool(static_cast<QThreadPool *>(m_indexPool));
+#endif
+    return pool;
 }
 
 QString Workspace::readFile(const QString &path)

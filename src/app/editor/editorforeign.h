@@ -11,6 +11,7 @@
 #include "editorinput.h"
 #include "fakeeditorhost.h"
 #include "markdownhighlighter.h"
+#include "notefind.h"
 #include "pagecontroller.h"
 #include "queryresultmodel.h"
 #include "richtextlinks.h"
@@ -26,6 +27,12 @@ struct PageControllerForeign {
     Q_GADGET
     QML_FOREIGN(brulion::editor::PageController)
     QML_NAMED_ELEMENT(PageController)
+};
+
+struct NoteFindForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::NoteFind)
+    QML_NAMED_ELEMENT(NoteFind)
 };
 
 struct StreamSelectionForeign {

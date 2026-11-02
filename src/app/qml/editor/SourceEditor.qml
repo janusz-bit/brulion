@@ -36,6 +36,21 @@ Flickable {
     TouchFlick.enabled: true
 
     function focusEditor() { source.forceActiveFocus() }
+    /// The find bar's current match: selected and scrolled to; the bar may keep the keyboard.
+    function showRange(from, to, keepKeyboard) {
+        source.select(from, to)
+        if (!keepKeyboard)
+            source.forceActiveFocus()
+        const rect = source.positionToRectangle(from)
+        const top = source.y + rect.y
+        const visibleHeight = root.height - root.toolbarRoom
+        if (top < root.contentY + Theme.space4 || top + rect.height > root.contentY + visibleHeight - Theme.space4)
+            root.contentY = Math.max(0, Math.min(top - visibleHeight / 3, root.contentHeight - visibleHeight))
+    }
+    /// The find bar's replaces: one step of the text's own undo history.
+    function replaceRanges(ranges, text) {
+        EditorInput.replaceRanges(source.textDocument, ranges, text)
+    }
     /// "Hide keyboard" on the toolbar: the text gives up the keyboard (a tap brings it back).
     function releaseKeyboard() { source.focus = false }
     /// Keep the caret inside the visible part (above the toolbar), not while the keyboard slides.
@@ -93,6 +108,8 @@ Flickable {
         color: Theme.fg
         selectionColor: Theme.selection
         selectedTextColor: Theme.selectionFg
+        // The find bar's match stays selected while the bar has the keyboard.
+        persistentSelection: root.editor !== null && root.editor.find !== null
         Accessible.role: Accessible.EditableText
         Accessible.name: qsTr("Markdown source")
 
@@ -109,6 +126,12 @@ Flickable {
             palette: root.editor.highlighterPalette
             mode: "source"
             monoFamily: Theme.fontMono
+            readonly property NoteFind find: root.editor.find
+            findQuery: find ? find.appliedQuery : ""
+            findMatchCase: find ? find.matchCase : false
+            findMatchDiacritics: find ? find.matchDiacritics : false
+            findWholeWord: find ? find.wholeWord : false
+            findColor: root.editor.findHitColor
         }
 
         Component.onCompleted: {

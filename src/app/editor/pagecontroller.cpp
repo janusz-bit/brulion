@@ -275,6 +275,7 @@ void PageController::setHost(EditorHost *host)
     showFile(m_host, m_path);
     if (m_host) {
         connect(m_host, &EditorHost::fileChanged, this, &PageController::onFileChanged);
+        connect(m_host, &EditorHost::saveEditorsRequested, this, [this] { save(); });
         connect(m_host, &EditorHost::indexChanged, m_model, &BlockListModel::invalidateRendering);
         connect(m_host, &EditorHost::indexChanged, this, [this] { m_notebookTypes.reset(); });
         connect(m_host, &EditorHost::webPictureChanged, this, &PageController::onWebPictureChanged);

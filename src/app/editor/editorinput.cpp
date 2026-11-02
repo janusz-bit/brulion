@@ -8,11 +8,29 @@
 #include <QQuickItem>
 #include <QQuickTextDocument>
 #include <QQuickWindow>
+#include <QTextCursor>
 #include <QTextDocument>
+#include <QVariantMap>
 
 namespace brulion::editor {
 
 EditorInput::EditorInput(QObject *parent) : QObject(parent) {}
+
+void EditorInput::replaceRanges(QQuickTextDocument *document, const QVariantList &ranges, const QString &replacement) const
+{
+    if (!document || !document->textDocument() || ranges.isEmpty())
+        return;
+    QTextCursor cursor(document->textDocument());
+    cursor.beginEditBlock();
+    // From the end: the positions before stay right.
+    for (qsizetype i = ranges.size() - 1; i >= 0; --i) {
+        const QVariantMap range = ranges.at(i).toMap();
+        cursor.setPosition(range.value(QStringLiteral("from")).toInt());
+        cursor.setPosition(range.value(QStringLiteral("to")).toInt(), QTextCursor::KeepAnchor);
+        cursor.insertText(replacement);
+    }
+    cursor.endEditBlock();
+}
 
 QString EditorInput::plainText(QQuickTextDocument *document) const
 {

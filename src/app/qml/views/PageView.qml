@@ -51,6 +51,9 @@ import Brulion
 // dialog), "menu" (the page menu), "unlinked" (the unlinked mentions, scrolled to), "links" |
 // "outline" | "calendar" (the side panel on that tab). route.source opens in source mode.
 // A picture takes "links" | "outline" | "calendar" and "text" (its text view).
+// Ctrl+F, the page menu's "Znajdź i zamień…" and the palette's command open the find bar (FindBar,
+// NoteFind; Ctrl+H with its replace row; route.open "find"; docs/UI.md "Find and replace"): in the
+// main pane only, and a PDF has its own search.
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
 // (daily notes by their date), `sidePanel`, `editing`, `toolbarDocked`, `endEditing()` and `sourceMode`. `--editor-script <state>` drives the
@@ -268,6 +271,9 @@ FocusScope {
         case "rename":
             editor.later(() => { if (root.pageHeader) root.pageHeader.startTitleEdit() })
             break
+        case "find":
+            editor.later(() => root.openFind(false))
+            break
         case "export":
             editor.later(() => exportDialog.openFor(page.path))
             break
@@ -311,6 +317,62 @@ FocusScope {
             return
         if (!page.toggleMode())
             AppController.toast(qsTr("The note mode could not be changed: the page's properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E)."), "error")
+    }
+
+    // ---- The find bar -------------------------------------------------------------------------
+    property bool findOpen: false
+    /// A note is shown in the editor: there is something to find in.
+    readonly property bool findable: !root.pictureRoute && !root.pdfRoute && !root.fileRoute && page.loaded
+    onFindableChanged: if (!findable && findOpen) root.closeFind()
+    function openFind(withReplace) {
+        if (!root.findable)
+            return
+        if (!root.findOpen) {
+            noteFind.setOriginHere(editor.sourcePosition())
+            root.findOpen = true
+        }
+        // (The bar's Loader made it just now.)
+        const bar = findBarLoader.item as FindBar
+        if (!bar)
+            return
+        if (withReplace)
+            bar.openReplace()
+        else
+            bar.focusField()
+    }
+    function closeFind() {
+        root.findOpen = false
+        editor.findClosed()
+    }
+
+    NoteFind {
+        id: noteFind
+        objectName: "pageFind"
+        controller: page
+        active: root.findOpen
+    }
+    Loader {
+        id: findBarLoader
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        active: root.findOpen
+        height: active && item ? item.implicitHeight : 0
+        sourceComponent: FindBar {
+            find: noteFind
+            editor: editor
+            onCloseRequested: root.closeFind()
+        }
+    }
+    Shortcut {
+        sequence: "Ctrl+F"
+        enabled: root.visible && !root.inSidePanel && root.findable
+        onActivated: root.openFind(false)
+    }
+    Shortcut {
+        sequence: "Ctrl+H"
+        enabled: root.visible && !root.inSidePanel && root.findable
+        onActivated: root.openFind(true)
     }
 
     function copyLink() {
@@ -396,7 +458,11 @@ FocusScope {
     BlockEditor {
         id: editor
         objectName: "pageEditor"
-        anchors.fill: parent
+        anchors.top: findBarLoader.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        find: root.findOpen ? noteFind : null
         // A picture, a PDF or another file fills the view instead (its bytes are never loaded into
         // the editor).
         visible: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
@@ -540,6 +606,16 @@ FocusScope {
             onTriggered: AppController.requestItemAction("move", page.path)
         }
         BMenuItem {
+            objectName: "pageMenuFind"
+            visible: !root.inSidePanel
+            height: visible ? implicitHeight : 0
+            text: qsTr("Find and replace…")
+            iconName: "search"
+            shortcut: "Ctrl+F"
+            enabled: root.findable
+            onTriggered: root.openFind(false)
+        }
+        BMenuItem {
             visible: !Theme.narrow && !root.inSidePanel
             height: visible ? implicitHeight : 0
             text: qsTr("Open in side panel")
@@ -650,6 +726,8 @@ FocusScope {
                     editor.toggleSourceMode()
             } else if (action === "toggleNoteMode" && root.visible && !root.inSidePanel) {
                 root.toggleNoteMode()
+            } else if (action === "findInNote" && root.visible && !root.inSidePanel) {
+                root.openFind(false)
             } else if (action.startsWith("copyLink:") && root.visible && !root.inSidePanel && !root.pictureRoute
                        && !root.pdfRoute && !root.fileRoute) {
                 editor.copyCurrentLink(action.slice(9))

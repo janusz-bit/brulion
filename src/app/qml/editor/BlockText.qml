@@ -45,9 +45,17 @@ Item {
     readonly property bool editing: live && block.editing
     readonly property int align: root.centered ? Text.AlignHCenter : Text.AlignLeft
     readonly property string html: root.live ? root.block.model.html : ""
+    /// The rendered text with the find bar's matches tinted (docs/UI.md "Find and replace").
+    readonly property string findHtml: {
+        const find = root.editor.find
+        return find && find.appliedQuery !== "" && root.live
+                ? TextHelper.findHighlightedHtml(root.html, find.appliedQuery, find.matchCase, find.matchDiacritics,
+                                                 find.wholeWord, root.editor.findHitColor.toString())
+                : root.html
+    }
     /// The text has a span with a background colour (InlineRenderer's chips and tags, inline code,
     /// highlights): the TextEdit with rounded shapes shows it.
-    readonly property bool tinted: html.indexOf("background-color:") >= 0
+    readonly property bool tinted: findHtml.indexOf("background-color:") >= 0
     /// The item showing the rendered text: linkAt(), the anchor of the token and link menus.
     readonly property Item renderedItem: tinted && tintedLoader.item ? tintedLoader.item as Item : rendered
 
@@ -60,7 +68,7 @@ Item {
     /// underlined. Not the task checkbox nor a chip a click edits (dates, 🔁, priorities).
     property string hoveredLink: ""
     /// The shown rich text: the rendered HTML with hoveredLink underlined.
-    readonly property string shownHtml: TextHelper.hoveredLinkHtml(root.html, root.hoveredLink)
+    readonly property string shownHtml: TextHelper.hoveredLinkHtml(root.findHtml, root.hoveredLink)
     function trackLink(x: real, y: real) {
         const link = root.editing ? "" : root.linkAt(x, y)
         const hovered = link !== "" && !link.startsWith("task:") && !root.editor.editsOnClick(link) ? link : ""

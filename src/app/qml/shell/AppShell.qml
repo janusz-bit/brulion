@@ -180,6 +180,7 @@ FocusScope {
         case "history": return qsTr("History of %1").arg(pageLabel(r.path))
         case "trash": return qsTr("Trash")
         case "cleanup": return qsTr("Clean up")
+        case "replace": return qsTr("Replace in notebook")
         case "settings": return qsTr("Settings")
         case "drawing": return Workspace.pageTitle(r.path || "").replace(/\.(svg|excalidraw)$/i, "")
         }

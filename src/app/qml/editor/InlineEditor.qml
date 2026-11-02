@@ -66,6 +66,12 @@ TextEdit {
         mode: edit.highlightMode
         monoFamily: Theme.fontMono
         lineHeight: edit.lineHeightPx
+        readonly property NoteFind find: edit.editor ? edit.editor.find : null
+        findQuery: find ? find.appliedQuery : ""
+        findMatchCase: find ? find.matchCase : false
+        findMatchDiacritics: find ? find.matchDiacritics : false
+        findWholeWord: find ? find.wholeWord : false
+        findColor: edit.editor ? edit.editor.findHitColor : "transparent"
     }
 
     Text {
@@ -119,6 +125,12 @@ TextEdit {
         cursorPosition = c < 0 ? length : Math.min(c, length)
         syncing = false
         editor.controller.cursorPosition = cursorPosition
+        edit.selectFindMatch()
+        // The find bar keeps the keyboard while it goes from match to match.
+        if (editor.findKeepsKeyboard) {
+            editor.activeEditor = edit
+            return
+        }
         forceActiveFocus()
         // A delegate created while rows are being inserted is not in the scene yet: focus again
         // once it is.
@@ -126,8 +138,15 @@ TextEdit {
     }
 
     function ensureFocus() {
-        if (active && !activeFocus)
+        if (active && !activeFocus && !(editor && editor.findKeepsKeyboard))
             forceActiveFocus()
+    }
+
+    /// The find bar's current match is in this block: selected.
+    function selectFindMatch() {
+        const match = editor ? editor.findSelection : null
+        if (match && match.row === row && active)
+            select(match.from, match.to)
     }
 
     /// The controller changed the text (undo, completion, normalisation…).
@@ -230,6 +249,7 @@ TextEdit {
         if (!editor)
             return
         if (activeFocus) {
+            editor.findKeepsKeyboard = false
             editor.activeEditor = edit
             Qt.callLater(editor.ensureCaretVisible, edit)
         } else {
@@ -243,6 +263,11 @@ TextEdit {
             if (r === edit.row && edit.active)
                 edit.reset(t, c)
         }
+    }
+
+    Connections {
+        target: edit.editor
+        function onFindSelectionChanged() { edit.selectFindMatch() }
     }
 
     Keys.onShortcutOverride: (event) => {
