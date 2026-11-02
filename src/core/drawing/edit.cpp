@@ -7,6 +7,7 @@
 #include <QRandomGenerator>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <climits>
 #include <cmath>
@@ -59,6 +60,23 @@ double lineWidth(QStringView line, int family, double size, const TextMetrics &m
     if (m.width)
         return std::max(0.0, m.width(line, family, size));
     return 0.55 * size * double(line.size());
+}
+
+/// The end point `k` of a line or an arrow moved by `delta`; an elbow arrow also moves the
+/// neighbouring corner `j` along the segment's axis, keeping right angles.
+void moveEnd(Stroke &e, qsizetype k, qsizetype j, QPointF delta)
+{
+    if (e.elbowed && e.points.size() >= 3) {
+        StrokePoint &tip = e.points[k];
+        StrokePoint &corner = e.points[j];
+        if (std::abs(tip.y - corner.y) < 1e-6)
+            corner.y = round2(corner.y + delta.y());
+        else if (std::abs(tip.x - corner.x) < 1e-6)
+            corner.x = round2(corner.x + delta.x());
+    }
+    e.points[k].x = round2(e.points[k].x + delta.x());
+    e.points[k].y = round2(e.points[k].y + delta.y());
+    e.box = pointsRect(e.points);
 }
 
 /// The point halfway along a polyline.
@@ -241,18 +259,7 @@ void moveElements(Drawing &d, const QSet<QString> &ids, QPointF delta, const Edi
         } else {
             const qsizetype n = e.points.size();
             const qsizetype k = start ? 0 : n - 1;
-            const qsizetype j = start ? 1 : n - 2;
-            if (e.elbowed && n >= 3) {
-                StrokePoint &tip = e.points[k];
-                StrokePoint &corner = e.points[j];
-                if (std::abs(tip.y - corner.y) < 1e-6)
-                    corner.y = round2(corner.y + delta.y());
-                else if (std::abs(tip.x - corner.x) < 1e-6)
-                    corner.x = round2(corner.x + delta.x());
-            }
-            e.points[k].x = round2(e.points[k].x + delta.x());
-            e.points[k].y = round2(e.points[k].y + delta.y());
-            e.box = pointsRect(e.points);
+            moveEnd(e, k, start ? 1 : n - 2, delta);
         }
         stamp(e, s);
         arrowLabelShift.insert(e.id, polylineMiddle(e.points) - before);
@@ -508,6 +515,150 @@ Stroke newShape(ElementType type, QPointF from, QPointF to, bool constrain, cons
     return e;
 }
 
+namespace {
+
+/// The corners stretched to span the unit square.
+QList<QPointF> spanUnitSquare(const QList<QPointF> &corners)
+{
+    double minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+    for (const QPointF &p : corners) {
+        minX = std::min(minX, p.x());
+        maxX = std::max(maxX, p.x());
+        minY = std::min(minY, p.y());
+        maxY = std::max(maxY, p.y());
+    }
+    QList<QPointF> out;
+    out.reserve(corners.size());
+    for (const QPointF &p : corners)
+        out.append(QPointF((p.x() - minX) / (maxX - minX), (p.y() - minY) / (maxY - minY)));
+    return out;
+}
+
+/// `count` corners on a circle, clockwise from the top; every second one at `inner` of the radius
+/// (a star).
+QList<QPointF> ringCorners(int count, double inner = 1)
+{
+    QList<QPointF> out;
+    for (int i = 0; i < count; ++i) {
+        const double r = i % 2 == 1 ? inner : 1;
+        const double a = -std::numbers::pi / 2 + 2 * std::numbers::pi * i / count;
+        out.append(QPointF(r * std::cos(a), r * std::sin(a)));
+    }
+    return spanUnitSquare(out);
+}
+
+QList<QPointF> heartCorners()
+{
+    // The classic parametric heart, enough corners to read as a curve in every program.
+    constexpr int count = 48;
+    QList<QPointF> out;
+    for (int i = 0; i < count; ++i) {
+        const double t = 2 * std::numbers::pi * i / count;
+        const double s = std::sin(t);
+        out.append(QPointF(16 * s * s * s,
+                           -(13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 * t) - std::cos(4 * t))));
+    }
+    return spanUnitSquare(out);
+}
+
+QList<QPointF> cloudCorners()
+{
+    // The outline of some circles on a flat base, seen from a point inside all of it: along each
+    // ray the farthest point any of them reaches.
+    static constexpr double circles[][3] = {
+            {0.22, 0.62, 0.18}, {0.42, 0.40, 0.24}, {0.68, 0.46, 0.19}, {0.82, 0.64, 0.16}};
+    const QPointF centre(0.5, 0.6);
+    const QRectF base(0.22, 0.5, 0.6, 0.3);
+    constexpr int count = 96;
+    QList<QPointF> out;
+    for (int i = 0; i < count; ++i) {
+        const double a = 2 * std::numbers::pi * i / count;
+        const QPointF dir(std::cos(a), std::sin(a));
+        double reach = 0;
+        for (const auto &c : circles) {
+            const QPointF to = QPointF(c[0], c[1]) - centre;
+            const double along = QPointF::dotProduct(to, dir);
+            const double disc = along * along - QPointF::dotProduct(to, to) + c[2] * c[2];
+            if (disc >= 0)
+                reach = std::max(reach, along + std::sqrt(disc));
+        }
+        // Where the ray leaves the base.
+        const double tx = dir.x() > 0   ? (base.right() - centre.x()) / dir.x()
+                          : dir.x() < 0 ? (base.left() - centre.x()) / dir.x()
+                                        : 1e9;
+        const double ty = dir.y() > 0   ? (base.bottom() - centre.y()) / dir.y()
+                          : dir.y() < 0 ? (base.top() - centre.y()) / dir.y()
+                                        : 1e9;
+        reach = std::max(reach, std::min(tx, ty));
+        out.append(centre + dir * reach);
+    }
+    return spanUnitSquare(out);
+}
+
+} // namespace
+
+std::optional<PolygonKind> polygonKindFromName(QStringView name)
+{
+    if (name == u"triangle")
+        return PolygonKind::Triangle;
+    if (name == u"rightTriangle")
+        return PolygonKind::RightTriangle;
+    if (name == u"parallelogram")
+        return PolygonKind::Parallelogram;
+    if (name == u"trapezoid")
+        return PolygonKind::Trapezoid;
+    if (name == u"pentagon")
+        return PolygonKind::Pentagon;
+    if (name == u"hexagon")
+        return PolygonKind::Hexagon;
+    if (name == u"star")
+        return PolygonKind::Star;
+    if (name == u"blockArrow")
+        return PolygonKind::BlockArrow;
+    if (name == u"callout")
+        return PolygonKind::Callout;
+    if (name == u"heart")
+        return PolygonKind::Heart;
+    if (name == u"cloud")
+        return PolygonKind::Cloud;
+    return std::nullopt;
+}
+
+QList<QPointF> polygonTemplate(PolygonKind kind)
+{
+    switch (kind) {
+    case PolygonKind::Triangle: return {{0.5, 0}, {1, 1}, {0, 1}};
+    case PolygonKind::RightTriangle: return {{0, 0}, {1, 1}, {0, 1}};
+    case PolygonKind::Parallelogram: return {{0.25, 0}, {1, 0}, {0.75, 1}, {0, 1}};
+    case PolygonKind::Trapezoid: return {{0.25, 0}, {0.75, 0}, {1, 1}, {0, 1}};
+    case PolygonKind::Pentagon: return ringCorners(5);
+    case PolygonKind::Hexagon: return {{0.25, 0}, {0.75, 0}, {1, 0.5}, {0.75, 1}, {0.25, 1}, {0, 0.5}};
+    case PolygonKind::Star: return ringCorners(10, 0.382);
+    case PolygonKind::BlockArrow: return {{0, 0.3}, {0.6, 0.3}, {0.6, 0}, {1, 0.5}, {0.6, 1}, {0.6, 0.7}, {0, 0.7}};
+    case PolygonKind::Callout: return {{0, 0}, {1, 0}, {1, 0.75}, {0.45, 0.75}, {0.25, 1}, {0.25, 0.75}, {0, 0.75}};
+    case PolygonKind::Heart: return heartCorners();
+    case PolygonKind::Cloud: return cloudCorners();
+    }
+    return {};
+}
+
+Stroke newPolygon(PolygonKind kind, QPointF from, QPointF to, bool constrain, const ShapeStyle &st, const EditStamp &s)
+{
+    // The box as newShape() drags it; the line's fields as a new line has them.
+    Stroke box = newShape(ElementType::Rectangle, from, to, constrain, st, s);
+    Stroke e = box;
+    e.type = ElementType::Line;
+    e.roundness = 0;
+    e.polygon = true;
+    for (const QPointF &c : polygonTemplate(kind)) {
+        e.points.append(
+                {round2(box.box.x() + c.x() * box.box.width()), round2(box.box.y() + c.y() * box.box.height()), 0.5});
+    }
+    e.points.append(e.points.first());
+    e.box = pointsRect(e.points);
+    return e;
+}
+
 QSizeF measureText(const QString &text, int fontFamily, double fontSize, double lineHeight, const TextMetrics &m)
 {
     const QStringList lines = QString(text).remove(u'\r').split(u'\n');
@@ -710,6 +861,409 @@ QString addLabel(Drawing &d, const QString &containerId, const QString &text, co
     d.strokes.insert(c + 1, std::move(t));
     layoutText(d, c + 1, typed, m, s);
     return id;
+}
+
+namespace {
+
+/// How a transformation carries one element.
+struct Placement {
+    /// Where a scene point goes.
+    std::function<QPointF(QPointF)> map;
+    /// Added to the element's angle.
+    double turn = 0;
+    /// Mirrored: left and right, top and bottom.
+    bool mirrorX = false;
+    bool mirrorY = false;
+    /// Along the element's own axes.
+    double scaleX = 1;
+    double scaleY = 1;
+    /// A text's size and box (1: only carried along).
+    double fontScale = 1;
+    /// Shapes' labels are wrapped again.
+    bool layoutLabels = false;
+};
+
+double normalizedAngle(double angle)
+{
+    const double full = 2 * std::numbers::pi;
+    double a = std::fmod(angle, full);
+    if (a < 0)
+        a += full;
+    return std::abs(a) < 1e-9 || std::abs(a - full) < 1e-9 ? 0 : a;
+}
+
+void place(Stroke &e, const Placement &p)
+{
+    const QPointF centre = elementCenter(e);
+    const QPointF to = p.map(centre);
+    const bool text = e.type == ElementType::Text;
+    const double sx = text ? p.fontScale : (p.mirrorX ? -p.scaleX : p.scaleX);
+    const double sy = text ? p.fontScale : (p.mirrorY ? -p.scaleY : p.scaleY);
+    if (hasPoints(e.type)) {
+        for (StrokePoint &point : e.points) {
+            point.x = round2(to.x() + (point.x - centre.x()) * sx);
+            point.y = round2(to.y() + (point.y - centre.y()) * sy);
+        }
+        e.box = pointsRect(e.points);
+    } else {
+        const double w = round2(e.box.width() * std::abs(sx));
+        const double h = round2(e.box.height() * std::abs(sy));
+        e.box = QRectF(round2(to.x() - w / 2), round2(to.y() - h / 2), w, h);
+    }
+    if (text)
+        e.fontSize = std::clamp(round2(e.fontSize * p.fontScale), 1.0, 1000.0);
+    if (e.type == ElementType::Image) {
+        e.flipX = e.flipX != p.mirrorX;
+        e.flipY = e.flipY != p.mirrorY;
+    }
+    if (e.elbowed)
+        return;
+    e.angle = normalizedAngle(p.mirrorX != p.mirrorY ? -e.angle : e.angle + p.turn);
+}
+
+bool withinLimit(const Stroke &e)
+{
+    const QRectF r = hasPoints(e.type) ? pointsRect(e.points).adjusted(0, 0, 1e-9, 1e-9) : e.box;
+    const double L = CoordinateLimit;
+    return std::isfinite(r.left()) && std::isfinite(r.top()) && std::isfinite(r.right()) && std::isfinite(r.bottom())
+           && r.left() >= -L && r.right() <= L && r.top() >= -L && r.bottom() <= L;
+}
+
+/// The elements `ids` placed by `p`, their labels and the ends of arrows bound to them with them
+/// (see resizeElements(), rotateElements(), flipElements()).
+void transformElements(Drawing &d, const QSet<QString> &ids, const Placement &p, const TextMetrics &m,
+                       const EditStamp &s)
+{
+    const QHash<QString, qsizetype> index = indexById(d);
+    QSet<QString> moved;
+    for (const Stroke &e : std::as_const(d.strokes)) {
+        if (ids.contains(e.id) && !lockedIn(d, index, e))
+            moved.insert(e.id);
+    }
+    for (const Stroke &e : std::as_const(d.strokes)) {
+        if (e.type == ElementType::Text && !e.locked && moved.contains(e.containerId))
+            moved.insert(e.id);
+    }
+    if (moved.isEmpty())
+        return;
+    const QList<Stroke> before = d.strokes;
+    const auto labelOfMoved = [&moved](const Stroke &e) {
+        return e.type == ElementType::Text && moved.contains(e.containerId);
+    };
+    // The elements first: labels follow where their shapes and arrows went.
+    for (Stroke &e : d.strokes) {
+        if (moved.contains(e.id) && !labelOfMoved(e)) {
+            place(e, p);
+            stamp(e, s);
+        }
+    }
+    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
+        if (!moved.contains(d.strokes.at(i).id) || !labelOfMoved(d.strokes.at(i)))
+            continue;
+        const qsizetype c = index.value(d.strokes.at(i).containerId, -1);
+        if (c < 0)
+            continue;
+        const Stroke &container = d.strokes.at(c);
+        if (isLinear(container.type)) {
+            // Level, at the arrow's middle as the arrow now lies.
+            Stroke &label = d.strokes[i];
+            const QPointF middle =
+                    rotatePoint(polylineMiddle(container.points), elementCenter(container), container.angle);
+            const double w = round2(label.box.width() * p.fontScale);
+            const double h = round2(label.box.height() * p.fontScale);
+            label.fontSize = std::clamp(round2(label.fontSize * p.fontScale), 1.0, 1000.0);
+            label.box = QRectF(round2(middle.x() - w / 2), round2(middle.y() - h / 2), w, h);
+            stamp(label, s);
+        } else if (p.layoutLabels) {
+            Stroke &label = d.strokes[i];
+            label.fontSize = std::clamp(round2(label.fontSize * p.fontScale), 1.0, 1000.0);
+            const QString typed = editableText(label);
+            layoutText(d, i, typed, m, s);
+        } else {
+            place(d.strokes[i], p);
+            stamp(d.strokes[i], s);
+        }
+    }
+    // Arrows that stay, bound to what moved: their bound ends follow.
+    QHash<QString, QPointF> labelShift;
+    for (Stroke &e : d.strokes) {
+        if (moved.contains(e.id) || !isLinear(e.type) || e.locked || e.points.size() < 2)
+            continue;
+        const bool start = !e.startBound.isEmpty() && moved.contains(e.startBound);
+        const bool end = !e.endBound.isEmpty() && moved.contains(e.endBound);
+        if (!start && !end)
+            continue;
+        const QPointF middle = polylineMiddle(e.points);
+        if (start && end && !e.elbowed) {
+            for (StrokePoint &point : e.points) {
+                const QPointF to = p.map(QPointF(point.x, point.y));
+                point.x = round2(to.x());
+                point.y = round2(to.y());
+            }
+            e.box = pointsRect(e.points);
+        } else if (start && end) {
+            translate(e, p.map(elementCenter(e)) - elementCenter(e));
+        } else {
+            const qsizetype n = e.points.size();
+            const qsizetype k = start ? 0 : n - 1;
+            const QPointF tip(e.points.at(k).x, e.points.at(k).y);
+            moveEnd(e, k, start ? 1 : n - 2, p.map(tip) - tip);
+        }
+        stamp(e, s);
+        labelShift.insert(e.id, polylineMiddle(e.points) - middle);
+    }
+    for (Stroke &e : d.strokes) {
+        if (e.type == ElementType::Text && !moved.contains(e.id) && labelShift.contains(e.containerId)) {
+            translate(e, labelShift.value(e.containerId));
+            stamp(e, s);
+        }
+    }
+    for (const Stroke &e : std::as_const(d.strokes)) {
+        if (!withinLimit(e)) {
+            d.strokes = before; // (nothing leaves the limit: the edit is not made)
+            return;
+        }
+    }
+}
+
+} // namespace
+
+QRectF resizedFrame(const QRectF &from, Handle handle, QPointF delta, bool proportional, double minSize)
+{
+    const bool west = handle == Handle::TopLeft || handle == Handle::Left || handle == Handle::BottomLeft;
+    const bool east = handle == Handle::TopRight || handle == Handle::Right || handle == Handle::BottomRight;
+    const bool north = handle == Handle::TopLeft || handle == Handle::Top || handle == Handle::TopRight;
+    const bool south = handle == Handle::BottomLeft || handle == Handle::Bottom || handle == Handle::BottomRight;
+    const double w0 = from.width(), h0 = from.height();
+    double w = w0, h = h0;
+    if (w0 > 0 && (west || east))
+        w = std::max(minSize, west ? w0 - delta.x() : w0 + delta.x());
+    if (h0 > 0 && (north || south))
+        h = std::max(minSize, north ? h0 - delta.y() : h0 + delta.y());
+    if (proportional) {
+        double scale = 1;
+        const bool horizontal = (west || east) && w0 > 0;
+        const bool vertical = (north || south) && h0 > 0;
+        if (horizontal && vertical)
+            scale = std::max(w / w0, h / h0);
+        else if (horizontal)
+            scale = w / w0;
+        else if (vertical)
+            scale = h / h0;
+        // Not below minSize on the shorter side that has a length.
+        const double shorter = w0 > 0 && h0 > 0 ? std::min(w0, h0) : std::max(w0, h0);
+        if (shorter > 0)
+            scale = std::max(scale, minSize / shorter);
+        w = w0 * scale;
+        h = h0 * scale;
+    }
+    const double left = west ? from.right() - w : east ? from.left() : from.center().x() - w / 2;
+    const double top = north ? from.bottom() - h : south ? from.top() : from.center().y() - h / 2;
+    return QRectF(left, top, w, h);
+}
+
+void resizeElements(Drawing &d, const QSet<QString> &ids, const QRectF &from, const QRectF &to, double angle,
+                    const TextMetrics &m, const EditStamp &s)
+{
+    const auto finite = [](const QRectF &r) {
+        return std::isfinite(r.x()) && std::isfinite(r.y()) && std::isfinite(r.width()) && std::isfinite(r.height());
+    };
+    if (!finite(from) || !finite(to) || !std::isfinite(angle) || from.width() < 0 || from.height() < 0 || to.width() < 0
+        || to.height() < 0 || from == to)
+        return;
+    const double sx = from.width() > 0 ? to.width() / from.width() : 1;
+    const double sy = from.height() > 0 ? to.height() / from.height() : 1;
+    if (!(sx > 0) || !(sy > 0))
+        return;
+    const QPointF pivot = from.center();
+    Placement p;
+    p.map = [=](QPointF point) {
+        const QPointF local = rotatePoint(point, pivot, -angle);
+        const QPointF scaled(to.left() + (local.x() - from.left()) * sx, to.top() + (local.y() - from.top()) * sy);
+        return rotatePoint(scaled, pivot, angle);
+    };
+    p.scaleX = sx;
+    p.scaleY = sy;
+    p.fontScale = std::abs(sx - sy) < 1e-6 ? sx : 1;
+    p.layoutLabels = true;
+    transformElements(d, ids, p, m, s);
+}
+
+void rotateElements(Drawing &d, const QSet<QString> &ids, QPointF pivot, double angle, const EditStamp &s)
+{
+    if (!std::isfinite(angle) || !std::isfinite(pivot.x()) || !std::isfinite(pivot.y()) || normalizedAngle(angle) == 0)
+        return;
+    Placement p;
+    p.map = [=](QPointF point) { return rotatePoint(point, pivot, angle); };
+    p.turn = angle;
+    transformElements(d, ids, p, TextMetrics{}, s);
+}
+
+void flipElements(Drawing &d, const QSet<QString> &ids, Flip flip, QPointF pivot, const EditStamp &s)
+{
+    if (!std::isfinite(pivot.x()) || !std::isfinite(pivot.y()))
+        return;
+    const bool horizontal = flip == Flip::Horizontal;
+    Placement p;
+    p.map = [=](QPointF point) {
+        return horizontal ? QPointF(2 * pivot.x() - point.x(), point.y())
+                          : QPointF(point.x(), 2 * pivot.y() - point.y());
+    };
+    p.mirrorX = horizontal;
+    p.mirrorY = !horizontal;
+    transformElements(d, ids, p, TextMetrics{}, s);
+}
+
+bool hasFill(const Stroke &e)
+{
+    return isShape(e.type) || (e.type == ElementType::Line && e.polygon);
+}
+
+bool hasThickness(const Stroke &e)
+{
+    return e.type != ElementType::Text && e.type != ElementType::Image;
+}
+
+bool hasDashes(const Stroke &e)
+{
+    return isShape(e.type) || isLinear(e.type);
+}
+
+bool canRound(const Stroke &e)
+{
+    return e.type == ElementType::Rectangle || e.type == ElementType::Diamond || (isLinear(e.type) && !e.elbowed);
+}
+
+bool hasHeads(const Stroke &e)
+{
+    return isLinear(e.type) && !e.polygon;
+}
+
+double thicknessWidth(const Stroke &e, int thickness)
+{
+    const int i = std::clamp(thickness, 0, 2);
+    if (e.type == ElementType::Freedraw && e.tool == Tool::Highlighter)
+        return std::array{3.0, 5.0, 8.0}.at(size_t(i));
+    if (e.type == ElementType::Freedraw)
+        return std::array{0.5, 1.0, 2.0}.at(size_t(i));
+    return std::array{1.0, 2.0, 4.0}.at(size_t(i));
+}
+
+int thicknessOf(const Stroke &e)
+{
+    int best = 0;
+    for (int i = 1; i < 3; ++i) {
+        if (std::abs(thicknessWidth(e, i) - e.width) < std::abs(thicknessWidth(e, best) - e.width))
+            best = i;
+    }
+    return best;
+}
+
+void styleElements(Drawing &d, const QSet<QString> &ids, const ElementStyle &style, const TextMetrics &m,
+                   const EditStamp &s)
+{
+    const QHash<QString, qsizetype> index = indexById(d);
+    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
+        if (!ids.contains(d.strokes.at(i).id) || lockedIn(d, index, d.strokes.at(i)))
+            continue;
+        Stroke e = d.strokes.at(i);
+        bool changed = false;
+        const auto set = [&changed](auto &field, const auto &value) {
+            if (field != value) {
+                field = value;
+                changed = true;
+            }
+        };
+        if (hasFill(e)) {
+            if (style.fill)
+                set(e.fill, *style.fill);
+            if (style.fillStyle)
+                set(e.fillStyle, *style.fillStyle);
+        }
+        if (hasThickness(e) && style.thickness)
+            set(e.width, thicknessWidth(e, *style.thickness));
+        if (hasDashes(e) && style.strokeStyle)
+            set(e.strokeStyle, *style.strokeStyle);
+        if (style.opacity)
+            set(e.opacity, std::clamp(*style.opacity, 0, 100));
+        if (canRound(e) && style.rounded) {
+            // Corners as Excalidraw rounds what it draws: rectangles adaptive, the others proportional.
+            set(e.roundness, !*style.rounded ? 0 : e.type == ElementType::Rectangle ? 3 : 2);
+        }
+        if (hasHeads(e)) {
+            if (style.startArrowhead)
+                set(e.startArrowhead, *style.startArrowhead);
+            if (style.endArrowhead)
+                set(e.endArrowhead, *style.endArrowhead);
+        }
+        const bool newSize =
+                e.type == ElementType::Text && style.fontSize && std::abs(e.fontSize - *style.fontSize) > 1e-6;
+        if (newSize) {
+            e.fontSize = std::clamp(*style.fontSize, 1.0, 1000.0);
+            changed = true;
+        }
+        if (!changed)
+            continue;
+        const QString typed = editableText(e);
+        d.strokes[i] = std::move(e);
+        if (newSize)
+            layoutText(d, i, typed, m, s);
+        else
+            stamp(d.strokes[i], s);
+    }
+}
+
+bool canGroup(const Drawing &d, const QSet<QString> &ids)
+{
+    int units = 0;
+    bool oneGroup = true;
+    QString group;
+    bool first = true;
+    for (const Stroke &e : d.strokes) {
+        if (!ids.contains(e.id) || (e.type == ElementType::Text && ids.contains(e.containerId)))
+            continue;
+        ++units;
+        const QString outer = e.groupIds.isEmpty() ? QString() : e.groupIds.last();
+        if (first)
+            group = outer;
+        else if (outer != group)
+            oneGroup = false;
+        first = false;
+    }
+    return units >= 2 && (!oneGroup || group.isEmpty());
+}
+
+bool canUngroup(const Drawing &d, const QSet<QString> &ids)
+{
+    return std::any_of(d.strokes.cbegin(), d.strokes.cend(),
+                       [&ids](const Stroke &e) { return ids.contains(e.id) && !e.groupIds.isEmpty(); });
+}
+
+QString groupElements(Drawing &d, const QSet<QString> &ids, const EditStamp &s)
+{
+    if (!canGroup(d, ids))
+        return {};
+    const QHash<QString, qsizetype> index = indexById(d);
+    const QString group = newIdOf(s);
+    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
+        if (!ids.contains(d.strokes.at(i).id) || lockedIn(d, index, d.strokes.at(i)))
+            continue;
+        d.strokes[i].groupIds.append(group);
+        stamp(d.strokes[i], s);
+    }
+    return group;
+}
+
+void ungroupElements(Drawing &d, const QSet<QString> &ids, const EditStamp &s)
+{
+    const QHash<QString, qsizetype> index = indexById(d);
+    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
+        const Stroke &e = d.strokes.at(i);
+        if (!ids.contains(e.id) || e.groupIds.isEmpty() || lockedIn(d, index, e))
+            continue;
+        d.strokes[i].groupIds.removeLast();
+        stamp(d.strokes[i], s);
+    }
 }
 
 namespace {

@@ -53,7 +53,10 @@
 #include <QtMath>
 #include <qpa/qwindowsysteminterface.h>
 
+#include <cmath>
 #include <memory>
+#include <numbers>
+#include <optional>
 #include <tuple>
 
 using namespace Qt::StringLiterals;
@@ -417,6 +420,30 @@ class TestDrawingCanvas : public QObject {
 
     std::unique_ptr<QQuickWindow> window;
     DrawingCanvas *canvas = nullptr;
+
+    /// The canvas on the shapes' drawing, with room above and to the left of it for the handles.
+    void loadShapesInView()
+    {
+        QCOMPARE(canvas->load(shapesFile()), QString());
+        canvas->setCenterX(canvas->centerX() - 60);
+        canvas->setCenterY(canvas->centerY() - 120);
+    }
+    /// The canvas on the shapes' drawing, the select tool, the rectangle selected.
+    void selectRectangle()
+    {
+        loadShapesInView();
+        canvas->setTool(u"select"_s);
+        canvas->select({u"prostokat"_s});
+        QCOMPARE(canvas->selectionCount(), 1);
+    }
+    QPoint itemPoint(QPointF scene) const { return canvas->toItem(scene).toPoint(); }
+    void mouseDragTo(QPoint from, QPoint to, Qt::KeyboardModifiers modifiers = {})
+    {
+        QTest::mousePress(window.get(), Qt::LeftButton, modifiers, from);
+        for (int i = 1; i <= 6; ++i)
+            QTest::mouseMove(window.get(), from + (to - from) * i / 6);
+        QTest::mouseRelease(window.get(), Qt::LeftButton, modifiers, to);
+    }
 
 private Q_SLOTS:
     void init()
@@ -2348,6 +2375,12 @@ private Q_SLOTS:
                               << QRectF(100, 100, 200, 50);
         QTest::newRow("arrow") << u"arrow"_s << QPoint(300, 150) << false << int(ElementType::Arrow)
                                << QRectF(100, 100, 200, 50);
+        QTest::newRow("triangle") << u"triangle"_s << QPoint(300, 200) << false << int(ElementType::Line)
+                                  << QRectF(100, 100, 200, 100);
+        QTest::newRow("star") << u"star"_s << QPoint(300, 200) << false << int(ElementType::Line)
+                              << QRectF(100, 100, 200, 100);
+        QTest::newRow("cloud, Shift: a square box")
+                << u"cloud"_s << QPoint(300, 180) << true << int(ElementType::Line) << QRectF(100, 100, 200, 200);
         QTest::newRow("Shift: a square") << u"rectangle"_s << QPoint(300, 180) << true << int(ElementType::Rectangle)
                                          << QRectF(100, 100, 200, 200);
         QTest::newRow("a click: nothing") << u"rectangle"_s << QPoint(101, 101) << false << -1 << QRectF();
@@ -2432,6 +2465,371 @@ private Q_SLOTS:
         fingers.send(
                 {{1, {QEventPoint::State::Released, {250, 440}}}, {2, {QEventPoint::State::Released, {420, 440}}}});
         QCOMPARE(canvas->strokeCount(), fingerDraws ? 1 : 0);
+    }
+
+    /// The drawing of tests/app/drawing/screenshots.sh's `allshapes`, `handles`, `stylepanel`:
+    /// every polygon in a grid, some filled, dashed or turned; "gwiazda" the star.
+    void polygonsSample()
+    {
+        const QString path = qEnvironmentVariable("BRULION_DRAWING_POLYGONS_SAMPLE");
+        if (path.isEmpty())
+            QSKIP("BRULION_DRAWING_POLYGONS_SAMPLE names the file to write");
+        using namespace brulion::drawing;
+        const EditStamp stamp = randomEditStamp(1761568000000);
+        Drawing d;
+        const struct {
+            PolygonKind kind;
+            const char *fill;
+            FillStyle style;
+            double angle;
+        } shapes[] = {{PolygonKind::Triangle, "#ffc9c9", FillStyle::Solid, 0},
+                      {PolygonKind::RightTriangle, "transparent", FillStyle::Solid, 0},
+                      {PolygonKind::Parallelogram, "#a5d8ff", FillStyle::Hachure, 0},
+                      {PolygonKind::Trapezoid, "transparent", FillStyle::Solid, 0},
+                      {PolygonKind::Pentagon, "#b2f2bb", FillStyle::Solid, 0},
+                      {PolygonKind::Hexagon, "#ffec99", FillStyle::CrossHatch, 0},
+                      {PolygonKind::Star, "#ffec99", FillStyle::Solid, 0.3},
+                      {PolygonKind::BlockArrow, "#eebefa", FillStyle::Solid, 0},
+                      {PolygonKind::Callout, "transparent", FillStyle::Solid, 0},
+                      {PolygonKind::Heart, "#ffc9c9", FillStyle::Solid, 0},
+                      {PolygonKind::Cloud, "#a5d8ff", FillStyle::Solid, 0}};
+        int i = 0;
+        for (const auto &s : shapes) {
+            const QPointF at(40 + (i % 4) * 150, 90 + (i / 4) * 150);
+            Stroke e = newPolygon(s.kind, at, at + QPointF(120, 110), false, ShapeStyle{u"#1f2430"_s, 2, true}, stamp);
+            e.fill = QString::fromLatin1(s.fill);
+            e.fillStyle = s.style;
+            e.angle = s.angle;
+            if (s.kind == PolygonKind::Callout)
+                e.strokeStyle = StrokeStyle::Dashed;
+            if (s.kind == PolygonKind::Star)
+                e.id = u"gwiazda"_s;
+            d.strokes.append(e);
+            ++i;
+        }
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(toSvg(d));
+    }
+
+    void everyPolygonToolDraws_data()
+    {
+        QTest::addColumn<QString>("tool");
+        for (const char *tool : {"triangle", "rightTriangle", "parallelogram", "trapezoid", "pentagon", "hexagon",
+                                 "star", "blockArrow", "callout", "heart", "cloud"})
+            QTest::newRow(tool) << QString::fromLatin1(tool);
+    }
+    void everyPolygonToolDraws()
+    {
+        QFETCH(QString, tool);
+        canvas->setTool(tool);
+        QCOMPARE(canvas->tool(), tool);
+        QTest::mousePress(window.get(), Qt::LeftButton, {}, QPoint(100, 100));
+        QTest::mouseMove(window.get(), QPoint(200, 200));
+        QVERIFY(canvas->busy());
+        QImage live(800, 600, QImage::Format_ARGB32_Premultiplied);
+        QPainter painter(&live);
+        canvas->render(&painter, QSizeF(800, 600)); // shown while dragged
+        painter.end();
+        QVERIFY(pixelsLike(live, QRect(95, 95, 110, 110), QColor(u"#1f2430"_s)) > 20);
+        QTest::mouseRelease(window.get(), Qt::LeftButton, {}, QPoint(300, 200));
+        QCOMPARE(canvas->strokeCount(), 1);
+        const brulion::drawing::Stroke e = canvas->currentDrawing().strokes.first();
+        QVERIFY(e.polygon);
+        // Saved and read as Excalidraw's closed line.
+        std::optional<brulion::drawing::Drawing> read = brulion::drawing::readDrawing(canvas->fileBytes());
+        QVERIFY(read);
+        QVERIFY(read->strokes.first().polygon);
+        QCOMPARE(read->strokes.first().points.size(), e.points.size());
+        for (qsizetype i = 0; i < e.points.size(); ++i) {
+            QVERIFY(qAbs(read->strokes.first().points.at(i).x - e.points.at(i).x) < 0.011);
+            QVERIFY(qAbs(read->strokes.first().points.at(i).y - e.points.at(i).y) < 0.011);
+        }
+    }
+
+    void handleResizes_data()
+    {
+        QTest::addColumn<QPointF>("handle");
+        QTest::addColumn<QPoint>("drag");
+        QTest::addColumn<bool>("shift");
+        QTest::addColumn<QRectF>("box");
+        // The rectangle is 100,100 200×100; handles lie on its frame, 6 px out.
+        QTest::newRow("bottom right") << QPointF(306, 206) << QPoint(50, 20) << false << QRectF(100, 100, 250, 120);
+        QTest::newRow("top left") << QPointF(94, 94) << QPoint(-20, -10) << false << QRectF(80, 90, 220, 110);
+        QTest::newRow("right edge") << QPointF(306, 150) << QPoint(40, 99) << false << QRectF(100, 100, 240, 100);
+        QTest::newRow("bottom edge") << QPointF(200, 206) << QPoint(99, 30) << false << QRectF(100, 100, 200, 130);
+        QTest::newRow("Shift: proportional")
+                << QPointF(306, 206) << QPoint(100, 0) << true << QRectF(100, 100, 300, 150);
+    }
+    void handleResizes()
+    {
+        QFETCH(QPointF, handle);
+        QFETCH(QPoint, drag);
+        QFETCH(bool, shift);
+        QFETCH(QRectF, box);
+        selectRectangle();
+        QSignalSpy content(canvas, &DrawingCanvas::contentChanged);
+        // (A handle is taken with Shift held too: it does not add to the selection there.)
+        QTest::mousePress(window.get(), Qt::LeftButton, shift ? Qt::ShiftModifier : Qt::NoModifier, itemPoint(handle));
+        QVERIFY(canvas->busy());
+        const QPoint to = itemPoint(handle) + drag;
+        QTest::mouseMove(window.get(), to, {});
+        QTest::mouseRelease(window.get(), Qt::LeftButton, shift ? Qt::ShiftModifier : Qt::NoModifier, to);
+        QVERIFY(!canvas->busy());
+        brulion::drawing::Drawing keep;
+        const auto *e = elementOf(canvas, u"prostokat"_s, keep);
+        QVERIFY(e);
+        QCOMPARE(e->box, box);
+        QCOMPARE(e->width, 4.0);
+        QCOMPARE(canvas->selectionCount(), 1);
+        QCOMPARE(content.size(), 1);
+        canvas->undo();
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->box, QRectF(100, 100, 200, 100));
+        canvas->redo();
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->box, box);
+    }
+
+    void handleShownMeanwhile()
+    {
+        selectRectangle();
+        QTest::mousePress(window.get(), Qt::LeftButton, {}, itemPoint(QPointF(306, 206)));
+        QTest::mouseMove(window.get(), itemPoint(QPointF(506, 306)));
+        QVERIFY(canvas->busy());
+        QImage image(800, 600, QImage::Format_ARGB32_Premultiplied);
+        QPainter painter(&image);
+        canvas->render(&painter, QSizeF(800, 600));
+        painter.end();
+        // The right side at 500, not at 300, while dragged; Escape's way out: nothing changed.
+        const QRect side = QRect(itemPoint(QPointF(497, 200)), QSize(6, 40));
+        QVERIFY(pixelsLike(image, side, QColor(u"#e03131"_s)) > 20);
+        QVERIFY(canvas->cancelGesture());
+        QVERIFY(!canvas->busy());
+        QTest::mouseRelease(window.get(), Qt::LeftButton, {}, itemPoint(QPointF(506, 306)));
+        brulion::drawing::Drawing keep;
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->box, QRectF(100, 100, 200, 100));
+        QVERIFY(!canvas->canUndo());
+    }
+
+    void handleRotates()
+    {
+        selectRectangle();
+        // Above the frame's middle; the centre is 200,150, so a quarter turn to the right.
+        const QPoint from = itemPoint(QPointF(200, 94 - DrawingCanvas::RotateHandleDistance));
+        const QPoint to = itemPoint(QPointF(200 + 72, 150));
+        mouseDragTo(from, to);
+        brulion::drawing::Drawing keep;
+        const auto *e = elementOf(canvas, u"prostokat"_s, keep);
+        QVERIFY(qAbs(e->angle - std::numbers::pi / 2) < 0.02);
+        QCOMPARE(e->box, QRectF(100, 100, 200, 100));
+        QVERIFY(canvas->canUndo());
+        // The frame turned with it: the bottom edge's handle is now at the left. It stretches the
+        // same box's height, towards the left on the screen.
+        mouseDragTo(itemPoint(QPointF(200 - 56, 150)), itemPoint(QPointF(200 - 86, 150)));
+        e = elementOf(canvas, u"prostokat"_s, keep);
+        QVERIFY2(qAbs(e->box.height() - 130) < 2, qPrintable(QString::number(e->box.height())));
+        QVERIFY(qAbs(e->angle - std::numbers::pi / 2) < 0.02);
+        // Inside the turned frame it moves.
+        const QRectF moved = e->box;
+        mouseDragTo(itemPoint(QPointF(200, 150)), itemPoint(QPointF(210, 160)));
+        QVERIFY(elementOf(canvas, u"prostokat"_s, keep)->box.center() != moved.center());
+
+        // Shift: to 15° steps.
+        canvas->undo();
+        canvas->undo();
+        canvas->undo();
+        canvas->select({u"prostokat"_s});
+        const QPoint start = itemPoint(QPointF(200, 94 - DrawingCanvas::RotateHandleDistance));
+        QTest::mousePress(window.get(), Qt::LeftButton, {}, start);
+        QTest::mouseMove(window.get(), itemPoint(QPointF(260, 100)));
+        QTest::mouseRelease(window.get(), Qt::LeftButton, Qt::ShiftModifier, itemPoint(QPointF(260, 100)));
+        const double degrees = elementOf(canvas, u"prostokat"_s, keep)->angle * 180 / std::numbers::pi;
+        QVERIFY2(qAbs(std::round(degrees / 15) * 15 - degrees) < 1e-6, qPrintable(QString::number(degrees)));
+    }
+
+    void severalElementsScaleTogether()
+    {
+        loadShapesInView(); // (room above: the rotation handle is not at the frame's bottom)
+        canvas->setTool(u"select"_s);
+        canvas->select({u"prostokat"_s, u"elipsa"_s});
+        const QRectF frame = canvas->selectionOuterRect();
+        // Corners only, keeping the shape: a drag across from the bottom right doubles both.
+        const QPoint corner = frame.bottomRight().toPoint();
+        QTest::mousePress(window.get(), Qt::LeftButton, {}, corner);
+        QVERIFY(canvas->busy());
+        QTest::mouseMove(window.get(), corner + QPoint(100, 0));
+        QTest::mouseRelease(window.get(), Qt::LeftButton, {}, corner + QPoint(100, 0));
+        brulion::drawing::Drawing keep;
+        const auto *r = elementOf(canvas, u"prostokat"_s, keep);
+        const double scale = r->box.width() / 200;
+        QVERIFY(scale > 1.1);
+        QVERIFY(qAbs(r->box.height() / 100 - scale) < 0.02);
+        // One undo step, the locked square and the text untouched.
+        canvas->undo();
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->box, QRectF(100, 100, 200, 100));
+        QCOMPARE(elementOf(canvas, u"tlo"_s, keep)->box, QRectF(40, 500, 60, 60));
+    }
+
+    void pressOnAHandleWithTheOtherPointers()
+    {
+        selectRectangle();
+        canvas->setFingerDraws(true);
+        Fingers fingers(window.get());
+        const QPointF corner = canvas->toItem(QPointF(306, 206));
+        // A finger reaches further: it lands 12 px from the handle, and the box grows.
+        fingers.drag(corner + QPointF(10, 6), corner + QPointF(60, 56), 6);
+        brulion::drawing::Drawing keep;
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->box.size(), QSizeF(250, 150));
+        Pen pen(window.get());
+        const QPointF right = canvas->toItem(QPointF(356, 175));
+        pen.stroke(right, right + QPointF(44, 0), 6, 0.5, 0.5);
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->box.width(), 294.0);
+        QCOMPARE(canvas->strokeCount(), 4);
+    }
+
+    void aSmallElementMovesWhenPressedInside()
+    {
+        QCOMPARE(canvas->load(shapesFile()), QString());
+        canvas->setTool(u"rectangle"_s);
+        mouseStroke(window.get(), {600, 400}, {610, 410}, 4);
+        canvas->setTool(u"select"_s);
+        const brulion::drawing::Stroke before = canvas->currentDrawing().strokes.last();
+        canvas->select({before.id});
+        QTest::mousePress(window.get(), Qt::LeftButton, {}, QPoint(605, 405));
+        QTest::mouseMove(window.get(), QPoint(655, 405));
+        QTest::mouseRelease(window.get(), Qt::LeftButton, {}, QPoint(655, 405));
+        const brulion::drawing::Stroke e = canvas->currentDrawing().strokes.last();
+        QCOMPARE(e.box.size(), before.box.size());
+        QCOMPARE(e.box.left(), before.box.left() + 50);
+    }
+
+    void boxSelection()
+    {
+        loadShapesInView();
+        canvas->setTool(u"select"_s);
+        QSignalSpy mode(canvas, &DrawingCanvas::selectModeChanged);
+        canvas->setSelectMode(u"box"_s);
+        QCOMPARE(canvas->selectMode(), u"box"_s);
+        QCOMPARE(mode.size(), 1);
+        // Across the rectangle and the ellipse, not the text, the locked square never.
+        mouseDragTo(itemPoint(QPointF(60, 60)), itemPoint(QPointF(540, 240)));
+        QCOMPARE(canvas->selection(), (QStringList{u"prostokat"_s, u"elipsa"_s}));
+        // Half of the rectangle's samples outside: not taken. A click is still a tap.
+        canvas->clearSelection();
+        mouseDragTo(itemPoint(QPointF(60, 60)), itemPoint(QPointF(150, 240)));
+        QCOMPARE(canvas->selectionCount(), 0);
+        QTest::mouseClick(window.get(), Qt::LeftButton, {}, itemPoint(QPointF(100, 150)));
+        QCOMPARE(canvas->selection(), QStringList{u"prostokat"_s});
+        // Anything else: the lasso.
+        canvas->setSelectMode(u"koło"_s);
+        QCOMPARE(canvas->selectMode(), u"lasso"_s);
+    }
+
+    void selectionStyleAndActions()
+    {
+        selectRectangle();
+        QVariantMap style = canvas->selectionStyle();
+        QCOMPARE(style.value(u"fillable"_s).toBool(), true);
+        QCOMPARE(style.value(u"fill"_s).toString(), u"transparent"_s);
+        QCOMPARE(style.value(u"thickness"_s).toInt(), 2);
+        QCOMPARE(style.value(u"strokeStyle"_s).toString(), u"solid"_s);
+        QCOMPARE(style.value(u"opacity"_s).toInt(), 100);
+        QVERIFY(!style.contains(u"text"_s));
+        QVERIFY(!style.contains(u"heads"_s));
+        QCOMPARE(style.value(u"canGroup"_s).toBool(), false);
+        // One choice, one undo step; the map says it.
+        QSignalSpy selection(canvas, &DrawingCanvas::selectionChanged);
+        canvas->styleSelection({{u"fill"_s, u"#a5d8ff"_s}});
+        QVERIFY(!selection.isEmpty());
+        QCOMPARE(canvas->selectionStyle().value(u"fill"_s).toString(), u"#a5d8ff"_s);
+        canvas->styleSelection({{u"fillStyle"_s, u"cross-hatch"_s},
+                                {u"strokeStyle"_s, u"dotted"_s},
+                                {u"opacity"_s, 50},
+                                {u"thickness"_s, 0},
+                                {u"rounded"_s, true}});
+        brulion::drawing::Drawing keep;
+        const auto *e = elementOf(canvas, u"prostokat"_s, keep);
+        QCOMPARE(e->fillStyle, brulion::drawing::FillStyle::CrossHatch);
+        QCOMPARE(e->strokeStyle, brulion::drawing::StrokeStyle::Dotted);
+        QCOMPARE(e->opacity, 50);
+        QCOMPARE(e->width, 1.0);
+        QCOMPARE(e->roundness, 3);
+        canvas->undo();
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->opacity, 100);
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->fill, u"#a5d8ff"_s);
+        // Rubbish changes nothing.
+        const int steps = int(canvas->canUndo());
+        canvas->styleSelection({{u"fill"_s, u"nie kolor"_s}, {u"fillStyle"_s, u"?"_s}, {u"fontSize"_s, -3}});
+        QCOMPARE(int(canvas->canUndo()), steps);
+        QCOMPARE(elementOf(canvas, u"prostokat"_s, keep)->fill, u"#a5d8ff"_s);
+
+        // Turned by 90° about its middle; mirrored about it.
+        canvas->rotateSelection(90);
+        e = elementOf(canvas, u"prostokat"_s, keep);
+        QVERIFY(qAbs(e->angle - std::numbers::pi / 2) < 1e-6);
+        QCOMPARE(e->box, QRectF(100, 100, 200, 100));
+        canvas->flipSelection(u"horizontal"_s);
+        QVERIFY(qAbs(elementOf(canvas, u"prostokat"_s, keep)->angle - 3 * std::numbers::pi / 2) < 1e-6);
+        canvas->undo();
+        canvas->undo();
+
+        // A group: one tap takes both, and it comes apart again.
+        canvas->select({u"prostokat"_s, u"elipsa"_s});
+        QCOMPARE(canvas->selectionStyle().value(u"canGroup"_s).toBool(), true);
+        canvas->groupSelection();
+        QCOMPARE(canvas->selectionStyle().value(u"canGroup"_s).toBool(), false);
+        QCOMPARE(canvas->selectionStyle().value(u"canUngroup"_s).toBool(), true);
+        canvas->clearSelection();
+        QTest::mouseClick(window.get(), Qt::LeftButton, {}, itemPoint(QPointF(100, 150)));
+        QCOMPARE(canvas->selectionCount(), 2);
+        canvas->ungroupSelection();
+        canvas->clearSelection();
+        // (Elsewhere on it: at the same place a second click would be a double one.)
+        QTest::mouseClick(window.get(), Qt::LeftButton, {}, itemPoint(QPointF(300, 150)));
+        QCOMPARE(canvas->selection(), QStringList{u"prostokat"_s});
+
+        // A text: its size; written and read back.
+        canvas->select({u"napis"_s});
+        QCOMPARE(canvas->selectionStyle().value(u"fontSize"_s).toDouble(), 36.0);
+        QVERIFY(!canvas->selectionStyle().contains(u"thick"_s));
+        canvas->styleSelection({{u"fontSize"_s, 16}});
+        std::optional<brulion::drawing::Drawing> read = brulion::drawing::readDrawing(canvas->fileBytes());
+        QVERIFY(read);
+        for (const auto &s : read->strokes) {
+            if (s.id == u"napis")
+                QCOMPARE(s.fontSize, 16.0);
+        }
+    }
+
+    void rotateHandleBelowWhenNoRoomAbove()
+    {
+        // As a drawing opens the topmost element touches the view's top: the handle stands under it.
+        QCOMPARE(canvas->load(shapesFile()), QString());
+        canvas->setTool(u"select"_s);
+        canvas->setCenterY(canvas->centerY() + (canvas->toItem(QPointF(0, 100)).y() - 10));
+        canvas->select({u"prostokat"_s});
+        mouseDragTo(itemPoint(QPointF(200, 206 + DrawingCanvas::RotateHandleDistance)),
+                    itemPoint(QPointF(200 + 84, 150)));
+        brulion::drawing::Drawing keep;
+        QVERIFY(qAbs(elementOf(canvas, u"prostokat"_s, keep)->angle - (2 * std::numbers::pi - std::numbers::pi / 2))
+                < 0.02);
+    }
+
+    void theBarKeepsClearOfTheHandles()
+    {
+        selectRectangle();
+        const QRectF outer = canvas->selectionOuterRect();
+        const QPointF rotate = canvas->toItem(QPointF(200, 94 - DrawingCanvas::RotateHandleDistance));
+        QVERIFY(outer.contains(rotate));
+        QVERIFY(outer.contains(canvas->toItem(QPointF(306, 206))));
+        // No selection, no frame; a text being written has no handles to take.
+        canvas->clearSelection();
+        QVERIFY(canvas->selectionOuterRect().isEmpty());
+        canvas->select({u"prostokat"_s});
+        canvas->editText(u"napis"_s);
+        QVERIFY(canvas->textEditing());
+        QTest::mousePress(window.get(), Qt::LeftButton, {}, itemPoint(QPointF(306, 206)));
+        QVERIFY(!canvas->busy());
+        QTest::mouseRelease(window.get(), Qt::LeftButton, {}, itemPoint(QPointF(306, 206)));
     }
 
     void lassoSelectsAndMoves()

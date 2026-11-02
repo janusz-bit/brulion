@@ -305,7 +305,13 @@ std::optional<Stroke> elementFromJson(const QJsonObject &e)
         s.autoResize = e.value(u"autoResize"_s).toBool(true);
         break;
     }
-    case ElementType::Image: s.fileId = e.value(u"fileId"_s).toString(); break;
+    case ElementType::Image: {
+        s.fileId = e.value(u"fileId"_s).toString();
+        const QJsonArray scale = e.value(u"scale"_s).toArray();
+        s.flipX = scale.size() == 2 && scale.at(0).toDouble(1) < 0;
+        s.flipY = scale.size() == 2 && scale.at(1).toDouble(1) < 0;
+        break;
+    }
     case ElementType::Rectangle:
     case ElementType::Ellipse:
     case ElementType::Diamond: break;
@@ -605,6 +611,7 @@ QJsonObject elementJson(const Stroke &s, const QHash<QString, ElementType> *type
         e.insert(u"autoResize"_s, s.autoResize);
     } else if (s.type == ElementType::Image) {
         e.insert(u"fileId"_s, nullOr(s.fileId));
+        e.insert(u"scale"_s, QJsonArray{s.flipX ? -1 : 1, s.flipY ? -1 : 1});
     }
     return e;
 }

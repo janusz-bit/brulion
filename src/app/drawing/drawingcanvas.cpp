@@ -37,8 +37,11 @@ drawing::Background backgroundOf(const QString &name)
 
 const QStringList &tools()
 {
-    static const QStringList all{u"pen"_s,     u"highlighter"_s, u"eraser"_s, u"select"_s, u"rectangle"_s,
-                                 u"ellipse"_s, u"diamond"_s,     u"line"_s,   u"arrow"_s,  u"text"_s};
+    static const QStringList all{u"pen"_s,      u"highlighter"_s,   u"eraser"_s,        u"select"_s,    u"rectangle"_s,
+                                 u"ellipse"_s,  u"diamond"_s,       u"line"_s,          u"arrow"_s,     u"text"_s,
+                                 u"triangle"_s, u"rightTriangle"_s, u"parallelogram"_s, u"trapezoid"_s, u"pentagon"_s,
+                                 u"hexagon"_s,  u"star"_s,          u"blockArrow"_s,    u"callout"_s,   u"heart"_s,
+                                 u"cloud"_s};
     return all;
 }
 
@@ -109,7 +112,7 @@ void DrawingCanvas::setTool(const QString &tool)
 bool DrawingCanvas::isShapeTool() const
 {
     return m_tool == u"rectangle" || m_tool == u"ellipse" || m_tool == u"diamond" || m_tool == u"line"
-           || m_tool == u"arrow";
+           || m_tool == u"arrow" || drawing::polygonKindFromName(m_tool).has_value();
 }
 
 void DrawingCanvas::setFontSize(qreal size)
@@ -880,7 +883,7 @@ void DrawingCanvas::drawIntoCache(qsizetype index)
 QSet<QString> DrawingCanvas::hiddenKeys() const
 {
     QSet<QString> hidden = m_erasing;
-    if (m_gesture == Gesture::Move)
+    if (m_gesture == Gesture::Move || m_gesture == Gesture::Resize || m_gesture == Gesture::Rotate)
         hidden.unite(m_selected);
     if (!m_textEditKey.isEmpty())
         hidden.insert(m_textEditKey);
@@ -937,10 +940,15 @@ void DrawingCanvas::prepareSnapshot()
     }
     // On top: a moved selection, a shape being dragged.
     s.overlay = sceneToItem();
-    if (m_gesture == Gesture::Move) {
-        QTransform moved;
-        moved.translate(m_moveDelta.x(), m_moveDelta.y());
-        s.overlay = s.overlay * moved;
+    if (m_gesture == Gesture::Move || m_gesture == Gesture::Resize || m_gesture == Gesture::Rotate) {
+        if (m_gesture == Gesture::Move) {
+            QTransform moved;
+            moved.translate(m_moveDelta.x(), m_moveDelta.y());
+            s.overlay = s.overlay * moved;
+        } else {
+            // (The selection's paths scaled or turned as they are: new paths when it ends.)
+            s.overlay = m_gestureTransform * s.overlay;
+        }
         for (qsizetype i = 0; i < m_doc.strokes.size(); ++i) {
             if (m_selected.contains(m_prepared.at(i).key))
                 s.elements.append({m_doc.strokes.at(i), m_prepared.at(i)});
@@ -957,11 +965,29 @@ void DrawingCanvas::prepareSnapshot()
         s.lasso = m_lasso;
     if (!m_selected.isEmpty() && m_gesture != Gesture::Lasso) {
         const QTransform t = s.overlay;
-        for (qsizetype i = 0; i < m_doc.strokes.size(); ++i) {
-            if (m_selected.contains(m_prepared.at(i).key) && m_prepared.at(i).key != m_textEditKey)
-                s.selected.append(t.mapRect(m_prepared.at(i).bounds));
+        if (m_gesture != Gesture::Resize && m_gesture != Gesture::Rotate) {
+            for (qsizetype i = 0; i < m_doc.strokes.size(); ++i) {
+                if (m_selected.contains(m_prepared.at(i).key) && m_prepared.at(i).key != m_textEditKey)
+                    s.selected.append(t.mapRect(m_prepared.at(i).bounds));
+            }
         }
-        s.selection = selectionRect();
+        const SelectionFrame frame =
+                m_gesture == Gesture::Resize || m_gesture == Gesture::Rotate ? m_transformFrame : selectionFrame();
+        if (frame.valid) {
+            s.frame = t.map(frameCorners(frame));
+            if (m_gesture == Gesture::None && !m_textEditing && m_editable) {
+                for (const auto &[kind, at] : frameHandles(frame))
+                    s.handles.append(at);
+                if (const std::optional<QPointF> at = rotateHandlePos(frame)) {
+                    s.rotates = true;
+                    s.rotateHandle = *at;
+                    // (On the side of the frame it stands on.)
+                    const QPointF top = (s.frame.at(0) + s.frame.at(1)) / 2;
+                    const QPointF bottom = (s.frame.at(2) + s.frame.at(3)) / 2;
+                    s.rotateAnchor = QLineF(top, *at).length() <= QLineF(bottom, *at).length() ? top : bottom;
+                }
+            }
+        }
     }
     m_snapshot = std::move(s);
 }
@@ -991,7 +1017,7 @@ void DrawingCanvas::paintSnapshot(QPainter *painter, const QSizeF &size) const
     }
     if (!s.live.isEmpty())
         painter->fillPath(s.live, s.liveColor);
-    if (!s.selection.isEmpty()) {
+    if (!s.frame.isEmpty()) {
         // The selection's frame: dashed around all, thin around each when there are several.
         QColor faint = s.selectionColor;
         faint.setAlphaF(0.45);
@@ -1003,7 +1029,19 @@ void DrawingCanvas::paintSnapshot(QPainter *painter, const QSizeF &size) const
         }
         QPen frame(s.selectionColor, 1.5, Qt::DashLine);
         painter->setPen(frame);
-        painter->drawRect(s.selection);
+        painter->drawPolygon(s.frame);
+        // The handles: squares on the frame, a dot above it on a thin line.
+        if (s.rotates) {
+            painter->setPen(QPen(s.selectionColor, 1));
+            painter->drawLine(s.rotateAnchor, s.rotateHandle);
+        }
+        painter->setPen(QPen(s.selectionColor, 1.5));
+        painter->setBrush(s.paper);
+        for (const QPointF &at : s.handles)
+            painter->drawRoundedRect(QRectF(at.x() - 4.5, at.y() - 4.5, 9, 9), 2, 2);
+        if (s.rotates)
+            painter->drawEllipse(s.rotateHandle, 5.5, 5.5);
+        painter->setBrush(Qt::NoBrush);
     }
     if (s.lasso.size() > 1) {
         QColor fill = s.selectionColor;
@@ -1310,6 +1348,8 @@ void DrawingCanvas::mouseUngrabEvent()
         break;
     case Gesture::Lasso:
     case Gesture::Move:
+    case Gesture::Resize:
+    case Gesture::Rotate:
     case Gesture::Shape:
     case Gesture::Tap: cancelToolGesture(); break;
     case Gesture::None: break;
@@ -1321,6 +1361,8 @@ void DrawingCanvas::hoverMoveEvent(QHoverEvent *event)
     if (m_tool == u"eraser") {
         m_hover = event->position();
         update();
+    } else if (m_tool == u"select") {
+        updateSelectCursor(event->position());
     }
     QQuickPaintedItem::hoverMoveEvent(event);
 }
@@ -1388,6 +1430,8 @@ void DrawingCanvas::yieldTouchToPen()
         break;
     case Gesture::Lasso:
     case Gesture::Move:
+    case Gesture::Resize:
+    case Gesture::Rotate:
     case Gesture::Shape:
     case Gesture::Tap: cancelToolGesture(); break;
     case Gesture::None: break;

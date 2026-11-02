@@ -1247,9 +1247,13 @@ and diagrams (shapes, arrows, text), on every platform.
   as Excalidraw draws it alike), **Gumka** (E: removes every element it touches — a shape with its
   label, never a locked one nor a locked shape's label —, one undo step per gesture, a ring
   follows the pointer),
-  **Zaznacz** (V, a lasso icon; below), **Kształty** (one button showing the last shape — R
-  Prostokąt, O Elipsa, D Romb, L Linia, A Strzałka, remembered in `drawing/shape` —; clicked again
-  while a shape is the tool it opens their menu), **Tekst** (T; below), the current tool's colours
+  **Zaznacz** (V, a lasso or a dashed square icon; clicked again while it is the tool it opens
+  **Lassem** / **Prostokątem**, `DrawingCanvas.selectMode`, remembered in `drawing/selectMode`;
+  below), **Kształty** (one button showing the last shape — R Prostokąt, O Elipsa, D Romb, L Linia,
+  A Strzałka and, after a separator and without keys, the polygons Trójkąt, Trójkąt prostokątny,
+  Równoległobok, Trapez, Pięciokąt, Sześciokąt, Gwiazda, Strzałka blokowa, Dymek, Serce, Chmurka,
+  remembered in `drawing/shape` —; clicked again while a shape is the tool it opens their menu),
+  **Tekst** (T; below), the current tool's colours
   (pen, shapes and text: atrament, niebieski, czerwony, zielony, pomarańczowy, fioletowy;
   highlighter: żółty, zielony, różowy, niebieski, pomarańczowy) and widths (cienka / średnia /
   gruba; wąska / średnia / szeroka; text: its sizes Mały / Średni / Duży / Bardzo duży, 16 / 20 /
@@ -1263,12 +1267,17 @@ and diagrams (shapes, arrows, text), on every platform.
   `drawing::ElementDiff`, at most 500 steps); the history is the session's (a reload clears it).
   Undo and redo stamp what they put back as a new edit (a higher `version`, a new `versionNonce`
   and `updated`), so another device's merge and the Excalidraw plugin never take it for older.
-* **Shapes** (rectangle, ellipse, diamond, line, arrow): dragged out, shown while dragged; the
-  colour is the pen's, the stroke twice the pen's width (1 / 2 / 4, Excalidraw's thin, bold, extra
-  bold); Shift: a square or a circle, a line at 15° steps; a click (under 3 px) makes none.
-  Rectangles get Excalidraw's rounded corners, other shapes sharp; no fill. The tool stays (several
-  shapes in a row) and the new shape is not selected. New arrows are never bound to shapes.
-* **Selection** (Zaznacz, V): a lasso (dashed, in `Theme.info`, a 10 % fill) takes every element at
+* **Shapes** (rectangle, ellipse, diamond, line, arrow, and the polygons: `drawing::PolygonKind`):
+  dragged out, shown while dragged; the colour is the pen's, the stroke twice the pen's width
+  (1 / 2 / 4, Excalidraw's thin, bold, extra bold); Shift: a square, a circle, a polygon in a square
+  box, a line at 15° steps; a click (under 3 px) makes none. Rectangles get Excalidraw's rounded
+  corners, other shapes sharp; no fill (Styl adds it). The tool stays (several shapes in a row) and
+  the new shape is not selected. New arrows are never bound to shapes. A polygon always stands
+  upright in the box dragged, whichever way it was dragged, and is Excalidraw's closed line
+  (docs/SYNTAX.md §2 "Elements"): it has no kind in the file, so no label inside (the text tool
+  writes a free text on it).
+* **Selection** (Zaznacz, V): a lasso — or, with **Prostokątem**, a rectangle dragged out — (dashed,
+  in `Theme.info`, a 10 % fill) takes every element at
   least half inside it (its points; a box's corners, edge middles and centre), a tap the topmost
   element under it (8 px, 14 px for a finger or a pen; an unfilled shape only near its outline) —
   with its group (`groupIds`, the outermost) and a shape's label; a tap on nothing clears it.
@@ -1277,12 +1286,45 @@ and diagrams (shapes, arrows, text), on every platform.
   follow, labels go along). **DrawingSelectionBar** floats centred above the frame (below it when
   there is no room, always inside the view), touch-sized on touch screens, while nothing is being
   drawn, moved or written: the pen's colours (recolour; on narrow windows one swatch opening them
-  — a highlighter stays one), **Duplikuj** (Ctrl+D: copies 10 units right and down, selected),
-  **Na wierzch** (Ctrl+Shift+]), **Na spód** (Ctrl+Shift+[: above a locked backdrop), **Usuń**
-  (Delete / Backspace). Keys: Ctrl+A (everything), Escape (a lasso or a shape in progress dropped,
+  — a highlighter stays one), **Styl** (below), **Duplikuj** (Ctrl+D: copies 10 units right and
+  down, selected), **Na wierzch** (Ctrl+Shift+]), **Na spód** (Ctrl+Shift+[: above a locked
+  backdrop; both in Więcej on narrow windows), **Więcej** (**Obróć o 90°**, **Odbij w poziomie**,
+  Shift+H, **Odbij w pionie**, Shift+V, **Grupuj**, Ctrl+G, **Rozgrupuj**, Ctrl+Shift+G: one outermost
+  group added or taken away), **Usuń** (Delete / Backspace). Keys: Ctrl+A (everything), Escape (a lasso or a shape in progress dropped,
   else the selection cleared), the arrows (move it 1 unit, with Shift 10), Ctrl+] / Ctrl+[ (one
   step up / down). Another tool clears the selection; undo, redo and a merge keep the selected
   elements that still exist.
+* **The frame's handles** (`DrawingCanvas::selectionFrame`, core `drawing::resizedFrame`,
+  `resizeElements`, `rotateElements`): the frame of one element is its own box (a text's, a
+  picture's; a line's points), turned with its `angle`; of several, what they cover, unturned. On it
+  squares at the corners and — on sides of 40 px or more, not for a text or several elements — at
+  the middle of each side; a dot 28 px above it on a thin line, under it when the view has no room
+  above (no dot for an elbow arrow). A press within 9 px (a finger or a pen 18 px) takes one, before
+  anything else, also with Shift; on an element under 24 px across a press inside its frame moves
+  it instead. A resize keeps the opposite corner or side where it is, never passes it and leaves at
+  least 4 px; Shift keeps the shape — always for a text and for several elements, for a picture
+  Shift lets it go instead. Rotating: about the frame's middle; Shift: the element's angle in 15°
+  steps, several elements by 15° steps. While dragged the selection is drawn with its paths scaled
+  or turned on top of the cached image (its lines too, and a label not yet wrapped again: nothing
+  is computed until the end, so a long handwritten note follows at once); the release makes the
+  edit — one undo step — and Escape drops it. The numbers: points and boxes scale along the
+  element's own axes, line widths stay; a text scales its size and box only in a scale the same both
+  ways; a shape's label is wrapped again in the new size (in a scale the same both ways scaled too)
+  and the shape grows to hold it, as when it is written; an arrow's label stays level at its middle;
+  the bound ends of arrows that are not selected get the same transformation. An edit that would
+  leave `CoordinateLimit` is not made. Elbow arrows are moved, never turned. The selection bar stays
+  clear of the handles (`selectionOuterRect`). A mouse over the frame gets the matching pointer
+  (`updateSelectCursor`).
+* **Styl** (`DrawingStylePanel`, a popup from the selection bar, `DrawingCanvas.selectionStyle` and
+  `styleSelection`, core `drawing::styleElements`): only the rows the selection has — **Wypełnienie**
+  (none or six light colours, Excalidraw's; shapes and polygons) and **Wzór wypełnienia** (pełne,
+  kreskowane, w kratkę; with a fill), **Grubość linii** (shapes 1 / 2 / 4, the pen's 0.5 / 1 / 2, the
+  highlighter's 3 / 5 / 8), **Rodzaj linii**, **Rogi** (rectangles Excalidraw's adaptive roundness,
+  diamonds, lines and arrows its proportional one; a line or an arrow then curves, a polygon too;
+  not elbow arrows), **Początek linii** / **Koniec linii** (lines and arrows), **Rozmiar tekstu**
+  (the four sizes; laid out again, so a label's shape may grow), **Krycie** (100 / 75 / 50 / 25 %;
+  everything). Each row shows the first element that has it. One undo step a choice, the panel stays
+  open, inside the view and scrolling when it does not fit; a choice that changes nothing is no edit.
 * **Text** (Tekst, T): a tap on the paper writes a new text there (its first line's middle at the
   tap), a tap on a text edits it, a tap inside a shape writes its label; with the select tool a
   double tap does the same. **DrawingTextEditor** opens on the paper in the text's font, size

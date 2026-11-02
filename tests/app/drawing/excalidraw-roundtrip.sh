@@ -6,7 +6,9 @@
 #     excalidraw.excalidraw (its scene as it stores it);
 #  3. Brulion opens excalidraw.com's scene editable, edits it and writes it again → back.svg
 #     (tst_drawingcanvas excalidrawsVersionIsEditable);
-#  4. excalidraw.com opens back.svg as Brulion wrote it.
+#  4. excalidraw.com opens back.svg as Brulion wrote it;
+#  5. excalidraw.com opens every polygon of the editor (tst_drawingcanvas polygonsSample) and keeps
+#     it as written: closed lines, not turned into something else.
 # Needs the internet, so it is no ctest. Run inside `nix develop` (Qt plugins) with Chromium and
 # Node >= 22 on PATH, after building tst_drawingcanvas:
 #
@@ -30,4 +32,7 @@ BRULION_DRAWING_CHECK="$work/excalidraw.excalidraw" BRULION_DRAWING_CHECK_OUT="$
   "$test_bin" excalidrawsVersionIsEditable
 node tests/app/drawing/excalidraw-roundtrip.mjs "$work/back.svg" "$work/again.excalidraw" \
   --shot "$work/excalidraw-2.png"
+BRULION_DRAWING_POLYGONS_SAMPLE="$work/polygons.svg" "$test_bin" polygonsSample >/dev/null
+node tests/app/drawing/excalidraw-roundtrip.mjs "$work/polygons.svg" "$work/polygons.excalidraw" \
+  --shot "$work/excalidraw-polygons.png"
 echo "excalidraw-roundtrip: ok ($work)"

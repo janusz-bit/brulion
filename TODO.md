@@ -24,7 +24,8 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   z „Dołącz kopie”.
 * **Rysunki — dalsze pomysły i sprawdzenie na urządzeniach.** Edytor rysunków (`/Rysunek`,
   docs/UI.md „Drawing editor”) ma pismo odręczne, zakreślacz, gumkę, papier, kształty, strzałki,
-  tekst, zaznaczanie lassem, podkłady (obraz, slajd, strona PDF), ciemne tło i własny kolor tła. Zostaje:
+  tekst, zaznaczanie lassem i prostokątem, uchwyty rozmiaru i obrotu, styl zaznaczenia, odbicia, grupy,
+  podkłady (obraz, slajd, strona PDF), ciemne tło i własny kolor tła. Zostaje:
   * sprawdzić ręcznie „Scal rysunki” na prawdziwych urządzeniach: rysunek zmieniony bez sieci na
     telefonie i na laptopie, Syncthing zostawia kopię `*.sync-conflict-….svg` (albo
     `*.excalidraw.sync-conflict-….md` rysunku z Obsidiana) → „Scal rysunki” w centrum
@@ -41,7 +42,10 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     (automatycznie sprawdzone: Chromium i Firefox — `tests/web`, emulator Androida — `--stylus`,
     `--drawing`, strona PDF przez PdfRenderer — samotest mostka, zgodność z excalidraw.com w obie
     strony — `tests/app/drawing/excalidraw-roundtrip.sh`, wymaga internetu);
-  * zmiana rozmiaru i obracanie zaznaczenia (uchwyty na ramce), zaznaczanie prostokątem;
+  * sprawdzić ręcznie uchwyty rozmiaru i obrotu oraz panel „Styl” rysikiem i palcem na prawdziwym
+    tablecie i telefonie;
+  * wyrównywanie i równe rozkładanie zaznaczonych elementów, napisy w środku kształtów z listy
+    (trójkąt, gwiazda…; Excalidraw zna je tylko w prostokącie, elipsie, rombie i na strzałkach);
   * kopiowanie elementów między Brulionem a excalidraw.com przez schowek;
   * przechodzenie między stronami PDF w edytorze rysunków (dziś: powrót do notatki albo „Inna
     strona PDF…”);

@@ -322,6 +322,12 @@ void paintElement(QPainter &painter, const drawing::Stroke &e, const Prepared &p
         }
         if (!it->isNull()) {
             painter.setRenderHint(QPainter::SmoothPixmapTransform);
+            if (e.flipX || e.flipY) {
+                const QPointF c = e.box.center();
+                painter.translate(c);
+                painter.scale(e.flipX ? -1 : 1, e.flipY ? -1 : 1);
+                painter.translate(-c);
+            }
             painter.drawImage(e.box, *it);
         } else {
             // No picture: a light grey box with a picture's outline.

@@ -4,9 +4,9 @@ import QtQuick.Templates as T
 import Brulion
 
 // DrawingToolbar — the drawing editor's tools (DrawingView; docs/UI.md "Drawing editor"): undo,
-// redo, the pen, the highlighter, the eraser, the selection (lasso), the shapes (one button showing
-// the last of rectangle, ellipse, diamond, line and arrow; a second click opens their menu) and
-// text, the current tool's colours and widths (text: its sizes S, M, L, XL), the paper (plain,
+// redo, the pen, the highlighter, the eraser, the selection (a lasso or a rectangle; a second click
+// opens the choice), the shapes (one button showing the last of them: rectangle, ellipse, diamond,
+// line, arrow and the polygons; a second click opens their menu) and text, the current tool's colours and widths (text: its sizes S, M, L, XL), the paper (plain,
 // lines, grid) and its backdrop ("Podkład z obrazu lub PDF…", "Inna strona PDF…", "Usuń podkład"
 // in the paper's menu), its light or dark background ("Tło rysunku": as the app, light, dark,
 // "Kolor tła…": DrawingPaperDialog),
@@ -30,7 +30,7 @@ Rectangle {
     property var widths: []
     /// The text's sizes: [{ value, label }].
     property var fontSizes: []
-    /// The shape tool the shape button stands for ("rectangle", "ellipse", "diamond", "line", "arrow").
+    /// The shape tool the shape button stands for (a tool of `shapes`).
     property string shapeTool: "rectangle"
     /// One finger draws (touch screens).
     property bool fingerDraws: false
@@ -53,6 +53,8 @@ Rectangle {
     signal fontSizeChosen(real size)
     /// A shape tool chosen in the shapes' menu (the button then stands for it).
     signal shapeChosen(string tool)
+    /// How the select tool takes elements, chosen in its menu: "lasso", "box".
+    signal selectModeChosen(string mode)
     signal fingerToggled()
     signal fitRequested()
     signal done()
@@ -71,7 +73,26 @@ Rectangle {
     /// A tool that has a colour (everything but the eraser and the selection).
     readonly property bool drawingTool: canvas.tool !== "eraser" && canvas.tool !== "select"
     readonly property bool textTool: canvas.tool === "text"
-    readonly property bool shapeActive: ["rectangle", "ellipse", "diamond", "line", "arrow"].indexOf(canvas.tool) >= 0
+    /// The shape tools: their icons, names and keys.
+    readonly property var shapes: ({
+        rectangle: { icon: "square", label: qsTr("Rectangle"), key: "R" },
+        ellipse: { icon: "circle", label: qsTr("Ellipse"), key: "O" },
+        diamond: { icon: "diamond", label: qsTr("Diamond"), key: "D" },
+        line: { icon: "slash", label: qsTr("Line"), key: "L" },
+        arrow: { icon: "move-up-right", label: qsTr("Arrow"), key: "A" },
+        triangle: { icon: "triangle", label: qsTr("Triangle"), key: "" },
+        rightTriangle: { icon: "triangle-right", label: qsTr("Right triangle"), key: "" },
+        parallelogram: { icon: "parallelogram", label: qsTr("Parallelogram"), key: "" },
+        trapezoid: { icon: "trapezoid", label: qsTr("Trapezoid"), key: "" },
+        pentagon: { icon: "pentagon", label: qsTr("Pentagon"), key: "" },
+        hexagon: { icon: "hexagon", label: qsTr("Hexagon"), key: "" },
+        star: { icon: "star", label: qsTr("Star"), key: "" },
+        blockArrow: { icon: "arrow-big-right", label: qsTr("Block arrow"), key: "" },
+        callout: { icon: "message-square", label: qsTr("Speech bubble"), key: "" },
+        heart: { icon: "heart", label: qsTr("Heart"), key: "" },
+        cloud: { icon: "cloud", label: qsTr("Cloud"), key: "" }
+    })
+    readonly property bool shapeActive: shapes[canvas.tool] !== undefined
 
     /// Open the colours and widths (compact), the "Więcej" menu (compact), the paper's menu or
     /// the background's (the "Więcej" menu on phones) — route.open, screenshots.
@@ -86,17 +107,12 @@ Rectangle {
             themeMenu.popup(themeButton, 0, themeButton.height)
     }
 
-    function shapeIcon(tool) {
-        return tool === "ellipse" ? "circle" : tool === "diamond" ? "diamond" : tool === "line" ? "slash"
-             : tool === "arrow" ? "move-up-right" : "square"
+    function shapeOf(tool) {
+        return bar.shapes[tool] !== undefined ? bar.shapes[tool] : bar.shapes.rectangle
     }
-    function shapeLabel(tool) {
-        return tool === "ellipse" ? qsTr("Ellipse") : tool === "diamond" ? qsTr("Diamond") : tool === "line" ? qsTr("Line")
-             : tool === "arrow" ? qsTr("Arrow") : qsTr("Rectangle")
-    }
-    function shapeKey(tool) {
-        return tool === "ellipse" ? "O" : tool === "diamond" ? "D" : tool === "line" ? "L" : tool === "arrow" ? "A" : "R"
-    }
+    function shapeIcon(tool) { return bar.shapeOf(tool).icon }
+    function shapeLabel(tool) { return bar.shapeOf(tool).label }
+    function shapeKey(tool) { return bar.shapeOf(tool).key }
     function chooseShape(tool) {
         bar.canvas.tool = tool
         bar.shapeChosen(tool)
@@ -300,13 +316,19 @@ Rectangle {
                 BIconButton {
                     objectName: "drawingSelect"
                     anchors.verticalCenter: parent.verticalCenter
-                    iconName: "lasso"
+                    id: selectButton
+                    iconName: bar.canvas.selectMode === "box" ? "square-dashed" : "lasso"
                     label: qsTr("Select")
                     shortcut: "V"
                     focusPolicy: Qt.NoFocus
-                    checkable: true
+                    // (Not toggled by a click: a click on the active tool opens the choice.)
                     checked: bar.canvas.tool === "select"
-                    onClicked: bar.canvas.tool = "select"
+                    onClicked: {
+                        if (bar.canvas.tool === "select")
+                            selectMenu.popup(selectButton, 0, bar.atBottom ? -selectMenu.implicitHeight : selectButton.height)
+                        else
+                            bar.canvas.tool = "select"
+                    }
                 }
                 // The last shape; clicked while a shape is the tool: the shapes' menu.
                 BIconButton {
@@ -483,44 +505,56 @@ Rectangle {
         onClicked: bar.done()
     }
 
+    component ShapeItem: BMenuItem {
+        required property string tool
+        objectName: "drawingShape" + tool.charAt(0).toUpperCase() + tool.slice(1)
+        text: bar.shapeLabel(tool)
+        iconName: bar.shapeIcon(tool)
+        shortcut: bar.shapeKey(tool)
+        onTriggered: bar.chooseShape(tool)
+    }
+
+    BMenu {
+        id: selectMenu
+        objectName: "drawingSelectMenu"
+        BMenuItem {
+            objectName: "drawingSelectLasso"
+            text: qsTr("Lasso")
+            iconName: "lasso"
+            checkable: true
+            checked: bar.canvas.selectMode === "lasso"
+            onTriggered: bar.selectModeChosen("lasso")
+        }
+        BMenuItem {
+            objectName: "drawingSelectBox"
+            text: qsTr("Rectangle selection")
+            iconName: "square-dashed"
+            checkable: true
+            checked: bar.canvas.selectMode === "box"
+            onTriggered: bar.selectModeChosen("box")
+        }
+    }
+
     BMenu {
         id: shapeMenu
         objectName: "drawingShapeMenu"
-        BMenuItem {
-            objectName: "drawingShapeRectangle"
-            text: qsTr("Rectangle")
-            iconName: "square"
-            shortcut: "R"
-            onTriggered: bar.chooseShape("rectangle")
-        }
-        BMenuItem {
-            objectName: "drawingShapeEllipse"
-            text: qsTr("Ellipse")
-            iconName: "circle"
-            shortcut: "O"
-            onTriggered: bar.chooseShape("ellipse")
-        }
-        BMenuItem {
-            objectName: "drawingShapeDiamond"
-            text: qsTr("Diamond")
-            iconName: "diamond"
-            shortcut: "D"
-            onTriggered: bar.chooseShape("diamond")
-        }
-        BMenuItem {
-            objectName: "drawingShapeLine"
-            text: qsTr("Line")
-            iconName: "slash"
-            shortcut: "L"
-            onTriggered: bar.chooseShape("line")
-        }
-        BMenuItem {
-            objectName: "drawingShapeArrow"
-            text: qsTr("Arrow")
-            iconName: "move-up-right"
-            shortcut: "A"
-            onTriggered: bar.chooseShape("arrow")
-        }
+        ShapeItem { tool: "rectangle" }
+        ShapeItem { tool: "ellipse" }
+        ShapeItem { tool: "diamond" }
+        ShapeItem { tool: "line" }
+        ShapeItem { tool: "arrow" }
+        BMenuSeparator {}
+        ShapeItem { tool: "triangle" }
+        ShapeItem { tool: "rightTriangle" }
+        ShapeItem { tool: "parallelogram" }
+        ShapeItem { tool: "trapezoid" }
+        ShapeItem { tool: "pentagon" }
+        ShapeItem { tool: "hexagon" }
+        ShapeItem { tool: "star" }
+        ShapeItem { tool: "blockArrow" }
+        ShapeItem { tool: "callout" }
+        ShapeItem { tool: "heart" }
+        ShapeItem { tool: "cloud" }
     }
 
     BMenu {

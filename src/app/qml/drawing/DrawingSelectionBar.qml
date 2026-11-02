@@ -6,7 +6,9 @@ import Brulion
 // DrawingSelectionBar — what can be done with the selected elements of a drawing (DrawingView;
 // docs/UI.md "Drawing editor"): a floating bar centred above the selection (below it when there is
 // no room, always inside the view) with the pen's colours (recolour; on narrow windows one swatch
-// opening them), "Duplikuj", "Na wierzch", "Na spód" and "Usuń". Shown while something is
+// opening them), "Styl" (DrawingStylePanel: fill, lines, opacity, corners, arrowheads, text size),
+// "Duplikuj", "Na wierzch", "Na spód" (in "Więcej" on narrow windows), "Więcej" (turn by 90°, mirror,
+// group, ungroup) and "Usuń". Shown while something is
 // selected and nothing is being drawn, moved or written; touch-sized on touch screens. Its parent
 // is the paper's area: the bar takes the presses on it, everything else goes to the paper.
 // The buttons take no keyboard focus (the view's keys go on working).
@@ -26,6 +28,10 @@ Item {
 
     visible: shown
 
+    /// The style panel, "Więcej" (route.open, screenshots).
+    function openStyle() { stylePanel.open() }
+    function openMore() { moreMenu.popup(moreButton, 0, moreButton.height) }
+
     component Separator: Rectangle {
         width: 1
         height: Theme.controlHeight - 8
@@ -41,7 +47,8 @@ Item {
     Rectangle {
         id: frame
         objectName: "drawingSelectionBar"
-        readonly property rect selection: root.canvas.selectionRect
+        // (Clear of the frame's handles.)
+        readonly property rect selection: root.canvas.selectionOuterRect
         readonly property real margin: Theme.space2
         width: Math.min(row.implicitWidth + 2 * Theme.space1, root.width - 2 * margin)
         height: row.implicitHeight + 2 * Theme.space1
@@ -96,6 +103,15 @@ Item {
             }
             Separator {}
             BIconButton {
+                id: styleButton
+                objectName: "drawingSelectionStyle"
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "sliders-horizontal"
+                label: qsTr("Style")
+                focusPolicy: Qt.NoFocus
+                onClicked: stylePanel.open()
+            }
+            BIconButton {
                 objectName: "drawingSelectionDuplicate"
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "copy"
@@ -106,6 +122,7 @@ Item {
             }
             BIconButton {
                 objectName: "drawingSelectionFront"
+                visible: !Theme.compact
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "bring-to-front"
                 label: qsTr("Bring to front")
@@ -115,12 +132,22 @@ Item {
             }
             BIconButton {
                 objectName: "drawingSelectionBack"
+                visible: !Theme.compact
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "send-to-back"
                 label: qsTr("Send to back")
                 shortcut: "Ctrl+Shift+["
                 focusPolicy: Qt.NoFocus
                 onClicked: root.canvas.reorderSelection("back")
+            }
+            BIconButton {
+                id: moreButton
+                objectName: "drawingSelectionMore"
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "ellipsis"
+                label: qsTr("More")
+                focusPolicy: Qt.NoFocus
+                onClicked: moreMenu.popup(moreButton, 0, moreButton.height)
             }
             BIconButton {
                 objectName: "drawingSelectionDelete"
@@ -131,6 +158,71 @@ Item {
                 focusPolicy: Qt.NoFocus
                 onClicked: root.canvas.deleteSelection()
             }
+        }
+    }
+
+    DrawingStylePanel {
+        id: stylePanel
+        parent: frame
+        canvas: root.canvas
+        area: root
+        barHost: frame
+    }
+
+    BMenu {
+        id: moreMenu
+        objectName: "drawingSelectionMenu"
+        BMenuItem {
+            objectName: "drawingSelectionRotate"
+            text: qsTr("Rotate by 90°")
+            iconName: "rotate-cw"
+            onTriggered: root.canvas.rotateSelection(90)
+        }
+        BMenuItem {
+            objectName: "drawingSelectionFlipH"
+            text: qsTr("Flip horizontally")
+            iconName: "flip-horizontal-2"
+            shortcut: "Shift+H"
+            onTriggered: root.canvas.flipSelection("horizontal")
+        }
+        BMenuItem {
+            objectName: "drawingSelectionFlipV"
+            text: qsTr("Flip vertically")
+            iconName: "flip-vertical-2"
+            shortcut: "Shift+V"
+            onTriggered: root.canvas.flipSelection("vertical")
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "drawingSelectionGroup"
+            text: qsTr("Group")
+            iconName: "group"
+            shortcut: "Ctrl+G"
+            enabled: root.canvas.selectionStyle.canGroup === true
+            onTriggered: root.canvas.groupSelection()
+        }
+        BMenuItem {
+            objectName: "drawingSelectionUngroup"
+            text: qsTr("Ungroup")
+            iconName: "ungroup"
+            shortcut: "Ctrl+Shift+G"
+            enabled: root.canvas.selectionStyle.canUngroup === true
+            onTriggered: root.canvas.ungroupSelection()
+        }
+        BMenuSeparator { visible: Theme.compact; height: visible ? implicitHeight : 0 }
+        BMenuItem {
+            visible: Theme.compact
+            height: visible ? implicitHeight : 0
+            text: qsTr("Bring to front")
+            iconName: "bring-to-front"
+            onTriggered: root.canvas.reorderSelection("front")
+        }
+        BMenuItem {
+            visible: Theme.compact
+            height: visible ? implicitHeight : 0
+            text: qsTr("Send to back")
+            iconName: "send-to-back"
+            onTriggered: root.canvas.reorderSelection("back")
         }
     }
 

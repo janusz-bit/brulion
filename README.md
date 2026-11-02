@@ -511,8 +511,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   installed font for the interface, notes and code, line spacing, a compact density on the
   desktop, and which sidebar entries and phone navigation buttons are shown.
 * Handwritten drawings in notes (`/Rysunek`): a stylus with pressure (its eraser end erases), a
-  highlighter, an eraser, shapes (rectangle, ellipse, diamond, line, arrow), text and labels in
-  shapes, lasso selection (move, duplicate, recolour, bring to front / send to back, delete),
+  highlighter, an eraser, shapes (rectangle, ellipse, diamond, line, arrow, triangles, polygons,
+  a star, a block arrow, a speech bubble, a heart, a cloud), text and labels in shapes, lasso or
+  rectangle selection (move, resize and rotate by handles, mirror, group, style — fill, lines,
+  opacity, corners, arrowheads, text size —, duplicate, recolour, bring to front / send to back, delete),
   colours and widths, plain, lined or squared paper, undo; a light or a
   dark background per drawing, or "Like the app" — it then turns dark and light with the app at
   once, in the editor and in the previews in notes (colours as in Excalidraw's dark mode); fingers

@@ -3595,6 +3595,21 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         sendKey(window, Qt::Key_V, Qt::NoModifier, u"v"_s);
     }
     check(waitFor([&] { return canvas->property("tool").toString() == u"select"; }), "the select tool");
+    // Clicked again: how it selects (lasso, rectangle); it stays marked as the tool in use.
+    if (QQuickItem *select = button(u"drawingSelect"_s)) {
+        tap(pointIn(select));
+        QQuickItem *lasso = nullptr;
+        check(waitFor([&] { return (lasso = button(u"drawingSelectLasso"_s)) != nullptr; }, 3000),
+              "the select button clicked again offers how it selects");
+        if (lasso) {
+            tap(pointIn(lasso));
+            check(waitFor([&] { return button(u"drawingSelectLasso"_s) == nullptr; }, 3000),
+                  "a choice closes the menu");
+        }
+        check(select->property("checked").toBool() && canvas->property("tool").toString() == u"select"
+                      && canvas->property("selectMode").toString() == u"lasso",
+              "the select button stays marked when clicked again");
+    }
     tap(pointIn(canvas, 0.45, 0.6)); // on the rectangle's top edge: it alone
     check(waitFor([&] { return canvas->property("selectionCount").toInt() == 1; }), "a tap selects the rectangle");
     check(waitFor([&] {

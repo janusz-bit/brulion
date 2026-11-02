@@ -5,7 +5,7 @@ brulion: document
 ---
 # Rysunki
 
-W notatce możesz rysować i pisać odręcznie — rysikiem na tablecie, palcem na telefonie albo myszką na komputerze — a także rysować schematy: prostokąty, elipsy, romby, linie, strzałki i tekst. Rysunek to zwykły obraz w notatniku, więc widać go także w Obsidianie, w przeglądarce i w menedżerze plików, a Syncthing synchronizuje go jak każdy inny plik.
+W notatce możesz rysować i pisać odręcznie — rysikiem na tablecie, palcem na telefonie albo myszką na komputerze — a także rysować schematy: prostokąty, elipsy, romby, linie, strzałki, trójkąty, gwiazdy, dymki, chmurki i inne kształty oraz tekst. Rysunek to zwykły obraz w notatniku, więc widać go także w Obsidianie, w przeglądarce i w menedżerze plików, a Syncthing synchronizuje go jak każdy inny plik.
 
 ## Nowy rysunek
 Wpisz w bloku `/Rysunek` (albo `/szkic`, `/rysuj`) i naciśnij Enter. Na telefonie jest też przycisk **Rysunek** na pasku nad klawiaturą, a w menu bloku (prawy przycisk myszy albo przytrzymanie punktora) — **Wstaw rysunek**. Brulion zapisuje w folderze załączników pusty rysunek `Rysunek 2026-10-27 14.32.svg`, wstawia go do notatki jako `![[Rysunek 2026-10-27 14.32.svg]]` i od razu otwiera do rysowania.
@@ -16,22 +16,23 @@ Rysunek w notatce ma w rogu ikonę pióra. Kliknij go albo stuknij, żeby rysowa
 - **Pióro** (klawisz P) — linia grubieje, gdy mocniej naciskasz rysik. Myszką i palcem linia jest cieńsza, gdy prowadzisz szybciej, jak prawdziwy atrament.
 - **Zakreślacz** (H) — szeroka, półprzezroczysta linia, np. do zaznaczania fragmentów notatek z wykładu.
 - **Gumka** (E) — usuwa każdą linię, kształt albo tekst, którego dotknie (kształt razem z napisem w środku). Drugi koniec rysika (gumka na rysiku) albo wciśnięty przycisk na rysiku ściera zawsze, bez przełączania narzędzia.
-- **Zaznacz** (V, ikona lassa) — zobacz niżej [[#Zaznaczanie lassem|Zaznaczanie lassem]].
-- **Kształty** — prostokąt (R), elipsa (O), romb (D), linia (L) i strzałka (A), zobacz niżej [[#Kształty i strzałki|Kształty i strzałki]].
+- **Zaznacz** (V, ikona lassa albo przerywanego kwadratu) — lassem albo prostokątem, zobacz niżej [[#Zaznaczanie lassem|Zaznaczanie lassem]].
+- **Kształty** — prostokąt (R), elipsa (O), romb (D), linia (L), strzałka (A) i jedenaście kolejnych na liście, zobacz niżej [[#Kształty i strzałki|Kształty i strzałki]].
 - **Tekst** (T) — zobacz niżej [[#Tekst|Tekst]].
 - **Kolory i grubości** — sześć kolorów pióra (atrament, niebieski, czerwony, zielony, pomarańczowy, fioletowy), pięć kolorów zakreślacza i trzy grubości każdego; dla tekstu cztery rozmiary: mały, średni, duży i bardzo duży. Na telefonie są pod kółkiem z bieżącym kolorem. Brulion pamięta ostatni wybór na tym urządzeniu.
 - **Papier** — gładki, w linie albo w kratkę (na telefonie w menu **Więcej**).
 - **Tło rysunku** — jasne albo ciemne, zobacz niżej [[#Jasne i ciemne tło|Jasne i ciemne tło]] (na telefonie w menu **Więcej**).
-- **Cofnij** i **Ponów** (`Ctrl+Z`, `Ctrl+Shift+Z`) — cofają linie, kształty, tekst, starcie gumką, każdą zmianę zaznaczenia (przesunięcie, kolor, kopię, usunięcie) oraz zmianę papieru i tła.
+- **Cofnij** i **Ponów** (`Ctrl+Z`, `Ctrl+Shift+Z`) — cofają linie, kształty, tekst, starcie gumką, każdą zmianę zaznaczenia (przesunięcie, rozmiar, obrót, odbicie, kolor, styl, kopię, grupowanie, usunięcie) oraz zmianę papieru i tła.
 - **Pokaż cały rysunek** (`Ctrl+0`) i **Gotowe** — powrót do notatki.
 
 Na telefonie pasek narzędzi jest na dole ekranu. Gdy telefon trzymasz pionowo, pasek ma dwa wiersze: u góry narzędzia i kółko koloru, niżej **Cofnij**, **Ponów**, **Więcej** i **Gotowe** — wszystkie przyciski są na ekranie.
 
 ## Kształty i strzałki
-Przycisk kształtu na pasku pokazuje ostatnio używany kształt; kliknij go jeszcze raz, gdy kształt jest wybrany, a rozwinie się lista: **Prostokąt** (R), **Elipsa** (O), **Romb** (D), **Linia** (L) i **Strzałka** (A).
-- Przeciągnij po kartce — kształt rośnie razem z ruchem rysika, palca albo myszy. Z wciśniętym `Shift` prostokąt staje się kwadratem, elipsa kołem, a linia i strzałka obracają się co 15°.
+Przycisk kształtu na pasku pokazuje ostatnio używany kształt; kliknij go jeszcze raz, gdy kształt jest wybrany, a rozwinie się lista: **Prostokąt** (R), **Elipsa** (O), **Romb** (D), **Linia** (L), **Strzałka** (A), a pod nimi **Trójkąt**, **Trójkąt prostokątny**, **Równoległobok**, **Trapez**, **Pięciokąt**, **Sześciokąt**, **Gwiazda**, **Strzałka blokowa**, **Dymek**, **Serce** i **Chmurka**.
+- Przeciągnij po kartce — kształt rośnie razem z ruchem rysika, palca albo myszy. Z wciśniętym `Shift` prostokąt staje się kwadratem, elipsa kołem, a linia i strzałka obracają się co 15°; pozostałe kształty rysują się wtedy w kwadracie.
 - Kształt ma kolor pióra i dwa razy większą grubość (cienka, średnia, gruba). Prostokąty mają zaokrąglone rogi, jak w Excalidraw.
 - Narzędzie zostaje wybrane, więc możesz narysować kilka kształtów po kolei. Pióro wybierzesz klawiszem P.
+- Kształty z dolnej części listy to w pliku zwykłe zamknięte linie Excalidraw, więc excalidraw.com i Obsidian też je pokażą i pozwolą edytować. Nie mają napisu w środku: tekst napisany na takim kształcie jest osobnym tekstem (zaznacz oba i zgrupuj, żeby przesuwały się razem).
 
 ## Tekst
 - Wybierz **Tekst** (T) i stuknij w kartkę — pojawia się pole do pisania. `Enter` zaczyna nowy wiersz.
@@ -42,12 +43,32 @@ Przycisk kształtu na pasku pokazuje ostatnio używany kształt; kliknij go jesz
 - Na telefonie kartka przesuwa się tak, żeby pisany tekst był nad klawiaturą.
 
 ## Zaznaczanie lassem
-Wybierz **Zaznacz** (V) i obrysuj rysikiem, palcem albo myszką to, co chcesz zaznaczyć — zaznaczy się wszystko, co jest przynajmniej w połowie w środku. Stuknięcie zaznacza jeden element, stuknięcie w puste miejsce zdejmuje zaznaczenie, a `Shift` dodaje do zaznaczenia (myszką).
+Wybierz **Zaznacz** (V) i obrysuj rysikiem, palcem albo myszką to, co chcesz zaznaczyć — zaznaczy się wszystko, co jest przynajmniej w połowie w środku. Kliknij **Zaznacz** jeszcze raz, gdy jest już wybrane, a wybierzesz sposób: **Lassem** albo **Prostokątem** (przeciągasz prostokąt zamiast obrysowywać). Brulion pamięta wybór na tym urządzeniu. Stuknięcie zaznacza jeden element, stuknięcie w puste miejsce zdejmuje zaznaczenie, a `Shift` dodaje do zaznaczenia (myszką).
 - **Przeciągnij** wewnątrz ramki zaznaczenia, żeby je przesunąć. Strzałki przyczepione do przesuwanych kształtów idą za nimi.
-- Nad zaznaczeniem pojawia się pasek: **kolory** (zmiana koloru), **Duplikuj** (`Ctrl+D`), **Na wierzch** (`Ctrl+Shift+]`), **Na spód** (`Ctrl+Shift+[`) i **Usuń** (`Delete`).
+- Nad zaznaczeniem pojawia się pasek: **kolory** (zmiana koloru), **Styl** (zobacz niżej [[#Styl zaznaczenia|Styl zaznaczenia]]), **Duplikuj** (`Ctrl+D`), **Na wierzch** (`Ctrl+Shift+]`), **Na spód** (`Ctrl+Shift+[`), **Więcej** i **Usuń** (`Delete`). Na telefonie **Na wierzch** i **Na spód** są w **Więcej**.
+- **Więcej** ma też **Obróć o 90°**, **Odbij w poziomie** (`Shift+H`), **Odbij w pionie** (`Shift+V`), **Grupuj** (`Ctrl+G`) i **Rozgrupuj** (`Ctrl+Shift+G`). Tekst przy odbiciu zostaje czytelny — zmienia tylko miejsce. Grupa zaznacza się i przesuwa w całości.
 - Klawisze: `Ctrl+A` zaznacza wszystko, strzałki przesuwają zaznaczenie (z `Shift` dziesięć razy dalej), `Ctrl+]` i `Ctrl+[` przesuwają je o jedno piętro w górę i w dół, `Esc` zdejmuje zaznaczenie.
 - Grupy z Excalidraw zaznaczają się w całości. Elementów zablokowanych w Excalidraw — ani napisów w zablokowanych kształtach — nie da się zaznaczyć, zetrzeć ani zmienić.
 - Gdy **Rysuj palcem** jest wyłączone, palec tylko przesuwa kartkę — dłoń oparta na zaznaczeniu go nie przesunie.
+
+## Zmiana rozmiaru i obracanie
+Zaznaczenie ma na ramce uchwyty — przeciągnij je rysikiem, myszką albo palcem (przy włączonym **Rysuj palcem**):
+- **Kwadraty w rogach i na środkach boków** zmieniają rozmiar, a przeciwległy róg albo bok zostaje na miejscu. `Shift` zachowuje proporcje. Grubość linii się nie zmienia.
+- **Kółko nad ramką** (pod ramką, gdy nad nią nie ma miejsca) obraca zaznaczenie; z `Shift` co 15°. Ramka jednego elementu obraca się razem z nim.
+- Obraz i tekst zachowują proporcje (obraz bez nich z `Shift`), a większy tekst ma po prostu większe litery. Kilka zaznaczonych elementów skaluje się razem z rogów ramki, zawsze z zachowaniem proporcji.
+- Napis w kształcie zawija się na nowo, a kształt nie zrobi się mniejszy, niż potrzeba, żeby go pomieścić. Strzałki przyczepione do kształtu idą za nim.
+- `Esc` w trakcie przeciągania rezygnuje ze zmiany.
+
+## Styl zaznaczenia
+Przycisk **Styl** na pasku nad zaznaczeniem pokazuje to, co zaznaczone elementy mają:
+- **Wypełnienie** i **Wzór wypełnienia** (pełne, kreskowane, w kratkę) — kształty;
+- **Grubość linii** (cienka, średnia, gruba) — wszystko, co jest rysowane linią;
+- **Rodzaj linii** (ciągła, kreskowana, kropkowana) — kształty, linie i strzałki;
+- **Rogi** (ostre, zaokrąglone) — prostokąty, romby, a na liniach i strzałkach łagodny łuk zamiast załamań;
+- **Początek linii** i **Koniec linii** (brak, grot, trójkąt, kółko, kreska, romb) — linie i strzałki;
+- **Rozmiar tekstu** i **Krycie** (100, 75, 50, 25 %).
+
+Każdy wybór to jeden krok cofania. Panel zostaje otwarty, więc możesz zmienić kilka rzeczy po kolei.
 
 ## Jasne i ciemne tło
 Przycisk **Tło rysunku** (słońce z księżycem, słońce albo księżyc na pasku narzędzi) ma trzy możliwości:

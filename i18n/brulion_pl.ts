@@ -3204,29 +3204,259 @@
 <context>
     <name>DrawingSelectionBar</name>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="92"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="99"/>
         <source>Colour</source>
         <translation>Kolor</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="102"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="110"/>
+        <source>Style</source>
+        <translation>Styl</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="118"/>
         <source>Duplicate</source>
         <translation>Duplikuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="111"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="128"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="216"/>
         <source>Bring to front</source>
         <translation>Na wierzch</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="120"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="138"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="223"/>
         <source>Send to back</source>
         <translation>Na spód</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="129"/>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="148"/>
+        <source>More</source>
+        <translation>Więcej</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="156"/>
         <source>Delete</source>
         <translation>Usuń</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="177"/>
+        <source>Rotate by 90°</source>
+        <translation>Obróć o 90°</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="183"/>
+        <source>Flip horizontally</source>
+        <translation>Odbij w poziomie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="190"/>
+        <source>Flip vertically</source>
+        <translation>Odbij w pionie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="198"/>
+        <source>Group</source>
+        <translation>Grupuj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingSelectionBar.qml" line="206"/>
+        <source>Ungroup</source>
+        <translation>Rozgrupuj</translation>
+    </message>
+</context>
+<context>
+    <name>DrawingStylePanel</name>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="23"/>
+        <source>Light red</source>
+        <translation>Jasnoczerwony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="24"/>
+        <source>Light yellow</source>
+        <translation>Jasnożółty</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="25"/>
+        <source>Light green</source>
+        <translation>Jasnozielony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="26"/>
+        <source>Light blue</source>
+        <translation>Jasnoniebieski</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="27"/>
+        <source>Light violet</source>
+        <translation>Jasnofioletowy</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="28"/>
+        <source>Light grey</source>
+        <translation>Jasnoszary</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="147"/>
+        <source>Fill</source>
+        <translation>Wypełnienie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="155"/>
+        <source>None</source>
+        <comment>fill</comment>
+        <translation>Brak</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="176"/>
+        <source>Fill pattern</source>
+        <translation>Wzór wypełnienia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="180"/>
+        <source>Solid</source>
+        <comment>fill</comment>
+        <translation>Pełne</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="181"/>
+        <source>Hatched</source>
+        <translation>Kreskowane</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="182"/>
+        <source>Cross-hatched</source>
+        <translation>W kratkę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="187"/>
+        <source>Line thickness</source>
+        <translation>Grubość linii</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="191"/>
+        <source>Fine</source>
+        <translation>Cienka</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="192"/>
+        <source>Medium</source>
+        <translation>Średnia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="193"/>
+        <source>Thick</source>
+        <translation>Gruba</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="198"/>
+        <source>Line style</source>
+        <translation>Rodzaj linii</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="202"/>
+        <source>Solid</source>
+        <comment>line</comment>
+        <translation>Ciągła</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="203"/>
+        <source>Dashed</source>
+        <translation>Kreskowana</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="204"/>
+        <source>Dotted</source>
+        <translation>Kropkowana</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="209"/>
+        <source>Corners</source>
+        <translation>Rogi</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="213"/>
+        <source>Sharp</source>
+        <translation>Ostre</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="214"/>
+        <source>Rounded</source>
+        <translation>Zaokrąglone</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="219"/>
+        <source>Line start</source>
+        <translation>Początek linii</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="226"/>
+        <source>Line end</source>
+        <translation>Koniec linii</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="233"/>
+        <source>Text size</source>
+        <translation>Rozmiar tekstu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="237"/>
+        <source>Small</source>
+        <translation>Mały</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="238"/>
+        <source>Medium</source>
+        <comment>text size</comment>
+        <translation>Średni</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="239"/>
+        <source>Large</source>
+        <translation>Duży</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="240"/>
+        <source>Extra large</source>
+        <translation>Bardzo duży</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="244"/>
+        <source>Opacity</source>
+        <translation>Krycie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="258"/>
+        <source>None</source>
+        <comment>line end</comment>
+        <translation>Brak</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="259"/>
+        <source>Arrow</source>
+        <translation>Grot</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="260"/>
+        <source>Triangle</source>
+        <translation>Trójkąt</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="261"/>
+        <source>Circle</source>
+        <translation>Kółko</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="262"/>
+        <source>Bar</source>
+        <translation>Kreska</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingStylePanel.qml" line="263"/>
+        <source>Diamond</source>
+        <translation>Romb</translation>
     </message>
 </context>
 <context>
@@ -3245,198 +3475,258 @@
 <context>
     <name>DrawingToolbar</name>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="94"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="498"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="79"/>
         <source>Ellipse</source>
         <translation>Elipsa</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="94"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="505"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="80"/>
         <source>Diamond</source>
         <translation>Romb</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="94"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="512"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="81"/>
         <source>Line</source>
         <translation>Linia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="95"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="519"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="82"/>
         <source>Arrow</source>
         <translation>Strzałka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="95"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="491"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="78"/>
         <source>Rectangle</source>
         <translation>Prostokąt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="242"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="83"/>
+        <source>Triangle</source>
+        <translation>Trójkąt</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="84"/>
+        <source>Right triangle</source>
+        <translation>Trójkąt prostokątny</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="85"/>
+        <source>Parallelogram</source>
+        <translation>Równoległobok</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="86"/>
+        <source>Trapezoid</source>
+        <translation>Trapez</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="87"/>
+        <source>Pentagon</source>
+        <translation>Pięciokąt</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="88"/>
+        <source>Hexagon</source>
+        <translation>Sześciokąt</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="89"/>
+        <source>Star</source>
+        <translation>Gwiazda</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="90"/>
+        <source>Block arrow</source>
+        <translation>Strzałka blokowa</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="91"/>
+        <source>Speech bubble</source>
+        <translation>Dymek</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="92"/>
+        <source>Heart</source>
+        <translation>Serce</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="93"/>
+        <source>Cloud</source>
+        <translation>Chmurka</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="258"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="252"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="268"/>
         <source>Redo</source>
         <translation>Ponów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="271"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="287"/>
         <source>Pen</source>
         <translation>Pióro</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="282"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="298"/>
         <source>Highlighter</source>
         <translation>Zakreślacz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="293"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="309"/>
         <source>Eraser</source>
         <translation>Gumka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="304"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="321"/>
         <source>Select</source>
         <translation>Zaznacz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="317"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="339"/>
         <source>Shapes</source>
         <translation>Kształty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="333"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="355"/>
         <source>Text</source>
         <translation>Tekst</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="389"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="411"/>
         <source>Colour and thickness</source>
         <translation>Kolor i grubość</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="389"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="411"/>
         <source>Colour and size</source>
         <translation>Kolor i rozmiar</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="412"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="434"/>
         <source>Paper</source>
         <translation>Papier</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="423"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="445"/>
         <source>Drawing background</source>
         <translation>Tło rysunku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="433"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="691"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="455"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="725"/>
         <source>Draw with finger</source>
         <translation>Rysuj palcem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="444"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="698"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="466"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="732"/>
         <source>Show the whole drawing</source>
         <translation>Pokaż cały rysunek</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="455"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="477"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="481"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="503"/>
         <source>Done</source>
         <translation>Gotowe</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="522"/>
+        <source>Lasso</source>
+        <translation>Lassem</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="530"/>
+        <source>Rectangle selection</source>
+        <translation>Prostokątem</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="564"/>
         <source>Plain</source>
         <translation>Gładki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="537"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="571"/>
         <source>Lines</source>
         <translation>W linie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="544"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="578"/>
         <source>Grid</source>
         <translation>W kratkę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="553"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="669"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="587"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="703"/>
         <source>Backdrop from a picture or PDF…</source>
         <translation>Podkład z obrazu lub PDF…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="562"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="677"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="596"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="711"/>
         <source>Another PDF page…</source>
         <translation>Inna strona PDF…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="570"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="684"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="604"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="718"/>
         <source>Remove backdrop</source>
         <translation>Usuń podkład</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="581"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="615"/>
         <source>Like the app</source>
         <translation>Jak motyw</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="589"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="623"/>
         <source>Light</source>
         <translation>Jasne</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="597"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="631"/>
         <source>Dark</source>
         <translation>Ciemne</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="606"/>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="661"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="640"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="695"/>
         <source>Background colour…</source>
         <translation>Kolor tła…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="615"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="649"/>
         <source>Plain paper</source>
         <translation>Papier gładki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="622"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="656"/>
         <source>Lined paper</source>
         <translation>Papier w linie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="629"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="663"/>
         <source>Squared paper</source>
         <translation>Papier w kratkę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="638"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="672"/>
         <source>Background like the app</source>
         <translation>Tło jak motyw</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="645"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="679"/>
         <source>Light background</source>
         <translation>Jasne tło</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="653"/>
+        <location filename="../src/app/qml/drawing/DrawingToolbar.qml" line="687"/>
         <source>Dark background</source>
         <translation>Ciemne tło</translation>
     </message>
@@ -3444,157 +3734,157 @@
 <context>
     <name>DrawingView</name>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="121"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="125"/>
         <source>Ink</source>
         <translation>Atrament</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="122"/>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="132"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="126"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="136"/>
         <source>Blue</source>
         <translation>Niebieski</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="123"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="127"/>
         <source>Red</source>
         <translation>Czerwony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="124"/>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="130"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="128"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="134"/>
         <source>Green</source>
         <translation>Zielony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="125"/>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="133"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="129"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="137"/>
         <source>Orange</source>
         <translation>Pomarańczowy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="126"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="130"/>
         <source>Violet</source>
         <translation>Fioletowy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="129"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="133"/>
         <source>Yellow</source>
         <translation>Żółty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="131"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="135"/>
         <source>Pink</source>
         <translation>Różowy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="136"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="140"/>
         <source>Fine</source>
         <translation>Cienka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="137"/>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="142"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="141"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="146"/>
         <source>Medium</source>
         <translation>Średnia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="138"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="142"/>
         <source>Thick</source>
         <translation>Gruba</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="141"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="145"/>
         <source>Narrow</source>
         <translation>Wąska</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="143"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="147"/>
         <source>Wide</source>
         <translation>Szeroka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="147"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="151"/>
         <source>Small</source>
         <translation>Mały</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="148"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="152"/>
         <source>Medium</source>
         <comment>text size</comment>
         <translation>Średni</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="149"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="153"/>
         <source>Large</source>
         <translation>Duży</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="150"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="154"/>
         <source>Extra large</source>
         <translation>Bardzo duży</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="199"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="203"/>
         <source>The drawing was changed on another device: both versions are kept in it</source>
         <translation>Rysunek zmienił się na innym urządzeniu: są w nim obie wersje</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="216"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="220"/>
         <source>%1 (this device)</source>
         <translation>%1 (to urządzenie)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="219"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="223"/>
         <source>The drawing was changed elsewhere into one Brulion cannot edit. What you drew here is kept in %1</source>
         <translation>Rysunek zmieniono gdzie indziej na taki, którego Brulion nie edytuje. To, co narysowano tutaj, zapisano w pliku %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="367"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="383"/>
         <source>The file %1 is not in the notebook any more.</source>
         <translation>Pliku %1 nie ma już w notatniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="390"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="406"/>
         <source>This drawing&apos;s pictures leave no room for the backdrop: the file would be too large to open again.</source>
         <translation>Obrazy w tym rysunku nie zostawiają miejsca na podkład: plik byłby za duży, żeby go potem otworzyć.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="515"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="531"/>
         <source>Backdrop from a picture or PDF</source>
         <translation>Podkład z obrazu lub PDF</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="747"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="774"/>
         <source>This drawing is in an old format of Obsidian&apos;s Excalidraw plugin. Open it once in Obsidian to update it; Brulion shows it as it is.</source>
         <translation>Ten rysunek ma stary format wtyczki Excalidraw dla Obsidiana. Otwórz go raz w Obsidianie, żeby go zaktualizować; Brulion pokazuje go takim, jaki jest.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="749"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="776"/>
         <source>This drawing from Obsidian&apos;s Excalidraw plugin has frames or embedded pages, which Brulion does not edit yet. Change it in Obsidian; Brulion shows it as it is.</source>
         <translation>Ten rysunek z wtyczki Excalidraw dla Obsidiana ma ramki albo osadzone strony, których Brulion jeszcze nie edytuje. Zmień go w Obsidianie; Brulion pokazuje go takim, jaki jest.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="750"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="777"/>
         <source>This drawing has frames or embedded web pages from Excalidraw, which Brulion does not edit. Open the file in excalidraw.com to change it.</source>
         <translation>Ten rysunek ma ramki lub osadzone strony internetowe z Excalidraw, których Brulion nie edytuje. Otwórz plik w excalidraw.com, aby go zmienić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="752"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="779"/>
         <source>This picture is not a drawing: it can only be viewed.</source>
         <translation>Ten obraz nie jest rysunkiem: można go tylko oglądać.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="754"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="781"/>
         <source>The drawing data in this file cannot be read. The picture is shown as it was saved.</source>
         <translation>Nie można odczytać danych rysunku z tego pliku. Obraz jest pokazany tak, jak został zapisany.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="756"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="783"/>
         <source>The drawing %1 is not in the notebook.</source>
         <translation>Rysunku %1 nie ma w notatniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="765"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="792"/>
         <source>Open as a picture</source>
         <translation>Otwórz jako obraz</translation>
     </message>
