@@ -317,6 +317,12 @@ Nextcloud keeps both versions (a conflict copy) of a drawing it cannot merge: an
 does not edit, a scene that cannot be read, no common version (two drawings made apart under one
 name), an element whose content changed with the same `version` (an edit by hand).
 
+*The paper's colour (Kolor tła…):* any `appState.viewBackgroundColor`; Brulion writes the chosen one
+as `#rrggbb`, in light-theme terms. On it the lines and the grid are `#c9d3e0` multiplied into the
+colour, channel by channel (`c × rule / 255`; white paper keeps `#c9d3e0`), on a dark colour the
+mirror image (`255 − (255 − c) × rule / 255`). A merge treats it as it treats the pattern and the
+theme: ours when the base is known and ours changed it, else theirs.
+
 *Light and dark (Jasne i ciemne tło):* colours are stored as drawn, in light-theme terms, whatever
 the paper (as Excalidraw does). The dark paper shows them through **Excalidraw's dark mode
 mapping** (`drawing/palette.h`, a port of `applyDarkModeFilter`: the CSS filter `invert(93%)

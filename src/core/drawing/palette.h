@@ -78,8 +78,10 @@ int highlighterDarkOpacity(int opacity);
 /// see-through colour such as Excalidraw's "#ffffff80": as it shows over white; dark: darkColor()
 /// of that — white gives #121212, Excalidraw's dark canvas).
 QString displayPaper(QStringView paper, bool dark);
-/// The colour of the lines and the grid as shown (RuleColor; dark #323a45).
-QString displayRule(bool dark);
+/// The colour of the lines and the grid as shown on `paper`, as drawn: RuleColor multiplied into a
+/// light paper (white: RuleColor itself; dark theme #323a45), its mirror image on a dark one (printed
+/// lines stay as visible on any colour, also a paper close to RuleColor).
+QString displayRule(bool dark, QStringView paper = DefaultPaper);
 
 /// An SVG picture with its colours as the dark theme shows them — what Excalidraw's dark mode does
 /// to a scene, colour by colour: every colour parseColor() reads in the attributes fill, stroke,
@@ -93,6 +95,9 @@ std::optional<QByteArray> darkSvg(const QByteArray &svg);
 /// WCAG 2 relative luminance (0–1) of an opaque colour, and the contrast ratio of two (1–21).
 double luminance(Rgba c);
 double contrast(Rgba a, Rgba b);
+/// Light marks show better on this opaque colour than dark ones (what goes on the paper as shown:
+/// the eraser's ring, the zoom's label — a custom paper may be dark in the light theme).
+bool isDarkShade(Rgba c);
 /// `fg` (its alpha too) at `opacity` (0–100) over the opaque `bg`: the opaque colour seen.
 Rgba over(Rgba fg, int opacity, Rgba bg);
 

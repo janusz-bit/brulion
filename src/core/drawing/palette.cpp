@@ -131,9 +131,17 @@ QString displayPaper(QStringView paper, bool dark)
     return colorName(dark ? darkRgba(c) : c);
 }
 
-QString displayRule(bool dark)
+QString displayRule(bool dark, QStringView paper)
 {
-    return dark ? darkColor(RuleColor) : RuleColor.toString();
+    const Rgba p = *parseColor(displayPaper(paper, false));
+    const Rgba rule = *parseColor(RuleColor);
+    const bool mirrored = isDarkShade(p);
+    const auto channel = [mirrored](int paperValue, int ruleValue) {
+        const double kept = (mirrored ? 255 - paperValue : paperValue) * ruleValue / 255.0;
+        return int(jsRound(mirrored ? 255 - kept : kept));
+    };
+    const Rgba shown{channel(p.r, rule.r), channel(p.g, rule.g), channel(p.b, rule.b), 255};
+    return colorName(dark ? darkRgba(shown) : shown);
 }
 
 namespace {
@@ -240,6 +248,11 @@ double contrast(Rgba a, Rgba b)
     const double la = luminance(a);
     const double lb = luminance(b);
     return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
+}
+
+bool isDarkShade(Rgba c)
+{
+    return contrast(c, Rgba{255, 255, 255, 255}) > contrast(c, Rgba{0, 0, 0, 255});
 }
 
 Rgba over(Rgba fg, int opacity, Rgba bg)

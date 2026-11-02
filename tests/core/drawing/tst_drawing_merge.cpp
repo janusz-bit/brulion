@@ -282,6 +282,33 @@ private Q_SLOTS:
         QCOMPARE(result.paper, u"#fffdf5"_s);
     }
 
+    void paperColor_data()
+    {
+        QTest::addColumn<bool>("known");
+        QTest::addColumn<QString>("ours");
+        QTest::addColumn<QString>("theirs");
+        QTest::addColumn<QString>("merged");
+        const QString white = u"#ffffff"_s;
+        QTest::newRow("changed here") << true << u"#fff9db"_s << white << u"#fff9db"_s;
+        QTest::newRow("changed there") << true << white << u"#dbe4ff"_s << u"#dbe4ff"_s;
+        QTest::newRow("changed on both: ours") << true << u"#fff9db"_s << u"#dbe4ff"_s << u"#fff9db"_s;
+        QTest::newRow("case does not count") << true << u"#FFFFFF"_s << u"#dbe4ff"_s << u"#dbe4ff"_s;
+        QTest::newRow("no base: theirs") << false << u"#fff9db"_s << u"#dbe4ff"_s << u"#dbe4ff"_s;
+    }
+    void paperColor()
+    {
+        QFETCH(bool, known);
+        QFETCH(QString, ours);
+        QFETCH(QString, theirs);
+        QFETCH(QString, merged);
+        Drawing base = scene(u"a"_s);
+        Drawing our = base;
+        our.paper = ours;
+        Drawing their = base;
+        their.paper = theirs;
+        QCOMPARE(brulion::drawing::merge(known ? mergeBase(base) : MergeBase{}, our, their).paper, merged);
+    }
+
     void filesOfBoth()
     {
         Drawing ours = scene(u"a"_s);

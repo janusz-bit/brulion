@@ -34,6 +34,7 @@ struct MergeBase {
     QHash<QString, int> versions;
     Background background = Background::Plain;
     PaperTheme theme = PaperTheme::Auto;
+    QString paper = DefaultPaper.toString();
 };
 /// The base of a drawing (known = true).
 MergeBase mergeBase(const Drawing &base);
@@ -49,8 +50,8 @@ MergeBase mergeBase(const Drawing &base);
 ///    both changed it), else theirs; unknown base — the higher `version`, a tie keeps theirs;
 ///  * a backdrop (backdrop.h) each side set of its own (two elements): the one set last (`updated`;
 ///    a tie keeps theirs) at the bottom, the other left out;
-///  * the paper's pattern and the theme: ours when the base is known and ours changed them, else
-///    theirs;
+///  * the paper's pattern, its colour and the theme: ours when the base is known and ours changed
+///    them, else theirs;
 ///  * files: theirs plus the entries only ours has.
 /// Deterministic; never reorders theirs. Both are editable() drawings (theirs.foreign stays).
 Drawing merge(const MergeBase &base, const Drawing &ours, Drawing theirs);

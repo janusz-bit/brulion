@@ -1183,7 +1183,7 @@ and diagrams (shapes, arrows, text), on every platform.
   dark paper (`#121212`) shows the strokes in Excalidraw's dark-mode colours (`drawing/palette.h`:
   the ink `#1f2430` as `#caced8`, every pen colour ≥ 4.2:1 on the paper; the lines and the grid
   `#323a45`), highlighter strokes in their own colour at 1.25 × the opacity (≥ 3.2:1 on the paper,
-  the dark ink on them ≥ 2.9:1), the eraser's ring light (`DrawingCanvas.dark`, `paperColor`). The
+  the dark ink on them ≥ 2.9:1), the eraser's ring light (`DrawingCanvas.paperIsDark`, `paperColor`). The
   tool bar's swatches show the colours as the paper shows them (`displayColor`); what is chosen
   and remembered is the colour as drawn. The file's picture follows the choice (docs/SYNTAX.md §2:
   dark attributes for Ciemne; for Jak motyw an `@media (prefers-color-scheme: dark)` style sheet,
@@ -1191,6 +1191,16 @@ and diagrams (shapes, arrows, text), on every platform.
   with another device's version keeps the theme chosen here only when it was changed here since
   the last load or save (as the paper's pattern). No keyboard shortcut (Excalidraw's Alt+Shift+D
   switches its app's theme; this one is per drawing).
+* **The paper's colour** ("Tło rysunku" → **Kolor tła…**; on phones in Więcej; `DrawingPaperDialog`,
+  `DrawingCanvas.paper`, saved as `appState.viewBackgroundColor`, an undo step; on Excalidraw's and
+  Obsidian's drawings too): a grid of papers (neutrals, two rows of pastels, a dark row; white goes
+  back to the default), a field for any `#rrggbb` and a preview with the default ink. The colour is
+  stored as drawn, like everything else: on dark paper the grid and the preview show it mapped, a
+  note says so and points to Jasne for the exact colour; a second note appears when the default
+  ink has less than 3:1 on it (ink colours never change by themselves). The lines and the grid
+  follow the paper (`displayRule`), the eraser's ring and the zoom's label its shade
+  (`DrawingCanvas.paperIsDark`). A merge keeps the colour chosen here only when it was changed here
+  since the last load or save (as the pattern and the theme).
 * **Input:**
   * a **stylus** works the tool — draws with its pressure (the line widens as it presses harder;
     a stylus that reports one pressure only draws like a mouse), draws the lasso or a shape —; its

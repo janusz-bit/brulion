@@ -52,12 +52,14 @@ Wybierz **Zaznacz** (V) i obrysuj rysikiem, palcem albo myszką to, co chcesz za
 ## Jasne i ciemne tło
 Przycisk **Tło rysunku** (słońce z księżycem, słońce albo księżyc na pasku narzędzi) ma trzy możliwości:
 - **Jak motyw** (domyślnie) — rysunek jest jasny w jasnym motywie Brulionu i ciemny w ciemnym, a zmienia się od razu, gdy przełączysz motyw (także wieczorem, gdy motyw idzie za systemem);
-- **Jasne** — zawsze biała kartka;
+- **Jasne** — zawsze biała kartka (albo w wybranym kolorze tła);
 - **Ciemne** — zawsze ciemna kartka, także w jasnym motywie.
 
 Wybór zapisuje się w pliku rysunku, więc każde urządzenie pokaże go tak samo. Działa i w edytorze rysunku, i w podglądzie w notatce, i w widoku samego obrazu.
 
 Na ciemnej kartce kolory są dopasowane tak samo jak w ciemnym trybie Excalidraw: atrament jest jasnoszary, niebieski, czerwony i fioletowy jaśniejsze, linie papieru ciemniejsze. Zakreślacz zostaje w swoim kolorze, tylko trochę mocniejszy, żeby był widoczny na ciemnym tle, a pismo pod nim dało się przeczytać. Same kolory w pliku się nie zmieniają: przełączenie z powrotem na jasne tło pokaże dokładnie to, co narysowałeś. Kółka kolorów na pasku pokazują kolory tak, jak wyglądają na bieżącej kartce.
+
+**Własny kolor tła.** W tym samym menu **Kolor tła…** (na telefonie w **Więcej**) wybierzesz kolor kartki z siatki albo wpiszesz dowolny, np. `#fff9db`; biały przywraca zwykłą kartkę. Podgląd pokazuje atrament na tym kolorze, a gdy atrament byłby słabo widoczny, okno o tym uprzedza — narysowane linie nie zmieniają koloru, ale możesz wybrać inny kolor pisaka. Linie i kratka papieru dopasowują się do koloru kartki. Na ciemnej kartce (**Ciemne** albo **Jak motyw** w ciemnym motywie) kolor tła zmienia się tak samo jak pozostałe kolory, np. kremowy staje się ciemnobrązowy; żeby widzieć dokładnie wybrany kolor, ustaw **Jasne**. Kolor tła zapisuje się w rysunku i można go cofnąć; widzą go też Excalidraw i Obsidian.
 
 W innych programach:
 - rysunek z tłem **Ciemne** jest ciemny wszędzie;

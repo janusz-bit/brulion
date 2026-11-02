@@ -844,6 +844,10 @@ private Q_SLOTS:
         }
         QCOMPARE(displayRule(false), RuleColor.toString());
         QCOMPARE(displayRule(true), u"#323a45"_s);
+        QVERIFY(isDarkShade(Rgba{0x12, 0x12, 0x12, 255}));
+        QVERIFY(isDarkShade(Rgba{0x1f, 0x24, 0x30, 255}));
+        QVERIFY(!isDarkShade(Rgba{255, 255, 255, 255}));
+        QVERIFY(!isDarkShade(Rgba{0xff, 0xf9, 0xdb, 255}));
         QVERIFY(!rendersDark(PaperTheme::Auto, false));
         QVERIFY(rendersDark(PaperTheme::Auto, true));
         QVERIFY(!rendersDark(PaperTheme::Light, true));
@@ -948,6 +952,63 @@ private Q_SLOTS:
         QCOMPARE(over({255, 255, 255, 128}, 100, {0, 0, 0, 255}), (Rgba{128, 128, 128, 255}));
         QCOMPARE(over({255, 0, 0, 255}, 0, {1, 2, 3, 255}), (Rgba{1, 2, 3, 255}));
         QCOMPARE(over({255, 0, 0, 255}, 400, {1, 2, 3, 255}), (Rgba{255, 0, 0, 255}));
+    }
+
+    void rulesShowOnAnyPaper_data()
+    {
+        QTest::addColumn<QString>("paper");
+        QTest::newRow("cream") << u"#fff9db"_s;
+        QTest::newRow("the rules' own colour") << u"#c9d3e0"_s;
+        QTest::newRow("pale blue") << u"#dbe4ff"_s;
+        QTest::newRow("mid grey") << u"#868e96"_s;
+        QTest::newRow("navy") << u"#1a2a4a"_s;
+        QTest::newRow("black") << u"#000000"_s;
+    }
+    void rulesShowOnAnyPaper()
+    {
+        QFETCH(QString, paper);
+        for (const bool dark : {false, true}) {
+            const QString rule = displayRule(dark, paper);
+            const double shown = contrast(*parseColor(rule), *parseColor(displayPaper(paper, dark)));
+            QVERIFY2(shown >= 1.2, qPrintable(rule + u' ' + QString::number(shown)));
+            QCOMPARE(rule.size(), 7);
+        }
+        // A paper that cannot be read is white paper.
+        QCOMPARE(displayRule(false, u"zielony"), RuleColor.toString());
+        QCOMPARE(displayRule(false, u"transparent"), RuleColor.toString());
+    }
+
+    void customPaperInTheFile_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::addColumn<QString>("rect");
+        QTest::addColumn<QString>("css");
+        QTest::newRow("light") << int(PaperTheme::Light) << displayPaper(u"#fff9db", false) << QString();
+        QTest::newRow("dark") << int(PaperTheme::Dark) << displayPaper(u"#fff9db", true) << QString();
+        QTest::newRow("auto") << int(PaperTheme::Auto) << displayPaper(u"#fff9db", false)
+                              << u".p{fill:"_s + displayPaper(u"#fff9db", true) + u"}.r{stroke:"_s
+                                         + displayRule(true, u"#fff9db") + u'}';
+    }
+    void customPaperInTheFile()
+    {
+        QFETCH(int, theme);
+        QFETCH(QString, rect);
+        QFETCH(QString, css);
+        Drawing d;
+        d.paper = u"#fff9db"_s;
+        d.background = Background::Lines;
+        d.theme = PaperTheme(theme);
+        const QByteArray svg = toSvg(d);
+        const QString text = QString::fromUtf8(svg);
+        QVERIFY2(text.contains(u"fill=\""_s + rect + u'"'), svg.constData());
+        const bool shownDark = d.theme == PaperTheme::Dark;
+        QVERIFY2(text.contains(u"stroke=\""_s + displayRule(shownDark, d.paper) + u'"'), svg.constData());
+        if (!css.isEmpty())
+            QVERIFY2(text.contains(css), svg.constData());
+        // The colour stays as drawn, whatever the theme.
+        const std::optional<Drawing> back = readDrawing(svg);
+        QVERIFY(back);
+        QCOMPARE(back->paper, u"#fff9db"_s);
     }
 
     void paperThemeRoundTrip_data()

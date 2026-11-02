@@ -22,7 +22,7 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   z „Dołącz kopie”.
 * **Rysunki — dalsze pomysły i sprawdzenie na urządzeniach.** Edytor rysunków (`/Rysunek`,
   docs/UI.md „Drawing editor”) ma pismo odręczne, zakreślacz, gumkę, papier, kształty, strzałki,
-  tekst, zaznaczanie lassem, podkłady (obraz, slajd, strona PDF) i ciemne tło. Zostaje:
+  tekst, zaznaczanie lassem, podkłady (obraz, slajd, strona PDF), ciemne tło i własny kolor tła. Zostaje:
   * sprawdzić ręcznie „Scal rysunki” na prawdziwych urządzeniach: rysunek zmieniony bez sieci na
     telefonie i na laptopie, Syncthing zostawia kopię `*.sync-conflict-….svg` (albo
     `*.excalidraw.sync-conflict-….md` rysunku z Obsidiana) → „Scal rysunki” w centrum
@@ -84,7 +84,8 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     (wpisanie hasła), adnotacje, widok dwóch stron obok siebie;
   * „Otwórz w innej aplikacji” dla innych załączników (DOCX, XLSX — z listą bezpiecznych typów;
     dziś otwierają się w Brulionie tylko do odczytu jako tekst).
-* **Dowolny kolor tła** — tło w kolorze wybranym przez użytkownika; zakres do ustalenia.
+* **Usuwanie pliku** — możliwość usunięcia pliku; zakres do ustalenia.
+* **Usuwanie nieaktualnych załączników** — usuwanie załączników niepołączonych z żadną notatką.
 
 ## Windows
 

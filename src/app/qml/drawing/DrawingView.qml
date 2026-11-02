@@ -92,6 +92,7 @@ FocusScope {
     property int backdropPick: 0
     property int backdropJob: 0
     property DrawingBackdropDialog backdropDialog: null
+    property DrawingPaperDialog paperDialog: null
     /// The picked file's vault path until the backdrop is set: abandoned, its copy goes again.
     property string backdropImport: ""
     /// The drawing the backdrop is chosen for (loadedPath then): another one loaded meanwhile
@@ -248,6 +249,8 @@ FocusScope {
                     bar.openBackground()
                 else if (open === "theme")
                     bar.openTheme()
+                else if (open === "papercolor")
+                    root.openPaperDialog()
                 else if (open === "shape")
                     bar.openShapes()
                 else if (open === "select") {
@@ -337,6 +340,11 @@ FocusScope {
             root.openPageDialog(path, 1)
         else
             root.backdropJob = DrawingBackdrops.prepare(path, [])
+    }
+    function openPaperDialog() {
+        if (!root.paperDialog)
+            root.paperDialog = paperDialogComponent.createObject(root) as DrawingPaperDialog
+        root.paperDialog.openWith(canvas.paper)
     }
     function openPageDialog(path, page) {
         if (!root.backdropDialog)
@@ -517,6 +525,14 @@ FocusScope {
         }
     }
     Component {
+        id: paperDialogComponent
+        DrawingPaperDialog {
+            canvas: canvas
+            onChosen: (color) => { canvas.paper = color }
+            onClosed: root.forceActiveFocus()
+        }
+    }
+    Component {
         id: backdropDialogComponent
         DrawingBackdropDialog {
             onPrepared: (items) => root.applyBackdrop(items)
@@ -635,6 +651,7 @@ FocusScope {
             onBackdropRequested: root.pickBackdrop()
             onBackdropPageRequested: root.otherBackdropPage()
             onBackdropRemoved: canvas.removeBackdrop()
+            onPaperColorRequested: root.openPaperDialog()
         }
 
         Item {
@@ -785,7 +802,7 @@ FocusScope {
                 text: Math.round(canvas.zoom * 100) + " %"
                 variant: "caption"
                 // On the paper (light or dark as the drawing is shown): 6.9:1 / 7.2:1.
-                color: canvas.dark ? "#9ba1af" : "#535a6a"
+                color: canvas.paperIsDark ? "#9ba1af" : "#535a6a"
             }
         }
 
@@ -811,6 +828,7 @@ FocusScope {
             onBackdropRequested: root.pickBackdrop()
             onBackdropPageRequested: root.otherBackdropPage()
             onBackdropRemoved: canvas.removeBackdrop()
+            onPaperColorRequested: root.openPaperDialog()
         }
     }
 }

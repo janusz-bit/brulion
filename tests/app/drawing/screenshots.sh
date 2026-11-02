@@ -38,7 +38,7 @@ delay="${DELAY:-1600}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
-all_shots=(editor page picture shapes selection shapemenu readonly new style more paper theme obsidian obsidianpage
+all_shots=(editor page picture shapes selection shapemenu readonly new style more paper theme papercolor obsidian obsidianpage
            obsidianframe backdrop backdroppages)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
@@ -91,6 +91,7 @@ shot_args() {
     more) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"more"}' ;;
     paper) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"paper"}' ;;
     theme) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"theme"}' ;;
+    papercolor) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"papercolor"}' ;;
     obsidian) printf '%s\n' --route '{"view":"drawing","path":"Excalidraw/Szkic z Obsidiana.excalidraw.md"}' ;;
     obsidianpage) printf '%s\n' --route '{"view":"page","path":"Excalidraw/Szkic z Obsidiana.excalidraw.md"}' ;;
     obsidianframe) printf '%s\n' --route '{"view":"drawing","path":"Excalidraw/Ramka z Obsidiana.excalidraw.md"}' ;;

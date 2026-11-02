@@ -359,7 +359,7 @@ void paintPaper(QPainter &painter, const drawing::Drawing &drawing, bool dark, c
     if (drawing.background != drawing::Background::Plain && invertible && spacing * zoom >= 6) {
         const QRectF visible = itemToScene.mapRect(QRectF(QPointF(0, 0), size));
         painter.setRenderHint(QPainter::Antialiasing);
-        QPen pen{toQColor(drawing::displayRule(dark))};
+        QPen pen{toQColor(drawing::displayRule(dark, drawing.paper))};
         pen.setCosmetic(true);
         pen.setWidthF(1);
         painter.setPen(pen);

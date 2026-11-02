@@ -1487,6 +1487,106 @@ private Q_SLOTS:
         QCOMPARE(canvas->currentDrawing().strokes.last().color, u"#1f2430"_s);
     }
 
+    void customPaper_data()
+    {
+        QTest::addColumn<QString>("theme");
+        QTest::addColumn<bool>("appDark");
+        QTest::addColumn<QString>("shown");
+        QTest::addColumn<bool>("paperIsDark");
+        QTest::newRow("cream, light") << u"light"_s << false << u"#fff9db"_s << false;
+        QTest::newRow("cream, as the dark app") << u"auto"_s << true << u"#1e1900"_s << true;
+        QTest::newRow("cream, dark") << u"dark"_s << false << u"#1e1900"_s << true;
+    }
+    void customPaper()
+    {
+        QFETCH(QString, theme);
+        QFETCH(bool, appDark);
+        QFETCH(QString, shown);
+        QFETCH(bool, paperIsDark);
+        canvas->setAppDark(appDark);
+        canvas->setTheme(theme);
+        canvas->setBackground(u"lines"_s);
+        QSignalSpy papers(canvas, &DrawingCanvas::paperChanged);
+        QSignalSpy render(canvas, &DrawingCanvas::renderChanged);
+        canvas->setPaper(u"#FFF9DB"_s);
+        QCOMPARE(canvas->paper(), u"#fff9db"_s);
+        QCOMPARE(papers.size(), 1);
+        QCOMPARE(render.size(), 1);
+        QVERIFY(canvas->modified());
+        QCOMPARE(canvas->paperColor().name(), shown);
+        QCOMPARE(canvas->paperIsDark(), paperIsDark);
+        QImage image = painted(canvas);
+        QCOMPARE(image.pixelColor(400, 50).name(), shown);
+        const bool dark = canvas->dark();
+        QCOMPARE(image.pixelColor(400, 64).name(), brulion::drawing::displayRule(dark, u"#fff9db"));
+        QCOMPARE(appStateOf(canvas->svg()).value(u"viewBackgroundColor"_s).toString(), u"#fff9db"_s);
+        // The same colour again, malformed or see-through ones: no step.
+        canvas->setPaper(u"#fff9db"_s);
+        canvas->setPaper(u"zielony"_s);
+        canvas->setPaper(u"#12345"_s);
+        canvas->setPaper(u"#fff9db80"_s);
+        canvas->setPaper(QString());
+        QCOMPARE(papers.size(), 1);
+        QCOMPARE(canvas->paper(), u"#fff9db"_s);
+        // An undo step, redone too.
+        canvas->undo();
+        QCOMPARE(canvas->paper(), u"#ffffff"_s);
+        QCOMPARE(papers.size(), 2);
+        QCOMPARE(painted(canvas).pixelColor(400, 50).name(), dark ? u"#121212"_s : u"#ffffff"_s);
+        canvas->redo();
+        QCOMPARE(canvas->paper(), u"#fff9db"_s);
+        QCOMPARE(painted(canvas).pixelColor(400, 50).name(), shown);
+        // The file keeps it.
+        const QByteArray saved = canvas->svg();
+        QCOMPARE(canvas->load(saved), QString());
+        QCOMPARE(canvas->paper(), u"#fff9db"_s);
+        QCOMPARE(canvas->paperColor().name(), shown);
+    }
+
+    void customPaperReadOnly()
+    {
+        QCOMPARE(canvas->load(fixture(u"excalidraw_frame.svg"_s)), u"readonly"_s);
+        const QString paper = canvas->paper();
+        canvas->setPaper(u"#fff9db"_s);
+        QCOMPARE(canvas->paper(), paper);
+        QVERIFY(!canvas->modified());
+    }
+
+    void darkCustomPaperInTheLightTheme()
+    {
+        canvas->setTheme(u"light"_s);
+        QVERIFY(canvas->inkContrast(u"#ffffff"_s) > 15);
+        QVERIFY(canvas->inkContrast(u"#1a2a4a"_s) < 3);
+        canvas->setPaper(u"#1a2a4a"_s);
+        QVERIFY(!canvas->dark());
+        QVERIFY(canvas->paperIsDark());
+        // The dark theme maps the ink and the paper alike: still too close, white still far apart.
+        canvas->setTheme(u"dark"_s);
+        QVERIFY(canvas->inkContrast(u"#1a2a4a"_s) < 3);
+        QVERIFY(canvas->inkContrast(u"#ffffff"_s) > 8);
+    }
+
+    void paperMerge()
+    {
+        QCOMPARE(canvas->load(strokesFile({u"a"_s})), QString());
+        canvas->setPaper(u"#fff9db"_s);
+        mouseStroke(window.get(), {100, 500}, {300, 500}, 6);
+        QVERIFY(canvas->modified());
+        brulion::drawing::Drawing other = *brulion::drawing::readDrawing(strokesFile({u"a"_s, u"ż"_s}));
+        other.paper = u"#dbe4ff"_s;
+        // Changed here since the last load: ours.
+        QSignalSpy papers(canvas, &DrawingCanvas::paperChanged);
+        QVERIFY(canvas->takeExternal(brulion::drawing::toSvg(other)));
+        QCOMPARE(canvas->paper(), u"#fff9db"_s);
+        QCOMPARE(papers.size(), 1);
+        QCOMPARE(canvas->paperColor().name(), u"#fff9db"_s);
+        // Not changed here: theirs.
+        canvas->markSaved(canvas->svg());
+        QVERIFY(canvas->takeExternal(brulion::drawing::toSvg(other)));
+        QCOMPARE(canvas->paper(), u"#dbe4ff"_s);
+        QCOMPARE(canvas->paperColor().name(), u"#dbe4ff"_s);
+    }
+
     void seeThroughPaper_data()
     {
         QTest::addColumn<QString>("paper");

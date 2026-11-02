@@ -48,6 +48,7 @@ routes=(
   '{"view":"drawing","path":"assets/Brak.svg"}'
   '{"view":"drawing","path":"assets/Nowy.svg"}'
   '{"view":"drawing","path":"assets/Rysunek ćwiczenia.svg","open":"theme"}'
+  '{"view":"drawing","path":"assets/Rysunek ćwiczenia.svg","open":"papercolor"}'
   '{"view":"page","path":"Zajęcia.md"}'
   '{"view":"page","path":"assets/Rysunek ćwiczenia.svg"}'
   '{"view":"drawing","path":"Excalidraw/Szkic.excalidraw.md"}'

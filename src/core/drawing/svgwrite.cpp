@@ -270,10 +270,10 @@ QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
         if (drawing.background == Background::Grid)
             rules(left, right, [&](double x) { d += u'M' + formatNumber(x + dx) + u",0V"_s + h; });
         if (!d.isEmpty()) {
-            body += u"<path d=\""_s + d + u"\" fill=\"none\" stroke=\""_s + displayRule(dark)
+            body += u"<path d=\""_s + d + u"\" fill=\"none\" stroke=\""_s + displayRule(dark, drawing.paper)
                     + u"\" stroke-width=\"1\""_s + withClass(u"r"_s) + u"/>\n"_s;
             if (autoTheme)
-                css += u".r{stroke:"_s + displayRule(true) + u'}';
+                css += u".r{stroke:"_s + displayRule(true, drawing.paper) + u'}';
         }
     }
 

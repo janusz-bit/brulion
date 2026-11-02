@@ -162,6 +162,11 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged FINAL)
     /// The paper's colour as shown (the drawing's, in the theme in force).
     Q_PROPERTY(QColor paperColor READ paperColor NOTIFY renderChanged FINAL)
+    /// The paper's colour as drawn, in light-theme terms ("Kolor tła…", appState
+    /// `viewBackgroundColor`; set: "#rrggbb", an undo step, anything else ignored).
+    Q_PROPERTY(QString paper READ paper WRITE setPaper NOTIFY paperChanged FINAL)
+    /// Light marks show better on the paper as shown (a custom paper may be dark in the light theme).
+    Q_PROPERTY(bool paperIsDark READ paperIsDark NOTIFY renderChanged FINAL)
     /// Milliseconds the last cached image took to render (diagnostics).
     Q_PROPERTY(double lastRenderMs READ lastRenderMs FINAL)
     /// The drawing has a backdrop; its source file's vault path ("" unknown) and PDF page (0: a
@@ -238,6 +243,9 @@ public:
                || m_gesture == Gesture::Move || m_gesture == Gesture::Shape;
     }
     QColor paperColor() const { return dark() ? m_paperDark : m_paperLight; }
+    QString paper() const { return m_doc.paper; }
+    void setPaper(const QString &color);
+    bool paperIsDark() const;
     double lastRenderMs() const { return m_lastRenderMs; }
     bool hasBackdrop() const;
     QString backdropPath() const;
@@ -318,6 +326,8 @@ public:
     /// A stored colour as the paper shows it now (the tool bar's swatches): mapped in the dark
     /// (drawing::darkRgba), a highlighter's colour as it is.
     Q_INVOKABLE QColor displayColor(const QColor &stored, bool highlighter = false) const;
+    /// The contrast (1–21) of the default ink on a paper of this colour, both as now shown.
+    Q_INVOKABLE double inkContrast(const QString &paper) const;
     /// Scene ↔ item coordinates.
     Q_INVOKABLE QPointF toScene(QPointF item) const;
     Q_INVOKABLE QPointF toItem(QPointF scene) const;
@@ -352,9 +362,10 @@ Q_SIGNALS:
     void textCommitRequested();
     void backgroundChanged();
     void themeChanged();
+    void paperChanged();
     void appDarkChanged();
-    /// What the paper shows changed colours: `dark`, `paperColor` (a theme, the app's theme, a
-    /// drawing loaded or taken in).
+    /// What the paper shows changed colours: `dark`, `paperColor` (a theme, the app's theme, the
+    /// paper's colour, a drawing loaded or taken in).
     void renderChanged();
     void fingerDrawsChanged();
     void stylusSeenChanged();
@@ -389,13 +400,15 @@ protected:
 
 private:
     struct Op {
-        enum Kind { Elements, Background, Theme } kind = Elements;
+        enum Kind { Elements, Background, Theme, Paper } kind = Elements;
         /// Elements: what changed (core drawing::diffElements).
         drawing::ElementDiff diff;
         drawing::Background before = drawing::Background::Plain;
         drawing::Background after = drawing::Background::Plain;
         drawing::PaperTheme themeBefore = drawing::PaperTheme::Auto;
         drawing::PaperTheme themeAfter = drawing::PaperTheme::Auto;
+        QString paperBefore;
+        QString paperAfter;
     };
     enum class Gesture { None, Draw, Erase, Pan, Pinch, Lasso, Move, Shape, Tap };
     /// What a pointer event is (from its device and the tablet event it was made of).
@@ -410,6 +423,8 @@ private:
     void filterWindow(QQuickWindow *window);
     /// Repaint in the colours of the theme in force when `wasDark` differs from it.
     void renderMaybeChanged(bool wasDark);
+    /// m_paperLight and m_paperDark from the document's paper.
+    void syncPaper();
     Pointer pointerOf(const QPointerEvent *event) const;
     /// A finger (with the keyboard's modifiers).
     static Pointer touchPointer();
@@ -607,6 +622,7 @@ private:
         bool cacheCurrent = false;
         QColor paper;
         bool dark = false;
+        bool paperIsDark = false;
         QPainterPath live;
         QColor liveColor; ///< with its opacity
         QPointF eraser{-1, -1};

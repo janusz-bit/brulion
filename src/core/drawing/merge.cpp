@@ -139,6 +139,7 @@ MergeBase mergeBase(const Drawing &base)
         b.versions.insert(mergeKey(s), s.version);
     b.background = base.background;
     b.theme = base.theme;
+    b.paper = base.paper;
     return b;
 }
 
@@ -222,6 +223,8 @@ Drawing merge(const MergeBase &base, const Drawing &ours, Drawing theirs)
         theirs.background = ours.background;
     if (base.known && ours.theme != base.theme)
         theirs.theme = ours.theme;
+    if (base.known && !samePaper(ours.paper, base.paper))
+        theirs.paper = ours.paper;
     for (auto it = ours.files.constBegin(); it != ours.files.constEnd(); ++it) {
         if (!theirs.files.contains(it.key()))
             theirs.files.insert(it.key(), it.value());

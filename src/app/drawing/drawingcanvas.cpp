@@ -184,6 +184,41 @@ void DrawingCanvas::setTheme(const QString &name)
     push(std::move(op));
 }
 
+void DrawingCanvas::setPaper(const QString &color)
+{
+    const std::optional<drawing::Rgba> c = drawing::parseColor(color);
+    if (!c || c->a != 255 || !m_editable)
+        return;
+    const QString name = drawing::colorName(*c);
+    if (name.compare(m_doc.paper, Qt::CaseInsensitive) == 0)
+        return;
+    Op op;
+    op.kind = Op::Paper;
+    op.paperBefore = m_doc.paper;
+    op.paperAfter = name;
+    apply(op, true);
+    push(std::move(op));
+}
+
+void DrawingCanvas::syncPaper()
+{
+    m_paperLight = toQColor(drawing::displayPaper(m_doc.paper, false));
+    m_paperDark = toQColor(drawing::displayPaper(m_doc.paper, true));
+}
+
+bool DrawingCanvas::paperIsDark() const
+{
+    const QColor shown = paperColor();
+    return drawing::isDarkShade(drawing::Rgba{shown.red(), shown.green(), shown.blue(), 255});
+}
+
+double DrawingCanvas::inkContrast(const QString &paper) const
+{
+    const drawing::Rgba shownPaper = *drawing::parseColor(drawing::displayPaper(paper, dark()));
+    const QString ink = drawing::Stroke{}.color;
+    return drawing::contrast(*drawing::parseColor(dark() ? drawing::darkColor(ink) : ink), shownPaper);
+}
+
 bool DrawingCanvas::dark() const
 {
     return drawing::rendersDark(m_doc.theme, m_appDark);
@@ -342,8 +377,7 @@ void DrawingCanvas::setDocument(drawing::Drawing doc)
     if (!sameFiles)
         m_pictures.clear();
     syncPrepared();
-    m_paperLight = toQColor(drawing::displayPaper(m_doc.paper, false));
-    m_paperDark = toQColor(drawing::displayPaper(m_doc.paper, true));
+    syncPaper();
     m_erasing.clear();
     invalidateCache();
 }
@@ -396,6 +430,7 @@ QString DrawingCanvas::load(const QByteArray &bytes)
     Q_EMIT loadedChanged();
     Q_EMIT backgroundChanged();
     Q_EMIT themeChanged();
+    Q_EMIT paperChanged();
     Q_EMIT renderChanged();
     Q_EMIT contentChanged();
     return status;
@@ -436,6 +471,7 @@ bool DrawingCanvas::takeExternal(const QByteArray &bytes)
         Q_EMIT loadedChanged();
     Q_EMIT backgroundChanged();
     Q_EMIT themeChanged();
+    Q_EMIT paperChanged();
     Q_EMIT renderChanged();
     Q_EMIT contentChanged();
     return true;
@@ -611,6 +647,12 @@ void DrawingCanvas::apply(const Op &op, bool forward)
         renderMaybeChanged(wasDark);
         break;
     }
+    case Op::Paper:
+        m_doc.paper = forward ? op.paperAfter : op.paperBefore;
+        syncPaper();
+        Q_EMIT paperChanged();
+        Q_EMIT renderChanged();
+        break;
     case Op::Elements: {
         // Stamped as a new edit: another device's copy or the Excalidraw plugin merges by version.
         const drawing::EditStamp s = stamp();
@@ -886,6 +928,7 @@ void DrawingCanvas::prepareSnapshot()
     }
     s.paper = paperColor();
     s.dark = dark();
+    s.paperIsDark = paperIsDark();
     s.live = m_livePath;
     s.liveColor = toQColor(drawing::displayInk(m_live, s.dark));
     if (m_gesture == Gesture::Erase || (m_tool == u"eraser" && m_gesture == Gesture::None && m_hover.x() >= 0)) {
@@ -970,9 +1013,9 @@ void DrawingCanvas::paintSnapshot(QPainter *painter, const QSizeF &size) const
         painter->drawPolygon(s.lasso);
     }
     if (s.eraser.x() >= 0) {
-        // A ring that shows on the paper of either theme.
-        painter->setPen(QPen(s.dark ? QColor(220, 224, 232, 160) : QColor(31, 36, 48, 150), 1));
-        painter->setBrush(s.dark ? QColor(0, 0, 0, 90) : QColor(255, 255, 255, 90));
+        // A ring that shows on the paper, whatever its colour.
+        painter->setPen(QPen(s.paperIsDark ? QColor(220, 224, 232, 160) : QColor(31, 36, 48, 150), 1));
+        painter->setBrush(s.paperIsDark ? QColor(0, 0, 0, 90) : QColor(255, 255, 255, 90));
         painter->drawEllipse(s.eraser, s.eraserRadius, s.eraserRadius);
     }
 }

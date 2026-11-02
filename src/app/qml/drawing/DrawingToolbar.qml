@@ -8,7 +8,8 @@ import Brulion
 // the last of rectangle, ellipse, diamond, line and arrow; a second click opens their menu) and
 // text, the current tool's colours and widths (text: its sizes S, M, L, XL), the paper (plain,
 // lines, grid) and its backdrop ("Podkład z obrazu lub PDF…", "Inna strona PDF…", "Usuń podkład"
-// in the paper's menu), its light or dark background ("Tło rysunku": as the app, light, dark),
+// in the paper's menu), its light or dark background ("Tło rysunku": as the app, light, dark,
+// "Kolor tła…": DrawingPaperDialog),
 // "Rysuj palcem" on touch screens, "Pokaż cały rysunek" and Gotowe.
 // Wide windows: everything in one row above the paper. `compact` (phones; at the bottom, in
 // reach of the thumb): the colours and widths behind one swatch (a popup above the bar), the
@@ -60,6 +61,8 @@ Rectangle {
     signal backdropRequested()
     signal backdropPageRequested()
     signal backdropRemoved()
+    /// "Kolor tła…" chosen in the background's menu ("Więcej" on phones).
+    signal paperColorRequested()
 
     /// "Inna strona PDF…": the backdrop is a PDF's page and PDFs can be drawn here.
     readonly property bool backdropPdf: canvas.hasBackdrop && canvas.backdropPage > 0 && canvas.backdropPath !== ""
@@ -597,6 +600,13 @@ Rectangle {
             checked: bar.canvas.theme === "dark"
             onTriggered: bar.canvas.theme = "dark"
         }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "drawingPaperColor"
+            text: qsTr("Background colour…")
+            iconName: "palette"
+            onTriggered: bar.paperColorRequested()
+        }
     }
 
     BMenu {
@@ -645,6 +655,13 @@ Rectangle {
             checkable: true
             checked: bar.canvas.theme === "dark"
             onTriggered: bar.canvas.theme = "dark"
+        }
+        BMenuItem {
+            objectName: "drawingPaperColorItem"
+            text: qsTr("Background colour…")
+            iconName: "palette"
+            enabled: bar.canvas.editable
+            onTriggered: bar.paperColorRequested()
         }
         BMenuSeparator {}
         BMenuItem {
