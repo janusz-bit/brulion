@@ -54,6 +54,7 @@ Gdy coś nie działa, zajrzyj do **Rejestru zdarzeń** (*Ustawienia → Aplikacj
 ## Historia wersji i kosz
 - Zanim notatka zostanie nadpisana, jej poprzednia wersja trafia do historii na urządzeniu. Menu strony → **Historia** pozwala porównać wersje i przywrócić dowolną.
 - Usunięte strony wpadają do **Kosza**, skąd można je odzyskać.
+- **Sprzątanie** (menu **Więcej** i paleta poleceń) pokazuje notatki i załączniki, do których nie prowadzi żaden link, tag ani zapytanie. Wybierasz, co przenieść do kosza: notatki, załączniki albo pojedyncze pliki. Dzienników, szablonów i ulubionych tam nie ma.
 - Dane robocze synchronizacji (historia, ślady scalania) leżą poza folderem notatnika, więc nie synchronizują się między urządzeniami.
 
 Zobacz też [[Format plików|Format plików]].

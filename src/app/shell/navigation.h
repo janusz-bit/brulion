@@ -16,6 +16,7 @@
 //   "importExport" ImportExportView
 //   "history"      HistoryView                   path
 //   "trash"        TrashView
+//   "cleanup"      CleanupView                   kind?, selected? (restored by Back)
 //   "settings"     SettingsView                  section?
 //
 // normalizeRoute() keeps non-empty values (`line` as an int >= 0), maps the alias "home" to

@@ -3,7 +3,7 @@
 # references, JSON names and shapes, and Notebook (a vault opened headless: no folder created,
 # lazy index, the write lock, compare-and-swap edits with retries and History), and shares from
 # other apps (capture text, page title and content, decoding, the platform's JSON), and a block placed
-# after the block that embeds an attachment (embeds.h).
-foreach(_t capture embeds journals pages links itemref json session share indexloader indexcache)
+# after the block that embeds an attachment (embeds.h), and the files nothing refers to (cleanup.h).
+foreach(_t capture cleanup embeds journals pages links itemref json session share indexloader indexcache)
     brulion_add_test(tst_notebook_${_t} SOURCES tst_notebook_${_t}.cpp LIBS brulion_core_notebook)
 endforeach()

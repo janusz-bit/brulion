@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="591"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="592"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
@@ -248,6 +248,49 @@
         <translation>
             <numerusform>+%n more</numerusform>
             <numerusform>+%n more</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>CleanupView</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/CleanupView.qml" line="74"/>
+        <source>%n file(s) moved to the trash</source>
+        <translation>
+            <numerusform>%n file moved to the trash</numerusform>
+            <numerusform>%n files moved to the trash</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/CleanupView.qml" line="80"/>
+        <source>%n open task(s)</source>
+        <translation>
+            <numerusform>%n open task</numerusform>
+            <numerusform>%n open tasks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/CleanupView.qml" line="81"/>
+        <source>%n reminder(s)</source>
+        <translation>
+            <numerusform>%n reminder</numerusform>
+            <numerusform>%n reminders</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/CleanupView.qml" line="143"/>
+        <source>%n selected</source>
+        <translation>
+            <numerusform>%n selected</numerusform>
+            <numerusform>%n selected</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/CleanupView.qml" line="237"/>
+        <source>%n file(s) will be moved to the trash. You can restore them from there.</source>
+        <translation>
+            <numerusform>%n file will be moved to the trash. You can restore it from there.</numerusform>
+            <numerusform>%n files will be moved to the trash. You can restore them from there.</numerusform>
         </translation>
     </message>
 </context>
@@ -935,7 +978,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4000"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4135"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>

@@ -51,7 +51,7 @@ Foldery porządkują strony jak katalogi na dysku: strona `Projekty/Dom` to plik
 - Drzewo samo pokazuje i podświetla otwartą stronę (wyłączysz to w menu „+” → „Pokazuj otwartą stronę”), a „Zwiń wszystkie” zamyka wszystkie foldery. Folder dziennika jest na górze, dni od najnowszego.
 - **Wszystkie strony** w folderze („Pokaż strony folderu” albo okruszki nad stroną) pokazują jego podfoldery nad stronami — tak przeglądasz notatnik folder po folderze także na telefonie. „Z podfolderami” decyduje, czy lista obejmuje też strony podfolderów.
 
-Widoki bez własnego przycisku — centrum synchronizacji, import i eksport, kosz, ustawienia — znajdziesz w menu **Więcej** (⋮) oraz w palecie poleceń. Rejestr zdarzeń jest w *Ustawienia → Aplikacja* i w palecie.
+Widoki bez własnego przycisku — centrum synchronizacji, import i eksport, kosz, sprzątanie, ustawienia — znajdziesz w menu **Więcej** (⋮) oraz w palecie poleceń. Rejestr zdarzeń jest w *Ustawienia → Aplikacja* i w palecie.
 
 ## Wygląd
 W *Ustawienia → Wygląd* dopasujesz Brulion do siebie — osobno na każdym urządzeniu:

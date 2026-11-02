@@ -171,7 +171,7 @@ components — no Material/Fusion look, so all targets look identical.
   Źródło Markdown is the picture bar's Pokaż jako tekst / Pokaż obraz and the note mode is not
   offered (nor in the palette: a picture is no note); always — Nowa strona (Ctrl+N), Paleta
   poleceń (Ctrl+K), **Centrum synchronizacji, Importuj notatki (the import tab), Import i eksport,
-  Kosz (n), Ustawienia (Ctrl+,), O Brulionie**. These destinations have no button of their own: on
+  Kosz (n), Sprzątanie, Ustawienia (Ctrl+,), O Brulionie**. These destinations have no button of their own: on
   phones this menu (and the command palette) is the way to them. A new notebook (at most one
   note) also offers **Importuj notatki** under the empty journal's hint, and onboarding has an
   "Importuj notatki" card that opens the chosen notebook on its import tab
@@ -547,12 +547,45 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder (the system's picker, `FilePicker`; the browser's own, several files at once) / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles, what to export (notebook / folder / page), for the HTML and Pandoc formats **Obrazy z internetu**: Zostaw adresy / Dołącz kopie (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Pobieranie obrazów z internetu (1 z 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Eksportuj…, the progress card, save (the system's save picker, `FilePicker`; the browser's save picker or a download) | `tab?`, `importer?`, `files?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Zastąpiona z wiersza poleceń (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` | — |
+| `cleanup` | `CleanupView` — notes and attachments nothing refers to ("Cleaning up" below) | `kind?`, `selected?` (written when a row opens a file, so Back returns to the same choice) |
 | `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |
 | `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
 | `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path`, `open?` (screenshots: `style`, `more`, `paper`, `theme`, `shape`, `select`, `backdrop` — the page picker of the backdrop's PDF) |
 
 `OnboardingView` is shown before a notebook is open (pick or create a folder, or the sample
 notebook "Przykładowy brulion").
+
+## Cleaning up (`qml/views/CleanupView.qml`)
+
+**Sprzątanie** (Więcej menu and the palette, `go.cleanup`) lists the notes and attachments nothing
+refers to, `notebook::unreferencedFiles` (`notebook/cleanup.h`), computed from the index after it
+settles; it waits for a notebook that is still being indexed, when links are not known yet.
+
+* **What counts as a reference:** a link, an embed or a `((id))` reference from another note (also
+  from a daily note, a template or a note that is itself listed), in the text, the frontmatter or a
+  property; for a note also a tag naming it (`#Dom`, carried by another note or in a ```query
+  filter) and a ```query `ref:` / `page:` filter; for an attachment also its file name in the text
+  of any note, as written or percent-encoded, in any letter case. The index does not read
+  `<img src="…">` or plugins' own syntax, so the name is what protects such a file; the price is that a
+  file named like a linked one in another folder (`old/plan.png` next to `assets/plan.png`) is not
+  offered. Plain-text mentions of a note's title do not count. Links inside native SVG drawings and
+  Obsidian's `.canvas` files are not read, as the index reads them nowhere: a note reached only from
+  one of them is offered. A PDF or picture a drawing lies on is offered when no note links to it: the drawing keeps
+  its raster (docs/SYNTAX.md "Backdrop") and only "Inna strona PDF" needs the file.
+* **Never offered:** daily notes, the templates folder and the journal template, favourites (nobody
+  links to them on purpose), hidden files and folders (a sync client's `.sync_….db`, `.gitignore`).
+* **Choosing:** nothing is ticked at first. A `BSegmented` shows everything, the notes or the
+  attachments; a tap on a row (or its check box) ticks it, "Zaznacz wszystko" ticks what is shown; the row's
+  button opens the file. A row says what deleting it would take away (open tasks, reminders).
+* **Removing:** "Przenieś do kosza" takes what is **ticked and shown** (a ticked note stays when
+  only attachments are shown) after a confirmation, which counts the files holding open tasks or
+  reminders; "Cofnij" in the toast restores all of them, also after leaving the view
+  (`Workspace.deletePages`, `restoreAll`). Nothing is deleted for good here: that is the trash's
+  business. The list follows the index, so a picture left without links by a removed note appears next.
+
+Tests: `tst_notebook_cleanup` (each kind of reference, what is never offered), `tst_shell_workspace_wiring`
+(`unreferencedFiles`), `--selftest-shell` (`checkCleanup`: ticks with real taps and clicks, Back, the filter, the
+confirmation, Undo from another view), `tst_content_qml` (the route without QML warnings).
 
 ## The block editor (heart of the app)
 

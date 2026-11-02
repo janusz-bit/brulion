@@ -2,9 +2,11 @@
 #include "workspace.h"
 
 #include "dates/dates.h"
+#include "notebook/cleanup.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#include <QLocale>
 #include <QMap>
 
 #include <algorithm>
@@ -218,6 +220,57 @@ bool Workspace::emptyTrash()
     m_trashCount = -1;
     Q_EMIT trashChanged();
     return ok;
+}
+
+// ---- Cleaning up --------------------------------------------------------------------------------
+
+QVariantList Workspace::unreferencedFiles() const
+{
+    QVariantList list;
+    if (!ready() || !m_index)
+        return list;
+    const QLocale locale(m_language == u"en" ? QLocale::English : QLocale::Polish);
+    const QDate today = now().date();
+    for (const notebook::UnreferencedFile &file : notebook::unreferencedFiles(*m_index, m_vault->config())) {
+        if (isFavorite(file.path))
+            continue;
+        const std::optional<FileStat> stat = m_vault->stat(file.path);
+        const qint64 size = stat ? stat->size : 0;
+        const QDateTime modified = stat && stat->mtime > 0 ? QDateTime::fromMSecsSinceEpoch(stat->mtime) : QDateTime();
+        list.append(QVariantMap{ { u"path"_s, file.path },
+                                 { u"title"_s, paths::pageTitle(file.path) },
+                                 { u"folder"_s, folderOf(file.path) },
+                                 { u"attachment"_s, file.attachment },
+                                 { u"picture"_s, paths::isPicturePath(file.path) },
+                                 { u"pdf"_s, paths::isPdfPath(file.path) },
+                                 { u"size"_s, size },
+                                 { u"sizeText"_s, locale.formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat) },
+                                 { u"modified"_s, humanOf(modified, m_language, today) },
+                                 { u"openTasks"_s, file.openTasks },
+                                 { u"reminders"_s, file.reminders } });
+    }
+    return list;
+}
+
+QStringList Workspace::deletePages(const QStringList &paths)
+{
+    QStringList trashed;
+    for (const QString &path : paths) {
+        const QString trashPath = deletePage(path);
+        if (!trashPath.isEmpty())
+            trashed.append(trashPath);
+    }
+    return trashed;
+}
+
+int Workspace::restoreAll(const QStringList &trashPaths)
+{
+    int restored = 0;
+    for (const QString &trashPath : trashPaths) {
+        if (!restore(trashPath).isEmpty())
+            ++restored;
+    }
+    return restored;
 }
 
 } // namespace brulion::shell

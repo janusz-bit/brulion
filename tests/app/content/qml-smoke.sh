@@ -2,7 +2,7 @@
 # QML smoke test of the content views (ctest tst_content_qml): opens JournalsView, PageView (a
 # page, a daily note, a missing page, the rename / export dialogs, the side panel, pages named by
 # tags: a tag's page not written yet with its references, one with a sub-tag), AllPagesView,
-# TagsView (all tags, a tag's overview), SearchView, TrashView and HistoryView in the real app with the
+# TagsView (all tags, a tag's overview), SearchView, TrashView, CleanupView and HistoryView in the real app with the
 # sample notebook, desktop and phone sizes, headless, and fails when the app does not start or QML
 # reports a warning or error from one of these files (binding loops, type errors, missing
 # properties, layout loops).
@@ -38,9 +38,11 @@ routes=(
   '{"view":"search","query":"remont"}'
   search
   trash
+  cleanup
+  '{"view":"cleanup","kind":"attachments","selected":["brak.md"]}'
   '{"view":"history","path":"Witaj w Brulionie.md"}'
 )
-pattern='qml/(content/|views/(JournalsView|PageView|AllPagesView|TagsView|SearchView|TrashView|HistoryView))'
+pattern='qml/(content/|views/(JournalsView|PageView|AllPagesView|TagsView|SearchView|TrashView|CleanupView|HistoryView))'
 
 failed=0
 for size in desktop phone; do

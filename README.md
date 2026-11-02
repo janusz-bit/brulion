@@ -201,6 +201,8 @@
   do historii na urządzeniu (przy pisaniu najwyżej co 5 minut, zawsze przed zmianami
   z synchronizacji i importu). Każdą wersję możesz porównać i przywrócić, a usunięte strony
   odzyskać z kosza.
+* **Sprzątanie.** Lista notatek i załączników, do których nie prowadzi żaden link, tag ani
+  zapytanie. Wybierasz, co przenieść do kosza: same notatki, same załączniki albo pojedyncze pliki.
 * **Na start: przykładowy brulion.** Strona „Witaj w Brulionie” pokazuje wszystkie funkcje na
   żywych przykładach — do klikania, edytowania i psucia.
 * **Dokumentacja w środku.** Pełny poradnik po polsku to osobny notatnik „Dokumentacja
@@ -379,7 +381,7 @@ dzienniku i na stronach, także przy przewijaniu, w komórkach tabel (Następna 
 źródle Markdown; dolna nawigacja chowa się, gdy klawiatura jest otwarta (po jej schowaniu wraca,
 a pasek leży tuż nad nią), a okna wysuwane od dołu, menu i
 pola formularzy nigdy nie trafiają pod klawiaturę (także w przeglądarce na telefonie). Widoki
-bez własnego przycisku (centrum synchronizacji, import i eksport, kosz, ustawienia) są w menu
+bez własnego przycisku (centrum synchronizacji, import i eksport, kosz, sprzątanie, ustawienia) są w menu
 *Więcej* (⋮).
 Wszystkie skróty: [docs/UI.md](docs/UI.md#keyboard-shortcuts-desktop).
 
