@@ -15,6 +15,10 @@ import Brulion
 // the app is suspended or closed is saved like any text. Rows and columns are added with
 // the buttons below the grid: always shown on touch screens; with a mouse while the table is
 // selected or a cell is edited (Enter in the last row and Tab in the last cell add a row too).
+// A right-click on a cell, also the one being edited, opens the block menu with the cell's Wiersz
+// and Kolumna submenus (BlockMenu: insert, move, delete, align; on touch UIs through the toolbar's
+// "Więcej"); in a cell Ctrl+Enter inserts a row below and Alt+arrows move its row or column, the
+// cell moving with it. The formulas' references follow their cells (calc/table.h).
 // While a cell is edited the editor knows (BlockEditor.editingTable): on touch UIs its toolbar,
 // docked on the keyboard, offers undo, redo, the next cell, "Więcej" (the table's block menu,
 // BlockEditor.openTableBlockMenu) and "hide keyboard" (nextCell(), undoInCell(), redoInCell(),
@@ -80,6 +84,10 @@ Item {
     FontMetrics { id: headerMetrics; font.family: Theme.fontUi; font.pixelSize: Theme.textBase; font.weight: Theme.weightSemiBold }
     FontMetrics { id: cellMetrics; font.family: Theme.fontUi; font.pixelSize: Theme.textBase }
 
+    /// What the block menu needs of cell (r, c): BlockMenu.openFor().
+    function cellInfo(r, c) {
+        return { row: r, column: c, rows: rows.length, columns: columns, align: aligns[c] || "" }
+    }
     function focusFirstCell() {
         startCell(rows.length > 0 ? 0 : -1, 0)
     }
@@ -374,7 +382,8 @@ Item {
                                 onTapped: (eventPoint) => {
                                     const p = eventPoint.position
                                     if (!root.cellMenu(rowItem.r, cell.c, cellText, p.x - cellText.x, p.y - cellText.y))
-                                        root.block.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition)
+                                        root.block.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition,
+                                                                          root.cellInfo(rowItem.r, cell.c))
                                 }
                             }
                             TapHandler {
@@ -453,6 +462,19 @@ Item {
                                         })
                                     }
                                     Component.onDestruction: if (root.cellInput === input) root.cellInput = null
+                                    /// Commit the text, do `edit` to the table (its rows are made anew),
+                                    /// then go on editing cell (r, c).
+                                    function reshape(edit, r, c) {
+                                        if (done)
+                                            return
+                                        EditorInput.commitPreedit(input)
+                                        done = true
+                                        const view = root
+                                        view.commit(rowItem.r, cell.c, text)
+                                        view.finish()
+                                        edit(view.block.controller, view.block.index)
+                                        Qt.callLater(() => { if (view) view.startCell(r, c) })
+                                    }
                                     function next() {
                                         const r = rowItem.r
                                         const c = cell.c
@@ -482,10 +504,32 @@ Item {
                                         leave()
                                         root.stayCurrent()
                                     }
+                                    // Alt+←/→ are the app's Back and Forward elsewhere.
+                                    Keys.onShortcutOverride: (event) => {
+                                        event.accepted = (event.modifiers & Qt.AltModifier) !== 0
+                                                         && (event.key === Qt.Key_Left || event.key === Qt.Key_Right
+                                                             || event.key === Qt.Key_Up || event.key === Qt.Key_Down)
+                                    }
                                     Keys.onPressed: (event) => {
                                         const r = rowItem.r
                                         const c = cell.c
-                                        if (event.key === Qt.Key_Escape) {
+                                        if ((event.modifiers & Qt.AltModifier) && !(event.modifiers & Qt.ControlModifier)
+                                                && (event.key === Qt.Key_Up || event.key === Qt.Key_Down)) {
+                                            const to = event.key === Qt.Key_Up ? r - 1 : r + 1
+                                            if (r >= 0 && to >= 0 && to < root.rows.length)
+                                                reshape((controller, block) => controller.moveTableRow(block, r, to), to, c)
+                                            event.accepted = true
+                                        } else if ((event.modifiers & Qt.AltModifier) && !(event.modifiers & Qt.ControlModifier)
+                                                   && (event.key === Qt.Key_Left || event.key === Qt.Key_Right)) {
+                                            const to = event.key === Qt.Key_Left ? c - 1 : c + 1
+                                            if (to >= 0 && to < root.columns)
+                                                reshape((controller, block) => controller.moveTableColumn(block, c, to), r, to)
+                                            event.accepted = true
+                                        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                                                   && (event.modifiers & Qt.ControlModifier)) {
+                                            reshape((controller, block) => controller.insertTableRow(block, r + 1), r + 1, c)
+                                            event.accepted = true
+                                        } else if (event.key === Qt.Key_Escape) {
                                             done = true
                                             root.finish()
                                             // Cancel: the cell's typing is one undo step, undone
@@ -522,6 +566,21 @@ Item {
                                             event.accepted = true
                                         }
                                     }
+                                }
+                            }
+                            // A right-click on the cell being edited: the field would take the
+                            // press from a handler, an area on top of it takes only that button.
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: cell.editingCell
+                                acceptedButtons: Qt.RightButton
+                                onClicked: (mouse) => {
+                                    const view = root
+                                    const info = view.cellInfo(rowItem.r, cell.c)
+                                    const scene = mapToItem(null, mouse.x, mouse.y)
+                                    view.closeCell()
+                                    view.stayCurrent()
+                                    view.block.editor.openBlockMenuAt(view.block.index, scene, info)
                                 }
                             }
                         }

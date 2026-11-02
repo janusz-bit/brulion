@@ -3168,43 +3168,82 @@ void PageController::cancelTableCell(int row, int tableRow, int column)
         undo();
 }
 
-void PageController::addTableRow(int row)
+/// `edit` on the table of block `row`, written back when it says it changed something.
+template<typename Edit>
+void PageController::editTable(int row, Edit edit)
 {
     if (!validRow(row))
         return;
     auto model = calc::parseTable(m_model->document().at(row).body);
-    if (!model)
-        return;
-    QStringList cells;
-    for (qsizetype c = 0; c < model->header.size(); ++c)
-        cells.append(QString());
-    model->rows.append(cells);
-    editBody(row, calc::serializeTable(*model));
+    if (model && edit(*model))
+        editBody(row, calc::serializeTable(*model));
+}
+
+QString PageController::newColumnHeader(const calc::TableModel &model) const
+{
+    const QString name = m_english ? u"Column %1"_s : u"Kolumna %1"_s;
+    int n = int(model.header.size()) + 1;
+    while (model.header.contains(name.arg(n), Qt::CaseInsensitive)) // [Kolumna 3] names one column
+        ++n;
+    return name.arg(n);
+}
+
+void PageController::addTableRow(int row)
+{
+    editTable(row, [](calc::TableModel &m) { return calc::insertTableRow(m, int(m.rows.size())); });
 }
 
 void PageController::addTableColumn(int row)
 {
-    if (!validRow(row))
-        return;
-    auto model = calc::parseTable(m_model->document().at(row).body);
-    if (!model)
-        return;
-    model->header.append((m_english ? u"Column %1"_s : u"Kolumna %1"_s).arg(model->header.size() + 1));
-    model->aligns.append(calc::TableAlign::None);
-    for (QStringList &r : model->rows)
-        r.append(QString());
-    editBody(row, calc::serializeTable(*model));
+    editTable(row, [this](calc::TableModel &m) {
+        return calc::insertTableColumn(m, int(m.header.size()), newColumnHeader(m));
+    });
 }
 
 void PageController::removeTableRow(int row, int tableRow)
 {
-    if (!validRow(row))
-        return;
-    auto model = calc::parseTable(m_model->document().at(row).body);
-    if (!model || tableRow < 0 || tableRow >= model->rows.size())
-        return;
-    model->rows.removeAt(tableRow);
-    editBody(row, calc::serializeTable(*model));
+    editTable(row, [=](calc::TableModel &m) { return calc::removeTableRow(m, tableRow); });
+}
+
+void PageController::insertTableRow(int row, int at)
+{
+    editTable(row, [=](calc::TableModel &m) { return calc::insertTableRow(m, at); });
+}
+
+void PageController::moveTableRow(int row, int from, int to)
+{
+    editTable(row, [=](calc::TableModel &m) { return calc::moveTableRow(m, from, to); });
+}
+
+void PageController::insertTableColumn(int row, int at)
+{
+    editTable(row, [=, this](calc::TableModel &m) { return calc::insertTableColumn(m, at, newColumnHeader(m)); });
+}
+
+void PageController::removeTableColumn(int row, int column)
+{
+    editTable(row, [=](calc::TableModel &m) { return calc::removeTableColumn(m, column); });
+}
+
+void PageController::moveTableColumn(int row, int from, int to)
+{
+    editTable(row, [=](calc::TableModel &m) { return calc::moveTableColumn(m, from, to); });
+}
+
+void PageController::setTableColumnAlign(int row, int column, const QString &align)
+{
+    editTable(row, [&](calc::TableModel &m) {
+        if (column < 0 || column >= m.aligns.size())
+            return false;
+        const calc::TableAlign chosen = align == u"left"     ? calc::TableAlign::Left
+                                        : align == u"center" ? calc::TableAlign::Center
+                                        : align == u"right"  ? calc::TableAlign::Right
+                                                             : calc::TableAlign::None;
+        if (m.aligns.at(column) == chosen)
+            return false; // not even the table's layout changes
+        m.aligns[column] = chosen;
+        return true;
+    });
 }
 
 // --- Links ------------------------------------------------------------------------------------------------

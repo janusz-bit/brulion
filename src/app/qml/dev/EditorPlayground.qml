@@ -24,7 +24,8 @@ import Brulion
 // keyboard (keyboardTest(): KeyboardInsets.simulated) and exits; `blocklinks` checks copying links
 // to blocks and headings and following them (blockLinksTest()) and exits; `refreshtest` checks
 // that views follow what they depend on (RefreshSelfTest.qml) and exits; `datechips` checks the
-// menu of date chips with real input (DateChipSelfTest.qml) and exits; `linkpartstest` checks the
+// menu of date chips with real input (DateChipSelfTest.qml) and exits; `tabletest` checks a
+// table's rows and columns with real input (TableSelfTest.qml) and exits; `linkpartstest` checks the
 // path parts of [[Folder/Page]] links with real input (LinkPartsSelfTest.qml) and exits, `linkparts`
 // / `linkparts-menu` show them (a part hovered / a folder part's menu); `propstest` checks the
 // page properties panel with real input (PropertiesSelfTest.qml) and exits; `properties` /
@@ -315,6 +316,17 @@ ApplicationWindow {
         id: dateChipTestLoader
         active: false
         sourceComponent: DateChipSelfTest {
+            window: window
+            editor: editor
+            page: page
+            host: host
+        }
+    }
+    // ---- A table's rows and columns (`--editor-script tabletest`) --------------------------------
+    Loader {
+        id: tableTestLoader
+        active: false
+        sourceComponent: TableSelfTest {
             window: window
             editor: editor
             page: page
@@ -3453,6 +3465,9 @@ ApplicationWindow {
             break
         case "datechips":
             dateChipTestLoader.active = true
+            break
+        case "tabletest":
+            tableTestLoader.active = true
             break
         case "propstest":
             propertiesTestLoader.active = true

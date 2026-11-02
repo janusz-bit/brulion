@@ -65,6 +65,8 @@ Message messageFor(CalcErrorCode code)
         return {u"Błąd w komórce %1", u"Error in cell %1"};
     case CalcErrorCode::RefOutside:
         return {u"Odwołanie poza tabelą: %1", u"Reference outside the table: %1"};
+    case CalcErrorCode::RefDeleted:
+        return {u"Odwołanie do usuniętego wiersza lub kolumny", u"Reference to a deleted row or column"};
     case CalcErrorCode::Domain:
         return {u"Argument poza dziedziną funkcji %1", u"Argument out of range for %1"};
     case CalcErrorCode::UnterminatedString:

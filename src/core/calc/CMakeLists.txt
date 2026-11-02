@@ -6,5 +6,5 @@ brulion_add_core_module(calc
         calc.h calclocale.h errors.h numbers.h table.h units.h value.h
         ast_p.h blocks_p.h evaluator_p.h lexer_p.h parser_p.h util_p.h
         blocks.cpp calc.cpp errors.cpp evaluator.cpp lexer.cpp numbers.cpp pagescope.cpp parser.cpp
-        table.cpp tableeval.cpp units.cpp value.cpp
+        table.cpp tableedit.cpp tableeval.cpp units.cpp value.cpp
     DEPS text dates)

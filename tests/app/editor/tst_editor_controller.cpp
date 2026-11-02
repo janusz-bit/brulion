@@ -4041,6 +4041,114 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.text(), u"Przed\n\n| Pozycja | Cena |\n| --- | ---: |\n| Płytki | 89 |\n| Suma | =sum(above) |\n\nPo\n"_s);
     }
 
+    void tableRowsAndColumnsInPlace()
+    {
+        const QString content = u"Przed\n\n| Pozycja | Cena |\n| --- | ---: |\n| Płytki | 89 |\n| Żółta farba | =B1*2 |\n\nPo\n"_s;
+        Fixture f(content);
+        const auto data = [&] { return f.role(1, "tableData").toMap(); };
+        const auto rowTexts = [&](int r) {
+            QStringList out;
+            for (const QVariant &cell : data().value(u"rows"_s).toList().at(r).toList())
+                out.append(cell.toMap().value(u"text"_s).toString());
+            return out;
+        };
+
+        f.page.insertTableRow(1, 0);
+        QCOMPARE(rowTexts(0), QStringList({QString(), QString()}));
+        QCOMPARE(rowTexts(2), QStringList({u"Żółta farba"_s, u"=B2*2"_s})); // follows "Płytki"
+        QCOMPARE(data().value(u"rows"_s).toList().at(2).toList().at(1).toMap().value(u"display"_s).toString(), u"178"_s);
+
+        f.page.moveTableRow(1, 1, 2);
+        QCOMPARE(rowTexts(1), QStringList({u"Żółta farba"_s, u"=B3*2"_s}));
+        QCOMPARE(rowTexts(2), QStringList({u"Płytki"_s, u"89"_s}));
+
+        f.page.insertTableColumn(1, 0);
+        QCOMPARE(data().value(u"header"_s).toStringList(), QStringList({u"Kolumna 3"_s, u"Pozycja"_s, u"Cena"_s}));
+        QCOMPARE(rowTexts(1), QStringList({QString(), u"Żółta farba"_s, u"=C3*2"_s}));
+
+        f.page.moveTableColumn(1, 0, 2);
+        QCOMPARE(data().value(u"header"_s).toStringList(), QStringList({u"Pozycja"_s, u"Cena"_s, u"Kolumna 3"_s}));
+        QCOMPARE(data().value(u"aligns"_s).toStringList(), QStringList({QString(), u"right"_s, QString()}));
+        QCOMPARE(rowTexts(1), QStringList({u"Żółta farba"_s, u"=B3*2"_s, QString()}));
+
+        // A name that is free: "Kolumna 3" is taken after one column less.
+        f.page.removeTableColumn(1, 0);
+        QCOMPARE(data().value(u"header"_s).toStringList(), QStringList({u"Cena"_s, u"Kolumna 3"_s}));
+        f.page.addTableColumn(1);
+        QCOMPARE(data().value(u"header"_s).toStringList(), QStringList({u"Cena"_s, u"Kolumna 3"_s, u"Kolumna 4"_s}));
+
+        f.page.setTableColumnAlign(1, 1, u"center"_s);
+        QCOMPARE(data().value(u"aligns"_s).toStringList(), QStringList({u"right"_s, u"center"_s, QString()}));
+        f.page.setTableColumnAlign(1, 1, u"center"_s); // nothing new: no undo step
+        f.page.setTableColumnAlign(1, 0, QString());
+        QCOMPARE(data().value(u"aligns"_s).toStringList(), QStringList({QString(), u"center"_s, QString()}));
+
+        // Out of range: nothing, and no undo step.
+        f.page.insertTableRow(1, 99);
+        f.page.moveTableRow(1, 0, 99);
+        f.page.insertTableColumn(1, 99);
+        f.page.removeTableColumn(1, 99);
+        f.page.moveTableColumn(1, 0, 99);
+        f.page.setTableColumnAlign(1, 99, u"left"_s);
+        f.page.insertTableRow(0, 0); // a paragraph: nothing
+
+        QVERIFY(f.text().startsWith(u"Przed\n\n"_s));
+        QVERIFY(f.text().endsWith(u"\n\nPo\n"_s));
+        for (int step = 0; step < 8; ++step) // each edit above is one step
+            f.page.undo();
+        QCOMPARE(f.text(), content);
+        for (int step = 0; step < 8; ++step)
+            f.page.redo();
+        QCOMPARE(data().value(u"aligns"_s).toStringList(), QStringList({QString(), u"center"_s, QString()}));
+    }
+
+    void theAlignmentAColumnHasChangesNothing()
+    {
+        const QString content = u"| A | B |\n|---|---:|\n| 1 | 2 |\n"_s; // not as Brulion lays tables out
+        Fixture f(content, 0);
+        f.page.setTableColumnAlign(0, 1, u"right"_s);
+        f.page.setTableColumnAlign(0, 0, QString());
+        QCOMPARE(f.text(), content);
+        QVERIFY(!f.page.canUndo());
+    }
+
+    void aTableKeepsItsLastColumnAndStaysATableWithoutRows()
+    {
+        const QString content = u"| Jedna |\n| --- |\n| ą |\n"_s;
+        Fixture f(content, 0);
+        f.page.removeTableColumn(0, 0);
+        QCOMPARE(f.text(), content);
+        f.page.removeTableRow(0, 0);
+        QCOMPARE(f.role(0, "view").toString(), u"table"_s);
+        QCOMPARE(f.role(0, "tableData").toMap().value(u"rows"_s).toList().size(), 0);
+        f.page.insertTableRow(0, 0);
+        QCOMPARE(f.role(0, "tableData").toMap().value(u"rows"_s).toList().size(), 1);
+    }
+
+    void aTableInCrlfNoteKeepsItsLineEndings()
+    {
+        Fixture f(u"Przed\r\n\r\n| A | B |\r\n| --- | --- |\r\n| 1 | 2 |\r\n\r\nPo\r\n"_s);
+        f.page.moveTableColumn(1, 0, 1);
+        const QString saved = f.text();
+        QVERIFY2(!saved.contains(QRegularExpression(u"[^\\r]\\n"_s)), qPrintable(saved));
+        QVERIFY(saved.contains(u"| B   | A   |"_s));
+    }
+
+    void typingAfterAStructuralEditIsItsOwnStep()
+    {
+        Fixture f(u"| A | B |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |\n"_s, 0);
+        f.page.setTableCell(0, 0, 0, u"1a"_s, true);
+        f.page.moveTableRow(0, 0, 1);
+        f.page.setTableCell(0, 0, 0, u"3a"_s, true);
+        f.page.cancelTableCell(0, 0, 0);
+        const auto first = [&] {
+            return f.role(0, "tableData").toMap().value(u"rows"_s).toList().at(0).toList().at(0).toMap().value(u"text"_s).toString();
+        };
+        QCOMPARE(first(), u"3"_s); // only the typing went, the row stays moved
+        f.page.undo();
+        QCOMPARE(first(), u"1a"_s);
+    }
+
     void tableCellsAreRendered()
     {
         Fixture f(u"| Rzecz | Cena |\n| --- | ---: |\n| **Płytki** z [[Inna]] #zakupy | 89 |\n| <b>x</b> ⏰ 2026-10-16 09:00 | =2*3 |\n| Brak [[Nie ma]] | =1+ |\n"_s);

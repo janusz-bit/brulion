@@ -19,6 +19,17 @@ QString slice(const QString &content, const TableSpan &t)
     return content.mid(t.from, t.to - t.from);
 }
 
+enum class Op { InsertRow, RemoveRow, MoveRow, InsertColumn, RemoveColumn, MoveColumn };
+
+TableModel shop()
+{
+    TableModel m;
+    m.header = {u"Pozycja"_s, u"Cena"_s, u"Ilość"_s};
+    m.aligns = {L, R, C};
+    m.rows = {{u"Płytki"_s, u"89"_s, u"2"_s}, {u"Żółta farba"_s, u"40"_s, u"1"_s}, {u"Wałek"_s, u"12,50"_s, u"3"_s}};
+    return m;
+}
+
 QList<QList<int>> lineRanges(const QList<TableSpan> &tables)
 {
     QList<QList<int>> out;
@@ -364,6 +375,236 @@ private Q_SLOTS:
         QCOMPARE(columnName(INT_MAX), u"FXSHRXX"_s);
         QCOMPARE(columnName(-1), QString());
         QCOMPARE(cellName(INT_MAX, 0), u"A2147483648"_s);
+    }
+
+    // --- rows and columns added, deleted and moved ------------------------------------------------
+
+    void rowEdits()
+    {
+        TableModel m = shop();
+        QVERIFY(insertTableRow(m, 1));
+        QCOMPARE(m.rows.size(), 4);
+        QCOMPARE(m.rows.at(0).at(0), u"Płytki"_s);
+        QCOMPARE(m.rows.at(1), QStringList({QString(), QString(), QString()}));
+        QCOMPARE(m.rows.at(2).at(0), u"Żółta farba"_s);
+        QVERIFY(insertTableRow(m, 4)); // at the end
+        QCOMPARE(m.rows.size(), 5);
+        QVERIFY(removeTableRow(m, 4));
+        QVERIFY(removeTableRow(m, 1));
+        QCOMPARE(m, shop());
+        QVERIFY(moveTableRow(m, 0, 2));
+        QCOMPARE(m.rows.at(0).at(0), u"Żółta farba"_s);
+        QCOMPARE(m.rows.at(2).at(0), u"Płytki"_s);
+        QVERIFY(moveTableRow(m, 2, 0));
+        QCOMPARE(m, shop());
+    }
+
+    void columnEdits()
+    {
+        TableModel m = shop();
+        QVERIFY(insertTableColumn(m, 1, u"Sklep"_s));
+        QCOMPARE(m.header, QStringList({u"Pozycja"_s, u"Sklep"_s, u"Cena"_s, u"Ilość"_s}));
+        QCOMPARE(m.aligns, QList<TableAlign>({L, N, R, C}));
+        QCOMPARE(m.rows.at(0), QStringList({u"Płytki"_s, QString(), u"89"_s, u"2"_s}));
+        QVERIFY(removeTableColumn(m, 1));
+        QCOMPARE(m, shop());
+        QVERIFY(moveTableColumn(m, 2, 0));
+        QCOMPARE(m.header, QStringList({u"Ilość"_s, u"Pozycja"_s, u"Cena"_s}));
+        QCOMPARE(m.aligns, QList<TableAlign>({C, L, R}));
+        QCOMPARE(m.rows.at(1), QStringList({u"1"_s, u"Żółta farba"_s, u"40"_s}));
+        QVERIFY(moveTableColumn(m, 0, 2));
+        QCOMPARE(m, shop());
+    }
+
+    void editsOutOfRangeChangeNothing()
+    {
+        TableModel m = shop();
+        const TableModel before = m;
+        QVERIFY(!insertTableRow(m, -1));
+        QVERIFY(!insertTableRow(m, 4));
+        QVERIFY(!removeTableRow(m, -1));
+        QVERIFY(!removeTableRow(m, 3));
+        QVERIFY(!moveTableRow(m, 0, 0));
+        QVERIFY(!moveTableRow(m, -1, 0));
+        QVERIFY(!moveTableRow(m, 0, 3));
+        QVERIFY(!insertTableColumn(m, -1, u"x"_s));
+        QVERIFY(!insertTableColumn(m, 4, u"x"_s));
+        QVERIFY(!removeTableColumn(m, 3));
+        QVERIFY(!moveTableColumn(m, 1, 1));
+        QVERIFY(!moveTableColumn(m, 0, 3));
+        QCOMPARE(m, before);
+    }
+
+    void theOnlyColumnStaysTheLastRowGoes()
+    {
+        TableModel m;
+        m.header = {u"Jedna"_s};
+        m.aligns = {N};
+        m.rows = {{u"ą"_s}};
+        QVERIFY(!removeTableColumn(m, 0));
+        QVERIFY(removeTableRow(m, 0));
+        QVERIFY(m.rows.isEmpty());
+        const std::optional<TableModel> read = brulion::calc::parseTable(brulion::calc::serializeTable(m));
+        QVERIFY(read.has_value()); // still a table: a header and its delimiter row
+        QCOMPARE(read->header, m.header);
+        QVERIFY(insertTableRow(m, 0));
+        QCOMPARE(m.rows, QList<QStringList>({{QString()}}));
+    }
+
+    void shortRowsAreFilledBeforeAnEdit()
+    {
+        TableModel m;
+        m.header = {u"A"_s, u"B"_s};
+        m.rows = {{u"1"_s}};
+        QVERIFY(insertTableColumn(m, 1, u"C"_s));
+        QCOMPARE(m.rows.at(0), QStringList({u"1"_s, QString(), QString()}));
+        QCOMPARE(m.aligns.size(), 3);
+    }
+
+    void formulasFollowTheirCells_data()
+    {
+        QTest::addColumn<int>("op");
+        QTest::addColumn<int>("a");
+        QTest::addColumn<int>("b");
+        QTest::addColumn<QString>("formula");
+        QTest::addColumn<QString>("expected");
+
+        // The table has 3 columns; the formula stands in row 5, column C, away from every edit
+        // (rows 1-4 are numbers), so only what it names changes.
+        const auto row = [](const char *name, Op op, int a, int b, const QString &f, const QString &e) {
+            QTest::newRow(name) << int(op) << a << b << f << e;
+        };
+        row("row inserted above a cell", Op::InsertRow, 1, 0, u"=A2*2"_s, u"=A3*2"_s);
+        row("row inserted below a cell", Op::InsertRow, 2, 0, u"=A2*2"_s, u"=A2*2"_s);
+        row("row inserted at a cell moves it", Op::InsertRow, 0, 0, u"=A1+B4"_s, u"=A2+B5"_s);
+        row("row inserted inside a range grows it", Op::InsertRow, 1, 0, u"=sum(A1:A3)"_s, u"=sum(A1:A4)"_s);
+        row("row inserted before a range moves it", Op::InsertRow, 0, 0, u"=sum(A1:A3)"_s, u"=sum(A2:A4)"_s);
+        row("row inserted after a range: as written", Op::InsertRow, 3, 0, u"=sum( A1 : A3 )"_s, u"=sum( A1 : A3 )"_s);
+        row("row and a whole column", Op::InsertRow, 0, 0, u"=sum(A:B)+1"_s, u"=sum(A:B)+1"_s);
+        row("row deleted above a cell", Op::RemoveRow, 0, 0, u"=A3"_s, u"=A2"_s);
+        row("the cell's row deleted", Op::RemoveRow, 1, 0, u"=1+A2*B3"_s, u"=1+REF!*B2"_s);
+        row("row deleted inside a range", Op::RemoveRow, 1, 0, u"=sum(A1:A3)"_s, u"=sum(A1:A2)"_s);
+        row("a range's first row deleted", Op::RemoveRow, 0, 0, u"=sum(A1:A3)"_s, u"=sum(A1:A2)"_s);
+        row("a range's last row deleted", Op::RemoveRow, 2, 0, u"=sum(A1:A3)"_s, u"=sum(A1:A2)"_s);
+        row("a range of one row deleted", Op::RemoveRow, 1, 0, u"=sum(A2:B2)"_s, u"=sum(REF!)"_s);
+        row("a row moved: a cell follows", Op::MoveRow, 0, 2, u"=A1+A2+A3+A4"_s, u"=A3+A1+A2+A4"_s);
+        row("a row moved up: a cell follows", Op::MoveRow, 2, 0, u"=A1+A2+A3+A4"_s, u"=A2+A3+A1+A4"_s);
+        row("a row moved: a range over several stays", Op::MoveRow, 0, 1, u"=sum(A1:A3)"_s, u"=sum(A1:A3)"_s);
+        row("a row moved: a range in it follows", Op::MoveRow, 0, 1, u"=sum(A1:B1)"_s, u"=sum(A2:B2)"_s);
+        row("column inserted", Op::InsertColumn, 1, 0, u"=A1+B1+[Cena]"_s, u"=A1+C1+[Cena]"_s);
+        row("column inserted inside a range", Op::InsertColumn, 1, 0, u"=sum(A1:B2)"_s, u"=sum(A1:C2)"_s);
+        row("column inserted: a whole column", Op::InsertColumn, 0, 0, u"=sum(B:B)"_s, u"=sum(C:C)"_s);
+        row("column deleted", Op::RemoveColumn, 0, 0, u"=A1+B1"_s, u"=REF!+A1"_s);
+        row("a whole column deleted", Op::RemoveColumn, 1, 0, u"=sum(B:B)+sum(A:B)"_s, u"=sum(REF!)+sum(A:A)"_s);
+        row("a column moved: all follow", Op::MoveColumn, 0, 1, u"=A1+B1+sum(A:A)+sum(B1:B2)"_s,
+            u"=B1+A1+sum(B:B)+sum(A1:A2)"_s);
+        row("a column moved: a range over several stays", Op::MoveColumn, 0, 1, u"=sum(A1:B2)"_s, u"=sum(A1:B2)"_s);
+
+        row("a reversed range is put in order", Op::InsertRow, 0, 0, u"=sum(A3:A1)"_s, u"=sum(A2:A4)"_s);
+        row("already deleted stays deleted", Op::InsertRow, 0, 0, u"=REF!+A1"_s, u"=REF!+A2"_s);
+        row("a string is no reference", Op::InsertRow, 0, 0, uR"(=if(A1 > 0, "A1", "ą"))"_s, uR"(=if(A2 > 0, "A1", "ą"))"_s);
+        row("a function is no reference", Op::InsertRow, 0, 0, u"=LOG10(A1)"_s, u"=LOG10(A2)"_s);
+        row("lower case is no reference", Op::InsertRow, 0, 0, u"=a1*2"_s, u"=a1*2"_s);
+        row("a header named like a cell", Op::InsertRow, 0, 0, u"=[D1]+A1"_s, u"=[D1]+A2"_s);
+        row("relative words stay", Op::InsertRow, 0, 0, u"=sum(above)+left"_s, u"=sum(above)+left"_s);
+        row("a comment stays", Op::InsertRow, 0, 0, u"=A1 # A1 tu"_s, u"=A2 # A1 tu"_s);
+        row("up to a syntax error", Op::InsertRow, 0, 0, u"=A1+"_s, u"=A2+"_s);
+        row("decimal comma stays", Op::InsertRow, 0, 0, u"=A1*1,5"_s, u"=A2*1,5"_s);
+        row("Polish variable next to a cell", Op::InsertRow, 0, 0, u"=A1*cenaŻ"_s, u"=A2*cenaŻ"_s);
+    }
+
+    void formulasFollowTheirCells()
+    {
+        QFETCH(int, op);
+        QFETCH(int, a);
+        QFETCH(int, b);
+        QFETCH(QString, formula);
+        QFETCH(QString, expected);
+
+        TableModel m;
+        m.header = {u"Cena"_s, u"D1"_s, u"Razem"_s};
+        m.aligns = {N, N, N};
+        for (int r = 0; r < 4; ++r)
+            m.rows.append({QString::number(r + 1), QString::number(10 * (r + 1)), QString()});
+        m.rows.append({QString(), QString(), formula});
+        // The formula's own place, after the edit (a column edit in the last column would touch it).
+        int formulaRow = 4;
+        int formulaColumn = 2;
+        switch (static_cast<Op>(op)) {
+        case Op::InsertRow:
+            QVERIFY(insertTableRow(m, a));
+            ++formulaRow;
+            break;
+        case Op::RemoveRow:
+            QVERIFY(removeTableRow(m, a));
+            --formulaRow;
+            break;
+        case Op::MoveRow:
+            QVERIFY(moveTableRow(m, a, b));
+            break;
+        case Op::InsertColumn:
+            QVERIFY(insertTableColumn(m, a, u"Nowa"_s));
+            ++formulaColumn;
+            break;
+        case Op::RemoveColumn:
+            QVERIFY(removeTableColumn(m, a));
+            --formulaColumn;
+            break;
+        case Op::MoveColumn:
+            QVERIFY(moveTableColumn(m, a, b));
+            break;
+        }
+        QCOMPARE(m.rows.at(formulaRow).at(formulaColumn), expected);
+    }
+
+    void resultsStayTheSameAfterEdits()
+    {
+        TableModel m;
+        m.header = {u"Cena"_s, u"Ilość"_s, u"Razem"_s};
+        m.aligns = {N, N, N};
+        m.rows = {{u"10"_s, u"2"_s, u"=A1*B1"_s},
+                  {u"5"_s, u"3"_s, u"=A2*B2"_s},
+                  {QString(), QString(), u"=sum(C1:C2)"_s}};
+        const auto total = [](const TableModel &t, int row, int column) {
+            return evaluateTable(t).values.at(row).at(column);
+        };
+        QCOMPARE(total(m, 2, 2), u"35"_s);
+        QVERIFY(insertTableRow(m, 1));
+        QCOMPARE(m.rows.at(2).at(2), u"=A3*B3"_s);
+        QCOMPARE(total(m, 3, 2), u"35"_s);
+        QVERIFY(moveTableRow(m, 0, 2)); // over the new row and the second one: inside the sum
+        QCOMPARE(total(m, 3, 2), u"35"_s);
+        QVERIFY(insertTableColumn(m, 0, u"Nowa"_s));
+        QCOMPARE(total(m, 3, 3), u"35"_s);
+        QVERIFY(moveTableColumn(m, 0, 2));
+        QCOMPARE(total(m, 3, 3), u"35"_s);
+    }
+
+    void aDeletedReferenceShowsAnError()
+    {
+        TableModel m;
+        m.header = {u"Cena"_s, u"Razem"_s};
+        m.aligns = {N, N};
+        m.rows = {{u"10"_s, QString()}, {u"5"_s, u"=A1+A2"_s}};
+        QVERIFY(removeTableRow(m, 0));
+        QCOMPARE(m.rows.at(0).at(1), u"=REF!+A1"_s);
+        const TableEval eval = evaluateTable(m, CalcLocale::Polish);
+        QCOMPARE(eval.values.at(0).at(1), kErrorMarker.toString());
+        QCOMPARE(eval.errors.at(0).at(1), u"Odwołanie do usuniętego wiersza lub kolumny"_s);
+        QCOMPARE(evaluateTable(m, CalcLocale::English).errors.at(0).at(1), u"Reference to a deleted row or column"_s);
+    }
+
+    void aPageVariableCalledRefStaysAVariable()
+    {
+        TableModel m;
+        m.header = {u"A"_s};
+        m.aligns = {N};
+        m.rows = {{u"=REF*2"_s}, {u"=REF!"_s}};
+        Scope scope;
+        scope.set(u"REF"_s, Value::number(3));
+        const TableEval eval = evaluateTable(m, CalcLocale::Polish, scope);
+        QCOMPARE(eval.values.at(0).at(0), u"6"_s);
+        QCOMPARE(eval.values.at(1).at(0), kErrorMarker.toString());
     }
 };
 

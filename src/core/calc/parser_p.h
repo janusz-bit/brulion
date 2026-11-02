@@ -21,7 +21,8 @@ namespace brulion::calc {
 
 /// A table reference found in a formula (tables only).
 struct TableRef {
-    enum class Kind { Cell, Range, Header, Direction };
+    /// Deleted: `REF!`, what a reference to a deleted row or column becomes (calc/table.h).
+    enum class Kind { Cell, Range, Header, Direction, Deleted };
     enum class Direction { Above, Below, Left, Right };
 
     Kind kind = Kind::Cell;
@@ -31,6 +32,8 @@ struct TableRef {
     int col2 = 0;
     Direction direction = Direction::Above;
     QString text; ///< as written ("A1", "A1:B3", "[Cena]", "above")
+    qsizetype pos = 0;    ///< Cell and Range: offset in the parsed source
+    qsizetype length = 0; ///< Cell and Range: length in the parsed source
 };
 
 /// One statement of a line (statements are separated by ';').

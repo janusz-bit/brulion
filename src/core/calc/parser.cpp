@@ -722,8 +722,16 @@ private:
         const Token &t = *peek();
         if (peekKind(TokenKind::LParen, 1))
             return nullptr; // a function call (LOG10(…))
+        if (t.text == u"REF" && peekOperator(u"!", 1)) {
+            TableRef ref;
+            ref.kind = TableRef::Kind::Deleted;
+            ref.text = t.text + u'!';
+            m_pos += 2;
+            return refNode(std::move(ref));
+        }
         if (const auto cell = parseCellRef(t.text)) {
             TableRef ref;
+            ref.pos = t.pos;
             if (rangeColonFollows()) {
                 if (const auto end = parseCellRef(peek(2)->text)) {
                     ref.kind = TableRef::Kind::Range;
@@ -732,6 +740,7 @@ private:
                     ref.row2 = end->first;
                     ref.col2 = end->second;
                     ref.text = t.text + u':' + peek(2)->text;
+                    ref.length = peek(2)->pos + peek(2)->length - t.pos;
                     m_pos += 3;
                     return refNode(std::move(ref));
                 }
@@ -740,12 +749,15 @@ private:
             ref.row1 = ref.row2 = cell->first;
             ref.col1 = ref.col2 = cell->second;
             ref.text = t.text;
+            ref.length = t.length;
             ++m_pos;
             return refNode(std::move(ref));
         }
         if (isUpperLetters(t.text, 3) && rangeColonFollows() && isUpperLetters(peek(2)->text, 3)) {
             TableRef ref;
             ref.kind = TableRef::Kind::Range;
+            ref.pos = t.pos;
+            ref.length = peek(2)->pos + peek(2)->length - t.pos;
             ref.row1 = 0;
             ref.row2 = INT_MAX;
             ref.col1 = columnIndexOf(t.text);

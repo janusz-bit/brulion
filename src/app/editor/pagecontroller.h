@@ -86,6 +86,10 @@ namespace brulion::platform {
 struct PickedFile; // pickedfiles.h (brulion_platform): one file of the browser's picker
 }
 
+namespace brulion::calc {
+struct TableModel; // calc/table.h
+}
+
 namespace brulion {
 class EditorHost;
 }
@@ -681,6 +685,18 @@ public:
     Q_INVOKABLE void addTableRow(int row);
     Q_INVOKABLE void addTableColumn(int row);
     Q_INVOKABLE void removeTableRow(int row, int tableRow);
+    // Rows and columns in place, one undo step each; the formulas' references follow their cells
+    // (calc/table.h). Out of range: nothing.
+    /// A new row at `at` (0 = under the header).
+    Q_INVOKABLE void insertTableRow(int row, int at);
+    Q_INVOKABLE void moveTableRow(int row, int from, int to);
+    /// A new column at `at`, called "Kolumna N" / "Column N" (a name no other column has).
+    Q_INVOKABLE void insertTableColumn(int row, int at);
+    /// Not the only column.
+    Q_INVOKABLE void removeTableColumn(int row, int column);
+    Q_INVOKABLE void moveTableColumn(int row, int from, int to);
+    /// `align`: "left", "center", "right", "" = none (the delimiter row's colons).
+    Q_INVOKABLE void setTableColumnAlign(int row, int column, const QString &align);
 
     // --- Links ----------------------------------------------------------------------------------
     /// A link of the rendered text was activated (page:, tag:, block:, ext:, task:, reminder:;
@@ -955,6 +971,9 @@ private:
     markdown::EditResult applyOp(const std::function<markdown::EditResult(markdown::BlockDocument &)> &op);
     /// Body edit of one row as one command.
     void editBody(int row, const QString &body, int focusCursor = -2);
+    template<typename Edit>
+    void editTable(int row, Edit edit);
+    QString newColumnHeader(const calc::TableModel &model) const;
     /// Apply a whole new document text as one command (keeps unchanged rows).
     void applyText(const QString &text, const Focus &after);
     /// Move the caret to a document index + body cursor from an EditResult.
