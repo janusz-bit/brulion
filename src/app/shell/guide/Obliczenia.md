@@ -62,6 +62,10 @@ Odwołania:
 
 Zwykłe komórki czytane są tak, jak zapisują ludzie: `12,50 zł`, `23%`. Błąd w formule pokazuje się jako `#ERR` (po najechaniu: powód), a zapętlenie jako `#CYCLE`. Tabelę edytujesz jak arkusz, a Brulion przepisuje ją do Markdownu.
 
+Wiersze i kolumny zmieniasz w menu komórki: kliknij ją prawym przyciskiem (na telefonie stuknij komórkę i wybierz **Więcej** na pasku nad klawiaturą). W **Wiersz** i **Kolumna** możesz wstawić nowy, przenieść go lub usunąć, a kolumnie ustawić wyrównanie. W komórce działają też skróty: **Ctrl+Enter** wstawia wiersz poniżej, **Alt+↑/↓** przenosi wiersz, a **Alt+←/→** kolumnę. Każdą zmianę cofniesz przez **Ctrl+Z**.
+
+Formuły nadal wskazują te same komórki: po wstawieniu wiersza nad komórką `B2` odwołanie w formule zmieni się na `B3`. Jeśli usuniesz wiersz lub kolumnę, do których odwołuje się formuła, w jej treści pojawi się `REF!`, a w komórce `#ERR`.
+
 Wstaw tabelę albo blok obliczeń poleceniami `/Tabela` i `/Obliczenia`. Zobacz też [[Tagi i właściwości|właściwości]], z których wartości można liczyć.
 
 Wzory matematyczne to inna rzecz niż rachunki: Brulion składa je w notatkach, ale nie oblicza ich wartości — zobacz [[Wzory matematyczne|Wzory matematyczne]].

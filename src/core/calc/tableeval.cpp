@@ -18,11 +18,6 @@ namespace brulion::calc {
 
 namespace {
 
-bool isFormula(QStringView text)
-{
-    return text.startsWith(u'=') && !text.mid(1).trimmed().isEmpty();
-}
-
 /// Rectangle of cells covered by a reference; `skip` is a cell left out (the formula's own).
 struct Area {
     int r1 = 0;
@@ -50,7 +45,7 @@ public:
             for (int c = 0; c < cols; ++c) {
                 const QString text = c < row.size() ? row.at(c).trimmed() : QString();
                 m_texts.append(text);
-                if (isFormula(text)) {
+                if (detail::isTableFormula(text)) {
                     m_formulaIds[static_cast<std::size_t>(key(r, c))] = static_cast<int>(m_formulaKeys.size());
                     m_formulaKeys.push_back(key(r, c));
                     m_formulaRows[static_cast<std::size_t>(c)].push_back(r);
@@ -113,6 +108,9 @@ std::optional<Area> areaOf(const TableRef &ref, int r, int c, const Grid &grid, 
             return std::nullopt;
         }
         return Area{ref.row1, ref.row1, ref.col1, ref.col1, -1};
+    case TableRef::Kind::Deleted:
+        err = {CalcErrorCode::RefDeleted, {}};
+        return std::nullopt;
     case TableRef::Kind::Header:
         return Area{r, r, ref.col1, ref.col1, -1};
     case TableRef::Kind::Range:

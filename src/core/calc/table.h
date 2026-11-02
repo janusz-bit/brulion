@@ -68,6 +68,23 @@ QString replaceTable(QStringView content, const TableSpan &span, const TableMode
 /// Approximate monospace display width: CJK and emoji count 2, combining marks 0.
 int displayWidth(QStringView text);
 
+// Rows and columns added, deleted and moved. Formulas keep naming the same cells: their A1
+// references and ranges are rewritten (only those; a formula that names nothing affected stays as
+// written). Inserting inside a range grows it, deleting shrinks it; a reference whose row or column
+// is gone becomes `REF!`, shown as #ERR. Moving: a reference follows the row or column it names
+// (also a range within one row or column), a range over several keeps its place. False when the
+// position is out of range, nothing changed. Rows are data rows, 0 = the first under the header.
+
+/// A new empty row at `at` (0..rows; rows = at the end).
+bool insertTableRow(TableModel &model, int at);
+bool removeTableRow(TableModel &model, int row);
+bool moveTableRow(TableModel &model, int from, int to);
+/// A new empty column called `header` at `at` (0..columns; columns = at the end).
+bool insertTableColumn(TableModel &model, int at, const QString &header);
+/// False for the only column: a table without columns is no table.
+bool removeTableColumn(TableModel &model, int column);
+bool moveTableColumn(TableModel &model, int from, int to);
+
 /// Shown for a formula cell whose evaluation failed (the message is in TableEval::errors).
 inline constexpr QStringView kErrorMarker = u"#ERR";
 /// Shown for a formula cell that is part of a reference cycle.

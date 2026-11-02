@@ -983,6 +983,19 @@ FocusScope {
             table.startCell(r, c)
     }
 
+    /// The same once `menu` is closed: a menu closing gives the keys back to what had them, which
+    /// would end the cell's editing at once.
+    function editTableCellOnceClosed(menu, row, r, c) {
+        const open = () => {
+            menu.closed.disconnect(open)
+            later(() => editTableCell(row, r, c))
+        }
+        if (menu.opened || menu.visible)
+            menu.closed.connect(open)
+        else
+            later(() => editTableCell(row, r, c))
+    }
+
     /// Ends the editing the touch toolbar is docked for — a block, a table cell, the source's
     /// keyboard — as its "Hide keyboard" does (the word being composed is kept): the shell's quick
     /// capture from the bottom navigation would otherwise open over it. The selection's tools stay.
@@ -2262,7 +2275,9 @@ FocusScope {
     /// BlockMenu for a block (made when first opened, one per editor; tests read it): a bullet's or
     /// number's right-click / long press, a right-click on a block, the touch toolbar's "Więcej".
     property BlockMenu blockMenu: null
-    function openBlockMenu(row, item, x, y) {
+    /// `cell` (TableBlockView.cellInfo()): the table cell it is opened from, for its Wiersz and
+    /// Kolumna submenus.
+    function openBlockMenu(row, item, x, y, cell) {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
         if (!blockMenu)
@@ -2272,7 +2287,7 @@ FocusScope {
         // A word the keyboard is still composing becomes text before anything acts on the block.
         if (activeEditor)
             EditorInput.commitPreedit(activeEditor)
-        blockMenu.openFor(row)
+        blockMenu.openFor(row, cell)
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
         blockMenu.bottomMargin = menuBottomMargin()
         if (item)
@@ -2282,11 +2297,11 @@ FocusScope {
     }
     /// The block menu of a right-click at `scene` (scene coordinates) on `row`: the list's handler,
     /// the rendered text's when the click was on no date chip. None for the page properties.
-    function openBlockMenuAt(row, scene) {
+    function openBlockMenuAt(row, scene, cell) {
         if (!controller || row < 0 || row >= controller.blocks.count || controller.blocks.get(row).view === "frontmatter")
             return
         const at = list.mapFromItem(null, scene.x, scene.y)
-        openBlockMenu(row, list, at.x, at.y)
+        openBlockMenu(row, list, at.x, at.y, cell)
     }
     /// The touch toolbar's "Więcej": the menu of the block being edited, right above the button.
     /// The keyboard goes (the menu takes the keys, which hides it on Android anyway): the menu
@@ -2310,6 +2325,7 @@ FocusScope {
         if (!controller || !table || !table.block)
             return
         const row = table.block.index
+        const cell = table.cellInfo(table.editRow, table.editColumn)
         if (table.cellInput)
             EditorInput.commitPreedit(table.cellInput)
         Qt.inputMethod.hide()
@@ -2318,7 +2334,7 @@ FocusScope {
         list.forceActiveFocus()
         list.forceLayout()
         const item = list.itemAtIndex(row) as BlockDelegate
-        openBlockMenu(row, item, item ? item.contentLeft : 0, 0)
+        openBlockMenu(row, item, item ? item.contentLeft : 0, 0, cell)
     }
     Component {
         id: blockMenuComponent

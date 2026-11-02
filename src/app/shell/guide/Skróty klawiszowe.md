@@ -45,6 +45,17 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | Esc | zamknij podpowiedzi, potem zakończ edycję i zaznacz blok |
 | / | menu poleceń |
 
+## Komórka tabeli
+
+| Skrót | Działanie |
+|---|---|
+| Tab / Shift+Tab | następna albo poprzednia komórka (Tab w ostatniej komórce dodaje wiersz) |
+| Enter | komórka poniżej (w ostatnim wierszu dodaje wiersz) |
+| Ctrl+Enter | wstawienie wiersza poniżej |
+| Alt+↑ / Alt+↓ | przeniesienie wiersza |
+| Alt+← / Alt+→ | przeniesienie kolumny |
+| Esc | wyjście z komórki i cofnięcie wpisanego w niej tekstu |
+
 ## Panel Właściwości
 | Skrót | Działanie |
 |---|---|

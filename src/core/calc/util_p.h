@@ -17,6 +17,12 @@ inline QString toNfc(QStringView s)
     return s.toString();
 }
 
+/// A table cell's trimmed text is a formula: `=` and something after it.
+inline bool isTableFormula(QStringView text)
+{
+    return text.startsWith(u'=') && !text.mid(1).trimmed().isEmpty();
+}
+
 inline bool isAsciiDigit(QChar c)
 {
     return c >= u'0' && c <= u'9';

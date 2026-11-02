@@ -17,6 +17,9 @@ import Brulion
 // is left for selecting it), the touch toolbar's "Więcej". The block is tracked while the menu is
 // open (sync or undo may move it); an action goes to wherever it is then, nowhere when it is gone.
 // On touch UIs the "Kopiuj odnośnik" submenu opens in place of the menu (BMenu: no cascade).
+// From a table's cell (a right-click on it, the cell toolbar's "Więcej": BlockEditor.openBlockMenu's
+// `cell`) also Wiersz ▸ and Kolumna ▸: insert, move and delete that cell's row or column, the
+// column's alignment; a new row or column has its cell opened for typing.
 //
 //   BlockMenu { editor: editor }    menu.openFor(row); menu.popup(item, x, y)
 BMenu {
@@ -41,14 +44,37 @@ BMenu {
     /// Why that selection is not cut or deleted (a selection over several days; "" when it can be).
     property string uncuttable: ""
     readonly property bool documentMode: editor !== null && editor.documentMode
+    /// The table cell the menu was opened from: its row (-1 the header, -2 no cell), its column, the
+    /// table's size and the column's alignment (TableBlockView.cellInfo()).
+    property int cellRow: -2
+    property int cellColumn: -1
+    property int tableRows: 0
+    property int tableColumns: 0
+    property string cellAlign: ""
+    readonly property bool inCell: cellRow > -2
 
-    /// Follow the block at `row` (until the next openFor) and take its shape.
-    function openFor(row: int) {
+    // Submenu items are OptionalItems too, shown as their OptionalMenu says. Set before the first
+    // submenu below: a menu makes the item of a submenu as soon as it gets it.
+    delegate: OptionalItem {
+        shown: {
+            const optional = subMenu as OptionalMenu
+            return !optional || optional.shown
+        }
+    }
+
+    /// Follow the block at `row` (until the next openFor) and take its shape. `cell`: the table
+    /// cell it was opened from.
+    function openFor(row: int, cell) {
         if (!controller)
             return
         if (handle >= 0)
             controller.untrack(handle)
         handle = controller.trackBlock(row)
+        cellRow = cell ? cell.row : -2
+        cellColumn = cell ? cell.column : -1
+        tableRows = cell ? cell.rows : 0
+        tableColumns = cell ? cell.columns : 0
+        cellAlign = cell ? cell.align : ""
         const info = controller.blocks.get(row)
         listItem = info.kind === "listItem"
         heading = controller.isHeading(row)
@@ -105,10 +131,32 @@ BMenu {
             fn(r)
     }
 
+    /// A new row or column: `insert(row of the table's block)`, then cell (r, c) opened for typing
+    /// once the menu has given the keys back.
+    function insertAndEdit(insert, r: int, c: int) {
+        act((block) => {
+            insert(block)
+            menu.editor.editTableCellOnceClosed(menu, block, r, c)
+        })
+    }
+
     component OptionalItem: BMenuItem {
         property bool shown: true
         visible: shown
         height: shown ? implicitHeight : 0
+    }
+    component OptionalMenu: BMenu {
+        property bool shown: true
+    }
+    /// One of the column's alignments, ticked when it is the column's.
+    component AlignItem: BMenuItem {
+        required property string align
+        checkable: true
+        checked: menu.cellAlign === align
+        onTriggered: {
+            checked = Qt.binding(() => menu.cellAlign === align) // the click toggled it
+            menu.act((r) => menu.controller.setTableColumnAlign(r, menu.cellColumn, align))
+        }
     }
 
     BMenuItem {
@@ -140,6 +188,107 @@ BMenu {
         onTriggered: menu.act((r) => menu.editor.selectBlock(r))
     }
     BMenuSeparator {}
+    OptionalMenu {
+        objectName: "tableRowMenu"
+        shown: menu.inCell
+        title: qsTr("Row")
+        iconName: "rows-3"
+
+        BMenuItem {
+            objectName: "tableRowAbove"
+            text: qsTr("Insert row above")
+            iconName: "arrow-up"
+            enabled: menu.cellRow >= 0
+            onTriggered: menu.insertAndEdit((r) => menu.controller.insertTableRow(r, menu.cellRow),
+                                            menu.cellRow, menu.cellColumn)
+        }
+        BMenuItem {
+            objectName: "tableRowBelow"
+            text: qsTr("Insert row below")
+            iconName: "arrow-down"
+            shortcut: "Ctrl+Enter"
+            onTriggered: menu.insertAndEdit((r) => menu.controller.insertTableRow(r, menu.cellRow + 1),
+                                            menu.cellRow + 1, menu.cellColumn)
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "tableRowUp"
+            text: qsTr("Move row up")
+            iconName: "move-up"
+            shortcut: "Alt+Up"
+            enabled: menu.cellRow > 0
+            onTriggered: menu.act((r) => menu.controller.moveTableRow(r, menu.cellRow, menu.cellRow - 1))
+        }
+        BMenuItem {
+            objectName: "tableRowDown"
+            text: qsTr("Move row down")
+            iconName: "move-down"
+            shortcut: "Alt+Down"
+            enabled: menu.cellRow >= 0 && menu.cellRow + 1 < menu.tableRows
+            onTriggered: menu.act((r) => menu.controller.moveTableRow(r, menu.cellRow, menu.cellRow + 1))
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "tableRowDelete"
+            text: qsTr("Delete row")
+            iconName: "trash-2"
+            danger: true
+            enabled: menu.cellRow >= 0
+            onTriggered: menu.act((r) => menu.controller.removeTableRow(r, menu.cellRow))
+        }
+    }
+    OptionalMenu {
+        objectName: "tableColumnMenu"
+        shown: menu.inCell
+        title: qsTr("Column")
+        iconName: "columns-2"
+
+        BMenuItem {
+            objectName: "tableColumnLeft"
+            text: qsTr("Insert column on the left")
+            iconName: "arrow-left"
+            onTriggered: menu.insertAndEdit((r) => menu.controller.insertTableColumn(r, menu.cellColumn),
+                                            -1, menu.cellColumn)
+        }
+        BMenuItem {
+            objectName: "tableColumnRight"
+            text: qsTr("Insert column on the right")
+            iconName: "arrow-right"
+            onTriggered: menu.insertAndEdit((r) => menu.controller.insertTableColumn(r, menu.cellColumn + 1),
+                                            -1, menu.cellColumn + 1)
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "tableColumnMoveLeft"
+            text: qsTr("Move column left")
+            iconName: "arrow-left"
+            shortcut: "Alt+Left"
+            enabled: menu.cellColumn > 0
+            onTriggered: menu.act((r) => menu.controller.moveTableColumn(r, menu.cellColumn, menu.cellColumn - 1))
+        }
+        BMenuItem {
+            objectName: "tableColumnMoveRight"
+            text: qsTr("Move column right")
+            iconName: "arrow-right"
+            shortcut: "Alt+Right"
+            enabled: menu.cellColumn + 1 < menu.tableColumns
+            onTriggered: menu.act((r) => menu.controller.moveTableColumn(r, menu.cellColumn, menu.cellColumn + 1))
+        }
+        BMenuSeparator {}
+        AlignItem { objectName: "tableAlignLeft"; align: "left"; text: qsTr("Align left") }
+        AlignItem { objectName: "tableAlignCenter"; align: "center"; text: qsTr("Align center") }
+        AlignItem { objectName: "tableAlignRight"; align: "right"; text: qsTr("Align right") }
+        AlignItem { objectName: "tableAlignNone"; align: ""; text: qsTr("Default alignment") }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "tableColumnDelete"
+            text: qsTr("Delete column")
+            iconName: "trash-2"
+            danger: true
+            enabled: menu.tableColumns > 1
+            onTriggered: menu.act((r) => menu.controller.removeTableColumn(r, menu.cellColumn))
+        }
+    }
     OptionalItem {
         objectName: "blockMenuZoom"
         shown: !menu.documentMode

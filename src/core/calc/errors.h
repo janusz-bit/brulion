@@ -36,6 +36,7 @@ enum class CalcErrorCode {
     Cycle,
     RefError,   ///< arg: cell name ("B1")
     RefOutside, ///< arg: reference as written ("A99")
+    RefDeleted, ///< `REF!`: the row or column it named was deleted
     Domain,     ///< arg: function name
     UnterminatedString,
     NotAUnit, ///< arg: name

@@ -932,6 +932,15 @@ people write them (`12,50 zł`, `23%`); empty cells count as 0, ranges skip text
 are evaluated in dependency order and may use the page's calc variables. Errors render as
 `#ERR` with a tooltip; cycles render `#CYCLE`.
 
+Editing a table's rows and columns in the app (docs/UI.md "The block editor") rewrites the `A1`
+references and ranges so that they name the same cells, as a spreadsheet does; nothing else in a
+formula changes, and a formula naming nothing affected stays as written. Inserting inside a
+range grows it, deleting inside shrinks it. A reference whose row or column was deleted becomes
+`REF!`, which always renders `#ERR` (`REF` without the `!` is an ordinary variable). A moved row or
+column takes the references to it along, also ranges within it (`B1:B3`, `B:B` when column B moves);
+a range over several rows or columns keeps its place. `[Header]`, `above` and the other relative
+references need no rewriting. Editing the file by hand rewrites nothing.
+
 ## 10. Queries
 
 A fenced block with language `query` renders live results in the editor (tasks can be checked

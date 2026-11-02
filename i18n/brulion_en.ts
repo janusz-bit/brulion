@@ -163,7 +163,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1643"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1656"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -174,7 +174,7 @@
 <context>
     <name>BlockMenu</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="116"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="164"/>
         <source>Copy %n block(s)</source>
         <translation>
             <numerusform>Copy %n block</numerusform>
@@ -182,7 +182,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="123"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="171"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -190,7 +190,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="242"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="391"/>
         <source>Delete %n block(s)</source>
         <translation>
             <numerusform>Delete %n block</numerusform>
@@ -254,7 +254,7 @@
 <context>
     <name>CleanupView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/CleanupView.qml" line="74"/>
+        <location filename="../src/app/qml/views/CleanupView.qml" line="76"/>
         <source>%n file(s) moved to the trash</source>
         <translation>
             <numerusform>%n file moved to the trash</numerusform>
@@ -262,7 +262,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/CleanupView.qml" line="80"/>
+        <location filename="../src/app/qml/views/CleanupView.qml" line="82"/>
         <source>%n open task(s)</source>
         <translation>
             <numerusform>%n open task</numerusform>
@@ -270,7 +270,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/CleanupView.qml" line="81"/>
+        <location filename="../src/app/qml/views/CleanupView.qml" line="83"/>
         <source>%n reminder(s)</source>
         <translation>
             <numerusform>%n reminder</numerusform>
@@ -278,7 +278,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/CleanupView.qml" line="143"/>
+        <location filename="../src/app/qml/views/CleanupView.qml" line="145"/>
         <source>%n selected</source>
         <translation>
             <numerusform>%n selected</numerusform>
@@ -286,7 +286,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/CleanupView.qml" line="237"/>
+        <location filename="../src/app/qml/views/CleanupView.qml" line="240"/>
         <source>%n file(s) will be moved to the trash. You can restore them from there.</source>
         <translation>
             <numerusform>%n file will be moved to the trash. You can restore it from there.</numerusform>
@@ -978,7 +978,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4135"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4173"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
