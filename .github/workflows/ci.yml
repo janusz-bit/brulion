@@ -102,6 +102,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The test programs under the sanitizers fill the runner's disk ("No space left on device"
+      # while linking, v0.6.3); this job needs none of these.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+
       # Qt PDF (`qtpdf`, an extension of Qt's repository): the PDF pages of drawings' backdrops
       # (src/platform/pdfpages_qtpdf.cpp; tests/platform/tst_pdfpages under the sanitizers).
       - uses: jurplel/install-qt-action@v4
