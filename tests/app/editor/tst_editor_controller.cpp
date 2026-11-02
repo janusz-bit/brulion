@@ -6680,6 +6680,103 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         find.setQuery(u"a\nb"_s); // pasted: one line
         QCOMPARE(find.query(), u"a b"_s);
     }
+
+    void findAfterAnEditReplacesOnlyWhatIsShown()
+    {
+        // The second match is shown; text before it goes: the third one must not become current.
+        Fixture f(u"kot a kot b kot\n"_s);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"kot"_s);
+        find.refresh();
+        find.next();
+        QCOMPARE(find.current(), 1);
+        QSignalSpy targets(&find, &NoteFind::targetRequested);
+        f.page.setEditText(0, u"kot kot b kot"_s, 4);
+        find.refresh();
+        QCOMPARE(find.count(), 3);
+        QCOMPARE(find.current(), -1);
+        QCOMPARE(targets.size(), 0);
+        // Replace shows a match first, and only the next one replaces what is shown.
+        QVERIFY(!find.replaceCurrent(u"pies"_s));
+        QCOMPARE(f.text(), u"kot kot b kot\n"_s);
+        QCOMPARE(targets.size(), 1);
+        const int shown = find.current();
+        QVERIFY(shown >= 0);
+        QVERIFY(find.replaceCurrent(u"pies"_s));
+        QCOMPARE(f.text().count(u"pies"_s), 1);
+        QCOMPARE(f.text().indexOf(u"pies"_s), targets.at(0).at(0).toMap().value(u"from"_s).toInt());
+    }
+
+    void findReplaceRightAfterAnOptionShowsFirst()
+    {
+        Fixture f(u"Kot kot\n"_s);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"kot"_s);
+        find.refresh();
+        QCOMPARE(find.current(), 0);
+        QSignalSpy targets(&find, &NoteFind::targetRequested);
+        find.setMatchCase(true); // the recount has not run yet
+        QVERIFY(!find.replaceCurrent(u"pies"_s));
+        QCOMPARE(f.text(), u"Kot kot\n"_s);
+        QCOMPARE(find.count(), 1);
+        QCOMPARE(targets.size(), 1);
+        QVERIFY(find.replaceCurrent(u"pies"_s));
+        QCOMPARE(f.text(), u"Kot pies\n"_s);
+    }
+
+    void findReplaceWithTheSameTextGoesOn()
+    {
+        Fixture f(u"- kot kot\n"_s);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"kot"_s);
+        find.refresh();
+        QCOMPARE(find.current(), 0);
+        QVERIFY(!find.replaceCurrent(u"kot"_s));
+        QCOMPARE(find.current(), 1);
+        QVERIFY(!f.page.canUndo());
+        QCOMPARE(find.replaceAll(u"kot"_s), 0);
+        QVERIFY(!f.page.canUndo());
+
+        // Source mode: nothing reaches the text area either.
+        Fixture source(u"- kot kot\n"_s);
+        source.page.setSourceMode(true);
+        NoteFind inSource;
+        inSource.setController(&source.page);
+        inSource.setActive(true);
+        inSource.setQuery(u"kot"_s);
+        inSource.refresh();
+        QSignalSpy requests(&inSource, &NoteFind::sourceReplaceRequested);
+        QVERIFY(!inSource.replaceCurrent(u"kot"_s));
+        QCOMPARE(inSource.current(), 1);
+        QCOMPARE(inSource.replaceAll(u"kot"_s), 0);
+        QCOMPARE(requests.size(), 0);
+    }
+
+    void findCountsMatchesInLinksAndFrontmatter()
+    {
+        Fixture f(u"---\ntytul: kot\ntagi: [kot]\n---\n- kot\n- [[Kot]] i [x](kot.md)\n- [[inny]] kot\n"_s);
+        NoteFind find;
+        find.setController(&f.page);
+        find.setActive(true);
+        find.setQuery(u"kot"_s);
+        find.refresh();
+        QCOMPARE(find.count(), 6);
+        QCOMPARE(find.frontmatterMatches(), 2);
+        QCOMPARE(find.linkMatches(), 2);
+        find.setQuery(u"inny"_s);
+        find.refresh();
+        QCOMPARE(find.frontmatterMatches(), 0);
+        QCOMPARE(find.linkMatches(), 1);
+        find.setQuery(u"zadnego"_s);
+        find.refresh();
+        QCOMPARE(find.linkMatches(), 0);
+    }
 };
 
 QTEST_MAIN(TestPageController)

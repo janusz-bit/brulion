@@ -481,6 +481,7 @@ FocusScope {
             return
         closeSuggestions()
         findKeepsKeyboard = false
+        findSelection = null
         const again = controller.editingRow === row
         controller.startEditing(row, cursor === undefined ? -1 : cursor)
         if (again && activeEditor && activeEditor.row === row)
@@ -494,7 +495,7 @@ FocusScope {
     readonly property color findHitColor: Theme.alpha(Theme.link, 0.28)
     /// The block going to a match does not take the keyboard from the bar (until it is tapped).
     property bool findKeepsKeyboard: false
-    /// { row, from, to }: the match the block being edited has selected.
+    /// { row, from, to }: the match its block is to select when its editor is there; null again then.
     property var findSelection: null
 
     /// Show a match (NoteFind.targetRequested): out of folds and zooms, scrolled to, selected in its

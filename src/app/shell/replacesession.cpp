@@ -53,7 +53,7 @@ QVariant ReplaceSession::data(const QModelIndex &index, int role) const
         return {};
     const Row &row = m_rows.at(index.row());
     const notebook::ReplaceFile &file = m_plan.files.at(row.file);
-    const Ticks ticks = m_ticks.value(file.path);
+    const Ticks ticks = ticksOf(file.path);
     const bool isHit = row.hit >= 0;
     const notebook::ReplaceHit *hit = isHit ? &file.hits.at(row.hit) : nullptr;
     switch (role) {
@@ -149,12 +149,20 @@ qreal ReplaceSession::applyProgress() const
     return total > 0 ? qreal(m_applyAt) / total : 0;
 }
 
+ReplaceSession::Ticks ReplaceSession::ticksOf(const QString &path) const
+{
+    const auto it = m_ticks.constFind(path);
+    if (it != m_ticks.cend())
+        return *it;
+    Ticks ticks;
+    ticks.file = m_defaultTicked;
+    return ticks;
+}
+
 int ReplaceSession::tickedInFile(const notebook::ReplaceFile &file) const
 {
-    const auto it = m_ticks.constFind(file.path);
-    if (it == m_ticks.cend())
-        return file.hitCount;
-    return it->file ? file.hitCount - int(it->excluded.size()) : 0;
+    const Ticks ticks = ticksOf(file.path);
+    return ticks.file ? file.hitCount - int(ticks.excluded.size()) : 0;
 }
 
 int ReplaceSession::tickedFiles() const
@@ -179,8 +187,42 @@ void ReplaceSession::forgetResults()
     m_plan = {};
     m_rows.clear();
     m_ticks.clear();
+    m_defaultTicked = true;
     endResetModel();
     Q_EMIT resultsChanged();
+}
+
+void ReplaceSession::keepTicks()
+{
+    if (m_plan.files.isEmpty())
+        return;
+    // (A scan still taking kept ticks back: those of notes it has not reached stay kept.)
+    if (!m_scan || !m_kept.valid || m_kept.query != m_query || m_kept.options != m_options)
+        m_kept = {};
+    m_kept.valid = true;
+    m_kept.query = m_query;
+    m_kept.options = m_options;
+    m_kept.defaultTicked = m_defaultTicked;
+    for (const notebook::ReplaceFile &file : std::as_const(m_plan.files)) {
+        if (const auto it = m_ticks.constFind(file.path); it != m_ticks.cend())
+            m_kept.files.insert(file.path, { file.hash, *it });
+    }
+}
+
+void ReplaceSession::dropKeptTicks()
+{
+    m_kept = {};
+}
+
+void ReplaceSession::adoptKeptTicks()
+{
+    if (!m_kept.valid)
+        return;
+    for (const notebook::ReplaceFile &file : std::as_const(m_plan.files)) {
+        const auto it = m_kept.files.constFind(file.path);
+        if (it != m_kept.files.cend() && it->hash == file.hash && !m_ticks.contains(file.path))
+            m_ticks.insert(file.path, it->ticks);
+    }
 }
 
 void ReplaceSession::scheduleScan()
@@ -222,6 +264,10 @@ void ReplaceSession::startScan()
 {
     if (!m_workspace->vault() || m_query.isEmpty() || applying())
         return;
+    if (m_kept.valid && (m_kept.query != m_query || m_kept.options != m_options))
+        m_kept = {};
+    if (m_kept.valid)
+        m_defaultTicked = m_kept.defaultTicked;
     // What editors hold goes to the files first: the plan looks at the files.
     Q_EMIT m_workspace->saveOpenEditorsRequested();
     m_scan = std::make_unique<notebook::ReplaceScan>(*m_workspace->vault(), m_workspace->workerPool(), m_query, m_options);
@@ -238,6 +284,7 @@ void ReplaceSession::scanStep()
     const notebook::ReplaceScan::Step step = m_scan->step(SliceMs);
     if (!m_scan->takeMerged().isEmpty()) {
         m_plan = m_scan->plan();
+        adoptKeptTicks();
         rebuildRows();
         Q_EMIT resultsChanged();
     } else {
@@ -248,8 +295,11 @@ void ReplaceSession::scanStep()
     switch (step) {
     case notebook::ReplaceScan::Step::Done:
         m_plan = m_scan->plan();
+        adoptKeptTicks();
+        m_kept = {};
         m_scan.reset();
-        m_slices.stop();
+        if (m_applyMode == ApplyMode::None)
+            m_slices.stop();
         rebuildRows();
         Q_EMIT resultsChanged();
         Q_EMIT stateChanged();
@@ -258,7 +308,8 @@ void ReplaceSession::scanStep()
         m_slices.start(); // the event loop gets its turn
         break;
     case notebook::ReplaceScan::Step::Waiting:
-        m_slices.stop(); // resultsReady() follows
+        if (m_applyMode == ApplyMode::None)
+            m_slices.stop(); // resultsReady() follows
         break;
     }
 }
@@ -320,6 +371,8 @@ void ReplaceSession::setHitTicked(const QString &path, int hit, bool ticked)
         const notebook::ReplaceFile &file = m_plan.files.at(f);
         if (file.path != path)
             continue;
+        if (!m_ticks.contains(path))
+            m_ticks.insert(path, ticksOf(path));
         Ticks &ticks = m_ticks[path];
         if (ticked && !ticks.file) {
             // From nothing ticked: only this one (as far as the preview names them).
@@ -342,10 +395,8 @@ void ReplaceSession::setHitTicked(const QString &path, int hit, bool ticked)
 void ReplaceSession::tickAll(bool ticked)
 {
     m_ticks.clear();
-    if (!ticked) {
-        for (const notebook::ReplaceFile &file : std::as_const(m_plan.files))
-            m_ticks[file.path].file = false;
-    }
+    m_defaultTicked = ticked;
+    m_kept = {};
     if (!m_rows.isEmpty())
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), { TickRole });
     Q_EMIT resultsChanged();
@@ -427,6 +478,9 @@ bool ReplaceSession::undo(int token)
 {
     if (!canUndo(token))
         return false;
+    // The rescan after the replace: the files are about to change again (onUndone() looks anew).
+    m_debounce.stop();
+    stopScan();
     m_changed.clear();
     m_undoRestored = 0;
     m_applyAt = 0;

@@ -82,7 +82,45 @@ bool onBoundary(const FoldedText &f, qsizetype at)
     return at <= 0 || at >= f.text.size() || f.map.at(at) != f.map.at(at - 1);
 }
 
+/// The last place of the two characters `a`, `b` in [from, to) of `text`, -1 when none.
+qsizetype lastPair(QStringView text, qsizetype from, qsizetype to, QChar a, QChar b)
+{
+    for (qsizetype i = to - 2; i >= from; --i) {
+        if (text.at(i) == a && text.at(i + 1) == b)
+            return i;
+    }
+    return -1;
+}
+
+qsizetype firstChar(QStringView text, qsizetype from, qsizetype to, QChar c)
+{
+    for (qsizetype i = from; i < to; ++i) {
+        if (text.at(i) == c)
+            return i;
+    }
+    return -1;
+}
+
 } // namespace
+
+bool isInsideLink(QStringView text, const TextRange &range)
+{
+    constexpr qsizetype Reach = 4096;
+    const auto lineBreak = [](QChar c) { return c == u'\n' || c == u'\r'; };
+    qsizetype lineStart = range.start;
+    while (lineStart > 0 && range.start - lineStart < Reach && !lineBreak(text.at(lineStart - 1)))
+        --lineStart;
+    qsizetype lineEnd = range.end();
+    while (lineEnd < text.size() && lineEnd - range.end() < Reach && !lineBreak(text.at(lineEnd)))
+        ++lineEnd;
+    const qsizetype wiki = lastPair(text, lineStart, range.start, u'[', u'[');
+    if (wiki >= 0 && lastPair(text, wiki, range.start, u']', u']') < 0
+        && lastPair(text, range.end(), lineEnd, u']', u']') >= 0)
+        return true;
+    const qsizetype target = lastPair(text, lineStart, range.start, u']', u'(');
+    return target >= 0 && firstChar(text, target, range.start, u')') < 0
+           && firstChar(text, range.end(), lineEnd, u')') >= 0;
+}
 
 QList<TextRange> findMatches(QStringView text, QStringView query, const FindOptions &options, qsizetype maxHits)
 {

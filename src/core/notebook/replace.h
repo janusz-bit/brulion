@@ -41,7 +41,7 @@ struct ReplaceHit {
     QString before;       ///< the line before the match, cut to a short context ("…" when cut)
     QString matched;      ///< the text matched, as written
     QString after;        ///< the line after the match, cut likewise
-    bool inLink = false;  ///< inside the target of a `[[link]]` or `[text](link)`: the link will change
+    bool inLink = false;  ///< text::isInsideLink(): the link will change
 
     friend bool operator==(const ReplaceHit &, const ReplaceHit &) = default;
 };
@@ -111,7 +111,8 @@ struct ReplacedFile {
 };
 
 /// One file of a plan (see the file comment): nothing written unless its bytes are the planned ones.
-/// An excluded hit stays as it is; nothing left to replace writes nothing (Written, replaced 0).
+/// An excluded hit stays as it is; nothing left to replace, or the same text, writes nothing
+/// (Written, replaced 0).
 ReplacedFile applyToFile(Vault &vault, const ReplaceFile &file, const ReplacePlan &plan, const QString &replacement,
                          const QSet<int> &excluded = {}, ChangeSource source = ChangeSource::User);
 

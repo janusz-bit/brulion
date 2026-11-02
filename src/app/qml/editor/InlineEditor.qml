@@ -142,11 +142,14 @@ TextEdit {
             forceActiveFocus()
     }
 
-    /// The find bar's current match is in this block: selected.
+    /// The find bar's current match is in this block: selected, once — a click back into the block
+    /// later (activate() again) must not select it again, typing would replace it.
     function selectFindMatch() {
         const match = editor ? editor.findSelection : null
-        if (match && match.row === row && active)
+        if (match && match.row === row && active) {
             select(match.from, match.to)
+            editor.findSelection = null
+        }
     }
 
     /// The controller changed the text (undo, completion, normalisation…).

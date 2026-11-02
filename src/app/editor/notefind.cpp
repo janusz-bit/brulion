@@ -1,6 +1,7 @@
 #include "notefind.h"
 
 #include "blocklistmodel.h"
+#include "markdown/frontmatter.h"
 #include "pagecontroller.h"
 
 #include <algorithm>
@@ -193,22 +194,38 @@ void NoteFind::recount()
     m_matches = text::findMatches(m_text, m_query, m_options);
     m_appliedQuery = m_query;
     m_appliedOptions = m_options;
-    const bool jump = std::exchange(m_jump, false);
-    // After an edit the match shown stays current (the nearest one at or after its place); the
-    // caret is left alone.
-    const qsizetype from = jump || keep < 0 ? m_origin : keep;
-    const auto at = std::lower_bound(m_matches.cbegin(), m_matches.cend(), from,
-                                     [](const text::TextRange &r, qsizetype v) { return r.start < v; });
-    const int nearest = m_matches.isEmpty() ? -1 : at == m_matches.cend() ? 0 : int(std::distance(m_matches.cbegin(), at));
-    if (jump) {
-        m_current = -1;
+    countRisks();
+    m_current = -1;
+    if (!std::exchange(m_jump, false)) {
+        // After an edit no match is current: which one is on show is not known any more (the caret
+        // is left alone), and replacing must not hit one nobody has seen. The next goes from here.
+        if (keep >= 0)
+            m_origin = keep;
         Q_EMIT matchesChanged();
-        if (nearest >= 0)
-            show(nearest);
         return;
     }
-    m_current = keep >= 0 ? nearest : -1;
     Q_EMIT matchesChanged();
+    if (m_matches.isEmpty())
+        return;
+    const auto at = std::lower_bound(m_matches.cbegin(), m_matches.cend(), m_origin,
+                                     [](const text::TextRange &r, qsizetype v) { return r.start < v; });
+    show(at == m_matches.cend() ? 0 : int(std::distance(m_matches.cbegin(), at)));
+}
+
+void NoteFind::countRisks()
+{
+    m_linkMatches = 0;
+    m_frontmatterMatches = 0;
+    if (m_matches.isEmpty())
+        return;
+    const std::optional<markdown::FrontmatterBlock> frontmatter = markdown::findFrontmatter(m_text);
+    const qsizetype bodyStart = frontmatter ? frontmatter->bodyStart : 0;
+    for (const text::TextRange &range : std::as_const(m_matches)) {
+        if (range.start < bodyStart)
+            ++m_frontmatterMatches;
+        else if (text::isInsideLink(m_text, range))
+            ++m_linkMatches;
+    }
 }
 
 QVariantMap NoteFind::targetOf(const text::TextRange &range) const
@@ -271,12 +288,15 @@ bool NoteFind::replaceCurrent(const QString &replacement)
 {
     if (!m_controller)
         return false;
-    refresh();
-    // The text may have changed under a pending recount: count on what is there now.
-    if (m_text != sourceOfSearch()) {
+    // Something changed under a pending recount: the current match is not what is on show.
+    if (m_jump || m_appliedQuery != m_query || m_appliedOptions != m_options || m_text != sourceOfSearch()) {
         m_timer.stop();
         recount();
+        if (m_current < 0)
+            next();
+        return false;
     }
+    m_timer.stop();
     if (m_matches.isEmpty())
         return false;
     if (m_current < 0) {
@@ -286,6 +306,10 @@ bool NoteFind::replaceCurrent(const QString &replacement)
     const text::TextRange range = m_matches.at(m_current);
     QString line = replacement;
     line.replace(u'\r', u' ').replace(u'\n', u' ');
+    if (QStringView(m_text).sliced(range.start, range.length) == line) {
+        show(int((m_current + 1) % m_matches.size()));
+        return false;
+    }
     if (sourceMode()) {
         Q_EMIT sourceReplaceRequested({ QVariantMap{ { u"from"_s, int(sourcePosition(m_text, range.start)) },
                                                      { u"to"_s, int(sourcePosition(m_text, range.end())) } } },
@@ -312,6 +336,8 @@ int NoteFind::replaceAll(const QString &replacement)
         return 0;
     QString line = replacement;
     line.replace(u'\r', u' ').replace(u'\n', u' ');
+    if (text::replaceMatches(m_text, ranges, line) == m_text)
+        return 0;
     if (sourceMode()) {
         QVariantList positions;
         positions.reserve(ranges.size());

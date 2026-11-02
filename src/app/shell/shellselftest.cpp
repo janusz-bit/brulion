@@ -4047,6 +4047,42 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
     check(waitFor([&] { return text() == u"- pierwszy kot\n\t- ukryty ŻÓŁW\n- bez niczego\n- ostatni zolw\n"_s; }),
           "one undo takes the whole Replace all back");
 
+    // A match selected, then a click away and back: typing inserts, the old match is not selected
+    // again to be typed over.
+    if (QQuickItem *again = named(u"findField"_s))
+        again->forceActiveFocus();
+    settle(200);
+    sendKey(window, Qt::Key_Return);
+    settle(150);
+    const int matchRow = controller->property("editingRow").toInt();
+    QQuickItem *blocks = editor->property("listView").value<QQuickItem *>();
+    const auto clickRow = [&](int row) {
+        QQuickItem *item = nullptr;
+        QMetaObject::invokeMethod(blocks, "itemAtIndex", qReturnArg(item), row);
+        if (item)
+            tapOrClick(window, pointIn(item, 0.3, 0.5), touch);
+    };
+    check(matchRow >= 0 && matchRow != 2, "the match is being shown in its block");
+    clickRow(2);
+    check(waitFor([&] { return controller->property("editingRow").toInt() == 2; }), "a click moves to another block");
+    clickRow(matchRow);
+    check(waitFor([&] { return controller->property("editingRow").toInt() == matchRow; }), "and back to the match's block");
+    settle(200);
+    const QString beforeTyping = text();
+    sendKey(window, 0, Qt::NoModifier, u"X"_s);
+    check(waitFor([&] { return text() != beforeTyping; }) && QString(text()).remove(u'X') == beforeTyping,
+          "typing after clicking back does not overwrite the old match");
+    QMetaObject::invokeMethod(controller, "undo");
+    waitFor([&] { return text() == beforeTyping; });
+
+    // With the replace row open, the bar says what a replace would do to links.
+    controller->setProperty("sourceText", QString(text() + u"- [[zolw]]\n"_s));
+    QQuickItem *riskNote = nullptr;
+    check(waitFor([&] { return (riskNote = named(u"findReplaceNote"_s)) != nullptr; }, 3000),
+          "the replace row warns about a match inside a link");
+    QMetaObject::invokeMethod(controller, "undo");
+    waitFor([&] { return text() == beforeTyping; });
+
     // Esc closes it and gives the keyboard back.
     if (named(u"findField"_s))
         named(u"findField"_s)->forceActiveFocus();
@@ -4107,6 +4143,25 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
     if (hitTick)
         tapOrClick(window, pointIn(hitTick), touch);
     check(waitFor([&] { return session->tickedHits() == all - 1; }), "a tap takes one hit out");
+    // Opening a hit and coming back keeps what was unticked.
+    const auto shownInList = [&](const QString &name) -> QQuickItem * {
+        const QList<QQuickItem *> items = uidriver::allItems(named(u"replaceList"_s));
+        for (QQuickItem *item : items) {
+            if (item->objectName() == name && uidriver::shown(item))
+                return item;
+        }
+        return nullptr;
+    };
+    if (QQuickItem *hitText = shownInList(u"replaceHitText"_s))
+        tapOrClick(window, pointIn(hitText), touch);
+    check(waitFor([&] { return app->currentView() == u"page"; }), "a tap on a hit opens its note");
+    app->back();
+    check(waitFor([&] { return app->currentView() == u"replace" && !session->scanning() && session->fileCount() >= 2; }, 5000),
+          "Back returns to the preview");
+    check(waitFor([&] { return session->tickedHits() == all - 1; }, 1000), "the unticked hit is still unticked");
+    settle(300); // the view fades in
+    hitTick = shownInList(u"replaceHitTick"_s);
+    apply = named(u"replaceApply"_s);
     if (hitTick)
         tapOrClick(window, pointIn(hitTick), touch);
     check(waitFor([&] { return session->tickedHits() == all; }), "and puts it back");

@@ -617,6 +617,150 @@ private Q_SLOTS:
         QCOMPARE(b.readAll(), "pies i coś jeszcze\n");
     }
 
+    void replaceUndoWhileARescanRuns()
+    {
+        // What ReplaceView does: a rescan right after applying. The Undo pressed meanwhile takes
+        // more than one slice, and the scan's results must not stop it.
+        const QString filler = QString(u"zażółć gęślą jaźń\n"_s).repeated(2000);
+        QHash<QString, QString> files;
+        for (int i = 0; i < 300; ++i)
+            files.insert(u"n%1.md"_s.arg(i), QString(u"kot\n"_s + filler));
+        QString root;
+        auto ws = open(files, &root);
+        ReplaceSession *session = ws->replacing();
+        QSignalSpy applied(session, &ReplaceSession::applied);
+        QSignalSpy undone(session, &ReplaceSession::undone);
+        connect(session, &ReplaceSession::applied, this, [session] { session->scanNow(); });
+        session->setQuery(u"kot"_s);
+        session->setReplacement(u"pies"_s);
+        session->scanNow();
+        QTRY_VERIFY_WITH_TIMEOUT(!session->scanning() && session->fileCount() == 300, 30000);
+        QVERIFY(session->apply());
+        QTRY_COMPARE_WITH_TIMEOUT(applied.size(), 1, 60000);
+        QVERIFY(session->undo(applied.first().at(0).toInt()));
+        QTRY_COMPARE_WITH_TIMEOUT(undone.size(), 1, 30000);
+        QCOMPARE(undone.first().at(0).toInt(), 300);
+        QVERIFY(!session->applying());
+        disconnect(session, nullptr, this, nullptr);
+        session->reset();
+    }
+
+    void replaceKeepsTicksWhileAHitIsOpened()
+    {
+        QString root;
+        auto ws = open({ { u"A.md"_s, u"kot kot kot\n"_s }, { u"B.md"_s, u"kot\n"_s }, { u"C.md"_s, u"kot\n"_s } }, &root);
+        ReplaceSession *session = ws->replacing();
+        const auto scan = [&] {
+            session->scanNow();
+            QTRY_VERIFY(!session->scanning() && session->fileCount() > 0);
+        };
+        session->setQuery(u"kot"_s);
+        session->setReplacement(u"pies"_s);
+        scan();
+        QCOMPARE(session->tickedHits(), 5);
+        session->setHitTicked(u"A.md"_s, 1, false);
+        session->setFileTicked(u"B.md"_s, false);
+        QCOMPARE(session->tickedHits(), 3);
+
+        // Opening a hit and coming back: the view goes and is made anew.
+        session->keepTicks();
+        session->reset();
+        session->reset();
+        scan();
+        QCOMPARE(session->tickedHits(), 3);
+
+        // A note changed meanwhile: only its own ticks are gone.
+        session->keepTicks();
+        session->reset();
+        writeRaw(root + u"/B.md"_s, "kot i kot\n");
+        scan();
+        QCOMPARE(session->tickedHits(), 2 + 2 + 1);
+
+        // Another query or option: everything ticked again, also when coming back to the query.
+        session->setHitTicked(u"A.md"_s, 0, false);
+        QCOMPARE(session->tickedHits(), 4);
+        session->keepTicks();
+        session->reset();
+        session->setWholeWord(true);
+        scan();
+        QCOMPARE(session->tickedHits(), 5 + 1);
+        session->setWholeWord(false);
+        session->setHitTicked(u"A.md"_s, 0, false); // (no results until the rescan: nothing to tick)
+        scan();
+        QCOMPARE(session->tickedHits(), 5 + 1);
+
+        // A fresh visit (dropKeptTicks: not a return from a hit) ticks everything.
+        session->setHitTicked(u"A.md"_s, 0, false);
+        session->keepTicks();
+        session->reset();
+        session->dropKeptTicks();
+        scan();
+        QCOMPARE(session->tickedHits(), 5 + 1);
+
+        // The kept ticks reach what is written.
+        session->setHitTicked(u"A.md"_s, 2, false);
+        session->keepTicks();
+        session->reset();
+        scan();
+        QSignalSpy applied(session, &ReplaceSession::applied);
+        QVERIFY(session->apply());
+        QTRY_COMPARE(applied.size(), 1);
+        QFile a(root + u"/A.md"_s);
+        QVERIFY(a.open(QIODevice::ReadOnly));
+        QCOMPARE(a.readAll(), "pies pies kot\n");
+        session->reset();
+    }
+
+    void replaceUntickAllReachesFilesFoundLater()
+    {
+        // Large enough that a scan is still running after its first slice, also without threads.
+        const QString filler = QString(u"zażółć gęślą jaźń\n"_s).repeated(2000);
+        QHash<QString, QString> files;
+        for (int i = 0; i < 400; ++i)
+            files.insert(u"n%1.md"_s.arg(i), QString(u"kot\n"_s + filler));
+        QString root;
+        auto ws = open(files, &root);
+        ReplaceSession *session = ws->replacing();
+        session->setQuery(u"kot"_s);
+        session->scanNow();
+        QVERIFY(session->scanning());
+        session->tickAll(false);
+        QTRY_VERIFY_WITH_TIMEOUT(!session->scanning(), 30000);
+        QCOMPARE(session->fileCount(), 400);
+        QCOMPARE(session->tickedHits(), 0);
+        QVERIFY(!session->apply());
+
+        // A hit ticked from there: only that one, and the rows say so.
+        session->setHitTicked(u"n0.md"_s, 0, true);
+        QCOMPARE(session->tickedHits(), 1);
+        const QHash<int, QByteArray> names = session->roleNames();
+        QCOMPARE(session->data(session->index(0), names.key("tick")).toInt(), 2);
+        // A new search starts ticked again.
+        session->setQuery(u"ko"_s);
+        session->scanNow();
+        QTRY_VERIFY_WITH_TIMEOUT(!session->scanning(), 30000);
+        QCOMPARE(session->tickedHits(), 400);
+        session->reset();
+    }
+
+    void replaceWithTheSameTextTellsNothingWasReplaced()
+    {
+        QString root;
+        auto ws = open({ { u"A.md"_s, u"kot kot\n"_s } }, &root);
+        ReplaceSession *session = ws->replacing();
+        QSignalSpy applied(session, &ReplaceSession::applied);
+        session->setQuery(u"kot"_s);
+        session->setReplacement(u"kot"_s);
+        session->scanNow();
+        QTRY_VERIFY(!session->scanning() && session->fileCount() == 1);
+        QVERIFY(session->apply());
+        QTRY_COMPARE(applied.size(), 1);
+        QCOMPARE(applied.first().at(1).toInt(), 0);
+        QCOMPARE(applied.first().at(2).toInt(), 0);
+        QVERIFY(!session->canUndo(applied.first().at(0).toInt()));
+        session->reset();
+    }
+
     void unreferencedFiles()
     {
         QString root;

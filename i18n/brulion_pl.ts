@@ -4783,6 +4783,24 @@
         <source>Replace all</source>
         <translation>Zamień wszystko</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/FindBar.qml" line="258"/>
+        <source>%n match(es) inside links: they will point elsewhere.</source>
+        <translation>
+            <numerusform>%n trafienie wewnątrz linku: zacznie prowadzić gdzie indziej.</numerusform>
+            <numerusform>%n trafienia wewnątrz linków: zaczną prowadzić gdzie indziej.</numerusform>
+            <numerusform>%n trafień wewnątrz linków: zaczną prowadzić gdzie indziej.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/FindBar.qml" line="260"/>
+        <source>%n match(es) in the page's properties.</source>
+        <translation>
+            <numerusform>%n trafienie we właściwościach strony.</numerusform>
+            <numerusform>%n trafienia we właściwościach strony.</numerusform>
+            <numerusform>%n trafień we właściwościach strony.</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>FrontmatterView</name>

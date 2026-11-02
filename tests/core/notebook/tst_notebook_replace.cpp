@@ -278,6 +278,34 @@ private Q_SLOTS:
         QVERIFY(!QFile::exists(nb.root.filePath(u"Bez pliku.md"_s)));
     }
 
+    void undoDoesNotBringBackADeletedNote()
+    {
+        Notebook nb;
+        nb.write(u"Skasowana.md"_s, "kot\n");
+        nb.open();
+        const ReplacePlan plan = planReplace(nb.vault, u"kot"_s, {});
+        const QList<ReplacedFile> results = applyReplace(nb.vault, plan, u"pies"_s, {{u"Skasowana.md"_s, {}}});
+        QCOMPARE(results.at(0).status, ReplaceStatus::Written);
+        // Another program deletes it; the vault's cached listing has not seen that yet.
+        QVERIFY(QFile::remove(nb.root.filePath(u"Skasowana.md"_s)));
+        QVERIFY(nb.vault.exists(u"Skasowana.md"_s));
+        QCOMPARE(undoReplacedFile(nb.vault, results.at(0)), UndoReplaceStatus::Changed);
+        QVERIFY(!QFile::exists(nb.root.filePath(u"Skasowana.md"_s)));
+    }
+
+    void identicalTextReplacesNothing()
+    {
+        Notebook nb;
+        nb.write(u"a.md"_s, "kot kot\n");
+        nb.open();
+        const ReplacePlan plan = planReplace(nb.vault, u"kot"_s, {});
+        const QList<ReplacedFile> results = applyReplace(nb.vault, plan, u"kot"_s, {{u"a.md"_s, {}}});
+        QCOMPARE(results.at(0).status, ReplaceStatus::Written);
+        QCOMPARE(results.at(0).replaced, 0);
+        QVERIFY(results.at(0).before.isEmpty());
+        QVERIFY(nb.vault.history()->list(u"a.md"_s).isEmpty());
+    }
+
     void scanOnThreads()
     {
         Notebook nb;
