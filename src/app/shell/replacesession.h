@@ -152,6 +152,8 @@ private:
     ApplyMode m_applyMode = ApplyMode::None;
     qsizetype m_applyAt = 0;
     QList<notebook::ReplaceChoice> m_choices;
+    notebook::ReplacePlan m_applyPlan; ///< the plan being applied: the view may go meanwhile
+    QString m_applyReplacement;
     QList<notebook::ReplacedFile> m_written; ///< the last replace, for undo
     QStringList m_changed;
     QStringList m_failed;

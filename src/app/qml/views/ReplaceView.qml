@@ -9,8 +9,8 @@ import Brulion
 // that have it (Workspace.replacing: looked through on other threads, a moment after typing stops),
 // each with its hits as "before → after" (from a note, so always plain text), a tick per note and per
 // hit. Everything is ticked at first: the preview is what is reviewed. "Zamień (N)" asks once more and
-// writes in slices; the toast's "Cofnij" restores every file still holding what was written, also
-// from another view. A hit inside a link says so: the link will point elsewhere (renaming a page is
+// writes in slices; the toast's "Cofnij" (AppShell) restores every file still holding what was written,
+// also from another view. A hit inside a link says so: the link will point elsewhere (renaming a page is
 // what keeps links). A hit opens its note at its line; the route keeps the query for Back.
 FocusScope {
     id: root
@@ -38,26 +38,11 @@ FocusScope {
         AppController.navigate({ view: "page", path: path, line: line - 1 })
     }
 
+    // (The shell tells how it went: AppShell. The results are looked for again.)
     Connections {
         target: root.session
-        function onApplied(token, hits, files, changed, failed) {
-            if (hits > 0) {
-                // A bound method, not a function of this view: the toast outlives the view.
-                AppController.toastAction(qsTr("%n occurrence(s) replaced", "", hits) + " · " + qsTr("%n note(s)", "", files),
-                                          "success", qsTr("Undo"), root.session.undo.bind(root.session, token))
-            }
-            if (changed.length > 0)
-                AppController.toast(qsTr("Left as they are, changed since the preview: %1").arg(changed.join(", ")), "warning")
-            if (failed.length > 0)
-                AppController.toast(qsTr("Could not write: %1").arg(failed.join(", ")), "error")
-            root.session.scanNow()
-        }
-        function onUndone(restored, left) {
-            AppController.toast(left.length > 0
-                                ? qsTr("%n note(s) restored", "", restored) + " · "
-                                  + qsTr("Changed since, left as they are: %1").arg(left.join(", "))
-                                : qsTr("%n note(s) restored", "", restored),
-                                left.length > 0 ? "warning" : "info")
+        function onApplied() { root.session.scanNow() }
+        function onUndone() {
             if (root.session.query !== "")
                 root.session.scanNow()
         }
@@ -279,6 +264,7 @@ FocusScope {
                             visible: row.inLink
                             Layout.fillWidth: true
                             variant: "muted"
+                            font.pixelSize: Theme.textSm
                             wrapMode: Text.Wrap
                             text: qsTr("Inside a link: it will point elsewhere.")
                         }

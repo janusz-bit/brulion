@@ -4105,10 +4105,23 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
           }),
           "the confirmation asks first");
     check(ws->readFile(other) == u"- zolw w innej notatce\n"_s, "nothing is written before the confirmation");
+    // (The note's Replace all has a toast with Undo of its own: this replace's is the one to press.)
+    if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
+        QMetaObject::invokeMethod(toasts, "clear");
     settle(250);
     if (acceptButton)
         tapOrClick(window, pointIn(acceptButton), touch);
     check(waitFor([&] { return ws->readFile(other) == u"- pies w innej notatce\n"_s; }, 5000), "the replace is written");
+    // Undo from another view: the toast outlives the view.
+    QQuickItem *undo = nullptr;
+    check(waitFor([&] { return (undo = named(u"toastAction"_s)) != nullptr; }), "the toast offers Undo");
+    app->navigate({ { u"view"_s, u"tasks"_s } });
+    settle(250);
+    undo = named(u"toastAction"_s);
+    if (undo)
+        tapOrClick(window, pointIn(undo), touch);
+    check(undo && waitFor([&] { return ws->readFile(other) == u"- zolw w innej notatce\n"_s; }, 5000),
+          "Undo restores the notes after leaving the view");
     closeMenus(window);
     ws->writeFile(note, QString());
     ws->deletePage(note);

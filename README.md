@@ -162,6 +162,9 @@
   szukanie bez polskich znaków i wielkości liter (na Androidzie od wersji 15), **Otwórz w innej
   aplikacji** i **Rysuj na tej stronie** — notatki na slajdach prosto z PDF-a. W przeglądarce PDF
   otwiera się w nowej karcie.
+* **Znajdź i zamień.** `Ctrl+F` w otwartej notatce, bez polskich znaków i wielkości liter („zolw”
+  znajdzie „ŻÓŁW”), a zamiana — w notatce (jedno `Ctrl+Z`) albo w całym notatniku, z podglądem
+  każdego trafienia, odznaczaniem i cofnięciem.
 * **Zapytania.** Blok ` ```query ` pokazuje na żywo np. wszystkie otwarte zadania z tagiem
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
@@ -353,6 +356,7 @@ usuwa go w całości.
 | `Ctrl+N` / `Ctrl+Shift+N` | nowa strona / szybka notatka do dziennika |
 | `Ctrl+Shift+B` | dokumentacja Brulionu / powrót do poprzedniego notatnika |
 | `Ctrl+Shift+F` | wyszukiwanie |
+| `Ctrl+F` / `Ctrl+H` | znajdź w notatce / znajdź i zamień |
 | `Alt+←` / `Alt+→` | wstecz / dalej |
 | `Enter` / `Shift+Enter` | nowy blok (na początku tekstu: pusty blok nad nim, przy zadaniu puste zadanie) / nowa linia w bloku |
 | `Tab` / `Shift+Tab` | wcięcie / wysunięcie bloku z dziećmi |

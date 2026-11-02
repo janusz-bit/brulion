@@ -538,11 +538,11 @@ private Q_SLOTS:
         QFETCH(QString, html);
         QFETCH(QString, query);
         QFETCH(QString, result);
-        QCOMPARE(InlineRenderer::withFindHighlight(html, query, {}, u"#ff0"), result);
+        QCOMPARE(InlineRenderer::withFindHighlight(html, query, false, false, false, u"#ff0"), result);
     }
     void findHighlightColorIsSafe()
     {
-        const QString out = InlineRenderer::withFindHighlight(u"kot", u"kot", {}, u"#ff0\"><img src=x>");
+        const QString out = InlineRenderer::withFindHighlight(u"kot", u"kot", false, false, false, u"#ff0\"><img src=x>");
         QVERIFY(!out.contains(u"<img"));
     }
 

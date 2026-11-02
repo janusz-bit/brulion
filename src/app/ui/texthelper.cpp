@@ -257,8 +257,7 @@ QString TextHelper::findHighlightedHtml(const QString &html, const QString &quer
 {
     if (query.isEmpty())
         return html;
-    return markdown::InlineRenderer::withFindHighlight(html, query, { matchCase, matchDiacritics, wholeWord },
-                                                       color);
+    return markdown::InlineRenderer::withFindHighlight(html, query, matchCase, matchDiacritics, wholeWord, color);
 }
 
 QString TextHelper::hoveredLinkHtml(const QString &html, const QString &href) const

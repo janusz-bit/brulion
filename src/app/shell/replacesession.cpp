@@ -361,6 +361,8 @@ bool ReplaceSession::apply()
         if (tickedInFile(file) > 0)
             m_choices.append({ file.path, m_ticks.value(file.path).excluded });
     }
+    m_applyPlan = m_plan;
+    m_applyReplacement = m_replacement;
     m_written.clear();
     m_changed.clear();
     m_failed.clear();
@@ -381,11 +383,11 @@ void ReplaceSession::applyStep()
     clock.start();
     while (vault && m_applyAt < m_choices.size() && clock.elapsed() < SliceMs) {
         const notebook::ReplaceChoice &choice = m_choices.at(m_applyAt++);
-        const auto file = std::find_if(m_plan.files.cbegin(), m_plan.files.cend(),
+        const auto file = std::find_if(m_applyPlan.files.cbegin(), m_applyPlan.files.cend(),
                                        [&](const notebook::ReplaceFile &f) { return f.path == choice.path; });
-        if (file == m_plan.files.cend())
+        if (file == m_applyPlan.files.cend())
             continue;
-        notebook::ReplacedFile done = notebook::applyToFile(*vault, *file, m_plan, m_replacement, choice.excluded);
+        notebook::ReplacedFile done = notebook::applyToFile(*vault, *file, m_applyPlan, m_applyReplacement, choice.excluded);
         switch (done.status) {
         case notebook::ReplaceStatus::Written:
             m_appliedHits += done.replaced;
@@ -408,6 +410,7 @@ void ReplaceSession::applyStep()
     m_slices.stop();
     m_applyMode = ApplyMode::None;
     m_choices.clear();
+    m_applyPlan = {};
     const int files = int(m_written.size());
     const QStringList changed = m_changed;
     const QStringList failed = m_failed;

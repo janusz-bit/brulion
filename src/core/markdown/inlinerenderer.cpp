@@ -1,3 +1,4 @@
+#include "text/find.h"
 #include "markdown/inlinerenderer.h"
 
 #include "dates/format.h"
@@ -498,8 +499,8 @@ char32_t entityAt(QStringView html, qsizetype at, qsizetype &end)
 
 } // namespace
 
-QString InlineRenderer::withFindHighlight(QStringView html, QStringView query, const text::FindOptions &options,
-                                          QStringView color)
+QString InlineRenderer::withFindHighlight(QStringView html, QStringView query, bool matchCase, bool matchDiacritics,
+                                          bool wholeWord, QStringView color)
 {
     if (query.isEmpty())
         return html.toString();
@@ -553,7 +554,7 @@ QString InlineRenderer::withFindHighlight(QStringView html, QStringView query, c
         add(c, i, i + 1);
         ++i;
     }
-    const QList<text::TextRange> matches = text::findMatches(shown, query, options);
+    const QList<text::TextRange> matches = text::findMatches(shown, query, { matchCase, matchDiacritics, wholeWord });
     if (matches.isEmpty())
         return html.toString();
     const QString open = u"<span style=\"background-color:"_s + safeColor(color.toString()) + u"\">"_s;

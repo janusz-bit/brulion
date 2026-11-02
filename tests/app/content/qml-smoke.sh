@@ -41,9 +41,9 @@ routes=(
   cleanup
   '{"view":"cleanup","kind":"attachments","selected":["brak.md"]}'
   '{"view":"history","path":"Witaj w Brulionie.md"}'
-  '{"view":"page","path":"projekt.md","open":"find"}'
   replace
   '{"view":"replace","query":"remont","replacement":"naprawa"}'
+  '{"view":"page","path":"Projekty/Remont mieszkania.md","open":"find"}'
 )
 pattern='qml/(content/|views/(JournalsView|PageView|AllPagesView|TagsView|SearchView|TrashView|CleanupView|ReplaceView|HistoryView)|editor/FindBar)'
 

@@ -91,8 +91,8 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * „Otwórz w innej aplikacji” dla innych załączników (DOCX, XLSX — z listą bezpiecznych typów;
     dziś otwierają się w Brulionie tylko do odczytu jako tekst).
 * **Usuwanie pliku** — możliwość usunięcia pliku; zakres do ustalenia.
-* **Znajdź i zamień** — szukanie w otwartej notatce (`Ctrl+F` działa dziś tylko w PDF-ie i grafie),
-  zamiana w notatce i w całym notatniku z podglądem zmian, bez polskich znaków i wielkości liter.
+* **Znajdź w strumieniu dziennika przez kilka dni** — `Ctrl+F` w strumieniu szuka dziś w jednym dniu
+  (tym, w którym piszesz); zamiana w całym notatniku obejmuje wszystkie dni.
 * **Sprawdzanie pisowni** — podkreślanie błędów i podpowiedzi w edytorze, po polsku i angielsku
   (na komputerze np. Hunspell, na Androidzie systemowe sprawdzanie klawiatury).
 * **Karty i wiele okien** — kilka otwartych stron w kartach, podział widoku na więcej niż główny i

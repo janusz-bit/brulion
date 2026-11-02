@@ -635,6 +635,28 @@ FocusScope {
 
     // ---- Shortcuts (docs/UI.md) -----------------------------------------------------------------
 
+    // How a replace in the whole notebook went, also when ReplaceView has gone meanwhile.
+    Connections {
+        target: Workspace.replacing
+        function onApplied(token, hits, files, changed, failed) {
+            if (hits > 0) {
+                AppController.toastAction(qsTr("%n occurrence(s) replaced", "", hits) + " · " + qsTr("%n note(s)", "", files),
+                                          "success", qsTr("Undo"), Workspace.replacing.undo.bind(Workspace.replacing, token))
+            }
+            if (changed.length > 0)
+                AppController.toast(qsTr("Left as they are, changed since the preview: %1").arg(changed.join(", ")), "warning")
+            if (failed.length > 0)
+                AppController.toast(qsTr("Could not write: %1").arg(failed.join(", ")), "error")
+        }
+        function onUndone(restored, left) {
+            AppController.toast(left.length > 0
+                                ? qsTr("%n note(s) restored", "", restored) + " · "
+                                  + qsTr("Changed since, left as they are: %1").arg(left.join(", "))
+                                : qsTr("%n note(s) restored", "", restored),
+                                left.length > 0 ? "warning" : "info")
+        }
+    }
+
     Shortcut { sequence: "Ctrl+K"; onActivated: shell.openPalette() }
     Shortcut { sequence: "Ctrl+O"; onActivated: shell.openSwitcher() }
     Shortcut { sequence: "Ctrl+Shift+F"; onActivated: AppController.search("") }
