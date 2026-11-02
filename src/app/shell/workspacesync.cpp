@@ -324,6 +324,7 @@ void WorkspaceSync::teardown()
     m_engine.reset();
     m_client.reset();
     suspendPdfReaders(false); // (a run abandoned: no runFinished)
+    holdReadyIfIdle();
     m_liveTimer.stop();
     m_liveTick.stop();
     if (!m_live.isEmpty()) {
@@ -366,6 +367,7 @@ void WorkspaceSync::rebuild()
     if (m_history)
         m_engine->setNextRunNumber(m_history->nextNumber());
     m_scheduler = std::make_unique<sync::SyncScheduler>(m_engine.get());
+    m_scheduler->setHeld(m_held);
     m_scheduler->setInterval(m_nextcloud.intervalMinutes > 0 ? qint64(m_nextcloud.intervalMinutes) * 60'000 : kDailyMs);
     if (m_onlineCheck)
         m_scheduler->setOnlineCheck(m_onlineCheck);
@@ -381,6 +383,9 @@ void WorkspaceSync::rebuild()
     // The run may replace, move or delete a PDF: no reader keeps one open meanwhile (Windows).
     connect(m_scheduler.get(), &sync::SyncScheduler::runStarted, this, [this] { suspendPdfReaders(true); });
     connect(m_scheduler.get(), &sync::SyncScheduler::runFinished, this, &WorkspaceSync::onRunFinished);
+    // (Queued: the scheduler is still inside the run's end when it says so.)
+    connect(m_scheduler.get(), &sync::SyncScheduler::runFinished, this, &WorkspaceSync::holdReadyIfIdle,
+            Qt::QueuedConnection);
     connect(m_scheduler.get(), &sync::SyncScheduler::synced, this, &WorkspaceSync::onSynced);
     // Which account and folder (never the password): the first lines to look at in a log.
     const QUrl server = QUrl::fromUserInput(m_nextcloud.url.trimmed());
@@ -676,6 +681,30 @@ QVariantMap WorkspaceSync::appStatus() const
 }
 
 // ---- actions ------------------------------------------------------------------------------------
+
+void WorkspaceSync::holdSync(std::function<void()> ready)
+{
+    m_held = true;
+    m_holdReady = std::move(ready);
+    if (m_scheduler)
+        m_scheduler->setHeld(true);
+    holdReadyIfIdle();
+}
+
+void WorkspaceSync::holdReadyIfIdle()
+{
+    if (!m_holdReady || (m_scheduler && m_scheduler->isRunning()))
+        return;
+    QMetaObject::invokeMethod(this, std::exchange(m_holdReady, {}), Qt::QueuedConnection);
+}
+
+void WorkspaceSync::releaseSync()
+{
+    m_held = false;
+    m_holdReady = {};
+    if (m_scheduler)
+        m_scheduler->setHeld(false);
+}
 
 void WorkspaceSync::syncNow()
 {

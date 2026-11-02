@@ -87,6 +87,7 @@ private Q_SLOTS:
 
         WriteOptions options;
         options.targetPath = dir.filePath(u"kopie/Brulion-Notatnik-2026-11-02-143005.zip"_s);
+        options.notebookId = vault.id();
         options.createFolder = true;
         const WriteResult result = runWriter(poolOn(threads ? &m_threads : nullptr), sources, options);
         QVERIFY2(result.ok(), qPrintable(result.detail));
@@ -94,7 +95,12 @@ private Q_SLOTS:
         QCOMPARE(result.bytes, QFileInfo(options.targetPath).size());
         QCOMPARE(result.files, files.size());
         QVERIFY(result.skipped.isEmpty());
+        QVERIFY(result.complete());
         QCOMPARE(QDir(dir.filePath(u"kopie"_s)).entryList(QDir::Files | QDir::Hidden).size(), 1);
+        const BackupManifest manifest = readBackupManifest(options.targetPath);
+        QVERIFY(manifest.valid);
+        QVERIFY(manifest.complete);
+        QCOMPARE(manifest.notebookId, options.notebookId);
 
         ArchiveReader reader(options.targetPath);
         const ArchiveInfo info = reader.readEntries();
@@ -251,9 +257,72 @@ private Q_SLOTS:
         options.targetPath = dir.filePath(u"Brulion-N-2026-11-02-143005.zip"_s);
         const WriteResult result = runWriter(poolOn(nullptr), sources, options);
         QVERIFY2(result.ok(), qPrintable(result.detail));
-        QCOMPARE(result.vanished, 1);
+        QCOMPARE(result.vanished, QStringList{u"b.md"_s});
+        QVERIFY(!result.complete());
+        QVERIFY(!readBackupManifest(options.targetPath).complete);
         QVERIFY(result.skipped.isEmpty());
         QCOMPARE(entryNames(options.targetPath), QStringList{u"a.md"_s});
+    }
+
+    void nothingArchivedIsAFailure_data()
+    {
+        QTest::addColumn<bool>("withConfig");
+        QTest::newRow("no files at all") << false;
+        QTest::newRow("only the settings left") << true;
+    }
+    void nothingArchivedIsAFailure()
+    {
+        // The drive went between the listing and the run: no ZIP that looks like a good backup.
+        QFETCH(bool, withConfig);
+        QTemporaryDir dir;
+        const QString root = dir.filePath(u"N"_s);
+        writeFile(root + u"/a.md"_s, "a");
+        writeFile(root + u"/b.md"_s, "b");
+        if (withConfig)
+            writeFile(root + u"/.brulion/config.json"_s, "{}");
+        Vault vault(root);
+        QVERIFY(vault.open());
+        const Sources sources = collectSources(vault);
+        QVERIFY(QFile::remove(root + u"/a.md"_s));
+        QVERIFY(QFile::remove(root + u"/b.md"_s));
+        WriteOptions options;
+        options.targetPath = dir.filePath(u"Brulion-N-2026-11-02-143005.zip"_s);
+        const WriteResult result = runWriter(poolOn(nullptr), sources, options);
+        QCOMPARE(result.error, WriteError::NothingArchived);
+        QVERIFY(!QFileInfo::exists(options.targetPath));
+    }
+
+    void manifestsOfOtherArchives_data()
+    {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<bool>("valid");
+        const QByteArray zip = rawZip({{"a.md", "a"}});
+        QTest::newRow("no comment") << zip << false;
+        QTest::newRow("garbage") << QByteArray("to nie jest archiwum") << false;
+        QTest::newRow("empty") << QByteArray() << false;
+        QByteArray other = zip;
+        const QByteArray comment = "{\"notebook\":\"cudzy\"}";
+        other[other.size() - 2] = char(comment.size());
+        other += comment;
+        QTest::newRow("another program's comment") << other << false;
+        QTest::newRow("a comment longer than the file")
+                << QByteArray(zip).replace(zip.size() - 2, 2, "\xff\xff") << false;
+        QTest::newRow("ours") << withManifest(zip, u"abc"_s) << true;
+    }
+    void manifestsOfOtherArchives()
+    {
+        QFETCH(QByteArray, bytes);
+        QFETCH(bool, valid);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"z.zip"_s);
+        writeFile(path, bytes);
+        const BackupManifest manifest = readBackupManifest(path);
+        QCOMPARE(manifest.valid, valid);
+        if (valid) {
+            QCOMPARE(manifest.notebookId, u"abc"_s);
+            ArchiveReader reader(path);
+            QVERIFY(reader.readEntries().ok()); // a ZIP as before
+        }
     }
 
     void anUnreadableFileIsReported()
@@ -274,6 +343,8 @@ private Q_SLOTS:
         const WriteResult result = runWriter(poolOn(nullptr), collectSources(vault), options);
         QVERIFY2(result.ok(), qPrintable(result.detail));
         QCOMPARE(result.skipped, QStringList{u"tajne.md"_s});
+        QVERIFY(!result.complete());
+        QVERIFY(!readBackupManifest(options.targetPath).complete);
         QCOMPARE(entryNames(options.targetPath), QStringList{u"jawne.md"_s});
     }
 
@@ -493,6 +564,9 @@ private Q_SLOTS:
         QByteArray cut = zip({{"a.md", "treść"}, {"b.md", "treść"}});
         cut.chop(10);
         QTest::newRow("cut short") << cut << int(ArchiveProblem::NotAZip);
+        // Brulion's manifest does not make a hostile archive any less hostile.
+        QTest::newRow("zip slip with a manifest")
+                << withManifest(zip({{"../poza.md", "owned"}})) << int(ArchiveProblem::UnsafePath);
     }
     void hostileArchives()
     {

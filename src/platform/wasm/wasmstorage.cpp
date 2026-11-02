@@ -161,7 +161,7 @@ EM_JS(void, brulion_storage_start, (const char *mountsJson, const char *cacheMou
                     st.cacheFailures++;
                     if (populate && st.keptMounts.indexOf(path) >= 0) st.unloaded[path] = true;
                     console.warn("Brulion: the cache in " + path + " was not " + (populate ? "loaded from" : "saved to") + " IndexedDB", err);
-                    report(4, false, JSON.stringify({ mount: path, error: describe(err) }));
+                    report(4, false, JSON.stringify({ mount: path, error: describe(err), load: populate }));
                 } else if (err && !failure) {
                     failure = err;
                 }
@@ -575,6 +575,8 @@ void WasmStorage::handleJsEvent(int op, bool ok, const QString &message)
         if (mount == backupsRoot()) {
             qCWarning(lcWasmStorage).noquote()
                     << QStringLiteral("the backups in %1 were not saved to IndexedDB (%2)").arg(mount, why);
+            if (failure.value(QStringLiteral("load")).toBool())
+                m_backupsLoadError = why.isEmpty() ? QStringLiteral("?") : why;
             Q_EMIT backupsNotSaved(why);
             break;
         }

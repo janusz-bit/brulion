@@ -8,6 +8,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QTemporaryFile>
 
@@ -36,7 +38,52 @@ QString canonicalAsFarAsItExists(const QString &path)
     return QFileInfo(existing).canonicalFilePath() + rest;
 }
 
+/// More than any comment Brulion writes.
+constexpr qint64 ManifestTailBytes = 4096;
+constexpr qsizetype EndOfDirectorySize = 22;
+
 } // namespace
+
+QByteArray backupManifest(const QString &notebookId, bool complete, int files)
+{
+    return QJsonDocument(QJsonObject{{u"brulionBackup"_s, 1},
+                                     {u"notebook"_s, notebookId},
+                                     {u"complete"_s, complete},
+                                     {u"files"_s, files}})
+            .toJson(QJsonDocument::Compact);
+}
+
+BackupManifest readBackupManifest(const QString &path)
+{
+    BackupManifest out;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return out;
+    const qint64 start = std::max<qint64>(0, file.size() - ManifestTailBytes);
+    if (!file.seek(start))
+        return out;
+    const QByteArray tail = file.read(ManifestTailBytes);
+    // The end-of-directory record whose comment reaches exactly to the end of the file.
+    static const QByteArray signature("PK\x05\x06", 4);
+    for (qsizetype at = tail.lastIndexOf(signature); at >= 0; at = at > 0 ? tail.lastIndexOf(signature, at - 1) : -1) {
+        if (at + EndOfDirectorySize > tail.size())
+            continue;
+        const auto low = static_cast<unsigned char>(tail.at(at + 20));
+        const auto high = static_cast<unsigned char>(tail.at(at + 21));
+        const qsizetype length = qsizetype(low) | (qsizetype(high) << 8);
+        if (at + EndOfDirectorySize + length != tail.size())
+            continue;
+        const QJsonObject json = QJsonDocument::fromJson(tail.sliced(at + EndOfDirectorySize)).object();
+        if (json.value(u"brulionBackup"_s).toInt() == 1) {
+            out.valid = true;
+            out.notebookId = json.value(u"notebook"_s).toString();
+            out.complete = json.value(u"complete"_s).toBool();
+            out.files = json.value(u"files"_s).toInt();
+        }
+        return out;
+    }
+    return out;
+}
 
 QString notebookFilePart(const QString &notebookName)
 {
@@ -88,39 +135,49 @@ QList<BackupFile> listBackups(const QString &folder, const QString &notebookName
     for (const QFileInfo &info : entries) {
         if (info.isSymLink())
             continue;
-        if (const std::optional<QDateTime> time = backupFileTime(info.fileName(), notebookName))
-            out.append(BackupFile{info.fileName(), info.absoluteFilePath(), *time, info.size()});
+        if (const std::optional<QDateTime> time = backupFileTime(info.fileName(), notebookName)) {
+            const BackupManifest manifest = readBackupManifest(info.absoluteFilePath());
+            out.append(BackupFile{info.fileName(), info.absoluteFilePath(), *time, info.size(),
+                                  manifest.valid ? manifest.notebookId : QString(),
+                                  manifest.valid && manifest.complete});
+        }
     }
     std::stable_sort(out.begin(), out.end(), [](const BackupFile &a, const BackupFile &b) { return a.time > b.time; });
     return out;
 }
 
-QStringList backupsToPrune(const QList<BackupFile> &backups, int keep, const QSet<QString> &own,
-                           const QSet<QString> &protect)
+QStringList backupsToPrune(const QList<BackupFile> &backups, int keep, const QString &notebookId,
+                           const QSet<QString> &protect, bool pruneComplete)
 {
     QStringList out;
-    qsizetype kept = 0;
+    if (notebookId.isEmpty())
+        return out;
+    const int limit = std::max(keep, MinKeep);
+    qsizetype keptComplete = 0;
+    qsizetype keptIncomplete = 0;
     for (const BackupFile &file : backups) {
-        if (protect.contains(file.fileName))
-            ++kept;
+        if (file.notebookId == notebookId && protect.contains(file.fileName))
+            ++(file.complete ? keptComplete : keptIncomplete);
     }
     for (const BackupFile &file : backups) {
-        if (protect.contains(file.fileName) || !own.contains(file.fileName))
+        if (file.notebookId != notebookId || protect.contains(file.fileName))
             continue;
-        if (kept < std::max(keep, MinKeep))
+        qsizetype &kept = file.complete ? keptComplete : keptIncomplete;
+        if (kept < limit)
             ++kept;
-        else
+        else if (pruneComplete || !file.complete)
             out.append(file.fileName);
     }
     return out;
 }
 
-QStringList pruneBackups(const QString &folder, const QString &notebookName, int keep, const QSet<QString> &own,
-                         const QSet<QString> &protect, QStringList *failed)
+QStringList pruneBackups(const QString &folder, const QString &notebookName, int keep, const QString &notebookId,
+                         const QSet<QString> &protect, bool pruneComplete, QStringList *failed)
 {
     QStringList removed;
     const QDir dir(folder);
-    for (const QString &name : backupsToPrune(listBackups(folder, notebookName), keep, own, protect)) {
+    for (const QString &name :
+         backupsToPrune(listBackups(folder, notebookName), keep, notebookId, protect, pruneComplete)) {
         if (QFile::remove(dir.filePath(name)))
             removed.append(name);
         else if (failed)
@@ -168,6 +225,21 @@ bool checkFolderWritable(const QString &folder, QString *error)
         return false;
     }
     return true;
+}
+
+bool isCaseInsensitiveFolder(const QString &folder)
+{
+    QTemporaryFile probe(QDir(folder).filePath(u".brulion-tmp-CaseProbe-XXXXXX"_s));
+    if (!probe.open())
+        return false;
+    const QFileInfo info(probe.fileName());
+    return QFileInfo::exists(info.dir().filePath(info.fileName().toLower()))
+           && QFileInfo::exists(info.dir().filePath(info.fileName().toUpper()));
+}
+
+qsizetype Sources::notebookFileCount() const
+{
+    return std::count_if(files.cbegin(), files.cend(), [](const SourceFile &f) { return f.path != vaultConfigPath(); });
 }
 
 Sources collectSources(const Vault &vault)

@@ -946,6 +946,7 @@ private:
     };
 
     void onFileChanged(const QString &path);
+    void onEditsDiscarded(const QString &path);
     /// Tell the hosts which file this editor shows (EditorHost::editorOpened/editorClosed).
     void showFile(EditorHost *host, const QString &path);
     void markDirty();
@@ -1084,6 +1085,7 @@ private:
     int m_undoGeneration = 0; ///< bumped whenever m_undo is cleared (undoToken())
     QTimer m_saveTimer;
     bool m_saving = false; ///< save() is inside the host's compare-and-swap write
+    bool m_editsDiscarded = false; ///< a restore took this page away: nothing is written until load()
     QString m_savedText;
     bool m_dirty = false;
     bool m_loading = false;

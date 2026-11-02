@@ -22,6 +22,8 @@
 #include <QTest>
 #include <QUrl>
 
+#include <atomic>
+
 using namespace Qt::StringLiterals;
 using brulion::shell::AppController;
 using brulion::shell::Workspace;
@@ -210,7 +212,7 @@ private Q_SLOTS:
         writeRaw(root + u"/a.md"_s, "- a\n");
         const QString chosen = m_tmp.filePath(u"pendrive"_s);
         const QString part = QFileInfo(root).fileName();
-        const QString foreignTwin = chosen + u"/Brulion-%1-2020-01-01-120000.zip"_s.arg(part); // another notebook's
+        const QString foreignTwin = chosen + u"/Brulion-%1-2020-01-01-120000.zip"_s.arg(part); // no manifest
         const QStringList foreign{foreignTwin, chosen + u"/Brulion-Inny-2020-01-01-120000.zip"_s,
                                   chosen + u"/zdjęcia.zip"_s, chosen + u"/notatka.md"_s};
         for (const QString &file : foreign)
@@ -409,9 +411,13 @@ private Q_SLOTS:
         QVERIFY(createNow(b));
         const QString name = u"Brulion-%1-2020-01-01-120000.zip"_s.arg(QFileInfo(root).fileName());
         writeRaw(QDir(b->folder()).filePath(name), "to nie jest archiwum");
+        b->refresh();
+        QTRY_COMPARE(b->backups().size(), 2);
         QSignalSpy planned(b, &WorkspaceBackups::restorePlanReady);
         QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
-        QVERIFY(b->prepareRestore(name));
+        // It has no manifest: not this notebook's, so it takes the explicit confirmation.
+        QVERIFY(!b->prepareRestore(name));
+        QVERIFY(b->prepareRestore(name, true));
         QTRY_COMPARE(messages.size(), 1);
         QCOMPARE(messages.first().at(1).toString(), u"error"_s);
         QVERIFY(planned.isEmpty());
@@ -465,6 +471,7 @@ private Q_SLOTS:
         QVERIFY(b->createNow());
         QVERIFY(settled(b));
         QCOMPARE(zipsIn(folder).size(), 3);
+        QSignalSpy listed(b, &WorkspaceBackups::backupsChanged);
         b->storageRefused(u"QuotaExceededError"_s);
         QCOMPARE(zipsIn(folder), kept);
         QCOMPARE(b->status(), u"failed"_s);
@@ -520,6 +527,308 @@ private Q_SLOTS:
         // A finished copy or none; never a half-written one under that name.
         for (const QString &name : zipsIn(folder))
             QVERIFY(QFileInfo(QDir(folder).filePath(name)).size() > 0);
+    }
+
+    void aRunTheStorageWentUnderIsNoBackup()
+    {
+        // The drive is pulled mid-run: what remains vanishes. The only good copy (keep 1) stays and
+        // the schedule does not think the fragment stands for the notebook.
+        const QString root = newRoot();
+        for (const QString &name : {u"a.md"_s, u"b.md"_s, u"c.md"_s})
+            writeRaw(root + u'/' + name, "- " + name.toUtf8() + "\n");
+        const QString drive = m_tmp.filePath(u"kopie-%1"_s.arg(m_n));
+        QDir().mkpath(drive);
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        b->chooseFolder(QUrl::fromLocalFile(drive));
+        QTRY_COMPARE(b->folder(), drive);
+        b->setKeep(1);
+        QVERIFY(createNow(b));
+        const QStringList good = zipsIn(drive);
+        QCOMPARE(good.size(), 1);
+
+        QVERIFY(ws->writeFile(u"a.md"_s, u"- zmiana\n"_s));
+        m_now = m_now.addDays(1);
+        const QString away = root + u"-odpięty"_s;
+        std::atomic_bool pulled = false;
+        // a.md is in the archive already, the rest goes with the drive.
+        b->setReadHook([&](const QString &path, qint64) {
+            if (path == u"b.md" && !pulled.exchange(true))
+                QDir().rename(root, away);
+        });
+        QSignalSpy written(b, &WorkspaceBackups::backupWritten);
+        QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
+        QVERIFY(b->createNow());
+        QVERIFY(settled(b));
+        b->setReadHook({});
+        QVERIFY(pulled);
+        QVERIFY(written.isEmpty());
+        QCOMPARE(zipsIn(drive), good);
+        QCOMPARE(b->status(), u"failed"_s);
+        QCOMPARE(messages.size(), 1);
+        QVERIFY(QDir().rename(away, root));
+        // Back: the next run is a real one, not "unchanged".
+        ws->vault()->rescan();
+        QVERIFY(!checked(b).isEmpty());
+    }
+
+    void anIncompleteCopyNeitherPrunesNorCountsAsCurrent()
+    {
+        if (!brulion::test::hasUnixPermissions())
+            QSKIP("no Unix file modes here");
+        const QString root = newRoot();
+        writeRaw(root + u"/a.md"_s, "- a\n");
+        writeRaw(root + u"/tajne.md"_s, "- tajne\n");
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        b->setKeep(1);
+        const QString good = checked(b);
+        QVERIFY(!good.isEmpty());
+        QTRY_COMPARE(b->backups().size(), 1);
+        QVERIFY(b->backups().first().toMap().value(u"complete"_s).toBool());
+
+        QFile::setPermissions(root + u"/tajne.md"_s, QFileDevice::Permissions{});
+        if (QFile probe(root + u"/tajne.md"_s); probe.open(QIODevice::ReadOnly))
+            QSKIP("this user can read everything");
+        QVERIFY(ws->writeFile(u"a.md"_s, u"- b\n"_s));
+        m_now = m_now.addDays(1);
+        QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
+        const QString partial = checked(b);
+        QVERIFY(!partial.isEmpty());
+        QTRY_COMPARE(b->backups().size(), 2);
+        QVERIFY(zipsIn(b->folder()).contains(good)); // keep 1: the good copy stays all the same
+        QCOMPARE(b->status(), u"warning"_s);
+        QCOMPARE(messages.size(), 1);
+        QCOMPARE(messages.first().at(1).toString(), u"warning"_s);
+
+        // Nothing changed since, but it left a file out: the next day tries again, and the older
+        // incomplete copy makes way for the new one.
+        m_now = m_now.addDays(1);
+        const QString again = checked(b);
+        QVERIFY(!again.isEmpty());
+        QTRY_VERIFY(!zipsIn(b->folder()).contains(partial));
+        QVERIFY(zipsIn(b->folder()).contains(good));
+
+        // Readable again: a complete copy, and only now the older complete one goes.
+        QFile::setPermissions(root + u"/tajne.md"_s, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        m_now = m_now.addDays(1);
+        const QString complete = checked(b);
+        QVERIFY(!complete.isEmpty());
+        QCOMPARE(b->status(), u"ok"_s);
+        QTRY_VERIFY(!zipsIn(b->folder()).contains(good));
+    }
+
+    void onlyTheSettingsLeftIsAnEmptyNotebook()
+    {
+        const QString root = newRoot();
+        writeRaw(root + u"/.brulion/config.json"_s, "{}");
+        auto ws = openAt(root);
+        QCOMPARE(checked(ws->backups()), QString());
+        QVERIFY(!ws->backups()->createNow());
+        QVERIFY(zipsIn(ws->backups()->folder()).isEmpty());
+    }
+
+    void aSafetyBackupMissingAFileThePlanTouchesAborts()
+    {
+        if (!brulion::test::hasUnixPermissions())
+            QSKIP("no Unix file modes here");
+        const QString root = newRoot();
+        writeRaw(root + u"/a.md"_s, "- z kopii\n");
+        writeRaw(root + u"/obraz.bin"_s, QByteArray("\0z kopii", 8));
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        QVERIFY(createNow(b));
+        const QString source = b->backups().first().toMap().value(u"name"_s).toString();
+        writeRaw(root + u"/obraz.bin"_s, QByteArray("\0inne bajty", 11));
+        ws->vault()->rescan();
+        QVERIFY(ws->writeFile(u"a.md"_s, u"- po kopii\n"_s));
+        m_now = m_now.addSecs(120);
+        const QVariantMap plan = plannedRestore(b, source);
+        QCOMPARE(plan.value(u"changed"_s).toInt(), 2);
+
+        QFile::setPermissions(root + u"/obraz.bin"_s, QFileDevice::WriteOwner);
+        if (QFile probe(root + u"/obraz.bin"_s); probe.open(QIODevice::ReadOnly))
+            QSKIP("this user can read everything");
+        QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
+        b->confirmRestore();
+        QTRY_VERIFY_WITH_TIMEOUT(!b->running(), 30000);
+        QFile::setPermissions(root + u"/obraz.bin"_s, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        QCOMPARE(messages.last().at(1).toString(), u"error"_s);
+        QVERIFY(messages.last().at(0).toString().contains(u"obraz.bin"_s));
+        QCOMPARE(readRaw(root + u"/obraz.bin"_s), QByteArray("\0inne bajty", 11));
+        QCOMPARE(readRaw(root + u"/a.md"_s), QByteArray("- po kopii\n"));
+    }
+
+    void anotherNotebooksCopiesAreForeign()
+    {
+        // Two notebooks with one folder name, one backup folder.
+        const QString shared = m_tmp.filePath(u"wspólny-%1"_s.arg(++m_n));
+        QDir().mkpath(shared);
+        const QString rootA = m_tmp.filePath(u"pierwszy-%1/Notatki"_s.arg(m_n));
+        const QString rootB = m_tmp.filePath(u"drugi-%1/Notatki"_s.arg(m_n));
+        writeRaw(rootA + u"/a.md"_s, "- pierwszy\n");
+        writeRaw(rootB + u"/b.md"_s, "- drugi\n");
+        auto a = openAt(rootA);
+        a->backups()->chooseFolder(QUrl::fromLocalFile(shared));
+        QTRY_COMPARE(a->backups()->folder(), shared);
+        QVERIFY(createNow(a->backups()));
+        const QString copyOfA = a->backups()->backups().first().toMap().value(u"name"_s).toString();
+        a.reset();
+
+        auto b = openAt(rootB);
+        WorkspaceBackups *backups = b->backups();
+        backups->chooseFolder(QUrl::fromLocalFile(shared));
+        QTRY_COMPARE(backups->folder(), shared);
+        QTRY_COMPARE(backups->backups().size(), 1);
+        QVERIFY(backups->backups().first().toMap().value(u"foreign"_s).toBool());
+
+        // Neither restored nor deleted without the explicit confirmation, never pruned.
+        QVERIFY(!backups->prepareRestore(copyOfA));
+        QVERIFY(!backups->remove(copyOfA));
+        QVERIFY(QFileInfo::exists(shared + u'/' + copyOfA));
+        backups->setKeep(1);
+        m_now = m_now.addSecs(60);
+        QVERIFY(createNow(backups));
+        QVERIFY(b->writeFile(u"b.md"_s, u"- zmiana\n"_s));
+        m_now = m_now.addSecs(60);
+        QVERIFY(createNow(backups));
+        QTRY_COMPARE(zipsIn(shared).size(), 2);
+        QVERIFY(zipsIn(shared).contains(copyOfA));
+        QTRY_COMPARE(backups->backups().size(), 2);
+
+        // Asked for by name: the plan says so.
+        const QVariantMap plan = [&] {
+            QSignalSpy planned(backups, &WorkspaceBackups::restorePlanReady);
+            backups->prepareRestore(copyOfA, true);
+            return planned.wait(30000) ? planned.first().first().toMap() : QVariantMap();
+        }();
+        QVERIFY(plan.value(u"foreign"_s).toBool());
+        backups->dismissRestore();
+        QVERIFY(backups->remove(copyOfA, true));
+        QVERIFY(!QFileInfo::exists(shared + u'/' + copyOfA));
+    }
+
+    void copiesFromBeforeALostDeviceStateAreStillOwn()
+    {
+        const QString root = newRoot();
+        writeRaw(root + u"/a.md"_s, "- a\n");
+        const QString shared = m_tmp.filePath(u"pendrive-%1"_s.arg(m_n));
+        QDir().mkpath(shared);
+        auto ws = openAt(root);
+        ws->backups()->chooseFolder(QUrl::fromLocalFile(shared));
+        QTRY_COMPARE(ws->backups()->folder(), shared);
+        QVERIFY(createNow(ws->backups()));
+        const QString old = zipsIn(shared).first();
+        ws.reset();
+        QVERIFY(QDir(root + u"-state"_s).removeRecursively()); // the app's data lost; the path is the same
+
+        ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        b->chooseFolder(QUrl::fromLocalFile(shared));
+        QTRY_COMPARE(b->backups().size(), 1);
+        QVERIFY(!b->backups().first().toMap().value(u"foreign"_s).toBool());
+        b->setKeep(1);
+        m_now = m_now.addDays(1);
+        QVERIFY(ws->writeFile(u"a.md"_s, u"- b\n"_s));
+        QVERIFY(createNow(b));
+        QTRY_VERIFY(!zipsIn(shared).contains(old)); // pruned like any of its own
+    }
+
+    void anUnloadedBrowserMountRefusesEverything()
+    {
+        const QString root = newRoot();
+        writeRaw(root + u"/a.md"_s, "- a\n");
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        QVERIFY(createNow(b));
+        const QString source = b->backups().first().toMap().value(u"name"_s).toString();
+        const qsizetype before = zipsIn(b->folder()).size();
+        b->setStorageUnavailable(u"UnknownError"_s);
+        QCOMPARE(b->status(), u"failed"_s);
+        QVERIFY(!b->statusText().isEmpty());
+        QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
+        QVERIFY(!b->createNow());
+        QCOMPARE(messages.size(), 1);
+        QVERIFY(!b->prepareRestore(source));
+        m_now = m_now.addDays(1);
+        QCOMPARE(checked(b), QString());
+        QCOMPARE(zipsIn(b->folder()).size(), before);
+    }
+
+    void anInterruptedRestoreIsToldAgain()
+    {
+        const QString root = newRoot();
+        for (int i = 0; i < 300; ++i)
+            writeRaw(root + u"/Notatka %1.md"_s.arg(i), "- z kopii\n");
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        QVERIFY(createNow(b));
+        const QString source = b->backups().first().toMap().value(u"name"_s).toString();
+        for (int i = 0; i < 300; ++i)
+            QVERIFY(ws->writeFile(u"Notatka %1.md"_s.arg(i), u"- po kopii\n"_s));
+        m_now = m_now.addSecs(120);
+        QVERIFY(!plannedRestore(b, source).isEmpty());
+        b->confirmRestore();
+        QVERIFY(QTest::qWaitFor([&] { return b->phase() == u"restore"; }, 30000));
+        QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
+        ws->close();
+        QCOMPARE(messages.size(), 1);
+        QCOMPARE(messages.first().at(1).toString(), u"warning"_s);
+
+        // The next open says so, names the way back, and keeps that way back from pruning.
+        ws.reset();
+        ws = std::make_unique<Workspace>();
+        ws->setClock([this] { return m_now; });
+        ws->sync()->setSyncthingDiscovery(false);
+        b = ws->backups();
+        b->setCheckTimings(24 * 3600 * 1000, 24 * 3600 * 1000);
+        QSignalSpy told(b, &WorkspaceBackups::messageRequested);
+        QVERIFY(ws->open(root, root + u"-state"_s));
+        ws->finishIndexing();
+        QVERIFY(b->interrupted());
+        QCOMPARE(b->status(), u"failed"_s);
+        QCOMPARE(told.size(), 1);
+        QVERIFY(told.first().at(0).toString() == b->statusText());
+        m_now = m_now.addDays(1);
+        QCOMPARE(checked(b), QString()); // no scheduled copies of a half-restored notebook
+        b->dismissInterrupted();
+        QVERIFY(!b->interrupted());
+        QCOMPARE(b->status(), u"ok"_s);
+    }
+
+    void aFinishedRestoreLeavesNoMarker()
+    {
+        const QString root = newRoot();
+        writeRaw(root + u"/a.md"_s, "- z kopii\n");
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        QVERIFY(createNow(b));
+        const QString source = b->backups().first().toMap().value(u"name"_s).toString();
+        QVERIFY(ws->writeFile(u"a.md"_s, u"- po kopii\n"_s));
+        m_now = m_now.addSecs(120);
+        QVERIFY(!plannedRestore(b, source).isEmpty());
+        b->confirmRestore();
+        QTRY_VERIFY_WITH_TIMEOUT(!b->running(), 30000);
+        QVERIFY(!b->interrupted());
+    }
+
+    void theDefaultFolderInsideTheNotebookIsRefused()
+    {
+        // A notebook opened over the app's own data folder: its device state lies inside it.
+        const QString root = newRoot();
+        writeRaw(root + u"/a.md"_s, "- a\n");
+        Workspace ws;
+        ws.setClock([this] { return m_now; });
+        ws.sync()->setSyncthingDiscovery(false);
+        QVERIFY(ws.open(root, root + u"/stan"_s));
+        ws.finishIndexing();
+        WorkspaceBackups *b = ws.backups();
+        QVERIFY(b->folder().startsWith(root + u'/'));
+        QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
+        QVERIFY(!b->createNow());
+        QCOMPARE(messages.size(), 1);
+        QCOMPARE(b->status(), u"failed"_s);
+        QVERIFY(zipsIn(b->folder()).isEmpty());
     }
 
     void noDeviceStateNoBackups()

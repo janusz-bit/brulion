@@ -83,6 +83,9 @@ public:
     QStringList mountPoints() const { return m_mountPoints; }
     QStringList cacheMountPoints() const { return m_cacheMountPoints; }
     QString lastError() const { return m_lastError; }
+    /// Why the backups' mount could not be loaded ("" when it was): it is not written back in this
+    /// session, so a write-back's success says nothing about it. The failure arrives before `ready()`.
+    QString backupsLoadError() const { return m_backupsLoadError; }
 
     /// `navigator.storage.estimate()` of this site, asked when loading started (bytes; -1 until
     /// the browser answered or where it cannot tell). Process-wide, for the index cache's budget.
@@ -135,6 +138,7 @@ private:
     QStringList m_mountPoints;
     QStringList m_cacheMountPoints;
     QString m_lastError;
+    QString m_backupsLoadError;
     int m_flushDelay = 400;
     int m_maxFlushDelay = 3000;
     bool m_started = false;

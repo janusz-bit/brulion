@@ -611,10 +611,15 @@ guide: the page "Kopie zapasowe" of the documentation notebook.
   for a cloud document, for a folder that takes no file), "Użyj domyślnego", on a desktop "Otwórz".
 * **The list:** `backupsList`, newest first, one `BListItem` per backup with icon buttons fitting a
   narrow phone: Przywróć (`backupRestore`), Pobierz in the browser or Udostępnij for Android's private
-  folder (`backupExport`), Usuń (`backupDelete`, confirmed; never to the trash, it is no note).
+  folder (`backupExport`), Usuń (`backupDelete`, confirmed; never to the trash, it is no note). The subtitle
+  says "nie z tego notatnika" (a foreign copy: Przywróć and Usuń ask specifically first,
+  `backupsForeignRestoreConfirm`) or "niekompletna".
 * **Restore:** `prepareRestore` checks the backup off the GUI thread; `restorePlanReady` opens
   `backupsRestoreConfirm` with the counts (replaced, back, to the trash, too large); nothing to do is a
-  toast. `confirmRestore` makes the safety backup and applies the plan; the outcome is a toast.
+  toast. `confirmRestore` saves open editors, waits for a running sync (phase `sync`), makes the safety
+  backup and applies the plan; the outcome is a toast. A restore interrupted by closing the notebook or a kill: a
+  toast, and on the next open the status names the safety backup, with "Już się tym zająłem"
+  (`backupsDismissInterrupted`).
 * The documentation notebook has none (`available` false, a note instead; the palette's commands off).
 
 Tests: `tst_backup*`, `tst_shell_workspace_backups` (+ `_inline`), `--selftest-shell` (`checkBackups`: real

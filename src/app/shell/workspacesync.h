@@ -263,6 +263,12 @@ public:
     QString fileErrorText(const QString &code, int status = 0) const;
 
     // ---- actions ------------------------------------------------------------------------
+    /// A restore's hold (workspacebackups.h): no run starts until releaseSync(), and `ready` follows
+    /// on a later turn once none is in flight — a running one is waited for, not cancelled (the
+    /// scheduler's watchdog ends a stalled one). Holds across a change of the account's settings.
+    void holdSync(std::function<void()> ready);
+    /// One run follows: it sees everything at once, before the mass-deletion guard.
+    void releaseSync();
     /// Sync now (also between automatic runs; joins a running sync).
     Q_INVOKABLE void syncNow();
     /// Sync now applying the deletions the mass-deletion guard held back. `expectedPaths`: the
@@ -374,6 +380,9 @@ private:
     std::unique_ptr<sync::WebDavClient> m_client;
     std::unique_ptr<sync::SyncEngine> m_engine;
     std::unique_ptr<sync::SyncScheduler> m_scheduler;
+    bool m_held = false;               ///< holdSync()
+    std::function<void()> m_holdReady; ///< waits for the run in flight
+    void holdReadyIfIdle();
     std::unique_ptr<sync::SyncthingClient> m_syncthing;
     QMetaObject::Connection m_vaultConnection;
     NextcloudSettings m_nextcloud;

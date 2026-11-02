@@ -275,6 +275,8 @@ void PageController::setHost(EditorHost *host)
     showFile(m_host, m_path);
     if (m_host) {
         connect(m_host, &EditorHost::fileChanged, this, &PageController::onFileChanged);
+        connect(m_host, &EditorHost::saveOpenEditorsRequested, this, &PageController::flush);
+        connect(m_host, &EditorHost::editsDiscarded, this, &PageController::onEditsDiscarded);
         connect(m_host, &EditorHost::indexChanged, m_model, &BlockListModel::invalidateRendering);
         connect(m_host, &EditorHost::indexChanged, this, [this] { m_notebookTypes.reset(); });
         connect(m_host, &EditorHost::webPictureChanged, this, &PageController::onWebPictureChanged);
@@ -508,6 +510,7 @@ void PageController::load()
     if (!m_host || m_path.isEmpty())
         return;
     m_saveTimer.stop();
+    m_editsDiscarded = false;
     m_loading = true;
     Q_EMIT loadingChanged();
     bool ok = false;
@@ -562,6 +565,10 @@ bool PageController::save()
     m_saveTimer.stop();
     if (!m_host || m_path.isEmpty() || !m_loaded || m_saving)
         return false;
+    if (m_editsDiscarded) {
+        setDirty(false);
+        return true;
+    }
     if (m_conflict)
         return false; // never overwrite the other version before the conflict is resolved
     if (!m_dirty)
@@ -817,6 +824,15 @@ void PageController::showFile(EditorHost *host, const QString &path)
     m_shownPath = shown;
     if (m_shownHost)
         m_shownHost->editorOpened(m_shownPath);
+}
+
+void PageController::onEditsDiscarded(const QString &path)
+{
+    if (m_path != path && !m_path.startsWith(path + u'/'))
+        return;
+    m_editsDiscarded = true;
+    m_saveTimer.stop();
+    setDirty(false);
 }
 
 void PageController::onFileChanged(const QString &path)

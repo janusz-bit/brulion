@@ -65,23 +65,32 @@ inline QByteArray rawZip(const QList<QPair<QByteArray, QByteArray>> &entries, mz
     return out;
 }
 
+/// `zip` as Brulion's own writer finishes an archive: with a manifest in its comment.
+inline QByteArray withManifest(QByteArray zip, const QString &notebookId = {}, bool complete = true)
+{
+    const QByteArray manifest = backupManifest(notebookId, complete, 1);
+    zip[zip.size() - 2] = char(manifest.size() & 0xff);
+    zip[zip.size() - 1] = char((manifest.size() >> 8) & 0xff);
+    return zip + manifest;
+}
+
 inline WriteResult runWriter(const notebook::WorkerPool &pool, const Sources &sources, const WriteOptions &options)
 {
     BackupWriter writer(pool);
     QSignalSpy spy(&writer, &BackupWriter::finished);
     writer.start(sources, options);
     if (!spy.wait(60000))
-        return WriteResult{WriteError::WriteFailed, u"timed out"_s, {}, 0, 0, {}, 0};
+        return WriteResult{WriteError::WriteFailed, u"timed out"_s, {}, 0, 0, {}, {}};
     return spy.first().first().value<WriteResult>();
 }
 
 inline RestoreCheck runChecker(const notebook::WorkerPool &pool, const QString &archive,
                                const QList<NotebookFile> &current, const QStringList &folders,
-                               const ArchiveLimits &limits = {})
+                               const RestoreCheckOptions &options = {})
 {
     RestoreChecker checker(pool);
     QSignalSpy spy(&checker, &RestoreChecker::finished);
-    checker.start(archive, current, folders, limits);
+    checker.start(archive, current, folders, options);
     if (!spy.wait(60000))
         return RestoreCheck{ArchiveProblem::Unreadable, false, u"timed out"_s, {}};
     return spy.first().first().value<RestoreCheck>();

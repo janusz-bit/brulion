@@ -9328,6 +9328,56 @@
 <context>
     <name>ShellBackupSettings</name>
     <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="30"/>
+        <source>Waiting for the running sync to finish…</source>
+        <translation>Czekanie na koniec trwającej synchronizacji…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="111"/>
+        <source>I have dealt with it</source>
+        <translation>Już się tym zająłem</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="241"/>
+        <source>not from this notebook</source>
+        <translation>nie z tego notatnika</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="242"/>
+        <source>incomplete</source>
+        <translation>niekompletna</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="283"/>
+        <source>The backup from %1 was not made from this notebook: it may be the only copy of another one. It is deleted for good; it does not go to the trash.</source>
+        <translation>Kopia (%1) nie powstała z tego notatnika: może być jedyną kopią innego. Zostanie usunięta na zawsze; nie trafi do kosza.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="311"/>
+        <source>This backup is not known to be complete, so files it does not hold stay where they are.</source>
+        <translation>Nie wiadomo, czy ta kopia jest pełna, więc pliki, których w niej nie ma, zostają na miejscu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="313"/>
+        <source>A safety backup of the notebook as it is now is made first. Replaced notes stay in the version history as well; other files only in the safety backup.</source>
+        <translation>Najpierw powstanie kopia bezpieczeństwa obecnego stanu notatnika. Zastąpione notatki zostaną też w historii wersji, a inne pliki tylko w kopii bezpieczeństwa.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="334"/>
+        <source>Use a backup from another notebook?</source>
+        <translation>Użyć kopii z innego notatnika?</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="335"/>
+        <source>This backup was not made from this notebook as it is now: it comes from another notebook of the same name, or from this one when it lay in another folder. Restoring it may replace this notebook&apos;s notes with another notebook&apos;s.</source>
+        <translation>Ta kopia nie powstała z tego notatnika w jego obecnym miejscu: pochodzi z innego notatnika o tej samej nazwie albo z tego, gdy leżał w innym folderze. Jej przywrócenie może zastąpić notatki tego notatnika notatkami innego.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="336"/>
+        <source>Continue</source>
+        <translation>Kontynuuj</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="24"/>
         <source>Creating a backup…</source>
         <translation>Tworzenie kopii…</translation>
@@ -9496,11 +9546,6 @@
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="282"/>
         <source>Restore the backup from %1?</source>
         <translation>Przywrócić kopię (%1)?</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="287"/>
-        <source>A safety backup of the notebook as it is now is made first. What is replaced stays in the version history.</source>
-        <translation>Najpierw powstanie kopia bezpieczeństwa obecnego stanu notatnika. To, co zostanie zastąpione, zostanie w historii wersji.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="288"/>
@@ -17352,6 +17397,122 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceBackups</name>
     <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1"/>
+        <source>The notebook was closed during a restore, so it is only partly restored. Open it again and see Settings → Backups.</source>
+        <translation>Notatnik zamknięto w trakcie przywracania, więc jest przywrócony tylko częściowo. Otwórz go ponownie i zajrzyj do: Ustawienia → Kopie zapasowe.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="484"/>
+        <source>Nothing was restored: “%1” could not be read for the safety backup, and the restore would replace it.</source>
+        <translation>Niczego nie przywrócono: nie udało się odczytać „%1” do kopii bezpieczeństwa, a przywracanie by go zastąpiło.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="669"/>
+        <source>This backup holds no files of a notebook, so restoring it would only empty this one. Nothing was changed.</source>
+        <translation>W tej kopii nie ma plików notatnika, więc jej przywrócenie tylko opróżniłoby ten notatnik. Nic się nie zmieniło.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="671"/>
+        <source>This backup holds names that differ only in letter case, which this storage cannot keep apart. Nothing was changed; unpack the ZIP by hand.</source>
+        <translation>W tej kopii są nazwy różniące się tylko wielkością liter, a ten dysk ich nie rozróżnia. Nic się nie zmieniło; rozpakuj ZIP ręcznie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="781"/>
+        <source>The restore was stopped: the notebook is only partly restored. The safety backup holds it as it was.</source>
+        <translation>Przywracanie zatrzymano: notatnik jest przywrócony tylko częściowo. Kopia bezpieczeństwa zawiera jego wcześniejszy stan.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="782"/>
+        <source>The restore was stopped: the notebook is only partly restored.</source>
+        <translation>Przywracanie zatrzymano: notatnik jest przywrócony tylko częściowo.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="787"/>
+        <source>The safety backup holds the notebook as it was.</source>
+        <translation>Kopia bezpieczeństwa zawiera wcześniejszy stan notatnika.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="790"/>
+        <source>The restore did not finish: the backup or the notebook&apos;s folder became unavailable.</source>
+        <translation>Przywracanie nie zostało ukończone: kopia albo folder notatnika stały się niedostępne.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="794"/>
+        <source>Restored. Replaced notes are in the version history, and files the backup does not hold are in the trash.</source>
+        <translation>Przywrócono. Zastąpione notatki są w historii wersji, a pliki, których nie ma w kopii, w koszu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="795"/>
+        <source>The safety backup holds everything as it was.</source>
+        <translation>Kopia bezpieczeństwa zawiera wszystko sprzed przywrócenia.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1004"/>
+        <source>A restore of this notebook did not finish, so it is only partly restored. Run the restore again.</source>
+        <translation>Przywracanie tego notatnika nie zostało ukończone, więc jest przywrócony tylko częściowo. Uruchom przywracanie ponownie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1005"/>
+        <source>A restore of this notebook did not finish, so it is only partly restored. The backup “%1” holds it as it was: restore that one, or run the restore again.</source>
+        <translation>Przywracanie tego notatnika nie zostało ukończone, więc jest przywrócony tylko częściowo. Kopia „%1” zawiera jego wcześniejszy stan: przywróć ją albo uruchom przywracanie ponownie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1009"/>
+        <source>This browser&apos;s storage of backups could not be read, so backups and restoring are off until the page is reloaded. Older backups have not been touched.</source>
+        <translation>Nie udało się odczytać kopii z pamięci tej przeglądarki, więc kopie i przywracanie są wyłączone do przeładowania strony. Starszych kopii to nie dotyczy.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1039"/>
+        <source>The last backup failed: none of the notebook&apos;s files could be read. %1</source>
+        <translation>Ostatnia kopia się nie udała: nie udało się odczytać żadnego pliku notatnika. %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1041"/>
+        <source>The last backup failed: the notebook&apos;s folder went away while it ran. %1</source>
+        <translation>Ostatnia kopia się nie udała: folder notatnika zniknął w jej trakcie. %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1043"/>
+        <source>No backup was made: the folder %1 lies inside the notebook. Choose a folder outside it.</source>
+        <translation>Kopia nie powstała: folder %1 leży wewnątrz notatnika. Wybierz folder poza nim.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacebackups.cpp" line="464"/>
+        <source>The backup was made without %n file(s) that could not be read or disappeared while it ran. Older backups are kept.</source>
+        <translation>
+            <numerusform>Kopia powstała bez %n pliku, którego nie udało się odczytać albo który zniknął w jej trakcie. Starsze kopie zostają.</numerusform>
+            <numerusform>Kopia powstała bez %n plików, których nie udało się odczytać albo które zniknęły w jej trakcie. Starsze kopie zostają.</numerusform>
+            <numerusform>Kopia powstała bez %n plików, których nie udało się odczytać albo które zniknęły w jej trakcie. Starsze kopie zostają.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacebackups.cpp" line="785"/>
+        <source>The restore did not finish: %n file(s) could not be written, so nothing else went to the trash.</source>
+        <translation>
+            <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n pliku, więc nic więcej nie trafiło do kosza.</numerusform>
+            <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n plików, więc nic więcej nie trafiło do kosza.</numerusform>
+            <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n plików, więc nic więcej nie trafiło do kosza.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacebackups.cpp" line="786"/>
+        <source>The restore did not finish: %n file(s) could not be written or moved to the trash.</source>
+        <translation>
+            <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n pliku albo przenieść go do kosza.</numerusform>
+            <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n plików albo przenieść ich do kosza.</numerusform>
+            <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n plików albo przenieść ich do kosza.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1014"/>
+        <source>The last backup is missing %n file(s) that could not be read or disappeared while it ran. The event log names them. Older complete backups are kept.</source>
+        <translation>
+            <numerusform>W ostatniej kopii brakuje %n pliku, którego nie udało się odczytać albo który zniknął w jej trakcie. Rejestr zdarzeń podaje jego nazwę. Starsze pełne kopie zostają.</numerusform>
+            <numerusform>W ostatniej kopii brakuje %n plików, których nie udało się odczytać albo które zniknęły w jej trakcie. Rejestr zdarzeń podaje ich nazwy. Starsze pełne kopie zostają.</numerusform>
+            <numerusform>W ostatniej kopii brakuje %n plików, których nie udało się odczytać albo które zniknęły w jej trakcie. Rejestr zdarzeń podaje ich nazwy. Starsze pełne kopie zostają.</numerusform>
+        </translation>
+    </message>
+    <message>
         <location filename="../src/app/shell/workspacebackups.cpp" line="254"/>
         <source>The notebook&apos;s folder is not available, so no backup was made.</source>
         <translation>Folder notatnika jest niedostępny, więc kopia nie powstała.</translation>
@@ -17405,16 +17566,6 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/shell/workspacebackups.cpp" line="566"/>
         <source>There is not enough free space for this restore: it needs %1.</source>
         <translation>Za mało wolnego miejsca na przywrócenie: potrzeba %1.</translation>
-    </message>
-    <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="598"/>
-        <source>The restore was stopped. What was already restored stays; the safety backup holds the rest.</source>
-        <translation>Przywracanie zatrzymano. To, co już przywrócono, zostaje; resztę ma kopia bezpieczeństwa.</translation>
-    </message>
-    <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="605"/>
-        <source>Restored. What was replaced is in the version history and what the backup does not hold is in the trash; a safety backup was made first.</source>
-        <translation>Przywrócono. To, co zastąpiono, jest w historii wersji, a to, czego nie ma w kopii, w koszu; najpierw powstała kopia bezpieczeństwa.</translation>
     </message>
     <message>
         <location filename="../src/app/shell/workspacebackups.cpp" line="842"/>
@@ -17485,33 +17636,6 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/shell/workspacebackups.cpp" line="960"/>
         <source>Could not open the share menu.</source>
         <translation>Nie udało się otworzyć menu udostępniania.</translation>
-    </message>
-    <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="358"/>
-        <source>The backup was made without %n file(s) that could not be read.</source>
-        <translation>
-            <numerusform>Kopia powstała bez %n pliku, którego nie udało się odczytać.</numerusform>
-            <numerusform>Kopia powstała bez %n plików, których nie udało się odczytać.</numerusform>
-            <numerusform>Kopia powstała bez %n plików, których nie udało się odczytać.</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="601"/>
-        <source>The restore did not finish: %n file(s) could not be written. Nothing else went to the trash; the safety backup holds the notebook as it was.</source>
-        <translation>
-            <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n pliku. Nic więcej nie trafiło do kosza; kopia bezpieczeństwa zawiera notatnik sprzed przywracania.</numerusform>
-            <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n plików. Nic więcej nie trafiło do kosza; kopia bezpieczeństwa zawiera notatnik sprzed przywracania.</numerusform>
-            <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n plików. Nic więcej nie trafiło do kosza; kopia bezpieczeństwa zawiera notatnik sprzed przywracania.</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="836"/>
-        <source>The last backup is missing %n file(s) that could not be read. The event log names them.</source>
-        <translation>
-            <numerusform>W ostatniej kopii brakuje %n pliku, którego nie udało się odczytać. Rejestr zdarzeń podaje jego nazwę.</numerusform>
-            <numerusform>W ostatniej kopii brakuje %n plików, których nie udało się odczytać. Rejestr zdarzeń podaje ich nazwy.</numerusform>
-            <numerusform>W ostatniej kopii brakuje %n plików, których nie udało się odczytać. Rejestr zdarzeń podaje ich nazwy.</numerusform>
-        </translation>
     </message>
 </context>
 <context>

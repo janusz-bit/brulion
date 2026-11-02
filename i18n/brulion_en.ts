@@ -1447,27 +1447,35 @@
 <context>
     <name>brulion::shell::WorkspaceBackups</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="358"/>
-        <source>The backup was made without %n file(s) that could not be read.</source>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="464"/>
+        <source>The backup was made without %n file(s) that could not be read or disappeared while it ran. Older backups are kept.</source>
         <translation>
-            <numerusform>The backup was made without %n file that could not be read.</numerusform>
-            <numerusform>The backup was made without %n files that could not be read.</numerusform>
+            <numerusform>The backup was made without %n file that could not be read or disappeared while it ran. Older backups are kept.</numerusform>
+            <numerusform>The backup was made without %n files that could not be read or disappeared while it ran. Older backups are kept.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="601"/>
-        <source>The restore did not finish: %n file(s) could not be written. Nothing else went to the trash; the safety backup holds the notebook as it was.</source>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="785"/>
+        <source>The restore did not finish: %n file(s) could not be written, so nothing else went to the trash.</source>
         <translation>
-            <numerusform>The restore did not finish: %n file could not be written. Nothing else went to the trash; the safety backup holds the notebook as it was.</numerusform>
-            <numerusform>The restore did not finish: %n files could not be written. Nothing else went to the trash; the safety backup holds the notebook as it was.</numerusform>
+            <numerusform>The restore did not finish: %n file could not be written, so nothing else went to the trash.</numerusform>
+            <numerusform>The restore did not finish: %n files could not be written, so nothing else went to the trash.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="836"/>
-        <source>The last backup is missing %n file(s) that could not be read. The event log names them.</source>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="786"/>
+        <source>The restore did not finish: %n file(s) could not be written or moved to the trash.</source>
         <translation>
-            <numerusform>The last backup is missing %n file that could not be read. The event log names it.</numerusform>
-            <numerusform>The last backup is missing %n files that could not be read. The event log names them.</numerusform>
+            <numerusform>The restore did not finish: %n file could not be written or moved to the trash.</numerusform>
+            <numerusform>The restore did not finish: %n files could not be written or moved to the trash.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1014"/>
+        <source>The last backup is missing %n file(s) that could not be read or disappeared while it ran. The event log names them. Older complete backups are kept.</source>
+        <translation>
+            <numerusform>The last backup is missing %n file that could not be read or disappeared while it ran. The event log names it. Older complete backups are kept.</numerusform>
+            <numerusform>The last backup is missing %n files that could not be read or disappeared while it ran. The event log names them. Older complete backups are kept.</numerusform>
         </translation>
     </message>
 </context>

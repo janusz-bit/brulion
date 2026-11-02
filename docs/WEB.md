@@ -538,7 +538,10 @@ historii ani ustawień — z trzema różnicami, bo te pliki należą do użytko
   IndexedDB (`flushed(true)` bez oczekujących zmian → `WorkspaceBackups::storageFlushed()`), żeby
   nieudany zapis nie kosztował starszych kopii; bez odpowiedzi przez 60 s przywracanie się przerywa;
 * montaż, którego nie udało się wczytać, nie jest zapisywany do końca sesji (`brulionStorage.unloaded`):
-  jego pusty stan skasowałby to, co jest w IndexedDB.
+  jego pusty stan skasowałby to, co jest w IndexedDB. Zapis takiego montażu niczego by nie dał, więc
+  kopie i przywracanie są wtedy wyłączone, a ustawienia mówią to na stałe
+  (`WasmStorage::backupsLoadError()` → `WorkspaceBackups::setStorageUnavailable()`; zdarzenie przychodzi
+  przed utworzeniem kontrolera, dlatego main.cpp pyta o nie przy starcie).
 
 Plik tymczasowy powstaje w `/tmp` (MEMFS poza montażami): śledzenie zmian zapisywałoby rosnący plik
 raz po raz. Na końcu jest kopiowany do montażu, więc przez chwilę archiwum jest w pamięci dwa razy.
