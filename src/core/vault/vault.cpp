@@ -1298,6 +1298,11 @@ void Vault::setHistoryReason(const QString &reason)
     d->historyReason = reason;
 }
 
+QString Vault::historyReason() const
+{
+    return d->historyReason;
+}
+
 void Vault::setClock(std::function<QDateTime()> clock)
 {
     d->clock = clock ? std::move(clock) : std::function<QDateTime()>(systemNow);

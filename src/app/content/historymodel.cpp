@@ -65,6 +65,8 @@ QString HistoryModel::reasonLabel(const QString &reason)
         return tr("Replaced by a restored version");
     if (reason == u"cli")
         return tr("Replaced from the command line (agent)"); // brulion-cli, e.g. an AI agent
+    if (reason == u"replace")
+        return tr("Replaced by Find and replace in the notebook");
     return tr("Replaced by Brulion");
 }
 
@@ -82,6 +84,8 @@ QString HistoryModel::reasonIcon(const QString &reason)
         return u"history"_s;
     if (reason == u"cli")
         return u"terminal"_s;
+    if (reason == u"replace")
+        return u"search"_s;
     return u"settings"_s;
 }
 

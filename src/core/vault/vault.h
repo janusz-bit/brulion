@@ -341,6 +341,7 @@ public:
     /// then says the text was replaced from the command line. Changes found on disk keep
     /// "external".
     void setHistoryReason(const QString &reason);
+    QString historyReason() const;
 
 Q_SIGNALS:
     /// Tracked files changed (by this vault or by other programs).

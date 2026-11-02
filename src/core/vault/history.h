@@ -12,8 +12,9 @@
 // Policy (ported from Brulion v1):
 //  * identical consecutive content is stored once;
 //  * at most one snapshot per path per `throttleSeconds` (5 min) for ordinary reasons ("user",
-//    "system", …); "sync", "import" and "external" snapshots are always kept (they precede
-//    changes the user did not type), and so is the first ordinary snapshot after one of them;
+//    "system", …); "sync", "import", "external" and "replace" (a replace in the whole notebook)
+//    snapshots are always kept (they precede changes the user did not type), and so is the first
+//    ordinary snapshot after one of them;
 //  * every snapshot applies the retention rules of the policy (50 per path, 90 days, but always
 //    the 5 newest); prune() applies them to every path and removes orphaned content.
 // Snapshots are kept in the order they were taken, so a device clock that is set back neither

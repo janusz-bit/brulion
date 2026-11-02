@@ -37,7 +37,7 @@ QString tr(const char *text)
 
 bool isAlwaysKept(const QString &reason)
 {
-    return reason == "sync"_L1 || reason == "import"_L1 || reason == "external"_L1;
+    return reason == "sync"_L1 || reason == "import"_L1 || reason == "external"_L1 || reason == "replace"_L1;
 }
 
 const QRegularExpression &idPattern()
