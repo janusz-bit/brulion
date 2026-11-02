@@ -6,8 +6,9 @@
 #                     flake's nixpkgs (qt6.qtbase: the host tools must be the same version)
 #   openssl.json      the hash of the pinned KDAB android_openssl commit (--openssl REV)
 #   gradle-deps.json  Gradle's downloads (Android Gradle Plugin, Kotlin, androidx…), recorded by
-#                     mitm-cache while the build runs up to `gradle assembleRelease` with network
-#                     access (outside the sandbox, in bubblewrap; a few minutes)
+#                     mitm-cache while the build runs up to `gradle assembleRelease`, the Kotlin
+#                     unit tests and lint with network access (outside the sandbox, in bubblewrap;
+#                     a few minutes)
 # Run it after `nix flake update` (a new Qt in nixpkgs) and after changes to Gradle
 # dependencies (Qt's Android template, android/), then build: nix build .#brulion-android
 #
@@ -75,7 +76,7 @@ if ((do_gradle)); then
   # The update script of gradle.fetchDeps: builds the app up to Gradle in a nix-shell of the
   # package (with network access through a recording proxy) and writes the lock relative to
   # the current directory (the repository root).
-  script=$(nix_ build --no-link --print-out-paths .#brulion-android.mitmCache.updateScript)
+  script=$(nix_ build --no-link --print-out-paths .#brulion-android-tested.mitmCache.updateScript)
   "$script"
 fi
 

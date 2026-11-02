@@ -1,7 +1,7 @@
 # The Brulion desktop app (Qt 6 from nixpkgs): bin/brulion, bin/brulion-cli (the command line for
 # scripts and AI agents, docs/CLI.md; nix/cli.nix builds it alone), desktop entry, AppStream
 # metainfo, icons and the agent skill (share/brulion/agent-skills). `nix build .#brulion` builds it without the unit tests; `nix flake check` runs them
-# (checks.<system>.tests: this package with doCheck = true), as do CI's Linux job,
+# (checks.<system>.tests: this package with doCheck = true), as do nix/sanitizers.nix (CI),
 # scripts/dev-build.sh and scripts/remote-build.sh.
 {
   lib,

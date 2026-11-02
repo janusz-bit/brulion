@@ -38,6 +38,9 @@
   werror ? false,
   # Also an unsigned Android App Bundle (.aab, Gradle's bundleRelease after the APK).
   withAab ? false,
+  # Also the Kotlin unit tests (android/tests) and Android lint, after the APK; its report in
+  # $out/reports. The same APK, bit for bit.
+  withTests ? false,
 }:
 
 let
@@ -103,6 +106,9 @@ let
     "x86_64"
   ];
   androidBuildDir = "build/src/app/android-build";
+  # Both relative to androidBuildDir.
+  unitTestsInit = "../../../../android/tests/unit-tests.gradle";
+  unitTestsDir = "../../../../android/tests/kotlin";
   qtAndroidView = "$TMPDIR/qt-android";
 in
 assert lib.assertMsg (qtAndroid.version == qt6.qtbase.version) ''
@@ -112,20 +118,24 @@ assert lib.assertMsg (qtAndroid.version == qt6.qtbase.version) ''
 stdenvNoCC.mkDerivation (finalAttrs: {
   # One pname for every ABI, so that all of them share one Gradle dependency cache.
   pname = "brulion-android";
-  name = "brulion-android-${abi}${lib.optionalString withAab "-aab"}-${version}";
+  name = "brulion-android-${abi}${lib.optionalString withAab "-aab"}${lib.optionalString withTests "-tested"}-${version}";
   inherit version;
 
   src = lib.fileset.toSource {
     root = ../.;
-    fileset = lib.fileset.unions [
-      ../CMakeLists.txt
-      ../cmake
-      ../src
-      ../i18n
-      ../assets
-      ../android
-      ../3rdparty
-    ];
+    fileset = lib.fileset.unions (
+      [
+        ../CMakeLists.txt
+        ../cmake
+        ../src
+        ../i18n
+        ../assets
+        ../android
+        ../3rdparty
+      ]
+      # The golden files the Kotlin tests share with the C++ tests.
+      ++ lib.optional withTests ../tests/data
+    );
   };
 
   strictDeps = true;
@@ -146,8 +156,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   };
   # The update run records what `assembleRelease` and `bundleRelease` (withAab) download
   # (preGradleUpdate below builds the Gradle project first), not every configuration of the
-  # project.
-  gradleUpdateTask = "assembleRelease bundleRelease";
+  # project; the update script of the -tested package (nix/android/update-locks.sh) also the
+  # unit tests' and lint's.
+  gradleUpdateTask =
+    lib.optionalString withTests "--init-script ${unitTestsInit} testDebugUnitTest lintRelease "
+    + "assembleRelease bundleRelease";
   # The SDK's aapt2 (patched to run on NixOS) instead of the prebuilt one AGP takes from Maven.
   gradleFlags = [ "-Pandroid.aapt2FromMavenOverride=${buildTools}/aapt2" ];
 
@@ -236,6 +249,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       # The bundle of the Gradle project androiddeployqt prepared (the release build is done).
       (cd ${androidBuildDir} && gradle bundleRelease)
     ''}
+    ${lib.optionalString withTests ''
+      (
+        cd ${androidBuildDir}
+        BRULION_ANDROID_TESTS_DIR=$PWD/${unitTestsDir} gradle --init-script ${unitTestsInit} testDebugUnitTest
+        gradle lintRelease
+        tail -n 1 build/reports/lint-results-release.txt
+      )
+    ''}
     runHook postBuild
   '';
 
@@ -245,6 +266,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     eval "$writeGradlew"
     eval "$buildApk"
     cd ${androidBuildDir}
+    ${lib.optionalString withTests "export BRULION_ANDROID_TESTS_DIR=$PWD/${unitTestsDir}"}
   '';
 
   installPhase = ''
@@ -258,6 +280,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     ${lib.optionalString withAab ''
       cp ${androidBuildDir}/build/outputs/bundle/release/android-build-release.aab \
         $out/brulion-${version}-${abi}-unsigned.aab
+    ''}
+    ${lib.optionalString withTests ''
+      install -D ${androidBuildDir}/build/reports/lint-results-release.txt $out/reports/lint-results-release.txt
     ''}
     runHook postInstall
   '';

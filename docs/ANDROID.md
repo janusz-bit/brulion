@@ -698,7 +698,7 @@ aplikacjami do PDF-ów, duże skany z wykładów.
 
 ## Budowanie APK
 
-Całość robi `scripts/android-build.sh` (lokalnie i w GitHub Actions): doinstalowuje brakujące
+Całość robi lokalnie `scripts/android-build.sh` (GitHub Actions i wydania budują przez Nix, niżej „Budowanie przez Nix”): doinstalowuje brakujące
 narzędzia, konfiguruje CMake, buduje bibliotekę `libbrulion_<abi>.so`, pakuje APK przez
 `androiddeployqt` (Gradle), podpisuje i sprawdza wynik. Można go uruchamiać wielokrotnie —
 istniejący katalog budowania jest wykorzystywany ponownie.
@@ -906,6 +906,7 @@ tylko na x86_64; NixOS nie potrzebuje do tego nix-ld):
 nix build .#brulion-android           # arm64-v8a: result/brulion-<wersja>-arm64-v8a-unsigned.apk
 nix build .#brulion-android-x86_64    # dla emulatora
 nix build .#brulion-android-aab       # arm64-v8a: APK + AAB (bundleRelease, ok. 10 s więcej)
+nix build .#brulion-android-tested    # arm64-v8a z -Werror, testami Kotlina i Android lint (CI, wydania); raport w result/reports
 nix run .#brulion-android-sign -- result/brulion-*-unsigned.apk   # → ./brulion-<wersja>-arm64-v8a.apk
 ```
 

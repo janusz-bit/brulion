@@ -4,10 +4,10 @@
 # without the marker runs nothing (its run shows up with every job skipped):
 #  * nix     — `nix flake check` (with the whole ctest suite: checks.<system>.tests) + `nix build .#brulion` on
 #              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
-#  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
-#              UndefinedBehaviorSanitizer at -O1 (asserts on), ccache kept between runs, ctest
-#              with the GUI tests side by side (fast feedback, independent of nixpkgs); Qt PDF
-#              (aqt's `qtpdf`) for drawings' PDF backdrops; a drawing's SVG light and dark in Chrome
+#  * sanitizers — the whole ctest suite under AddressSanitizer + UndefinedBehaviorSanitizer at -O1
+#              (asserts on), -Werror, in the Nix sandbox (`nix build .#brulion-sanitizers`,
+#              nix/sanitizers.nix, poppler for PDF pages; Qt PDF is tested by the AppImage and
+#              Windows builds); a drawing's SVG light and dark in Chrome
 #              (tests/app/drawing/svg-theme-check.mjs);
 #  * lint    — actionlint + shellcheck (workflows, scripts), no QML read made only for a binding's
 #              dependency (scripts/check-qml-reads.sh) and clang-format on the changed lines
@@ -43,9 +43,6 @@ permissions:
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref_type == 'branch' }}
-
-env:
-  QT_VERSION: 6.11.2
 
 jobs:
   nix:
@@ -88,17 +85,11 @@ jobs:
       - name: nix build .#brulion
         run: nix build .#brulion -L --print-out-paths
 
-  linux:
-    name: Linux (Qt 6.11.2 from aqt, GCC, -Werror, sanitizers)
+  sanitizers:
+    name: Sanitizers (ASan + UBSan, -Werror, Nix)
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
-    # Warm cache: ~20 min; a cold one (new compiler, Qt or flags): ~30 min.
-    timeout-minutes: 60
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_BASEDIR: ${{ github.workspace }}
-      CCACHE_MAXSIZE: 1500M
-      CCACHE_COMPILERCHECK: content
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
 
@@ -110,66 +101,18 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           df -h /
 
-      # Qt PDF (`qtpdf`, an extension of Qt's repository): the PDF pages of drawings' backdrops
-      # (src/platform/pdfpages_qtpdf.cpp; tests/platform/tst_pdfpages under the sanitizers).
-      - uses: jurplel/install-qt-action@v4
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: nix build .#brulion-sanitizers
+        run: nix build .#brulion-sanitizers -L
+
+      # Every test's time for comparing runs (a failed test's output is in the log above).
+      - name: Upload the test times
+        uses: actions/upload-artifact@v7
         with:
-          version: ${{ env.QT_VERSION }}
-          host: linux
-          target: desktop
-          arch: linux_gcc_64
-          modules: qtpdf
-          aqtversion: ==3.3.0
-          cache: true
-
-      - name: Install ccache
-        run: command -v ccache || { sudo apt-get update -qq && sudo apt-get install -y -qq ccache; }
-
-      # The newest cache of an earlier run (a tag's run sees main's caches); saved again right
-      # after the build, so a failing test does not lose it.
-      - name: Restore the compiler cache
-        uses: actions/cache/restore@v6
-        with:
-          path: .ccache
-          key: ccache-asan-O1-${{ env.QT_VERSION }}-${{ github.sha }}
-          restore-keys: ccache-asan-O1-${{ env.QT_VERSION }}-
-
-      # -O1 (what the sanitizers recommend) roughly halves the CPU-bound tests' time against
-      # -O0; Debug keeps Q_ASSERT on, -g1 the line tables the sanitizers' reports need.
-      - name: Configure
-        run: >-
-          cmake -S . -B build -G Ninja
-          -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
-          -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          -DBRULION_WERROR=ON
-          "-DCMAKE_CXX_FLAGS_DEBUG=-g1 -O1"
-          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls"
-          "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
-
-      - name: Build
-        id: build
-        run: |
-          ccache -z
-          cmake --build build --parallel
-          ccache -s
-
-      - name: Save the compiler cache
-        if: ${{ !cancelled() && steps.build.outcome != 'skipped' }}
-        uses: actions/cache/save@v6
-        with:
-          path: .ccache
-          key: ccache-asan-O1-${{ env.QT_VERSION }}-${{ github.sha }}
-
-      - name: Unit tests (ctest)
-        env:
-          # Leak checking off: Qt keeps global singletons alive until exit.
-          ASAN_OPTIONS: detect_leaks=0:strict_string_checks=1:detect_stack_use_after_return=1
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: >-
-          ctest --test-dir build --output-on-failure --parallel "$(nproc)" --timeout 300
-          --output-junit "$RUNNER_TEMP/ctest-junit.xml"
+          name: ctest-junit-linux-asan
+          path: result/ctest-junit.xml
+          if-no-files-found: ignore
 
       # A drawing on "Jak motyw" shows dark in a browser that prefers dark: its SVG's @media style
       # sheet (tests/data/drawing/auto_theme.svg, which tst_drawing compares byte for byte), in
@@ -184,24 +127,17 @@ jobs:
           CHROME=$(command -v google-chrome)
           node tests/app/drawing/svg-theme-check.mjs
 
-      # Every test's time (and the output of the failed ones) for comparing runs.
-      - name: Upload the test times
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ctest-junit-linux-asan
-          path: ${{ runner.temp }}/ctest-junit.xml
-          if-no-files-found: ignore
-
       # qmllint over the app's QML modules; advisory (warnings show up as annotations).
       - name: QML lint
         continue-on-error: true
         run: |
-          if cmake --build build --target help | grep -q '^all_qmllint'; then
-            cmake --build build --target all_qmllint
-          else
-            echo "no all_qmllint target"
-          fi
+          nix develop -c bash -c '
+            cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF
+            if cmake --build build --target help | grep -q "^all_qmllint"; then
+              cmake --build build --target all_qmllint
+            else
+              echo "no all_qmllint target"
+            fi'
 
   lint:
     name: Lint (actionlint, shellcheck, clang-format)
@@ -301,22 +237,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: jurplel/install-qt-action@v4
+      - uses: DeterminateSystems/nix-installer-action@v23
         timeout-minutes: 15
-        with:
-          version: ${{ env.QT_VERSION }}
-          host: linux
-          target: desktop
-          arch: linux_gcc_64
-          aqtversion: ==3.3.0
-          cache: true
 
       - name: Build the benchmark suites (Release)
         timeout-minutes: 20
         run: |
-          cmake -S . -B build-bench -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
-            -DCMAKE_BUILD_TYPE=Release -DBRULION_BUILD_BENCHMARKS=ON
-          cmake --build build-bench --parallel --target bench_text bench_index bench_markdown bench_io
+          nix develop -c bash -c '
+            cmake -S . -B build-bench -G Ninja -DCMAKE_BUILD_TYPE=Release -DBRULION_BUILD_BENCHMARKS=ON
+            cmake --build build-bench --parallel --target bench_text bench_index bench_markdown bench_io'
 
       # The benchmarks get 25 min (bench.sh -T: no repetition starts after that; a running one
       # finishes, at most ~4 min on a slow runner); what they had no time for is MISSING (a
@@ -326,7 +255,7 @@ jobs:
         run: |
           set -o pipefail
           status=0
-          scripts/perf-check.sh -n -s -b build-bench -o "$RUNNER_TEMP/perf" -- -r 3 -T 1500 \
+          nix develop -c scripts/perf-check.sh -n -s -b build-bench -o "$RUNNER_TEMP/perf" -- -r 3 -T 1500 \
             2>&1 | tee "$RUNNER_TEMP/perf.log" || status=$?
           {
             echo '### Performance smoke: scripts/perf-check.sh -s'

@@ -39,6 +39,11 @@
         in
         {
           brulion-android = apk { abi = "arm64-v8a"; };
+          brulion-android-tested = apk {
+            abi = "arm64-v8a";
+            werror = true;
+            withTests = true;
+          };
           brulion-android-x86_64 = apk { abi = "x86_64"; };
           # The arm64-v8a APK and an Android App Bundle (.aab).
           brulion-android-aab = apk {
@@ -50,9 +55,11 @@
     {
       # nix build .#brulion                 desktop app (also the default; with bin/brulion-cli)
       # nix build .#brulion-cli             the command line alone (no Qt Quick: small, for servers)
+      # nix build .#brulion-sanitizers      the whole ctest suite under ASan and UBSan (CI)
       # nix build .#brulion-android         Android APK, arm64-v8a, unsigned (x86_64-linux hosts)
       # nix build .#brulion-android-x86_64  Android APK for the emulator, unsigned
       # nix build .#brulion-android-aab     arm64-v8a APK + Android App Bundle, unsigned
+      # nix build .#brulion-android-tested  the arm64-v8a APK with -Werror, Kotlin unit tests and lint (releases)
       # nix run .#brulion-android-sign -- result/*.apk   signs an APK with the release key
       packages = forAllSystems (
         pkgs:
@@ -60,6 +67,7 @@
           brulion = pkgs.callPackage ./nix/package.nix { };
           default = brulion;
           brulion-cli = pkgs.callPackage ./nix/cli.nix { inherit brulion; };
+          brulion-sanitizers = pkgs.callPackage ./nix/sanitizers.nix { inherit brulion; };
           brulion-android-sign = pkgs.callPackage ./nix/android/sign.nix { };
         }
         // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (

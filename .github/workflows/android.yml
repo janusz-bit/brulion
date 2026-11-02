@@ -1,13 +1,13 @@
-# Signed Android APK (artifact "brulion-android-apk") built with scripts/android-build.sh
-# (Qt 6.11.2 for Android via aqt, NDK r27c, JDK 21, Kotlin unit tests + Android lint; R8 and
-# OpenSSL 3 for HTTPS, which CMake downloads from KDAB/android_openssl at the commit and SHA-256
-# sums pinned in src/app/CMakeLists.txt) — see docs/ANDROID.md. Runs by hand, for a push to main
-# with "[ci]" in a commit message (and changes in the paths below; see the job's `if`), and from
+# Signed Android APK (artifact "brulion-android-apk") built in the Nix sandbox: `nix build
+# .#brulion-android-tested` (nix/android.nix: every input pinned, Qt 6.11.2 for Android, NDK r27c,
+# JDK 21, -Werror, Kotlin unit tests + Android lint; R8 and OpenSSL 3 for HTTPS) and signed with
+# `nix run .#brulion-android-sign` — see docs/ANDROID.md. Runs by hand, for a push to main with
+# "[ci]" in a commit message (and changes in the paths below; see the job's `if`), and from
 # release.yml.
 # Release signing uses the repository secrets QT_ANDROID_KEYSTORE_BASE64,
-# QT_ANDROID_KEYSTORE_STORE_PASS, QT_ANDROID_KEYSTORE_KEY_PASS and QT_ANDROID_KEYSTORE_ALIAS
-# (create them with scripts/android-new-keystore.sh). Without them the APK is signed with a
-# throwaway key (see the warning in the run summary).
+# QT_ANDROID_KEYSTORE_STORE_PASS and QT_ANDROID_KEYSTORE_ALIAS (create them with
+# scripts/android-new-keystore.sh). Without them the APK is signed with a throwaway key (see the
+# warning in the run summary).
 name: Android
 
 on:
@@ -21,7 +21,10 @@ on:
       - 3rdparty/**
       - cmake/**
       - CMakeLists.txt
-      - scripts/android-build.sh
+      - flake.lock
+      - flake.nix
+      - nix/android.nix
+      - nix/android/**
       - .github/workflows/android.yml
   workflow_dispatch:
     inputs:
@@ -50,8 +53,6 @@ on:
         required: false
       QT_ANDROID_KEYSTORE_STORE_PASS:
         required: false
-      QT_ANDROID_KEYSTORE_KEY_PASS:
-        required: false
       QT_ANDROID_KEYSTORE_ALIAS:
         required: false
 
@@ -65,13 +66,6 @@ concurrency:
   group: android-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
-env:
-  # Keep in sync with scripts/android-build.sh.
-  QT_VERSION: 6.11.2
-  AQT_VERSION: 3.3.0
-  NDK_VERSION: 27.2.12479018
-  SDK_CMAKE_VERSION: 3.31.6
-
 jobs:
   apk:
     name: Build APK
@@ -79,85 +73,68 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
-      version: ${{ steps.build.outputs.version }}
-      signing: ${{ steps.build.outputs.signing }}
+      version: ${{ steps.sign.outputs.version }}
+      signing: ${{ steps.sign.outputs.signing }}
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 21
+      - uses: DeterminateSystems/nix-installer-action@v23
 
-      - uses: android-actions/setup-android@v4
-        with:
-          log-accepted-android-sdk-licenses: false
+      - name: Build and check the APK (Kotlin unit tests and lint)
+        run: nix build .#brulion-android-tested -L --out-link result-apk
 
-      # aqt runs through uvx (scripts/android-build.sh).
-      - uses: astral-sh/setup-uv@v10.3.0
-        with:
-          enable-cache: false
+      - name: Build the App Bundle
+        if: inputs.aab
+        run: nix build .#brulion-android-aab -L --out-link result-aab
 
-      # The runner's default NDK (ANDROID_NDK_ROOT) is a newer r27; Qt 6.11.2 is built with r27c.
-      - id: sdk
-        name: Android SDK paths
-        run: |
-          sdk=${ANDROID_SDK_ROOT:-$ANDROID_HOME}
-          echo "Android SDK: $sdk"
-          {
-            echo "ndk=$sdk/ndk/$NDK_VERSION"
-            echo "cmake=$sdk/cmake/$SDK_CMAKE_VERSION"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Cache the NDK r27c and the SDK's CMake
-        uses: actions/cache@v6
-        with:
-          path: |
-            ${{ steps.sdk.outputs.ndk }}
-            ${{ steps.sdk.outputs.cmake }}
-          key: android-ndk-${{ env.NDK_VERSION }}-cmake-${{ env.SDK_CMAKE_VERSION }}
-
-      # The host Qt (moc, rcc, qmlcachegen, androiddeployqt…) is shared with wasm.yml.
-      - name: Cache the host Qt
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/brulion-qt/${{ env.QT_VERSION }}/gcc_64
-          key: qt-${{ env.QT_VERSION }}-linux_gcc_64-aqt${{ env.AQT_VERSION }}
-
-      - name: Cache Qt for Android
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/brulion-qt/${{ env.QT_VERSION }}/android_arm64_v8a
-          key: qt-${{ env.QT_VERSION }}-android_arm64_v8a-aqt${{ env.AQT_VERSION }}
-
-      - uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: on-failure
-
-      - id: build
-        name: Build, sign and check the APK (+ OpenSSL, Kotlin unit tests and lint)
+      - id: sign
+        name: Sign
         env:
-          ANDROID_NDK_ROOT: ${{ steps.sdk.outputs.ndk }}
           QT_ANDROID_KEYSTORE_BASE64: ${{ secrets.QT_ANDROID_KEYSTORE_BASE64 }}
           QT_ANDROID_KEYSTORE_STORE_PASS: ${{ secrets.QT_ANDROID_KEYSTORE_STORE_PASS }}
-          QT_ANDROID_KEYSTORE_KEY_PASS: ${{ secrets.QT_ANDROID_KEYSTORE_KEY_PASS }}
           QT_ANDROID_KEYSTORE_ALIAS: ${{ secrets.QT_ANDROID_KEYSTORE_ALIAS }}
-          BRULION_ANDROID_AAB: ${{ inputs.aab && '1' || '0' }}
-          BRULION_ANDROID_UNIT_TESTS: 1
-          BRULION_ANDROID_LINT: 1
-          BRULION_WERROR: 'ON'
-        run: bash scripts/android-build.sh
+        run: |
+          keystore=$RUNNER_TEMP/brulion.jks
+          if [ -n "$QT_ANDROID_KEYSTORE_BASE64" ]; then
+            base64 -d <<< "$QT_ANDROID_KEYSTORE_BASE64" > "$keystore"
+            signing=release
+          else
+            QT_ANDROID_KEYSTORE_ALIAS=brulion-throwaway
+            QT_ANDROID_KEYSTORE_STORE_PASS=$(od -An -tx1 -N24 /dev/urandom | tr -d ' \n')
+            echo "::add-mask::$QT_ANDROID_KEYSTORE_STORE_PASS"
+            export QT_ANDROID_KEYSTORE_ALIAS QT_ANDROID_KEYSTORE_STORE_PASS
+            nix shell --inputs-from . nixpkgs#jdk21_headless -c keytool -genkeypair -noprompt \
+              -keystore "$keystore" -storetype PKCS12 -alias "$QT_ANDROID_KEYSTORE_ALIAS" \
+              -storepass:env QT_ANDROID_KEYSTORE_STORE_PASS -keypass:env QT_ANDROID_KEYSTORE_STORE_PASS \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Brulion unofficial build, O=Throwaway key"
+            signing=throwaway
+          fi
+          mkdir dist-android
+          for input in result-apk/*.apk result-aab/*.aab; do
+            [ -e "$input" ] || continue
+            name=$(basename "$input")
+            nix run .#brulion-android-sign -- "$input" --keystore "$keystore" \
+              --alias "$QT_ANDROID_KEYSTORE_ALIAS" --out "dist-android/${name/-unsigned/}"
+          done
+          rm -f "$keystore"
+          {
+            echo "version=$(nix eval --raw .#brulion.version)"
+            echo "signing=$signing"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Summary
         env:
-          VERSION: ${{ steps.build.outputs.version }}
-          SIGNING: ${{ steps.build.outputs.signing }}
-          OPENSSL: ${{ steps.build.outputs.openssl }}
+          VERSION: ${{ steps.sign.outputs.version }}
+          SIGNING: ${{ steps.sign.outputs.signing }}
         run: |
+          openssl=$(unzip -p dist-android/*.apk 'lib/arm64-v8a/libcrypto_3.so' | LC_ALL=C grep -a -o -m 1 'OpenSSL 3\.[0-9.]* [0-9]* [A-Z][a-z]* [0-9]*' || true)
           {
             echo "### Brulion $VERSION for Android"
             echo
-            echo "HTTPS: $OPENSSL (KDAB android_openssl, Apache-2.0)"
+            echo "HTTPS: ${openssl:-OpenSSL version not found} (KDAB android_openssl, Apache-2.0)"
+            echo
+            echo "Lint: $(tail -n 1 result-apk/reports/lint-results-release.txt)"
             echo
             echo "| File | Size | SHA-256 |"
             echo "|---|---|---|"
@@ -178,12 +155,3 @@ jobs:
           path: dist-android/
           if-no-files-found: error
           retention-days: 30
-
-      - name: Lint report
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: android-lint-report
-          path: build-android/src/app/android-build/build/reports/
-          if-no-files-found: ignore
-          retention-days: 7

@@ -301,13 +301,22 @@
  },
  "https://maven.google.com": {
   "androidx/core/group-index": {
-   "xml": "sha256-CY6X5iNiM0CWJLDjqCEXjWi2DniyXdYZHHthNp2sr3Y="
+   "xml": "sha256-qVZcSop417T0yjKyElIbxn1LxsZZGwnQ+gWqUzpvqFM="
   },
   "com/android/tools/build/group-index": {
-   "xml": "sha256-njQzCdpe3222rFK22f4KJyp8ZhmSFXfd9FpcK6ngnlw="
+   "xml": "sha256-LT8gcw4feL/2DwnEIfF4bIPgQFo71OSHdajJ/bkTB7M="
   },
   "master-index": {
-   "xml": "sha256-A50cGTtYF/oHm8+QxLqSWihc1xpXg6IUkYEozsBhD08="
+   "xml": "sha256-tDZ2bgU/cIUJgBMT/7ZEZFcetEWThChJjdEygSXMlRw="
+  }
+ },
+ "https://repo.gradle.org": {
+  "artifactory/libs-releases/org/gradle/gradle-tooling-api/maven-metadata": {
+   "xml": {
+    "groupId": "org.gradle",
+    "lastUpdated": "20261030142926",
+    "release": "9.9.0-rc-1"
+   }
   }
  },
  "https://repo.maven.apache.org/maven2": {
@@ -488,6 +497,10 @@
    "jar": "sha256-kcdwRKUMSBY2wy2Rb9ickRinIZU5BFLIEGUID5V95/8=",
    "pom": "sha256-lD4SsQBieARjj6KFgFoKt4imgCZlMeZQkh6/5GIai/o="
   },
+  "junit#junit/4.13.2": {
+   "jar": "sha256-jklbY0Rp1k+4rPo0laBly6zIoP/1XOHjEAe+TBbcV9M=",
+   "pom": "sha256-Vptpd+5GA8llwcRsMFj6bpaSkbAWDraWTdCSzYnq3ZQ="
+  },
   "net/java/dev/jna#jna-platform/5.6.0": {
    "jar": "sha256-ns6ovysbOZY5OdGLcEZO72DFCP7Ygg+dyroMNVGOq/c=",
    "pom": "sha256-G+s1y0GE5skGp+Murr2FLdPaCiY5YumRNKuUWDI5Tig="
@@ -617,6 +630,13 @@
   "org/glassfish/jaxb#txw2/2.3.2": {
    "jar": "sha256-SmqfSDOI1GG4GqmijGhbi3TAWXmTvxiEsE7dvKlfSP4=",
    "pom": "sha256-p53QAvsDgYP/KGomNb4uaMEDuH4OZHF9jUS/0Bf9M+o="
+  },
+  "org/hamcrest#hamcrest-core/1.3": {
+   "jar": "sha256-Zv3vkelzk0jfeglqo4SlaF9Oh1WEzOiThqekclHE2Ok=",
+   "pom": "sha256-/eOGp5BRc6GxA95quCBydYS1DQ4yKC4nl3h8IKZP+pM="
+  },
+  "org/hamcrest#hamcrest-parent/1.3": {
+   "pom": "sha256-bVNflO+2Y722gsnyelAzU5RogAlkK6epZ3UEvBvkEps="
   },
   "org/jdom#jdom2/2.0.6": {
    "jar": "sha256-E0XxG6YG0VYD1nQFUajCGUfAIVZAdw7GcnH+eL6pfPU=",
@@ -814,6 +834,10 @@
   "org/jetbrains/kotlinx#kotlinx-coroutines-core/1.9.0": {
    "module": "sha256-rVNANKlTtOEsvuuHTGat+LHKFN8V/g0uZUeqNOht/so=",
    "pom": "sha256-dw8nk9BeKwJ7nHmZOOwdLU7xQc5YGceAwyw5lcrbCkc="
+  },
+  "org/json#json/20250517": {
+   "jar": "sha256-PqYbKgbjHt8ckRNP6RBrDrsWYovhafPbdbx6Kwa0V5Y=",
+   "pom": "sha256-caH7hqKwVTejz8HIfbQtA279u/x+nDSbY10hrB+odqc="
   },
   "org/jspecify#jspecify/1.0.0": {
    "jar": "sha256-H61ua+dVd4Hk0zcp1Jrhzcj92m/kd7sMxozjUer9+6s=",
