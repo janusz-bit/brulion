@@ -409,7 +409,7 @@ Zrzuty ekranu i testy interfejsu działają bez okna (`--screenshot`, `--journey
 Wiersz poleceń (`./build/src/cli/brulion-cli`) i serwer MCP: [docs/CLI.md](docs/CLI.md).
 
 Dokumentacja: [architektura](docs/ARCHITECTURE.md) · [składnia](docs/SYNTAX.md) ·
-[interfejs](docs/UI.md) · [Android](docs/ANDROID.md) · [przeglądarka](docs/WEB.md) ·
+[szablony](docs/TEMPLATES.md) · [interfejs](docs/UI.md) · [Android](docs/ANDROID.md) · [przeglądarka](docs/WEB.md) ·
 [NixOS](docs/NIXOS.md) · [wydania](docs/RELEASE.md). Poprzednia wersja (TypeScript +
 Tauri) jest zachowana na gałęzi `archive/web-v1`.
 

@@ -1114,9 +1114,12 @@ Polish typography (display only, the file is unchanged): a one-letter word (`a`,
 
 ## 12. Templates
 
-Files in `templatesFolder`. Variables: `{{date}}` (yyyy-MM-dd), `{{date:FORMAT}}`
-(Qt date format), `{{time}}` (HH:mm), `{{title}}`, `{{weekday}}` (localised),
-`{{cursor}}` (caret position after insert). `journalTemplate` is applied to new daily notes:
+User guide (Polish): [TEMPLATES.md](TEMPLATES.md).
+
+Files in `templatesFolder`. Variables: `{{date}}` (yyyy-MM-dd), `{{date:FORMAT}}` and
+`{{time:FORMAT}}` (Qt date-time format), `{{time}}` (HH:mm), `{{title}}`, `{{weekday}}` (localised),
+`{{cursor}}` (removed; `applyTemplate` returns its offset, the editor does not place the caret
+there yet). `journalTemplate` is applied to new daily notes:
 a day without a note shows the template as its starting text, and the note is created — with
 the template, filled for that day — by the first change; looking at a day never creates it.
 Entries appended to today's note (quick capture, shares, the Android widgets' quick add, which
