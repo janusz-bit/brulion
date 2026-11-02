@@ -62,6 +62,9 @@ W *Ustawienia → Wygląd* dopasujesz Brulion do siebie — osobno na każdym ur
 
 Czcionkę notatek (szeryfowa, bezszeryfowa albo **Inna…**), czcionkę kodu, rozmiar tekstu i **odstęp między wierszami** ustawisz w *Ustawienia → Edytor*. „Przywróć domyślny wygląd” wraca do kolorów i czcionek z początku. W przeglądarce nie ma wyboru czcionek — działają tylko jej wbudowane.
 
+## Nowa wersja
+Na Androidzie i Windows Brulion raz dziennie pyta GitHuba o najnowsze wydanie. Gdy jest nowsze, pod górnym paskiem pojawia się komunikat, a **Zobacz na GitHubie** otwiera stronę wydania, skąd je pobierzesz. Krzyżyk ukrywa komunikat do następnej wersji. GitHub widzi adres urządzenia, nic o Twoich notatkach nie jest wysyłane. Wyłączysz to w **Ustawienia → Aplikacja → Sprawdzaj nowe wersje**.
+
 ## Co dalej
 - [[Dokument i konspekt|Dokument i konspekt]]
 - [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]]

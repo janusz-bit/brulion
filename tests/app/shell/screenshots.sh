@@ -77,6 +77,8 @@ declare -A shot_args=(
   [newpage-root]="--demo --route {\"view\":\"page\",\"path\":\"Przepisy.md\"} --popup newPage"
   [move-chosen]="--demo --route journals --popup move:templates>Projekty"
   [newfolder]="--demo --route journals --popup newFolder"
+  # The message about a new version under the top bar (--update-available: no network).
+  [update]="--demo --route journals --update-available 9.9.9"
   [allpages]="--demo --route allPages"
   [allpages-folder]="--demo --route {\"view\":\"allPages\",\"path\":\"Projekty\"}"
   # The block editor in the real app on the guide page (qml/dev/PageScript.qml).

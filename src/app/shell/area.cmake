@@ -44,6 +44,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/appcontroller.h ${_brulion_shell_dir}/appcontroller.cpp
     ${_brulion_shell_dir}/appshare.cpp
     ${_brulion_shell_dir}/appsettings.h ${_brulion_shell_dir}/appsettings.cpp
+    ${_brulion_shell_dir}/appupdates.h ${_brulion_shell_dir}/appupdates.cpp
     ${_brulion_shell_dir}/commandmodel.h ${_brulion_shell_dir}/commandmodel.cpp
     ${_brulion_shell_dir}/demovault.h ${_brulion_shell_dir}/demovault.cpp
     ${_brulion_shell_dir}/foldertreemodel.h ${_brulion_shell_dir}/foldertreemodel.cpp
@@ -77,7 +78,7 @@ target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
 target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui Qt6::Qml brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook
-    PRIVATE Qt6::Network brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
+    PRIVATE Qt6::Network brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
             brulion_core_drawing brulion_notify)
 # Autostart ("Start when you sign in", Windows); AndroidBridge (permissions, test notification);
 # WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,
@@ -130,6 +131,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellSyncFooter.qml
     qml/shell/ShellTopBar.qml
     qml/shell/ShellTrayCalendar.qml
+    qml/shell/ShellUpdateBanner.qml
 )
 
 include(${_brulion_shell_dir}/views.cmake)

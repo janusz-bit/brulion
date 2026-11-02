@@ -12,6 +12,7 @@
 
 #include "appcontroller.h"
 #include "appsettings.h"
+#include "appupdates.h"
 #include "commandmodel.h"
 #include "foldertreemodel.h"
 #include "workspace.h"
@@ -77,6 +78,13 @@ public:
     {
         return detail::cppOwned(detail::controllerForQml()->workspace());
     }
+};
+
+struct AppUpdatesForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::AppUpdates)
+    QML_NAMED_ELEMENT(AppUpdates)
+    QML_UNCREATABLE("Use AppController.updates")
 };
 
 struct WorkspaceRemindersForeign {
