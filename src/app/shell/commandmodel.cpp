@@ -119,6 +119,21 @@ static QList<Command> buildCommands(const AppController *app)
     };
 }
 
+/// The automatic backups' commands (docs/UI.md "Backups"): their settings' section and a backup now.
+static QList<Command> backupCommands(const AppController *app)
+{
+    const bool usable = app->status() == u"ready" && app->workspace()->backups()->available();
+    return {
+            {u"backup.open"_s,
+             CommandModel::tr("Backups"),
+             CommandModel::tr("Copies of this notebook; restore one"),
+             u"hard-drive"_s,
+             {},
+             usable},
+            {u"backup.now"_s, CommandModel::tr("Create a backup now"), {}, u"hard-drive"_s, {}, usable},
+    };
+}
+
 // ---- Folders (Przenieś do…, Nowy folder…, Pokaż w drzewie) -----------------------------------
 // One block: the commands, where they go in the list, and what they do.
 
@@ -259,6 +274,7 @@ static QList<Command> allCommands(const AppController *app)
     const QList<Command> folders = folderCommands(app);
     for (qsizetype i = 0; i < folders.size(); ++i)
         out.insert(folderAt + i, folders.at(i));
+    out += backupCommands(app);
     return out;
 }
 
@@ -322,6 +338,10 @@ bool CommandModel::run(const QString &id)
         m_app->setSidePanelVisible(!m_app->sidePanelVisible());
     else if (id == u"sync.now")
         m_app->requestSync();
+    else if (id == u"backup.open")
+        m_app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"backups"_s}});
+    else if (id == u"backup.now")
+        m_app->workspace()->backups()->createNow();
     else if (id == u"theme.toggle")
         m_app->requestUiAction(u"toggleTheme"_s);
     else if (id == u"language.switch")

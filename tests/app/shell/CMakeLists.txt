@@ -149,6 +149,12 @@ endif()
 brulion_add_test(tst_shell_workspace_wiring SOURCES tst_workspace_wiring.cpp
     LIBS brulion_shell brulion_core_vault brulion_core_markdown brulion_core_index brulion_core_reminders
          brulion_core_dates)
+# Automatic backups on the real Workspace (workspacebackups.h): the schedule, pruning, a folder that
+# went away, restoring, the browser's rules; also in slices on the GUI thread (the browser's way).
+brulion_add_test(tst_shell_workspace_backups SOURCES tst_workspace_backups.cpp LIBS brulion_shell)
+add_test(NAME tst_shell_workspace_backups_inline COMMAND tst_shell_workspace_backups)
+set_tests_properties(tst_shell_workspace_backups_inline PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;BRULION_INDEX_THREADS=0")
 # The same with the index loaded in slices on the GUI thread (no worker threads: WebAssembly's way);
 # the default run loads it on worker threads (docs/PERFORMANCE.md, L1).
 add_test(NAME tst_shell_workspace_wiring_inline COMMAND tst_shell_workspace_wiring)

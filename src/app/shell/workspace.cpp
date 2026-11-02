@@ -117,6 +117,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     connect(m_reminders, &WorkspaceReminders::navigationRequested, this,
             [this](const QVariantMap &route) { navigate(route); });
     connect(m_reminders, &WorkspaceReminders::errorOccurred, this, &Workspace::errorOccurred);
+    m_backups = new WorkspaceBackups([this] { return now(); }, this);
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });
     connect(m_sync, &WorkspaceSync::errorOccurred, this, &Workspace::errorOccurred);
@@ -139,6 +140,7 @@ Workspace::~Workspace()
     // destroyed by now): close quietly.
     m_sync->blockSignals(true);
     m_reminders->blockSignals(true);
+    m_backups->blockSignals(true);
     blockSignals(true);
     close();
 }
@@ -207,6 +209,27 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     m_trashCount = -1;
     m_reminders->attach(m_vault.get(), m_index.get());
     m_sync->attach(m_vault.get());
+    {
+        // Backups next to History and LocalStore: in the browser a mount of their own, as the index
+        // cache's (a quota failure must not touch History or settings), and their temporary file
+        // outside every mount (the storage would save it again and again while it grows).
+        WorkspaceBackups::Attachment backups;
+        backups.notebookName = name();
+        if (!deviceStatePath.isEmpty())
+            backups.defaultFolder = QDir(deviceStatePath).filePath(u"backups"_s);
+#ifdef BRULION_INDEX_THREADS
+        backups.pool = indexWorkerPool(static_cast<QThreadPool *>(m_indexPool));
+#endif
+#ifdef Q_OS_WASM
+        if (!deviceStatePath.isEmpty())
+            backups.defaultFolder =
+                    QDir(platform::WasmStorage::backupsRoot()).filePath(QFileInfo(deviceStatePath).fileName());
+        backups.workFolder = QDir(QDir::tempPath()).filePath(u"brulion-backup"_s);
+        const platform::WasmStorage::Estimate storage = platform::WasmStorage::estimate();
+        backups.maxBytes = notebook::indexCacheBudget(storage.usage, storage.quota, 0, qint64(512) << 20);
+#endif
+        m_backups->attach(m_vault.get(), backups);
+    }
     if (!m_loader->isDone())
         m_indexTimer.start();
 
@@ -233,6 +256,7 @@ void Workspace::close()
     // what it finished stays synced, the rest is synced next time).
     m_reminders->detach();
     m_sync->detach();
+    m_backups->detach();
     m_indexTimer.stop();
     cancelMoveImpact(); // its planner reads the index
     m_impacts = ImpactCache();
@@ -306,6 +330,7 @@ void Workspace::setUiLanguage(const QString &language)
     m_language = language == u"en" ? u"en"_s : u"pl"_s;
     m_reminders->setLanguage(m_language);
     m_sync->setLanguage(m_language);
+    m_backups->setLanguage(m_language);
 }
 
 void Workspace::setDataUrlAssets(bool on)
@@ -413,6 +438,7 @@ void Workspace::indexingFinished()
     // scheduler: an empty schedule() would cancel what the previous notebook armed.
     if (!m_remindersPaused)
         m_reminders->start();
+    m_backups->start();
     setReady(false);
 #ifdef Q_OS_WASM
     {
@@ -1504,6 +1530,7 @@ void Workspace::applicationStateChanged(Qt::ApplicationState state)
         m_wasInactive = true;
         return;
     }
+    m_backups->applicationActive();
 #ifndef Q_OS_WASM
     if (std::exchange(m_wasInactive, false) && m_vault)
         m_vault->rescan(); // emits changed() for what other programs did meanwhile

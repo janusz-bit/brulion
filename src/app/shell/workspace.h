@@ -49,6 +49,7 @@
 #include "notebook/pages.h"
 #include "queryhost.h"
 #include "types.h"
+#include "workspacebackups.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
@@ -119,6 +120,8 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(brulion::shell::WorkspaceReminders *reminders READ reminders CONSTANT FINAL)
     /// Nextcloud sync, Syncthing status and conflict copies: workspacesync.h.
     Q_PROPERTY(brulion::shell::WorkspaceSync *sync READ sync CONSTANT FINAL)
+    /// Automatic backups of the open notebook: workspacebackups.h.
+    Q_PROPERTY(brulion::shell::WorkspaceBackups *backups READ backups CONSTANT FINAL)
     /// Number of daily notes (grows while the index is built).
     Q_PROPERTY(int journalCount READ journalCount NOTIFY indexChanged FINAL)
     /// Number of items in the trash (a deleted folder counts once).
@@ -171,6 +174,7 @@ public:
     void setRemindersPaused(bool paused) { m_remindersPaused = paused; }
     bool remindersPaused() const { return m_remindersPaused; }
     WorkspaceSync *sync() const { return m_sync; }
+    WorkspaceBackups *backups() const { return m_backups; }
     int journalCount() const;
     int trashCount() const;
     int revision() const { return m_revision; }
@@ -691,6 +695,7 @@ private:
     // Children of this object (parented: QML never takes them over); detached by close().
     WorkspaceReminders *m_reminders = nullptr;
     WorkspaceSync *m_sync = nullptr;
+    WorkspaceBackups *m_backups = nullptr;
     std::function<QDateTime()> m_clock;
     QString m_language = QStringLiteral("pl");
     bool m_dataUrlAssets = false;

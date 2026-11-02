@@ -4093,6 +4093,115 @@ void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
     app->goHome();
 }
 
+/// "Kopie zapasowe": the settings' section with real input: a backup made with its button, the row of
+/// the list, "Przywróć" through the confirmation with its counts, the note back; "Usuń" asks first.
+void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    WorkspaceBackups *backups = ws->backups();
+    const QString note = u"Kopia żółwia.md"_s;
+    ws->writeFile(note, u"- z kopii\n"_s);
+
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"backups"_s}});
+    // The section may lie below the fold of the narrow layout's one column: brought into view.
+    const auto reveal = [&](QQuickItem *item) {
+        if (!item)
+            return;
+        for (QQuickItem *up = item->parentItem(); up; up = up->parentItem()) {
+            if (!up->inherits("QQuickFlickable"))
+                continue;
+            const qreal y = item->mapToItem(up->property("contentItem").value<QQuickItem *>(), QPointF(0, 0)).y();
+            const qreal maxY = qMax<qreal>(0, up->property("contentHeight").toReal() - up->height());
+            up->setProperty("contentY", qBound<qreal>(0, y - up->height() / 3, maxY));
+            break;
+        }
+        settle(100);
+    };
+    QQuickItem *create = nullptr;
+    check(waitFor([&] {
+              create = shownNamed(window->contentItem(), u"backupsCreateNow"_s);
+              return create != nullptr;
+          }),
+          "the settings show the backups' section");
+    if (!create)
+        return;
+    const qsizetype before = backups->backups().size();
+    reveal(create);
+    settle(1200); // the narrow layout's own scroll to the route's section has ended
+    reveal(create);
+    tapOrClick(window, pointIn(create), touch);
+    check(waitFor([&] { return backups->backups().size() == before + 1 && !backups->running(); }),
+          "“Create a backup now” adds a backup to the list");
+    check(backups->status() == u"ok", "the status says it worked");
+
+    QQuickItem *row = nullptr;
+    check(waitFor([&] {
+              row = shownNamed(window->contentItem(), u"backupRow"_s);
+              return row != nullptr;
+          }),
+          "the backup has a row");
+    QQuickItem *restore =
+            row ? findShown(row, [](QQuickItem *i) { return i->objectName() == u"backupRestore"; }) : nullptr;
+    check(restore != nullptr, "the row has “Restore”");
+    if (!restore)
+        return;
+
+    ws->writeFile(note, u"- zmieniona po kopii\n"_s);
+    ws->writeFile(u"Kopia nowa.md"_s, u"- po kopii\n"_s);
+    reveal(restore);
+    tapOrClick(window, pointIn(restore), touch);
+    const QString accept = QCoreApplication::translate("ShellBackupSettings", "Restore");
+    QQuickItem *acceptButton = nullptr;
+    check(waitFor([&] {
+              acceptButton = findShown(window->contentItem(), [&](QQuickItem *item) {
+                  return isA(item, "BButton") && item->property("text").toString() == accept;
+              });
+              return acceptButton != nullptr;
+          }),
+          "a restore asks first, with its counts");
+    check(ws->readFile(note) == u"- zmieniona po kopii\n", "nothing is restored before the confirmation");
+    settle(250);
+    if (acceptButton)
+        tapOrClick(window, pointIn(acceptButton), touch);
+    check(waitFor([&] { return ws->readFile(note) == u"- z kopii\n" && !backups->running(); }),
+          "the confirmed restore brings the note back");
+    check(!ws->exists(u"Kopia nowa.md"_s), "what the backup does not hold goes to the trash");
+    check(waitFor([&] { return backups->backups().size() >= before + 2; }), "a safety backup was made first");
+    closeMenus(window);
+
+    // Delete asks first too.
+    settle(300);
+    const qsizetype listed = backups->backups().size();
+    row = shownNamed(window->contentItem(), u"backupRow"_s);
+    QQuickItem *remove =
+            row ? findShown(row, [](QQuickItem *i) { return i->objectName() == u"backupDelete"; }) : nullptr;
+    check(remove != nullptr, "the row has “Delete”");
+    if (remove) {
+        reveal(remove);
+        tapOrClick(window, pointIn(remove), touch);
+        const QString confirm = QCoreApplication::translate("ShellBackupSettings", "Delete");
+        QQuickItem *confirmButton = nullptr;
+        check(waitFor([&] {
+                  confirmButton = findShown(window->contentItem(), [&](QQuickItem *item) {
+                      return isA(item, "BButton") && item->property("text").toString() == confirm;
+                  });
+                  return confirmButton != nullptr;
+              }),
+              "deleting a backup asks first");
+        check(backups->backups().size() == listed, "nothing is deleted before the confirmation");
+        settle(250);
+        if (confirmButton)
+            tapOrClick(window, pointIn(confirmButton), touch);
+        check(waitFor([&] { return backups->backups().size() == listed - 1; }), "the confirmed backup is deleted");
+    }
+
+    // Leave the sample notebook as it was for the checks after this one.
+    ws->deleteForever(ws->deletePage(note));
+    closeMenus(window);
+    app->goHome();
+}
+
 void checkShare(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -5137,6 +5246,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3e'. "Sprzątanie": what nothing refers to, picked with real input, to the trash and back.
     checkCleanup(window, app, check);
+    closeMenus(window);
+    // 3e''. "Kopie zapasowe": a backup, a restore through its confirmation and a delete.
+    checkBackups(window, app, check);
     closeMenus(window);
     // 3f. "Udostępnij → Brulion": the share dialog, to the journal and to a new page.
     checkShare(window, app, check);

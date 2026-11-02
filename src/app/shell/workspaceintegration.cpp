@@ -3,6 +3,7 @@
 #include "appcontroller.h"
 #include "appsettings.h"
 #include "workspace.h"
+#include "workspacebackups.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
@@ -233,6 +234,9 @@ void integrateWorkspace(AppController *app)
     ws->setWebPicturesShown(settings->webPicturesShown());
     QObject::connect(settings, &AppSettings::webPicturesShownChanged, ws,
                      [settings, ws] { ws->setWebPicturesShown(settings->webPicturesShown()); });
+    // Automatic backups: their messages (also of a failed scheduled run) as toasts.
+    QObject::connect(ws->backups(), &WorkspaceBackups::messageRequested, app,
+                     [app](const QString &text, const QString &kind) { app->toast(text, kind); });
 }
 
 QString syncthingApiKey(AppSettings *settings)

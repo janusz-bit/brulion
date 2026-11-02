@@ -497,6 +497,16 @@ int main(int argc, char *argv[])
                          if (controller && controller->workspace())
                              controller->workspace()->stopIndexCache(message);
                      });
+    // The backups' own mount: a copy the quota cannot take goes again (the older ones stay), and
+    // pruning waits until IndexedDB has the new one. Mount errors never touch notes or History.
+    QObject::connect(&storage, &wasm::WasmStorage::backupsNotSaved, &app, [&controller](const QString &message) {
+        if (controller && controller->workspace())
+            controller->workspace()->backups()->storageRefused(message);
+    });
+    QObject::connect(&storage, &wasm::WasmStorage::flushed, &app, [&controller, &storage](bool ok) {
+        if (ok && !storage.hasPendingChanges() && controller && controller->workspace())
+            controller->workspace()->backups()->storageFlushed();
+    });
     QObject::connect(
         &storage, &wasm::WasmStorage::ready, &engine,
         [&storage, &controller, &createController, &startUi] {
@@ -508,6 +518,7 @@ int main(int argc, char *argv[])
             wasm::setShellStage(wasm::ShellStage::StartingUi);
             createController(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
                              + u"/settings.ini"_s);
+            controller->workspace()->backups()->setDeferUntilStored(storage.isBackedByIndexedDb());
             startUi();
             wasm::hideShellLoadingScreen();
             // Private mode or blocked site data: nothing reaches IndexedDB. Say so before the

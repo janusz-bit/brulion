@@ -71,7 +71,9 @@ EMSCRIPTEN_BINDINGS(brulion_wasm_storage)
 // completion): each is one IndexedDB database and one transaction, and a failure of a cache
 // mount (`cacheMounts`: files the app can rebuild) only counts in `cacheFailures` and is reported
 // as op 4 — never as a failed load or write-back, so a cache the quota cannot take neither
-// blocks the start nor keeps the page "unsaved".
+// blocks the start nor keeps the page "unsaved". `keptMounts` (the backups) are cache mounts whose
+// files C++ does not drop; one that could not be loaded is skipped by every later write-back
+// (`unloaded`), because its empty tree would delete what is stored.
 //   dirty/timer/firstChange - debounce: write back `delay` ms after the last change, but at
 //            most `maxDelay` ms after the first unsaved change.
 // Change tracking wraps the public Emscripten FS API (FS.close/write/rename/unlink/rmdir/
@@ -84,7 +86,7 @@ EMSCRIPTEN_BINDINGS(brulion_wasm_storage)
 // reloads when it is shown again.
 EM_JS_DEPS(brulion_wasm_storage, "$FS,$IDBFS,$UTF8ToString");
 
-EM_JS(void, brulion_storage_start, (const char *mountsJson, const char *cacheMountsJson, int delayMs, int maxDelayMs), {
+EM_JS(void, brulion_storage_start, (const char *mountsJson, const char *cacheMountsJson, const char *keptMountsJson, int delayMs, int maxDelayMs), {
     var report = function(op, ok, message) {
         try {
             Module["brulionStorageEvent"](op, !!ok, message ? String(message) : "");
@@ -103,6 +105,7 @@ EM_JS(void, brulion_storage_start, (const char *mountsJson, const char *cacheMou
     var st = {
         mounts: JSON.parse(UTF8ToString(mountsJson)),
         cacheMounts: JSON.parse(UTF8ToString(cacheMountsJson)),
+        keptMounts: JSON.parse(UTF8ToString(keptMountsJson)), unloaded: {},
         cacheFailures: 0, estimate: null,
         ready: false, failed: false, busy: false, again: false, waitingForLock: false,
         releaseLock: null, lockReleased: false, releaseAfterFlush: false, suspended: false,
@@ -156,6 +159,7 @@ EM_JS(void, brulion_storage_start, (const char *mountsJson, const char *cacheMou
                 called = true;
                 if (err && cache) {
                     st.cacheFailures++;
+                    if (populate && st.keptMounts.indexOf(path) >= 0) st.unloaded[path] = true;
                     console.warn("Brulion: the cache in " + path + " was not " + (populate ? "loaded from" : "saved to") + " IndexedDB", err);
                     report(4, false, JSON.stringify({ mount: path, error: describe(err) }));
                 } else if (err && !failure) {
@@ -164,7 +168,7 @@ EM_JS(void, brulion_storage_start, (const char *mountsJson, const char *cacheMou
                 if (--left === 0) callback(failure);
             };
             var mount = mountAt(path);
-            if (!mount || !mount.type.syncfs) {
+            if (!mount || !mount.type.syncfs || (!populate && st.unloaded[path])) {
                 done(null);
                 return;
             }
@@ -411,9 +415,14 @@ QString WasmStorage::indexCacheRoot()
     return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/index");
 }
 
+QString WasmStorage::backupsRoot()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/backups");
+}
+
 QStringList WasmStorage::defaultCacheMountPoints()
 {
-    return {indexCacheRoot()};
+    return {indexCacheRoot(), backupsRoot()};
 }
 
 WasmStorage::Estimate WasmStorage::estimate()
@@ -472,7 +481,10 @@ void WasmStorage::start(const QStringList &mountPoints, const QStringList &cache
         QJsonDocument(QJsonArray::fromStringList(m_mountPoints)).toJson(QJsonDocument::Compact);
     const QByteArray cacheJson =
         QJsonDocument(QJsonArray::fromStringList(m_cacheMountPoints)).toJson(QJsonDocument::Compact);
-    brulion_storage_start(json.constData(), cacheJson.constData(), m_flushDelay, m_maxFlushDelay);
+    const QByteArray keptJson =
+        QJsonDocument(QJsonArray::fromStringList({backupsRoot()})).toJson(QJsonDocument::Compact);
+    brulion_storage_start(json.constData(), cacheJson.constData(), keptJson.constData(), m_flushDelay,
+                          m_maxFlushDelay);
 }
 
 void WasmStorage::dropCacheFiles(const QString &mountPoint)
@@ -559,6 +571,12 @@ void WasmStorage::handleJsEvent(int op, bool ok, const QString &message)
         if (!m_cacheMountPoints.contains(mount)) {
             qCWarning(lcWasmStorage) << "failure of an unknown cache mount:" << message;
             return;
+        }
+        if (mount == backupsRoot()) {
+            qCWarning(lcWasmStorage).noquote()
+                    << QStringLiteral("the backups in %1 were not saved to IndexedDB (%2)").arg(mount, why);
+            Q_EMIT backupsNotSaved(why);
+            break;
         }
         qCWarning(lcWasmStorage).noquote()
                 << QStringLiteral("the cache in %1 was not saved to IndexedDB (%2): its files are removed")
