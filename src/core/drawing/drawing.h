@@ -31,7 +31,8 @@
 //   svgWithScene(picture, drawing)             another program's picture of the scene with the
 //                                              scene embedded (an imported Trilium canvas)
 //   elementShape(), hitTest(), lassoSelects()  the look and the hit tests of elements (geometry.h)
-//   moveElements(), duplicateElements(), …     the edits of elements; undo diffs (edit.h)
+//   moveElements(), resizeElements(), …        the edits of elements; undo diffs (edit.h)
+//   newPolygon()                               triangles, a star, … as closed lines (edit.h)
 //   merge(), mergeBase(), mergeKey()           two versions of a drawing merged element by element
 //   mergeCounts(), sameDrawing(),              (merge.h): the open editor, the sync center's
 //   containsDrawing(), mergeDrawingFiles()     conflict copies, Nextcloud's sync of a drawing file
@@ -143,7 +144,8 @@ struct Stroke {
     /// Line, Arrow: the heads at either end.
     Arrowhead startArrowhead = Arrowhead::None;
     Arrowhead endArrowhead = Arrowhead::None;
-    /// Arrow: an elbow arrow (right angles; Brulion moves it rigidly). Line: closed (a polygon).
+    /// Arrow: an elbow arrow (right angles; Brulion moves it rigidly). Line: closed (a polygon:
+    /// its last point is its first, as Excalidraw keeps them).
     bool elbowed = false;
     bool polygon = false;
     /// Line, Arrow: `startBinding.elementId` / `endBinding.elementId` ("" none).
@@ -165,6 +167,9 @@ struct Stroke {
     bool autoResize = true;
     /// Image: the key of its picture in Drawing::files ("" none: drawn as a placeholder).
     QString fileId;
+    /// Image: mirrored within its box (Excalidraw's `scale`: [-1, 1], [1, -1]).
+    bool flipX = false;
+    bool flipY = false;
     int seed = 1;
     /// Raised by every edit (with versionNonce and updated): an element whose version is the one
     /// of its read `element` is written back exactly as it was read.

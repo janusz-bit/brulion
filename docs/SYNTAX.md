@@ -257,7 +257,12 @@ freehand lines (also rotated or filled), rectangles, ellipses, diamonds, lines (
 closed), arrows (with their heads: arrow, triangle, bar, dot/circle, diamond and their outlines;
 elbow arrows too), text (free, and labels of shapes and arrows: `containerId`, the shape's
 `boundElements`) and pictures (`image` with its `files` entry; a missing file shows a placeholder,
-still movable and deletable). A scene with any other element — a frame, a magic frame, an embedded
+still movable and deletable; mirrored by its `scale`: `[-1, 1]`, `[1, -1]`, as Excalidraw flips one).
+The editor's polygons (triangle, star, heart, cloud…: `drawing::PolygonKind`) are no kind of their
+own but closed lines: `type: "line"`, `polygon: true`, `roundness: null`, the last point equal to the
+first (Excalidraw's own condition for a polygon), and curved outlines are many short sides, so every
+program that reads Excalidraw shows and edits them as drawn. A closed line with roundness curves
+through each corner once. A scene with any other element — a frame, a magic frame, an embedded
 web page (`embeddable`, `iframe`), a kind Brulion does not know, an element with a coordinate
 farther than 10⁶ scene units from the origin on either axis (`drawing::CoordinateLimit`) or with
 broken numbers — is shown, never written (read-only); a drawing whose only such elements were

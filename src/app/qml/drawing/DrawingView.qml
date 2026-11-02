@@ -12,15 +12,16 @@ import Brulion
 //    mouse works it; one finger works it or moves the paper — "Rysuj palcem", on by default until
 //    a stylus has been seen on this device —, two fingers move and zoom) and the tool bar
 //    (DrawingToolbar: above the paper, at the bottom on phones). Tools: the pen, the highlighter,
-//    the eraser, the selection (a lasso or a tap; DrawingSelectionBar over the selection), shapes
-//    (rectangle, ellipse, diamond, line, arrow), text (DrawingTextEditor writes it). Keys (none
+//    the eraser, the selection (a lasso, a rectangle or a tap; its frame's handles resize and turn
+//    it; DrawingSelectionBar over the selection), shapes (rectangle, ellipse, diamond, line, arrow
+//    and the polygons in their menu), text (DrawingTextEditor writes it). Keys (none
 //    while a text is written): Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, P / H / E (pen, highlighter,
 //    eraser), V (select), R / O / D / L / A (rectangle, ellipse, diamond, line, arrow), T (text),
 //    Delete / Backspace (the selection), Ctrl+D (duplicate), Ctrl+A (select all), Escape (a shape
 //    or a lasso in progress dropped, else the selection cleared), the arrows (move the selection
 //    1, with Shift 10), Ctrl+] / Ctrl+[ (one step up / down), Ctrl+Shift+] / Ctrl+Shift+[ (to the
-//    front / back), Space held (move the paper), Ctrl+0 (the whole drawing), Ctrl++ / Ctrl+-
-//    (zoom).
+//    front / back), Ctrl+G / Ctrl+Shift+G (group, ungroup), Shift+H / Shift+V (mirror across, up
+//    and down), Space held (move the paper), Ctrl+0 (the whole drawing), Ctrl++ / Ctrl+- (zoom).
 //  * Saved by itself: 1.2 s after the last change, when the route changes, the view goes and the
 //    app leaves the foreground (Workspace.writeAttachment). A text being written is written first
 //    by those but never by the 1.2 s timer, which waits until its editor closes (committing it
@@ -52,7 +53,8 @@ import Brulion
 //    back.
 // route.open (screenshots): "style" (the colours and widths) and "more" on phones, "paper" (the
 // paper's menu) on wide windows, "theme" (the background's menu; on phones "Więcej"), "shape"
-// (the shapes' menu), "select" (everything selected: the selection bar), "backdrop" (the page
+// (the shapes' menu), "select" (everything selected — or route.ids —: the selection bar),
+// "selectstyle" and "selectmore" (the same with its style panel, its "Więcej"), "backdrop" (the page
 // picker of the backdrop's PDF; a picture's backdrop: the paper's menu).
 // View contract (ShellRouteView): `title` (the file's name), `editing` (always: the paper is being
 // worked on), `toolbarDocked` and `replacesBottomNav` (phones: the tool bar at the bottom — the
@@ -111,6 +113,8 @@ FocusScope {
     property real highlighterWidth: Number(AppSettings.value("drawing/highlighterWidth", 5)) || 5
     /// The shape tool the shape button stands for.
     property string shapeTool: AppSettings.value("drawing/shape", "rectangle")
+    /// How the select tool takes elements: "lasso", "box".
+    property string selectMode: AppSettings.value("drawing/selectMode", "lasso")
     property real fontSize: Number(AppSettings.value("drawing/fontSize", 20)) || 20
     /// "auto" (a finger draws until a stylus has been seen), "on", "off".
     property string fingerMode: AppSettings.value("drawing/finger", "auto")
@@ -253,9 +257,16 @@ FocusScope {
                     root.openPaperDialog()
                 else if (open === "shape")
                     bar.openShapes()
-                else if (open === "select") {
+                else if (open === "select" || open === "selectstyle" || open === "selectmore") {
                     canvas.tool = "select"
-                    canvas.selectAll()
+                    if (root.route.ids)
+                        canvas.select(root.route.ids)
+                    else
+                        canvas.selectAll()
+                    if (open === "selectstyle")
+                        selectionBar.openStyle()
+                    else if (open === "selectmore")
+                        selectionBar.openMore()
                 } else if (open === "backdrop") {
                     if (canvas.backdropPage > 0 && canvas.backdropPath !== "" && DrawingBackdrops.pdfAvailable)
                         root.otherBackdropPage()
@@ -296,6 +307,11 @@ FocusScope {
     function chooseShape(tool) {
         root.shapeTool = tool
         AppSettings.setValue("drawing/shape", tool)
+    }
+
+    function chooseSelectMode(mode) {
+        root.selectMode = mode
+        AppSettings.setValue("drawing/selectMode", mode)
     }
 
     function useShape(tool) {
@@ -598,6 +614,15 @@ FocusScope {
         } else if (event.matches(StandardKey.SelectAll)) {
             canvas.tool = "select"
             canvas.selectAll()
+        } else if (ctrl && event.key === Qt.Key_G && canvas.selectionCount > 0) {
+            if (shift)
+                canvas.ungroupSelection()
+            else
+                canvas.groupSelection()
+        } else if (event.modifiers === Qt.ShiftModifier && event.key === Qt.Key_H && canvas.selectionCount > 0) {
+            canvas.flipSelection("horizontal")
+        } else if (event.modifiers === Qt.ShiftModifier && event.key === Qt.Key_V && canvas.selectionCount > 0) {
+            canvas.flipSelection("vertical")
         } else if (event.key === Qt.Key_Escape && (canvas.busy || canvas.selectionCount > 0)) {
             if (!canvas.cancelGesture())
                 canvas.clearSelection()
@@ -645,6 +670,7 @@ FocusScope {
             onWidthChosen: (width) => root.chooseWidth(width)
             onFontSizeChosen: (size) => root.chooseFontSize(size)
             onShapeChosen: (tool) => root.chooseShape(tool)
+            onSelectModeChosen: (mode) => root.chooseSelectMode(mode)
             onFingerToggled: root.toggleFinger()
             onFitRequested: canvas.fitAll()
             onDone: root.done()
@@ -666,6 +692,7 @@ FocusScope {
                 fingerDraws: root.fingerDraws
                 appDark: Theme.dark
                 selectionColor: Theme.info
+                selectMode: root.selectMode
                 onToolChanged: root.applyTool()
                 onContentChanged: if (canvas.modified) saveTimer.restart()
                 onTextEditingChanged: {
@@ -822,6 +849,7 @@ FocusScope {
             onWidthChosen: (width) => root.chooseWidth(width)
             onFontSizeChosen: (size) => root.chooseFontSize(size)
             onShapeChosen: (tool) => root.chooseShape(tool)
+            onSelectModeChosen: (mode) => root.chooseSelectMode(mode)
             onFingerToggled: root.toggleFinger()
             onFitRequested: canvas.fitAll()
             onDone: root.done()

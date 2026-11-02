@@ -1,19 +1,23 @@
 // DrawingCanvas's tools beyond the pen and the eraser (drawingcanvas.h; docs/UI.md "Drawing
-// editor"): the selection — a lasso or a tap, moving it, its actions —, the shapes, and text written
+// editor"): the selection — a lasso, a rectangle or a tap, moving, resizing and rotating it, its
+// actions —, the shapes, and text written
 // in QML's editor. Every edit goes through editElements(): the core's pure edits (drawing/edit.h) on
 // the drawing, one undo step of their diff.
 #include "drawingcanvas.h"
 
 #include "drawingrender.h"
 
+#include "drawing/excalidraw.h"
 #include "drawing/geometry.h"
 #include "drawing/palette.h"
 
+#include <QCursor>
 #include <QGuiApplication>
 #include <QLineF>
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <utility>
 
 using namespace Qt::StringLiterals;
@@ -33,6 +37,26 @@ drawing::ElementType shapeType(const QString &tool)
     if (tool == u"arrow")
         return drawing::ElementType::Arrow;
     return drawing::ElementType::Rectangle;
+}
+
+/// The enum value with this name in the scene (one of `values`, nullopt: none).
+template<typename Enum, typename Name>
+std::optional<Enum> enumFromName(const QString &name, std::initializer_list<Enum> values, Name nameOf)
+{
+    for (const Enum value : values) {
+        if (nameOf(value) == name)
+            return value;
+    }
+    return std::nullopt;
+}
+
+std::optional<drawing::Arrowhead> arrowheadFromName(const QString &name)
+{
+    using A = drawing::Arrowhead;
+    return enumFromName<A>(name,
+                           {A::None, A::Arrow, A::Triangle, A::TriangleOutline, A::Bar, A::Circle, A::CircleOutline,
+                            A::Diamond, A::DiamondOutline},
+                           drawing::arrowheadName);
 }
 
 QString alignName(drawing::TextAlign align)
@@ -135,6 +159,268 @@ QRectF DrawingCanvas::selectionSceneRect() const
     return out;
 }
 
+void DrawingCanvas::setSelectMode(const QString &mode)
+{
+    const QString m = mode == u"box" ? mode : u"lasso"_s;
+    if (m == m_selectMode)
+        return;
+    if (m_gesture == Gesture::Lasso)
+        cancelToolGesture();
+    m_selectMode = m;
+    Q_EMIT selectModeChanged();
+}
+
+DrawingCanvas::SelectionFrame DrawingCanvas::selectionFrame() const
+{
+    SelectionFrame frame;
+    const drawing::Stroke *only = nullptr;
+    int units = 0;
+    QRectF all;
+    for (qsizetype i = 0; i < m_prepared.size(); ++i) {
+        if (!m_selected.contains(m_prepared.at(i).key))
+            continue;
+        const QRectF bounds = m_prepared.at(i).bounds;
+        if (!bounds.isNull())
+            all = all.isNull() ? bounds : all.united(bounds);
+        const drawing::Stroke &e = m_doc.strokes.at(i);
+        // (A label goes with its shape or arrow.)
+        if (e.type == drawing::ElementType::Text && m_selected.contains(e.containerId))
+            continue;
+        ++units;
+        only = &e;
+    }
+    if (units == 0)
+        return frame;
+    frame.valid = true;
+    if (units > 1) {
+        frame.box = all;
+        frame.proportional = true;
+        frame.fixedShape = true;
+        frame.edges = false;
+        return frame;
+    }
+    frame.box = drawing::hasPoints(only->type) ? drawing::pointsRect(only->points) : only->box;
+    frame.angle = only->elbowed ? 0 : only->angle;
+    frame.rotates = !only->elbowed;
+    const bool text = only->type == drawing::ElementType::Text;
+    frame.proportional = text || only->type == drawing::ElementType::Image;
+    frame.fixedShape = text;
+    frame.edges = !text;
+    return frame;
+}
+
+QRectF DrawingCanvas::paddedFrame(const SelectionFrame &frame) const
+{
+    const double pad = FramePadding / m_zoom;
+    return frame.box.adjusted(-pad, -pad, pad, pad);
+}
+
+QPolygonF DrawingCanvas::frameCorners(const SelectionFrame &frame) const
+{
+    const QRectF r = paddedFrame(frame);
+    const QPointF c = frame.box.center();
+    return QPolygonF{drawing::rotatePoint(r.topLeft(), c, frame.angle),
+                     drawing::rotatePoint(r.topRight(), c, frame.angle),
+                     drawing::rotatePoint(r.bottomRight(), c, frame.angle),
+                     drawing::rotatePoint(r.bottomLeft(), c, frame.angle)};
+}
+
+QList<std::pair<int, QPointF>> DrawingCanvas::frameHandles(const SelectionFrame &frame) const
+{
+    const QRectF r = paddedFrame(frame);
+    const QPointF c = frame.box.center();
+    const auto item = [&](QPointF local) { return toItem(drawing::rotatePoint(local, c, frame.angle)); };
+    using H = drawing::Handle;
+    QList<std::pair<int, QPointF>> out{{int(H::TopLeft), item(r.topLeft())},
+                                       {int(H::TopRight), item(r.topRight())},
+                                       {int(H::BottomRight), item(r.bottomRight())},
+                                       {int(H::BottomLeft), item(r.bottomLeft())}};
+    if (frame.edges) {
+        const double mid = (r.left() + r.right()) / 2;
+        const double middle = (r.top() + r.bottom()) / 2;
+        // (No edge handle where the side has no length to scale, or none to sit on.)
+        if (frame.box.height() > 0 && r.width() * m_zoom >= MinSideForEdgeHandle) {
+            out.append({int(H::Top), item(QPointF(mid, r.top()))});
+            out.append({int(H::Bottom), item(QPointF(mid, r.bottom()))});
+        }
+        if (frame.box.width() > 0 && r.height() * m_zoom >= MinSideForEdgeHandle) {
+            out.append({int(H::Left), item(QPointF(r.left(), middle))});
+            out.append({int(H::Right), item(QPointF(r.right(), middle))});
+        }
+    }
+    return out;
+}
+
+std::optional<QPointF> DrawingCanvas::rotateHandlePos(const SelectionFrame &frame) const
+{
+    if (!frame.rotates)
+        return std::nullopt;
+    const QRectF r = paddedFrame(frame);
+    const double middle = (r.left() + r.right()) / 2;
+    const QPointF above = toItem(drawing::rotatePoint(QPointF(middle, r.top() - RotateHandleDistance / m_zoom),
+                                                      frame.box.center(), frame.angle));
+    // Under the frame when there is no room for it above (the topmost element as a drawing opens).
+    const QRectF view = QRectF(0, 0, width(), height()).adjusted(8, 8, -8, -8);
+    if (view.contains(above))
+        return above;
+    const QPointF below = toItem(drawing::rotatePoint(QPointF(middle, r.bottom() + RotateHandleDistance / m_zoom),
+                                                      frame.box.center(), frame.angle));
+    return view.contains(below) ? below : above;
+}
+
+int DrawingCanvas::frameHandleAt(const SelectionFrame &frame, QPointF itemPos, bool wideReach) const
+{
+    if (!frame.valid || !m_editable || m_textEditing)
+        return -1;
+    const double reach = wideReach ? TouchHandleReach : HandleReach;
+    if (const std::optional<QPointF> at = rotateHandlePos(frame); at && QLineF(*at, itemPos).length() <= reach)
+        return RotateHandle;
+    const QRectF r = paddedFrame(frame);
+    // A small element: inside its frame it moves (the handles would cover all of it).
+    if (std::min(r.width(), r.height()) * m_zoom < MinSideForInnerHandles) {
+        const QPointF local = drawing::rotatePoint(toScene(itemPos), frame.box.center(), -frame.angle);
+        if (r.contains(local))
+            return -1;
+    }
+    int best = -1;
+    double bestDistance = reach;
+    for (const auto &[kind, at] : frameHandles(frame)) {
+        const double distance = QLineF(at, itemPos).length();
+        if (distance <= bestDistance) {
+            best = kind;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
+QRectF DrawingCanvas::selectionOuterRect() const
+{
+    const SelectionFrame frame = selectionFrame();
+    if (!frame.valid)
+        return {};
+    QPolygonF corners;
+    for (const QPointF &p : frameCorners(frame))
+        corners.append(toItem(p));
+    QRectF out = corners.boundingRect();
+    if (const std::optional<QPointF> at = rotateHandlePos(frame))
+        out = out.united(QRectF(*at, QSizeF(0, 0)).adjusted(-6, -6, 6, 6));
+    return m_gesture == Gesture::Move ? out.translated(m_moveDelta) : out;
+}
+
+QVariantMap DrawingCanvas::selectionStyle() const
+{
+    QVariantMap style;
+    const auto first = [&](const QString &flag) {
+        if (style.contains(flag))
+            return false;
+        style.insert(flag, true);
+        return true;
+    };
+    for (const drawing::Stroke &e : m_doc.strokes) {
+        if (!m_selected.contains(e.id))
+            continue;
+        if (!style.contains(u"opacity"_s))
+            style.insert(u"opacity"_s, e.opacity);
+        if (drawing::hasFill(e) && first(u"fillable"_s)) {
+            style.insert(u"fill"_s, e.fill);
+            style.insert(u"fillStyle"_s, drawing::fillStyleName(e.fillStyle));
+        }
+        if (drawing::hasThickness(e) && first(u"thick"_s))
+            style.insert(u"thickness"_s, drawing::thicknessOf(e));
+        if (drawing::hasDashes(e) && first(u"dashable"_s))
+            style.insert(u"strokeStyle"_s, drawing::strokeStyleName(e.strokeStyle));
+        if (drawing::canRound(e) && first(u"roundable"_s))
+            style.insert(u"rounded"_s, e.roundness != 0);
+        if (e.type == drawing::ElementType::Text && first(u"text"_s))
+            style.insert(u"fontSize"_s, e.fontSize);
+        if (drawing::hasHeads(e) && first(u"heads"_s)) {
+            style.insert(u"startHead"_s, drawing::arrowheadName(e.startArrowhead));
+            style.insert(u"endHead"_s, drawing::arrowheadName(e.endArrowhead));
+        }
+    }
+    style.insert(u"canGroup"_s, drawing::canGroup(m_doc, m_selected));
+    style.insert(u"canUngroup"_s, drawing::canUngroup(m_doc, m_selected));
+    return style;
+}
+
+void DrawingCanvas::styleSelection(const QVariantMap &change)
+{
+    if (m_selected.isEmpty() || busy())
+        return;
+    drawing::ElementStyle style;
+    if (change.contains(u"fill"_s)) {
+        const QString fill = change.value(u"fill"_s).toString();
+        if (fill == u"transparent")
+            style.fill = fill;
+        else if (const QColor color(fill); color.isValid())
+            style.fill = color.name(QColor::HexRgb);
+    }
+    using FS = drawing::FillStyle;
+    using SS = drawing::StrokeStyle;
+    if (change.contains(u"fillStyle"_s))
+        style.fillStyle = enumFromName<FS>(change.value(u"fillStyle"_s).toString(),
+                                           {FS::Solid, FS::Hachure, FS::CrossHatch}, drawing::fillStyleName);
+    if (change.contains(u"thickness"_s))
+        style.thickness = std::clamp(change.value(u"thickness"_s).toInt(), 0, 2);
+    if (change.contains(u"strokeStyle"_s))
+        style.strokeStyle = enumFromName<SS>(change.value(u"strokeStyle"_s).toString(),
+                                             {SS::Solid, SS::Dashed, SS::Dotted}, drawing::strokeStyleName);
+    if (change.contains(u"opacity"_s))
+        style.opacity = std::clamp(change.value(u"opacity"_s).toInt(), 0, 100);
+    if (change.contains(u"rounded"_s))
+        style.rounded = change.value(u"rounded"_s).toBool();
+    if (change.contains(u"fontSize"_s)) {
+        const double size = change.value(u"fontSize"_s).toDouble();
+        if (std::isfinite(size) && size >= 1 && size <= 1000)
+            style.fontSize = size;
+    }
+    if (change.contains(u"startHead"_s))
+        style.startArrowhead = arrowheadFromName(change.value(u"startHead"_s).toString());
+    if (change.contains(u"endHead"_s))
+        style.endArrowhead = arrowheadFromName(change.value(u"endHead"_s).toString());
+    const QSet<QString> ids = m_selected;
+    const drawing::TextMetrics metrics = textMetrics();
+    editElements([&](drawing::Drawing &doc) { drawing::styleElements(doc, ids, style, metrics, stamp()); });
+}
+
+void DrawingCanvas::rotateSelection(qreal degrees)
+{
+    const SelectionFrame frame = selectionFrame();
+    if (!frame.valid || busy() || !std::isfinite(degrees))
+        return;
+    const QSet<QString> ids = m_selected;
+    editElements([&](drawing::Drawing &doc) {
+        drawing::rotateElements(doc, ids, frame.box.center(), degrees * std::numbers::pi / 180, stamp());
+    });
+}
+
+void DrawingCanvas::flipSelection(const QString &axis)
+{
+    const SelectionFrame frame = selectionFrame();
+    if (!frame.valid || busy())
+        return;
+    const QSet<QString> ids = m_selected;
+    const drawing::Flip flip = axis == u"vertical" ? drawing::Flip::Vertical : drawing::Flip::Horizontal;
+    editElements([&](drawing::Drawing &doc) { drawing::flipElements(doc, ids, flip, frame.box.center(), stamp()); });
+}
+
+void DrawingCanvas::groupSelection()
+{
+    if (m_selected.isEmpty() || busy())
+        return;
+    const QSet<QString> ids = m_selected;
+    editElements([&](drawing::Drawing &doc) { drawing::groupElements(doc, ids, stamp()); });
+}
+
+void DrawingCanvas::ungroupSelection()
+{
+    if (m_selected.isEmpty() || busy())
+        return;
+    const QSet<QString> ids = m_selected;
+    editElements([&](drawing::Drawing &doc) { drawing::ungroupElements(doc, ids, stamp()); });
+}
+
 QRectF DrawingCanvas::selectionRect() const
 {
     const QRectF scene = selectionSceneRect();
@@ -217,7 +503,7 @@ void DrawingCanvas::nudgeSelection(qreal dx, qreal dy)
 bool DrawingCanvas::cancelGesture()
 {
     if (m_gesture == Gesture::Lasso || m_gesture == Gesture::Move || m_gesture == Gesture::Shape
-        || m_gesture == Gesture::Tap) {
+        || m_gesture == Gesture::Tap || m_gesture == Gesture::Resize || m_gesture == Gesture::Rotate) {
         cancelToolGesture();
         return true;
     }
@@ -252,6 +538,8 @@ void DrawingCanvas::moveToolGesture(QPointF itemPos, const Pointer &p)
     case Gesture::Pan: panTo(itemPos); break;
     case Gesture::Lasso: lassoTo(itemPos); break;
     case Gesture::Move: moveSelectionTo(itemPos); break;
+    case Gesture::Resize: resizeSelectionTo(itemPos, p); break;
+    case Gesture::Rotate: rotateSelectionTo(itemPos, p); break;
     case Gesture::Shape: shapeTo(itemPos, p); break;
     case Gesture::Tap: m_lastItemPos = itemPos; break;
     case Gesture::Pinch:
@@ -283,6 +571,14 @@ void DrawingCanvas::endToolGesture(QPointF itemPos, const Pointer &p)
         moveSelectionTo(itemPos);
         finishMove(itemPos, p);
         break;
+    case Gesture::Resize:
+        resizeSelectionTo(itemPos, p);
+        finishResize();
+        break;
+    case Gesture::Rotate:
+        rotateSelectionTo(itemPos, p);
+        finishRotate();
+        break;
     case Gesture::Shape:
         shapeTo(itemPos, p);
         finishShape(itemPos, p);
@@ -308,6 +604,12 @@ void DrawingCanvas::cancelToolGesture()
         invalidateCache();
         Q_EMIT selectionChanged();
         break;
+    case Gesture::Resize:
+    case Gesture::Rotate:
+        setGesture(Gesture::None);
+        invalidateCache();
+        Q_EMIT selectionChanged();
+        break;
     case Gesture::Shape:
         m_liveShapeShown = false;
         setGesture(Gesture::None);
@@ -326,9 +628,30 @@ void DrawingCanvas::cancelToolGesture()
 void DrawingCanvas::beginSelect(QPointF itemPos, const Pointer &p)
 {
     m_gestureStart = itemPos;
-    const QRectF box =
-            selectionRect().adjusted(p.touch ? -10 : 0, p.touch ? -10 : 0, p.touch ? 10 : 0, p.touch ? 10 : 0);
-    if (!m_selected.isEmpty() && box.contains(itemPos) && !(p.modifiers & Qt::ShiftModifier)) {
+    const bool shift = p.modifiers & Qt::ShiftModifier;
+    const SelectionFrame frame = selectionFrame();
+    const int handle = frameHandleAt(frame, itemPos, p.touch || p.stylus);
+    if (handle >= 0) {
+        m_transformFrame = frame;
+        m_transformHandle = handle;
+        m_resizeTo = frame.box;
+        m_rotateBy = 0;
+        m_gestureTransform = QTransform();
+        setGesture(handle == RotateHandle ? Gesture::Rotate : Gesture::Resize);
+        invalidateCache(); // (the selection is drawn on top meanwhile)
+        return;
+    }
+    const double margin = p.touch ? 10 : 0;
+    bool inside = false;
+    if (frame.valid && frame.angle != 0) {
+        // Inside the turned frame (no drag from the corners of what it covers).
+        const double grow = margin / m_zoom;
+        const QPointF local = drawing::rotatePoint(toScene(itemPos), frame.box.center(), -frame.angle);
+        inside = paddedFrame(frame).adjusted(-grow, -grow, grow, grow).contains(local);
+    } else if (frame.valid) {
+        inside = selectionRect().adjusted(-margin, -margin, margin, margin).contains(itemPos);
+    }
+    if (inside && !shift) {
         m_moveDelta = QPointF();
         setGesture(Gesture::Move);
         invalidateCache(); // (the selection is drawn on top while it moves)
@@ -344,6 +667,14 @@ void DrawingCanvas::lassoTo(QPointF itemPos)
 {
     if (m_gesture != Gesture::Lasso || m_lasso.isEmpty())
         return;
+    if (m_selectMode == u"box") {
+        const QRectF box = QRectF(m_gestureStart, itemPos).normalized();
+        m_lasso = QPolygonF{box.topLeft(), box.topRight(), box.bottomRight(), box.bottomLeft()};
+        m_lassoLength = QLineF(m_gestureStart, itemPos).length();
+        m_lastItemPos = itemPos;
+        update();
+        return;
+    }
     const double step = QLineF(m_lasso.last(), itemPos).length();
     if (step < 2)
         return;
@@ -427,6 +758,117 @@ void DrawingCanvas::finishMove(QPointF itemPos, const Pointer &p)
     if (!moved)
         invalidateCache();
     Q_EMIT selectionChanged();
+}
+
+void DrawingCanvas::resizeSelectionTo(QPointF itemPos, const Pointer &p)
+{
+    if (m_gesture != Gesture::Resize)
+        return;
+    m_lastItemPos = itemPos;
+    const SelectionFrame &frame = m_transformFrame;
+    const QPointF drag = drawing::rotatePoint((itemPos - m_gestureStart) / m_zoom, QPointF(), -frame.angle);
+    const bool proportional = frame.fixedShape || (frame.proportional != bool(p.modifiers & Qt::ShiftModifier));
+    m_resizeTo = drawing::resizedFrame(frame.box, drawing::Handle(m_transformHandle), drag, proportional,
+                                       MinResizedSide / m_zoom);
+    // Scene → the frame's axes → scaled → back (the same as drawing::resizeElements places them).
+    const QRectF &from = frame.box;
+    const QPointF pivot = from.center();
+    const double sx = from.width() > 0 ? m_resizeTo.width() / from.width() : 1;
+    const double sy = from.height() > 0 ? m_resizeTo.height() / from.height() : 1;
+    QTransform t;
+    t.translate(pivot.x(), pivot.y());
+    t.rotateRadians(frame.angle);
+    t.translate(-pivot.x(), -pivot.y());
+    t.translate(m_resizeTo.left(), m_resizeTo.top());
+    t.scale(sx, sy);
+    t.translate(-from.left(), -from.top());
+    t.translate(pivot.x(), pivot.y());
+    t.rotateRadians(-frame.angle);
+    t.translate(-pivot.x(), -pivot.y());
+    m_gestureTransform = t;
+    update();
+}
+
+void DrawingCanvas::finishResize()
+{
+    const QRectF from = m_transformFrame.box;
+    const QRectF to = m_resizeTo;
+    const double angle = m_transformFrame.angle;
+    setGesture(Gesture::None);
+    const QSet<QString> ids = m_selected;
+    const drawing::TextMetrics metrics = textMetrics();
+    if (!editElements(
+                [&](drawing::Drawing &doc) { drawing::resizeElements(doc, ids, from, to, angle, metrics, stamp()); }))
+        invalidateCache();
+    Q_EMIT selectionChanged();
+}
+
+void DrawingCanvas::rotateSelectionTo(QPointF itemPos, const Pointer &p)
+{
+    if (m_gesture != Gesture::Rotate)
+        return;
+    m_lastItemPos = itemPos;
+    const SelectionFrame &frame = m_transformFrame;
+    const QPointF pivot = frame.box.center();
+    const QPointF centre = toItem(pivot);
+    const auto bearing = [&centre](QPointF at) { return std::atan2(at.y() - centre.y(), at.x() - centre.x()); };
+    double by = bearing(itemPos) - bearing(m_gestureStart);
+    if (p.modifiers & Qt::ShiftModifier) {
+        // 15° steps: of the element's angle, or of the turn for several.
+        const double step = std::numbers::pi / 12;
+        by = std::round((frame.angle + by) / step) * step - frame.angle;
+    }
+    m_rotateBy = by;
+    QTransform t;
+    t.translate(pivot.x(), pivot.y());
+    t.rotateRadians(by);
+    t.translate(-pivot.x(), -pivot.y());
+    m_gestureTransform = t;
+    update();
+}
+
+void DrawingCanvas::finishRotate()
+{
+    const QPointF pivot = m_transformFrame.box.center();
+    const double by = m_rotateBy;
+    setGesture(Gesture::None);
+    const QSet<QString> ids = m_selected;
+    if (!editElements([&](drawing::Drawing &doc) { drawing::rotateElements(doc, ids, pivot, by, stamp()); }))
+        invalidateCache();
+    Q_EMIT selectionChanged();
+}
+
+void DrawingCanvas::updateSelectCursor(QPointF itemPos)
+{
+    if (m_panMode || busy())
+        return;
+    Qt::CursorShape shape = Qt::ArrowCursor;
+    const SelectionFrame frame = selectionFrame();
+    if (frame.valid) {
+        const int handle = frameHandleAt(frame, itemPos, false);
+        if (handle == RotateHandle) {
+            shape = Qt::PointingHandCursor;
+        } else if (handle >= 0) {
+            // By where the handle lies as the frame is turned now.
+            const QPointF centre = toItem(frame.box.center());
+            double degrees = 0;
+            for (const auto &[kind, at] : frameHandles(frame)) {
+                if (kind == handle)
+                    degrees = std::atan2(at.y() - centre.y(), at.x() - centre.x()) * 180 / std::numbers::pi;
+            }
+            const double line = std::fmod(degrees + 180, 180);
+            shape = line < 22.5 || line >= 157.5 ? Qt::SizeHorCursor
+                    : line < 67.5                ? Qt::SizeFDiagCursor
+                    : line < 112.5               ? Qt::SizeVerCursor
+                                                 : Qt::SizeBDiagCursor;
+        } else {
+            const QPointF local = drawing::rotatePoint(toScene(itemPos), frame.box.center(), -frame.angle);
+            if (paddedFrame(frame).contains(local))
+                shape = Qt::SizeAllCursor;
+        }
+    }
+    if (cursor().shape() != shape)
+        setCursor(shape);
 }
 
 qsizetype DrawingCanvas::elementAt(QPointF itemPos, const Pointer &p) const
@@ -514,8 +956,12 @@ void DrawingCanvas::shapeTo(QPointF itemPos, const Pointer &p)
     drawing::EditStamp preview;
     preview.newId = [] { return u"~"_s; };
     const drawing::ShapeStyle style{m_color.name(QColor::HexRgb), std::clamp(m_penWidth * 2, 0.5, 40.0), true};
-    m_liveShape = drawing::newShape(shapeType(m_tool), clamped(m_gestureStart), clamped(itemPos),
-                                    p.modifiers & Qt::ShiftModifier, style, preview);
+    const bool constrain = p.modifiers & Qt::ShiftModifier;
+    const std::optional<drawing::PolygonKind> polygon = drawing::polygonKindFromName(m_tool);
+    m_liveShape = polygon ? drawing::newPolygon(*polygon, clamped(m_gestureStart), clamped(itemPos), constrain, style,
+                                                preview)
+                          : drawing::newShape(shapeType(m_tool), clamped(m_gestureStart), clamped(itemPos), constrain,
+                                              style, preview);
     m_liveShapeShown = QLineF(m_gestureStart, itemPos).length() >= MinShape;
     update();
 }

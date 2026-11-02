@@ -164,10 +164,13 @@ QList<QPointF> pointsOf(const Stroke &e)
 /// points or more (not for elbow arrows); a closed polygon when `polygon`.
 Path linearPath(const Stroke &e)
 {
-    const QList<QPointF> pts = pointsOf(e);
+    QList<QPointF> pts = pointsOf(e);
     const bool closed = e.polygon && e.type == ElementType::Line && pts.size() >= 3;
     if (pts.size() < 3 || e.roundness == 0 || e.elbowed)
         return polygonPath(pts, closed);
+    // (Excalidraw's polygon ends on its first point: as a curve that corner counts once.)
+    if (closed && pts.size() > 3 && pts.first() == pts.last())
+        pts.removeLast();
     Path p;
     p.append({PathOp::Move, pts.first(), {}, {}});
     const qsizetype n = pts.size();

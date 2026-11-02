@@ -17,13 +17,16 @@
 // fileBytes(): the plugin file's Markdown around the scene kept as it was).
 //
 // Tools (`tool`): "pen", "highlighter" (freehand lines), "eraser" (whole elements it touches, a
-// shape with its label), "select" (a lasso: elements at least half inside it — or a tap: the
-// topmost one — taken with their groups and labels; a drag on the selection moves it; a double
-// tap on a text edits it, on a shape its label), "rectangle", "ellipse", "diamond", "line",
-// "arrow" (dragged: colour the pen's, width penWidth × 2; Shift: a square, a circle, 15° steps; the
-// tool stays), "text" (a tap: a new text — or the text, the shape's label tapped — edited in QML's
-// DrawingTextEditor: textEditRequested → commitText). The selection's actions: deleteSelection,
-// duplicateSelection, recolorSelection, reorderSelection, nudgeSelection, selectAll (QML's
+// shape with its label), "select" (a lasso or a rectangle — `selectMode` —: elements at least half
+// inside it — or a tap: the topmost one — taken with their groups and labels; a drag on the selection
+// moves it, on the frame's handles resizes or rotates it; a double tap on a text edits it, on a
+// shape its label), "rectangle", "ellipse", "diamond", "line", "arrow" and the polygons "triangle",
+// "rightTriangle", "parallelogram", "trapezoid", "pentagon", "hexagon", "star", "blockArrow",
+// "callout", "heart", "cloud" (dragged: colour the pen's, width penWidth × 2; Shift: a square box, a
+// circle, 15° steps; the tool stays), "text" (a tap: a new text — or the text, the shape's label
+// tapped — edited in QML's DrawingTextEditor: textEditRequested → commitText). The selection's
+// actions: deleteSelection, duplicateSelection, recolorSelection, styleSelection, rotateSelection,
+// flipSelection, groupSelection, ungroupSelection, reorderSelection, nudgeSelection, selectAll (QML's
 // DrawingSelectionBar and keys). Locked elements are never selected, moved or erased.
 //
 // Input (the rules of docs/UI.md "Drawing editor"):
@@ -93,9 +96,12 @@
 #include <QQuickPaintedItem>
 #include <QSet>
 #include <QTimer>
+#include <QTransform>
 #include <QVariantMap>
 
 #include <functional>
+#include <optional>
+#include <utility>
 
 class QPointingDevice;
 
@@ -104,8 +110,8 @@ namespace brulion::drawingview {
 class DrawingCanvas : public QQuickPaintedItem {
     Q_OBJECT
 
-    /// "pen", "highlighter", "eraser", "select", "rectangle", "ellipse", "diamond", "line", "arrow"
-    /// or "text" (anything else: "pen").
+    /// "pen", "highlighter", "eraser", "select", "text", a shape ("rectangle", "ellipse", "diamond",
+    /// "line", "arrow") or a polygon (drawing::polygonKindFromName; anything else: "pen").
     Q_PROPERTY(QString tool READ tool WRITE setTool NOTIFY toolChanged FINAL)
     /// The colour of new strokes, shapes and text.
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged FINAL)
@@ -117,6 +123,15 @@ class DrawingCanvas : public QQuickPaintedItem {
     /// How many elements are selected, and their frame in item coordinates (the bar's place).
     Q_PROPERTY(int selectionCount READ selectionCount NOTIFY selectionChanged FINAL)
     Q_PROPERTY(QRectF selectionRect READ selectionRect NOTIFY selectionChanged FINAL)
+    /// The selection's frame with its handles, in item coordinates (what the bar keeps clear of).
+    Q_PROPERTY(QRectF selectionOuterRect READ selectionOuterRect NOTIFY selectionChanged FINAL)
+    /// What the selection looks like and which parts of a style it has (styleSelection()):
+    /// { fillable, fill, fillStyle, thick, thickness, dashable, strokeStyle, opacity, roundable,
+    /// rounded, text, fontSize, heads, startHead, endHead, canGroup, canUngroup } — each value that
+    /// of the first selected element that has that part.
+    Q_PROPERTY(QVariantMap selectionStyle READ selectionStyle NOTIFY selectionChanged FINAL)
+    /// How a drag with the select tool takes elements: "lasso" or "box" (a rectangle).
+    Q_PROPERTY(QString selectMode READ selectMode WRITE setSelectMode NOTIFY selectModeChanged FINAL)
     /// The colour of the lasso and the selection's frame (QML: Theme.info).
     Q_PROPERTY(QColor selectionColor READ selectionColor WRITE setSelectionColor NOTIFY selectionColorChanged FINAL)
     /// A text is being written (QML's editor is open): the canvas takes no other input.
@@ -158,7 +173,7 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(bool legacy READ legacy NOTIFY loadedChanged FINAL)
     /// How many elements the drawing has.
     Q_PROPERTY(int strokeCount READ strokeCount NOTIFY contentChanged FINAL)
-    /// A stroke, an erasing gesture, a lasso, a move or a shape is in progress.
+    /// A stroke, an erasing gesture, a lasso, a move, a resize, a rotation or a shape is in progress.
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged FINAL)
     /// The paper's colour as shown (the drawing's, in the theme in force).
     Q_PROPERTY(QColor paperColor READ paperColor NOTIFY renderChanged FINAL)
@@ -194,6 +209,19 @@ public:
     static constexpr double MinShape = 3;
     /// A duplicate lies this far (scene units) from its original.
     static constexpr double DuplicateOffset = 10;
+    /// How far the selection's frame lies outside the element, and its rotation handle above the
+    /// frame (px on screen).
+    static constexpr double FramePadding = 6;
+    static constexpr double RotateHandleDistance = 28;
+    /// How far from a handle's middle a press takes it (px on screen; touch and pen).
+    static constexpr double HandleReach = 9;
+    static constexpr double TouchHandleReach = 18;
+    /// A frame's side (px) shorter than this has no edge handle in its middle.
+    static constexpr double MinSideForEdgeHandle = 40;
+    /// A frame's side (px) shorter than this moves when pressed inside: handles only outside it.
+    static constexpr double MinSideForInnerHandles = 24;
+    /// The smallest side a handle leaves (px on screen).
+    static constexpr double MinResizedSide = 4;
 
     QString tool() const { return m_tool; }
     void setTool(const QString &tool);
@@ -205,6 +233,10 @@ public:
     void setFontSize(qreal size);
     int selectionCount() const { return int(m_selected.size()); }
     QRectF selectionRect() const;
+    QRectF selectionOuterRect() const;
+    QVariantMap selectionStyle() const;
+    QString selectMode() const { return m_selectMode; }
+    void setSelectMode(const QString &mode);
     QColor selectionColor() const { return m_selectionColor; }
     void setSelectionColor(const QColor &color);
     bool textEditing() const { return m_textEditing; }
@@ -240,7 +272,8 @@ public:
     bool busy() const
     {
         return m_gesture == Gesture::Draw || m_gesture == Gesture::Erase || m_gesture == Gesture::Lasso
-               || m_gesture == Gesture::Move || m_gesture == Gesture::Shape;
+               || m_gesture == Gesture::Move || m_gesture == Gesture::Shape || m_gesture == Gesture::Resize
+               || m_gesture == Gesture::Rotate;
     }
     QColor paperColor() const { return dark() ? m_paperDark : m_paperLight; }
     QString paper() const { return m_doc.paper; }
@@ -300,6 +333,18 @@ public:
     Q_INVOKABLE void duplicateSelection();
     /// The stored colour (as on light paper) of the selected elements.
     Q_INVOKABLE void recolorSelection(const QColor &stored);
+    /// Style the selected elements that have that part of it — one undo step. `change` holds any of:
+    /// fill ("transparent" or a colour), fillStyle ("solid", "hachure", "cross-hatch"), thickness
+    /// (0–2), strokeStyle ("solid", "dashed", "dotted"), opacity (0–100), rounded, fontSize,
+    /// startHead and endHead ("" none, or Excalidraw's names).
+    Q_INVOKABLE void styleSelection(const QVariantMap &change);
+    /// Turn the selection by so many degrees clockwise, about the middle of its frame.
+    Q_INVOKABLE void rotateSelection(qreal degrees);
+    /// Mirror the selection about the middle of its frame: "horizontal", "vertical".
+    Q_INVOKABLE void flipSelection(const QString &axis);
+    /// A new group of the selection; the selection taken out of its outermost groups.
+    Q_INVOKABLE void groupSelection();
+    Q_INVOKABLE void ungroupSelection();
     /// "forward", "backward", "front", "back".
     Q_INVOKABLE void reorderSelection(const QString &how);
     /// Move the selection by (dx, dy) scene units (the arrow keys).
@@ -336,8 +381,8 @@ public:
     drawing::Drawing currentDrawing() const { return m_doc; }
     /// The decoded pictures and dark backdrops kept (tests: a replaced backdrop's are dropped).
     qsizetype keptPictures() const { return m_pictures.size() + m_darkBackdrops.size(); }
-    /// Select the elements `ids` (with their groups and labels; tests).
-    void select(const QStringList &ids);
+    /// Select the elements `ids` (with their groups and labels; tests, screenshots).
+    Q_INVOKABLE void select(const QStringList &ids);
     /// The clock of new strokes (ms since the epoch); tests fix it.
     void setClock(std::function<qint64()> clock) { m_clock = std::move(clock); }
     /// Render into `painter` for an item of `size` (paint(), tests).
@@ -351,6 +396,7 @@ Q_SIGNALS:
     void penWidthChanged();
     void fontSizeChanged();
     void selectionChanged();
+    void selectModeChanged();
     void selectionColorChanged();
     void textEditingChanged();
     /// Show the text editor: { id ("" a new text), containerId (a shape's label), sceneX, sceneY
@@ -410,7 +456,22 @@ private:
         QString paperBefore;
         QString paperAfter;
     };
-    enum class Gesture { None, Draw, Erase, Pan, Pinch, Lasso, Move, Shape, Tap };
+    enum class Gesture { None, Draw, Erase, Pan, Pinch, Lasso, Move, Shape, Tap, Resize, Rotate };
+    /// The frame the handles lie on: one element's own box, turned with it, or — several — what
+    /// they cover. In scene coordinates: `box` turned by `angle` about its centre.
+    struct SelectionFrame {
+        bool valid = false;
+        QRectF box;
+        double angle = 0;
+        /// A handle keeps the shape (a picture, several elements); Shift swaps it, unless `fixedShape`
+        /// (a text, several elements).
+        bool proportional = false;
+        bool fixedShape = false;
+        bool edges = true;
+        bool rotates = true;
+    };
+    /// frameHandleAt(): drawing::Handle's values, then the rotation handle.
+    static constexpr int RotateHandle = 8;
     /// What a pointer event is (from its device and the tablet event it was made of).
     struct Pointer {
         bool stylus = false;
@@ -452,6 +513,22 @@ private:
     void finishLasso(QPointF itemPos, const Pointer &p);
     void moveSelectionTo(QPointF itemPos);
     void finishMove(QPointF itemPos, const Pointer &p);
+    SelectionFrame selectionFrame() const;
+    /// The frame's padded box (scene units, unturned), its corners on the scene.
+    QRectF paddedFrame(const SelectionFrame &frame) const;
+    QPolygonF frameCorners(const SelectionFrame &frame) const;
+    /// The handles that are there, in item coordinates ({drawing::Handle's value, its place}), and
+    /// the rotation handle's (null: none).
+    QList<std::pair<int, QPointF>> frameHandles(const SelectionFrame &frame) const;
+    std::optional<QPointF> rotateHandlePos(const SelectionFrame &frame) const;
+    /// The handle under `itemPos` (−1 none).
+    int frameHandleAt(const SelectionFrame &frame, QPointF itemPos, bool wideReach) const;
+    void resizeSelectionTo(QPointF itemPos, const Pointer &p);
+    void finishResize();
+    void rotateSelectionTo(QPointF itemPos, const Pointer &p);
+    void finishRotate();
+    /// The pointer's look over the selection's frame (a mouse).
+    void updateSelectCursor(QPointF itemPos);
     void beginShape(QPointF itemPos, const Pointer &p);
     void shapeTo(QPointF itemPos, const Pointer &p);
     void finishShape(QPointF itemPos, const Pointer &p);
@@ -579,6 +656,15 @@ private:
     double m_lassoLength = 0;
     /// Move: how far the selection is dragged (item coordinates).
     QPointF m_moveDelta;
+    /// "lasso", "box".
+    QString m_selectMode = QStringLiteral("lasso");
+    /// Resize, rotate: the frame at the start, the handle, where the frame goes (Resize), by how much
+    /// it turns (Rotate), and that as a transformation of the scene (what is shown meanwhile).
+    SelectionFrame m_transformFrame;
+    int m_transformHandle = -1;
+    QRectF m_resizeTo;
+    double m_rotateBy = 0;
+    QTransform m_gestureTransform;
     /// Shape: the shape being dragged.
     drawing::Stroke m_liveShape;
     bool m_liveShapeShown = false;
@@ -634,7 +720,11 @@ private:
         PictureCache pictures;
         /// The lasso and the selection's frames (item coordinates).
         QPolygonF lasso;
-        QRectF selection;
+        QPolygonF frame;
+        QList<QPointF> handles;
+        QPointF rotateHandle;
+        QPointF rotateAnchor;
+        bool rotates = false;
         QList<QRectF> selected;
         QColor selectionColor;
     } m_snapshot;

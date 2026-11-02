@@ -14,6 +14,7 @@ qt_target_qml_sources(brulion
         qml/drawing/DrawingView.qml
         qml/drawing/DrawingToolbar.qml
         qml/drawing/DrawingSelectionBar.qml
+        qml/drawing/DrawingStylePanel.qml
         qml/drawing/DrawingTextEditor.qml
         qml/drawing/DrawingBackdropDialog.qml
         qml/drawing/DrawingPaperDialog.qml

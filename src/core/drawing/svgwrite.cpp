@@ -414,7 +414,17 @@ QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
             // (The backdrop of a Dark drawing: its dark raster; other pictures keep their colours.)
             const QString url = index == backdrop && dark ? darkBackdrop : safeDataUrl(drawing.files, s.fileId);
             if (!url.isEmpty()) {
-                part += u"<image "_s + box + u" preserveAspectRatio=\"none\" xlink:href=\""_s + url + u"\"/>\n"_s;
+                // Mirrored within its box: about the box's centre, inside the element's rotation.
+                const QString mirror = s.flipX || s.flipY
+                                               ? u" transform=\"translate("_s + formatNumber(s.box.center().x() + dx)
+                                                         + u' ' + formatNumber(s.box.center().y() + dy) + u") scale("_s
+                                                         + (s.flipX ? u"-1"_s : u"1"_s) + u' '
+                                                         + (s.flipY ? u"-1"_s : u"1"_s) + u") translate("_s
+                                                         + formatNumber(-(s.box.center().x() + dx)) + u' '
+                                                         + formatNumber(-(s.box.center().y() + dy)) + u")\""_s
+                                               : QString();
+                part += u"<image "_s + box + mirror + u" preserveAspectRatio=\"none\" xlink:href=\""_s + url
+                        + u"\"/>\n"_s;
             } else {
                 const QString grey = ImagePlaceholderFill.toString();
                 const QString edge = ImagePlaceholderEdge.toString();

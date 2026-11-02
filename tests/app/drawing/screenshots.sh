@@ -2,7 +2,9 @@
 # Screenshots of the drawing editor in the real app: a page of handwritten lecture notes (written
 # by tst_drawingcanvas handwritingSample, BRULION_DRAWING_SAMPLE) in the editor, the page that
 # embeds it, its picture view, a diagram of shapes, arrows, text and pictures (`shapes`), it all
-# selected with the selection's bar (`selection`), the shapes' menu (`shapemenu`), an Excalidraw
+# selected with the selection's bar (`selection`), the shapes' menu (`shapemenu`), every shape
+# (`allshapes`), one turned and filled with its frame's handles (`handles`), the style panel of
+# all selected (`stylepanel`), the selection's "Więcej" (`selectionmore`), an Excalidraw
 # drawing with a frame (read-only), a new empty drawing and the menus (the colours, "Więcej", the
 # paper, the background: light or dark), a drawing of Obsidian's Excalidraw plugin in the editor
 # (`obsidian`), opened as a page (`obsidianpage`: its picture view) and one with a frame
@@ -38,7 +40,7 @@ delay="${DELAY:-1600}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
-all_shots=(editor page picture shapes selection shapemenu readonly new style more paper theme papercolor obsidian obsidianpage
+all_shots=(editor page picture shapes selection shapemenu allshapes handles stylepanel selectionmore readonly new style more paper theme papercolor obsidian obsidianpage
            obsidianframe backdrop backdroppages)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
@@ -56,6 +58,8 @@ vault="$work/Studia"
 mkdir -p "$vault/assets"
 BRULION_DRAWING_SAMPLE="$vault/assets/Rysunek 2026-10-27 14.32.svg" QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
   "$sample_test" handwritingSample >/dev/null
+BRULION_DRAWING_POLYGONS_SAMPLE="$vault/assets/Kształty.svg" QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+  "$sample_test" polygonsSample >/dev/null
 cp tests/data/drawing/smiley_embedded_v2.svg "$vault/assets/Schemat z Excalidraw.svg"
 cp tests/data/drawing/excalidraw_shapes.svg "$vault/assets/Diagram.svg"
 cp tests/data/drawing/excalidraw_frame.svg "$vault/assets/Ramka z Excalidraw.svg"
@@ -85,6 +89,10 @@ shot_args() {
     shapes) printf '%s\n' --route '{"view":"drawing","path":"assets/Diagram.svg"}' ;;
     selection) printf '%s\n' --route '{"view":"drawing","path":"assets/Diagram.svg","open":"select"}' ;;
     shapemenu) printf '%s\n' --route '{"view":"drawing","path":"assets/Diagram.svg","open":"shape"}' ;;
+    allshapes) printf '%s\n' --route '{"view":"drawing","path":"assets/Kształty.svg"}' ;;
+    handles) printf '%s\n' --route '{"view":"drawing","path":"assets/Kształty.svg","open":"select","ids":["gwiazda"]}' ;;
+    stylepanel) printf '%s\n' --route '{"view":"drawing","path":"assets/Kształty.svg","open":"selectstyle"}' ;;
+    selectionmore) printf '%s\n' --route '{"view":"drawing","path":"assets/Kształty.svg","open":"selectmore"}' ;;
     readonly) printf '%s\n' --route '{"view":"drawing","path":"assets/Ramka z Excalidraw.svg"}' ;;
     new) printf '%s\n' --route '{"view":"drawing","path":"assets/Pusty.svg"}' ;;
     style) printf '%s\n' --route '{"view":"drawing","path":"assets/Rysunek 2026-10-27 14.32.svg","open":"style"}' ;;

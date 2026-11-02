@@ -72,6 +72,40 @@ EditStamp testStamp(qint64 now = 1761600000000)
     return s;
 }
 
+/// One of each: a rectangle "r" (10,10 20×20, rounded), a freehand line "f" (10,10 → 50,50, with
+/// pressures), a text "x", an arrow "a" and a locked rectangle "locked" (10,10 20×20).
+Drawing oneOfEach()
+{
+    Drawing d;
+    Stroke r;
+    r.type = ElementType::Rectangle;
+    r.id = u"r"_s;
+    r.box = QRectF(10, 10, 20, 20);
+    r.roundness = 3;
+    r.width = 2;
+    Stroke f;
+    f.type = ElementType::Freedraw;
+    f.id = u"f"_s;
+    f.simulatePressure = false;
+    f.points = {{10, 10, 0.2}, {50, 50, 0.9}};
+    Stroke x;
+    x.type = ElementType::Text;
+    x.id = u"x"_s;
+    x.box = QRectF(60, 60, 30, 20);
+    x.text = u"ą"_s;
+    x.originalText = x.text;
+    Stroke a;
+    a.type = ElementType::Arrow;
+    a.id = u"a"_s;
+    a.points = {{0, 90, 0.5}, {90, 90, 0.5}};
+    a.endArrowhead = Arrowhead::Arrow;
+    Stroke locked = r;
+    locked.id = u"locked"_s;
+    locked.locked = true;
+    d.strokes = {r, f, x, a, locked};
+    return d;
+}
+
 /// The measure of the tests: 0.55 em a character.
 TextMetrics fakeMetrics()
 {
@@ -1510,10 +1544,575 @@ private Q_SLOTS:
                 duplicateElements(d, {s->id}, QPointF(1, 1), stamp);
                 reorderElements(d, {s->id}, Reorder::ToBack, stamp);
                 setText(d, s->id, u"x"_s, fakeMetrics(), stamp);
+                resizeElements(d, {s->id}, QRectF(0, 0, 100, 100), QRectF(0, 0, 50, 300), 0.3, fakeMetrics(), stamp);
+                rotateElements(d, {s->id}, QPointF(7, 9), 1.1, stamp);
+                flipElements(d, {s->id}, Flip::Vertical, QPointF(7, 9), stamp);
+                ElementStyle style;
+                style.fontSize = 44;
+                style.thickness = 2;
+                style.rounded = true;
+                styleElements(d, {s->id}, style, fakeMetrics(), stamp);
                 QVERIFY(wellFormed(toSvg(d)));
                 QVERIFY(parseScene(sceneJson(d)));
             }
         }
+    }
+    // --- Polygons ---------------------------------------------------------------------------------
+
+    void polygons_data()
+    {
+        QTest::addColumn<QString>("name");
+        for (const char *name : {"triangle", "rightTriangle", "parallelogram", "trapezoid", "pentagon", "hexagon",
+                                 "star", "blockArrow", "callout", "heart", "cloud"})
+            QTest::newRow(name) << QString::fromLatin1(name);
+    }
+    void polygons()
+    {
+        QFETCH(QString, name);
+        const std::optional<PolygonKind> kind = polygonKindFromName(name);
+        QVERIFY(kind);
+        const ShapeStyle style{u"#e03131"_s, 4, true};
+        // Dragged up and to the left too: always upright in the box dragged.
+        const Stroke e = newPolygon(*kind, QPointF(300, 240), QPointF(100, 100), false, style, testStamp());
+        QCOMPARE(e.type, ElementType::Line);
+        QVERIFY(e.polygon);
+        QCOMPARE(e.roundness, 0);
+        QCOMPARE(e.color, u"#e03131"_s);
+        QCOMPARE(e.width, 4.0);
+        QVERIFY(e.fill == u"transparent");
+        // As Excalidraw keeps a polygon (restore's isValidPolygon: over 3 points, last = first).
+        QVERIFY(e.points.size() > 3);
+        QCOMPARE(e.points.first(), e.points.last());
+        QCOMPARE(pointsRect(e.points), QRectF(100, 100, 200, 140));
+
+        const QJsonObject json = elementJson(e);
+        QCOMPARE(json.value(u"type"_s).toString(), u"line"_s);
+        QVERIFY(json.value(u"polygon"_s).toBool());
+        QVERIFY(json.value(u"roundness"_s).isNull());
+        QCOMPARE(json.value(u"width"_s).toDouble(), 200.0);
+        QCOMPARE(json.value(u"height"_s).toDouble(), 140.0);
+        const QJsonArray points = json.value(u"points"_s).toArray();
+        QCOMPARE(points.first(), points.last());
+        QVERIFY(json.value(u"endArrowhead"_s).isNull());
+
+        Drawing d;
+        d.strokes = {e};
+        QVERIFY(editable(d));
+        QVERIFY(wellFormed(toSvg(d)));
+        std::optional<Drawing> back = readDrawing(toSvg(d));
+        QVERIFY(back);
+        QCOMPARE(back->strokes.first().points.size(), e.points.size());
+        for (qsizetype i = 0; i < e.points.size(); ++i) {
+            QVERIFY(qAbs(back->strokes.first().points.at(i).x - e.points.at(i).x) < 0.011);
+            QVERIFY(qAbs(back->strokes.first().points.at(i).y - e.points.at(i).y) < 0.011);
+        }
+        QVERIFY(back->strokes.first().polygon);
+        QVERIFY(editable(*back));
+
+        // Filled: the fill and its hatching stay inside, the inside is a hit.
+        Stroke filled = e;
+        filled.fill = u"#a5d8ff"_s;
+        QVERIFY(!elementShape(filled).area.isEmpty());
+        filled.fillStyle = FillStyle::Hachure;
+        const QRectF box = elementBounds(filled);
+        const ElementShape hatched = elementShape(filled);
+        QVERIFY(!hatched.hatch.isEmpty());
+        for (const QLineF &line : hatched.hatch) {
+            QVERIFY(box.contains(line.p1()));
+            QVERIFY(box.contains(line.p2()));
+        }
+    }
+
+    void polygonWithShift()
+    {
+        const ShapeStyle style;
+        const Stroke e = newPolygon(PolygonKind::Star, QPointF(10, 10), QPointF(110, 60), true, style, testStamp());
+        QCOMPARE(pointsRect(e.points), QRectF(10, 10, 100, 100));
+        QVERIFY(!polygonKindFromName(u"rectangle"));
+        QVERIFY(!polygonKindFromName(u""));
+    }
+
+    void closedCurveGoesThroughEachCornerOnce()
+    {
+        // Excalidraw's polygon ends on its first point: rounded, that point is one corner, no kink.
+        Stroke e = newPolygon(PolygonKind::Hexagon, QPointF(0, 0), QPointF(100, 100), false, ShapeStyle{}, testStamp());
+        e.roundness = 2;
+        int cubics = 0;
+        const Path path = elementShape(e).outline;
+        for (const PathOp &op : path)
+            cubics += op.kind == PathOp::Cubic;
+        QCOMPARE(cubics, 6);
+        QCOMPARE(path.last().kind, PathOp::Close);
+    }
+
+    // --- The frame's handles ------------------------------------------------------------------------
+
+    void resizedFrames_data()
+    {
+        QTest::addColumn<QRectF>("from");
+        QTest::addColumn<int>("handle");
+        QTest::addColumn<QPointF>("delta");
+        QTest::addColumn<bool>("proportional");
+        QTest::addColumn<QRectF>("to");
+        const QRectF f(100, 100, 200, 100);
+        QTest::newRow("bottom right") << f << int(Handle::BottomRight) << QPointF(50, 20) << false
+                                      << QRectF(100, 100, 250, 120);
+        QTest::newRow("top left") << f << int(Handle::TopLeft) << QPointF(-50, -20) << false
+                                  << QRectF(50, 80, 250, 120);
+        QTest::newRow("right") << f << int(Handle::Right) << QPointF(50, 99) << false << QRectF(100, 100, 250, 100);
+        QTest::newRow("top") << f << int(Handle::Top) << QPointF(99, 30) << false << QRectF(100, 130, 200, 70);
+        QTest::newRow("never past the other side")
+                << f << int(Handle::Left) << QPointF(900, 0) << false << QRectF(296, 100, 4, 100);
+        QTest::newRow("corner, proportional: the larger scale")
+                << f << int(Handle::BottomRight) << QPointF(200, 10) << true << QRectF(100, 100, 400, 200);
+        QTest::newRow("corner, proportional from the top left")
+                << f << int(Handle::TopLeft) << QPointF(-200, 0) << true << QRectF(-100, 0, 400, 200);
+        QTest::newRow("edge, proportional: about the middle")
+                << f << int(Handle::Right) << QPointF(200, 0) << true << QRectF(100, 50, 400, 200);
+        QTest::newRow("proportional, never below the least")
+                << f << int(Handle::BottomRight) << QPointF(-900, -900) << true << QRectF(100, 100, 8, 4);
+        QTest::newRow("a straight line stays straight") << QRectF(0, 50, 200, 0) << int(Handle::BottomRight)
+                                                        << QPointF(100, 40) << false << QRectF(0, 50, 300, 0);
+        QTest::newRow("a straight line, proportional") << QRectF(0, 50, 200, 0) << int(Handle::BottomRight)
+                                                       << QPointF(100, 40) << true << QRectF(0, 50, 300, 0);
+    }
+    void resizedFrames()
+    {
+        QFETCH(QRectF, from);
+        QFETCH(int, handle);
+        QFETCH(QPointF, delta);
+        QFETCH(bool, proportional);
+        QFETCH(QRectF, to);
+        QCOMPARE(resizedFrame(from, Handle(handle), delta, proportional, 4), to);
+    }
+
+    // --- Resizing ---------------------------------------------------------------------------------
+
+    void resizeScalesPointsAndBoxes()
+    {
+        Drawing d = oneOfEach();
+        const QRectF from(0, 0, 100, 100);
+        const QRectF to(0, 0, 200, 300);
+        const Stroke rectBefore = *find(d, u"r"_s);
+        resizeElements(d, {u"r"_s, u"f"_s, u"locked"_s}, from, to, 0, fakeMetrics(), testStamp());
+        const Stroke *r = find(d, u"r"_s);
+        QCOMPARE(r->box, QRectF(20, 30, 40, 60));
+        QCOMPARE(r->width, rectBefore.width); // lines keep their width
+        QCOMPARE(r->version, rectBefore.version + 1);
+        const Stroke *f = find(d, u"f"_s);
+        QCOMPARE(f->points.first(), (StrokePoint{20, 30, 0.2})); // pressures kept
+        QCOMPARE(f->points.last(), (StrokePoint{100, 150, 0.9}));
+        QCOMPARE(find(d, u"locked"_s)->box, QRectF(10, 10, 20, 20));
+    }
+
+    void resizeKeepsTheAnchorOfATurnedElement()
+    {
+        Drawing d;
+        Stroke r;
+        r.type = ElementType::Rectangle;
+        r.id = u"r"_s;
+        r.box = QRectF(100, 100, 200, 100);
+        r.angle = 0.7;
+        d.strokes = {r};
+        const QPointF anchor = rotatePoint(r.box.topLeft(), r.box.center(), r.angle);
+        const QRectF to = resizedFrame(r.box, Handle::BottomRight, QPointF(100, 50), false, 4);
+        resizeElements(d, {u"r"_s}, r.box, to, r.angle, fakeMetrics(), testStamp());
+        const Stroke &e = d.strokes.first();
+        QCOMPARE(e.box.size(), QSizeF(300, 150));
+        QCOMPARE(e.angle, 0.7);
+        const QPointF now = rotatePoint(e.box.topLeft(), e.box.center(), e.angle);
+        QVERIFY(QLineF(anchor, now).length() < 0.02);
+
+        // A freehand line the same way, its centre that of its points.
+        Stroke f;
+        f.type = ElementType::Freedraw;
+        f.id = u"f"_s;
+        f.points = {{0, 0, 0.5}, {100, 50, 0.5}};
+        f.angle = 1.2;
+        d.strokes = {f};
+        const QRectF box = pointsRect(f.points);
+        const QPointF start = rotatePoint(QPointF(0, 0), box.center(), f.angle);
+        resizeElements(d, {u"f"_s}, box, QRectF(0, 0, 200, 100), f.angle, fakeMetrics(), testStamp());
+        const Stroke &g = d.strokes.first();
+        QVERIFY(QLineF(start, rotatePoint(QPointF(g.points.first().x, g.points.first().y), elementCenter(g), g.angle))
+                        .length()
+                < 0.02);
+    }
+
+    void resizeText()
+    {
+        Drawing d;
+        Stroke t = newText(QPointF(100, 100), u"Zażółć"_s, TextStyle{}, fakeMetrics(), testStamp());
+        d.strokes = {t};
+        const QSet<QString> ids{t.id};
+        // The same scale both ways: its size and box.
+        resizeElements(d, ids, t.box, QRectF(100, 100, t.box.width() * 2, t.box.height() * 2), 0, fakeMetrics(),
+                       testStamp());
+        QCOMPARE(d.strokes.first().fontSize, 40.0);
+        QCOMPARE(d.strokes.first().box.topLeft(), QPointF(100, 100));
+        QCOMPARE(d.strokes.first().text, u"Zażółć"_s);
+        // Stretched one way only: carried along, never distorted.
+        const Stroke before = d.strokes.first();
+        resizeElements(d, ids, before.box, QRectF(100, 100, before.box.width() * 2, before.box.height()), 0,
+                       fakeMetrics(), testStamp());
+        QCOMPARE(d.strokes.first().fontSize, 40.0);
+        QCOMPARE(d.strokes.first().box.size(), before.box.size());
+    }
+
+    void resizeWrapsALabelAndGrowsItsShape()
+    {
+        Drawing d;
+        Stroke r = newShape(ElementType::Rectangle, QPointF(0, 0), QPointF(400, 100), false, ShapeStyle{}, testStamp());
+        r.id = u"r"_s;
+        d.strokes = {r};
+        const QString label = addLabel(d, u"r"_s, u"Zażółć gęślą jaźń"_s, TextStyle{}, fakeMetrics(), testStamp());
+        QVERIFY(!label.isEmpty());
+        QCOMPARE(find(d, label)->text, u"Zażółć gęślą jaźń"_s); // one line in 400
+        resizeElements(d, {u"r"_s, label}, QRectF(0, 0, 400, 100), QRectF(0, 0, 120, 100), 0, fakeMetrics(),
+                       testStamp());
+        const Stroke *text = find(d, label);
+        const Stroke *shape = find(d, u"r"_s);
+        QCOMPARE(text->fontSize, 20.0); // a label keeps its size in a resize of its shape
+        QVERIFY(text->text.contains(u'\n'));
+        QCOMPARE(text->originalText, u"Zażółć gęślą jaźń"_s);
+        QVERIFY(qAbs(text->box.center().x() - shape->box.center().x()) < 0.02);
+        // Too low for the wrapped lines now: the shape holds them.
+        const QRectF box = shape->box;
+        resizeElements(d, {u"r"_s, label}, box, QRectF(0, 0, 120, 5), 0, fakeMetrics(), testStamp());
+        QVERIFY(find(d, u"r"_s)->box.height() >= find(d, label)->box.height());
+    }
+
+    void boundArrowsFollow()
+    {
+        Drawing d;
+        Stroke r;
+        r.type = ElementType::Rectangle;
+        r.id = u"r"_s;
+        r.box = QRectF(0, 0, 100, 100);
+        r.boundIds = {u"a"_s};
+        Stroke a;
+        a.type = ElementType::Arrow;
+        a.id = u"a"_s;
+        a.points = {{100, 50, 0.5}, {200, 50, 0.5}, {300, 50, 0.5}};
+        a.startBound = u"r"_s;
+        d.strokes = {r, a};
+        resizeElements(d, {u"r"_s}, QRectF(0, 0, 100, 100), QRectF(0, 0, 200, 200), 0, fakeMetrics(), testStamp());
+        QCOMPARE(find(d, u"a"_s)->points.first(), (StrokePoint{200, 100, 0.5}));
+        QCOMPARE(find(d, u"a"_s)->points.last(), (StrokePoint{300, 50, 0.5}));
+        rotateElements(d, {u"r"_s}, QPointF(100, 100), std::numbers::pi / 2, testStamp());
+        const StrokePoint tip = find(d, u"a"_s)->points.first();
+        QVERIFY(qAbs(tip.x - 100) < 0.02 && qAbs(tip.y - 200) < 0.02);
+    }
+
+    void transformsRefuseToLeaveTheLimit()
+    {
+        Drawing d;
+        Stroke r;
+        r.type = ElementType::Rectangle;
+        r.id = u"r"_s;
+        r.box = QRectF(CoordinateLimit - 200, 0, 100, 100);
+        d.strokes = {r};
+        resizeElements(d, {u"r"_s}, r.box, QRectF(r.box.left(), 0, 900, 900), 0, fakeMetrics(), testStamp());
+        QCOMPARE(d.strokes.first().box, r.box);
+        QCOMPARE(d.strokes.first().version, r.version);
+        rotateElements(d, {u"r"_s}, QPointF(0, 0), std::numbers::pi / 2, testStamp());
+        QVERIFY(d.strokes.first().box.top() > 0 || d.strokes.first().box == r.box);
+        // Frames that cannot be used change nothing.
+        const Stroke same = d.strokes.first();
+        resizeElements(d, {u"r"_s}, QRectF(0, 0, 10, 10), QRectF(0, 0, 10, 10), 0, fakeMetrics(), testStamp());
+        resizeElements(d, {u"r"_s}, QRectF(0, 0, 10, 10), QRectF(0, 0, qQNaN(), 10), 0, fakeMetrics(), testStamp());
+        resizeElements(d, {u"r"_s}, QRectF(0, 0, 10, 10), QRectF(0, 0, 0, 0), 0, fakeMetrics(), testStamp());
+        rotateElements(d, {u"r"_s}, QPointF(0, 0), qInf(), testStamp());
+        rotateElements(d, {u"r"_s}, QPointF(0, 0), 0, testStamp());
+        QCOMPARE(d.strokes.first().version, same.version);
+    }
+
+    // --- Rotating ---------------------------------------------------------------------------------
+
+    void rotate()
+    {
+        Drawing d;
+        Stroke r;
+        r.type = ElementType::Rectangle;
+        r.id = u"r"_s;
+        r.box = QRectF(100, 0, 100, 50);
+        Stroke t;
+        t.type = ElementType::Text;
+        t.id = u"t"_s;
+        t.containerId = u"r"_s;
+        t.box = QRectF(130, 15, 40, 20);
+        t.text = u"ż"_s;
+        r.boundIds = {u"t"_s};
+        Stroke line;
+        line.type = ElementType::Line;
+        line.id = u"l"_s;
+        line.points = {{0, 0, 0.5}, {100, 0, 0.5}};
+        Stroke elbow;
+        elbow.type = ElementType::Arrow;
+        elbow.id = u"e"_s;
+        elbow.elbowed = true;
+        elbow.points = {{0, 200, 0.5}, {50, 200, 0.5}, {50, 250, 0.5}};
+        d.strokes = {r, t, line, elbow};
+        const EditStamp s = testStamp();
+        rotateElements(d, {u"r"_s, u"l"_s, u"e"_s}, QPointF(0, 0), std::numbers::pi / 2, s);
+        const Stroke *shape = find(d, u"r"_s);
+        QVERIFY(qAbs(shape->angle - std::numbers::pi / 2) < 1e-9);
+        QVERIFY(QLineF(shape->box.center(), QPointF(-25, 150)).length() < 0.02);
+        // The label with it (its angle too); it came along though only its shape was named.
+        const Stroke *label = find(d, u"t"_s);
+        QVERIFY(qAbs(label->angle - shape->angle) < 1e-9);
+        QVERIFY(QLineF(label->box.center(), shape->box.center()).length() < 0.02);
+        // A line keeps its points' shape: the angle says the rest.
+        const Stroke *l = find(d, u"l"_s);
+        QCOMPARE(pointsRect(l->points).size(), QSizeF(100, 0));
+        QVERIFY(QLineF(elementCenter(*l), QPointF(0, 50)).length() < 0.02);
+        // An elbow arrow keeps its right angles: moved, never turned.
+        const Stroke *arrow = find(d, u"e"_s);
+        QCOMPARE(arrow->angle, 0.0);
+        QCOMPARE(arrow->points.at(0).y, arrow->points.at(1).y);
+        QCOMPARE(arrow->points.at(1).x, arrow->points.at(2).x);
+        // Round and round: the angle stays in a turn, a full turn ends where it began.
+        for (int i = 0; i < 3; ++i)
+            rotateElements(d, {u"r"_s}, QPointF(0, 0), std::numbers::pi / 2, s);
+        QCOMPARE(find(d, u"r"_s)->angle, 0.0);
+        QVERIFY(QLineF(find(d, u"r"_s)->box.center(), QPointF(150, 25)).length() < 0.05);
+    }
+
+    void rotatedArrowLabelStaysLevel()
+    {
+        Drawing d;
+        Stroke a = newShape(ElementType::Arrow, QPointF(0, 0), QPointF(200, 0), false, ShapeStyle{}, testStamp());
+        a.id = u"a"_s;
+        d.strokes = {a};
+        const QString label = addLabel(d, u"a"_s, u"tak"_s, TextStyle{}, fakeMetrics(), testStamp());
+        QVERIFY(!label.isEmpty());
+        rotateElements(d, {u"a"_s}, QPointF(100, 0), std::numbers::pi / 2, testStamp());
+        const Stroke *text = find(d, label);
+        QCOMPARE(text->angle, 0.0);
+        QVERIFY(QLineF(text->box.center(), QPointF(100, 0)).length() < 0.05);
+    }
+
+    // --- Mirroring --------------------------------------------------------------------------------
+
+    void flip()
+    {
+        Drawing d = oneOfEach();
+        const Stroke rect = *find(d, u"r"_s);
+        const Stroke freehand = *find(d, u"f"_s);
+        const EditStamp s = testStamp();
+        flipElements(d, {u"r"_s, u"f"_s, u"locked"_s}, Flip::Horizontal, QPointF(50, 0), s);
+        QCOMPARE(find(d, u"r"_s)->box,
+                 QRectF(100 - rect.box.right(), rect.box.top(), rect.box.width(), rect.box.height()));
+        QCOMPARE(find(d, u"f"_s)->points.first().x, 100 - freehand.points.first().x);
+        QCOMPARE(find(d, u"f"_s)->points.first().y, freehand.points.first().y);
+        QCOMPARE(find(d, u"f"_s)->points.first().pressure, freehand.points.first().pressure);
+        QCOMPARE(find(d, u"locked"_s)->box, QRectF(10, 10, 20, 20));
+        // Twice: where it was.
+        flipElements(d, {u"r"_s, u"f"_s}, Flip::Horizontal, QPointF(50, 0), s);
+        QCOMPARE(find(d, u"r"_s)->box, rect.box);
+        QCOMPARE(find(d, u"f"_s)->points, freehand.points);
+
+        // Turned: the mirror of the turn; the far corner lands where the mirror puts it.
+        Stroke r;
+        r.type = ElementType::Rectangle;
+        r.id = u"t"_s;
+        r.box = QRectF(100, 100, 200, 50);
+        r.angle = 0.5;
+        d.strokes = {r};
+        const QPointF corner = rotatePoint(r.box.topLeft(), r.box.center(), r.angle);
+        flipElements(d, {u"t"_s}, Flip::Vertical, QPointF(0, 500), s);
+        const Stroke &m = d.strokes.first();
+        QVERIFY(qAbs(m.angle - (2 * std::numbers::pi - 0.5)) < 1e-9);
+        const QPointF mirrored = rotatePoint(m.box.bottomLeft(), m.box.center(), m.angle);
+        QVERIFY(QLineF(mirrored, QPointF(corner.x(), 1000 - corner.y())).length() < 0.02);
+
+        // A text stays readable: it only changes place.
+        Stroke t = newText(QPointF(0, 0), u"Łódź"_s, TextStyle{}, fakeMetrics(), testStamp());
+        d.strokes = {t};
+        flipElements(d, {t.id}, Flip::Horizontal, QPointF(100, 0), s);
+        QCOMPARE(d.strokes.first().text, u"Łódź"_s);
+        QCOMPARE(d.strokes.first().box.right(), 200.0);
+        QCOMPARE(d.strokes.first().fontSize, 20.0);
+    }
+
+    void flippedPictures()
+    {
+        Drawing d;
+        Stroke image;
+        image.type = ElementType::Image;
+        image.id = u"i"_s;
+        image.box = QRectF(10, 20, 100, 50);
+        image.fileId = u"f"_s;
+        d.strokes = {image};
+        d.files.insert(u"f"_s, QJsonObject{{u"id"_s, u"f"_s},
+                                           {u"mimeType"_s, u"image/png"_s},
+                                           {u"dataURL"_s, u"data:image/png;base64,iVBORw0KGgo="_s}});
+        flipElements(d, {u"i"_s}, Flip::Horizontal, QPointF(60, 45), testStamp());
+        QVERIFY(d.strokes.first().flipX);
+        QVERIFY(!d.strokes.first().flipY);
+        QCOMPARE(d.strokes.first().box, image.box);
+        const QJsonArray scale = elementJson(d.strokes.first()).value(u"scale"_s).toArray();
+        QCOMPARE(scale, (QJsonArray{-1, 1}));
+        // Read back, and as Excalidraw flips one; the SVG shows it mirrored.
+        const std::optional<Stroke> read = elementFromJson(elementJson(d.strokes.first()));
+        QVERIFY(read);
+        QVERIFY(read->flipX);
+        const QByteArray svg = toSvg(d);
+        QVERIFY(wellFormed(svg));
+        QVERIFY(svg.contains("scale(-1 1)"));
+        flipElements(d, {u"i"_s}, Flip::Horizontal, QPointF(60, 45), testStamp());
+        QVERIFY(!d.strokes.first().flipX);
+        QVERIFY(!toSvg(d).contains("scale(-1 1)"));
+    }
+
+    // --- Style ------------------------------------------------------------------------------------
+
+    void style()
+    {
+        Drawing d = oneOfEach();
+        const Stroke text = *find(d, u"x"_s);
+        const Stroke freehand = *find(d, u"f"_s);
+        ElementStyle style;
+        style.fill = u"#a5d8ff"_s;
+        style.fillStyle = FillStyle::CrossHatch;
+        style.thickness = 2;
+        style.strokeStyle = StrokeStyle::Dashed;
+        style.opacity = 50;
+        style.rounded = false;
+        const QSet<QString> everything{u"r"_s, u"f"_s, u"x"_s, u"a"_s, u"locked"_s};
+        styleElements(d, everything, style, fakeMetrics(), testStamp());
+        const Stroke *r = find(d, u"r"_s);
+        QCOMPARE(r->fill, u"#a5d8ff"_s);
+        QCOMPARE(r->fillStyle, FillStyle::CrossHatch);
+        QCOMPARE(r->width, 4.0);
+        QCOMPARE(r->strokeStyle, StrokeStyle::Dashed);
+        QCOMPARE(r->opacity, 50);
+        QCOMPARE(r->roundness, 0);
+        // A freehand line has its own widths and no fill or dashes.
+        const Stroke *f = find(d, u"f"_s);
+        QCOMPARE(f->width, 2.0);
+        QCOMPARE(f->fill, freehand.fill);
+        QCOMPARE(f->strokeStyle, StrokeStyle::Solid);
+        QCOMPARE(f->opacity, 50);
+        QCOMPARE(thicknessOf(*f), 2);
+        // A text: opacity only.
+        const Stroke *x = find(d, u"x"_s);
+        QCOMPARE(x->width, text.width);
+        QCOMPARE(x->opacity, 50);
+        QCOMPARE(x->fontSize, text.fontSize);
+        QCOMPARE(find(d, u"locked"_s)->opacity, 100);
+
+        // Nothing changes: nothing is stamped.
+        const int version = r->version;
+        styleElements(d, everything, style, fakeMetrics(), testStamp());
+        QCOMPARE(find(d, u"r"_s)->version, version);
+
+        // Corners, as Excalidraw rounds each.
+        ElementStyle rounded;
+        rounded.rounded = true;
+        styleElements(d, {u"r"_s}, rounded, fakeMetrics(), testStamp());
+        QCOMPARE(find(d, u"r"_s)->roundness, 3);
+        Stroke diamond;
+        diamond.type = ElementType::Diamond;
+        diamond.id = u"d"_s;
+        d.strokes.append(diamond);
+        styleElements(d, {u"d"_s}, rounded, fakeMetrics(), testStamp());
+        QCOMPARE(find(d, u"d"_s)->roundness, 2);
+
+        // Arrowheads, written as Excalidraw's names; an elbow arrow keeps its corners.
+        ElementStyle heads;
+        heads.startArrowhead = Arrowhead::Circle;
+        heads.endArrowhead = Arrowhead::None;
+        styleElements(d, {u"a"_s}, heads, fakeMetrics(), testStamp());
+        const QJsonObject arrow = elementJson(*find(d, u"a"_s));
+        QCOMPARE(arrow.value(u"startArrowhead"_s).toString(), u"circle"_s);
+        QVERIFY(arrow.value(u"endArrowhead"_s).isNull());
+        Stroke elbow = *find(d, u"a"_s);
+        elbow.elbowed = true;
+        QVERIFY(!canRound(elbow));
+
+        // What is written reads back.
+        const std::optional<Stroke> back = elementFromJson(elementJson(*find(d, u"r"_s)));
+        QVERIFY(back);
+        QCOMPARE(back->fill, u"#a5d8ff"_s);
+        QCOMPARE(back->fillStyle, FillStyle::CrossHatch);
+        QCOMPARE(back->strokeStyle, StrokeStyle::Dashed);
+        QCOMPARE(back->opacity, 50);
+    }
+
+    void styleFontSize()
+    {
+        Drawing d;
+        const EditStamp stamp = testStamp(); // (one stamp: its ids differ)
+        Stroke t = newText(QPointF(5, 5), u"Zażółć"_s, TextStyle{}, fakeMetrics(), stamp);
+        Stroke r = newShape(ElementType::Rectangle, QPointF(0, 100), QPointF(100, 140), false, ShapeStyle{}, stamp);
+        d.strokes = {t, r};
+        const QString label = addLabel(d, r.id, u"Ąć"_s, TextStyle{}, fakeMetrics(), stamp);
+        ElementStyle style;
+        style.fontSize = 36;
+        styleElements(d, {t.id, label}, style, fakeMetrics(), stamp);
+        const Stroke *text = find(d, t.id);
+        QCOMPARE(text->fontSize, 36.0);
+        QCOMPARE(text->box.topLeft(), QPointF(5, 5));
+        QCOMPARE(text->box.width(), std::round(0.55 * 36 * 6 * 100) / 100);
+        // A label stays centred and its shape holds it.
+        const Stroke *inside = find(d, label);
+        QCOMPARE(inside->fontSize, 36.0);
+        const Stroke *shape = find(d, r.id);
+        QVERIFY(QLineF(inside->box.center(), shape->box.center()).length() < 0.02);
+        QVERIFY(shape->box.height() >= inside->box.height());
+    }
+
+    // --- Groups -----------------------------------------------------------------------------------
+
+    void groups()
+    {
+        Drawing d = oneOfEach();
+        const QSet<QString> two{u"r"_s, u"f"_s};
+        QVERIFY(canGroup(d, two));
+        QVERIFY(!canGroup(d, {u"r"_s}));
+        QVERIFY(!canUngroup(d, two));
+        const QString group = groupElements(d, two, testStamp());
+        QVERIFY(!group.isEmpty());
+        QCOMPARE(find(d, u"r"_s)->groupIds, QStringList{group});
+        // One tap takes the whole group; one group already: nothing more to group.
+        QCOMPARE(selectionClosure(d, {u"r"_s}), (QStringList{u"r"_s, u"f"_s}));
+        QVERIFY(!canGroup(d, two));
+        QVERIFY(canUngroup(d, two));
+        QVERIFY(groupElements(d, two, testStamp()).isEmpty());
+        // A group in a group: outermost last, ungrouped layer by layer.
+        const QString outer = groupElements(d, {u"r"_s, u"f"_s, u"x"_s}, testStamp());
+        QVERIFY(!outer.isEmpty());
+        QCOMPARE(find(d, u"r"_s)->groupIds, (QStringList{group, outer}));
+        QCOMPARE(find(d, u"x"_s)->groupIds, QStringList{outer});
+        ungroupElements(d, {u"r"_s, u"f"_s, u"x"_s}, testStamp());
+        QCOMPARE(find(d, u"r"_s)->groupIds, QStringList{group});
+        QVERIFY(find(d, u"x"_s)->groupIds.isEmpty());
+        ungroupElements(d, two, testStamp());
+        QVERIFY(find(d, u"r"_s)->groupIds.isEmpty());
+        QCOMPARE(selectionClosure(d, {u"r"_s}), QStringList{u"r"_s});
+        // A label counts with its shape.
+        Drawing labelled;
+        Stroke s;
+        s.type = ElementType::Rectangle;
+        s.id = u"s"_s;
+        s.box = QRectF(0, 0, 100, 100);
+        labelled.strokes = {s};
+        const QString label = addLabel(labelled, u"s"_s, u"ż"_s, TextStyle{}, fakeMetrics(), testStamp());
+        QVERIFY(!canGroup(labelled, {u"s"_s, label}));
+    }
+
+    void transformsUndoAsOneStep()
+    {
+        Drawing d = oneOfEach();
+        const QList<Stroke> before = d.strokes;
+        const EditStamp s = testStamp();
+        resizeElements(d, {u"r"_s}, QRectF(0, 0, 100, 100), QRectF(0, 0, 200, 200), 0, fakeMetrics(), s);
+        const ElementDiff diff = diffElements(before, d.strokes);
+        QCOMPARE(diff.changed.size(), 1);
+        QList<Stroke> back = d.strokes;
+        applyDiff(back, diff, false);
+        QCOMPARE(back.first().box, before.first().box);
     }
 };
 

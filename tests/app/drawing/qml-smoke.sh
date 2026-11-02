@@ -43,6 +43,8 @@ routes=(
   '{"view":"drawing","path":"assets/Schemat.svg"}'
   '{"view":"drawing","path":"assets/Schemat.svg","open":"shape"}'
   '{"view":"drawing","path":"assets/Schemat.svg","open":"select"}'
+  '{"view":"drawing","path":"assets/Schemat.svg","open":"selectstyle"}'
+  '{"view":"drawing","path":"assets/Schemat.svg","open":"selectmore"}'
   '{"view":"drawing","path":"assets/Ramka.svg"}'
   '{"view":"drawing","path":"assets/logo.svg"}'
   '{"view":"drawing","path":"assets/Brak.svg"}'
