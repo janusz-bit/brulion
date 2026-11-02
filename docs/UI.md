@@ -609,11 +609,12 @@ Its buttons never take focus, so the field keeps the keyboard. Options: "Aa" (ca
   `sourceText`), so markup, link targets, hidden task markers and frontmatter count. Queries are
   literal and one line. `NoteFind` recounts 120 ms after a change (400 ms over 200 KB) and leaves the
   caret alone; only next, previous and the replaces move anything. A new query goes to the nearest
-  match from where the bar was opened.
+  match from where the bar was opened. An edit leaves no current match ("12 wyników"): the next one
+  counts from its place.
 * **Showing a match in block mode:** delegates are virtual and rendered text is not the raw text, so
   the current match is shown in the block's inline editor (`BlockEditor.showFindTarget`): the
   block unfolds, a zoom that does not hold it ends (`PageController.reveal`), the list scrolls, the block
-  is edited with the match selected (`InlineEditor.selectFindMatch`) while `findKeepsKeyboard` keeps
+  is edited with the match selected once (`InlineEditor.selectFindMatch`: a later click into the block is an ordinary caret) while `findKeepsKeyboard` keeps
   the keyboard in the bar and the touch toolbar away. A tap in a block ends that. Closing on a touch
   screen leaves the block again, so no keyboard pops up. `PageController::locateText` maps a text
   offset to a row and edit-text range: a file line ends with the same line of the block's body.
@@ -628,7 +629,11 @@ Its buttons never take focus, so the field keeps the keyboard. Options: "Aa" (ca
   results and embeds draw themselves is not tinted either.
 * **Replacing:** `PageController::replaceTextRanges` applies the change to the whole text through
   `applyText`: one undo step ("Zamień wszystko" too, with Cofnij in its toast), other blocks' bytes
-  untouched, the usual debounced save and merge. In source mode the TextEdit holds the text and its own
+  untouched, the usual debounced save and merge. "Zamień" only replaces the match on show: with none,
+  or with a recount pending (an edit, an option just changed), it shows one and replaces nothing; the
+  same text as the match's moves on. With the replace row open the bar counts the matches inside links
+  (`text::isInsideLink`, as the notebook-wide preview) and in the YAML frontmatter: Logseq's leading
+  `key::` lines are not counted. In source mode the TextEdit holds the text and its own
   undo: `EditorInput.replaceRanges` is one edit block. `NoteFind` maps text offsets to TextEdit
   positions there, as the TextEdit shows a CRLF as one line break.
 * **The journal stream** searches **one day**, the one being written in (`activeDay`, named in the
@@ -645,7 +650,9 @@ notebook). Core: `notebook/replace.h`; the app: `src/app/shell/replacesession.h`
   (`*.excalidraw.md`, or the plugin's frontmatter key), SVGs; a note that is not valid UTF-8 or is over 16 MB
   is left out and counted. The preview holds the first 50 hits of a note and 2000 in all, and says how many
   more there are: those go with their ticked note.
-* **Choosing:** everything is ticked at first; a tick per note and per hit, tristate where partial. A
+* **Choosing:** everything is ticked at first; a tick per note and per hit, tristate where partial;
+  "untick all" also covers notes the scan finds later. Coming Back from a hit opened keeps the ticks
+  for each note whose bytes, query and options are the same (a note changed meanwhile is ticked anew). A
   hit shows "line: before ~~match~~ → **replacement** after", from the note, so escaped into `StyledText`;
   "Inside a link: it will point elsewhere" under a hit in `[[…]]` or `](…)`: links are text here, keeping
   them is the rename's job. A tap on the text opens the note at that line.
@@ -655,7 +662,8 @@ notebook). Core: `notebook/replace.h`; the app: `src/app/shell/replacesession.h`
   never drops. BOM, line endings and all other bytes stay. Open editors follow through `fileChanged`.
 * **Undo:** the toast's Cofnij (`ReplaceSession.undo(token)`, kept by the session, so it works from
   another view; the old text is held in memory until the next replace or notebook) restores only files
-  still holding what was written; others stay and are named.
+  still holding what was written, judged on the disk; others stay and are named, a deleted note is not
+  brought back. A rescan running is stopped first. Replacing with the same text writes and tells nothing.
 
 Tests: `tst_text_find`, `tst_notebook_replace`, `tst_markdown_render`, `tst_editor_controller`,
 `tst_editor_highlighter`, `tst_shell_workspace_wiring`, `tst_shell_workspace_editor`, `--selftest-shell`

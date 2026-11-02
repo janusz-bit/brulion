@@ -3,7 +3,8 @@
 // current one, going to it, replacing. The matches are recounted a moment after the text changes
 // (longer on big notes), never touching the caret: only next(), previous() and the replaces emit
 // targetRequested(). A query or option just changed goes to the nearest match from where the bar
-// was opened.
+// was opened. An edit leaves no current match (the one shown may have moved or gone): the next one
+// counts from its place. Replace only ever replaces the match on show.
 //
 // A target says where a match is: { row, from, to (in that row's edit text), editable (the block's
 // inline editor can select it; false for a table, a list marker or a task marker, a fence line: the
@@ -41,6 +42,10 @@ class NoteFind : public QObject {
     Q_PROPERTY(int count READ count NOTIFY matchesChanged FINAL)
     /// The match shown, -1: none yet.
     Q_PROPERTY(int current READ current NOTIFY matchesChanged FINAL)
+    /// Of the matches: those inside links (text::isInsideLink(); a replace makes the link point
+    /// elsewhere) and those in the YAML frontmatter, which the block view hides in its panel.
+    Q_PROPERTY(int linkMatches READ linkMatches NOTIFY matchesChanged FINAL)
+    Q_PROPERTY(int frontmatterMatches READ frontmatterMatches NOTIFY matchesChanged FINAL)
 
 public:
     explicit NoteFind(QObject *parent = nullptr);
@@ -60,6 +65,8 @@ public:
     QString appliedQuery() const { return m_appliedQuery; }
     int count() const { return int(m_matches.size()); }
     int current() const { return m_current; }
+    int linkMatches() const { return m_linkMatches; }
+    int frontmatterMatches() const { return m_frontmatterMatches; }
     text::FindOptions options() const { return m_options; }
 
     /// The next match goes from where the caret is: `sourcePosition` in source mode's TextEdit, else
@@ -69,10 +76,12 @@ public:
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void next();
     Q_INVOKABLE void previous();
-    /// The current match replaced, the one after it shown. No current match: it is shown first, and
-    /// nothing is replaced — what is replaced has been seen. True when something was replaced.
+    /// The current match replaced, the one after it shown. No current match, or a recount still
+    /// pending (the text or the options changed): a match is shown first and nothing is replaced —
+    /// what is replaced has been seen. The same text as the match's: nothing to replace, the next
+    /// one is shown. True when something was replaced.
     Q_INVOKABLE bool replaceCurrent(const QString &replacement);
-    /// Every match replaced as one undo step. How many.
+    /// Every match replaced as one undo step. How many (0: none, or the same text).
     Q_INVOKABLE int replaceAll(const QString &replacement);
 
 Q_SIGNALS:
@@ -93,6 +102,7 @@ private:
     QVariantMap targetOf(const text::TextRange &range) const;
     void show(int index);
     void recount();
+    void countRisks();
     bool sourceMode() const;
 
     QPointer<PageController> m_controller;
@@ -105,6 +115,8 @@ private:
     QString m_text; ///< the text m_matches are ranges of
     QList<text::TextRange> m_matches;
     int m_current = -1;
+    int m_linkMatches = 0;
+    int m_frontmatterMatches = 0;
     qsizetype m_origin = 0;
     bool m_jump = false;
     QTimer m_timer;

@@ -6,6 +6,7 @@
 #include "vault/vault.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
@@ -49,36 +50,6 @@ void fillContext(ReplaceHit &hit, QStringView text, qsizetype lineStart, qsizety
     hit.after = text.sliced(matchEnd, to - matchEnd).toString();
     if (to < lineEnd)
         hit.after.append(u'…');
-}
-
-/// The last place of the two characters `a`, `b` in [from, to) of `text`, -1 when none.
-qsizetype lastPair(QStringView text, qsizetype from, qsizetype to, QChar a, QChar b)
-{
-    for (qsizetype i = to - 2; i >= from; --i) {
-        if (text.at(i) == a && text.at(i + 1) == b)
-            return i;
-    }
-    return -1;
-}
-
-qsizetype firstChar(QStringView text, qsizetype from, qsizetype to, QChar c)
-{
-    for (qsizetype i = from; i < to; ++i) {
-        if (text.at(i) == c)
-            return i;
-    }
-    return -1;
-}
-
-/// [start, end) of `text` lies inside a link's target on its line [lineStart, lineEnd): `[[…]]` (all of
-/// it names the target or its text, which a replace cannot tell apart cheaply) or `](…)`.
-bool insideLink(QStringView text, qsizetype lineStart, qsizetype lineEnd, qsizetype start, qsizetype end)
-{
-    const qsizetype wiki = lastPair(text, lineStart, start, u'[', u'[');
-    if (wiki >= 0 && lastPair(text, wiki, start, u']', u']') < 0 && lastPair(text, end, lineEnd, u']', u']') >= 0)
-        return true;
-    const qsizetype target = lastPair(text, lineStart, start, u']', u'(');
-    return target >= 0 && firstChar(text, target, start, u')') < 0 && firstChar(text, end, lineEnd, u')') >= 0;
 }
 
 qsizetype lineEndFrom(QStringView text, qsizetype from)
@@ -163,7 +134,7 @@ ReplaceFile planFile(const VaultPath &path, QStringView text, QStringView query,
         hit.length = range.length;
         const qsizetype lineEnd = lineEndFrom(text, range.end());
         fillContext(hit, text, lineStart, lineEnd);
-        hit.inLink = insideLink(text, lineStart, lineEnd, range.start, range.end());
+        hit.inLink = text::isInsideLink(text, range);
         file.hits.append(std::move(hit));
     }
     return file;
@@ -220,8 +191,10 @@ ReplacedFile applyToFile(Vault &vault, const ReplaceFile &file, const ReplacePla
     if (chosen.isEmpty())
         return out;
     QString after = text::replaceMatches(read.text, chosen, replacement);
-    if (after == read.text)
+    if (after == read.text) {
+        out.replaced = 0; // the same text: nothing written, nothing to undo
         return out;
+    }
     out.before = read.text;
     out.after = std::move(after);
     const HistoryReason reason(vault);
@@ -256,7 +229,8 @@ QList<ReplacedFile> applyReplace(Vault &vault, const ReplacePlan &plan, const QS
 
 UndoReplaceStatus undoReplacedFile(Vault &vault, const ReplacedFile &file, ChangeSource source)
 {
-    if (!vault.exists(file.path))
+    // On the disk, not the vault's listing: writeTextIfUnchanged() would create a deleted file.
+    if (!QFileInfo(vault.absolutePath(file.path)).isFile())
         return UndoReplaceStatus::Changed;
     const HistoryReason reason(vault);
     switch (vault.writeTextIfUnchanged(file.path, file.before, file.after, source)) {

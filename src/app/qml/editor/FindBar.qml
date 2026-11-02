@@ -241,6 +241,22 @@ Rectangle {
             }
         }
 
+        // What Replace all would also change: the bar says so before it does.
+        BText {
+            objectName: "findReplaceNote"
+            visible: bar.replaceOpen && text !== ""
+            Layout.fillWidth: true
+            variant: "muted"
+            wrapMode: Text.Wrap
+            text: {
+                const parts = []
+                if (bar.find.linkMatches > 0)
+                    parts.push(qsTr("%n match(es) inside links: they will point elsewhere.", "", bar.find.linkMatches))
+                if (bar.find.frontmatterMatches > 0)
+                    parts.push(qsTr("%n match(es) in the page's properties.", "", bar.find.frontmatterMatches))
+                return parts.join(" ")
+            }
+        }
         RowLayout {
             visible: bar.replaceOpen
             Layout.fillWidth: true

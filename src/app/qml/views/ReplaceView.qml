@@ -23,6 +23,9 @@ FocusScope {
     focus: true
     Component.onCompleted: {
         session.reset()
+        // Back from a hit keeps what was unticked; any other visit starts from everything ticked.
+        if (!route.ticksKept)
+            session.dropKeptTicks()
         session.replacement = route.replacement || ""
         session.query = route.query || ""
         queryField.text = session.query
@@ -34,7 +37,8 @@ FocusScope {
     Component.onDestruction: session.reset()
 
     function open(path, line) {
-        AppController.replaceRoute({ view: "replace", query: session.query, replacement: session.replacement })
+        session.keepTicks()
+        AppController.replaceRoute({ view: "replace", query: session.query, replacement: session.replacement, ticksKept: true })
         AppController.navigate({ view: "page", path: path, line: line - 1 })
     }
 

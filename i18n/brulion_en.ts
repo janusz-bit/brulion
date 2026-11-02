@@ -500,6 +500,22 @@
             <numerusform>%n results</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/FindBar.qml" line="258"/>
+        <source>%n match(es) inside links: they will point elsewhere.</source>
+        <translation>
+            <numerusform>%n match inside a link: it will point elsewhere.</numerusform>
+            <numerusform>%n matches inside links: they will point elsewhere.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/FindBar.qml" line="260"/>
+        <source>%n match(es) in the page's properties.</source>
+        <translation>
+            <numerusform>%n match in the page's properties.</numerusform>
+            <numerusform>%n matches in the page's properties.</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>GraphNodeCard</name>

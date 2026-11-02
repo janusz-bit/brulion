@@ -2,7 +2,8 @@
 // docs/UI.md "Find and replace"): the scan behind the view (notebook::ReplaceScan on the index's
 // threads, in slices on WebAssembly; editors save first, the scan starts a moment after typing
 // stops), the preview as a list model (a row per file, then its hits, then how many more; capped by
-// notebook::ReplaceLimits, the count stays exact), what is ticked (everything at first), applying in
+// notebook::ReplaceLimits, the count stays exact), what is ticked (everything at first; kept while a
+// hit is opened: keepTicks()), applying in
 // slices and undoing. The session outlives the view: a toast's "Cofnij" works from any view, and
 // only for the replace it told about (undo(token)).
 #pragma once
@@ -100,6 +101,11 @@ public:
     /// Put the replace `token` (applied()) back, in slices: undone() when done. Only the last replace
     /// (a later one takes the place), each file only while it holds what was written.
     Q_INVOKABLE bool undo(int token);
+    /// The ticks are to survive the view going while a hit is opened: the next scan takes them back
+    /// for each note whose bytes are the same, if its query and options are too.
+    Q_INVOKABLE void keepTicks();
+    /// A fresh visit: everything ticked at first.
+    Q_INVOKABLE void dropKeptTicks();
     /// `token`'s replace can still be undone.
     Q_INVOKABLE bool canUndo(int token) const;
 
@@ -137,6 +143,10 @@ private:
     int fileRow(int file) const;
     void fileTickChanged(int file);
     int tickedInFile(const notebook::ReplaceFile &file) const;
+    /// A file's ticks: its own, else m_defaultTicked.
+    Ticks ticksOf(const QString &path) const;
+    /// Take the kept ticks back for the notes of the plan so far.
+    void adoptKeptTicks();
 
     Workspace *m_workspace = nullptr;
     QString m_query;
@@ -148,6 +158,19 @@ private:
     notebook::ReplacePlan m_plan;
     QList<Row> m_rows;
     QHash<QString, Ticks> m_ticks;
+    /// Files without an entry in m_ticks: "untick all" reaches those a scan finds later too.
+    bool m_defaultTicked = true;
+    struct KeptFile {
+        QString hash;
+        Ticks ticks;
+    };
+    struct KeptTicks {
+        bool valid = false;
+        QString query;
+        text::FindOptions options;
+        bool defaultTicked = true;
+        QHash<QString, KeptFile> files;
+    } m_kept;
 
     ApplyMode m_applyMode = ApplyMode::None;
     qsizetype m_applyAt = 0;

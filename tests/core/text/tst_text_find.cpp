@@ -103,6 +103,29 @@ private Q_SLOTS:
         QCOMPARE(findMatches(u"İ", u"i"), (Ranges{{0, 1}}));
     }
 
+    void insideLink_data()
+    {
+        QTest::addColumn<QString>("line");
+        QTest::addColumn<bool>("inside");
+        QTest::newRow("plain") << u"kot w domu"_s << false;
+        QTest::newRow("wiki link") << u"zobacz [[kot]] tu"_s << true;
+        QTest::newRow("display text") << u"[[Strona|kot]]"_s << true;
+        QTest::newRow("markdown target") << u"[x](kot.md)"_s << true;
+        QTest::newRow("markdown text") << u"[kot](x.md)"_s << false;
+        QTest::newRow("after a link") << u"[[a]] kot"_s << false;
+        QTest::newRow("before a link") << u"kot [[a]]"_s << false;
+        QTest::newRow("opened on the line before") << u"[[a\nkot]]"_s << false;
+    }
+    void insideLink()
+    {
+        QFETCH(QString, line);
+        QFETCH(bool, inside);
+        const QString text = u"wstęp\n"_s + line + u"\nkoniec"_s;
+        const QList<TextRange> found = findMatches(text, u"kot");
+        QCOMPARE(found.size(), 1);
+        QCOMPARE(isInsideLink(text, found.first()), inside);
+    }
+
     void maxHits()
     {
         QCOMPARE(findMatches(u"a a a", u"a", {}, 2).size(), 2);
