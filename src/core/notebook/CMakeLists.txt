@@ -2,17 +2,18 @@
 # quick capture, journals (template, appending), pages and folders (create, rename and move with
 # every link and tag kept, delete), the links Brulion copies, item references, JSON of the model,
 # what is shared to Brulion from another app, a block placed after the block embedding an attachment
-# (embeds.h: "Rysuj na tej stronie" of the PDF viewer),
+# (embeds.h: "Rysuj na tej stronie" of the PDF viewer), the files nothing refers to (cleanup.h),
 # and Notebook (a vault opened headless: lazy index, lock, compare-and-swap edits with History);
 # loading the index on worker threads (IndexLoader) and keeping its cache on the device
 # (IndexCacheKeeper).
 # The shell's Workspace delegates to it; brulion-cli (src/cli) is built on it.
 # Public headers: notebook.h (overview), capture.h, journals.h, pages.h, links.h, itemref.h,
-# json.h, session.h, share.h, embeds.h.
+# json.h, session.h, share.h, embeds.h, cleanup.h.
 brulion_add_core_module(notebook
     SOURCES
         notebook.h
         capture.h capture.cpp
+        cleanup.h cleanup.cpp
         embeds.h embeds.cpp
         indexloader.h indexloader.cpp
         indexcachekeeper.h indexcachekeeper.cpp

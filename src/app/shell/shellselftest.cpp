@@ -3935,6 +3935,164 @@ QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
 /// dialog, "Zapisz" (a real tap / click) writes one block at the end of today's journal — no
 /// reminder from "jutro" —, a shared .md file is offered as a new page titled after the file and
 /// saved byte for byte, its copy removed; Escape drops a share and writes nothing.
+/// "Sprzątanie": what nothing refers to is listed with nothing ticked, a tap ticks it, "Open" and
+/// Back keep the ticks, only what is shown and ticked goes to the trash, and the toast's Undo still
+/// works after leaving the view.
+void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    const QString note = u"Sprzątanie stara notatka.md"_s;
+    const QString picture = u"assets/Sprzątanie żółw.png"_s;
+    const QString linkedPicture = u"assets/Sprzątanie w użyciu.png"_s;
+    const auto offered = [ws](const QString &path) {
+        const QVariantList files = ws->unreferencedFiles();
+        return std::any_of(files.cbegin(), files.cend(),
+                           [&](const QVariant &f) { return f.toMap().value(u"path"_s).toString() == path; });
+    };
+    ws->writeFile(note, u"- [ ] zadanie do zrobienia\n"_s);
+    ws->writeFile(u"Sprzątanie z obrazem.md"_s, u"- ![[Sprzątanie w użyciu.png]]\n"_s);
+    ws->createAttachment(picture, "png");
+    ws->createAttachment(linkedPicture, "png");
+    check(waitFor([&] { return offered(note) && offered(picture); }), "files nothing refers to are offered");
+    check(!offered(linkedPicture), "an embedded picture is not offered");
+
+    app->navigate({ { u"view"_s, u"cleanup"_s } });
+    QQuickItem *list = nullptr;
+    QQuickItem *view = nullptr;
+    const auto tickedCount = [&] {
+        return view ? view->property("shownTicked").toList().size() : -1;
+    };
+    check(waitFor([&] {
+              list = shownNamed(window->contentItem(), u"cleanupList"_s);
+              return list != nullptr && list->property("count").toInt() > 1;
+          }),
+          "the cleanup view lists the files");
+    for (QQuickItem *up = list; up; up = up->parentItem()) {
+        if (isA(up, "CleanupView")) {
+            view = up;
+            break;
+        }
+    }
+    check(view && tickedCount() == 0, "nothing is ticked at first");
+    QQuickItem *trashButton = shownNamed(window->contentItem(), u"cleanupTrash"_s);
+    check(trashButton && !trashButton->isEnabled(), "with nothing ticked nothing can be moved to the trash");
+
+    const auto rowOf = [&](const QString &title) -> QQuickItem * {
+        const QVariantList shownFiles = view ? view->property("shown").toList() : QVariantList();
+        for (int i = 0; i < shownFiles.size(); ++i) {
+            if (shownFiles[i].toMap().value(u"title"_s).toString() == title)
+                QMetaObject::invokeMethod(list, "positionViewAtIndex", i, 4 /* ListView.Contain */);
+        }
+        settle(100);
+        return findShown(list, [&](QQuickItem *item) {
+            return isA(item, "BListItem") && item->property("text").toString() == title;
+        });
+    };
+    QQuickItem *noteRow = rowOf(u"Sprzątanie stara notatka"_s);
+    QQuickItem *pictureRow = rowOf(u"Sprzątanie żółw.png"_s);
+    check(noteRow && pictureRow, "both rows are in the list");
+    if (!noteRow || !pictureRow || !view)
+        return;
+    check(noteRow->property("subtitle").toString().contains(u'1'), "the note's row says it holds an open task");
+    tapOrClick(window, pointIn(pictureRow), touch);
+    check(waitFor([&] { return tickedCount() == 1; }), "a tap on a row ticks it");
+    tapOrClick(window, pointIn(rowOf(u"Sprzątanie stara notatka"_s)), touch);
+    check(waitFor([&] { return tickedCount() == 2; }), "a second row is ticked too");
+
+    // The row's button opens the file; Back returns with the ticks.
+    noteRow = rowOf(u"Sprzątanie stara notatka"_s);
+    QQuickItem *openButton = noteRow ? findShown(noteRow, [](QQuickItem *item) { return isA(item, "BIconButton"); }) : nullptr;
+    check(openButton != nullptr, "the row has an open button");
+    if (openButton)
+        tapOrClick(window, pointIn(openButton), touch);
+    check(waitFor([&] { return app->currentView() == u"page" && app->currentRoute().value(u"path"_s).toString() == note; }),
+          "the row's button opens the file");
+    app->back();
+    view = nullptr;
+    check(waitFor([&] {
+              list = shownNamed(window->contentItem(), u"cleanupList"_s);
+              for (QQuickItem *up = list; up && !view; up = up->parentItem()) {
+                  if (isA(up, "CleanupView"))
+                      view = up;
+              }
+              return view && tickedCount() == 2;
+          }),
+          "Back returns with the ticks kept");
+
+    // Some ticked: "Select all" ticks all that is shown; pressed again it unticks them.
+    QQuickItem *tickAll = shownNamed(window->contentItem(), u"cleanupTickAll"_s);
+    const qsizetype all = view->property("shown").toList().size();
+    check(tickAll && all > 2, "the view offers to tick everything shown");
+    if (tickAll) {
+        tapOrClick(window, pointIn(tickAll, 0.1), touch);
+        check(waitFor([&] { return tickedCount() == all; }), "“Select all” from some ticked ticks every file shown");
+        settle(500); // no double click
+        tapOrClick(window, pointIn(tickAll, 0.1), touch);
+        check(waitFor([&] { return tickedCount() == 0; }), "pressed again it unticks them");
+        settle(500);
+        tapOrClick(window, pointIn(rowOf(u"Sprzątanie stara notatka"_s)), touch);
+        settle(500);
+        tapOrClick(window, pointIn(rowOf(u"Sprzątanie żółw.png"_s)), touch);
+        check(waitFor([&] { return tickedCount() == 2; }), "rows are ticked again");
+    }
+
+    // Only what is shown goes: attachments only, the note stays although ticked.
+    settle(200); // the view made anew by Back lays out its segments
+    QQuickItem *kind = shownNamed(window->contentItem(), u"cleanupKind"_s);
+    check(kind != nullptr, "the kind filter is shown");
+    const QString attachments = QCoreApplication::translate("CleanupView", "Attachments (%1)").section(u'(', 0, 0);
+    QQuickItem *attachmentsTab = kind ? findShown(kind, [&](QQuickItem *item) {
+        return item->property("text").toString().startsWith(attachments);
+    }) : nullptr;
+    check(attachmentsTab != nullptr, "the filter has a segment for attachments");
+    if (attachmentsTab)
+        tapOrClick(window, pointIn(attachmentsTab), touch);
+    check(waitFor([&] { return view->property("kind").toString() == u"attachments" && tickedCount() == 1; }),
+          "the filter shows attachments; a ticked note is not counted");
+    trashButton = shownNamed(window->contentItem(), u"cleanupTrash"_s);
+    check(trashButton && trashButton->isEnabled(), "something ticked can go to the trash");
+    if (trashButton)
+        tapOrClick(window, pointIn(trashButton), touch);
+    const QString accept = QCoreApplication::translate("CleanupView", "Move to trash");
+    QQuickItem *acceptButton = nullptr;
+    check(waitFor([&] {
+              QQuickItem *overlay = window->contentItem();
+              acceptButton = findShown(overlay, [&](QQuickItem *item) {
+                  return isA(item, "BButton") && item != trashButton && item->property("text").toString() == accept;
+              });
+              return acceptButton != nullptr;
+          }),
+          "the confirmation asks first");
+    check(ws->exists(picture), "nothing is moved before the confirmation");
+    settle(250);
+    if (acceptButton)
+        tapOrClick(window, pointIn(acceptButton), touch);
+    check(waitFor([&] { return !ws->exists(picture); }), "the confirmed picture is in the trash");
+    check(ws->exists(note), "the note filtered out stays");
+    check(waitFor([&] { return !offered(picture); }), "the list no longer has the picture");
+
+    // Undo from another view: the toast outlives the cleanup view.
+    QQuickItem *undo = nullptr;
+    check(waitFor([&] {
+              undo = shownNamed(window->contentItem(), u"toastAction"_s);
+              return undo != nullptr;
+          }),
+          "the toast offers Undo");
+    app->navigate({ { u"view"_s, u"trash"_s } });
+    settle(250);
+    undo = shownNamed(window->contentItem(), u"toastAction"_s);
+    if (undo)
+        tapOrClick(window, pointIn(undo), touch);
+    check(undo && waitFor([&] { return ws->exists(picture); }), "Undo restores the file after leaving the view");
+
+    // Leave the sample notebook as it was for the checks after this one.
+    for (const QString &path : { note, picture, linkedPicture, u"Sprzątanie z obrazem.md"_s })
+        ws->deleteForever(ws->deletePage(path));
+    closeMenus(window);
+    app->goHome();
+}
+
 void checkShare(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -4976,6 +5134,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 3e. Folders: reveal, the row menu's "Przenieś do…", a root folder, drag and drop (desktop),
     //     All pages as a folder browser.
     checkFolders(window, app, check);
+    closeMenus(window);
+    // 3e'. "Sprzątanie": what nothing refers to, picked with real input, to the trash and back.
+    checkCleanup(window, app, check);
     closeMenus(window);
     // 3f. "Udostępnij → Brulion": the share dialog, to the journal and to a new page.
     checkShare(window, app, check);

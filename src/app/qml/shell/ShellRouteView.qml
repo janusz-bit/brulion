@@ -78,6 +78,7 @@ Item {
         case "importExport": return importExportView
         case "history": return historyView
         case "trash": return trashView
+        case "cleanup": return cleanupView
         case "settings": return settingsView
         case "logs": return logsView
         case "drawing": return drawingView
@@ -119,6 +120,7 @@ Item {
     Component { id: importExportView; ImportExportView { route: root.route } }
     Component { id: historyView; HistoryView { route: root.route } }
     Component { id: trashView; TrashView { route: root.route } }
+    Component { id: cleanupView; CleanupView { route: root.route } }
     Component { id: settingsView; SettingsView { route: root.route } }
     Component { id: logsView; LogsView { route: root.route } }
     Component { id: drawingView; DrawingView { route: root.route; inSidePanel: root.inSidePanel } }

@@ -518,6 +518,52 @@ private Q_SLOTS:
         QVERIFY(ws->foldState(u"Sprawunki w Łodzi.md"_s).isEmpty()); // forgotten with the page
     }
 
+    void unreferencedFiles()
+    {
+        QString root;
+        auto ws = open({ { u"Główna.md"_s, u"- [[Dom]] ![[plan.png]]\n"_s },
+                         { u"Dom.md"_s, u"- [ ] farba\n- spotkanie ⏰ 2026-10-20 10:00\n"_s },
+                         { u"Żółw.md"_s, u"- [ ] nakarmić\n- wizyta ⏰ 2026-10-20 10:00\n"_s },
+                         { u"Ulubiona.md"_s, u"- a\n"_s },
+                         { u"journals/2026-10-14.md"_s, u"- dziś\n"_s },
+                         { u"assets/plan.png"_s, u"x"_s },
+                         { u"assets/stary skan.pdf"_s, u"abc"_s } },
+                       &root);
+        ws->setFavorite(u"Ulubiona.md"_s, true);
+        const QVariantList files = ws->unreferencedFiles();
+        QStringList listed;
+        for (const QVariant &f : files)
+            listed.append(f.toMap().value(u"path"_s).toString());
+        QCOMPARE(listed, (QStringList{ u"Główna.md"_s, u"Żółw.md"_s, u"assets/stary skan.pdf"_s }));
+
+        const QVariantMap turtle = files[1].toMap();
+        QCOMPARE(turtle.value(u"title"_s).toString(), u"Żółw"_s);
+        QCOMPARE(turtle.value(u"attachment"_s).toBool(), false);
+        QCOMPARE(turtle.value(u"openTasks"_s).toInt(), 1);
+        QCOMPARE(turtle.value(u"reminders"_s).toInt(), 1);
+        const QVariantMap scan = files[2].toMap();
+        QCOMPARE(scan.value(u"title"_s).toString(), u"stary skan.pdf"_s);
+        QCOMPARE(scan.value(u"folder"_s).toString(), u"assets"_s);
+        QCOMPARE(scan.value(u"attachment"_s).toBool(), true);
+        QCOMPARE(scan.value(u"pdf"_s).toBool(), true);
+        QCOMPARE(scan.value(u"size"_s).toLongLong(), 3);
+
+        // Removing the only note that embeds a picture leaves the picture without links.
+        const QStringList trashed = ws->deletePages({ u"Główna.md"_s, u"assets/stary skan.pdf"_s, u"brak.md"_s });
+        QCOMPARE(trashed.size(), 2);
+        QVERIFY(!ws->exists(u"Główna.md"_s));
+        QVERIFY(!ws->exists(u"assets/stary skan.pdf"_s));
+        ws->finishIndexing();
+        QTRY_VERIFY(std::any_of(ws->unreferencedFiles().cbegin(), ws->unreferencedFiles().cend(), [](const QVariant &f) {
+            return f.toMap().value(u"path"_s).toString() == u"assets/plan.png"_s;
+        }));
+
+        QCOMPARE(ws->restoreAll(trashed), 2);
+        QVERIFY(ws->exists(u"Główna.md"_s));
+        QVERIFY(ws->exists(u"assets/stary skan.pdf"_s));
+        QCOMPARE(ws->restoreAll({ u".trash/brak.md"_s }), 0);
+    }
+
     void trash()
     {
         auto ws = open({ { u"Notatka.md"_s, u"- a\n"_s },

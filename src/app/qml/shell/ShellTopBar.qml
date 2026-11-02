@@ -316,6 +316,11 @@ Rectangle {
             onTriggered: AppController.navigate({ view: "trash" })
         }
         BMenuItem {
+            text: qsTr("Clean up")
+            iconName: "sparkles"
+            onTriggered: AppController.navigate({ view: "cleanup" })
+        }
+        BMenuItem {
             text: qsTr("Settings")
             iconName: "settings"
             shortcut: "Ctrl+,"

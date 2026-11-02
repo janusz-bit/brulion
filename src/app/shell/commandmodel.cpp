@@ -103,6 +103,8 @@ static QList<Command> buildCommands(const AppController *app)
         { u"go.sync"_s, CommandModel::tr("Sync center"), {}, u"folder-sync"_s, {}, ready },
         { u"go.importExport"_s, CommandModel::tr("Import and export"), {}, u"import"_s, {}, ready },
         { u"go.trash"_s, CommandModel::tr("Trash"), {}, u"trash-2"_s, {}, ready },
+        { u"go.cleanup"_s, CommandModel::tr("Clean up"), CommandModel::tr("Notes and attachments without links"),
+          u"sparkles"_s, {}, ready },
         { u"theme.toggle"_s, CommandModel::tr("Toggle dark mode"), {}, u"moon"_s, {}, true },
         // The other language's name in that language, so it can be found either way.
         { u"language.switch"_s, CommandModel::tr("Change language"), english ? u"Polski"_s : u"English"_s,

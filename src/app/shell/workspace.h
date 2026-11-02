@@ -20,7 +20,8 @@
 //                                      an index change only the changed notes are computed)
 //   pages                              createPage, renamePage (rewrites links in every file
 //                                      linking to it), deletePage (-> .trash/), restore,
-//                                      trashItems, deleteForever, emptyTrash
+//                                      trashItems, deleteForever, emptyTrash; the cleanup view:
+//                                      unreferencedFiles, deletePages, restoreAll
 //   folders                            createFolder (names sanitised, hidden ones refused),
 //                                      renameFolder, movePath (pages, attachments and folders;
 //                                      every link and tag keeps its target: the index's
@@ -464,8 +465,13 @@ public:
     Q_INVOKABLE QVariantList subfolders(const QString &folder) const;
     /// Move a file or folder to the trash. Returns its path inside .trash/ ("" on failure).
     Q_INVOKABLE QString deletePage(const QString &path);
+    /// Move several files to the trash. Returns their paths inside .trash/, without those that
+    /// failed (errorOccurred says which).
+    Q_INVOKABLE QStringList deletePages(const QStringList &paths);
     /// Restore a trashed file; returns the path it was restored to ("" on failure).
     Q_INVOKABLE QString restore(const QString &trashPath);
+    /// Restore several trashed files; returns how many came back.
+    Q_INVOKABLE int restoreAll(const QStringList &trashPaths);
     /// The trash, most recently deleted first: [{ trashPath, original, title, folder (it was a
     /// folder), files, size, deletedAt ("YYYY-MM-DDTHH:mm:ss" or ""), when (human) }].
     Q_INVOKABLE QVariantList trashItems() const;
@@ -473,6 +479,10 @@ public:
     Q_INVOKABLE bool deleteForever(const QString &trashPath);
     /// Delete everything in the trash permanently.
     Q_INVOKABLE bool emptyTrash();
+    /// What the cleanup view offers (notebook::unreferencedFiles() without favourites; empty while
+    /// the notebook is being indexed, when links are not known yet): [{ path, title, folder,
+    /// attachment, picture, pdf, size, sizeText, modified (human), openTasks, reminders }].
+    Q_INVOKABLE QVariantList unreferencedFiles() const;
 
     // ---- Version history (device-local, vault/history.h) ------------------------------------
     /// Versions of `path`, newest first: [{ id, time ("YYYY-MM-DDTHH:mm:ss"), when (human), size,

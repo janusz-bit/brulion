@@ -26,6 +26,8 @@
 //   embeds.h     insertBlockAfterEmbed(content, lineHint, embedsIt, body) -> {content, line,
 //                afterEmbed}: a block right after the block embedding an attachment (the PDF
 //                viewer's drawing under its PDF), else appended — pure, untouched bytes kept
+//   cleanup.h    unreferencedFiles(index, config) -> notes and attachments nothing refers to (no
+//                daily notes, templates, hidden files), with their open tasks and reminders
 //   indexloader.h IndexLoader(vault, index, WorkerPool{threads, start}, {cachePath, firstFolder}):
 //                start(files), step(budgetMs) -> Done | More | Waiting (+ resultsReady()), finish(),
 //                forget(path), configChanged(), stats() — reads and parses on the pool's threads
@@ -57,6 +59,7 @@
 #pragma once
 
 #include "notebook/capture.h"
+#include "notebook/cleanup.h"
 #include "notebook/embeds.h"
 #include "notebook/indexcachekeeper.h"
 #include "notebook/indexloader.h"
