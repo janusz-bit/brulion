@@ -238,7 +238,7 @@ private Q_SLOTS:
                                         << link(u"ext:mailto:jan@example.com"_s, u"L"_s, u"jan@example.com"_s);
         QTest::newRow("angle destination")
                 << u"[x](<https://a.pl/x y>)"_s << link(u"ext:https://a.pl/x%20y"_s, u"L"_s, u"x"_s);
-        QTest::newRow("tag") << u"#zakupy/spożywcze"_s << tag(u"zakupy%2Fspo%C5%BCywcze"_s, u"zakupy/spożywcze"_s);
+        QTest::newRow("tag") << u"#zakupy"_s << tag(u"zakupy"_s, u"zakupy"_s);
         QTest::newRow("bracket tag") << u"#[[dwa słowa]]"_s << tag(u"dwa%20s%C5%82owa"_s, u"dwa słowa"_s);
         QTest::newRow("block ref") << u"((abc))"_s << link(u"block:abc"_s, u"L"_s, u"Treść &lt;b&gt;bloku&lt;/b&gt;"_s);
         QTest::newRow("block ref without markup")
@@ -341,7 +341,7 @@ private Q_SLOTS:
                 << u"![[Firma/Adam]]"_s << link(u"page:Firma%2FAdam"_s, u"L"_s, u"⧉ Firma/Adam"_s);
         QTest::newRow("a Markdown link stays one")
                 << u"[x](Firma/Adam.md)"_s << link(u"page:Firma%2FAdam.md"_s, u"L"_s, u"x"_s);
-        QTest::newRow("a tag stays one") << u"#Firma/Adam"_s << tag(u"Firma%2FAdam"_s, u"Firma/Adam"_s);
+        QTest::newRow("a tag") << u"#Firma"_s << tag(u"Firma"_s, u"Firma"_s);
         QTest::newRow("an attachment") << u"[[assets/plan.png]]"_s
                                        << link(u"page:assets%2Fplan.png"_s, u"L"_s, u"assets/plan.png"_s);
         QTest::newRow("a trailing slash") << u"[[Firma/]]"_s << link(u"page:Firma%2F"_s, u"L"_s, u"Firma/"_s);
@@ -455,6 +455,49 @@ private Q_SLOTS:
         QVERIFY(!parseLinkPartUrl(url));
     }
 
+    void nestedTags_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<QStringList>("hrefs");
+        QTest::addColumn<QString>("shown");
+        const QString nb = u"\u00a0"_s;
+        QTest::newRow("a plain tag") << u"#praca"_s << QStringList{u"tag:praca"_s} << nb + u"#praca"_s + nb;
+        QTest::newRow("two parts") << u"#praca/raporty"_s << QStringList{u"tag:praca"_s, u"tag:praca%2Fraporty"_s}
+                                   << nb + u"#praca/raporty"_s + nb;
+        QTest::newRow("three parts, Polish")
+                << u"#żółw/gęś/jaźń"_s
+                << QStringList{u"tag:%C5%BC%C3%B3%C5%82w"_s, u"tag:%C5%BC%C3%B3%C5%82w%2Fg%C4%99%C5%9B"_s,
+                               u"tag:%C5%BC%C3%B3%C5%82w%2Fg%C4%99%C5%9B%2Fja%C5%BA%C5%84"_s}
+                << nb + u"#żółw/gęś/jaźń"_s + nb;
+        QTest::newRow("brackets with spaces")
+                << u"#[[Dom i ogród/Kuchnia]]"_s
+                << QStringList{u"tag:Dom%20i%20ogr%C3%B3d"_s, u"tag:Dom%20i%20ogr%C3%B3d%2FKuchnia"_s}
+                << nb + u"#Dom i ogród/Kuchnia"_s + nb;
+        QTest::newRow("markup is escaped") << u"#[[<b>/x]]"_s << QStringList{u"tag:%3Cb%3E"_s, u"tag:%3Cb%3E%2Fx"_s}
+                                           << nb + u"#<b>/x"_s + nb;
+        // By the rules of a link's path parts: one link.
+        QTest::newRow("an attachment's name") << u"#[[assets/plan.png]]"_s << QStringList{u"tag:assets%2Fplan.png"_s}
+                                              << nb + u"#assets/plan.png"_s + nb;
+        QTest::newRow("a blank part") << u"#[[a//b]]"_s << QStringList{u"tag:a%2F%2Fb"_s} << nb + u"#a//b"_s + nb;
+    }
+    void nestedTags()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(QStringList, hrefs);
+        QFETCH(QString, shown);
+        const QString html = render(markdown);
+        QStringList found;
+        static const QRegularExpression href(u"<a href=\"([^\"]*)\""_s);
+        for (auto it = href.globalMatch(html); it.hasNext();)
+            found.append(it.next().captured(1));
+        QCOMPARE(found, hrefs);
+        static const QRegularExpression markup(u"<[^>]*>"_s);
+        QCOMPARE(QString(html).remove(markup).replace(u"&nbsp;"_s, u"\u00a0"_s).replace(u"&lt;"_s, u"<"_s).replace(u"&gt;"_s, u">"_s),
+                 shown);
+        // Every piece has the tag's tint, so the pieces read as one chip.
+        QCOMPARE(html.count(u"background-color:"_s), hrefs.size() * 2 - 1);
+    }
+
     void hoveredLink_data()
     {
         QTest::addColumn<QString>("html");
@@ -476,6 +519,11 @@ private Q_SLOTS:
                                        << part(1, u"Firma%2FAdam"_s, u"L"_s, u"Firma"_s) + sep()
                                                   + under(u"page:Firma%2FAdam"_s, u"L"_s, u"Adam"_s);
         QTest::newRow("a tag stays") << render(u"#zakupy"_s) << u"tag:zakupy"_s << tag(u"zakupy"_s, u"zakupy"_s);
+        const QString nested = render(u"#praca/raporty"_s);
+        // Only the part under the pointer: the first decoration is the parent's.
+        QString underParent = nested;
+        underParent.replace(underParent.indexOf(u";text-decoration:none"_s), 21, u";text-decoration:underline"_s);
+        QTest::newRow("a nested tag's parent") << nested << u"tag:praca"_s << underParent;
         const QString reminder = render(u"Zadzwonić ⏰ 2026-10-15 09:00"_s);
         QTest::newRow("a reminder chip stays") << reminder << u"reminder:10-28"_s << reminder;
         QTest::newRow("nothing hovered") << render(u"[[Strona]]"_s) << QString() << render(u"[[Strona]]"_s);
@@ -527,7 +575,16 @@ private Q_SLOTS:
         QTest::newRow("an embed") << u"![[Firma/Adam]]"_s << 4 << u"page:Firma%2FAdam"_s;
         QTest::newRow("a heading fragment") << u"[[Firma/Adam#Plan]]"_s << 15 << u"page:Firma%2FAdam#Plan"_s;
         QTest::newRow("spaces as written") << u"[[ Firma / Adam ]]"_s << 3 << u"part:1:Firma%20%2F%20Adam"_s;
-        QTest::newRow("a tag") << u"#zakupy/spożywcze"_s << 3 << u"tag:zakupy%2Fspo%C5%BCywcze"_s;
+        QTest::newRow("a tag") << u"#zakupy"_s << 3 << u"tag:zakupy"_s;
+        QTest::newRow("a nested tag's #") << u"#zakupy/spożywcze"_s << 0 << u"tag:zakupy"_s;
+        QTest::newRow("a nested tag's parent") << u"#zakupy/spożywcze"_s << 3 << u"tag:zakupy"_s;
+        QTest::newRow("right after the parent") << u"#zakupy/spożywcze"_s << 7 << u"tag:zakupy"_s;
+        QTest::newRow("a nested tag's last part") << u"#zakupy/spożywcze"_s << 8 << u"tag:zakupy%2Fspo%C5%BCywcze"_s;
+        QTest::newRow("a nested tag's end") << u"#zakupy/spożywcze"_s << 17 << u"tag:zakupy%2Fspo%C5%BCywcze"_s;
+        QTest::newRow("the middle of three") << u"#a/b/c"_s << 4 << u"tag:a%2Fb"_s;
+        QTest::newRow("brackets, the parent") << u"#[[ Dom i ogród/Kuchnia ]]"_s << 6 << u"tag:Dom%20i%20ogr%C3%B3d"_s;
+        QTest::newRow("brackets, the last part") << u"#[[ Dom i ogród/Kuchnia ]]"_s << 20
+                                                 << u"tag:Dom%20i%20ogr%C3%B3d%2FKuchnia"_s;
         QTest::newRow("a block reference") << u"((abc))"_s << 3 << u"block:abc"_s;
         QTest::newRow("a bare URL") << u"https://example.com/x"_s << 5 << u"ext:https://example.com/x"_s;
         QTest::newRow("a Markdown link to a note") << u"[x](Firma/Adam.md)"_s << 1 << u"page:Firma%2FAdam.md"_s;

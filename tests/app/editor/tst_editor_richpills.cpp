@@ -114,6 +114,7 @@ private Q_SLOTS:
         QTest::addColumn<QString>("markdown");
         QTest::addColumn<QStringList>("expected"); // a kind per tinted span, in order
         QTest::newRow("polish tag") << u"Wyjazd #podróże w sierpniu"_s << QStringList{u"pill"_s};
+        QTest::newRow("nested tag is one chip") << u"Raport #praca/raporty/pilne dziś"_s << QStringList{u"pill"_s};
         QTest::newRow("due chip") << u"[ ] Zadanie 📅 2026-10-20"_s << QStringList{u"pill"_s};
         QTest::newRow("done chip") << u"[x] Zrobione 📅 2026-10-13 ✅ 2026-10-14"_s
                                    << QStringList{u"pill"_s, u"pill"_s};

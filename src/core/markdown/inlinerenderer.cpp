@@ -442,6 +442,8 @@ QString InlineRenderer::withHoveredLink(QStringView html, QStringView href)
         return html.toString();
     const QString open = u"<a href=\""_s + href.toString().toHtmlEscaped() + u"\" style=\"color:"_s;
     constexpr QStringView plain = u";text-decoration:none\">";
+    // A part of a nested tag: the decoration comes before its tint (a whole tag's stays as it is).
+    constexpr QStringView tagPart = u";text-decoration:none;background-color:";
     QString out;
     qsizetype done = 0;
     for (qsizetype at = html.indexOf(open); at >= 0; at = html.indexOf(open, at + open.size())) {
@@ -451,11 +453,15 @@ QString InlineRenderer::withHoveredLink(QStringView html, QStringView href)
         const qsizetype semicolon = html.indexOf(u';', colour);
         if (semicolon < 0)
             break;
-        if (html.sliced(colour, semicolon - colour).contains(u'"') || !html.sliced(semicolon).startsWith(plain))
+        if (html.sliced(colour, semicolon - colour).contains(u'"'))
+            continue;
+        const QStringView rest = html.sliced(semicolon);
+        const bool part = rest.startsWith(tagPart);
+        if (!part && !rest.startsWith(plain))
             continue;
         out += html.sliced(done, semicolon - done);
-        out += u";text-decoration:underline\">"_s;
-        done = semicolon + plain.size();
+        out += part ? u";text-decoration:underline;background-color:"_s : u";text-decoration:underline\">"_s;
+        done = semicolon + (part ? tagPart.size() : plain.size());
     }
     if (done == 0)
         return html.toString();
@@ -715,6 +721,27 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 // as a chip, not as highlighted letters, two tags next to each other stay apart, and
                 // it never wraps away from its padding. (Qt's HTML parser turns a narrow no-break
                 // space, U+202F, into a plain space that collapses, even written as an entity.)
+                // A nested tag (#praca/raporty): one chip, every path part a tag: link of its own
+                // naming the tag up to it (docs/SYNTAX.md §3 "Tags as page links"). The tint
+                // joins them: adjacent spans of one background are one pill (RichTextPills).
+                if (const QList<LinkPathPart> parts = linkPathParts(item.target); parts.size() >= 2) {
+                    const QString tint = u"style=\"color:"_s + safeColor(pal.tag.foreground)
+                                         + u";text-decoration:none;background-color:"_s
+                                         + safeColor(pal.tag.background) + u"\">"_s;
+                    const QStringView target(item.target);
+                    for (qsizetype k = 0; k < parts.size(); ++k) {
+                        const bool last = k + 1 == parts.size();
+                        html += u"<a href=\"tag:"_s + percentEncoded(target.left(parts[k].to)) + u"\" "_s + tint
+                                + (k == 0 ? u"&nbsp;#"_s : QString())
+                                + esc(target.sliced(parts[k].from, parts[k].to - parts[k].from))
+                                + (last ? u"&nbsp;"_s : QString()) + u"</a>"_s;
+                        if (!last) {
+                            html += u"<span "_s + tint
+                                    + esc(target.sliced(parts[k].to, parts[k + 1].from - parts[k].to)) + u"</span>"_s;
+                        }
+                    }
+                    break;
+                }
                 html = u"<a href=\"tag:"_s + percentEncoded(item.target) + u"\" style=\"color:"_s
                        + safeColor(pal.tag.foreground) + u";background-color:"_s + safeColor(pal.tag.background)
                        + u";text-decoration:none\">&nbsp;#"_s + esc(item.target) + u"&nbsp;</a>"_s;
@@ -983,6 +1010,24 @@ QString InlineRenderer::linkUrlAt(QStringView text, qsizetype position) const
         }
         return page;
     };
+    // A tag at the caret: a parent part names the tag up to it, as a click on it does; "#" and "#[["
+    // belong to the first part, the rest to the whole tag.
+    const auto tagUrl = [&](const InlineItem &item) -> QString {
+        const QString whole = u"tag:"_s + percentEncoded(item.target);
+        const QList<LinkPathPart> parts = linkPathParts(item.target);
+        if (parts.size() < 2)
+            return whole;
+        qsizetype start = item.from + 1;
+        if (text.sliced(start).startsWith(u"[["))
+            start += 2;
+        while (start < item.to && text[start].isSpace())
+            ++start;
+        for (qsizetype k = 0; k + 1 < parts.size(); ++k) {
+            if (position <= start + parts[k].to)
+                return u"tag:"_s + percentEncoded(QStringView(item.target).left(parts[k].to));
+        }
+        return whole;
+    };
     QString url;
     lexInlineOutsideMath(text, masked, findMathSpans(masked), [&](const InlineItem &item) {
         if (position < item.from || position > item.to)
@@ -1002,7 +1047,7 @@ QString InlineRenderer::linkUrlAt(QStringView text, qsizetype position) const
         case InlineKind::BlockEmbed: found = u"block:"_s + item.target; break;
         case InlineKind::Url:
         case InlineKind::Autolink: found = allowedExternal(item.target) ? externalHref(item.target) : QString(); break;
-        case InlineKind::Tag: found = u"tag:"_s + percentEncoded(item.target); break;
+        case InlineKind::Tag: found = tagUrl(item); break;
         }
         // In order: the construct starting at `position` comes after the one ending there.
         if (!found.isEmpty())

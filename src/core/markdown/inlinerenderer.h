@@ -15,7 +15,8 @@
 //                                        path parts (RenderContext::resolveLinkPart): the whole
 //                                        target percent-encoded as written, without its fragment
 //                                        ([[Firma/Adam cośtam]] -> part:1:Firma%2FAdam%20co%C5%9Btam)
-//   tag:<name>                           #tags (percent-encoded, without '#')
+//   tag:<name>                           #tags (percent-encoded, without '#'); #a/b is one chip of
+//                                        two links, tag:a and tag:a%2Fb
 //   block:<id>                           ((id)) block references and !((id)) block embeds
 //   ext:<url>                            http(s)/mailto URLs only (other schemes stay text)
 //   task:toggle                          the leading task checkbox (RenderContext::taskCheckbox)

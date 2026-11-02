@@ -606,6 +606,13 @@ frontmatter's `tags:`.
   Ctrl+click opens the page; a long press or right-click opens the tag's menu (Filtruj po tagu,
   Otwórz stronę tagu, Widok tagu, Otwórz w panelu bocznym, Kopiuj tag — `#tag`, or `#[[tag ze
   spacjami]]`), as in the editor, where the tag's menu has "Zadania z tym tagiem" instead.
+* **Nested tags** (rendering only; the Markdown never changes) — every path part of a nested tag
+  is a link of its own inside one chip: in `#praca/raporty` a click on `#praca` opens the tag
+  `praca` (as a tag written `#praca` would, also in Tasks' filter and the tag's menu), on `raporty`
+  the whole tag `praca/raporty`; in `#a/b/c` the middle part opens `a/b`. The `/` is no link (a
+  click on it edits the block). A tag splits by the rules of a link's path parts (§2 "Path parts":
+  `#[[Projekty/Dom/plan.png]]` or a blank part stay one link); Alt+Enter on the edited text
+  follows the part under the caret.
 * **References** — a page's "Odnośniki" list the blocks that link to it *and* the blocks tagged
   with a tag naming it (one row per block), and pages tagged as a whole (frontmatter `tags:`,
   leading `tags::`) as a group marked "cała strona"; self-references are excluded. Exactly the

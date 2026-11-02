@@ -2309,7 +2309,10 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QTest::newRow("outside") << task << u"Zapytać"_s << 3 << QString();
         QTest::newRow("a heading") << u"## Plan [[A/B]]\n"_s << u"A/"_s << 0 << u"part:1:A%2FB"_s;
         QTest::newRow("a quote") << u"> Cytat [[A/B]]\n"_s << u"A/"_s << 1 << u"part:1:A%2FB"_s;
-        QTest::newRow("a tag") << u"- #zakupy/spożywcze\n"_s << u"zakupy"_s << 0 << u"tag:zakupy%2Fspo%C5%BCywcze"_s;
+        QTest::newRow("a tag") << u"- #zakupy\n"_s << u"zakupy"_s << 0 << u"tag:zakupy"_s;
+        QTest::newRow("a nested tag's parent") << u"- #zakupy/spożywcze\n"_s << u"zakupy"_s << 0 << u"tag:zakupy"_s;
+        QTest::newRow("a nested tag's last part") << u"- #zakupy/spożywcze\n"_s << u"spożywcze"_s << 0
+                                                    << u"tag:zakupy%2Fspo%C5%BCywcze"_s;
         QTest::newRow("inline code") << u"- `[[A/B]]`\n"_s << u"A/"_s << 0 << QString();
         QTest::newRow("a code block") << u"```\n[[A/B]]\n```\n"_s << u"A/"_s << 0 << QString();
     }

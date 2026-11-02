@@ -26,6 +26,7 @@ QtObject {
 
     property var events: null
     property int row: -1
+    property int tagRow: -1
     property point at: Qt.point(0, 0)
     property string before: ""
     property int navigations: 0
@@ -40,6 +41,7 @@ QtObject {
         + "- Zapytać się [[Firma/Adam cośtam]] o to czego się pouczyć\n"
         + "- [[Projekty/Zażółć gęślą jaźń/Notatki]]\n"
         + "- Z tekstem: [[Firma/Adam cośtam|Adam]]\n"
+        + "- Etykieta #praca/raporty dziś\n"
         + "\n"
         + "| Kto | Gdzie |\n"
         + "| --- | --- |\n"
@@ -84,6 +86,17 @@ QtObject {
             }
         }
         return x2 < 0 ? null : { x: x1, y: y1, width: x2 - x1, height: y2 - y1, cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 }
+    }
+    /// The middle of the link of `text` whose URL is exactly `url`, on the height of `y` (null: none).
+    function exactLink(text, url, y) {
+        let x1 = -1, x2 = -1
+        for (let x = 1; text && x < text.width; ++x) {
+            if (text.linkAt(x, y) === url) {
+                x1 = x1 < 0 ? x : x1
+                x2 = x
+            }
+        }
+        return x2 < 0 ? null : { cx: (x1 + x2) / 2, cy: y }
     }
     /// How many links of `html` are underlined.
     function underlined(html) { return html.split("text-decoration:underline").length - 1 }
@@ -268,6 +281,28 @@ QtObject {
             },
             wait(() => page.editingRow < 0 && textOf(row) !== null, "editing ends"),
             () => check(window.fileLineOf(window.pageText(), "Zapytać") === firstLine, "the file is unchanged"),
+            // ---- 2b. a nested tag: one chip, its parent a link of its own ---------------------------------
+            () => {
+                tagRow = rowWith("Etykieta")
+                editor.listView.positionViewAtIndex(tagRow, ListView.Center)
+            },
+            wait(() => linkBox(textOf(tagRow, "tag:praca"), "tag:praca%2Fraporty") !== null, "the nested tag is drawn"),
+            () => {
+                mark()
+                const t = textOf(tagRow, "tag:praca")
+                const box = exactLink(t, "tag:praca", linkBox(t, "tag:praca%2Fraporty").cy)
+                check(box !== null, "“#praca” is a link of its own")
+                if (box)
+                    window.tapPoint(t, box.cx, box.cy)
+            },
+            wait(() => navigated() && route().view === "tag" && route().tag === "praca",
+                 () => "“#praca” opens the parent tag: " + JSON.stringify(route())),
+            () => {
+                mark()
+                clickLink(textOf(tagRow, "tag:praca"), "tag:praca%2Fraporty")
+            },
+            wait(() => navigated() && route().view === "tag" && route().tag === "praca/raporty",
+                 () => "“raporty” opens the whole tag: " + JSON.stringify(route())),
             // ---- 3. a display text: one link ------------------------------------------------------------
             () => {
                 const r = rowWith("Z tekstem")
