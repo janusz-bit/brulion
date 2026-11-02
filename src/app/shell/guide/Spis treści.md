@@ -31,6 +31,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 ## Pliki i urządzenia
 - [[Synchronizacja|Synchronizacja]] — Syncthing, Nextcloud, konflikty, historia wersji.
 - [[Import i eksport|Import i eksport]] — przenoszenie notatek z i do innych programów.
+- [[Kopie zapasowe|Kopie zapasowe]] — kopie notatnika według harmonogramu i ich przywracanie.
 - [[Format plików|Format plików]] — jak notatki wyglądają na dysku.
 - [[Wiersz poleceń i agenci AI|Wiersz poleceń i agenci AI]] — `brulion-cli`, skrypty i agenci AI (MCP).
 

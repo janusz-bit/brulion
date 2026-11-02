@@ -555,7 +555,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Zastąpiona z wiersza poleceń (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` | — |
 | `cleanup` | `CleanupView` — notes and attachments nothing refers to ("Cleaning up" below) | `kind?`, `selected?` (written when a row opens a file, so Back returns to the same choice) |
-| `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on Android and Windows "Sprawdzaj nowe wersje" — `AppController.updates.enabled`, "Window layout"; on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |
+| `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Kopie zapasowe (`backups`, "Backups" below), Aplikacja (on Android and Windows "Sprawdzaj nowe wersje" — `AppController.updates.enabled`, "Window layout"; on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |
 | `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
 | `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path`, `open?` (screenshots: `style`, `more`, `paper`, `theme`, `shape`, `select`, `backdrop` — the page picker of the backdrop's PDF) |
 
@@ -593,6 +593,32 @@ settles; it waits for a notebook that is still being indexed, when links are not
 Tests: `tst_notebook_cleanup` (each kind of reference, what is never offered), `tst_shell_workspace_wiring`
 (`unreferencedFiles`), `--selftest-shell` (`checkCleanup`: ticks with real taps and clicks, Back, the filter, the
 confirmation, Undo from another view), `tst_content_qml` (the route without QML warnings).
+
+## Backups (`qml/shell/ShellBackupSettings.qml`)
+
+**Kopie zapasowe** is a section of the settings (`section: "backups"`; the palette: `backup.open`, and
+`backup.now` for "Utwórz kopię teraz"), on `Workspace.backups` (`shell/workspacebackups.h`). User's
+guide: the page "Kopie zapasowe" of the documentation notebook.
+
+* **Status:** the last backup's time and size with "Utwórz kopię teraz"; a problem under it in full
+  (`statusText`: red for a failed run, plain for files left out). While something runs: what, a
+  progress line and "Zatrzymaj". A failed scheduled run also gives one warning toast per kind of
+  failure per session, and a line in the event log; older backups are never touched.
+* **Schedule:** the switch (`backupsEnabled`), Every day / Every week, how many to keep (`keepChoices`:
+  3, 5, 7, 14, 30; the browser 1, 2, 3). All per notebook on this device.
+* **Folder** (not in the browser): the path, "Wybierz…" (`FilePicker.OpenFolder`; `chooseFolder`:
+  a local URL or an Android document that names a file; refused with a message inside the notebook,
+  for a cloud document, for a folder that takes no file), "Użyj domyślnego", on a desktop "Otwórz".
+* **The list:** `backupsList`, newest first, one `BListItem` per backup with icon buttons fitting a
+  narrow phone: Przywróć (`backupRestore`), Pobierz in the browser or Udostępnij for Android's private
+  folder (`backupExport`), Usuń (`backupDelete`, confirmed; never to the trash, it is no note).
+* **Restore:** `prepareRestore` checks the backup off the GUI thread; `restorePlanReady` opens
+  `backupsRestoreConfirm` with the counts (replaced, back, to the trash, too large); nothing to do is a
+  toast. `confirmRestore` makes the safety backup and applies the plan; the outcome is a toast.
+* The documentation notebook has none (`available` false, a note instead; the palette's commands off).
+
+Tests: `tst_backup*`, `tst_shell_workspace_backups` (+ `_inline`), `--selftest-shell` (`checkBackups`: real
+taps through a backup, a restore's confirmation, a delete), `tst_content_qml` (the route).
 
 ## The block editor (heart of the app)
 

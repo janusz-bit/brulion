@@ -201,6 +201,9 @@
   do historii na urządzeniu (przy pisaniu najwyżej co 5 minut, zawsze przed zmianami
   z synchronizacji i importu). Każdą wersję możesz porównać i przywrócić, a usunięte strony
   odzyskać z kosza.
+* **Kopie zapasowe.** Automatyczne archiwa ZIP notatnika, codziennie albo co tydzień, z limitem
+  liczby, na urządzeniu lub we wskazanym folderze. Przywracanie pokazuje najpierw, co się zmieni,
+  robi kopię bezpieczeństwa i zostawia zastąpione wersje w historii, a nadmiarowe pliki w koszu.
 * **Sprzątanie.** Lista notatek i załączników, do których nie prowadzi żaden link, tag ani
   zapytanie. Wybierasz, co przenieść do kosza: same notatki, same załączniki albo pojedyncze pliki.
 * **Na start: przykładowy brulion.** Strona „Witaj w Brulionie” pokazuje wszystkie funkcje na
