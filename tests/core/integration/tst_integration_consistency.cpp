@@ -6,6 +6,7 @@
 // from SYNTAX.md and every module must agree with it.
 #include "index/index.h"
 #include "io/io.h"
+#include "markdown/inline.h"
 #include "markdown/markdown.h"
 #include "reminders/reminders.h"
 #include "sync/syncengine.h"
@@ -238,8 +239,14 @@ private Q_SLOTS:
         const ParsedNote note = markdown::parseNote(kPath, content);
         QCOMPARE(sortedUnique(note.tags), want);
 
-        // Rendered rich text (block editor).
-        QCOMPARE(sortedUnique(lowered(renderedHrefs(content, u"tag"_s))), want);
+        // Rendered rich text (block editor): a nested tag's parents are links of their own too.
+        QStringList wantRendered = want;
+        for (const QString &tag : want) {
+            const QList<markdown::LinkPathPart> parts = markdown::linkPathParts(tag);
+            for (qsizetype k = 0; k + 1 < parts.size(); ++k)
+                wantRendered.append(tag.left(parts[k].to));
+        }
+        QCOMPARE(sortedUnique(lowered(renderedHrefs(content, u"tag"_s))), sortedUnique(wantRendered));
 
         // Index.
         QStringList indexed;
