@@ -1,6 +1,8 @@
 #include "texthelper.h"
 
+#include "markdown/highlight.h"
 #include "markdown/inlinerenderer.h"
+#include "markdown/pagelook.h"
 #include "text/text.h"
 
 #include <algorithm>
@@ -258,6 +260,39 @@ QString TextHelper::findHighlightedHtml(const QString &html, const QString &quer
     if (query.isEmpty())
         return html;
     return markdown::InlineRenderer::withFindHighlight(html, query, matchCase, matchDiacritics, wholeWord, color);
+}
+
+QVariantMap TextHelper::setHighlight(const QString &text, int from, int to, const QString &color) const
+{
+    std::optional<markdown::HighlightColor> c;
+    if (!color.isEmpty()) {
+        c = markdown::parseHighlightColorName(color);
+        if (!c)
+            return {{u"text"_s, text}, {u"from"_s, from}, {u"to"_s, to}, {u"changed"_s, false}};
+    }
+    const markdown::HighlightEdit edit = markdown::setHighlight(text, from, to, c);
+    return {{u"text"_s, edit.text}, {u"from"_s, int(edit.from)}, {u"to"_s, int(edit.to)}, {u"changed"_s, edit.changed}};
+}
+
+QVariantMap TextHelper::pageIcon(const QString &text) const
+{
+    const markdown::PageIcon icon = markdown::parsePageIcon(text);
+    const QString kind = icon.kind == markdown::PageIcon::Kind::Emoji ? u"emoji"_s
+                         : icon.kind == markdown::PageIcon::Kind::App ? u"app"_s
+                                                                      : QString();
+    return {{u"kind"_s, kind}, {u"name"_s, icon.name}};
+}
+
+QVariantList TextHelper::highlightColors() const
+{
+    QVariantList out;
+    for (int i = 0; i < markdown::HighlightColorCount; ++i) {
+        const auto color = markdown::HighlightColor(i);
+        out.append(QVariantMap{{u"name"_s, markdown::highlightColorName(color)},
+                               {u"tint"_s, markdown::highlightTint(color)},
+                               {u"written"_s, markdown::highlightWrittenColor(color)}});
+    }
+    return out;
 }
 
 QString TextHelper::hoveredLinkHtml(const QString &html, const QString &href) const

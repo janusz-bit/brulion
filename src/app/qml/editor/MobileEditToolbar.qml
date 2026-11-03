@@ -294,6 +294,14 @@ Rectangle {
                 }
             }
             ToolButton {
+                id: highlightButton
+                objectName: "toolbarHighlight"
+                iconName: "highlighter"
+                label: qsTr("Highlight")
+                enabled: bar.row >= 0 && bar.edit !== null
+                onClicked: { bar.commitComposition(); bar.editor.openHighlightMenuAbove(bar.edit, highlightButton) }
+            }
+            ToolButton {
                 objectName: "toolbarDrawing"
                 iconName: "pen-tool"
                 label: qsTr("Drawing")

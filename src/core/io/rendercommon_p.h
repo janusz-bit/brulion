@@ -4,6 +4,7 @@
 // callout titles, list items that are one fenced block). Internal to the io module.
 #pragma once
 
+#include "markdown/highlight.h"
 #include "types.h"
 
 #include <QList>
@@ -22,6 +23,9 @@ struct InlineAtom {
     qsizetype from = 0;
     qsizetype to = 0;
     QString out;
+    /// The two tags of a `<mark>` pair share a number (≥ 0): rendered only when both are kept,
+    /// else as text.
+    int pair = -1;
 };
 
 /// Opening and closing markup of an emphasis: `ch` is '*' or '_' (`count` 1 = emphasis, 2 =
@@ -39,6 +43,12 @@ QString renderAtoms(QStringView text, QList<InlineAtom> atoms, const EmphasisMar
 /// `<!--…-->` comments hidden atoms.
 void codeAndCommentAtoms(QStringView text, QStringView masked, QList<InlineAtom> &atoms,
                          const std::function<QString(const QString &content)> &code);
+
+/// The opening and closing output of a coloured highlight (docs/SYNTAX.md §11).
+using HighlightMarks = std::function<std::pair<QString, QString>(markdown::HighlightColor color)>;
+/// The `<mark>` pairs of `masked` (markdown::findMarkPairs) as atom pairs: the tags replaced by
+/// `marks(color)` — the palette colour, never the note's CSS.
+void markAtoms(QStringView masked, QList<InlineAtom> &atoms, const HighlightMarks &marks);
 
 /// ASCII punctuation (what a backslash can escape).
 bool isAsciiPunct(QChar c);

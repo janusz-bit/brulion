@@ -1,6 +1,8 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Templates as T
+import QtQuick.Window
 import Brulion
 
 // ContentPageHeader — the top of a page in PageView (the block editor's header, it scrolls with
@@ -20,6 +22,13 @@ import Brulion
 // every width, "Widok tagu" (the tag overview) as a "#" button among the page actions, "Zadania z
 // tym tagiem" in the page menu (PageView; also in Widok tagu and every #tag's menu), and its
 // sub-tags as chips under the title (#praca/raporty under Praca), each opening its own page.
+// The page's look (docs/UI.md "Page icon and cover", PageController.look): its icon before the
+// title (above the chips for a page that starts with its own "# Title"; a click: iconRequested —
+// the icon dialog), its cover — a band above everything, the picture filling its width, moved up
+// or down with "Przesuń" (a drag, then "Zapisz": `banner_y`), changed with "Zmień okładkę"
+// (coverRequested). A cover from the internet shows only from the device's cache: "Pokaż" first
+// (unless the device allows such pictures), a spinner, the reason it failed; a file that is not in
+// the notebook (any more) is named.
 //
 //   ContentPageHeader {
 //       controller: page; editor: editor; tools: tools
@@ -47,12 +56,38 @@ Item {
 
     signal renameRequested(string title)
     signal menuRequested(Item anchor)
+    /// The icon or the cover was clicked to be changed (PageView opens their dialogs).
+    signal iconRequested()
+    signal coverRequested()
     /// The mode toggle was clicked (PageView switches: PageController.toggleMode).
     signal modeToggleRequested()
     /// The page menu's button (route.open "menu" opens the menu there).
     property Item menuAnchor: null
 
     readonly property bool small: Theme.compact || inSidePanel
+    /// The page's look (PageController.look).
+    readonly property var look: controller ? controller.look : ({})
+    readonly property var pageIcon: look.icon || ({})
+    readonly property var cover: look.cover || ({})
+    readonly property bool hasIcon: !!pageIcon.kind
+    readonly property bool hasCover: !!cover.kind
+    /// The cover's picture is being moved (a drag): coverDraft is shown until it is written.
+    property bool coverMoving: false
+    property real coverDraft: 0.5
+    readonly property real coverPosition: coverMoving ? coverDraft : cover.position !== undefined ? cover.position : 0.5
+    function startCoverMove() {
+        coverDraft = coverPosition
+        coverMoving = true
+    }
+    function finishCoverMove(save) {
+        if (save && controller) {
+            const r = controller.setPageCoverPosition(coverDraft)
+            if (!r.ok)
+                AppController.toast(r.reason, "error")
+        }
+        coverMoving = false
+    }
+    onPathChanged: coverMoving = false
     readonly property string path: controller ? controller.path : ""
     readonly property bool exists: controller ? controller.exists : false
     readonly property bool loaded: controller ? controller.loaded : false
@@ -188,6 +223,35 @@ Item {
         }
     }
 
+    /// The page's icon, a button opening the icon dialog (iconRequested).
+    component IconButton: T.AbstractButton {
+        id: iconButton
+        property real iconSize: Theme.text3xl
+        objectName: "pageIconButton"
+        implicitWidth: Math.round(iconSize * 1.3)
+        implicitHeight: Math.round(iconSize * 1.3)
+        focusPolicy: Qt.StrongFocus
+        hoverEnabled: !Theme.touchUi
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Page icon")
+        Accessible.description: qsTr("Change icon")
+        onClicked: header.iconRequested()
+        background: Rectangle {
+            radius: Theme.radius
+            color: iconButton.down ? Theme.bgPressed : iconButton.hovered || iconButton.visualFocus ? Theme.bgHover : "transparent"
+            border.width: iconButton.visualFocus ? 2 : 0
+            border.color: Theme.focusRing
+        }
+        contentItem: Item {
+            BPageIcon {
+                anchors.centerIn: parent
+                icon: header.pageIcon
+                size: Math.round(iconButton.iconSize * 1.05)
+                color: Theme.fg
+            }
+        }
+    }
+
     /// `tag:` query of a tag key (quoted when it has a space, a comma or a quote).
     function tagQuery(key) {
         return "tag:" + (/[\s,"]/.test(key) ? "\"" + key + "\"" : key)
@@ -249,6 +313,157 @@ Item {
         width: header.textWidth
         spacing: header.small ? Theme.space1 : Theme.space2
 
+        // ---- Cover (docs/UI.md "Page icon and cover") ------------------------------------------------
+        Item {
+            id: coverBand
+            objectName: "pageCover"
+            visible: header.hasCover
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? (header.small ? 112 : 180) : 0
+            Layout.bottomMargin: visible ? Theme.space2 : 0
+            clip: true
+            readonly property string coverState: header.cover.state || ""
+            readonly property bool ready: coverState === "ready" && coverImage.status === Image.Ready
+
+            Rectangle {
+                anchors.fill: parent
+                radius: Theme.radius
+                color: Theme.bgSunken
+            }
+            Image {
+                id: coverImage
+                objectName: "pageCoverImage"
+                /// The picture at the band's width (its height by its proportions).
+                readonly property real naturalHeight: implicitWidth > 0 ? coverBand.width * implicitHeight / implicitWidth
+                                                                        : coverBand.height
+                width: coverBand.width
+                height: Math.max(coverBand.height, naturalHeight)
+                y: -(height - coverBand.height) * header.coverPosition
+                source: coverBand.coverState === "ready" ? header.cover.url : ""
+                asynchronous: true
+                fillMode: Image.PreserveAspectCrop
+                sourceSize.width: Math.ceil(Math.max(1, coverBand.width) * Screen.devicePixelRatio)
+            }
+            // Not shown (yet): why, with what can be done.
+            Column {
+                anchors.centerIn: parent
+                width: parent.width - 2 * Theme.space4
+                spacing: Theme.space2
+                visible: !coverBand.ready
+                BSpinner {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    visible: coverBand.coverState === "loading" || (coverBand.coverState === "ready" && coverImage.status === Image.Loading)
+                    running: visible
+                }
+                BText {
+                    objectName: "pageCoverMessage"
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    visible: text !== ""
+                    text: coverBand.coverState === "missing" ? qsTr("No picture “%1” in the notebook").arg(header.cover.target || "")
+                          : coverBand.coverState === "ask" ? qsTr("Cover from %1").arg(header.cover.host || "")
+                          : coverBand.coverState === "failed" ? (header.cover.error || qsTr("The picture could not be loaded"))
+                          : coverBand.coverState === "ready" && coverImage.status === Image.Error ? qsTr("The picture could not be loaded")
+                          : ""
+                    variant: "muted"
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                }
+                BButton {
+                    objectName: "pageCoverShow"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    visible: header.cover.kind === "web" && (coverBand.coverState === "ask" || coverBand.coverState === "failed")
+                    size: "small"
+                    text: coverBand.coverState === "failed" ? qsTr("Try again") : qsTr("Show")
+                    iconName: coverBand.coverState === "failed" ? "refresh-cw" : "eye"
+                    onClicked: if (header.controller) header.controller.showWebPicture(header.cover.target)
+                }
+            }
+            HoverHandler {
+                id: coverHover
+                enabled: !Theme.touchUi
+            }
+            // Moving: the picture follows a vertical drag (none to make for a picture no taller
+            // than the band).
+            DragHandler {
+                id: coverDrag
+                enabled: header.coverMoving && coverImage.height > coverBand.height
+                target: null
+                xAxis.enabled: false
+                property real startPosition: 0.5
+                onActiveChanged: if (active) startPosition = header.coverDraft
+                onTranslationChanged: {
+                    const room = coverImage.height - coverBand.height
+                    if (active && room > 0)
+                        header.coverDraft = Math.max(0, Math.min(1, startPosition - translation.y / room))
+                }
+            }
+            Row {
+                objectName: "pageCoverTools"
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: Theme.space2
+                spacing: Theme.space1
+                // (With the keys: the page menu's "Zmień okładkę…".)
+                visible: header.coverMoving || Theme.touchUi || coverHover.hovered
+                BButton {
+                    objectName: "pageCoverMove"
+                    visible: !header.coverMoving && coverBand.ready
+                    size: "small"
+                    text: qsTr("Reposition")
+                    iconName: "move-up"
+                    onClicked: header.startCoverMove()
+                }
+                BButton {
+                    objectName: "pageCoverChange"
+                    visible: !header.coverMoving
+                    size: "small"
+                    text: qsTr("Change cover")
+                    iconName: "image"
+                    onClicked: header.coverRequested()
+                }
+                BButton {
+                    objectName: "pageCoverMoveCancel"
+                    visible: header.coverMoving
+                    size: "small"
+                    text: qsTr("Cancel")
+                    onClicked: header.finishCoverMove(false)
+                }
+                BButton {
+                    objectName: "pageCoverMoveSave"
+                    visible: header.coverMoving
+                    size: "small"
+                    variant: "primary"
+                    text: qsTr("Save position")
+                    onClicked: header.finishCoverMove(true)
+                }
+            }
+            BText {
+                visible: header.coverMoving
+                anchors.left: parent.left
+                anchors.bottom: parent.bottom
+                anchors.margins: Theme.space2
+                text: qsTr("Drag the picture up or down")
+                variant: "small"
+                color: Theme.fg
+                Rectangle {
+                    z: -1
+                    anchors.fill: parent
+                    anchors.margins: -Theme.space1
+                    radius: Theme.radiusXs
+                    color: Theme.bgElevated
+                    opacity: 0.85
+                }
+            }
+        }
+
+        // ---- The icon above everything else when there is no title row ("# Title" first) ------------
+        IconButton {
+            visible: header.hasIcon && !header.showTitle
+            iconSize: header.small ? Theme.text2xl : Theme.text3xl
+        }
+
         // ---- Day navigation / folder (side panel) · favourite · menu ---------------------------------
         // Pages show their folders in the shell's top bar; the side panel has none. The star and
         // the menu go here when there is no title row to carry them (daily notes, a page that
@@ -304,6 +519,13 @@ Item {
             visible: header.showTitle || header.editingTitle
             Layout.fillWidth: true
             spacing: Theme.space2
+
+            IconButton {
+                visible: header.hasIcon && header.showTitle && !header.editingTitle
+                Layout.alignment: Qt.AlignTop
+                iconSize: titleText.font.pixelSize
+                implicitHeight: titleText.lineHeight
+            }
 
             Item {
                 Layout.fillWidth: true

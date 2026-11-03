@@ -4,6 +4,7 @@
 #include "dates/format.h"
 #include "dates/recurrence.h"
 #include "markdown/blockclipboard.h"
+#include "markdown/highlight.h"
 #include "markdown/inline_p.h"
 #include "markdown/journal.h"
 #include "markdown/lines_p.h"
@@ -15,6 +16,7 @@
 #include "markdown/tokens.h"
 #include "markdown/tokens_p.h"
 
+#include <QHash>
 #include <QStringList>
 #include <QTextBoundaryFinder>
 #include <QUrl>
@@ -53,6 +55,8 @@ struct Atom {
     qsizetype from = 0;
     qsizetype to = 0;
     QString html;
+    /// The tags of a `<mark>` pair share a number (≥ 0): shown only when both are kept.
+    int pair = -1;
 };
 
 QString esc(QStringView s)
@@ -118,6 +122,23 @@ QString link(const QString &href, const QString &color, const QString &labelHtml
 {
     return u"<a href=\""_s + href.toHtmlEscaped() + u"\" style=\"color:"_s + safeColor(color)
            + u";text-decoration:none\">"_s + labelHtml + u"</a>"_s;
+}
+
+/// A page's icon in front of a link to it (RenderContext::pageIcon), a link to `href` of its own: an
+/// emoji as text; an app icon as three no-break spaces in an anchor named `brulion-icon:<name>` with a
+/// transparent tint — RichTextPills draws the icon there (docs/UI.md "Page icon and cover"). A
+/// no-break space keeps it with the link's text.
+QString iconLink(const QString &href, const QString &color, const PageIcon &icon)
+{
+    switch (icon.kind) {
+    case PageIcon::Kind::None: return {};
+    case PageIcon::Kind::Emoji: return link(href, color, esc(icon.name)) + u"&nbsp;"_s;
+    case PageIcon::Kind::App:
+        return u"<a href=\""_s + href.toHtmlEscaped() + u"\" name=\"brulion-icon:"_s + esc(icon.name)
+               + u"\" style=\"color:"_s + safeColor(color)
+               + u";text-decoration:none;background-color:transparent\">&nbsp;&nbsp;&nbsp;</a>&nbsp;"_s;
+    }
+    return {};
 }
 
 QString muted(const Palette &p, const QString &html)
@@ -657,6 +678,20 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                               + u"</code>"_s});
     }
 
+    // Coloured highlights: `<mark …>` … `</mark>` pairs (docs/SYNTAX.md §11, markdown/highlight.h).
+    // The colour is the palette's nearest, never the note's CSS.
+    {
+        int pair = 0;
+        for (const MarkPair &p : findMarkPairs(masked)) {
+            const QString tint =
+                    p.open.color == HighlightColor::Default ? pal.highlightBackground : highlightTint(p.open.color);
+            atoms.append(
+                    {p.open.from, p.open.to, u"<span style=\"background-color:"_s + safeColor(tint) + u"\">"_s, pair});
+            atoms.append({p.close.from, p.close.to, u"</span>"_s, pair});
+            ++pair;
+        }
+    }
+
     // Formulas: $…$ and $$…$$ (docs/SYNTAX.md §11, markdown/math.h). The scan runs
     // on the masked text, so a formula inside a code span or a comment is not one; like emphasis,
     // a formula works in a link label too.
@@ -759,8 +794,11 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                         m_ctx.resolveLinkPart && !day && w.display.isEmpty() && !w.target.isEmpty() && page == w.target
                                 ? linkPathParts(w.target)
                                 : QList<LinkPathPart>();
+                // The page's icon in front (docs/SYNTAX.md §4 "Page icon and cover").
+                if (resolved && !day && !w.target.isEmpty() && m_ctx.pageIcon)
+                    html = iconLink(href, pal.link, m_ctx.pageIcon(w.target));
                 if (parts.size() < 2) {
-                    html = link(href, resolved ? pal.link : pal.unresolved, esc(label));
+                    html += link(href, resolved ? pal.link : pal.unresolved, esc(label));
                     break;
                 }
                 const QStringView target(w.target);
@@ -813,8 +851,11 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 } else {
                     const bool resolved =
                             dest.target.isEmpty() || !m_ctx.resolvePage || m_ctx.resolvePage(dest.target).has_value();
-                    html = link(u"page:"_s + percentEncoded(dest.target) + fragment(dest.heading, dest.blockId),
-                                resolved ? pal.link : pal.unresolved, label);
+                    const QString href =
+                            u"page:"_s + percentEncoded(dest.target) + fragment(dest.heading, dest.blockId);
+                    if (resolved && item.kind == InlineKind::Markdown && !dest.target.isEmpty() && m_ctx.pageIcon)
+                        html = iconLink(href, pal.link, m_ctx.pageIcon(dest.target));
+                    html += link(href, resolved ? pal.link : pal.unresolved, label);
                 }
                 break;
             }
@@ -979,6 +1020,16 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             end = a.to;
             kept.append(std::move(a));
         }
+    }
+    // A mark tag whose partner went with another construct (`[a <mark>b](x) c</mark>`) is text.
+    QHash<int, int> markTags;
+    for (const Atom &a : std::as_const(kept)) {
+        if (a.pair >= 0)
+            ++markTags[a.pair];
+    }
+    for (Atom &a : kept) {
+        if (a.pair >= 0 && markTags.value(a.pair) != 2)
+            a.html = escapeText(text.sliced(a.from, a.to - a.from));
     }
     QList<Piece> pieces = buildPieces(text, kept);
     processEmphasis(pieces, m_ctx.palette);

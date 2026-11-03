@@ -209,6 +209,10 @@ private Q_SLOTS:
         QTest::newRow("unpaired marks stay") << u"2**3 i a == b oraz ~~ i __"_s << u"2**3 i a == b oraz ~~ i __"_s;
         QTest::newRow("emphasis around code") << u"**ważne `x`** i ==`y`=="_s << u"ważne x i y"_s;
         QTest::newRow("nested pairs") << u"**__żółć__** ~~==b==~~"_s << u"żółć b"_s;
+        QTest::newRow("coloured highlights")
+                << u"<mark style=\"background: #FF5582A6;\">**gęślą**</mark> i <mark>x</mark>"_s << u"gęślą i x"_s;
+        QTest::newRow("lone mark tag stays")
+                << u"<mark>otwarte i `<mark>kod</mark>`"_s << u"<mark>otwarte i <mark>kod</mark>"_s;
         QTest::newRow("private-use characters") << u"\ue000 `kod`"_s << u"\ue000 kod"_s;
     }
     void inlineMarkup()

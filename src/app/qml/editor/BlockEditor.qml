@@ -3188,6 +3188,19 @@ FocusScope {
                 height: visible ? implicitHeight : 0
             }
             BMenuItem {
+                objectName: "editTextHighlight"
+                visible: menu.textItems
+                height: visible ? implicitHeight : 0
+                text: qsTr("Highlight…")
+                iconName: "highlighter"
+                onTriggered: {
+                    const edit = menu.edit
+                    if (edit)
+                        editor.later(() => editor.openHighlightMenu(edit, edit, edit.cursorRectangle.x,
+                                                                    edit.cursorRectangle.y + edit.cursorRectangle.height))
+                }
+            }
+            BMenuItem {
                 objectName: "editTextSelectAll"
                 visible: menu.textItems
                 height: visible ? implicitHeight : 0
@@ -3209,6 +3222,98 @@ FocusScope {
             }
             // The keyboard goes back to the edited text (its selection stayed: persistentSelection).
             onClosed: if (edit && edit.active) edit.ensureFocus()
+        }
+    }
+
+    // ---- Coloured highlights (docs/UI.md "Coloured highlights") ---------------------------------
+    /// The colours of "Zakreśl": the edited text's menu ("Zakreśl…"), the touch toolbar's button.
+    /// A colour highlights the selection (or recolours the highlight around it; `==…==` for the
+    /// default colour, Highlightr's `<mark style="background: …;">` for the others), "Usuń
+    /// zakreślenie" removes the highlight around the caret — PageController.setHighlight, one undo
+    /// step; the highlighted text stays selected. Made when first opened.
+    property BMenu highlightMenu: null
+    property InlineEditor highlightMenuEdit: null
+    /// What a palette colour (TextHelper.highlightColors) is called in the menu.
+    function highlightColorLabel(name) {
+        switch (name) {
+        case "default": return qsTr("Default", "highlight colour")
+        case "red": return qsTr("Red")
+        case "orange": return qsTr("Orange")
+        case "yellow": return qsTr("Yellow")
+        case "green": return qsTr("Green")
+        case "cyan": return qsTr("Cyan")
+        case "blue": return qsTr("Blue")
+        case "purple": return qsTr("Purple")
+        case "pink": return qsTr("Pink")
+        case "grey": return qsTr("Grey")
+        }
+        return name
+    }
+    /// Highlight the selection of the edited text `edit` in `color` (a palette name; "" removes).
+    function applyHighlight(edit, color) {
+        if (!edit || !controller || !edit.active)
+            return
+        EditorInput.commitPreedit(edit)
+        const r = controller.setHighlight(edit.row, edit.selectionStart, edit.selectionEnd, color)
+        if (!r.changed) {
+            if (color === "")
+                notice(qsTr("No highlight here"), "info")
+            else if (r.refused)
+                notice(qsTr("Select text within one line, not across a highlight's edge"), "info")
+            return
+        }
+        later(() => {
+            if (edit.active) {
+                edit.ensureFocus()
+                edit.select(r.from, r.to)
+            }
+        })
+    }
+    function openHighlightMenu(edit, item, x, y) {
+        if (!edit || !controller)
+            return
+        if (!highlightMenu)
+            highlightMenu = highlightMenuComponent.createObject(editor) as BMenu
+        highlightMenuEdit = edit
+        highlightMenu.bottomMargin = menuBottomMargin()
+        highlightMenu.popup(item, x, y)
+    }
+    /// The touch toolbar's "Zakreśl": the colours above the bar.
+    function openHighlightMenuAbove(edit, item) {
+        if (!edit || !controller)
+            return
+        if (!highlightMenu)
+            highlightMenu = highlightMenuComponent.createObject(editor) as BMenu
+        const y = -highlightMenu.implicitHeight - Theme.space1
+        openHighlightMenu(edit, item, 0, y)
+        followToolbarWith(highlightMenu, item, y)
+    }
+    Component {
+        id: highlightMenuComponent
+        BMenu {
+            id: colours
+            objectName: "highlightMenu"
+            Instantiator {
+                model: TextHelper.highlightColors()
+                delegate: BMenuItem {
+                    required property var modelData
+                    objectName: "highlight-" + modelData.name
+                    text: editor.highlightColorLabel(modelData.name)
+                    swatch: modelData.name === "default" ? Theme.mark : modelData.tint
+                    onTriggered: editor.applyHighlight(editor.highlightMenuEdit, modelData.name)
+                }
+                onObjectAdded: (index, object) => colours.insertItem(index, object)
+                onObjectRemoved: (index, object) => colours.removeItem(object)
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                objectName: "highlight-remove"
+                text: qsTr("Remove highlight")
+                iconName: "eraser"
+                onTriggered: editor.applyHighlight(editor.highlightMenuEdit, "")
+            }
+            // The keyboard goes back to the edited text (its selection stayed: persistentSelection).
+            onClosed: if (editor.highlightMenuEdit && editor.highlightMenuEdit.active) editor.highlightMenuEdit.ensureFocus()
         }
     }
 

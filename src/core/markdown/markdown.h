@@ -101,6 +101,14 @@
 //                  tops) (exact blocks re-based to column 0, LF, no BOM, no frontmatter),
 //                  blocksPlainText(doc, tops, {blockText}) ("• ", ☐/☑, no markup),
 //                  stripInlineMarkup(text), withoutBlockIds(markdown, drop), blockIdsOf(markdown)
+//   highlight.h    coloured highlights next to ==text== (Highlightr's `<mark style="background:
+//                  #FF5582A6;">`, `<mark class="hltr-red">`, `<mark>`): HighlightColor (a fixed
+//                  palette; any CSS colour mapped to its nearest), markTagAt, findMarkPairs,
+//                  findHighlights, setHighlight(text, from, to, color | nullopt) (the editor's
+//                  "Zakreśl": wrap, recolour, remove)
+//   pagelook.h     a page's icon and cover (`icon` / `banner_icon`, `banner`, `banner_y`):
+//                  parsePageIcon (emoji, Iconize's `LiBookOpen`), parsePageCover (`![[file]]`,
+//                  a path, an http(s) URL), pageLook(properties), the values Brulion writes
 //   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, linkedBlockText,
 //                  inlineCalc, today, locale, palette, taskCheckbox, dateLinks}).render(body) /
 //                  renderBlock(body, kind) ->
@@ -117,11 +125,13 @@
 #include "markdown/blockdocument.h"
 #include "markdown/edit.h"
 #include "markdown/frontmatter.h"
+#include "markdown/highlight.h"
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
 #include "markdown/notemode.h"
+#include "markdown/pagelook.h"
 #include "markdown/pageprops.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"

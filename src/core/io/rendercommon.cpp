@@ -2,6 +2,7 @@
 
 #include "util/paths.h"
 
+#include <QHash>
 #include <QRegularExpression>
 #include <QUrl>
 
@@ -178,6 +179,16 @@ QString renderAtoms(QStringView text, QList<InlineAtom> atoms, const EmphasisMar
             kept.append(std::move(a));
         }
     }
+    // A mark tag whose partner went with another construct is text.
+    QHash<int, int> markTags;
+    for (const InlineAtom &a : std::as_const(kept)) {
+        if (a.pair >= 0)
+            ++markTags[a.pair];
+    }
+    for (InlineAtom &a : kept) {
+        if (a.pair >= 0 && markTags.value(a.pair) != 2)
+            a.out = plain(text.sliced(a.from, a.to - a.from));
+    }
     QList<Piece> pieces = buildPieces(text, kept);
     processEmphasis(pieces, marks);
     QString out;
@@ -243,6 +254,17 @@ void codeAndCommentAtoms(QStringView text, QStringView masked, QList<InlineAtom>
         } else {
             ++i;
         }
+    }
+}
+
+void markAtoms(QStringView masked, QList<InlineAtom> &atoms, const HighlightMarks &marks)
+{
+    int pair = 0;
+    for (const markdown::MarkPair &p : markdown::findMarkPairs(masked)) {
+        const auto [open, close] = marks(p.open.color);
+        atoms.append(InlineAtom{p.open.from, p.open.to, open, pair});
+        atoms.append(InlineAtom{p.close.from, p.close.to, close, pair});
+        ++pair;
     }
 }
 

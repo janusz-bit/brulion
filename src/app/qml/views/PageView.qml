@@ -227,6 +227,11 @@ FocusScope {
     Component.onDestruction: {
         alive = false
         editor.controller = null
+        // The look's dialogs live in the overlay: they go with the view.
+        if (iconDialog)
+            iconDialog.destroy()
+        if (coverDialog)
+            coverDialog.destroy()
     }
     /// False once the view is being destroyed: a route change queued just before (the shell
     /// switching to another view) does nothing then.
@@ -644,6 +649,8 @@ FocusScope {
                 inSidePanel: root.inSidePanel
                 onRenameRequested: (newTitle) => root.rename(newTitle)
                 onModeToggleRequested: root.toggleNoteMode()
+                onIconRequested: root.openIconDialog()
+                onCoverRequested: root.openCoverDialog()
                 onMenuRequested: (anchor) => pageMenu.popup(anchor, anchor.width - pageMenu.width, anchor.height)
                 Component.onCompleted: root.pageHeader = pageHeader
                 Component.onDestruction: if (root.pageHeader === pageHeader) root.pageHeader = null
@@ -841,6 +848,21 @@ FocusScope {
             enabled: page.loaded
             onTriggered: root.toggleNoteMode()
         }
+        // The page's look (docs/UI.md "Page icon and cover").
+        BMenuItem {
+            objectName: "pageMenuIcon"
+            text: (page.look.icon || {}).kind ? qsTr("Change icon…") : qsTr("Add icon…")
+            iconName: "sparkles"
+            enabled: page.loaded && !root.pictureRoute
+            onTriggered: root.openIconDialog()
+        }
+        BMenuItem {
+            objectName: "pageMenuCover"
+            text: (page.look.cover || {}).kind ? qsTr("Change cover…") : qsTr("Add cover…")
+            iconName: "image"
+            enabled: page.loaded && !root.pictureRoute
+            onTriggered: root.openCoverDialog()
+        }
         BMenuItem {
             objectName: "pageMenuAddProperty"
             text: qsTr("Add property")
@@ -865,6 +887,31 @@ FocusScope {
         }
     }
 
+    // Made when first opened.
+    property ContentPageIconDialog iconDialog: null
+    property ContentPageCoverDialog coverDialog: null
+    function openIconDialog() {
+        if (!page.loaded)
+            return
+        if (!iconDialog)
+            iconDialog = iconDialogComponent.createObject(T.Overlay.overlay, { controller: page, editor: editor }) as ContentPageIconDialog
+        iconDialog.open()
+    }
+    function openCoverDialog() {
+        if (!page.loaded)
+            return
+        if (!coverDialog)
+            coverDialog = coverDialogComponent.createObject(T.Overlay.overlay, { controller: page, editor: editor }) as ContentPageCoverDialog
+        coverDialog.open()
+    }
+    Component {
+        id: iconDialogComponent
+        ContentPageIconDialog { objectName: "pageIconDialog" }
+    }
+    Component {
+        id: coverDialogComponent
+        ContentPageCoverDialog { objectName: "pageCoverDialog" }
+    }
     ContentRenameDialog {
         id: renameDialog
         objectName: "pageRenameDialog"

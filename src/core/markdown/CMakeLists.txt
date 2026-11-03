@@ -11,6 +11,7 @@ brulion_add_core_module(markdown
         blockdocument.h blockdocument.cpp
         edit.h edit.cpp
         frontmatter.h frontmatter_p.h frontmatter.cpp
+        highlight.h highlight.cpp
         inline.h inline_p.h inline.cpp
         inlinerenderer.h inlinerenderer.cpp
         journal.h journal.cpp
@@ -19,6 +20,7 @@ brulion_add_core_module(markdown
         math.h math.cpp
         notemode.h notemode.cpp
         notetags.cpp
+        pagelook.h pagelook.cpp
         pageprops.h pageprops.cpp
         parse.h parse_p.h parse.cpp
         properties.h properties.cpp

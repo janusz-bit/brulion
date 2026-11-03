@@ -336,6 +336,15 @@ private Q_SLOTS:
         QTest::newRow("emphasis") << u"**mocno** *lekko* __też__ ~~nie~~ ==to=="_s
                                   << u"**mocno** *lekko* **też** ~~nie~~ [to]{.mark}"_s;
         QTest::newRow("unpaired") << u"2 * 3 = 6, ==sam"_s << u"2 \\* 3 = 6, ==sam"_s;
+        // Coloured highlights (docs/SYNTAX.md §11): pandoc's highlight span with the palette's class,
+        // never the note's CSS; an unpaired tag stays (escaped) text.
+        QTest::newRow("coloured highlight") << u"<mark style=\"background: #FF5582A6;\">gęślą **jaźń**</mark>"_s
+                                            << u"[gęślą **jaźń**]{.mark .hltr-red}"_s;
+        QTest::newRow("highlight class") << u"<mark class=\"hltr-blue\">a</mark> <mark>b</mark>"_s
+                                         << u"[a]{.mark .hltr-blue} [b]{.mark}"_s;
+        QTest::newRow("hostile highlight css")
+                << u"<mark style=\"background:url(x);position:fixed\">c</mark>"_s << u"[c]{.mark}"_s;
+        QTest::newRow("unpaired mark") << u"<mark>otwarte"_s << u"\\<mark>otwarte"_s;
         QTest::newRow("line breaks") << u"pierwsza\ndruga\n"_s << u"pierwsza\\\ndruga"_s;
         QTest::newRow("line starts") << u"a\n# b\n> c\n- d\n12. e\n: f\n=== g"_s
                                      << u"a\\\n\\# b\\\n\\> c\\\n\\- d\\\n12\\. e\\\n\\: f\\\n\\=== g"_s;

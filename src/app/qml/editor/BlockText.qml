@@ -152,6 +152,7 @@ Item {
             Repeater {
                 model: tints.pills
                 delegate: Rectangle {
+                    id: tintShape
                     required property var modelData
                     z: -1
                     x: modelData.x
@@ -160,7 +161,14 @@ Item {
                     height: modelData.height
                     radius: modelData.kind === "pill" ? height / 2 : Theme.radiusXs
                     antialiasing: true
-                    color: modelData.color
+                    // A page's app icon in front of a link (RichTextPills kind "icon"): the icon, no shape.
+                    color: modelData.kind === "icon" ? "transparent" : modelData.color
+                    BIcon {
+                        anchors.centerIn: parent
+                        name: tintShape.modelData.kind === "icon" ? tintShape.modelData.icon : ""
+                        size: Math.round(Math.min(parent.width, parent.height) * 0.9)
+                        color: tintShape.modelData.color
+                    }
                 }
             }
         }

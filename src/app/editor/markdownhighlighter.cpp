@@ -1,5 +1,6 @@
 #include "markdownhighlighter.h"
 
+#include "markdown/highlight.h"
 #include "markdown/inline.h"
 #include "markdown/tokens.h"
 #include "spell/spellwords.h"
@@ -649,6 +650,16 @@ void MarkdownHighlighter::highlightInline(const QString &full, int offset, int l
     emphasis(italicUnderscoreRe, u"italic"_s, 1);
     emphasis(strikeRe, u"strike"_s, 2);
     emphasis(highlightRe, u"highlight"_s, 2);
+    // Coloured highlights `<mark …>…</mark>` (markdown/highlight.h): the text on its palette
+    // colour, the tags faint.
+    for (const markdown::MarkPair &p : markdown::findMarkPairs(masked)) {
+        QTextCharFormat tint = m_formats[u"highlight"_s];
+        if (p.open.color != markdown::HighlightColor::Default)
+            tint.setBackground(QColor(markdown::highlightTint(p.open.color)));
+        mergeRange(at(p.open.to), int(p.close.from - p.open.to), tint);
+        mergeRange(at(p.open.from), int(p.open.to - p.open.from), m_formats[u"faint"_s]);
+        mergeRange(at(p.close.from), int(p.close.to - p.close.from), m_formats[u"faint"_s]);
+    }
 
     // Links.
     static const QRegularExpression wikiRe(u"!?\\[\\[([^\\[\\]\\n]+)\\]\\]"_s);

@@ -24,6 +24,30 @@
 
 namespace brulion {
 
+namespace editor {
+
+/// `icon`, or None for an app icon this build does not have (BIcon's :/icons/<name>.svg): a page
+/// icon from another app (Iconize's whole Lucide set) is then shown nowhere.
+inline markdown::PageIcon availablePageIcon(markdown::PageIcon icon)
+{
+    if (icon.kind == markdown::PageIcon::Kind::App
+        && !QFile::exists(QStringLiteral(":/icons/") + icon.name + QStringLiteral(".svg")))
+        return {};
+    return icon;
+}
+
+/// A page icon for QML: { kind: "emoji" | "app" | "" (none), name }.
+inline QVariantMap pageIconMap(const markdown::PageIcon &icon)
+{
+    const QString kind = icon.kind == markdown::PageIcon::Kind::Emoji ? QStringLiteral("emoji")
+                                                                      : icon.kind == markdown::PageIcon::Kind::App
+            ? QStringLiteral("app")
+            : QString();
+    return {{QStringLiteral("kind"), kind}, {QStringLiteral("name"), kind.isEmpty() ? QString() : icon.name}};
+}
+
+} // namespace editor
+
 /// The largest file stored as an attachment or used as a drawing's backdrop (pictures, PDFs; not
 /// whole videos by mistake): one limit for the note's pickers, the drawing editor's and the
 /// backdrop's preparation (src/app/drawing/backdropimage.h).
@@ -89,6 +113,14 @@ public:
     }
     /// Resolve a wiki-link target seen from `fromPath`; "" when unresolved.
     virtual QString resolveLink(const QString &target, const QString &fromPath) const = 0;
+    /// The icon of the note at `path` (docs/SYNTAX.md §4 "Page icon and cover": its `icon`
+    /// property), shown in front of links to it; an app icon only when this build has it
+    /// (editor::pageIconFor). Default: none.
+    virtual markdown::PageIcon pageIcon(const QString &path) const
+    {
+        Q_UNUSED(path);
+        return {};
+    }
     /// The shortest wiki-link target that reaches `path` from `fromPath` ("Dom", or "Projekty/Dom"
     /// when the title alone names another page) — what `[[` completion writes; "" when no link
     /// can. Default: the title when resolveLink() takes it to `path`, else the path without .md.

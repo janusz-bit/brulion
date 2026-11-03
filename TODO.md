@@ -106,8 +106,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * podkreślenia także poza edytowanym blokiem i w trybie źródła Markdown.
 * **Tryb Vim** — opcjonalne poruszanie się i edycja klawiszami Vima w edytorze bloków i w trybie
   źródła (Obsidian); skróty poleceń zmienia się już w Ustawienia → Skróty klawiszowe.
-* **Wygląd stron** — ikona strony, okładka; kolorowe zakreślenia (Obsidian) obok dzisiejszego
-  `==…==`.
 
 ## Widoki i dane
 

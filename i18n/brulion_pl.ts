@@ -1646,6 +1646,77 @@
             <numerusform>Zapisano %n obrazów w notatniku</numerusform>
         </translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3142"/>
+        <source>Highlight…</source>
+        <translation>Zakreśl…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3187"/>
+        <source>Default</source>
+        <comment>highlight colour</comment>
+        <translation>Domyślny</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3188"/>
+        <source>Red</source>
+        <translation>Czerwony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3189"/>
+        <source>Orange</source>
+        <translation>Pomarańczowy</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3190"/>
+        <source>Yellow</source>
+        <translation>Żółty</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3191"/>
+        <source>Green</source>
+        <translation>Zielony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3192"/>
+        <source>Cyan</source>
+        <translation>Turkusowy</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3193"/>
+        <source>Blue</source>
+        <translation>Niebieski</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3194"/>
+        <source>Purple</source>
+        <translation>Fioletowy</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3195"/>
+        <source>Pink</source>
+        <translation>Różowy</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3196"/>
+        <source>Grey</source>
+        <translation>Szary</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3208"/>
+        <source>No highlight here</source>
+        <translation>Tu nie ma zakreślenia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3210"/>
+        <source>Select text within one line, not across a highlight's edge</source>
+        <translation>Zaznacz tekst w jednej linii, nie przez brzeg zakreślenia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="3259"/>
+        <source>Remove highlight</source>
+        <translation>Usuń zakreślenie</translation>
+    </message>
 </context>
 <context>
     <name>BlockMenu</name>
@@ -2833,6 +2904,79 @@
     </message>
 </context>
 <context>
+    <name>ContentPageCoverDialog</name>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="41"/>
+        <source>Cover removed</source>
+        <translation>Usunięto okładkę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="41"/>
+        <source>Cover set</source>
+        <translation>Ustawiono okładkę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="49"/>
+        <source>Page cover</source>
+        <translation>Okładka strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="52"/>
+        <source>Use address</source>
+        <translation>Użyj adresu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="64"/>
+        <source>Remove cover</source>
+        <translation>Usuń okładkę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="76"/>
+        <source>Find a picture in the notebook</source>
+        <translation>Szukaj obrazu w notatniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="80"/>
+        <source>From file…</source>
+        <translation>Z pliku…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="127"/>
+        <source>No pictures match</source>
+        <translation>Żaden obraz nie pasuje</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="127"/>
+        <source>The notebook has no pictures yet</source>
+        <translation>W notatniku nie ma jeszcze obrazów</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="134"/>
+        <source>Picture from the internet</source>
+        <translation>Obraz z internetu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="141"/>
+        <source>Picture address</source>
+        <translation>Adres obrazu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="147"/>
+        <source>It is fetched only when you allow it (“Show” on the cover), and kept on this device.</source>
+        <translation>Brulion pobierze go dopiero, gdy na to pozwolisz („Pokaż” na okładce), i zachowa na tym urządzeniu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="155"/>
+        <source>Choose a cover picture</source>
+        <translation>Wybierz obraz okładki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageCoverDialog.qml" line="163"/>
+        <source>The picture could not be stored in the notebook</source>
+        <translation>Nie udało się zapisać obrazu w notatniku</translation>
+    </message>
+</context>
+<context>
     <name>ContentPageHeader</name>
     <message>
         <location filename="../src/app/qml/content/ContentPageHeader.qml" line="162"/>
@@ -3006,6 +3150,114 @@
         <location filename="../src/app/shell/shellselftest.cpp" line="863"/>
         <source>Start writing</source>
         <translation>Zacznij pisać</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="363"/>
+        <source>No picture “%1” in the notebook</source>
+        <translation>Nie ma obrazu „%1” w notatniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="364"/>
+        <source>Cover from %1</source>
+        <translation>Okładka z %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="365"/>
+        <source>The picture could not be loaded</source>
+        <translation>Nie udało się wczytać obrazu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="378"/>
+        <source>Try again</source>
+        <translation>Spróbuj ponownie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="378"/>
+        <source>Show</source>
+        <translation>Pokaż</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="414"/>
+        <source>Reposition</source>
+        <translation>Przesuń</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="422"/>
+        <source>Change cover</source>
+        <translation>Zmień okładkę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="430"/>
+        <source>Cancel</source>
+        <translation>Anuluj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="438"/>
+        <source>Save position</source>
+        <translation>Zapisz położenie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="447"/>
+        <source>Drag the picture up or down</source>
+        <translation>Przeciągnij obraz w górę lub w dół</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="236"/>
+        <source>Page icon</source>
+        <translation>Ikona strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="237"/>
+        <source>Change icon</source>
+        <translation>Zmień ikonę</translation>
+    </message>
+</context>
+<context>
+    <name>ContentPageIconDialog</name>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageIconDialog.qml" line="56"/>
+        <source>Page icon removed</source>
+        <translation>Usunięto ikonę strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageIconDialog.qml" line="56"/>
+        <source>Page icon set</source>
+        <translation>Ustawiono ikonę strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageIconDialog.qml" line="64"/>
+        <source>Page icon</source>
+        <translation>Ikona strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageIconDialog.qml" line="66"/>
+        <source>Use</source>
+        <translation>Użyj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageIconDialog.qml" line="75"/>
+        <source>Remove icon</source>
+        <translation>Usuń ikonę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageIconDialog.qml" line="110"/>
+        <source>Type or paste an emoji</source>
+        <translation>Wpisz albo wklej emoji</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageIconDialog.qml" line="111"/>
+        <source>Emoji</source>
+        <translation>Emoji</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageIconDialog.qml" line="112"/>
+        <source>Not an emoji</source>
+        <translation>To nie jest emoji</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPageIconDialog.qml" line="134"/>
+        <source>Icons</source>
+        <translation>Ikony</translation>
     </message>
 </context>
 <context>
@@ -7195,6 +7447,11 @@
         <source>First editing tools</source>
         <translation>Podstawowe narzędzia edycji</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/editor/MobileEditToolbar.qml" line="300"/>
+        <source>Highlight</source>
+        <translation>Zakreśl</translation>
+    </message>
 </context>
 <context>
     <name>MsTodoMessages</name>
@@ -7963,6 +8220,26 @@
         <location filename="../src/app/qml/views/PageView.qml" line="616"/>
         <source>Selection: %1</source>
         <translation>Zaznaczenie: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/PageView.qml" line="661"/>
+        <source>Change icon…</source>
+        <translation>Zmień ikonę…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/PageView.qml" line="661"/>
+        <source>Add icon…</source>
+        <translation>Dodaj ikonę…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/PageView.qml" line="668"/>
+        <source>Change cover…</source>
+        <translation>Zmień okładkę…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/PageView.qml" line="668"/>
+        <source>Add cover…</source>
+        <translation>Dodaj okładkę…</translation>
     </message>
 </context>
 <context>
@@ -16973,6 +17250,16 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="99"/>
         <source>The value “%1” could not be kept — it was cleared.</source>
         <translation>Wartości „%1” nie dało się zachować — wyczyszczono ją.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/editor/pagecontroller_properties.cpp" line="288"/>
+        <source>Not an emoji or an icon of the app</source>
+        <translation>To nie jest emoji ani ikona aplikacji</translation>
+    </message>
+    <message>
+        <location filename="../src/app/editor/pagecontroller_properties.cpp" line="315"/>
+        <source>This file's name cannot be used in a link</source>
+        <translation>Nazwy tego pliku nie da się użyć w linku</translation>
     </message>
 </context>
 <context>

@@ -12,6 +12,7 @@
 #include "drawing/backdrop.h"
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
+#include "markdown/highlight.h"
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
@@ -266,7 +267,10 @@ void PageController::setHost(EditorHost *host)
         connect(m_host, &EditorHost::saveOpenEditorsRequested, this, &PageController::flush);
         connect(m_host, &EditorHost::editsDiscarded, this, &PageController::onEditsDiscarded);
         connect(m_host, &EditorHost::indexChanged, m_model, &BlockListModel::invalidateRendering);
-        connect(m_host, &EditorHost::indexChanged, this, [this] { m_notebookTypes.reset(); });
+        connect(m_host, &EditorHost::indexChanged, this, [this] {
+            m_notebookTypes.reset();
+            updateLook(); // the cover's file may have come or gone
+        });
         connect(m_host, &EditorHost::webPictureChanged, this, &PageController::onWebPictureChanged);
         connect(m_host, &EditorHost::pdfThumbnailChanged, m_model, &BlockListModel::pdfThumbnailChanged);
         connect(m_host, &QObject::destroyed, this, [this] { m_host = nullptr; });
@@ -2150,6 +2154,30 @@ int PageController::replaceRange(int row, int from, int to, const QString &repla
     return cursor;
 }
 
+QVariantMap PageController::setHighlight(int row, int from, int to, const QString &color)
+{
+    QVariantMap out{{u"changed"_s, false}, {u"refused"_s, false}, {u"from"_s, from}, {u"to"_s, to}};
+    if (!validRow(row))
+        return out;
+    std::optional<markdown::HighlightColor> c;
+    if (!color.isEmpty()) {
+        c = markdown::parseHighlightColorName(color);
+        if (!c)
+            return out;
+    }
+    const QString edit = m_model->editTextAt(row);
+    const markdown::HighlightEdit r =
+            markdown::setHighlight(edit, snapToCharacter(edit, from), snapToCharacter(edit, to), c);
+    out.insert(u"from"_s, int(r.from));
+    out.insert(u"to"_s, int(r.to));
+    out.insert(u"refused"_s, r.refused);
+    if (!r.changed)
+        return out;
+    editBody(row, bodyWithEditText(m_model->document().at(row), r.text), int(r.to));
+    out.insert(u"changed"_s, true);
+    return out;
+}
+
 QVariantMap PageController::pasteText(int row, int from, int to, const QString &pasted)
 {
     const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
@@ -3767,6 +3795,9 @@ int PageController::downloadWebPictures(const QString &url)
 void PageController::onWebPictureChanged(const QString &url)
 {
     m_model->webPictureChanged(url);
+    // The cover from the internet (docs/UI.md "Page icon and cover").
+    if (url.isEmpty() || m_look.value(u"cover"_s).toMap().value(u"target"_s).toString() == url)
+        updateLook();
     if (!m_host)
         return;
     const QStringList pending = m_webDownloads;

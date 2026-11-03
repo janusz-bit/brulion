@@ -1,5 +1,7 @@
 #include "markdown/blockclipboard.h"
 
+#include "markdown/highlight.h"
+
 #include "markdown/lines_p.h"
 #include "markdown/properties.h"
 #include "markdown/structure_p.h"
@@ -376,6 +378,18 @@ QString stripInlineMarkup(const QString &text)
     if (!canMask) {
         static const QRegularExpression codeSpan(u"(?<!`)(`+)(?!`)([^\\n]*?[^`\\n])\\1(?!`)"_s);
         t.replace(codeSpan, u"\\2"_s);
+    }
+    // Coloured highlights: the tags of a `<mark>` pair come off (markdown/highlight.h); a lone one
+    // is text.
+    {
+        QList<std::pair<qsizetype, qsizetype>> tags;
+        for (const MarkPair &p : findMarkPairs(t)) {
+            tags.append({p.open.from, p.open.to});
+            tags.append({p.close.from, p.close.to});
+        }
+        std::sort(tags.begin(), tags.end());
+        for (qsizetype k = tags.size() - 1; k >= 0; --k)
+            t.remove(tags[k].first, tags[k].second - tags[k].first);
     }
     t.replace(wikiAlias, u"\\1"_s);
     t.replace(mdLink, u"\\1"_s);

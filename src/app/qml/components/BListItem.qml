@@ -9,6 +9,8 @@ import Brulion
 //   BListItem { iconName: "file-text"; text: page.title; subtitle: page.folder
 //               trailing: BKbd { sequence: "Ctrl+1" } }
 //
+// iconEmoji:   an emoji in the icon's place instead of iconName (a page's icon, docs/UI.md "Page
+//              icon and cover"; plain text)
 // text:        the title (also the accessible name)
 // titleMarkup: optional escaped rich text for the title (e.g. TextHelper.markMatches) —
 //              never raw note content
@@ -28,6 +30,7 @@ T.ItemDelegate {
     id: control
 
     property string iconName
+    property string iconEmoji
     property color iconColor: selected ? Theme.fg : Theme.fgMuted
     property string titleMarkup
     property string subtitle
@@ -81,9 +84,22 @@ T.ItemDelegate {
         BIcon {
             id: icon
             anchors.verticalCenter: parent.verticalCenter
-            name: control.iconName
+            name: control.iconEmoji !== "" ? "" : control.iconName
+            collapseWhenEmpty: control.iconEmoji === ""
             size: Theme.iconSize
             color: control.iconColor
+            // A page's emoji (made only where there is one).
+            Loader {
+                anchors.centerIn: parent
+                active: control.iconEmoji !== ""
+                sourceComponent: Text {
+                    text: control.iconEmoji
+                    textFormat: Text.PlainText
+                    font.pixelSize: Math.round(Theme.iconSize * 0.85)
+                    color: Theme.fg
+                    Accessible.ignored: true
+                }
+            }
         }
 
         // The title, and the subtitle under it (or after it: subtitleInline).

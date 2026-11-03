@@ -183,6 +183,11 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
     QList<InlineAtom> atoms;
     codeAndCommentAtoms(text, masked, atoms,
                         [](const QString &content) { return u"<code>"_s + esc(content) + u"</code>"_s; });
+    // Coloured highlights: `<mark>` with the palette's colour as Brulion writes it (Highlightr's).
+    markAtoms(masked, atoms, [](markdown::HighlightColor color) {
+        const QString open = color == markdown::HighlightColor::Default ? u"<mark>"_s : markdown::markOpenTag(color);
+        return std::pair{open, u"</mark>"_s};
+    });
 
     // Formulas: $…$ and $$…$$ (docs/SYNTAX.md §11). The scan runs on the masked
     // text, so a formula inside code or a comment is not one; a link label gets one through

@@ -68,6 +68,11 @@ Wpisz `/` na początku bloku, a pojawi się lista poleceń: zadanie, przypomnien
 
 ==Zakreślenie== piszesz między podwójnymi znakami równości, ~~przekreślenie~~ w `~~tyldach~~`, a komentarz widoczny tylko w edycji w `%%procentach%%`.
 
+### Kolorowe zakreślenia
+Zakreślenie może mieć kolor: <mark style="background: #FF5582A6;">czerwony</mark>, <mark style="background: #BBFABBA6;">zielony</mark>, <mark style="background: #ADCCFFA6;">niebieski</mark> i inne. Zaznacz tekst w edytowanym bloku, kliknij go prawym przyciskiem i wybierz **Zakreśl…** (na telefonie przycisk z zakreślaczem na pasku nad klawiaturą), a potem kolor. Gdy kursor albo zaznaczenie jest w zakreśleniu, ten sam wybór zmienia jego kolor, a **Usuń zakreślenie** je zdejmuje. Każdą zmianę cofniesz (Ctrl+Z).
+
+W pliku kolorowe zakreślenie wygląda tak, jak zapisuje je wtyczka Highlightr do Obsidiana: `<mark style="background: #FF5582A6;">tekst</mark>` — więc Obsidian, GitHub i Pandoc pokażą je bez Brulionu. Brulion czyta też `<mark class="hltr-red">` i inne kolory, ale zawsze pokazuje je w jednym z dziewięciu kolorów swojej palety: nic z wyglądu zapisanego w notatce (styl, skrypt) nie trafia do aplikacji. Domyślny kolor to zwykłe zakreślenie między podwójnymi znakami równości.
+
 ## Tryb źródła
 **Ctrl+E** pokazuje cały plik jako surowy Markdown z podświetleniem składni. Przydaje się do hurtowych zmian; kolejne naciśnięcie wraca do bloków. Na telefonie tekst przesuwasz palcem, dotknięcie stawia kursor, a przytrzymanie zaznacza słowo. (Do kopiowania fragmentów kilku bloków nie musisz już przechodzić do źródła: zobacz [[#Zaznaczanie i kopiowanie|Zaznaczanie i kopiowanie]].)
 

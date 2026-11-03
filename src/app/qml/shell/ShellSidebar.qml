@@ -556,10 +556,13 @@ Rectangle {
                         delegate: BListItem {
                             id: favoriteItem
                             required property var modelData
+                            /// The page's own icon in place of the star (docs/UI.md "Page icon and cover").
+                            readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(modelData.path) : ({})
                             width: parent.width
                             dense: true
                             text: modelData.title
-                            iconName: "star"
+                            iconName: pageIcon.kind === "app" ? pageIcon.name : "star"
+                            iconEmoji: pageIcon.kind === "emoji" ? pageIcon.name : ""
                             selected: sidebar.route.view === "page" && sidebar.route.path === modelData.path
                             onClicked: sidebar.openPage(modelData.path)
                             onPressAndHold: sidebar.showContextMenu(favoriteItem, modelData.path, false)
@@ -604,10 +607,12 @@ Rectangle {
                         delegate: BListItem {
                             id: recentItem
                             required property var modelData
+                            readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(modelData.path) : ({})
                             width: parent.width
                             dense: true
                             text: modelData.title
-                            iconName: "clock"
+                            iconName: pageIcon.kind === "app" ? pageIcon.name : "clock"
+                            iconEmoji: pageIcon.kind === "emoji" ? pageIcon.name : ""
                             onClicked: sidebar.openPage(modelData.path)
                             TapHandler {
                                 // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
@@ -679,8 +684,12 @@ Rectangle {
                 text: journalDate !== "" ? DatesHelper.formatShort(journalDate) : title
                 // An empty folder opens too (folder-open) and says why nothing appears under it.
                 subtitle: isDir && expanded && !hasChildren ? qsTr("Empty folder") : ""
+                /// A page's own icon (docs/UI.md "Page icon and cover"), following its edits.
+                readonly property var pageIcon: !isDir && Workspace.revision >= 0 ? Workspace.pageIconOf(path) : ({})
                 iconName: special === "journals" ? fileIcon
-                          : isDir && hasChildren ? (expanded ? "chevron-down" : "chevron-right") : fileIcon
+                          : isDir && hasChildren ? (expanded ? "chevron-down" : "chevron-right")
+                          : pageIcon.kind === "app" ? pageIcon.name : fileIcon
+                iconEmoji: pageIcon.kind === "emoji" ? pageIcon.name : ""
                 iconColor: special === "journals" ? Theme.accent : Theme.fgFaint
                 selected: !isDir && sidebar.currentPath === path
                 opacity: sidebar.dragging && sidebar.dragPath === path ? 0.5 : 1
