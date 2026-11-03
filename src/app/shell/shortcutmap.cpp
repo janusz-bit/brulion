@@ -45,14 +45,14 @@ const QHash<QString, QString> &reservedKeys()
             }
         };
         // Editing text: the clipboard, undo, moving and selecting by words, Ctrl+Enter (dialogs
-        // accept with it too), Alt+Enter (follow a link).
+        // accept with it too), Alt+Enter (follow a link). (Ctrl+Tab and Ctrl+Shift+Tab are the tab
+        // commands' defaults.)
         add(u"text"_s, {"Ctrl+A",         "Ctrl+C",          "Ctrl+V",          "Ctrl+X",           "Ctrl+Z",
                         "Ctrl+Y",         "Ctrl+Shift+Z",    "Ctrl+Ins",        "Shift+Ins",        "Shift+Del",
                         "Ctrl+Backspace", "Ctrl+Del",        "Ctrl+Left",       "Ctrl+Right",       "Ctrl+Up",
                         "Ctrl+Down",      "Ctrl+Home",       "Ctrl+End",        "Ctrl+Shift+Left",  "Ctrl+Shift+Right",
                         "Ctrl+Shift+Up",  "Ctrl+Shift+Down", "Ctrl+Shift+Home", "Ctrl+Shift+End",   "Ctrl+Return",
-                        "Ctrl+Enter",     "Alt+Return",      "Alt+Enter",       "Alt+Shift+Return", "Alt+Shift+Enter",
-                        "Ctrl+Tab",       "Ctrl+Shift+Tab"});
+                        "Ctrl+Enter",     "Alt+Return",      "Alt+Enter",       "Alt+Shift+Return", "Alt+Shift+Enter"});
         // Blocks: fold, the task status menu, moving blocks.
         add(u"blocks"_s, {"Ctrl+.", "Ctrl+Shift+Return", "Ctrl+Shift+Enter", "Alt+Up", "Alt+Down"});
         // The drawing editor (docs/UI.md "Drawing editor").
