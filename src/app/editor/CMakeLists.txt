@@ -2,7 +2,8 @@
 # PageController (+ DayClock: the date for every open page; LazyHtmlMimeData: a copy's HTML rendered
 # on request; StreamSelection: a selection over several days of the journal stream), MarkdownHighlighter, RichTextPills (the
 # rounded chips of the rendered text), SuggestionModel, EditorInput (TextEdit text and input-method
-# helpers), QueryResultModel (live ```query results), the pure helpers of blocktext.h and the
+# helpers), SpellCheck (spell checking on a worker thread: the core module spell over the platform's
+# backends, src/platform/spellbackends.h), QueryResultModel (live ```query results), the pure helpers of blocktext.h and the
 # in-memory FakeEditorHost (playground, tests; queries run on the real index module), MermaidView
 # (a ```mermaid block drawn by the core module diagram).
 # A static library so tests/app/editor links it without the app; the app's QML module "Brulion"
@@ -38,6 +39,7 @@ qt_add_library(brulion_editor STATIC
     streamselection.h streamselection.cpp
     dayclock.h dayclock.cpp
     markdownhighlighter.h markdownhighlighter.cpp
+    spellcheck.h spellcheck.cpp
     richtext_p.h
     richtextpills.h richtextpills.cpp
     richtextlinks.h richtextlinks.cpp
@@ -48,7 +50,7 @@ qt_add_library(brulion_editor STATIC
 )
 target_include_directories(brulion_editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_editor
-    PUBLIC Qt6::Core Qt6::Gui Qt6::Quick brulion_editorhost brulion_core_markdown
+    PUBLIC Qt6::Core Qt6::Gui Qt6::Quick brulion_editorhost brulion_core_markdown brulion_core_spell
     PRIVATE brulion_core_calc brulion_core_dates brulion_core_text brulion_core_util brulion_core_index
             brulion_core_webpicture brulion_core_drawing
             brulion_core_notebook

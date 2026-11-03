@@ -4,7 +4,9 @@
 # Builds Brulion's Linux AppImage for the architecture of this machine (x86_64 or aarch64):
 # Qt 6.11.2 from aqt, a CMake Release build + unit tests, `cmake --install` into an AppDir,
 # then linuxdeploy + linuxdeploy-plugin-qt bundle Qt (libraries; xcb, Wayland and offscreen
-# platform plugins; the QML modules that src/app/qml imports) and pack the AppImage.
+# platform plugins; the QML modules that src/app/qml imports) and pack the AppImage. Spell checking:
+# the system's Hunspell (libhunspell-dev, bundled by linuxdeploy) with the Polish and English
+# dictionaries of hunspell-pl and hunspell-en-us in usr/share/hunspell (docs/UI.md "Spell checking").
 # Idempotent: re-running reuses the build directory, Qt and the downloaded tools.
 #
 # An AppImage runs on distributions whose glibc is at least as new as the build machine's, so
@@ -90,6 +92,8 @@ install_deps() {
     libxcb-keysyms1 libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-shape0 libxcb-shm0
     libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xkb1 libxkbcommon0 libxkbcommon-x11-0
     libsm6 libice6 libwayland-client0 libwayland-cursor0 libwayland-egl1 libegl1 libgl1
+    # spell checking: Hunspell (bundled by linuxdeploy) and the dictionaries copied into the AppDir
+    libhunspell-dev hunspell-pl hunspell-en-us
   )
   # Ubuntu 22.04's default g++ 11 lacks parts of C++20; g++-12 is in its main archive.
   local default_gcc
@@ -252,7 +256,8 @@ cmake -S "$ROOT" -B "$BUILD_DIR" -G Ninja \
   -DCMAKE_PREFIX_PATH="$QT_DIR" \
   -DCMAKE_INSTALL_PREFIX=/usr \
   -DBUILD_TESTING="$([[ ${BRULION_APPIMAGE_TESTS:-1} == 1 ]] && echo ON || echo OFF)" \
-  -DBRULION_WERROR="${BRULION_WERROR:-ON}"
+  -DBRULION_WERROR="${BRULION_WERROR:-ON}" \
+  -DBRULION_SPELL_BACKEND=hunspell
 
 info "Building (-j$JOBS)"
 cmake --build "$BUILD_DIR" --parallel "$JOBS"
@@ -271,6 +276,20 @@ DESTDIR=$(cd -- "$BUILD_DIR" && pwd)/AppDir cmake --install "$BUILD_DIR"
 # The command line is reached through the app's binary (`Brulion.AppImage cli …`, docs/CLI.md):
 # the AppImage has one entry point, so the separate brulion-cli stays out.
 rm -f -- "$APPDIR/usr/bin/brulion-cli"
+# Spell checking's dictionaries (hunspell-pl, hunspell-en-us; their licences next to them): the app
+# looks in <usr/bin>/../share/hunspell (src/platform/spelldictionaries.h).
+SPELL_DICTS=${SPELL_DICTS:-/usr/share/hunspell}
+mkdir -p "$APPDIR/usr/share/hunspell"
+for dict in pl_PL en_US; do
+  for ext in aff dic; do
+    [[ -f $SPELL_DICTS/$dict.$ext ]] || die "$SPELL_DICTS/$dict.$ext missing (install hunspell-pl and hunspell-en-us: --install-deps)"
+    cp -L -- "$SPELL_DICTS/$dict.$ext" "$APPDIR/usr/share/hunspell/"
+  done
+done
+for doc in hunspell-pl:pl_PL hunspell-en-us:en_US; do
+  copyright=/usr/share/doc/${doc%%:*}/copyright
+  if [[ -f $copyright ]]; then cp -- "$copyright" "$APPDIR/usr/share/hunspell/${doc##*:}.copyright"; fi
+done
 
 # Desktop entry and icon: the installed ones when the build provides them, else generated here.
 desktop=$(find "$APPDIR/usr/share/applications" -name '*.desktop' -print -quit 2>/dev/null || true)
@@ -392,6 +411,12 @@ done
 [[ -z $unused_qml ]] || die "unused Qt Quick styles, QtQuick.Dialogs or QtQuick.Pdf in the AppImage: $unused_qml"
 [[ -n $(find "$check_dir/squashfs-root/usr/lib" -maxdepth 1 -name 'libQt6Pdf.so*' -print -quit) ]] ||
   die "libQt6Pdf missing from the AppImage (the PDF pages of drawings' backdrops)"
+# Spell checking: Hunspell and the Polish and English dictionaries.
+[[ -n $(find "$check_dir/squashfs-root/usr/lib" -maxdepth 1 -name 'libhunspell*.so*' -print -quit) ]] ||
+  die "libhunspell missing from the AppImage (spell checking)"
+for f in pl_PL.aff pl_PL.dic en_US.aff en_US.dic; do
+  [[ -s $check_dir/squashfs-root/usr/share/hunspell/$f ]] || die "usr/share/hunspell/$f missing from the AppImage (spell checking)"
+done
 # "Otwórz za pomocą → Inny program → Brulion": the desktop entry AppImage integration tools (Gear
 # Lever, AppImageLauncher, appimaged) install keeps --open %F, declares no file types (a desktop
 # without a default program would make Brulion the default for every text file: docs/NIXOS.md) and

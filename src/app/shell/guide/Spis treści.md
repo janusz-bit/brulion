@@ -16,6 +16,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 ## Pisanie i porządkowanie
 - [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]] — `[[strony]]`, odwołania do bloków, osadzenia.
 - [[Tagi i właściwości|Tagi i właściwości]] — `#tagi` (i ich strony), nagłówek YAML, `klucz:: wartość`, edycja właściwości w polach.
+- [[Sprawdzanie pisowni|Sprawdzanie pisowni]] — podkreślone literówki, podpowiedzi, słownik użytkownika, polski i angielski.
 - [[Wzory matematyczne|Wzory matematyczne]] — LaTeX w tekście i blokach: ułamki, pierwiastki, macierze.
 - [[Diagramy|Diagramy]] — schematy blokowe, diagramy sekwencji i wykresy kołowe z bloków `mermaid`.
 - [[Rysunki|Rysunki]] — pismo odręczne i szkice rysikiem, palcem albo myszką, także na slajdach i stronach PDF.

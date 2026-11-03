@@ -2,6 +2,7 @@
 
 #include "markdown/inline.h"
 #include "markdown/tokens.h"
+#include "spell/spellwords.h"
 #include "text/text.h"
 
 #include <QCoreApplication>
@@ -42,6 +43,10 @@ QColor toColor(const QVariant &v)
 MarkdownHighlighter::MarkdownHighlighter(QObject *parent) : QSyntaxHighlighter(parent)
 {
     rebuildFormats();
+    // Verdicts arrive in batches: the lines waiting for them are highlighted once per pass.
+    m_spellTimer.setSingleShot(true);
+    m_spellTimer.setInterval(0);
+    connect(&m_spellTimer, &QTimer::timeout, this, &MarkdownHighlighter::rehighlightPendingSpelling);
 }
 
 MarkdownHighlighter::~MarkdownHighlighter()
@@ -53,10 +58,10 @@ MarkdownHighlighter::~MarkdownHighlighter()
 
 QStringList MarkdownHighlighter::formatNames()
 {
-    return {u"heading"_s, u"marker"_s, u"link"_s,     u"url"_s,      u"tag"_s,       u"code"_s,      u"bold"_s,
-            u"italic"_s,  u"strike"_s, u"highlight"_s, u"muted"_s,   u"faint"_s,     u"blockId"_s,   u"property"_s,
-            u"due"_s,     u"scheduled"_s, u"start"_s, u"reminder"_s, u"alarm"_s,     u"recurrence"_s, u"done"_s,
-            u"priority"_s, u"blockRef"_s, u"comment"_s, u"fence"_s};
+    return {u"heading"_s,  u"marker"_s,    u"link"_s,      u"url"_s,      u"tag"_s,     u"code"_s,       u"bold"_s,
+            u"italic"_s,   u"strike"_s,    u"highlight"_s, u"muted"_s,    u"faint"_s,   u"blockId"_s,    u"property"_s,
+            u"due"_s,      u"scheduled"_s, u"start"_s,     u"reminder"_s, u"alarm"_s,   u"recurrence"_s, u"done"_s,
+            u"priority"_s, u"blockRef"_s,  u"comment"_s,   u"fence"_s,    u"spelling"_s};
 }
 
 void MarkdownHighlighter::setTextDocument(QQuickTextDocument *document)
@@ -209,6 +214,10 @@ void MarkdownHighlighter::rebuildFormats()
     make(u"recurrence"_s).setForeground(color("recurrence", QColor(u"#2a6e44"_s)));
     make(u"done"_s).setForeground(color("done", muted));
     make(u"priority"_s).setForeground(color("priority", QColor(u"#a8382d"_s)));
+    // A plain underline in the colour: Qt Quick 6.11 draws no wavy SpellCheckUnderline.
+    QTextCharFormat &spelling = make(u"spelling"_s);
+    spelling.setUnderlineStyle(QTextCharFormat::SingleUnderline);
+    spelling.setUnderlineColor(m_spellColor);
 }
 
 void MarkdownHighlighter::setRange(int from, int length, const QTextCharFormat &format)
@@ -231,6 +240,30 @@ void MarkdownHighlighter::mergeRange(int from, int length, const QTextCharFormat
         merged.merge(format);
         // Keep the most specific name for tests: the newly merged one.
         merged.setProperty(NameProperty, format.property(NameProperty));
+        setFormat(pos, run - pos, merged);
+        pos = run;
+    }
+}
+
+void MarkdownHighlighter::mergeSpelling(int from, int length)
+{
+    // Qt Quick draws a highlighter's format only when it has a colour (QQuickTextNodeEngine
+    // takes a layout's formats with a foreground or a background): plain text gets the palette's
+    // "text" colour with its underline.
+    const QTextCharFormat &spelling = m_formats[u"spelling"_s];
+    const QColor text = color("text", QColor());
+    int pos = from;
+    const int end = from + length;
+    while (pos < end) {
+        const QTextCharFormat current = QSyntaxHighlighter::format(pos);
+        int run = pos + 1;
+        while (run < end && QSyntaxHighlighter::format(run) == current)
+            ++run;
+        QTextCharFormat merged = current;
+        merged.merge(spelling);
+        merged.setProperty(NameProperty, spelling.property(NameProperty));
+        if (!current.hasProperty(QTextFormat::ForegroundBrush) && text.isValid())
+            merged.setForeground(text);
         setFormat(pos, run - pos, merged);
         pos = run;
     }
@@ -284,9 +317,160 @@ void MarkdownHighlighter::findChangedTo(const QString &query, const text::FindOp
         rehighlight();
 }
 
+void MarkdownHighlighter::setSpellCheck(SpellCheck *spell)
+{
+    if (m_spell == spell)
+        return;
+    for (const QMetaObject::Connection &c : std::as_const(m_spellConnections))
+        disconnect(c);
+    m_spellConnections.clear();
+    const bool was = spellActive();
+    m_spell = spell;
+    m_spellPending.clear();
+    m_spellMarked.clear();
+    if (spell) {
+        m_spellConnections = {
+                connect(spell, &SpellCheck::checked, this,
+                        [this](bool changed) {
+                            // A word marked before may be right now (added to the dictionary).
+                            if (changed)
+                                m_spellPending.unite(m_spellMarked);
+                            if (!m_spellPending.isEmpty() && !m_spellTimer.isActive())
+                                m_spellTimer.start();
+                        }),
+                connect(spell, &SpellCheck::invalidated, this, [this] { rehighlight(); }),
+                connect(spell, &SpellCheck::activeChanged, this, [this] { rehighlight(); }),
+        };
+    }
+    Q_EMIT spellCheckChanged();
+    if (was || spellActive())
+        rehighlight();
+}
+
+void MarkdownHighlighter::setSpellCaret(int position)
+{
+    if (m_spellCaret == position)
+        return;
+    m_spellCaret = position;
+    Q_EMIT spellCaretChanged();
+    if (!spellActive() || !document())
+        return;
+    // The line that left a word unmarked for the old caret, and the one with a wrong word ending
+    // at the new caret.
+    QSet<int> lines;
+    if (m_spellSuppressedBlock >= 0)
+        lines.insert(m_spellSuppressedBlock);
+    if (const int b = wrongWordBlockAt(position); b >= 0)
+        lines.insert(b);
+    for (const int number : std::as_const(lines)) {
+        const QTextBlock block = document()->findBlockByNumber(number);
+        if (block.isValid())
+            rehighlightBlock(block);
+    }
+}
+
+void MarkdownHighlighter::setSpellColor(const QColor &color)
+{
+    if (m_spellColor == color)
+        return;
+    m_spellColor = color;
+    rebuildFormats();
+    Q_EMIT spellColorChanged();
+    if (spellActive())
+        rehighlight();
+}
+
+bool MarkdownHighlighter::spellActive() const
+{
+    return m_spell && m_spell->active() && m_mode != u"code";
+}
+
+int MarkdownHighlighter::wrongWordBlockAt(int position) const
+{
+    QTextDocument *doc = document();
+    if (!doc || position < 0 || !m_spell)
+        return -1;
+    const QTextBlock block = doc->findBlock(position);
+    if (!block.isValid())
+        return -1;
+    const QString text = block.text();
+    const auto word = spell::wordAt(text, position - block.position());
+    if (!word || word->to != position - block.position() || word->dot)
+        return -1;
+    const auto verdict = m_spell->verdict(spell::checkedText(text, *word));
+    return verdict == SpellCheck::Verdict::Wrong ? block.blockNumber() : -1;
+}
+
+void MarkdownHighlighter::rehighlightPendingSpelling()
+{
+    QTextDocument *doc = document();
+    const QSet<int> pending = std::exchange(m_spellPending, {});
+    if (!doc || !spellActive())
+        return;
+    for (const int number : pending) {
+        const QTextBlock block = doc->findBlockByNumber(number);
+        if (block.isValid())
+            rehighlightBlock(block);
+    }
+}
+
+void MarkdownHighlighter::highlightSpelling(const QString &line)
+{
+    const int number = currentBlock().blockNumber();
+    if (m_spellSuppressedBlock == number)
+        m_spellSuppressedBlock = -1;
+    m_spellMarked.remove(number);
+    if (!spellActive())
+        return;
+    // Not inside fenced code, frontmatter or a comment running over lines (source mode).
+    if (m_mode == u"source" && (currentBlockState() & StateMask) != Normal)
+        return;
+    const int caret = m_spellCaret - currentBlock().position();
+    bool pending = false;
+    for (const spell::WordSpan &word : spell::findWords(line)) {
+        switch (m_spell->verdict(spell::checkedText(line, word))) {
+        case SpellCheck::Verdict::Correct: break;
+        case SpellCheck::Verdict::Pending: pending = true; break;
+        case SpellCheck::Verdict::Wrong:
+            // The word being typed (the caret right after it) waits until it is finished.
+            m_spellMarked.insert(number);
+            if (word.to == caret && !word.dot) {
+                m_spellSuppressedBlock = number;
+                break;
+            }
+            mergeSpelling(int(word.from), int(word.length()));
+            break;
+        }
+    }
+    if (pending)
+        m_spellPending.insert(number);
+}
+
+QVariantMap MarkdownHighlighter::misspelledAt(int position) const
+{
+    QTextDocument *doc = document();
+    if (!doc || position < 0 || !spellActive())
+        return {};
+    const QTextBlock block = doc->findBlock(position);
+    if (!block.isValid())
+        return {};
+    const QString text = block.text();
+    const auto word = spell::wordAt(text, position - block.position());
+    if (!word)
+        return {};
+    const QString checked = spell::checkedText(text, *word);
+    if (m_spell->verdict(checked) != SpellCheck::Verdict::Wrong)
+        return {};
+    return {{u"from"_s, int(block.position() + word->from)},
+            {u"to"_s, int(block.position() + word->to)},
+            {u"word"_s, checked},
+            {u"text"_s, text.mid(word->from, word->length())}};
+}
+
 void MarkdownHighlighter::highlightBlock(const QString &line)
 {
     highlightLine(line);
+    highlightSpelling(line);
     if (m_findQuery.isEmpty())
         return;
     QTextCharFormat hit;

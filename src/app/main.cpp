@@ -15,6 +15,7 @@
 #include "logcontroller.h"        // the event log page's controller (src/app/diag)
 #include "pdfpageimageprovider.h" // the thumbnails of PDF pages (src/app/drawing)
 #include "pdfviewimageprovider.h" // the PDF viewer's pages (src/app/pdf)
+#include "spellcheck.h"           // spell checking of the editor (src/app/editor)
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -366,6 +367,23 @@ int main(int argc, char *argv[])
         logs.setPersistVerbosity(
                 [settings](const QString &verbosity) { settings->setValue(u"diagnostics/logVerbosity"_s, verbosity); });
         logs.setRecentSyncs([ctl = controller.get()] { return ctl->workspace()->sync()->historyLines(5); });
+        // Spell checking of the editor (docs/UI.md "Spell checking") follows the device's settings
+        // and the UI language; words added in the editor's menu are stored there.
+        brulion::editor::SpellCheck *spell = brulion::editor::SpellCheck::instance();
+        spell->setUiLanguage(devTools.language());
+        spell->setLanguageSetting(settings->spellLanguages());
+        spell->setPersonalWords(settings->spellingWords());
+        spell->setEnabled(settings->spellCheck());
+        QObject::connect(&devTools, &brulion::ui::DevTools::languageChanged, settings,
+                         [spell, &devTools] { spell->setUiLanguage(devTools.language()); });
+        QObject::connect(settings, &brulion::shell::AppSettings::spellCheckChanged, spell,
+                         [spell, settings] { spell->setEnabled(settings->spellCheck()); });
+        QObject::connect(settings, &brulion::shell::AppSettings::spellLanguagesChanged, spell,
+                         [spell, settings] { spell->setLanguageSetting(settings->spellLanguages()); });
+        QObject::connect(settings, &brulion::shell::AppSettings::spellingWordsChanged, spell,
+                         [spell, settings] { spell->setPersonalWords(settings->spellingWords()); });
+        QObject::connect(spell, &brulion::editor::SpellCheck::personalWordsEdited, settings,
+                         [spell, settings] { settings->setSpellingWords(spell->personalWords()); });
         if (fixedNow.isValid())
             logs.setClock([fixedNow] { return fixedNow; });
         QObject::connect(controller.get(), &AppController::quitRequested, &app, &QCoreApplication::quit,

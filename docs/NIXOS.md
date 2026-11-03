@@ -158,6 +158,16 @@ z cache.nixos.org dla x86_64 i aarch64). CMake znajduje go przez pkg-config
 testy `tst_pdfpages` sprawdzają tam backend popplera. Zbudowanie bez PDF-ów:
 `-DBRULION_PDF_BACKEND=none`.
 
+### Sprawdzanie pisowni
+
+Pakiet z Nixa sprawdza pisownię Hunspellem z nixpkgs (`hunspell`) i słownikami
+`hunspellDicts.pl_PL` i `hunspellDicts.en_US`: ich ścieżki w `/nix/store` są wkompilowane
+w program (`BRULION_SPELL_DICTIONARY_DIRS`, `nix/package.nix`, `passthru.spellDictionaries`), więc
+nic nie trzeba instalować obok. Brulion patrzy też w `DICPATH`, w `share/hunspell` folderów
+`XDG_DATA_DIRS` (np. słowniki z `environment.systemPackages`) i w `/usr/share/hunspell`.
+`nix develop` ustawia `DICPATH` na te same słowniki dla `./build`. Bez Hunspella:
+`-DBRULION_SPELL_BACKEND=none` (ustawienia pisowni znikają). docs/UI.md „Spell checking”.
+
 ### Otwórz za pomocą
 
 Wpis pulpitu z pakietu (`Exec=brulion --open %F`, `StartupNotify=true`) pozwala otworzyć plik

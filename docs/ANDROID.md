@@ -710,6 +710,26 @@ Zostaje do sprawdzenia na prawdziwym telefonie: płynność szczypania i gest Ws
 szukanie na Androidzie 15+ na prawdziwym urządzeniu, „Otwórz w innej aplikacji” z prawdziwymi
 aplikacjami do PDF-ów, duże skany z wykładów.
 
+## Sprawdzanie pisowni
+
+Brulion nie dokłada do APK słowników: pyta **systemowe sprawdzanie pisowni** — to samo, którego
+używa klawiatura (Gboard, klawiatura AOSP; `TextServicesManager` / `SpellCheckerSession`,
+docs/UI.md „Spell checking”). `SpellCheck.kt` otwiera po jednej sesji na język (`Locale("pl")`,
+`Locale("en")`, bez ustawień języka systemu: języki wybiera Brulion) na własnym wątku
+(`HandlerThread`; sesja oddaje odpowiedzi na pętli wątku, na którym powstała), a wątek C++ czeka na
+odpowiedź najwyżej 3 s. Sesja, która nie odpowiedziała na czas, jest zamykana (spóźniona odpowiedź
+nie może trafić do następnego pytania) i otwierana od nowa przy kolejnym. Słowa jadą jako JSON,
+całą paczką w jednym wywołaniu (`BrulionAndroid.spellCheck`); słowo jest błędne tylko wtedy, gdy
+sprawdzanie oznaczy je jako literówkę (`RESULT_ATTR_LOOKS_LIKE_TYPO`), więc sprawdzanie, które
+danego języka nie zna, niczego nie podkreśla. Języki: podtypy bieżącego sprawdzania pisowni
+(Android 12+), a bez nich języki urządzenia i angielski. Gdy sprawdzanie pisowni jest wyłączone
+w ustawieniach Androida (Ustawienia → System → Język → Sprawdzanie pisowni), Brulion chowa swoje
+ustawienia pisowni. Podpowiedzi otwiera dotknięcie podkreślonego słowa (przytrzymanie zostaje
+systemowym zaznaczaniem tekstu).
+
+Zostaje do sprawdzenia na prawdziwym telefonie: Gboard z polskim i angielskim, podkreślenia
+i podpowiedzi podczas pisania z klawiaturą, która sama poprawia słowa.
+
 ## Nowa wersja
 
 Android nie aktualizuje aplikacji zainstalowanej z pliku APK, więc Brulion mówi o nowej wersji sam:

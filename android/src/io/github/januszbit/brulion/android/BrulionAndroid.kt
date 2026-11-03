@@ -495,6 +495,28 @@ object BrulionAndroid {
   @JvmStatic
   fun pdfIsOpen(session: Int): Boolean = PdfPages.isOpen(session)
 
+  // -----------------------------------------------------------------------------------------
+  // Spell checking (SpellCheck.kt, src/platform/spell_android.cpp): called from C++'s worker
+  // thread, each call waits for the system's checker (at most SpellCheck.TIMEOUT_MS).
+  // -----------------------------------------------------------------------------------------
+
+  /** JSON array of the languages the system's spell checker offers (`[]`: off). */
+  @JvmStatic
+  fun spellLanguages(context: Context): String = SpellCheck.languages(context)
+
+  /** A session of the system's checker for [language] is open (false: no checker). */
+  @JvmStatic
+  fun spellOpen(context: Context, language: String): Boolean = SpellCheck.available(context, language)
+
+  /** JSON array of booleans for the words of the JSON array [words] (null: no answer). */
+  @JvmStatic
+  fun spellCheck(context: Context, language: String, words: String): String? = SpellCheck.check(context, language, words)
+
+  /** JSON array of at most [max] corrections of [word]. */
+  @JvmStatic
+  fun spellSuggest(context: Context, language: String, word: String, max: Int): String =
+    SpellCheck.suggest(context, language, word, max)
+
   /**
    * "Otwórz w innej aplikacji": the file at [path] (type [mime]) in the app the system has for it
    * (OpenWith.kt): 0 started, 1 no app, 2 failed, 3 being copied first (a memory card).

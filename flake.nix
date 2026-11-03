@@ -110,6 +110,11 @@
             ]
           );
           QML_IMPORT_PATH = lib.makeSearchPath pkgs.qt6.qtbase.qtQmlPrefix [ pkgs.qt6.qtdeclarative ];
+          # Hunspell's dictionaries for the spell checking of ./build (the package compiles their
+          # store paths in instead: nix/package.nix).
+          DICPATH = lib.concatMapStringsSep ":" (
+            d: "${d}/share/hunspell"
+          ) self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.spellDictionaries;
           shellHook = ''
             export CMAKE_GENERATOR=Ninja
             export CMAKE_CXX_COMPILER_LAUNCHER=ccache

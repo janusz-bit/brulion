@@ -40,6 +40,14 @@ brulion_add_test(tst_editor_suggestions
 brulion_add_test(tst_editor_highlighter
     SOURCES tst_editor_highlighter.cpp
     LIBS brulion_editor)
+# Spell checking (SpellCheck on its worker thread over word-list backends; MarkdownHighlighter's
+# underlines): verdicts pending then in, batches, the cache, languages from the setting and the UI
+# language, the personal dictionary and ignored words (no flicker: wrong words stay marked until
+# asked again), suggestions, a slow backend never blocking the UI thread; the underlines only on
+# prose — not on code, links, tags, dates, fences —, the word at the caret, misspelledAt().
+brulion_add_test(tst_editor_spellcheck
+    SOURCES tst_editor_spellcheck.cpp
+    LIBS brulion_editor brulion_core_spell)
 # The rounded shapes of the rendered text's chips, tags, code and highlights (RichTextPills) on
 # InlineRenderer's real HTML: brushes taken off, kinds, rectangles per line, the fixed line height.
 brulion_add_test(tst_editor_richpills
@@ -138,6 +146,20 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 COMMAND brulion --editor --editor-script datechips --no-single-instance
                     --size ${_chips_size} ${_chips_touch} --now "2026-10-15 10:00" --locale pl)
             set_tests_properties(${_chips_test} PROPERTIES
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+        endforeach()
+        # Spell checking in the real editor (`--editor-script spelltest`, qml/dev/SpellingSelfTest.qml)
+        # on word lists: the mark, a right-click (a finger's tap) opening the corrections, one
+        # replacing the word (undo), "Dodaj do słownika", "Ignoruj", syntax never marked, off.
+        foreach(_spell "tst_editor_qml_spelling;1280x800;" "tst_editor_qml_spelling_touch;412x915;--touch")
+            list(GET _spell 0 _spell_test)
+            list(GET _spell 1 _spell_size)
+            list(GET _spell 2 _spell_touch)
+            add_test(NAME ${_spell_test}
+                COMMAND brulion --editor --editor-script spelltest --no-single-instance
+                    --size ${_spell_size} ${_spell_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_spell_test} PROPERTIES
                 ENVIRONMENT "${_playground_env}"
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()

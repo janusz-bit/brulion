@@ -138,6 +138,10 @@
 * **Wzory matematyczne.** LaTeX w notatkach (`$E=mc^2$`, `$$\frac{a}{b}$$`, blok
   ` ```math `) jest od razu rysowany jako wzór — greckie litery, ułamki, pierwiastki,
   macierze, układy równań. Plik zachowuje źródło LaTeX, a eksport HTML pokazuje gotowy wzór.
+* **Sprawdzanie pisowni.** Literówki w edytowanym bloku są podkreślone — po polsku i angielsku
+  naraz — a prawy przycisk (na telefonie dotknięcie słowa) daje podpowiedzi, „Dodaj do słownika”
+  i „Ignoruj”. Kod, linki, tagi, daty i wzory nie są sprawdzane. Na komputerze Hunspell ze
+  słownikami w pakiecie, na Androidzie systemowe sprawdzanie pisowni klawiatury.
 * **Diagramy Mermaid.** Bloki ` ```mermaid ` — schematy blokowe (`flowchart`/`graph`, z podgrafami
   i stylami), diagramy sekwencji i wykresy kołowe — Brulion rysuje sam, w kolorach motywu jasnego
   i ciemnego, bez uruchamiania czegokolwiek z notatki (notatki z synchronizacji i importów są
@@ -527,6 +531,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   or any colour, kept readable), paper or white and blue-grey or OLED-black backgrounds, any
   installed font for the interface, notes and code, line spacing, a compact density on the
   desktop, and which sidebar entries and phone navigation buttons are shown.
+* Spell checking of the block being edited, in Polish and English at once: misspelled words
+  underlined, corrections, "add to dictionary" and "ignore" from the right-click menu (a tap on
+  touch screens); code, links, tags, dates and formulas are skipped. Hunspell with bundled
+  dictionaries on the desktop, the system's spell checker on Android.
 * Mermaid diagrams in ```` ```mermaid ```` blocks — flowcharts (with subgraphs and styles),
   sequence diagrams and pie charts — drawn by Brulion's own renderer in the theme's light or dark
   colours, nothing from a note ever executed; a click edits the source with a live preview, the

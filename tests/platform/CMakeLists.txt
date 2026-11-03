@@ -18,3 +18,13 @@ brulion_add_test(tst_pdfsearch SOURCES tst_pdfsearch.cpp LIBS brulion_platform)
 # The file an Android document URI names (documentpaths.h: the phone's storage, a memory card,
 # Downloads' raw paths; anything else none) — pure, so tested on every platform.
 brulion_add_test(tst_documentpaths SOURCES tst_documentpaths.cpp LIBS brulion_platform)
+# Where Hunspell's dictionaries are (spelldictionaries.h: DICPATH, next to the app, the build's
+# folders, XDG data folders, the system's; the best of several per language, both files needed) —
+# pure, so tested on every platform.
+brulion_add_test(tst_spelldictionaries SOURCES tst_spelldictionaries.cpp LIBS brulion_platform)
+# This build's spell checking backend (spellbackends.h) with dictionaries the test writes: Hunspell
+# with an ISO8859-2 Polish and a UTF-8 English dictionary (diacritics, affixes, capitals,
+# apostrophes, suggestions back in UTF-16, words the encoding cannot hold), through SpellChecker;
+# "none" (a build without Hunspell): no languages, no backends.
+brulion_add_test(tst_spellbackends SOURCES tst_spellbackends.cpp LIBS brulion_platform brulion_core_spell)
+target_compile_definitions(tst_spellbackends PRIVATE BRULION_TEST_SPELL_BACKEND="${BRULION_SPELL_BACKEND_USED}")
