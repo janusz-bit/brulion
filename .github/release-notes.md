@@ -2,7 +2,9 @@
 
 **Nowości w {{VERSION}}**
 
-Wersja 0.8.0 nie została opublikowana, więc jej nowości trafiają do Ciebie dopiero w tym wydaniu.
+* **Diagramy Mermaid** — bloki ```` ```mermaid ```` rysują się w notatce jako diagram w kolorach motywu: schematy blokowe (`flowchart`/`graph`), diagramy sekwencji i wykresy kołowe. `/Diagram` wstawia gotowy schemat, a kliknięcie pokazuje źródło z podglądem na żywo. Brulion rysuje je sam, bez internetu i bez uruchamiania czegokolwiek z notatki; eksport HTML zawiera je jako obrazy SVG. Inne typy diagramów na razie pokazują źródło.
+
+Wersja 0.8.0 nie została opublikowana, więc jej nowości, opisane poniżej, trafiają do Ciebie dopiero w tym wydaniu.
 
 * **Automatyczne kopie zapasowe** — codziennie albo co tydzień archiwum ZIP z notatkami, załącznikami i ustawieniami notatnika, które rozpakujesz dowolnym programem. Wybierasz liczbę zachowanych kopii i folder (np. pendrive). **Przywróć** najpierw pokazuje, co się zmieni, i robi kopię bezpieczeństwa obecnego stanu. **Ustawienia → Kopie zapasowe**; domyślnie włączone, w przeglądarce wyłączone.
 * **Znajdź i zamień** — **Ctrl+F** szuka w otwartej notatce, **Ctrl+H** od razu z zamianą (na telefonie w menu strony). Wielkość liter i polskie znaki można pomijać albo uwzględniać, a „Zamień wszystko” cofa jedno **Ctrl+Z**. **Zamień w notatniku** (menu **Więcej**, paleta poleceń) pokazuje każde trafienie „przed → po” do odznaczenia i ma **Cofnij**.

@@ -9,6 +9,9 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 
 ## 0.8.1 — 3 listopada 2026
 
+**Nowe**
+- **Diagramy Mermaid** — blok ```` ```mermaid ```` rysuje się w notatce jako diagram w kolorach motywu, jasnego albo ciemnego: schematy blokowe (`flowchart` albo `graph`, kierunki `TD`, `LR`, `BT`, `RL`), diagramy sekwencji (`sequenceDiagram`) i wykresy kołowe (`pie`). `/Diagram` wstawia gotowy schemat do przerobienia, a kliknięcie diagramu pokazuje źródło z podglądem na żywo; przy błędzie widać, w którym wierszu. Brulion rysuje diagramy sam, bez internetu i bez uruchamiania czegokolwiek z notatki, więc diagram z synchronizacji albo importu jest bezpieczny (polecenia `click` i linki są pomijane). Eksport HTML zawiera diagramy jako obrazy SVG, a w pliku zostaje samo źródło. Inne typy diagramów na razie pokazują źródło. Zobacz [[Diagramy|Diagramy]].
+
 **Uwaga**
 - Wersja 0.8.0 nie została opublikowana: wydanie zatrzymały błędy w testach i w budowaniu na Androida, a nie w działaniu aplikacji. Wszystkie jej nowości, opisane poniżej, są dostępne od tej wersji.
 
