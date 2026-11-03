@@ -5,7 +5,8 @@ import Brulion
 
 // DrawingStylePanel — the style of the selected elements (DrawingSelectionBar's "Styl"; docs/UI.md
 // "Drawing editor"): only what the selection has (DrawingCanvas.selectionStyle): the fill and its
-// pattern, the line's thickness and dashes, corners, arrowheads, the text's size, opacity. Each
+// pattern, the line's thickness and dashes, corners, arrowheads, the text's size, aligning and
+// distributing several parts (alignSelection, distributeSelection), opacity. Each
 // choice is one undo step (DrawingCanvas.styleSelection) and the panel stays open for the next.
 // Inside the view (`area`), beside the bar (`barHost`, its parent), scrolling when it does not fit.
 T.Popup {
@@ -239,6 +240,61 @@ T.Popup {
                     { value: 28, label: qsTr("Large") },
                     { value: 36, label: qsTr("Extra large") }
                 ]
+            }
+            Column {
+                visible: panel.current.canAlign === true
+                width: parent.width
+                spacing: 2
+                BText {
+                    text: qsTr("Align")
+                    variant: "caption"
+                }
+                Flow {
+                    width: parent.width
+                    spacing: 2
+                    Repeater {
+                        model: [
+                            { value: "left", icon: "align-start-vertical", label: qsTr("Align left"), keys: "Ctrl+Shift+Left" },
+                            { value: "center", icon: "align-center-vertical", label: qsTr("Centre horizontally"), keys: "" },
+                            { value: "right", icon: "align-end-vertical", label: qsTr("Align right"), keys: "Ctrl+Shift+Right" },
+                            { value: "top", icon: "align-start-horizontal", label: qsTr("Align top"), keys: "Ctrl+Shift+Up" },
+                            { value: "middle", icon: "align-center-horizontal", label: qsTr("Centre vertically"), keys: "" },
+                            { value: "bottom", icon: "align-end-horizontal", label: qsTr("Align bottom"), keys: "Ctrl+Shift+Down" }
+                        ]
+                        delegate: BIconButton {
+                            required property var modelData
+                            objectName: "drawingStyleAlign_" + modelData.value
+                            iconName: modelData.icon
+                            label: modelData.label
+                            shortcut: modelData.keys
+                            focusPolicy: Qt.NoFocus
+                            onClicked: panel.canvas.alignSelection(modelData.value)
+                        }
+                    }
+                    Item {
+                        visible: panel.current.canDistribute === true
+                        width: Theme.space2
+                        height: 1
+                    }
+                    BIconButton {
+                        objectName: "drawingStyleDistribute_horizontal"
+                        visible: panel.current.canDistribute === true
+                        iconName: "align-horizontal-distribute-center"
+                        label: qsTr("Distribute horizontally")
+                        shortcut: "Alt+H"
+                        focusPolicy: Qt.NoFocus
+                        onClicked: panel.canvas.distributeSelection("horizontal")
+                    }
+                    BIconButton {
+                        objectName: "drawingStyleDistribute_vertical"
+                        visible: panel.current.canDistribute === true
+                        iconName: "align-vertical-distribute-center"
+                        label: qsTr("Distribute vertically")
+                        shortcut: "Alt+V"
+                        focusPolicy: Qt.NoFocus
+                        onClicked: panel.canvas.distributeSelection("vertical")
+                    }
+                }
             }
             Options {
                 title: qsTr("Opacity")

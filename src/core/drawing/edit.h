@@ -130,17 +130,28 @@ Stroke newText(QPointF topLeft, const QString &text, const TextStyle &st, const 
 /// text wrapped at its box, its lines (text) for one whose box follows it. setText() with it
 /// changes nothing.
 QString editableText(const Stroke &e);
-/// The width a label wraps at in the shape `container` (Excalidraw's getBoundTextMaxWidth): a
-/// rectangle's width, the widest rectangle inside an ellipse (width / 2 · √2) or a diamond
-/// (width / 2), less 2 × LabelPadding. The label's editor is as wide.
+/// The element holds a label inside it: a rectangle, an ellipse, a diamond or a polygon (a closed
+/// line of three corners or more: newPolygon()). Excalidraw binds text only to the first three (and
+/// to arrows): a polygon's label is stored as a text grouped with it (docs/SYNTAX.md §2 "Labels in
+/// polygons", excalidraw.h).
+bool holdsLabel(const Stroke &e);
+/// The width a label wraps at in the element `container` (holdsLabel(); Excalidraw's
+/// getBoundTextMaxWidth): a rectangle's width, the widest rectangle inside an ellipse (width / 2 ·
+/// √2) or a diamond (width / 2), a polygon's room (labelCenter()) — less 2 × LabelPadding. The
+/// label's editor is as wide.
 double labelMaxWidth(const Stroke &container);
+/// Where the middle of a label in `container` lies (scene coordinates, the container's rotation
+/// applied): a shape's centre; in a polygon the middle of its widest band across, 40 % of its
+/// height, between 30 % and 70 % of the way down (a triangle's lower half, a callout's body, a
+/// star's middle).
+QPointF labelCenter(const Stroke &container);
 /// The text of the Text element `id` replaced: measured (autoResize), wrapped at its box's width,
 /// or — a label — wrapped to labelMaxWidth() of its shape and centred in it (the shape grows to
 /// hold it as Excalidraw grows it: computeContainerDimensionForBoundText). An empty text deletes
 /// the element; the text it has (editableText()) changes nothing — no stamp, no new wrapping in
 /// Brulion's fonts. Locked texts and labels of locked shapes stay.
 void setText(Drawing &d, const QString &id, const QString &text, const TextMetrics &m, const EditStamp &s);
-/// A label `text` for the shape `containerId`, right after it (its boundElements name it). The new
+/// A label `text` for the shape, polygon or arrow `containerId`, right after it (its boundElements name it). The new
 /// text's id ("" when there is no such shape or the text is empty).
 QString addLabel(Drawing &d, const QString &containerId, const QString &text, const TextStyle &st, const TextMetrics &m,
                  const EditStamp &s);
@@ -216,6 +227,25 @@ bool canUngroup(const Drawing &d, const QSet<QString> &ids);
 QString groupElements(Drawing &d, const QSet<QString> &ids, const EditStamp &s);
 /// The elements `ids` taken out of their outermost group (inner groups stay).
 void ungroupElements(Drawing &d, const QSet<QString> &ids, const EditStamp &s);
+
+/// How alignElements() lines the parts of a selection up: by their left edges, their middles across
+/// or their right edges; by their top edges, their middles down or their bottom edges.
+enum class Align { Left, Center, Right, Top, Middle, Bottom };
+/// Along which axis distributeElements() spaces them.
+enum class Distribute { Horizontal, Vertical };
+/// How many parts of `ids` align and distribute move, each as a whole: an outermost group, a shape
+/// or an arrow with its label, any other element (locked ones left out, as unknown ids).
+int arrangeUnits(const Drawing &d, const QSet<QString> &ids);
+/// Line the parts of `ids` (arrangeUnits()) up along an edge or the middle of the box all of them
+/// cover, each by the box it covers (elementBounds(): a rotated element by its turned outline, a
+/// group by all of its members) — Excalidraw's "Align". Moved as moveElements() moves them (labels
+/// and bound arrows follow; nothing leaves CoordinateLimit). Two parts or more; parts already there
+/// are not stamped.
+void alignElements(Drawing &d, const QSet<QString> &ids, Align how, const EditStamp &s);
+/// Space the parts of `ids` evenly between the two outermost ones, which stay (Excalidraw's
+/// "Distribute"): the same gap between their boxes, sorted by their middles; when they overlap too
+/// much for gaps, the same step between their middles. Three parts or more.
+void distributeElements(Drawing &d, const QSet<QString> &ids, Distribute axis, const EditStamp &s);
 
 /// What one edit changed: the elements removed (with their indices before), added (with their
 /// indices after) and changed (before, after) — by mergeKey() and version — and, when the order of

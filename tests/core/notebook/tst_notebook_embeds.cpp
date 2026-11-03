@@ -126,6 +126,47 @@ private Q_SLOTS:
         QVERIFY2(lines.at(out.line).contains(body), qPrintable(lines.at(out.line)));
     }
 
+    void insertBlockBeforeEmbed_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("hint");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<int>("line");
+        QTest::addColumn<bool>("afterEmbed");
+        QTest::newRow("outline") << u"- Wstęp\n- ![[wykład s. 4.svg]]\n- Dalej\n"_s << 1
+                                 << u"- Wstęp\n- ![[wykład s. 3.svg]]\n- ![[wykład s. 4.svg]]\n- Dalej\n"_s << 1
+                                 << true;
+        QTest::newRow("first block") << u"- ![[wykład s. 4.svg]]\n"_s << 0
+                                     << u"- ![[wykład s. 3.svg]]\n- ![[wykład s. 4.svg]]\n"_s << 0 << true;
+        QTest::newRow("with its children") << u"- Temat\n\t- ![[wykład s. 4.svg]]\n\t\t- uwaga ąę\n- Inny\n"_s << 1
+                                           << u"- Temat\n\t- ![[wykład s. 3.svg]]\n\t- ![[wykład s. 4.svg]]\n"
+                                              u"\t\t- uwaga ąę\n- Inny\n"_s
+                                           << 1 << true;
+        QTest::newRow("document paragraphs")
+                << u"Slajdy:\n\n![[wykład s. 4.svg]]\n\nKoniec\n"_s << 2
+                << u"Slajdy:\n\n![[wykład s. 3.svg]]\n\n![[wykład s. 4.svg]]\n\nKoniec\n"_s << 2 << true;
+        QTest::newRow("CRLF") << u"- A\r\n- ![[wykład s. 4.svg]]\r\n"_s << 1
+                              << u"- A\r\n- ![[wykład s. 3.svg]]\r\n- ![[wykład s. 4.svg]]\r\n"_s << 1 << true;
+        QTest::newRow("frontmatter") << u"---\ntytuł: W\n---\n- ![[wykład s. 4.svg]]\n"_s << 3
+                                     << u"---\ntytuł: W\n---\n- ![[wykład s. 3.svg]]\n- ![[wykład s. 4.svg]]\n"_s << 3
+                                     << true;
+        QTest::newRow("not embedded: appended") << u"- A\n"_s << 0 << u"- A\n- ![[wykład s. 3.svg]]\n"_s << 1 << false;
+    }
+    void insertBlockBeforeEmbed()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, hint);
+        QFETCH(QString, expected);
+        QFETCH(int, line);
+        QFETCH(bool, afterEmbed);
+        const auto embedsIt = [](QStringView target) { return target == u"wykład s. 4.svg"; };
+        const EmbedInsertion out =
+                brulion::notebook::insertBlockBeforeEmbed(content, hint, embedsIt, u"![[wykład s. 3.svg]]"_s);
+        QCOMPARE(out.content, expected);
+        QCOMPARE(out.line, line);
+        QCOMPARE(out.afterEmbed, afterEmbed);
+    }
+
     void noPredicate()
     {
         // Without a predicate nothing embeds the file: appended.

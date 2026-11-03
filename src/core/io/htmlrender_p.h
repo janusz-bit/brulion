@@ -27,6 +27,9 @@ struct HtmlLinks {
     std::function<QString(const QString &tag)> tag;
     /// href and text of a referenced block (an empty href: the text alone); nullopt when unknown.
     std::function<std::optional<std::pair<QString, QString>>(const QString &id)> block;
+    /// src of the picture of an Obsidian Excalidraw plugin drawing an embed names (`![[Szkic.excalidraw]]`,
+    /// `![[Szkic.excalidraw.md]]`: ExportVault::drawingPicture); nullopt or unset: none.
+    std::function<std::optional<QString>(const QString &target)> drawing;
     /// HTML of an embedded page (`![[Page]]` alone in a block); empty when unavailable.
     std::function<QString(const QString &target, const QString &heading, const QString &blockId)> embed;
     /// src of the copy of a picture from the internet (the URL as the link target gives it) the

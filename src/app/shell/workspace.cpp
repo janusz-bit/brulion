@@ -987,11 +987,35 @@ QUrl Workspace::drawingUrl(const QString &path, bool dark) const
     QString version;
     if (const std::optional<FileStat> st = m_vault->stat(key))
         version = QString::number(st->mtime) + u'-' + QString::number(st->size);
+    // An Obsidian Excalidraw plugin drawing: the pictures of its "## Embedded Files", their links
+    // resolved here (the provider runs in another thread), read once per version of the file.
+    QString pictures;
+    if (paths::isMarkdown(key)) {
+        auto cached = m_drawingPictures.constFind(key);
+        if (cached == m_drawingPictures.constEnd() || cached->first != version) {
+            QList<drawing::EmbeddedFile> files;
+            const QByteArray bytes = readAttachment(key);
+            if (drawing::looksLikeExcalidrawMarkdown(bytes.left(drawing::HeadBytes)))
+                files = drawing::embeddedFiles(bytes);
+            cached = m_drawingPictures.insert(key, {version, files});
+        }
+        // (Resolved on every call: a picture that arrives later shows.)
+        for (const drawing::EmbeddedFile &f : cached->second) {
+            const QString picture = attachmentPathOf(f.link, key);
+            const std::optional<FileStat> st = picture.isEmpty() ? std::nullopt : m_vault->stat(picture);
+            if (!st)
+                continue;
+            pictures += u"&f="_s
+                        + QString::fromLatin1(QUrl::toPercentEncoding(
+                                f.fileId + u':' + QDir::fromNativeSeparators(m_vault->absolutePath(picture))))
+                        + u"&fv="_s + QString::number(st->mtime) + u'-' + QString::number(st->size);
+        }
+    }
     return QUrl(u"image://drawing/"_s
                         + QString::fromLatin1(
                                 QUrl::toPercentEncoding(QDir::fromNativeSeparators(m_vault->absolutePath(key))))
                         + u"?v="_s + QString::fromLatin1(QUrl::toPercentEncoding(version)) + u"&dark="_s
-                        + (dark ? u'1' : u'0'),
+                        + (dark ? u'1' : u'0') + pictures,
                 QUrl::StrictMode);
 }
 

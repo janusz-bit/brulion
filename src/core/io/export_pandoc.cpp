@@ -74,7 +74,10 @@ public:
                 }
                 parts.append(tags.join(u' '));
             }
-            const QString body = PandocRenderer(links(*n, true, true)).renderNote(*n->parsed);
+            // An Obsidian Excalidraw plugin drawing: its picture, not the plugin's Markdown.
+            const std::optional<VaultPath> picture = m_vault.drawingPicture(n->path);
+            const QString body = picture ? drawingMarkdown(*n, *picture)
+                                         : PandocRenderer(links(*n, true, true)).renderNote(*n->parsed);
             if (!body.isEmpty())
                 parts.append(body);
             if (!parts.isEmpty())
@@ -117,6 +120,12 @@ private:
 
     static QString destination(const QString &fragment) { return fragment.isEmpty() ? QString() : u'#' + fragment; }
 
+    /// The picture of an Obsidian Excalidraw plugin drawing (ExportVault::drawingPicture).
+    QString drawingMarkdown(const ExportVault::Note &n, const VaultPath &picture) const
+    {
+        return u"!["_s + PandocRenderer::escape(n.parsed->title) + u"]("_s + attachmentPath(picture) + u')';
+    }
+
     /// Path of an attachment from the document (it sits at the root of the archive folder). A
     /// first segment with ':' gets "./" (it would read as a URL scheme).
     QString attachmentPath(const VaultPath &path) const
@@ -144,6 +153,8 @@ private:
             // The archive holds the document and the attachments at their paths.
             m_claims.reserve(paths::sanitizeFileName(m_vault.vaultName()) + u".md"_s);
             for (const FileEntry &a : m_vault.attachments())
+                m_claims.reserve(a.path);
+            for (const FileEntry &a : m_vault.madePictures())
                 m_claims.reserve(a.path);
             m_claimsReady = true;
         }
@@ -179,6 +190,11 @@ private:
                 return destination(fragment(*resolved, heading, blockId));
             return attachmentPath(*resolved);
         };
+        l.drawing = [=, this](const QString &target) -> std::optional<QString> {
+            const auto resolved = m_vault.resolve(target, notePath);
+            const auto picture = resolved ? m_vault.drawingPicture(*resolved) : std::nullopt;
+            return picture ? std::optional<QString>(attachmentPath(*picture)) : std::nullopt;
+        };
         l.attachment = [=, this](const QString &target) -> std::optional<QString> {
             const auto resolved = m_vault.resolve(target, notePath);
             if (!resolved || !m_vault.isAttachment(*resolved))
@@ -202,6 +218,8 @@ private:
                 const ExportVault::Note *n = resolved ? m_vault.note(*resolved) : nullptr;
                 if (!n || !n->parsed || *resolved == notePath)
                     return {};
+                if (const auto picture = m_vault.drawingPicture(*resolved))
+                    return drawingMarkdown(*n, *picture);
                 // An embedded copy: no identifiers (the original has them), no nested embeds.
                 const PandocRenderer inner(links(*n, false, false));
                 QList<int> blocks;

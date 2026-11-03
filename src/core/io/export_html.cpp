@@ -158,6 +158,11 @@ public:
                 return m_noteHref(*resolved, fragment(*resolved, heading, blockId));
             return m_attachmentUrl(*resolved);
         };
+        l.drawing = [=, this](const QString &target) -> std::optional<QString> {
+            const auto resolved = m_vault.resolve(target, notePath);
+            const auto picture = resolved ? m_vault.drawingPicture(*resolved) : std::nullopt;
+            return picture ? m_attachmentUrl(*picture) : std::nullopt;
+        };
         l.attachment = [=, this](const QString &target) -> std::optional<QString> {
             const auto resolved = m_vault.resolve(target, notePath);
             if (!resolved || !m_vault.isAttachment(*resolved))
@@ -182,6 +187,8 @@ public:
                 const ExportVault::Note *n = resolved ? m_vault.note(*resolved) : nullptr;
                 if (!n || !n->parsed || *resolved == notePath)
                     return {};
+                if (const auto picture = m_vault.drawingPicture(*resolved))
+                    return drawingHtml(*n, *picture);
                 const HtmlRenderer inner(links(*resolved, outputNote, false));
                 QList<int> blocks;
                 if (!blockId.isEmpty()) {
@@ -204,8 +211,21 @@ public:
 
     QString renderNote(const ExportVault::Note &n) const
     {
+        // An Obsidian Excalidraw plugin drawing's page: its picture, not the plugin's Markdown.
+        if (const auto picture = m_vault.drawingPicture(n.path))
+            return u"<p>"_s + drawingHtml(n, *picture) + u"</p>"_s;
         const HtmlRenderer renderer(links(n.path, n.path, true));
         return renderer.renderNote(*n.parsed);
+    }
+
+    /// The picture of an Obsidian Excalidraw plugin drawing (ExportVault::drawingPicture).
+    QString drawingHtml(const ExportVault::Note &n, const VaultPath &picture) const
+    {
+        const auto url = m_attachmentUrl(picture);
+        if (!url)
+            return {};
+        return u"<img class=\"drawing\" src=\""_s + esc(*url) + u"\" alt=\""_s + esc(n.parsed->title)
+               + u"\" loading=\"lazy\">"_s;
     }
 
     /// Where a tag leads: the page it names (SYNTAX §3) when that note is exported, else the
@@ -313,6 +333,8 @@ public:
         QHash<VaultPath, QString> htmlFiles;
         for (const FileEntry &a : vault.attachments())
             claims.claim(a.path);
+        for (const FileEntry &a : vault.madePictures())
+            claims.claim(a.path);
         for (const ExportVault::Note &n : vault.notes())
             htmlFiles.insert(n.path, claims.claim(paths::stripMarkdownExtension(n.path) + u".html"_s));
         const QList<TagCount> tags = vault.index().tags();
@@ -389,6 +411,8 @@ public:
         entries.append(FileEntry{root + u"index.html"_s, indexPage(vault, htmlFiles, tags, tagFiles, footer).toUtf8()});
         entries.append(FileEntry{root + u"style.css"_s, QByteArray(styleSheet())});
         for (const FileEntry &a : vault.attachments())
+            entries.append(FileEntry{root + a.path, a.data});
+        for (const FileEntry &a : vault.madePictures())
             entries.append(FileEntry{root + a.path, a.data});
         ExportResult r;
         r.files.append(ExportedFile{vault.fileName(u"html"_s, u".zip"_s), u"application/zip"_s, vault.zip(entries)});

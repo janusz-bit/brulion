@@ -7,8 +7,8 @@ import Brulion
 // docs/UI.md "Drawing editor"): a floating bar centred above the selection (below it when there is
 // no room, always inside the view) with the pen's colours (recolour; on narrow windows one swatch
 // opening them), "Styl" (DrawingStylePanel: fill, lines, opacity, corners, arrowheads, text size),
-// "Duplikuj", "Na wierzch", "Na spód" (in "Więcej" on narrow windows), "Więcej" (turn by 90°, mirror,
-// group, ungroup) and "Usuń". Shown while something is
+// "Duplikuj", "Na wierzch", "Na spód" (in "Więcej" on narrow windows), "Więcej" (copy, cut — as
+// Excalidraw's clipboard —, turn by 90°, mirror, group, ungroup) and "Usuń". Shown while something is
 // selected and nothing is being drawn, moved or written; touch-sized on touch screens. Its parent
 // is the paper's area: the bar takes the presses on it, everything else goes to the paper.
 // The buttons take no keyboard focus (the view's keys go on working).
@@ -172,6 +172,21 @@ Item {
     BMenu {
         id: moreMenu
         objectName: "drawingSelectionMenu"
+        BMenuItem {
+            objectName: "drawingSelectionCopy"
+            text: qsTr("Copy")
+            iconName: "copy"
+            shortcut: "Ctrl+C"
+            onTriggered: root.canvas.copySelection()
+        }
+        BMenuItem {
+            objectName: "drawingSelectionCut"
+            text: qsTr("Cut")
+            iconName: "scissors"
+            shortcut: "Ctrl+X"
+            onTriggered: root.canvas.cutSelection()
+        }
+        BMenuSeparator {}
         BMenuItem {
             objectName: "drawingSelectionRotate"
             text: qsTr("Rotate by 90°")

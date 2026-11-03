@@ -30,6 +30,10 @@ struct PandocLinks {
     std::function<std::optional<std::pair<QString, QString>>(const QString &id)> block;
     /// Destination of the page a tag names; nullopt: the tag is a span.
     std::function<std::optional<QString>(const QString &tag)> tag;
+    /// Destination of the picture of an Obsidian Excalidraw plugin drawing an embed names
+    /// (`![[Szkic.excalidraw]]`, `![[Szkic.excalidraw.md]]`: ExportVault::drawingPicture); nullopt or
+    /// unset: none.
+    std::function<std::optional<QString>(const QString &target)> drawing;
     /// Pandoc Markdown of an embedded page (`![[Page]]` alone in a block); empty when unavailable.
     std::function<QString(const QString &target, const QString &heading, const QString &blockId)> embed;
     /// Destination (a relative, encoded path) of the copy of a picture from the internet (the URL

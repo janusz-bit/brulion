@@ -4,7 +4,8 @@
 # merge of two versions, the Excalidraw scene and its payload embedded in an SVG, the colours of
 # the light and the dark theme (Excalidraw's dark mode), the SVG file Brulion writes, the Obsidian
 # Excalidraw plugin's `*.excalidraw.md` files (LZ-String), one API for every drawing file format and
-# the backdrop of a drawing (a picture or a PDF page under the ink).
+# the backdrop of a drawing (a picture or a PDF page under the ink), elements copied and pasted as
+# Excalidraw's clipboard.
 # QtCore only; zlib through the vendored miniz.
 if(NOT TARGET brulion_miniz)
     add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/miniz ${CMAKE_BINARY_DIR}/3rdparty/miniz)
@@ -23,5 +24,6 @@ brulion_add_core_module(drawing
         lzstring.h lzstring.cpp
         excalidrawmd.h excalidrawmd.cpp
         drawingfile.h drawingfile.cpp
-        backdrop.h backdrop.cpp)
+        backdrop.h backdrop.cpp
+        clipboard.h clipboard.cpp)
 target_link_libraries(brulion_core_drawing PRIVATE brulion_miniz)

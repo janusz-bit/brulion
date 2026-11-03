@@ -25,7 +25,9 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Rysunki — dalsze pomysły i sprawdzenie na urządzeniach.** Edytor rysunków (`/Rysunek`,
   docs/UI.md „Drawing editor”) ma pismo odręczne, zakreślacz, gumkę, papier, kształty, strzałki,
   tekst, zaznaczanie lassem i prostokątem, uchwyty rozmiaru i obrotu, styl zaznaczenia, odbicia, grupy,
-  podkłady (obraz, slajd, strona PDF), ciemne tło i własny kolor tła. Zostaje:
+  podkłady (obraz, slajd, strona PDF) z przechodzeniem do sąsiednich stron PDF, ciemne tło i własny
+  kolor tła, wyrównywanie i rozkładanie, napisy w wielokątach, schowek zgodny z excalidraw.com,
+  obrazy z „Embedded Files” rysunków z Obsidiana i ich eksport jako obrazów. Zostaje:
   * sprawdzić ręcznie „Scal rysunki” na prawdziwych urządzeniach: rysunek zmieniony bez sieci na
     telefonie i na laptopie, Syncthing zostawia kopię `*.sync-conflict-….svg` (albo
     `*.excalidraw.sync-conflict-….md` rysunku z Obsidiana) → „Scal rysunki” w centrum
@@ -44,14 +46,11 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     strony — `tests/app/drawing/excalidraw-roundtrip.sh`, wymaga internetu);
   * sprawdzić ręcznie uchwyty rozmiaru i obrotu oraz panel „Styl” rysikiem i palcem na prawdziwym
     tablecie i telefonie;
-  * wyrównywanie i równe rozkładanie zaznaczonych elementów, napisy w środku kształtów z listy
-    (trójkąt, gwiazda…; Excalidraw zna je tylko w prostokącie, elipsie, rombie i na strzałkach);
-  * kopiowanie elementów między Brulionem a excalidraw.com przez schowek;
-  * przechodzenie między stronami PDF w edytorze rysunków (dziś: powrót do notatki albo „Inna
-    strona PDF…”);
-  * rysunki `*.excalidraw.md` wtyczki Excalidraw dla Obsidiana: obrazy z sekcji „Embedded Files”
-    (dziś zastępcze prostokąty), eksport (HTML, Pandoc) takich rysunków jako obrazów (dziś
-    osadzone jako strona);
+  * sprawdzić ręcznie w prawdziwym excalidraw.com (wymaga internetu): wklejenie elementów
+    skopiowanych w Brulionie (`Ctrl+C`) i odwrotnie, oraz napis w trójkącie czy gwieździe zapisany
+    przez Brulion (tekst zgrupowany z kształtem) — czy stoi w tym samym miejscu i przesuwa się razem
+    z kształtem; w Obsidianie: obraz z „Embedded Files” po edycji rysunku w Brulionie dalej się
+    wczytuje;
   * sprawdzić ręcznie rysunki z Obsidiana na prawdziwym skarbcu (testy opierają się na plikach
     napisanych według kodu wtyczki; 22 pliki z publicznych skarbców Brulion czyta i zapisuje
     poprawnie, ale nie otwierano ich potem w Obsidianie): otworzyć `*.excalidraw.md` w Brulionie,

@@ -4018,7 +4018,11 @@ void PageController::openDrawing(const QString &path)
     if (!m_host || path.isEmpty())
         return;
     flush();
-    m_host->navigate({{u"view"_s, u"drawing"_s}, {u"path"_s, path}});
+    // (Where it was opened from: the drawing editor's previous / next PDF page put new drawings there.)
+    QVariantMap route{{u"view"_s, u"drawing"_s}, {u"path"_s, path}};
+    if (!m_path.isEmpty())
+        route.insert(u"from"_s, m_path);
+    m_host->navigate(route);
 }
 
 QVariantMap PageController::insertFiles(int row, int from, int to, const QList<QUrl> &urls)

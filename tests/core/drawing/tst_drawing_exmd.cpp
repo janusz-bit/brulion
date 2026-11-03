@@ -1157,6 +1157,98 @@ private Q_SLOTS:
         }
         qInfo("%d of 400 random files read as drawings", read);
     }
+
+    void embeddedFilesOfTheFixture()
+    {
+        // The plugin keeps a pasted picture in its own file: listed, never written into the scene.
+        const QByteArray bytes = fixture(u"obsidian_mixed.excalidraw.md"_s);
+        const QList<EmbeddedFile> files = embeddedFiles(bytes);
+        QCOMPARE(files.size(), 1);
+        QCOMPARE(files.first(), (EmbeddedFile{u"a1b2c3d4e5f60718"_s, u"Pasted Image 20261028143205.png"_s}));
+        std::optional<DrawingFile> read = readDrawingFile(bytes);
+        QVERIFY(read);
+        QVERIFY(!read->drawing.files.contains(u"a1b2c3d4e5f60718"_s));
+        // Shown: the app puts the picture in (marked); written back, the scene has no such file.
+        const QByteArray png = QByteArray::fromBase64(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=");
+        const std::optional<QJsonObject> entry = embeddedFileEntry(u"a1b2c3d4e5f60718"_s, png);
+        QVERIFY(entry);
+        QCOMPARE(entry->value(u"mimeType"_s).toString(), u"image/png"_s);
+        QVERIFY(entry->value(EmbeddedFileKey).toBool());
+        QVERIFY(!safeDataUrl(QJsonObject{{u"a1b2c3d4e5f60718"_s, *entry}}, u"a1b2c3d4e5f60718"_s).isEmpty());
+        Drawing shown = read->drawing;
+        shown.files.insert(u"a1b2c3d4e5f60718"_s, *entry);
+        QCOMPARE(writeDrawingFile(*read, shown, 1790000000000), writeDrawingFile(*read, read->drawing, 1790000000000));
+        // The picture Brulion draws in its SVG (an export of it) is there.
+        QVERIFY(toSvg(shown).contains("data:image/png;base64,"));
+    }
+
+    void embeddedFilesSection_data()
+    {
+        QTest::addColumn<QByteArray>("section");
+        QTest::addColumn<QStringList>("expected"); // "fileId=link"
+        QTest::newRow("one") << QByteArray("## Embedded Files\nabc123: [[Obraz.png]]\n\n%%\n")
+                             << QStringList{u"abc123=Obraz.png"_s};
+        QTest::newRow("alias and heading") << QByteArray("## Embedded Files\na1: [[Zdjęcia/Źrebak ąę.jpg|mały]]\n"
+                                                         "b2: [[Plan.svg#warstwa]]\n")
+                                           << QStringList{u"a1=Zdjęcia/Źrebak ąę.jpg"_s, u"b2=Plan.svg"_s};
+        QTest::newRow("colour map of an SVG") << QByteArray("## Embedded Files\nc3: [[ikona.svg]] {\"#000\":\"red\"}\n")
+                                              << QStringList{u"c3=ikona.svg"_s};
+        QTest::newRow("CRLF, old heading") << QByteArray("# Embedded Files\r\nd4: [[a.png]]\r\ne5: [[b.png]]\r\n")
+                                           << QStringList{u"d4=a.png"_s, u"e5=b.png"_s};
+        QTest::newRow("LaTeX, a URL, Mermaid: none")
+                << QByteArray("## Embedded Files\nf6: $$\\sum_i x_i$$\ng7: https://example.com/a.png\nh8: [[ok.png]]\n")
+                << QStringList{u"h8=ok.png"_s};
+        QTest::newRow("ends at the next heading")
+                << QByteArray("## Embedded Files\ni9: [[a.png]]\n## Drawing\nj0: [[b.png]]\n")
+                << QStringList{u"i9=a.png"_s};
+        QTest::newRow("the same id twice: the first")
+                << QByteArray("## Embedded Files\nk1: [[a.png]]\nk1: [[b.png]]\n") << QStringList{u"k1=a.png"_s};
+        QTest::newRow("empty and broken") << QByteArray(
+                "## Embedded Files\nl2: [[]]\nm3: [[nie zamknięty\n: [[bez id.png]]\nn4 [[brak dwukropka.png]]\n")
+                                          << QStringList{};
+        QTest::newRow("no section") << QByteArray("## Text Elements\nTekst ^abc\n") << QStringList{};
+        QTest::newRow("a heading in the text, not at a line's start")
+                << QByteArray("Tekst ## Embedded Files\no5: [[a.png]]\n") << QStringList{};
+    }
+    void embeddedFilesSection()
+    {
+        QFETCH(QByteArray, section);
+        QFETCH(QStringList, expected);
+        const QByteArray file = PluginFrontmatter + "# Excalidraw Data\n## Text Elements\n" + section;
+        QStringList got;
+        for (const EmbeddedFile &f : brulion::drawing::embeddedFiles(file))
+            got.append(f.fileId + u'=' + f.link);
+        QCOMPARE(got, expected);
+    }
+
+    void embeddedFileEntries_data()
+    {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<QString>("mime");
+        QTest::newRow("png") << QByteArray("\x89PNG\r\n\x1a\nreszta") << u"image/png"_s;
+        QTest::newRow("jpeg") << QByteArray("\xff\xd8\xff\xe0reszta") << u"image/jpeg"_s;
+        QTest::newRow("gif") << QByteArray("GIF89a....") << u"image/gif"_s;
+        QTest::newRow("webp") << QByteArray("RIFF\0\0\0\0WEBPVP8 ", 16) << u"image/webp"_s;
+        QTest::newRow("svg") << QByteArray("<?xml version=\"1.0\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\"/>")
+                             << u"image/svg+xml"_s;
+        QTest::newRow("text") << QByteArray("Zażółć gęślą jaźń") << QString();
+        QTest::newRow("empty") << QByteArray() << QString();
+        QTest::newRow("a PDF") << QByteArray("%PDF-1.4") << QString();
+    }
+    void embeddedFileEntries()
+    {
+        QFETCH(QByteArray, bytes);
+        QFETCH(QString, mime);
+        const std::optional<QJsonObject> entry = embeddedFileEntry(u"id1"_s, bytes);
+        QCOMPARE(entry.has_value(), !mime.isEmpty());
+        if (entry) {
+            QCOMPARE(entry->value(u"id"_s).toString(), u"id1"_s);
+            QCOMPARE(entry->value(u"mimeType"_s).toString(), mime);
+            QVERIFY(entry->value(u"dataURL"_s).toString().startsWith(u"data:"_s + mime + u";base64,"_s));
+        }
+        QVERIFY(!embeddedFileEntry(QString(), bytes));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestDrawingExmd)

@@ -1,5 +1,6 @@
 #include "drawing/excalidraw.h"
 
+#include "drawing/edit.h"
 #include "drawing/stroke.h"
 
 #include <QJsonDocument>
@@ -616,6 +617,143 @@ QJsonObject elementJson(const Stroke &s, const QHash<QString, ElementType> *type
     return e;
 }
 
+namespace {
+
+/// The marker of a polygon's label in its customData (docs/SYNTAX.md §2 "Labels in polygons").
+constexpr QStringView LabelMarker = u"brulionLabel";
+
+bool hasLabelMarker(const QJsonObject &element)
+{
+    return element.value(u"customData"_s).toObject().value(LabelMarker).toBool();
+}
+
+/// `group` first in the element's groupIds (in place of the innermost one when `replaceFirst`).
+void putGroupFirst(QJsonObject &e, const QString &group, bool replaceFirst)
+{
+    QJsonArray groups = e.value(u"groupIds"_s).toArray();
+    if (!groups.isEmpty() && groups.first().toString() == group)
+        return;
+    if (replaceFirst && !groups.isEmpty())
+        groups.removeFirst();
+    groups.prepend(group);
+    e.insert(u"groupIds"_s, groups);
+}
+
+/// The labels of polygons as Brulion keeps them: a text marked as a label (customData
+/// `brulionLabel`) alone with one polygon in its innermost group, the rest of their groups the same,
+/// becomes that polygon's label (containerId, boundElements); the group is taken out of both (the
+/// writer puts it back). A group Excalidraw renamed (a copy made there) is renamed in the elements
+/// as read to polygonLabelGroup(), so what is written unchanged agrees with what is written anew.
+void attachPolygonLabels(Drawing &d)
+{
+    QHash<QString, QList<qsizetype>> members;
+    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
+        if (!d.strokes.at(i).groupIds.isEmpty())
+            members[d.strokes.at(i).groupIds.first()].append(i);
+    }
+    if (members.isEmpty())
+        return;
+    QSet<QString> foreignGroups;
+    for (const QJsonValue &v : std::as_const(d.foreign)) {
+        for (const QJsonValue &g : v.toObject().value(u"groupIds"_s).toArray())
+            foreignGroups.insert(g.toString());
+    }
+    QSet<QString> labelled;
+    for (const Stroke &e : std::as_const(d.strokes)) {
+        if (e.type == ElementType::Text && !e.containerId.isEmpty())
+            labelled.insert(e.containerId);
+    }
+    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
+        const Stroke &t = d.strokes.at(i);
+        if (t.type != ElementType::Text || t.id.isEmpty() || !t.containerId.isEmpty() || t.groupIds.isEmpty()
+            || !hasLabelMarker(t.element))
+            continue;
+        const QString group = t.groupIds.first();
+        const QList<qsizetype> &in = members.value(group);
+        if (in.size() != 2 || foreignGroups.contains(group))
+            continue;
+        const qsizetype j = in.at(0) == i ? in.at(1) : in.at(0);
+        const Stroke &p = d.strokes.at(j);
+        if (p.id.isEmpty() || !isLinear(p.type) || !holdsLabel(p) || labelled.contains(p.id) || p.groupIds.isEmpty()
+            || p.groupIds.first() != group || p.groupIds.mid(1) != t.groupIds.mid(1))
+            continue;
+        labelled.insert(p.id);
+        Stroke &label = d.strokes[i];
+        Stroke &polygon = d.strokes[j];
+        label.containerId = polygon.id;
+        label.groupIds.removeFirst();
+        polygon.groupIds.removeFirst();
+        if (!polygon.boundIds.contains(label.id))
+            polygon.boundIds.append(label.id);
+        const QString written = polygonLabelGroup(polygon.id);
+        if (group != written) {
+            putGroupFirst(label.element, written, true);
+            putGroupFirst(polygon.element, written, true);
+        }
+    }
+}
+
+/// The labels of polygons as the scene stores them (see attachPolygonLabels()): `written[i]` is
+/// `strokes[i]`'s JSON.
+void detachPolygonLabels(const QList<Stroke> &strokes, QList<QJsonObject> &written)
+{
+    QHash<QString, const Stroke *> byId;
+    for (const Stroke &s : strokes) {
+        if (!s.id.isEmpty() && !byId.contains(s.id))
+            byId.insert(s.id, &s);
+    }
+    QHash<QString, QString> labelOf; // polygon → its label
+    for (const Stroke &s : strokes) {
+        if (s.type != ElementType::Text || s.containerId.isEmpty())
+            continue;
+        const Stroke *c = byId.value(s.containerId);
+        if (c && isLinear(c->type) && holdsLabel(*c) && !labelOf.contains(c->id))
+            labelOf.insert(c->id, s.id);
+    }
+    for (qsizetype i = 0; i < strokes.size(); ++i) {
+        const Stroke &s = strokes.at(i);
+        QJsonObject &e = written[i];
+        const bool label = s.type == ElementType::Text && labelOf.value(s.containerId) == s.id && !s.id.isEmpty();
+        if (label) {
+            e.insert(u"containerId"_s, QJsonValue::Null);
+            QJsonObject custom = e.value(u"customData"_s).toObject();
+            if (!custom.value(LabelMarker).toBool()) {
+                custom.insert(LabelMarker.toString(), true);
+                e.insert(u"customData"_s, custom);
+            }
+            putGroupFirst(e, polygonLabelGroup(s.containerId), false);
+        } else if (labelOf.contains(s.id)) {
+            putGroupFirst(e, polygonLabelGroup(s.id), false);
+            const QString text = labelOf.value(s.id);
+            QJsonArray bound = e.value(u"boundElements"_s).toArray();
+            const qsizetype before = bound.size();
+            for (qsizetype k = bound.size() - 1; k >= 0; --k) {
+                if (bound.at(k).toObject().value(u"id"_s).toString() == text)
+                    bound.removeAt(k);
+            }
+            if (bound.size() != before)
+                e.insert(u"boundElements"_s, bound.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(bound));
+        } else if (s.type == ElementType::Text && hasLabelMarker(e)
+                   && (s.element.isEmpty() || s.element.value(u"version"_s).toInt(1) != s.version)) {
+            // No label any more (written anew): unmarked, so grouping it with a polygon later
+            // does not make it one.
+            QJsonObject custom = e.value(u"customData"_s).toObject();
+            custom.remove(LabelMarker);
+            if (custom.isEmpty())
+                e.remove(u"customData"_s);
+            else
+                e.insert(u"customData"_s, custom);
+        }
+    }
+}
+
+} // namespace
+
+QString polygonLabelGroup(QStringView polygonId)
+{
+    return u"brulion-label-"_s + polygonId;
+}
+
 std::optional<QJsonObject> sceneRoot(QByteArrayView json)
 {
     if (json.size() > MaxSceneBytes)
@@ -656,6 +794,7 @@ std::optional<Drawing> sceneFromObject(const QJsonObject &root)
         else
             d.foreign.append(v);
     }
+    attachPolygonLabels(d);
     d.appState = root.value(u"appState"_s).toObject();
     d.files = root.value(u"files"_s).toObject();
     if (const QString paper = d.appState.value(u"viewBackgroundColor"_s).toString(); !paper.isEmpty())
@@ -692,6 +831,7 @@ QJsonObject sceneObject(const Drawing &drawing)
     written.reserve(drawing.strokes.size() + drawing.foreign.size());
     for (const Stroke &s : drawing.strokes)
         written.append(elementJson(s, &types));
+    detachPolygonLabels(drawing.strokes, written);
     for (const QJsonValue &v : drawing.foreign)
         written.append(v.toObject());
     // Fractional indices that no longer rise (an element moved up or down, a copy): left out of

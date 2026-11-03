@@ -43,6 +43,7 @@
 // Everything is synchronous on the GUI thread; dates are local "YYYY-MM-DD" strings.
 #pragma once
 
+#include "drawing/excalidrawmd.h"
 #include "editorhost.h"
 #include "notebook/indexcachekeeper.h"
 #include "notebook/indexloader.h"
@@ -334,6 +335,19 @@ public:
     /// drawing::backdropSource of each embedded drawing file, at most 50 read): [{path, name}] —
     /// "Rysuj na tej stronie" offers to open one instead of making a second.
     Q_INVOKABLE QVariantList drawingsOnPdfPage(const QString &pdfPath, int page, const QString &note) const;
+    /// The note a drawing belongs to (the drawing editor's "Poprzednia / Następna strona PDF",
+    /// docs/UI.md "Drawing editor" → Backdrop): `fromNote` (the note it was opened from) when that
+    /// links to `drawingPath`, else the first note that does (backlinks(): journals newest first,
+    /// then by path); "" none.
+    Q_INVOKABLE QString noteOfDrawing(const QString &drawingPath, const QString &fromNote) const;
+    /// The drawing of a neighbouring PDF page DrawingBackdrops prepared (`prepared`: {svg, path,
+    /// page, name, error}) stored as "<name> s. <page>.svg" (EditorHost::drawingFileNameOn; a free
+    /// name) and embedded in `note` right before (`before`: the previous page) or after the block
+    /// that embeds `drawingPath` (notebook::insertBlockBeforeEmbed / insertBlockAfterEmbed, compare
+    /// and swap, three tries), or — no note, or it is gone — as a block of today's journal.
+    /// {path, note, journal}; {} and errorOccurred on failure.
+    Q_INVOKABLE QVariantMap addDrawingBeside(const QString &drawingPath, const QVariantMap &prepared,
+                                             const QString &note, bool before);
 
     /// Copied blocks as HTML (io::clipboardHtml: attachments as file links — none in the browser,
     /// whose assets are data: URLs —, block references as their text); workspaceclipboard.cpp.
@@ -733,6 +747,14 @@ private:
     /// The vault path an embed's target names from `fromNote` (as the editor resolves it: the
     /// index's link resolution, else the attachments folder).
     QString attachmentPathOf(const QString &target, const QString &fromNote) const;
+    /// The drawing file `drawing` just stored, embedded as a block of its own in `note` beside the
+    /// block `embedsIt` accepts nearest line `line` (after it, or before), else in today's journal
+    /// (addDrawingOnPdfPage(), addDrawingBeside()).
+    QVariantMap embedNewDrawing(const QString &drawing, const QString &note, int line,
+                                const std::function<bool(QStringView)> &embedsIt, bool before);
+    /// drawingUrl(): the embedded pictures of Excalidraw plugin drawings by the drawing's path, with
+    /// the version of the drawing they were read from.
+    mutable QHash<QString, std::pair<QString, QList<drawing::EmbeddedFile>>> m_drawingPictures;
     mutable QHash<QString, QUrl> m_dataUrls;
     mutable QHash<QString, QSize> m_dataUrlSizes; // pictures among them (picturesize.h)
     /// Pages shown by editors (editorOpened()), and by how many.

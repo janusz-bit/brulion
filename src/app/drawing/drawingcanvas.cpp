@@ -5,6 +5,7 @@
 
 #include "drawing/backdrop.h"
 #include "drawing/drawingfile.h"
+#include "drawing/excalidrawmd.h"
 #include "drawing/geometry.h"
 #include "drawing/palette.h"
 #include "drawing/stroke.h"
@@ -375,6 +376,10 @@ void DrawingCanvas::syncPrepared()
 
 void DrawingCanvas::setDocument(drawing::Drawing doc)
 {
+    for (auto it = m_embeddedFiles.constBegin(); it != m_embeddedFiles.constEnd(); ++it) {
+        if (!doc.files.contains(it.key()))
+            doc.files.insert(it.key(), it.value());
+    }
     const bool sameFiles = doc.files == m_doc.files;
     m_doc = std::move(doc);
     if (!sameFiles)
@@ -385,12 +390,48 @@ void DrawingCanvas::setDocument(drawing::Drawing doc)
     invalidateCache();
 }
 
+void DrawingCanvas::readEmbeddedLinks(const QByteArray &bytes, bool always)
+{
+    QVariantList links;
+    if (m_formatKnown && m_format == drawing::FileFormat::ExcalidrawMarkdown) {
+        for (const drawing::EmbeddedFile &f : drawing::embeddedFiles(bytes))
+            links.append(QVariantMap{{u"fileId"_s, f.fileId}, {u"link"_s, f.link}});
+    }
+    if (always || links != m_embeddedLinks) {
+        m_embeddedLinks = links;
+        Q_EMIT embeddedFilesChanged();
+    }
+}
+
+bool DrawingCanvas::provideEmbeddedFile(const QString &fileId, const QByteArray &bytes)
+{
+    const bool listed = std::any_of(m_embeddedLinks.cbegin(), m_embeddedLinks.cend(), [&fileId](const QVariant &v) {
+        return v.toMap().value(u"fileId"_s).toString() == fileId;
+    });
+    if (!listed)
+        return false;
+    const std::optional<QJsonObject> entry = drawing::embeddedFileEntry(fileId, bytes);
+    // (A picture the scene has itself is never replaced.)
+    const QJsonObject own = m_doc.files.value(fileId).toObject();
+    if (!entry || (!own.isEmpty() && !own.value(drawing::EmbeddedFileKey).toBool()))
+        return false;
+    if (m_embeddedFiles.value(fileId).toObject() == *entry)
+        return true;
+    m_embeddedFiles.insert(fileId, *entry);
+    m_doc.files.insert(fileId, *entry);
+    m_pictures.remove(fileId);
+    invalidateCache();
+    update();
+    return true;
+}
+
 QString DrawingCanvas::load(const QByteArray &bytes)
 {
     cancelStroke();
     if (busy())
         cancelToolGesture();
     endTextEdit();
+    m_embeddedFiles = QJsonObject(); // (another file's pictures)
     QString status;
     drawing::Drawing doc;
     // A new drawing is an SVG (Brulion's own).
@@ -416,6 +457,7 @@ QString DrawingCanvas::load(const QByteArray &bytes)
     }
     m_editable = status.isEmpty();
     m_prepared.clear();
+    readEmbeddedLinks(m_editable ? bytes : QByteArray(), true);
     setDocument(m_editable ? std::move(doc) : drawing::Drawing());
     m_base = drawing::mergeBase(m_doc);
     m_known = bytes;
@@ -458,6 +500,7 @@ bool DrawingCanvas::takeExternal(const QByteArray &bytes)
     if (m_modified)
         *theirs = drawing::merge(m_base, m_doc, std::move(*theirs));
     const QSet<QString> erasing = m_erasing;
+    readEmbeddedLinks(bytes, false);
     setDocument(std::move(*theirs));
     m_erasing = erasing;
     m_base = taken;
@@ -1358,6 +1401,7 @@ void DrawingCanvas::mouseUngrabEvent()
 
 void DrawingCanvas::hoverMoveEvent(QHoverEvent *event)
 {
+    m_pointer = event->position();
     if (m_tool == u"eraser") {
         m_hover = event->position();
         update();
@@ -1369,6 +1413,7 @@ void DrawingCanvas::hoverMoveEvent(QHoverEvent *event)
 
 void DrawingCanvas::hoverLeaveEvent(QHoverEvent *event)
 {
+    m_pointer.reset();
     if (m_hover.x() >= 0) {
         m_hover = QPointF(-1, -1);
         update();
