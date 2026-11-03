@@ -1,11 +1,14 @@
 // AppUpdates (appupdates.h): when GitHub is asked (a local HTTP server stands in for it), when the
-// message about a newer version shows and what is kept between runs.
+// message about a newer version shows and what is kept between runs. A build with the CMake option
+// BRULION_UPDATE_CHECK=OFF runs only the tests that need no check (TestsWithoutTheCheck) and the
+// one of such a build: never supported, never asking.
 #include "appcontroller.h"
 #include "appsettings.h"
 #include "appupdates.h"
 
 #include "../minihttpserver.h"
 
+#include <QSet>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -18,6 +21,9 @@ using brulion::shell::AppUpdates;
 namespace {
 
 const QDateTime Noon(QDate(2026, 11, 2), QTime(12, 0));
+
+const QSet<QByteArray> TestsWithoutTheCheck = {"checkFollowsTheCMakeOption", "unsupportedNeverAsks",
+                                               "neverInABuildWithoutTheCheck"};
 
 } // namespace
 
@@ -57,6 +63,8 @@ private Q_SLOTS:
         m_settings = std::make_unique<AppSettings>(m_dir.filePath(u"settings.ini"_s), m_dir.path());
         m_server = std::make_unique<MiniHttpServer>();
         m_now = Noon;
+        if (!AppUpdates::checkBuiltIn() && !TestsWithoutTheCheck.contains(QTest::currentTestFunction()))
+            QSKIP("built with BRULION_UPDATE_CHECK=OFF: no check to test");
     }
     void cleanup() { m_settings.reset(); }
 
@@ -186,6 +194,34 @@ private Q_SLOTS:
         QTest::qWait(50);
         QVERIFY(m_server->requests.isEmpty());
         QCOMPARE(updates->availableVersion(), QString());
+    }
+
+    // The test is built with the CMake option's value too (tests/app/shell/CMakeLists.txt).
+    void checkFollowsTheCMakeOption() { QCOMPARE(AppUpdates::checkBuiltIn(), bool(BRULION_UPDATE_CHECK_EXPECTED)); }
+
+    void neverInABuildWithoutTheCheck()
+    {
+        if (AppUpdates::checkBuiltIn())
+            QSKIP("built with BRULION_UPDATE_CHECK=ON");
+        answer("v0.7.0");
+        m_settings->setValue(u"updates/latest"_s, u"0.7.0"_s);
+        auto updates = make(); // asked to be supported
+        QVERIFY(!updates->supported());
+        updates->start();
+        updates->checkIfDue();
+        QTest::qWait(50);
+        QVERIFY(m_server->requests.isEmpty());
+        QCOMPARE(updates->availableVersion(), QString());
+
+        // Not even --update-available shows the message.
+        AppController::Options options;
+        options.settingsFile = m_dir.filePath(u"controller.ini"_s);
+        options.dataDir = m_dir.path();
+        options.checkForUpdates = true;
+        options.arguments = {u"brulion"_s, u"--update-available"_s, u"99.0.0"_s};
+        AppController dev(options);
+        QVERIFY(!dev.updates()->supported());
+        QCOMPARE(dev.updates()->availableVersion(), QString());
     }
 
     void startAsksAfterTheDelay()

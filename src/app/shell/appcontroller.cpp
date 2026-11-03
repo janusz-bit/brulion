@@ -146,7 +146,11 @@ AppController::AppController(const Options &options, QObject *parent)
     AppUpdates::Options updates;
     updates.settings = m_settings.get();
     updates.currentVersion = version();
-    updates.supported = !devUpdate.isEmpty() || (options.checkForUpdates && (isAndroid() || platform() == "windows"_L1));
+    // Builds without the check (BRULION_UPDATE_CHECK=OFF, e.g. F-Droid's) never tell, not even with
+    // --update-available.
+    updates.supported =
+            AppUpdates::checkBuiltIn()
+            && (!devUpdate.isEmpty() || (options.checkForUpdates && (isAndroid() || platform() == "windows"_L1)));
     updates.network = devUpdate.isEmpty();
     updates.clock = [this] { return now(); };
     m_updates = std::make_unique<AppUpdates>(updates);

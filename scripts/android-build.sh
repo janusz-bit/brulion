@@ -31,6 +31,9 @@
 #   BRULION_ANDROID_SELFTEST=1   also build the bridge self-test APK (same package as the app!)
 #                                for scripts/android-emulator-test.sh
 #   BRULION_ANDROID_VERSION_CODE versionCode (default major*1000000 + minor*1000 + patch)
+#   BRULION_UPDATE_CHECK=OFF     no check for a newer version on GitHub, no message or switch about
+#                                it (CMake option BRULION_UPDATE_CHECK, default ON): for builds that a
+#                                store updates (F-Droid, IzzyOnDroid; docs/ANDROID.md)
 #   BRULION_ANDROID_CMAKE=system use the cmake/ninja on PATH instead of the SDK's (NixOS's
 #                                patched cmake does not find the NDK sysroot's EGL/GLES headers)
 #   BRULION_ANDROID_OPENSSL_DIR  a checkout of KDAB/android_openssl for offline builds (default:
@@ -306,6 +309,7 @@ cmake_args=(
   -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
   -DBRULION_WERROR="${BRULION_WERROR:-OFF}"
   -DBRULION_ANDROID_VERSION_CODE="${BRULION_ANDROID_VERSION_CODE:-}"
+  -DBRULION_UPDATE_CHECK="${BRULION_UPDATE_CHECK:-ON}"
 )
 [[ ${BRULION_ANDROID_SELFTEST:-0} == 1 ]] && cmake_args+=(-DBRULION_ANDROID_SELFTEST=ON)
 [[ -n ${BRULION_ANDROID_OPENSSL_DIR:-} ]] && cmake_args+=(-DBRULION_ANDROID_OPENSSL_DIR="$BRULION_ANDROID_OPENSSL_DIR")

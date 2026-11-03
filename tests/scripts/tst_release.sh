@@ -674,6 +674,121 @@ expect "... sending release's unpushed commits along" ancestor "$origin" "$(sha 
 expect "... release is main" same "$origin" release "$origin" main
 expect "... but says v0.3.6's tag stays here" has "they carry the tags v0.3.6, which this run does not push (git push origin v0.3.6)"
 
+echo "--- the fastlane changelogs of the release's versionCode (F-Droid, IzzyOnDroid)"
+fixture fastlane
+rel "$work" --dry-run patch
+expect "without fastlane/metadata/android there is none" lacks "fastlane"
+for locale in en-US pl; do
+  mkdir -p "$work/fastlane/metadata/android/$locale"
+  printf 'Brulion\n' >"$work/fastlane/metadata/android/$locale/title.txt"
+done
+cat >"$work/.github/release-notes.md" <<'EOF'
+**Brulion {{VERSION}}** — notatki
+
+**Nowości w {{VERSION}}**
+
+* **Zegar z `⏰`** — przypomnienia dzwonią.
+* Szybsze [[Wyszukiwanie|szukanie]] w [[Dziennik]]u i [linkach](https://example.invalid/a) — także bez polskich znaków.
+- **Zażółć gęślą jaźń** w tabelach
+  * wcięty punkt się nie liczy
+
+Z wersji 0.3.5: zegar.
+
+**Najważniejsze**
+
+* Dziennik na każdy dzień
+EOF
+git -C "$work" add -A
+git -C "$work" commit -q -m "Update release notes for v0.3.6, fastlane texts"
+pl=fastlane/metadata/android/pl/changelogs/3006.txt en=fastlane/metadata/android/en-US/changelogs/3006.txt
+before=$(snapshot "$work")
+rel "$work" --dry-run patch
+expect "a dry run names both changelogs of versionCode 3006" has "fastlane: $pl:"
+expect "... the English one too" has "fastlane: $en:"
+expect "... with the text it writes" has "| • Zegar z ⏰"
+expect "... saying the commit has them" has "updates CMakeLists.txt nix/package.nix to 0.3.6, writes the fastlane changelogs and commits \"Release v0.3.6\""
+expect "... and changes nothing" test "$(snapshot "$work")" = "$before"
+rel "$work" patch --yes
+expect "the release succeeds" test "$status" = 0
+expect "... with both changelogs in \"Release v0.3.6\"" test "$(git -C "$work" show --format= --name-only main | sort | paste -sd ' ' -)" = "CMakeLists.txt $en $pl nix/package.nix"
+expected_pl='Nowości w 0.3.6:
+• Zegar z ⏰
+• Szybsze szukanie w Dzienniku i linkach
+• Zażółć gęślą jaźń
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.3.6'
+expect "... the Polish one lists the news' leads" test "$(git -C "$work" show "main:$pl")" = "$expected_pl"
+expect "... the English one points to the release notes" test "$(git -C "$work" show "main:$en")" = "What's new in Brulion 0.3.6 (in Polish):
+https://github.com/janusz-bit/brulion/releases/tag/v0.3.6"
+expect "... on a clean main" on_main_clean "$work"
+
+rel "$work" 0.4.0-rc.1 --yes
+pl=fastlane/metadata/android/pl/changelogs/4000.txt en=fastlane/metadata/android/en-US/changelogs/4000.txt
+expect "a pre-release writes its version's changelogs (versionCode 4000)" test "$(git -C "$work" show --format= --name-only main | grep -c changelogs/4000.txt)" = 2
+expect "... pointing to the final release" has "| https://github.com/janusz-bit/brulion/releases/tag/v0.4.0"
+main0=$(sha "$work" main)
+commit "$work" fix.txt 'poprawka do rc' "Fix for rc.2"
+rel "$work" 0.4.0-rc.2 --yes
+expect "the next pre-release with the same notes makes no commit" test "$(subject "$work" main)/$(sha "$work" main~1)" = "Fix for rc.2/$main0"
+expect "... as it says" has "CMakeLists.txt already has 0.4.0: no version commit"
+expect "... and tags the fix" same "$work" v0.4.0-rc.2 "$work" main
+# Longer news: what does not fit in 500 characters ends in "• …"; a failed run puts the
+# changelog back as it was.
+{
+  printf '%s\n' '**Nowości w {{VERSION}}**' ''
+  for i in $(seq 1 40); do printf '* **Nowość numer %d z polskimi znakami: ąćęłńóśźż** — opis\n' "$i"; done
+} >"$work/.github/release-notes.md"
+git -C "$work" commit -q -am "Update release notes for v0.4.0"
+before=$(snapshot "$work")
+old_pl=$(git -C "$work" show "main:$pl")
+hook "$work" pre-commit 'exit 1'
+rel "$work" 0.4.0 --yes
+expect "a refused commit of the changelogs fails the run" has 'release.sh failed while committing "Release v0.4.0" on main.'
+expect "... putting the changelog back" test "$(cat "$work/$pl")" = "$old_pl"
+expect "... leaving everything as before" test "$(snapshot "$work")" = "$before"
+expect "... on a clean main" on_main_clean "$work"
+rm -- "$work/.git/hooks/pre-commit"
+rel "$work" 0.4.0 --yes
+expect "the final release commits only the changed Polish changelog" test "$(subject "$work" main)/$(git -C "$work" show --format= --name-only main)" = "Release v0.4.0/$pl"
+expect "... saying so" has "CMakeLists.txt already has 0.4.0; writes the fastlane changelogs and commits \"Release v0.4.0\""
+expect "... at most 500 bytes" test "$(wc -c <"$work/$pl")" -le 500
+expect "... but close to it" test "$(wc -c <"$work/$pl")" -gt 400
+expect "... the news that do not fit end in \"• …\"" grep -qx '• …' "$work/$pl"
+expect "... the first news is there" grep -qx '• Nowość numer 1 z polskimi znakami: ąćęłńóśźż' "$work/$pl"
+expect "... the last is not" test "$(grep -c 'numer 40' "$work/$pl")" = 0
+expect "... nor the link missing" test "$(tail -n 1 "$work/$pl")" = "Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.4.0"
+
+# A changelog the run would write that is in the working tree but not committed is refused.
+commit "$work" .github/release-notes.md '* Jeszcze jedna (0.4.1)' "Update release notes for v0.4.1"
+mkdir -p "$work/fastlane/metadata/android/pl/changelogs"
+printf 'ręcznie\n' >"$work/fastlane/metadata/android/pl/changelogs/4001.txt"
+before=$(snapshot "$work")
+rel "$work" patch --yes
+expect "an uncommitted changelog of the version is refused" has "error: fastlane/metadata/android/pl/changelogs/4001.txt is not committed"
+expect "... changing nothing" test "$(snapshot "$work")" = "$before"
+rm -- "$work/fastlane/metadata/android/pl/changelogs/4001.txt"
+# A new changelogs directory goes again when the run fails.
+git -C "$work" rm -q -r fastlane/metadata/android/en-US/changelogs
+git -C "$work" commit -q -m "No English changelogs"
+before=$(snapshot "$work")
+hook "$work" pre-commit 'exit 1'
+rel "$work" patch --yes
+expect "a failed run removes the changelogs directory it made" test ! -e "$work/fastlane/metadata/android/en-US/changelogs"
+expect "... leaving everything as before" test "$(snapshot "$work")" = "$before"
+expect "... on a clean main" on_main_clean "$work"
+rm -- "$work/.git/hooks/pre-commit"
+# Notes without a news section: all their bullets; without bullets: the version and the link.
+printf '%s\n' '**Brulion {{VERSION}}** — notatki' '' '* Bez sekcji — wszystkie punkty' '* **Drugi** punkt' >"$work/.github/release-notes.md"
+git -C "$work" commit -q -am "Notes without a section"
+rel "$work" --dry-run patch
+expect "notes without a news section give all their bullets" has "| • Bez sekcji"
+expect "... each" has "| • Drugi"
+printf '%s\n' '**Brulion {{VERSION}}** — same poprawki.' >"$work/.github/release-notes.md"
+git -C "$work" commit -q -am "Notes without bullets"
+rel "$work" --dry-run patch
+expect "notes without bullets give the version" has "| Brulion 0.4.1."
+expect "... and the link" has "| Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.4.1"
+
 echo
 if ((failed)); then
   echo "Totals: $failed failed"

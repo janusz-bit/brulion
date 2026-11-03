@@ -15,6 +15,10 @@ option(BRULION_WERROR "Treat compiler warnings in Brulion's own code as errors" 
 # OFF: only the core libraries and the command line brulion-cli (src/cli), without Qt Quick, QML,
 # SVG or Wayland — for headless machines (nix: packages.<system>.brulion-cli). Desktop only.
 option(BRULION_BUILD_APP "Build the app (Qt Quick); OFF builds the core libraries and brulion-cli only" ON)
+# OFF: the app never asks GitHub for a newer version (src/app/shell/appupdates.h) and has neither
+# the message about one nor its switch in the settings — for builds that a store updates (F-Droid,
+# IzzyOnDroid; docs/ANDROID.md). Android and Windows only ask with ON (the default).
+option(BRULION_UPDATE_CHECK "Ask GitHub for a newer version (Android, Windows); OFF for store builds" ON)
 
 if(BRULION_BUILD_APP)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Svg LinguistTools)

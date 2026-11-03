@@ -10,6 +10,10 @@ using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcAppUpdates, "brulion.updates")
 
+#ifndef BRULION_UPDATE_CHECK
+#error "BRULION_UPDATE_CHECK (0 or 1) comes from the CMake option of that name"
+#endif
+
 namespace brulion::shell {
 
 namespace {
@@ -25,12 +29,12 @@ constexpr int LookEveryMs = 6 * 60 * 60 * 1000;
 } // namespace
 
 AppUpdates::AppUpdates(const Options &options, QObject *parent)
-    : QObject(parent),
-      m_settings(options.settings),
-      m_current(options.currentVersion),
-      m_supported(options.supported),
-      m_firstCheckDelayMs(options.firstCheckDelayMs),
-      m_clock(options.clock)
+    : QObject(parent)
+    , m_settings(options.settings)
+    , m_current(options.currentVersion)
+    , m_supported(options.supported && checkBuiltIn())
+    , m_firstCheckDelayMs(options.firstCheckDelayMs)
+    , m_clock(options.clock)
 {
     m_latest = m_settings->value(KeyLatest).toString();
     m_dismissed = m_settings->value(KeyDismissed).toString();
@@ -46,6 +50,11 @@ AppUpdates::AppUpdates(const Options &options, QObject *parent)
 }
 
 AppUpdates::~AppUpdates() = default;
+
+bool AppUpdates::checkBuiltIn()
+{
+    return BRULION_UPDATE_CHECK != 0;
+}
 
 void AppUpdates::start()
 {

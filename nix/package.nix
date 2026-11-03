@@ -47,6 +47,7 @@ stdenv.mkDerivation (finalAttrs: {
       ++ lib.optionals finalAttrs.doCheck [
         ../docs
         ../scripts
+        ../fastlane
       ]
     );
   };

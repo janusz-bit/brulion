@@ -1,0 +1,8 @@
+Nowości w 0.8.1:
+• Diagramy Mermaid
+• Automatyczne kopie zapasowe
+• Znajdź i zamień
+• Klikalne części tagu zagnieżdżonego
+• Usuwanie z cofaniem
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.8.1

@@ -36,3 +36,12 @@ if(BRULION_BASH)
                      ${PROJECT_SOURCE_DIR}/scripts/bench.sh)
     set_tests_properties(tst_scripts_bench_budget PROPERTIES SKIP_RETURN_CODE 77)
 endif()
+# The store texts and pictures of F-Droid and IzzyOnDroid (fastlane/metadata/android, docs/ANDROID.md):
+# scripts/check-fastlane-metadata.sh on small metadata folders, then on the repository's, which must
+# have the changelog of the version in CMakeLists.txt.
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_check_fastlane_metadata
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_check_fastlane_metadata.sh
+                     ${PROJECT_SOURCE_DIR}/scripts/check-fastlane-metadata.sh
+                     ${PROJECT_SOURCE_DIR}/fastlane/metadata/android ${PROJECT_SOURCE_DIR}/CMakeLists.txt)
+endif()

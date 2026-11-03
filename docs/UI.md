@@ -84,7 +84,9 @@ components — no Material/Fusion look, so all targets look identical.
   Brulion X.Y.Z", **Zobacz na GitHubie** (the release's page in the browser; the card stays until
   the app is updated) and a cross (no more message about this version; a later release shows it
   again). Settings → Aplikacja → "Sprawdzaj nowe wersje" (on by default, this device's setting)
-  turns it off; GitHub is asked once a day and only while it is on.
+  turns it off; GitHub is asked once a day and only while it is on. Builds with the CMake option
+  `BRULION_UPDATE_CHECK=OFF` (store builds: F-Droid, IzzyOnDroid; docs/ANDROID.md) have neither
+  the card nor the switch (`updates.supported` is false, also with `--update-available`).
 * **Wide (≥ 900 px):** `SplitView` — left **sidebar** | **top bar** + current view | optional
   right **side panel**. One 1-px hairline between them: the split handle's (`BSplitHandle`, which
   also highlights on hover and while dragging); the sidebar and the side panel draw no edge of
