@@ -134,11 +134,13 @@ Gdy otwarty jest PDF. Więcej: [[Dokument i konspekt#PDF-y|PDF-y]].
 | Enter / F3 | następne trafienie |
 | Shift+Enter / Shift+F3 | poprzednie trafienie |
 | Ctrl+G | przejdź do strony |
+| Ctrl+C | kopiuj zaznaczony tekst |
+| Ctrl+A | zaznacz tekst całej bieżącej strony |
 | Ctrl++ / Ctrl+- | powiększ / pomniejsz |
 | Ctrl+0 | dopasuj do szerokości |
 | Ctrl + kółko myszy | powiększanie wokół kursora |
 | PageDown / Spacja, PageUp / Shift+Spacja | ekran niżej / wyżej |
 | ↑ ↓ (← → po powiększeniu) | przewijanie |
 | Home / End | pierwsza / ostatnia strona |
-| Esc | zamknij szukanie, potem przeglądarkę |
+| Esc | usuń zaznaczenie, zamknij szukanie, potem przeglądarkę |
 | Alt+← | wróć (zamyka przeglądarkę) |

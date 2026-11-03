@@ -3,10 +3,13 @@
 #include "pdfrenderpool.h"
 
 #include "pdfpages.h"
+#include "pdftext.h"
 
+#include <QClipboard>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QPointer>
 
 #include <algorithm>
@@ -146,6 +149,7 @@ void PdfVisiblePages::pageChanged(int i)
 struct PdfViewModel::SizeJob {
     QString file;
     QString version;
+    QString password;
     int laid = 0;
     int generation = 0;
     std::shared_ptr<std::atomic_bool> cancel;
@@ -157,6 +161,8 @@ PdfViewModel::PdfViewModel(QObject *parent) : QObject(parent), m_settleTimer(thi
 {
     m_pages = new PdfVisiblePages(this);
     m_searchAvailable = platform::pdfTextAvailable();
+    m_selectionAvailable = platform::pdfSelectionAvailable();
+    m_passwordAvailable = platform::pdfPasswordAvailable();
     m_settleTimer.setSingleShot(true);
     m_settleTimer.setInterval(SettleMs);
     connect(&m_settleTimer, &QTimer::timeout, this, &PdfViewModel::settle);
@@ -174,6 +180,8 @@ PdfViewModel::~PdfViewModel()
         m_openCancel->store(true);
     if (m_searchCancel)
         m_searchCancel->store(true);
+    m_latestSelectJob->store(-1);
+    releasePassword();
 }
 
 QAbstractListModel *PdfViewModel::pages() const
@@ -186,7 +194,10 @@ void PdfViewModel::setFile(const QString &file)
     if (file == m_file)
         return;
     m_file = file;
-    // Another file starts at its top, fitted.
+    // Another file starts at its top, fitted, and never with the last one's password.
+    m_password.clear();
+    m_passwordRejected = false;
+    releasePassword();
     m_keepPage = 0;
     m_keepScale = 0;
     m_keepFit = true;
@@ -238,6 +249,29 @@ void PdfViewModel::reload()
     open();
 }
 
+void PdfViewModel::unlock(const QString &password)
+{
+    m_password = password;
+    m_passwordRejected = false;
+    open();
+}
+
+void PdfViewModel::setPasswordAvailable(bool available)
+{
+    if (available == m_passwordAvailable)
+        return;
+    m_passwordAvailable = available;
+    Q_EMIT statusChanged();
+}
+
+void PdfViewModel::releasePassword()
+{
+    if (m_heldPasswordFile.isEmpty())
+        return;
+    PdfReaderPool::instance().releasePassword(m_heldPasswordFile);
+    m_heldPasswordFile.clear();
+}
+
 void PdfViewModel::setStatus(Status status)
 {
     m_status = status;
@@ -267,6 +301,15 @@ void PdfViewModel::open()
     m_failed.clear();
     m_error.clear();
     m_locked = false;
+    clearSelection();
+    m_links.clear();
+    m_linksAsked.clear();
+    ++m_linkRevision;
+    Q_EMIT linksChanged();
+    if (!m_outline.isEmpty()) {
+        m_outline.clear();
+        Q_EMIT outlineChanged();
+    }
     if (m_file.isEmpty()) {
         m_layout.setPages({});
         m_pages->reset();
@@ -289,6 +332,7 @@ void PdfViewModel::open()
     const int generation = m_generation;
     const QString file = m_file;
     const QString version = m_version;
+    const QString password = m_password;
     const std::shared_ptr<std::atomic_bool> cancel = m_openCancel;
     const std::shared_ptr<bool> alive = m_alive;
     const QPointer<PdfViewModel> self(this);
@@ -297,23 +341,31 @@ void PdfViewModel::open()
                 if (cancel->load())
                     return;
                 platform::PdfInfo info;
-                PdfReaderPool::Lease lease = PdfReaderPool::instance().acquire(file, version, &info);
+                PdfReaderPool::Lease lease = PdfReaderPool::instance().acquire(file, version, &info, password);
                 if (!lease) {
                     const bool locked = info.locked;
                     const bool empty = info.pages == 0 || info.error.contains(u"no pages"_s);
-                    post(alive, [self, generation, locked, empty] {
+                    post(alive, [self, generation, locked, empty, password] {
                         if (!self || generation != self->m_generation)
                             return;
-                        self->fail(locked  ? tr("This PDF is protected with a password: Brulion cannot open it.")
-                                   : empty ? tr("This PDF has no pages.")
-                                           : tr("This PDF cannot be read."),
-                                   locked);
+                        PdfViewModel &m = *self;
+                        // A wrong password is never kept.
+                        m.m_passwordRejected = locked && !password.isEmpty();
+                        if (locked) {
+                            m.m_password.clear();
+                            m.releasePassword();
+                        }
+                        m.fail(locked && m.m_passwordAvailable ? tr("This PDF is protected with a password.")
+                               : locked ? tr("This PDF is protected with a password: Brulion cannot open it.")
+                               : empty  ? tr("This PDF has no pages.")
+                                        : tr("This PDF cannot be read."),
+                               locked);
                     });
                     return;
                 }
                 const int count = lease->pageCount();
                 const QSizeF first = lease->pageSize(1);
-                post(alive, [self, generation, count, first] {
+                post(alive, [self, generation, count, first, file, password] {
                     if (!self || generation != self->m_generation)
                         return;
                     if (count <= 0) {
@@ -321,6 +373,13 @@ void PdfViewModel::open()
                         return;
                     }
                     PdfViewModel &m = *self;
+                    m.m_passwordRejected = false;
+                    if (!password.isEmpty() && m.m_heldPasswordFile != file) {
+                        // The image provider draws its pages with it from now on (memory only).
+                        m.releasePassword();
+                        PdfReaderPool::instance().holdPassword(file, password);
+                        m.m_heldPasswordFile = file;
+                    }
                     m.m_totalPages = count;
                     m.m_layout.setPages(QList<QSizeF>(std::min(count, MaxViewerPages), first));
                     if (m.m_keepScale > 0 && !m.m_keepFit) {
@@ -341,6 +400,7 @@ void PdfViewModel::open()
                     Q_EMIT m.moveViewport(at.x(), at.y());
                     if (!m.m_searchText.trimmed().isEmpty())
                         m.startSearch();
+                    m.loadOutline();
                 });
                 // The real sizes, a chunk per task (pages drawn meanwhile go first: higher
                 // priority). Qt PDF and poppler: microseconds a page; Android: ~1 ms.
@@ -348,6 +408,7 @@ void PdfViewModel::open()
                 auto job = std::make_shared<SizeJob>();
                 job->file = file;
                 job->version = version;
+                job->password = password;
                 job->laid = std::min(count, MaxViewerPages);
                 job->generation = generation;
                 job->cancel = cancel;
@@ -365,7 +426,8 @@ void PdfViewModel::readSizes(const std::shared_ptr<SizeJob> &job, int from)
     QList<QSizeF> sizes;
     const int to = std::min(job->laid, from + SizeChunk - 1);
     {
-        PdfReaderPool::Lease reader = PdfReaderPool::instance().acquire(job->file, job->version);
+        PdfReaderPool::Lease reader =
+                PdfReaderPool::instance().acquire(job->file, job->version, nullptr, job->password);
         if (!reader)
             return;
         for (int page = from; page <= to && !job->cancel->load(); ++page)
@@ -546,6 +608,8 @@ void PdfViewModel::updateVisible()
     }
     const auto [first, last] = m_layout.range(m_contentY - m_viewportHeight / 2, m_contentY + m_viewportHeight * 1.5);
     m_pages->setRange(first, last);
+    if (first >= 0)
+        loadLinks(first + 1, last + 1);
 }
 
 void PdfViewModel::updateCurrentPage()
@@ -577,6 +641,13 @@ QRectF PdfViewModel::pageRect(int page) const
     return m_layout.rect(page - 1);
 }
 
+int PdfViewModel::pageAt(qreal x, qreal y) const
+{
+    if (m_status != Status::Ready || !std::isfinite(x) || !std::isfinite(y))
+        return 0;
+    return m_layout.indexAt(QPointF(x, y)) + 1;
+}
+
 QPointF PdfViewModel::positionForPage(int page, qreal fraction) const
 {
     const int index = std::clamp(page, 1, std::max(1, m_layout.count())) - 1;
@@ -584,7 +655,21 @@ QPointF PdfViewModel::positionForPage(int page, qreal fraction) const
     if (r.isNull())
         return {};
     const qreal top = fraction > 0 ? r.y() + fraction * r.height() : r.y() - std::min(m_gap / 2, r.y());
-    return clampedPosition(QPointF(m_contentX, top));
+    // Sideways only when the page is out of sight (two pages side by side, zoomed in).
+    const qreal x = r.right() <= m_contentX || r.left() >= m_contentX + m_viewportWidth ? r.x() - m_margin : m_contentX;
+    return clampedPosition(QPointF(x, top));
+}
+
+QPointF PdfViewModel::positionForTarget(int page, qreal top) const
+{
+    if (!(top >= 0) || !std::isfinite(top))
+        return positionForPage(page, 0);
+    const int index = std::clamp(page, 1, std::max(1, m_layout.count())) - 1;
+    const QRectF r = m_layout.rect(index);
+    if (r.isNull())
+        return {};
+    const QPointF at = positionForPage(page, 0);
+    return clampedPosition(QPointF(at.x(), r.y() + std::min<qreal>(top, 1) * r.height() - m_gap));
 }
 
 QPointF PdfViewModel::applyScale(qreal scale, QPointF viewportPoint, bool fit)
@@ -743,6 +828,7 @@ void PdfViewModel::startSearch()
     const QPointer<PdfViewModel> self(this);
     const QString file = m_file;
     const QString version = m_version;
+    const QString password = m_password;
     const int count = m_layout.count();
     const int start = std::clamp(m_currentPage, 1, count);
     Q_EMIT searchChanged();
@@ -756,7 +842,7 @@ void PdfViewModel::startSearch()
                             self->searchBatch(job, hits, searched, sawText, done, capped);
                     });
                 };
-                PdfReaderPool::Lease lease = PdfReaderPool::instance().acquire(file, version);
+                PdfReaderPool::Lease lease = PdfReaderPool::instance().acquire(file, version, nullptr, password);
                 if (!lease) {
                     send({}, 0, false, true, false);
                     return;
@@ -921,6 +1007,302 @@ QPointF PdfViewModel::previousHit()
     ++m_hitRevision;
     Q_EMIT searchChanged();
     return positionForHit(m_currentHit);
+}
+
+// ---- Two pages side by side ------------------------------------------------------------------
+
+void PdfViewModel::setTwoPages(bool on)
+{
+    applySpread(on, m_layout.coverAlone());
+}
+
+void PdfViewModel::setCoverAlone(bool on)
+{
+    applySpread(m_layout.twoPages(), on);
+}
+
+void PdfViewModel::applySpread(bool twoPages, bool coverAlone)
+{
+    if (twoPages == m_layout.twoPages() && coverAlone == m_layout.coverAlone())
+        return;
+    const int page = m_currentPage;
+    m_layout.setSpread(twoPages, coverAlone);
+    if (m_fitWidth)
+        m_layout.setScale(m_layout.fitWidthScale());
+    Q_EMIT spreadChanged();
+    Q_EMIT layoutChanged();
+    m_pages->geometryChanged();
+    if (m_status == Status::Ready && page > 0) {
+        // The current page stays in view and stays the current one.
+        const QPointF at = positionForPage(page, 0);
+        m_contentX = at.x();
+        m_contentY = at.y();
+        Q_EMIT moveViewport(at.x(), at.y());
+        updateVisible();
+        pinPage(page);
+        m_settleTimer.start();
+    } else {
+        updateVisible();
+        updateCurrentPage();
+    }
+}
+
+// ---- Selection ----------------------------------------------------------------------------------
+
+void PdfViewModel::setSelectionAvailable(bool available)
+{
+    if (available == m_selectionAvailable)
+        return;
+    m_selectionAvailable = available;
+    Q_EMIT selectionAvailableChanged();
+    if (!available)
+        clearSelection();
+}
+
+void PdfViewModel::selectText(int page, QPointF from, QPointF to)
+{
+    if (!std::isfinite(from.x()) || !std::isfinite(from.y()) || !std::isfinite(to.x()) || !std::isfinite(to.y()))
+        return;
+    startSelection(page, [page, from, to](platform::PdfReader &reader, QSizeF points) {
+        return reader.selectText(page, QPointF(from.x() * points.width(), from.y() * points.height()),
+                                 QPointF(to.x() * points.width(), to.y() * points.height()));
+    });
+}
+
+void PdfViewModel::selectWord(int page, QPointF at)
+{
+    if (!std::isfinite(at.x()) || !std::isfinite(at.y()))
+        return;
+    startSelection(page, [page, at](platform::PdfReader &reader, QSizeF points) {
+        // The characters a few points around it, then the word of the page's text there.
+        const QPointF p(at.x() * points.width(), at.y() * points.height());
+        platform::PdfTextSelection near;
+        for (const qreal d : {3.0, 8.0, 16.0}) {
+            // (Two points in one character's two halves of a caret apart give nothing: wider.)
+            near = reader.selectText(page, p - QPointF(d, 0), p + QPointF(d, 0));
+            if (!near.isEmpty())
+                break;
+        }
+        if (near.isEmpty())
+            return near;
+        const platform::PdfTextRange word =
+                platform::pdfWordAt(reader.pageText(page), near.start + std::max(0, near.length - 1) / 2);
+        if (word.length <= 0)
+            return near;
+        return reader.selectRange(page, int(word.start), int(word.length));
+    });
+}
+
+void PdfViewModel::selectAll(int page)
+{
+    startSelection(page, [page](platform::PdfReader &reader, QSizeF) {
+        return reader.selectRange(page, 0, int(reader.pageText(page).size()));
+    });
+}
+
+void PdfViewModel::startSelection(int page,
+                                  std::function<platform::PdfTextSelection(platform::PdfReader &, QSizeF)> pick)
+{
+    if (!m_selectionAvailable || m_status != Status::Ready || page < 1 || page > m_layout.count())
+        return;
+    const int job = ++m_selectJob;
+    m_latestSelectJob->store(job);
+    const std::shared_ptr<std::atomic_int> latest = m_latestSelectJob;
+    const std::shared_ptr<bool> alive = m_alive;
+    const QPointer<PdfViewModel> self(this);
+    const QString file = m_file;
+    const QString version = m_version;
+    const QString password = m_password;
+    PdfRenderPool::start(
+            [=] {
+                // (A drag asks again with every move: only the newest is worth the work.)
+                if (latest->load() != job)
+                    return;
+                QString text;
+                QList<QRectF> rects;
+                if (PdfReaderPool::Lease lease = PdfReaderPool::instance().acquire(file, version, nullptr, password)) {
+                    const QSizeF points = lease->pageSize(page);
+                    if (points.width() > 0 && points.height() > 0) {
+                        const platform::PdfTextSelection picked = pick(*lease.get(), points);
+                        text = picked.isEmpty() ? QString() : picked.text;
+                        for (const QRectF &r : picked.rects)
+                            rects.append(QRectF(r.x() / points.width(), r.y() / points.height(),
+                                                r.width() / points.width(), r.height() / points.height()));
+                    }
+                }
+                post(alive, [self, job, page, text, rects] {
+                    if (self)
+                        self->selectionArrived(job, page, text, rects);
+                });
+            },
+            PdfRenderPool::Selection);
+}
+
+void PdfViewModel::selectionArrived(int job, int page, const QString &text, const QList<QRectF> &rects)
+{
+    if (job != m_selectJob)
+        return; // an older request's, or cleared meanwhile
+    m_selectedText = text;
+    m_selectionPage = text.isEmpty() ? 0 : page;
+    m_selectionRects = text.isEmpty() ? QList<QRectF>() : rects;
+    ++m_selectionRevision;
+    Q_EMIT selectionChanged();
+}
+
+void PdfViewModel::clearSelection()
+{
+    m_latestSelectJob->store(++m_selectJob);
+    if (m_selectionPage == 0 && m_selectedText.isEmpty())
+        return;
+    m_selectedText.clear();
+    m_selectionPage = 0;
+    m_selectionRects.clear();
+    ++m_selectionRevision;
+    Q_EMIT selectionChanged();
+}
+
+QVariantList PdfViewModel::selectionRects(int page) const
+{
+    QVariantList out;
+    if (page < 1 || page != m_selectionPage)
+        return out;
+    for (const QRectF &r : m_selectionRects)
+        out.append(QVariantMap{{u"x"_s, r.x()}, {u"y"_s, r.y()}, {u"width"_s, r.width()}, {u"height"_s, r.height()}});
+    return out;
+}
+
+bool PdfViewModel::copySelection()
+{
+    if (m_selectedText.isEmpty() || !qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
+        return false;
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    if (!clipboard)
+        return false;
+    clipboard->setText(m_selectedText);
+    return true;
+}
+
+// ---- Outline and links --------------------------------------------------------------------------
+
+void PdfViewModel::loadOutline()
+{
+    const int generation = m_generation;
+    const int laid = m_layout.count();
+    const QString file = m_file;
+    const QString version = m_version;
+    const QString password = m_password;
+    const std::shared_ptr<std::atomic_bool> cancel = m_openCancel;
+    const std::shared_ptr<bool> alive = m_alive;
+    const QPointer<PdfViewModel> self(this);
+    PdfRenderPool::start(
+            [=] {
+                if (cancel->load())
+                    return;
+                QList<platform::PdfOutlineItem> items;
+                if (PdfReaderPool::Lease lease = PdfReaderPool::instance().acquire(file, version, nullptr, password))
+                    items = lease->outline();
+                if (items.isEmpty() || cancel->load())
+                    return;
+                QVariantList outline;
+                outline.reserve(items.size());
+                for (const platform::PdfOutlineItem &item : std::as_const(items)) {
+                    // (A page beyond the pages laid out leads nowhere.)
+                    const int page = item.page >= 1 && item.page <= laid ? item.page : 0;
+                    outline.append(QVariantMap{{u"title"_s, item.title},
+                                               {u"level"_s, item.level},
+                                               {u"page"_s, page},
+                                               {u"top"_s, page > 0 ? item.top : -1.0}});
+                }
+                post(alive, [self, generation, outline] {
+                    if (!self || generation != self->m_generation)
+                        return;
+                    self->m_outline = outline;
+                    Q_EMIT self->outlineChanged();
+                });
+            },
+            PdfRenderPool::Outline);
+}
+
+void PdfViewModel::loadLinks(int first, int last)
+{
+    if (m_status != Status::Ready)
+        return;
+    QList<int> wanted;
+    for (int page = std::max(1, first); page <= std::min(last, m_layout.count()); ++page) {
+        if (!m_linksAsked.contains(page))
+            wanted.append(page);
+    }
+    if (wanted.isEmpty())
+        return;
+    // The pages far from the view forgotten (asked again when they come back).
+    if (m_linksAsked.size() + wanted.size() > MaxLinkPages) {
+        for (auto it = m_linksAsked.begin(); it != m_linksAsked.end();) {
+            if (*it < first - 8 || *it > last + 8) {
+                m_links.remove(*it);
+                it = m_linksAsked.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (const int page : std::as_const(wanted))
+        m_linksAsked.insert(page);
+    const int generation = m_generation;
+    const int laid = m_layout.count();
+    const QString file = m_file;
+    const QString version = m_version;
+    const QString password = m_password;
+    const std::shared_ptr<std::atomic_bool> cancel = m_openCancel;
+    const std::shared_ptr<bool> alive = m_alive;
+    const QPointer<PdfViewModel> self(this);
+    PdfRenderPool::start(
+            [=] {
+                if (cancel->load())
+                    return;
+                PdfReaderPool::Lease lease = PdfReaderPool::instance().acquire(file, version, nullptr, password);
+                if (!lease)
+                    return;
+                for (const int page : wanted) {
+                    if (cancel->load())
+                        return;
+                    const QSizeF points = lease->pageSize(page);
+                    if (!(points.width() > 0) || !(points.height() > 0))
+                        continue;
+                    QVariantList links;
+                    for (const platform::PdfLink &link : lease->links(page)) {
+                        if (link.url.isEmpty() && (link.page < 1 || link.page > laid))
+                            continue;
+                        links.append(QVariantMap{{u"x"_s, link.rect.x() / points.width()},
+                                                 {u"y"_s, link.rect.y() / points.height()},
+                                                 {u"width"_s, link.rect.width() / points.width()},
+                                                 {u"height"_s, link.rect.height() / points.height()},
+                                                 {u"url"_s, link.url},
+                                                 {u"page"_s, link.page},
+                                                 {u"top"_s, link.top}});
+                    }
+                    if (links.isEmpty())
+                        continue;
+                    post(alive, [self, generation, page, links] {
+                        if (self)
+                            self->linksArrived(generation, page, links);
+                    });
+                }
+            },
+            PdfRenderPool::Links);
+}
+
+void PdfViewModel::linksArrived(int generation, int page, const QVariantList &links)
+{
+    if (generation != m_generation || !m_linksAsked.contains(page))
+        return;
+    m_links.insert(page, links);
+    ++m_linkRevision;
+    Q_EMIT linksChanged();
+}
+
+QVariantList PdfViewModel::linkRects(int page) const
+{
+    return m_links.value(page);
 }
 
 void PdfViewModel::onPageFailed(const QString &file, const QString &version, int page)

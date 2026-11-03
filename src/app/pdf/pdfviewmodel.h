@@ -16,13 +16,33 @@
 // hits posted in batches; a new text cancels it between pages. The first hit at or after the current
 // page becomes the current one and is shown (moveViewport()). At most MaxHits.
 //
+// Text selection (where platform::pdfSelectionAvailable()): selectText() between two points of a
+// page (fractions of it) or selectAll() of a page, run on PdfRenderPool (a newer request makes an
+// older one moot), the result's text and rectangles kept for one page; copySelection() puts it on
+// the clipboard.
+//
+// The table of contents (outline) is read once the PDF is open; the links of the pages near the
+// viewport as they come into it (linkRects(): internal ones lead to a page and a place on it —
+// positionForTarget() —, external ones to an http(s) / mailto address that QML hands to
+// Workspace.openUrl).
+//
+// A password (where platform::pdfPasswordAvailable()): unlock() opens a protected PDF with it; a wrong
+// one leaves it locked with passwordRejected. It lives in this model and, while the PDF is open, in
+// PdfReaderPool's memory (holdPassword) — never on disk, in a route or a setting; another file or the
+// model's end forgets it.
+//
+// Two pages side by side (twoPages, coverAlone: PdfPageLayout::setSpread) keep the current page.
+//
 // The QML side moves its Flickable where moveViewport() says (sizes arriving, a reload, a hit, a
 // zoom of fit width following the window) and tells the model where it is (setViewport()).
 #pragma once
 
 #include "pdflayout.h"
 
+#include "pdfpages.h"
+
 #include <QAbstractListModel>
+#include <QHash>
 #include <QObject>
 #include <QPointF>
 #include <QRectF>
@@ -33,6 +53,7 @@
 #include <QVariantMap>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 
 namespace brulion::pdfview {
@@ -92,10 +113,19 @@ private:
     Q_PROPERTY(qreal margin READ margin WRITE setMargin NOTIFY geometryInputChanged FINAL)
     Q_PROPERTY(qreal gap READ gap WRITE setGap NOTIFY geometryInputChanged FINAL)
     Q_PROPERTY(qreal maxFitWidth READ maxFitWidth WRITE setMaxFitWidth NOTIFY geometryInputChanged FINAL)
+    /// Two pages side by side; with coverAlone the first one alone (as a book opens).
+    Q_PROPERTY(bool twoPages READ twoPages WRITE setTwoPages NOTIFY spreadChanged FINAL)
+    Q_PROPERTY(bool coverAlone READ coverAlone WRITE setCoverAlone NOTIFY spreadChanged FINAL)
     // out
     Q_PROPERTY(Status status READ status NOTIFY statusChanged FINAL)
     Q_PROPERTY(QString error READ error NOTIFY statusChanged FINAL)
     Q_PROPERTY(bool locked READ locked NOTIFY statusChanged FINAL)
+    /// The renderer opens protected PDFs with a password (unlock()).
+    Q_PROPERTY(bool passwordAvailable READ passwordAvailable NOTIFY statusChanged FINAL)
+    /// The last unlock() tried a wrong password.
+    Q_PROPERTY(bool passwordRejected READ passwordRejected NOTIFY statusChanged FINAL)
+    /// Opened with a password (a drawing on its page would need one too: not offered).
+    Q_PROPERTY(bool unlocked READ unlocked NOTIFY statusChanged FINAL)
     Q_PROPERTY(int pageCount READ pageCount NOTIFY layoutChanged FINAL)
     /// The PDF has more pages than are laid out (MaxViewerPages).
     Q_PROPERTY(int totalPages READ totalPages NOTIFY layoutChanged FINAL)
@@ -120,6 +150,16 @@ private:
     Q_PROPERTY(bool hitsCapped READ hitsCapped NOTIFY searchChanged FINAL)
     Q_PROPERTY(bool textless READ textless NOTIFY searchChanged FINAL)
     Q_PROPERTY(int hitRevision READ hitRevision NOTIFY searchChanged FINAL)
+    // selection
+    Q_PROPERTY(bool selectionAvailable READ selectionAvailable NOTIFY selectionAvailableChanged FINAL)
+    Q_PROPERTY(QString selectedText READ selectedText NOTIFY selectionChanged FINAL)
+    /// The page the selection is on (0: none).
+    Q_PROPERTY(int selectionPage READ selectionPage NOTIFY selectionChanged FINAL)
+    Q_PROPERTY(int selectionRevision READ selectionRevision NOTIFY selectionChanged FINAL)
+    // outline and links
+    /// [{title, level, page, top}] (page 0: no destination; top a fraction of the page or −1).
+    Q_PROPERTY(QVariantList outline READ outline NOTIFY outlineChanged FINAL)
+    Q_PROPERTY(int linkRevision READ linkRevision NOTIFY linksChanged FINAL)
 
 public:
     static constexpr int MaxViewerPages = 20'000;
@@ -127,6 +167,8 @@ public:
     static constexpr int SizeChunk = 64;
     static constexpr int SearchDebounceMs = 250;
     static constexpr int SettleMs = 150;
+    /// The most pages whose links are kept (those near the viewport stay).
+    static constexpr int MaxLinkPages = 64;
 
     explicit PdfViewModel(QObject *parent = nullptr);
     ~PdfViewModel() override;
@@ -147,10 +189,19 @@ public:
     void setGap(qreal gap);
     qreal maxFitWidth() const { return m_maxFitWidth; }
     void setMaxFitWidth(qreal width);
+    bool twoPages() const { return m_layout.twoPages(); }
+    void setTwoPages(bool on);
+    bool coverAlone() const { return m_layout.coverAlone(); }
+    void setCoverAlone(bool on);
 
     Status status() const { return m_status; }
     QString error() const { return m_error; }
     bool locked() const { return m_locked; }
+    bool passwordAvailable() const { return m_passwordAvailable; }
+    /// Tests: as where the renderer opens no protected PDF.
+    void setPasswordAvailable(bool available);
+    bool passwordRejected() const { return m_passwordRejected; }
+    bool unlocked() const { return m_status == Status::Ready && !m_password.isEmpty(); }
     int pageCount() const { return m_layout.count(); }
     int totalPages() const { return m_totalPages; }
     qreal scale() const { return m_layout.scale(); }
@@ -177,6 +228,16 @@ public:
     bool textless() const { return m_textless; }
     int hitRevision() const { return m_hitRevision; }
 
+    bool selectionAvailable() const { return m_selectionAvailable; }
+    /// Tests: the selection turned off (as where the renderer cannot select).
+    void setSelectionAvailable(bool available);
+    QString selectedText() const { return m_selectedText; }
+    int selectionPage() const { return m_selectionPage; }
+    int selectionRevision() const { return m_selectionRevision; }
+
+    QVariantList outline() const { return m_outline; }
+    int linkRevision() const { return m_linkRevision; }
+
     /// The Flickable's position (content coordinates): the visible pages, the current page.
     Q_INVOKABLE void setViewport(qreal contentX, qreal contentY);
     /// The view stopped moving: the detail pictures for this position and zoom (also 150 ms after
@@ -184,6 +245,8 @@ public:
     Q_INVOKABLE void settle();
     /// Page `page` (1-based) in content coordinates.
     Q_INVOKABLE QRectF pageRect(int page) const;
+    /// The page (1-based) at a point of the content: in a row of two the one under x; 0 without pages.
+    Q_INVOKABLE int pageAt(qreal x, qreal y) const;
     /// The Flickable's contentX/Y showing page `page` from `fraction` of its height.
     Q_INVOKABLE QPointF positionForPage(int page, qreal fraction = 0) const;
     /// Page `page` is the current one while the view stays where it is now (a jump to a page that
@@ -210,6 +273,27 @@ public:
     Q_INVOKABLE void clearSearch();
     /// Opened again (the current page and the zoom kept).
     Q_INVOKABLE void reload();
+    /// Opened again with `password` (a protected PDF; never stored).
+    Q_INVOKABLE void unlock(const QString &password);
+
+    /// The text of page `page` between two points, in fractions of the page (either order).
+    Q_INVOKABLE void selectText(int page, QPointF from, QPointF to);
+    /// The word at a point of page `page` (fractions of it): a long press.
+    Q_INVOKABLE void selectWord(int page, QPointF at);
+    /// All the text of page `page`.
+    Q_INVOKABLE void selectAll(int page);
+    Q_INVOKABLE void clearSelection();
+    /// The selection's rectangles on page `page`: [{x, y, width, height}] in fractions of the page.
+    Q_INVOKABLE QVariantList selectionRects(int page) const;
+    /// The selected text onto the clipboard; false when nothing is selected.
+    Q_INVOKABLE bool copySelection();
+
+    /// The links of page `page` (loaded as it comes near the view): [{x, y, width, height} in
+    /// fractions of the page, url ("" for a page of this PDF), page, top (a fraction or −1)].
+    Q_INVOKABLE QVariantList linkRects(int page) const;
+    /// The Flickable's contentX/Y showing page `page` from `top` (a fraction of it; −1: its top) —
+    /// an outline entry or a link — a little above it.
+    Q_INVOKABLE QPointF positionForTarget(int page, qreal top) const;
 
     // For PdfVisiblePages.
     QRectF rectOfIndex(int index) const { return m_layout.rect(index); }
@@ -225,6 +309,11 @@ Q_SIGNALS:
     void detailChanged();
     void searchAvailableChanged();
     void searchChanged();
+    void spreadChanged();
+    void selectionAvailableChanged();
+    void selectionChanged();
+    void outlineChanged();
+    void linksChanged();
     /// The Flickable should go to contentX/Y (sizes arrived, a reload, a hit, fit width followed the
     /// view's width).
     void moveViewport(qreal contentX, qreal contentY);
@@ -255,6 +344,15 @@ private:
     void searchBatch(int job, const QList<Hit> &hits, int searched, bool sawText, bool done, bool capped);
     QPointF positionForHit(int index) const;
     void onPageFailed(const QString &file, const QString &version, int page);
+    void applySpread(bool twoPages, bool coverAlone);
+    /// A selection job: `pick` on a leased reader with the page's size in points.
+    void startSelection(int page, std::function<platform::PdfTextSelection(platform::PdfReader &, QSizeF)> pick);
+    void selectionArrived(int job, int page, const QString &text, const QList<QRectF> &rects);
+    void loadOutline();
+    void loadLinks(int first, int last);
+    void linksArrived(int generation, int page, const QVariantList &links);
+    /// The viewer's hold of its password in PdfReaderPool let go.
+    void releasePassword();
 
     QString m_file;
     QString m_version;
@@ -307,6 +405,26 @@ private:
     int m_hitRevision = 0;
     int m_searchJob = 0;
     std::shared_ptr<std::atomic_bool> m_searchCancel;
+
+    bool m_passwordAvailable = false;
+    bool m_passwordRejected = false;
+    /// The password the PDF is opened with (memory only); "" none.
+    QString m_password;
+    /// The file whose password this model holds in PdfReaderPool ("" none).
+    QString m_heldPasswordFile;
+
+    bool m_selectionAvailable = false;
+    QString m_selectedText;
+    int m_selectionPage = 0;
+    QList<QRectF> m_selectionRects; ///< fractions of the page
+    int m_selectionRevision = 0;
+    int m_selectJob = 0;
+    std::shared_ptr<std::atomic_int> m_latestSelectJob = std::make_shared<std::atomic_int>(0);
+
+    QVariantList m_outline;
+    QHash<int, QVariantList> m_links; ///< by page
+    QSet<int> m_linksAsked;
+    int m_linkRevision = 0;
     std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 };
 

@@ -21,10 +21,17 @@ import Brulion
 // only) so Back from the drawing editor or another page returns to it, and jumps to route.pdfPage
 // when the PDF is ready and whenever the route's page changes from outside (a link to another page
 // of the same PDF) — never for its own writes.
+// Where the renderer has them (PdfViewModel): text selected by dragging the mouse over a page or, on
+// a touch screen, by a long press (a word) and moving the finger on — Ctrl+C, the floating "Kopiuj",
+// the right-click menu, Ctrl+A for the current page —; the PDF's table of contents ("Spis treści": a
+// list that jumps); its links (a page of the PDF, or an http(s) / mailto address through
+// Workspace.openUrl); a password asked for a protected PDF (never kept); two pages side by side
+// (remembered on the device: AppSettings "pdf/twoPages", "pdf/coverAlone").
 // Where no renderer is built in (the browser, a desktop build without one) it shows the file's name
 // and size, explains that and offers "Otwórz w nowej karcie" / "Otwórz w innej aplikacji" (a real
-// click: the gesture the browser wants); a PDF that cannot be shown (a password, a broken file) says
-// why, with the same button; the notes that embed or link it follow in both cases.
+// click: the gesture the browser wants); a PDF that cannot be shown (a broken file, a password where
+// the renderer opens none) says why, with the same button; the notes that embed or link it follow in
+// both cases.
 //   route.open (screenshots, tests): "search" (with route.search typed), "jump", "draw" (its menu or
 //   the drawing); route.pdfScale: a zoom in percent.
 Item {
@@ -62,6 +69,13 @@ Item {
     property point previewOrigin: Qt.point(0, 0)
     /// Grows when the file changes on disk: its version is asked for again (the model reloads).
     property int revision: 0
+    /// Selecting text: the page the press was on and where (fractions of that page); a mouse drag
+    /// (`selecting`) or a finger after a long press (`touchSelecting`).
+    property int selectPage: 0
+    property point selectFrom: Qt.point(0, 0)
+    property bool selecting: false
+    property bool touchSelecting: false
+    readonly property bool hasSelection: pdf.selectionPage > 0 && pdf.selectedText !== ""
     /// The route page applied last (also the page this view wrote into the route itself).
     property int _routePage: -1
     property string _opened: ""
@@ -99,6 +113,9 @@ Item {
         gap: Theme.space3
         maxFitWidth: Theme.narrow || root.inSidePanel ? 1e6 : 1000
         onMoveViewport: (x, y) => root.moveTo(x, y)
+        // Two pages side by side, as last chosen on this device (QSettings' INI gives strings).
+        twoPages: String(AppSettings.value("pdf/twoPages", false)) === "true"
+        coverAlone: String(AppSettings.value("pdf/coverAlone", false)) === "true"
         // (Once the bindings on the status, `ready` among them, followed it.)
         onStatusChanged: if (status === PdfViewModel.Ready) Qt.callLater(root.whenReady)
         onCurrentPageChanged: if (root.ready) writeRoute.restart()
@@ -340,6 +357,74 @@ Item {
         }
     }
 
+    // ---- Selection, links, outline, password, two pages -------------------------------------------
+
+    /// The page at a point of the pages layer (content coordinates) and the point in fractions of it.
+    function pagePoint(x, y, page) {
+        const p = page > 0 ? page : pdf.pageAt(x, y)
+        const r = pdf.pageRect(p)
+        if (p < 1 || !(r.width > 0) || !(r.height > 0))
+            return null
+        return { page: p, at: Qt.point((x - r.x) / r.width, (y - r.y) / r.height) }
+    }
+    /// A selection starts at a point of the pages layer.
+    function beginSelection(x, y) {
+        const hit = root.pagePoint(x, y, 0)
+        if (!hit)
+            return false
+        root.selectPage = hit.page
+        root.selectFrom = hit.at
+        pdf.clearSelection()
+        return true
+    }
+    /// …and goes on to another point (fractions of the press's page, beyond it too).
+    function extendSelection(x, y) {
+        const hit = root.pagePoint(x, y, root.selectPage)
+        if (hit)
+            pdf.selectText(root.selectPage, root.selectFrom, hit.at)
+    }
+    function copySelection() {
+        if (pdf.copySelection())
+            AppController.toast(qsTr("Copied to the clipboard"), "success")
+    }
+    function selectAllOnPage() {
+        if (pdf.selectionAvailable && root.ready)
+            pdf.selectAll(Math.max(1, pdf.currentPage))
+    }
+    /// A link of the PDF: a page of it (and a place there), or an address for the browser / mail.
+    function followLink(link) {
+        if (link.url)
+            Workspace.openUrl(link.url) // (only http, https, mailto)
+        else if (link.page > 0)
+            root.jumpToTarget(link.page, link.top)
+    }
+    function jumpToTarget(page, top) {
+        if (!root.ready || page < 1)
+            return
+        root.moveTo(pdf.positionForTarget(page, top))
+        pdf.pinPage(page)
+        pdf.settle()
+    }
+    function openOutline() {
+        if (root.ready && pdf.outline.length > 0)
+            outlineDialog.open()
+    }
+    function setTwoPages(on) {
+        pdf.twoPages = on
+        AppSettings.setValue("pdf/twoPages", on)
+    }
+    function setCoverAlone(on) {
+        pdf.coverAlone = on
+        AppSettings.setValue("pdf/coverAlone", on)
+    }
+    function submitPassword() {
+        if (passwordField.text === "")
+            return
+        const password = passwordField.text
+        passwordField.text = "" // (the field never keeps it either)
+        pdf.unlock(password)
+    }
+
     focus: true
     Keys.onPressed: (event) => {
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
@@ -347,6 +432,10 @@ Item {
         let handled = true
         if (ctrl && event.key === Qt.Key_F && pdf.searchAvailable)
             root.openSearch()
+        else if (ctrl && event.key === Qt.Key_C && root.hasSelection)
+            root.copySelection()
+        else if (ctrl && event.key === Qt.Key_A && pdf.selectionAvailable)
+            root.selectAllOnPage()
         else if (ctrl && event.key === Qt.Key_G)
             root.openJump()
         else if (ctrl && (event.key === Qt.Key_Plus || event.key === Qt.Key_Equal))
@@ -376,7 +465,9 @@ Item {
         else if (event.key === Qt.Key_Left && root.pannedSideways)
             root.scrollBy(-48, 0)
         else if (event.key === Qt.Key_Escape) {
-            if (root.searchOpen)
+            if (root.hasSelection)
+                pdf.clearSelection()
+            else if (root.searchOpen)
                 root.closeSearch()
             else if (AppController.canGoBack && !root.inSidePanel)
                 AppController.back()
@@ -493,10 +584,20 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: root.searchOpen ? root.closeSearch() : root.openSearch()
             }
+            BIconButton {
+                id: outlineButton
+                objectName: "pdfOutlineButton"
+                visible: root.ready && pdf.outline.length > 0
+                size: "small"
+                iconName: "list"
+                label: qsTr("Table of contents")
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: root.openOutline()
+            }
             BButton {
                 id: drawButton
                 objectName: "pdfDrawButton"
-                visible: root.ready && root.wide
+                visible: root.ready && root.wide && !pdf.unlocked
                 size: "small"
                 variant: "secondary"
                 iconName: "pen-tool"
@@ -532,6 +633,22 @@ Item {
         BMenuItem { text: "150 %"; onTriggered: root.zoomTo(150) }
         BMenuItem { text: "200 %"; onTriggered: root.zoomTo(200) }
         BMenuItem { text: "400 %"; onTriggered: root.zoomTo(400) }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "pdfZoomTwoPages"
+            text: qsTr("Two pages side by side")
+            checkable: true
+            checked: pdf.twoPages
+            onTriggered: root.setTwoPages(!pdf.twoPages)
+        }
+        BMenuItem {
+            visible: pdf.twoPages
+            height: visible ? implicitHeight : 0
+            text: qsTr("Cover page alone")
+            checkable: true
+            checked: pdf.coverAlone
+            onTriggered: root.setCoverAlone(!pdf.coverAlone)
+        }
     }
 
     BMenu {
@@ -558,8 +675,26 @@ Item {
             onTriggered: root.fitWidth()
         }
         BMenuItem {
-            objectName: "pdfMenuDraw"
+            objectName: "pdfMenuTwoPages"
             visible: root.ready && !root.wide
+            height: visible ? implicitHeight : 0
+            text: qsTr("Two pages side by side")
+            iconName: "columns-2"
+            checkable: true
+            checked: pdf.twoPages
+            onTriggered: root.setTwoPages(!pdf.twoPages)
+        }
+        BMenuItem {
+            visible: root.ready && !root.wide && pdf.twoPages
+            height: visible ? implicitHeight : 0
+            text: qsTr("Cover page alone")
+            checkable: true
+            checked: pdf.coverAlone
+            onTriggered: root.setCoverAlone(!pdf.coverAlone)
+        }
+        BMenuItem {
+            objectName: "pdfMenuDraw"
+            visible: root.ready && !root.wide && !pdf.unlocked
             height: visible ? implicitHeight : 0
             text: qsTr("Draw on this page")
             iconName: "pen-tool"
@@ -747,8 +882,8 @@ Item {
         contentHeight: pdf.contentHeight + (refs.visible ? refs.height + Theme.space12 : 0)
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.AutoFlickIfNeeded
-        interactive: !pinch.active
-        TouchFlick.enabled: !pinch.active
+        interactive: !pinch.active && !root.touchSelecting
+        TouchFlick.enabled: !pinch.active && !root.touchSelecting
         T.ScrollBar.vertical: BScrollBar {}
         T.ScrollBar.horizontal: BScrollBar {}
         onContentXChanged: pdf.setViewport(contentX, contentY)
@@ -838,6 +973,49 @@ Item {
                             border.color: Theme.accent
                         }
                     }
+                    Repeater {
+                        // The selected text (fractions of the page; the page is paper: one blue in
+                        // both themes).
+                        model: pdf.selectionRevision >= 0 ? pdf.selectionRects(pageItem.page) : []
+                        delegate: Rectangle {
+                            required property var modelData
+                            objectName: "pdfSelection"
+                            x: modelData.x * pageItem.width
+                            y: modelData.y * pageItem.height
+                            width: modelData.width * pageItem.width
+                            height: modelData.height * pageItem.height
+                            color: Qt.rgba(66 / 255, 133 / 255, 244 / 255, 0.35)
+                        }
+                    }
+                    Repeater {
+                        // Links: a page of the PDF, or an address for the browser / mail client.
+                        model: pdf.linkRevision >= 0 ? pdf.linkRects(pageItem.page) : []
+                        delegate: MouseArea {
+                            id: linkArea
+                            required property var modelData
+                            objectName: "pdfLink"
+                            x: modelData.x * pageItem.width
+                            y: modelData.y * pageItem.height
+                            width: Math.max(1, modelData.width * pageItem.width)
+                            height: Math.max(1, modelData.height * pageItem.height)
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            Accessible.role: Accessible.Link
+                            Accessible.name: modelData.url !== "" ? modelData.url
+                                                                  : qsTr("Page %1 of %2").arg(modelData.page).arg(pdf.pageCount)
+                            Accessible.onPressAction: root.followLink(modelData)
+                            onClicked: root.followLink(modelData)
+                            Loader {
+                                // Where an address leads, on hover (created only then).
+                                active: linkArea.containsMouse && linkArea.modelData.url !== ""
+                                sourceComponent: BToolTip {
+                                    parent: linkArea
+                                    visible: true
+                                    text: linkArea.modelData.url
+                                }
+                            }
+                        }
+                    }
                     Text {
                         visible: pageItem.failed
                         anchors.centerIn: parent
@@ -857,11 +1035,15 @@ Item {
             MouseArea {
                 // Ctrl+wheel (and a touchpad's pinch on the desktop, sent as Ctrl+wheel): a
                 // preview, then one zoom; a double click fits the width ↔ twice that. Other wheel
-                // turns go on to the Flickable (scrolling); a press and drag still pan it.
+                // turns go on to the Flickable (scrolling). A press and drag selects text where
+                // the renderer can (the Flickable may not steal it then), else pans; a right click
+                // opens the menu of the selection. Under the pages' links (z).
                 objectName: "pdfMouse"
                 anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                cursorShape: root.pannedSideways ? Qt.OpenHandCursor : Qt.ArrowCursor
+                z: -1
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                preventStealing: root.selecting
+                cursorShape: pdf.selectionAvailable ? Qt.IBeamCursor : root.pannedSideways ? Qt.OpenHandCursor : Qt.ArrowCursor
                 onWheel: (wheel) => {
                     if (!(wheel.modifiers & Qt.ControlModifier)) {
                         wheel.accepted = false
@@ -879,7 +1061,26 @@ Item {
                     wheelCommit.restart()
                 }
                 // A finger is the TapHandler's and the PinchHandler's (below), never this one's.
-                onPressed: (mouse) => mouse.accepted = mouse.source === Qt.MouseEventNotSynthesized
+                onPressed: (mouse) => {
+                    mouse.accepted = mouse.source === Qt.MouseEventNotSynthesized
+                    if (!mouse.accepted || !root.ready)
+                        return
+                    root.forceActiveFocus()
+                    if (mouse.button === Qt.RightButton) {
+                        root.contextPage = pdf.pageAt(mouse.x, mouse.y)
+                        const p = flick.mapFromItem(this, mouse.x, mouse.y)
+                        selectionMenu.popup(flick, p.x, p.y)
+                        return
+                    }
+                    if (pdf.selectionAvailable)
+                        root.selecting = root.beginSelection(mouse.x, mouse.y)
+                }
+                onPositionChanged: (mouse) => {
+                    if (root.selecting)
+                        root.extendSelection(mouse.x, mouse.y)
+                }
+                onReleased: root.selecting = false
+                onCanceled: root.selecting = false
                 onDoubleClicked: (mouse) => {
                     // (A finger's double tap: the TapHandler below.)
                     if (mouse.source !== Qt.MouseEventNotSynthesized)
@@ -902,10 +1103,57 @@ Item {
                 onActiveScaleChanged: if (active) root.previewScale = root.boundedPreview(activeScale)
             }
             TapHandler {
-                // A finger's double tap: fit width ↔ twice that, around the tap.
+                // A finger's double tap: fit width ↔ twice that, around the tap. A long press
+                // selects the word under it (where the renderer can), and the finger moving on
+                // selects on to it (the pages stop scrolling meanwhile: PointHandler below); a
+                // tap elsewhere ends the selection.
+                id: touchTap
                 acceptedDevices: PointerDevice.TouchScreen
                 onDoubleTapped: (eventPoint) => root.toggleZoomAt(
                                     flick.mapFromItem(null, eventPoint.scenePosition.x, eventPoint.scenePosition.y))
+                onTapped: if (root.hasSelection) pdf.clearSelection()
+                onLongPressed: {
+                    const p = touchTap.point.position
+                    if (pdf.selectionAvailable && root.ready && root.beginSelection(p.x, p.y)) {
+                        root.touchSelecting = true
+                        pdf.selectWord(root.selectPage, root.selectFrom)
+                    }
+                }
+            }
+            PointHandler {
+                // The finger after a long press (a passive grab: it sees every move).
+                id: touchFinger
+                acceptedDevices: PointerDevice.TouchScreen
+                onPointChanged: {
+                    if (!root.touchSelecting || !touchFinger.active)
+                        return
+                    // (The word of the long press stays until the finger really moves.)
+                    const p = touchFinger.point.position
+                    const from = touchFinger.point.pressPosition
+                    if (Math.abs(p.x - from.x) + Math.abs(p.y - from.y) > Theme.space2)
+                        root.extendSelection(p.x, p.y)
+                }
+                onActiveChanged: if (!active) root.touchSelecting = false
+            }
+
+            BButton {
+                // The selection's "Kopiuj", over its first line (scrolls with the page).
+                id: copyButton
+                objectName: "pdfCopyButton"
+                readonly property var first: root.hasSelection && pdf.selectionRevision >= 0
+                                             ? pdf.selectionRects(pdf.selectionPage)[0] : undefined
+                readonly property rect pageBox: root.hasSelection && pdf.scale > 0 && pdf.contentWidth > 0
+                                                ? pdf.pageRect(pdf.selectionPage) : Qt.rect(0, 0, 0, 0)
+                visible: first !== undefined && !root.selecting && !root.touchSelecting
+                z: 3
+                x: first ? Math.max(pageBox.x, Math.min(pageBox.x + pageBox.width - width,
+                                                         pageBox.x + first.x * pageBox.width)) : 0
+                y: first ? Math.max(0, pageBox.y + first.y * pageBox.height - height - Theme.space2) : 0
+                size: "small"
+                variant: "secondary"
+                iconName: "copy"
+                text: qsTr("Copy")
+                onClicked: root.copySelection()
             }
         }
 
@@ -946,6 +1194,35 @@ Item {
     }
     /// The wide window's side panel lists the references (PageView sets it).
     property bool refsInSidePanel: false
+    /// The page a right click was on (the selection menu's "Zaznacz całą stronę").
+    property int contextPage: 0
+
+    BMenu {
+        id: selectionMenu
+        objectName: "pdfSelectionMenu"
+        BMenuItem {
+            objectName: "pdfMenuCopy"
+            text: qsTr("Copy")
+            iconName: "copy"
+            shortcut: "Ctrl+C"
+            enabled: root.hasSelection
+            onTriggered: root.copySelection()
+        }
+        BMenuItem {
+            objectName: "pdfMenuSelectPage"
+            text: qsTr("Select the whole page")
+            iconName: "text-select"
+            enabled: pdf.selectionAvailable && root.contextPage > 0
+            onTriggered: pdf.selectAll(root.contextPage)
+        }
+        BMenuItem {
+            visible: pdf.outline.length > 0
+            height: visible ? implicitHeight : 0
+            text: qsTr("Table of contents")
+            iconName: "list"
+            onTriggered: root.openOutline()
+        }
+    }
 
     // ---- Other states ---------------------------------------------------------------------------
 
@@ -1030,10 +1307,47 @@ Item {
                           : root.browser ? qsTr("Brulion here does not draw PDFs: the browser's own viewer opens it in a new tab (scrolling, zoom, search).")
                           : qsTr("This version of Brulion has no PDF renderer: open it in another app.")
                 }
+                // A protected PDF: its password (where the renderer opens one; never kept).
+                BTextField {
+                    id: passwordField
+                    objectName: "pdfPasswordField"
+                    visible: pdf.status === PdfViewModel.Failed && pdf.locked && pdf.passwordAvailable
+                    width: parent.width
+                    echoMode: TextInput.Password
+                    placeholderText: qsTr("Password")
+                    accessibleName: qsTr("The PDF's password")
+                    inputMethodHints: Qt.ImhSensitiveData | Qt.ImhHiddenText | Qt.ImhNoPredictiveText
+                                      | Qt.ImhNoAutoUppercase
+                    errorText: pdf.passwordRejected ? qsTr("Wrong password. Try again.") : ""
+                    onAccepted: root.submitPassword()
+                    onVisibleChanged: if (visible && !Theme.touchUi) forceActiveFocus()
+                }
+                BButton {
+                    objectName: "pdfUnlock"
+                    visible: passwordField.visible
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    variant: "primary"
+                    iconName: "lock"
+                    text: qsTr("Open the PDF")
+                    enabled: passwordField.text !== ""
+                    onClicked: root.submitPassword()
+                }
+                Text {
+                    objectName: "pdfPasswordNote"
+                    visible: passwordField.visible
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textSm
+                    color: Theme.fgMuted
+                    text: qsTr("Brulion does not remember the password: it is asked for each time the PDF is opened.")
+                }
                 BButton {
                     objectName: "pdfOpenElsewhere"
                     anchors.horizontalCenter: parent.horizontalCenter
-                    variant: "primary"
+                    variant: passwordField.visible ? "secondary" : "primary"
                     iconName: "external-link"
                     text: root.openElsewhereText
                     onClicked: root.openElsewhere()
@@ -1060,6 +1374,69 @@ Item {
                         height: 1
                         color: Theme.borderSubtle
                     }
+                }
+            }
+        }
+    }
+
+    // ---- Table of contents ----------------------------------------------------------------------
+
+    /// The outline entry of the current page: the last one leading to it or before it.
+    function currentOutlineIndex() {
+        let best = -1
+        for (let i = 0; i < pdf.outline.length; ++i) {
+            const page = pdf.outline[i].page
+            if (page > 0 && page <= pdf.currentPage)
+                best = i
+        }
+        return best
+    }
+
+    BDialog {
+        id: outlineDialog
+        objectName: "pdfOutline"
+        parent: T.Overlay.overlay
+        title: qsTr("Table of contents")
+        showFooter: false
+        preferredWidth: 440
+        property int current: -1
+        onAboutToShow: {
+            current = root.currentOutlineIndex()
+            if (current >= 0)
+                Qt.callLater(() => outlineList.positionViewAtIndex(outlineDialog.current, ListView.Center))
+        }
+        onClosed: root.forceActiveFocus()
+
+        ListView {
+            id: outlineList
+            objectName: "pdfOutlineList"
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(contentHeight, Math.max(160, root.height * 0.6))
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            model: outlineDialog.visible ? pdf.outline : []
+            T.ScrollBar.vertical: BScrollBar {}
+            delegate: BListItem {
+                id: entry
+                required property var modelData
+                required property int index
+                objectName: "pdfOutlineEntry"
+                width: ListView.view.width
+                dense: true
+                text: modelData.title !== "" ? modelData.title : qsTr("Page %1").arg(modelData.page)
+                leftPadding: Theme.space3 + Math.min(modelData.level, 6) * Theme.space4
+                selected: index === outlineDialog.current
+                enabled: modelData.page > 0
+                trailing: Text {
+                    text: entry.modelData.page > 0 ? String(entry.modelData.page) : ""
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textSm
+                    color: Theme.fgMuted
+                }
+                onClicked: {
+                    outlineDialog.close()
+                    root.jumpToTarget(modelData.page, modelData.top)
                 }
             }
         }

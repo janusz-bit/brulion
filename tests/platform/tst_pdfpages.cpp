@@ -8,9 +8,14 @@
 // once, page sizes, parts of pages equal to the whole page's crop, its limits, text and search
 // (Polish, without diacritics), encrypted PDFs (tests/data/pdf: AES-256 and RC4 with a user
 // password — locked —, an owner password only — opens), broken files, a rotated page, two
-// threads with readers of one file. Skipped where the build has no PDF renderer (the browser).
+// threads with readers of one file; text selected between two points and by range, the outline,
+// the links (pages, named destinations, web addresses — never scripts or launches), an annotation
+// drawn with its page (tests/data/pdf/spis.pdf, written by hand here: linkedPdf()), an outline that
+// loops, passwords (right, wrong, Polish, too long). Skipped where the build has no PDF renderer
+// (the browser).
 #include "pdfpages.h"
 #include "pdfsearch.h"
+#include "pdftext.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -144,6 +149,155 @@ QByteArray handMadePdf(const QSizeF &mediaBox, const QByteArray &content, const 
     return pdf;
 }
 
+/// A PDF of `objects` (object i + 1 is objects[i]; the first is the catalog), its cross-reference
+/// table right.
+QByteArray pdfOf(const QList<QByteArray> &objects)
+{
+    QByteArray pdf = "%PDF-1.7\n%\xe2\xe3\xcf\xd3\n"_ba;
+    QList<qsizetype> offsets;
+    for (qsizetype i = 0; i < objects.size(); ++i) {
+        offsets.append(pdf.size());
+        pdf += QByteArray::number(i + 1) + " 0 obj\n" + objects.at(i) + "\nendobj\n";
+    }
+    const qsizetype xref = pdf.size();
+    pdf += "xref\n0 " + QByteArray::number(objects.size() + 1) + "\n0000000000 65535 f \n";
+    for (const qsizetype offset : std::as_const(offsets))
+        pdf += QByteArray::number(offset).rightJustified(10, '0') + " 00000 n \n";
+    pdf += "trailer\n<< /Size " + QByteArray::number(objects.size() + 1) + " /Root 1 0 R >>\nstartxref\n"
+           + QByteArray::number(xref) + "\n%%EOF\n";
+    return pdf;
+}
+
+/// `text` as a PDF string of the fixtures' font (WinAnsi, the Polish letters at 128…145 through its
+/// /Differences), parentheses and backslashes escaped.
+QByteArray plString(const QString &text)
+{
+    static const QString polish = u"ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"_s;
+    QByteArray out = "(";
+    for (const QChar c : text) {
+        const qsizetype i = polish.indexOf(c);
+        if (i >= 0)
+            out += char(128 + i);
+        else if (c == u'(' || c == u')' || c == u'\\')
+            out += '\\' + QByteArray(1, char(c.unicode()));
+        else
+            out += char(c.unicode() < 128 ? c.unicode() : '?');
+    }
+    return out + ")";
+}
+
+/// `text` as a PDF text string: UTF-16BE with its byte order mark, in hex.
+QByteArray utf16String(const QString &text)
+{
+    QByteArray bytes = "\xfe\xff"_ba;
+    for (const QChar c : text) {
+        bytes += char(c.unicode() >> 8);
+        bytes += char(c.unicode() & 0xff);
+    }
+    return '<' + bytes.toHex() + '>';
+}
+
+/// A page's content: Helvetica 24 pt, each line at x 60 and its baseline (points from the bottom).
+QByteArray textLines(const QList<std::pair<int, QString>> &lines)
+{
+    QByteArray content;
+    for (const auto &[baseline, text] : lines)
+        content += "BT /F1 24 Tf 60 " + QByteArray::number(baseline) + " Td " + plString(text) + " Tj ET\n";
+    return content;
+}
+
+QByteArray stream(const QByteArray &dictionary, const QByteArray &content)
+{
+    return "<< " + dictionary + " /Length " + QByteArray::number(content.size()) + " >>\nstream\n" + content
+           + "\nendstream";
+}
+
+/// tests/data/pdf/spis.pdf: three A4 pages (595 × 842) with a table of contents, links and an
+/// annotation.
+///   page 1  "Spis treści" (baseline 762) and the lines "Rozdział 2" (700: a link to page 2 at
+///           421 pt from the bottom, its middle), "Strona WWW" (650: https://example.org/…),
+///           "Rozdział 3" (600: the named destination "rozdzial3", page 3 at 700), "Skrypt" (550: a
+///           JavaScript action), "Zły adres" (500: a javascript: URI), "Program" (450: a launch
+///           action) — the last three never become links
+///   page 2  "Rozdział 2: żółw" (762) and a square annotation (its own appearance: red) at
+///           [100 300 200 400]
+///   page 3  "Zażółć gęślą jaźń" (762)
+///   outline "Wstęp" → 1; "Rozdział 2 — żółw" → 2 at its middle, under it "Podrozdział 2.1" → 2
+///           (a GoTo action); "Rozdział 3" → "rozdzial3"; "Bez celu" (no destination)
+QByteArray linkedPdf()
+{
+    QByteArray differences = "[128";
+    for (const char *name :
+         {"aogonek", "cacute", "eogonek", "lslash", "nacute", "oacute", "sacute", "zacute", "zdotaccent", "Aogonek",
+          "Cacute", "Eogonek", "Lslash", "Nacute", "Oacute", "Sacute", "Zacute", "Zdotaccent"})
+        differences += " /"_ba + name;
+    differences += "]";
+    const QByteArray font = "<< /F1 6 0 R >>";
+    const auto link = [](int bottom, const QByteArray &action) {
+        return "<< /Type /Annot /Subtype /Link /Rect [55 " + QByteArray::number(bottom - 10) + " 320 "
+               + QByteArray::number(bottom + 24) + "] /Border [0 0 0] " + action + " >>";
+    };
+    const QList<QByteArray> objects{
+            // 1 catalog, 2 pages, 3–5 the pages, 6 the font, 7–9 their contents
+            "<< /Type /Catalog /Pages 2 0 R /Outlines 10 0 R /PageMode /UseOutlines /Names << /Dests << /Names "
+            "[(rozdzial3) [5 0 R /XYZ 0 700 null]] >> >> >>",
+            "<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font " + font
+                    + " >> /Contents 7 0 R /Annots [16 0 R 17 0 R 18 0 R 19 0 R 20 0 R 21 0 R] >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font " + font
+                    + " >> /Contents 8 0 R /Annots [22 0 R] >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font " + font
+                    + " >> /Contents 9 0 R >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /BaseEncoding "
+            "/WinAnsiEncoding /Differences "
+                    + differences + " >> >>",
+            stream({}, textLines({{762, u"Spis treści"_s},
+                                  {700, u"Rozdział 2"_s},
+                                  {650, u"Strona WWW"_s},
+                                  {600, u"Rozdział 3"_s},
+                                  {550, u"Skrypt"_s},
+                                  {500, u"Zły adres"_s},
+                                  {450, u"Program"_s}})),
+            stream({}, textLines({{762, u"Rozdział 2: żółw"_s}})),
+            stream({}, textLines({{762, u"Zażółć gęślą jaźń"_s}})),
+            // 10 the outline, 11–15 its entries
+            "<< /Type /Outlines /First 11 0 R /Last 15 0 R /Count 5 >>",
+            "<< /Title " + utf16String(u"Wstęp"_s) + " /Parent 10 0 R /Next 12 0 R /Dest [3 0 R /XYZ 0 842 null] >>",
+            "<< /Title " + utf16String(u"Rozdział 2 — żółw"_s)
+                    + " /Parent 10 0 R /Prev 11 0 R /Next 14 0 R /First 13 0 R /Last 13 0 R /Count 1 /Dest [4 0 R "
+                      "/XYZ 0 421 null] >>",
+            "<< /Title (Podrozdzia\\233 2.1) /Parent 12 0 R /A << /S /GoTo /D [4 0 R /Fit] >> >>",
+            "<< /Title (Rozdzia\\233 3) /Parent 10 0 R /Prev 12 0 R /Next 15 0 R /Dest (rozdzial3) >>",
+            "<< /Title (Bez celu) /Parent 10 0 R /Prev 14 0 R >>",
+            // 16–21 the links of page 1, 22 the square of page 2, 23 its appearance
+            link(700, "/Dest [4 0 R /XYZ 0 421 null]"),
+            link(650, "/A << /S /URI /URI (https://example.org/brulion?q=%C5%BC%C3%B3%C5%82w) >>"),
+            link(600, "/Dest (rozdzial3)"),
+            link(550, "/A << /S /JavaScript /JS (app.alert\\(1\\)) >>"),
+            link(500, "/A << /S /URI /URI (javascript:alert\\(1\\)) >>"),
+            link(450, "/A << /S /Launch /F (calc.exe) >>"),
+            "<< /Type /Annot /Subtype /Square /Rect [100 300 200 400] /F 4 /C [1 0 0] /IC [1 0 0] /AP << /N 23 0 R "
+            ">> >>",
+            stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100]", "1 0 0 rg 0 0 100 100 re f"),
+    };
+    return pdfOf(objects);
+}
+
+/// A PDF whose outline loops: two entries each other's /Next, the first its own /First child.
+QByteArray loopingOutlinePdf()
+{
+    const QList<QByteArray> objects{
+            "<< /Type /Catalog /Pages 2 0 R /Outlines 5 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R >>",
+            stream({}, "0 0 1 rg 100 100 300 300 re f"),
+            "<< /Type /Outlines /First 6 0 R /Last 7 0 R /Count 2 >>",
+            "<< /Title (Raz) /Parent 5 0 R /Next 7 0 R /First 6 0 R /Last 6 0 R /Count 1 /Dest [3 0 R /Fit] >>",
+            "<< /Title (Dwa) /Parent 5 0 R /Prev 6 0 R /Next 6 0 R /Dest [3 0 R /Fit] >>",
+    };
+    return pdfOf(objects);
+}
+
 } // namespace
 
 class TestPdfPages : public QObject {
@@ -178,6 +332,15 @@ private Q_SLOTS:
     void broken();
     void rotatedPage();
     void concurrentReaders();
+    void selectText_data();
+    void selectText();
+    void selectRange();
+    void outline();
+    void loopingOutline();
+    void links();
+    void annotationDrawn();
+    void password_data();
+    void password();
     void writeFixtures();
 
 private:
@@ -736,6 +899,239 @@ void TestPdfPages::concurrentReaders()
     QCOMPARE(drawn.load(), 40);
 }
 
+void TestPdfPages::selectText_data()
+{
+    QTest::addColumn<int>("page");
+    QTest::addColumn<QPointF>("from");
+    QTest::addColumn<QPointF>("to");
+    QTest::addColumn<QString>("text"); // simplified; "" nothing
+    const QString line = u"Wykład 3 — Zażółć gęślą jaźń"_s;
+    QTest::newRow("the line from its margins") << 1 << QPointF(5, 110) << QPointF(590, 110) << line;
+    QTest::newRow("backwards") << 1 << QPointF(590, 110) << QPointF(5, 110) << line;
+    QTest::newRow("the page from its corners") << 1 << QPointF(0, 0) << QPointF(595, 842) << line;
+    QTest::newRow("a point below the text") << 1 << QPointF(5, 110) << QPointF(300, 800) << line;
+    QTest::newRow("one point") << 1 << QPointF(70, 110) << QPointF(70, 110) << QString();
+    QTest::newRow("a slide without text") << 2 << QPointF(0, 0) << QPointF(842, 595) << QString();
+    QTest::newRow("page 0") << 0 << QPointF(0, 0) << QPointF(595, 842) << QString();
+    QTest::newRow("page 4") << 4 << QPointF(0, 0) << QPointF(595, 842) << QString();
+    QTest::newRow("NaN points") << 1 << QPointF(qQNaN(), 0) << QPointF(595, qQNaN()) << QString();
+}
+
+void TestPdfPages::selectText()
+{
+    if (!pdfAvailable())
+        QSKIP("no PDF renderer in this build");
+    QFETCH(int, page);
+    QFETCH(QPointF, from);
+    QFETCH(QPointF, to);
+    QFETCH(QString, text);
+    const std::unique_ptr<PdfReader> reader = PdfReader::open(QDir(dataDir()).filePath(u"wyklad.pdf"_s));
+    QVERIFY(reader);
+    const PdfTextSelection selected = reader->selectText(page, from, to);
+    if (!pdfSelectionAvailable() || text.isEmpty()) {
+        QVERIFY2(selected.isEmpty(), qPrintable(selected.text));
+        QVERIFY(selected.rects.isEmpty());
+        return;
+    }
+    QCOMPARE(selected.text.simplified(), text);
+    QVERIFY(selected.start >= 0 && selected.length >= text.size());
+    QCOMPARE(reader->pageText(page).mid(selected.start, selected.length).simplified(), text);
+    // One line: one rectangle around baseline 120, from x 60.
+    QCOMPARE(selected.rects.size(), 1);
+    const QRectF r = selected.rects.first();
+    QVERIFY2(r.top() >= 120 - 24 - 12 && r.bottom() <= 120 + 12 && r.left() >= 58 && r.right() <= 60 + 450,
+             qPrintable(u"%1 %2 %3 %4"_s.arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height())));
+
+    // A word between its edges (where the search found it): that word.
+    const QList<PdfTextHit> hits = reader->find(1, u"gesla"_s);
+    QCOMPARE(hits.size(), 1);
+    const QRectF word = hits.first().rects.first();
+    const PdfTextSelection one = reader->selectText(1, QPointF(word.left() + 1, word.center().y()),
+                                                    QPointF(word.right() - 1, word.center().y()));
+    QCOMPARE(one.text, u"gęślą"_s);
+    QCOMPARE(one.rects.size(), 1);
+    QVERIFY(word.adjusted(-2, -2, 2, 2).contains(one.rects.first()));
+}
+
+void TestPdfPages::selectRange()
+{
+    if (!pdfAvailable() || !pdfSelectionAvailable())
+        QSKIP("no PDF text selection in this build");
+    const std::unique_ptr<PdfReader> reader = PdfReader::open(QDir(dataDir()).filePath(u"wyklad.pdf"_s));
+    QVERIFY(reader);
+    const QString text = reader->pageText(3);
+    const QList<PdfTextRange> turtle = findPdfText(text, u"zolw"_s, 1);
+    QCOMPARE(turtle.size(), 1);
+    const PdfTextSelection selected = reader->selectRange(3, int(turtle.first().start), int(turtle.first().length));
+    QCOMPARE(selected.text, u"żółw"_s);
+    QCOMPARE(selected.start, int(turtle.first().start));
+    QCOMPARE(selected.rects.size(), 1);
+    // All of it ("select all"), clipped ranges, nothing.
+    QCOMPARE(reader->selectRange(3, 0, int(text.size())).text, pdfCopyText(text));
+    QCOMPARE(reader->selectRange(3, 0, 1'000'000).text, pdfCopyText(text));
+    QVERIFY(reader->selectRange(3, -5, 3).isEmpty());
+    QVERIFY(reader->selectRange(3, int(text.size()), 5).isEmpty());
+    QVERIFY(reader->selectRange(3, 2, 0).isEmpty());
+    QVERIFY(reader->selectRange(3, 2, -4).isEmpty());
+    QVERIFY(reader->selectRange(2, 0, 10).isEmpty());
+    QVERIFY(reader->selectRange(9, 0, 10).isEmpty());
+}
+
+void TestPdfPages::outline()
+{
+    if (!pdfAvailable())
+        QSKIP("no PDF renderer in this build");
+    const std::unique_ptr<PdfReader> reader = PdfReader::open(QDir(dataDir()).filePath(u"spis.pdf"_s));
+    QVERIFY(reader);
+    QCOMPARE(reader->pageCount(), 3);
+    const QList<PdfOutlineItem> items = reader->outline();
+    for (const PdfOutlineItem &item : items)
+        qInfo("%s: outline %d “%s” → %d at %g", qPrintable(pdfBackendName()), item.level, qPrintable(item.title),
+              item.page, item.top);
+    if (pdfBackendName() != u"poppler"_s) {
+        // PdfRenderer has no outline; Qt PDF's bookmark model is not safe with a looping one.
+        QVERIFY(items.isEmpty());
+        return;
+    }
+    QCOMPARE(items.size(), 5);
+    const QStringList titles{u"Wstęp"_s, u"Rozdział 2 — żółw"_s, u"Podrozdział 2.1"_s, u"Rozdział 3"_s, u"Bez celu"_s};
+    const QList<int> levels{0, 0, 1, 0, 0};
+    const QList<int> pages{1, 2, 2, 3, 0};
+    for (int i = 0; i < 5; ++i) {
+        QCOMPARE(items.at(i).title, titles.at(i));
+        QCOMPARE(items.at(i).level, levels.at(i));
+        QCOMPARE(items.at(i).page, pages.at(i));
+    }
+    // Where on the page: the top (or none), the middle, 142 pt of 842 from the top.
+    QVERIFY(items.at(0).top < 0.01);
+    QVERIFY2(qAbs(items.at(1).top - 0.5) < 0.02, qPrintable(QString::number(items.at(1).top)));
+    QVERIFY(items.at(2).top < 0.01);
+    QVERIFY2(qAbs(items.at(3).top - 142.0 / 842) < 0.02, qPrintable(QString::number(items.at(3).top)));
+    QCOMPARE(items.at(4).top, -1.0);
+    // A PDF without one.
+    QVERIFY(PdfReader::open(QDir(dataDir()).filePath(u"wyklad.pdf"_s))->outline().isEmpty());
+}
+
+void TestPdfPages::loopingOutline()
+{
+    if (!pdfAvailable())
+        QSKIP("no PDF renderer in this build");
+    const QString path = m_dir.filePath(u"pętla.pdf"_s);
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(loopingOutlinePdf());
+    }
+    const std::unique_ptr<PdfReader> reader = PdfReader::open(path);
+    QVERIFY(reader);
+    QElapsedTimer timer;
+    timer.start();
+    const QList<PdfOutlineItem> items = reader->outline();
+    qInfo("%s: a looping outline gave %d entries in %lld ms", qPrintable(pdfBackendName()), int(items.size()),
+          timer.elapsed());
+    QVERIFY(items.size() <= MaxPdfOutlineItems);
+    QVERIFY(timer.elapsed() < 10000);
+    for (const PdfOutlineItem &item : items)
+        QVERIFY(item.level < MaxPdfOutlineDepth);
+}
+
+void TestPdfPages::links()
+{
+    if (!pdfAvailable())
+        QSKIP("no PDF renderer in this build");
+    const std::unique_ptr<PdfReader> reader = PdfReader::open(QDir(dataDir()).filePath(u"spis.pdf"_s));
+    QVERIFY(reader);
+    const QList<PdfLink> links = reader->links(1);
+    for (const PdfLink &link : links)
+        qInfo("%s: link %g %g %g %g → %d at %g, %s", qPrintable(pdfBackendName()), link.rect.x(), link.rect.y(),
+              link.rect.width(), link.rect.height(), link.page, link.top, qPrintable(link.url));
+    if (pdfBackendName() == u"Android PdfRenderer"_s) {
+        QVERIFY(links.isEmpty()); // (not wired yet)
+        return;
+    }
+    // Rozdział 2, the web page, Rozdział 3 — never the script, the javascript: address or the launch.
+    QCOMPARE(links.size(), 3);
+    const auto near = [](const QRectF &a, const QRectF &b) {
+        return qAbs(a.left() - b.left()) < 1 && qAbs(a.top() - b.top()) < 1 && qAbs(a.right() - b.right()) < 1
+               && qAbs(a.bottom() - b.bottom()) < 1;
+    };
+    QVERIFY(near(links.at(0).rect, QRectF(55, 842 - 724, 265, 34)));
+    QCOMPARE(links.at(0).page, 2);
+    QVERIFY(qAbs(links.at(0).top - 0.5) < 0.02);
+    QVERIFY(links.at(0).url.isEmpty());
+    QVERIFY(near(links.at(1).rect, QRectF(55, 842 - 674, 265, 34)));
+    QCOMPARE(links.at(1).page, 0);
+    QCOMPARE(links.at(1).url, u"https://example.org/brulion?q=%C5%BC%C3%B3%C5%82w"_s);
+    QVERIFY(near(links.at(2).rect, QRectF(55, 842 - 624, 265, 34)));
+    QCOMPARE(links.at(2).page, 3);
+    QVERIFY(qAbs(links.at(2).top - 142.0 / 842) < 0.02);
+    // The square annotation is no link; out of range.
+    QVERIFY(reader->links(2).isEmpty());
+    QVERIFY(reader->links(3).isEmpty());
+    QVERIFY(reader->links(0).isEmpty());
+    QVERIFY(reader->links(4).isEmpty());
+}
+
+void TestPdfPages::annotationDrawn()
+{
+    if (!pdfAvailable())
+        QSKIP("no PDF renderer in this build");
+    // The square annotation of spis.pdf's page 2 (its own appearance: red) is drawn with the page.
+    const std::unique_ptr<PdfReader> reader = PdfReader::open(QDir(dataDir()).filePath(u"spis.pdf"_s));
+    QVERIFY(reader);
+    const QImage page = reader->render(2, QSize(595, 842));
+    QVERIFY(!page.isNull());
+    const QColor inside = page.pixelColor(150, 842 - 350);
+    const QColor outside = page.pixelColor(300, 842 - 350);
+    QVERIFY2(inside.red() > 200 && inside.green() < 60 && inside.blue() < 60, qPrintable(inside.name()));
+    QVERIFY2(outside.lightness() > 240, qPrintable(outside.name()));
+}
+
+void TestPdfPages::password_data()
+{
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<QString>("password");
+    QTest::addColumn<bool>("opens");
+    QTest::newRow("AES-256, right") << u"zaszyfrowany.pdf"_s << u"tajne"_s << true;
+    QTest::newRow("AES-256, wrong case") << u"zaszyfrowany.pdf"_s << u"TAJNE"_s << false;
+    QTest::newRow("AES-256, none") << u"zaszyfrowany.pdf"_s << QString() << false;
+    QTest::newRow("AES-256, with a space") << u"zaszyfrowany.pdf"_s << u"tajne "_s << false;
+    QTest::newRow("RC4, right") << u"zaszyfrowany-rc4.pdf"_s << u"tajne"_s << true;
+    QTest::newRow("RC4, wrong") << u"zaszyfrowany-rc4.pdf"_s << u"jawne"_s << false;
+    QTest::newRow("Polish, right") << u"haslo-polskie.pdf"_s << u"zażółć"_s << true;
+    QTest::newRow("Polish, without diacritics") << u"haslo-polskie.pdf"_s << u"zazolc"_s << false;
+    QTest::newRow("owner only, any password") << u"tylko-wlasciciel.pdf"_s << u"cokolwiek"_s << true;
+    QTest::newRow("not encrypted, a password") << u"wyklad.pdf"_s << u"tajne"_s << true;
+    QTest::newRow("too long") << u"zaszyfrowany.pdf"_s << u"tajne"_s.repeated(MaxPdfPasswordLength) << false;
+}
+
+void TestPdfPages::password()
+{
+    if (!pdfAvailable())
+        QSKIP("no PDF renderer in this build");
+    QFETCH(QString, name);
+    QFETCH(QString, password);
+    QFETCH(bool, opens);
+    const QString path = QDir(dataDir()).filePath(name);
+    QVERIFY2(QFile::exists(path), qPrintable(path));
+    PdfInfo info;
+    const std::unique_ptr<PdfReader> reader = PdfReader::open(path, &info, password);
+    if (!opens || (!pdfPasswordAvailable() && name.startsWith(u"zaszyfrowany"_s))
+        || (!pdfPasswordAvailable() && name.startsWith(u"haslo"_s))) {
+        QVERIFY(!reader);
+        QVERIFY(info.locked);
+        QCOMPARE(info.pages, -1);
+        return;
+    }
+    QVERIFY2(reader, qPrintable(info.error));
+    QVERIFY(!info.locked);
+    QCOMPARE(info.pages, 3);
+    QCOMPARE(reader->pageCount(), 3);
+    if (pdfTextAvailable())
+        QVERIFY2(reader->pageText(1).contains(u"Zażółć"_s), qPrintable(reader->pageText(1)));
+    QVERIFY(!reader->render(1, QSize(200, 283)).isNull());
+}
+
 void TestPdfPages::writeFixtures()
 {
     // tests/data/pdf/make-fixtures.sh: BRULION_PDF_FIXTURES_OUT=<dir> tst_pdfpages writeFixtures.
@@ -744,6 +1140,9 @@ void TestPdfPages::writeFixtures()
         QSKIP("BRULION_PDF_FIXTURES_OUT is not set");
     QVERIFY(QDir().mkpath(out));
     QVERIFY(writeLecture(QDir(out).filePath(u"wyklad.pdf"_s)));
+    QFile linked(QDir(out).filePath(u"spis.pdf"_s));
+    QVERIFY(linked.open(QIODevice::WriteOnly));
+    QVERIFY(linked.write(linkedPdf()) > 0);
 }
 
 QTEST_MAIN(TestPdfPages)

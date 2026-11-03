@@ -61,6 +61,33 @@ QImage PdfReader::onWhite(const QImage &rendered, const QSize &size)
     return out;
 }
 
+PdfTextSelection PdfReader::selectText(int page, QPointF from, QPointF to)
+{
+    Q_UNUSED(page);
+    Q_UNUSED(from);
+    Q_UNUSED(to);
+    return {};
+}
+
+PdfTextSelection PdfReader::selectRange(int page, int start, int length)
+{
+    Q_UNUSED(page);
+    Q_UNUSED(start);
+    Q_UNUSED(length);
+    return {};
+}
+
+QList<PdfOutlineItem> PdfReader::outline()
+{
+    return {};
+}
+
+QList<PdfLink> PdfReader::links(int page)
+{
+    Q_UNUSED(page);
+    return {};
+}
+
 PdfInfo pdfInfo(const QString &file, bool pageSizes)
 {
     PdfInfo info;

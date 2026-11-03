@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace brulion::pdfview {
 
@@ -71,12 +72,26 @@ void PdfPageLayout::setGeometry(qreal viewportWidth, qreal margin, qreal gap, qr
     relayout();
 }
 
+void PdfPageLayout::setSpread(bool twoPages, bool coverAlone)
+{
+    if (twoPages == m_twoPages && coverAlone == m_coverAlone)
+        return;
+    m_twoPages = twoPages;
+    m_coverAlone = coverAlone;
+    relayout();
+}
+
 qreal PdfPageLayout::fitWidthScale() const
 {
-    if (m_widest <= 0)
+    if (m_widestSingle <= 0 && m_widestPair <= 0)
         return PointsToLogical;
     const qreal width = std::min(m_viewportWidth - 2 * m_margin, m_maxFitWidth);
-    return std::clamp(width / m_widest, MinScale, MaxScale);
+    qreal scale = std::numeric_limits<qreal>::infinity();
+    if (m_widestSingle > 0)
+        scale = width / m_widestSingle;
+    if (m_widestPair > 0)
+        scale = std::min(scale, (width - m_gap) / m_widestPair);
+    return std::clamp(scale, MinScale, MaxScale);
 }
 
 void PdfPageLayout::setScale(qreal scale)
@@ -94,66 +109,118 @@ QSizeF PdfPageLayout::pagePoints(int index) const
 
 void PdfPageLayout::relayout()
 {
-    m_tops.resize(m_points.size());
-    m_widest = 0;
+    m_rows.clear();
+    m_rowOf.resize(m_points.size());
+    m_widestSingle = 0;
+    m_widestPair = 0;
     qreal y = m_margin;
-    for (qsizetype i = 0; i < m_points.size(); ++i) {
-        m_tops[i] = y;
-        y += m_points.at(i).height() * m_scale + m_gap;
-        m_widest = std::max(m_widest, m_points.at(i).width());
+    for (int i = 0; i < m_points.size();) {
+        Row row;
+        row.first = i;
+        row.count = m_twoPages && !(m_coverAlone && i == 0) && i + 1 < m_points.size() ? 2 : 1;
+        for (int k = i; k < i + row.count; ++k) {
+            row.width += m_points.at(k).width();
+            row.height = std::max(row.height, m_points.at(k).height());
+            m_rowOf[k] = int(m_rows.size());
+        }
+        row.top = y;
+        y += row.height * m_scale + m_gap;
+        if (row.count == 2)
+            m_widestPair = std::max(m_widestPair, row.width);
+        else
+            m_widestSingle = std::max(m_widestSingle, row.width);
+        m_rows.append(row);
+        i += row.count;
     }
-    m_height = m_points.isEmpty() ? 0 : y - m_gap + m_margin;
+    m_height = m_rows.isEmpty() ? 0 : y - m_gap + m_margin;
+}
+
+int PdfPageLayout::rowOf(int index) const
+{
+    return index >= 0 && index < m_rowOf.size() ? m_rowOf.at(index) : -1;
+}
+
+int PdfPageLayout::firstOfRow(int row) const
+{
+    return row >= 0 && row < m_rows.size() ? m_rows.at(row).first : -1;
 }
 
 QRectF PdfPageLayout::rect(int index) const
 {
     if (index < 0 || index >= m_points.size())
         return {};
+    const Row &row = m_rows.at(m_rowOf.at(index));
     const qreal w = m_points.at(index).width() * m_scale;
     const qreal h = m_points.at(index).height() * m_scale;
-    const qreal content = contentSize().width();
-    return QRectF((content - w) / 2, m_tops.at(index), w, h);
+    const qreal rowWidth = row.width * m_scale + (row.count == 2 ? m_gap : 0);
+    qreal x = (contentSize().width() - rowWidth) / 2;
+    if (index > row.first)
+        x += m_points.at(row.first).width() * m_scale + m_gap;
+    return QRectF(x, row.top, w, h);
 }
 
 QSizeF PdfPageLayout::contentSize() const
 {
     if (m_points.isEmpty())
         return QSizeF(m_viewportWidth, 0);
-    return QSizeF(std::max(m_viewportWidth, m_widest * m_scale + 2 * m_margin), m_height);
+    const qreal widest = std::max(m_widestSingle * m_scale, m_widestPair > 0 ? m_widestPair * m_scale + m_gap : 0.0);
+    return QSizeF(std::max(m_viewportWidth, widest + 2 * m_margin), m_height);
+}
+
+int PdfPageLayout::rowAt(qreal y) const
+{
+    if (m_rows.isEmpty())
+        return -1;
+    // The last row whose top is at or above y…
+    const auto it = std::upper_bound(m_rows.cbegin(), m_rows.cend(), y,
+                                     [](qreal value, const Row &row) { return value < row.top; });
+    if (it == m_rows.cbegin())
+        return 0;
+    const int r = int(it - m_rows.cbegin()) - 1;
+    // …or, in the gap after it, the next one.
+    const qreal bottom = m_rows.at(r).top + m_rows.at(r).height * m_scale;
+    return y > bottom && r + 1 < m_rows.size() ? r + 1 : r;
 }
 
 int PdfPageLayout::indexAt(qreal y) const
 {
-    if (m_tops.isEmpty())
+    const int r = rowAt(y);
+    return r < 0 ? -1 : m_rows.at(r).first;
+}
+
+int PdfPageLayout::indexAt(QPointF content) const
+{
+    const int r = rowAt(content.y());
+    if (r < 0)
         return -1;
-    // The last page whose top is at or above y…
-    const auto it = std::upper_bound(m_tops.cbegin(), m_tops.cend(), y);
-    if (it == m_tops.cbegin())
-        return 0;
-    const int i = int(it - m_tops.cbegin()) - 1;
-    // …or, in the gap after it, the next one.
-    const qreal bottom = m_tops.at(i) + m_points.at(i).height() * m_scale;
-    return y > bottom && i + 1 < m_tops.size() ? i + 1 : i;
+    const Row &row = m_rows.at(r);
+    if (row.count == 1)
+        return row.first;
+    // The second page from the middle of the gap between them on.
+    const QRectF second = rect(row.first + 1);
+    return content.x() >= second.left() - m_gap / 2 ? row.first + 1 : row.first;
 }
 
 std::pair<int, int> PdfPageLayout::range(qreal y0, qreal y1) const
 {
-    if (m_tops.isEmpty() || y1 < y0)
+    if (m_rows.isEmpty() || y1 < y0)
         return {-1, -1};
-    int first = indexAt(y0);
-    int last = indexAt(y1);
-    // indexAt() gives the next page in a gap: y1 in the gap after `last - 1` does not reach `last`.
-    if (last > first && rect(last).top() > y1)
+    const int first = rowAt(y0);
+    int last = rowAt(y1);
+    // rowAt() gives the next row in a gap: y1 in the gap after `last - 1` does not reach `last`.
+    if (last > first && m_rows.at(last).top > y1)
         --last;
-    if (rect(first).bottom() < y0 || rect(first).top() > y1)
+    const Row &top = m_rows.at(first);
+    if (top.top + top.height * m_scale < y0 || top.top > y1)
         return {-1, -1};
-    return {first, std::max(first, last)};
+    const Row &bottom = m_rows.at(std::max(first, last));
+    return {top.first, bottom.first + bottom.count - 1};
 }
 
 PdfPageLayout::Anchor PdfPageLayout::anchorAt(QPointF content) const
 {
     Anchor a;
-    a.index = indexAt(content.y());
+    a.index = indexAt(content);
     if (a.index < 0)
         return a;
     const QRectF r = rect(a.index);

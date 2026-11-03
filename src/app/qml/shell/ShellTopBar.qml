@@ -217,7 +217,8 @@ Rectangle {
         }
         BMenuItem {
             objectName: "menuOpenInOtherApp"
-            visible: bar.onPage && bar.pdf
+            // A PDF; another attachment of the allow-list (DOCX, XLSX, MP3…: name and first bytes).
+            visible: bar.onPage && (bar.pdf || (bar.fileOnly && Workspace.canOpenInOtherApp(bar.pagePath)))
             height: visible ? implicitHeight : 0
             text: Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
             iconName: "external-link"

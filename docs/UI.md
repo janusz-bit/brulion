@@ -1766,9 +1766,11 @@ viewer.
 
 **The viewer.** A bar like the picture view's: the page icon and the file's name, then — at 600 px
 and wider — "Strona 3 z 12" (a click: the page jump), Pomniejsz, the zoom "85 %" (its menu: Dopasuj
-do szerokości, 50–400 %), Powiększ, Szukaj (only where the renderer extracts text), **Rysuj na tej
-stronie** and ⋯ (Otwórz w innej aplikacji); narrower (phones, the side panel): "3/12", Szukaj, ⋯
-(Powiększ, Pomniejsz, Dopasuj do szerokości, Rysuj na tej stronie, Otwórz w innej aplikacji). The
+do szerokości, 50–400 %, Dwie strony obok siebie, Okładka osobno), Powiększ, Szukaj (only where the
+renderer extracts text), Spis treści (only when the PDF has one), **Rysuj na tej stronie** and ⋯
+(Otwórz w innej aplikacji); narrower (phones, the side panel): "3/12", Szukaj, Spis treści, ⋯
+(Powiększ, Pomniejsz, Dopasuj do szerokości, Dwie strony obok siebie, Okładka osobno, Rysuj na tej
+stronie, Otwórz w innej aplikacji). The
 pages one under another on `bgSunken`, each white with a hairline frame, laid out exactly by
 `PdfPageLayout` (every page its own size; fit width by the widest page, at most 1000 px on wide
 windows — readable lines —, the full width on phones; zoom shown as the real size, 96 dpi = 100 %,
@@ -1788,8 +1790,9 @@ the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyon
   buttons (around the view's centre), Ctrl+0 fit width; fit width follows the window's width.
   Zoomed past the view's width the pages pan sideways (a mouse drag, Shift+wheel, ← →), and on
   phones the drawer's edge strip yields to that (`PageView.edgeSwipe`).
-* **Keys**: Ctrl+F search, Ctrl+G the page jump, PageDown / Space and PageUp / Shift+Space by 90 %
-  of the view, Home / End the first / last page, ↑ ↓ 48 px, Esc closes the search, else goes back
+* **Keys**: Ctrl+F search, Ctrl+G the page jump, Ctrl+C copies the selected text, Ctrl+A selects
+  the current page's text, PageDown / Space and PageUp / Shift+Space by 90 % of the view, Home / End
+  the first / last page, ↑ ↓ 48 px, Esc clears the selection, else closes the search, else goes back
   (Back on Android and Alt+← through the shell).
 * **Page jump** (`pdfJump`): a dialog — a bottom sheet on phones — with the page number (digits,
   1…N) and "Przejdź"; Enter jumps.
@@ -1802,6 +1805,50 @@ the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyon
   "Szukam… strona 4 z 12", "Brak wyników", "Ten PDF nie ma tekstu do przeszukania (to pewnie skan).";
   Enter / F3 next, Shift+Enter / Shift+F3 previous, Esc (Back on Android while typing) closes it and
   clears the highlights. A new text cancels the search between pages.
+* **Selecting text** (where `PdfViewModel.selectionAvailable`: Qt PDF and poppler; not Android's
+  PdfRenderer — its selection needs API 35 and is not wired yet —, not the browser): a mouse drag
+  over a page selects its text from the press to the pointer (`selectText(page, from, to)` in
+  fractions of the page; the Flickable may not steal the drag, so the mouse pans no longer — the
+  scroll bars, Shift+wheel and ← → do; the cursor is an I-beam); a point beside the text takes the
+  nearest character (poppler: `pdftext.h` `pdfCaretAt` on its per-character boxes; Qt PDF: the point
+  moved onto its nearest line, then pdfium's `getSelection`). A selection stays on the page it began
+  on. A finger: a long press selects the word under it (`selectWord`: the characters a few points
+  around it, then `pdfWordAt` of the page's text — letters, digits, marks, an apostrophe or a hyphen
+  inside a word), and moving the finger without lifting it selects on to it (the pages stop
+  scrolling meanwhile; a `PointHandler` follows the finger); a tap elsewhere ends it. The selection
+  is tinted one blue on the white page in both themes; a small **Kopiuj** over its first line, Ctrl+C,
+  and the right-click menu (Kopiuj, Zaznacz całą stronę, Spis treści) copy it (`copySelection`:
+  `pdfCopyText` — CR LF as LF, soft hyphens and pdfium's U+0002 dropped, trailing white space
+  trimmed) with the toast "Skopiowano do schowka"; Ctrl+A selects the current page's text; Esc
+  clears the selection first. Each request runs on `PdfRenderPool` (priority Selection) and a newer
+  one makes the older moot, so a fast drag never queues work.
+* **Spis treści** (the PDF's outline, read once it opens: `PdfReader::outline()` — poppler only, so
+  the Nix package and other poppler builds; Qt PDF's `QPdfBookmarkModel` follows a looping outline
+  until the stack overflows — a hostile PDF would crash the app — so the Qt PDF builds (Windows, the
+  AppImage) read none, and Android's PdfRenderer has none: the button is not there): `pdfOutline`, a dialog (a bottom sheet on phones) with the entries indented by level, each
+  with its page number, the entry of the current page marked and scrolled to; a tap jumps to the
+  page and the place the entry names (`positionForTarget(page, top)`: that height, a gap above it).
+  Titles are plain text, one line (`pdfCleanTitle`: control characters as spaces, at most 300
+  characters); entries without a page are shown disabled; at most 5000 entries, 32 levels (a hostile
+  outline that loops ends there).
+* **Links** of the pages near the view (`linkRects(page)`, loaded as the pages come near:
+  `PdfReader::links()`, at most 500 a page, those of 64 pages kept): a link to a page of this PDF
+  (also a named destination) jumps there; a web or mail address (`pdfLinkUrlAllowed`: http and https
+  with a host, mailto with an address — never `javascript:`, `file:`, an app's scheme, a launch
+  action or a script) opens through `Workspace.openUrl`, the same check as a note's links, its
+  address in a tooltip on hover. The pointer is a hand over a link; a link is a press target above
+  the text selection.
+* **Dwie strony obok siebie** (the zoom menu, ⋯ on phones; `PdfViewModel.twoPages`,
+  `PdfPageLayout::setSpread`): pages 1–2, 3–4, … in rows, at the top of their row, fit width by the
+  widest row; **Okładka osobno** (`coverAlone`) puts the first page alone (1, 2–3, 4–5 — as a book
+  opens). The current page stays in view and stays the current one; "Strona N z M" then names the
+  row's first page as it scrolls. Both remembered on the device (`AppSettings` keys `pdf/twoPages`,
+  `pdf/coverAlone`).
+* **Annotations** a PDF has (highlights, notes, stamps, shapes) are drawn with the page where the
+  renderer draws them: Qt PDF (`RenderFlag::Annotations`) and poppler (`tst_pdfpages`
+  `annotationDrawn`: a square with its own appearance); Android's PdfRenderer draws what its display
+  mode draws (not checked on a device yet: TODO.md). Making new ones is for another app (Otwórz w
+  innej aplikacji).
 * **Otwórz w innej aplikacji** (⋯ and the top bar's Więcej): `Workspace.openInOtherApp` →
   `platform::openFileExternally` — the desktop's default app, Android's ACTION_VIEW (a content:// URI
   of Brulion's FileProvider with a read grant; a file outside its roots, a memory card, copied into
@@ -1822,11 +1869,25 @@ the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyon
   the route), Back again to the note with the drawing right under the PDF. When the note embeds a
   drawing of this page already (`Workspace.drawingsOnPdfPage`: the drawings' backdrop markers), a
   menu offers "Otwórz rysunek „…”" (up to three) and "Nowy rysunek na tej stronie".
-* **States**: a spinner while it opens; a PDF that cannot be shown — "Ten PDF jest chroniony hasłem
-  — Brulion go nie otworzy." (a lock; no password prompt), "Nie można odczytać tego PDF-a.", "Ten PDF
-  nie ma stron.", "Tego pliku nie ma już w notatniku." — under the file's name and size, with
-  **Otwórz w innej aplikacji** (another app may know the password or repair it) and the notes that
-  embed or link it below (as in every state without pages; not while the side panel lists them);
+* **A password**: where the renderer opens protected PDFs (`PdfViewModel.passwordAvailable`: Qt
+  PDF and poppler — tried as the owner's and the user's password, in UTF-8 for AES-256 and in
+  Latin-1 for older encryption), a protected PDF says "Ten PDF jest chroniony hasłem." with a lock, a
+  password field (`pdfPasswordField`, focused on a desktop), **Otwórz PDF** (`pdfUnlock`; Enter too)
+  and "Brulion nie zapamiętuje hasła: trzeba je wpisać przy każdym otwarciu PDF-a."; a wrong one
+  says "Nieprawidłowe hasło. Spróbuj jeszcze raz." under the field (`passwordRejected`). The password
+  is never stored: it lives in the model and, while the PDF is open, in `PdfReaderPool`'s memory
+  (`holdPassword` / `releasePassword`, counted per file) for the image provider's pages; the field is
+  emptied at once; another file, the viewer's end or a wrong password forgets it (and closes the
+  readers opened with it). It is never in the route, a setting or a log line. The embeds' thumbnails
+  of a protected PDF stay a lock (their PNG cache never holds its pages), and "Rysuj na tej stronie"
+  is not offered for it (the drawing's backdrop would need the password too). Android's PdfRenderer
+  opens none (API 35's `LoadParams` is not wired yet): there the old message stays.
+* **States**: a spinner while it opens; a PDF that cannot be shown — the password above, or where the
+  renderer opens no protected PDF "Ten PDF jest chroniony hasłem — Brulion go nie otworzy." (a lock),
+  "Nie można odczytać tego PDF-a.", "Ten PDF nie ma stron.", "Tego pliku nie ma już w notatniku." —
+  under the file's name and size, with **Otwórz w innej aplikacji** (another app may know the
+  password or repair it) and the notes that embed or link it below (as in every state without pages;
+  not while the side panel lists them);
   a page that fails alone says "Nie można pokazać strony
   N." on its white page. The file changed on disk (sync, another program): opened again at the same
   page and zoom; renamed or moved: the shell's route follows it and the viewer reopens on the
@@ -1848,7 +1909,18 @@ the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyon
 
 **Other attachments.** Any other file that is no note, no picture and no PDF (DOCX, ZIP, MP3…)
 opens read-only as text (`PageView.fileRoute` → `ContentPictureView` with `textOnly`: the bar names
-the file and says "Tylko do odczytu", at most its first 200 KB) — never in the block editor.
+the file and says "Tylko do odczytu", at most its first 200 KB) — never in the block editor. A kind
+on the allow-list (`platform/externalfiles.h`: DOCX, XLSX, PPTX, ODT, ODS, ODP, EPUB, DOC, XLS, PPT,
+RTF, MP3, M4A, OGG, OPUS, WAV, FLAC, MP4, MOV, WEBM, MKV, TXT, CSV, TSV — by its extension AND its
+first 64 KiB: a zip with Word's / Excel's / PowerPoint's parts, an OpenDocument or EPUB zip naming
+its own type first, OLE2, `{\rtf`, the audio and video signatures, text without NUL bytes in
+valid UTF-8) has **Otwórz w innej aplikacji** in that bar (`pictureOpenElsewhere`; "Otwórz gdzie
+indziej" when narrow) and in the top bar's Więcej (`Workspace.canOpenInOtherApp`): the system's app
+for it with the list's MIME type (Android's ACTION_VIEW; the browser's new tab, which usually
+downloads it). A program, a script, a shortcut, an HTML page, an archive, a macro-enabled document
+(`.docm`) — or any of them renamed to a listed name — is never handed over: "Brulion nie przekazuje
+„x” innym aplikacjom: tylko dokumenty, arkusze, prezentacje, e-booki, dźwięk, wideo i pliki
+tekstowe." A ZIP keeps its read-only text and nothing else.
 
 C++: `src/app/pdf` (library `brulion_pdfview`): `PdfRenderPool` (at most two threads; priorities:
 a visible page, a detail picture, a thumbnail, page sizes, search), `PdfReaderPool` (open readers
@@ -1858,12 +1930,19 @@ itself writes, moves or deletes it or a folder holding it: `Workspace::releasePd
 Windows cannot replace, move or delete an open file; during a Nextcloud sync run, which may do the
 same to any PDF, no reader waits idle at all — `PdfReaderPool::suspendIdle()` from the run's start
 to its end, `WorkspaceSync`), `PdfThumbnails`,
-`PdfPageLayout` (pure), `PdfViewModel` (QML `PdfViewModel`: status, error, locked, pageCount,
-scale, zoomPercent, fitWidth, contentWidth/Height, currentPage — the page under 40 % of the view's
-height —, pages, detailRevision, search properties; setViewport, settle, positionForPage,
-zoomAround, setScaleAround, fitToWidth, pageUrl, detail, hitRects, nextHit, previousHit,
-clearSearch, reload; `moveViewport(x, y)` moves the Flickable) and `PdfViewImageProvider`. Tests:
-`tests/app/pdf` (`tst_pdflayout`, `tst_pdfthumbnails`, `tst_pdfviewmodel`),
+`PdfPageLayout` (pure; rows of one or two pages), `PdfViewModel` (QML `PdfViewModel`: status,
+error, locked, passwordAvailable, passwordRejected, unlocked, pageCount, scale, zoomPercent,
+fitWidth, twoPages, coverAlone, contentWidth/Height, currentPage — the page under 40 % of the view's
+height —, pages, detailRevision, search properties, selectionAvailable, selectedText,
+selectionPage, selectionRevision, outline, linkRevision; setViewport, settle, positionForPage,
+positionForTarget, pageAt, zoomAround, setScaleAround, fitToWidth, pageUrl, detail, hitRects,
+nextHit, previousHit, clearSearch, reload, unlock, selectText, selectWord, selectAll,
+clearSelection, selectionRects, copySelection, linkRects; `moveViewport(x, y)` moves the
+Flickable) and `PdfViewImageProvider`. The platform's side: `PdfReader::selectText`, `selectRange`,
+`outline`, `links`, `open(file, info, password)` (`src/platform/pdfpages.h`) and the pure
+`src/platform/pdftext.h`. Tests: `tests/app/pdf` (`tst_pdflayout`, `tst_pdfthumbnails`,
+`tst_pdfviewmodel`), `tests/platform` (`tst_pdfpages` — also on `tests/data/pdf/spis.pdf`, a PDF
+written by hand with an outline, links and an annotation —, `tst_pdftext`, `tst_externalfiles`),
 `tests/app/shell/tst_workspace_pdf.cpp`, `--selftest-shell` (below), the Android emulator's `--pdf`
 mode and `tests/web/pdf.spec.mjs` (docs/ANDROID.md, docs/WEB.md). Screenshots:
 `tests/app/shell/screenshots.sh pdf-embed pdf-viewer pdf-zoom pdf-search pdf-jump pdf-locked`.

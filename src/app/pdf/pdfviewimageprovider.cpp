@@ -153,7 +153,10 @@ QQuickImageResponse *PdfViewImageProvider::requestImageResponse(const QString &i
                 QImage image;
                 bool failed = false;
                 if (!cancelled->load()) {
-                    PdfReaderPool::Lease lease = PdfReaderPool::instance().acquire(request.file, request.version);
+                    // (A protected PDF the viewer opened: with its password, kept in memory only.)
+                    PdfReaderPool &pool = PdfReaderPool::instance();
+                    PdfReaderPool::Lease lease =
+                            pool.acquire(request.file, request.version, nullptr, pool.password(request.file));
                     if (lease && request.page <= lease->pageCount() && !cancelled->load()) {
                         image = lease->render(request.page, full, clip);
                         failed = image.isNull();

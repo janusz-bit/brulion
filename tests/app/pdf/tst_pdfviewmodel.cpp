@@ -2,16 +2,23 @@
 // opening (Loading → Ready, three pages), a locked and a missing file, the visible pages, zoom around
 // a point, detail pictures only when zoomed in, search without diacritics and case (a turtle on page
 // 3), a new text cancelling the old search, a PDF without text, the search turned off, a new version
-// opened at the same page, a page that failed; and the image provider's ids (pure).
+// opened at the same page, a page that failed; text selected between two points, a word, a page, its
+// rectangles, older requests dropped, copied to the clipboard; the table of contents and the links
+// of tests/data/pdf/spis.pdf (where a target lies); a protected PDF unlocked with its password (a
+// wrong one rejected and never kept, the image provider's password held while the viewer is open and
+// forgotten with it, never the thumbnails'); two pages side by side keeping the current page; and the
+// image provider's ids (pure).
 #include "pdfviewmodel.h"
 
 #include "pdfpages.h"
 #include "pdfrenderpool.h"
 #include "pdfviewimageprovider.h"
 
+#include <QClipboard>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QGuiApplication>
 #include <QPageSize>
 #include <QPainter>
 #include <QPdfWriter>
@@ -407,6 +414,265 @@ private Q_SLOTS:
         QVERIFY(!page.isNull());
         QVERIFY(!thumb.isNull());
         QVERIFY(ready < 10000);
+    }
+
+    void selection()
+    {
+        auto model = opened(fixture(u"wyklad.pdf"_s));
+        QTRY_COMPARE(model->status(), Status::Ready);
+        if (!brulion::platform::pdfSelectionAvailable()) {
+            QVERIFY(!model->selectionAvailable());
+            model->selectText(1, QPointF(0, 0), QPointF(1, 1));
+            QTest::qWait(100);
+            QVERIFY(model->selectedText().isEmpty());
+            return;
+        }
+        QVERIFY(model->selectionAvailable());
+        QSignalSpy changed(model.get(), &PdfViewModel::selectionChanged);
+        // Page 1's line (baseline 120 pt of 842, from x 60): from the left margin to the right one.
+        model->selectText(1, QPointF(0.01, 110.0 / 842), QPointF(0.99, 110.0 / 842));
+        QTRY_COMPARE(model->selectedText().simplified(), u"Wykład 3 — Zażółć gęślą jaźń"_s);
+        QCOMPARE(model->selectionPage(), 1);
+        const QVariantList rects = model->selectionRects(1);
+        QCOMPARE(rects.size(), 1);
+        const QVariantMap r = rects.first().toMap();
+        QVERIFY(r.value(u"x"_s).toReal() > 0.05 && r.value(u"x"_s).toReal() < 0.15);
+        QVERIFY(r.value(u"y"_s).toReal() > 0.05 && r.value(u"y"_s).toReal() < 0.16);
+        QVERIFY(model->selectionRects(2).isEmpty());
+        // Copied as it is.
+        QVERIFY(model->copySelection());
+        QCOMPARE(QGuiApplication::clipboard()->text().simplified(), u"Wykład 3 — Zażółć gęślą jaźń"_s);
+        // A drag asks with every move: only the newest answer counts.
+        for (int i = 0; i < 20; ++i)
+            model->selectText(3, QPointF(0.01, 110.0 / 842), QPointF(0.02 + i * 0.001, 110.0 / 842));
+        model->selectText(3, QPointF(0.01, 110.0 / 842), QPointF(0.99, 110.0 / 842));
+        QTRY_COMPARE(model->selectedText().simplified(), u"Strona trzecia: żółw"_s);
+        QCOMPARE(model->selectionPage(), 3);
+        // All of a page (Ctrl+A).
+        model->clearSelection();
+        model->selectAll(3);
+        QTRY_COMPARE(model->selectedText().simplified(), u"Strona trzecia: żółw"_s);
+        // Cleared; nothing to copy then.
+        model->clearSelection();
+        QVERIFY(model->selectedText().isEmpty());
+        QCOMPARE(model->selectionPage(), 0);
+        QVERIFY(!model->copySelection());
+        // A slide without text, a page out of range, NaN: nothing.
+        model->selectText(2, QPointF(0, 0), QPointF(1, 1));
+        QTest::qWait(200);
+        QVERIFY(model->selectedText().isEmpty());
+        model->selectText(9, QPointF(0, 0), QPointF(1, 1));
+        model->selectText(1, QPointF(qQNaN(), 0), QPointF(1, 1));
+        QTest::qWait(100);
+        QVERIFY(model->selectedText().isEmpty());
+        QVERIFY(changed.size() >= 3);
+        // Turned off (a renderer without it): cleared, nothing more.
+        model->setSelectionAvailable(false);
+        model->selectAll(1);
+        QTest::qWait(100);
+        QVERIFY(model->selectedText().isEmpty());
+    }
+
+    void selectWord()
+    {
+        auto model = opened(fixture(u"wyklad.pdf"_s));
+        QTRY_COMPARE(model->status(), Status::Ready);
+        if (!brulion::platform::pdfSelectionAvailable())
+            QSKIP("no PDF text selection in this build");
+        // Where the search finds "gęślą" on page 1: its middle, in fractions of the page.
+        model->setSearchText(u"gesla"_s);
+        QTRY_VERIFY(!model->searching() && model->hitCount() == 1);
+        const QVariantMap hit = model->hitRects(1).first().toMap();
+        const QPointF middle(hit.value(u"x"_s).toReal() + hit.value(u"width"_s).toReal() / 2,
+                             hit.value(u"y"_s).toReal() + hit.value(u"height"_s).toReal() / 2);
+        model->selectWord(1, middle);
+        QTRY_COMPARE(model->selectedText(), u"gęślą"_s);
+        // In the margin, nothing near: nothing.
+        model->selectWord(1, QPointF(0.5, 0.9));
+        QTRY_VERIFY(model->selectedText().isEmpty());
+    }
+
+    void outlineAndLinks()
+    {
+        auto model = opened(fixture(u"spis.pdf"_s), 800, 600);
+        QTRY_COMPARE(model->status(), Status::Ready);
+        if (brulion::platform::pdfBackendName() == u"Android PdfRenderer"_s)
+            QSKIP("no outline or links with PdfRenderer");
+        // Page 1's links come as it is shown: Rozdział 2, the web page, Rozdział 3 (never the script).
+        QTRY_COMPARE(model->linkRects(1).size(), 3);
+        if (brulion::platform::pdfBackendName() != u"poppler"_s) {
+            QTest::qWait(200);
+            QVERIFY(model->outline().isEmpty()); // (poppler only)
+        } else {
+            QTRY_COMPARE(model->outline().size(), 5);
+        }
+        if (!model->outline().isEmpty()) {
+            const QVariantMap chapter = model->outline().at(1).toMap();
+            QCOMPARE(chapter.value(u"title"_s).toString(), u"Rozdział 2 — żółw"_s);
+            QCOMPARE(chapter.value(u"page"_s).toInt(), 2);
+            QVERIFY(std::abs(chapter.value(u"top"_s).toReal() - 0.5) < 0.02);
+            QCOMPARE(model->outline().at(2).toMap().value(u"level"_s).toInt(), 1);
+            QCOMPARE(model->outline().at(4).toMap().value(u"page"_s).toInt(), 0);
+        }
+        // A target in the middle of page 2: a gap above it.
+        const QPointF at = model->positionForTarget(2, 0.5);
+        const QRectF page2 = model->pageRect(2);
+        QVERIFY2(std::abs(at.y() - (page2.y() + page2.height() / 2 - 12)) < 0.5,
+                 qPrintable(u"%1 vs %2"_s.arg(at.y()).arg(page2.y() + page2.height() / 2)));
+        // No place: the page's top; a page out of range: clamped.
+        QCOMPARE(model->positionForTarget(3, -1), model->positionForPage(3, 0));
+        QCOMPARE(model->positionForTarget(9, -1), model->positionForPage(3, 0));
+        const QVariantList links = model->linkRects(1);
+        QCOMPARE(links.at(0).toMap().value(u"page"_s).toInt(), 2);
+        QVERIFY(links.at(0).toMap().value(u"url"_s).toString().isEmpty());
+        QCOMPARE(links.at(1).toMap().value(u"url"_s).toString(),
+                 u"https://example.org/brulion?q=%C5%BC%C3%B3%C5%82w"_s);
+        QCOMPARE(links.at(2).toMap().value(u"page"_s).toInt(), 3);
+        const QVariantMap first = links.at(0).toMap();
+        QVERIFY(std::abs(first.value(u"x"_s).toReal() - 55.0 / 595) < 0.01);
+        QVERIFY(std::abs(first.value(u"y"_s).toReal() - (842.0 - 724) / 842) < 0.01);
+        QVERIFY(model->linkRects(2).isEmpty());
+        // Another file: the outline and the links go.
+        model->setFile(fixture(u"wyklad.pdf"_s));
+        QTRY_COMPARE(model->status(), Status::Ready);
+        QTRY_VERIFY(model->outline().isEmpty() && model->linkRects(1).isEmpty());
+        QTRY_COMPARE(model->pageCount(), 3);
+    }
+
+    void password()
+    {
+        PdfReaderPool &pool = PdfReaderPool::instance();
+        const QString file = fixture(u"zaszyfrowany.pdf"_s);
+        auto model = opened(file);
+        QTRY_COMPARE(model->status(), Status::Failed);
+        QVERIFY(model->locked());
+        if (!brulion::platform::pdfPasswordAvailable()) {
+            QVERIFY(!model->passwordAvailable());
+            QVERIFY2(model->error().contains(u"cannot open"_s), qPrintable(model->error()));
+            return;
+        }
+        QVERIFY(model->passwordAvailable());
+        QVERIFY(!model->passwordRejected());
+        QVERIFY(!model->unlocked());
+        // A wrong one: still locked, rejected, not kept.
+        model->unlock(u"jawne"_s);
+        QTRY_VERIFY(model->passwordRejected());
+        QCOMPARE(model->status(), Status::Failed);
+        QVERIFY(model->locked());
+        QVERIFY(pool.password(file).isEmpty());
+        // The right one.
+        model->unlock(u"tajne"_s);
+        QTRY_COMPARE(model->status(), Status::Ready);
+        QVERIFY(!model->passwordRejected());
+        QVERIFY(!model->locked());
+        QVERIFY(model->unlocked());
+        QCOMPARE(model->pageCount(), 3);
+        // The image provider's pages are drawn with it meanwhile (memory only)…
+        QCOMPARE(pool.password(file), u"tajne"_s);
+        {
+            PdfReaderPool::Lease lease = pool.acquire(file, u"1"_s, nullptr, pool.password(file));
+            QVERIFY(lease);
+        }
+        // …the thumbnails never: no password, no reader.
+        QVERIFY(!pool.acquire(file, u"1"_s));
+        if (brulion::platform::pdfTextAvailable()) {
+            model->setSearchText(u"zolw"_s);
+            QTRY_VERIFY(!model->searching() && model->hitCount() == 1);
+        }
+        // A new version of the file opens with it again (the page kept).
+        model->setVersion(u"2"_s);
+        QTRY_COMPARE(model->status(), Status::Ready);
+        QVERIFY(model->unlocked());
+        // Another file forgets it, and its idle readers opened with it are closed.
+        model->setFile(fixture(u"wyklad.pdf"_s));
+        QVERIFY(pool.password(file).isEmpty());
+        QTRY_COMPARE(model->status(), Status::Ready);
+        QVERIFY(!model->unlocked());
+        model->setFile(file);
+        QTRY_COMPARE(model->status(), Status::Failed);
+        QVERIFY(model->locked());
+        QVERIFY(!model->passwordRejected());
+        // The model's end forgets it too.
+        model->unlock(u"tajne"_s);
+        QTRY_COMPARE(model->status(), Status::Ready);
+        QCOMPARE(pool.password(file), u"tajne"_s);
+        model.reset();
+        QVERIFY(pool.password(file).isEmpty());
+        // A renderer that opens none says so.
+        auto other = opened(file);
+        other->setPasswordAvailable(false);
+        QTRY_COMPARE(other->status(), Status::Failed);
+        QVERIFY2(other->error().contains(u"cannot open"_s), qPrintable(other->error()));
+    }
+
+    void twoPages()
+    {
+        auto model = opened(fixture(u"wyklad.pdf"_s), 1000, 700);
+        QTRY_COMPARE(model->status(), Status::Ready);
+        QTRY_VERIFY(std::abs(model->pageRect(2).width() - (1000 - 48)) < 0.5); // (the slide's size arrived)
+        QVERIFY(!model->twoPages());
+        // Go to page 3, then two pages side by side: page 3 stays the current one, in view.
+        model->setViewport(0, model->positionForPage(3).y());
+        QCOMPARE(model->currentPage(), 3);
+        QSignalSpy moved(model.get(), &PdfViewModel::moveViewport);
+        QSignalSpy spread(model.get(), &PdfViewModel::spreadChanged);
+        model->setTwoPages(true);
+        QVERIFY(model->twoPages());
+        QCOMPARE(spread.size(), 1);
+        QCOMPARE(model->currentPage(), 3);
+        QVERIFY(!moved.isEmpty());
+        // Pages 1 and 2 side by side (fit width: the pair), page 3 alone below.
+        QVERIFY(std::abs(model->pageRect(1).y() - model->pageRect(2).y()) < 0.5);
+        QVERIFY(model->pageRect(2).left() > model->pageRect(1).right());
+        QVERIFY(model->pageRect(3).top() > model->pageRect(1).bottom());
+        QVERIFY(model->pageRect(2).right() <= 1000 - 24 + 0.5);
+        QCOMPARE(model->pageAt(model->pageRect(2).center().x(), model->pageRect(2).center().y()), 2);
+        QCOMPARE(model->pageAt(model->pageRect(1).center().x(), model->pageRect(1).center().y()), 1);
+        // The cover alone: 1 | 2 3.
+        model->setCoverAlone(true);
+        QVERIFY(std::abs(model->pageRect(2).y() - model->pageRect(3).y()) < 0.5);
+        QVERIFY(model->pageRect(2).top() > model->pageRect(1).bottom());
+        QCOMPARE(model->currentPage(), 3);
+        // Back to one page per row.
+        model->setTwoPages(false);
+        QVERIFY(model->pageRect(2).top() > model->pageRect(1).bottom());
+        QVERIFY(model->pageRect(3).top() > model->pageRect(2).bottom());
+        QCOMPARE(model->currentPage(), 3);
+        QCOMPARE(model->pageAt(10, 10), 1);
+    }
+
+    void readerPoolPasswords()
+    {
+        PdfReaderPool &pool = PdfReaderPool::instance();
+        pool.closeIdle();
+        const QString file = fixture(u"zaszyfrowany.pdf"_s);
+        if (!brulion::platform::pdfPasswordAvailable())
+            QSKIP("no passwords in this build");
+        // Counted holds; idle readers opened with it are reused only with it.
+        pool.holdPassword(file, u"tajne"_s);
+        pool.holdPassword(file, u"tajne"_s);
+        {
+            PdfReaderPool::Lease lease = pool.acquire(file, u"v"_s, nullptr, u"tajne"_s);
+            QVERIFY(lease);
+        }
+        QCOMPARE(pool.idleCount(), 1);
+        QVERIFY(!pool.acquire(file, u"v"_s)); // (without it: opened anew, locked)
+        QCOMPARE(pool.idleCount(), 1);
+        pool.releasePassword(file);
+        QCOMPARE(pool.password(file), u"tajne"_s);
+        QCOMPARE(pool.idleCount(), 1);
+        pool.releasePassword(file);
+        QVERIFY(pool.password(file).isEmpty());
+        QCOMPARE(pool.idleCount(), 0); // closed with the last hold
+        // Given back after the last hold: not kept open.
+        {
+            PdfReaderPool::Lease lease = pool.acquire(file, u"v"_s, nullptr, u"tajne"_s);
+            QVERIFY(lease);
+        }
+        QCOMPARE(pool.idleCount(), 0);
+        pool.releasePassword(file);         // (an unpaired release does nothing)
+        pool.holdPassword(file, QString()); // (no password: nothing held)
+        QVERIFY(pool.password(file).isEmpty());
     }
 
     void readerPoolReuses()

@@ -80,6 +80,7 @@ PdfReaderPool::Lease::Lease(Lease &&other) noexcept
     : m_pool(other.m_pool)
     , m_file(std::move(other.m_file))
     , m_version(std::move(other.m_version))
+    , m_password(std::move(other.m_password))
     , m_reader(std::move(other.m_reader))
 {
     other.m_pool = nullptr;
@@ -92,6 +93,7 @@ PdfReaderPool::Lease &PdfReaderPool::Lease::operator=(Lease &&other) noexcept
         m_pool = other.m_pool;
         m_file = std::move(other.m_file);
         m_version = std::move(other.m_version);
+        m_password = std::move(other.m_password);
         m_reader = std::move(other.m_reader);
         other.m_pool = nullptr;
     }
@@ -108,20 +110,22 @@ void PdfReaderPool::Lease::release()
     if (!m_reader || !m_pool)
         return;
     m_reader->detachFromThread();
-    m_pool->giveBack(m_file, m_version, std::move(m_reader));
+    m_pool->giveBack(m_file, m_version, m_password, std::move(m_reader));
     m_pool = nullptr;
 }
 
-PdfReaderPool::Lease PdfReaderPool::acquire(const QString &file, const QString &version, platform::PdfInfo *info)
+PdfReaderPool::Lease PdfReaderPool::acquire(const QString &file, const QString &version, platform::PdfInfo *info,
+                                            const QString &password)
 {
     Lease lease;
     lease.m_pool = this;
     lease.m_file = file;
     lease.m_version = version;
+    lease.m_password = password;
     {
         const std::lock_guard lock(m_lock);
         for (auto it = m_idle.begin(); it != m_idle.end(); ++it) {
-            if (it->file == file && it->version == version) {
+            if (it->file == file && it->version == version && it->password == password) {
                 lease.m_reader = std::move(it->reader);
                 m_idle.erase(it);
                 break;
@@ -135,7 +139,7 @@ PdfReaderPool::Lease PdfReaderPool::acquire(const QString &file, const QString &
             info->pagePoints = {lease.m_reader->pageSize(1)};
         }
     } else {
-        lease.m_reader = platform::PdfReader::open(file, info);
+        lease.m_reader = platform::PdfReader::open(file, info, password);
         if (!lease.m_reader)
             return {};
         const std::lock_guard lock(m_lock);
@@ -145,13 +149,16 @@ PdfReaderPool::Lease PdfReaderPool::acquire(const QString &file, const QString &
     return lease;
 }
 
-void PdfReaderPool::giveBack(const QString &file, const QString &version, std::unique_ptr<platform::PdfReader> reader)
+void PdfReaderPool::giveBack(const QString &file, const QString &version, const QString &password,
+                             std::unique_ptr<platform::PdfReader> reader)
 {
     std::list<Idle> closed; // closed outside the lock
     if (reader->lost() || m_suspended.load() > 0)
         return; // (closed here: never given to the next thread / kept open while a sync runs)
     {
         const std::lock_guard lock(m_lock);
+        if (!password.isEmpty() && m_passwords.value(file).password != password)
+            return; // (the viewer let it go: an unlocked PDF is not kept open)
         // A reader of an older version of the file is not kept.
         for (auto it = m_idle.begin(); it != m_idle.end();) {
             if (it->file == file && it->version != version)
@@ -162,6 +169,7 @@ void PdfReaderPool::giveBack(const QString &file, const QString &version, std::u
         Idle idle;
         idle.file = file;
         idle.version = version;
+        idle.password = password;
         idle.reader = std::move(reader);
         idle.since.start();
         m_idle.push_front(std::move(idle));
@@ -214,6 +222,40 @@ void PdfReaderPool::forget(const QString &file)
         else
             ++it;
     }
+}
+
+void PdfReaderPool::holdPassword(const QString &file, const QString &password)
+{
+    if (file.isEmpty() || password.isEmpty())
+        return;
+    const std::lock_guard lock(m_lock);
+    Held &held = m_passwords[file];
+    held.password = password;
+    ++held.holders;
+}
+
+void PdfReaderPool::releasePassword(const QString &file)
+{
+    std::list<Idle> closed;
+    const std::lock_guard lock(m_lock);
+    const auto it = m_passwords.find(file);
+    if (it == m_passwords.end())
+        return;
+    if (--it->holders > 0)
+        return;
+    m_passwords.erase(it);
+    for (auto idle = m_idle.begin(); idle != m_idle.end();) {
+        if (idle->file == file && !idle->password.isEmpty())
+            closed.splice(closed.end(), m_idle, idle++);
+        else
+            ++idle;
+    }
+}
+
+QString PdfReaderPool::password(const QString &file) const
+{
+    const std::lock_guard lock(m_lock);
+    return m_passwords.value(file).password;
 }
 
 void PdfReaderPool::suspendIdle()

@@ -1,7 +1,9 @@
 // The PDF viewer's page layout (src/app/pdf/pdflayout.h): exact rectangles and the content's size,
 // mixed page sizes, fit width with its cap (centred), zoom past the viewport, hostile sizes (zero,
 // negative, NaN, a hostile aspect), the page at a height (gaps, before, after), ranges, anchors that
-// keep a point in place across zooms, a page's size arriving later, 20 000 pages fast.
+// keep a point in place across zooms, a page's size arriving later, 20 000 pages fast; two pages side
+// by side (pairs, the cover alone, an odd last page, mixed sizes fitted by the widest row, the page
+// at a point, ranges by rows, anchors, back to one page per row).
 #include "pdflayout.h"
 
 #include <QElapsedTimer>
@@ -197,6 +199,105 @@ private Q_SLOTS:
         QCOMPARE(layout.pagePoints(2), A4Landscape);
         layout.setPageSize(7, A4); // out of range: nothing
         QCOMPARE(layout.count(), 3);
+    }
+
+    void twoPagesSideBySide()
+    {
+        PdfPageLayout layout;
+        layout.setPages({A4, A4, A4, A4, A4});
+        layout.setGeometry(1000, 20, 10, 1e6);
+        layout.setSpread(true, false);
+        layout.setScale(layout.fitWidthScale());
+        // The widest row (two A4 and the gap between them) fills the width.
+        const qreal k = (1000 - 40 - 10) / (2 * A4W);
+        QVERIFY(near(layout.scale(), k, 1e-9));
+        const qreal w = A4W * k;
+        const qreal h = A4H * k;
+        QCOMPARE(layout.rowCount(), 3);
+        QVERIFY(near(layout.rect(0).x(), 20));
+        QVERIFY(near(layout.rect(1).x(), 20 + w + 10));
+        QVERIFY(near(layout.rect(1).y(), layout.rect(0).y()));
+        QVERIFY(near(layout.rect(2).y(), 20 + h + 10));
+        QVERIFY(near(layout.rect(3).x(), layout.rect(1).x()));
+        // The odd last page alone, centred.
+        QCOMPARE(layout.rowOf(4), 2);
+        QVERIFY(near(layout.rect(4).center().x(), 500));
+        QVERIFY(near(layout.rect(4).y(), 20 + 2 * (h + 10)));
+        QVERIFY(near(layout.contentSize().height(), 20 + 3 * h + 2 * 10 + 20));
+        QVERIFY(near(layout.contentSize().width(), 1000));
+        QCOMPARE(layout.firstOfRow(1), 2);
+        QCOMPARE(layout.firstOfRow(3), -1);
+        QCOMPARE(layout.rowOf(5), -1);
+        // A height names the row's first page; a point the page under it.
+        QCOMPARE(layout.indexAt(20 + h + 15), 2);
+        QCOMPARE(layout.indexAt(QPointF(30, 20 + h + 15)), 2);
+        QCOMPARE(layout.indexAt(QPointF(990, 20 + h + 15)), 3);
+        QCOMPARE(layout.indexAt(QPointF(500 + 6, 30)), 1); // just past the middle of the gap
+        QCOMPARE(layout.indexAt(QPointF(500 - 6, 30)), 0);
+        QCOMPARE(layout.indexAt(QPointF(500, 1e9)), 4);
+        // Ranges are whole rows.
+        QCOMPARE(layout.range(30, 40), std::make_pair(0, 1));
+        QCOMPARE(layout.range(30, 20 + h + 20), std::make_pair(0, 3));
+        QCOMPARE(layout.range(0, 1e9), std::make_pair(0, 4));
+        // Back to one page per row.
+        layout.setSpread(false, false);
+        QCOMPARE(layout.rowCount(), 5);
+        layout.setScale(layout.fitWidthScale());
+        QVERIFY(near(layout.rect(1).x(), 20));
+        QVERIFY(near(layout.rect(1).width(), 960));
+    }
+
+    void coverAlone()
+    {
+        PdfPageLayout layout;
+        layout.setPages({A4, A4, A4, A4});
+        layout.setGeometry(1000, 20, 10, 1e6);
+        layout.setSpread(true, true);
+        layout.setScale(1);
+        // 1 | 2 3 | 4
+        QCOMPARE(layout.rowCount(), 3);
+        QCOMPARE(layout.rowOf(0), 0);
+        QCOMPARE(layout.rowOf(1), 1);
+        QCOMPARE(layout.rowOf(2), 1);
+        QCOMPARE(layout.rowOf(3), 2);
+        QVERIFY(near(layout.rect(0).center().x(), layout.contentSize().width() / 2));
+        QVERIFY(near(layout.rect(2).x(), layout.rect(1).right() + 10));
+        QVERIFY(near(layout.rect(1).y(), 20 + A4H + 10));
+        // Content wider than the view: the widest row and the margins.
+        QVERIFY(near(layout.contentSize().width(), 2 * A4W + 10 + 40));
+        // One page only: alone either way.
+        PdfPageLayout one;
+        one.setPages({A4});
+        one.setSpread(true, false);
+        QCOMPARE(one.rowCount(), 1);
+        QVERIFY(near(one.rect(0).width(), A4W * PdfPageLayout::PointsToLogical));
+    }
+
+    void twoPagesMixedSizes()
+    {
+        PdfPageLayout layout;
+        // A slide next to a portrait page; a wider pair below.
+        layout.setPages({A4, A4Landscape, A4Landscape, A4Landscape});
+        layout.setGeometry(1200, 16, 12, 1e6);
+        layout.setSpread(true, false);
+        layout.setScale(layout.fitWidthScale());
+        const qreal k = (1200 - 32 - 12) / (2 * A4H);
+        QVERIFY(near(layout.scale(), k, 1e-9));
+        // Pages at the top of their row; the row as tall as its tallest page.
+        QVERIFY(near(layout.rect(0).y(), layout.rect(1).y()));
+        QVERIFY(near(layout.rect(2).y(), 16 + A4H * k + 12));
+        // The narrower first row centred.
+        const qreal firstRow = layout.rect(1).right() - layout.rect(0).left();
+        QVERIFY(near(layout.rect(0).x(), (1200 - firstRow) / 2));
+        // Anchors keep a point of the right page in place across zooms.
+        const QRectF r = layout.rect(3);
+        const QPointF point(r.x() + r.width() * 0.25, r.y() + r.height() * 0.75);
+        const PdfPageLayout::Anchor anchor = layout.anchorAt(point);
+        QCOMPARE(anchor.index, 3);
+        layout.setScale(3);
+        const QRectF big = layout.rect(3);
+        QVERIFY(near(layout.pointOf(anchor).x(), big.x() + big.width() * 0.25, 1e-6));
+        QVERIFY(near(layout.pointOf(anchor).y(), big.y() + big.height() * 0.75, 1e-6));
     }
 
     void manyPagesFast()

@@ -15,6 +15,14 @@ target_compile_definitions(tst_pdfpages PRIVATE BRULION_TEST_PDF_DIR="${PROJECT_
 # The PDF viewer's matcher (pdfsearch.h): Polish without diacritics, white space, soft hyphens,
 # surrogates, the rectangles of a match, Android's spellings — pure, so tested on every platform.
 brulion_add_test(tst_pdfsearch SOURCES tst_pdfsearch.cpp LIBS brulion_platform)
+# Text picked by pointing, outline titles and link addresses (pdftext.h): the caret nearest to a
+# point, a range between two, the clipboard's text, titles cleaned, only http(s) / mailto links —
+# pure, so tested on every platform.
+brulion_add_test(tst_pdftext SOURCES tst_pdftext.cpp LIBS brulion_platform)
+# Which attachments may go to another app (externalfiles.h): the allow-list by name and first bytes
+# — documents, sheets, presentations, e-books, audio, video, text; never a program, a script, a page
+# or an archive, nor one renamed to a document — pure, so tested on every platform.
+brulion_add_test(tst_externalfiles SOURCES tst_externalfiles.cpp LIBS brulion_platform)
 # The file an Android document URI names (documentpaths.h: the phone's storage, a memory card,
 # Downloads' raw paths; anything else none) — pure, so tested on every platform.
 brulion_add_test(tst_documentpaths SOURCES tst_documentpaths.cpp LIBS brulion_platform)

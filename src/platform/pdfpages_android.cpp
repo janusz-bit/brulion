@@ -209,8 +209,19 @@ bool pdfTextAvailable()
     return available;
 }
 
-std::unique_ptr<PdfReader> PdfReader::open(const QString &file, PdfInfo *info)
+bool pdfSelectionAvailable()
 {
+    return false;
+}
+
+bool pdfPasswordAvailable()
+{
+    return false;
+}
+
+std::unique_ptr<PdfReader> PdfReader::open(const QString &file, PdfInfo *info, const QString &password)
+{
+    Q_UNUSED(password); // (PdfRenderer opens a protected PDF only on API 35+: not wired yet)
     PdfInfo local;
     PdfInfo &out = info ? *info : local;
     out = PdfInfo();

@@ -1,10 +1,12 @@
 // Workspace — PDFs of the notebook (docs/UI.md "PDF viewer"): the thumbnails of embedded PDFs
 // (EditorHost::pdfThumbnail, cached as PNG files by pdfview::PdfThumbnails), "Otwórz w innej
 // aplikacji" (platform::openFileExternally: the system's viewer, Android's ACTION_VIEW, the
-// browser's new tab), and "Rysuj na tej stronie" (a drawing on a PDF page, embedded right after the
-// PDF in the note the viewer was opened from: notebook::insertBlockAfterEmbed).
+// browser's new tab — also for the other attachments of platform/externalfiles.h's allow-list), and "Rysuj na tej
+// stronie" (a drawing on a PDF page, embedded right after the PDF in the note the viewer was opened from:
+// notebook::insertBlockAfterEmbed).
 #include "workspace.h"
 
+#include "externalfiles.h"
 #include "openexternal.h"
 #include "pdfpages.h"
 #include "pdfrenderpool.h"
@@ -41,13 +43,13 @@ qint64 thumbnailCacheBytes()
 #endif
 }
 
-/// The first bytes of a PDF: "%PDF-" within the first 1024 bytes (Acrobat accepts junk before it).
-bool startsLikePdf(const QString &file)
+/// The file's first bytes, as many as platform::externalFileType() looks at.
+QByteArray headOf(const QString &file)
 {
     QFile f(file);
     if (!f.open(QIODevice::ReadOnly))
-        return false;
-    return f.read(1024).contains("%PDF-");
+        return {};
+    return f.read(platform::ExternalFileHeadBytes);
 }
 
 } // namespace
@@ -176,20 +178,49 @@ void Workspace::releasePdfReaders(const QString &path)
         pdfview::PdfReaderPool::instance().closeIdle();
 }
 
+namespace {
+
+/// The file of the notebook `rawPath` names (normalize() keeps a leading ".." of a path that leaves
+/// it): its path and its absolute file; empty when it leaves the notebook or is no file.
+std::pair<QString, QString> insideFile(const Vault *vault, const QString &rawPath)
+{
+    const QString path = paths::normalize(rawPath);
+    const bool inside = !path.isEmpty() && !path.startsWith(u"../"_s) && path != u".."_s && !QDir::isAbsolutePath(path);
+    if (!vault || !inside)
+        return {};
+    const QString file = vault->absolutePath(path);
+    if (!QFileInfo(file).isFile())
+        return {};
+    return {path, file};
+}
+
+} // namespace
+
+bool Workspace::canOpenInOtherApp(const QString &rawPath) const
+{
+    const auto [path, file] = insideFile(m_vault.get(), rawPath);
+    return !file.isEmpty() && platform::externalFileType(paths::basename(path), headOf(file)).allowed();
+}
+
 bool Workspace::openInOtherApp(const QString &rawPath)
 {
     if (!m_vault || rawPath.isEmpty())
         return false;
-    const QString path = paths::normalize(rawPath);
-    const QString name = paths::basename(path.isEmpty() ? rawPath : path);
-    const QString file = path.isEmpty() ? QString() : m_vault->absolutePath(path);
-    // Inside the notebook (normalize() keeps a leading ".." of a path that leaves it), a file, a PDF
-    // by its name and by its first bytes.
-    const bool inside = !path.isEmpty() && !path.startsWith(u"../"_s) && path != u".."_s && !QDir::isAbsolutePath(path);
-    if (!inside || !paths::isPdfPath(path) || !QFileInfo(file).isFile() || !startsLikePdf(file)) {
-        Q_EMIT errorOccurred(tr("“%1” is not a PDF file.").arg(name));
+    const QString normalized = paths::normalize(rawPath);
+    const QString name = paths::basename(normalized.isEmpty() ? rawPath : normalized);
+    const auto [path, file] = insideFile(m_vault.get(), rawPath);
+    // A file of the notebook on the allow-list, by its name and by its first bytes.
+    const platform::ExternalFileType type =
+            file.isEmpty() ? platform::ExternalFileType() : platform::externalFileType(name, headOf(file));
+    if (!type.allowed()) {
+        Q_EMIT errorOccurred(paths::isPdfPath(rawPath)
+                                     ? tr("“%1” is not a PDF file.").arg(name)
+                                     : tr("Brulion does not hand “%1” to other apps: only documents, spreadsheets, "
+                                          "presentations, e-books, audio, video and text files go out.")
+                                               .arg(name));
         return false;
     }
+    const bool pdf = type.kind == u"pdf"_s;
     QByteArray bytes;
 #ifdef Q_OS_WASM
     // The browser's tab gets the bytes (IDBFS is no file its viewer could open).
@@ -203,12 +234,16 @@ bool Workspace::openInOtherApp(const QString &rawPath)
         return false;
     }
 #endif
-    switch (platform::openFileExternally(file, u"application/pdf"_s, name, bytes)) {
+    switch (platform::openFileExternally(file, type.mimeType, name, bytes)) {
     case platform::OpenResult::Opened: return true;
     case platform::OpenResult::Blocked:
-        Q_EMIT noticeOccurred(tr("The browser blocked the new tab: the PDF was downloaded instead."));
+        Q_EMIT noticeOccurred(pdf ? tr("The browser blocked the new tab: the PDF was downloaded instead.")
+                                  : tr("The browser blocked the new tab: the file was downloaded instead."));
         return true;
-    case platform::OpenResult::NoApp: Q_EMIT errorOccurred(tr("No app on this device opens PDF files.")); return false;
+    case platform::OpenResult::NoApp:
+        Q_EMIT errorOccurred(pdf ? tr("No app on this device opens PDF files.")
+                                 : tr("No app on this device opens “%1”.").arg(name));
+        return false;
     case platform::OpenResult::Failed: break;
     }
     Q_EMIT errorOccurred(tr("Could not open “%1” in another app.").arg(name));
