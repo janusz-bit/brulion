@@ -82,7 +82,10 @@
   scalania.
 * **Dziennik + outliner.** Codzienna strona dziennika, bloki z wcięciami (Tab / Shift+Tab),
   zwijanie, przybliżanie bloku, przenoszenie bloków z dziećmi, odwołania do bloków
-  `((…))`, linki `[[…]]`, tagi `#…`, odnośniki zwrotne. Tagi działają jak linki do stron, jak
+  `((…))`, linki `[[…]]`, tagi `#…`, odnośniki zwrotne. Obok dni — notatki tygodniowe (tydzień
+  ISO, `2026-W45.md`) i miesięczne (`2026-11.md`) z własnymi szablonami, otwierane z kalendarza
+  (numer tygodnia, nazwa miesiąca) albo skrótami `Ctrl+Alt+W` / `Ctrl+Alt+M`. `Ctrl+F` w
+  dzienniku szuka we wszystkich dniach naraz. Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
   pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego
   bloku i nagłówka — `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]` — skopiujesz z menu bloku
@@ -364,6 +367,7 @@ usuwa go w całości.
 | `Ctrl+K` | paleta poleceń |
 | `Ctrl+O` | szybkie przejście do strony |
 | `Ctrl+J` | dzisiejszy dziennik |
+| `Ctrl+Alt+W` / `Ctrl+Alt+M` | notatka tego tygodnia / miesiąca |
 | `Ctrl+N` / `Ctrl+Shift+N` | nowa strona / szybka notatka do dziennika |
 | `Ctrl+Shift+B` | dokumentacja Brulionu / powrót do poprzedniego notatnika |
 | `Ctrl+Shift+F` | wyszukiwanie |
@@ -474,6 +478,9 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   or page renamed in the app is moved on the server in one WebDAV MOVE (also when you keep
   typing in it right away), never mistaken for a mass deletion; one renamed on another device or in the Nextcloud web UI is renamed here too,
   recognised by its `oc:fileid` or ETag, so its version history, favourites and folds follow).
+* Weekly (ISO week, `2026-W45.md`) and monthly notes (`2026-11.md`) next to the daily ones, with
+  their own folders, file names and templates, opened from the calendar's week numbers and month
+  title or with `Ctrl+Alt+W` / `Ctrl+Alt+M`; `Ctrl+F` in the journal searches every day at once.
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
   a page is created and switchable at any time; stored in the note as `brulion: document` /

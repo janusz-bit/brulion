@@ -1,6 +1,6 @@
 // Templates (docs/SYNTAX.md §12): `{{date}}`, `{{date:FORMAT}}`, `{{time}}`, `{{time:FORMAT}}`,
-// `{{title}}`, `{{weekday}}`, `{{cursor}}`. Part of the markdown module — see
-// markdown/markdown.h for the module overview.
+// `{{title}}`, `{{weekday}}`, `{{month}}`, `{{week}}`, `{{end}}`, `{{end:FORMAT}}`, `{{cursor}}`. Part of the markdown
+// module — see markdown/markdown.h for the module overview.
 #pragma once
 
 #include "dates/names.h"
@@ -16,6 +16,8 @@ struct TemplateVars {
     QDateTime now; ///< local date and time (inject a fixed value in tests)
     QString title; ///< page title
     dates::UiLocale locale = dates::UiLocale::Polish;
+    /// The last day of the period a weekly or monthly note covers ({{end}}); invalid: `now`'s day.
+    QDate end;
 };
 
 struct TemplateResult {
@@ -26,8 +28,10 @@ struct TemplateResult {
 /// Fill a template. `{{date}}` = yyyy-MM-dd, `{{time}}` = HH:mm, `{{date:FORMAT}}` /
 /// `{{time:FORMAT}}` take Qt date-time format strings (names in the UI language: Polish
 /// "środa, 14 października 2026"), `{{weekday}}` is the localised weekday name, `{{title}}` the
-/// page title (not expanded again). `{{cursor}}` is removed and its first offset returned.
-/// Variable names are case-insensitive and may have blanks inside the braces; unknown
+/// page title (not expanded again), `{{month}}` the month's name as a heading has it ("listopad",
+/// "November"; Qt's MMMM writes "listopada"), `{{week}}` the ISO week number of `now`'s day, `{{end}}` /
+/// `{{end:FORMAT}}` the period's last day (`vars.end`; else `now`'s day) like `{{date}}`. `{{cursor}}` is removed and
+/// its first offset returned. Variable names are case-insensitive and may have blanks inside the braces; unknown
 /// variables are left as written.
 TemplateResult applyTemplate(QStringView tpl, const TemplateVars &vars);
 

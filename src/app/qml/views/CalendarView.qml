@@ -17,7 +17,9 @@ import Brulion
 // options).
 //
 // Keys: arrows / PageUp / PageDown / Home / End move through days and periods (the grid has the
-// focus), T = today, Enter opens the day, Ctrl+Enter its journal. Touch: swipe for the previous /
+// focus), T = today, Enter opens the day, Ctrl+Enter its journal. Weekly and monthly notes: a click
+// on a week number (the month grid's left column, the week grid's corner) or on the title (the
+// month's / week's note); W / M open the selected day's week / month note. Touch: swipe for the previous /
 // next period.
 //
 // Route parameters: date (the selected day), mode ("month" | "week" | "agenda"), open ("day" =
@@ -96,6 +98,20 @@ FocusScope {
             daySheet.close()
         AppController.openJournal(date)
     }
+    /// The weekly or monthly note of the period holding `date` (docs/SYNTAX.md §1): opened, created
+    /// by its first change from the period's template.
+    function openPeriodNote(period, date) {
+        if (daySheet.opened)
+            daySheet.close()
+        AppController.openPeriodicNote(period, date, 0)
+    }
+    /// The note of the period in the header's title (the anchor's month or week).
+    readonly property var periodNote: {
+        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
+        if (mode === "agenda" || cal.anchorDate === "" || Workspace.revision < 0)
+            return ({})
+        return Workspace.periodicNote(mode === "week" ? "week" : "month", cal.anchorDate)
+    }
     function showDay(date) {
         cal.anchorDate = date
         if (!sideBySide && !stackedDay)
@@ -118,8 +134,16 @@ FocusScope {
     focus: true
 
     Keys.onPressed: (event) => {
-        if (event.key === Qt.Key_T && event.modifiers === Qt.NoModifier) {
+        if (event.modifiers !== Qt.NoModifier)
+            return
+        if (event.key === Qt.Key_T) {
             cal.goToday()
+            event.accepted = true
+        } else if (event.key === Qt.Key_W) {
+            root.openPeriodNote("week", cal.anchorDate)
+            event.accepted = true
+        } else if (event.key === Qt.Key_M) {
+            root.openPeriodNote("month", cal.anchorDate)
             event.accepted = true
         }
     }
@@ -174,6 +198,8 @@ FocusScope {
             onToday: cal.goToday()
             onModeRequested: (m) => root.setMode(m)
             onOverdueRequested: root.showDay(DatesHelper.today)
+            titleHasNote: root.periodNote.exists === true
+            onTitleClicked: root.openPeriodNote(root.mode === "week" ? "week" : "month", cal.anchorDate)
         }
 
         RowLayout {
@@ -265,11 +291,13 @@ FocusScope {
             onDayTapped: (date) => root.showDay(date)
             onDayOpened: (date) => root.openJournal(date)
             onItemOpened: (entry) => root.openEntry(entry)
+            onWeekOpened: (monday) => root.openPeriodNote("week", monday)
         }
     }
     Component {
         id: weekView
         CalendarWeekGrid {
+            onWeekOpened: (monday) => root.openPeriodNote("week", monday)
             onItemMenuRequested: (entry, item, x, y) => root.openEntryMenu(entry, item, x, y)
             calendar: cal
             swipeEnabled: root.gridSwipe

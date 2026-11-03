@@ -1,5 +1,6 @@
 #include "vault/vaultconfig.h"
 
+#include "periodic/periodic.h"
 #include "util/paths.h"
 
 #include <QJsonArray>
@@ -27,6 +28,12 @@ constexpr auto kDefaultReminderTime = "defaultReminderTime"_L1;
 constexpr auto kWeekStartsOn = "weekStartsOn"_L1;
 constexpr auto kJournalMode = "journalMode"_L1;
 constexpr auto kPageMode = "pageMode"_L1;
+constexpr auto kWeeklyFolder = "weeklyFolder"_L1;
+constexpr auto kWeeklyFileFormat = "weeklyFileFormat"_L1;
+constexpr auto kWeeklyTemplate = "weeklyTemplate"_L1;
+constexpr auto kMonthlyFolder = "monthlyFolder"_L1;
+constexpr auto kMonthlyFileFormat = "monthlyFileFormat"_L1;
+constexpr auto kMonthlyTemplate = "monthlyTemplate"_L1;
 
 std::optional<QString> pathValue(const QJsonValue &v)
 {
@@ -38,6 +45,14 @@ std::optional<QString> pathValue(const QJsonValue &v)
 std::optional<QString> formatValue(const QJsonValue &v)
 {
     if (!v.isString() || !isUsableJournalFormat(v.toString().trimmed()))
+        return std::nullopt;
+    return v.toString().trimmed();
+}
+
+template<periodic::Period P>
+std::optional<QString> periodFormatValue(const QJsonValue &v)
+{
+    if (!v.isString() || !periodic::isUsableFormat(P, v.toString().trimmed()))
         return std::nullopt;
     return v.toString().trimmed();
 }
@@ -160,6 +175,19 @@ ParsedVaultConfig parseVaultConfig(QByteArrayView json)
     mergeKey<Qt::DayOfWeek>(raw, kWeekStartsOn, weekStartValue, [&](Qt::DayOfWeek v) { c.weekStartsOn = v; }, w);
     mergeKey<NoteMode>(raw, kJournalMode, noteModeValue, [&](NoteMode v) { c.journalMode = v; }, w);
     mergeKey<NoteMode>(raw, kPageMode, noteModeValue, [&](NoteMode v) { c.pageMode = v; }, w);
+    // Weekly and monthly notes: next to the daily ones unless their folder is set.
+    c.weeklyFolder = c.journalsFolder;
+    c.monthlyFolder = c.journalsFolder;
+    mergeKey<QString>(raw, kWeeklyFolder, pathValue, [&](const QString &v) { c.weeklyFolder = v; }, w);
+    mergeKey<QString>(
+            raw, kWeeklyFileFormat, periodFormatValue<periodic::Period::Week>,
+            [&](const QString &v) { c.weeklyFileFormat = v; }, w);
+    mergeKey<QString>(raw, kWeeklyTemplate, pathValue, [&](const QString &v) { c.weeklyTemplate = v; }, w);
+    mergeKey<QString>(raw, kMonthlyFolder, pathValue, [&](const QString &v) { c.monthlyFolder = v; }, w);
+    mergeKey<QString>(
+            raw, kMonthlyFileFormat, periodFormatValue<periodic::Period::Month>,
+            [&](const QString &v) { c.monthlyFileFormat = v; }, w);
+    mergeKey<QString>(raw, kMonthlyTemplate, pathValue, [&](const QString &v) { c.monthlyTemplate = v; }, w);
     return out;
 }
 
@@ -183,6 +211,12 @@ QJsonObject vaultConfigToJson(const VaultConfig &config)
     o.insert(kWeekStartsOn, weekStart == Qt::Sunday ? 0 : weekStart);
     o.insert(kJournalMode, noteModeName(config.journalMode, defaults.journalMode));
     o.insert(kPageMode, noteModeName(config.pageMode, defaults.pageMode));
+    o.insert(kWeeklyFolder, paths::normalize(config.weeklyFolder));
+    o.insert(kWeeklyFileFormat, periodic::fileFormat(periodic::Period::Week, config));
+    o.insert(kWeeklyTemplate, paths::normalize(config.weeklyTemplate));
+    o.insert(kMonthlyFolder, paths::normalize(config.monthlyFolder));
+    o.insert(kMonthlyFileFormat, periodic::fileFormat(periodic::Period::Month, config));
+    o.insert(kMonthlyTemplate, paths::normalize(config.monthlyTemplate));
     return o;
 }
 
@@ -201,7 +235,10 @@ bool sameVaultConfig(const VaultConfig &a, const VaultConfig &b)
            && a.newPagesFolder == b.newPagesFolder && a.attachmentsFolder == b.attachmentsFolder
            && a.templatesFolder == b.templatesFolder && a.journalTemplate == b.journalTemplate
            && a.defaultReminderTime == b.defaultReminderTime && a.weekStartsOn == b.weekStartsOn
-           && a.journalMode == b.journalMode && a.pageMode == b.pageMode;
+           && a.journalMode == b.journalMode && a.pageMode == b.pageMode && a.weeklyFolder == b.weeklyFolder
+           && a.weeklyFileFormat == b.weeklyFileFormat && a.weeklyTemplate == b.weeklyTemplate
+           && a.monthlyFolder == b.monthlyFolder && a.monthlyFileFormat == b.monthlyFileFormat
+           && a.monthlyTemplate == b.monthlyTemplate;
 }
 
 } // namespace brulion

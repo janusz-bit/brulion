@@ -612,6 +612,54 @@ private Q_SLOTS:
         QCOMPARE(ws->journalDate(u"Dziennik/19.10.2026.md"_s), u"2026-10-19"_s);
     }
 
+    void periodicNotes()
+    {
+        // Weekly and monthly notes (docs/SYNTAX.md §1): where they are, never written by looking.
+        auto ws = open({{u"templates/weekly.md"_s, u"# Tydzień {{week}}\n- \n"_s},
+                        {u"journals/2026-10.md"_s, u"- październik\n"_s},
+                        {u"Inna.md"_s, u""_s}});
+        QVariantMap week = ws->periodicNote(u"week"_s, u"2026-10-14"_s);
+        QCOMPARE(week.value(u"period"_s).toString(), u"week"_s);
+        QCOMPARE(week.value(u"path"_s).toString(), u"journals/2026-W42.md"_s);
+        QCOMPARE(week.value(u"start"_s).toString(), u"2026-10-12"_s);
+        QCOMPARE(week.value(u"end"_s).toString(), u"2026-10-18"_s);
+        QCOMPARE(week.value(u"week"_s).toInt(), 42);
+        QCOMPARE(week.value(u"exists"_s).toBool(), false);
+        QCOMPARE(week.value(u"label"_s).toString(), u"Tydzień 42 (12–18 października 2026)"_s);
+        QCOMPARE(week.value(u"template"_s).toString(), u"templates/weekly.md"_s);
+        QVERIFY(!ws->exists(u"journals/2026-W42.md"_s));
+        // Week 53 across the year's end; the month's note exists, without a template.
+        QCOMPARE(ws->periodicNote(u"week"_s, u"2027-01-01"_s).value(u"path"_s).toString(), u"journals/2026-W53.md"_s);
+        const QVariantMap month = ws->periodicNote(u"month"_s, u"2026-10-31"_s);
+        QCOMPARE(month.value(u"path"_s).toString(), u"journals/2026-10.md"_s);
+        QCOMPARE(month.value(u"exists"_s).toBool(), true);
+        QCOMPARE(month.value(u"template"_s).toString(), QString());
+        QCOMPARE(month.value(u"week"_s).toInt(), 0);
+        QVERIFY(ws->periodicNote(u"day"_s, u"2026-10-14"_s).isEmpty());
+        QVERIFY(ws->periodicNote(u"week"_s, u"14.10.2026"_s).isEmpty());
+        // A note's own path.
+        QCOMPARE(ws->periodicNoteOf(u"journals/2026-10.md"_s).value(u"label"_s).toString(), u"Październik 2026"_s);
+        QVERIFY(ws->periodicNoteOf(u"Inna.md"_s).isEmpty());
+        QVERIFY(ws->periodicNoteOf(u"journals/2026-10-14.md"_s).isEmpty());
+        // Phrases, in the app's language.
+        QCOMPARE(ws->parsePeriod(u"week"_s, u"przyszły tydzień"_s), u"2026-10-19"_s);
+        QCOMPARE(ws->parsePeriod(u"month"_s, u"listopad"_s), u"2026-11-01"_s);
+        QCOMPARE(ws->parsePeriod(u"month"_s, u"żółw"_s), QString());
+        // The calendar's marks.
+        QVERIFY(ws->writeFile(u"journals/2026-W43.md"_s, u"- plan\n"_s));
+        QCOMPARE(ws->periodicNoteStarts(u"week"_s, u"2026-10-01"_s, u"2026-10-31"_s), QStringList{u"2026-10-19"_s});
+        QCOMPARE(ws->periodicNoteStarts(u"month"_s, u"2026-10-14"_s, u"2026-12-31"_s), QStringList{u"2026-10-01"_s});
+        QVERIFY(ws->periodicNoteStarts(u"week"_s, u"2026-11-01"_s, u"2026-10-01"_s).isEmpty());
+        // Another folder and format (Settings → Notatnik); an unusable format is refused.
+        QVERIFY(ws->setConfig({{u"weeklyFolder"_s, u"Tygodnie"_s}, {u"weeklyFileFormat"_s, u"yyyy/'Tydzień' ww"_s}}));
+        QCOMPARE(ws->periodicNote(u"week"_s, u"2026-10-14"_s).value(u"path"_s).toString(),
+                 u"Tygodnie/2026/Tydzień 42.md"_s);
+        QVERIFY(!ws->setConfig({{u"weeklyFileFormat"_s, u"ww"_s}}));
+        QVERIFY(!ws->setConfig({{u"monthlyFileFormat"_s, u"yyyy-MM-dd"_s}}));
+        QCOMPARE(ws->vaultConfig().value(u"weeklyFileFormat"_s).toString(), u"yyyy/'Tydzień' ww"_s);
+        QCOMPARE(ws->vaultConfig().value(u"monthlyFolder"_s).toString(), u"journals"_s);
+    }
+
     void journalUnderAnotherName()
     {
         // A Logseq vault names daily notes "2026_10_14.md"; a vault synced from another device
@@ -1608,8 +1656,12 @@ private Q_SLOTS:
                  (QStringList{u"journals"_s}));
         QCOMPARE(ws->renameFolder(u"journals"_s, u"Dziennik"_s), u"Dziennik"_s);
         QCOMPARE(ws->vaultConfig().value(u"journalsFolder"_s).toString(), u"Dziennik"_s);
+        // Weekly and monthly notes next to the daily ones go with them, said once.
+        QCOMPARE(ws->vaultConfig().value(u"weeklyFolder"_s).toString(), u"Dziennik"_s);
+        QCOMPARE(ws->vaultConfig().value(u"monthlyFolder"_s).toString(), u"Dziennik"_s);
         QCOMPARE(notices.size(), 1);
         QVERIFY(notices.first().first().toString().contains(u"Dziennik"_s));
+        QCOMPARE(notices.first().first().toString().count(u"Dziennik"_s), 1);
         QCOMPARE(ws->journalDate(u"Dziennik/2026-10-13.md"_s), u"2026-10-13"_s);
         QCOMPARE(ws->ensureJournal(u"2026-10-14"_s), u"Dziennik/2026-10-14.md"_s);
         QVERIFY(!ws->exists(u"journals"_s));
@@ -1647,6 +1699,15 @@ private Q_SLOTS:
         QCOMPARE(ws->vaultConfig().value(u"journalsFolder"_s).toString(), u"Archiwum/Notatki/Dziennik"_s);
         QCOMPARE(ws->vaultConfig().value(u"newPagesFolder"_s).toString(), u"Archiwum/Notatki/Nowe"_s);
         QCOMPARE(notices.size(), 1);
+        // A folder of weekly notes of its own, and the weekly template.
+        QVERIFY(ws->setConfig({{u"weeklyFolder"_s, u"Tygodnie"_s}, {u"weeklyTemplate"_s, u"Tygodnie/szablon.md"_s}}));
+        QVERIFY(ws->writeFile(u"Tygodnie/szablon.md"_s, u"# Tydzień {{week}}\n"_s));
+        QCOMPARE(specials(ws->folderInfo(u"Tygodnie"_s)),
+                 (QStringList{u"weekly:Tygodnie"_s, u"weeklyTemplate:Tygodnie/szablon.md"_s}));
+        QCOMPARE(ws->renameFolder(u"Tygodnie"_s, u"Tygodnie 2026"_s), u"Tygodnie 2026"_s);
+        QCOMPARE(ws->vaultConfig().value(u"weeklyFolder"_s).toString(), u"Tygodnie 2026"_s);
+        QCOMPARE(ws->vaultConfig().value(u"weeklyTemplate"_s).toString(), u"Tygodnie 2026/szablon.md"_s);
+        QCOMPARE(ws->vaultConfig().value(u"monthlyFolder"_s).toString(), u"Archiwum/Notatki/Dziennik"_s);
         // Other folders leave the settings alone.
         notices.clear();
         QVERIFY(!ws->createFolder(u"Inny"_s).isEmpty());

@@ -33,6 +33,10 @@ Item {
     property PageTools tools
     /// "YYYY-MM-DD" for a daily note, else "".
     property string journalDate
+    /// A weekly or monthly note's period (Workspace.periodicNoteOf), else {}.
+    property var periodic: ({})
+    readonly property bool periodicNote: !!periodic && !!periodic.period
+    readonly property bool weekly: periodicNote && periodic.period === "week"
     /// The first block repeats the title as "# Title": no second title above it.
     property bool startsWithTitle: false
     property bool inSidePanel: false
@@ -369,6 +373,45 @@ Item {
                 Layout.alignment: Qt.AlignTop
                 Layout.topMargin: header.small ? 0 : Theme.space1
                 sourceComponent: pageActions
+            }
+        }
+
+        // ---- A weekly or monthly note: its period, the one before and after, the current one --------
+        RowLayout {
+            objectName: "periodicNav"
+            visible: header.periodicNote
+            Layout.fillWidth: true
+            spacing: 2
+            BIconButton {
+                objectName: "periodicPrevious"
+                iconName: "chevron-left"
+                label: header.weekly ? qsTr("Previous week") : qsTr("Previous month")
+                size: "small"
+                onClicked: AppController.openPeriodicNote(header.periodic.period, header.periodic.start, -1)
+            }
+            BIconButton {
+                objectName: "periodicNext"
+                iconName: "chevron-right"
+                label: header.weekly ? qsTr("Next week") : qsTr("Next month")
+                size: "small"
+                onClicked: AppController.openPeriodicNote(header.periodic.period, header.periodic.start, 1)
+            }
+            BText {
+                objectName: "periodicLabel"
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space1
+                text: header.periodicNote ? header.periodic.label : ""
+                variant: "muted"
+                elide: Text.ElideRight
+            }
+            BButton {
+                readonly property bool current: header.periodicNote && DatesHelper.today >= header.periodic.start
+                                                && DatesHelper.today <= header.periodic.end
+                visible: header.periodicNote && !current
+                size: "small"
+                variant: "ghost"
+                text: header.weekly ? qsTr("This week") : qsTr("This month")
+                onClicked: AppController.openPeriodicNote(header.periodic.period, "", 0)
             }
         }
 

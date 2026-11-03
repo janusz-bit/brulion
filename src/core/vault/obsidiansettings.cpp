@@ -256,6 +256,12 @@ ObsidianAdoption adoptObsidianSettings(const ObsidianVaultFiles &files, const QS
         }
     }
 
+    // Weekly and monthly notes stay next to the daily ones (unless they had a folder of their own).
+    if (base.weeklyFolder == base.journalsFolder)
+        c.weeklyFolder = c.journalsFolder;
+    if (base.monthlyFolder == base.journalsFolder)
+        c.monthlyFolder = c.journalsFolder;
+
     // Templates folder (the Templates core plugin).
     {
         const QString path = obsidianTemplatesPath();

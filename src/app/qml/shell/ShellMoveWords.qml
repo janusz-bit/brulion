@@ -29,6 +29,10 @@ QtObject {
         case "attachments": return qsTr("attachments folder")
         case "newPages": return qsTr("folder for new pages")
         case "journalTemplate": return qsTr("journal template")
+        case "weekly": return qsTr("folder of weekly notes")
+        case "monthly": return qsTr("folder of monthly notes")
+        case "weeklyTemplate": return qsTr("weekly note template")
+        case "monthlyTemplate": return qsTr("monthly note template")
         }
         return special
     }

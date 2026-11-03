@@ -831,6 +831,48 @@ Item {
                 description: qsTr("New daily pages start with this page.")
                 ConfigField { key: "journalTemplate"; leadingIcon: "file-text" }
             }
+            // Weekly (ISO week) and monthly notes (docs/SYNTAX.md §1 "Weekly and monthly notes").
+            ShellSettingRow {
+                title: qsTr("Weekly notes folder")
+                description: qsTr("Empty: the top of the notebook. Open this week's note with Ctrl+Alt+W or a week number in the calendar.")
+                ConfigField { objectName: "weeklyFolderField"; key: "weeklyFolder"; leadingIcon: "folder"; placeholderText: qsTr("(top level)") }
+            }
+            ShellSettingRow {
+                title: qsTr("Weekly note file names")
+                // (revision: the example follows a format just saved)
+                description: qsTr("yyyy is the week's year, ww its number (w without a leading zero), text in 'quotes'. This week: %1")
+                             .arg(Workspace.revision >= 0 ? (Workspace.periodicNote("week", AppController.today()).path || "") : "")
+                ConfigField {
+                    objectName: "weeklyFileFormatField"
+                    key: "weeklyFileFormat"
+                    invalidText: qsTr("The format needs a year (yyyy) and a week (ww), other letters in 'quotes'.")
+                }
+            }
+            ShellSettingRow {
+                title: qsTr("Weekly note template")
+                description: qsTr("New weekly notes start with this page: {{date}} is the Monday, {{end}} the Sunday, {{week}} the week's number.")
+                ConfigField { key: "weeklyTemplate"; leadingIcon: "file-text" }
+            }
+            ShellSettingRow {
+                title: qsTr("Monthly notes folder")
+                description: qsTr("Empty: the top of the notebook. Open this month's note with Ctrl+Alt+M or the month's title in the calendar.")
+                ConfigField { objectName: "monthlyFolderField"; key: "monthlyFolder"; leadingIcon: "folder"; placeholderText: qsTr("(top level)") }
+            }
+            ShellSettingRow {
+                title: qsTr("Monthly note file names")
+                description: qsTr("Date format of the month, e.g. yyyy-MM or MMMM yyyy. This month: %1")
+                             .arg(Workspace.revision >= 0 ? (Workspace.periodicNote("month", AppController.today()).path || "") : "")
+                ConfigField {
+                    objectName: "monthlyFileFormatField"
+                    key: "monthlyFileFormat"
+                    invalidText: qsTr("The format needs a month and a year, and no day.")
+                }
+            }
+            ShellSettingRow {
+                title: qsTr("Monthly note template")
+                description: qsTr("New monthly notes start with this page: {{date}} is the 1st, {{end}} the last day, {{month}} the month's name.")
+                ConfigField { key: "monthlyTemplate"; leadingIcon: "file-text" }
+            }
             ShellSettingRow {
                 title: qsTr("Templates folder")
                 ConfigField { key: "templatesFolder"; leadingIcon: "folder" }

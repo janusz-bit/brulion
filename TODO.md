@@ -90,16 +90,12 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     (wpisanie hasła), adnotacje, widok dwóch stron obok siebie;
   * „Otwórz w innej aplikacji” dla innych załączników (DOCX, XLSX — z listą bezpiecznych typów;
     dziś otwierają się w Brulionie tylko do odczytu jako tekst).
-* **Znajdź w strumieniu dziennika przez kilka dni** — `Ctrl+F` w strumieniu szuka dziś w jednym dniu
-  (tym, w którym piszesz); zamiana w całym notatniku obejmuje wszystkie dni.
 * **Sprawdzanie pisowni** — podkreślanie błędów i podpowiedzi w edytorze, po polsku i angielsku
   (na komputerze np. Hunspell, na Androidzie systemowe sprawdzanie klawiatury).
 * **Karty i wiele okien** — kilka otwartych stron w kartach, podział widoku na więcej niż główny i
   boczny panel, strona w osobnym oknie (Obsidian).
 * **Podgląd linku po najechaniu** — treść strony lub bloku w dymku bez opuszczania notatki
   (Obsidian, Logseq).
-* **Notatki tygodniowe i miesięczne** — strony okresowe obok dziennych, z własnym szablonem i
-  dostępem z kalendarza.
 * **Statystyki i tryb skupienia** — liczba słów i znaków, czas czytania; widok bez pasków bocznych,
   kursor trzymany na środku ekranu.
 * **Własne skróty klawiszowe** — zmiana skrótów w ustawieniach, opcjonalnie tryb Vim (Obsidian).

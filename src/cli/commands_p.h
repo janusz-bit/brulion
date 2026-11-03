@@ -34,7 +34,8 @@ std::optional<QString> insertUnder(Call &call, const QString &content, const QSt
                                    int *insertedLine);
 /// Write options for an edit of `path` that may create it: a missing daily note starts from the
 /// journal template filled in for its day — as ensureJournal(), and so the app, creates it — in a
-/// real run and a dry run alike (the dry run's diff is what gets written). Other pages must exist.
+/// real run and a dry run alike (the dry run's diff is what gets written); a missing weekly or
+/// monthly note from its period's template likewise. Other pages must exist.
 notebook::Notebook::WriteOptions creatingJournal(Call &call, const VaultPath &path);
 /// The first line of `block` appended at the end of `after` (appendBlock()).
 int appendedLine(const QString &after, const QString &block);

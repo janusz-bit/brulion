@@ -19,6 +19,7 @@
 #include "markdown/templates.h"
 #include "markdown/tokens.h"
 #include "notebook/links.h"
+#include "periodic/periodic.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "webpicture/webpicture.h"
@@ -1912,9 +1913,15 @@ int PageController::startNewPage(const QString &templatePath)
         return appendEmptyBlock();
     markdown::TemplateVars vars;
     vars.now = currentDateTime();
-    // A daily note's template is filled for its own day ({{date}} of yesterday's note is yesterday).
-    if (const auto day = markdown::journalDateFromPath(m_path, vaultConfigFromMap(m_host->vaultConfig())))
+    // A daily note's template is filled for its own day ({{date}} of yesterday's note is yesterday),
+    // a weekly or monthly note's for its period ({{date}} its first day, {{end}} its last).
+    const VaultConfig config = vaultConfigFromMap(m_host->vaultConfig());
+    if (const auto day = markdown::journalDateFromPath(m_path, config)) {
         vars.now = QDateTime(*day, vars.now.time());
+    } else if (const auto period = periodic::periodicNoteFromPath(m_path, config)) {
+        vars.now = QDateTime(period->start, vars.now.time());
+        vars.end = periodic::periodEnd(period->period, period->start);
+    }
     vars.title = title();
     vars.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
     const QString filled = markdown::applyTemplate(tpl, vars).text;

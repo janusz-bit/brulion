@@ -18,6 +18,7 @@ import Brulion
 // Keyboard (when focused): arrows move the selected day (±1 / ±7), PageUp/PageDown change the
 // month, Home/End go to the start / end of the week, Enter emits dayTapped (the view opens the
 // day), Ctrl+Enter dayOpened (the daily note). Touch: horizontal swipe = previous / next month.
+// The ISO week numbers on the left (`showWeekNumbers`) open the week's note (weekOpened).
 FocusScope {
     id: root
 
@@ -27,7 +28,10 @@ FocusScope {
     property bool swipeEnabled: true
 
     readonly property real headerHeight: Theme.touchUi ? 30 : 26
-    readonly property real cellWidth: width / 7
+    /// The ISO week numbers' column on the left (CalendarWeekNumber: a click opens the week's note).
+    property bool showWeekNumbers: true
+    readonly property real weekColumn: showWeekNumbers ? (Theme.touchUi ? 26 : 28) : 0
+    readonly property real cellWidth: (width - weekColumn) / 7
     readonly property real cellHeight: Math.max(1, (height - headerHeight) / 6)
     /// Dots instead of pills (narrow cells).
     readonly property bool dots: cellWidth < 96
@@ -48,6 +52,16 @@ FocusScope {
     signal dayTapped(string date)
     signal dayOpened(string date)
     signal itemOpened(var entry)
+    /// A week number was clicked: the week's Monday ("YYYY-MM-DD").
+    signal weekOpened(string monday)
+
+    /// Mondays of the shown weeks that have a weekly note (the numbers' accent).
+    readonly property var weekNotes: {
+        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
+        if (!showWeekNumbers || calendar.rangeStart === "" || Workspace.revision < 0)
+            return []
+        return Workspace.periodicNoteStarts("week", calendar.rangeStart, calendar.rangeEnd)
+    }
 
     /// The keyboard was used last (the focus ring shows only then).
     property bool keyboardActive: false
@@ -84,7 +98,8 @@ FocusScope {
 
     // Weekday names.
     Row {
-        width: parent.width
+        x: root.weekColumn
+        width: parent.width - root.weekColumn
         height: root.headerHeight
         Repeater {
             model: root.weekdayNames
@@ -130,6 +145,33 @@ FocusScope {
                 NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing }
             }
 
+            // ISO week numbers: the week of each row's middle day (its Monday's week, also when the
+            // week starts on a Sunday).
+            Repeater {
+                model: root.showWeekNumbers ? 6 : 0
+                delegate: CalendarWeekNumber {
+                    required property int index
+                    readonly property string middle: root.calendar.rangeStart !== ""
+                                                     ? DatesHelper.addDays(root.calendar.rangeStart, index * 7 + 3) : ""
+                    objectName: "calendarWeekNumber" + index
+                    x: 0
+                    y: index * root.cellHeight
+                    width: root.weekColumn
+                    height: root.cellHeight
+                    week: DatesHelper.isoWeek(middle)
+                    monday: middle !== "" ? DatesHelper.addDays(middle, 1 - DatesHelper.dayOfWeek(middle)) : ""
+                    hasNote: root.weekNotes.indexOf(monday) >= 0
+                    onOpened: (date) => root.weekOpened(date)
+                }
+            }
+            Rectangle {
+                visible: root.showWeekNumbers
+                x: root.weekColumn - 1
+                width: 1
+                height: parent.height
+                color: Theme.borderSubtle
+            }
+
             Repeater {
                 model: root.calendar
                 delegate: Rectangle {
@@ -158,7 +200,7 @@ FocusScope {
                     readonly property bool overflow: ordered.length > root.maxPills
                     readonly property int shownPills: overflow ? Math.max(0, root.maxPills - 1) : ordered.length
 
-                    x: column * root.cellWidth
+                    x: root.weekColumn + column * root.cellWidth
                     y: row * root.cellHeight
                     width: root.cellWidth
                     height: root.cellHeight

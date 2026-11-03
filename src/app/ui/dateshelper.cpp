@@ -370,6 +370,12 @@ int DatesHelper::dayOfWeek(const QString &date) const
     return d.isValid() ? d.dayOfWeek() : 0;
 }
 
+int DatesHelper::isoWeek(const QString &date) const
+{
+    const QDate d = parseDate(date);
+    return d.isValid() ? d.weekNumber() : 0;
+}
+
 QString DatesHelper::startOfWeek(const QString &date) const
 {
     const QDate d = parseDate(date);

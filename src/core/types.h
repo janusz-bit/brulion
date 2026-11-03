@@ -306,6 +306,14 @@ struct VaultConfig {
     Qt::DayOfWeek weekStartsOn = Qt::Monday;
     NoteMode journalMode = NoteMode::Outline; ///< journal pages without an explicit `brulion:` mode
     NoteMode pageMode = NoteMode::Document;   ///< new pages; other pages the content does not decide
+    // Weekly (ISO week) and monthly notes (periodic/periodic.h, docs/SYNTAX.md §1). A folder key
+    // missing from config.json follows journalsFolder.
+    QString weeklyFolder = QStringLiteral("journals");
+    QString weeklyFileFormat = QStringLiteral("yyyy-'W'ww"); ///< periodic::isUsableFormat(Week): "2026-W45"
+    QString weeklyTemplate = QStringLiteral("templates/weekly.md");
+    QString monthlyFolder = QStringLiteral("journals");
+    QString monthlyFileFormat = QStringLiteral("yyyy-MM"); ///< Qt QDate format of the 1st: "2026-11"
+    QString monthlyTemplate = QStringLiteral("templates/monthly.md");
 };
 
 } // namespace brulion

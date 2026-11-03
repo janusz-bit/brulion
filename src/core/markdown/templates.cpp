@@ -27,6 +27,14 @@ QString resolveVar(const QString &name, const QString &arg, const TemplateVars &
         return vars.title.isNull() ? u""_s : vars.title;
     if (name == u"weekday")
         return dates::weekdayName(vars.now.date().dayOfWeek(), vars.locale);
+    if (name == u"month")
+        return arg.isEmpty() ? dates::monthName(vars.now.date().month(), vars.locale) : QString();
+    if (name == u"week")
+        return arg.isEmpty() && vars.now.date().isValid() ? QString::number(vars.now.date().weekNumber()) : QString();
+    if (name == u"end") {
+        const QDateTime end = vars.end.isValid() ? QDateTime(vars.end, vars.now.time()) : vars.now;
+        return locale.toString(end, arg.isEmpty() ? u"yyyy-MM-dd"_s : arg);
+    }
     return {};
 }
 

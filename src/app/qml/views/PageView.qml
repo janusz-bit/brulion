@@ -67,8 +67,14 @@ FocusScope {
 
     /// The page's day ("YYYY-MM-DD") when it is a daily note, else "".
     readonly property string journalDate: page.path !== "" ? Workspace.journalDate(page.path) : ""
-    /// Top bar title: daily notes by their date; other pages use the shell's default (file name).
-    readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : ""
+    /// The page's week or month when it is a weekly or monthly note (Workspace.periodicNoteOf:
+    /// { period, start, end, label, template, … }), else {}. (Read again as the notebook changes:
+    /// another file name format.)
+    readonly property var periodic: page.path !== "" && Workspace.revision >= 0 && journalDate === ""
+                                    ? Workspace.periodicNoteOf(page.path) : ({})
+    /// Top bar title: daily notes by their date, weekly and monthly notes by their period; other
+    /// pages use the shell's default (file name).
+    readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : (periodic.label || "")
     /// A block (or the source) is being edited, or a picture, a PDF or another file fills the view.
     readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute || root.pdfRoute
                                     || root.fileRoute
@@ -193,12 +199,14 @@ FocusScope {
             root._openedMissing = page.loaded && !page.exists
             page.sourceMode = AppSettings.editorSourceMode || root.route.source === true
             // A page that does not exist yet: something to type into. A day without a note starts
-            // from the journal template, like in the journal stream — written only once changed.
+            // from the journal template, like in the journal stream — written only once changed; a
+            // week or month without a note from its own template.
             // A page opened from a #tag on a touch screen waits for a tap ("Zacznij pisać", the
             // space under the header): the keyboard would cover the blocks with the tag it lists.
             const waits = Theme.touchUi && !!root.route.fromTag && root.journalDate === ""
             if (page.loaded && !page.exists && page.blocks.count === 0 && !waits)
-                editor.startEditing(page.startNewPage(root.journalDate !== "" ? (Workspace.config.journalTemplate || "") : ""), -1)
+                editor.startEditing(page.startNewPage(root.journalDate !== "" ? (Workspace.config.journalTemplate || "")
+                                                                               : (root.periodic.template || "")), -1)
         }
         revealTarget()
         openRequested()
@@ -489,6 +497,7 @@ FocusScope {
                 editor: editor
                 tools: tools
                 journalDate: root.journalDate
+                periodic: root.periodic
                 startsWithTitle: root.startsWithTitle
                 inSidePanel: root.inSidePanel
                 onRenameRequested: (newTitle) => root.rename(newTitle)

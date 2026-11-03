@@ -13,6 +13,7 @@
 
 #include "notebook/session.h"
 #include "notebook/share.h"
+#include "periodic/periodic.h"
 #include "sync/syncengine.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
@@ -462,6 +463,19 @@ void AppController::refuseOtherNotebookRoute(const QString &vault)
 {
     toast(tr("The command line asked to open a page of another notebook (%1).").arg(QDir::toNativeSeparators(vault)),
           u"warning"_s);
+}
+
+void AppController::openPeriodicNote(const QString &period, const QString &date, int offset)
+{
+    const auto p = periodic::parsePeriodName(period);
+    const QDate day = date.isEmpty() ? now().date() : QDate::fromString(date, Qt::ISODate);
+    if (!p || !day.isValid() || m_status != u"ready")
+        return;
+    const QDate start = periodic::shiftPeriod(*p, day, offset);
+    const QVariantMap note = m_workspace->periodicNote(periodic::periodName(*p), start.toString(Qt::ISODate));
+    const QString path = note.value(u"path"_s).toString();
+    if (!path.isEmpty())
+        navigate({{u"view"_s, u"page"_s}, {u"path"_s, path}});
 }
 
 QString AppController::today(int offsetDays) const

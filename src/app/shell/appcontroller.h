@@ -242,6 +242,10 @@ public:
     Q_INVOKABLE void openJournal(const QString &date);
     /// Today's journal; while the notebook is still opening, once it is ready.
     Q_INVOKABLE void openToday();
+    /// The weekly or monthly note (`period` "week" | "month") of the period holding `date`
+    /// ("YYYY-MM-DD"; "" = today), `offset` periods later (negative: earlier). Opening never
+    /// creates it: the editor does with the first change, from the period's template.
+    Q_INVOKABLE void openPeriodicNote(const QString &period, const QString &date = QString(), int offset = 0);
     /// A route asked for from outside (brulion-cli `app open`, ipc/appmessage.h): navigate to it
     /// once the notebook is ready (resolved like the editor's routes: Workspace::resolveRoute).
     /// `vault`, when given, must be the notebook that is open (or opening): a route of another

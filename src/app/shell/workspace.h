@@ -564,6 +564,21 @@ public:
     Q_INVOKABLE QVariantList journals(int offset = 0, int limit = 50) const;
     /// Days "YYYY-MM-DD" within [from, to] that have a daily note (calendar dots).
     Q_INVOKABLE QStringList journalDates(const QString &from, const QString &to) const;
+    /// A weekly or monthly note (docs/SYNTAX.md §1 "Weekly and monthly notes"; `period` "week" |
+    /// "month", `date` any day of it, "YYYY-MM-DD"): { period, start, end ("YYYY-MM-DD"), week (the
+    /// ISO week; 0 for a month), path (its existing file, else where it will be created — never
+    /// written here: the editor creates it with its first change, from `template`), exists, label
+    /// ("Tydzień 45 (2–8 listopada 2026)", "Listopad 2026"), template (the period's template when
+    /// the file is there, else "") }; {} for an unknown period or a bad date.
+    Q_INVOKABLE QVariantMap periodicNote(const QString &period, const QString &date) const;
+    /// periodicNote() of the note at `path` when it is a weekly or monthly note, else {}.
+    Q_INVOKABLE QVariantMap periodicNoteOf(const QString &path) const;
+    /// The start "YYYY-MM-DD" of the week / month a typed phrase names ("ten tydzień", "2026-W45",
+    /// "listopad", "w przyszłym miesiącu": periodic::parsePeriodPhrase), "" when it names none.
+    Q_INVOKABLE QString parsePeriod(const QString &period, const QString &text) const;
+    /// The starts "YYYY-MM-DD" of the weeks / months overlapping [from, to] that have a note
+    /// (the calendar's marks on week numbers and the month's title).
+    Q_INVOKABLE QStringList periodicNoteStarts(const QString &period, const QString &from, const QString &to) const;
 
     // ---- Configuration ----------------------------------------------------------------------
     /// Save .brulion/config.json from a map with the keys of vaultConfig() (missing keys keep

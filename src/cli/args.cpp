@@ -67,7 +67,10 @@ bool isCommandPrefix(const QStringList &words)
 /// Commands whose first word alone means a subcommand ("journal" = "journal read").
 const QHash<QString, QString> &defaultSubcommands()
 {
-    static const QHash<QString, QString> table{{u"journal"_s, u"journal.read"_s}, {u"app"_s, u"app.open"_s}};
+    static const QHash<QString, QString> table{{u"journal"_s, u"journal.read"_s},
+                                               {u"week"_s, u"week.read"_s},
+                                               {u"month"_s, u"month.read"_s},
+                                               {u"app"_s, u"app.open"_s}};
     return table;
 }
 

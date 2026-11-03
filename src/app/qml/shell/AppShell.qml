@@ -589,6 +589,18 @@ FocusScope {
             case "journalTemplate":
                 return self ? qsTr("This is the journal template: new daily notes will start empty.")
                             : qsTr("It holds the journal template “%1”: new daily notes will start empty.").arg(specialPath)
+            case "weekly":
+                return self ? qsTr("This is the folder of weekly notes: new weekly notes will create it again.")
+                            : qsTr("It holds the folder of weekly notes “%1”: new weekly notes will create it again.").arg(specialPath)
+            case "monthly":
+                return self ? qsTr("This is the folder of monthly notes: new monthly notes will create it again.")
+                            : qsTr("It holds the folder of monthly notes “%1”: new monthly notes will create it again.").arg(specialPath)
+            case "weeklyTemplate":
+                return self ? qsTr("This is the weekly note template: new weekly notes will start empty.")
+                            : qsTr("It holds the weekly note template “%1”: new weekly notes will start empty.").arg(specialPath)
+            case "monthlyTemplate":
+                return self ? qsTr("This is the monthly note template: new monthly notes will start empty.")
+                            : qsTr("It holds the monthly note template “%1”: new monthly notes will start empty.").arg(specialPath)
             }
             return ""
         }
@@ -664,6 +676,9 @@ FocusScope {
     Shortcut { sequence: "Alt+Left"; onActivated: AppController.back() }
     Shortcut { sequence: "Alt+Right"; onActivated: AppController.forward() }
     Shortcut { sequence: "Ctrl+J"; onActivated: AppController.openToday() }
+    // This week's / this month's note (docs/SYNTAX.md §1 "Weekly and monthly notes").
+    Shortcut { sequence: "Ctrl+Alt+W"; onActivated: AppController.openPeriodicNote("week", "", 0) }
+    Shortcut { sequence: "Ctrl+Alt+M"; onActivated: AppController.openPeriodicNote("month", "", 0) }
     Shortcut { sequence: "Ctrl+N"; onActivated: shell.openNewPage("") }
     Shortcut { sequence: "Ctrl+Shift+N"; onActivated: shell.openCapture() }
     Shortcut { sequence: "Ctrl+Shift+B"; onActivated: AppController.toggleDocsVault() }

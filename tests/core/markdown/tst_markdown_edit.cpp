@@ -55,7 +55,7 @@ VaultConfig config(const QString &format, const QString &folder = u"journals"_s)
 TemplateVars vars(dates::UiLocale locale = dates::UiLocale::Polish, const QString &title = QString())
 {
     // Wednesday, 14 October 2026, 09:05 local time.
-    return TemplateVars{QDateTime(QDate(2026, 10, 14), QTime(9, 5)), title, locale};
+    return TemplateVars{QDateTime(QDate(2026, 10, 14), QTime(9, 5)), title, locale, QDate()};
 }
 
 } // namespace
@@ -1148,6 +1148,28 @@ private Q_SLOTS:
                  u"T {{unknown}} 2026-10-14 {{"_s);
         QCOMPARE(applyTemplate(u"{{title}}", vars(dates::UiLocale::Polish, u"{{date}}"_s)).text, u"{{date}}"_s);
         QCOMPARE(applyTemplate(u"{{TIME}}", vars()).text, u"09:05"_s);
+        QCOMPARE(applyTemplate(u"{{week:x}}", vars()).text, u"{{week:x}}"_s);
+    }
+
+    void templatePeriods()
+    {
+        // 2026-10-14 is in ISO week 42; without an end {{end}} is the day itself.
+        QCOMPARE(applyTemplate(u"Tydzień {{week}}: {{date}}–{{end}}", vars()).text,
+                 u"Tydzień 42: 2026-10-14–2026-10-14"_s);
+        TemplateVars week{QDateTime(QDate(2026, 12, 28), QTime(9, 5)), u"2026-W53"_s, dates::UiLocale::Polish,
+                          QDate(2027, 1, 3)};
+        QCOMPARE(applyTemplate(u"# Tydzień {{week}} ({{date:d MMMM}} – {{end:d MMMM yyyy}})", week).text,
+                 u"# Tydzień 53 (28 grudnia – 3 stycznia 2027)"_s);
+        // 2027-01-01 is in week 53 of 2026: the ISO week, not the calendar's.
+        week.now = QDateTime(QDate(2027, 1, 1), QTime(8, 0));
+        QCOMPARE(applyTemplate(u"{{ WEEK }}", week).text, u"53"_s);
+        TemplateVars month{QDateTime(QDate(2026, 2, 1), QTime(7, 0)), u"2026-02"_s, dates::UiLocale::English,
+                           QDate(2026, 2, 28)};
+        QCOMPARE(applyTemplate(u"{{date:MMMM}} {{date:d}}–{{end:d}}", month).text, u"February 1–28"_s);
+        QCOMPARE(applyTemplate(u"{{month}}", month).text, u"February"_s);
+        month.locale = dates::UiLocale::Polish;
+        QCOMPARE(applyTemplate(u"# {{Month}} {{date:yyyy}} ({{date:MMMM}})", month).text, u"# luty 2026 (lutego)"_s);
+        QCOMPARE(applyTemplate(u"{{month:x}}", month).text, u"{{month:x}}"_s);
     }
 
     // --- end to end (archive index test) ---------------------------------------------------------
@@ -1157,8 +1179,9 @@ private Q_SLOTS:
         const QDate date(2026, 10, 14);
         const VaultConfig def;
         const VaultPath path = journalPathForDate(date, def);
-        const auto tpl = applyTemplate(u"# {{date:dddd}}\n- [ ] {{cursor}}Przegląd [[Projekt]] ⏰ {{date}} 09:30",
-                                       TemplateVars{QDateTime(date, QTime(8, 0)), u"x"_s, dates::UiLocale::Polish});
+        const auto tpl =
+                applyTemplate(u"# {{date:dddd}}\n- [ ] {{cursor}}Przegląd [[Projekt]] ⏰ {{date}} 09:30",
+                              TemplateVars{QDateTime(date, QTime(8, 0)), u"x"_s, dates::UiLocale::Polish, QDate()});
         QCOMPARE(tpl.text, u"# środa\n- [ ] Przegląd [[Projekt]] ⏰ 2026-10-14 09:30"_s);
         const ParsedNote note = parseNote(path, tpl.text);
         QCOMPARE(note.journalDate, date);

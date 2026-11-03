@@ -51,6 +51,7 @@ MCP: `brulion-cli mcp --vault <folder>` serves the same commands as tools (`brul
 | Note something for today | `capture "Kupić mleko jutro o 18"` — a date with a time becomes a reminder ⏰, a date alone a due date 📅 |
 | Append to today's (or another day's) journal | `journal append "tekst" [--date wczoraj]` |
 | Read today's journal | `journal` (`journal wczoraj`, `journal 2026-10-15`) |
+| This week's / month's note (ISO week; created from its template) | `week` · `week append "Cel tygodnia"` · `month "zeszły miesiąc"` · `week path 2026-W45` |
 | Add a task | `task add "Zadzwonić do Łukasza" --due "w piątek" --remind "jutro 9:00" --every "co tydzień" --priority high` |
 | What is open / due | `task list` · `task list --due '<=+7d'` · `task list --query "status:open tag:praca sort:due"` |
 | Complete a task | `task done <ref>` with the `ref` from `task list` (also `doing`, `todo`, `cancel`, `defer`) |

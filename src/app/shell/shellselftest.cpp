@@ -4111,13 +4111,68 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
     check(waitFor([&] { return !controller->property("sourceMode").toBool(); }), "back to the blocks");
     QMetaObject::invokeMethod(controller, "save");
 
-    // The journal stream: not a dead key, over the day being written in.
+    // The journal stream: not a dead key, over every day — the count spans them, Enter goes on to
+    // the next day with a match (scrolled to, written in), Esc closes.
+    const QString day1 = ws->journalFileFor(app->today(-1));
+    const QString day3 = ws->journalFileFor(app->today(-3));
+    const bool had1 = ws->exists(day1);
+    const bool had3 = ws->exists(day3);
+    const QString old1 = had1 ? ws->readFile(day1) : QString();
+    const QString old3 = had3 ? ws->readFile(day3) : QString();
+    ws->writeFile(day1, old1 + u"\n- wydrzyk pierwszy\n- wydrzyk drugi\n"_s);
+    ws->writeFile(day3, old3 + u"\n- trzeci wydrzyk\n"_s);
     app->navigate({ { u"view"_s, u"journals"_s } });
     settle(300);
     shortcut(Qt::Key_F);
-    check(waitFor([&] { return named(u"findField"_s) != nullptr; }), "the bar opens in the journal stream");
+    check(waitFor([&] { return (field = named(u"findField"_s)) != nullptr && field->hasActiveFocus(); }),
+          "the bar opens in the journal stream");
+    // (The stream's NoteFind whose bar is open: a view kept for Back may have one too.)
+    const auto searchedDay = [&] {
+        const QList<QObject *> finds = window->findChildren<QObject *>(u"journalFind"_s);
+        for (QObject *find : finds) {
+            if (!find->property("active").toBool())
+                continue;
+            QObject *ctl = find->property("controller").value<QObject *>();
+            return ctl ? ctl->property("path").toString() : QString();
+        }
+        return QString();
+    };
+    typeIn(u"wydrzyk"_s);
+    check(waitFor(
+                  [&] {
+                      status = named(u"findStatus"_s);
+                      const QString shown = status ? status->property("text").toString() : QString();
+                      return shown.contains(u'3') && shown.contains(u'2') && shown.contains(u"·"_s);
+                  },
+                  3000),
+          "the stream's bar counts the matches of every day, and in how many days");
+    check(waitFor([&] { return searchedDay() == day1 || searchedDay() == day3; }, 3000),
+          "the search goes on to a day with a match");
+    const QString firstDay = searchedDay();
+    const QString secondDay = firstDay == day1 ? day3 : day1;
+    for (int i = 0; i < 4 && searchedDay() != secondDay; ++i) {
+        sendKey(window, Qt::Key_Return);
+        settle(250);
+    }
+    check(searchedDay() == secondDay, "Enter goes on to the next day with a match");
+    check(waitFor([&] { return named(u"findField"_s) && named(u"findField"_s)->hasActiveFocus(); }),
+          "moving to another day leaves the keyboard in the field");
+    for (int i = 0; i < 4 && searchedDay() != firstDay; ++i) {
+        sendKey(window, Qt::Key_Return, Qt::ShiftModifier);
+        settle(250);
+    }
+    check(searchedDay() == firstDay, "Shift+Enter goes back to the day before");
     sendKey(window, Qt::Key_Escape);
     check(waitFor([&] { return named(u"findBar"_s) == nullptr; }), "Esc closes the stream's bar");
+    check(ws->readFile(day3).endsWith(u"- trzeci wydrzyk\n"_s), "searching the days changes nothing");
+    const auto restore = [&](const QString &path, bool had, const QString &old) {
+        if (had)
+            ws->writeFile(path, old);
+        else
+            ws->deletePage(path);
+    };
+    restore(day1, had1, old1);
+    restore(day3, had3, old3);
 
     // The whole notebook.
     app->navigate({ { u"view"_s, u"replace"_s }, { u"query"_s, u"zolw"_s }, { u"replacement"_s, u"pies"_s } });
@@ -4199,6 +4254,80 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
     ws->deletePage(note);
     ws->deletePage(other);
     app->goHome();
+}
+
+/// Weekly and monthly notes (docs/SYNTAX.md §1): this week's note opened (not written by it), its
+/// period under the title with the next week's arrow, the template on the first change; the
+/// calendar's week number and title open the week's and the month's notes.
+void checkPeriodicNotes(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const auto routePath = [&] { return app->currentRoute().value(u"path"_s).toString(); };
+    const QString tpl = ws->vaultConfig().value(u"weeklyTemplate"_s).toString();
+    const bool hadTemplate = ws->exists(tpl);
+    const QString oldTemplate = hadTemplate ? ws->readFile(tpl) : QString();
+    ws->writeFile(tpl, u"# Tydzień {{week}}\n- \n"_s);
+    const QVariantMap week = ws->periodicNote(u"week"_s, app->today());
+    const QString weekPath = week.value(u"path"_s).toString();
+    const bool hadWeek = week.value(u"exists"_s).toBool();
+    app->openPeriodicNote(u"week"_s);
+    check(waitFor([&] { return app->currentView() == u"page" && routePath() == weekPath; }, 3000),
+          "this week's note opens");
+    QQuickItem *label = nullptr;
+    check(waitFor(
+                  [&] {
+                      label = named(u"periodicLabel"_s);
+                      return label && label->property("text").toString() == week.value(u"label"_s).toString();
+                  },
+                  3000),
+          "the week is named under the title");
+    check(hadWeek || !ws->exists(weekPath), "looking at a week writes nothing");
+    settle(400); // the view fades in
+    QQuickItem *next = nullptr;
+    check(waitFor([&] { return (next = named(u"periodicNext"_s)) != nullptr; }), "the next week's arrow is there");
+    // (With a mouse its click as a signal: a pointer left hovering the header's button keeps its
+    // tooltip, which takes the Back key of the checks after this one.)
+    if (next && touch)
+        tapOrClick(window, pointIn(next), touch);
+    else if (next)
+        QMetaObject::invokeMethod(next, "clicked");
+    const QString nextPath = ws->periodicNote(u"week"_s, app->today(7)).value(u"path"_s).toString();
+    check(waitFor([&] { return routePath() == nextPath; }, 3000), "the arrow opens the next week's note");
+
+    // The calendar: a week number of the month grid, the title (the month's note).
+    app->navigate({{u"view"_s, u"calendar"_s}, {u"mode"_s, u"month"_s}, {u"date"_s, app->today()}});
+    QQuickItem *number = nullptr;
+    check(waitFor([&] { return (number = named(u"calendarWeekNumber0"_s)) != nullptr; }, 3000),
+          "the month grid has week numbers");
+    if (number) {
+        const QString monday = number->property("monday").toString();
+        const QString expected = ws->periodicNote(u"week"_s, monday).value(u"path"_s).toString();
+        tapOrClick(window, pointIn(number), touch);
+        check(waitFor([&] { return app->currentView() == u"page" && routePath() == expected; }, 3000),
+              "a click on a week number opens that week's note");
+    }
+    app->navigate({{u"view"_s, u"calendar"_s}, {u"mode"_s, u"month"_s}, {u"date"_s, app->today()}});
+    QQuickItem *title = nullptr;
+    check(waitFor([&] { return (title = named(u"calendarTitleNote"_s)) != nullptr; }, 3000),
+          "the calendar's title opens a note");
+    if (title) {
+        const QString expected = ws->periodicNote(u"month"_s, app->today()).value(u"path"_s).toString();
+        settle(400); // the view fades in
+        tapOrClick(window, pointIn(title, 0.2, 0.5), touch);
+        check(waitFor([&] { return app->currentView() == u"page" && routePath() == expected; }, 3000),
+              "a click on the month's title opens its note");
+    }
+    // The month's new note is being written in (a page not written yet): leave it as a user would.
+    sendKey(window, Qt::Key_Escape);
+    sendKey(window, Qt::Key_Escape);
+    if (hadTemplate)
+        ws->writeFile(tpl, oldTemplate);
+    else
+        ws->deletePage(tpl);
+    app->goHome();
+    settle(300);
 }
 
 void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
@@ -5520,8 +5649,11 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         waitFor([&] { return !isOpen(drawer); });
     }
     app->goHome();
-    // 3g. Find and replace: the bar in a note, the notebook-wide view.
+    // 3g. Find and replace: the bar in a note and over the journal's days, the notebook-wide view.
     checkFindAndReplace(window, app, check);
+    closeMenus(window);
+    // 3h. Weekly and monthly notes: opened from the shortcut's action, the page's arrows, the calendar.
+    checkPeriodicNotes(window, app, check);
     closeMenus(window);
 
     // 4. The command palette: Escape closes it; the focus returns to the shell.

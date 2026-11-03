@@ -110,6 +110,12 @@ private:
         o.insert(u"weekStartsOn"_s, int(c.weekStartsOn));
         o.insert(u"journalMode"_s, markdown::noteModeName(c.journalMode));
         o.insert(u"pageMode"_s, markdown::noteModeName(c.pageMode));
+        o.insert(u"weeklyFolder"_s, c.weeklyFolder);
+        o.insert(u"weeklyFileFormat"_s, c.weeklyFileFormat);
+        o.insert(u"weeklyTemplate"_s, c.weeklyTemplate);
+        o.insert(u"monthlyFolder"_s, c.monthlyFolder);
+        o.insert(u"monthlyFileFormat"_s, c.monthlyFileFormat);
+        o.insert(u"monthlyTemplate"_s, c.monthlyTemplate);
         return o;
     }
 
