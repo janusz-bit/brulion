@@ -315,13 +315,17 @@ public:
     /// The thumbnails' folder (tests: a temporary one; "" — the default) and its size cap (0 — the
     /// default).
     void setPdfThumbnailCacheDir(const QString &dir) { m_pdfThumbnailDir = dir; }
-    /// A PDF of the notebook handed to the system's viewer / a new browser tab
-    /// (platform::openFileExternally): the path normalised, inside the vault (no "..", a file), named
-    /// .pdf AND starting with "%PDF-" within its first 1024 bytes (a renamed program is never handed
-    /// to ShellExecute / xdg-open). Messages: errorOccurred (not a PDF, no app, could not be opened),
-    /// noticeOccurred (the browser blocked the tab: downloaded instead). The browser reads the bytes
-    /// (at most MaxAttachmentBytes) for the tab's blob. False when it was not opened.
+    /// An attachment of the notebook handed to the system's app / a new browser tab
+    /// (platform::openFileExternally): the path normalised, inside the vault (no "..", a file), and
+    /// on the allow-list of platform/externalfiles.h by its name AND its first bytes (a PDF starts
+    /// with "%PDF-", a DOCX is a zip with Word's parts…: a renamed program is never handed to
+    /// ShellExecute / xdg-open), with that list's MIME type. Messages: errorOccurred (not a PDF / not
+    /// a kind that may open elsewhere, no app, could not be opened), noticeOccurred (the browser
+    /// blocked the tab: downloaded instead). The browser reads the bytes (at most
+    /// MaxAttachmentBytes) for the tab's blob. False when it was not opened.
     Q_INVOKABLE bool openInOtherApp(const QString &path) override;
+    /// openInOtherApp() would hand this file over (the read-only view's and the top bar's button).
+    Q_INVOKABLE bool canOpenInOtherApp(const QString &path) const;
     /// "Rysuj na tej stronie": the drawing DrawingBackdrops prepared (`prepared`: {svg, path, page,
     /// name, error}) stored as "<name> s. <page>.svg" (EditorHost::drawingFileNameOn; a free name)
     /// and embedded (`![[<link target>]]`) right after the block of `fromNote` that embeds the PDF

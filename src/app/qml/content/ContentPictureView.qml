@@ -27,7 +27,9 @@ import Brulion
 // image provider).
 // `textOnly` (PageView's safety net for attachments that are no note, no picture and no PDF —
 // DOCX, ZIP, MP3…): the bar names the file and says "Tylko do odczytu", the view is the file read
-// as text, nothing else — no file's bytes ever reach the block editor.
+// as text, nothing else — no file's bytes ever reach the block editor; "Otwórz w innej aplikacji"
+// for a kind on the allow-list (Workspace.canOpenInOtherApp: DOCX, XLSX, ODT, MP3… by name and
+// first bytes; never a program, a script, a page or an archive).
 // The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
 // never read whole for it), again whenever the file changes (sync, another program).
 //
@@ -228,6 +230,21 @@ Item {
                 text: qsTr("Read-only")
                 variant: "muted"
                 Layout.alignment: Qt.AlignVCenter
+            }
+            // A document, a sheet, audio… of the allow-list (Workspace.canOpenInOtherApp: its name
+            // and its first bytes): the system's app for it, a new tab in the browser.
+            BButton {
+                objectName: "pictureOpenElsewhere"
+                visible: root.textOnly && root.fileRevision >= 0 && root.path !== ""
+                         && Workspace.canOpenInOtherApp(root.path)
+                size: "small"
+                variant: "secondary"
+                iconName: "external-link"
+                text: root.iconSizeToggle ? qsTr("Open elsewhere")
+                    : Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
+                Accessible.name: Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: Workspace.openInOtherApp(root.path)
             }
             BButton {
                 objectName: "pictureTextButton"

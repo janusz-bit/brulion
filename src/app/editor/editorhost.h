@@ -255,7 +255,8 @@ public:
     /// another app (openInOtherApp()).
     virtual bool pdfViewable() const { return false; }
     /// The attachment at `path` handed to another app — the system's PDF viewer, the browser's new
-    /// tab; only PDFs. False when it could not be (the host told the user why).
+    /// tab; PDFs and the other kinds of platform/externalfiles.h. False when it could not be (the
+    /// host told the user why).
     virtual bool openInOtherApp(const QString &path)
     {
         Q_UNUSED(path);

@@ -80,10 +80,18 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     do PDF-ów (Android, domyślna aplikacja Windows, GNOME i KDE), Safari na iOS (nowa karta albo
     pobranie), zwykły Firefox z pdf.js (nowa karta), duże skany z wykładów (100+ MB) — pamięć na
     telefonie (docs/PERFORMANCE.md, L19);
-  * zaznaczanie i kopiowanie tekstu z PDF-a, spis treści PDF-a, linki w PDF-ie, PDF-y z hasłem
-    (wpisanie hasła), adnotacje, widok dwóch stron obok siebie;
-  * „Otwórz w innej aplikacji” dla innych załączników (DOCX, XLSX — z listą bezpiecznych typów;
-    dziś otwierają się w Brulionie tylko do odczytu jako tekst).
+  * ręcznie na prawdziwym telefonie, tablecie i komputerze: zaznaczanie tekstu (przeciąganie myszą,
+    przytrzymanie palcem i przesuwanie), spis treści, linki, wpisywanie hasła, dwie strony obok
+    siebie, adnotacje z prawdziwych PDF-ów (zakreślenia, notatki), „Otwórz w innej aplikacji” dla
+    DOCX / XLSX / MP3 z prawdziwymi aplikacjami;
+  * na Androidzie 15+ (API 35) podłączyć do PdfRenderer zaznaczanie tekstu (`selectContent`), linki
+    (`getLinkContents`, `getGotoLinks`) i otwieranie PDF-ów z hasłem (`LoadParams.setPassword`) —
+    wymaga sprawdzenia na emulatorze lub telefonie; spisu treści PdfRenderer nie podaje wcale;
+  * spis treści PDF-a w wersjach z Qt PDF (Windows, AppImage): `QPdfBookmarkModel` nie broni się
+    przed zapętlonym spisem (rekurencja do przepełnienia stosu — `tst_pdfpages` `loopingOutline`),
+    więc dziś spis treści jest tylko z popplerem; potrzebny własny, bezpieczny odczyt zakładek;
+  * tworzenie własnych adnotacji (zakreślenia, notatki) zapisywanych w PDF-ie — dziś istniejące są
+    tylko pokazywane, nowe robi się w innej aplikacji.
 * **Znajdź w strumieniu dziennika przez kilka dni** — `Ctrl+F` w strumieniu szuka dziś w jednym dniu
   (tym, w którym piszesz); zamiana w całym notatniku obejmuje wszystkie dni.
 * **Sprawdzanie pisowni** — podkreślanie błędów i podpowiedzi w edytorze, po polsku i angielsku

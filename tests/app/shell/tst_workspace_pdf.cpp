@@ -1,7 +1,8 @@
 // PDFs on the real Workspace (src/app/shell/workspacepdf.cpp, docs/UI.md "PDF viewer"): isPdf and a
 // file's version; "Otwórz w innej aplikacji" through a recording hook (a PDF of the notebook handed
-// over; a path leaving the notebook, a missing file, a folder, HTML named .pdf, a text file refused
-// with the message; no app / a blocked browser tab told); "Rysuj na tej stronie" (the drawing stored
+// over, and the other kinds of the allow-list — a DOCX, a text file — with their MIME types; a path
+// leaving the notebook, a missing file, a folder, HTML named .pdf, a program named .docx, a ZIP, a
+// note refused with the message; no app / a blocked browser tab told); "Rysuj na tej stronie" (the drawing stored
 // and embedded right after the PDF's block, byte for byte; a second one with a free name; no note or
 // a deleted one → today's journal; a failed item refused); the drawings of a page found again; the
 // drawing editor's previous / next page (the note a drawing belongs to, the new drawing before or
@@ -90,6 +91,11 @@ class TestWorkspacePdf : public QObject {
         writeFile(o.root + u"/assets/sejf.pdf"_s, fixture(u"zaszyfrowany.pdf"_s));
         writeFile(o.root + u"/assets/strona.pdf"_s, "<!doctype html><p>Zażółć gęślą jaźń</p>");
         writeFile(o.root + u"/notatka.txt"_s, "%PDF-1.4 to jednak tekst");
+        writeFile(o.root + u"/assets/Sprawozdanie – źródła.docx"_s,
+                  QByteArray("PK\x03\x04", 4) + QByteArray(26, '\0') + "[Content_Types].xml<Types/>"
+                          + QByteArray("PK\x03\x04", 4) + QByteArray(26, '\0') + "word/document.xml<w:document/>");
+        writeFile(o.root + u"/assets/faktura.docx"_s, QByteArray("MZ\x90\0\x03\0\0\0 program", 16));
+        writeFile(o.root + u"/assets/archiwum.zip"_s, QByteArray("PK\x03\x04", 4) + QByteArray(26, '\0') + "a.exe");
         QDir().mkpath(o.root + u"/assets/katalog.pdf"_s);
         writeFile(o.root + u"/Wykład – ćwiczenia.md"_s, "- Wstęp\n- Slajdy ![[wykład.pdf]]\n  - uwaga\n- Dalej\n");
         o.ws = std::make_unique<Workspace>();
@@ -138,39 +144,52 @@ private Q_SLOTS:
     void openInOtherApp_data()
     {
         QTest::addColumn<QString>("path");
-        QTest::addColumn<bool>("handed");
-        QTest::newRow("a PDF of the notebook") << u"assets/wykład.pdf"_s << true;
-        QTest::newRow("a locked PDF") << u"assets/sejf.pdf"_s << true;
-        QTest::newRow("leaves the notebook") << u"../poza.pdf"_s << false;
-        QTest::newRow("missing") << u"assets/brak.pdf"_s << false;
-        QTest::newRow("a folder") << u"assets/katalog.pdf"_s << false;
-        QTest::newRow("HTML named .pdf") << u"assets/strona.pdf"_s << false;
-        QTest::newRow("a text file") << u"notatka.txt"_s << false;
-        QTest::newRow("empty") << QString() << false;
+        QTest::addColumn<QString>("mime"); // "" refused
+        QTest::addColumn<QString>("refusal");
+        const QString notPdf = u"is not a PDF file"_s;
+        const QString notListed = u"does not hand"_s;
+        QTest::newRow("a PDF of the notebook") << u"assets/wykład.pdf"_s << u"application/pdf"_s << QString();
+        QTest::newRow("a locked PDF") << u"assets/sejf.pdf"_s << u"application/pdf"_s << QString();
+        QTest::newRow("a DOCX") << u"assets/Sprawozdanie – źródła.docx"_s
+                                << u"application/vnd.openxmlformats-officedocument.wordprocessingml.document"_s
+                                << QString();
+        QTest::newRow("a text file") << u"notatka.txt"_s << u"text/plain"_s << QString();
+        QTest::newRow("leaves the notebook") << u"../poza.pdf"_s << QString() << notPdf;
+        QTest::newRow("missing") << u"assets/brak.pdf"_s << QString() << notPdf;
+        QTest::newRow("a folder") << u"assets/katalog.pdf"_s << QString() << notPdf;
+        QTest::newRow("HTML named .pdf") << u"assets/strona.pdf"_s << QString() << notPdf;
+        QTest::newRow("a program named .docx") << u"assets/faktura.docx"_s << QString() << notListed;
+        QTest::newRow("a ZIP") << u"assets/archiwum.zip"_s << QString() << notListed;
+        QTest::newRow("a note") << u"Wykład – ćwiczenia.md"_s << QString() << notListed;
+        QTest::newRow("empty") << QString() << QString() << QString();
     }
 
     void openInOtherApp()
     {
         QFETCH(QString, path);
-        QFETCH(bool, handed);
+        QFETCH(QString, mime);
+        QFETCH(QString, refusal);
+        const bool handed = !mime.isEmpty();
         Opened o = open(u"otworz"_s);
         QVERIFY(o.ws);
         writeFile(m_tmp.filePath(u"poza.pdf"_s), fixture(u"wyklad.pdf"_s));
         QStringList calls;
-        brulion::platform::setOpenFileHook([&calls](const QString &file, const QString &mime) {
-            calls.append(file + u'|' + mime);
+        brulion::platform::setOpenFileHook([&calls](const QString &file, const QString &type) {
+            calls.append(file + u'|' + type);
             return OpenResult::Opened;
         });
         QSignalSpy errors(o.ws.get(), &Workspace::errorOccurred);
+        QCOMPARE(o.ws->canOpenInOtherApp(path), handed);
         QCOMPARE(o.ws->openInOtherApp(path), handed);
         if (handed) {
-            QCOMPARE(calls, QStringList{o.ws->absoluteFilePath(path) + u"|application/pdf"_s});
+            QCOMPARE(calls, QStringList{o.ws->absoluteFilePath(path) + u'|' + mime});
             QVERIFY(errors.isEmpty());
         } else {
             QVERIFY(calls.isEmpty());
             if (!path.isEmpty()) {
                 QCOMPARE(errors.size(), 1);
-                QVERIFY(errors.first().first().toString().contains(u"is not a PDF file"_s));
+                QVERIFY2(errors.first().first().toString().contains(refusal),
+                         qPrintable(errors.first().first().toString()));
             }
         }
     }
@@ -193,6 +212,13 @@ private Q_SLOTS:
         QVERIFY(!o.ws->openInOtherApp(u"assets/wykład.pdf"_s));
         QCOMPARE(errors.size(), 2);
         QVERIFY(errors.last().first().toString().contains(u"wykład.pdf"_s));
+        // Another kind: its own wording.
+        brulion::platform::setOpenFileHook([](const QString &, const QString &) { return OpenResult::NoApp; });
+        QVERIFY(!o.ws->openInOtherApp(u"notatka.txt"_s));
+        QVERIFY(errors.last().first().toString().contains(u"notatka.txt"_s));
+        brulion::platform::setOpenFileHook([](const QString &, const QString &) { return OpenResult::Blocked; });
+        QVERIFY(o.ws->openInOtherApp(u"notatka.txt"_s));
+        QVERIFY(notices.last().first().toString().contains(u"the file was downloaded"_s));
     }
 
     void drawingAfterThePdf()

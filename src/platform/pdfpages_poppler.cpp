@@ -3,14 +3,21 @@
 // boxes of textList().
 //
 // Text: textList()'s words (their characters' boxes in points), a space after a word that has one,
-// a line break after the last word of a line; matched by pdfsearch.h.
+// a line break after the last word of a line; matched by pdfsearch.h, selected by pdftext.h (the
+// carets nearest to two points). The outline and the links: poppler's own (their positions come
+// normalized, the top-left origin, rotation applied). A password: tried as the owner's and the
+// user's, in UTF-8 (AES-256, PDF 2.0) and, when that fails, in Latin-1 (older encryption).
 #include "pdfpages.h"
 #include "pdfsearch.h"
+#include "pdftext.h"
 
 #include "log/categories.h"
 
+#include <poppler-link.h>
 #include <poppler-qt6.h>
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <mutex>
 
@@ -86,10 +93,122 @@ public:
         return out;
     }
 
+    PdfTextSelection selectText(int page, QPointF from, QPointF to) override
+    {
+        load(page);
+        return selection(pdfRangeBetween(m_boxes, from, to));
+    }
+
+    PdfTextSelection selectRange(int page, int start, int length) override
+    {
+        load(page);
+        const qsizetype from = std::clamp<qsizetype>(start, 0, m_text.size());
+        const qsizetype to = std::clamp<qsizetype>(qsizetype(start) + std::max(length, 0), from, m_text.size());
+        return selection({from, to - from});
+    }
+
+    QList<PdfOutlineItem> outline() override
+    {
+        QList<PdfOutlineItem> out;
+        addOutline(m_doc->outline(), 0, out);
+        return out;
+    }
+
+    QList<PdfLink> links(int page) override
+    {
+        QList<PdfLink> out;
+        const std::unique_ptr<Poppler::Page> p = pageAt(page);
+        if (!p)
+            return out;
+        const QSizeF points = p->pageSizeF();
+        if (!(points.width() > 0) || !(points.height() > 0))
+            return out;
+        for (const std::unique_ptr<Poppler::Link> &link : p->links()) {
+            if (out.size() >= MaxPdfLinksPerPage)
+                break;
+            const QRectF area = link->linkArea().normalized();
+            if (area.isEmpty() || !std::isfinite(area.x()) || !std::isfinite(area.y()) || !std::isfinite(area.width())
+                || !std::isfinite(area.height()))
+                continue;
+            PdfLink out1;
+            out1.rect = QRectF(area.x() * points.width(), area.y() * points.height(), area.width() * points.width(),
+                               area.height() * points.height());
+            if (link->linkType() == Poppler::Link::Goto) {
+                const auto *go = static_cast<const Poppler::LinkGoto *>(link.get());
+                if (go->isExternal())
+                    continue; // another file
+                if (!target(go->destination(), out1.page, out1.top))
+                    continue;
+            } else if (link->linkType() == Poppler::Link::Browse) {
+                out1.url = static_cast<const Poppler::LinkBrowse *>(link.get())->url();
+                if (!pdfLinkUrlAllowed(out1.url))
+                    continue;
+            } else {
+                continue; // launch, JavaScript, forms, media: never
+            }
+            out.append(out1);
+        }
+        return out;
+    }
+
 private:
     std::unique_ptr<Poppler::Page> pageAt(int page) const
     {
         return page >= 1 && page <= m_doc->numPages() ? m_doc->page(page - 1) : nullptr;
+    }
+
+    /// The page and the top (a fraction, −1 none) of a destination; a named one looked up. False
+    /// when it names no page of this PDF.
+    bool target(const Poppler::LinkDestination &destination, int &page, qreal &top)
+    {
+        page = destination.pageNumber();
+        top = destination.isChangeTop() ? destination.top() : -1;
+        if (page <= 0 && !destination.destinationName().isEmpty()) {
+            if (const std::unique_ptr<Poppler::LinkDestination> named =
+                        m_doc->linkDestination(destination.destinationName())) {
+                page = named->pageNumber();
+                top = named->isChangeTop() ? named->top() : -1;
+            }
+        }
+        if (page < 1 || page > m_doc->numPages()) {
+            page = 0;
+            return false;
+        }
+        top = std::isfinite(top) && top >= 0 ? std::min<qreal>(top, 1) : -1;
+        return true;
+    }
+
+    void addOutline(const QVector<Poppler::OutlineItem> &items, int level, QList<PdfOutlineItem> &out)
+    {
+        for (const Poppler::OutlineItem &item : items) {
+            if (out.size() >= MaxPdfOutlineItems)
+                return;
+            if (item.isNull())
+                continue;
+            PdfOutlineItem entry;
+            entry.title = pdfCleanTitle(item.name());
+            entry.level = level;
+            if (item.externalFileName().isEmpty()) {
+                if (const QSharedPointer<const Poppler::LinkDestination> d = item.destination())
+                    target(*d, entry.page, entry.top);
+            }
+            if (!entry.title.isEmpty() || entry.page > 0)
+                out.append(entry);
+            if (level + 1 < MaxPdfOutlineDepth && item.hasChildren())
+                addOutline(item.children(), level + 1, out);
+        }
+    }
+
+    PdfTextSelection selection(PdfTextRange range) const
+    {
+        PdfTextSelection out;
+        if (range.length <= 0 || range.start < 0 || range.start + range.length > m_text.size())
+            return out;
+        out.start = int(range.start);
+        out.length = int(range.length);
+        out.text = pdfCopyText(QStringView(m_text).sliced(range.start, range.length));
+        out.rects = pdfRangeRects(m_boxes, range);
+        return out;
     }
 
     /// The page's text and a box for each of its units (kept for the last page asked: a search
@@ -152,7 +271,17 @@ bool pdfTextAvailable()
     return true;
 }
 
-std::unique_ptr<PdfReader> PdfReader::open(const QString &file, PdfInfo *info)
+bool pdfSelectionAvailable()
+{
+    return true;
+}
+
+bool pdfPasswordAvailable()
+{
+    return true;
+}
+
+std::unique_ptr<PdfReader> PdfReader::open(const QString &file, PdfInfo *info, const QString &password)
 {
     PdfInfo local;
     PdfInfo &out = info ? *info : local;
@@ -162,6 +291,14 @@ std::unique_ptr<PdfReader> PdfReader::open(const QString &file, PdfInfo *info)
     if (!doc) {
         out.error = u"The PDF cannot be read"_s;
         return nullptr;
+    }
+    if (doc->isLocked() && !password.isEmpty() && password.size() <= MaxPdfPasswordLength) {
+        // As the owner's or the user's password: UTF-8 (AES-256), else Latin-1 (RC4, AES-128).
+        const QByteArray utf8 = password.toUtf8();
+        doc->unlock(utf8, utf8); // (returns whether it is still locked)
+        const QByteArray latin1 = password.toLatin1();
+        if (doc->isLocked() && latin1 != utf8)
+            doc->unlock(latin1, latin1);
     }
     if (doc->isLocked()) {
         out.locked = true;

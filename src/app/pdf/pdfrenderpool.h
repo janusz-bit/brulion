@@ -10,7 +10,14 @@
 //                                          the next (same file and version) until MaxIdlePerFile /
 //                                          MaxIdle push it out (the least recently used) or it has
 //                                          been idle IdleCloseMs — so Syncthing on Windows can
-//                                          replace the file (an open file cannot be renamed there)
+//                                          replace the file (an open file cannot be renamed there);
+//                                          a reader opened with a password is reused only with it
+//   PdfReaderPool::instance().holdPassword(file, password)
+//                                          the password of a protected PDF the viewer opened, in
+//                                          memory only while a viewer holds it (never written
+//                                          anywhere): the image provider's pages are drawn with it,
+//                                          the thumbnails of embeds never (their PNG cache stays
+//                                          without a protected PDF's pages)
 //
 // The browser (no threads, no renderer) never starts anything: platform::pdfAvailable() is false.
 #pragma once
@@ -18,6 +25,7 @@
 #include "pdfpages.h"
 
 #include <QElapsedTimer>
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -36,7 +44,18 @@ namespace brulion::pdfview {
 
 class PdfRenderPool {
 public:
-    enum Priority { Page = 10, Detail = 8, Thumbnail = 4, Sizes = 2, Search = 1 };
+    /// Pages first, then what the user is doing (a selection), detail pictures, the links of the
+    /// pages in view, thumbnails, the table of contents, sizes, search.
+    enum Priority {
+        Page = 10,
+        Selection = 9,
+        Detail = 8,
+        Links = 5,
+        Thumbnail = 4,
+        Outline = 3,
+        Sizes = 2,
+        Search = 1
+    };
     static constexpr int MaxThreads = 2;
     /// `task` on one of the threads (the browser, no threads: never — nothing calls it there; it
     /// runs on the spot then). Any thread.
@@ -73,13 +92,22 @@ public:
         PdfReaderPool *m_pool = nullptr;
         QString m_file;
         QString m_version;
+        QString m_password;
         std::unique_ptr<platform::PdfReader> m_reader;
     };
 
-    /// A reader of `file` at `version` ("<mtime ms>-<size>"): an idle one, or one opened now
-    /// (`info` filled; a null lease when the file cannot be opened — `info` says why). Any thread;
-    /// the reader is attached to the calling thread.
-    Lease acquire(const QString &file, const QString &version, platform::PdfInfo *info = nullptr);
+    /// A reader of `file` at `version` ("<mtime ms>-<size>"): an idle one opened with the same
+    /// `password` (none: without one), or one opened now (`info` filled; a null lease when the file
+    /// cannot be opened — `info` says why; a wrong password leaves it locked). Any thread; the
+    /// reader is attached to the calling thread.
+    Lease acquire(const QString &file, const QString &version, platform::PdfInfo *info = nullptr,
+                  const QString &password = {});
+    /// The viewer opened `file` with `password` (counted: holdPassword() / releasePassword() in
+    /// pairs, per file); password() gives it to the image provider meanwhile. The last release
+    /// forgets it and closes the idle readers opened with it. Any thread.
+    void holdPassword(const QString &file, const QString &password);
+    void releasePassword(const QString &file);
+    QString password(const QString &file) const;
     /// The file changed or went: its idle readers are closed (Workspace on fileChanged and renames;
     /// a leased one is not given back to the pool when its version differs).
     void forget(const QString &file);
@@ -105,12 +133,14 @@ Q_SIGNALS:
 
 private:
     PdfReaderPool();
-    void giveBack(const QString &file, const QString &version, std::unique_ptr<platform::PdfReader> reader);
+    void giveBack(const QString &file, const QString &version, const QString &password,
+                  std::unique_ptr<platform::PdfReader> reader);
     void closeExpired();
 
     struct Idle {
         QString file;
         QString version;
+        QString password;
         std::unique_ptr<platform::PdfReader> reader;
         QElapsedTimer since;
     };
@@ -119,6 +149,11 @@ private:
     QTimer m_closer;        ///< (GUI thread; a child, moves with the pool) closes readers idle for IdleCloseMs
     int m_opened = 0;
     std::atomic_int m_suspended = 0;
+    struct Held {
+        QString password;
+        int holders = 0;
+    };
+    QHash<QString, Held> m_passwords; ///< (under m_lock)
 };
 
 } // namespace brulion::pdfview

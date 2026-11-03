@@ -131,9 +131,15 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   detail pictures; at most `MaxPdfFullSide` 32768 px long, `MaxPdfClipPixels` 16 MP per picture; a
   huge or hostile page costs no more memory than the picture asked for) —, `pageText(page)` and
   `find(page, query)` (`PdfTextHit`: a range of the text and its rectangles in points, the page as
-  shown); a reader is used by one thread at a time (`attachToCurrentThread` / `detachFromThread`:
+  shown), `selectText(page, from, to)` / `selectRange(page, start, length)` (`PdfTextSelection`:
+  the range, the clipboard's text, its rectangles), `outline()` (`PdfOutlineItem`s depth first,
+  capped; poppler only — Qt PDF's bookmark model has no guard against a looping outline) and
+  `links(page)` (`PdfLink`: an area to a page of the PDF or to an http(s) / mailto address; Qt PDF
+  and poppler); `open(file, info, password)` opens a protected PDF (Qt PDF and poppler:
+  `pdfPasswordAvailable()`); a reader is used by one thread at a time (`attachToCurrentThread` / `detachFromThread`:
   Qt PDF's document is pulled to the leasing thread). `pdfTextAvailable()`: Qt PDF and poppler yes,
-  Android from Android 15 (API 35), none no — the viewer hides its search otherwise. One backend
+  Android from Android 15 (API 35), none no — the viewer hides its search otherwise;
+  `pdfSelectionAvailable()`: Qt PDF and poppler (Android's API 35 selection is not wired yet). One backend
   per build, chosen by `src/platform/CMakeLists.txt` (`BRULION_PDF_BACKEND`, default `auto`):
   Android `pdfpages_android.cpp` (JNI to `BrulionAndroid.pdfOpen` / `pdfPageSizes` /
   `pdfRenderInto` / `pdfPageText` / `pdfSearch` / `pdfClose` → `PdfPages.kt`: sessions of the
@@ -151,6 +157,15 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   surrogate pair or a letter from its marks —, `pdfRangeRects(boxes, range)` (one rectangle per
   line from the characters' boxes), `pdfMatchSpellings` (the spellings Android's own,
   case-insensitive-only search is asked for).
+* **Text picked by pointing and what a PDF says about itself** (`pdftext.h`; pure, tests/platform
+  `tst_pdftext`): `pdfNearestBox` / `pdfCaretAt` / `pdfRangeBetween` (the characters between two
+  points from per-character boxes: poppler's whole selection, Qt PDF's points moved onto lines),
+  `pdfWordAt` (a long press's word), `pdfCopyText` (the clipboard's text), `pdfCleanTitle` (an
+  outline title), `pdfLinkUrlAllowed` (a PDF's link that may open: http, https, mailto).
+* **Which attachments may go to another app** (`externalfiles.h`; pure, tests/platform
+  `tst_externalfiles`): `externalFileType(name, head)` — an allow-list (PDF, Office Open XML,
+  OpenDocument, EPUB, old Office, RTF, audio, video, text) by the extension AND the first 64 KiB
+  matching it; its MIME type, or refused (a program, a script, a page, an archive, or one renamed).
 * **A file handed to the system's app** (`openexternal.h`; one per build): `openFileExternally(path,
   mime, name, bytes)` → `Opened` | `NoApp` | `Blocked` | `Failed` — the desktop's default app
   (`openexternal_desktop.cpp`: `QDesktopServices::openUrl` of the local file), Android's
@@ -161,7 +176,8 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   a blob: URL of the bytes typed explicitly, `window.open` inside the user's click, the opener cut,
   the last three URLs kept; blocked → the bytes saved as a download). `setOpenFileHook` records
   instead (tests, self-tests). The caller decides what may be opened: `Workspace::openInOtherApp`
-  hands over only PDFs of the notebook whose first bytes are `%PDF-`.
+  hands over only files of the notebook that `externalFileType()` allows (a PDF's first bytes hold
+  `%PDF-`, a DOCX is a zip with Word's parts…), with that MIME type.
 * **Android documents that name their file** (`documentpaths.h`; pure, tests/platform
   `tst_documentpaths`): `localPathOfDocument(url, primaryStorage)` — the system's picker hands out
   `content://` URIs also for files of the phone's storage; the storage provider's ids

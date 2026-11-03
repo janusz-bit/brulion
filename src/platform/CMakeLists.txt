@@ -5,8 +5,11 @@
 #                bookkeeping of the browser's file picker, wasm/wasmfiles.h; pure, tested
 #                everywhere), pdfpages (PDF pages as pictures: a drawing's backdrop — one backend per
 #                build, below; PdfReader: an open PDF drawing parts of pages and finding text for the
-#                PDF viewer), pdfsearch (its matcher: pure, tested everywhere), openexternal (a file
+#                PDF viewer), pdfsearch (its matcher: pure, tested everywhere), pdftext (its text
+#                selection by points, outline titles, links' addresses: pure, tested everywhere), openexternal (a file
 #                handed to the system's app: desktop, Android, a browser tab — one per build, below),
+#                externalfiles (which attachments may be handed over: an allow-list by name and first
+#                bytes; pure, tested everywhere),
 #                documentpaths (the file an Android document URI names: a picked file
 #                of the notebook used where it is; pure, tested everywhere). Tests: tests/platform.
 qt_add_library(brulion_platform STATIC
@@ -16,7 +19,9 @@ qt_add_library(brulion_platform STATIC
     pickedfiles.h pickedfiles.cpp
     pdfpages.h pdfpages.cpp
     pdfsearch.h pdfsearch.cpp
+    pdftext.h pdftext.cpp
     openexternal.h openexternal.cpp
+    externalfiles.h externalfiles.cpp
     documentpaths.h documentpaths.cpp
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

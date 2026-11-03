@@ -3194,13 +3194,19 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
 /// 3"; Ctrl+G 3 Enter goes to page 3, Home back, PageDown moves; Ctrl++ zooms (the page's picture
 /// asked for larger, sideways panning — the drawer's edge strip yields), Ctrl+0 fits the width again;
 /// a pinch (phone run) or Ctrl+wheel (desktop) zooms, a double tap fits / doubles; Ctrl+F "gesla"
-/// finds "gęślą" once with a highlight; Esc closes the search, Esc again returns to the note; the
+/// finds "gęślą" once with a highlight; Esc closes the search; a mouse drag over page 1's line (a
+/// long press on its first word on the phone) selects it, tinted with "Kopiuj", Ctrl+C copies it, Esc
+/// clears it; Esc again returns to the note; the
 /// note's link with #page=3 opens the viewer at page 3; "Rysuj na tej stronie" on page 2 opens the
 /// drawing editor on a drawing whose backdrop is page 2, embedded right after the PDF's block, Back
 /// returns to the viewer on page 2; again on page 2 the existing drawing is offered and opened (no
 /// second file); the More menu's "Otwórz w innej aplikacji" hands the file over (a recording hook);
 /// the PDF moved to another folder while open reopens on the same page; a locked PDF says why
-/// (BRULION_SELFTEST_PDF_DIR: tests/data/pdf); a ZIP opens read-only, never in the editor. Builds without a renderer:
+/// (BRULION_SELFTEST_PDF_DIR: tests/data/pdf), refuses a wrong password, opens with the right one and
+/// asks again when opened again; spis.pdf's table of contents (poppler) jumps to "Rozdział 3", its
+/// link to page 2 jumps, its web link keeps its address and no script is a link, the menu's two
+/// pages side by side keeps page 2; a ZIP opens read-only, never in the editor nor handed over; a
+/// DOCX opens read-only and "Otwórz w innej aplikacji" hands it over as a Word document. Builds without a renderer:
 /// the chip, its click hands the file over, the viewer's message with its button.
 void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check,
                     const std::function<QObject *(const QString &)> &controllerFor)
@@ -3412,6 +3418,49 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     sendKey(window, Qt::Key_Escape);
     check(waitFor([&] { return !view->property("searchOpen").toBool() && modelValue("hitCount").toInt() == 0; }),
           "Esc closes the search and its highlights");
+
+    // Selecting text on page 1: a mouse drag over its line (a finger: a long press on its first
+    // word), Ctrl+C copies it, Esc clears it (and stays in the viewer).
+    if (platform::pdfSelectionAvailable()) {
+        view->forceActiveFocus();
+        sendKey(window, Qt::Key_Home);
+        waitFor([&] { return opened(1); });
+        QQuickItem *firstPage = findShown(view, [](QQuickItem *item) {
+            return item->objectName() == u"pdfPage"_s && item->property("page").toInt() == 1;
+        });
+        const QRectF box =
+                firstPage ? firstPage->mapRectToScene(QRectF(0, 0, firstPage->width(), firstPage->height())) : QRectF();
+        const qreal lineY = box.top() + box.height() * 110.0 / 842;
+        const QString line = u"Wykład 3 — Zażółć gęślą jaźń"_s;
+        const auto selected = [&] { return modelValue("selectedText").toString().simplified(); };
+        QString expected;
+        if (touch) {
+            uidriver::touchHoldNow(
+                    window, QPointF(box.left() + box.width() * 75 / 595, lineY),
+                    [&] { return selected() == u"Wykład"_s; }, 6000);
+            expected = u"Wykład"_s;
+            check(selected() == expected, "a long press selects the word under the finger");
+        } else {
+            const qreal before = flick ? flick->property("contentY").toReal() : 0;
+            uidriver::mouseDragNow(window, QPointF(box.left() + 4, lineY), QPointF(box.right() - 4, lineY + 2));
+            expected = line;
+            check(waitFor([&] { return selected() == line; }, 5000) && flick
+                          && qAbs(flick->property("contentY").toReal() - before) < 1,
+                  "a mouse drag over the line selects its text (the pages do not pan)");
+        }
+        check(waitFor([&] {
+                  return shownNamed(view, u"pdfSelection"_s) != nullptr
+                         && shownNamed(view, u"pdfCopyButton"_s) != nullptr;
+              }),
+              "the selection is tinted, with “Copy” over it");
+        view->forceActiveFocus();
+        sendKey(window, Qt::Key_C, Qt::ControlModifier);
+        check(waitFor([&] { return QGuiApplication::clipboard()->text().simplified() == expected; }),
+              "Ctrl+C copies the selected text");
+        sendKey(window, Qt::Key_Escape);
+        check(waitFor([&] { return modelValue("selectionPage").toInt() == 0; }) && opened(0),
+              "Esc clears the selection and stays in the viewer");
+    }
     sendKey(window, Qt::Key_Escape);
     check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == note; }),
           "Esc again returns to the note");
@@ -3552,6 +3601,142 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
                          && shownNamed(pdfView(), u"pdfMessageSize"_s) != nullptr;
               }),
               "and names the file with its size");
+        // Its password typed (a wrong one first): asked again, then the pages.
+        if (platform::pdfPasswordAvailable()) {
+            const auto typePassword = [&](const QString &password) {
+                QQuickItem *field = pdfView() ? shownNamed(pdfView(), u"pdfPasswordField"_s) : nullptr;
+                if (!field)
+                    return false;
+                if (touch)
+                    tapOrClick(window, pointIn(field), touch);
+                field->forceActiveFocus();
+                for (const QChar ch : password)
+                    sendKey(window, 0, Qt::NoModifier, QString(ch));
+                sendKey(window, Qt::Key_Return);
+                return true;
+            };
+            check(typePassword(u"jawne"_s) && waitFor([&] { return modelValue("passwordRejected").toBool(); }, 15000)
+                          && shownNamed(pdfView(), u"pdfPasswordField"_s) != nullptr,
+                  "a wrong password is refused and asked for again");
+            check(typePassword(u"tajne"_s)
+                          && waitFor(
+                                  [&] {
+                                      return pdfView() && pdfView()->property("ready").toBool()
+                                             && modelValue("pageCount").toInt() == 3;
+                                  },
+                                  15000),
+                  "the right password opens the PDF");
+            check(waitFor([&] { return shownNamed(pdfView(), u"pdfPageImage"_s) != nullptr; })
+                          && shownNamed(pdfView(), u"pdfDrawButton"_s) == nullptr,
+                  "its pages are drawn, “Draw on this page” is not offered");
+            app->goHome();
+            app->openPage(locked);
+            check(waitFor(
+                          [&] {
+                              return pdfView() && modelValue("locked").toBool()
+                                     && shownNamed(pdfView(), u"pdfPasswordField"_s) != nullptr;
+                          },
+                          15000),
+                  "opened again, it asks for the password again (never kept)");
+        }
+    }
+
+    // A PDF with a table of contents and links (tests/data/pdf/spis.pdf): the outline jumps, a link
+    // to a page jumps, a web link names its address; two pages side by side.
+    QFile linkedFile(QDir(data).filePath(u"spis.pdf"_s));
+    if (!data.isEmpty() && linkedFile.open(QIODevice::ReadOnly)
+        && platform::pdfBackendName() != u"Android PdfRenderer"_s) {
+        pdf = workspace->createAttachment(u"assets/spis treści.pdf"_s, linkedFile.readAll());
+        app->openPage(pdf);
+        check(waitFor([&] { return opened(1); }, 15000), "the PDF with a table of contents opens");
+        // (poppler only: Qt PDF's bookmark model is not safe with a looping outline.)
+        if (platform::pdfBackendName() == u"poppler"_s) {
+            QQuickItem *outlineButton = nullptr;
+            check(waitFor([&] { return (outlineButton = shownNamed(pdfView(), u"pdfOutlineButton"_s)) != nullptr; }),
+                  "a PDF with a table of contents has its button");
+            if (outlineButton)
+                tapOrClick(window, pointIn(outlineButton), touch);
+            QQuickItem *third = nullptr;
+            check(waitFor([&] {
+                      third = findShown(window->contentItem(), [](QQuickItem *item) {
+                          return item->objectName() == u"pdfOutlineEntry"_s
+                                 && item->property("text").toString() == u"Rozdział 3"_s;
+                      });
+                      return third != nullptr;
+                  }),
+                  "the table of contents lists its chapters");
+            if (third)
+                tapOrClick(window, pointIn(third), touch);
+            check(waitFor([&] { return opened(3); }), "a chapter of the table of contents opens its page");
+        }
+        pdfView()->forceActiveFocus();
+        sendKey(window, Qt::Key_Home);
+        QQuickItem *link = nullptr;
+        check(waitFor(
+                      [&] {
+                          link = findShown(pdfView(), [](QQuickItem *item) {
+                              return item->objectName() == u"pdfLink"_s
+                                     && item->property("modelData").toMap().value(u"page"_s).toInt() == 2;
+                          });
+                          return opened(1) && link != nullptr;
+                      },
+                      10000),
+              "page 1's links are there");
+        const bool webLink = findShown(pdfView(),
+                                       [](QQuickItem *item) {
+                                           return item->objectName() == u"pdfLink"_s
+                                                  && item->property("modelData")
+                                                             .toMap()
+                                                             .value(u"url"_s)
+                                                             .toString()
+                                                             .startsWith(u"https://example.org/"_s);
+                                       })
+                             != nullptr;
+        // (Only page 1 has links: three of its six — never the script, the javascript: address, the launch.)
+        const int linkCount = int(
+                uidriver::matching(window, [](QQuickItem *item) { return item->objectName() == u"pdfLink"_s; }).size());
+        check(webLink && linkCount == 3, "a web link keeps its address; scripts and launches are no links");
+        if (link) {
+            const QPointF at = pointIn(link);
+            // (A toast of an earlier step may still lie over it.)
+            waitFor([&] { return uidriver::pressTargetAt(window, at) == link; }, 10000);
+            QQuickItem *target = uidriver::pressTargetAt(window, at);
+            std::fprintf(stderr, "selftest: PDF link at %.0f,%.0f, press target %s %s; %s\n", at.x(), at.y(),
+                         target ? target->metaObject()->className() : "",
+                         target ? qPrintable(target->objectName()) : "", qPrintable(uidriver::itemsAt(window, at)));
+            tapOrClick(window, at, touch);
+        }
+        const bool followed = waitFor([&] { return opened(2); });
+        if (!followed)
+            std::fprintf(stderr, "selftest: after the link: page %d, route pdfPage %d\n",
+                         modelValue("currentPage").toInt(), app->currentRoute().value(u"pdfPage"_s).toInt());
+        check(followed, "a link to page 2 goes there");
+        // Two pages side by side (the zoom menu; ⋯ on phones), and back.
+        QObject *m = viewModel();
+        const auto sideBySide = [&] {
+            QRectF one;
+            QRectF two;
+            QMetaObject::invokeMethod(m, "pageRect", qReturnArg(one), 1);
+            QMetaObject::invokeMethod(m, "pageRect", qReturnArg(two), 2);
+            return qAbs(one.y() - two.y()) < 1 && two.left() > one.right();
+        };
+        const bool wideBar = shownNamed(pdfView(), u"pdfZoomButton"_s) != nullptr;
+        if (QQuickItem *button = shownNamed(pdfView(), wideBar ? u"pdfZoomButton"_s : u"pdfMoreButton"_s))
+            tapOrClick(window, pointIn(button), touch);
+        QQuickItem *item = nullptr;
+        check(waitFor([&] {
+                  return (item = shownNamed(window->contentItem(),
+                                            wideBar ? u"pdfZoomTwoPages"_s : u"pdfMenuTwoPages"_s));
+              }),
+              "the menu offers two pages side by side");
+        if (item)
+            tapOrClick(window, pointIn(item), touch);
+        check(m && waitFor([&] { return m->property("twoPages").toBool() && sideBySide(); }) && opened(2),
+              "pages 1 and 2 side by side, page 2 still the current one");
+        closeMenus(window);
+        QMetaObject::invokeMethod(pdfView(), "setTwoPages", QVariant(false));
+        check(waitFor([&] { return m && !m->property("twoPages").toBool() && !sideBySide(); }),
+              "and back to one page per row");
     }
 
     // Another attachment that is no note (a ZIP): read-only text, never the editor.
@@ -3564,6 +3749,33 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
                      && shownNamed(picture, u"pictureReadOnly"_s) != nullptr;
           }) && controllerFor(zip) == nullptr,
           "a ZIP opens read-only, not in the block editor");
+    check(shownNamed(window->contentItem(), u"pictureOpenElsewhere"_s) == nullptr,
+          "a ZIP is never handed to another app");
+    // A document of the allow-list (a DOCX: a zip with Word's parts): read-only here, handed over.
+    {
+        const auto entry = [](const QByteArray &name, const QByteArray &bytes) {
+            return QByteArray("PK\x03\x04", 4) + QByteArray(26, '\0') + name + bytes;
+        };
+        const QString docx = workspace->createAttachment(u"assets/Sprawozdanie – źródła.docx"_s,
+                                                         entry("[Content_Types].xml", "<Types/>")
+                                                                 + entry("word/document.xml", "<w:document/>"));
+        app->openPage(docx);
+        QQuickItem *button = nullptr;
+        check(waitFor([&] {
+                  return (button = shownNamed(window->contentItem(), u"pictureOpenElsewhere"_s)) != nullptr;
+              }) && controllerFor(docx) == nullptr,
+              "a DOCX opens read-only with “Open in another app”");
+        handed.clear();
+        if (button)
+            tapOrClick(window, pointIn(button), touch);
+        check(waitFor([&] {
+                  return handed
+                         == QStringList{
+                                 workspace->absoluteFilePath(docx)
+                                 + u"|application/vnd.openxmlformats-officedocument.wordprocessingml.document"_s};
+              }),
+              "it hands the DOCX to the system's app for Word documents");
+    }
     app->goHome();
 }
 
