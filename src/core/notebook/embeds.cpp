@@ -31,8 +31,11 @@ bool blockEmbeds(const markdown::BlockDocument &doc, int i, const std::function<
 
 } // namespace
 
-EmbedInsertion insertBlockAfterEmbed(const QString &content, int lineHint,
-                                     const std::function<bool(QStringView target)> &embedsIt, const QString &blockBody)
+namespace {
+
+EmbedInsertion insertBesideEmbed(const QString &content, int lineHint,
+                                 const std::function<bool(QStringView target)> &embedsIt, const QString &blockBody,
+                                 bool before)
 {
     EmbedInsertion out;
     markdown::BlockDocument doc(content);
@@ -59,6 +62,8 @@ EmbedInsertion insertBlockAfterEmbed(const QString &content, int lineHint,
         edit = e.kind == BlockKind::ListItem ? doc.insertAfter(found, blockBody, e.depth, true)
                                              : doc.insertAfter(found, blockBody, 0, false);
         out.afterEmbed = true;
+        if (before && edit.focus >= 0 && edit.focus < doc.count())
+            edit = doc.moveUp(edit.focus);
     } else {
         const int last = doc.count() - 1;
         const bool list = last < 0 || doc.at(last).kind == BlockKind::ListItem;
@@ -68,6 +73,20 @@ EmbedInsertion insertBlockAfterEmbed(const QString &content, int lineHint,
     if (edit.focus >= 0 && edit.focus < doc.count())
         out.line = doc.at(edit.focus).line;
     return out;
+}
+
+} // namespace
+
+EmbedInsertion insertBlockAfterEmbed(const QString &content, int lineHint,
+                                     const std::function<bool(QStringView target)> &embedsIt, const QString &blockBody)
+{
+    return insertBesideEmbed(content, lineHint, embedsIt, blockBody, false);
+}
+
+EmbedInsertion insertBlockBeforeEmbed(const QString &content, int lineHint,
+                                      const std::function<bool(QStringView target)> &embedsIt, const QString &blockBody)
+{
+    return insertBesideEmbed(content, lineHint, embedsIt, blockBody, true);
 }
 
 } // namespace brulion::notebook

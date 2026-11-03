@@ -39,6 +39,10 @@
 //   backdropIndex(), backdropSource(),         a picture or a PDF page under the ink: a locked
 //   setBackdrop(), removeBackdrop(),           image element at index 0 with a marker, its
 //   parsePageRanges()                          raster in the scene (backdrop.h)
+//   clipboardJson(), parseClipboard(),         elements copied and pasted as Excalidraw's
+//   pasteElements()                            clipboard (clipboard.h)
+//   alignElements(), distributeElements()      a selection lined up or spaced evenly (edit.h)
+//   holdsLabel(), labelCenter()                labels in shapes and polygons (edit.h)
 //   darkColor(), displayInk(), displayPaper()  the colours of the dark theme (palette.h)
 //   strokeOutline(stroke), outlineToSvgPath()  the outline of a freehand line (stroke.h)
 //   parseScene(), sceneJson(), svgPayload(),   the Excalidraw format (excalidraw.h)

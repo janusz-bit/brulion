@@ -117,6 +117,10 @@ W edytorze rysunku (gdy nie piszesz tekstu). Więcej: [[Rysunki|Rysunki]].
 | ← ↑ → ↓ (z Shift) | przesuń zaznaczenie o 1 (o 10) |
 | Ctrl+] / Ctrl+[ | zaznaczenie piętro wyżej / niżej |
 | Ctrl+Shift+] / Ctrl+Shift+[ | zaznaczenie na wierzch / na spód |
+| Ctrl+C / Ctrl+X / Ctrl+V | kopiuj / wytnij / wklej (także z excalidraw.com i do niego) |
+| Ctrl+Shift+← → ↑ ↓ | wyrównaj zaznaczenie do lewej / prawej / góry / dołu |
+| Alt+H / Alt+V | rozłóż zaznaczenie równo w poziomie / w pionie |
+| PgUp / PgDown | rysunek na poprzedniej / następnej stronie PDF-a |
 | Esc | przerwij rysowany kształt albo lasso; odznacz |
 | Ctrl+Z / Ctrl+Shift+Z | cofnij / ponów |
 | Spacja (przytrzymana) | przesuwanie kartki |

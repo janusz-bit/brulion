@@ -32,12 +32,12 @@ Przycisk kształtu na pasku pokazuje ostatnio używany kształt; kliknij go jesz
 - Przeciągnij po kartce — kształt rośnie razem z ruchem rysika, palca albo myszy. Z wciśniętym `Shift` prostokąt staje się kwadratem, elipsa kołem, a linia i strzałka obracają się co 15°; pozostałe kształty rysują się wtedy w kwadracie.
 - Kształt ma kolor pióra i dwa razy większą grubość (cienka, średnia, gruba). Prostokąty mają zaokrąglone rogi, jak w Excalidraw.
 - Narzędzie zostaje wybrane, więc możesz narysować kilka kształtów po kolei. Pióro wybierzesz klawiszem P.
-- Kształty z dolnej części listy to w pliku zwykłe zamknięte linie Excalidraw, więc excalidraw.com i Obsidian też je pokażą i pozwolą edytować. Nie mają napisu w środku: tekst napisany na takim kształcie jest osobnym tekstem (zaznacz oba i zgrupuj, żeby przesuwały się razem).
+- Kształty z dolnej części listy to w pliku zwykłe zamknięte linie Excalidraw, więc excalidraw.com i Obsidian też je pokażą i pozwolą edytować. Mogą mieć napis w środku, tak jak prostokąt (zobacz [[#Tekst|Tekst]]): excalidraw.com zna napisy tylko w prostokącie, elipsie, rombie i na strzałkach, więc Brulion zapisuje napis w trójkącie czy gwieździe jako tekst zgrupowany z kształtem — w excalidraw.com widać go w tym samym miejscu i przesuwa się razem z kształtem.
 
 ## Tekst
 - Wybierz **Tekst** (T) i stuknij w kartkę — pojawia się pole do pisania. `Enter` zaczyna nowy wiersz.
 - Kliknięcie obok pola, `Esc`, `Ctrl+Enter` albo przycisk ✓ (na ekranie dotykowym) kończy pisanie. Pusty tekst znika.
-- Stuknij w istniejący tekst, żeby go poprawić. Stuknij w środek prostokąta, elipsy albo rombu, a napiszesz w nim etykietę: wyśrodkowaną i zawiniętą tak jak w Excalidraw — w elipsie i rombie węższą, żeby zmieściła się w środku. Gdy tekst się nie mieści, kształt rośnie. Etykieta przesuwa się i usuwa razem z kształtem.
+- Stuknij w istniejący tekst, żeby go poprawić. Stuknij w środek prostokąta, elipsy albo rombu, a napiszesz w nim etykietę: wyśrodkowaną i zawiniętą tak jak w Excalidraw — w elipsie i rombie węższą, żeby zmieściła się w środku. Tak samo w trójkącie, gwieździe, dymku i pozostałych kształtach z listy: napis staje w najszerszym miejscu kształtu (w trójkącie niżej, w dymku w jego „chmurce”). Gdy tekst się nie mieści, kształt rośnie. Etykieta przesuwa się, obraca i usuwa razem z kształtem.
 - Pole zamknięte bez zmian niczego w rysunku nie zmienia — tekst z Excalidraw zostaje dokładnie taki, jaki był.
 - Narzędziem **Zaznacz** to samo robi podwójne kliknięcie (albo dwa stuknięcia).
 - Na telefonie kartka przesuwa się tak, żeby pisany tekst był nad klawiaturą.
@@ -46,8 +46,8 @@ Przycisk kształtu na pasku pokazuje ostatnio używany kształt; kliknij go jesz
 Wybierz **Zaznacz** (V) i obrysuj rysikiem, palcem albo myszką to, co chcesz zaznaczyć — zaznaczy się wszystko, co jest przynajmniej w połowie w środku. Kliknij **Zaznacz** jeszcze raz, gdy jest już wybrane, a wybierzesz sposób: **Lassem** albo **Prostokątem** (przeciągasz prostokąt zamiast obrysowywać). Brulion pamięta wybór na tym urządzeniu. Stuknięcie zaznacza jeden element, stuknięcie w puste miejsce zdejmuje zaznaczenie, a `Shift` dodaje do zaznaczenia (myszką).
 - **Przeciągnij** wewnątrz ramki zaznaczenia, żeby je przesunąć. Strzałki przyczepione do przesuwanych kształtów idą za nimi.
 - Nad zaznaczeniem pojawia się pasek: **kolory** (zmiana koloru), **Styl** (zobacz niżej [[#Styl zaznaczenia|Styl zaznaczenia]]), **Duplikuj** (`Ctrl+D`), **Na wierzch** (`Ctrl+Shift+]`), **Na spód** (`Ctrl+Shift+[`), **Więcej** i **Usuń** (`Delete`). Na telefonie **Na wierzch** i **Na spód** są w **Więcej**.
-- **Więcej** ma też **Obróć o 90°**, **Odbij w poziomie** (`Shift+H`), **Odbij w pionie** (`Shift+V`), **Grupuj** (`Ctrl+G`) i **Rozgrupuj** (`Ctrl+Shift+G`). Tekst przy odbiciu zostaje czytelny — zmienia tylko miejsce. Grupa zaznacza się i przesuwa w całości.
-- Klawisze: `Ctrl+A` zaznacza wszystko, strzałki przesuwają zaznaczenie (z `Shift` dziesięć razy dalej), `Ctrl+]` i `Ctrl+[` przesuwają je o jedno piętro w górę i w dół, `Esc` zdejmuje zaznaczenie.
+- **Więcej** ma też **Kopiuj** (`Ctrl+C`), **Wytnij** (`Ctrl+X`), **Obróć o 90°**, **Odbij w poziomie** (`Shift+H`), **Odbij w pionie** (`Shift+V`), **Grupuj** (`Ctrl+G`) i **Rozgrupuj** (`Ctrl+Shift+G`). Tekst przy odbiciu zostaje czytelny — zmienia tylko miejsce. Grupa zaznacza się i przesuwa w całości.
+- Klawisze: `Ctrl+A` zaznacza wszystko, strzałki przesuwają zaznaczenie (z `Shift` dziesięć razy dalej), `Ctrl+]` i `Ctrl+[` przesuwają je o jedno piętro w górę i w dół, `Ctrl+Shift+←`, `→`, `↑`, `↓` wyrównują do lewej, prawej, góry i dołu, `Alt+H` i `Alt+V` rozkładają równo w poziomie i w pionie, `Esc` zdejmuje zaznaczenie.
 - Grupy z Excalidraw zaznaczają się w całości. Elementów zablokowanych w Excalidraw — ani napisów w zablokowanych kształtach — nie da się zaznaczyć, zetrzeć ani zmienić.
 - Gdy **Rysuj palcem** jest wyłączone, palec tylko przesuwa kartkę — dłoń oparta na zaznaczeniu go nie przesunie.
 
@@ -66,7 +66,9 @@ Przycisk **Styl** na pasku nad zaznaczeniem pokazuje to, co zaznaczone elementy 
 - **Rodzaj linii** (ciągła, kreskowana, kropkowana) — kształty, linie i strzałki;
 - **Rogi** (ostre, zaokrąglone) — prostokąty, romby, a na liniach i strzałkach łagodny łuk zamiast załamań;
 - **Początek linii** i **Koniec linii** (brak, grot, trójkąt, kółko, kreska, romb) — linie i strzałki;
-- **Rozmiar tekstu** i **Krycie** (100, 75, 50, 25 %).
+- **Rozmiar tekstu**;
+- **Wyrównaj** — gdy zaznaczone są co najmniej dwie rzeczy: do lewej, do środka w poziomie, do prawej, do góry, do środka w pionie, do dołu; przy trzech i więcej także **Rozłóż w poziomie** i **Rozłóż w pionie** (skrajne zostają na miejscu, pozostałe dostają równe odstępy). Grupa, kształt z napisem i każdy inny element przesuwają się w całości, według ramki, którą zajmują — obrócony element według swojego obróconego obrysu. Strzałki przyczepione do kształtów idą za nimi;
+- **Krycie** (100, 75, 50, 25 %).
 
 Każdy wybór to jeden krok cofania. Panel zostaje otwarty, więc możesz zmienić kilka rzeczy po kolei.
 
@@ -101,15 +103,21 @@ Plik spoza notatnika Brulion kopiuje do folderu załączników, jak obrazy. Plik
 **Podkład w edytorze rysunku.** W menu **Papier** (na telefonie w **Więcej**):
 - **Podkład z obrazu lub PDF…** — kładzie obraz albo stronę PDF pod istniejący rysunek (albo zmienia podkład, który już jest);
 - **Inna strona PDF…** — inna strona tego samego PDF-a (gdy podkładem jest strona PDF); jeśli pliku nie ma już w notatniku (przeniesiony, usunięty), Brulion to powie — rysunek ma jednak w sobie obraz strony i wygląda dalej tak samo;
+- **Poprzednia strona PDF** i **Następna strona PDF** (`PgUp`, `PgDown`) — przejście do rysunku na sąsiedniej stronie tego samego PDF-a, bez wracania do notatki. Brulion szuka go w notatce, w której jest bieżący rysunek: jeśli notatka ma już rysunek na tej stronie, otwiera go; jeśli nie — robi nowy („wykład 3 s. 5.svg”) i wstawia go do notatki w osobnym bloku zaraz za bieżącym rysunkiem (następna strona) albo tuż przed nim (poprzednia), więc rysunki stoją w notatce po kolei. Bieżący rysunek zapisuje się najpierw, a **Wstecz** wraca do notatki. Rysunek, którego nie ma w żadnej notatce, dodaje nowy do dzisiejszego dziennika;
 - **Usuń podkład** — zostawia samo pismo.
 
-Każdą z tych zmian cofniesz. Podkład jest zablokowany: gumka go nie ściera, lasso i `Ctrl+A` go nie zaznaczają, a **Na spód** kładzie elementy tuż nad nim.
+Każdą zmianę podkładu cofniesz. Podkład jest zablokowany: gumka go nie ściera, lasso i `Ctrl+A` go nie zaznaczają, a **Na spód** kładzie elementy tuż nad nim.
 
 **Ciemne tło.** Na ciemnej kartce podkład też ciemnieje — jak tryb nocny czytnika PDF: biała strona staje się ciemnoszara, czarny tekst jasny — więc jasne pismo dalej dobrze widać. Rysunek na stronie PDF zaczyna z tłem **Jak motyw** (ciemnieje razem z Brulionem), rysunek na obrazie z tłem **Jasne**; obie możesz zmienić przyciskiem **Tło rysunku**. Rysunek z tłem **Ciemne** ma ciemny podkład także w Obsidianie i w przeglądarce.
 
 **Gdzie działa PDF.** Strony PDF wstawisz — z okna wyboru stron i przyciskiem **Rysuj na tej stronie** w przeglądarce PDF — w aplikacji na Androida, Windows i Linuksa (pakiet Nix i AppImage). W wersji w przeglądarce PDF-ów nie ma (przeglądarkowa wersja Qt nie umie ich rysować; PDF otwiera się tam w nowej karcie) — tam podkładem może być obraz, a rysunki na stronach PDF zrobione na innym urządzeniu wyglądają i edytują się normalnie, bo obraz strony jest w pliku rysunku.
 
 **W pliku.** Obraz podkładu jest w samym rysunku (najwyżej 2400 pikseli na dłuższym boku i 4 MB), więc rysunek wygląda tak samo na każdym urządzeniu, w Obsidianie, w przeglądarce i w excalidraw.com — tam podkład jest zwykłym zablokowanym obrazem na spodzie. Obraz jest w pliku dwa razy (w scenie i w samym obrazie), więc rysunek ze slajdem waży zwykle od 0,5 do 1,7 MB.
+
+## Kopiowanie i wklejanie (także z excalidraw.com)
+Zaznaczenie skopiujesz `Ctrl+C` (albo **Kopiuj** w **Więcej** nad zaznaczeniem), wytniesz `Ctrl+X`, a wkleisz `Ctrl+V` albo **Wklej** w menu **Papier** (na telefonie w **Więcej**). Wklejone elementy pojawiają się pod kursorem myszy (albo na środku widoku), od razu zaznaczone — możesz je przesunąć; całe wklejenie cofniesz jednym `Ctrl+Z`.
+
+Brulion kopiuje w tym samym formacie co Excalidraw, więc działa to w obie strony: elementy skopiowane w Brulionie wkleisz w **excalidraw.com** (i w innym rysunku Brulionu), a skopiowane w excalidraw.com — w Brulionie. Wkleisz też całą zawartość pliku `.excalidraw` skopiowaną jako tekst. Ramek i osadzonych stron internetowych z Excalidraw Brulion nie rysuje — przy wklejaniu je pomija i mówi, ile ich było. Zwykły tekst ze schowka wkleja się jako nowy tekst na rysunku.
 
 ## Rysik, palec i mysz
 - **Rysik** rysuje. **Palce** wtedy nie rysują, tylko przesuwają kartkę (jeden palec) i powiększają ją (dwa palce) — możesz więc oprzeć dłoń na ekranie. Dopóki rysik dotyka ekranu, dłoń niczego nie zmienia: nie przesuwa kartki i nie przerywa linii.
@@ -144,7 +152,9 @@ Rysunki wtyczki **Excalidraw dla Obsidiana** to pliki `*.excalidraw.md` (na przy
 - **Z listy stron, linku albo wyszukiwania** taki plik otwiera się jako obraz rysunku z przyciskiem „Edytuj rysunek”. „Pokaż jako tekst” pokazuje jego Markdown (tylko do czytania) — notatek „z tyłu” rysunku nie edytuje się w Brulionie, tylko w Obsidianie.
 - **Edycja:** pismo odręczne, kształty, strzałki, tekst i zaznaczanie działają tak samo jak w rysunkach Brulionu.
 - **Zapis w tym samym formacie:** Brulion zmienia tylko blok `## Drawing` ze sceną (skompresowany — `compressed-json` — zostaje skompresowany, `json` zostaje JSON-em) i wpisy w „Text Elements” tekstów, które zmieniłeś albo usunąłeś (tekst tylko przesunięty, przekolorowany albo przeniesiony razem z kształtem zachowuje swoje linki). Frontmatter, notatki z tyłu rysunku, linki elementów („Element Links”), osadzone pliki („Embedded Files”) i znaczniki `%%` zostają bajt w bajt. Obsidian otworzy rysunek dalej, a to, co starłeś w Brulionie, zniknie też w Obsidianie, nawet jeśli ma ten rysunek otwarty.
-- **Ograniczenia:** obrazy wklejone w Obsidianie (z sekcji „Embedded Files”) Brulion pokazuje jako szare prostokąty — można je przesuwać i usuwać. Link w tekście zmienionym w Brulionie staje się zwykłym tekstem. Rysunek z **ramkami** albo **osadzonymi stronami** Brulion tylko pokazuje (zmienisz go w Obsidianie); jego podglądem jest eksport wtyczki obok (`Rysunek.excalidraw.svg` albo `.png`), a gdy go nie ma — rysunek z przerywanymi ramkami w miejscu tych elementów. Rysunek w bardzo starym formacie wtyczki (bez bloku kodu) wystarczy raz otworzyć w Obsidianie.
+- **Obrazy wklejone w Obsidianie** (sekcja „Embedded Files”, np. `Pasted Image ….png`) Brulion pokazuje — w edytorze i w podglądzie w notatce — szukając ich tak, jak Obsidian szuka linków w tym rysunku. Obraz zostaje w swoim pliku; w rysunku jest tylko odnośnik, jak w Obsidianie. Wzory LaTeX i adresy z tej sekcji, a także obraz, którego nie ma w notatniku, są szarymi prostokątami — można je przesuwać i usuwać.
+- **Eksport:** w eksporcie do HTML (strona i dokument) i do Pandoca taki rysunek jest obrazem — wstawiony do notatki, wskazany linkiem `![[Rysunek.excalidraw]]` i na swojej własnej stronie — a nie tekstem wtyczki. Brulion bierze eksport wtyczki leżący obok (`Rysunek.excalidraw.svg` albo `.png`), a gdy go nie ma, sam robi z rysunku obraz SVG (z wklejonymi obrazami).
+- **Ograniczenia:** link w tekście zmienionym w Brulionie staje się zwykłym tekstem. Rysunek z **ramkami** albo **osadzonymi stronami** Brulion tylko pokazuje (zmienisz go w Obsidianie); jego podglądem jest eksport wtyczki obok (`Rysunek.excalidraw.svg` albo `.png`), a gdy go nie ma — rysunek z przerywanymi ramkami w miejscu tych elementów. Rysunek w bardzo starym formacie wtyczki (bez bloku kodu) wystarczy raz otworzyć w Obsidianie.
 - **Synchronizacja:** gdy taki rysunek zmieni się na dwóch urządzeniach naraz, Nextcloud scala go element po elemencie, jak rysunki Brulionu, i nigdy nie skleja go wiersz po wierszu. Notatki z tyłu rysunku i frontmatter zostają z tej wersji, w której je zmieniono; gdy zmieniono je na obu urządzeniach, Nextcloud zachowa obie wersje (kopię konfliktu).
 - **Kopia konfliktowa z innymi notatkami:** gdy kopia takiego rysunku (od Syncthinga albo Nextclouda) ma inne notatki niż twój rysunek — frontmatter, notatki z tyłu, linki, osadzone pliki — centrum synchronizacji nigdy nie nazwie jej „taką samą” ani „starszą”. **Scal rysunki** połączy elementy obu wersji w twoim rysunku (z twoimi notatkami), a kopia zostanie na miejscu. Wtedy centrum pokaże „Różnią się tylko notatki wokół rysunku” i porównanie notatek obu wersji: przenieś w Obsidianie to, czego potrzebujesz, i dopiero potem **Usuń kopię**. Gdy rysunek jest otwarty w Brulionie, wersja z innego urządzenia łączy się z twoją kreska po kresce.
 - Nowe rysunki Brulion tworzy zawsze jako SVG.

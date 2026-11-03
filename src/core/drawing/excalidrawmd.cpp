@@ -4,6 +4,7 @@
 
 #include <QHash>
 #include <QJsonDocument>
+#include <QRegularExpression>
 #include <QSet>
 
 #include <algorithm>
@@ -351,11 +352,78 @@ std::optional<ExcalidrawMarkdownRead> readExcalidrawMarkdown(QByteArrayView byte
     return read;
 }
 
+QList<EmbeddedFile> embeddedFiles(QByteArrayView bytes)
+{
+    QList<EmbeddedFile> out;
+    if (bytes.size() > MaxSceneBytes)
+        return out;
+    const QString text = QString::fromUtf8(bytes);
+    // The section's heading (the plugin writes "## Embedded Files"; older files "# Embedded Files")
+    // at the start of a line, then its entries up to the next heading or "%%".
+    static const QRegularExpression heading(u"^#{1,2} Embedded Files[ \\t]*\\r?$"_s,
+                                            QRegularExpression::MultilineOption);
+    static const QRegularExpression entry(u"^([A-Za-z0-9_-]+):[ \\t]*!?\\[\\[([^\\]\\n]*)\\]\\]"_s);
+    const QRegularExpressionMatch found = heading.match(text);
+    if (!found.hasMatch())
+        return out;
+    QSet<QString> seen;
+    const QStringList lines = text.mid(found.capturedEnd()).split(u'\n');
+    for (qsizetype i = 1; i < lines.size(); ++i) {
+        const QString line = QString(lines.at(i)).remove(u'\r');
+        if (line.startsWith(u'#') || line.startsWith(u"%%"))
+            break;
+        const QRegularExpressionMatch m = entry.match(line);
+        if (!m.hasMatch() || seen.contains(m.captured(1)))
+            continue;
+        // The target alone: no alias ("|…"), no heading or block ("#…").
+        QString link = m.captured(2);
+        link = link.left(link.indexOf(u'|') < 0 ? link.size() : link.indexOf(u'|'));
+        link = link.left(link.indexOf(u'#') < 0 ? link.size() : link.indexOf(u'#')).trimmed();
+        if (link.isEmpty())
+            continue;
+        seen.insert(m.captured(1));
+        out.append({m.captured(1), link});
+    }
+    return out;
+}
+
+std::optional<QJsonObject> embeddedFileEntry(const QString &fileId, QByteArrayView bytes)
+{
+    if (fileId.isEmpty() || bytes.isEmpty() || bytes.size() > MaxSceneBytes)
+        return std::nullopt;
+    QString mime;
+    if (bytes.startsWith("\x89PNG\r\n\x1a\n"))
+        mime = u"image/png"_s;
+    else if (bytes.startsWith("\xff\xd8\xff"))
+        mime = u"image/jpeg"_s;
+    else if (bytes.startsWith("GIF87a") || bytes.startsWith("GIF89a"))
+        mime = u"image/gif"_s;
+    else if (bytes.size() >= 12 && bytes.startsWith("RIFF") && bytes.sliced(8, 4) == "WEBP")
+        mime = u"image/webp"_s;
+    else if (bytes.first(std::min<qsizetype>(bytes.size(), 1024)).contains("<svg"))
+        mime = u"image/svg+xml"_s;
+    else
+        return std::nullopt;
+    return QJsonObject{{u"id"_s, fileId},
+                       {u"mimeType"_s, mime},
+                       {u"dataURL"_s, QString(u"data:"_s + mime + u";base64,"_s
+                                              + QString::fromLatin1(bytes.toByteArray().toBase64()))},
+                       {EmbeddedFileKey.toString(), true}};
+}
+
 QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawing &drawing, qint64 now)
 {
     Q_ASSERT(layout.encoding != ExcalidrawMarkdown::Encoding::Legacy);
     QJsonObject scene = sceneObject(drawing);
     QJsonArray elements = scene.value(u"elements"_s).toArray();
+    // The pictures of "## Embedded Files" the app put in to show them stay in their files.
+    if (QJsonObject files = scene.value(u"files"_s).toObject(); !files.isEmpty()) {
+        for (const QString &id : files.keys()) {
+            if (files.value(id).toObject().value(EmbeddedFileKey).toBool())
+                files.remove(id);
+        }
+        scene.insert(u"files"_s, files);
+    }
 
     QHash<QString, QJsonObject> read;
     read.reserve(layout.elements.size());

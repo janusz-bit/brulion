@@ -71,6 +71,16 @@ std::optional<Stroke> elementFromJson(const QJsonObject &e);
 /// `types` (id → kind) names the kinds of the elements in boundElements (bound ones it lacks are
 /// left out).
 QJsonObject elementJson(const Stroke &e, const QHash<QString, ElementType> *types = nullptr);
+/// The innermost group a polygon's label shares with the polygon in a scene. Excalidraw binds text
+/// only to rectangles, ellipses, diamonds and arrows (a text whose containerId names a polygon, or
+/// a polygon listing it in boundElements, is turned into its bound text there, which Excalidraw
+/// cannot lay out in a line): Brulion stores a polygon's label as a free text (containerId null,
+/// customData `brulionLabel: true`) in a group of its own with the polygon — innermost, the
+/// label's other groups the polygon's —, so excalidraw.com shows it where Brulion put it and moves,
+/// copies and deletes it with the polygon; reading a scene (sceneFromObject()) makes such a text
+/// the polygon's label again (Stroke::containerId) and takes the group out of both
+/// (docs/SYNTAX.md §2 "Labels in polygons").
+QString polygonLabelGroup(QStringView polygonId);
 /// The scene names of the fill, stroke, arrowhead and alignment styles, and back.
 QString fillStyleName(FillStyle style);
 QString strokeStyleName(StrokeStyle style);

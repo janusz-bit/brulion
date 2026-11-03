@@ -1,5 +1,8 @@
 #include "io/exportutil_p.h"
 
+#include "drawing/drawingfile.h"
+#include "drawing/excalidrawmd.h"
+#include "drawing/svgwrite.h"
 #include "index/vaultindex.h"
 #include "io/importutil_p.h"
 #include "io/logseq_p.h"
@@ -39,6 +42,44 @@ ExportVault::ExportVault(const ExportInput &input) : m_input(input), m_index(std
     }
     for (Note &n : m_notes)
         n.parsed = m_index->note(n.path);
+    // Obsidian Excalidraw plugin drawings: their pictures (drawingPicture()).
+    for (const Note &n : std::as_const(m_notes)) {
+        const QByteArray bytes = n.content.toUtf8();
+        if (!drawing::looksLikeExcalidrawMarkdown(
+                    QByteArrayView(bytes).first(std::min<qsizetype>(bytes.size(), drawing::HeadBytes))))
+            continue;
+        const QString base = paths::stripMarkdownExtension(n.path);
+        std::optional<VaultPath> picture;
+        for (const QString &ext : {u".svg"_s, u".png"_s}) {
+            if (!picture && isAttachment(base + ext))
+                picture = base + ext;
+        }
+        if (!picture) {
+            const std::optional<drawing::DrawingFile> file = drawing::readDrawingFile(bytes);
+            if (!file)
+                continue;
+            drawing::Drawing d =
+                    drawing::editable(file->drawing) ? file->drawing : drawing::previewDrawing(file->drawing);
+            for (const drawing::EmbeddedFile &e : drawing::embeddedFiles(bytes)) {
+                const std::optional<VaultPath> target =
+                        d.files.contains(e.fileId) ? std::nullopt : resolve(e.link, n.path);
+                const FileEntry *a = target ? attachment(*target) : nullptr;
+                if (const std::optional<QJsonObject> entry =
+                            a ? drawing::embeddedFileEntry(e.fileId, a->data) : std::nullopt)
+                    d.files.insert(e.fileId, *entry);
+            }
+            picture = base + u".svg"_s;
+            m_madeIndex.insert(*picture, m_made.size());
+            m_made.append(FileEntry{*picture, drawing::toSvg(d)});
+        }
+        m_drawingPictures.insert(n.path, *picture);
+    }
+}
+
+std::optional<VaultPath> ExportVault::drawingPicture(const VaultPath &note) const
+{
+    const auto it = m_drawingPictures.constFind(note);
+    return it == m_drawingPictures.constEnd() ? std::nullopt : std::optional<VaultPath>(*it);
 }
 
 ExportVault::~ExportVault() = default;
@@ -56,8 +97,10 @@ bool ExportVault::isAttachment(const VaultPath &path) const
 
 const FileEntry *ExportVault::attachment(const VaultPath &path) const
 {
-    const auto it = m_attachmentIndex.constFind(path);
-    return it == m_attachmentIndex.constEnd() ? nullptr : &m_attachments[*it];
+    if (const auto it = m_attachmentIndex.constFind(path); it != m_attachmentIndex.constEnd())
+        return &m_attachments[*it];
+    const auto made = m_madeIndex.constFind(path);
+    return made == m_madeIndex.constEnd() ? nullptr : &m_made[*made];
 }
 
 std::optional<VaultPath> ExportVault::resolve(const QString &target, const VaultPath &from) const

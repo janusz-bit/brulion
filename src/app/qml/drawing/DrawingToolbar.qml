@@ -7,7 +7,8 @@ import Brulion
 // redo, the pen, the highlighter, the eraser, the selection (a lasso or a rectangle; a second click
 // opens the choice), the shapes (one button showing the last of them: rectangle, ellipse, diamond,
 // line, arrow and the polygons; a second click opens their menu) and text, the current tool's colours and widths (text: its sizes S, M, L, XL), the paper (plain,
-// lines, grid) and its backdrop ("Podkład z obrazu lub PDF…", "Inna strona PDF…", "Usuń podkład"
+// lines, grid) and its backdrop ("Podkład z obrazu lub PDF…", "Inna strona PDF…", "Poprzednia /
+// Następna strona PDF", "Usuń podkład" and "Wklej"
 // in the paper's menu), its light or dark background ("Tło rysunku": as the app, light, dark,
 // "Kolor tła…": DrawingPaperDialog),
 // "Rysuj palcem" on touch screens, "Pokaż cały rysunek" and Gotowe.
@@ -62,6 +63,10 @@ Rectangle {
     /// chosen, another page of its PDF, removed.
     signal backdropRequested()
     signal backdropPageRequested()
+    /// The drawing of the previous (−1) or the next (1) page of the backdrop's PDF.
+    signal pageStepRequested(int step)
+    /// "Wklej" (the clipboard's elements or text).
+    signal pasteRequested()
     signal backdropRemoved()
     /// "Kolor tła…" chosen in the background's menu ("Więcej" on phones).
     signal paperColorRequested()
@@ -598,12 +603,40 @@ Rectangle {
             onTriggered: bar.backdropPageRequested()
         }
         BMenuItem {
+            objectName: "drawingPreviousPage"
+            visible: bar.backdropPdf
+            height: visible ? implicitHeight : 0
+            enabled: bar.canvas.backdropPage > 1
+            text: qsTr("Previous PDF page")
+            iconName: "chevron-left"
+            shortcut: "PgUp"
+            onTriggered: bar.pageStepRequested(-1)
+        }
+        BMenuItem {
+            objectName: "drawingNextPage"
+            visible: bar.backdropPdf
+            height: visible ? implicitHeight : 0
+            text: qsTr("Next PDF page")
+            iconName: "chevron-right"
+            shortcut: "PgDown"
+            onTriggered: bar.pageStepRequested(1)
+        }
+        BMenuItem {
             objectName: "drawingBackdropRemove"
             visible: bar.canvas.hasBackdrop
             height: visible ? implicitHeight : 0
             text: qsTr("Remove backdrop")
             iconName: "trash-2"
             onTriggered: bar.backdropRemoved()
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "drawingPaste"
+            text: qsTr("Paste")
+            iconName: "clipboard-paste"
+            shortcut: "Ctrl+V"
+            enabled: bar.canvas.editable
+            onTriggered: bar.pasteRequested()
         }
     }
 
@@ -713,11 +746,39 @@ Rectangle {
             onTriggered: bar.backdropPageRequested()
         }
         BMenuItem {
+            objectName: "drawingPreviousPageItem"
+            visible: bar.backdropPdf
+            height: visible ? implicitHeight : 0
+            enabled: bar.canvas.backdropPage > 1
+            text: qsTr("Previous PDF page")
+            iconName: "chevron-left"
+            shortcut: "PgUp"
+            onTriggered: bar.pageStepRequested(-1)
+        }
+        BMenuItem {
+            objectName: "drawingNextPageItem"
+            visible: bar.backdropPdf
+            height: visible ? implicitHeight : 0
+            text: qsTr("Next PDF page")
+            iconName: "chevron-right"
+            shortcut: "PgDown"
+            onTriggered: bar.pageStepRequested(1)
+        }
+        BMenuItem {
             visible: bar.canvas.hasBackdrop
             height: visible ? implicitHeight : 0
             text: qsTr("Remove backdrop")
             iconName: "trash-2"
             onTriggered: bar.backdropRemoved()
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "drawingPasteItem"
+            text: qsTr("Paste")
+            iconName: "clipboard-paste"
+            shortcut: "Ctrl+V"
+            enabled: bar.canvas.editable
+            onTriggered: bar.pasteRequested()
         }
         BMenuSeparator {}
         BMenuItem {

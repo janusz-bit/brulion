@@ -1,6 +1,7 @@
-// A block placed right after the block that embeds an attachment (docs/UI.md "PDF viewer": "Rysuj na
-// tej stronie" puts the new drawing under the PDF it was drawn on, in a note that is not open in an
-// editor). Pure: content in, content out — untouched bytes and line endings stay as they were. Part
+// A block placed right after (or before) the block that embeds an attachment (docs/UI.md "PDF
+// viewer": "Rysuj na tej stronie" puts the new drawing under the PDF it was drawn on, in a note that
+// is not open in an editor; "Drawing editor": the drawing of the next or the previous PDF page beside
+// the current one's). Pure: content in, content out — untouched bytes and line endings stay as they were. Part
 // of the notebook module — see notebook/notebook.h.
 //
 //   insertBlockAfterEmbed("- Wykład ![[Fizyka.pdf]]\n- Dalej\n", 0, isFizyka, "![[Fizyka s. 4.svg]]")
@@ -34,5 +35,12 @@ struct EmbedInsertion {
 /// markdown::extractInline skips them).
 EmbedInsertion insertBlockAfterEmbed(const QString &content, int lineHint,
                                      const std::function<bool(QStringView target)> &embedsIt, const QString &blockBody);
+/// The same right before that block (the drawing editor's "Poprzednia strona PDF" puts the drawing
+/// of the previous page above the current one's): inserted after it as above, then moved above it
+/// (markdown::BlockDocument::moveUp: the block with its children swapped with the new one); with no
+/// block embedding it, appended as above (`afterEmbed` false).
+EmbedInsertion insertBlockBeforeEmbed(const QString &content, int lineHint,
+                                      const std::function<bool(QStringView target)> &embedsIt,
+                                      const QString &blockBody);
 
 } // namespace brulion::notebook

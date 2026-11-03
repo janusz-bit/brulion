@@ -1334,7 +1334,10 @@ and diagrams (shapes, arrows, text), on every platform.
   entries of text changed or removed here rewritten — the frontmatter, the back of the card and the
   plugin's other sections as they were; elements erased here written as deleted ones, so Obsidian,
   showing the drawing, removes them (after a save the file written is the base of the next:
-  `markSaved`). New drawings are SVGs. A plugin file opened as a page (from the page list, a link,
+  `markSaved`). A plugin file's pictures kept in their own files ("## Embedded Files") are shown:
+  `DrawingCanvas.embeddedFiles` lists them, DrawingView resolves each link as the file's own links
+  (`Workspace.resolveLink`) and hands the bytes to `provideEmbeddedFile` (kept across merges, never
+  written into the file); the previews get them through the URL (below). New drawings are SVGs. A plugin file opened as a page (from the page list, a link,
   search) is shown as its drawing: `PageView.drawingPage` → the picture view, its "Edytuj rysunek"
   opens this editor, "Pokaż jako tekst" the plugin's Markdown read-only — never the block editor.
 
@@ -1441,8 +1444,11 @@ and diagrams (shapes, arrows, text), on every platform.
   corners, other shapes sharp; no fill (Styl adds it). The tool stays (several shapes in a row) and
   the new shape is not selected. New arrows are never bound to shapes. A polygon always stands
   upright in the box dragged, whichever way it was dragged, and is Excalidraw's closed line
-  (docs/SYNTAX.md §2 "Elements"): it has no kind in the file, so no label inside (the text tool
-  writes a free text on it).
+  (docs/SYNTAX.md §2 "Elements"): it has no kind in the file. It holds a label as a shape does (the
+  text tool's tap inside it, a double tap with the select tool), stored as a text grouped with it so
+  excalidraw.com shows it too (docs/SYNTAX.md §2 "Labels in polygons"): wrapped to its widest band
+  across the middle (`drawing::labelMaxWidth`, `labelCenter`: a triangle's lower half, a callout's
+  body), the polygon stretched from its top left when the label needs the room.
 * **Selection** (Zaznacz, V): a lasso — or, with **Prostokątem**, a rectangle dragged out — (dashed,
   in `Theme.info`, a 10 % fill) takes every element at
   least half inside it (its points; a box's corners, edge middles and centre), a tap the topmost
@@ -1455,11 +1461,13 @@ and diagrams (shapes, arrows, text), on every platform.
   drawn, moved or written: the pen's colours (recolour; on narrow windows one swatch opening them
   — a highlighter stays one), **Styl** (below), **Duplikuj** (Ctrl+D: copies 10 units right and
   down, selected), **Na wierzch** (Ctrl+Shift+]), **Na spód** (Ctrl+Shift+[: above a locked
-  backdrop; both in Więcej on narrow windows), **Więcej** (**Obróć o 90°**, **Odbij w poziomie**,
+  backdrop; both in Więcej on narrow windows), **Więcej** (**Kopiuj**, Ctrl+C, **Wytnij**, Ctrl+X —
+  as Excalidraw's clipboard, below —, **Obróć o 90°**, **Odbij w poziomie**,
   Shift+H, **Odbij w pionie**, Shift+V, **Grupuj**, Ctrl+G, **Rozgrupuj**, Ctrl+Shift+G: one outermost
   group added or taken away), **Usuń** (Delete / Backspace). Keys: Ctrl+A (everything), Escape (a lasso or a shape in progress dropped,
   else the selection cleared), the arrows (move it 1 unit, with Shift 10), Ctrl+] / Ctrl+[ (one
-  step up / down). Another tool clears the selection; undo, redo and a merge keep the selected
+  step up / down), Ctrl+Shift+← / → / ↑ / ↓ (align left, right, top, bottom), Alt+H / Alt+V
+  (distribute across, down — Excalidraw's keys). Another tool clears the selection; undo, redo and a merge keep the selected
   elements that still exist.
 * **The frame's handles** (`DrawingCanvas::selectionFrame`, core `drawing::resizedFrame`,
   `resizeElements`, `rotateElements`): the frame of one element is its own box (a text's, a
@@ -1489,11 +1497,18 @@ and diagrams (shapes, arrows, text), on every platform.
   highlighter's 3 / 5 / 8), **Rodzaj linii**, **Rogi** (rectangles Excalidraw's adaptive roundness,
   diamonds, lines and arrows its proportional one; a line or an arrow then curves, a polygon too;
   not elbow arrows), **Początek linii** / **Koniec linii** (lines and arrows), **Rozmiar tekstu**
-  (the four sizes; laid out again, so a label's shape may grow), **Krycie** (100 / 75 / 50 / 25 %;
-  everything). Each row shows the first element that has it. One undo step a choice, the panel stays
+  (the four sizes; laid out again, so a label's shape may grow), **Wyrównaj** (two parts or more —
+  an outermost group, a shape or an arrow with its label, any other element, each moved as a whole
+  by the box it covers, a rotated element by its turned outline: `DrawingCanvas.alignSelection`, core
+  `drawing::alignElements` —: icons for left, the middle across, right, top, the middle down, bottom;
+  with three parts or more also **Rozłóż w poziomie** / **w pionie**, `distributeSelection`,
+  `drawing::distributeElements`: the outermost parts stay, the others get equal gaps between their
+  boxes, sorted by their middles — equal steps between their middles when they overlap too much, as
+  Excalidraw distributes; bound arrows and labels follow as when moved), **Krycie** (100 / 75 / 50 /
+  25 %; everything). Each row shows the first element that has it. One undo step a choice, the panel stays
   open, inside the view and scrolling when it does not fit; a choice that changes nothing is no edit.
 * **Text** (Tekst, T): a tap on the paper writes a new text there (its first line's middle at the
-  tap), a tap on a text edits it, a tap inside a shape writes its label; with the select tool a
+  tap), a tap on a text edits it, a tap inside a shape or a polygon writes its label; with the select tool a
   double tap does the same. **DrawingTextEditor** opens on the paper in the text's font, size
   (× zoom), colour (as the paper shows it) and alignment — as wide as the text, a label as wide as
   it wraps in its shape (Excalidraw's getBoundTextMaxWidth: a rectangle's width, the widest
@@ -1546,7 +1561,20 @@ and diagrams (shapes, arrows, text), on every platform.
   **"Ustaw podkład"**), **"Inna strona PDF…"** (when the backdrop is a PDF's page and PDFs can be
   drawn here; the file renamed or gone: "Pliku … nie ma już w notatniku" — renames do not follow
   into drawings) and **"Usuń podkład"** — each one undo step (`DrawingCanvas.setBackdrop`,
-  `removeBackdrop`; `hasBackdrop`, `backdropPath`, `backdropPage`). A thin progress line runs
+  `removeBackdrop`; `hasBackdrop`, `backdropPath`, `backdropPage`), and on a PDF's page **"Poprzednia
+  strona PDF"** / **"Następna strona PDF"** (PgUp / PgDown; `DrawingView.stepPage`): the drawing of
+  page N − 1 / N + 1 of the same PDF in the note this drawing belongs to — the note it was opened
+  from (the route's `from`: PageController::openDrawing sets it) when that embeds it, else the first
+  note linking to it (`Workspace.noteOfDrawing`) —: the first drawing that note embeds on that page
+  opens (`Workspace.drawingsOnPdfPage`); none — a new one is made as "Rysuj na tej stronie" makes it
+  ("<PDF> s. N.svg", Jak motyw, the page prepared with the progress line) and embedded in that note
+  in a block of its own right **before** (the previous page) or **after** (the next) the block that
+  embeds this drawing (`Workspace.addDrawingBeside`: `notebook::insertBlockBeforeEmbed` /
+  `insertBlockAfterEmbed`, compare and swap; no note: today's journal, with a toast). This drawing is
+  saved first; the other one replaces it in the route (Back returns to the note). Page 1 has no
+  previous page, the last page no next one ("To pierwsza / ostatnia strona PDF-a."); a PDF that is
+  gone or unreadable says so. Where PDFs cannot be drawn (the browser) the entries are not there, as
+  "Inna strona PDF…". A thin progress line runs
   over the paper while a picture is prepared; one ready during a stroke, a shape or a text is set
   when that ends, one for a drawing closed meanwhile is dropped (its imported copy too), and one
   that would make the file unreadable is refused with a toast ("tooLarge"). The backdrop is locked: the
@@ -1567,6 +1595,15 @@ and diagrams (shapes, arrows, text), on every platform.
   only inside QtWebEngine); the browser — none (Qt has no Qt PDF for WebAssembly): there pictures
   only, while drawings on PDF pages made elsewhere show and edit normally (their pixels are in the
   file). Sizes: docs/PERFORMANCE.md "Rozmiar".
+* **Clipboard** (`DrawingCanvas.copySelection`, `cutSelection`, `paste`; core `drawing/clipboard.h`,
+  docs/SYNTAX.md §2 "Clipboard"): Ctrl+C / Ctrl+X and the selection bar's Więcej put the selection on
+  the system clipboard as Excalidraw's clipboard (`{"type":"excalidraw/clipboard",…}` as text), so
+  excalidraw.com — and another drawing in Brulion — pastes it; Ctrl+V and **Wklej** (the paper's
+  menu; on phones Więcej) paste Excalidraw's elements (copied in excalidraw.com, a `.excalidraw`
+  file's text, Brulion's own) with new ids, their middle at the mouse pointer over the paper, else
+  in the middle of the view — selected, the select tool chosen, one undo step —, or plain text as a
+  new text there. Elements Brulion does not draw (frames, embedded pages) are left out with a toast
+  ("Pominięto N wklejonych elementów…"); a clipboard with nothing for a drawing says so.
 * **Saving:** by itself, 1.2 s after the last change, and when the route changes, the view goes
   (Back, Gotowe, another view) and the app leaves the foreground (`Workspace.writeAttachment`:
   atomic, the replaced version kept in History as for notes). A text being written goes in first
@@ -1640,7 +1677,10 @@ and diagrams (shapes, arrows, text), on every platform.
   parser — `tst_editor_picturesize largeDrawingSizeIsCached`); one it does not draw (frames)
   shows the plugin's export beside it (`Szkic.excalidraw.svg` / `.png`, `editor::drawingExportOf`)
   or else its elements with a dashed grey box for each of the others (`drawing::previewDrawing`) —
-  never a blank picture. A `.md` file is read only when it is a plugin drawing. It runs in Qt
+  never a blank picture. A plugin drawing's pictures in their own files ("## Embedded Files") are
+  named in its URL (`&f=<fileId>:<absolute path>`, the links resolved by `Workspace.drawingUrl`, the
+  file's entries read once per version, the links on every call) and shown in place of grey
+  placeholders. A `.md` file is read only when it is a plugin drawing. It runs in Qt
   Quick's image reader thread (the browser: the GUI thread) and only reads the file. A theme switch loads the other URL; `retainWhileLoading` keeps
   the shown picture — and the embed's frame its size — until it is there.
 * View contract: `title`, `editing` (always), `toolbarDocked` (phones),
@@ -1652,12 +1692,18 @@ vectors and the fixture generator's port, malformed and random input; the plugin
 compressed, json, CRLF, commented text, a frame, the oldest form — read, written back with every
 byte around the block kept, deleted elements, text entries following edits — a text only moved,
 recoloured or carried by its shape keeps its Markdown (links, transclusions), also across saves —,
-crafted files read in linear time, the one API of drawing files, the `.excalidraw` layout — type
+crafted files read in linear time, the pictures of "## Embedded Files", the one API of drawing files, the `.excalidraw` layout — type
 first, still a drawing beyond 4 KB), `tst_drawing_elements` (every kind of element read —
 `excalidraw_shapes.*` —, malformed ones normalised or foreign, written back byte for byte, a
 changed one's version, new elements as excalidraw.com reads them, fractional indices, corners,
 arrowheads, hatching, hit tests, the lasso, every edit, undo diffs of random edits, the SVG of
-shapes and text, random elements), `tst_drawing_merge` (the merge: new here on top, changed here
+shapes and text, random elements; aligning and distributing — groups, labels, rotated, locked,
+overlapping, bound arrows, nothing stamped when in place —; labels in every polygon — inside, grown,
+moved, turned, mirrored, resized, deleted — and how the scene stores them: grouped, read back, copied
+in excalidraw.com, marks and groups that make no label), `tst_drawing_clipboard` (Excalidraw's
+clipboard both ways: what is copied, pasted back with new ids, groups and bindings, excalidraw.com's
+own with a frame, an embedded page and deleted elements, a scene, refused and malformed text, the
+limit), `tst_drawing_merge` (the merge: new here on top, changed here
 wins, deleted here / there, a backdrop at the bottom, an unknown base, versions, Polish ids, random
 merges keeping their invariants; how two versions relate — counts, the same drawing, an older one;
 Nextcloud's merge of files: SVG, `.excalidraw`, plugin files with their Markdown, and everything it
@@ -1676,6 +1722,10 @@ merge with shapes, text drawn in a worker thread, 600 shapes; plugin files loade
 format, a stroke erased after a save marked deleted, a text's link kept when moved and its edit
 kept in later saves, another device's file merged into theirs, the oldest form and a frame read-only, a `.excalidraw` saved as one; the previews of plugin files and
 the plugin's export standing in),
+`alignAndDistribute`, `polygonLabelsWithTheTextTool`, `copyAndPaste` (the system clipboard),
+`excalidrawMarkdownEmbeddedPictures`, `imageProviderEmbeddedPictures` (`tst_drawingcanvas`),
+`drawingsOfNeighbouringPages` (`tst_workspace_pdf`), `insertBlockBeforeEmbed` (`tst_notebook_embeds`),
+`excalidrawDrawingsAsPictures` (`tst_io_export`: HTML website and document, Pandoc),
 `tst_drawing_qml` (the route and its notices, the background menu, a drawing of shapes with the
 shapes' menu and everything selected, a frame read-only, embeds and the picture view in the real
 app, Obsidian Excalidraw plugin drawings — editable, a frame, the oldest form, opened as a page,

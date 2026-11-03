@@ -5,8 +5,11 @@
 // at once (a new URL: Qt's pixmap cache keeps both).
 //
 //   image://drawing/<absolute file path, percent-encoded>?v=<mtime>-<size>&dark=0|1
+//                   [&f=<fileId>:<absolute path of an embedded picture>…]
 //   (Workspace::drawingUrl builds it; `v` only keeps Qt's cache honest when the file changes;
-//   `dark`: the app is dark — an "auto" drawing follows it, a "light" or "dark" one does not.)
+//   `dark`: the app is dark — an "auto" drawing follows it, a "light" or "dark" one does not;
+//   `f`: the pictures an Obsidian Excalidraw plugin file keeps in their own files — its "## Embedded
+//   Files", their links resolved by the app —, shown in place of grey placeholders.)
 //
 // The files: Brulion's SVG (and Excalidraw's "Embed scene" SVG), a `.excalidraw` scene and an
 // Obsidian Excalidraw plugin file (`*.excalidraw.md`, any `.md` with the plugin's frontmatter key;
@@ -43,6 +46,8 @@ public:
     static constexpr qint64 MaxFileBytes = 64 * 1024 * 1024;
     /// Largest side of a preview (px); a larger requested size is scaled down, aspect kept.
     static constexpr int MaxSide = 4096;
+    /// Most pictures of an Excalidraw plugin file's "## Embedded Files" a preview reads.
+    static constexpr int MaxEmbeddedPictures = 200;
 
     /// The preview URL of the drawing file at `absolutePath` (see above).
     static QUrl url(const QString &absolutePath, const QString &version, bool dark);

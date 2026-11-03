@@ -32,7 +32,9 @@
 // from the file and gone from the drawing are written as deleted ones (`isDeleted: true`, a
 // "tombstone"): the plugin, showing the drawing while the file changes under it, removes only
 // those. The plugin's oldest form (the scene as one line under "# Drawing", no code block) is read,
-// never written.
+// never written. Pictures the plugin keeps in their own files ("## Embedded Files": embeddedFiles())
+// are put into the drawing by the app to show them (embeddedFileEntry(): marked) and never written
+// into the scene.
 #pragma once
 
 #include "drawing/drawing.h"
@@ -116,6 +118,29 @@ std::optional<ExcalidrawMarkdownRead> readExcalidrawMarkdown(QByteArrayView byte
 /// file's tombstones are kept (but those whose id is in the drawing again).
 /// Precondition: layout.encoding != Legacy.
 QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawing &drawing, qint64 now);
+
+/// A picture the plugin keeps beside the scene, not in it (its "## Embedded Files" section:
+/// `<fileId>: [[Obraz.png]]` — the scene's image element names the file id, the scene's `files`
+/// has no entry for it): the file id and the link's target (an alias "|…" and a heading "#…" left
+/// out; Obsidian resolves it as any link of the file). The section's other entries (LaTeX `$$…$$`,
+/// web addresses, Mermaid) are none.
+struct EmbeddedFile {
+    QString fileId;
+    QString link;
+
+    friend bool operator==(const EmbeddedFile &, const EmbeddedFile &) = default;
+};
+/// The pictures a plugin file's "## Embedded Files" section names, in its order (the first entry of
+/// a file id).
+QList<EmbeddedFile> embeddedFiles(QByteArrayView bytes);
+/// The mark of a scene file entry the app made of an embedded picture to show it
+/// (embeddedFileEntry()): writeExcalidrawMarkdown() leaves such entries out — the picture stays in
+/// its own file, as the plugin keeps it.
+inline constexpr QStringView EmbeddedFileKey = u"brulionEmbedded";
+/// The scene file entry showing an embedded picture's bytes: {id, mimeType, dataURL, brulionEmbedded:
+/// true} — a PNG, JPEG, GIF, WebP or SVG by its first bytes; nullopt for anything else or beyond
+/// MaxSceneBytes.
+std::optional<QJsonObject> embeddedFileEntry(const QString &fileId, QByteArrayView bytes);
 
 /// JSON.stringify(value, null, indent)'s layout: one member or item a line, `"key": value`, "{}"
 /// and "[]" when empty; scalars as QJsonDocument writes them, object keys in QJsonObject's order

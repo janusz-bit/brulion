@@ -26,7 +26,8 @@
 // circle, 15° steps; the tool stays), "text" (a tap: a new text — or the text, the shape's label
 // tapped — edited in QML's DrawingTextEditor: textEditRequested → commitText). The selection's
 // actions: deleteSelection, duplicateSelection, recolorSelection, styleSelection, rotateSelection,
-// flipSelection, groupSelection, ungroupSelection, reorderSelection, nudgeSelection, selectAll (QML's
+// flipSelection, groupSelection, ungroupSelection, reorderSelection, alignSelection,
+// distributeSelection, nudgeSelection, selectAll, copySelection, cutSelection, paste (QML's
 // DrawingSelectionBar and keys). Locked elements are never selected, moved or erased.
 //
 // Input (the rules of docs/UI.md "Drawing editor"):
@@ -127,7 +128,8 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(QRectF selectionOuterRect READ selectionOuterRect NOTIFY selectionChanged FINAL)
     /// What the selection looks like and which parts of a style it has (styleSelection()):
     /// { fillable, fill, fillStyle, thick, thickness, dashable, strokeStyle, opacity, roundable,
-    /// rounded, text, fontSize, heads, startHead, endHead, canGroup, canUngroup } — each value that
+    /// rounded, text, fontSize, heads, startHead, endHead, canGroup, canUngroup, canAlign,
+    /// canDistribute } — each value that
     /// of the first selected element that has that part.
     Q_PROPERTY(QVariantMap selectionStyle READ selectionStyle NOTIFY selectionChanged FINAL)
     /// How a drag with the select tool takes elements: "lasso" or "box" (a rectangle).
@@ -189,6 +191,11 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(bool hasBackdrop READ hasBackdrop NOTIFY contentChanged FINAL)
     Q_PROPERTY(QString backdropPath READ backdropPath NOTIFY contentChanged FINAL)
     Q_PROPERTY(int backdropPage READ backdropPage NOTIFY contentChanged FINAL)
+    /// The pictures an Obsidian Excalidraw plugin file keeps in their own files (its "## Embedded
+    /// Files": core drawing::embeddedFiles): [{ fileId, link }] — QML resolves each link from the
+    /// file's path and hands the picture's bytes to provideEmbeddedFile(), so they show instead of
+    /// grey placeholders. They are never written into the file.
+    Q_PROPERTY(QVariantList embeddedFiles READ embeddedFiles NOTIFY embeddedFilesChanged FINAL)
 
 public:
     explicit DrawingCanvas(QQuickItem *parent = nullptr);
@@ -283,6 +290,11 @@ public:
     bool hasBackdrop() const;
     QString backdropPath() const;
     int backdropPage() const;
+    QVariantList embeddedFiles() const { return m_embeddedLinks; }
+    /// The bytes of the embedded picture `fileId` (embeddedFiles): shown from now on, also after a
+    /// merge (drawing::embeddedFileEntry: a PNG, JPEG, GIF, WebP or SVG). False: no such entry, or
+    /// no picture.
+    Q_INVOKABLE bool provideEmbeddedFile(const QString &fileId, const QByteArray &bytes);
 
     /// Show the drawing in `bytes` (Brulion's SVG, excalidraw.com's "Embed scene" SVG, a
     /// .excalidraw file, an Obsidian Excalidraw plugin file; empty: a new drawing — an SVG). ""
@@ -347,8 +359,31 @@ public:
     Q_INVOKABLE void ungroupSelection();
     /// "forward", "backward", "front", "back".
     Q_INVOKABLE void reorderSelection(const QString &how);
+    /// Line the selection's parts (groups, a shape with its label, other elements) up by their
+    /// boxes: "left", "center", "right", "top", "middle", "bottom" (core drawing::alignElements;
+    /// two parts or more — selectionStyle.canAlign).
+    Q_INVOKABLE void alignSelection(const QString &how);
+    /// Space the selection's parts evenly: "horizontal", "vertical" (core
+    /// drawing::distributeElements; three parts or more — selectionStyle.canDistribute).
+    Q_INVOKABLE void distributeSelection(const QString &axis);
     /// Move the selection by (dx, dy) scene units (the arrow keys).
     Q_INVOKABLE void nudgeSelection(qreal dx, qreal dy);
+    /// Copy the selection to the system clipboard as Excalidraw's clipboard (text: core
+    /// drawing::clipboardJson) — excalidraw.com and other drawings paste it. False: nothing copied.
+    Q_INVOKABLE bool copySelection();
+    /// Copy the selection, then delete it (one undo step). False: nothing copied.
+    Q_INVOKABLE bool cutSelection();
+    /// Paste what the system clipboard holds — one undo step, the pasted elements selected:
+    /// Excalidraw's elements (core drawing::parseClipboard / pasteElements: excalidraw.com's
+    /// clipboard, a scene, what copySelection() wrote) with their middle at the mouse pointer over
+    /// the paper, else in the middle of the view; plain text (at most MaxPastedText characters) as a
+    /// new text there. { pasted (elements; 0 nothing pasted), skipped (elements Brulion does not draw:
+    /// frames, embedded pages), text (it was plain text) }.
+    Q_INVOKABLE QVariantMap paste();
+    /// Paste `text` as paste() pastes the clipboard's (tests).
+    Q_INVOKABLE QVariantMap pasteText(const QString &text);
+    /// The longest plain text paste() writes as a text.
+    static constexpr qsizetype MaxPastedText = 20000;
     /// Drop a lasso, a move or a shape in progress (Escape); false when there is none.
     Q_INVOKABLE bool cancelGesture();
     /// Text: QML shows its editor for `request` (textEditRequested) and calls commitText() with what
@@ -406,6 +441,7 @@ Q_SIGNALS:
     void textEditRequested(const QVariantMap &request);
     /// A press on the paper while a text is written: QML commits it.
     void textCommitRequested();
+    void embeddedFilesChanged();
     void backgroundChanged();
     void themeChanged();
     void paperChanged();
@@ -612,6 +648,12 @@ private:
     drawing::FileFormat m_format = drawing::FileFormat::Svg;
     bool m_formatKnown = false;
     std::shared_ptr<const drawing::ExcalidrawMarkdown> m_markdown;
+    /// An Excalidraw plugin file's embedded pictures: [{fileId, link}], and those provided (scene
+    /// file entries marked drawing::EmbeddedFileKey: put into every document shown, never written).
+    QVariantList m_embeddedLinks;
+    QJsonObject m_embeddedFiles;
+    /// m_embeddedLinks of a file read (embeddedFilesChanged() when they differ, or `always`).
+    void readEmbeddedLinks(const QByteArray &bytes, bool always);
     bool m_writable = true;
     bool m_modified = false;
     /// The drawing at the last load or save (takeExternal() merges against it).
@@ -682,6 +724,8 @@ private:
     QPointF m_pinchScene;
     int m_touchDrawId = -1;
     QPointF m_hover{-1, -1};
+    /// Where the mouse is over the paper (paste()); none when it left.
+    std::optional<QPointF> m_pointer;
     /// A stylus gesture taken from the window's tablet events (see the header).
     bool m_tabletGesture = false;
     /// The gesture in progress is the fingers' (a pen landing ends it: yieldTouchToPen()).

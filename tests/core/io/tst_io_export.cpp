@@ -13,6 +13,7 @@
 #include "markdown/math.h"
 #include "markdown/parse.h"
 
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -626,6 +627,69 @@ private Q_SLOTS:
         QVERIFY(html.contains(u"href=\"#n4\""_s));
         QVERIFY(html.contains(u"<a class=\"tag\" href=\"#n3\">#zakupy</a>"_s)); // the page the tag names
         QVERIFY(!html.contains(u"<script>"_s));
+    }
+
+    void excalidrawDrawingsAsPictures()
+    {
+        // Obsidian Excalidraw plugin drawings (`*.excalidraw.md`): embedded, linked as an attachment
+        // and as a page — exported as their picture: Brulion's SVG (with the picture the plugin keeps
+        // in its own file), or the plugin's export beside the file; never the plugin's Markdown.
+        const auto data = [](const QString &name) {
+            QFile f(QStringLiteral(BRULION_TEST_DATA "/drawing/") + name);
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        };
+        const QByteArray png = QByteArray::fromBase64(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=");
+        ExportInput in;
+        in.files = {
+                iotest::bytes(u"Excalidraw/Szkic ćwiczeń.excalidraw.md"_s, data(u"obsidian_mixed.excalidraw.md"_s)),
+                iotest::bytes(u"Excalidraw/Pasted Image 20261028143205.png"_s, png),
+                iotest::bytes(u"Excalidraw/Plan.excalidraw.md"_s, data(u"obsidian_freedraw.excalidraw.md"_s)),
+                iotest::bytes(u"Excalidraw/Plan.excalidraw.png"_s, "\x89PNG-eksport-wtyczki"),
+                iotest::text(u"Wykład.md"_s, u"- ![[Szkic ćwiczeń.excalidraw]]\n- ![[Szkic ćwiczeń.excalidraw.md]]\n"
+                                             u"- ![[Plan.excalidraw]]\n- [[Szkic ćwiczeń.excalidraw]]\n"_s),
+        };
+        in.vaultName = u"Skarbiec"_s;
+        in.now = QDateTime(QDate(2026, 10, 15), QTime(12, 0), iotest::warsaw());
+
+        // One document: the pictures as data: URIs, Brulion's SVG with the pasted picture in it.
+        const QString single = QString::fromUtf8(exportWith(u"html-single"_s, in).data);
+        QVERIFY(!single.contains(u"compressed-json"_s));
+        QVERIFY(!single.contains(u"Excalidraw Data"_s));
+        const QString svgPrefix = u"<img class=\"drawing\" src=\"data:image/svg+xml;base64,"_s;
+        const qsizetype at = single.indexOf(svgPrefix);
+        QVERIFY2(at >= 0, qPrintable(single.left(4000)));
+        const qsizetype from = at + svgPrefix.size();
+        const QByteArray svg = QByteArray::fromBase64(single.mid(from, single.indexOf(u'"', from) - from).toLatin1());
+        QVERIFY(svg.contains("<svg"));
+        QVERIFY(svg.contains(QByteArray(QByteArray("data:image/png;base64,") + png.toBase64())));
+        // The plugin's own export of Plan is used as it is.
+        QVERIFY(single.contains(u"src=\"data:image/png;base64,"_s
+                                + QString::fromLatin1(QByteArray("\x89PNG-eksport-wtyczki").toBase64())));
+
+        // The website: the picture as a file beside the drawing, the embeds and the page show it.
+        const QList<FileEntry> site = readZip(exportWith(u"html-site"_s, in).data);
+        QVERIFY(iotest::entryData(site, u"Skarbiec/Excalidraw/Szkic ćwiczeń.excalidraw.svg"_s).contains("<svg"));
+        const QString lecture = textOf(site, u"Skarbiec/Wykład.html"_s);
+        QCOMPARE(lecture.count(u"<img class=\"drawing\" src=\"Excalidraw/Szkic%20ćwiczeń.excalidraw.svg\""_s), 2);
+        QVERIFY(lecture.contains(u"src=\"Excalidraw/Plan.excalidraw.png\""_s));
+        // A link to it leads to its page.
+        QVERIFY(lecture.contains(u"href=\"Excalidraw/Szkic%20ćwiczeń.excalidraw.html\""_s));
+        const QString page = textOf(site, u"Skarbiec/Excalidraw/Szkic ćwiczeń.excalidraw.html"_s);
+        QVERIFY(page.contains(u"<img class=\"drawing\" src=\"Szkic%20ćwiczeń.excalidraw.svg\""_s));
+        QVERIFY(!page.contains(u"compressed-json"_s));
+
+        // Pandoc: the picture in the archive, the document points at it.
+        const QList<FileEntry> pandoc = readZip(exportWith(u"pandoc"_s, in).data);
+        QVERIFY(iotest::entryData(pandoc, u"Skarbiec/Excalidraw/Szkic ćwiczeń.excalidraw.svg"_s).contains("<svg"));
+        const QString document = textOf(pandoc, u"Skarbiec/Skarbiec.md"_s);
+        QVERIFY2(document.contains(u"](Excalidraw/Szkic%20ćwiczeń.excalidraw.svg)"_s), qPrintable(document));
+        QVERIFY(!document.contains(u"compressed-json"_s));
+
+        // Exports of the vault's files add no picture of their own.
+        const QList<FileEntry> markdown = readZip(exportWith(u"markdown-zip"_s, in).data);
+        for (const FileEntry &e : markdown)
+            QVERIFY2(!e.path.endsWith(u"Szkic ćwiczeń.excalidraw.svg"_s), qPrintable(e.path));
     }
 
     void htmlHostileFileNames()

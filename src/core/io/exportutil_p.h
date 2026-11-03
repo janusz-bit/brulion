@@ -39,7 +39,18 @@ public:
     const QList<FileEntry> &attachments() const { return m_attachments; }
     const Note *note(const VaultPath &path) const;
     bool isAttachment(const VaultPath &path) const;
+    /// An attachment, or a picture the export made (madePictures()).
     const FileEntry *attachment(const VaultPath &path) const;
+    /// The pictures the export made of Obsidian Excalidraw plugin drawings (drawingPicture()), by
+    /// path: not among attachments() — exports that copy the vault's files leave them out.
+    const QList<FileEntry> &madePictures() const { return m_made; }
+    /// The picture of a note that is an Obsidian Excalidraw plugin drawing (`*.excalidraw.md`,
+    /// docs/SYNTAX.md §2 "Drawings"): the plugin's export beside it (`Szkic.excalidraw.svg`, else
+    /// `.png`), else the SVG Brulion makes of it (drawing::toSvg, the pictures of its "## Embedded
+    /// Files" in it; one Brulion does not draw: its elements with a dashed box for each of the others)
+    /// — made at `Szkic.excalidraw.svg` (madePictures()). Embeds, links to it as an attachment
+    /// and the note's own page show it. nullopt for any other note.
+    std::optional<VaultPath> drawingPicture(const VaultPath &note) const;
     /// SYNTAX §2 resolution of a link written in note `from` (notes and attachments). `target`
     /// is a parsed link target (FoundLink::target): '#' and '|' in it belong to the file name.
     std::optional<VaultPath> resolve(const QString &target, const VaultPath &from) const;
@@ -61,6 +72,9 @@ private:
     QList<FileEntry> m_attachments;
     QHash<QString, qsizetype> m_noteIndex;
     QHash<QString, qsizetype> m_attachmentIndex;
+    QHash<QString, VaultPath> m_drawingPictures;
+    QList<FileEntry> m_made;
+    QHash<QString, qsizetype> m_madeIndex;
 };
 
 /// MIME type of a file by extension ("application/octet-stream" when unknown).

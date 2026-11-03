@@ -5208,10 +5208,11 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // A second one in the same minute gets a free name.
         r = f.page.insertDrawing(0, -1, -1);
         QCOMPARE(r.value(u"path"_s).toString(), u"assets/Drawing 2026-10-15 10.00 2.svg"_s);
-        // Opening it saves the page first, then asks for the drawing route.
+        // Opening it saves the page first, then asks for the drawing route — with the page it was
+        // opened from (the drawing editor's previous / next PDF page put new drawings there).
         f.page.openDrawing(path);
         QCOMPARE(f.host.file(Page), f.text());
-        QCOMPARE(f.host.lastRoute(), (QVariantMap{{u"view"_s, u"drawing"_s}, {u"path"_s, path}}));
+        QCOMPARE(f.host.lastRoute(), (QVariantMap{{u"view"_s, u"drawing"_s}, {u"path"_s, path}, {u"from"_s, Page}}));
         // Undo takes the embed away (the file stays, as with pictures).
         f.page.undo();
         f.page.undo();

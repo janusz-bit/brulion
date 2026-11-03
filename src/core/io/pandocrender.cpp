@@ -325,7 +325,13 @@ QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
             break;
         }
         case LinkKind::Embed: {
-            if (isWebPictureTarget(l.target)) {
+            const auto drawing =
+                    m_links.drawing && !isWebPictureTarget(l.target) ? m_links.drawing(l.target) : std::nullopt;
+            if (drawing) {
+                // An Obsidian Excalidraw plugin drawing: its picture.
+                out = u"!["_s + escape(l.display.isEmpty() ? paths::basename(l.target) : l.display) + u"]("_s + *drawing
+                      + u')';
+            } else if (isWebPictureTarget(l.target)) {
                 // `![[https://…/kot.jpg]]`: a picture from the internet, like `![](https://…)`.
                 out = u"!["_s + escape(l.display) + u"]("_s + webPictureDestination(l.target) + u')';
             } else if (isAttachmentTarget(l.target)) {

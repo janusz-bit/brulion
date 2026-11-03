@@ -7,6 +7,7 @@
 #include "drawing/drawing.h"
 #include "drawing/drawingfile.h"
 #include "drawing/excalidraw.h"
+#include "drawing/excalidrawmd.h"
 #include "drawing/palette.h"
 #include "drawing/svgwrite.h"
 
@@ -119,6 +120,35 @@ bool looksDark(const QImage &picture)
         add(w - 1, y);
     }
     return n > 0 && sum / n < 0.18;
+}
+
+/// The pictures an Excalidraw plugin file keeps in their own files ("## Embedded Files"), as the
+/// URL names them (`f=<fileId>:<absolute path>`, Workspace::drawingUrl resolved their links), put
+/// into the drawing to be shown (drawing::embeddedFileEntry): at most MaxEmbeddedPictures, each a
+/// picture file within MaxFileBytes; a missing one stays a placeholder.
+void addEmbeddedPictures(drawing::Drawing &d, const QString &id)
+{
+    const qsizetype q = id.indexOf(u'?');
+    if (q < 0)
+        return;
+    const QList<std::pair<QString, QString>> items = QUrlQuery(id.mid(q + 1)).queryItems(QUrl::FullyDecoded);
+    int taken = 0;
+    for (const auto &[key, value] : items) {
+        if (key != u"f" || taken >= DrawingImageProvider::MaxEmbeddedPictures)
+            continue;
+        const qsizetype colon = value.indexOf(u':');
+        const QString fileId = value.left(std::max<qsizetype>(colon, 0));
+        const QString path = colon < 0 ? QString() : value.mid(colon + 1);
+        if (fileId.isEmpty() || d.files.contains(fileId) || path.isEmpty() || !QDir::isAbsolutePath(path)
+            || path.contains(QChar(0)) || QDir::fromNativeSeparators(path).split(u'/').contains(u".."_s))
+            continue;
+        ++taken;
+        QFile f(path);
+        if (!QFileInfo(path).isFile() || !f.open(QIODevice::ReadOnly) || f.size() > DrawingImageProvider::MaxFileBytes)
+            continue;
+        if (const std::optional<QJsonObject> entry = drawing::embeddedFileEntry(fileId, f.readAll()))
+            d.files.insert(fileId, *entry);
+    }
 }
 
 } // namespace
@@ -263,9 +293,11 @@ QImage DrawingImageProvider::requestImage(const QString &id, QSize *size, const 
     const QByteArray bytes = file.read(MaxFileBytes + 1);
     if (bytes.isEmpty() || bytes.size() > MaxFileBytes)
         return {};
-    const std::optional<drawing::DrawingFile> read = drawing::readDrawingFile(bytes);
+    std::optional<drawing::DrawingFile> read = drawing::readDrawingFile(bytes);
     if (path.endsWith(u".md"_s, Qt::CaseInsensitive) && !read)
         return {}; // a note, not a drawing
+    if (read && read->format == drawing::FileFormat::ExcalidrawMarkdown)
+        addEmbeddedPictures(read->drawing, id);
     const QString exportFile =
             read && read->format == drawing::FileFormat::ExcalidrawMarkdown && !drawing::editable(read->drawing)
                     ? editor::drawingExportOf(path)

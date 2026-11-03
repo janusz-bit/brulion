@@ -4,6 +4,8 @@
 // with the message; no app / a blocked browser tab told); "Rysuj na tej stronie" (the drawing stored
 // and embedded right after the PDF's block, byte for byte; a second one with a free name; no note or
 // a deleted one → today's journal; a failed item refused); the drawings of a page found again; the
+// drawing editor's previous / next page (the note a drawing belongs to, the new drawing before or
+// after the current one's block); the
 // thumbnails relayed by vault path with this build's renderer (a locked PDF failing with its reason).
 #include "workspace.h"
 
@@ -221,6 +223,51 @@ private Q_SLOTS:
         QVERIFY(o.ws->drawingsOnPdfPage(u"assets/wykład.pdf"_s, 3, note).isEmpty());
         QVERIFY(o.ws->drawingsOnPdfPage(u"assets/sejf.pdf"_s, 2, note).isEmpty());
         QVERIFY(o.ws->drawingsOnPdfPage(u"assets/wykład.pdf"_s, 2, u"brak.md"_s).isEmpty());
+    }
+
+    void drawingsOfNeighbouringPages()
+    {
+        // The drawing editor's previous / next PDF page: the note a drawing belongs to, the new
+        // drawing put right after (next) or before (previous) the current one's block.
+        Opened o = open(u"strony"_s);
+        QVERIFY(o.ws);
+        const QString note = u"Wykład – ćwiczenia.md"_s;
+        const QString pdf = u"assets/wykład.pdf"_s;
+        const QString two = o.ws->addDrawingOnPdfPage(pdf, preparedDrawing(pdf, 2, u"wykład"_s), note, 1)
+                                    .value(u"path"_s)
+                                    .toString();
+        QCOMPARE(two, u"assets/wykład p. 2.svg"_s);
+        // The note it was opened from — read now, before the index has seen the embed —, else the
+        // first that links to it; none for a drawing nothing embeds.
+        QCOMPARE(o.ws->noteOfDrawing(two, note), note);
+        QTRY_COMPARE(o.ws->noteOfDrawing(two, QString()), note);
+        QCOMPARE(o.ws->noteOfDrawing(two, u"Brak.md"_s), note);
+        QCOMPARE(o.ws->noteOfDrawing(u"assets/nic.svg"_s, QString()), QString());
+        QCOMPARE(o.ws->noteOfDrawing(QString(), note), QString());
+
+        const QVariantMap three = o.ws->addDrawingBeside(two, preparedDrawing(pdf, 3, u"wykład"_s), note, false);
+        QCOMPARE(three.value(u"path"_s).toString(), u"assets/wykład p. 3.svg"_s);
+        QCOMPARE(three.value(u"note"_s).toString(), note);
+        QVERIFY(!three.value(u"journal"_s).toBool());
+        const QVariantMap one = o.ws->addDrawingBeside(two, preparedDrawing(pdf, 1, u"wykład"_s), note, true);
+        QCOMPARE(one.value(u"path"_s).toString(), u"assets/wykład p. 1.svg"_s);
+        const auto target = [&](const QString &path) { return o.ws->linkTarget(path, note); };
+        QCOMPARE(readFile(o.root + u"/"_s + note),
+                 u"- Wstęp\n- Slajdy ![[wykład.pdf]]\n  - uwaga\n- ![[%1]]\n- ![[%2]]\n- ![[%3]]\n- Dalej\n"_s.arg(
+                         target(u"assets/wykład p. 1.svg"_s), target(two), target(u"assets/wykład p. 3.svg"_s)));
+        // Found again by page.
+        QCOMPARE(o.ws->drawingsOnPdfPage(pdf, 3, note).size(), 1);
+        QCOMPARE(o.ws->drawingsOnPdfPage(pdf, 1, note).first().toMap().value(u"path"_s).toString(),
+                 u"assets/wykład p. 1.svg"_s);
+        // No note: today's journal; a failed item: nothing.
+        const QVariantMap alone = o.ws->addDrawingBeside(two, preparedDrawing(pdf, 3, u"wykład"_s), QString(), false);
+        QVERIFY(alone.value(u"journal"_s).toBool());
+        QSignalSpy errors(o.ws.get(), &Workspace::errorOccurred);
+        QVariantMap broken = preparedDrawing(pdf, 4, u"wykład"_s);
+        broken.insert(u"error"_s, u"pdf"_s);
+        QVERIFY(o.ws->addDrawingBeside(two, broken, note, false).isEmpty());
+        QVERIFY(o.ws->addDrawingBeside(QString(), preparedDrawing(pdf, 4, u"wykład"_s), note, false).isEmpty());
+        QCOMPARE(errors.size(), 2);
     }
 
     void drawingIntoTheJournal()

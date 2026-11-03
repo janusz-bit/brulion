@@ -317,6 +317,17 @@ private Q_SLOTS:
             QVERIFY(model->data(model->index(row), transclusionsRole).toList().isEmpty());
         }
         QCOMPARE(embedOf(page, 2).value(u"alt"_s).toString(), u"Szkic"_s);
+        // The plugin's pasted picture (its "## Embedded Files") named in the preview's URL, its link
+        // resolved here; missing: none.
+        const auto pictures = [](const QUrl &url) {
+            return QUrlQuery(url.query()).allQueryItemValues(u"f"_s, QUrl::FullyDecoded);
+        };
+        QVERIFY(pictures(ws.drawingUrl(u"Plan.md"_s, false)).isEmpty());
+        QVERIFY(pictures(ws.drawingUrl(sketch, false)).isEmpty()); // (it has none)
+        const QString pasted = root + u"/Załączniki/Pasted Image 20261028143205.png"_s;
+        QVERIFY(writeFile(pasted, pngBytes()));
+        QTRY_COMPARE(pictures(ws.drawingUrl(u"Plan.md"_s, false)),
+                     QStringList{u"a1b2c3d4e5f60718:"_s + QFileInfo(pasted).absoluteFilePath()});
         // A note embedded: a page, as before.
         QVERIFY(embedOf(page, 4).isEmpty());
         QCOMPARE(model->data(model->index(4), transclusionsRole).toList().size(), 1);

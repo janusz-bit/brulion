@@ -26,10 +26,12 @@
 #include "drawing/svgwrite.h"
 
 #include <QBuffer>
+#include <QClipboard>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QImage>
 #include <QImageWriter>
 #include <QJsonArray>
@@ -50,6 +52,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QThread>
+#include <QUrlQuery>
 #include <QtMath>
 #include <qpa/qwindowsysteminterface.h>
 
@@ -2125,6 +2128,46 @@ private Q_SLOTS:
         QVERIFY(near(image.pixelColor(40, 20), QColor(u"#2f9e44"_s)));
     }
 
+    void imageProviderEmbeddedPictures()
+    {
+        // A plugin drawing's pasted picture kept in its own file: the URL names it (`f`, as
+        // Workspace::drawingUrl resolves it) and the preview shows it instead of the grey placeholder.
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"Plan ąę.excalidraw.md"_s);
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(fixture(u"obsidian_mixed.excalidraw.md"_s));
+        f.close();
+        QImage green(80, 60, QImage::Format_RGB32);
+        green.fill(QColor(u"#2f9e44"_s));
+        const QString picture = dir.filePath(u"Pasted Image 20261028143205.png"_s);
+        QVERIFY(green.save(picture));
+        const QRectF rect = brulion::drawing::pictureRect(
+                *brulion::drawing::readDrawing(fixture(u"obsidian_mixed.excalidraw.md"_s)));
+        const QPoint middle(int(660 - rect.left()), int(230 - rect.top())); // the image element's middle
+        brulion::drawingview::DrawingImageProvider provider;
+        const QUrl plain = brulion::drawingview::DrawingImageProvider::url(path, u"1-1"_s, false);
+        QSize size;
+        QImage image = provider.requestImage(imageId(plain), &size, QSize());
+        QVERIFY(!near(image.pixelColor(middle), QColor(u"#2f9e44"_s), 20));
+        QUrl withPicture = plain;
+        QUrlQuery query(withPicture);
+        query.addQueryItem(u"f"_s, QString::fromLatin1(QUrl::toPercentEncoding(u"a1b2c3d4e5f60718:"_s + picture)));
+        withPicture.setQuery(query);
+        image = provider.requestImage(imageId(withPicture), &size, QSize());
+        QVERIFY(near(image.pixelColor(middle), QColor(u"#2f9e44"_s), 20));
+        // A relative path, a ".." or a missing file: the placeholder.
+        for (const QString &bad : QStringList{u"a1b2c3d4e5f60718:Pasted.png"_s, u"a1b2c3d4e5f60718:/tmp/../x.png"_s,
+                                              u"a1b2c3d4e5f60718:/nie/ma.png"_s, QString(u":"_s + picture)}) {
+            QUrl other = plain;
+            QUrlQuery q(other);
+            q.addQueryItem(u"f"_s, QString::fromLatin1(QUrl::toPercentEncoding(bad)));
+            other.setQuery(q);
+            image = provider.requestImage(imageId(other), &size, QSize());
+            QVERIFY2(!near(image.pixelColor(middle), QColor(u"#2f9e44"_s), 20), qPrintable(bad));
+        }
+    }
+
     void imageProviderRefuses_data()
     {
         QTest::addColumn<QString>("id");
@@ -3037,6 +3080,151 @@ private Q_SLOTS:
         QCOMPARE(canvas->selectionCount(), 2);
         canvas->deleteSelection();
         QCOMPARE(canvas->strokeCount(), 1);
+    }
+
+    void alignAndDistribute()
+    {
+        QCOMPARE(canvas->load(shapesFile()), QString());
+        canvas->setTool(u"select"_s);
+        // One element: nothing to line up.
+        canvas->select({u"prostokat"_s});
+        QVERIFY(!canvas->selectionStyle().value(u"canAlign"_s).toBool());
+        canvas->alignSelection(u"left"_s);
+        QVERIFY(!canvas->canUndo());
+        // Three (the locked one never taken): each step one undo step.
+        canvas->selectAll();
+        QVERIFY(canvas->selectionStyle().value(u"canAlign"_s).toBool());
+        QVERIFY(canvas->selectionStyle().value(u"canDistribute"_s).toBool());
+        brulion::drawing::Drawing keep;
+        canvas->alignSelection(u"top"_s);
+        const double top = brulion::drawing::elementBounds(*elementOf(canvas, u"prostokat"_s, keep)).top();
+        QCOMPARE(brulion::drawing::elementBounds(*elementOf(canvas, u"napis"_s, keep)).top(), top);
+        QCOMPARE(brulion::drawing::elementBounds(*elementOf(canvas, u"elipsa"_s, keep)).top(), top);
+        QCOMPARE(elementOf(canvas, u"tlo"_s, keep)->box, QRectF(40, 500, 60, 60));
+        canvas->distributeSelection(u"horizontal"_s);
+        canvas->alignSelection(u"nowhere"_s); // (no such side: nothing)
+        canvas->distributeSelection(u"diagonal"_s);
+        QCOMPARE(canvas->selectionCount(), 3);
+        canvas->undo();
+        canvas->undo();
+        QCOMPARE(elementOf(canvas, u"napis"_s, keep)->box.topLeft(), QPointF(100, 300));
+        QVERIFY(!canvas->canUndo());
+    }
+
+    void polygonLabelsWithTheTextTool()
+    {
+        canvas->setTool(u"triangle"_s);
+        mouseStroke(window.get(), {100, 100}, {300, 300}, 6);
+        QCOMPARE(canvas->strokeCount(), 1);
+        const QString triangle = canvas->currentDrawing().strokes.first().id;
+        // A tap inside the (unfilled) triangle writes its label, as in a rectangle.
+        canvas->setTool(u"text"_s);
+        QSignalSpy requests(canvas, &DrawingCanvas::textEditRequested);
+        QTest::mouseClick(window.get(), Qt::LeftButton, {}, canvas->toItem(QPointF(200, 250)).toPoint());
+        QCOMPARE(requests.size(), 1);
+        const QVariantMap request = requests.takeFirst().at(0).toMap();
+        QCOMPARE(request.value(u"containerId"_s).toString(), triangle);
+        QCOMPARE(request.value(u"align"_s).toString(), u"center"_s);
+        canvas->commitText(request, u"Trójkąt"_s);
+        const brulion::drawing::Drawing d = canvas->currentDrawing();
+        QCOMPARE(d.strokes.size(), 2);
+        QCOMPARE(d.strokes.last().containerId, triangle);
+        // Saved as excalidraw.com shows it: a free text grouped with the triangle.
+        const std::optional<brulion::drawing::Drawing> back = brulion::drawing::readDrawing(canvas->fileBytes());
+        QVERIFY(back);
+        QCOMPARE(back->strokes.last().containerId, triangle);
+        QVERIFY(canvas->fileBytes().size() > 0);
+        // Taken with the triangle, edited again with a double tap.
+        canvas->setTool(u"select"_s);
+        canvas->select({triangle});
+        QCOMPARE(canvas->selectionCount(), 2);
+        canvas->clearSelection();
+        canvas->editText(d.strokes.last().id);
+        QCOMPARE(requests.size(), 1);
+        QCOMPARE(requests.takeFirst().at(0).toMap().value(u"containerId"_s).toString(), triangle);
+        canvas->cancelText();
+    }
+
+    void copyAndPaste()
+    {
+        QCOMPARE(canvas->load(shapesFile()), QString());
+        canvas->setTool(u"select"_s);
+        QClipboard *clipboard = QGuiApplication::clipboard();
+        QVERIFY(clipboard);
+        // Nothing selected: nothing copied.
+        QVERIFY(!canvas->copySelection());
+        canvas->select({u"prostokat"_s, u"napis"_s});
+        QVERIFY(canvas->copySelection());
+        const QJsonObject clip = QJsonDocument::fromJson(clipboard->text().toUtf8()).object();
+        QCOMPARE(clip.value(u"type"_s).toString(), u"excalidraw/clipboard"_s);
+        QCOMPARE(clip.value(u"elements"_s).toArray().size(), 2);
+        // Pasted in the middle of the view (no mouse over it): new ids, selected, one undo step.
+        const QVariantMap out = canvas->paste();
+        QCOMPARE(out.value(u"pasted"_s).toInt(), 2);
+        QCOMPARE(out.value(u"skipped"_s).toInt(), 0);
+        QCOMPARE(canvas->strokeCount(), 6);
+        const QStringList pasted = canvas->selection();
+        QCOMPARE(pasted.size(), 2);
+        QVERIFY(!pasted.contains(u"prostokat"_s) && !pasted.contains(u"napis"_s));
+        canvas->undo();
+        QCOMPARE(canvas->strokeCount(), 4);
+        // Cut: copied, then gone.
+        canvas->select({u"elipsa"_s});
+        QVERIFY(canvas->cutSelection());
+        QCOMPARE(canvas->strokeCount(), 3);
+        QCOMPARE(canvas->paste().value(u"pasted"_s).toInt(), 1);
+        QCOMPARE(canvas->strokeCount(), 4);
+        // Plain text: a new text; nothing for a drawing: nothing.
+        QVariantMap text = canvas->pasteText(u"Zażółć gęślą jaźń\r\nDruga linia"_s);
+        QVERIFY(text.value(u"text"_s).toBool());
+        QCOMPARE(canvas->currentDrawing().strokes.last().text, u"Zażółć gęślą jaźń\nDruga linia"_s);
+        QCOMPARE(canvas->pasteText(QString()).value(u"pasted"_s).toInt(), 0);
+        QCOMPARE(canvas->pasteText(u"   "_s).value(u"pasted"_s).toInt(), 0);
+        QCOMPARE(canvas->pasteText(QString(DrawingCanvas::MaxPastedText + 1, u'x')).value(u"pasted"_s).toInt(), 0);
+        // excalidraw.com's frame: left out, said.
+        const QString frame =
+                uR"({"type":"excalidraw/clipboard","elements":[{"id":"f","type":"frame","x":0,"y":0,"width":10,"height":10}],"files":{}})"_s;
+        text = canvas->pasteText(frame);
+        QCOMPARE(text.value(u"pasted"_s).toInt(), 0);
+        QCOMPARE(text.value(u"skipped"_s).toInt(), 1);
+    }
+
+    void excalidrawMarkdownEmbeddedPictures()
+    {
+        // The plugin keeps a pasted picture in its own file: QML resolves the link and hands the
+        // bytes over; it is painted, and never written into the plugin's scene.
+        const QByteArray bytes = fixture(u"obsidian_mixed.excalidraw.md"_s);
+        QSignalSpy embedded(canvas, &DrawingCanvas::embeddedFilesChanged);
+        QCOMPARE(canvas->load(bytes), QString());
+        QCOMPARE(embedded.size(), 1);
+        const QVariantList files = canvas->embeddedFiles();
+        QCOMPARE(files.size(), 1);
+        QCOMPARE(files.first().toMap().value(u"fileId"_s).toString(), u"a1b2c3d4e5f60718"_s);
+        QCOMPARE(files.first().toMap().value(u"link"_s).toString(), u"Pasted Image 20261028143205.png"_s);
+        QImage red(8, 8, QImage::Format_RGB32);
+        red.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        red.save(&buffer, "PNG");
+        QVERIFY(!canvas->provideEmbeddedFile(u"nie ma"_s, png));
+        QVERIFY(!canvas->provideEmbeddedFile(u"a1b2c3d4e5f60718"_s, "to nie obraz"));
+        QVERIFY(canvas->provideEmbeddedFile(u"a1b2c3d4e5f60718"_s, png));
+        QVERIFY(canvas->currentDrawing().files.contains(u"a1b2c3d4e5f60718"_s));
+        // Written: the scene as the plugin keeps it, without the picture.
+        mouseStroke(window.get(), {100, 400}, {300, 460}, 10);
+        const std::optional<brulion::drawing::DrawingFile> back =
+                brulion::drawing::readDrawingFile(canvas->fileBytes());
+        QVERIFY(back);
+        QVERIFY(!back->drawing.files.contains(u"a1b2c3d4e5f60718"_s));
+        QVERIFY(!canvas->fileBytes().contains("data:image/png"));
+        // Another device's version taken in: still shown.
+        QVERIFY(canvas->takeExternal(bytes));
+        QVERIFY(canvas->currentDrawing().files.contains(u"a1b2c3d4e5f60718"_s));
+        // Another file: none.
+        QCOMPARE(canvas->load(shapesFile()), QString());
+        QVERIFY(canvas->embeddedFiles().isEmpty());
+        QVERIFY(!canvas->currentDrawing().files.contains(u"a1b2c3d4e5f60718"_s));
     }
 
     void eraserErasesShapesNotLocked()

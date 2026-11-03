@@ -1,8 +1,9 @@
 // Workspace — PDFs of the notebook (docs/UI.md "PDF viewer"): the thumbnails of embedded PDFs
 // (EditorHost::pdfThumbnail, cached as PNG files by pdfview::PdfThumbnails), "Otwórz w innej
 // aplikacji" (platform::openFileExternally: the system's viewer, Android's ACTION_VIEW, the
-// browser's new tab), and "Rysuj na tej stronie" (a drawing on a PDF page, embedded right after the
-// PDF in the note the viewer was opened from: notebook::insertBlockAfterEmbed).
+// browser's new tab), "Rysuj na tej stronie" (a drawing on a PDF page, embedded right after the
+// PDF in the note the viewer was opened from: notebook::insertBlockAfterEmbed) and the drawing
+// editor's previous / next PDF page (the neighbouring page's drawing beside the current one's).
 #include "workspace.h"
 
 #include "openexternal.h"
@@ -251,28 +252,32 @@ QVariantMap Workspace::addDrawingOnPdfPage(const QString &rawPdfPath, const QVar
     if (drawing.isEmpty())
         return {}; // (saveAttachment() said why)
     const QString fromNote = paths::normalize(rawFromNote);
-    if (!fromNote.isEmpty() && paths::isMarkdown(fromNote) && m_vault->exists(fromNote)) {
-        QString target = linkTarget(drawing, fromNote);
+    const auto embedsIt = [this, &pdfPath, &fromNote](QStringView t) {
+        return attachmentPathOf(t.toString(), fromNote) == pdfPath;
+    };
+    return embedNewDrawing(drawing, fromNote, fromLine, embedsIt, false);
+}
+
+QVariantMap Workspace::embedNewDrawing(const QString &drawing, const QString &note, int line,
+                                       const std::function<bool(QStringView)> &embedsIt, bool before)
+{
+    if (!note.isEmpty() && paths::isMarkdown(note) && m_vault->exists(note)) {
+        QString target = linkTarget(drawing, note);
         if (target.isEmpty())
             target = paths::basename(drawing);
         const QString body = u"![["_s + target + u"]]"_s;
-        const auto embedsIt = [this, &pdfPath, &fromNote](QStringView t) {
-            return attachmentPathOf(t.toString(), fromNote) == pdfPath;
-        };
         // The note may change meanwhile (sync, an editor in the side panel): compare and swap.
         for (int attempt = 0; attempt < 3; ++attempt) {
             bool ok = false;
-            const QString content = m_vault->readText(fromNote, &ok);
+            const QString content = m_vault->readText(note, &ok);
             if (!ok)
                 break;
             const notebook::EmbedInsertion insertion =
-                    notebook::insertBlockAfterEmbed(content, fromLine, embedsIt, body);
-            const WriteResult written = writeIfUnchanged(fromNote, insertion.content, content);
+                    before ? notebook::insertBlockBeforeEmbed(content, line, embedsIt, body)
+                           : notebook::insertBlockAfterEmbed(content, line, embedsIt, body);
+            const WriteResult written = writeIfUnchanged(note, insertion.content, content);
             if (written == WriteResult::Written)
-                return {{u"path"_s, drawing},
-                        {u"note"_s, fromNote},
-                        {u"journal"_s, false},
-                        {u"line"_s, insertion.line}};
+                return {{u"path"_s, drawing}, {u"note"_s, note}, {u"journal"_s, false}, {u"line"_s, insertion.line}};
             if (written == WriteResult::Failed)
                 return {{u"path"_s, drawing}, {u"note"_s, QString()}, {u"journal"_s, false}};
         }
@@ -284,6 +289,63 @@ QVariantMap Workspace::addDrawingOnPdfPage(const QString &rawPdfPath, const QVar
         target = paths::basename(drawing);
     const QString written = captureToJournal(u"![["_s + target + u"]]"_s);
     return {{u"path"_s, drawing}, {u"note"_s, written}, {u"journal"_s, !written.isEmpty()}};
+}
+
+QString Workspace::noteOfDrawing(const QString &rawDrawingPath, const QString &rawFromNote) const
+{
+    const QString drawing = paths::normalize(rawDrawingPath);
+    const QString from = paths::normalize(rawFromNote);
+    if (drawing.isEmpty())
+        return {};
+    // The note it was opened from, read now (the index may not have seen a drawing just embedded).
+    if (m_vault && !from.isEmpty() && paths::isMarkdown(from) && m_vault->exists(from)) {
+        bool ok = false;
+        const QString content = m_vault->readText(from, &ok);
+        if (ok && content.contains(u"![")) {
+            for (const Link &link : markdown::extractInline(content).links) {
+                if (attachmentPathOf(link.target, from) == drawing)
+                    return from;
+            }
+        }
+    }
+    const QVariantList links = backlinks(drawing);
+    return links.isEmpty() ? QString() : links.first().toMap().value(u"path"_s).toString();
+}
+
+QVariantMap Workspace::addDrawingBeside(const QString &rawDrawingPath, const QVariantMap &prepared,
+                                        const QString &rawNote, bool before)
+{
+    if (!m_vault)
+        return {};
+    const QString current = paths::normalize(rawDrawingPath);
+    const QString pdfPath = paths::normalize(prepared.value(u"path"_s).toString());
+    const QByteArray svg = prepared.value(u"svg"_s).toByteArray();
+    if (!prepared.value(u"error"_s).toString().isEmpty() || svg.isEmpty() || pdfPath.isEmpty() || current.isEmpty()) {
+        Q_EMIT errorOccurred(tr("The drawing could not be made."));
+        return {};
+    }
+    QString name = prepared.value(u"name"_s).toString().trimmed();
+    if (name.isEmpty())
+        name = QFileInfo(paths::basename(pdfPath)).completeBaseName().trimmed();
+    if (name.isEmpty())
+        name = tr("Drawing");
+    const int page = std::max(0, prepared.value(u"page"_s).toInt());
+    const QString drawing = saveAttachment(EditorHost::drawingFileNameOn(name, page) + u".svg"_s, svg);
+    if (drawing.isEmpty())
+        return {}; // (saveAttachment() said why)
+    const QString note = paths::normalize(rawNote);
+    // Near the line that links to the current drawing (the index's), when the note is indexed.
+    int line = -1;
+    for (const QVariant &link : backlinks(current)) {
+        if (link.toMap().value(u"path"_s).toString() == note) {
+            line = link.toMap().value(u"line"_s).toInt();
+            break;
+        }
+    }
+    const auto embedsIt = [this, &current, &note](QStringView t) {
+        return attachmentPathOf(t.toString(), note) == current;
+    };
+    return embedNewDrawing(drawing, note, line, embedsIt, before);
 }
 
 QVariantList Workspace::drawingsOnPdfPage(const QString &rawPdfPath, int page, const QString &rawNote) const

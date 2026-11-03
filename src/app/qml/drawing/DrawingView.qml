@@ -17,11 +17,15 @@ import Brulion
 //    and the polygons in their menu), text (DrawingTextEditor writes it). Keys (none
 //    while a text is written): Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, P / H / E (pen, highlighter,
 //    eraser), V (select), R / O / D / L / A (rectangle, ellipse, diamond, line, arrow), T (text),
-//    Delete / Backspace (the selection), Ctrl+D (duplicate), Ctrl+A (select all), Escape (a shape
+//    Delete / Backspace (the selection), Ctrl+C / Ctrl+X / Ctrl+V (copy, cut, paste — as
+//    Excalidraw's clipboard, so excalidraw.com pastes it and Brulion pastes what it copied, plain
+//    text as a text), Ctrl+D (duplicate), Ctrl+A (select all), Escape (a shape
 //    or a lasso in progress dropped, else the selection cleared), the arrows (move the selection
 //    1, with Shift 10), Ctrl+] / Ctrl+[ (one step up / down), Ctrl+Shift+] / Ctrl+Shift+[ (to the
 //    front / back), Ctrl+G / Ctrl+Shift+G (group, ungroup), Shift+H / Shift+V (mirror across, up
-//    and down), Space held (move the paper), Ctrl+0 (the whole drawing), Ctrl++ / Ctrl+- (zoom).
+//    and down), Ctrl+Shift+arrows (align left, right, top, bottom), Alt+H / Alt+V (distribute
+//    across, down), PgUp / PgDown (the previous / next PDF page's drawing), Space held (move the
+//    paper), Ctrl+0 (the whole drawing), Ctrl++ / Ctrl+- (zoom).
 //  * Saved by itself: 1.2 s after the last change, when the route changes, the view goes and the
 //    app leaves the foreground (Workspace.writeAttachment). A text being written is written first
 //    by those but never by the 1.2 s timer, which waits until its editor closes (committing it
@@ -50,7 +54,8 @@ import Brulion
 //    it is) and puts it — a PDF's page chosen in DrawingBackdropDialog — under the drawing (a copy
 //    stored for nothing — cancelled, a locked PDF — is removed again: Workspace.discardImport); "Inna
 //    strona PDF…" chooses another page of the same PDF, "Usuń podkład" removes it. Undo takes each
-//    back.
+//    back. "Poprzednia / Następna strona PDF" (PgUp / PgDown) opens the drawing of the neighbouring
+//    page in the same note, made and embedded beside this one when there is none (stepPage()).
 // route.open (screenshots): "style" (the colours and widths) and "more" on phones, "paper" (the
 // paper's menu) on wide windows, "theme" (the background's menu; on phones "Więcej"), "shape"
 // (the shapes' menu), "select" (everything selected — or route.ids —: the selection bar),
@@ -102,6 +107,12 @@ FocusScope {
     property string backdropFor: ""
     /// A prepared backdrop waiting for the stroke, shape or text in progress to end.
     property var pendingBackdrop: null
+    /// The drawing of a neighbouring PDF page being made (stepPage()): the job preparing the page
+    /// (0 none), the drawing it goes beside, the note it goes into, before the current one or after.
+    property int pageJob: 0
+    property string pageFrom: ""
+    property string pageNote: ""
+    property bool pageBefore: false
     /// The file the paper shows (follows renames; "" none).
     property string loadedPath: ""
     property bool _writing: false
@@ -385,6 +396,78 @@ FocusScope {
         }
         root.openPageDialog(path, canvas.backdropPage)
     }
+    /// Ctrl+V, "Wklej": Excalidraw's elements (excalidraw.com's, another drawing's) or plain text
+    /// from the clipboard (DrawingCanvas.paste), saying what was left out.
+    function paste() {
+        const out = canvas.paste()
+        if (out.skipped > 0)
+            AppController.toast(qsTr("%n pasted element(s) Brulion does not draw (frames, embedded pages) left out.", "", out.skipped))
+        else if (out.pasted === 0 && root.status === "")
+            AppController.toast(qsTr("The clipboard holds nothing to paste on a drawing."))
+    }
+    /// "Poprzednia / Następna strona PDF" (PgUp / PgDown): the drawing of page N ± 1 of the
+    /// backdrop's PDF in the note this one belongs to (Workspace.noteOfDrawing: the note it was
+    /// opened from, else the first that links to it) — the first that note embeds is opened, else a
+    /// new one is made ("<PDF> s. N.svg") and embedded right before (the previous page) or after
+    /// this one's block (no note: today's journal). It replaces this drawing in the route, so Back
+    /// returns to the note.
+    function stepPage(step) {
+        const path = canvas.backdropPath
+        const page = canvas.backdropPage + step
+        if (root.status !== "" || root.pageJob > 0 || canvas.backdropPage < 1 || path === ""
+                || !DrawingBackdrops.pdfAvailable)
+            return
+        if (page < 1) {
+            AppController.toast(qsTr("This is the first page of the PDF."))
+            return
+        }
+        if (!Workspace.exists(path)) {
+            AppController.toast(qsTr("The file %1 is not in the notebook any more.").arg(path.slice(path.lastIndexOf("/") + 1)))
+            return
+        }
+        const info = DrawingBackdrops.pdfInfo(path)
+        if (info.pages < 1) {
+            AppController.toast(info.error !== "" ? info.error : DrawingBackdrops.errorText("pdf"))
+            return
+        }
+        if (page > info.pages) {
+            AppController.toast(qsTr("This is the last page of the PDF."))
+            return
+        }
+        if (!root.save())
+            return
+        const note = Workspace.noteOfDrawing(root.loadedPath, root.route && root.route.from ? root.route.from : "")
+        const existing = note !== "" ? Workspace.drawingsOnPdfPage(path, page, note) : []
+        if (existing.length > 0) {
+            AppController.replaceRoute({ view: "drawing", path: existing[0].path, from: note })
+            return
+        }
+        root.pageFrom = root.loadedPath
+        root.pageNote = note
+        root.pageBefore = step < 0
+        root.pageJob = DrawingBackdrops.prepare(path, [page], true)
+    }
+    Connections {
+        target: DrawingBackdrops
+        enabled: root.pageJob > 0
+        function onFinished(job, items, cancelled) {
+            if (job !== root.pageJob)
+                return
+            root.pageJob = 0
+            if (cancelled || root.pageFrom !== root.loadedPath)
+                return // (another drawing was opened meanwhile)
+            if (items.length === 0 || items[0].error !== "") {
+                AppController.toast(DrawingBackdrops.errorText(items.length > 0 ? items[0].error : "pdf"), "error")
+                return
+            }
+            const out = Workspace.addDrawingBeside(root.pageFrom, items[0], root.pageNote, root.pageBefore)
+            if (!out.path)
+                return
+            if (out.journal)
+                AppController.toast(qsTr("The drawing was added to today's journal."), "info")
+            AppController.replaceRoute({ view: "drawing", path: out.path, from: out.note })
+        }
+    }
     function applyBackdrop(items) {
         root.pendingBackdrop = null
         if (root.backdropFor !== root.loadedPath) {
@@ -578,6 +661,9 @@ FocusScope {
             canvas.undo()
         } else if (event.matches(StandardKey.Redo) || (ctrl && event.key === Qt.Key_Y)) {
             canvas.redo()
+        } else if ((event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) && plain
+                   && canvas.backdropPage > 0 && !canvas.busy) {
+            root.stepPage(event.key === Qt.Key_PageUp ? -1 : 1)
         } else if (event.key === Qt.Key_Space && !ctrl) {
             if (!event.isAutoRepeat)
                 canvas.panMode = true
@@ -609,6 +695,12 @@ FocusScope {
             canvas.tool = "text"
         } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && canvas.selectionCount > 0) {
             canvas.deleteSelection()
+        } else if (event.matches(StandardKey.Copy) && canvas.selectionCount > 0) {
+            canvas.copySelection()
+        } else if (event.matches(StandardKey.Cut) && canvas.selectionCount > 0) {
+            canvas.cutSelection()
+        } else if (event.matches(StandardKey.Paste)) {
+            root.paste()
         } else if (ctrl && !shift && event.key === Qt.Key_D) {
             canvas.duplicateSelection()
         } else if (event.matches(StandardKey.SelectAll)) {
@@ -626,6 +718,12 @@ FocusScope {
         } else if (event.key === Qt.Key_Escape && (canvas.busy || canvas.selectionCount > 0)) {
             if (!canvas.cancelGesture())
                 canvas.clearSelection()
+        } else if (arrows[event.key] !== undefined && canvas.selectionCount > 0 && ctrl && shift) {
+            const sides = { [Qt.Key_Left]: "left", [Qt.Key_Right]: "right", [Qt.Key_Up]: "top", [Qt.Key_Down]: "bottom" }
+            canvas.alignSelection(sides[event.key])
+        } else if (event.modifiers === Qt.AltModifier && (event.key === Qt.Key_H || event.key === Qt.Key_V)
+                   && canvas.selectionCount > 0) {
+            canvas.distributeSelection(event.key === Qt.Key_H ? "horizontal" : "vertical")
         } else if (arrows[event.key] !== undefined && canvas.selectionCount > 0 && !ctrl) {
             const step = shift ? 10 : 1
             canvas.nudgeSelection(arrows[event.key][0] * step, arrows[event.key][1] * step)
@@ -676,6 +774,8 @@ FocusScope {
             onDone: root.done()
             onBackdropRequested: root.pickBackdrop()
             onBackdropPageRequested: root.otherBackdropPage()
+            onPageStepRequested: (step) => root.stepPage(step)
+            onPasteRequested: root.paste()
             onBackdropRemoved: canvas.removeBackdrop()
             onPaperColorRequested: root.openPaperDialog()
         }
@@ -701,6 +801,18 @@ FocusScope {
                     root.applyPendingBackdrop()
                 }
                 onBusyChanged: root.applyPendingBackdrop()
+                // An Obsidian Excalidraw plugin file's pictures in their own files ("## Embedded
+                // Files"): their links resolved as the file's links, their bytes shown.
+                onEmbeddedFilesChanged: {
+                    for (const f of canvas.embeddedFiles) {
+                        const path = Workspace.resolveLink(f.link, root.loadedPath || root.routePath)
+                        if (path === "")
+                            continue
+                        const bytes = Workspace.readAttachment(path)
+                        if (bytes.byteLength > 0)
+                            canvas.provideEmbeddedFile(f.fileId, bytes)
+                    }
+                }
                 onStylusSeenChanged: {
                     if (canvas.stylusSeen && !root.stylusKnown) {
                         root.stylusKnown = true
@@ -718,13 +830,14 @@ FocusScope {
                 colors: root.penColors
             }
 
-            // A backdrop being prepared (a large photo takes a moment) or waiting for a gesture.
+            // A backdrop being prepared (a large photo takes a moment) or waiting for a gesture, the
+            // next PDF page's drawing being made.
             BProgressBar {
                 objectName: "drawingBackdropProgress"
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                visible: root.backdropJob > 0 || root.pendingBackdrop !== null
+                visible: root.backdropJob > 0 || root.pendingBackdrop !== null || root.pageJob > 0
                 indeterminate: true
             }
 
@@ -855,6 +968,8 @@ FocusScope {
             onDone: root.done()
             onBackdropRequested: root.pickBackdrop()
             onBackdropPageRequested: root.otherBackdropPage()
+            onPageStepRequested: (step) => root.stepPage(step)
+            onPasteRequested: root.paste()
             onBackdropRemoved: canvas.removeBackdrop()
             onPaperColorRequested: root.openPaperDialog()
         }

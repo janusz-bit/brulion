@@ -5,8 +5,8 @@
 # no drawing, a missing file and an empty one (a new drawing), the drawing's background menu, the
 # page embedding them and the picture view of a drawing; drawings of Obsidian's Excalidraw plugin
 # (`*.excalidraw.md`: an editable one, one with a frame and one in the plugin's oldest form —
-# read-only —, a plugin file without the suffix embedded as a page; a plugin file opened as a page
-# shows its drawing), a drawing on a slide (a backdrop, "Podkład": the drawing, its PDF's page
+# read-only —, a plugin file without the suffix embedded as a page and edited, its pasted picture
+# from "## Embedded Files" shown; a plugin file opened as a page shows its drawing), a drawing on a slide (a backdrop, "Podkład": the drawing, its PDF's page
 # picker, the paper's menu, its embed), a PDF embedded as its thumbnail and the PDF viewer (with
 # its search and page jump opened), in the real app at desktop and phone sizes in
 # the light and the dark theme, headless; fails when the app does not start or QML reports a
@@ -33,6 +33,9 @@ cp "$data/obsidian_freedraw.excalidraw.md" "$vault/Excalidraw/Szkic.excalidraw.m
 cp "$data/obsidian_frame.excalidraw.md" "$vault/Excalidraw/Ramka z Obsidiana.excalidraw.md"
 cp "$data/obsidian_legacy.excalidraw.md" "$vault/Excalidraw/Stary.excalidraw.md"
 cp "$data/obsidian_mixed.excalidraw.md" "$vault/Plan ogrodu.md"
+# The picture its "## Embedded Files" names (a 1 × 1 PNG), found as Obsidian finds a link.
+printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=' | base64 -d \
+  > "$vault/Załączniki/Pasted Image 20261028143205.png"
 # A drawing on page 2 of a lecture's PDF (its backdrop names the PDF, which is there).
 cp "$data/backdrop.svg" "$vault/assets/Slajd z notatkami.svg"
 cp "$data/slajdy.pdf" "$vault/Załączniki/Wykład 3 – ruch falowy.pdf"
@@ -58,6 +61,7 @@ routes=(
   '{"view":"drawing","path":"Excalidraw/Stary.excalidraw.md"}'
   '{"view":"page","path":"Excalidraw/Szkic.excalidraw.md"}'
   '{"view":"page","path":"Plan ogrodu.md"}'
+  '{"view":"drawing","path":"Plan ogrodu.md"}'
   '{"view":"drawing","path":"assets/Slajd z notatkami.svg"}'
   '{"view":"drawing","path":"assets/Slajd z notatkami.svg","open":"backdrop"}'
   '{"view":"drawing","path":"assets/Slajd z notatkami.svg","open":"paper"}'

@@ -225,7 +225,15 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             break;
         }
         case LinkKind::Embed: {
-            if (isWebPictureTarget(l.target)) {
+            const auto drawing =
+                    m_links.drawing && !isWebPictureTarget(l.target) ? m_links.drawing(l.target) : std::nullopt;
+            if (drawing) {
+                // An Obsidian Excalidraw plugin drawing: its picture.
+                const QString label = l.display.isEmpty() ? paths::basename(l.target) : l.display;
+                html = m_links.mediaAsLinks ? mediaHtml(*drawing, label, QString())
+                                            : u"<img class=\"drawing\" src="_s + attr(*drawing) + u" alt="_s
+                                                      + attr(label) + u" loading=\"lazy\">"_s;
+            } else if (isWebPictureTarget(l.target)) {
                 // `![[https://…/kot.jpg]]`: a picture from the internet, like `![](https://…)` —
                 // never a missing attachment for its extension.
                 html = webPictureHtml(l.target, l.display);

@@ -2114,6 +2114,399 @@ private Q_SLOTS:
         applyDiff(back, diff, false);
         QCOMPARE(back.first().box, before.first().box);
     }
+
+    void align_data()
+    {
+        QTest::addColumn<int>("how");
+        QTest::newRow("left") << int(Align::Left);
+        QTest::newRow("center") << int(Align::Center);
+        QTest::newRow("right") << int(Align::Right);
+        QTest::newRow("top") << int(Align::Top);
+        QTest::newRow("middle") << int(Align::Middle);
+        QTest::newRow("bottom") << int(Align::Bottom);
+    }
+    void align()
+    {
+        QFETCH(int, how);
+        const Align a = Align(how);
+        // A rectangle, a group of two (moved as one), a rotated diamond (by its turned outline), a
+        // shape with its Polish label, a locked rectangle (never moved).
+        Drawing d;
+        d.strokes.append(rectangle(u"R"_s, QRectF(0, 0, 40, 20)));
+        Stroke g1 = rectangle(u"G1"_s, QRectF(100, 50, 20, 20));
+        g1.groupIds = {u"G"_s};
+        Stroke g2 = shapeOf(ElementType::Ellipse, u"G2"_s, QRectF(130, 80, 30, 10));
+        g2.groupIds = {u"G"_s};
+        d.strokes += {g1, g2};
+        Stroke turned = shapeOf(ElementType::Diamond, u"D"_s, QRectF(200, 200, 60, 20));
+        turned.angle = std::numbers::pi / 4;
+        d.strokes.append(turned);
+        d.strokes.append(rectangle(u"S"_s, QRectF(-50, 300, 100, 60)));
+        const QString label = addLabel(d, u"S"_s, u"Żółw"_s, TextStyle{}, fakeMetrics(), testStamp());
+        Stroke locked = rectangle(u"K"_s, QRectF(-500, -500, 10, 10));
+        locked.locked = true;
+        d.strokes.append(locked);
+        const QSet<QString> all{u"R"_s, u"G1"_s, u"G2"_s, u"D"_s, u"S"_s, label, u"K"_s};
+        QCOMPARE(arrangeUnits(d, all), 4);
+        const auto unitBox = [&d](const QStringList &members) {
+            QRectF r;
+            for (const QString &id : members)
+                r = r.isNull() ? elementBounds(*find(d, id)) : r.united(elementBounds(*find(d, id)));
+            return r;
+        };
+        const QList<QStringList> units{{u"R"_s}, {u"G1"_s, u"G2"_s}, {u"D"_s}, {u"S"_s, label}};
+        QRectF before;
+        for (const QStringList &u : units)
+            before = before.isNull() ? unitBox(u) : before.united(unitBox(u));
+        const QPointF groupOffset = find(d, u"G2"_s)->box.topLeft() - find(d, u"G1"_s)->box.topLeft();
+        const QPointF labelOffset = find(d, label)->box.topLeft() - find(d, u"S"_s)->box.topLeft();
+        alignElements(d, all, a, testStamp());
+        for (const QStringList &u : units) {
+            const QRectF b = unitBox(u);
+            const auto near = [](double x, double y) { return std::abs(x - y) < 0.011; };
+            switch (a) {
+            case Align::Left: QVERIFY2(near(b.left(), before.left()), qPrintable(u.join(u','))); break;
+            case Align::Center: QVERIFY(near(b.center().x(), before.center().x())); break;
+            case Align::Right: QVERIFY(near(b.right(), before.right())); break;
+            case Align::Top: QVERIFY(near(b.top(), before.top())); break;
+            case Align::Middle: QVERIFY(near(b.center().y(), before.center().y())); break;
+            case Align::Bottom: QVERIFY(near(b.bottom(), before.bottom())); break;
+            }
+        }
+        // Groups and labels move as one, the rotation stays, the locked rectangle stays put.
+        QCOMPARE(find(d, u"G2"_s)->box.topLeft() - find(d, u"G1"_s)->box.topLeft(), groupOffset);
+        QCOMPARE(find(d, label)->box.topLeft() - find(d, u"S"_s)->box.topLeft(), labelOffset);
+        QCOMPARE(find(d, u"D"_s)->angle, std::numbers::pi / 4);
+        QCOMPARE(find(d, u"K"_s)->box, QRectF(-500, -500, 10, 10));
+        QCOMPARE(find(d, u"K"_s)->version, 1);
+        // Aligned already: nothing changes, nothing is stamped.
+        const QList<Stroke> aligned = d.strokes;
+        alignElements(d, all, a, testStamp());
+        QVERIFY(sameElements(d.strokes, aligned));
+    }
+
+    void alignNeedsTwoParts()
+    {
+        Drawing d = oneOfEach();
+        const QList<Stroke> before = d.strokes;
+        // One element, one group, a shape with its label, only locked ones, unknown ids: nothing.
+        alignElements(d, {u"r"_s}, Align::Left, testStamp());
+        alignElements(d, {u"locked"_s, u"r"_s}, Align::Left, testStamp());
+        alignElements(d, {u"nie ma"_s, u"ż"_s}, Align::Right, testStamp());
+        alignElements(d, {}, Align::Top, testStamp());
+        QVERIFY(sameElements(d.strokes, before));
+        QCOMPARE(arrangeUnits(d, {u"r"_s, u"locked"_s}), 1);
+        QCOMPARE(arrangeUnits(d, {}), 0);
+        // A freehand line without points covers nothing: no part.
+        Drawing empty;
+        empty.strokes = {freehand(u"f0"_s, 0, 0, 0), rectangle(u"r"_s, QRectF(0, 0, 10, 10))};
+        QCOMPARE(arrangeUnits(empty, {u"f0"_s, u"r"_s}), 1);
+        Drawing grouped = d;
+        groupElements(grouped, {u"r"_s, u"f"_s}, testStamp());
+        QCOMPARE(arrangeUnits(grouped, {u"r"_s, u"f"_s}), 1);
+        const QList<Stroke> group = grouped.strokes;
+        alignElements(grouped, {u"r"_s, u"f"_s}, Align::Left, testStamp());
+        QVERIFY(sameElements(grouped.strokes, group));
+    }
+
+    void alignedArrowsFollow()
+    {
+        // An arrow bound to two rectangles that are aligned: its ends follow them.
+        Drawing d;
+        Stroke a = rectangle(u"A"_s, QRectF(0, 0, 40, 40));
+        a.boundIds = {u"X"_s};
+        Stroke b = rectangle(u"B"_s, QRectF(100, 60, 40, 40));
+        b.boundIds = {u"X"_s};
+        Stroke x = lineOf(ElementType::Arrow, u"X"_s, {{41, 20}, {99, 80}});
+        x.startBound = u"A"_s;
+        x.endBound = u"B"_s;
+        d.strokes = {a, b, x};
+        alignElements(d, {u"A"_s, u"B"_s}, Align::Top, testStamp());
+        QCOMPARE(find(d, u"B"_s)->box, QRectF(100, 0, 40, 40));
+        QCOMPARE(find(d, u"X"_s)->points.first(), (StrokePoint{41, 20, 0.5}));
+        QCOMPARE(find(d, u"X"_s)->points.last(), (StrokePoint{99, 20, 0.5}));
+    }
+
+    void distribute_data()
+    {
+        QTest::addColumn<bool>("horizontal");
+        QTest::newRow("horizontal") << true;
+        QTest::newRow("vertical") << false;
+    }
+    void distribute()
+    {
+        QFETCH(bool, horizontal);
+        const auto at = [horizontal](double along, double size) {
+            return horizontal ? QRectF(along, 0, size, 20) : QRectF(0, along, 20, size);
+        };
+        const auto start = [horizontal](const QRectF &r) { return horizontal ? r.left() : r.top(); };
+        const auto end = [horizontal](const QRectF &r) { return horizontal ? r.right() : r.bottom(); };
+        const Distribute axis = horizontal ? Distribute::Horizontal : Distribute::Vertical;
+        // Gaps: the first and the last stay, the gaps between the boxes become equal (in the
+        // order of their middles, whatever the drawing order).
+        Drawing d;
+        d.strokes = {rectangle(u"C"_s, at(130, 50)), rectangle(u"A"_s, at(0, 20)), rectangle(u"B"_s, at(30, 10)),
+                     rectangle(u"D"_s, at(400, 40))};
+        const QSet<QString> all{u"A"_s, u"B"_s, u"C"_s, u"D"_s};
+        distributeElements(d, all, axis, testStamp());
+        const QStringList order{u"A"_s, u"B"_s, u"C"_s, u"D"_s};
+        QCOMPARE(find(d, u"A"_s)->box, at(0, 20));
+        QCOMPARE(find(d, u"D"_s)->box, at(400, 40));
+        QList<double> gaps;
+        for (qsizetype k = 0; k + 1 < order.size(); ++k)
+            gaps.append(start(elementBounds(*find(d, order.at(k + 1)))) - end(elementBounds(*find(d, order.at(k)))));
+        for (const double g : gaps)
+            QVERIFY2(std::abs(g - gaps.first()) < 0.02, qPrintable(QString::number(g)));
+        // Evenly spaced already: nothing stamped.
+        const QList<Stroke> even = d.strokes;
+        distributeElements(d, all, axis, testStamp());
+        QVERIFY(sameElements(d.strokes, even));
+
+        // Overlapping too much for gaps: equal steps between the middles, the outermost stay.
+        Drawing o;
+        o.strokes = {rectangle(u"P"_s, at(0, 100)), rectangle(u"Q"_s, at(10, 100)), rectangle(u"R"_s, at(20, 100)),
+                     rectangle(u"S"_s, at(90, 100))};
+        distributeElements(o, {u"P"_s, u"Q"_s, u"R"_s, u"S"_s}, axis, testStamp());
+        const auto mid = [&](const QString &id) {
+            const QRectF r = find(o, id)->box;
+            return horizontal ? r.center().x() : r.center().y();
+        };
+        QCOMPARE(mid(u"P"_s), 50.0);
+        QCOMPARE(mid(u"Q"_s), 80.0);
+        QCOMPARE(mid(u"R"_s), 110.0);
+        QCOMPARE(mid(u"S"_s), 140.0);
+
+        // Two parts: nothing to distribute.
+        Drawing two;
+        two.strokes = {rectangle(u"A"_s, at(0, 20)), rectangle(u"B"_s, at(100, 20))};
+        const QList<Stroke> twoBefore = two.strokes;
+        distributeElements(two, {u"A"_s, u"B"_s, u"nie ma"_s}, axis, testStamp());
+        QVERIFY(sameElements(two.strokes, twoBefore));
+    }
+
+    void distributeGroupsAsOne()
+    {
+        Drawing d;
+        Stroke g1 = rectangle(u"G1"_s, QRectF(0, 0, 10, 10));
+        g1.groupIds = {u"inner"_s, u"G"_s};
+        Stroke g2 = rectangle(u"G2"_s, QRectF(20, 0, 10, 10));
+        g2.groupIds = {u"G"_s};
+        d.strokes = {g1, g2, rectangle(u"M"_s, QRectF(35, 0, 10, 10)), rectangle(u"Z"_s, QRectF(200, 0, 10, 10))};
+        QCOMPARE(arrangeUnits(d, {u"G1"_s, u"G2"_s, u"M"_s, u"Z"_s}), 3);
+        distributeElements(d, {u"G1"_s, u"G2"_s, u"M"_s, u"Z"_s}, Distribute::Horizontal, testStamp());
+        // The group (0–30, with the strokes' half widths −1–31) and Z (199–211) stay; M in between.
+        QCOMPARE(find(d, u"G1"_s)->box.left(), 0.0);
+        QCOMPARE(find(d, u"G2"_s)->box.left(), 20.0);
+        QCOMPARE(find(d, u"Z"_s)->box.left(), 200.0);
+        const QRectF m = elementBounds(*find(d, u"M"_s));
+        QVERIFY(std::abs((m.left() - 31) - (199 - m.right())) < 0.02);
+    }
+
+    void polygonLabels_data()
+    {
+        QTest::addColumn<QString>("kind");
+        for (const char *name : {"triangle", "rightTriangle", "parallelogram", "trapezoid", "pentagon", "hexagon",
+                                 "star", "blockArrow", "callout", "heart", "cloud"})
+            QTest::newRow(name) << QString::fromLatin1(name);
+    }
+    void polygonLabels()
+    {
+        QFETCH(QString, kind);
+        const TextMetrics m = fakeMetrics();
+        Drawing d;
+        Stroke p = newPolygon(*polygonKindFromName(kind), QPointF(100, 100), QPointF(300, 260), false, ShapeStyle{},
+                              testStamp());
+        p.id = u"P"_s;
+        d.strokes = {p, rectangle(u"R"_s, QRectF(0, 0, 10, 10))};
+        QVERIFY(holdsLabel(p));
+        QVERIFY(labelMaxWidth(p) > 0);
+        QList<QPointF> corners;
+        for (const StrokePoint &c : p.points)
+            corners.append(QPointF(c.x, c.y));
+        QVERIFY2(pointInPolygon(labelCenter(p), corners), qPrintable(kind));
+
+        const QString id = addLabel(d, u"P"_s, u"Zażółć gęślą jaźń"_s, TextStyle{}, m, testStamp());
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(ids(d), (QStringList{u"P"_s, id, u"R"_s}));
+        const Stroke &poly = *find(d, u"P"_s);
+        const Stroke &label = *find(d, id);
+        QCOMPARE(label.containerId, u"P"_s);
+        QVERIFY(poly.boundIds.contains(id));
+        QCOMPARE(label.textAlign, TextAlign::Center);
+        QCOMPARE(label.verticalAlign, VerticalAlign::Middle);
+        QCOMPARE(QString(label.text).remove(u'\n').remove(u' '), u"Zażółćgęśląjaźń"_s);
+        // Centred in its room, every line within the room's width, the box inside the polygon.
+        QVERIFY(std::abs(label.box.center().x() - labelCenter(poly).x()) < 0.01);
+        QVERIFY(std::abs(label.box.center().y() - labelCenter(poly).y()) < 0.01);
+        for (const QString &line : label.text.split(u'\n'))
+            QVERIFY2(m.width(line, 2, 20) <= std::max(labelMaxWidth(poly), m.width(line.left(1), 2, 20)) + 1e-9,
+                     qPrintable(line));
+        QList<QPointF> grown;
+        for (const StrokePoint &c : poly.points)
+            grown.append(QPointF(c.x, c.y));
+        QVERIFY2(pointInPolygon(label.box.center(), grown), qPrintable(kind));
+        // A second label is no label: the one it has is edited.
+        QVERIFY(addLabel(d, u"P"_s, u"drugi"_s, TextStyle{}, m, testStamp()).isEmpty());
+        // A label longer than the polygon is tall makes it taller, from its top left.
+        Drawing tall = d;
+        setText(tall, id, u"jeden\ndwa\ntrzy\ncztery\npięć\nsześć\nsiedem"_s, m, testStamp());
+        const Stroke &tp = *find(tall, u"P"_s);
+        QCOMPARE(pointsRect(tp.points).topLeft(), pointsRect(poly.points).topLeft());
+        QVERIFY(pointsRect(tp.points).height() > pointsRect(poly.points).height());
+        QVERIFY(find(tall, id)->box.height() <= pointsRect(tp.points).height() * 0.4);
+        // Moved, turned, mirrored and deleted with its polygon.
+        Drawing moved = d;
+        moveElements(moved, QSet<QString>{u"P"_s, id}, QPointF(10, -5), testStamp());
+        QCOMPARE(find(moved, id)->box, label.box.translated(10, -5));
+        Drawing turned = d;
+        rotateElements(turned, {u"P"_s, id}, elementCenter(poly), std::numbers::pi / 2, testStamp());
+        QVERIFY(std::abs(find(turned, id)->angle - std::numbers::pi / 2) < 1e-9);
+        QVERIFY(QLineF(find(turned, id)->box.center(), labelCenter(*find(turned, u"P"_s))).length() < 0.05);
+        Drawing flipped = d;
+        flipElements(flipped, {u"P"_s, id}, Flip::Vertical, elementCenter(poly), testStamp());
+        QVERIFY(QLineF(find(flipped, id)->box.center(), labelCenter(*find(flipped, u"P"_s))).length() < 0.05);
+        Drawing resized = d;
+        const QRectF from = pointsRect(poly.points);
+        resizeElements(resized, {u"P"_s, id}, from, QRectF(from.topLeft(), from.size() * 2), 0, m, testStamp());
+        QVERIFY(QLineF(find(resized, id)->box.center(), labelCenter(*find(resized, u"P"_s))).length() < 0.05);
+        Drawing gone = d;
+        deleteElements(gone, {u"P"_s}, testStamp());
+        QCOMPARE(ids(gone), QStringList{u"R"_s});
+    }
+
+    void polygonLabelsInTheScene()
+    {
+        // Excalidraw binds text only to rectangles, ellipses, diamonds and arrows: a polygon's
+        // label is a free text in a group of its own with the polygon, marked in its customData.
+        const TextMetrics m = fakeMetrics();
+        Drawing d;
+        Stroke p = newPolygon(PolygonKind::Star, QPointF(0, 0), QPointF(200, 200), false, ShapeStyle{}, testStamp());
+        p.id = u"P"_s;
+        p.groupIds = {u"outer"_s};
+        d.strokes = {p};
+        const QString id = addLabel(d, u"P"_s, u"Gwiazdka ąę"_s, TextStyle{}, m, testStamp());
+        d.strokes[1].groupIds = {u"outer"_s};
+        const QByteArray json = sceneJson(d);
+        const QJsonArray elements = QJsonDocument::fromJson(json).object().value(u"elements"_s).toArray();
+        QCOMPARE(elements.size(), 2);
+        const QJsonObject pj = elements.at(0).toObject();
+        const QJsonObject tj = elements.at(1).toObject();
+        const QString group = polygonLabelGroup(u"P");
+        QCOMPARE(pj.value(u"groupIds"_s).toArray(), (QJsonArray{group, u"outer"_s}));
+        QCOMPARE(tj.value(u"groupIds"_s).toArray(), (QJsonArray{group, u"outer"_s}));
+        QVERIFY(tj.value(u"containerId"_s).isNull());
+        QVERIFY(tj.value(u"customData"_s).toObject().value(u"brulionLabel"_s).toBool());
+        QVERIFY(pj.value(u"boundElements"_s).isNull());
+        QCOMPARE(tj.value(u"text"_s).toString(), find(d, id)->text);
+
+        // Read back: the polygon's label again, the group taken out; unchanged, written the same.
+        std::optional<Drawing> back = parseScene(json);
+        QVERIFY(back);
+        QCOMPARE(find(*back, id)->containerId, u"P"_s);
+        QCOMPARE(find(*back, id)->groupIds, QStringList{u"outer"_s});
+        QCOMPARE(find(*back, u"P"_s)->groupIds, QStringList{u"outer"_s});
+        QCOMPARE(find(*back, u"P"_s)->boundIds, QStringList{id});
+        QCOMPARE(sceneJson(*back), json);
+        QCOMPARE(selectionClosure(*back, {u"P"_s}), (QStringList{u"P"_s, id}));
+        // Edited in Brulion: still written as Excalidraw shows it.
+        setText(*back, id, u"Nowy napis"_s, m, testStamp());
+        const QJsonArray edited = QJsonDocument::fromJson(sceneJson(*back)).object().value(u"elements"_s).toArray();
+        QVERIFY(edited.at(1).toObject().value(u"containerId"_s).isNull());
+        QCOMPARE(edited.at(1).toObject().value(u"groupIds"_s).toArray(), (QJsonArray{group, u"outer"_s}));
+        QCOMPARE(edited.at(1).toObject().value(u"originalText"_s).toString(), u"Nowy napis"_s);
+        // The label deleted: the polygon leaves the group, written anew.
+        Drawing unlabelled = *back;
+        deleteElements(unlabelled, {id}, testStamp());
+        const QJsonArray rest = QJsonDocument::fromJson(sceneJson(unlabelled)).object().value(u"elements"_s).toArray();
+        QCOMPARE(rest.size(), 1);
+        QCOMPARE(rest.at(0).toObject().value(u"groupIds"_s).toArray(), QJsonArray{u"outer"_s});
+
+        // A copy made in excalidraw.com (new ids, a new group): a label, its group renamed.
+        QByteArray copied = json;
+        copied.replace(group.toUtf8(), "kopiaGrupy");
+        copied.replace("\"P\"", "\"P2\"");
+        std::optional<Drawing> copy = parseScene(copied);
+        QVERIFY(copy);
+        QCOMPARE(find(*copy, id)->containerId, u"P2"_s);
+        const QJsonArray rewritten = QJsonDocument::fromJson(sceneJson(*copy)).object().value(u"elements"_s).toArray();
+        QCOMPARE(rewritten.at(0).toObject().value(u"groupIds"_s).toArray(),
+                 (QJsonArray{polygonLabelGroup(u"P2"), u"outer"_s}));
+        QCOMPARE(rewritten.at(1).toObject().value(u"groupIds"_s).toArray(),
+                 (QJsonArray{polygonLabelGroup(u"P2"), u"outer"_s}));
+        QVERIFY(parseScene(sceneJson(*copy)));
+        QCOMPARE(find(*parseScene(sceneJson(*copy)), id)->containerId, u"P2"_s);
+
+        // A duplicate in Brulion is a label of the copy.
+        Drawing dup = *back;
+        const QStringList copies = duplicateElements(dup, {u"P"_s, id}, QPointF(10, 10), testStamp());
+        std::optional<Drawing> dupBack = parseScene(sceneJson(dup));
+        QVERIFY(dupBack);
+        QCOMPARE(find(*dupBack, copies.at(1))->containerId, copies.at(0));
+        QCOMPARE(find(*dupBack, id)->containerId, u"P"_s);
+    }
+
+    void notPolygonLabels_data()
+    {
+        QTest::addColumn<QByteArray>("change");
+        QTest::addColumn<QString>("with");
+        // What was written changed so that the text is no label any more (the first match: the
+        // polygon's groups).
+        QTest::newRow("no marker") << QByteArray("\"brulionLabel\":true") << u"\"brulionLabel\":false"_s;
+        QTest::newRow("ungrouped") << QByteArray("[\"brulion-label-P\"]") << u"[]"_s;
+        QTest::newRow("another group") << QByteArray("\"groupIds\":[\"brulion-label-P\"],\"height\"")
+                                       << u"\"groupIds\":[\"ktoś\"],\"height\""_s;
+        QTest::newRow("not closed") << QByteArray("\"polygon\":true") << u"\"polygon\":false"_s;
+        QTest::newRow("a rectangle") << QByteArray("\"type\":\"line\"") << u"\"type\":\"rectangle\""_s;
+    }
+    void notPolygonLabels()
+    {
+        QFETCH(QByteArray, change);
+        QFETCH(QString, with);
+        const TextMetrics m = fakeMetrics();
+        Drawing d;
+        Stroke p =
+                newPolygon(PolygonKind::Triangle, QPointF(0, 0), QPointF(200, 200), false, ShapeStyle{}, testStamp());
+        p.id = u"P"_s;
+        d.strokes = {p};
+        const QString id = addLabel(d, u"P"_s, u"Ćma"_s, TextStyle{}, m, testStamp());
+        QByteArray json = sceneJson(d);
+        QVERIFY2(json.contains(change), json.constData());
+        json.replace(json.indexOf(change), change.size(), with.toUtf8()); // (the first: the polygon's)
+        const std::optional<Drawing> back = parseScene(json);
+        QVERIFY(back);
+        const Stroke *t = find(*back, id);
+        QVERIFY(t);
+        QVERIFY(t->containerId.isEmpty());
+        // Written back as it was read.
+        QCOMPARE(QJsonDocument::fromJson(sceneJson(*back)), QJsonDocument::fromJson(json));
+    }
+
+    void polygonLabelsInCrowdedGroups()
+    {
+        // Three in the group, or two marked texts for one polygon: only a pair is a label.
+        Drawing d;
+        Stroke p = newPolygon(PolygonKind::Hexagon, QPointF(0, 0), QPointF(100, 100), false, ShapeStyle{}, testStamp());
+        p.id = u"P"_s;
+        p.groupIds = {u"G"_s};
+        Stroke a = textOf(u"A"_s, QRectF(10, 10, 20, 20), u"a"_s);
+        a.groupIds = {u"G"_s};
+        Stroke b = textOf(u"B"_s, QRectF(10, 40, 20, 20), u"b"_s);
+        b.groupIds = {u"G"_s};
+        d.strokes = {p, a, b};
+        QJsonObject root = QJsonDocument::fromJson(sceneJson(d)).object();
+        QJsonArray elements = root.value(u"elements"_s).toArray();
+        for (const int i : {1, 2}) {
+            QJsonObject e = elements.at(i).toObject();
+            e.insert(u"customData"_s, QJsonObject{{u"brulionLabel"_s, true}});
+            elements[i] = e;
+        }
+        root.insert(u"elements"_s, elements);
+        const std::optional<Drawing> back = parseScene(QJsonDocument(root).toJson());
+        QVERIFY(back);
+        QVERIFY(find(*back, u"A"_s)->containerId.isEmpty());
+        QVERIFY(find(*back, u"B"_s)->containerId.isEmpty());
+        QCOMPARE(find(*back, u"P"_s)->groupIds, QStringList{u"G"_s});
+    }
 };
 
 QTEST_GUILESS_MAIN(TestDrawingElements)

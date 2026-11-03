@@ -262,7 +262,32 @@ The editor's polygons (triangle, star, heart, cloud…: `drawing::PolygonKind`) 
 own but closed lines: `type: "line"`, `polygon: true`, `roundness: null`, the last point equal to the
 first (Excalidraw's own condition for a polygon), and curved outlines are many short sides, so every
 program that reads Excalidraw shows and edits them as drawn. A closed line with roundness curves
-through each corner once. A scene with any other element — a frame, a magic frame, an embedded
+through each corner once.
+
+*Labels in polygons (Napisy w wielokątach; `excalidraw.h` polygonLabelGroup, `edit.h` holdsLabel):*
+Excalidraw binds text only to rectangles, ellipses, diamonds and arrows — a text whose `containerId`
+names a line, or a line listing a text in its `boundElements`, is turned into that line's bound text
+there, which it cannot lay out. So a polygon's label (a closed line of three corners or more) is
+stored as a **free text grouped with its polygon**: `containerId: null`, `customData:
+{"brulionLabel": true}`, centred (`textAlign: "center"`, `verticalAlign: "middle"`, the polygon's
+`angle`), and the innermost group `brulion-label-<polygon id>` shared by the two alone (their other
+`groupIds` the same), the polygon's `boundElements` not naming the text:
+
+```json
+{"id":"P","type":"line","polygon":true,"groupIds":["brulion-label-P"],"boundElements":null,…}
+{"id":"T","type":"text","containerId":null,"groupIds":["brulion-label-P"],
+ "customData":{"brulionLabel":true},"text":"Gwiazdka","textAlign":"center",…}
+```
+
+excalidraw.com shows the text where Brulion put it and moves, copies and deletes it with the
+polygon (a group); Brulion reads such a pair — a marked text and one closed line, alone in their
+innermost group — as the polygon and its label (the group is no group in the editor: "Rozgrupuj"
+does not see it) and writes it back so; a copy made in excalidraw.com (new ids, a new group) is
+recognised too and its group renamed to `brulion-label-<id>`. A marked text in a group of more
+elements, or ungrouped, is a free text (the mark is dropped when Brulion next writes it). The label
+is wrapped to the polygon's room: the widest band across it, 40 % of its height, between 30 % and
+70 % of the way down (a triangle's lower half, a callout's body), less 2 × 5 — centred there; a
+label that does not fit stretches the polygon from its top left, as a shape grows. A scene with any other element — a frame, a magic frame, an embedded
 web page (`embeddable`, `iframe`), a kind Brulion does not know, an element with a coordinate
 farther than 10⁶ scene units from the origin on either axis (`drawing::CoordinateLimit`) or with
 broken numbers — is shown, never written (read-only); a drawing whose only such elements were
@@ -348,6 +373,18 @@ it dark in its dark theme even on a light system, light in its light theme). Onl
 numbers of Brulion's own formatting go into the CSS, never text from a scene; Qt's SVG renderer
 ignores such a style sheet (it applies media rules only for a medium it is given and drops a style
 sheet with a media feature query), so it draws the light picture.
+
+*Clipboard (Schowek; `drawing/clipboard.h`):* the drawing editor copies elements as Excalidraw does
+— text on the clipboard, the JSON `{"type":"excalidraw/clipboard","elements":[…],"files":{…}}` (the
+elements as a scene stores them, bindings to elements not copied dropped, a polygon's label as
+above; `files` the pictures they show) —, so excalidraw.com pastes a selection copied in Brulion and
+Brulion pastes one copied there. It pastes that, Excalidraw's `excalidraw-api/clipboard` and a whole
+scene (`{"type":"excalidraw",…}`, a `.excalidraw` file's text): the elements it draws get new ids,
+seeds and groups (bindings and labels kept among them), lose a locked state and a frame membership,
+and are placed with their middle at the mouse pointer (else the middle of the view); elements it
+does not draw (frames, embedded pages, unknown kinds, beyond the coordinate limit, broken) are left
+out — the editor says how many —, as deleted ones; 20 000 elements at most. Plain text is pasted as
+a new text (at most 20 000 characters). A clipboard's JSON is read within the scene's limits.
 
 *Backdrop (Podkład; `drawing/backdrop.h`):* a drawing may lie on a picture, an exported slide or a
 PDF page — lecture notes on slides. The backdrop is an ordinary Excalidraw **`image` element at
@@ -438,8 +475,16 @@ transclusions — as the file has them (compared by the text it shows, `original
 the back of the card, `## Element Links`, `## Embedded Files`, `%%` markers, `# Markdown Images`.
 Elements read from the file and erased in Brulion are written as deleted ones (`isDeleted: true`,
 `version + 1`, `updated`: the plugin showing the drawing while the file changes removes only such
-elements); the file's deleted elements are kept. Pictures the plugin links through `## Embedded
-Files` (`files` in its scene is usually `{}`) are shown as placeholders; frames and embedded pages
+elements); the file's deleted elements are kept. Pictures the plugin keeps in their own files
+(`## Embedded Files`: `<fileId>: [[Obraz.png]]`, also with `|alias` or an SVG's colour map after it;
+`files` in its scene is usually `{}`; `drawing::embeddedFiles`) are shown — their links resolved as
+the file's own links, the picture (PNG, JPEG, GIF, WebP, SVG) put into the drawing only to show it
+(marked `brulionEmbedded`), never written into the scene: the plugin keeps reading it from its file;
+the section's LaTeX, web addresses and Mermaid stay placeholders, as a picture that is missing. The
+HTML and Pandoc exports show such a drawing — embedded, linked as `![[Szkic.excalidraw]]`, and as its
+own page — as a picture: the plugin's export beside it when there is one (`Szkic.excalidraw.svg` /
+`.png`), else the SVG Brulion makes of it, its embedded pictures in it (`Szkic.excalidraw.svg` in the
+export; never the plugin's Markdown). Frames and embedded pages
 make the drawing read-only, as in any scene (its preview: the plugin's export beside it —
 `Szkic.excalidraw.svg` / `.png`, also `Szkic.svg` / `.png` — when there is one, else its elements
 with a dashed grey box for each of those). A `.md` file is such a drawing only by the key (a note

@@ -11,3 +11,5 @@ brulion_add_test(tst_drawing_exmd SOURCES tst_drawing_exmd.cpp LIBS brulion_core
 # set, replaced, removed, read back, hostile markers and files, the pages a user types, the SVG's
 # theme with a backdrop, the merge.
 brulion_add_test(tst_drawing_backdrop SOURCES tst_drawing_backdrop.cpp LIBS brulion_core_drawing)
+# Elements copied and pasted as Excalidraw's clipboard (drawing/clipboard.h), both ways.
+brulion_add_test(tst_drawing_clipboard SOURCES tst_drawing_clipboard.cpp LIBS brulion_core_drawing)
