@@ -76,7 +76,7 @@ gałęziach. Wydania to tagi: `git tag -l 'v*' --sort=v:refname`, a w historii
 ```sh
 git switch main && git pull --ff-only
 # .github/release-notes.md + sekcja "## X.Y.Z — <data>" w src/app/shell/guide/Lista zmian.md
-#   -> commit "Update release notes for vX.Y.Z" (na main)
+#   -> commit "Update release notes for vX.Y.Z" (na main); changelogi fastlane pisze release.sh
 scripts/release.sh --dry-run patch     # podgląd: wersje, commity, ostrzeżenia
 scripts/release.sh patch --push        # wersja na main, release przesunięta na nią + tag, push
 ```
@@ -130,8 +130,20 @@ roboczym:
    push wyśle jej commity, ale nie jej tag (skrypt podaje `git push origin <tag>`).
 2. **Wersja na main.** Ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
    biorą się wersja aplikacji, `versionName` i `versionCode` Androida = major·1000000 +
-   minor·1000 + patch) i w `nix/package.nix` i robi na main commit „Release vX.Y.Z”. Gdy
-   wersja już jest w plikach (kolejne `-rc.N`, wydanie końcowe po `-rc`), tego commita nie ma.
+   minor·1000 + patch) i w `nix/package.nix`, pisze changelogi fastlane dla F-Droid
+   i IzzyOnDroid (niżej) i robi na main commit „Release vX.Y.Z” z tymi plikami. Gdy wersja już
+   jest w plikach (kolejne `-rc.N`, wydanie końcowe po `-rc`), a changelogi się nie zmieniają,
+   tego commita nie ma; gdy zmieniły się tylko nowości w notatkach, commit ma same changelogi.
+
+   **Changelogi fastlane** (docs/ANDROID.md, „F-Droid i IzzyOnDroid”): dla każdego języka
+   w `fastlane/metadata/android/` plik `<język>/changelogs/<versionCode>.txt` (np. `8001.txt` dla
+   0.8.1), do 500 znaków — „co nowego” w sklepie. Polski (`pl`) to lista nowości z sekcji
+   „Nowości w …” `.github/release-notes.md` (pogrubiony początek punktu albo punkt do „ — ”, bez
+   linii „Z wersji …”; co się nie mieści, kończy „• …”) i link do opisu wydania; angielski
+   (`en-US`, i każdy inny język) to sam link do (polskiego) opisu wydania. Powstają z notatek przy
+   każdym wydaniu tej wersji, także testowym (`-rc` ma ten sam `versionCode`) — poprawia się
+   notatki, nie te pliki. Podgląd tekstu daje `--dry-run`; nieudany przebieg usuwa je razem
+   z resztą. Repozytorium bez `fastlane/metadata/android` (np. w testach) changelogów nie dostaje.
 3. **`release` do przodu.** Przesuwa `release` na nowy HEAD main (commit „Release vX.Y.Z”) —
    zawsze fast-forward (jak `git merge --ff-only main` na `release`), nigdy commit scalający —
    i daje temu commitowi tag z adnotacją `vX.Y.Z`: ten sam commit jest na `main` i na
@@ -178,7 +190,8 @@ Push taga uruchamia `release.yml`:
 
 Aplikacja na Androidzie i Windows pyta raz dziennie o najnowsze wydanie (`releases/latest`) i pokazuje
 komunikat ze stroną jego taga (`shell/appupdates.h`). Liczy się tylko tag `vX.Y.Z`: szkic i wydanie
-testowe nikomu go nie pokażą, a komunikat pojawia się dopiero po publikacji.
+testowe nikomu go nie pokażą, a komunikat pojawia się dopiero po publikacji. Buildy z opcją CMake
+`BRULION_UPDATE_CHECK=OFF` (dla F-Droid i IzzyOnDroid, docs/ANDROID.md) nie pytają wcale.
 
 Nieudany build: „Re-run failed jobs” w zakładce Actions (szkic wydania jest używany
 ponownie). Ręczne uruchomienie (Actions → Release → Run workflow) dla istniejącego taga trzeba
@@ -214,7 +227,8 @@ na Ubuntu 24.04).
 nix shell nixpkgs#actionlint nixpkgs#shellcheck -c actionlint
 nix shell nixpkgs#shellcheck -c shellcheck scripts/*.sh tests/scripts/*.sh
 tests/scripts/tst_release.sh                  # release.sh w jednorazowych repozytoriach
-tests/scripts/tst_appimage_update_check.sh    # (oba też w ctest: tst_scripts_*)
+tests/scripts/tst_appimage_update_check.sh    # (wszystkie też w ctest: tst_scripts_*)
+tests/scripts/tst_check_fastlane_metadata.sh  # opisy fastlane: limity i changelog bieżącej wersji
 ```
 
 Na Raspberry Pi shellcheck 0.11 potrafi się zawiesić (losowo, 100% CPU) — pomaga przypięcie do

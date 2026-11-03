@@ -32,9 +32,15 @@
 #
 # Updated files: CMakeLists.txt (project VERSION — the app, the Android versionName and
 # versionCode = major*1000000 + minor*1000 + patch, so minor and patch stay below 1000) and
-# nix/package.nix (`version = "...";`). Releasing the version that is already recorded (a
-# further pre-release, or the final release after its pre-releases) makes no version commit:
-# release moves to main's last commit (when it is not there already) and the tag goes on that.
+# nix/package.nix (`version = "...";`), and, when main has fastlane/metadata/android (the store
+# texts of F-Droid and IzzyOnDroid), each locale's changelogs/<versionCode>.txt — the store's
+# "what's new" of the version, at most 500 characters: Polish (pl*) lists the news of
+# .github/release-notes.md, the other locales say where the (Polish) release notes are. They are
+# written from the notes on every release of the version (also its pre-releases, which share the
+# versionCode): change the notes, not the files. Releasing the version that is already recorded (a
+# further pre-release, or the final release after its pre-releases) makes no version commit when
+# the changelogs are written already: release moves to main's last commit (when it is not there
+# already) and the tag goes on that.
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -124,6 +130,7 @@ esac
 release=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}
 ((BASH_REMATCH[2] < 1000 && BASH_REMATCH[3] < 1000)) ||
   die "minor and patch must be below 1000 (Android versionCode = major*1000000 + minor*1000 + patch)"
+version_code=$((BASH_REMATCH[1] * 1000000 + BASH_REMATCH[2] * 1000 + BASH_REMATCH[3]))
 newest=$(printf '%s\n%s\n' "$current" "$release" | sort -V | tail -n 1)
 [[ $newest == "$release" ]] || die "$release is older than the current version $current"
 tag=v$new final=v$release
@@ -274,10 +281,78 @@ if [[ $new == "$release" ]] && git cat-file -e "$main_head:$changelog" 2>/dev/nu
   warn "$changelog has no section \"## $release\" (add the changes of $tag to it on main first)"
 fi
 
-files=()
-if [[ $release != "$current" || $nix_current != "$release" ]]; then
-  files=("$cmake_file" "$nix_file")
+# The fastlane changelogs of the release's versionCode (see the header), for each locale
+# directory main has: those whose text changes go into the "Release" commit.
+fastlane=fastlane/metadata/android
+releases_url=https://github.com/janusz-bit/brulion/releases/tag/$final
+changelog_of() { # <locale>: the changelog's text (at most 500 bytes, so 500 characters)
+  case $1 in
+    pl | pl-*)
+      # The bullets of the "Nowości w …" section (of the whole file when it has none): a bold
+      # lead's text, else the bullet up to its " — ". Those that do not fit end in "• …".
+      { git show "$main_head:$notes" 2>/dev/null || true; } | LC_ALL=C awk -v version="$release" -v link="$releases_url" '
+        function plain(t,  out) { # [[page|text]], [[page]] and [text](url) give their text
+          gsub(/\[\[[^]|]*\|/, "[[", t)
+          gsub(/\*\*|`|\[\[|\]\]/, "", t)
+          while (match(t, /\[[^]]*\]\([^)]*\)/)) {
+            out = out substr(t, 1, RSTART - 1) substr(t, RSTART + 1, index(substr(t, RSTART), "]") - 2)
+            t = substr(t, RSTART + RLENGTH)
+          }
+          return out t
+        }
+        /^\*\*Nowości w / { on = 1; seen = 1; next }
+        on && /^\*\*/ { on = 0 }
+        /^[*-][[:space:]]+[^[:space:]]/ {
+          item = $0
+          sub(/^[*-][[:space:]]+/, "", item)
+          if (match(item, /^\*\*[^*]+\*\*/)) item = substr(item, 3, RLENGTH - 4)
+          else sub(/[[:space:]]+—[[:space:]].*/, "", item)
+          item = "• " plain(item)
+          if (on) news[++n] = item
+          else if (!seen) all[++m] = item
+        }
+        END {
+          if (!seen) for (i = 1; i <= m; i++) news[++n] = all[i]
+          foot = "Pełny opis: " link "\n"
+          if (!n) { printf "Brulion %s.\n\n%s", version, foot; exit }
+          text = "Nowości w " version ":\n"
+          room = 500 - length(text) - 1 - length(foot)
+          used = 0
+          for (i = 1; i <= n; i++) used += length(news[i]) + 1
+          if (used > room) room -= length("• …") + 1
+          for (i = 1; i <= n && length(news[i]) + 1 <= room; i++) {
+            text = text news[i] "\n"
+            room -= length(news[i]) + 1
+          }
+          if (i <= n) text = text "• …\n"
+          printf "%s\n%s", text, foot
+        }'
+      ;;
+    *) printf "What's new in Brulion %s (in Polish):\n%s\n" "$release" "$releases_url" ;;
+  esac
+}
+changelogs=()
+declare -A changelog_text=()
+if locales=$(git ls-tree -d --name-only "$main_head:$fastlane" 2>/dev/null); then
+  while IFS= read -r locale; do
+    [[ -n $locale ]] || continue
+    file=$fastlane/$locale/changelogs/$version_code.txt
+    text=$(changelog_of "$locale")
+    old=$(git show "$main_head:$file" 2>/dev/null) || old=''
+    [[ $text != "$old" ]] || continue
+    changelogs+=("$file")
+    changelog_text[$file]=$text
+    if [[ $branch == main && -e $file && -n $(git status --porcelain --ignored -- "$file") ]]; then
+      refuse "$file is not committed (commit or remove it first)"
+    fi
+  done <<<"$locales"
 fi
+
+version_files=()
+if [[ $release != "$current" || $nix_current != "$release" ]]; then
+  version_files=("$cmake_file" "$nix_file")
+fi
+files=("${version_files[@]}" "${changelogs[@]}")
 # Release moves to main's head (the version commit, or main as it is). Without a version commit
 # main may bring nothing new: then release is there already (e.g. the final release of what the
 # last pre-release had), and its commit only gets the tag.
@@ -289,11 +364,19 @@ fi
 push_cmd=(git push --atomic origin main release "refs/tags/$tag")
 
 echo "Brulion $current -> $new (tag $tag, from $from)"
-if ((${#files[@]})); then
-  echo "  main:    updates ${files[*]} to $release and commits \"Release $tag\""
+if ((${#version_files[@]})); then
+  what="updates ${version_files[*]} to $release"
+  ((${#changelogs[@]} == 0)) || what+=", writes the fastlane changelogs"
+  echo "  main:    $what and commits \"Release $tag\""
+elif ((${#changelogs[@]})); then
+  echo "  main:    $cmake_file already has $release; writes the fastlane changelogs and commits \"Release $tag\""
 else
   echo "  main:    $cmake_file already has $release: no version commit"
 fi
+for file in "${changelogs[@]}"; do
+  echo "  fastlane: $file:"
+  printf '%s\n' "${changelog_text[$file]}" | sed 's/^/           | /'
+done
 [[ -z $release_note ]] || echo "  release: $release_note"
 forward=$(git rev-list --count "$release_head..$main_head" 2>/dev/null || echo 0)
 if ((${#files[@]})); then
@@ -320,7 +403,7 @@ fi
 
 # From here on refs change. When a step fails, the trap undoes everything this run did (the tag,
 # the release branch, the version commit) and says so; HEAD stays on main throughout.
-orig_main=$main_head step='' finished=0 bumped=0 release_moved=0 tagged=0
+orig_main=$main_head step='' finished=0 bumped=0 release_moved=0 tagged=0 made_dirs=()
 undo() {
   local status=$?
   ((finished)) && return "$status"
@@ -337,8 +420,15 @@ undo() {
   fi
   if ((bumped)); then
     rm -f -- "$cmake_file.tmp" "$nix_file.tmp"
-    git reset -q --soft "$orig_main" && git checkout -q "$orig_main" -- "$cmake_file" "$nix_file" &&
+    # Back to main's files: the changelogs main had, the new ones out of the index and the tree.
+    local restore=("$cmake_file" "$nix_file") added=() file dir
+    for file in "${changelogs[@]}"; do
+      if git cat-file -e "$orig_main:$file" 2>/dev/null; then restore+=("$file"); else added+=("$file"); fi
+    done
+    git reset -q --soft "$orig_main" && git checkout -q "$orig_main" -- "${restore[@]}" &&
+      { ((${#added[@]} == 0)) || { git rm -q -f --cached --ignore-unmatch -- "${added[@]}" && rm -f -- "${added[@]}"; }; } &&
       undone+=("put main back at $(short "$orig_main") (without \"Release $tag\")")
+    for dir in "${made_dirs[@]}"; do rmdir -- "$dir" 2>/dev/null; done
   fi
   printf '%s\n' "release.sh failed while $step." >&2
   if ((${#undone[@]})); then printf 'Undone: %s.\n' "${undone[@]}" >&2; fi
@@ -363,22 +453,33 @@ fi
 if ((${#files[@]})); then
   step="committing \"Release $tag\" on main"
   bumped=1
-  # CMakeLists.txt: the first `VERSION X.Y.Z` line (the one inside project()).
-  awk -v new="$release" '
-    !done && /^[[:space:]]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$/ {
-      sub(/[0-9]+\.[0-9]+\.[0-9]+/, new); done = 1
-    }
-    { print }
-    END { if (!done) exit 3 }
-  ' "$cmake_file" >"$cmake_file.tmp" || die "could not update $cmake_file"
-  mv -- "$cmake_file.tmp" "$cmake_file"
-  awk -v new="$release" '
-    !done && /^[[:space:]]*version = "[^"]*";/ { sub(/"[^"]*"/, "\"" new "\""); done = 1 }
-    { print }
-    END { if (!done) exit 3 }
-  ' "$nix_file" >"$nix_file.tmp" || die "could not update $nix_file"
-  mv -- "$nix_file.tmp" "$nix_file"
-  git --no-pager diff --stat -- "${files[@]}"
+  if ((${#version_files[@]})); then
+    # CMakeLists.txt: the first `VERSION X.Y.Z` line (the one inside project()).
+    awk -v new="$release" '
+      !done && /^[[:space:]]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$/ {
+        sub(/[0-9]+\.[0-9]+\.[0-9]+/, new); done = 1
+      }
+      { print }
+      END { if (!done) exit 3 }
+    ' "$cmake_file" >"$cmake_file.tmp" || die "could not update $cmake_file"
+    mv -- "$cmake_file.tmp" "$cmake_file"
+    awk -v new="$release" '
+      !done && /^[[:space:]]*version = "[^"]*";/ { sub(/"[^"]*"/, "\"" new "\""); done = 1 }
+      { print }
+      END { if (!done) exit 3 }
+    ' "$nix_file" >"$nix_file.tmp" || die "could not update $nix_file"
+    mv -- "$nix_file.tmp" "$nix_file"
+  fi
+  for file in "${changelogs[@]}"; do
+    dir=$(dirname -- "$file")
+    if [[ ! -d $dir ]]; then
+      mkdir -- "$dir" || die "could not create $dir"
+      made_dirs+=("$dir")
+    fi
+    printf '%s\n' "${changelog_text[$file]}" >"$file" || die "could not write $file"
+  done
+  git add -- "${files[@]}"
+  git --no-pager diff --cached --stat -- "${files[@]}"
   git commit -q -m "Release $tag" -- "${files[@]}"
 fi
 

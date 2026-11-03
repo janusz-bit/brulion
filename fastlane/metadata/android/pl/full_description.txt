@@ -1,0 +1,12 @@
+Brulion trzyma notatki jako zwykłe pliki Markdown w wybranym folderze. Piszesz je w konspekcie z blokami i w dzienniku, łączysz strony i bloki, planujesz w kalendarzu, z zadaniami, przypomnieniami i alarmami, a obliczenia liczysz wprost w notatkach.
+
+• Działa offline; pliki da się czytać w Obsidianie i Logseq
+• Dziennik, odnośniki zwrotne, tagi, wyszukiwanie i zapytania
+• Kalendarz, zadania, powtarzalne przypomnienia i alarmy, które dzwonią także przy zamkniętej aplikacji
+• Obliczenia z jednostkami, procentami i formułami w tabelach
+• Rysunki w notatkach, z naciskiem rysika
+• Synchronizacja przez Syncthing (zwykły folder) albo Nextcloud (WebDAV)
+• Widżety na ekranie głównym i „Udostępnij → Brulion”
+• Interfejs po polsku i po angielsku
+
+Folder Syncthinga na pamięci współdzielonej wymaga uprawnienia „Dostęp do wszystkich plików”; notatnik w prywatnym folderze aplikacji, synchronizowany z Nextcloudem, nie potrzebuje żadnego.

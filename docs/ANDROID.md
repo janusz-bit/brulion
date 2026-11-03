@@ -721,6 +721,60 @@ i co najwyżej raz dziennie, a nieudane pytanie zapisuje tylko w rejestrze zdarz
 kilku godzinach. Pomija wydania testowe (`-rc`). GitHub widzi adres urządzenia, ale żadnych
 danych o notatkach. Wyłącza to **Ustawienia → Aplikacja → Sprawdzaj nowe wersje**. Kod:
 `src/core/appupdate`, `src/app/shell/appupdates.h`, `qml/shell/ShellUpdateBanner.qml`.
+Build z opcją CMake `BRULION_UPDATE_CHECK=OFF` (dla sklepów, które same aktualizują aplikację —
+[F-Droid i IzzyOnDroid](#f-droid-i-izzyondroid)) nie ma ani komunikatu, ani przełącznika i nigdy
+nie łączy się z GitHubem.
+
+## F-Droid i IzzyOnDroid
+
+Gotowe są dwie części potrzebne obu repozytoriom; przepisu do `fdroiddata` i budowania ze
+źródeł w F-Droid jeszcze nie ma (TODO.md, „Sklepy i repozytoria”).
+
+**Opisy sklepu** leżą w układzie fastlane, który czytają F-Droid i IzzyOnDroid:
+
+```text
+fastlane/metadata/android/
+├── en-US/                      angielski, zapasowy dla innych języków (także obrazy)
+│   ├── title.txt               nazwa (do 50 znaków)
+│   ├── short_description.txt   jedno zdanie (do 80 znaków)
+│   ├── full_description.txt    opis (do 4000 znaków; z packaging/…metainfo.xml)
+│   ├── changelogs/<versionCode>.txt   „co nowego” wersji (do 500 znaków)
+│   └── images/icon.png         ikona 512 × 512 z assets/logo.svg
+│       images/phoneScreenshots/ zrzuty z docs/images/telefon-*.png
+└── pl/                         to samo po polsku, bez obrazów (biorą je z en-US)
+```
+
+`versionCode` = major·1000000 + minor·1000 + patch (`8001.txt` dla 0.8.1, jak w
+`src/app/CMakeLists.txt`). Pliki `changelogs/` pisze `scripts/release.sh` przy każdym wydaniu
+(docs/RELEASE.md): polski wymienia nowości z `.github/release-notes.md`, angielski podaje link
+do opisu wydania. Pozostałe pliki zmienia się ręcznie — opisy razem z `metainfo.xml`, zrzuty po
+odświeżeniu `docs/images/telefon-*.png` (`cp` z nazwą z numerem kolejności), ikonę po zmianie
+logo:
+
+```sh
+nix shell nixpkgs#librsvg nixpkgs#optipng -c sh -c '
+  rsvg-convert -w 512 -h 512 assets/logo.svg -o fastlane/metadata/android/en-US/images/icon.png &&
+  optipng -o5 -strip all fastlane/metadata/android/en-US/images/icon.png'
+```
+
+Limity sprawdza `scripts/check-fastlane-metadata.sh [-v X.Y.Z]` (długości w znakach, oba języki,
+changelog wersji z `CMakeLists.txt`, ikona 512 × 512, obrazy PNG/JPEG); w ctest jako
+`tst_scripts_check_fastlane_metadata`.
+
+**Bez sprawdzania nowych wersji.** Aplikację z F-Droid albo IzzyOnDroid aktualizuje ich klient,
+więc komunikat o nowej wersji z GitHuba jest tam zbędny, a pytanie GitHuba — połączeniem, którego
+taka instalacja nie potrzebuje. Opcja CMake `BRULION_UPDATE_CHECK=OFF`
+(domyślnie `ON`) wyłącza go w całości: `AppController.updates.supported` jest fałszywe, więc nie
+ma komunikatu ani przełącznika „Sprawdzaj nowe wersje”, a zapytanie do `api.github.com` nie
+powstaje nigdy — nawet z `--update-available`. `scripts/android-build.sh` przekazuje ją ze
+zmiennej środowiskowej:
+
+```sh
+BRULION_UPDATE_CHECK=OFF scripts/android-build.sh
+```
+
+Test: `tst_shell_appupdates` sprawdza, że `AppUpdates::checkBuiltIn()` idzie za opcją, a w
+buildzie z `OFF` — że aplikacja niczego nie pokazuje i o nic nie pyta.
 
 ## Budowanie APK
 
@@ -1026,6 +1080,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
+| `fastlane/metadata/android/`, `scripts/check-fastlane-metadata.sh` | opisy, ikona i zrzuty dla F-Droid i IzzyOnDroid, ich sprawdzanie — [F-Droid i IzzyOnDroid](#f-droid-i-izzyondroid) |
 | `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków, części linku do strony w folderze i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--pickers`: systemowe okna wyboru plików (import plików i folderu, „Zapisz” eksportu); `--pdf`: miniatury PDF-ów, przeglądarka PDF, szczypanie, szukanie od Androida 15, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”, pamięć; `--relaunch`: aktywność utworzona od nowa w trakcie startu (restart zamiast pustego okna); `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
