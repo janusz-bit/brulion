@@ -24,6 +24,7 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | Ctrl+F | znajdź w notatce (Enter: następne, Shift+Enter: poprzednie, Esc: zamknij) |
 | Ctrl+H | znajdź i zamień w notatce |
 | Ctrl+; | dodaj właściwość strony |
+| Delete | w drzewku stron: przenieś stronę, plik albo folder do kosza (po potwierdzeniu; „Cofnij” w powiadomieniu przywraca) |
 | Ctrl+Enter | w oknach: zatwierdź |
 
 ## Edycja bloków

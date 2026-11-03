@@ -7,6 +7,15 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.8.0 — 3 listopada 2026
+
+**Nowe**
+- **Automatyczne kopie zapasowe** — Brulion sam robi kopię notatnika: zwykłe archiwum ZIP z notatkami, załącznikami i ustawieniami notatnika, które rozpakujesz dowolnym programem. Codziennie albo co tydzień (nic się nie zmieniło — nowej kopii nie ma), z wybraną liczbą zachowanych kopii; najstarsza znika dopiero po udanym zapisie nowej. Kopie są w prywatnym folderze aplikacji albo w folderze, który wskażesz (np. na pendrive'ie). **Przywróć** najpierw pokazuje, ile plików zastąpi, ile wróci, a ile trafi do kosza, potem robi kopię bezpieczeństwa obecnego stanu i na czas przywracania wstrzymuje synchronizację z Nextcloudem. Wszystko w **Ustawienia → Kopie zapasowe**; kopie automatyczne są domyślnie włączone, a w przeglądarce wyłączone. Zobacz [[Kopie zapasowe|Kopie zapasowe]].
+- **Znajdź i zamień w notatce** — **Ctrl+F** otwiera pasek szukania w otwartej notatce, a **Ctrl+H** od razu z polem zamiany (na telefonie: menu strony → **Znajdź i zamień…**). Trafienia są podświetlone, **Enter** i **Shift+Enter** przechodzą między nimi, a przyciski „Aa”, „ąa” i „Słowo” uwzględniają wielkość liter, polskie znaki i całe słowa. „Zamień wszystko” cofa jedno **Ctrl+Z**. Zobacz [[Pierwsze kroki#Szukanie i przechodzenie|Szukanie i przechodzenie]].
+- **Zamiana w całym notatniku** — **Zamień w notatniku** (menu **Więcej**, paleta poleceń, „Zamień…” w wyszukiwaniu) pokazuje każde trafienie „przed → po”; odznaczasz, czego nie chcesz zmieniać, a trafienie w linku jest oznaczone, bo link zacząłby prowadzić gdzie indziej. Po zamianie **Cofnij** przywraca notatki, a ich poprzednie wersje są też w historii wersji. Zobacz [[Pierwsze kroki#Szukanie i przechodzenie|Szukanie i przechodzenie]].
+- **Klikalne części tagu zagnieżdżonego** — w `#praca/raporty` kliknięcie `#praca` otwiera tag nadrzędny `praca`, a kliknięcie `raporty` cały tag `praca/raporty`; tag zostaje jedną etykietą. Zobacz [[Tagi i właściwości#Tag to link do strony|Tag to link do strony]].
+- **Usuwanie z cofaniem** — po przeniesieniu strony, załącznika albo folderu do kosza z menu **Więcej** i ze **Wszystkich stron** powiadomienie ma **Cofnij**. W drzewku stron usuwa klawisz `Delete`, a paleta poleceń ma **Przenieś do kosza**. Wiersz poleceń ma `brulion-cli file delete`, który przenosi do kosza także załączniki. Zobacz [[Synchronizacja#Historia wersji i kosz|Historia wersji i kosz]].
+
 ## 0.7.1 — 2 listopada 2026
 
 **Uwaga**
