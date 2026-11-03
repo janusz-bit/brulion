@@ -4,7 +4,7 @@ brulion: document
 ---
 # Skróty klawiszowe
 
-Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi, polecenia, terminy i cofanie są w pasku narzędzi tuż nad klawiaturą (przytrzymaj przycisk Zadanie, aby wybrać status zadania; zobacz [[Pierwsze kroki#Pisanie na telefonie|Pisanie na telefonie]]).
+Skróty na komputerze — te z tabeli „Ogólne” możesz zmienić: zobacz [[#Własne skróty|Własne skróty]]. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi, polecenia, terminy i cofanie są w pasku narzędzi tuż nad klawiaturą (przytrzymaj przycisk Zadanie, aby wybrać status zadania; zobacz [[Pierwsze kroki#Pisanie na telefonie|Pisanie na telefonie]]).
 
 ## Ogólne
 | Skrót | Działanie |
@@ -26,6 +26,7 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | Ctrl+\ | panel boczny (szerokie okno) |
 | F2 | zmiana nazwy strony |
 | Ctrl+, | ustawienia |
+| F8 | tryb skupienia: sam tekst, bez pasków (Esc też z niego wychodzi; [[Dokument i konspekt#Statystyki i tryb skupienia|Tryb skupienia]]) |
 | Ctrl+E | tryb źródła Markdown |
 | Ctrl+F | znajdź w notatce, w dzienniku we wszystkich dniach (Enter: następne, Shift+Enter: poprzednie, Esc: zamknij) |
 | Ctrl+H | znajdź i zamień w notatce |
@@ -41,6 +42,16 @@ Kilka stron może być otwartych naraz, każda w swojej karcie. Każda karta ma 
 * **Podział widoku**: *Więcej* ⋮ → „Podziel widok” (albo paleta poleceń) pokazuje drugą stronę obok — kliknij w połowę okna, w której chcesz pracować. „Zamknij podział” wraca do jednego widoku.
 * **Osobne okno** (komputer): „Otwórz w nowym oknie” z menu linku, menu strony w drzewku albo *Więcej* ⋮. Zmiany w jednym oknie od razu widać w drugim. „Przenieś do okna głównego” robi z okna z powrotem kartę.
 * **Na telefonie** nie ma paska kart: gdy kart jest kilka, na górnym pasku pojawia się kwadracik z ich liczbą — dotknij go, żeby przełączyć kartę albo zamknąć pozostałe.
+
+## Własne skróty
+Skróty poleceń z palety (Ctrl+K) zmienisz w *Ustawienia → Skróty klawiszowe* (albo w palecie: „Skróty klawiszowe”). Lista ma wszystkie polecenia z ich skrótem — także te, które domyślnie żadnego nie mają, np. „Synchronizuj teraz” czy „Zadania”. Wyszukiwarka nad listą znajduje polecenie po nazwie albo po klawiszach („ctrl+j”).
+
+- **Zmień** czeka na nowy skrót: naciśnij klawisz z Ctrl albo Alt (albo klawisz funkcyjny F1–F12). Esc anuluje.
+- Gdy skrót ma już inne polecenie, Brulion mówi które; **Przypisz tutaj** przenosi go, a tamto polecenie zostaje bez skrótu.
+- Nie da się wybrać klawiszy, którymi się pisze (litery bez Ctrl czy Alt, Enter, Tab, strzałki), klawiszy edytora (Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+A, Ctrl+Enter, Alt+↑…), rysunków i przeglądarki PDF ani Ctrl+Alt z literą, którą na Windows daje AltGr (Ctrl+Alt+A to „ą”).
+- **✕** zostawia polecenie bez skrótu, **↺** przywraca jego domyślny, a **Przywróć wszystkie** — wszystkie domyślne.
+
+Nowy skrót działa od razu w całej aplikacji: paleta i podpowiedzi przy przyciskach pokazują go zamiast domyślnego. Własne skróty są ustawieniem tego urządzenia (każdy komputer ma swoje); klawisze edycji bloków z tabel poniżej zostają takie, jak są.
 
 ## Edycja bloków
 | Skrót | Działanie |

@@ -10,7 +10,7 @@
 # "Otwórz w innej aplikacji", a drawing on a PDF page), reminders — WorkspaceReminders
 # over the notifiers of src/app/notify —, sync —
 # WorkspaceSync: Nextcloud, Syncthing, conflicts — and their wiring to the app,
-# workspaceintegration), CommandModel, FolderTreeModel, the sample vault, the tray calendar's
+# workspaceintegration), CommandModel, ShortcutMap (the commands' custom shortcuts), FolderTreeModel, the sample vault, the tray calendar's
 # placement (traypopup.h, pure). SingleInstance is in
 # src/ipc (brulion_ipc, desktop). The app registers them as QML types through the QML_FOREIGN wrappers in
 # shell/shellqml.h (the src/app/ui pattern; the library's extracted metatypes give qmllint and
@@ -52,6 +52,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/navigation.h ${_brulion_shell_dir}/navigation.cpp
     ${_brulion_shell_dir}/tabs.h ${_brulion_shell_dir}/tabs.cpp
     ${_brulion_shell_dir}/replacesession.h ${_brulion_shell_dir}/replacesession.cpp
+    ${_brulion_shell_dir}/shortcutmap.h ${_brulion_shell_dir}/shortcutmap.cpp
     ${_brulion_shell_dir}/traypopup.h ${_brulion_shell_dir}/traypopup.cpp
     ${_brulion_shell_dir}/workspace.h ${_brulion_shell_dir}/workspace.cpp
     ${_brulion_shell_dir}/workspacequery.cpp
@@ -131,6 +132,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellSettingDividers.qml
     qml/shell/ShellSettingRow.qml
     qml/shell/ShellShareDialog.qml
+    qml/shell/ShellShortcutSettings.qml
     qml/shell/ShellSidePanel.qml
     qml/shell/ShellSidebar.qml
     qml/shell/ShellSplash.qml

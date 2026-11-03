@@ -38,7 +38,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[Wiersz poleceń i agenci AI|Wiersz poleceń i agenci AI]] — `brulion-cli`, skrypty i agenci AI (MCP).
 
 ## Pod ręką
-- [[Skróty klawiszowe|Skróty klawiszowe]]
+- [[Skróty klawiszowe|Skróty klawiszowe]] — także własne skróty poleceń.
 - [[Lista zmian|Lista zmian]] — co się zmieniło w kolejnych wersjach Brulionu.
 
 > [!tip] Paleta poleceń

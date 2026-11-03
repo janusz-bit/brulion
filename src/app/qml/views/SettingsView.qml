@@ -10,7 +10,9 @@ import Brulion
 // four buttons, the quick note button; back to the default look — AppSettings, Theme inputs),
 // Edytor (font — serif, sans or any installed family —, code font, size, line spacing, width,
 // source mode, spell checking — on/off, its languages, the personal dictionary's dialog, shown only
-// where SpellCheck.available —; font pickers: BFontPickerDialog, not in the browser), Notatnik (the vault's shared settings in
+// where SpellCheck.available —, word count, focus mode, typewriter scrolling; font pickers:
+// BFontPickerDialog, not in the browser), Skróty klawiszowe (qml/shell/ShellShortcutSettings: the
+// commands' shortcuts), Notatnik (the vault's shared settings in
 // .brulion/config.json: the note modes of new pages and of the journal, journal folder and file
 // names, attachments, templates, default reminder time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
@@ -56,6 +58,7 @@ Item {
         { id: "general", title: qsTr("General"), icon: "settings" },
         { id: "appearance", title: qsTr("Appearance"), icon: "palette" },
         { id: "editor", title: qsTr("Editor"), icon: "pencil" },
+        { id: "shortcuts", title: qsTr("Keyboard shortcuts"), icon: "keyboard" },
         { id: "vault", title: qsTr("Notebook"), icon: "notebook-pen" },
         { id: "reminders", title: qsTr("Reminders"), icon: "bell" },
         { id: "sync", title: qsTr("Sync"), icon: "folder-sync" },
@@ -67,6 +70,7 @@ Item {
         switch (id) {
         case "appearance": return appearanceSection
         case "editor": return editorSection
+        case "shortcuts": return shortcutsSection
         case "vault": return vaultSection
         case "reminders": return remindersSection
         case "sync": return syncSection
@@ -817,6 +821,31 @@ Item {
                 }
             }
             BSwitch {
+                objectName: "settingsWordCount"
+                Layout.fillWidth: true
+                text: qsTr("Word count")
+                description: qsTr("Words, characters and reading time in the corner of a page (wide windows); the page's menu always shows them.")
+                checked: AppSettings.wordCountShown
+                onToggled: AppSettings.wordCountShown = checked
+            }
+            BSwitch {
+                objectName: "settingsFocusMode"
+                Layout.fillWidth: true
+                text: qsTr("Focus mode")
+                description: qsTr("On a page and in the journal only the text, without side bars and toolbars. %1 or Esc leaves it.")
+                             .arg(ShortcutMap.sequences["view.focus"] || qsTr("The command palette"))
+                checked: AppSettings.focusMode
+                onToggled: AppSettings.focusMode = checked
+            }
+            BSwitch {
+                objectName: "settingsTypewriter"
+                Layout.fillWidth: true
+                text: qsTr("Typewriter scrolling")
+                description: qsTr("The line you are writing stays in the middle of the screen.")
+                checked: AppSettings.typewriterScrolling
+                onToggled: AppSettings.typewriterScrolling = checked
+            }
+            BSwitch {
                 objectName: "settingsWebPictures"
                 Layout.fillWidth: true
                 text: qsTr("Show pictures from the internet without asking")
@@ -1174,6 +1203,11 @@ Item {
     Component {
         id: backupsSection
         ShellBackupSettings {}
+    }
+
+    Component {
+        id: shortcutsSection
+        ShellShortcutSettings {}
     }
 
     Component {

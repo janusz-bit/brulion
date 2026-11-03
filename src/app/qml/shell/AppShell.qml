@@ -22,7 +22,9 @@ import Brulion
 // AppController's history and only lets the app close from the home view.
 //
 // Owns the shell's popups (command palette, quick switcher, quick capture, new page or folder,
-// rename, "Przenieś do…", delete confirmation, about) and the global shortcuts; bars, the sidebar
+// rename, "Przenieś do…", delete confirmation, about) and the global shortcuts (ShortcutMap's,
+// custom ones too; docs/UI.md "Custom shortcuts") and focus mode (no bars around a page or the
+// journal: AppSettings.focusMode, "Statistics and focus mode"); bars, the sidebar
 // and views call the open*() functions (views through AppController.requestItemAction(action,
 // path): move, rename, delete, newPage, newFolder, reveal). Content is laid out edge-to-edge: bars extend under the system bars and pad
 // themselves with the SafeArea margins.
@@ -94,7 +96,7 @@ FocusScope {
     /// Phones: the bottom navigation shows unless the keyboard is up or the view has a bar of
     /// its own at the bottom instead (the drawing's tools). An editing toolbar that stays after
     /// the keyboard went (the editing goes on) docks right above it.
-    readonly property bool bottomNavShown: Theme.narrow && !keyboardUp && !shell.routeView.viewReplacesBottomNav
+    readonly property bool bottomNavShown: Theme.narrow && !keyboardUp && !shell.routeView.viewReplacesBottomNav && !focusMode
     /// Room under the content: the keyboard (minus the bottom navigation, while that is shown:
     /// sliding, the keyboard covers or uncovers it first); while typing without the navigation
     /// at least the system's navigation bar, which the docked toolbar must clear, and the
@@ -149,6 +151,15 @@ FocusScope {
 
     function flag(value) {
         return value === true || value === "true"
+    }
+
+    /// Focus mode (AppSettings.focusMode; docs/UI.md "Statistics and focus mode"): where an editor
+    /// shows a page or the journal, no sidebar, top bar, side panel or bottom navigation — the
+    /// text column alone, centred. F8 (ShortcutMap "view.focus"), Esc once the view does not need
+    /// it, the Back key and the corner button leave it; other views show their bars as usual.
+    readonly property bool focusMode: AppSettings.focusMode && ["page", "journal", "journals"].indexOf(route.view) >= 0
+    function leaveFocusMode() {
+        AppSettings.focusMode = false
     }
 
     // The detailed event log notes where the view ends while typing, once the keyboard has
@@ -315,19 +326,29 @@ FocusScope {
         case "trashPage": if (currentFile !== "") confirmDelete(currentFile); break
         case "about": openAbout(); break
         case "toggleSidePanel": AppController.sidePanelVisible = !AppController.sidePanelVisible; break
+        case "renamePage": if (route.view === "page") openRename(route.path, false); break
         }
     }
 
     focus: true
 
-    // Android back key / gesture: back through the history; at home the app may close.
+    // Android back key / gesture: back through the history; at home the app may close. Focus
+    // mode first ends (also Esc, once nothing in the view took it).
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Back)
-            event.accepted = AppController.canGoBack || !AppController.atHome
+            event.accepted = shell.focusMode || AppController.canGoBack || !AppController.atHome
+        else if (event.key === Qt.Key_Escape && shell.focusMode) {
+            shell.leaveFocusMode()
+            event.accepted = true
+        }
     }
     Keys.onReleased: (event) => {
-        if (event.key === Qt.Key_Back)
+        if (event.key === Qt.Key_Back && shell.focusMode) {
+            shell.leaveFocusMode()
+            event.accepted = true
+        } else if (event.key === Qt.Key_Back) {
             event.accepted = AppController.handleBackKey()
+        }
     }
 
     onWidthChanged: if (!Theme.narrow && drawer.opened) drawer.close()
@@ -343,7 +364,7 @@ FocusScope {
 
         Loader {
             id: sidebarLoader
-            visible: !Theme.narrow && shell.sidebarVisible
+            visible: !Theme.narrow && shell.sidebarVisible && !shell.focusMode
             active: !Theme.narrow
             SplitView.preferredWidth: Theme.sidebarWidth
             SplitView.minimumWidth: 200
@@ -367,7 +388,14 @@ FocusScope {
             SplitView.minimumWidth: 300
             spacing: 0
 
+            // Focus mode: no top bar; the content clears the system's status bar itself.
+            Item {
+                visible: shell.focusMode
+                Layout.preferredHeight: shell.safe.top
+            }
             ShellTopBar {
+                objectName: "shellTopBar"
+                visible: !shell.focusMode
                 Layout.fillWidth: true
                 title: shell.title
                 titleOf: (r) => shell.routeTitle(r)
@@ -396,7 +424,7 @@ FocusScope {
             }
             // Not while typing: the room above the on-screen keyboard is the note's.
             ShellUpdateBanner {
-                visible: !shell.keyboardUp && AppController.updates.availableVersion !== ""
+                visible: !shell.keyboardUp && !shell.focusMode && AppController.updates.availableVersion !== ""
                 Layout.fillWidth: true
                 Layout.leftMargin: Theme.space2
                 Layout.rightMargin: Theme.space2
@@ -446,6 +474,12 @@ FocusScope {
 
             // The palette's block commands follow the main view's source mode (CommandModel).
             Binding { target: AppController; property: "sourceModeShown"; value: shell.routeView.viewSourceMode }
+            // Focus mode on a phone: no bottom navigation; the content clears the system's
+            // navigation bar (while typing the keyboard's room does).
+            Item {
+                visible: shell.focusMode && !shell.typing
+                Layout.preferredHeight: shell.navigationBar
+            }
             ShellBottomNav {
                 id: bottomNav
                 objectName: "shellBottomNav"
@@ -469,7 +503,7 @@ FocusScope {
 
         ShellSidePanel {
             id: sidePanel
-            visible: !Theme.narrow && AppController.sidePanelVisible
+            visible: !Theme.narrow && AppController.sidePanelVisible && !shell.focusMode
             SplitView.preferredWidth: 340
             SplitView.minimumWidth: 260
             SplitView.maximumWidth: 600
@@ -492,13 +526,33 @@ FocusScope {
         color: KeyboardInsets.marked ? "#ff00ff" : Theme.bgElevated
     }
 
+    // Focus mode's way out where no key is at hand (phones): a quiet button in the top corner,
+    // clearer under the pointer.
+    BIconButton {
+        id: focusExit
+        objectName: "focusModeExit"
+        visible: shell.focusMode
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: shell.safe.top + Theme.space2
+        anchors.rightMargin: shell.safe.right + Theme.space3
+        z: 5
+        iconName: "minimize"
+        toolTipBelow: true
+        label: qsTr("Leave focus mode")
+        shortcut: ShortcutMap.sequences["view.focus"] || ""
+        opacity: Theme.touchUi || hovered || activeFocus ? 1 : 0.35
+        onClicked: shell.leaveFocusMode()
+    }
+
     Drawer {
         id: drawer
         objectName: "shellDrawer"
         width: Math.min(320, shell.width * 0.86)
         height: shell.height
         edge: Qt.LeftEdge
-        interactive: Theme.narrow
+        // (Not in focus mode: nothing but the text; its button or Back leave it first.)
+        interactive: Theme.narrow && !shell.focusMode
         // The edge swipe: a finger that starts within dragMargin of the left edge and moves
         // right opens the drawer (on it or the scrim, to the left, closes it). Touch UIs get a
         // strip a finger hits (Qt's default is the start-drag distance, a few px) that begins
@@ -726,17 +780,29 @@ FocusScope {
         }
     }
 
-    Shortcut { sequence: "Ctrl+K"; onActivated: shell.openPalette() }
-    Shortcut { sequence: "Ctrl+O"; onActivated: shell.openSwitcher() }
-    Shortcut { sequence: "Ctrl+Shift+F"; onActivated: AppController.search("") }
-    Shortcut { sequence: "Alt+Left"; onActivated: AppController.back(AppController.focusedTab) }
-    Shortcut { sequence: "Alt+Right"; onActivated: AppController.forward(AppController.focusedTab) }
-    // Tabs (docs/UI.md "Tabs, split view and windows").
-    Shortcut { sequence: "Ctrl+T"; onActivated: AppController.newTab() }
-    Shortcut { sequence: "Ctrl+W"; onActivated: AppController.closeTab(AppController.focusedTab) }
-    Shortcut { sequences: ["Ctrl+Tab", "Ctrl+PgDown"]; onActivated: AppController.nextTab() }
+    // The commands' shortcuts (docs/UI.md "Custom shortcuts"): one Shortcut per action that has
+    // one, as ShortcutMap has them now (custom ones too). Find, replace, Markdown source and a
+    // page property are the views' own (PageView, JournalsView: their state decides); the editor
+    // copies a block reference with Ctrl+Shift+C itself (another key for it is a Shortcut here).
+    readonly property var viewShortcuts: ["page.find", "page.replace", "page.source", "page.addProperty"]
+    Repeater {
+        model: ShortcutMap.bindings.filter(b => shell.viewShortcuts.indexOf(b.id) < 0
+                                           && !(b.id === "block.copyRef" && b.sequence === "Ctrl+Shift+C"))
+        delegate: Item {
+            id: binding
+            required property var modelData
+            Shortcut {
+                sequence: binding.modelData.sequence
+                enabled: shell.shortcutEnabled(binding.modelData.id)
+                onActivated: shell.runShortcut(binding.modelData.id)
+            }
+        }
+    }
+    // Tabs (docs/UI.md "Tabs, split view and windows"): Ctrl+T, Ctrl+W, Ctrl+Tab and Ctrl+Shift+Tab
+    // are the tab commands' shortcuts above; these are the browsers' other keys for them.
+    Shortcut { sequences: ["Ctrl+PgDown"]; onActivated: AppController.nextTab() }
     // (Shift+Tab arrives as Backtab.)
-    Shortcut { sequences: ["Ctrl+Shift+Tab", "Ctrl+Shift+Backtab", "Ctrl+PgUp"]; onActivated: AppController.previousTab() }
+    Shortcut { sequences: ["Ctrl+Shift+Backtab", "Ctrl+PgUp"]; onActivated: AppController.previousTab() }
     Instantiator {
         model: 9
         delegate: Shortcut {
@@ -746,23 +812,25 @@ FocusScope {
             onActivated: AppController.selectTabAt(index === 8 ? -1 : index)
         }
     }
-    Shortcut { sequence: "Ctrl+J"; onActivated: AppController.openToday() }
-    // This week's / this month's note (docs/SYNTAX.md §1 "Weekly and monthly notes").
-    Shortcut { sequence: "Ctrl+Alt+W"; onActivated: AppController.openPeriodicNote("week", "", 0) }
-    Shortcut { sequence: "Ctrl+Alt+M"; onActivated: AppController.openPeriodicNote("month", "", 0) }
-    Shortcut { sequence: "Ctrl+N"; onActivated: shell.openNewPage("") }
-    Shortcut { sequence: "Ctrl+Shift+N"; onActivated: shell.openCapture() }
-    Shortcut { sequence: "Ctrl+Shift+B"; onActivated: AppController.toggleDocsVault() }
-    Shortcut { sequence: "Ctrl+,"; onActivated: AppController.navigate({ view: "settings" }) }
-    Shortcut {
-        sequence: "Ctrl+\\"
-        enabled: !Theme.narrow
-        onActivated: AppController.sidePanelVisible = !AppController.sidePanelVisible
+    function shortcutEnabled(id) {
+        switch (id) {
+        case "panel.toggle": return !Theme.narrow
+        case "page.rename": return shell.route.view === "page"
+        }
+        return true
     }
-    Shortcut {
-        sequence: "F2"
-        enabled: shell.route.view === "page"
-        onActivated: shell.openRename(shell.route.path, false)
+    /// What a command's shortcut does: the shell's own popups directly, the rest as the palette.
+    function runShortcut(id) {
+        switch (id) {
+        case "palette": shell.openPalette(); break
+        case "page.switch": shell.openSwitcher(); break
+        case "go.search": AppController.search(""); break
+        case "page.new": shell.openNewPage(""); break
+        case "capture": shell.openCapture(); break
+        case "panel.toggle": AppController.sidePanelVisible = !AppController.sidePanelVisible; break
+        case "page.rename": shell.openRename(shell.route.path, false); break
+        default: CommandModel.run(id)
+        }
     }
 
     // ---- Tabs: links in a new tab (OpenIn), pages in windows of their own -------------------------

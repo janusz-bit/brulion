@@ -87,6 +87,8 @@ components — no Material/Fusion look, so all targets look identical.
   turns it off; GitHub is asked once a day and only while it is on. Builds with the CMake option
   `BRULION_UPDATE_CHECK=OFF` (store builds: F-Droid, IzzyOnDroid; docs/ANDROID.md) have neither
   the card nor the switch (`updates.supported` is false, also with `--update-available`).
+* **Focus mode** (F8; "Statistics and focus mode" below): on a page or the journal no sidebar,
+  top bar, side panel or bottom navigation.
 * **Wide (≥ 900 px):** `SplitView` — left **sidebar** | **top bar** + current view | optional
   right **side panel**. One 1-px hairline between them: the split handle's (`BSplitHandle`, which
   also highlights on hover and while dragging); the sidebar and the side panel draw no edge of
@@ -202,8 +204,8 @@ components — no Material/Fusion look, so all targets look identical.
   capture and reminder taps from it go back to the user's notebook, and its Nextcloud switch
   is its own (off; it never takes over the user notebook's server folder).
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
-  new page, Nowy folder…, Przenieś do…, Pokaż w drzewie, capture, theme, language, sync, panels,
-  settings, about; the editor's commands —
+  new page, Nowy folder…, Przenieś do…, Pokaż w drzewie, Zmień nazwę strony… (F2), capture, theme,
+  language, sync, panels, focus mode and typewriter scrolling, settings, Skróty klawiszowe, about; the editor's commands —
   Markdown source, note mode, "Kopiuj link do strony", "Kopiuj odwołanie do bloku", "Kopiuj link
   do bloku", "Kopiuj link do nagłówka": the current block is the one being edited (a table whose
   cell is edited too; a cell left for the palette leaves its table selected), else the selected
@@ -517,10 +519,14 @@ everything near the bottom, the same way on Android, in the browser and with a s
 | F2 | rename the current page |
 | Delete on a focused row of the sidebar's tree | move that page, file or folder to the trash (after the confirmation) |
 | Ctrl+, | settings |
+| F8 | focus mode on / off ("Statistics and focus mode") |
 | Ctrl+E | Markdown source mode of the page / journal |
 | Ctrl+F / Ctrl+H | find in the note — in the journal stream over its days (the PDF viewer and the graph keep their own Ctrl+F) / with its replace row ("Find and replace") |
 | Ctrl+; | add a page property (the properties panel's add row; "Page properties") |
 | Ctrl+Enter | (in dialogs) accept |
+
+Every key of this table but Delete and Ctrl+Enter is a command's shortcut and can be changed
+("Custom shortcuts" below); the block editor's keys below cannot.
 
 Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageController`):
 
@@ -545,6 +551,81 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | Ctrl+Shift+C | copy the block reference `((id))` (an id is added when missing; the browser may keep the keys for its own tools: the palette's "Kopiuj odwołanie do bloku" then) | same (the focus end); nothing selected: a toast says what to do |
 | Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y | undo, redo (per page) | same (undoing a deletion selects the blocks again) |
 | Esc | close the suggestions, else stop editing and select the block | deselect (also Android's Back in the touch selection mode) |
+
+## Statistics and focus mode
+
+**Word count** (`stats/textstats.h`, `PageController.pageStats()` / `selectionStats(text)`): the
+words, characters (with and without spaces) and reading time (200 words a minute, rounded, at
+least 1) of the open page — its source in source mode — and, while text in a block or whole blocks
+are selected, of the selection. What is counted is what a reader sees: Markdown syntax, the
+frontmatter, `key:: value` properties, block ids, task and reminder tokens, comments, embeds,
+pictures, block references and HTML tags are left out, a link counts as its label, fenced code
+(code, query, calc, Mermaid) and display formulas not at all; a word is a run between whitespace
+with a letter or digit in it (hyphenated words, "m.in.", "3,14", addresses are one word; a dash or
+emoji alone none; a no-break space separates words except between digits) — the header of
+`textstats.h` has the rules, `tst_stats` the cases. Shown:
+
+* in the bottom-right corner of PageView (`pageStatsFooter`, wide windows, not in the side panel,
+  not over a docked touch toolbar; Ustawienia → Edytor → "Liczba słów", `AppSettings.wordCountShown`,
+  on by default): "123 słowa · 820 znaków · 1 min czytania", "Zaznaczenie: …" while something is
+  selected, the characters without spaces in its tooltip and accessible name;
+* at the top of the page's menu (`pageMenuStats`, disabled item, every width) — counted when the
+  menu opens.
+
+Counting is cheap but not per keystroke: the footer counts once the page has not changed for
+400 ms plus 1 ms per 100 characters (at most 3 s; about 5 ms per 100 000 characters), the
+selection 150 ms after it changed; with the footer hidden nothing is counted until the menu opens.
+The journal stream shows no count (a day opened as a page does).
+
+**Focus mode** (`AppSettings.focusMode`, `ui/focusMode`, a device setting kept across restarts;
+palette `view.focus`, F8; Ustawienia → Edytor): where an editor shows a page or the journal
+(routes page, journal, journals) the shell hides the sidebar (and the drawer's edge swipe), the
+top bar, the update banner, the side panel and the bottom navigation; the view fills the window
+and the editor centres its text column (`BlockEditor.contentX`). The content keeps clear of the
+system bars itself (the SafeArea's top, the navigation bar while not typing). It ends with F8, Esc
+(AppShell's `Keys` — only once the view did not take it: suggestions, editing, a block selection
+come first), the Back key (before the history) and the quiet corner button `focusModeExit`
+(`minimize` icon, clearer under the pointer). Other views keep their bars while the setting is on.
+
+**Typewriter scrolling** (`AppSettings.typewriterScrolling`, palette `view.typewriter`): the
+caret's line is kept in the middle of the view — `BlockEditor.typewriter` (`centerInView()`
+instead of `ensureVisible()` for the caret; PageView adds half the view's height under the last
+block, `bottomSpace`), the source editor (`SourceEditor.keepCaretVisible`, a bottom margin of half
+the view) and the journal stream (its `centerInView(item, rect)` as the days' `scroller`), as far
+as the content goes (the first lines of a page stay where they are).
+
+## Custom shortcuts
+
+`ShortcutMap` (`shell/shortcutmap.h`, QML singleton): the actions are the palette itself
+(`palette`, Ctrl+K) and every command of `CommandModel` with its default shortcut
+(`CommandModel::shortcutActions()`; commands without one can get one: "Synchronizuj teraz",
+"Zadania"…). Custom shortcuts are a device setting (AppSettings group `shortcuts`: id = portable
+text, "" = none) — one key chord with Ctrl, Alt or Meta, or a function key. `check(id, sequence)`
+refuses, with a message in the UI language: not one chord ("invalid"), a key that types or moves
+in text ("typing"), the keys of editing text and blocks, the drawing editor, the PDF viewer and
+menus, and Ctrl+Alt with a letter Windows' AltGr makes Polish ("reserved"); another action's
+shortcut is a "conflict" — `assign(id, sequence, true)` moves it, the other action is left
+without one. `reset(id)` brings the default back (whoever took it meanwhile loses it),
+`resetAll()` all of them. Stored values are read defensively: no string (an INI list), malformed
+or not allowed is ignored; two actions on one key — the earlier custom one keeps it, a default
+taken by a custom one gives way.
+
+Applied everywhere through `ShortcutMap.sequences[id]` / `bindings`: AppShell makes one
+`Shortcut` per action (`runShortcut(id)`: the shell's popups directly, the rest
+`CommandModel.run(id)`), except find, replace, Markdown source and a page property, which PageView
+and JournalsView bind to their own Shortcuts (their state decides); the editor's own Ctrl+E and
+Ctrl+Shift+C are handled by it only while they are those commands' shortcuts
+(`BlockEditor.sourceModeShortcut` / `copyRefShortcut`, bound by the views; another key is a
+window Shortcut). The palette shows the shortcut each command has now, and so do the top bar's
+and menus' hints (BIconButton / BMenuItem `shortcut`).
+
+Ustawienia → **Skróty klawiszowe** (`ShellShortcutSettings`, also the palette's
+`settings.shortcuts`): every action with its key caps ("Brak skrótu" for none), a search over
+titles, ids and keys (case and diacritics ignored), **Zmień** — the row waits for the next key
+(an invisible recorder takes the keyboard and every ShortcutOverride, so no window shortcut fires;
+a modifier alone waits; Esc or Back cancel; focus leaving ends it) —, the refusal or the conflict
+under the row with **Przypisz tutaj**, ✕ (no shortcut), ↺ (the default, shown as "Domyślnie: …"
+for a custom one) and **Przywróć wszystkie** with a confirmation. Vim mode is not there (TODO.md).
 
 ## Navigation
 

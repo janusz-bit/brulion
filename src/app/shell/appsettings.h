@@ -27,6 +27,7 @@
 #include <QVariantList>
 
 #include <memory>
+#include <optional>
 
 class QSettings;
 
@@ -100,6 +101,16 @@ class AppSettings : public QObject {
     /// The personal dictionary: words spell checking takes as right, sorted (a device setting:
     /// every notebook of this device; docs/UI.md "Spell checking" says why not in the notebook).
     Q_PROPERTY(QStringList spellingWords READ spellingWords WRITE setSpellingWords NOTIFY spellingWordsChanged FINAL)
+    /// The word and character count in the corner of a page (wide windows; the page's Więcej menu
+    /// always has it). Default on.
+    Q_PROPERTY(bool wordCountShown READ wordCountShown WRITE setWordCountShown NOTIFY wordCountShownChanged FINAL)
+    /// Focus mode (docs/UI.md "Statistics and focus mode"): on a page or in the journal no sidebar,
+    /// top bar, side panel or bottom navigation — the text column alone, centred. F8 (a custom
+    /// shortcut), Esc, the Back key or its corner button leave it. Kept on this device.
+    Q_PROPERTY(bool focusMode READ focusMode WRITE setFocusMode NOTIFY focusModeChanged FINAL)
+    /// Typewriter scrolling: the editor keeps the caret's line in the middle of the view.
+    Q_PROPERTY(bool typewriterScrolling READ typewriterScrolling WRITE setTypewriterScrolling NOTIFY
+                       typewriterScrollingChanged FINAL)
     /// The export's choice for pictures from the internet (ExportController::webPictures):
     /// "link" (default: the addresses stay) | "include" (copies in the HTML and Pandoc exports).
     Q_PROPERTY(QString exportWebPictures READ exportWebPictures WRITE setExportWebPictures NOTIFY
@@ -225,6 +236,21 @@ public:
     void setSpellLanguages(const QString &languages);
     QStringList spellingWords() const;
     void setSpellingWords(const QStringList &words);
+    bool wordCountShown() const;
+    void setWordCountShown(bool on);
+    bool focusMode() const;
+    void setFocusMode(bool on);
+    bool typewriterScrolling() const;
+    void setTypewriterScrolling(bool on);
+
+    /// Custom keyboard shortcuts (ShortcutMap): the stored values of group "shortcuts", command id
+    /// -> what was stored (a string as written, "" for none; anything else is malformed and left to
+    /// ShortcutMap to ignore).
+    QVariantMap shortcutOverrides() const;
+    /// Store `id`'s custom shortcut (portable text, "" for none); nullopt removes it (the default).
+    void setShortcutOverride(const QString &id, const std::optional<QString> &sequence);
+    /// Remove every custom shortcut.
+    void clearShortcutOverrides();
 
     QString currentVault() const;
     void setCurrentVault(const QString &path);
@@ -338,6 +364,9 @@ Q_SIGNALS:
     void spellCheckChanged();
     void spellLanguagesChanged();
     void spellingWordsChanged();
+    void wordCountShownChanged();
+    void focusModeChanged();
+    void typewriterScrollingChanged();
     void currentVaultChanged();
     void recentVaultsChanged();
     void closeToTrayChanged();

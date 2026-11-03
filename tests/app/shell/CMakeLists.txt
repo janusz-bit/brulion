@@ -14,6 +14,9 @@ brulion_add_test(tst_shell_share SOURCES tst_share.cpp LIBS brulion_shell brulio
 # QGuiApplication for the screen lookup).
 brulion_add_test(tst_shell_traypopup SOURCES tst_traypopup.cpp LIBS brulion_shell Qt6::Gui)
 brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell brulion_core_text)
+# Custom keyboard shortcuts (shortcutmap.h): key chords, what cannot be a shortcut, conflicts,
+# taking over, reset, persistence and malformed stored values.
+brulion_add_test(tst_shell_shortcutmap SOURCES tst_shortcutmap.cpp LIBS brulion_shell)
 # The message about a newer version (appupdates.h; a local HTTP server stands in for GitHub).
 # BRULION_UPDATE_CHECK_EXPECTED: the CMake option, which the library's AppUpdates::checkBuiltIn()
 # must follow (an OFF build runs the tests of a build without the check).

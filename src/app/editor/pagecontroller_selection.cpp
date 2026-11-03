@@ -8,6 +8,7 @@
 
 #include "markdown/blockclipboard.h"
 #include "markdown/inline.h"
+#include "stats/textstats.h"
 #include "util/paths.h"
 #include "webpicture/webpicture.h"
 
@@ -413,6 +414,34 @@ QString PageController::selectionMarkdown() const
     if (tops.isEmpty())
         return {};
     return markdown::blocksMarkdown(m_model->document(), tops);
+}
+
+namespace {
+
+QVariantMap statsMap(const stats::TextStats &s, qsizetype length)
+{
+    return {{QStringLiteral("words"), s.words}, {QStringLiteral("characters"), s.characters},
+                                                 {QStringLiteral("charactersNoSpaces"), s.charactersNoSpaces},
+                                                  {QStringLiteral("readingMinutes"), s.readingMinutes},
+                                                   {QStringLiteral("length"), qlonglong(length)}};
+}
+
+} // namespace
+
+QVariantMap PageController::pageStats() const
+{
+    if (!m_loaded)
+        return {};
+    const QString content = m_sourceMode ? sourceText() : text();
+    return statsMap(stats::countMarkdown(content), content.size());
+}
+
+QVariantMap PageController::selectionStats(const QString &editSelection) const
+{
+    const QString selected = !editSelection.isEmpty() ? editSelection : selectionMarkdown();
+    if (selected.isEmpty())
+        return {};
+    return statsMap(stats::countMarkdown(selected, stats::CountOptions{.page = false}), selected.size());
 }
 
 QString PageController::selectionPlainText() const

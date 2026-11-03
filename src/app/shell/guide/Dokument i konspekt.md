@@ -71,6 +71,15 @@ Wpisz `/` na początku bloku, a pojawi się lista poleceń: zadanie, przypomnien
 ## Tryb źródła
 **Ctrl+E** pokazuje cały plik jako surowy Markdown z podświetleniem składni. Przydaje się do hurtowych zmian; kolejne naciśnięcie wraca do bloków. Na telefonie tekst przesuwasz palcem, dotknięcie stawia kursor, a przytrzymanie zaznacza słowo. (Do kopiowania fragmentów kilku bloków nie musisz już przechodzić do źródła: zobacz [[#Zaznaczanie i kopiowanie|Zaznaczanie i kopiowanie]].)
 
+## Statystyki i tryb skupienia
+W prawym dolnym rogu strony (w szerokim oknie) widać, ile ma słów i znaków i ile zajmie jej przeczytanie — przy zaznaczeniu tekstu albo bloków liczby dotyczą zaznaczenia. Najedź na nie, a zobaczysz też liczbę znaków bez spacji. To samo jest zawsze na górze menu strony (**⋯** obok tytułu), także na telefonie. Licznik wyłączysz w *Ustawienia → Edytor → Liczba słów*.
+
+Brulion liczy to, co czytelnik widzi: bez znaczników Markdown, nagłówka YAML i właściwości `klucz:: wartość`, identyfikatorów bloków, dat zadań i przypomnień, komentarzy `%%…%%`, obrazów i osadzeń; link liczy się jako jego tekst (`[[Strona|etykieta]]` to „etykieta”), a bloki kodu, zapytań, obliczeń i diagramów oraz wzory w `$$` nie liczą się wcale. Słowo to wszystko między odstępami, co ma choć jedną literę albo cyfrę: „biało-czerwony”, „m.in.”, „3,14” i adres strony to po jednym słowie, a samotny myślnik „—” czy emoji — żadne. Twarda spacja po „w” albo „i” rozdziela słowa, a między cyframi („1 000 000”) nie. Czas czytania liczony jest dla 200 słów na minutę.
+
+**Tryb skupienia** (F8, w palecie „Tryb skupienia” albo *Ustawienia → Edytor*) chowa pasek boczny, górny pasek, panel boczny i dolną nawigację — na stronie i w dzienniku zostaje sam tekst, na środku ekranu. Wychodzisz z niego klawiszem F8, Esc (kiedy edytor nie potrzebuje go już do zamknięcia podpowiedzi czy zaznaczenia), przyciskiem w prawym górnym rogu albo gestem Wstecz na telefonie. Brulion pamięta go na tym urządzeniu, także po ponownym uruchomieniu; inne widoki (zadania, kalendarz, ustawienia) pokazują swoje paski jak zwykle.
+
+**Przewijanie jak w maszynie do pisania** (*Ustawienia → Edytor*, albo „Przewijanie jak w maszynie do pisania” w palecie) trzyma wiersz, w którym piszesz, na środku ekranu — także w trybie źródła i w dzienniku. Pod ostatnim blokiem jest wtedy miejsce, by i ostatni wiersz mógł stanąć na środku.
+
 ## Obrazy i pliki
 Wklej obraz (Ctrl+V), upuść pliki na stronę albo użyj `/Obraz…` — okno wyboru plików przyjmie kilka obrazów naraz, także w przeglądarce. Pliki trafiają do folderu załączników (`assets/`) i są osadzane jako `![[plik.png]]`.
 

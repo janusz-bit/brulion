@@ -99,8 +99,13 @@ FocusScope {
                 root.activeDay.editor.downloadWebPictures("")
                 return
             }
-            if (action === "findInNote") {
-                root.openFind(false)
+            if (action === "findInNote" || action === "replaceInNote") {
+                root.openFind(action === "replaceInNote")
+                return
+            }
+            if (action === "toggleSourceMode") {
+                // The day opens as a page in source mode (ContentJournalDay), as Ctrl+E there.
+                root.activeDay.editor.toggleSourceMode()
                 return
             }
             if (action === "addProperty") {
@@ -115,11 +120,18 @@ FocusScope {
     }
 
     // Ctrl+; in the stream: a property of the day being written in (one day as a page: its PageView).
+    // (The shortcuts of these commands can be changed: ShortcutMap.)
     Shortcut {
-        sequence: "Ctrl+;"
+        sequence: ShortcutMap.sequences["page.addProperty"] || ""
         enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeDay !== null
                  && !root.activeDay.controller.sourceMode
         onActivated: root.activeDay.editor.addProperty()
+    }
+    // Markdown source of the day being written in (Ctrl+E): it opens as a page in source mode.
+    Shortcut {
+        sequence: ShortcutMap.sequences["page.source"] || ""
+        enabled: !root.single && !root.inSidePanel && root.visible && root.activeDay !== null
+        onActivated: root.activeDay.editor.toggleSourceMode()
     }
 
     // ---- The find bar over the stream ------------------------------------------------------------
@@ -180,12 +192,12 @@ FocusScope {
         }
     }
     Shortcut {
-        sequence: "Ctrl+F"
+        sequence: ShortcutMap.sequences["page.find"] || ""
         enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeDay !== null
         onActivated: root.openFind(false)
     }
     Shortcut {
-        sequence: "Ctrl+H"
+        sequence: ShortcutMap.sequences["page.replace"] || ""
         enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeDay !== null
         onActivated: root.openFind(true)
     }
@@ -263,6 +275,18 @@ FocusScope {
                     list.contentY = Math.max(list.originY, p.y - margin)
                 else if (top + rect.height > bottom - margin)
                     list.contentY = p.y + rect.height - bottom + margin
+            }
+            /// Typewriter scrolling (BlockEditor.typewriter): `rect` of `item` to the middle of
+            /// the visible part, as far as the stream goes.
+            function centerInView(item, rect) {
+                if (!item || KeyboardInsets.animating)
+                    return
+                const p = item.mapToItem(list.contentItem, rect.x, rect.y)
+                const visibleHeight = list.height - (toolbarDocked ? Theme.editToolbarHeight : 0)
+                const end = Math.max(list.originY, list.originY + list.contentHeight - list.height + list.bottomMargin)
+                const target = Math.max(list.originY, Math.min(end, p.y + rect.height / 2 - visibleHeight / 2))
+                if (Math.abs(target - list.contentY) >= 1)
+                    list.contentY = target
             }
             function keepCaretInView() {
                 if (root.activeDay)

@@ -313,7 +313,7 @@ BMenu {
             objectName: "copyBlockRef"
             text: qsTr("Block reference ((…))")
             iconName: "link"
-            shortcut: "Ctrl+Shift+C"
+            shortcut: menu.editor ? menu.editor.copyRefShortcut : ""
             onTriggered: menu.act((r) => menu.editor.copyLink(r, "blockRef"))
         }
         BMenuItem {

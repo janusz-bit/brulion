@@ -355,6 +355,10 @@ FocusScope {
                                                   : AppController.toast(text, kind)
         listView.interactive: false
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
+        // Typewriter scrolling and the editor's own keys as the shortcuts are now (ShortcutMap).
+        typewriter: AppSettings.typewriterScrolling
+        copyRefShortcut: ShortcutMap.sequences["block.copyRef"] || ""
+        sourceModeShortcut: ShortcutMap.sequences["page.source"] || ""
         // The properties panel open or folded: a device setting, shared with pages. Bound here
         // too, not only by the Binding above (applied when the day is complete, after the editor
         // made its rows): a day created while the stream scrolls has its panel open at once —

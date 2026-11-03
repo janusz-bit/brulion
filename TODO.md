@@ -104,9 +104,8 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * słownik użytkownika synchronizowany między urządzeniami (dziś ustawienie urządzenia — Nextcloud
     przenosi z `.brulion/` tylko `config.json`, a scalanie po kluczach gubiłoby słowa);
   * podkreślenia także poza edytowanym blokiem i w trybie źródła Markdown.
-* **Statystyki i tryb skupienia** — liczba słów i znaków, czas czytania; widok bez pasków bocznych,
-  kursor trzymany na środku ekranu.
-* **Własne skróty klawiszowe** — zmiana skrótów w ustawieniach, opcjonalnie tryb Vim (Obsidian).
+* **Tryb Vim** — opcjonalne poruszanie się i edycja klawiszami Vima w edytorze bloków i w trybie
+  źródła (Obsidian); skróty poleceń zmienia się już w Ustawienia → Skróty klawiszowe.
 * **Wygląd stron** — ikona strony, okładka; kolorowe zakreślenia (Obsidian) obok dzisiejszego
   `==…==`.
 
