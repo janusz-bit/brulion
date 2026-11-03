@@ -1,0 +1,58 @@
+# Draft of the fdroiddata recipe (metadata/io.github.januszbit.brulion.yml in
+# https://gitlab.com/fdroid/fdroiddata) — docs/ANDROID.md, "F-Droid". Kept here so that it is
+# checked against the build scripts (tests/scripts/tst_fdroid_recipe.sh); fdroiddata's copy is the
+# one F-Droid uses (its bot adds the Builds of new tags).
+#
+# The APK is built entirely from source: Qt 6.11.2 (srclib Qt5, the qt5.git super-repository,
+# only the modules the app uses) and OpenSSL 3.5 (srclib OpenSSL) are compiled with the NDK by
+# scripts/android-qt-from-source.sh and scripts/android-openssl-from-source.sh, called by
+# scripts/android-build.sh (BRULION_ANDROID_QT=source). No prebuilt Qt (aqt) or OpenSSL (KDAB).
+# Summary, description, icon and screenshots come from fastlane/metadata/android in the repository.
+Categories:
+  - Note
+  - Calendar & Agenda
+  - Task
+  - Writing
+License: AGPL-3.0-or-later
+AuthorName: janusz-bit
+SourceCode: https://github.com/janusz-bit/brulion
+IssueTracker: https://github.com/janusz-bit/brulion/issues
+Changelog: https://github.com/janusz-bit/brulion/releases
+
+AutoName: Brulion
+
+RepoType: git
+Repo: https://github.com/janusz-bit/brulion.git
+
+Builds:
+  - versionName: 0.8.1
+    versionCode: 8001
+    commit: v0.8.1
+    timeout: 14400
+    sudo:
+      - apt-get update
+      - apt-get install -y --no-install-recommends g++ make
+    output: dist-android/brulion-$$VERSION$$-arm64-v8a-unsigned.apk
+    srclibs:
+      - Qt5@v6.11.2
+      - OpenSSL@openssl-3.5.9
+    prebuild:
+      - sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'cmake;3.31.6'
+      - export PATH="$$SDK$$/cmake/3.31.6/bin:$PATH"
+      - cd $$Qt5$$
+      - ./init-repository -f --module-subset=qtbase,qtshadertools,qtsvg,qtdeclarative,qttools,qttranslations
+    scandelete:
+      - tests/core/io/fixtures/trilium
+    build:
+      - export ANDROID_SDK_ROOT="$$SDK$$" ANDROID_NDK_ROOT="$$NDK$$"
+      - export BRULION_QT_SOURCE_DIR="$$Qt5$$" BRULION_OPENSSL_SOURCE_DIR="$$OpenSSL$$"
+      - export QT_ROOT="$PWD/../qt-android" BRULION_OPENSSL_OUT="$PWD/../openssl-android"
+      - export BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 BRULION_UPDATE_CHECK=OFF
+      - export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+      - scripts/android-build.sh
+    ndk: r27c
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
+CurrentVersion: 0.8.1
+CurrentVersionCode: 8001

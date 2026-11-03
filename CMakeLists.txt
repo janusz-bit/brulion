@@ -48,6 +48,28 @@ if(MSVC)
     add_compile_definitions(NOMINMAX)
 endif()
 
+# Android: the same sources give the same APK in any directory (reproducible builds — F-Droid
+# compares its build with the published APK, docs/ANDROID.md): the NDK compiles with -g, so the
+# paths of the checkout, the build directory, the NDK and Qt would end up in the debug info (and
+# through it in the libraries' build ID, which stays after Gradle strips them).
+if(ANDROID)
+    set(_brulion_path_maps "${PROJECT_SOURCE_DIR}=/brulion" "${PROJECT_BINARY_DIR}=/brulion-build")
+    if(CMAKE_ANDROID_NDK)
+        list(APPEND _brulion_path_maps "${CMAKE_ANDROID_NDK}=/ndk")
+    elseif(ANDROID_NDK)
+        list(APPEND _brulion_path_maps "${ANDROID_NDK}=/ndk")
+    endif()
+    if(QT6_INSTALL_PREFIX)
+        list(APPEND _brulion_path_maps "${QT6_INSTALL_PREFIX}=/qt")
+    endif()
+    if(QT_HOST_PATH)
+        list(APPEND _brulion_path_maps "${QT_HOST_PATH}=/qt-host")
+    endif()
+    foreach(_map IN LISTS _brulion_path_maps)
+        add_compile_options("-ffile-prefix-map=${_map}")
+    endforeach()
+endif()
+
 # Tests are built on desktop only (not for Android/WebAssembly cross builds).
 if(NOT ANDROID AND NOT EMSCRIPTEN)
     include(CTest)

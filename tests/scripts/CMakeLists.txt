@@ -36,3 +36,9 @@ if(BRULION_BASH)
                      ${PROJECT_SOURCE_DIR}/scripts/bench.sh)
     set_tests_properties(tst_scripts_bench_budget PROPERTIES SKIP_RETURN_CODE 77)
 endif()
+# The draft F-Droid recipe (packaging/fdroid) against the Android build scripts it calls and the
+# project version (docs/ANDROID.md, "F-Droid").
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_fdroid_recipe
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_fdroid_recipe.sh ${PROJECT_SOURCE_DIR})
+endif()
