@@ -26,6 +26,64 @@ RichTextPills::~RichTextPills()
     detach();
 }
 
+void RichTextPills::classBegin()
+{
+    m_deferred = true;
+}
+
+void RichTextPills::componentComplete()
+{
+    m_deferred = false;
+    if (m_ownsText)
+        reload();
+    else
+        process();
+}
+
+void RichTextPills::setHtml(const QString &html)
+{
+    if (m_ownsText && m_html == html)
+        return;
+    m_html = html;
+    m_ownsText = true;
+    reload();
+    Q_EMIT htmlChanged();
+}
+
+void RichTextPills::setMaximumLineCount(int lines)
+{
+    lines = std::max(0, lines);
+    if (m_maxLines == lines)
+        return;
+    m_maxLines = lines;
+    if (m_ownsText)
+        reload();
+    Q_EMIT maximumLineCountChanged();
+}
+
+void RichTextPills::setFont(const QFont &font)
+{
+    if (m_fontSet && m_font == font)
+        return;
+    m_font = font;
+    m_fontSet = true;
+    if (m_ownsText)
+        reload();
+    Q_EMIT fontChanged();
+}
+
+void RichTextPills::setWidth(qreal width)
+{
+    if (qFuzzyCompare(m_width + 1, width + 1))
+        return;
+    m_width = width;
+    if (m_ownsText)
+        reload();
+    else
+        refresh();
+    Q_EMIT widthChanged();
+}
+
 void RichTextPills::setTextDocument(QQuickTextDocument *document)
 {
     if (m_quickDocument == document)
@@ -40,7 +98,10 @@ void RichTextPills::setLineHeight(qreal px)
     if (qFuzzyCompare(m_lineHeight + 1, px + 1))
         return;
     m_lineHeight = px;
-    process();
+    if (m_ownsText)
+        reload(); // (the line height decides where the text is cut)
+    else
+        process();
     Q_EMIT lineHeightChanged();
 }
 
@@ -101,7 +162,10 @@ void RichTextPills::attach(QTextDocument *document)
             }
         }));
     }
-    process();
+    if (m_ownsText)
+        reload();
+    else
+        process();
 }
 
 void RichTextPills::onContentsChange()
@@ -111,8 +175,109 @@ void RichTextPills::onContentsChange()
     process();
 }
 
+void RichTextPills::reload()
+{
+    QTextDocument *doc = m_document;
+    if (!doc || m_deferred || m_changing)
+        return;
+    m_changing = true;
+    if (doc->isUndoRedoEnabled())
+        doc->setUndoRedoEnabled(false);
+    // The TextEdit's own font and width (it may set them on the document after this object).
+    if (m_fontSet && doc->defaultFont() != m_font)
+        doc->setDefaultFont(m_font);
+    if (m_width > 0 && !qFuzzyCompare(doc->textWidth(), m_width))
+        doc->setTextWidth(m_width);
+    doc->setHtml(m_html);
+    QTextCursor edit(doc);
+    edit.beginEditBlock();
+    applyLineHeight();
+    takeBrushes();
+    edit.endEditBlock();
+    const bool cut = m_maxLines > 0 && cutToLines();
+    m_changing = false;
+    if (cut != m_truncated) {
+        m_truncated = cut;
+        Q_EMIT truncatedChanged();
+    }
+    refresh();
+}
+
+bool RichTextPills::cutToLines()
+{
+    QTextDocument *doc = m_document;
+    QAbstractTextDocumentLayout *layout = doc->documentLayout();
+    int before = 0; // lines of the blocks above
+    for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
+        (void)layout->blockBoundingRect(block); // lays the block out (with the current width)
+        const QTextLayout *text = block.layout();
+        const int lines = text ? text->lineCount() : 0;
+        if (before + lines < m_maxLines) {
+            before += lines;
+            continue;
+        }
+        // The last line shown is in this block: the text goes on after it?
+        const QTextLine last = text->lineAt(m_maxLines - before - 1);
+        const int cut = block.position() + last.textStart() + last.textLength();
+        QTextCursor rest(doc);
+        rest.setPosition(cut);
+        rest.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
+        if (rest.selectedText().trimmed().isEmpty())
+            return false; // (blanks, empty paragraphs)
+        ellipsize(cut, m_maxLines - before);
+        return true;
+    }
+    return false;
+}
+
+void RichTextPills::ellipsize(int cut, int lines)
+{
+    QTextDocument *doc = m_document;
+    QTextCursor cursor(doc);
+    cursor.setPosition(cut);
+    cursor.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
+    cursor.removeSelectedText();
+    // No blank (a space, a no-break space, a line break) before the "…".
+    while (cursor.position() > cursor.block().position() && doc->characterAt(cursor.position() - 1).isSpace())
+        cursor.deletePreviousChar();
+    // The text's own colour, no link and no tint: "…" belongs to no token.
+    QTextCharFormat format = cursor.charFormat();
+    format.setAnchor(false);
+    format.setAnchorHref(QString());
+    format.setAnchorNames({});
+    format.clearProperty(TintColorProperty);
+    format.clearProperty(TintRoundProperty);
+    format.clearBackground();
+    format.clearForeground();
+    format.setFontUnderline(false);
+    format.setFontFixedPitch(false);
+    cursor.insertText(QString(QChar(0x2026)), format);
+    const QTextBlock block = cursor.block();
+    QAbstractTextDocumentLayout *layout = doc->documentLayout();
+    // Shortened (by whole characters, then blanks) until "…" fits on the last line.
+    for (int guard = 0; guard < 400; ++guard) {
+        (void)layout->blockBoundingRect(block);
+        const QTextLayout *text = block.layout();
+        if (!text || text->lineCount() <= lines)
+            break;
+        QTextCursor before(doc);
+        before.setPosition(cursor.position() - 1); // in front of the "…"
+        if (before.position() <= block.position())
+            break;
+        before.movePosition(QTextCursor::PreviousCharacter, QTextCursor::KeepAnchor);
+        before.removeSelectedText();
+        while (before.position() > block.position() && doc->characterAt(before.position() - 1).isSpace())
+            before.deletePreviousChar();
+        cursor.setPosition(before.position() + 1);
+    }
+}
+
 void RichTextPills::process()
 {
+    if (m_ownsText) {
+        reload();
+        return;
+    }
     QTextDocument *doc = m_document;
     if (doc && !m_changing) {
         m_changing = true;

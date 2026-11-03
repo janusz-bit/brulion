@@ -41,7 +41,8 @@ brulion_add_test(tst_editor_highlighter
     SOURCES tst_editor_highlighter.cpp
     LIBS brulion_editor)
 # The rounded shapes of the rendered text's chips, tags, code and highlights (RichTextPills) on
-# InlineRenderer's real HTML: brushes taken off, kinds, rectangles per line, the fixed line height.
+# InlineRenderer's real HTML: brushes taken off, kinds, rectangles per line, the fixed line height;
+# the text set by it and cut after a number of lines with "…" (the lists' BRichText).
 brulion_add_test(tst_editor_richpills
     SOURCES tst_editor_richpills.cpp
     LIBS brulion_editor brulion_core_markdown)
@@ -50,6 +51,11 @@ brulion_add_test(tst_editor_richpills
 brulion_add_test(tst_editor_richlinks
     SOURCES tst_editor_richlinks.cpp
     LIBS brulion_editor brulion_core_markdown)
+# What a link's hover preview shows (LinkPreview): pages, sections, blocks, missing ones, links
+# without a preview, escaping, the routes followed from it.
+brulion_add_test(tst_editor_linkpreview
+    SOURCES tst_editor_linkpreview.cpp
+    LIBS brulion_editor)
 brulion_add_test(tst_editor_queryresults
     SOURCES tst_editor_queryresults.cpp
     LIBS brulion_editor)

@@ -721,6 +721,39 @@
     </message>
 </context>
 <context>
+    <name>BLinkPreview</name>
+    <message>
+        <location filename="../src/app/qml/components/BLinkPreview.qml" line="76"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2739"/>
+        <source>“%1” does not exist yet. Click the title to create it.</source>
+        <translation>„%1” jeszcze nie istnieje. Kliknij nazwę, aby utworzyć stronę.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/components/BLinkPreview.qml" line="77"/>
+        <source>There is no such section on this page.</source>
+        <translation>Na tej stronie nie ma takiej sekcji.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/components/BLinkPreview.qml" line="78"/>
+        <source>This block was not found.</source>
+        <translation>Nie znaleziono tego bloku.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/components/BLinkPreview.qml" line="79"/>
+        <source>Nothing here yet.</source>
+        <translation>Na razie nic tu nie ma.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/components/BLinkPreview.qml" line="344"/>
+        <source>… and %n more block(s)</source>
+        <translation>
+            <numerusform>… i jeszcze %n blok</numerusform>
+            <numerusform>… i jeszcze %n bloki</numerusform>
+            <numerusform>… i jeszcze %n bloków</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>BMergeView</name>
     <message>
         <location filename="../src/app/qml/components/BMergeView.qml" line="27"/>

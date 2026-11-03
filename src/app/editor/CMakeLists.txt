@@ -1,8 +1,8 @@
 # brulion_editor — the C++ side of the block editor (docs/UI.md "The block editor"): BlockListModel,
 # PageController (+ DayClock: the date for every open page; LazyHtmlMimeData: a copy's HTML rendered
 # on request; StreamSelection: a selection over several days of the journal stream), MarkdownHighlighter, RichTextPills (the
-# rounded chips of the rendered text), SuggestionModel, EditorInput (TextEdit text and input-method
-# helpers), QueryResultModel (live ```query results), the pure helpers of blocktext.h and the
+# rounded chips of the rendered text), LinkPreview (what a link's hover preview shows), SuggestionModel,
+# EditorInput (TextEdit text and input-method helpers), QueryResultModel (live ```query results), the pure helpers of blocktext.h and the
 # in-memory FakeEditorHost (playground, tests; queries run on the real index module), MermaidView
 # (a ```mermaid block drawn by the core module diagram).
 # A static library so tests/app/editor links it without the app; the app's QML module "Brulion"
@@ -41,6 +41,7 @@ qt_add_library(brulion_editor STATIC
     richtext_p.h
     richtextpills.h richtextpills.cpp
     richtextlinks.h richtextlinks.cpp
+    linkpreview.h linkpreview.cpp
     suggestionmodel.h suggestionmodel.cpp
     fakeeditorhost.h fakeeditorhost.cpp
     editorinput.h editorinput.cpp

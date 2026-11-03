@@ -70,11 +70,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   Waylandem, dwuklik na `.md` otwiera dalej dotychczasowy program; Cinnamon/Xfce pod X11: kursor nie
   kręci się po otwarciu pliku w działającym Brulionie); AppImage zintegrowany przez Gear Lever albo
   AppImageLauncher.
-* **Zaokrąglone `#tagi` i daty poza edytorem.** W blokach edytora są już zaokrąglonymi etykietami
-  (`RichTextPills`, docs/UI.md „The block editor”), ale listy, które przycinają tekst — linki
-  zwrotne (`ContentRefRow`), Zadania (`TasksRow`), osadzone strony (`TransclusionView`), tabele
-  (`TableBlockView`) i wyniki zapytań (`QueryBlockView`) — używają `Text` z `maximumLineCount` /
-  `elide`, których `TextEdit` nie ma, więc mają jeszcze kwadratowe tło.
 * **Przeglądarka PDF — sprawdzić na urządzeniach i dalsze pomysły.** Miniatury PDF-ów w notatkach
   i przeglądarka PDF (docs/UI.md „PDF viewer”) są sprawdzone automatycznie: testy z Qt PDF i
   popplerem, samotest powłoki (`tst_shell_qml`), emulator Androida (`--pdf`: szczypanie, szukanie
@@ -96,8 +91,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   (na komputerze np. Hunspell, na Androidzie systemowe sprawdzanie klawiatury).
 * **Karty i wiele okien** — kilka otwartych stron w kartach, podział widoku na więcej niż główny i
   boczny panel, strona w osobnym oknie (Obsidian).
-* **Podgląd linku po najechaniu** — treść strony lub bloku w dymku bez opuszczania notatki
-  (Obsidian, Logseq).
 * **Notatki tygodniowe i miesięczne** — strony okresowe obok dziennych, z własnym szablonem i
   dostępem z kalendarza.
 * **Statystyki i tryb skupienia** — liczba słów i znaków, czas czytania; widok bez pasków bocznych,

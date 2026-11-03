@@ -1,5 +1,6 @@
 #include "pagecontroller.h"
 
+#include "blockrender_p.h"
 #include "blocktext.h"
 #include "dayclock.h"
 #include "editorhost.h"
@@ -137,20 +138,6 @@ private:
 };
 
 namespace {
-
-QString colorString(const QVariant &v, const QString &fallback)
-{
-    if (!v.isValid())
-        return fallback;
-    QColor c;
-    if (v.metaType() == QMetaType::fromType<QColor>())
-        c = v.value<QColor>();
-    else
-        c = QColor::fromString(v.toString());
-    if (!c.isValid())
-        return fallback;
-    return c.alpha() == 255 ? c.name(QColor::HexRgb) : c.name(QColor::HexArgb);
-}
 
 int lineCount(const QString &s)
 {
@@ -401,29 +388,7 @@ void PageController::setPalette(const QVariantMap &palette)
 
 void PageController::rebuildPalette()
 {
-    markdown::Palette p;
-    const auto get = [this](const char *key, const QString &fallback) {
-        return colorString(m_palette.value(QString::fromLatin1(key)), fallback);
-    };
-    p.link = get("link", p.link);
-    p.unresolved = get("unresolved", p.unresolved);
-    p.muted = get("muted", p.muted);
-    p.codeBackground = get("codeBackground", p.codeBackground);
-    p.highlightBackground = get("highlightBackground", p.highlightBackground);
-    const auto chip = [&](const char *name, markdown::ChipColors &c) {
-        c.foreground = get(QByteArray(QByteArray(name) + "Fg").constData(), c.foreground);
-        c.background = get(QByteArray(QByteArray(name) + "Bg").constData(), c.background);
-    };
-    chip("tag", p.tag);
-    chip("due", p.due);
-    chip("overdue", p.overdue);
-    chip("scheduled", p.scheduled);
-    chip("reminder", p.reminder);
-    chip("alarm", p.alarm);
-    chip("recurrence", p.recurrence);
-    chip("done", p.done);
-    chip("neutral", p.neutral);
-    m_model->setPalette(p);
+    m_model->setPalette(detail::rendererPalette(m_palette));
 }
 
 void PageController::setLocale(const QString &locale)

@@ -8,7 +8,9 @@ import Brulion
 // (QueryResultModel over the host's QueryHost): tasks with a checkbox that changes the task in
 // its own file (this page: an undoable edit; right-click / long press: the status menu), blocks
 // and pages rendered like the editor renders them (links, tags, date chips), `group:` results
-// under group headers, the page of each item (unless grouped by page) as a quiet link. A click
+// under group headers, the page of each item (unless grouped by page) as a quiet link; tags and
+// chips are rounded shapes, an item ends with "…" after 4 lines (BRichText), the mouse pointer
+// resting on a [[page]] or ((block)) link shows its preview (LinkPreviews). A click
 // on an item opens it at its block; the results follow the index (other devices, edits
 // elsewhere; while a result's status menu is open they wait, QueryResultModel.hold(), and follow
 // once it closed). The header, the filters (or Enter when the block is selected) edit the query
@@ -354,7 +356,7 @@ Rectangle {
                     required property int line
                     required property string raw
                     readonly property bool group: kind === "group"
-                    readonly property Text textItem: itemText
+                    readonly property BRichText textItem: itemText
                     readonly property bool closed: status === "done" || status === "cancelled"
                     /// The link under the mouse or the pressing finger, underlined (BlockText.qml).
                     property string hoveredLink: ""
@@ -364,6 +366,7 @@ Rectangle {
                         const h = link !== "" && !link.startsWith("task:") && !root.editor.editsOnClick(link) ? link : ""
                         if (h !== row.hoveredLink)
                             row.hoveredLink = h
+                        return p
                     }
                     readonly property string itemHtml: row.group ? "" : row.html + (row.showPage && row.title !== ""
                         ? "&nbsp;&nbsp;<a href=\"open:\" style=\"color:" + Theme.fgFaint + ";text-decoration:none\">·&nbsp;"
@@ -425,31 +428,29 @@ Rectangle {
                         }
                     }
 
-                    Text {
+                    BRichText {
                         id: itemText
                         visible: !row.group
                         x: row.isTask ? root.editor.taskBoxWidth + 2 : 0
                         y: row.pad
                         width: parent.width - x
-                        textFormat: Text.RichText
-                        text: TextHelper.hoveredLinkHtml(row.itemHtml, row.hoveredLink)
-                        wrapMode: Text.Wrap
+                        html: row.itemHtml
+                        hoveredLink: row.hoveredLink
                         maximumLineCount: 4
-                        elide: Text.ElideRight
                         font.family: Theme.fontEditor
                         font.pixelSize: root.itemFontSize
                         font.strikeout: row.status === "cancelled"
-                        lineHeightMode: Text.FixedHeight
                         lineHeight: root.itemLineHeight
                         color: row.closed ? Theme.fgFaint : Theme.fg
-                        linkColor: Theme.link
                         Accessible.role: Accessible.Link
                         Accessible.name: row.text + (row.showPage ? " — " + row.title : "")
                     }
                     // Screen readers: the item's links as link items of their own (the row stays a
                     // link to the item; at most its 4 shown lines).
                     BLinkTargets {
-                        textItem: itemText
+                        x: itemText.x
+                        y: itemText.y
+                        textItem: itemText.textItem
                         html: row.itemHtml
                         lineHeight: root.itemLineHeight
                         maxHeight: 4 * root.itemLineHeight
@@ -465,8 +466,19 @@ Rectangle {
                         id: itemHover
                         enabled: !row.group && !Theme.touchUi
                         cursorShape: Qt.PointingHandCursor
-                        onPointChanged: row.trackLink(point.position)
-                        onHoveredChanged: if (!hovered && !itemTap.pressed) row.hoveredLink = ""
+                        onPointChanged: {
+                            // The link under the resting pointer: its preview (LinkPreviews).
+                            const p = row.trackLink(point.position)
+                            LinkPreviews.hover(itemText, row.hoveredLink, row.path, root.block.controller ? root.block.controller.host : null,
+                                               p.x, p.y)
+                        }
+                        onHoveredChanged: {
+                            if (!hovered) {
+                                LinkPreviews.leave(itemText)
+                                if (!itemTap.pressed)
+                                    row.hoveredLink = ""
+                            }
+                        }
                     }
                     TapHandler {
                         id: itemTap

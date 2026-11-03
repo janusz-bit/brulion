@@ -3,10 +3,13 @@
 // and highlights are taken off (no square is painted), their colours and kinds become rectangles
 // from the document's own layout — one per line of a wrapped chip, centred on the glyphs inside
 // the fixed-height line —, every paragraph gets the fixed line height, and malformed input never
-// leaves a square behind.
+// leaves a square behind. The lists' mode (BRichText): the HTML set by RichTextPills itself and
+// cut after maximumLineCount lines with "…" — never inside a character, never as part of a link
+// or a chip —, cut anew for another width or font, nothing done before the QML object is complete.
 #include "markdown/inlinerenderer.h"
 #include "richtextpills.h"
 
+#include <QAbstractTextDocumentLayout>
 #include <QFont>
 #include <QFontMetricsF>
 #include <QSignalSpy>
@@ -101,6 +104,35 @@ QList<qreal> linesOf(const QList<RichTextPills::Pill> &pills, int from)
             out.append(p.rect.top());
     }
     return out;
+}
+
+/// The lines of the laid-out document (every block laid out with its current width).
+int lineCountOf(QTextDocument &doc)
+{
+    int n = 0;
+    for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
+        (void)doc.documentLayout()->blockBoundingRect(block);
+        n += block.layout() ? block.layout()->lineCount() : 0;
+    }
+    return n;
+}
+
+/// The format of the document's last character.
+QTextCharFormat lastCharFormat(QTextDocument &doc)
+{
+    QTextCursor c(&doc);
+    c.movePosition(QTextCursor::End);
+    return c.charFormat();
+}
+
+const QString Ellipsis = QString(QChar(0x2026));
+
+/// A long Polish paragraph: a #tag at the start, a [[link]] and a due date further on.
+QString longText()
+{
+    return render(u"#podróże Wyjazd do Zakopanego: zarezerwować nocleg w Kościelisku, kupić bilety na pociąg, "
+                  u"sprawdzić szlaki na Giewont i Kasprowy Wierch, zabrać kurtkę przeciwdeszczową, [[Lista rzeczy]], "
+                  u"zapytać Łukasza o samochód i zatankować przed wyjazdem 📅 2026-10-20 — źdźbło, gęś, jaźń."_s);
 }
 
 } // namespace
@@ -334,6 +366,288 @@ private Q_SLOTS:
             QVERIFY(p.from < p.to);
         }
         doc.setTextWidth(40); // narrow: wraps whatever there is
+        QCOMPARE(brushesLeft(doc), 0);
+    }
+
+    // ---- The lists' mode: the text set by RichTextPills, cut after maximumLineCount lines ----
+
+    void setsTheTextItself()
+    {
+        QTextDocument doc;
+        setUp(doc);
+        RichTextPills pills;
+        pills.setLineHeight(LineHeight);
+        pills.attach(&doc);
+        const QString html = render(u"Wyjazd #podróże w sierpniu"_s);
+        QVERIFY(tintsOf(html).size() == 1);
+        pills.setHtml(html);
+        QVERIFY(doc.toPlainText().contains(u"Wyjazd"_s));
+        QCOMPARE(brushesLeft(doc), 0);
+        QCOMPARE(pills.pillList().size(), 1);
+        QVERIFY(!pills.truncated());
+        QVERIFY(!doc.toPlainText().contains(Ellipsis));
+        // A new text replaces it (the tints of the new one go too).
+        pills.setHtml(render(u"Inny tekst bez tagów"_s));
+        QCOMPARE(doc.toPlainText(), u"Inny tekst bez tagów"_s);
+        QVERIFY(pills.pillList().isEmpty());
+        // An empty text empties the document.
+        pills.setHtml(QString());
+        QVERIFY(doc.toPlainText().isEmpty());
+    }
+
+    void cutsAfterLines_data()
+    {
+        QTest::addColumn<int>("lines");
+        QTest::addColumn<qreal>("width");
+        QTest::newRow("one line") << 1 << qreal(300);
+        QTest::newRow("two lines") << 2 << qreal(300);
+        QTest::newRow("four lines, narrow") << 4 << qreal(160);
+        QTest::newRow("six lines, very narrow") << 6 << qreal(60);
+        QTest::newRow("one line, very narrow") << 1 << qreal(30);
+    }
+    void cutsAfterLines()
+    {
+        QFETCH(int, lines);
+        QFETCH(qreal, width);
+        QTextDocument doc;
+        setUp(doc, width);
+        RichTextPills pills;
+        pills.setLineHeight(LineHeight);
+        pills.setMaximumLineCount(lines);
+        pills.setWidth(width);
+        pills.attach(&doc);
+        pills.setHtml(longText());
+        QVERIFY(pills.truncated());
+        QCOMPARE(lineCountOf(doc), lines);
+        const QString text = doc.toPlainText();
+        QVERIFY2(text.endsWith(Ellipsis), qPrintable(text));
+        QVERIFY2(!text.chopped(1).endsWith(u' ') && !text.chopped(1).endsWith(QChar(0x00A0)), qPrintable(text));
+        // "…" is no link and no chip, in the text's own colour.
+        const QTextCharFormat f = lastCharFormat(doc);
+        QVERIFY(!f.isAnchor());
+        QVERIFY(f.anchorHref().isEmpty());
+        QVERIFY(!f.hasProperty(RichTextPills::TintColorProperty));
+        QVERIFY(!f.hasProperty(QTextFormat::ForegroundBrush));
+        QCOMPARE(brushesLeft(doc), 0);
+        // No pill below the last line shown, none on the "…".
+        const int ellipsisAt = int(text.size()) - 1;
+        for (const RichTextPills::Pill &p : pills.pillList()) {
+            QVERIFY(p.rect.bottom() <= lines * LineHeight + 0.5);
+            QVERIFY(p.to <= ellipsisAt);
+        }
+    }
+
+    void shortTextIsNotCut_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<int>("lines");
+        QTest::newRow("one line") << u"Krótko #tag"_s << 1;
+        QTest::newRow("fits four") << u"Zażółć gęślą jaźń 📅 2026-10-20"_s << 4;
+        QTest::newRow("empty") << QString() << 1;
+    }
+    void shortTextIsNotCut()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(int, lines);
+        QTextDocument doc;
+        setUp(doc);
+        RichTextPills pills;
+        pills.setLineHeight(LineHeight);
+        pills.setMaximumLineCount(lines);
+        pills.attach(&doc);
+        QSignalSpy truncated(&pills, &RichTextPills::truncatedChanged);
+        pills.setHtml(render(markdown));
+        QVERIFY(!pills.truncated());
+        QCOMPARE(truncated.count(), 0);
+        QVERIFY(!doc.toPlainText().contains(Ellipsis));
+    }
+
+    void exactlyTheLimitIsNotCut()
+    {
+        // Two paragraphs, two lines: a limit of 2 keeps both; a limit of 1 cuts the second.
+        QTextDocument doc;
+        setUp(doc);
+        RichTextPills pills;
+        pills.setLineHeight(LineHeight);
+        pills.setMaximumLineCount(2);
+        pills.attach(&doc);
+        pills.setHtml(
+                u"<p>Pierwszy akapit</p><p>Drugi <span style=\"background-color:#ffe08a;color:#333\">#akapit</span></p>"_s);
+        QVERIFY(!pills.truncated());
+        QCOMPARE(lineCountOf(doc), 2);
+        QCOMPARE(pills.pillList().size(), 1);
+        pills.setMaximumLineCount(1);
+        QVERIFY(pills.truncated());
+        QCOMPARE(lineCountOf(doc), 1);
+        QVERIFY(doc.toPlainText().startsWith(u"Pierwszy akapit"_s));
+        QVERIFY(doc.toPlainText().endsWith(Ellipsis));
+        QVERIFY(pills.pillList().isEmpty()); // the tag was in the paragraph cut off
+        // Back to no limit: the whole text again.
+        pills.setMaximumLineCount(0);
+        QVERIFY(!pills.truncated());
+        QVERIFY(doc.toPlainText().contains(u"Drugi"_s));
+    }
+
+    void blankRestIsNoCut()
+    {
+        QTextDocument doc;
+        setUp(doc);
+        RichTextPills pills;
+        pills.setMaximumLineCount(1);
+        pills.attach(&doc);
+        pills.setHtml(u"<p>Jedna linia</p><p>&nbsp;</p><p></p>"_s);
+        QVERIFY(!pills.truncated());
+        QVERIFY(!doc.toPlainText().contains(Ellipsis));
+    }
+
+    void widthChangeCutsAnew()
+    {
+        QTextDocument doc;
+        setUp(doc, 1200);
+        RichTextPills pills;
+        pills.setLineHeight(LineHeight);
+        pills.setMaximumLineCount(2);
+        pills.setWidth(1200);
+        pills.attach(&doc);
+        pills.setHtml(longText());
+        QVERIFY(!pills.truncated());
+        const QString whole = doc.toPlainText();
+        pills.setWidth(200);
+        QVERIFY(pills.truncated());
+        QCOMPARE(lineCountOf(doc), 2);
+        QCOMPARE(doc.textWidth(), qreal(200));
+        // Wider again: the whole text is back (it is set again, not grown from the cut one).
+        pills.setWidth(1200);
+        QVERIFY(!pills.truncated());
+        QCOMPARE(doc.toPlainText(), whole);
+        QCOMPARE(brushesLeft(doc), 0);
+    }
+
+    void fontChangeCutsAnew()
+    {
+        QTextDocument doc;
+        setUp(doc, 400);
+        RichTextPills pills;
+        pills.setLineHeight(LineHeight);
+        pills.setMaximumLineCount(3);
+        pills.setWidth(400);
+        QFont small;
+        small.setPixelSize(8);
+        pills.setFont(small);
+        pills.attach(&doc);
+        pills.setHtml(longText());
+        QVERIFY(!pills.truncated());
+        QFont big;
+        big.setPixelSize(22);
+        pills.setFont(big);
+        QCOMPARE(doc.defaultFont().pixelSize(), 22);
+        QVERIFY(pills.truncated());
+        QCOMPARE(lineCountOf(doc), 3);
+    }
+
+    void cutNeverSplitsACharacter_data()
+    {
+        QTest::addColumn<QString>("html");
+        QTest::newRow("emoji") << QString(u"😀🎉👍🏽🇵🇱"_s).repeated(40);
+        QTest::newRow("one long word") << QString(u"Konstantynopolitańczykówna"_s).repeated(12);
+        QTest::newRow("combining marks") << QString(u"éąż "_s).repeated(80);
+    }
+    void cutNeverSplitsACharacter()
+    {
+        QFETCH(QString, html);
+        QTextDocument doc;
+        setUp(doc, 120);
+        RichTextPills pills;
+        pills.setMaximumLineCount(2);
+        pills.setWidth(120);
+        pills.attach(&doc);
+        pills.setHtml(html);
+        QVERIFY(pills.truncated());
+        QVERIFY(lineCountOf(doc) <= 2);
+        const QString text = doc.toPlainText();
+        QVERIFY(text.endsWith(Ellipsis));
+        for (qsizetype i = 0; i < text.size(); ++i) {
+            if (text.at(i).isHighSurrogate())
+                QVERIFY(i + 1 < text.size() && text.at(i + 1).isLowSurrogate());
+            if (text.at(i).isLowSurrogate())
+                QVERIFY(i > 0 && text.at(i - 1).isHighSurrogate());
+        }
+    }
+
+    void cutInsideALink()
+    {
+        // A long link on the last line shown: the text is cut inside it, "…" is not part of it.
+        QTextDocument doc;
+        setUp(doc, 200);
+        RichTextPills pills;
+        pills.setMaximumLineCount(1);
+        pills.setWidth(200);
+        pills.attach(&doc);
+        pills.setHtml(render(u"[[Bardzo długa nazwa strony o wyjeździe do Zakopanego zimą]]"_s));
+        QVERIFY(pills.truncated());
+        const QTextCharFormat f = lastCharFormat(doc);
+        QVERIFY(!f.isAnchor());
+        QTextCursor c(&doc);
+        c.setPosition(1);
+        QVERIFY(c.charFormat().isAnchor()); // the rest of the link stays a link
+    }
+
+    void malformedIsCutSafely_data()
+    {
+        QTest::addColumn<QString>("html");
+        QTest::newRow("unclosed tags") << u"<b><i><span style=\"background-color:#eee\">tekst "_s.repeated(30);
+        QTest::newRow("table")
+                << u"<table><tr><td>a b c d e f g h</td><td>ż ź ć ń ó ł ę ą</td></tr></table>"_s.repeated(10);
+        QTest::newRow("line breaks only") << u"<br/>"_s.repeated(50);
+        QTest::newRow("pre") << u"<pre>linia\nlinia\nlinia\nlinia</pre>"_s;
+        QTest::newRow("escaped script") << u"&lt;script&gt;alert(1)&lt;/script&gt; "_s.repeated(20);
+    }
+    void malformedIsCutSafely()
+    {
+        QFETCH(QString, html);
+        QTextDocument doc;
+        setUp(doc, 150);
+        RichTextPills pills;
+        pills.setLineHeight(LineHeight);
+        pills.setMaximumLineCount(2);
+        pills.setWidth(150);
+        pills.attach(&doc);
+        pills.setHtml(html);
+        QCOMPARE(brushesLeft(doc), 0);
+        for (const RichTextPills::Pill &p : pills.pillList())
+            QVERIFY(p.rect.width() > 0 && p.rect.height() > 0);
+    }
+
+    void deferredUntilComplete()
+    {
+        QTextDocument doc;
+        setUp(doc, 200);
+        doc.setPlainText(u"poprzedni"_s);
+        RichTextPills pills;
+        pills.classBegin();
+        pills.attach(&doc);
+        pills.setHtml(longText());
+        pills.setMaximumLineCount(2);
+        pills.setWidth(200);
+        pills.setLineHeight(LineHeight);
+        QCOMPARE(doc.toPlainText(), u"poprzedni"_s); // nothing until it is complete
+        pills.componentComplete();
+        QVERIFY(pills.truncated());
+        QCOMPARE(lineCountOf(doc), 2);
+    }
+
+    void withoutHtmlTheDocumentIsLeftAlone()
+    {
+        // BlockText's mode: the TextEdit's own text, never replaced or cut.
+        QTextDocument doc;
+        setUp(doc, 100);
+        RichTextPills pills;
+        pills.setMaximumLineCount(1);
+        pills.attach(&doc);
+        doc.setHtml(longText());
+        QVERIFY(!pills.truncated());
+        QVERIFY(!doc.toPlainText().contains(Ellipsis));
+        QVERIFY(lineCountOf(doc) > 1);
         QCOMPARE(brushesLeft(doc), 0);
     }
 };

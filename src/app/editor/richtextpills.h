@@ -23,12 +23,27 @@
 //   Repeater { model: pills.pills
 //              delegate: Rectangle { required property var modelData; x: modelData.x; …
 //                                    radius: modelData.kind === "pill" ? height / 2 : 3 } }
+//
+// Lists that cut their text (BRichText.qml: linked references, Tasks, embeds, tables, query
+// results) give it the rich text itself (`html`, the TextEdit's `text` left unset), with the
+// TextEdit's `font` and `width`: it sets the HTML on the document and, with `maximumLineCount`,
+// cuts the text after that many lines and ends the last one with "…" (no link, no tint, the
+// text's own colour; `truncated`) — what QML Text's maximumLineCount and elide do for plain text
+// but not for rich text. A new width or font sets the whole text again and cuts it anew. Created
+// from QML it does this once, when it is completed (QQmlParserStatus), so the row has its final
+// height when the list places it.
+//
+//   TextEdit { id: edit; textFormat: TextEdit.RichText; readOnly: true; wrapMode: TextEdit.Wrap
+//              RichTextPills { textDocument: edit.textDocument; html: row.html; lineHeight: 20
+//                              maximumLineCount: 4; font: edit.font; width: edit.width } }
 #pragma once
 
 #include <QColor>
+#include <QFont>
 #include <QMetaObject>
 #include <QObject>
 #include <QPointer>
+#include <QQmlParserStatus>
 #include <QQuickTextDocument>
 #include <QRectF>
 #include <QVariantList>
@@ -37,12 +52,25 @@ class QTextDocument;
 
 namespace brulion::editor {
 
-class RichTextPills : public QObject {
+class RichTextPills : public QObject, public QQmlParserStatus {
     Q_OBJECT
+    Q_INTERFACES(QQmlParserStatus)
     Q_PROPERTY(QQuickTextDocument *textDocument READ textDocument WRITE setTextDocument NOTIFY textDocumentChanged FINAL)
     Q_PROPERTY(qreal lineHeight READ lineHeight WRITE setLineHeight NOTIFY lineHeightChanged FINAL)
     Q_PROPERTY(qreal inset READ inset WRITE setInset NOTIFY insetChanged FINAL)
     Q_PROPERTY(QVariantList pills READ pills NOTIFY pillsChanged FINAL)
+    /// The rich text this object sets on the document (once written, the document's text is
+    /// its: the TextEdit's own `text` stays unset). Needed for maximumLineCount.
+    Q_PROPERTY(QString html READ html WRITE setHtml NOTIFY htmlChanged FINAL)
+    /// With `html`: the lines shown at most (0, the default: all of them).
+    Q_PROPERTY(
+            int maximumLineCount READ maximumLineCount WRITE setMaximumLineCount NOTIFY maximumLineCountChanged FINAL)
+    /// With `html`: the document's font and text width (the TextEdit's; a change sets the text
+    /// again, cut anew). A width ≤ 0 leaves the document's own.
+    Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged FINAL)
+    Q_PROPERTY(qreal width READ width WRITE setWidth NOTIFY widthChanged FINAL)
+    /// The text was cut after maximumLineCount lines ("…" ends the last one).
+    Q_PROPERTY(bool truncated READ truncated NOTIFY truncatedChanged FINAL)
 
 public:
     /// One line segment of a tinted span.
@@ -65,6 +93,18 @@ public:
     qreal inset() const { return m_inset; }
     void setInset(qreal px);
     QVariantList pills() const;
+    QString html() const { return m_html; }
+    void setHtml(const QString &html);
+    int maximumLineCount() const { return m_maxLines; }
+    void setMaximumLineCount(int lines);
+    QFont font() const { return m_font; }
+    void setFont(const QFont &font);
+    qreal width() const { return m_width; }
+    void setWidth(qreal width);
+    bool truncated() const { return m_truncated; }
+
+    void classBegin() override;
+    void componentComplete() override;
 
     /// Attach to a plain QTextDocument (C++/tests); what setTextDocument does for a TextEdit's.
     void attach(QTextDocument *document);
@@ -83,6 +123,11 @@ Q_SIGNALS:
     void lineHeightChanged();
     void insetChanged();
     void pillsChanged();
+    void htmlChanged();
+    void maximumLineCountChanged();
+    void fontChanged();
+    void widthChanged();
+    void truncatedChanged();
 
 private:
     void onContentsChange();
@@ -91,6 +136,14 @@ private:
     void applyLineHeight();
     void takeBrushes();
     void detach();
+    /// `html` mode: the text set on the document again, its tints taken off, cut to
+    /// maximumLineCount lines, the rectangles recomputed.
+    void reload();
+    /// Cuts the document after maximumLineCount lines; true when there was more text.
+    bool cutToLines();
+    /// Ends the text at `cut` of `block` with "…", shortened until the block has at most `lines`
+    /// lines.
+    void ellipsize(int cut, int lines);
 
     QPointer<QQuickTextDocument> m_quickDocument;
     QPointer<QTextDocument> m_document;
@@ -100,6 +153,14 @@ private:
     QList<Pill> m_pills;
     bool m_changing = false;  ///< our own document changes: their signals are ignored
     bool m_computing = false; ///< in refresh(): layout signals it causes are ignored
+    QString m_html;
+    bool m_ownsText = false; ///< `html` was set: the document's text is ours
+    int m_maxLines = 0;
+    QFont m_font;
+    bool m_fontSet = false;
+    qreal m_width = 0;
+    bool m_truncated = false;
+    bool m_deferred = false; ///< between classBegin() and componentComplete()
 };
 
 } // namespace brulion::editor

@@ -18,7 +18,9 @@ import Brulion
 // view's PlanningTokenMenu), on a #tag or a link of the text for the link's menu
 // (linkMenuRequested: "Filtruj po tagu" first, "Otwórz stronę tagu", …). A click on a #tag is a
 // link (TasksView filters by it); Ctrl+click (mouse) on it asks for the tag's page instead
-// (tagPageRequested, docs/SYNTAX.md §3).
+// (tagPageRequested, docs/SYNTAX.md §3). The text's #tags and chips are rounded shapes and it ends
+// with "…" after 4 lines (BRichText); the mouse pointer resting on a [[page]] or ((block)) link
+// shows its preview (LinkPreviews, docs/UI.md "Link previews").
 T.ItemDelegate {
     id: control
 
@@ -166,52 +168,68 @@ T.ItemDelegate {
             width: Math.max(0, content.width - x)
             height: label.height + Theme.space1 + chips.height
 
-            Text {
+            BRichText {
                 id: label
                 width: parent.width
-                // Escaped by the core InlineRenderer: notes never inject markup.
-                text: TextHelper.hoveredLinkHtml(control.task.html || "", control._hoveredLink)
-                textFormat: Text.RichText
+                // Escaped by the core InlineRenderer: notes never inject markup. Tags and chips are
+                // rounded shapes; the text ends with "…" after 4 lines.
+                html: control.task.html || ""
+                hoveredLink: control._hoveredLink
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textBase
                 font.strikeout: control.task.status === "cancelled"
                 color: control.closed ? Theme.fgMuted : Theme.fg
-                linkColor: Theme.link
-                wrapMode: Text.Wrap
                 maximumLineCount: 4
-                elide: Text.ElideRight
-                lineHeightMode: Text.FixedHeight
-                lineHeight: Theme.lineHeightPx(font.pixelSize, 1.4)
-                onLinkActivated: (link) => {
-                    if (control._tagOpened)
-                        control._tagOpened = false // the gesture that opened the tag's page
-                    else
-                        control.linkActivated(link)
+                lineHeight: Theme.lineHeightPx(Theme.textBase, 1.4)
+            }
+            // The links of the text: they take the presses on them (a click elsewhere opens the
+            // task: the row's), the hover underline and the preview of a [[page]] or ((block)).
+            Item {
+                anchors.fill: label
+                containmentMask: QtObject {
+                    function contains(point: point): bool {
+                        return label.linkAt(point.x, point.y) !== ""
+                    }
                 }
                 HoverHandler {
                     id: labelHover
-                    cursorShape: label.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onPointChanged: control._trackLink(point.position.x, point.position.y)
-                    onHoveredChanged: if (!hovered) control._hoveredLink = ""
-                }
-                TapHandler {
-                    // Ctrl+click on a #tag: its page (a plain click is the text's link: it filters
-                    // the list). Passive: the text keeps its clicks; the link of this one is ignored.
-                    id: mouseTap
-                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-                    onPressedChanged: if (pressed) control._tagOpened = false
-                    onTapped: (eventPoint) => {
-                        if (!(mouseTap.point.modifiers & Qt.ControlModifier))
-                            return
-                        const tag = control.tagAt(eventPoint.position.x, eventPoint.position.y)
-                        if (tag !== "")
-                            control.openTagPage(tag)
+                    cursorShape: Qt.PointingHandCursor
+                    onPointChanged: {
+                        control._trackLink(point.position.x, point.position.y)
+                        LinkPreviews.hover(label, control._hoveredLink, control.task.path || "", Workspace,
+                                           point.position.x, point.position.y)
+                    }
+                    onHoveredChanged: {
+                        if (!hovered) {
+                            control._hoveredLink = ""
+                            LinkPreviews.leave(label)
+                        }
                     }
                 }
                 TapHandler {
-                    // A long press on a link (touch): its menu. The text keeps the press (a link).
+                    // A click on a link: a #tag filters the list, other links open (Ctrl+click on a
+                    // #tag: its page, docs/SYNTAX.md §3).
+                    id: mouseTap
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onPressedChanged: if (pressed) control._tagOpened = false
+                    onTapped: (eventPoint) => {
+                        const p = eventPoint.position
+                        const tag = control.tagAt(p.x, p.y)
+                        if (tag !== "" && (mouseTap.point.modifiers & Qt.ControlModifier)) {
+                            control.openTagPage(tag)
+                            return
+                        }
+                        const link = label.linkAt(p.x, p.y)
+                        if (link !== "")
+                            control.linkActivated(link)
+                    }
+                }
+                TapHandler {
+                    // A tap on a link follows it; a long press on it: its menu.
                     id: touchHold
                     acceptedDevices: PointerDevice.TouchScreen
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
                     onPressedChanged: {
                         if (pressed) {
                             control._tagOpened = false
@@ -220,17 +238,25 @@ T.ItemDelegate {
                             control._hoveredLink = ""
                         }
                     }
+                    onTapped: (eventPoint) => {
+                        if (control._tagOpened) {
+                            control._tagOpened = false // the gesture that opened the link's menu
+                            return
+                        }
+                        const link = label.linkAt(eventPoint.position.x, eventPoint.position.y)
+                        if (link !== "")
+                            control.linkActivated(link)
+                    }
                     onLongPressed: {
-                        if (!control._tagOpened)
-                            control.openMenuAt(label.mapToItem(control, point.position.x, point.position.y).x,
-                                               label.mapToItem(control, point.position.x, point.position.y).y)
+                        const at = label.mapToItem(control, touchHold.point.position.x, touchHold.point.position.y)
+                        control.openMenuAt(at.x, at.y)
                     }
                 }
             }
 
             // Screen readers: the task text's links as link items of their own (its 4 shown lines).
             BLinkTargets {
-                textItem: label
+                textItem: label.textItem
                 html: control.task.html || ""
                 lineHeight: label.lineHeight
                 maxHeight: label.height

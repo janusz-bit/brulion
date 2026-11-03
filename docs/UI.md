@@ -53,8 +53,9 @@ components — no Material/Fusion look, so all targets look identical.
   backgrounds: `#tags` and the date / reminder / done / recurrence chips are pills (radius =
   height / 2, the shape of the page header's tag chips, `BChip`), inline `code` and
   `==highlights==` boxes with `Theme.radiusXs`; their colours, tints and the no-break space
-  inside each end are the renderer's ("The block editor"). Lists that cut their text (linked
-  references, Tasks, embeds, tables, query results) keep the square tint for now.
+  inside each end are the renderer's ("The block editor"). The same in the lists that quote note
+  text — linked references, Tasks, embeds, tables, query results — and in link previews
+  (`BRichText`, "The block editor").
 * Backdrops of modal surfaces: sheets from an edge — bottom sheets, the full-screen palette on
   phones, the drawer — dim the page (`Theme.scrim`: ink at 40 % in light, 62 % in dark); centred
   panels that ask for a command or a decision — the floating command palette and quick switcher,
@@ -724,6 +725,23 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   around the baseline); a `Repeater` draws them under the text. Every other text stays a `Text`
   (cheaper rows); clicks, long presses, right-clicks and the cursor shape go through the same
   overlay for both (`BlockText.linkAt`).
+  **Rendered text outside the blocks** — linked references (`ContentRefRow`), Tasks and calendar
+  rows (`TasksRow`), embeds (`TransclusionView`), table cells (`TableBlockView`), query results
+  (`QueryBlockView`), link previews (`BLinkPreview`) — is a `BRichText`
+  (`qml/components/BRichText.qml`): a plain `Text` for a text without tints that fits its line
+  limit, else a read-only rich-text `TextEdit` whose `RichTextPills` gets the HTML itself (`html`,
+  with the TextEdit's `font` and `width`) and, with `maximumLineCount`, cuts the document after that
+  many lines and ends the last one with "…" (no link, no tint, the text's own colour; shortened by
+  whole characters until it fits; `truncated`) — QML `Text` ignores `maximumLineCount` and `elide`
+  for rich text, so before this these rows were never cut at all. A new width or font sets the
+  whole text again and cuts it anew; created from QML it does so once, when it is completed
+  (`QQmlParserStatus`), so the row has its final height when the list places it ("Scrolling
+  performance": rows of tinted or long texts cost a TextEdit, the others stay a Text). Its height is
+  counted in whole fixed-height lines, its TextEdit takes no input (`enabled: false`): the row's
+  handlers ask `BRichText.linkAt`. Limits: linked references 12 lines (6 in the side panel), Tasks
+  and query results 4, a table cell 1 (its tooltip shows the whole text when cut), embeds and
+  previews none. Tasks' text links take the presses on them through an item whose
+  `containmentMask` is the links (a press elsewhere is the row's).
   Clicking or tapping it edits it inline (`InlineEditor`: a `TextEdit` with the raw Markdown,
   minus the task marker / fences the delegate draws, and `MarkdownHighlighter`).
   * **Links in rendered text: path parts, hover, accessibility.** A wiki link to a page in a
@@ -750,6 +768,37 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
     (`PageController.linkAtCursor`, the shortcuts above). The same in table cells, query results, embeds (`TransclusionView`), the properties'
     text values (`PropertyRow`), Tasks and calendar rows (`TasksRow`) and linked references
     (`ContentRefRow`); the embed frame's header and list-property chips stay single links.
+  * **Link previews** (`LinkPreviews.qml`, a QML singleton; `BLinkPreview.qml`; C++
+    `LinkPreview`, `src/app/editor/linkpreview.h`). The mouse pointer resting on a `page:` or
+    `block:` link (`[[Page]]`, `[[Page#Heading]]`, `[[Page#^id]]`, `((id))`; in the editor also a
+    day's `day:` link, by the page it names: `PageController.dateChip(…).url`) for 600 ms opens a
+    popup under the pointer (above it near the window's bottom) with what the link opens, rendered
+    as an embed of it would be: `BlockListModel::linkPreview()` builds the transclusion map of
+    `![[Page…]]` / `!((id))` from the note the link is written in (InlineRenderer's escaped rich
+    text, never the note's own HTML; nested embeds depth-limited, at most `MaxTransclusionBlocks`
+    blocks, the rest counted), read through the text's `EditorHost` (the shell's `Workspace`, the
+    editor's host) when it opens — so it shows the saved note. Shown with `BRichText` (rounded
+    tags and chips), scrollable (at most half the window, 360 px), tasks with a read-only
+    `TaskBox`. Every view that shows rendered text calls `LinkPreviews.hover(item, link,
+    sourcePath, host, x, y)` from its `HoverHandler` and `LinkPreviews.leave(item)` when the
+    pointer leaves: `BlockText`, `ContentRefRow`, `TasksRow`, `TransclusionView`, `TableBlockView`,
+    `QueryBlockView` (nothing per row: one popup per window, created when it first opens, in the
+    window of the text). It stays while the pointer is on the link or on the popup and closes
+    350 ms after it left both, on a press elsewhere (`CloseOnPressOutside`, the press goes on to
+    what is under it), when the text it belongs to is destroyed (a row scrolled away, the page
+    closed, `anchorItem` turns null) or the block is edited; another link moves it after the
+    delay. It never takes the keyboard focus. Its header (icon, title — `missingPage` in the
+    unresolved colour) opens the link (`LinkPreview.openLink()`: the host's `navigate()`, as a
+    click in a note; Ctrl+click: the side panel), a click on a link inside follows that link from
+    the note it is written in; task boxes, reminders and the chips a click edits do nothing there.
+    A page not written yet says "“%1” does not exist yet. Click the title to create it." (a click
+    on the title creates it, as any link to a missing page), a missing section or block says so,
+    an empty page "Nothing here yet."; links to attachments (pictures, PDFs — by the target's
+    extension, found or not) and drawings have none. **Touch UIs have no previews** (no hover;
+    `Theme.touchUi`): a long press stays the link's menu, whose "Otwórz w panelu bocznym" shows
+    the page beside the note on wide screens. Tests: `tst_editor_linkpreview` (pages, sections,
+    blocks, missing ones, links without a preview, escaping, malformed URLs, the routes followed),
+    `--selftest-shell` (`checkLinkPreviews`: real mouse moves and clicks).
 * `PageController` executes commands (one undo step each, typing coalesced), saves debounced
   and on focus loss / suspend / quit, and merges external changes three-way. An undo step is a
   `BlockDocument::Delta` — the run of blocks the command changed, a block in both versions with
@@ -2531,7 +2580,9 @@ quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00
 `BAccentDialog` (a custom accent: colour grid, `#rrggbb` field, live preview of what
 `ThemePalette` makes of it), `BFontPickerDialog` (installed font families with fuzzy search, each
 row in its own font, the default first), `BDiffView`,
-`BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BPalette` with `BCommandPalette` and
+`BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BRichText` (rendered note text
+outside the editor's blocks: rounded tags, cut after `maximumLineCount` lines with "…"),
+`BLinkPreview` with the singleton `LinkPreviews` (the hover preview of links, "The block editor"), `BPalette` with `BCommandPalette` and
 `BQuickSwitcher` (floating on wide windows: one-line rows, a subtitle such as a page's folder after
 the title, over `Theme.scrimModal`, the list as many whole rows high as fit — measured from the
 rows the view has created, a row it released after scrolling counting as one of those, so the
