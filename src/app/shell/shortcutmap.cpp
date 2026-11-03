@@ -60,6 +60,10 @@ const QHash<QString, QString> &reservedKeys()
                            "Alt+H", "Alt+V", "Ctrl+0", "Ctrl++", "Ctrl+-", "Ctrl+=", "Ctrl+Shift+="});
         // The PDF viewer.
         add(u"pdf"_s, {"Ctrl+G", "F3", "Shift+F3"});
+        // Tabs: the browsers' keys AppShell has besides the tab commands (docs/UI.md "Tabs, split
+        // view and windows").
+        add(u"tabs"_s, {"Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6", "Ctrl+7", "Ctrl+8", "Ctrl+9",
+                        "Ctrl+PgUp", "Ctrl+PgDown"});
         // Menus: the menu key's and the context menu's.
         add(u"menus"_s, {"F10", "Shift+F10"});
         return out;
@@ -96,6 +100,8 @@ QString areaName(const QString &area)
         return ShortcutMap::tr("drawings");
     if (area == u"pdf")
         return ShortcutMap::tr("the PDF viewer");
+    if (area == u"tabs")
+        return ShortcutMap::tr("switching tabs");
     return ShortcutMap::tr("menus");
 }
 

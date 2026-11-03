@@ -48,7 +48,7 @@ Skróty poleceń z palety (Ctrl+K) zmienisz w *Ustawienia → Skróty klawiszowe
 
 - **Zmień** czeka na nowy skrót: naciśnij klawisz z Ctrl albo Alt (albo klawisz funkcyjny F1–F12). Esc anuluje.
 - Gdy skrót ma już inne polecenie, Brulion mówi które; **Przypisz tutaj** przenosi go, a tamto polecenie zostaje bez skrótu.
-- Nie da się wybrać klawiszy, którymi się pisze (litery bez Ctrl czy Alt, Enter, Tab, strzałki), klawiszy edytora (Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+A, Ctrl+Enter, Alt+↑…), rysunków i przeglądarki PDF ani Ctrl+Alt z literą, którą na Windows daje AltGr (Ctrl+Alt+A to „ą”).
+- Nie da się wybrać klawiszy, którymi się pisze (litery bez Ctrl czy Alt, Enter, Tab, strzałki), klawiszy edytora (Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+A, Ctrl+Enter, Alt+↑…), rysunków, przeglądarki PDF i przełączania kart (Ctrl+1…9, Ctrl+PgUp, Ctrl+PgDown) ani Ctrl+Alt z literą, którą na Windows daje AltGr (Ctrl+Alt+A to „ą”).
 - **✕** zostawia polecenie bez skrótu, **↺** przywraca jego domyślny, a **Przywróć wszystkie** — wszystkie domyślne.
 
 Nowy skrót działa od razu w całej aplikacji: paleta i podpowiedzi przy przyciskach pokazują go zamiast domyślnego. Własne skróty są ustawieniem tego urządzenia (każdy komputer ma swoje); klawisze edycji bloków z tabel poniżej zostają takie, jak są.

@@ -18880,6 +18880,11 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>przeglądarki PDF</translation>
     </message>
     <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="104"/>
+        <source>switching tabs</source>
+        <translation>przełączania kart</translation>
+    </message>
+    <message>
         <location filename="../src/app/shell/shortcutmap.cpp" line="66"/>
         <source>menus</source>
         <translation>menu</translation>

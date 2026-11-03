@@ -602,7 +602,7 @@ as the content goes (the first lines of a page stay where they are).
 "Zadania"…). Custom shortcuts are a device setting (AppSettings group `shortcuts`: id = portable
 text, "" = none) — one key chord with Ctrl, Alt or Meta, or a function key. `check(id, sequence)`
 refuses, with a message in the UI language: not one chord ("invalid"), a key that types or moves
-in text ("typing"), the keys of editing text and blocks, the drawing editor, the PDF viewer and
+in text ("typing"), the keys of editing text and blocks, the drawing editor, the PDF viewer, switching tabs (Ctrl+1…9, Ctrl+PgUp, Ctrl+PgDown) and
 menus, and Ctrl+Alt with a letter Windows' AltGr makes Polish ("reserved"); another action's
 shortcut is a "conflict" — `assign(id, sequence, true)` moves it, the other action is left
 without one. `reset(id)` brings the default back (whoever took it meanwhile loses it),
