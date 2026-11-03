@@ -5058,6 +5058,337 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
 /// activation going elsewhere hide it, a click right after such a hide keeps it closed; "Open
 /// journal" hides it and shows that day in the main window; with the main window hidden in the
 /// tray, opening and closing it (also Alt+F4's close) never ends the app.
+/// The page windows shown (ShellPageWindow, docs/UI.md "Tabs, split view and windows").
+QList<QQuickWindow *> pageWindows()
+{
+    QList<QQuickWindow *> out;
+    const QList<QWindow *> windows = QGuiApplication::topLevelWindows();
+    for (QWindow *w : windows) {
+        if (w->objectName() == u"shellPageWindow" && w->isVisible())
+            out.append(qobject_cast<QQuickWindow *>(w));
+    }
+    out.removeAll(nullptr);
+    return out;
+}
+
+/// Tabs, the split view and pages in windows of their own (docs/UI.md "Tabs, split view and
+/// windows"). Desktops: the shortcuts with real keys (Ctrl+T, Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1 /
+/// Ctrl+9, Ctrl+W), each tab's own history, a middle click and a Ctrl+click on a page in the
+/// sidebar, a middle click on a link in the editor and the link menu's "Otwórz w nowej karcie", a
+/// tab dragged in the bar, a tab keeping where its page was scrolled, only the tabs shown having
+/// an editor, the split view (a click focuses a pane; Ctrl+W on its tab closes it) and a page in a
+/// window of its own that sees the main window's edits. Phones: no bar, the top bar's tab switcher.
+void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool narrow = window->width() < 900;
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const auto key = [window](int k, Qt::KeyboardModifiers modifiers = Qt::ControlModifier) {
+        uidriver::deliverKey(window, {k, modifiers, {}}, uidriver::KeyDelivery::System);
+        settle(120);
+    };
+    const auto named = [window](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const auto path = [app] { return app->currentRoute().value(u"path"_s).toString(); };
+    const auto pageRoute = [](const QString &p) { return QVariantMap{{u"view"_s, u"page"_s}, {u"path"_s, p}}; };
+    // The page controllers (an editor each) of `w` showing `p` — of views on screen: a view the
+    // shell replaced waits for its deferred deletion, which never comes while the self-test runs.
+    const auto controllers = [](QQuickWindow *w, const QString &p) {
+        QList<QObject *> out;
+        const QList<QObject *> found = w->findChildren<QObject *>(u"pageController"_s);
+        for (QObject *c : found) {
+            auto *view = qobject_cast<QQuickItem *>(c->parent());
+            if (c->property("path").toString() == p && view && view->window() == w && view->isVisible())
+                out.append(c);
+        }
+        return out;
+    };
+    const auto loadedIn = [&](QQuickWindow *w, const QString &p) {
+        return waitFor([&] {
+            const QList<QObject *> found = controllers(w, p);
+            return !found.isEmpty() && found.first()->property("loaded").toBool();
+        });
+    };
+    const QString guide = u"Witaj w Brulionie.md"_s;
+    const QString renovation = u"Projekty/Remont mieszkania.md"_s;
+
+    // One tab at home to start with.
+    app->closeOtherTabs(app->focusedTab());
+    app->closeSplit();
+    app->goHome();
+    settle(200);
+    check(app->tabCount() == 1 && !named(u"shellTabBar"_s) && !named(u"topBarTabs"_s),
+          "one tab: no tab bar and no tab switcher");
+
+    if (narrow) {
+        // ---- Phones: the tab switcher in the top bar.
+        app->openPage(guide);
+        const int first = app->focusedTab();
+        app->openTab(pageRoute(renovation));
+        QQuickItem *button = nullptr;
+        check(waitFor([&] { return (button = named(u"topBarTabs"_s)) != nullptr; }) && !named(u"shellTabBar"_s),
+              "phones: two tabs show the tab switcher in the top bar, no tab bar");
+        if (button)
+            tapOrClick(window, pointIn(button), touch);
+        check(waitFor([&] { return openMenus(window) == 1; }), "the tab switcher opens its menu");
+        QList<QQuickItem *> entries;
+        waitFor([&] {
+            entries.clear();
+            for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
+                if (item->objectName() == u"tabSwitcherEntry" && shown(item))
+                    entries.append(item);
+            }
+            return entries.size() == 2;
+        });
+        check(entries.size() == 2, "the tab switcher lists both tabs");
+        if (!entries.isEmpty()) {
+            std::sort(entries.begin(), entries.end(), [](QQuickItem *a, QQuickItem *b) {
+                return a->mapToScene(QPointF()).y() < b->mapToScene(QPointF()).y();
+            });
+            tapOrClick(window, pointIn(entries.first()), touch);
+        }
+        check(waitFor([&] { return app->focusedTab() == first && path() == guide && openMenus(window) == 0; }),
+              "a tap on a tab in the switcher shows it");
+        // Each tab its own history: the back key returns within this one.
+        app->navigate({{u"view"_s, u"tasks"_s}});
+        const bool handled = sendKey(window, Qt::Key_Back);
+        check(handled && app->focusedTab() == first && path() == guide,
+              "the back key goes back in the tab's own history");
+        if ((button = named(u"topBarTabs"_s)))
+            tapOrClick(window, pointIn(button), touch);
+        QQuickItem *closeOthers = nullptr;
+        check(waitFor([&] { return (closeOthers = named(u"tabSwitcherCloseOthers"_s)) != nullptr; }),
+              "the tab switcher offers “Zamknij pozostałe karty”");
+        if (closeOthers)
+            tapOrClick(window, pointIn(closeOthers), touch);
+        check(waitFor([&] { return app->tabCount() == 1 && !named(u"topBarTabs"_s) && openMenus(window) == 0; }),
+              "closing the other tabs hides the tab switcher");
+        closeMenus(window);
+        app->goHome();
+        return;
+    }
+
+    // ---- Desktops: the shortcuts.
+    window->requestActivate();
+    waitFor([window] { return window->isActive(); }, 2000);
+    const int first = app->focusedTab();
+    key(Qt::Key_T);
+    check(app->tabCount() == 2 && app->focusedTab() != first && app->atHome() && !app->canGoBack(),
+          "Ctrl+T opens a new tab at home");
+    check(waitFor([&] { return named(u"shellTabBar"_s) != nullptr; }), "two tabs show the tab bar");
+    const int second = app->focusedTab();
+    app->openPage(guide);
+    check(loadedIn(window, guide), "the new tab shows a page");
+    key(Qt::Key_Tab);
+    check(app->focusedTab() == first && app->atHome() && !app->tabCanGoForward(first),
+          "Ctrl+Tab shows the next tab (round past the last), with its own history");
+    key(Qt::Key_Backtab, Qt::ControlModifier | Qt::ShiftModifier);
+    check(app->focusedTab() == second && path() == guide && app->canGoBack(), "Ctrl+Shift+Tab shows the previous tab");
+    key(Qt::Key_1);
+    check(app->focusedTab() == first, "Ctrl+1 shows the first tab");
+    key(Qt::Key_9);
+    check(app->focusedTab() == second, "Ctrl+9 shows the last tab");
+    check(loadedIn(window, guide), "back on the tab, its page is in the editor again");
+
+    // ---- A middle click and a Ctrl+click on a page of the sidebar's tree.
+    const auto treeRow = [&](const QString &p) -> QQuickItem * {
+        QQuickItem *list = named(u"sidebarTree"_s);
+        if (!list)
+            return nullptr;
+        if (auto *model = list->property("model").value<QObject *>()) {
+            int row = -1;
+            QMetaObject::invokeMethod(model, "indexOf", qReturnArg(row), p);
+            if (row >= 0)
+                QMetaObject::invokeMethod(list, "positionViewAtIndex", row, 4 /* ListView.Contain */);
+        }
+        settle(60);
+        return findShown(list, [&](QQuickItem *item) {
+            return item->property("isDir").isValid() && item->property("path").toString() == p;
+        });
+    };
+    app->requestItemAction(u"reveal"_s, renovation);
+    QQuickItem *row = nullptr;
+    check(waitFor([&] { return (row = treeRow(renovation)) != nullptr; }), "the sidebar shows the renovation page");
+    if (row)
+        mouseClick(window, pointIn(row), Qt::MiddleButton);
+    check(waitFor([&] { return app->tabCount() == 3 && path() == renovation; }),
+          "a middle click on a page in the sidebar opens it in a new tab");
+    key(Qt::Key_W);
+    check(app->tabCount() == 2 && app->focusedTab() == second && path() == guide,
+          "Ctrl+W closes the tab; its neighbour is shown");
+    if ((row = treeRow(renovation)))
+        mouseClick(window, pointIn(row), Qt::LeftButton, Qt::ControlModifier);
+    check(waitFor([&] { return app->tabCount() == 3 && path() == renovation; }),
+          "a Ctrl+click on a page in the sidebar opens it in a new tab");
+    const int third = app->focusedTab();
+
+    // ---- A link in the editor: a middle click, and the link menu's "Otwórz w nowej karcie".
+    app->selectTab(second);
+    QObject *page = nullptr;
+    QQuickItem *editor = nullptr;
+    const auto guideEditor = [&] {
+        page = nullptr;
+        editor = nullptr;
+        waitFor([&] {
+            const QList<QObject *> found = controllers(window, guide);
+            page = found.value(0);
+            return page && page->property("loaded").toBool();
+        });
+        for (QQuickItem *e : window->findChildren<QQuickItem *>(u"pageEditor"_s)) {
+            if (page && e->property("controller").value<QObject *>() == page)
+                editor = e;
+        }
+        return editor;
+    };
+    const auto linkOnScreen = [&]() -> QPointF {
+        if (!guideEditor())
+            return {-1, -1};
+        const QStringList lines = app->workspace()->readFile(guide).split(u'\n');
+        int linkRow = -1;
+        for (qsizetype i = 0; i < lines.size() && linkRow < 0; ++i) {
+            if (lines.at(i).startsWith(u"- Link do strony:"_s))
+                QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(linkRow), int(i));
+        }
+        if (auto *list = editor->property("listView").value<QQuickItem *>(); list && linkRow >= 0)
+            QMetaObject::invokeMethod(list, "positionViewAtIndex", linkRow, 1 /* ListView.Center */);
+        settle(250);
+        QQuickItem *text = renderedTextContaining(editor, u"page:Remont"_s);
+        return text ? linkPoint(text, u"page:Remont"_s) : QPointF(-1, -1);
+    };
+    QPointF link = linkOnScreen();
+    check(link.x() >= 0, "the guide shows its link to the renovation project");
+    if (link.x() >= 0)
+        mouseClick(window, link, Qt::MiddleButton);
+    check(waitFor([&] { return app->tabCount() == 4 && path() == renovation; }),
+          "a middle click on a link in the editor opens it in a new tab");
+    app->closeTab(app->focusedTab());
+    app->selectTab(second);
+    link = linkOnScreen();
+    if (link.x() >= 0)
+        mouseClick(window, link, Qt::RightButton);
+    QQuickItem *openTab = nullptr;
+    check(waitFor([&] { return (openTab = named(u"linkMenuOpenTab"_s)) != nullptr; }),
+          "the link menu offers “Otwórz w nowej karcie”");
+    check(named(u"linkMenuOpenWindow"_s) != nullptr, "the link menu offers “Otwórz w nowym oknie”");
+    if (openTab)
+        mouseClick(window, pointIn(openTab));
+    check(waitFor([&] { return app->tabCount() == 4 && path() == renovation && openMenus(window) == 0; }),
+          "the link menu's “Otwórz w nowej karcie” opens the page in a new tab");
+    app->closeTab(app->focusedTab());
+    closeMenus(window);
+
+    // ---- A tab dragged along the bar.
+    app->selectTab(second);
+    settle(200);
+    const auto barTabs = [&] {
+        QList<QQuickItem *> out;
+        for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
+            if (item->objectName() == u"shellTab" && shown(item))
+                out.append(item);
+        }
+        std::sort(out.begin(), out.end(), [](QQuickItem *a, QQuickItem *b) {
+            return a->mapToScene(QPointF()).x() < b->mapToScene(QPointF()).x();
+        });
+        return out;
+    };
+    QList<QQuickItem *> tabItems;
+    check(waitFor([&] { return (tabItems = barTabs()).size() == 3; }), "the bar shows the three tabs");
+    if (tabItems.size() == 3) {
+        mouseDrag(window, pointIn(tabItems.first()), pointIn(tabItems.last(), 0.7), 100);
+        check(waitFor([&] { return app->tabs().last().toMap().value(u"id"_s).toInt() == first; }),
+              "a tab dragged to the end of the bar moves there");
+    }
+
+    // ---- Where a page was scrolled: kept while the tab is away (its editor is not).
+    if (guideEditor()) {
+        auto *list = editor->property("listView").value<QQuickItem *>();
+        if (list) {
+            QMetaObject::invokeMethod(list, "positionViewAtIndex", 12, 0 /* ListView.Beginning */);
+            list->setProperty("contentY", list->property("contentY").toReal() + 7);
+            settle(150);
+        }
+        const qreal before = list ? list->property("contentY").toReal() : -1;
+        app->selectTab(first); // the journals: another view, the page's editor goes
+        check(waitFor([&] { return controllers(window, guide).isEmpty(); }),
+              "a tab not shown keeps no editor of its page");
+        check(controllers(window, renovation).isEmpty(), "nor does a tab in the background");
+        app->selectTab(second);
+        const bool back = guideEditor() != nullptr;
+        auto *again = back ? editor->property("listView").value<QQuickItem *>() : nullptr;
+        check(again && before > 50 && waitFor([&] { return qAbs(again->property("contentY").toReal() - before) <= 2; }),
+              "back on its tab the page is where it was scrolled");
+        if (again && qAbs(again->property("contentY").toReal() - before) > 2)
+            std::fprintf(stderr, "selftest: scrolled to %.1f, back at %.1f\n", before,
+                         again->property("contentY").toReal());
+    }
+
+    // ---- The split view.
+    check(app->commands()->run(u"view.split"_s), "“Podziel widok” splits the view");
+    QQuickItem *splitPane = nullptr;
+    check(waitFor([&] { return (splitPane = named(u"shellSplitPane"_s)) != nullptr; }) && app->splitFocused()
+                  && waitFor([&] { return controllers(window, guide).size() == 2; }),
+          "the split pane shows a copy of the tab beside it, focused");
+    app->navigate(pageRoute(renovation));
+    check(loadedIn(window, renovation) && app->tabRoute(app->mainTab()).value(u"path"_s) == guide,
+          "navigation goes to the focused pane");
+    // A click into the main pane's page (it starts editing a block there): that pane is focused.
+    if (QQuickItem *mainPane = named(u"shellMainPane"_s)) {
+        QQuickItem *text = findShown(mainPane, [](QQuickItem *item) {
+            return item->inherits("QQuickText") && !item->property("text").toString().isEmpty()
+                   && hasAncestor(item, "BlockText");
+        });
+        if (text)
+            mouseClick(window, text->mapToScene(QPointF(8, text->height() / 2)));
+        check(text && waitFor([&] { return !app->splitFocused() && path() == guide; }),
+              "a click in the main pane focuses it");
+        if (QObject *c = controllers(window, guide).value(0))
+            QMetaObject::invokeMethod(c, "stopEditing");
+    }
+    app->focusPane(true);
+    key(Qt::Key_W);
+    check(waitFor([&] { return app->splitTab() == 0 && !named(u"shellSplitPane"_s); }) && path() == guide,
+          "Ctrl+W on the split pane's tab closes the split view");
+
+    // ---- A page in a window of its own: the same notebook, edits seen in both windows.
+    app->openPage(renovation);
+    QObject *mainPage = nullptr;
+    loadedIn(window, renovation);
+    mainPage = controllers(window, renovation).value(0);
+    const int windowTab = app->openWindow(pageRoute(renovation));
+    QQuickWindow *pageWindow = nullptr;
+    check(windowTab > 0 && waitFor([&] { return (pageWindow = pageWindows().value(0)) != nullptr; })
+                  && loadedIn(pageWindow, renovation),
+          "“Otwórz w nowym oknie” shows the page in a window of its own");
+    check(app->tabCount() == 3 && app->windowTabs().size() == 1, "the window's tab is not in the bar");
+    if (pageWindow && mainPage) {
+        QObject *windowPage = controllers(pageWindow, renovation).value(0);
+        int added = -1;
+        QMetaObject::invokeMethod(mainPage, "insertBlockAfter", qReturnArg(added), 0,
+                                  u"Zażółć gęślą jaźń z okna głównego"_s);
+        QMetaObject::invokeMethod(mainPage, "save");
+        check(added >= 0 && windowPage
+                      && waitFor(
+                              [&] {
+                                  return windowPage->property("sourceText").toString().contains(u"z okna głównego"_s);
+                              },
+                              8000),
+              "an edit in the main window shows in the page's window");
+        // Undo the edit in the notebook (later checks read it).
+        const QString text = app->workspace()->readFile(renovation);
+        app->workspace()->writeFile(renovation, QString(text).remove(u"- Zażółć gęślą jaźń z okna głównego\n"_s));
+    }
+    app->closeTab(windowTab);
+    check(waitFor([&] { return pageWindows().isEmpty(); }) && app->windowTabs().isEmpty(),
+          "closing the window's tab closes the window");
+    window->requestActivate();
+    waitFor([window] { return window->isActive(); }, 2000);
+
+    // One tab again.
+    app->closeOtherTabs(app->focusedTab());
+    check(waitFor([&] { return app->tabCount() == 1 && !named(u"shellTabBar"_s); }), "one tab left: the bar goes");
+    Q_UNUSED(third);
+    app->goHome();
+    closeMenus(window);
+}
+
 QQuickWindow *trayCalendarWindow()
 {
     const QList<QWindow *> windows = QGuiApplication::topLevelWindows();
@@ -6752,6 +7083,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         }
         app->goHome();
     }
+
+    // 5m. Tabs, the split view, a page in a window of its own (phones: the tab switcher).
+    checkTabs(window, app, check);
+    closeMenus(window);
 
     // 5c. The event log page and a sync run's details.
     checkLogsAndSyncDetails(window, app, check);

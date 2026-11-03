@@ -51,10 +51,11 @@ FocusScope {
         }
         AppSettings.setValue("allPages/sort", pages.sortKey + (pages.descending ? ":desc" : ":asc"))
     }
-    function open(row, newPane) {
+    /// Open row `row`'s page: here, in the side panel (`newPane`), or in `target` ("tab": a new tab).
+    function open(row, newPane, target) {
         const p = pages.get(row)
         if (p.path)
-            AppController.openPage(p.path, -1, newPane === true && !Theme.narrow)
+            OpenIn.run(target || "", () => AppController.openPage(p.path, -1, newPane === true && !Theme.narrow))
     }
     function sortLabel(key) {
         for (const k of sortKeys) {
@@ -329,8 +330,16 @@ FocusScope {
                 focusPolicy: Qt.NoFocus
                 Accessible.role: Accessible.ListItem
                 Accessible.name: shownTitle + (row.model.folder !== "" ? ", " + row.model.folder : "")
-                onClicked: root.open(row.index, false)
+                // Ctrl+click: a new tab (OpenIn).
+                onClicked: root.open(row.index, false, OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers()))
                 onPressAndHold: rowMenu.openFor(row.index, row)
+                TapHandler {
+                    // A middle click: in a new tab.
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    acceptedButtons: Qt.MiddleButton
+                    enabled: OpenIn.tabs
+                    onTapped: root.open(row.index, false, "tab")
+                }
                 TapHandler {
                     // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so on
                     // a phone a tap opened the (modal) menu instead of the page.
@@ -506,6 +515,13 @@ FocusScope {
             text: qsTr("Open")
             iconName: "file-text"
             onTriggered: root.open(rowMenu.row, false)
+        }
+        BMenuItem {
+            visible: OpenIn.tabs
+            height: visible ? implicitHeight : 0
+            text: qsTr("Open in new tab")
+            iconName: "plus"
+            onTriggered: root.open(rowMenu.row, false, "tab")
         }
         BMenuItem {
             visible: !Theme.narrow

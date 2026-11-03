@@ -2,10 +2,10 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
-// ShellRouteView — shows the view component for a route (AppController.currentRoute in the main
-// area, AppController.sidePanelRoute in the side panel). The view instance is kept while only
-// the route's parameters change (another page, another day) and replaced when the view changes,
-// with a short fade.
+// ShellRouteView — shows the view component for a route (a tab's in a ShellTabPane — the main
+// window's panes, a page's own window —, AppController.sidePanelRoute in the side panel). The view
+// instance is kept while only the route's parameters change (another page, another day; another tab
+// showing the same view) and replaced when the view changes, with a short fade.
 //
 // View contract: every view has `property var route`; optional `property string title` (top
 // bar), `property Component sidePanel` (context panel: backlinks, outline, mini calendar) and
@@ -19,7 +19,11 @@ import Brulion
 // menu acts on it), `sourceMode` (PageView: the page is shown as Markdown source — the palette's
 // block commands are off), `edgeSwipe` (CalendarView: the view's own horizontal swipe starts at
 // the left edge — the drawer's edge strip makes way). The shell sets `covered` (CalendarView: a
-// modal panel lies over the view).
+// modal panel lies over the view), `paneActive` (PageView, JournalsView: false in the other pane of
+// a split view — the window-wide shortcuts and the shell's actions are the focused pane's view's).
+// Optional `viewState()` / `restoreViewState(state)` (PageView, JournalsView): where the view is
+// scrolled, kept by the tab while another one is shown (restoreViewState() here waits for the
+// view of a route just set).
 Item {
     id: root
 
@@ -29,6 +33,26 @@ Item {
     /// A modal panel of the shell (the drawer) lies over the view: views with their own swipes
     /// (CalendarView's `covered`) turn them off, so the panel's swipe stays the panel's.
     property bool covered: false
+    /// The pane navigation goes to (false: the other pane of a split view).
+    property bool paneActive: true
+
+    /// The view's state (where it is scrolled), {} for a view that keeps none.
+    function viewState() {
+        return _view && typeof _view.viewState === "function" ? _view.viewState() : {}
+    }
+    /// Give the view of the route just set the state it had ({}: none, the route's own target).
+    function restoreViewState(state) {
+        root._pendingState = state && Object.keys(state).length > 0 ? state : null
+        root.applyPendingState()
+    }
+    property var _pendingState: null
+    function applyPendingState() {
+        if (!root._pendingState || !root._view)
+            return
+        if (typeof root._view.restoreViewState === "function")
+            root._view.restoreViewState(root._pendingState)
+        root._pendingState = null
+    }
 
     readonly property Item view: loader.item as Item
     readonly property string viewName: route && route.view ? route.view : ""
@@ -95,6 +119,7 @@ Item {
         onLoaded: {
             item.opacity = 0
             fadeIn.restart()
+            root.applyPendingState()
         }
     }
     NumberAnimation {
@@ -109,8 +134,8 @@ Item {
         onStopped: if (loader.item) loader.item.opacity = 1
     }
 
-    Component { id: journalsView; JournalsView { route: root.route; inSidePanel: root.inSidePanel } }
-    Component { id: pageView; PageView { route: root.route; inSidePanel: root.inSidePanel } }
+    Component { id: journalsView; JournalsView { route: root.route; inSidePanel: root.inSidePanel; paneActive: root.paneActive } }
+    Component { id: pageView; PageView { route: root.route; inSidePanel: root.inSidePanel; paneActive: root.paneActive } }
     Component { id: calendarView; CalendarView { route: root.route; covered: root.covered } }
     Component { id: tasksView; TasksView { route: root.route } }
     Component { id: graphView; GraphView { route: root.route } }

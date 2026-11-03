@@ -20,7 +20,8 @@ import Brulion
 // pointer resting on a [[page]] or ((block)) link shows its preview (LinkPreviews). Tags and chips
 // are rounded shapes (BRichText), the text cut after 12 lines (6 when compact) with "…". A click
 // on the task checkbox emits taskToggled() (a right-click or long press on it: the status menu,
-// taskStatusRequested()), a click anywhere else opens the block in its page.
+// taskStatusRequested()), a click anywhere else opens the block in its page — a Ctrl+click or a middle
+// click in a new tab (OpenIn: opened(false) emitted inside OpenIn.run("tab", …)), links too.
 // Keyboard: focusable, Enter opens, Ctrl+Enter opens in the side panel (wide windows).
 FocusScope {
     id: row
@@ -192,6 +193,7 @@ FocusScope {
     TapHandler {
         id: tap
         gesturePolicy: TapHandler.ReleaseWithinBounds
+        acceptedButtons: OpenIn.tabs ? Qt.LeftButton | Qt.MiddleButton : Qt.LeftButton
         onPressedChanged: {
             if (pressed)
                 row.trackLink(tap.point.position)
@@ -202,12 +204,17 @@ FocusScope {
             const p = textItem.mapFromItem(row, eventPoint.position.x, eventPoint.position.y)
             const link = textItem.linkAt(p.x, p.y)
             if (link === "task:toggle") {
-                row.taskToggled()
+                if (button === Qt.LeftButton)
+                    row.taskToggled()
                 return
             }
-            if (link !== "" && row.tools && row.tools.openLink(link, row.sourcePath, false))
-                return
-            row.opened((tap.point.modifiers & Qt.ControlModifier) !== 0 && !Theme.narrow)
+            // Ctrl+click, a middle click: a new tab.
+            const target = OpenIn.clickTarget(button, tap.point.modifiers)
+            let followed = false
+            if (link !== "" && row.tools)
+                OpenIn.run(target, () => { followed = row.tools.openLink(link, row.sourcePath, false) })
+            if (!followed)
+                OpenIn.run(target, () => row.opened(false))
         }
     }
 }

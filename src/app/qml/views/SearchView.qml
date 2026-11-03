@@ -42,12 +42,13 @@ FocusScope {
         recent = []
         AppSettings.setValue("search/recent", [])
     }
-    function openResult(row, newPane) {
+    /// Open result `row`: here, in the side panel (`newPane`) or in `target` ("tab": a new tab).
+    function openResult(row, newPane, target) {
         const r = results.get(row)
         if (!r.path)
             return
         remember(field.text)
-        AppController.openPage(r.path, r.line, newPane === true && !Theme.narrow)
+        OpenIn.run(target || "", () => AppController.openPage(r.path, r.line, newPane === true && !Theme.narrow))
     }
     function move(delta) {
         if (results.count === 0)
@@ -225,7 +226,15 @@ FocusScope {
                 focusPolicy: Qt.NoFocus
                 Accessible.role: Accessible.ListItem
                 Accessible.name: (journal ? DatesHelper.formatLong(hit.model.journalDate) : hit.model.title) + ": " + hit.model.excerpt
-                onClicked: root.openResult(hit.index, false)
+                // Ctrl+click: a new tab (OpenIn).
+                onClicked: root.openResult(hit.index, false, OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers()))
+                TapHandler {
+                    // A middle click: in a new tab.
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    acceptedButtons: Qt.MiddleButton
+                    enabled: OpenIn.tabs
+                    onTapped: root.openResult(hit.index, false, "tab")
+                }
 
                 background: Rectangle {
                     radius: Theme.radius

@@ -6,7 +6,15 @@ import Brulion
 
 // AppShell — the main UI once a vault is open (docs/UI.md "Window layout").
 //
-// Wide (≥ 900 px): SplitView — sidebar | top bar + current view | optional side panel.
+// Wide (≥ 900 px): SplitView — sidebar | top bar + tab bar + current view (one pane, or two side by
+// side: the split view) | optional side panel.
+// Tabs (docs/UI.md "Tabs, split view and windows"; AppController's tabs, tabs.h): ShellTabBar while
+// there are two or more (wide), the top bar's tab switcher on phones; each pane is a ShellTabPane
+// showing one tab — the main pane AppController.mainTab, the split pane AppController.splitTab
+// (narrow: one pane, the focused tab). Pages in windows of their own (desktop): ShellPageWindow, one
+// per AppController.windowTabs entry, made and destroyed here. The editor and the lists open
+// links in a new tab through OpenIn (set up here). Shortcuts: Ctrl+T, Ctrl+W, Ctrl+Tab,
+// Ctrl+Shift+Tab, Ctrl+1…9.
 // Narrow: the sidebar is a Drawer (the bottom navigation's Menu, or a swipe from the left edge — on
 // touch UIs from a strip beyond the zone Android's gesture navigation keeps for "back"; the top
 // bar's ☰ only on a view that replaces the bottom navigation, the drawing editor) and a bottom
@@ -50,6 +58,20 @@ FocusScope {
     }
     onSafeChanged: noteNavigationBar()
     readonly property var route: AppController.currentRoute
+    /// The main window shows two panes side by side (wide windows).
+    readonly property bool split: !Theme.narrow && AppController.splitTab !== 0
+    /// The focused pane's view: the top bar, the side panel's context and the keyboard rules are its.
+    readonly property ShellRouteView routeView: split && AppController.splitFocused ? splitPane.routeView : mainPane.routeView
+    /// The split pane is the focused one. The keyboard follows (Ctrl+Tab to the other pane's tab)
+    /// when it was in one of the panes.
+    readonly property bool splitPaneFocused: split && AppController.splitFocused
+    onSplitPaneFocusedChanged: {
+        const pane = splitPaneFocused ? splitPane : mainPane
+        if (!pane.activeFocus && (mainPane.activeFocus || splitPane.activeFocus))
+            pane.forceActiveFocus()
+    }
+    /// The tab bar (wide windows): two tabs or more, or a split view.
+    readonly property bool tabBarShown: !Theme.narrow && (AppController.tabCount > 1 || AppController.splitTab !== 0)
     /// How much of the window's bottom the on-screen keyboard covers.
     readonly property real keyboardOverlap: KeyboardInsets.overlap
     /// Width of the strip at the left edge whose swipe opens the drawer (touch UIs), beyond the
@@ -57,7 +79,7 @@ FocusScope {
     readonly property real edgeSwipeStrip: 24
     /// A view's editing toolbar is docked at its bottom edge (touch UIs): the main view's or the
     /// side panel's.
-    readonly property bool toolbarDocked: routeView.viewToolbarDocked || sidePanel.toolbarDocked
+    readonly property bool toolbarDocked: shell.routeView.viewToolbarDocked || sidePanel.toolbarDocked
     /// Typing: the keyboard is up, or a toolbar stays docked after the system hid it.
     readonly property bool typing: KeyboardInsets.shown || toolbarDocked
     /// The bottom navigation's height (with the system's navigation bar under it), shown or not.
@@ -72,7 +94,7 @@ FocusScope {
     /// Phones: the bottom navigation shows unless the keyboard is up or the view has a bar of
     /// its own at the bottom instead (the drawing's tools). An editing toolbar that stays after
     /// the keyboard went (the editing goes on) docks right above it.
-    readonly property bool bottomNavShown: Theme.narrow && !keyboardUp && !routeView.viewReplacesBottomNav
+    readonly property bool bottomNavShown: Theme.narrow && !keyboardUp && !shell.routeView.viewReplacesBottomNav
     /// Room under the content: the keyboard (minus the bottom navigation, while that is shown:
     /// sliding, the keyboard covers or uncovers it first); while typing without the navigation
     /// at least the system's navigation bar, which the docked toolbar must clear, and the
@@ -86,7 +108,7 @@ FocusScope {
     /// it never drops onto it after it came — and when it goes. (A keyboard reported in one step
     /// took the navigation at once, the toolbar moving with it then.)
     readonly property real keyboardFloor: Theme.narrow && keyboardUp && KeyboardInsets.slidesOver && keyboardOverlap > 0
-                                          && !routeView.viewReplacesBottomNav ? bottomNavHeight : 0
+                                          && !shell.routeView.viewReplacesBottomNav ? bottomNavHeight : 0
     /// What covers the window's bottom edge for toasts (Main.qml): on phones the bottom
     /// navigation, with a toolbar docked on it; else the keyboard and a docked toolbar while
     /// typing; else the system's navigation bar.
@@ -96,8 +118,8 @@ FocusScope {
     /// Toasts go to the window's top (Main.qml) while text is typed on a touch screen — the
     /// on-screen keyboard up, or an editing toolbar docked while a view edits text: the caret's
     /// line is kept right above the keyboard and the toolbar, under the toasts' usual place.
-    readonly property bool toastsAtTop: KeyboardInsets.shown || (toolbarDocked && routeView.viewEditing)
-    readonly property string title: routeView.viewTitle !== "" ? routeView.viewTitle : routeTitle(route)
+    readonly property bool toastsAtTop: KeyboardInsets.shown || (toolbarDocked && shell.routeView.viewEditing)
+    readonly property string title: shell.routeView.viewTitle !== "" ? shell.routeView.viewTitle : routeTitle(route)
     /// Folders above the current page, or above the folder All pages shows (with "Wszystkie
     /// strony" first): [{ title, path }] — a crumb opens All pages in that folder.
     readonly property var crumbs: {
@@ -348,6 +370,7 @@ FocusScope {
             ShellTopBar {
                 Layout.fillWidth: true
                 title: shell.title
+                titleOf: (r) => shell.routeTitle(r)
                 crumbs: shell.crumbs
                 topInset: shell.safe.top
                 sidebarVisible: shell.sidebarVisible
@@ -356,10 +379,10 @@ FocusScope {
                 // editor) or the on-screen keyboard up (it takes the bar's place, and there is no
                 // edge strip while typing: dragMargin), so the drawer is never out of reach.
                 menuButtonShown: !Theme.narrow || !shell.bottomNavShown
-                picture: routeView.viewPicture
-                pictureAsText: routeView.viewPictureAsText
-                pdf: routeView.viewPdf
-                fileOnly: routeView.viewFile
+                picture: shell.routeView.viewPicture
+                pictureAsText: shell.routeView.viewPictureAsText
+                pdf: shell.routeView.viewPdf
+                fileOnly: shell.routeView.viewFile
                 onMenuClicked: drawer.open()
                 onSidebarToggled: shell.toggleSidebar()
                 onPaletteRequested: shell.openPalette()
@@ -379,17 +402,50 @@ FocusScope {
                 Layout.rightMargin: Theme.space2
                 Layout.topMargin: Theme.space2
             }
-            ShellRouteView {
-                id: routeView
+            ShellTabBar {
+                id: tabBar
+                objectName: "shellTabBar"
+                visible: shell.tabBarShown
+                Layout.fillWidth: true
+                titleOf: (r) => shell.routeTitle(r)
+            }
+            // One pane, or two side by side (the split view). Only the tabs shown have views.
+            SplitView {
+                id: panes
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 focus: true
-                route: AppController.currentRoute
-                // The calendar grids' swipe took the swipe that closes the drawer over them.
-                covered: drawer.visible
+                orientation: Qt.Horizontal
+                handle: BSplitHandle { orientation: Qt.Horizontal }
+
+                ShellTabPane {
+                    id: mainPane
+                    objectName: "shellMainPane"
+                    SplitView.fillWidth: true
+                    SplitView.minimumWidth: 280
+                    focus: !shell.split || !AppController.splitFocused
+                    // Phones: one pane, the focused tab.
+                    tabId: Theme.narrow ? AppController.focusedTab : AppController.mainTab
+                    paneActive: !shell.split || !AppController.splitFocused
+                    // The calendar grids' swipe took the swipe that closes the drawer over them.
+                    covered: drawer.visible
+                    onActivated: if (!Theme.narrow) AppController.focusPane(false)
+                }
+                ShellTabPane {
+                    id: splitPane
+                    objectName: "shellSplitPane"
+                    visible: shell.split
+                    SplitView.preferredWidth: panes.width / 2
+                    SplitView.minimumWidth: 280
+                    focus: shell.split && AppController.splitFocused
+                    tabId: shell.split ? AppController.splitTab : 0
+                    paneActive: shell.split && AppController.splitFocused
+                    onActivated: if (shell.split) AppController.focusPane(true)
+                }
             }
+
             // The palette's block commands follow the main view's source mode (CommandModel).
-            Binding { target: AppController; property: "sourceModeShown"; value: routeView.viewSourceMode }
+            Binding { target: AppController; property: "sourceModeShown"; value: shell.routeView.viewSourceMode }
             ShellBottomNav {
                 id: bottomNav
                 objectName: "shellBottomNav"
@@ -405,7 +461,7 @@ FocusScope {
                 // "+ Notatka": a block still edited with the keyboard hidden (its toolbar docked on
                 // the bar) is ended first, as a tab's view change ends it.
                 onCaptureClicked: {
-                    routeView.endEditing()
+                    shell.routeView.endEditing()
                     shell.openCapture()
                 }
             }
@@ -418,7 +474,7 @@ FocusScope {
             SplitView.minimumWidth: 260
             SplitView.maximumWidth: 600
             pinnedTitle: shell.routeTitle(AppController.sidePanelRoute)
-            contextPanel: routeView.viewSidePanel
+            contextPanel: shell.routeView.viewSidePanel
         }
     }
 
@@ -461,7 +517,7 @@ FocusScope {
         // replaces that bar or the keyboard hides it) still opens it, a swipe on it still closes it. The strip follows
         // the UI mode, not the pointer: a mouse in a touch UI gets it too.
         dragMargin: !Theme.touchUi ? Application.styleHints.startDragDistance
-                    : shell.typing || routeView.viewEdgeSwipe ? 0
+                    : shell.typing || shell.routeView.viewEdgeSwipe ? 0
                     : Math.max(shell.safe.left, GestureInsets.left) + shell.edgeSwipeStrip
         dim: true
         // Focus while open (Drawer's default, stated because the keys rely on it): Escape / the
@@ -673,8 +729,23 @@ FocusScope {
     Shortcut { sequence: "Ctrl+K"; onActivated: shell.openPalette() }
     Shortcut { sequence: "Ctrl+O"; onActivated: shell.openSwitcher() }
     Shortcut { sequence: "Ctrl+Shift+F"; onActivated: AppController.search("") }
-    Shortcut { sequence: "Alt+Left"; onActivated: AppController.back() }
-    Shortcut { sequence: "Alt+Right"; onActivated: AppController.forward() }
+    Shortcut { sequence: "Alt+Left"; onActivated: AppController.back(AppController.focusedTab) }
+    Shortcut { sequence: "Alt+Right"; onActivated: AppController.forward(AppController.focusedTab) }
+    // Tabs (docs/UI.md "Tabs, split view and windows").
+    Shortcut { sequence: "Ctrl+T"; onActivated: AppController.newTab() }
+    Shortcut { sequence: "Ctrl+W"; onActivated: AppController.closeTab(AppController.focusedTab) }
+    Shortcut { sequences: ["Ctrl+Tab", "Ctrl+PgDown"]; onActivated: AppController.nextTab() }
+    // (Shift+Tab arrives as Backtab.)
+    Shortcut { sequences: ["Ctrl+Shift+Tab", "Ctrl+Shift+Backtab", "Ctrl+PgUp"]; onActivated: AppController.previousTab() }
+    Instantiator {
+        model: 9
+        delegate: Shortcut {
+            required property int index
+            sequence: "Ctrl+" + (index + 1)
+            // Ctrl+9: the last tab, as in browsers.
+            onActivated: AppController.selectTabAt(index === 8 ? -1 : index)
+        }
+    }
     Shortcut { sequence: "Ctrl+J"; onActivated: AppController.openToday() }
     // This week's / this month's note (docs/SYNTAX.md §1 "Weekly and monthly notes").
     Shortcut { sequence: "Ctrl+Alt+W"; onActivated: AppController.openPeriodicNote("week", "", 0) }
@@ -694,8 +765,61 @@ FocusScope {
         onActivated: shell.openRename(shell.route.path, false)
     }
 
-    // The navigation bar's first margin.
-    Component.onCompleted: noteNavigationBar()
+    // ---- Tabs: links in a new tab (OpenIn), pages in windows of their own -------------------------
+
+    /// tab id → its ShellPageWindow.
+    property var pageWindows: ({})
+    /// One window per AppController.windowTabs entry: new ones made and shown, gone ones destroyed.
+    function syncPageWindows() {
+        const ids = AppController.windowTabs
+        const kept = {}
+        for (const id of ids) {
+            let w = pageWindows[id]
+            if (!w) {
+                w = pageWindowComponent.createObject(shell, { tabId: id, titleOf: (r) => shell.routeTitle(r) })
+                if (!w)
+                    continue
+                w.show()
+                w.raise()
+                w.requestActivate()
+            }
+            kept[id] = w
+        }
+        for (const key of Object.keys(pageWindows)) {
+            if (!kept[key]) {
+                // Hidden at once (destroy() waits for the event loop).
+                pageWindows[key].hide()
+                pageWindows[key].destroy()
+            }
+        }
+        pageWindows = kept
+    }
+    Component {
+        id: pageWindowComponent
+        ShellPageWindow {}
+    }
+    Connections {
+        target: AppController
+        function onWindowTabsChanged() { shell.syncPageWindows() }
+    }
+    // The tabs saved (the panes hand their view states over first) when the app goes to the
+    // background, where Android may end it.
+    Connections {
+        target: Qt.application
+        function onStateChanged() {
+            if (Qt.application.state !== Qt.ApplicationActive)
+                AppController.saveTabs()
+        }
+    }
+    Binding { target: OpenIn; property: "windows"; value: AppController.windowsAllowed && !Theme.narrow }
+
+    Component.onCompleted: {
+        // The navigation bar's first margin.
+        noteNavigationBar()
+        OpenIn.openIn = (target, open) => AppController.openIn(target, open)
+        syncPageWindows()
+    }
+    Component.onDestruction: OpenIn.openIn = null
 
     // --popup (screenshots, the UI benchmark, manual checks): opened once the notebook is open and
     // indexed — a popup that lists pages (the switcher) then shows them, as a user sees it —, or

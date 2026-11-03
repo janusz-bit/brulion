@@ -41,6 +41,7 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
     connect(app, &AppController::statusChanged, this, &CommandModel::commandsChanged);
     connect(app, &AppController::currentRouteChanged, this, &CommandModel::commandsChanged);
     connect(app, &AppController::historyChanged, this, &CommandModel::commandsChanged);
+    connect(app, &AppController::tabsChanged, this, &CommandModel::commandsChanged);
     connect(app, &AppController::syncStatusChanged, this, &CommandModel::commandsChanged);
     connect(app, &AppController::sidePanelAllowedChanged, this, &CommandModel::commandsChanged);
     connect(app, &AppController::sourceModeShownChanged, this, &CommandModel::commandsChanged);
@@ -239,6 +240,71 @@ static QList<Command> folderCommands(const AppController *app)
     };
 }
 
+// ---- Tabs, the split view, windows (docs/UI.md "Tabs, split view and windows") ---------------
+
+/// The tab commands, after "Forward": a new tab, a copy of this one, closing it, the next and the
+/// previous one; the split view (wide windows) and the page in a window of its own (desktop).
+static QList<Command> tabCommands(const AppController *app)
+{
+    const bool ready = app->status() == u"ready";
+    const bool several = ready && app->tabCount() > 1;
+    const bool wide = ready && app->sidePanelAllowed();
+    return {
+            {u"tab.new"_s, CommandModel::tr("New tab"), {}, u"plus"_s, u"Ctrl+T"_s, ready},
+            {u"tab.duplicate"_s,
+             CommandModel::tr("Open in new tab"),
+             CommandModel::tr("The view shown, in a tab of its own"),
+             u"copy"_s,
+             {},
+             ready},
+            {u"tab.close"_s, CommandModel::tr("Close tab"), {}, u"x"_s, u"Ctrl+W"_s, ready},
+            {u"tab.next"_s, CommandModel::tr("Next tab"), {}, u"chevron-right"_s, u"Ctrl+Tab"_s, several},
+            {u"tab.previous"_s, CommandModel::tr("Previous tab"), {}, u"chevron-left"_s, u"Ctrl+Shift+Tab"_s, several},
+            {u"view.split"_s,
+             CommandModel::tr("Split view"),
+             CommandModel::tr("A second pane beside this one"),
+             u"columns-2"_s,
+             {},
+             wide && app->splitTab() == 0},
+            {u"view.closeSplit"_s,
+             CommandModel::tr("Close split view"),
+             {},
+             u"square"_s,
+             {},
+             wide && app->splitTab() != 0},
+            {u"window.open"_s,
+             CommandModel::tr("Open in new window"),
+             CommandModel::tr("The view shown, in a window of its own"),
+             u"app-window"_s,
+             {},
+             ready && app->windowsAllowed()},
+    };
+}
+
+/// Run a tab command; false when `id` is none.
+static bool runTabCommand(AppController *app, const QString &id)
+{
+    if (id == u"tab.new")
+        app->newTab();
+    else if (id == u"tab.duplicate")
+        app->openTab(app->currentRoute());
+    else if (id == u"tab.close")
+        app->closeTab(app->focusedTab());
+    else if (id == u"tab.next")
+        app->nextTab();
+    else if (id == u"tab.previous")
+        app->previousTab();
+    else if (id == u"view.split")
+        app->splitView();
+    else if (id == u"view.closeSplit")
+        app->closeSplit();
+    else if (id == u"window.open")
+        app->openWindow(app->currentRoute());
+    else
+        return false;
+    return true;
+}
+
 /// Run a folder command; false when `id` is none.
 static bool runFolderCommand(AppController *app, const QString &id)
 {
@@ -339,6 +405,13 @@ static QList<Command> allCommands(const AppController *app)
     const QList<Command> folders = folderCommands(app);
     for (qsizetype i = 0; i < folders.size(); ++i)
         out.insert(folderAt + i, folders.at(i));
+    // The tab commands after "Forward".
+    const auto forward =
+            std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"nav.forward"; });
+    const qsizetype tabAt = forward == out.cend() ? out.size() : std::distance(out.cbegin(), forward) + 1;
+    const QList<Command> tabs = tabCommands(app);
+    for (qsizetype i = 0; i < tabs.size(); ++i)
+        out.insert(tabAt + i, tabs.at(i));
     out += backupCommands(app);
     return out;
 }
@@ -429,7 +502,7 @@ bool CommandModel::run(const QString &id)
         m_app->closeVault();
     else if (id == u"about")
         m_app->requestUiAction(u"about"_s);
-    else if (!runFolderCommand(m_app, id))
+    else if (!runFolderCommand(m_app, id) && !runTabCommand(m_app, id))
         return false;
     return true;
 }

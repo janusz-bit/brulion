@@ -954,6 +954,29 @@ GitHub runner, 1080 × 2400): TOTAL PSS 174 MB (`dumpsys meminfo`) after zooming
 | APK arm64 release (`android.yml`'s artifact, zipped) | 29 450 612 B | 29 746 852 B | +296 240 B (+1.0 %) |
 | Windows ZIP + installer (`windows.yml`'s artifact, zipped; Qt PDF was already shipped) | 80 169 509 B | 80 583 602 B | +414 093 B (+0.5 %) |
 
+### Tabs, split view and windows: what a tab costs (2026-11-03)
+
+Tabs (docs/UI.md "Tabs, split view and windows") are kept cheap by design, not by tuning:
+
+* **Only the tabs shown have views.** The main window has two `ShellTabPane`s (the split pane
+  shows nothing — no view, no Loader item — while the view is not split) and every page window one;
+  a tab in the background is a `Tab` in `TabSet` — its `RouteHistory` (≤ 100 routes a side, a few
+  short strings each) and a view state (two numbers). A hundred tabs (`TabSet::MaxTabs`) are a few
+  tens of kilobytes; no editor, PDF reader, picture or query model stays alive for them.
+* **Switching tabs is a route change in the pane.** The same view (a page after a page) keeps its
+  instance and loads the other note, as a link does (the old page is saved first); another view
+  (the journals after a page) is created again, as on navigation. Coming back the pane restores
+  where the tab was scrolled (`PageView.viewState()`: the first row in view and the offset into
+  it, applied once the page has loaded; the journal stream: the day at the top) — the price of not
+  keeping editors is one page load per switch, the same as following a link.
+* **The bar** is a `ListView` of light delegates (an icon, a title, ×); `AppController.tabs` is a
+  plain list rebuilt when a tab's route changes. Signals are computed by comparing a snapshot of
+  the tabs before and after a change (`AppController::beginTabs` / `endTabs`): a pane hears only
+  about its own tab (`tabRouteChanged(id)`), the command palette and the top bar only when the
+  focused tab changed.
+* **Saving** writes one JSON string per notebook (`tabs/<vault id>`, histories trimmed to 20 routes
+  a side) half a second after the last change, so a burst of navigation writes the settings once.
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the

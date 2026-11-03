@@ -42,6 +42,9 @@ Item {
     property string path
     property var route: ({})
     property bool inSidePanel: false
+    /// In the focused pane (false: the other pane of a split view, whose route is not the one
+    /// navigation and replaceRoute() act on).
+    property bool paneActive: true
     /// Renderer colours for the references (BlockEditor.rendererPalette).
     property var rendererPalette: ({})
 
@@ -170,7 +173,7 @@ Item {
         interval: 500
         onTriggered: {
             const current = AppController.currentRoute
-            if (root.inSidePanel || !root.ready || root._readyPath !== root.path || !current
+            if (root.inSidePanel || !root.paneActive || !root.ready || root._readyPath !== root.path || !current
                     || current.path !== root.path)
                 return
             const page = pdf.currentPage

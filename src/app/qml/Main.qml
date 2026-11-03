@@ -71,6 +71,10 @@ ApplicationWindow {
             })
     }
 
+    // Back from a page's own window (docs/UI.md "Tabs, split view and windows"): navigation goes to
+    // this window's focused tab again.
+    onActiveChanged: if (active && AppController.status === "ready") AppController.mainWindowActivated()
+
     function showAndRaise() {
         if (window.visibility === Window.Minimized || !window.visible)
             window.showNormal()

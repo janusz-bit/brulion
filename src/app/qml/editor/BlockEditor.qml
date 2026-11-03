@@ -2724,6 +2724,14 @@ FocusScope {
         linkMenu.popup(item, x, y)
         return true
     }
+    /// A middle click (a mouse's wheel button) on `link` in block `row`'s text: a page, tag or
+    /// block link opens in a new tab (OpenIn; nothing outside the app's shell). True when it did.
+    function openLinkInTab(row, link) {
+        if (!controller || !OpenIn.tabs || !isLinkMenuLink(link) || link.startsWith("ext:"))
+            return false
+        OpenIn.run("tab", () => editor.activateLink(row, link))
+        return true
+    }
     /// The link menu of a link in block `row`'s text.
     function openBlockLinkMenu(row, link, item, x, y) {
         return openLinkMenu(link, "", (newPane) => {
@@ -2742,6 +2750,8 @@ FocusScope {
         switch (action) {
         case "open": if (open) open(false); break
         case "openSide": if (open) open(true); break
+        case "openTab": if (open) OpenIn.run("tab", () => open(false)); break
+        case "openWindow": if (open) OpenIn.run("window", () => open(false)); break
         case "copy": copyText(info.copyText); break
         case "overview": controller.navigate({ view: "tag", tag: info.tag, overview: true }); break
         case "tasks": if (linkMenu) controller.navigate({ view: "tasks", query: linkMenu.tasksQuery(info.tag) }); break

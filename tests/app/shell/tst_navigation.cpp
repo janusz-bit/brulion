@@ -13,6 +13,7 @@
 #include "workspace.h"
 
 #include "reminders/notifications.h"
+#include "vault/vault.h"
 
 #include <QDir>
 #include <QFile>
@@ -1107,6 +1108,277 @@ private Q_SLOTS:
         const QJSValue result = carried.call();
         QVERIFY2(!result.isError(), qPrintable(result.toString()));
         QCOMPARE(engine.globalObject().property(u"undone"_s).toInt(), 1);
+    }
+
+    // ---- tabs (tabs.h; docs/UI.md "Tabs, split view and windows") ------------------------------
+
+    // Every tab has its own history; currentRoute and back/forward are the focused tab's.
+    void tabsHaveTheirOwnHistory()
+    {
+        auto app = openApp(u"karty"_s);
+        Workspace *ws = app->workspace();
+        const QString a = ws->createPage(u"Źródła"_s);
+        const QString b = ws->createPage(u"Łąki"_s);
+        const int first = app->focusedTab();
+        QCOMPARE(app->tabCount(), 1);
+        app->openPage(a);
+        QSignalSpy tabsSpy(app.get(), &AppController::tabsChanged);
+        QSignalSpy routes(app.get(), &AppController::tabRouteChanged);
+        QSignalSpy current(app.get(), &AppController::currentRouteChanged);
+        const int second = app->newTab();
+        QVERIFY(second > 0 && second != first);
+        QCOMPARE(app->tabCount(), 2);
+        QCOMPARE(app->focusedTab(), second);
+        QCOMPARE(app->activeTab(), second);
+        QVERIFY(app->atHome()); // a new tab shows the home route, with nothing to go back to
+        QVERIFY(!app->canGoBack());
+        QCOMPARE(tabsSpy.size(), 1);
+        QCOMPARE(routes.size(), 1);
+        QCOMPARE(routes.first().first().toInt(), second);
+        QCOMPARE(current.size(), 1);
+        app->openPage(b);
+        QCOMPARE(app->tabRoute(first), page(a));
+        QCOMPARE(app->tabRoute(second), page(b));
+        QVERIFY(app->previousTab());
+        QCOMPARE(app->currentRoute(), page(a));
+        QVERIFY(app->canGoBack());
+        QVERIFY(app->nextTab());
+        QCOMPARE(app->currentRoute(), page(b));
+        QVERIFY(app->back());
+        QVERIFY(app->atHome());
+        QCOMPARE(app->tabRoute(first), page(a)); // untouched
+        QVERIFY(app->tabCanGoForward(second));
+        QVERIFY(!app->tabCanGoForward(first));
+        QVERIFY(!app->tabCanGoBack(4242));
+        QVERIFY(app->tabRoute(4242).isEmpty());
+        // The bar's data for QML.
+        const QVariantList bar = app->tabs();
+        QCOMPARE(bar.size(), 2);
+        QCOMPARE(bar.at(0).toMap().value(u"id"_s).toInt(), first);
+        QCOMPARE(bar.at(0).toMap().value(u"route"_s).toMap(), page(a));
+        QVERIFY(bar.at(0).toMap().value(u"canGoBack"_s).toBool());
+        // Ctrl+1 / Ctrl+9, moving, closing.
+        QVERIFY(app->selectTabAt(0));
+        QCOMPARE(app->focusedTab(), first);
+        QVERIFY(app->selectTabAt(-1));
+        QCOMPARE(app->focusedTab(), second);
+        QVERIFY(!app->selectTabAt(-1)); // already there
+        QVERIFY(app->moveTab(1, 0));
+        QCOMPARE(app->tabs().first().toMap().value(u"id"_s).toInt(), second);
+        QVERIFY(app->closeTab(second));
+        QCOMPARE(app->tabCount(), 1);
+        QCOMPARE(app->currentRoute(), page(a));
+        QVERIFY(!app->nextTab()); // one tab
+        QVERIFY(app->closeTab());
+        QCOMPARE(app->tabCount(), 1);
+        QVERIFY(app->atHome()); // the last tab closed: a fresh one at home
+    }
+
+    // openIn(): a click's navigation in a new tab or window; nothing else is affected.
+    void openInNewTabOrWindow()
+    {
+        auto app = openApp(u"otworz"_s);
+        const QString a = app->workspace()->createPage(u"Gęś"_s);
+        QJSEngine engine;
+        QJSEngine::setObjectOwnership(app.get(), QJSEngine::CppOwnership);
+        engine.globalObject().setProperty(u"app"_s, engine.newQObject(app.get()));
+        const QJSValue open = engine.evaluate(u"(function () { app.openPage(\"Gęś.md\", -1, false) })"_s);
+        const QJSValue nothing = engine.evaluate(u"(function () { })"_s);
+        QVERIFY(open.isCallable());
+        app->openIn(u"tab"_s, open);
+        QCOMPARE(app->tabCount(), 2);
+        QCOMPARE(app->currentRoute(), page(a));
+        QVERIFY(!app->canGoBack());
+        QCOMPARE(app->tabRoute(app->tabs().first().toMap().value(u"id"_s).toInt()).value(u"view"_s).toString(),
+                 u"journals"_s);
+        // A function that navigates nowhere leaves nothing pending for the next navigation.
+        app->openIn(u"tab"_s, nothing);
+        app->openIn(u"tab"_s, QJSValue(42)); // not a function: nothing
+        app->navigate(view(u"tasks"_s));
+        QCOMPARE(app->tabCount(), 2);
+        QCOMPARE(app->currentView(), u"tasks"_s);
+        // Another target: as usual.
+        app->openIn(u"somewhere"_s, open);
+        QCOMPARE(app->tabCount(), 2);
+        QCOMPARE(app->currentRoute(), page(a));
+        // A window of its own (desktop builds: these tests); its navigation is its own while it is
+        // active, the main window's routes stay.
+        QVERIFY(app->windowsAllowed());
+        QSignalSpy windows(app.get(), &AppController::windowTabsChanged);
+        app->openIn(u"window"_s, open);
+        QCOMPARE(windows.size(), 1);
+        QCOMPARE(app->windowTabs().size(), 1);
+        const int w = app->windowTabs().first().toInt();
+        QCOMPARE(app->activeTab(), w);
+        QCOMPARE(app->tabCount(), 2); // not in the bar
+        app->navigate(view(u"calendar"_s));
+        QCOMPARE(app->tabRoute(w).value(u"view"_s).toString(), u"calendar"_s);
+        QCOMPARE(app->currentRoute(), page(a)); // the main window's tab
+        QVERIFY(app->back(w));
+        QCOMPARE(app->tabRoute(w), page(a));
+        app->mainWindowActivated();
+        QCOMPARE(app->activeTab(), app->focusedTab());
+        app->navigate(view(u"graph"_s));
+        QCOMPARE(app->currentView(), u"graph"_s);
+        QCOMPARE(app->tabRoute(w), page(a));
+        // Back into the bar, and out again.
+        QVERIFY(app->attachTab(w));
+        QCOMPARE(app->tabCount(), 3);
+        QVERIFY(app->windowTabs().isEmpty());
+        QCOMPARE(app->focusedTab(), w);
+        QVERIFY(app->detachTab(w));
+        QCOMPARE(app->windowTabs().size(), 1);
+        QVERIFY(app->closeTab(w)); // the window closed
+        QVERIFY(app->windowTabs().isEmpty());
+        QCOMPARE(app->tabCount(), 2);
+    }
+
+    // The split view: a second pane beside the main one (wide windows only).
+    void splitView()
+    {
+        auto app = openApp(u"podzial"_s);
+        const QString a = app->workspace()->createPage(u"Lewa strona"_s);
+        app->openPage(a);
+        app->setSidePanelAllowed(false);
+        QVERIFY(!app->splitView()); // a phone shows one view
+        app->setSidePanelAllowed(true);
+        QVERIFY(app->splitView());
+        QVERIFY(app->splitTab() != 0);
+        QVERIFY(app->splitFocused());
+        QCOMPARE(app->focusedTab(), app->splitTab());
+        QCOMPARE(app->currentRoute(), page(a)); // a copy of the focused tab
+        app->navigate(view(u"tasks"_s));
+        QCOMPARE(app->tabRoute(app->mainTab()), page(a));
+        QVERIFY(app->focusPane(false));
+        QCOMPARE(app->currentRoute(), page(a));
+        QVERIFY(app->focusPane(true));
+        QCOMPARE(app->currentView(), u"tasks"_s);
+        QVERIFY(app->closeSplit());
+        QCOMPARE(app->splitTab(), 0);
+        QCOMPARE(app->tabCount(), 2); // its tab stays in the bar
+        QCOMPARE(app->currentRoute(), page(a));
+        // The commands.
+        CommandModel *model = app->commands();
+        QVERIFY(model->run(u"view.split"_s));
+        QVERIFY(app->splitTab() != 0);
+        QVERIFY(!model->run(u"view.split"_s)); // already split
+        QVERIFY(model->run(u"view.closeSplit"_s));
+        QCOMPARE(app->splitTab(), 0);
+        QVERIFY(model->run(u"tab.new"_s));
+        QCOMPARE(app->tabCount(), 4);
+        QVERIFY(model->run(u"tab.previous"_s));
+        QVERIFY(model->run(u"tab.next"_s));
+        QVERIFY(model->run(u"tab.close"_s));
+        QCOMPARE(app->tabCount(), 3);
+        QVERIFY(model->run(u"tab.duplicate"_s));
+        QCOMPARE(app->tabCount(), 4);
+        QVERIFY(model->run(u"window.open"_s));
+        QCOMPARE(app->windowTabs().size(), 1);
+    }
+
+    // Renamed pages are followed in every tab; deleted ones leave every tab's history.
+    void tabsFollowRenamesAndDeletions()
+    {
+        auto app = openApp(u"kartyzmiany"_s);
+        Workspace *ws = app->workspace();
+        const QString a = ws->createPage(u"Żaba"_s);
+        const QString b = ws->createPage(u"Inna"_s);
+        app->openPage(a);
+        const int second = app->openTab(page(a));
+        app->openPage(b);
+        const int window = app->openWindow(page(a));
+        QSignalSpy routes(app.get(), &AppController::tabRouteChanged);
+        const QString renamed = ws->renamePage(a, u"Ropucha"_s);
+        QCOMPARE(app->tabRoute(app->tabs().first().toMap().value(u"id"_s).toInt()), page(renamed));
+        QCOMPARE(app->tabRoute(window), page(renamed));
+        QCOMPARE(routes.size(), 2); // the first tab and the window; the second tab shows another page
+        QVERIFY(!ws->deletePage(renamed).isEmpty());
+        QCOMPARE(app->tabRoute(window).value(u"view"_s).toString(), u"journals"_s);
+        QCOMPARE(app->tabRoute(app->tabs().first().toMap().value(u"id"_s).toInt()).value(u"view"_s).toString(),
+                 u"journals"_s);
+        // The second tab shows another page: only its back list lost the page.
+        QCOMPARE(app->tabRoute(second), page(b));
+        QVERIFY(!app->tabCanGoBack(second));
+    }
+
+    // The tabs are a device setting per notebook: they come back when it opens again, also after
+    // a restart; pages gone meanwhile drop out; another notebook has its own.
+    void tabsAreKeptPerNotebook()
+    {
+        auto app = openApp(u"Notatnik z kartami"_s);
+        Workspace *ws = app->workspace();
+        const QString a = ws->createPage(u"Pierwsza"_s);
+        const QString b = ws->createPage(u"Druga"_s);
+        const QString gone = ws->createPage(u"Zniknie"_s);
+        app->openPage(a);
+        app->openTab(page(b));
+        app->openTab(page(gone));
+        app->setTabViewState(app->focusedTab(), {{u"row"_s, 5}});
+        app->selectTabAt(1);
+        app->setTabViewState(app->focusedTab(), {{u"row"_s, 9}, {u"offset"_s, 14}});
+        const QString first = ws->rootPath();
+        // Another notebook: one tab at home.
+        app->openVault(m_tmp.filePath(u"Drugi notatnik"_s));
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QCOMPARE(app->tabCount(), 1);
+        QVERIFY(app->atHome());
+        app->openTab(view(u"tasks"_s));
+        // Back to the first: its three tabs, the second one shown, with its view state.
+        app->openVault(first);
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QCOMPARE(app->tabCount(), 3);
+        QCOMPARE(app->currentRoute(), page(b));
+        QCOMPARE(app->tabViewState(app->focusedTab()).value(u"row"_s).toInt(), 9);
+        QVERIFY(app->tabCanGoBack(app->tabs().first().toMap().value(u"id"_s).toInt()));
+        // The page deleted while the notebook was closed (another program, sync) is gone.
+        AppController::Options o;
+        o.settingsFile = app->settings()->fileName();
+        o.dataDir = app->dataDir();
+        app->saveTabs();
+        app.reset();
+        QVERIFY(QFile::remove(QDir(first).filePath(gone)));
+        AppController again(o);
+        again.start();
+        QTRY_COMPARE(again.status(), u"ready"_s);
+        QCOMPARE(again.workspace()->rootPath(), first);
+        QCOMPARE(again.tabCount(), 3);
+        QCOMPARE(again.currentRoute(), page(b));
+        QCOMPARE(again.tabRoute(again.tabs().last().toMap().value(u"id"_s).toInt()).value(u"view"_s).toString(),
+                 u"journals"_s);
+        // Malformed saved tabs: one tab at home.
+        again.closeVault(); // (saves them: then the broken ones)
+        again.settings()->setValue(u"tabs/"_s + brulion::Vault::idForPath(first), u"{\"tabs\": [zepsute"_s);
+        again.openVault(first);
+        QTRY_COMPARE(again.status(), u"ready"_s);
+        QCOMPARE(again.tabCount(), 1);
+        QVERIFY(again.atHome());
+    }
+
+    // --route (screenshots, tests): one tab with that route; the saved tabs are left alone.
+    void startRouteLeavesTheSavedTabs()
+    {
+        auto app = openApp(u"trasa"_s);
+        app->openTab(view(u"tasks"_s));
+        app->openTab(view(u"calendar"_s));
+        AppController::Options o;
+        o.settingsFile = app->settings()->fileName();
+        o.dataDir = app->dataDir();
+        o.arguments = {u"--route"_s, u"graph"_s};
+        app.reset();
+        {
+            AppController shot(o);
+            shot.start();
+            QTRY_COMPARE(shot.status(), u"ready"_s);
+            QCOMPARE(shot.tabCount(), 1);
+            QCOMPARE(shot.currentView(), u"graph"_s);
+            shot.openTab(view(u"search"_s));
+        }
+        o.arguments.clear();
+        AppController again(o);
+        again.start();
+        QTRY_COMPARE(again.status(), u"ready"_s);
+        QCOMPARE(again.tabCount(), 3);
+        QCOMPARE(again.currentView(), u"calendar"_s);
     }
 
     // Settings → Application → "Start when you sign in" (Windows' Run key; here INI files).

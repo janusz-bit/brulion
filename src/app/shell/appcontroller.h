@@ -12,6 +12,18 @@
 //   search(query)
 // Renamed pages are followed in the history; deleted pages drop out of it.
 //
+// Tabs, the split view and windows (tabs.h; docs/UI.md "Tabs, split view and windows"): every
+// tab has its own history. `currentRoute`, `canGoBack`, `canGoForward` and `atHome` are those of
+// the main window's focused tab (`focusedTab`: the main pane's, or the split pane's when that one
+// is focused); navigate(), replaceRoute(), back() and forward() act on the active tab
+// (`activeTab`: the focused tab, or a page's own window while that has the focus — its views
+// navigate in it). newTab(), openTab(route), openWindow(route) (desktop), closeTab(), selectTab(),
+// nextTab() / previousTab(), moveTab(), splitView() / closeSplit(), detachTab() / attachTab();
+// openIn("tab" | "window", fn) runs `fn` (a link's click) with its navigation going there. The
+// panes and windows show a tab each (tabRoute(id), tabRouteChanged(id)) and keep its view state
+// (setTabViewState()). The tabs are saved per notebook on this device ("tabs/<vault id>") and
+// come back when it opens again.
+//
 // Vault lifecycle: start() opens the last vault (or shows onboarding); openVault(path)
 // (created when missing), openDemoVault() ("Przykładowy brulion", seeded with the sample notes),
 // closeVault(); openRecentVault(path) for a known notebook (never recreates a missing folder).
@@ -51,12 +63,14 @@
 #include "appsettings.h"
 #include "appupdates.h"
 #include "navigation.h"
+#include "tabs.h"
 #include "workspace.h"
 
 #include "notebook/share.h"
 
 #include <QDateTime>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QJSValue>
 #include <QJsonObject>
 #include <QObject>
@@ -64,6 +78,8 @@
 #include <QPointer>
 #include <QRect>
 #include <QStringList>
+#include <QTimer>
+#include <QVariantList>
 #include <QVariantMap>
 
 #include <functional>
@@ -107,6 +123,23 @@ class AppController : public QObject {
     /// Set by the shell: the main view's editor shows its page as Markdown source (source mode,
     /// Ctrl+E). The palette's commands for blocks and headings are off then.
     Q_PROPERTY(bool sourceModeShown READ sourceModeShown WRITE setSourceModeShown NOTIFY sourceModeShownChanged FINAL)
+
+    // ---- Tabs (tabs.h) ------------------------------------------------------------------
+    /// The main window's bar: [{ id, route, canGoBack, canGoForward }] in order.
+    Q_PROPERTY(QVariantList tabs READ tabs NOTIFY tabsChanged FINAL)
+    Q_PROPERTY(int tabCount READ tabCount NOTIFY tabsChanged FINAL)
+    /// The tab navigation goes to: the focused pane's, or a page window's while it has the focus.
+    Q_PROPERTY(int activeTab READ activeTab NOTIFY tabsChanged FINAL)
+    /// The main pane's tab; the split pane's (0: no split); which of the two is focused.
+    Q_PROPERTY(int mainTab READ mainTab NOTIFY tabsChanged FINAL)
+    Q_PROPERTY(int splitTab READ splitTab NOTIFY tabsChanged FINAL)
+    Q_PROPERTY(bool splitFocused READ splitFocused NOTIFY tabsChanged FINAL)
+    /// The main window's focused pane's tab (its route is currentRoute).
+    Q_PROPERTY(int focusedTab READ focusedTab NOTIFY tabsChanged FINAL)
+    /// The tabs shown in windows of their own (desktop), in the order they were opened.
+    Q_PROPERTY(QVariantList windowTabs READ windowTabs NOTIFY windowTabsChanged FINAL)
+    /// Pages can open in windows of their own (desktop; not Android, not the browser).
+    Q_PROPERTY(bool windowsAllowed READ windowsAllowed CONSTANT FINAL)
 
     // ---- Platform -----------------------------------------------------------------------
     /// "linux", "windows", "android" or "wasm".
@@ -215,10 +248,10 @@ public:
     QString errorString() const { return m_error; }
 
     // ---- Navigation ---------------------------------------------------------------------
-    QVariantMap currentRoute() const { return m_history.current(); }
+    QVariantMap currentRoute() const;
     QString currentView() const;
-    bool canGoBack() const { return m_history.canGoBack(); }
-    bool canGoForward() const { return m_history.canGoForward(); }
+    bool canGoBack() const;
+    bool canGoForward() const;
     bool atHome() const;
     QVariantMap sidePanelRoute() const { return m_sideRoute; }
     bool sidePanelVisible() const { return m_sidePanelVisible; }
@@ -230,8 +263,9 @@ public:
 
     Q_INVOKABLE void navigate(const QVariantMap &route, bool newPane = false);
     Q_INVOKABLE void replaceRoute(const QVariantMap &route);
-    Q_INVOKABLE bool back();
-    Q_INVOKABLE bool forward();
+    /// Back / forward in tab `tab` (0: the active tab).
+    Q_INVOKABLE bool back(int tab = 0);
+    Q_INVOKABLE bool forward(int tab = 0);
     Q_INVOKABLE void goHome();
     /// Android back key / gesture: back(), else go home; false at home (the app may close).
     Q_INVOKABLE bool handleBackKey();
@@ -260,6 +294,60 @@ public:
     /// Open a reminder's note (notification tap); waits for the vault when it is not ready. In
     /// the documentation (which arms no reminders) it opens the user's notebook first.
     Q_INVOKABLE void openNotification(const QString &path, int line);
+
+    // ---- Tabs ---------------------------------------------------------------------------
+    QVariantList tabs() const;
+    int tabCount() const { return int(m_tabs.bar().size()); }
+    int activeTab() const { return m_tabs.active(); }
+    int mainTab() const { return m_tabs.mainTab(); }
+    int splitTab() const { return m_tabs.splitTab(); }
+    bool splitFocused() const { return m_tabs.splitFocused(); }
+    int focusedTab() const { return m_tabs.focusedBarTab(); }
+    QVariantList windowTabs() const;
+    bool windowsAllowed() const { return isDesktop(); }
+
+    /// A new tab after the focused one, shown and focused: `route`, the home route for {} (Ctrl+T).
+    /// Its id; 0 when TabSet::MaxTabs are open (a notice says so).
+    Q_INVOKABLE int newTab(const QVariantMap &route = {});
+    /// The same, `background`: it stays behind the focused tab.
+    Q_INVOKABLE int openTab(const QVariantMap &route, bool background = false);
+    /// `route` in a window of its own (desktop; elsewhere a new tab). Its id.
+    Q_INVOKABLE int openWindow(const QVariantMap &route);
+    /// Run `open` (a function following a link or opening a page as a click does) with its
+    /// navigation going to `target`: "tab" (a new tab), "window" (a window of its own; a tab where
+    /// there are none), anything else as usual. Nothing that `open` does not navigate.
+    Q_INVOKABLE void openIn(const QString &target, const QJSValue &open);
+    /// Close tab `id` (0: the active one; a window's tab closes that window).
+    Q_INVOKABLE bool closeTab(int id = 0);
+    Q_INVOKABLE bool closeOtherTabs(int id);
+    /// Show tab `id` (TabSet::select: the focused pane gets it, or its pane gets the focus).
+    Q_INVOKABLE bool selectTab(int id);
+    /// The bar tab at `index` (Ctrl+1…8); -1 or past the end: the last one (Ctrl+9).
+    Q_INVOKABLE bool selectTabAt(int index);
+    Q_INVOKABLE bool nextTab();
+    Q_INVOKABLE bool previousTab();
+    Q_INVOKABLE bool moveTab(int from, int to);
+    /// Split the main window: bar tab `id` beside the main pane (0: a copy of the focused tab).
+    Q_INVOKABLE bool splitView(int id = 0);
+    Q_INVOKABLE bool closeSplit();
+    /// The main window's split pane (or main pane) got the focus.
+    Q_INVOKABLE bool focusPane(bool split);
+    /// The main window got the focus (Main.qml): its focused tab is the active one again.
+    Q_INVOKABLE void mainWindowActivated();
+    /// Bar tab `id` (0: the focused one) into a window of its own (desktop); back into the bar.
+    Q_INVOKABLE bool detachTab(int id = 0);
+    Q_INVOKABLE bool attachTab(int id);
+    /// Tab `id`'s current route ({} when there is none), whether it can go back / forward.
+    Q_INVOKABLE QVariantMap tabRoute(int id) const;
+    Q_INVOKABLE bool tabCanGoBack(int id) const;
+    Q_INVOKABLE bool tabCanGoForward(int id) const;
+    /// Where tab `id`'s view was scrolled for its current route ({} when nothing is kept); set by
+    /// the pane showing it before it shows another tab (and when the tabs are saved).
+    Q_INVOKABLE QVariantMap tabViewState(int id) const;
+    Q_INVOKABLE void setTabViewState(int id, const QVariantMap &state);
+    /// Save the tabs of the open notebook now (the panes hand over their view states first:
+    /// tabViewStatesRequested); the app going to the background, leaving the notebook, quitting.
+    Q_INVOKABLE void saveTabs();
 
     // ---- Platform -----------------------------------------------------------------------
     QString platform() const;
@@ -459,6 +547,12 @@ Q_SIGNALS:
     void sidePanelVisibleChanged();
     void sidePanelAllowedChanged();
     void sourceModeShownChanged();
+    void tabsChanged();
+    void windowTabsChanged();
+    /// Tab `id`'s current route changed (a pane or window showing it follows).
+    void tabRouteChanged(int id);
+    /// saveTabs(): the panes set the view states of the tabs they show (setTabViewState()) now.
+    void tabViewStatesRequested();
     void trayAvailableChanged();
     void quittingChanged();
     void startAtLoginChanged();
@@ -491,7 +585,24 @@ private:
     /// not shown one yet: scanning a big vault must not keep the window blank.
     void scheduleOpening(const QString &path, bool seedDemo);
     void finishOpening(const QString &path, bool seedDemo);
-    void routeChanged();
+    /// What the tab signals compare (beginTabs() before a change, endTabs() after it emits
+    /// tabsChanged, tabRouteChanged, currentRouteChanged, historyChanged… for what differs).
+    struct TabsSnapshot {
+        QList<int> bar;
+        QList<int> windows;
+        int main = 0, split = 0, active = 0, focused = 0;
+        bool splitFocused = false;
+        QHash<int, QVariantMap> routes;
+        QHash<int, int> nav; ///< bit 1: can go back, bit 2: forward
+    };
+    TabsSnapshot beginTabs() const;
+    /// `pageOpened`: a page the focused tab now shows was opened (recent pages); false for a
+    /// rename, a route a view updates.
+    void endTabs(const TabsSnapshot &before, bool pageOpened = true);
+    /// The settings key of the open notebook's tabs ("" when none).
+    QString tabsKey(const QString &vaultPath) const;
+    /// The tabs of the notebook at `vaultPath` (else one tab at home), pages gone since dropped.
+    void restoreTabs(const QString &vaultPath);
     void onPathRenamed(const QString &oldPath, const QString &newPath);
     /// A folder moved: folder routes (All pages, search in a folder, a folder export) follow.
     void onFolderRenamed(const QString &oldPath, const QString &newPath);
@@ -519,7 +630,12 @@ private:
     QString m_dataDir;
     QString m_status = QStringLiteral("boot");
     QString m_error;
-    RouteHistory m_history;
+    TabSet m_tabs;
+    /// The notebook m_tabs belong to ("" none) and the timer that saves them a moment after a change.
+    QString m_tabsVault;
+    QTimer *m_tabsSaveTimer = nullptr;
+    /// openIn()'s target while its function runs.
+    QString m_openIn;
     QVariantMap m_sideRoute;
     bool m_sidePanelVisible = false;
     bool m_sidePanelAllowed = true;

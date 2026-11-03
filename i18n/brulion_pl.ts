@@ -226,6 +226,11 @@
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="522"/>
+        <source>Open in new tab</source>
+        <translation>Otwórz w nowej karcie</translation>
+    </message>
 </context>
 <context>
     <name>AppShell</name>
@@ -6733,6 +6738,16 @@
         <source>Copy folder path</source>
         <translation>Kopiuj ścieżkę folderu</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/editor/LinkMenu.qml" line="71"/>
+        <source>Open in new tab</source>
+        <translation>Otwórz w nowej karcie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/LinkMenu.qml" line="85"/>
+        <source>Open in new window</source>
+        <translation>Otwórz w nowym oknie</translation>
+    </message>
 </context>
 <context>
     <name>LogsView</name>
@@ -10926,6 +10941,24 @@
     </message>
 </context>
 <context>
+    <name>ShellPageWindow</name>
+    <message>
+        <location filename="../src/app/qml/shell/ShellPageWindow.qml" line="74"/>
+        <source>Back</source>
+        <translation>Wstecz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellPageWindow.qml" line="81"/>
+        <source>Forward</source>
+        <translation>Dalej</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellPageWindow.qml" line="96"/>
+        <source>Move to main window</source>
+        <translation>Przenieś do okna głównego</translation>
+    </message>
+</context>
+<context>
     <name>ShellQuickCapture</name>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="14"/>
@@ -11392,6 +11425,16 @@
         <source>Import notes</source>
         <translation>Importuj notatki</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="968"/>
+        <source>Open in new tab</source>
+        <translation>Otwórz w nowej karcie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="983"/>
+        <source>Open in new window</source>
+        <translation>Otwórz w nowym oknie</translation>
+    </message>
 </context>
 <context>
     <name>ShellSplash</name>
@@ -11447,6 +11490,45 @@
         <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="88"/>
         <source>Sync now</source>
         <translation>Synchronizuj teraz</translation>
+    </message>
+</context>
+<context>
+    <name>ShellTabBar</name>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTabBar.qml" line="28"/>
+        <source>Tabs</source>
+        <translation>Karty</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTabBar.qml" line="160"/>
+        <location filename="../src/app/qml/shell/ShellTabBar.qml" line="224"/>
+        <source>Close tab</source>
+        <translation>Zamknij kartę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTabBar.qml" line="208"/>
+        <source>New tab</source>
+        <translation>Nowa karta</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTabBar.qml" line="229"/>
+        <source>Close other tabs</source>
+        <translation>Zamknij pozostałe karty</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTabBar.qml" line="238"/>
+        <source>Show in split view</source>
+        <translation>Pokaż w podziale</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTabBar.qml" line="245"/>
+        <source>Close split view</source>
+        <translation>Zamknij podział</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTabBar.qml" line="252"/>
+        <source>Move to new window</source>
+        <translation>Przenieś do nowego okna</translation>
     </message>
 </context>
 <context>
@@ -11641,6 +11723,46 @@
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="337"/>
         <source>Replace in notebook</source>
         <translation>Zamień w notatniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="161"/>
+        <source>Tabs (%1)</source>
+        <translation>Karty (%1)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="249"/>
+        <source>New tab</source>
+        <translation>Nowa karta</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="254"/>
+        <source>Close tab</source>
+        <translation>Zamknij kartę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="260"/>
+        <source>Close other tabs</source>
+        <translation>Zamknij pozostałe karty</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="353"/>
+        <source>Open in new tab</source>
+        <translation>Otwórz w nowej karcie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="361"/>
+        <source>Open in new window</source>
+        <translation>Otwórz w nowym oknie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="369"/>
+        <source>Close split view</source>
+        <translation>Zamknij podział</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="369"/>
+        <source>Split view</source>
+        <translation>Podziel widok</translation>
     </message>
 </context>
 <context>
@@ -18011,6 +18133,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
             <numerusform>Zapisano %n stron</numerusform>
         </translation>
     </message>
+    <message>
+        <location filename="../src/app/shell/appcontroller.cpp" line="486"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="503"/>
+        <source>Too many tabs are open: close some first.</source>
+        <translation>Otwartych jest zbyt wiele kart: najpierw zamknij część z nich.</translation>
+    </message>
 </context>
 <context>
     <name>brulion::shell::CommandModel</name>
@@ -18377,6 +18505,61 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/shell/commandmodel.cpp" line="107"/>
         <source>Find and replace in every note, with a preview</source>
         <translation>Znajdź i zamień we wszystkich notatkach, z podglądem</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="201"/>
+        <source>New tab</source>
+        <translation>Nowa karta</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="203"/>
+        <source>Open in new tab</source>
+        <translation>Otwórz w nowej karcie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="204"/>
+        <source>The view shown, in a tab of its own</source>
+        <translation>To, co widać, w osobnej karcie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="208"/>
+        <source>Close tab</source>
+        <translation>Zamknij kartę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="209"/>
+        <source>Next tab</source>
+        <translation>Następna karta</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="210"/>
+        <source>Previous tab</source>
+        <translation>Poprzednia karta</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="212"/>
+        <source>Split view</source>
+        <translation>Podziel widok</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="213"/>
+        <source>A second pane beside this one</source>
+        <translation>Drugi widok obok tego</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="218"/>
+        <source>Close split view</source>
+        <translation>Zamknij podział</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="224"/>
+        <source>Open in new window</source>
+        <translation>Otwórz w nowym oknie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="225"/>
+        <source>The view shown, in a window of its own</source>
+        <translation>To, co widać, w osobnym oknie</translation>
     </message>
 </context>
 <context>

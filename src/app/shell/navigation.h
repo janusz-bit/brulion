@@ -65,6 +65,14 @@ public:
     bool forward();
     /// Clear everything and show the home route.
     void reset();
+    /// The routes before the current one (the oldest first) and after it (the nearest LAST: the
+    /// order forward() takes them in), for saving the history (tabs.h).
+    QList<QVariantMap> backRoutes() const { return m_back; }
+    QList<QVariantMap> forwardRoutes() const { return m_forward; }
+    /// Replace everything with these routes (as backRoutes() / forwardRoutes() give them): each one
+    /// normalised, invalid ones dropped, neighbouring duplicates collapsed, at most MaxDepth on
+    /// each side (the farthest ones go). False — and nothing changed — when `current` is invalid.
+    bool restore(const QList<QVariantMap> &back, const QVariantMap &current, const QList<QVariantMap> &forward);
     /// Apply `f(QVariantMap &route)` to every route (back, current, forward), e.g. to follow a
     /// renamed page. The caller keeps the routes valid.
     template<typename F>

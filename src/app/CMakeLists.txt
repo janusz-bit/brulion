@@ -90,6 +90,7 @@ set(BRULION_UI_QML
     qml/components/BToastHost.qml
     qml/components/BToolTip.qml
     qml/components/LinkPreviews.qml
+    qml/components/OpenIn.qml
 )
 if(BRULION_DEV_QML_ENABLED)
     list(APPEND BRULION_UI_QML qml/dev/Gallery.qml qml/dev/GallerySection.qml)
@@ -125,7 +126,8 @@ set(BRULION_UI_SOURCES
     ui/deviceinfo.h ui/deviceinfo.cpp
     ui/keyboardsources.h ui/keyboardsources.cpp
 )
-set_source_files_properties(qml/theme/Theme.qml qml/components/LinkPreviews.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/theme/Theme.qml qml/components/LinkPreviews.qml qml/components/OpenIn.qml
+    PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The generated QML type registration includes the helper headers by file name.
 target_include_directories(brulion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui)
 target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch brulion_ui_scroll brulion_ui_network brulion_ui_fonts
