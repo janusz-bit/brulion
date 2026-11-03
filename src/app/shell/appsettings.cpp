@@ -47,6 +47,9 @@ constexpr auto kEditorWidth = "editor/maxWidth";
 constexpr auto kEditorSource = "editor/sourceMode";
 constexpr auto kPropertiesExpanded = "editor/propertiesExpanded";
 constexpr auto kWebPictures = "editor/webPicturesShown";
+constexpr auto kSpellCheck = "spelling/enabled";
+constexpr auto kSpellLanguages = "spelling/languages";
+constexpr auto kSpellingWords = "spelling/words";
 constexpr auto kExportWebPictures = "export/webPictures";
 constexpr auto kCurrentVault = "vaults/current";
 constexpr auto kRecentVaults = "vaults/recent";
@@ -572,6 +575,50 @@ void AppSettings::setWebPicturesShown(bool on)
 {
     if (store(key(kWebPictures), on, webPicturesShown()))
         Q_EMIT webPicturesShownChanged();
+}
+
+bool AppSettings::spellCheck() const
+{
+    return m_settings->value(key(kSpellCheck), true).toBool();
+}
+
+void AppSettings::setSpellCheck(bool on)
+{
+    if (store(key(kSpellCheck), on, spellCheck()))
+        Q_EMIT spellCheckChanged();
+}
+
+QString AppSettings::spellLanguages() const
+{
+    static const QStringList known{u"auto"_s, u"pl"_s, u"en"_s, u"pl,en"_s, u"en,pl"_s};
+    const QString v = m_settings->value(key(kSpellLanguages)).toString();
+    return known.contains(v) ? v : u"auto"_s;
+}
+
+void AppSettings::setSpellLanguages(const QString &languages)
+{
+    static const QStringList known{u"auto"_s, u"pl"_s, u"en"_s, u"pl,en"_s, u"en,pl"_s};
+    const QString v = known.contains(languages) ? languages : u"auto"_s;
+    if (store(key(kSpellLanguages), v, spellLanguages()))
+        Q_EMIT spellLanguagesChanged();
+}
+
+QStringList AppSettings::spellingWords() const
+{
+    return storedList(m_settings->value(key(kSpellingWords)));
+}
+
+void AppSettings::setSpellingWords(const QStringList &words)
+{
+    QStringList clean;
+    for (const QString &w : words) {
+        const QString t = w.trimmed();
+        // Single words: no line breaks, at most 100 characters.
+        if (!t.isEmpty() && t.size() <= 100 && !t.contains(u'\n') && !clean.contains(t))
+            clean.append(t);
+    }
+    if (store(key(kSpellingWords), clean, spellingWords()))
+        Q_EMIT spellingWordsChanged();
 }
 
 QString AppSettings::exportWebPictures() const

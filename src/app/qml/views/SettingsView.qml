@@ -9,7 +9,8 @@ import Brulion
 // font, density, reduce motion; Układ: sidebar entries and sections, the bottom navigation's
 // four buttons, the quick note button; back to the default look — AppSettings, Theme inputs),
 // Edytor (font — serif, sans or any installed family —, code font, size, line spacing, width,
-// source mode; font pickers: BFontPickerDialog, not in the browser), Notatnik (the vault's shared settings in
+// source mode, spell checking — on/off, its languages, the personal dictionary's dialog, shown only
+// where SpellCheck.available —; font pickers: BFontPickerDialog, not in the browser), Notatnik (the vault's shared settings in
 // .brulion/config.json: the note modes of new pages and of the journal, journal folder and file
 // names, attachments, templates, default reminder time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
@@ -108,6 +109,10 @@ Item {
         { value: "tags", text: qsTr("Tags"), icon: "tags" },
         { value: "graph", text: qsTr("Graph"), icon: "waypoints" }
     ]
+    /// The name of a spelling language ("pl", "en") in the UI language.
+    function languageName(code) {
+        return code === "pl" ? qsTr("Polish") : code === "en" ? qsTr("English") : code
+    }
     function viewInfo(value) {
         return bottomNavViews.find(v => v.value === value) || { value: value, text: value, icon: "" }
     }
@@ -139,6 +144,70 @@ Item {
                 AppSettings.editorFont = "serif"
             } else {
                 AppSettings.editorFontFamily = family
+            }
+        }
+    }
+    // The personal dictionary of spell checking (a device setting: AppSettings.spellingWords).
+    BDialog {
+        id: dictionaryDialog
+        objectName: "spellDictionaryDialog"
+        title: qsTr("Personal dictionary")
+        subtitle: qsTr("Words spell checking takes as right, on this device.")
+        iconName: "book-open"
+        showReject: false
+        acceptText: qsTr("Close")
+        initialFocusItem: newWord
+        function addTyped() {
+            const w = newWord.text.trim()
+            if (w !== "") {
+                SpellCheck.addToDictionary(w)
+                newWord.text = ""
+            }
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.space2
+            BTextField {
+                id: newWord
+                objectName: "spellNewWord"
+                Layout.fillWidth: true
+                placeholderText: qsTr("A word to add")
+                onAccepted: dictionaryDialog.addTyped()
+            }
+            BButton {
+                objectName: "spellAddButton"
+                text: qsTr("Add")
+                iconName: "plus"
+                enabled: newWord.text.trim() !== ""
+                onClicked: dictionaryDialog.addTyped()
+            }
+        }
+        BText {
+            visible: SpellCheck.personalWords.length === 0
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            color: Theme.fgMuted
+            text: qsTr("No words yet. Add them here or with “Add to dictionary” in the editor's menu on an underlined word.")
+        }
+        Repeater {
+            model: SpellCheck.personalWords
+            delegate: RowLayout {
+                id: wordRow
+                required property string modelData
+                Layout.fillWidth: true
+                spacing: Theme.space2
+                BText {
+                    Layout.fillWidth: true
+                    text: wordRow.modelData
+                    elide: Text.ElideRight
+                }
+                BIconButton {
+                    objectName: "spellRemoveWord"
+                    iconName: "trash-2"
+                    //: %1: a word of the personal dictionary
+                    label: qsTr("Remove “%1”").arg(wordRow.modelData)
+                    onClicked: SpellCheck.removeFromDictionary(wordRow.modelData)
+                }
             }
         }
     }
@@ -694,6 +763,58 @@ Item {
                 description: qsTr("Show the whole file as text instead of blocks. Ctrl+E switches for one page.")
                 checked: AppSettings.editorSourceMode
                 onToggled: AppSettings.editorSourceMode = checked
+            }
+            // Spell checking (docs/UI.md "Spell checking"): only where this device can check.
+            BSwitch {
+                objectName: "settingsSpellCheck"
+                visible: SpellCheck.available
+                Layout.fillWidth: true
+                text: qsTr("Check spelling")
+                description: Theme.touchUi
+                             ? qsTr("Misspelled words of the block you are editing are underlined; tap one for corrections.")
+                             : qsTr("Misspelled words of the block you are editing are underlined; right-click one for corrections.")
+                checked: AppSettings.spellCheck
+                onToggled: AppSettings.spellCheck = checked
+            }
+            ShellSettingRow {
+                objectName: "spellLanguagesRow"
+                visible: SpellCheck.available && AppSettings.spellCheck
+                title: qsTr("Spelling languages")
+                description: SpellCheck.languages.length === 0
+                             ? qsTr("No dictionary on this device for this choice.")
+                             : qsTr("Checked now: %1.").arg(SpellCheck.languages.map(l => root.languageName(l)).join(", "))
+                BSegmented {
+                    objectName: "spellLanguagesSetting"
+                    accessibleName: qsTr("Spelling languages")
+                    model: {
+                        const have = SpellCheck.availableLanguages
+                        const out = [{ value: "auto", text: qsTr("Automatic", "spelling languages") }]
+                        if (have.indexOf("pl") >= 0)
+                            out.push({ value: "pl", text: qsTr("Polish") })
+                        if (have.indexOf("en") >= 0)
+                            out.push({ value: "en", text: qsTr("English") })
+                        if (have.indexOf("pl") >= 0 && have.indexOf("en") >= 0)
+                            out.push({ value: "pl,en", text: qsTr("Both", "spelling languages") })
+                        return out
+                    }
+                    currentValue: AppSettings.spellLanguages === "en,pl" ? "pl,en" : AppSettings.spellLanguages
+                    onActivated: (value) => AppSettings.spellLanguages = value
+                }
+            }
+            ShellSettingRow {
+                objectName: "spellDictionaryRow"
+                visible: SpellCheck.available && AppSettings.spellCheck
+                title: qsTr("Personal dictionary")
+                description: SpellCheck.personalWords.length === 0
+                             ? qsTr("Words you add are kept on this device for all notebooks.")
+                             : qsTr("%n word(s), kept on this device for all notebooks.", "", SpellCheck.personalWords.length)
+                BButton {
+                    objectName: "spellDictionaryButton"
+                    size: "small"
+                    text: qsTr("Edit…")
+                    iconName: "book-open"
+                    onClicked: dictionaryDialog.open()
+                }
             }
             BSwitch {
                 objectName: "settingsWebPictures"

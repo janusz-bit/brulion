@@ -432,7 +432,7 @@ FocusScope {
         code: Theme.fg, codeBackground: Theme.bgSunken, highlightBackground: Theme.mark,
         muted: Theme.fgMuted, faint: Theme.fgFaint, due: Theme.chipDueFg, scheduled: Theme.chipScheduledFg,
         reminder: Theme.chipReminderFg, alarm: Theme.warningText, recurrence: Theme.chipRecurrenceFg,
-        done: Theme.fgFaint, priority: Theme.dangerText
+        done: Theme.fgFaint, priority: Theme.dangerText, text: Theme.fg
     })
 
     // Also set at once when the controller arrives, before the list creates its rows: a Binding
@@ -2985,19 +2985,41 @@ FocusScope {
     // ---- The edited text's menu (desktop right-click) -------------------------------------------------
     /// Wytnij, Kopiuj, Wklej, Zaznacz wszystko for the text of the block being edited: a right-click
     /// in it with a mouse, touchpad or stylus (a bare TextEdit has no menu of its own; touch UIs have
-    /// the system's selection handles and popup). Made when first opened.
+    /// the system's selection handles and popup). On a word marked as misspelled (SpellCheck,
+    /// docs/UI.md "Spell checking") its corrections come first, then Dodaj do słownika and Ignoruj;
+    /// on touch UIs a tap on such a word opens only those (openSpellingMenu). Made when first opened.
     property BMenu textMenu: null
     property InlineEditor textMenuEdit: null
+    /// The misspelled word the menu is about ({from, to, word, text}; {}: none).
+    property var textMenuSpelling: ({})
+    /// Only the spelling's part (touch UIs).
+    property bool textMenuSpellingOnly: false
     function openTextMenu(edit, x, y) {
         if (!edit || !controller)
             return
-        if (!textMenu)
-            textMenu = textMenuComponent.createObject(editor) as BMenu
-        textMenuEdit = edit
         // A click outside the selected text moves the caret there first.
         const pos = edit.positionAt(x, y)
         if (pos < edit.selectionStart || pos > edit.selectionEnd || edit.selectionStart === edit.selectionEnd)
             edit.cursorPosition = pos
+        showTextMenu(edit, edit.misspelledAt(pos), false, x, y)
+    }
+    /// The corrections of the misspelled word at `pos` of the edited text (touch UIs: a tap on it).
+    function openSpellingMenu(edit, pos, x, y) {
+        if (!edit || !controller)
+            return
+        const word = edit.misspelledAt(pos)
+        if (word.word !== undefined)
+            showTextMenu(edit, word, true, x, y)
+    }
+    function showTextMenu(edit, spelling, spellingOnly, x, y) {
+        if (!textMenu)
+            textMenu = textMenuComponent.createObject(editor) as BMenu
+        textMenuEdit = edit
+        textMenuSpelling = spelling
+        textMenuSpellingOnly = spellingOnly && spelling.word !== undefined
+        // Asked once per word (the answer is kept: SpellCheck.suggestionsFor).
+        if (spelling.word !== undefined && SpellCheck.suggestionsFor(spelling.word).length === 0)
+            SpellCheck.requestSuggestions(spelling.word)
         textMenu.bottomMargin = menuBottomMargin()
         textMenu.popup(edit, x, y)
     }
@@ -3008,8 +3030,76 @@ FocusScope {
             objectName: "editTextMenu"
             readonly property InlineEditor edit: editor.textMenuEdit
             readonly property bool hasSelection: edit !== null && edit.selectionStart !== edit.selectionEnd
+            readonly property var spelling: editor.textMenuSpelling
+            readonly property bool misspelled: spelling.word !== undefined
+            readonly property bool textItems: !editor.textMenuSpellingOnly
+            /// The corrections of `spelling.word`; `suggesting` until they come.
+            property var suggestions: []
+            property bool suggesting: false
+            onSpellingChanged: {
+                suggestions = misspelled ? SpellCheck.suggestionsFor(spelling.word) : []
+                suggesting = misspelled && suggestions.length === 0
+            }
+            Connections {
+                target: SpellCheck
+                function onSuggestionsReady(word, list) {
+                    if (menu.misspelled && word === menu.spelling.word) {
+                        menu.suggestions = list
+                        menu.suggesting = false
+                    }
+                }
+            }
+            function replaceWith(text) {
+                const word = spelling
+                if (edit && word.word !== undefined)
+                    edit.replaceWord(word.from, word.to, text)
+            }
+
+            // The spelling: corrections, then the dictionary.
+            Instantiator {
+                model: menu.misspelled ? menu.suggestions : []
+                delegate: BMenuItem {
+                    required property string modelData
+                    objectName: "spellSuggestion"
+                    text: modelData
+                    font.weight: Font.DemiBold
+                    onTriggered: menu.replaceWith(modelData)
+                }
+                onObjectAdded: (index, object) => menu.insertItem(index, object)
+                onObjectRemoved: (index, object) => menu.removeItem(object)
+            }
+            BMenuItem {
+                objectName: "spellNoSuggestions"
+                visible: menu.misspelled && menu.suggestions.length === 0
+                height: visible ? implicitHeight : 0
+                enabled: false
+                text: menu.suggesting ? qsTr("Looking for corrections…") : qsTr("No corrections")
+            }
+            BMenuItem {
+                objectName: "spellAddWord"
+                visible: menu.misspelled
+                height: visible ? implicitHeight : 0
+                //: %1: the word, added to the personal dictionary of spell checking
+                text: qsTr("Add “%1” to dictionary").arg(menu.spelling.text || "")
+                iconName: "plus"
+                onTriggered: SpellCheck.addToDictionary(menu.spelling.word)
+            }
+            BMenuItem {
+                objectName: "spellIgnore"
+                visible: menu.misspelled
+                height: visible ? implicitHeight : 0
+                text: qsTr("Ignore", "spelling")
+                iconName: "eye-off"
+                onTriggered: SpellCheck.ignore(menu.spelling.word)
+            }
+            BMenuSeparator {
+                visible: menu.misspelled && menu.textItems
+                height: visible ? implicitHeight : 0
+            }
             BMenuItem {
                 objectName: "editTextCut"
+                visible: menu.textItems
+                height: visible ? implicitHeight : 0
                 text: qsTr("Cut")
                 iconName: "scissors"
                 shortcut: "Ctrl+X"
@@ -3018,6 +3108,8 @@ FocusScope {
             }
             BMenuItem {
                 objectName: "editTextCopy"
+                visible: menu.textItems
+                height: visible ? implicitHeight : 0
                 text: qsTr("Copy")
                 iconName: "copy"
                 shortcut: "Ctrl+C"
@@ -3027,7 +3119,7 @@ FocusScope {
             BMenuItem {
                 objectName: "editTextPaste"
                 // Not in the browser: a page reads the clipboard only from a paste event (Ctrl+V).
-                visible: DeviceInfo.platform !== "wasm"
+                visible: menu.textItems && DeviceInfo.platform !== "wasm"
                 height: visible ? implicitHeight : 0
                 text: qsTr("Paste")
                 iconName: "clipboard-paste"
@@ -3039,15 +3131,22 @@ FocusScope {
                         menu.edit.paste()
                 }
             }
-            BMenuSeparator {}
+            BMenuSeparator {
+                visible: menu.textItems
+                height: visible ? implicitHeight : 0
+            }
             BMenuItem {
                 objectName: "editTextSelectAll"
+                visible: menu.textItems
+                height: visible ? implicitHeight : 0
                 text: qsTr("Select all")
                 shortcut: "Ctrl+A"
                 onTriggered: if (menu.edit) menu.edit.selectAll()
             }
             BMenuItem {
                 objectName: "editTextBlockMenu"
+                visible: menu.textItems
+                height: visible ? implicitHeight : 0
                 text: qsTr("Block…")
                 iconName: "ellipsis"
                 onTriggered: {

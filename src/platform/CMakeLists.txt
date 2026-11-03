@@ -11,7 +11,9 @@
 #                externalfiles (which attachments may be handed over: an allow-list by name and first
 #                bytes; pure, tested everywhere),
 #                documentpaths (the file an Android document URI names: a picked file
-#                of the notebook used where it is; pure, tested everywhere). Tests: tests/platform.
+#                of the notebook used where it is; pure, tested everywhere), spelldictionaries (where
+#                Hunspell's dictionaries are; pure, tested everywhere), spellbackends (spell checking
+#                of the editor: one backend per build, below). Tests: tests/platform.
 qt_add_library(brulion_platform STATIC
     platform.h platform.cpp
     autostart.h autostart.cpp
@@ -23,6 +25,8 @@ qt_add_library(brulion_platform STATIC
     openexternal.h openexternal.cpp
     externalfiles.h externalfiles.cpp
     documentpaths.h documentpaths.cpp
+    spelldictionaries.h spelldictionaries.cpp
+    spellbackends.h
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)
@@ -82,6 +86,57 @@ else()
     message(FATAL_ERROR "BRULION_PDF_BACKEND: unknown backend '${BRULION_PDF_BACKEND}'")
 endif()
 message(STATUS "Brulion: PDF pages through ${_pdf_backend} (src/platform/pdfpages.h)")
+
+# Spell checking of the editor (spellbackends.h; docs/UI.md "Spell checking"): Android — the
+# system's spell checker through JNI (nothing in the APK); the browser — none; elsewhere Hunspell
+# when the build has it (the system's through pkg-config: the Nix package, the AppImage's
+# libhunspell-dev; or compiled from an unpacked Hunspell release given as
+# BRULION_HUNSPELL_SOURCE_DIR: Windows, scripts/windows-build.ps1), else none — the app then hides
+# spell checking. The dictionaries are found at run time (spelldictionaries.h);
+# BRULION_SPELL_DICTIONARY_DIRS adds folders to look in (the Nix package: the store paths of the
+# Polish and English ones). -DBRULION_SPELL_BACKEND=<android|hunspell|none> chooses by hand.
+set(BRULION_SPELL_BACKEND "auto" CACHE STRING "Spell checking: auto, hunspell, android or none")
+set(BRULION_HUNSPELL_SOURCE_DIR "" CACHE PATH
+    "An unpacked Hunspell release (hunspell-1.7.x) to compile in when the system has no Hunspell")
+set(BRULION_SPELL_DICTIONARY_DIRS "" CACHE STRING
+    "Folders (;-separated) with Hunspell dictionaries the app looks in besides DICPATH and the system's")
+set(_spell_backend "${BRULION_SPELL_BACKEND}")
+if(_spell_backend STREQUAL "auto" OR _spell_backend STREQUAL "hunspell")
+    if(ANDROID AND _spell_backend STREQUAL "auto")
+        set(_spell_backend android)
+    elseif(EMSCRIPTEN AND _spell_backend STREQUAL "auto")
+        set(_spell_backend none)
+    else()
+        include(${PROJECT_SOURCE_DIR}/cmake/BrulionHunspell.cmake)
+        brulion_find_hunspell(_hunspell_target)
+        if(_hunspell_target)
+            set(_spell_backend hunspell)
+        elseif(_spell_backend STREQUAL "hunspell")
+            message(FATAL_ERROR "BRULION_SPELL_BACKEND=hunspell: no Hunspell (pkg-config hunspell, or BRULION_HUNSPELL_SOURCE_DIR)")
+        else()
+            set(_spell_backend none)
+        endif()
+    endif()
+endif()
+if(_spell_backend STREQUAL "hunspell")
+    target_sources(brulion_platform PRIVATE spell_hunspell.cpp)
+    target_link_libraries(brulion_platform PRIVATE ${_hunspell_target} brulion_core_spell)
+    if(BRULION_SPELL_DICTIONARY_DIRS)
+        # '|' between the folders: a ';' would split the definition (a CMake list).
+        string(REPLACE "\"" "" _spell_dirs "${BRULION_SPELL_DICTIONARY_DIRS}")
+        string(REPLACE ";" "|" _spell_dirs "${_spell_dirs}")
+        set_property(SOURCE spell_hunspell.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+            "BRULION_SPELL_DICTIONARY_DIRS=\"${_spell_dirs}\"")
+    endif()
+elseif(_spell_backend STREQUAL "android")
+    target_sources(brulion_platform PRIVATE spell_android.cpp)
+elseif(_spell_backend STREQUAL "none")
+    target_sources(brulion_platform PRIVATE spell_none.cpp)
+else()
+    message(FATAL_ERROR "BRULION_SPELL_BACKEND: unknown backend '${BRULION_SPELL_BACKEND}'")
+endif()
+set(BRULION_SPELL_BACKEND_USED "${_spell_backend}" CACHE INTERNAL "The spell checking backend of this build")
+message(STATUS "Brulion: spell checking through ${_spell_backend} (src/platform/spellbackends.h)")
 
 # A file handed to the system's app (openexternal.h): Android's ACTION_VIEW, the browser's new tab
 # (wasm/wasmopen.cpp, below), the desktop's default app.

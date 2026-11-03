@@ -5,10 +5,13 @@ Builds, tests and packages Brulion for Windows x86_64 (the test version, docs/WI
 
 .DESCRIPTION
 Steps (all by default, in this order; -Steps picks some):
-  build    CMake (Ninja, Release) + MSVC 2022 against Qt 6.11.2 msvc2022_64
+  build    CMake (Ninja, Release) + MSVC 2022 against Qt 6.11.2 msvc2022_64; spell checking's
+           Hunspell (compiled in from its release, BRULION_HUNSPELL_SOURCE_DIR) and the Polish and
+           English dictionaries of LibreOffice are downloaded first (pinned SHA-256) into
+           <BuildDir>\deps
   test     ctest offscreen (the tests that run on Windows: the CMake files leave out the bash ones)
-  package  windeployqt (Qt libraries, plugins, the QML modules src/app/qml imports) and the MSVC
-           runtime next to brulion.exe and brulion-cli.exe, then
+  package  windeployqt (Qt libraries, plugins, the QML modules src/app/qml imports), the MSVC
+           runtime and the dictionaries (dictionaries\) next to brulion.exe and brulion-cli.exe, then
              dist-windows\brulion-<version>-windows-x86_64.zip          (portable)
              dist-windows\Brulion-<version>-windows-x86_64-setup.exe    (Inno Setup,
                                                                           packaging\windows\brulion.iss)
@@ -114,6 +117,53 @@ function Find-Iscc {
     Fail 'Inno Setup 6 (ISCC.exe) not found: install it (winget install JRSoftware.InnoSetup, choco install innosetup)'
 }
 
+# --- spell checking's sources -------------------------------------------------------------------
+
+# Hunspell's release (compiled into the app: cmake/BrulionHunspell.cmake) and the Polish and English
+# dictionaries of LibreOffice's repository (docs/UI.md "Spell checking"), each checked by SHA-256.
+# Bump the versions and hashes together.
+$HunspellVersion = '1.7.2'
+$DictionaryTag = 'libreoffice-25.8.2.2'
+$SpellDownloads = @(
+    @{ Url = "https://github.com/hunspell/hunspell/releases/download/v$HunspellVersion/hunspell-$HunspellVersion.tar.gz"
+       File = "hunspell-$HunspellVersion.tar.gz"; Sha256 = '11ddfa39afe28c28539fe65fc4f1592d410c1e9b6dd7d8a91ca25d85e9ec65b8' },
+    @{ Url = "https://raw.githubusercontent.com/LibreOffice/dictionaries/$DictionaryTag/pl_PL/pl_PL.aff"
+       File = 'dictionaries\pl_PL.aff'; Sha256 = '7c37b9bde78054e43365b488a13859094c88bc66664b5b7a7bb073626454b38e' },
+    @{ Url = "https://raw.githubusercontent.com/LibreOffice/dictionaries/$DictionaryTag/pl_PL/pl_PL.dic"
+       File = 'dictionaries\pl_PL.dic'; Sha256 = '215fd73aa47b11e7fdd2e4d655e9fe37be4acdae16ff833badcfdfce79110aad' },
+    @{ Url = "https://raw.githubusercontent.com/LibreOffice/dictionaries/$DictionaryTag/pl_PL/README_pl.txt"
+       File = 'dictionaries\README_pl_PL.txt'; Sha256 = 'ce3ad7ab1d3a8b767b8f7dcc870796fbda76bc7ad8cde22f6312b0cf86a5bd11' },
+    @{ Url = "https://raw.githubusercontent.com/LibreOffice/dictionaries/$DictionaryTag/en/en_US.aff"
+       File = 'dictionaries\en_US.aff'; Sha256 = 'e746c882dd6f303c2c46e7452804b9201115a6942cfeb15f18f8edf774d2e24e' },
+    @{ Url = "https://raw.githubusercontent.com/LibreOffice/dictionaries/$DictionaryTag/en/en_US.dic"
+       File = 'dictionaries\en_US.dic'; Sha256 = 'f0b1a234bd178bdd01875b2a392a9647f888b8fe879f79c52aae62c2759b3647' },
+    @{ Url = "https://raw.githubusercontent.com/LibreOffice/dictionaries/$DictionaryTag/en/README_en_US.txt"
+       File = 'dictionaries\README_en_US.txt'; Sha256 = '168b4c01cb841f766a72f310b065c04d09cff46376c37a81d799593ce751c371' }
+)
+$SpellDeps = Join-Path $BuildDir 'deps'
+$HunspellSource = Join-Path $SpellDeps "hunspell-$HunspellVersion"
+$Dictionaries = Join-Path $SpellDeps 'dictionaries'
+
+function Get-SpellSources {
+    foreach ($d in $SpellDownloads) {
+        $target = Join-Path $SpellDeps $d.File
+        if ((Test-Path $target) -and (Get-FileHash -Algorithm SHA256 $target).Hash.ToLower() -eq $d.Sha256) { continue }
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+        Info "Downloading $($d.Url)"
+        Invoke-WebRequest -UseBasicParsing -Uri $d.Url -OutFile "$target.part"
+        $hash = (Get-FileHash -Algorithm SHA256 "$target.part").Hash.ToLower()
+        if ($hash -ne $d.Sha256) {
+            Remove-Item -Force "$target.part"
+            Fail "$($d.File): SHA-256 $hash, expected $($d.Sha256)"
+        }
+        Move-Item -Force "$target.part" $target
+    }
+    if (-not (Test-Path (Join-Path $HunspellSource 'src\hunspell\hunspell.cxx'))) {
+        # Windows 10 and 11 have bsdtar as tar.exe.
+        Exec tar @('-xzf', (Join-Path $SpellDeps "hunspell-$HunspellVersion.tar.gz"), '-C', $SpellDeps)
+    }
+}
+
 # --- build ---------------------------------------------------------------------------------------
 
 if ($Steps -contains 'build') {
@@ -122,9 +172,11 @@ if ($Steps -contains 'build') {
     foreach ($tool in 'cmake', 'ninja') {
         if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { Fail "$tool not found (Visual Studio's CMake tools bring both)" }
     }
+    Get-SpellSources
     Info "Configuring ($BuildDir)"
     $configure = @('-S', $Root, '-B', $BuildDir, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
-        "-DCMAKE_PREFIX_PATH=$QtDir", '-DBUILD_TESTING=ON')
+        "-DCMAKE_PREFIX_PATH=$QtDir", '-DBUILD_TESTING=ON', '-DBRULION_SPELL_BACKEND=hunspell',
+        "-DBRULION_HUNSPELL_SOURCE_DIR=$($HunspellSource -replace '\\', '/')")
     # ccache (4.6 or newer knows cl.exe; Release has no /Zi, whose PDBs it cannot cache) when it is
     # on PATH: CI restores its cache, a rebuild of the same sources takes minutes instead of 15.
     $ccache = Get-Command ccache -ErrorAction SilentlyContinue
@@ -172,6 +224,10 @@ if ($Steps -contains 'package') {
     Copy-Item (Join-Path $Root 'LICENSE') (Join-Path $Stage 'LICENSE.txt')
     # The icon of the toasts (the AppUserModelID's IconUri, src/platform/appidentity.h).
     Copy-Item (Join-Path $Root 'packaging\windows\brulion.ico') $Stage
+    # Spell checking's dictionaries with their licences (src/platform/spelldictionaries.h looks in
+    # <exe dir>\dictionaries).
+    if (-not (Test-Path (Join-Path $Dictionaries 'pl_PL.dic'))) { Get-SpellSources }
+    Copy-Item -Recurse $Dictionaries (Join-Path $Stage 'dictionaries')
     $skill = Join-Path $Stage 'agent-skills\brulion'
     New-Item -ItemType Directory -Force -Path $skill | Out-Null
     Copy-Item (Join-Path $Root 'packaging\agent\brulion\SKILL.md') $skill

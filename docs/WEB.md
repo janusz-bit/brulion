@@ -896,6 +896,9 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
   `DrawingBackdrops.pickInBrowser`), a backend `src/platform/pdfpages_none.cpp` mówi, że PDF-ów nie
   ma. Rysunki na stronach PDF zrobione na innym urządzeniu wyglądają i edytują się normalnie: obraz
   strony jest w pliku rysunku.
+* **Bez sprawdzania pisowni** (docs/UI.md „Spell checking”): Hunspell ze słownikami dodałby kilka MB
+  do pobrania, a sprawdzanie pisowni przeglądarki nie sięga do pól tekstowych rysowanych przez Qt
+  na kanwie — backend `src/platform/spell_none.cpp` nie ma języków, więc ustawienia pisowni są ukryte.
 * Wymagany WebGL 2 (powłoka ostrzega, gdy go brak, i pozwala spróbować mimo to).
 * Pamięć: start 50 MB, wzrost do 4 GB (domyślne Qt).
 * Sieć tylko przez `QNetworkAccessManager` (fetch przeglądarki) i z zasadami CORS.

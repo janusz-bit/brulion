@@ -1000,7 +1000,15 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1124"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="810"/>
+        <source>%n word(s), kept on this device for all notebooks.</source>
+        <translation>
+            <numerusform>%n word, kept on this device for all notebooks.</numerusform>
+            <numerusform>%n words, kept on this device for all notebooks.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1203"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>

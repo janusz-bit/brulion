@@ -15,7 +15,10 @@ import Brulion
 // and U+2028 into spaces / line feeds, and the block must keep every character it had (so do
 // Ctrl+C / Ctrl+X: BlockEditor.copyEditSelection). The selection stays shown while a menu or a
 // dialog has the keyboard; a right-click (mouse, touchpad, stylus) opens Wytnij / Kopiuj / Wklej /
-// Zaznacz wszystko (BlockEditor.openTextMenu).
+// Zaznacz wszystko (BlockEditor.openTextMenu), with the spelling's corrections at its top on a word
+// marked as misspelled; on touch UIs a tap on such a word opens only those (docs/UI.md "Spell
+// checking"). Spell checking (SpellCheck) runs in the edited prose of text blocks, headings and
+// quotes — not in code, calculations or queries ("code" highlighting).
 TextEdit {
     id: edit
 
@@ -34,6 +37,8 @@ TextEdit {
     property bool completions: !multiline || continuation !== ""
     property string highlightMode: "inline"
     property string placeholderText
+    /// Misspelled words are underlined while the block is edited.
+    readonly property bool spellChecked: active && highlightMode !== "code" && SpellCheck.active
 
     // Until the initial text is in place, textChanged (TextEdit also reports formatting-only
     // changes) is ignored. lastText: the exact text last synchronised with the controller.
@@ -61,6 +66,7 @@ TextEdit {
     FontMetrics { id: tabMetrics; font: edit.font }
 
     MarkdownHighlighter {
+        id: highlighter
         textDocument: edit.textDocument
         palette: edit.editor ? edit.editor.highlighterPalette : ({})
         mode: edit.highlightMode
@@ -72,6 +78,20 @@ TextEdit {
         findMatchDiacritics: find ? find.matchDiacritics : false
         findWholeWord: find ? find.wholeWord : false
         findColor: edit.editor ? edit.editor.findHitColor : "transparent"
+        spellCheck: edit.spellChecked ? SpellCheck : null
+        spellCaret: edit.spellChecked ? edit.cursorPosition : -1
+        spellColor: Theme.danger
+    }
+
+    /// The word marked as misspelled at `position` ({from, to, word, text}; {} when none).
+    function misspelledAt(position) {
+        return edit.spellChecked ? highlighter.misspelledAt(position) : ({})
+    }
+    /// Replace the misspelled word [from, to) with `text`: one undo step, the caret after it
+    /// (PageController.replaceRange → editTextReset).
+    function replaceWord(from, to, text) {
+        if (editor && editor.controller && active)
+            editor.controller.replaceRange(row, from, to, text)
     }
 
     Text {
@@ -283,6 +303,17 @@ TextEdit {
             event.accepted = true
     }
 
+    // Touch UIs: a tap on a word marked as misspelled opens its corrections (the tap places the
+    // caret there first, as on any text: this handler only watches).
+    TapHandler {
+        enabled: edit.active && Theme.touchUi && edit.spellChecked
+        acceptedDevices: PointerDevice.TouchScreen
+        onTapped: (eventPoint) => {
+            const pos = edit.positionAt(eventPoint.position.x, eventPoint.position.y)
+            if (edit.misspelledAt(pos).word !== undefined)
+                edit.editor.openSpellingMenu(edit, pos, eventPoint.position.x, eventPoint.position.y)
+        }
+    }
     // The text menu: a right-click in the edited text (its press is the text's: the editor's
     // right-click on the block opens no block menu as well).
     TapHandler {

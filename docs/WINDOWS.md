@@ -239,6 +239,11 @@ Aplikacja → Sprawdzaj nowe wersje**.
   nie zapisze, dopóki ten program ją trzyma: Windows nie podmienia pliku otwartego bez
   `FILE_SHARE_DELETE`, a Brulion zapisuje atomowo (nowy plik w miejsce starego). Zamknij ją tam,
   zanim zmienisz ją w Brulionie; synchronizacja ponawia taki plik przy następnym przebiegu.
+* **Sprawdzanie pisowni** (docs/UI.md „Spell checking”): Hunspell jest wkompilowany w program
+  (`scripts/windows-build.ps1` pobiera jego wydanie 1.7.2 i słowniki polski i angielski
+  z repozytorium słowników LibreOffice, ze sprawdzonymi sumami SHA-256), słowniki leżą w folderze
+  `dictionaries\` obok `brulion.exe` (z ich licencjami). Nie sprawdzone jeszcze na prawdziwym
+  Windows: folder programu z polskimi znakami w ścieżce.
 * Dowiązania symboliczne i punkty połączenia (junction) w notatniku nie są testowane na Windows.
 * Tylko x86_64 (bez Windows na ARM) i tylko Windows 10/11.
 * Kalendarz z zasobnika nie zastępuje kalendarza zegara Windows (wyżej, „Kalendarz z zasobnika”).

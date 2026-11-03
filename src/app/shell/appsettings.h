@@ -92,6 +92,14 @@ class AppSettings : public QObject {
     /// waits for "Pokaż" — a synced or imported note cannot make the device fetch anything).
     Q_PROPERTY(
             bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
+    /// Spell checking in the editor (SpellCheck, docs/UI.md "Spell checking"; default on).
+    Q_PROPERTY(bool spellCheck READ spellCheck WRITE setSpellCheck NOTIFY spellCheckChanged FINAL)
+    /// Its languages: "auto" (default: the UI language, the system's, English), "pl", "en",
+    /// "pl,en" (spell/languages.h resolveLanguages).
+    Q_PROPERTY(QString spellLanguages READ spellLanguages WRITE setSpellLanguages NOTIFY spellLanguagesChanged FINAL)
+    /// The personal dictionary: words spell checking takes as right, sorted (a device setting:
+    /// every notebook of this device; docs/UI.md "Spell checking" says why not in the notebook).
+    Q_PROPERTY(QStringList spellingWords READ spellingWords WRITE setSpellingWords NOTIFY spellingWordsChanged FINAL)
     /// The export's choice for pictures from the internet (ExportController::webPictures):
     /// "link" (default: the addresses stay) | "include" (copies in the HTML and Pandoc exports).
     Q_PROPERTY(QString exportWebPictures READ exportWebPictures WRITE setExportWebPictures NOTIFY
@@ -211,6 +219,12 @@ public:
     void setWebPicturesShown(bool on);
     QString exportWebPictures() const;
     void setExportWebPictures(const QString &mode);
+    bool spellCheck() const;
+    void setSpellCheck(bool on);
+    QString spellLanguages() const;
+    void setSpellLanguages(const QString &languages);
+    QStringList spellingWords() const;
+    void setSpellingWords(const QStringList &words);
 
     QString currentVault() const;
     void setCurrentVault(const QString &path);
@@ -321,6 +335,9 @@ Q_SIGNALS:
     void propertiesExpandedChanged();
     void webPicturesShownChanged();
     void exportWebPicturesChanged();
+    void spellCheckChanged();
+    void spellLanguagesChanged();
+    void spellingWordsChanged();
     void currentVaultChanged();
     void recentVaultsChanged();
     void closeToTrayChanged();

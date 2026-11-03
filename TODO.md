@@ -92,8 +92,18 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     więc dziś spis treści jest tylko z popplerem; potrzebny własny, bezpieczny odczyt zakładek;
   * tworzenie własnych adnotacji (zakreślenia, notatki) zapisywanych w PDF-ie — dziś istniejące są
     tylko pokazywane, nowe robi się w innej aplikacji.
-* **Sprawdzanie pisowni** — podkreślanie błędów i podpowiedzi w edytorze, po polsku i angielsku
-  (na komputerze np. Hunspell, na Androidzie systemowe sprawdzanie klawiatury).
+* **Sprawdzanie pisowni — sprawdzić na urządzeniach i dalsze pomysły.** Podkreślanie błędów
+  w edytowanym bloku, podpowiedzi, słownik użytkownika i „Ignoruj” (docs/UI.md „Spell checking”)
+  są sprawdzone automatycznie na komputerze (Hunspell, testy i samotest edytora). Zostaje:
+  * na prawdziwym telefonie z Androidem: systemowe sprawdzanie pisowni (Gboard, polski
+    i angielski) — podkreślenia, dotknięcie słowa i podpowiedzi, wyłączone sprawdzanie w ustawieniach
+    Androida (ustawienia pisowni Brulionu znikają); kod Kotlin/JNI (`SpellCheck.kt`) nie był
+    uruchomiony na urządzeniu;
+  * AppImage i Windows: zbudować w CI i sprawdzić, że słowniki z pakietu się wczytują (Windows:
+    folder programu z polskimi znakami w ścieżce);
+  * słownik użytkownika synchronizowany między urządzeniami (dziś ustawienie urządzenia — Nextcloud
+    przenosi z `.brulion/` tylko `config.json`, a scalanie po kluczach gubiłoby słowa);
+  * podkreślenia także poza edytowanym blokiem i w trybie źródła Markdown.
 * **Karty i wiele okien** — kilka otwartych stron w kartach, podział widoku na więcej niż główny i
   boczny panel, strona w osobnym oknie (Obsidian).
 * **Statystyki i tryb skupienia** — liczba słów i znaków, czas czytania; widok bez pasków bocznych,

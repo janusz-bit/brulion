@@ -13,22 +13,32 @@
 //       "code"   — code/calc/query content: only comments (# and //) are dimmed.
 // palette (QML colors or colour strings): heading, marker (list/quote/heading marks, brackets),
 // link, url, tag, code, codeBackground, highlightBackground, muted (properties, block ids),
-// faint (comments, fences), due, scheduled, reminder, alarm, recurrence, done, priority.
+// faint (comments, fences), due, scheduled, reminder, alarm, recurrence, done, priority, text (the
+// plain text's colour: misspelled words take it with their underline, see spellCheck).
 // monoFamily: font family of inline code. lineHeight (px, > 0): every paragraph of the document
 // gets this fixed line height (QTextBlockFormat::FixedHeight) — the same layout QML `Text` uses
 // with `lineHeightMode: Text.FixedHeight`, so a block does not move when it switches between
 // rendered and edited. Setting it disables the document's own undo stack (the block editor has
 // its own); leave it 0 for editors that rely on TextEdit's undo (source mode).
+// spellCheck (SpellCheck, docs/UI.md "Spell checking"): words it says are wrong get a red
+// underline (format "spelling", `spellColor`) — prose only (spell/spellwords.h skips the syntax),
+// never in "code" mode, fences, frontmatter or comments; the word ending at `spellCaret` is not
+// marked while it is being typed. Verdicts come from the checker's thread: lines with words still
+// pending are highlighted again when they arrive (only those lines). misspelledAt(pos): the
+// marked word there, for the editor's menu.
 #pragma once
 
+#include "spellcheck.h"
 #include "text/find.h"
 
 #include <QColor>
 #include <QHash>
 #include <QPointer>
 #include <QQuickTextDocument>
+#include <QSet>
 #include <QSyntaxHighlighter>
 #include <QTextCharFormat>
+#include <QTimer>
 #include <QVariantMap>
 
 namespace brulion::editor {
@@ -47,6 +57,12 @@ class MarkdownHighlighter : public QSyntaxHighlighter {
     Q_PROPERTY(bool findMatchDiacritics READ findMatchDiacritics WRITE setFindMatchDiacritics NOTIFY findChanged FINAL)
     Q_PROPERTY(bool findWholeWord READ findWholeWord WRITE setFindWholeWord NOTIFY findChanged FINAL)
     Q_PROPERTY(QColor findColor READ findColor WRITE setFindColor NOTIFY findChanged FINAL)
+    /// Spell checking: null or inactive — none.
+    Q_PROPERTY(
+            brulion::editor::SpellCheck *spellCheck READ spellCheck WRITE setSpellCheck NOTIFY spellCheckChanged FINAL)
+    /// The caret (a position in the document; -1: none): the word ending right at it is not marked.
+    Q_PROPERTY(int spellCaret READ spellCaret WRITE setSpellCaret NOTIFY spellCaretChanged FINAL)
+    Q_PROPERTY(QColor spellColor READ spellColor WRITE setSpellColor NOTIFY spellColorChanged FINAL)
 
 public:
     explicit MarkdownHighlighter(QObject *parent = nullptr);
@@ -72,6 +88,17 @@ public:
     void setFindWholeWord(bool on);
     QColor findColor() const { return m_findColor; }
     void setFindColor(const QColor &color);
+    SpellCheck *spellCheck() const { return m_spell; }
+    void setSpellCheck(SpellCheck *spell);
+    int spellCaret() const { return m_spellCaret; }
+    void setSpellCaret(int position);
+    QColor spellColor() const { return m_spellColor; }
+    void setSpellColor(const QColor &color);
+
+    /// The word marked as misspelled at `position` of the document (inside it or right after
+    /// it): {from, to (document positions), word (as checked: "np." with its dot), text (as
+    /// written)}; an empty map when none is marked there.
+    Q_INVOKABLE QVariantMap misspelledAt(int position) const;
 
     /// Attach to a plain QTextDocument (C++/tests); same as QSyntaxHighlighter::setDocument plus
     /// the line-height handling.
@@ -80,7 +107,7 @@ public:
     /// Format names used for a character range, for tests: "heading", "marker", "link", "url",
     /// "tag", "code", "bold", "italic", "strike", "highlight", "muted", "faint", "blockId",
     /// "property", "due", "scheduled", "start", "reminder", "alarm", "recurrence", "done",
-    /// "priority", "blockRef", "comment", "fence".
+    /// "priority", "blockRef", "comment", "fence", "spelling".
     static QStringList formatNames();
 
 Q_SIGNALS:
@@ -90,6 +117,9 @@ Q_SIGNALS:
     void monoFamilyChanged();
     void lineHeightChanged();
     void findChanged();
+    void spellCheckChanged();
+    void spellCaretChanged();
+    void spellColorChanged();
 
 protected:
     void highlightBlock(const QString &text) override;
@@ -105,6 +135,12 @@ private:
     void findChangedTo(const QString &query, const text::FindOptions &options);
     void setRange(int from, int length, const QTextCharFormat &format);
     void mergeRange(int from, int length, const QTextCharFormat &format);
+    void mergeSpelling(int from, int length);
+    bool spellActive() const;
+    void highlightSpelling(const QString &line);
+    void rehighlightPendingSpelling();
+    /// Block number of the wrong word ending at `position`, -1 when none ends there.
+    int wrongWordBlockAt(int position) const;
 
     QPointer<QQuickTextDocument> m_quickDocument;
     QVariantMap m_palette;
@@ -117,6 +153,16 @@ private:
     QString m_findQuery;
     text::FindOptions m_findOptions;
     QColor m_findColor = QColor(255, 196, 0, 90);
+    QPointer<SpellCheck> m_spell;
+    QList<QMetaObject::Connection> m_spellConnections;
+    int m_spellCaret = -1;
+    QColor m_spellColor = QColor(u"#c0392b");
+    /// Lines with words whose verdicts are pending, and lines with words marked (block numbers).
+    QSet<int> m_spellPending;
+    QSet<int> m_spellMarked;
+    /// The line where the word at the caret was left unmarked (-1: none).
+    int m_spellSuppressedBlock = -1;
+    QTimer m_spellTimer;
 };
 
 } // namespace brulion::editor

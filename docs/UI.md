@@ -719,6 +719,72 @@ Tests: `tst_text_find`, `tst_notebook_replace`, `tst_markdown_render`, `tst_edit
 `tst_editor_highlighter`, `tst_shell_workspace_wiring`, `tst_shell_workspace_editor`, `--selftest-shell`
 (`checkFindAndReplace`), `tst_remote_control_qml` (the real Ctrl+F and Ctrl+H), `tst_content_qml`.
 
+## Spell checking
+
+Misspelled words of the block being edited are underlined in red (`Theme.danger`), in Polish and
+English — both at once by default — with corrections in the edited text's menu. User guide: the
+page "Sprawdzanie pisowni" of the documentation notebook.
+
+* **Where:** the prose of the edited block only (`InlineEditor` of text blocks, headings, quotes,
+  callouts: `spellChecked`); rendered blocks, code, `calc`, `query`, table cells, the properties
+  panel and source mode are not checked. One block at a time keeps the cost per keystroke tiny and
+  reading free of red. `spell/spellwords.h` (core) finds the words of a line and skips the syntax:
+  code spans and comments, formulas, wiki links, embeds and block refs whole, a Markdown link's
+  destination (its text is checked), URLs, e-mail addresses, tags, every task and date token (📅 ⏰ 🔁
+  and its rule, priorities, task ids, Logseq planning), block ids, `key::` names, task keywords,
+  callout types, HTML, `{{macros}}`, footnote markers; words with digits or `_`, single letters,
+  acronyms in capitals, mixed case (`iPhone`), file names, paths. Hyphenated words are right whole or
+  by their parts (an acronym part counts: `PDF-y`), `np.` with its dot, typographic apostrophes as
+  ASCII (`spell/spellchecker.h`).
+* **Underline:** `MarkdownHighlighter.spellCheck` (the `SpellCheck` singleton while the block is
+  edited) merges the format "spelling" — a plain underline in `spellColor` (Qt Quick 6.11 draws no
+  wavy `SpellCheckUnderline`). The word ending right at the caret (`spellCaret`) is not marked while
+  it is typed; it is once the caret leaves it.
+* **Never blocking:** `SpellCheck` (`src/app/editor/spellcheck.h`) keeps a verdict per word and runs
+  `spell::SpellChecker` on a worker thread of its own, made at first use; loading a dictionary
+  (Hunspell's Polish one: a few hundred ms) and Android's checker (IPC) happen there. A word seen
+  for the first time is Pending: queued, sent in batches of 200 after the highlighting pass, and
+  only the lines waiting for it are highlighted again when the answer comes (`checked(changed)`).
+  Verdicts are cached (20 000 words), so retyping asks nothing.
+* **Menu:** a right-click on a marked word (`BlockEditor.openTextMenu`, `InlineEditor.misspelledAt`)
+  puts its corrections (up to 6, asked from the worker: "Szukam podpowiedzi…" until they come, "Brak
+  podpowiedzi") at the top of Wytnij / Kopiuj / Wklej, then **Dodaj „…” do słownika** and **Ignoruj**.
+  A correction replaces the word through `PageController.replaceRange` (one undo step, the caret
+  after it). On touch UIs a tap on a marked word opens only those items (`openSpellingMenu`; the tap
+  places the caret as usual — a long press stays the system's selection). Adding or ignoring asks
+  again only about the words marked wrong, which stay marked until the answer (no flicker); taking a
+  word out of the dictionary or changing languages forgets every verdict (`invalidated()`).
+* **Settings** (Ustawienia → Edytor, shown only where `SpellCheck.available`): "Sprawdzaj pisownię"
+  (`AppSettings.spellCheck`, default on), "Języki pisowni" (`spellLanguages`: Automatycznie — the UI
+  language, the system's and English, `spell::resolveLanguages`; Polski, Angielski, Oba — of the
+  languages this device has) and "Słownik użytkownika" (a dialog listing `SpellCheck.personalWords`:
+  add, remove). main.cpp binds `SpellCheck` to these settings and to the UI language.
+* **The personal dictionary is a device setting** (`spelling/words`, every notebook of this device),
+  not a notebook file: Nextcloud sync carries only `.brulion/config.json` of the `.brulion/` folder,
+  and in that file a key-wise merge would drop the words one of two devices added at the same time.
+  "Ignoruj" lasts until the app quits. Matching follows Hunspell's letter case: "Kraków" also
+  accepts "KRAKÓW", "kot" also "Kot", never "kraków" for "Kraków".
+* **Backends** (`src/platform/spellbackends.h`, one per build): **Hunspell** on the desktop — the
+  `.aff`/`.dic` pairs found by `spelldictionaries.h` (DICPATH, `<exe>\dictionaries` on Windows,
+  `<exe>/../share/hunspell` in the AppImage, the build's `BRULION_SPELL_DICTIONARY_DIRS` — the Nix
+  package's store paths of `hunspellDicts.pl_PL` and `en_US` —, XDG data folders, `/usr/share/hunspell`);
+  pl_PL is preferred for Polish, en_US, en_GB, … for English; the dictionary's 8-bit encoding (the
+  Polish one is ISO8859-2) through `spell/dictencoding.h`. **Android**: the system's spell checker
+  (`TextServicesManager` / `SpellCheckerSession`, the keyboard's dictionaries; `SpellCheck.kt` over
+  JNI, one session per language, at most 3 s per answer — none: nothing marked); its languages are
+  the checker's subtypes (Android 12+) or the device's languages and English; with the checker off
+  in Android's settings Brulion offers no spell checking. **None** in the browser and in desktop
+  builds without Hunspell (`-DBRULION_SPELL_BACKEND=none`): the settings hide it. Packaging: the Nix
+  package and dev shell (flake.nix, `DICPATH`), the AppImage (Ubuntu's libhunspell, hunspell-pl,
+  hunspell-en-us), Windows (Hunspell compiled in from its release and LibreOffice's dictionaries,
+  downloaded by `scripts/windows-build.ps1` with pinned SHA-256s).
+
+Tests: `tst_spell_words` (the tokenizer), `tst_spell_checker` (rules, languages, encodings),
+`tst_spelldictionaries`, `tst_spellbackends` (Hunspell with ISO8859-2 and UTF-8 dictionaries the
+test writes), `tst_editor_spellcheck` (the worker, the settings, the underlines, the caret,
+`misspelledAt`), `tst_editor_qml_spelling` and `_touch` (`--editor-script spelltest`: the mark, the
+menu with a right-click and a finger, corrections, undo, add, ignore, syntax, off).
+
 ## The block editor (heart of the app)
 
 A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocument` in the core

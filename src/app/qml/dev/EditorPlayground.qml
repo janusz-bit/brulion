@@ -28,7 +28,8 @@ import Brulion
 // table's rows and columns with real input (TableSelfTest.qml) and exits; `linkpartstest` checks the
 // path parts of [[Folder/Page]] links with real input (LinkPartsSelfTest.qml) and exits, `linkparts`
 // / `linkparts-menu` show them (a part hovered / a folder part's menu); `propstest` checks the
-// page properties panel with real input (PropertiesSelfTest.qml) and exits; `properties` /
+// page properties panel with real input (PropertiesSelfTest.qml) and exits; `spelltest` checks spell
+// checking's marks and menu with real input on word lists (SpellingSelfTest.qml) and exits; `properties` /
 // `properties-phone` show the panel expanded on a page with every type; `copylink` /
 // `copylink-document` show the block menu's "Kopiuj odnośnik" (outline / document),
 // `copylink-toolbar` the menu from the touch toolbar's "Więcej" (--touch), `copylink-table` a
@@ -316,6 +317,17 @@ ApplicationWindow {
         id: dateChipTestLoader
         active: false
         sourceComponent: DateChipSelfTest {
+            window: window
+            editor: editor
+            page: page
+            host: host
+        }
+    }
+    // ---- Spell checking (`--editor-script spelltest`) ------------------------------------------------
+    Loader {
+        id: spellingTestLoader
+        active: false
+        sourceComponent: SpellingSelfTest {
             window: window
             editor: editor
             page: page
@@ -3465,6 +3477,9 @@ ApplicationWindow {
             break
         case "datechips":
             dateChipTestLoader.active = true
+            break
+        case "spelltest":
+            spellingTestLoader.active = true
             break
         case "tabletest":
             tableTestLoader.active = true

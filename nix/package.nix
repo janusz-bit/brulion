@@ -21,6 +21,8 @@
   hostname,
   dejavu_fonts,
   makeFontsConf,
+  hunspell,
+  hunspellDicts,
 }:
 
 stdenv.mkDerivation (finalAttrs: {
@@ -70,12 +72,26 @@ stdenv.mkDerivation (finalAttrs: {
     # PDF pages as a drawing's backdrop (src/platform/pdfpages_poppler.cpp): nixpkgs has Qt PDF only
     # inside QtWebEngine (+615 MiB); poppler-qt6 adds some 26 MiB (docs/PERFORMANCE.md "Rozmiar").
     kdePackages.poppler
+    # Spell checking in the editor (src/platform/spell_hunspell.cpp, docs/UI.md "Spell checking");
+    # the dictionaries are found through BRULION_SPELL_DICTIONARY_DIRS below.
+    hunspell
   ]
   ++ lib.optionals stdenv.hostPlatform.isLinux [ qt6.qtwayland ];
 
   cmakeFlags = [
     (lib.cmakeBool "BUILD_TESTING" finalAttrs.finalPackage.doCheck)
     (lib.cmakeFeature "BRULION_QT_TRANSLATIONS_DIR" "${qt6.qttranslations}/translations")
+    # The Polish and English Hunspell dictionaries (store paths compiled in; DICPATH and the
+    # system's folders are searched too): docs/UI.md "Spell checking".
+    (lib.cmakeFeature "BRULION_SPELL_DICTIONARY_DIRS" (
+      lib.concatMapStringsSep ";" (d: "${d}/share/hunspell") finalAttrs.passthru.spellDictionaries
+    ))
+  ];
+
+  # Dictionaries of the editor's spell checking (also on DICPATH in the dev shell, flake.nix).
+  passthru.spellDictionaries = [
+    hunspellDicts.pl_PL
+    hunspellDicts.en_US
   ];
 
   # The QML smoke tests are `#!/usr/bin/env bash` scripts; the build sandbox has no /usr/bin/env.
