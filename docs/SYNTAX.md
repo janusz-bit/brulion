@@ -1044,8 +1044,8 @@ type:tasks ref:this status:open group:page
 
 `==highlight==`, `%%hidden comment%%`, callouts `> [!note] Title` (`note`, `tip`,
 `warning`, `danger`, `info`, `todo`, `quote`), footnotes `[^1]`, GFM tables, task lists,
-strikethrough, autolinks. Raw HTML in notes is rendered as escaped text (never
-executed).
+strikethrough, autolinks, math formulas and Mermaid diagrams (below). Raw HTML in notes is
+rendered as escaped text (never executed).
 
 ### Math formulas
 
@@ -1118,6 +1118,96 @@ Where a formula is (in a block's inline text, after code spans and comments are 
 
 Polish typography (display only, the file is unchanged): a one-letter word (`a`, `i`, `o`, `u`,
 `w`, `z`) never ends a line — the space after it is shown as a no-break space.
+
+### Mermaid diagrams
+
+A fenced block with the language `mermaid` (as in Obsidian, GitHub and GitLab; the language is
+read in lower case) is a diagram. Brulion draws it with its own parser and layout (core module
+`diagram`, docs/ARCHITECTURE.md) — no Mermaid.js, no web view, nothing from a note is executed:
+`click`, `href` and `callback` lines are ignored entirely and styles take nothing but colours,
+widths and dashes. The note keeps the source; the editor shows the diagram and edits the source
+in place (docs/UI.md "The block editor"), `/Diagram` inserts a small flowchart.
+
+````
+```mermaid
+flowchart LR
+    A[Pomysł] --> B{Czy warto?}
+    B -->|Tak| C[Zrób to]
+    B -->|Nie| D([Odłóż])
+```
+````
+
+Every type: `%%` comment lines, `%%{init: …}%%` directives (also over several lines) and the
+front matter's configuration are ignored; its `title:` is drawn above the diagram. Labels: text
+in quotes may hold any character (brackets, `|`, `;`); `` "`Markdown`" `` strings are shown as
+their plain text (`**`, `*` dropped, `\n` a line break); `<br>` (`<br/>`, `<br />`) breaks a line;
+`<b>`, `<i>`, `<span>` and other simple formatting tags show their text, any other markup is
+text; Mermaid's entity codes `#quot;`, `#35;`, `#x41;` and HTML's `&amp;` are characters (never
+controls or surrogates). Long labels wrap at about 15 em and are cut at 1000 characters
+(40 lines).
+
+* **Flowcharts** — `graph` or `flowchart`, then `TB`/`TD` (default), `BT`, `LR` or `RL`;
+  statements on lines or separated by `;`. Nodes: `id` (letters of any script, digits, `_`, `-`
+  and `.` inside), `id[text]`, `(rounded)`, `([stadium])`, `[[subroutine]]`, `[(cylinder)]`,
+  `((circle))`, `(((double circle)))`, `>asymmetric]`, `{rhombus}`, `{{hexagon}}`,
+  `[/parallelogram/]`, `[\alternative\]`, `[/trapezoid\]`, `[\inverted trapezoid/]`, and
+  Mermaid 11's `id@{ shape: diam, label: "…" }` (the names of the shapes above: `rect`,
+  `rounded`, `stadium`, `subproc`, `cyl`/`db`, `circle`, `dbl-circ`, `odd`, `diam`/`decision`,
+  `hex`, `lean-r`, `lean-l`, `trap-b`, `trap-t`, …). A node's last shape and text win; a node
+  only named keeps its id as its text. Links: `-->`, `---`, `-.->`, `-.-`, `==>`, `===`, `~~~`
+  (invisible: laid out, not drawn), ends `--o` (circle), `--x` (cross), `<-->`, `o--o`, `x--x`;
+  longer forms span more ranks (`--->`, `-..->`, `====>`); labels `-->|text|` and
+  `-- text -->` (`-. text .->`, `== text ==>`); chains `A --> B --> C` and groups
+  `A & B --> C & D` (a link from each to each). `subgraph id [Title]`, `subgraph "Title"`,
+  `subgraph Title words` … `end`, nested up to 16 levels; a node belongs to the subgraph it is
+  first named in (named later in a deeper one, it moves there); `direction LR` inside a
+  subgraph lays it out in that direction; a link may end at a subgraph (`A --> sub`; one to its
+  own member is not drawn). Styles: `classDef name,other fill:#f9f,stroke:#333,…`,
+  `classDef default …` (every node), `class a,b name`, `A:::name`, `style id …` (nodes and
+  subgraphs), `linkStyle 0,2 …` / `linkStyle default …` (by the order links are written, each
+  pair of a chain or group counting). Properties: `fill`, `stroke`, `color`, `stroke-width`,
+  `stroke-dasharray`, `font-weight`; colours `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`,
+  `rgb()`/`rgba()`, CSS names and `transparent` — anything else is dropped. A node with a
+  fill and no `color` gets dark or light text by contrast. `accTitle:` is the title when there
+  is none; `accDescr` is ignored.
+* **Sequence diagrams** — `sequenceDiagram`. `participant A`, `participant A as Alicja`, `actor B`
+  (a stick figure), `create participant …` (drawn like the others), participants named by
+  their first message too; `destroy` is ignored. Messages `A->>B: text` with `->` (line),
+  `-->` (dotted), `->>` / `-->>` (arrow), `<<->>` / `<<-->>` (both ways), `-x` / `--x`
+  (cross), `-)` / `--)` (open arrow); `->>+B` activates the receiver, `->>-B` deactivates the
+  sender; `activate A` / `deactivate A`; `A->>A` a message to itself. `Note left of A: …`,
+  `Note right of A: …`, `Note over A: …`, `Note over A,B: …`. Blocks `loop`, `alt` … `else`,
+  `opt`, `par` … `and`, `critical` … `option`, `break`, `rect <colour>` … `end` (nested up to
+  16 levels); `box [colour] [Title]` … `end` around participants; `autonumber [start [step]]`,
+  `autonumber off`; `title …`. Participants are drawn at the top and again at the bottom.
+  `link`/`links` menus, `properties` and `details` are ignored.
+* **Pie charts** — `pie`, optionally `showData` and `title …` on the same line or `title …`
+  on its own; slices `"Label" : 42.5` (a number with `.`). Zero and negative values are left
+  out; slices go clockwise from the top in the written order, with their share on slices of
+  14° or more and in the legend (with the value too under `showData`).
+
+Other Mermaid types (`classDiagram`, `stateDiagram`, `erDiagram`, `gantt`, `journey`, `mindmap`,
+`timeline`, `gitGraph`, `C4…`, `quadrantChart`, `requirementDiagram`, `sankey`, `xychart`,
+`block`, `packet`, `kanban`, `architecture`, `radar`, `treemap`, `zenuml`) are recognised: the
+editor shows their source with a note that Brulion does not draw them yet. A source Brulion
+cannot read shows the source with the reason and its line (the line in the block, the opening
+fence excluded).
+
+Colours follow the theme, as in Obsidian: nodes, actors and activations tinted with the accent
+colour on the block's background, lines in the muted text colour, notes amber, pie slices from
+a fixed set (light pastels in the light theme, deep tones in the dark one); colours a diagram
+sets itself are kept in both themes. Bounds (sources come from sync and imports): 100 kB of
+source, 1000 nodes, 3000 links, 200 subgraphs, 300 participants, 500 messages and notes,
+64 slices, 16 levels of nesting; more is reported as too large instead of being drawn. The
+layout is a layered one like Mermaid's (dagre) but not the same pixel for pixel: subgraphs are
+laid out from the inside out, so a link into one runs from its frame to the node.
+
+The HTML exports draw a diagram as inline SVG — the light colours in its attributes, the dark
+ones in a `@media (prefers-color-scheme: dark)` rule, nothing active — with the source folded
+under it (`<details>`); a diagram Brulion cannot draw stays a code block. The clipboard's HTML,
+the Markdown, Obsidian, Logseq and Pandoc exports keep the source (pandoc filters such as
+`mermaid-filter` can draw it). Embedded pages and blocks (`![[Page]]`, `!((id))`) show a
+diagram's source.
 
 ## 12. Templates
 

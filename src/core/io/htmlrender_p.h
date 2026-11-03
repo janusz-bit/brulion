@@ -1,8 +1,8 @@
 // Full HTML rendering of notes for the HTML exporters: blocks of a ParsedNote become semantic
-// HTML (headings, paragraphs, nested lists, task checkboxes, code, tables, quotes, callouts,
-// rules), inline Markdown of the Brulion dialect becomes <strong>/<em>/<del>/<mark>/<code>, links,
-// images, tags, block references and date chips. Everything not recognised is escaped — raw
-// HTML in notes is shown as text, never interpreted. Internal to the io module.
+// HTML (headings, paragraphs, nested lists, task checkboxes, code, Mermaid diagrams as SVG with
+// their source, tables, quotes, callouts, rules), inline Markdown of the Brulion dialect becomes
+// <strong>/<em>/<del>/<mark>/<code>, links, images, tags, block references and date chips. Everything not recognised is
+// escaped — raw HTML in notes is shown as text, never interpreted. Internal to the io module.
 #pragma once
 
 #include "types.h"
@@ -37,6 +37,9 @@ struct HtmlLinks {
     /// Pictures, audio and video as links to them instead of <img> / <audio> / <video> (the
     /// clipboard: clipboardHtml()).
     bool mediaAsLinks = false;
+    /// ```mermaid blocks as their source (<pre>) instead of the diagram's SVG (the clipboard:
+    /// apps a copy is pasted into seldom show inline SVG).
+    bool diagramsAsSource = false;
 };
 
 class HtmlRenderer {

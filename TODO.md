@@ -119,9 +119,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Tablica (nieskończone płótno)** — notatki, obrazy, PDF-y i rysunki rozłożone na płótnie, z
   połączeniami; najlepiej w formacie JSON Canvas (Obsidian Canvas, AFFiNE). Edytor rysunków
   pokrywa szkice, ale nie osadza w nich notatek.
-* **Diagramy Mermaid** — rysowanie bloków ` ```mermaid ` w notatce i w eksporcie, kolory z motywu
-  (Obsidian). Dziś widać samo źródło; potrzebny renderer bez wykonywania skryptów z notatek, które
-  przychodzą z synchronizacji.
 * **Wykresy** — wykres z tabeli z formułami, bloku `calc` albo wyników zapytania.
 * **Sortowanie i filtrowanie tabel Markdown** — z nagłówka kolumny, bez ręcznego przestawiania
   wierszy; import i eksport CSV pojedynczej tabeli.

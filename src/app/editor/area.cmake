@@ -25,6 +25,7 @@ qt_target_qml_sources(brulion
         qml/editor/TableBlockView.qml
         qml/editor/QueryBlockView.qml
         qml/editor/MathBlockView.qml
+        qml/editor/MermaidBlockView.qml
         qml/editor/FrontmatterView.qml
         qml/editor/PropertiesPanel.qml
         qml/editor/PropertyRow.qml

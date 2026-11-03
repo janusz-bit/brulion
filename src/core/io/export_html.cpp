@@ -44,6 +44,10 @@ code{padding:.1em .3em}
 pre{padding:.75rem 1rem;overflow:auto}
 pre code{padding:0;background:none}
 div.math,.math.display{display:block;margin:1rem 0;text-align:center}
+figure.mermaid{margin:1rem 0;text-align:center;overflow-x:auto}
+figure.mermaid svg{max-width:100%;height:auto}
+figure.mermaid details{margin-top:.25rem;text-align:left;font-size:.85rem;color:var(--muted)}
+figure.mermaid summary{cursor:pointer}
 mark{background:var(--mark);color:inherit}
 blockquote{margin:1rem 0;padding:.25rem 1rem;border-left:3px solid var(--line);color:var(--muted)}
 .callout{margin:1rem 0;padding:.5rem 1rem;border:1px solid var(--line);border-left:4px solid var(--link);border-radius:6px;background:var(--card)}

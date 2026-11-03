@@ -93,6 +93,7 @@ QStringList webPictureTargets(const ExportInput &input)
         }
         return std::nullopt;
     };
+    links.diagramsAsSource = true; // (no diagram has pictures: none laid out for nothing)
     const HtmlRenderer renderer(links);
     for (const ExportVault::Note &n : vault.notes()) {
         if (n.parsed)

@@ -354,6 +354,16 @@ private Q_SLOTS:
         QCOMPARE(io::clipboardHtml(u"  \n"_s), QString());
     }
 
+    // A copied ```mermaid block is its source in the HTML too (mail and office apps seldom show
+    // inline SVG); the export draws it (tst_io_export htmlMermaid).
+    void clipboardHtmlOfDiagram()
+    {
+        const QString html = io::clipboardHtml(u"```mermaid\ngraph TD\n  A --> B\n```\n"_s);
+        QVERIFY2(html.contains(u"<pre><code class=\"language-mermaid\">graph TD\n  A --&gt; B</code></pre>"_s),
+                 qPrintable(html));
+        QVERIFY(!html.contains(u"<svg"_s));
+    }
+
     // Dates, recurrence and priority stay in the HTML of blocks that are no tasks (a mail or an
     // office app pastes it: the Markdown flavour has them).
     void clipboardHtmlKeepsTokens_data()

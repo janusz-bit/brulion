@@ -283,7 +283,7 @@ private Q_SLOTS:
             QCOMPARE(head + s.editText + tail, e.body);
             QCOMPARE(bodyWithEditText(e, s.editText), e.body);
             const bool fenced = s.view == BlockView::Code || s.view == BlockView::Calc || s.view == BlockView::Query
-                                || s.view == BlockView::Math;
+                                || s.view == BlockView::Math || s.view == BlockView::Mermaid;
             const auto fence = parseFence(e.body);
             const bool closedFence = fenced && fence && fence->closed && fence->onlyMetadataAfter;
             const bool mixed = fenced && fence && fence->closed && !fence->onlyMetadataAfter;
@@ -412,6 +412,13 @@ private Q_SLOTS:
         QTest::newRow("latex fence") << u"```latex\nE = mc^2\n```\n"_s << 0 << u"math"_s << u"E = mc^2"_s << 9
                                      << QString();
         QTest::newRow("tex fence") << u"```tex\nx^2\n```\n"_s << 0 << u"math"_s << u"x^2"_s << 7 << QString();
+        QTest::newRow("mermaid") << u"```mermaid\ngraph TD\nA-->B\n```\n"_s << 0 << u"mermaid"_s << u"graph TD\nA-->B"_s
+                                 << 11 << QString();
+        QTest::newRow("list mermaid") << u"- ```mermaid\n  pie\n  \"Psy\" : 3\n  ```\n"_s << 0 << u"mermaid"_s
+                                      << u"pie\n\"Psy\" : 3"_s << 11 << QString();
+        // (A fence's language is read in lower case: ```Mermaid is a diagram too.)
+        QTest::newRow("Mermaid case") << u"```Mermaid\ngraph TD\n```\n"_s << 0 << u"mermaid"_s << u"graph TD"_s << 11
+                                      << QString();
         QTest::newRow("list math") << u"- ```math\n  a^2 + b^2 = c^2\n  ```\n"_s << 0 << u"math"_s
                                    << u"a^2 + b^2 = c^2"_s << 8 << QString();
         QTest::newRow("code with id") << u"```js\nlet a = 1\n```\n^kod123\n"_s << 0 << u"code"_s << u"let a = 1"_s << 6
@@ -702,8 +709,9 @@ private Q_SLOTS:
     {
         for (const BlockView v : {BlockView::Text, BlockView::Heading, BlockView::Quote, BlockView::Callout})
             QVERIFY(showsEmbeds(v));
-        for (const BlockView v : {BlockView::Code, BlockView::Calc, BlockView::Query, BlockView::Math, BlockView::Table,
-                                  BlockView::Rule, BlockView::Frontmatter, BlockView::Html})
+        for (const BlockView v :
+             {BlockView::Code, BlockView::Calc, BlockView::Query, BlockView::Math, BlockView::Mermaid, BlockView::Table,
+              BlockView::Rule, BlockView::Frontmatter, BlockView::Html})
             QVERIFY(!showsEmbeds(v));
     }
 
@@ -1072,6 +1080,10 @@ private Q_SLOTS:
         QTest::newRow("równanie") << u"równanie"_s << u"math"_s;
         QTest::newRow("latex") << u"latex"_s << u"math"_s;
         QTest::newRow("formula") << u"formula"_s << u"math"_s;
+        QTest::newRow("diagram") << u"diagr"_s << u"mermaid"_s;
+        QTest::newRow("mermaid") << u"mermaid"_s << u"mermaid"_s;
+        QTest::newRow("schemat") << u"schemat"_s << u"mermaid"_s;
+        QTest::newRow("flowchart") << u"flowchart"_s << u"mermaid"_s;
         QTest::newRow("powtarzaj") << u"powt"_s << u"recurrence"_s;
         QTest::newRow("termin") << u"termin"_s << u"due"_s;
         QTest::newRow("zaplanuj") << u"zapl"_s << u"scheduled"_s;
@@ -1154,6 +1166,11 @@ private Q_SLOTS:
         QCOMPARE(slashTemplate(u"math", false, &cursor), u"```math\n\n```"_s);
         QCOMPARE(cursor, 8);
         QCOMPARE(slashCommand(u"math"_s)->namePl, u"Wzór matematyczny"_s);
+        const QString diagram = slashTemplate(u"mermaid", false, &cursor);
+        QCOMPARE(diagram, u"```mermaid\nflowchart TD\n    A[Początek] --> B[Koniec]\n```"_s);
+        QCOMPARE(cursor, diagram.indexOf(u"]\n```"_s) + 1);
+        QVERIFY(slashTemplate(u"mermaid", true, &cursor).contains(u"A[Start] --> B[End]"_s));
+        QCOMPARE(slashCommand(u"mermaid"_s)->namePl, u"Diagram"_s);
         QVERIFY(slashTemplate(u"table", false, &cursor).contains(u"Kolumna 1"_s));
         QVERIFY(slashTemplate(u"table", true, &cursor).contains(u"Column 1"_s));
         QVERIFY(slashTemplate(u"reminder", false, &cursor).isEmpty());

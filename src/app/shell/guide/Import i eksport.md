@@ -47,7 +47,7 @@ Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu j
 
 ## Eksport
 - archiwum **ZIP** z Markdownem, także w układzie Obsidiana lub Logseqa,
-- statyczna **strona HTML** albo jeden plik HTML,
+- statyczna **strona HTML** albo jeden plik HTML (diagramy Mermaid jako obrazy, zobacz [[Diagramy#Eksport|Diagramy]]),
 - **Pandoc Markdown** — jeden dokument do zamiany w plik Worda, LibreOffice, PDF albo EPUB,
 - **JSON** z całą zawartością,
 - **iCalendar** — zadania i przypomnienia do kalendarza,

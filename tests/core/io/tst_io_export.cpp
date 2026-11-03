@@ -508,6 +508,68 @@ private Q_SLOTS:
         QVERIFY(!page.contains(u"language-math"_s));
     }
 
+    // ```mermaid: the diagram's SVG (light, dark through prefers-color-scheme) with the source folded
+    // under it; a source Brulion cannot draw stays code; inside a list item too; never anything
+    // active from the note.
+    void htmlMermaid()
+    {
+        ExportInput in;
+        in.files = {iotest::text(u"Diagramy.md"_s, u"```mermaid\n"
+                                                   u"graph TD\n"
+                                                   u"  A[Początek <b>&</b>] --> B{Czy działa?}\n"
+                                                   u"  click A \"javascript:alert(1)\"\n"
+                                                   u"```\n"
+                                                   u"\n"
+                                                   u"```mermaid\n"
+                                                   u"classDiagram\n"
+                                                   u"  A <|-- B\n"
+                                                   u"```\n"
+                                                   u"\n"
+                                                   u"```mermaid\n"
+                                                   u"graph TD\n"
+                                                   u"  A[niezamknięty --> B\n"
+                                                   u"```\n"
+                                                   u"\n"
+                                                   u"- ```mermaid\n"
+                                                   u"  pie title Zwierzęta\n"
+                                                   u"  \"Psy\" : 3\n"
+                                                   u"  ```\n"_s)};
+        for (const QString &format : {u"html-site"_s, u"html-single"_s}) {
+            const ExportedFile f = exportWith(format, in);
+            const QString page = format == u"html-site" ? textOf(readZip(f.data), u"Brulion/Diagramy.html"_s)
+                                                        : QString::fromUtf8(f.data);
+            QVERIFY2(page.contains(u"<figure class=\"mermaid\"><svg xmlns=\"http://www.w3.org/2000/svg\""_s),
+                     qPrintable(page));
+            QCOMPARE(page.count(u"<figure class=\"mermaid\">"_s), 2);
+            // (Simple formatting tags show their text.)
+            QVERIFY(page.contains(u">Początek &amp;</text>"_s));
+            QVERIFY(page.contains(u"<title>Zwierzęta</title>"_s));
+            QVERIFY(page.contains(u"@media (prefers-color-scheme:dark){.bmd-"_s));
+            QVERIFY(page.contains(u"<details><summary>Diagram source</summary><pre><code class=\"language-mermaid\">"
+                                  u"graph TD\n  A[Początek &lt;b&gt;&amp;&lt;/b&gt;] --&gt; B{Czy działa?}"_s));
+            // The list item's diagram is the item.
+            QVERIFY(page.contains(u"<li><figure class=\"mermaid\"><svg"_s));
+            // Not drawn: code, as before.
+            QVERIFY(page.contains(u"<pre><code class=\"language-mermaid\">classDiagram\n  A &lt;|-- B</code></pre>"_s));
+            QVERIFY(page.contains(
+                    u"<pre><code class=\"language-mermaid\">graph TD\n  A[niezamknięty --&gt; B</code></pre>"_s));
+            QVERIFY(page.contains(u"figure.mermaid svg{max-width:100%;height:auto}"_s) || format == u"html-site");
+            // (Only the note's own `javascript:` text, escaped in the folded source.)
+            QCOMPARE(page.count(u"javascript"_s), 1);
+            QVERIFY(!page.contains(u"<script"_s));
+            QVERIFY(!page.contains(u"foreignObject"_s));
+        }
+        // Pandoc keeps the source (pandoc's own filters draw Mermaid where wanted).
+        const QList<FileEntry> pandoc = readZip(exportWith(u"pandoc"_s, in).data);
+        QString doc;
+        for (const QString &path : iotest::entryPaths(pandoc))
+            if (path.endsWith(u".md"_s))
+                doc = textOf(pandoc, path);
+        QVERIFY2(doc.contains(u"```mermaid\ngraph TD\n"_s) || doc.contains(u"``` mermaid\ngraph TD\n"_s),
+                 qPrintable(doc));
+        QVERIFY(!doc.contains(u"<svg"_s));
+    }
+
     // `/Wzór matematyczny` in an outline or a journal writes a ```math block inside a list item:
     // the export shows the formula there too, and other fenced items as code blocks.
     void htmlFencesInListItems()

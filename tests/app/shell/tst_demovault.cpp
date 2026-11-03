@@ -7,6 +7,7 @@
 
 #include "calc/calc.h"
 #include "dates/recurrence.h"
+#include "diagram/diagram.h"
 #include "index/query.h"
 #include "index/vaultindex.h"
 #include "markdown/markdown.h"
@@ -406,6 +407,7 @@ private Q_SLOTS:
         QVERIFY(headingLinks >= 3);
 
         int queries = 0;
+        int diagrams = 0;
         for (const DemoFile &f : docs) {
             const QString &content = f.content;
             for (const calc::CalcBlock &block : calc::findCalcBlocks(content)) {
@@ -430,6 +432,15 @@ private Q_SLOTS:
                 const calc::CalcLineResult r = calc::evaluateInline(m.captured(1), calc::Scope());
                 QVERIFY2(r.hasValue() && !r.hasError(), qPrintable(f.path + u": "_s + m.captured(0)));
             }
+            // Every ```mermaid example draws (a type Brulion does not draw yet only where shown so).
+            static const QRegularExpression mermaidBlock(u"```mermaid\n(.*?)```"_s,
+                                                         QRegularExpression::DotMatchesEverythingOption);
+            for (const auto &m : mermaidBlock.globalMatch(content)) {
+                const diagram::Result r = diagram::render(m.captured(1));
+                QVERIFY2(r.ok() || r.kind == diagram::Kind::Unsupported,
+                         qPrintable(f.path + u": "_s + m.captured(1).section(u'\n', 0, 0)));
+                ++diagrams;
+            }
             static const QRegularExpression queryBlock(u"```query\n(.*?)```"_s,
                                                        QRegularExpression::DotMatchesEverythingOption);
             for (const auto &m : queryBlock.globalMatch(content)) {
@@ -440,6 +451,7 @@ private Q_SLOTS:
             }
         }
         QVERIFY(queries >= 1);
+        QVERIFY(diagrams >= 5);
     }
 
     void listOfChangesHasNoLiveSyntax()

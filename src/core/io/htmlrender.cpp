@@ -1,6 +1,9 @@
 #include "io/htmlrender_p.h"
 
 #include "dates/recurrence.h"
+#include "diagram/diagram.h"
+#include "diagram/svg.h"
+#include "io/messages_p.h"
 #include "io/rendercommon_p.h"
 #include "markdown/inline.h"
 #include "markdown/math.h"
@@ -90,11 +93,27 @@ QString statusName(TaskStatus s)
 }
 
 /// A fenced code block as HTML: fenced math (```math, latex, tex) is display-only, so the export
-/// shows the formula, not its LaTeX source (docs/SYNTAX.md §11). `id`: attribute text or empty.
-QString codeBlockHtml(const QString &lang, const QString &code, const QString &id)
+/// shows the formula, not its LaTeX source (docs/SYNTAX.md §11); a ```mermaid diagram Brulion
+/// draws is its SVG (light, and dark when the reader's browser prefers dark: core diagram/svg.h)
+/// with the source folded under it (docs/SYNTAX.md §11 "Mermaid diagrams") — one it cannot draw (a mistake,
+/// a type it does not draw yet) and every diagram with `diagramsAsSource` stay code. `id`:
+/// attribute text or empty.
+QString codeBlockHtml(const QString &lang, const QString &code, const QString &id, bool diagramsAsSource)
 {
     if (isMathFence(lang))
         return u"<div class=\"math\""_s + id + u'>' + markdown::renderMath(code, true) + u"</div>"_s;
+    if (!diagramsAsSource && lang.compare(u"mermaid", Qt::CaseInsensitive) == 0) {
+        const diagram::Result r = diagram::render(code);
+        if (r.ok()) {
+            const diagram::Palette dark = diagram::darkPalette();
+            diagram::SvgOptions options;
+            options.fallbackTitle = IoMessages::tr("Diagram");
+            return u"<figure class=\"mermaid\""_s + id + u'>'
+                   + diagram::toSvg(r.scene, diagram::lightPalette(), &dark, options) + u"<details><summary>"_s
+                   + esc(IoMessages::tr("Diagram source")) + u"</summary><pre><code class=\"language-mermaid\">"_s
+                   + esc(code) + u"</code></pre></details></figure>"_s;
+        }
+    }
     const QString cls = lang.isEmpty() ? QString() : u" class="_s + attr(u"language-"_s + lang);
     return u"<pre"_s + id + u"><code"_s + cls + u'>' + esc(code) + u"</code></pre>"_s;
 }
@@ -465,7 +484,7 @@ QString HtmlRenderer::renderListItem(const ParsedNote &note, int index) const
     const QString embedded = b.task || fence ? QString() : embeddedContent(b.text);
     out += u'>' + box;
     if (fence)
-        out += codeBlockHtml(fence->first, fence->second, QString());
+        out += codeBlockHtml(fence->first, fence->second, QString(), m_links.diagramsAsSource);
     else if (!embedded.isEmpty())
         out += u"<div class=\"embed\">"_s + embedded + u"</div>"_s;
     else
@@ -542,7 +561,7 @@ QString HtmlRenderer::renderBlock(const ParsedNote &note, int index) const
             return u"<div class=\"embed\""_s + id + u'>' + embedded + u"</div>"_s;
         return u"<p"_s + id + u'>' + renderInline(b.text) + metaChips(b) + u"</p>"_s;
     }
-    case BlockKind::Code: return codeBlockHtml(b.lang.section(u' ', 0, 0), b.text, id);
+    case BlockKind::Code: return codeBlockHtml(b.lang.section(u' ', 0, 0), b.text, id, m_links.diagramsAsSource);
     case BlockKind::Table: return u"<div class=\"table\""_s + id + u'>' + renderTable(b.text) + u"</div>"_s;
     case BlockKind::Quote: {
         if (!b.children.isEmpty())

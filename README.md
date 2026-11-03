@@ -138,6 +138,11 @@
 * **Wzory matematyczne.** LaTeX w notatkach (`$E=mc^2$`, `$$\frac{a}{b}$$`, blok
   ` ```math `) jest od razu rysowany jako wzór — greckie litery, ułamki, pierwiastki,
   macierze, układy równań. Plik zachowuje źródło LaTeX, a eksport HTML pokazuje gotowy wzór.
+* **Diagramy Mermaid.** Bloki ` ```mermaid ` — schematy blokowe (`flowchart`/`graph`, z podgrafami
+  i stylami), diagramy sekwencji i wykresy kołowe — Brulion rysuje sam, w kolorach motywu jasnego
+  i ciemnego, bez uruchamiania czegokolwiek z notatki (notatki z synchronizacji i importów są
+  bezpieczne). Kliknięcie pokazuje źródło z podglądem na żywo, `/Diagram` wstawia nowy diagram,
+  a eksport HTML zawiera diagram jako SVG. Inne typy Mermaid zostają źródłem.
 * **Rysunki.** Polecenie `/Rysunek` (albo *Rysunek* na pasku nad klawiaturą) wstawia do notatki
   rysunek odręczny i otwiera go do rysowania: rysik z naciskiem (drugi koniec rysika ściera),
   zakreślacz, gumka, kształty (prostokąt, elipsa, romb, linia, strzałka), tekst i etykiety
@@ -522,6 +527,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   or any colour, kept readable), paper or white and blue-grey or OLED-black backgrounds, any
   installed font for the interface, notes and code, line spacing, a compact density on the
   desktop, and which sidebar entries and phone navigation buttons are shown.
+* Mermaid diagrams in ```` ```mermaid ```` blocks — flowcharts (with subgraphs and styles),
+  sequence diagrams and pie charts — drawn by Brulion's own renderer in the theme's light or dark
+  colours, nothing from a note ever executed; a click edits the source with a live preview, the
+  HTML export has the diagram as SVG. Other Mermaid types stay their source.
 * Handwritten drawings in notes (`/Rysunek`): a stylus with pressure (its eraser end erases), a
   highlighter, an eraser, shapes (rectangle, ellipse, diamond, line, arrow, triangles, polygons,
   a star, a block arrow, a speech bubble, a heart, a cloud), text and labels in shapes, lasso or

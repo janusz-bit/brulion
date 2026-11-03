@@ -14,6 +14,7 @@ QString clipboardHtml(const QString &markdown, const ClipboardHtmlOptions &optio
     const ParsedNote note = markdown::parseNote(QString(), markdown, options.config);
     detail::HtmlLinks links;
     links.mediaAsLinks = true;
+    links.diagramsAsSource = true;
     // Notes and tags: their text (no link leads anywhere outside the notebook).
     links.attachment = [&](const QString &target) -> std::optional<QString> {
         const QString url = options.attachmentUrl ? options.attachmentUrl(target) : QString();

@@ -253,3 +253,9 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
             TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
     endif()
 endif()
+# A ```mermaid block drawn (MermaidView): status and translated messages, the shared layout cache,
+# the size for the width, painting in the light and the dark theme (BRULION_MERMAID_SHOTS=<dir>
+# saves the samples as PNG to look at).
+brulion_add_test(tst_editor_mermaid
+    SOURCES tst_editor_mermaid.cpp
+    LIBS brulion_editor brulion_core_diagram)

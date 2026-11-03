@@ -3757,6 +3757,20 @@ ApplicationWindow {
             editor.listView.positionViewAtIndex(row, ListView.Beginning)
             break
         }
+        case "mermaid":
+        case "mermaid-editing": {
+            // ```mermaid blocks: a flowchart drawn, a type Brulion does not draw yet (its source and
+            // a note); "mermaid-editing": the source being edited with the diagram under it.
+            const row = page.insertBlockAfter(rowOf("Ekipa może"), "```mermaid\nflowchart LR\n"
+                                              + "  A[Pomysł] --> B{Czy warto?}\n  B -->|Tak| C[Zrób to]\n"
+                                              + "  B -->|Nie| D([Odłóż])\n  C -.-> E[(Notatki)]\n```")
+            page.insertBlockAfter(row, "```mermaid\nclassDiagram\n  Notatka <|-- Dziennik\n```")
+            page.stopEditing()
+            editor.listView.positionViewAtIndex(row, ListView.Beginning)
+            if (name === "mermaid-editing")
+                editor.startEditing(row, -1)
+            break
+        }
         case "embeds":
             editor.listView.positionViewAtIndex(rowOf("Powiązane"), ListView.Beginning)
             break
