@@ -47,6 +47,10 @@ const SpecialSetting kSpecialSettings[] = {
         {"attachmentsFolder", "attachments", &VaultConfig::attachmentsFolder}, // pasted pictures
         {"newPagesFolder", "newPages", &VaultConfig::newPagesFolder},          // new pages
         {"journalTemplate", "journalTemplate", &VaultConfig::journalTemplate}, // a file
+        {"weeklyFolder", "weekly", &VaultConfig::weeklyFolder},                // weekly notes
+        {"monthlyFolder", "monthly", &VaultConfig::monthlyFolder},             // monthly notes
+        {"weeklyTemplate", "weeklyTemplate", &VaultConfig::weeklyTemplate},    // a file
+        {"monthlyTemplate", "monthlyTemplate", &VaultConfig::monthlyTemplate}, // a file
 };
 
 } // namespace
@@ -198,13 +202,33 @@ QList<SpecialPath> specialsWithin(const VaultConfig &config, const VaultPath &pa
     QList<SpecialPath> out;
     if (path.isEmpty())
         return out;
+    const QString journals = paths::normalize(config.journalsFolder);
     for (const SpecialSetting &s : kSpecialSettings) {
         const QString value = paths::normalize(config.*(s.field));
+        // Weekly and monthly notes next to the daily ones: the journals folder names them.
+        const QLatin1StringView special(s.special);
+        if ((special == "weekly"_L1 || special == "monthly"_L1) && value == journals)
+            continue;
         if (isWithin(value, path))
             out.append(SpecialPath{QString::fromLatin1(s.special), QString::fromLatin1(s.key), value});
     }
     return out;
 }
+
+namespace {
+
+/// specialsWithin() without a weekly or monthly template that is not there (the defaults name
+/// files most notebooks never create).
+QList<SpecialPath> presentSpecialsWithin(const Vault &vault, const VaultPath &path)
+{
+    QList<SpecialPath> out = specialsWithin(vault.config(), path);
+    out.removeIf([&](const SpecialPath &s) {
+        return (s.special == u"weeklyTemplate" || s.special == u"monthlyTemplate") && !vault.exists(s.path);
+    });
+    return out;
+}
+
+} // namespace
 
 FolderInfo folderInfo(const Vault &vault, const VaultPath &rawPath)
 {
@@ -226,7 +250,7 @@ FolderInfo folderInfo(const Vault &vault, const VaultPath &rawPath)
         if (f.path.startsWith(path + u'/'))
             ++out.folders;
     }
-    out.specials = specialsWithin(vault.config(), path);
+    out.specials = presentSpecialsWithin(vault, path);
     return out;
 }
 
@@ -367,7 +391,7 @@ RelocationImpact relocationChecks(const Vault &vault, const VaultIndex *index, c
         return out;
     out.ok = true;
     // The settings relocate() changes (special folders, the journal template file).
-    for (const SpecialPath &s : specialsWithin(vault.config(), from))
+    for (const SpecialPath &s : presentSpecialsWithin(vault, from))
         out.specials.append(s.special);
     if (moves)
         *moves = fileMoves(vault, from, to);

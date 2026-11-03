@@ -13,6 +13,8 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | Ctrl+O | szybkie przejście do strony |
 | Ctrl+Shift+F | wyszukiwanie |
 | Ctrl+J | dzisiejszy dziennik |
+| Ctrl+Alt+W | notatka tego tygodnia |
+| Ctrl+Alt+M | notatka tego miesiąca |
 | Ctrl+N | nowa strona |
 | Ctrl+Shift+N | szybka notatka do dziennika |
 | Ctrl+Shift+B | dokumentacja Brulionu / powrót do poprzedniego notatnika |
@@ -21,7 +23,7 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | F2 | zmiana nazwy strony |
 | Ctrl+, | ustawienia |
 | Ctrl+E | tryb źródła Markdown |
-| Ctrl+F | znajdź w notatce (Enter: następne, Shift+Enter: poprzednie, Esc: zamknij) |
+| Ctrl+F | znajdź w notatce, w dzienniku we wszystkich dniach (Enter: następne, Shift+Enter: poprzednie, Esc: zamknij) |
 | Ctrl+H | znajdź i zamień w notatce |
 | Ctrl+; | dodaj właściwość strony |
 | Delete | w drzewku stron: przenieś stronę, plik albo folder do kosza (po potwierdzeniu; „Cofnij” w powiadomieniu przywraca) |

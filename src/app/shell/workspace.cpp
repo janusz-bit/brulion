@@ -17,6 +17,7 @@
 #include "notebook/journals.h"
 #include "notebook/json.h"
 #include "notebook/pages.h"
+#include "notebook/periodicnotes.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -43,6 +44,7 @@
 #include <QStringDecoder>
 
 #include <algorithm>
+#include <tuple>
 #include <utility>
 
 using namespace Qt::StringLiterals;
@@ -1169,6 +1171,20 @@ bool Workspace::setConfig(const QVariantMap &map)
     folder("attachmentsFolder", c.attachmentsFolder);
     folder("templatesFolder", c.templatesFolder);
     folder("journalTemplate", c.journalTemplate);
+    folder("weeklyFolder", c.weeklyFolder);
+    folder("weeklyTemplate", c.weeklyTemplate);
+    folder("monthlyFolder", c.monthlyFolder);
+    folder("monthlyTemplate", c.monthlyTemplate);
+    for (const auto &[key, period, field] :
+         {std::tuple{u"weeklyFileFormat"_s, periodic::Period::Week, &c.weeklyFileFormat},
+          std::tuple{u"monthlyFileFormat"_s, periodic::Period::Month, &c.monthlyFileFormat}}) {
+        if (!map.contains(key))
+            continue;
+        const QString format = map.value(key).toString().trimmed();
+        if (!periodic::isUsableFormat(period, format))
+            return false;
+        *field = format;
+    }
     if (map.contains(u"journalFileFormat"_s)) {
         const QString format = map.value(u"journalFileFormat"_s).toString().trimmed();
         if (!isUsableJournalFormat(format))
@@ -1426,6 +1442,72 @@ QString Workspace::journalFileFor(const QString &date) const
     if (!m_vault)
         return {};
     return notebook::journalFileFor(*m_vault, QDate::fromString(date, Qt::ISODate));
+}
+
+QVariantMap Workspace::periodicNote(const QString &period, const QString &date) const
+{
+    const auto p = periodic::parsePeriodName(period);
+    const QDate d = QDate::fromString(date, Qt::ISODate);
+    if (!m_vault || !p || !d.isValid())
+        return {};
+    const QDate start = periodic::periodStart(*p, d);
+    const QString path = notebook::periodicFileFor(*m_vault, *p, d);
+    if (!start.isValid() || path.isEmpty())
+        return {};
+    const QString tpl = periodic::templatePath(*p, m_vault->config());
+    return {{u"period"_s, periodic::periodName(*p)},
+            {u"start"_s, start.toString(Qt::ISODate)},
+            {u"end"_s, periodic::periodEnd(*p, d).toString(Qt::ISODate)},
+            {u"week"_s, *p == periodic::Period::Week ? periodic::isoWeek(start).week : 0},
+            {u"path"_s, path},
+            {u"exists"_s, m_vault->exists(path) || QFileInfo::exists(m_vault->absolutePath(path))},
+            {u"label"_s, periodic::periodLabel(*p, start, notebook::contentLocale(m_language))},
+            {u"template"_s, !tpl.isEmpty() && m_vault->exists(tpl) ? tpl : QString()}};
+}
+
+QVariantMap Workspace::periodicNoteOf(const QString &path) const
+{
+    if (!m_vault || path.isEmpty())
+        return {};
+    const auto note = periodic::periodicNoteFromPath(path, m_vault->config());
+    if (!note)
+        return {};
+    QVariantMap out = periodicNote(periodic::periodName(note->period), note->start.toString(Qt::ISODate));
+    // This file, also when another one of the period is preferred (two spellings of the folder).
+    out.insert(u"path"_s, paths::normalize(path));
+    out.insert(u"exists"_s, m_vault->exists(path) || QFileInfo::exists(m_vault->absolutePath(path)));
+    return out;
+}
+
+QString Workspace::parsePeriod(const QString &period, const QString &text) const
+{
+    const auto p = periodic::parsePeriodName(period);
+    if (!p)
+        return {};
+    const VaultConfig config = m_vault ? m_vault->config() : VaultConfig();
+    const auto start = periodic::parsePeriodPhrase(*p, text, now(), config.weekStartsOn,
+                                                   notebook::contentLocale(m_language), &config);
+    return start ? start->toString(Qt::ISODate) : QString();
+}
+
+QStringList Workspace::periodicNoteStarts(const QString &period, const QString &from, const QString &to) const
+{
+    QStringList out;
+    const auto p = periodic::parsePeriodName(period);
+    const QDate a = QDate::fromString(from, Qt::ISODate);
+    const QDate b = QDate::fromString(to, Qt::ISODate);
+    if (!m_vault || !p || !a.isValid() || !b.isValid() || a > b)
+        return out;
+    const VaultConfig config = m_vault->config();
+    const QDate first = periodic::periodStart(*p, a);
+    for (const FileStat &f : m_vault->markdownFiles()) {
+        const auto start = periodic::dateFromPath(*p, f.path, config);
+        if (start && *start >= first && *start <= b)
+            out.append(start->toString(Qt::ISODate));
+    }
+    out.removeDuplicates();
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 QString Workspace::ensureJournal(const QString &date)

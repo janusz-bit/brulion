@@ -96,6 +96,9 @@ public:
     Q_INVOKABLE QString addMonths(const QString &date, int months) const;
     Q_INVOKABLE QString addMinutes(const QString &spec, int minutes) const;
     Q_INVOKABLE int dayOfWeek(const QString &date) const;
+    /// The ISO week number (1–53; Monday first, week 1 holds the year's first Thursday) of
+    /// "YYYY-MM-DD", 0 when invalid — "2027-01-01" is in week 53 (of 2026).
+    Q_INVOKABLE int isoWeek(const QString &date) const;
     Q_INVOKABLE QString startOfWeek(const QString &date) const;
     Q_INVOKABLE bool isValidDate(const QString &date) const;
     /// Lenient 24-hour time: "9" -> "09:00", "9:5" invalid, "930" / "0930" -> "09:30",

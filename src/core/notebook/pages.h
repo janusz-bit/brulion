@@ -100,11 +100,13 @@ QStringList folderPaths(const Vault &vault);
 
 /// A setting of .brulion/config.json that names a folder (or the journal template file).
 struct SpecialPath {
-    QString special; ///< "journals" | "templates" | "attachments" | "newPages" | "journalTemplate"
+    QString special; ///< "journals" | "templates" | "attachments" | "newPages" | "journalTemplate" | "weekly" |
+                     ///< "monthly" | "weeklyTemplate" | "monthlyTemplate"
     QString key;     ///< the config key ("journalsFolder", …)
     VaultPath path;
 };
-/// The settings naming `path` or something in it.
+/// The settings naming `path` or something in it (the weekly and monthly folders when they are the
+/// journals folder: that one names them).
 QList<SpecialPath> specialsWithin(const VaultConfig &config, const VaultPath &path);
 
 struct FolderInfo {

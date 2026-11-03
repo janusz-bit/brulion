@@ -36,8 +36,11 @@ FocusScope {
     /// The stream's selection over several days (JournalsView): the day's controller is attached
     /// to it while the day exists.
     property StreamSelection stream: null
-    /// The stream's find bar (JournalsView): this day's editor tints its matches while it is searched.
+    /// The stream's find bar (JournalsView): every day's editor tints its matches while it is open.
     property NoteFind find: null
+    /// The search over the stream's days (JournalsView): the day's controller is attached to it
+    /// while the day exists (its live text is searched instead of its file).
+    property StreamFind streamFind: null
     /// This day shows the tools of a selection over several days (it becomes the active day).
     readonly property bool spanTools: stream !== null && stream.active && stream.toolsController === page
     // (Also a day created again while scrolling: the keys, Back and the selection mode come here.)
@@ -140,11 +143,15 @@ FocusScope {
         restoreFolds()
         if (day.stream)
             day.stream.attach(page)
+        if (day.streamFind)
+            day.streamFind.attach(page)
     }
     // The editor's delegates go first, while the editor still exists (they read its geometry).
     Component.onDestruction: {
         if (day.stream)
             day.stream.detach(page)
+        if (day.streamFind)
+            day.streamFind.detach(page)
         editor.controller = null
     }
 
@@ -326,7 +333,8 @@ FocusScope {
     }
     BlockEditor {
         id: editor
-        find: day.find && day.find.active && day.find.controller === page ? day.find : null
+        // (Every day tints the matches; the day written in also shows the current one.)
+        find: day.find && day.find.active ? day.find : null
         objectName: "journalDayEditor"
         y: emptyPrompt.active ? emptyPrompt.y + emptyPrompt.height : headerRow.height
         width: day.width

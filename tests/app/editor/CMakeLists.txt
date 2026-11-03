@@ -34,6 +34,10 @@ brulion_add_test(tst_editor_selection
 brulion_add_test(tst_editor_streamselection
     SOURCES tst_editor_streamselection.cpp
     LIBS brulion_editor brulion_core_markdown)
+# The find bar over the journal stream's days (StreamFind): counts, moving between days, replacing.
+brulion_add_test(tst_editor_streamfind
+    SOURCES tst_editor_streamfind.cpp
+    LIBS brulion_editor brulion_core_markdown)
 brulion_add_test(tst_editor_suggestions
     SOURCES tst_editor_suggestions.cpp
     LIBS brulion_editor)

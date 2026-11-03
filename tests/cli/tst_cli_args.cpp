@@ -40,6 +40,14 @@ private Q_SLOTS:
                                       << uR"({"date":"w piątek"})"_s;
         QTest::newRow("journal read") << QStringList{u"journal"_s, u"read"_s, u"wczoraj"_s} << u"journal.read"_s
                                       << uR"({"date":"wczoraj"})"_s;
+        QTest::newRow("week alone") << QStringList{u"week"_s} << u"week.read"_s << u"{}"_s;
+        QTest::newRow("week phrase") << QStringList{u"week"_s, u"zeszły"_s, u"tydzień"_s} << u"week.read"_s
+                                     << uR"({"when":"zeszły tydzień"})"_s;
+        QTest::newRow("week path") << QStringList{u"week"_s, u"path"_s, u"2026-W53"_s} << u"week.path"_s
+                                   << uR"({"when":"2026-W53"})"_s;
+        QTest::newRow("month append") << QStringList{u"month"_s, u"append"_s, u"Podsumowanie"_s, u"--when"_s,
+                                                     u"listopad"_s}
+                                      << u"month.append"_s << uR"({"text":"Podsumowanie","when":"listopad"})"_s;
         QTest::newRow("text after --") << QStringList{u"journal"_s, u"append"_s, u"--"_s, u"-5"_s, u"stopni"_s}
                                        << u"journal.append"_s << uR"({"text":"-5 stopni"})"_s;
         QTest::newRow("calc") << QStringList{u"calc"_s, u"2+2"_s} << u"calc"_s << uR"({"expression":"2+2"})"_s;
@@ -215,6 +223,12 @@ private Q_SLOTS:
                                "journal.read",
                                "journal.path",
                                "journal.append",
+                               "week.read",
+                               "week.path",
+                               "week.append",
+                               "month.read",
+                               "month.path",
+                               "month.append",
                                "capture",
                                "task.list",
                                "task.add",

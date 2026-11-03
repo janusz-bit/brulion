@@ -331,7 +331,18 @@ QString Workspace::relocate(const QString &from, const QString &to)
         Q_EMIT errorOccurred(tr("Could not save the notebook settings: %1").arg(moved.configError));
     } else if (!moved.rebased.isEmpty()) {
         QStringList said;
+        QString journals;
         for (const notebook::RebasedSetting &r : moved.rebased) {
+            if (r.special == u"journals")
+                journals = r.value;
+        }
+        for (const notebook::RebasedSetting &r : moved.rebased) {
+            // Weekly and monthly notes next to the daily ones went with them: said once; their
+            // templates only when they are there.
+            if ((r.special == u"weekly" || r.special == u"monthly") && r.value == journals)
+                continue;
+            if ((r.special == u"weeklyTemplate" || r.special == u"monthlyTemplate") && !m_vault->exists(r.value))
+                continue;
             if (r.special == u"journals")
                 said.append(tr("journals folder → “%1”").arg(r.value));
             else if (r.special == u"templates")
@@ -340,6 +351,14 @@ QString Workspace::relocate(const QString &from, const QString &to)
                 said.append(tr("attachments folder → “%1”").arg(r.value));
             else if (r.special == u"newPages")
                 said.append(tr("folder for new pages → “%1”").arg(r.value));
+            else if (r.special == u"weekly")
+                said.append(tr("folder of weekly notes → “%1”").arg(r.value));
+            else if (r.special == u"monthly")
+                said.append(tr("folder of monthly notes → “%1”").arg(r.value));
+            else if (r.special == u"weeklyTemplate")
+                said.append(tr("weekly note template → “%1”").arg(r.value));
+            else if (r.special == u"monthlyTemplate")
+                said.append(tr("monthly note template → “%1”").arg(r.value));
             else
                 said.append(tr("journal template → “%1”").arg(r.value));
         }

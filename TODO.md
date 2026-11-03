@@ -92,14 +92,10 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
     więc dziś spis treści jest tylko z popplerem; potrzebny własny, bezpieczny odczyt zakładek;
   * tworzenie własnych adnotacji (zakreślenia, notatki) zapisywanych w PDF-ie — dziś istniejące są
     tylko pokazywane, nowe robi się w innej aplikacji.
-* **Znajdź w strumieniu dziennika przez kilka dni** — `Ctrl+F` w strumieniu szuka dziś w jednym dniu
-  (tym, w którym piszesz); zamiana w całym notatniku obejmuje wszystkie dni.
 * **Sprawdzanie pisowni** — podkreślanie błędów i podpowiedzi w edytorze, po polsku i angielsku
   (na komputerze np. Hunspell, na Androidzie systemowe sprawdzanie klawiatury).
 * **Karty i wiele okien** — kilka otwartych stron w kartach, podział widoku na więcej niż główny i
   boczny panel, strona w osobnym oknie (Obsidian).
-* **Notatki tygodniowe i miesięczne** — strony okresowe obok dziennych, z własnym szablonem i
-  dostępem z kalendarza.
 * **Statystyki i tryb skupienia** — liczba słów i znaków, czas czytania; widok bez pasków bocznych,
   kursor trzymany na środku ekranu.
 * **Własne skróty klawiszowe** — zmiana skrótów w ustawieniach, opcjonalnie tryb Vim (Obsidian).

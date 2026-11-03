@@ -17,9 +17,12 @@ cache (docs/ARCHITECTURE.md); `tst_markdown_model`'s golden digest fails until y
 ```
 <vault>/
   journals/2026-10-14.md     daily notes (folder + file-name format configurable)
+  journals/2026-W45.md       weekly notes (ISO week; own folder, format, template)
+  journals/2026-11.md        monthly notes (likewise)
   <any>/<folders>/Page.md    pages; folders act as namespaces ("Projekty/Dom")
   assets/                    attachments (images, pdf, ...)
-  templates/                 templates (journal.md = template for new daily notes)
+  templates/                 templates (journal.md / weekly.md / monthly.md = templates for new
+                             daily / weekly / monthly notes)
   .brulion/config.json       vault settings shared between devices (synced)
   .trash/                    deleted files (restorable)
 ```
@@ -44,8 +47,9 @@ cache (docs/ARCHITECTURE.md); `tst_markdown_model`'s golden digest fails until y
   folder name the vault would hide (also once sanitised: `logseq?`); every link and tag keeps its
   target (§2 "Rewriting on rename and move"). Renaming or moving a special folder of
   `.brulion/config.json` (`journalsFolder`, `templatesFolder`, `attachmentsFolder`,
-  `newPagesFolder`), a folder holding one, or the `journalTemplate` file updates those keys in the
-  same operation.
+  `newPagesFolder`, `weeklyFolder`, `monthlyFolder`), a folder holding one, or the
+  `journalTemplate` / `weeklyTemplate` / `monthlyTemplate` file updates those keys in the same
+  operation.
 * Device-local state (sync bookkeeping, merge bases, history snapshots, caches) is **never**
   stored inside the vault — it lives in the app data directory on the device (`QStandardPaths::AppDataLocation`). This keeps Syncthing /
   Nextcloud from syncing machine-specific data.
@@ -70,7 +74,13 @@ cache (docs/ARCHITECTURE.md); `tst_markdown_model`'s golden digest fails until y
   "defaultReminderTime": "09:00",
   "weekStartsOn": 1,
   "journalMode": "outline",
-  "pageMode": "document"
+  "pageMode": "document",
+  "weeklyFolder": "journals",
+  "weeklyFileFormat": "yyyy-'W'ww",
+  "weeklyTemplate": "templates/weekly.md",
+  "monthlyFolder": "journals",
+  "monthlyFileFormat": "yyyy-MM",
+  "monthlyTemplate": "templates/monthly.md"
 }
 ```
 `journalFileFormat` uses Qt `QDate` format strings (`yyyy-MM-dd`, `dd.MM.yyyy`, …).
@@ -80,7 +90,45 @@ to these defaults; unknown keys are kept when Brulion saves the file. When the f
 and the folder is an Obsidian vault (`.obsidian/`), `journalsFolder`, `journalFileFormat`
 (converted from moment.js), `journalTemplate`, `templatesFolder` and `attachmentsFolder` default
 to Obsidian's settings (`daily-notes.json`, `templates.json`, `app.json`; docs/IMPORT.md "Folder
-Obsidiana bez importu") — in memory, until the settings are saved.
+Obsidiana bez importu") — in memory, until the settings are saved. `weeklyFolder` /
+`monthlyFolder` missing from the file follow `journalsFolder` (also one taken from Obsidian).
+
+### Weekly and monthly notes / Notatki tygodniowe i miesięczne
+
+Periodic pages next to the daily ones (`src/core/periodic/periodic.h`, creating them:
+`notebook/periodicnotes.h`): one note per **ISO week** and one per **month**, each with its own
+folder, file name format and template. They are ordinary pages (the page's note mode rules,
+`pageMode` by default), not journal pages: the journal stream, `journalDate` and `date:` queries
+do not list them; cleaning up never proposes them or their templates.
+
+* **ISO weeks**: Monday to Sunday; week 1 holds the year's first Thursday, so the week-year can
+  differ from the calendar year at both ends — 2027-01-01 is in `2026-W53`, 2024-12-30 in
+  `2025-W01`; a year has 52 or 53 weeks (53 when it starts on a Thursday, or a leap year on a
+  Wednesday). `weekStartsOn` does not change them (the calendar's week numbers name the ISO week of
+  each row's middle day).
+* **`weeklyFileFormat`** (default `yyyy-'W'ww` → `2026-W45`, Obsidian Periodic Notes' ISO
+  `GGGG-[W]WW`): Brulion's own small format, as Qt has no week tokens — `yyyy` the ISO week-year,
+  `yy` its last two digits, `ww` the week with a leading zero, `w` without, text in single quotes
+  literal (`''` a quote), other non-letters literal, `/` a subfolder (`yyyy/'W'ww` →
+  `2026/W45.md`). A letter outside quotes that is no token, no year or no week, an unclosed quote,
+  a name that would hide itself (`.`) or leave the folder: unusable (a warning; the default is used).
+* **`monthlyFileFormat`** (default `yyyy-MM` → `2026-11`): a Qt `QDate` format of the month's 1st
+  that names the month alone — no day (`yyyy-MM-dd` is refused: it would name a daily note). Month
+  names are written in English (`MMMM yyyy` → `November 2026`) and read in English or Polish, also
+  in the nominative (`listopad 2026`, `listopada 2026`).
+* **Reading names back**: a Markdown file inside the period's folder (letter case aside, not in a
+  subfolder unless the format has one) whose name formats back to itself, letter case aside —
+  `2026-W54`, `2027-W53` (2027 has 52 weeks), `2026-W5` with `ww`, `2026-13` are no periodic notes.
+  An existing note under another spelling of the folder (`Journals/`) is used, never a second one.
+* **Creating**: opening a week or month never writes; the editor creates the note with its first
+  change from `weeklyTemplate` / `monthlyTemplate` (§12: `{{date}}` the period's first day,
+  `{{end}}` its last), like a day without a note. `brulion-cli week append` / `month append`
+  create it from the template too.
+* **Phrases** (`periodic::parsePeriodPhrase`, the command line, the app): "ten tydzień",
+  "przyszły / następny tydzień", "zeszły / poprzedni tydzień", "w przyszłym miesiącu", "this week",
+  "next month", "last week"; `2026-W45`, `W45`, `tydzień 45 [2026]`, `week 45`; `2026-11`,
+  `11.2026`, `listopad [2026]`, `Nov 2026`; the vault's own file name; else any date the natural
+  date parser (§8) reads as a whole — its week or month ("jutro", "15 października", "za 2 tygodnie").
 
 ---
 
@@ -1261,8 +1309,13 @@ User guide (Polish): [TEMPLATES.md](TEMPLATES.md).
 
 Files in `templatesFolder`. Variables: `{{date}}` (yyyy-MM-dd), `{{date:FORMAT}}` and
 `{{time:FORMAT}}` (Qt date-time format), `{{time}}` (HH:mm), `{{title}}`, `{{weekday}}` (localised),
-`{{cursor}}` (removed; `applyTemplate` returns its offset, the editor does not place the caret
-there yet). `journalTemplate` is applied to new daily notes:
+`{{month}}` (the month's name in the nominative, localised: "listopad" — Qt's `MMMM` writes the
+genitive "listopada"), `{{week}}` (the ISO week number of the date), `{{end}}` / `{{end:FORMAT}}`
+(the last day of a weekly or monthly note's period; elsewhere the date itself), `{{cursor}}`
+(removed; `applyTemplate` returns its offset, the editor does not place the caret there yet).
+`weeklyTemplate` / `monthlyTemplate` are applied to new weekly / monthly notes as the journal
+template to days, `{{date}}` being the period's first day (§1 "Weekly and monthly notes").
+`journalTemplate` is applied to new daily notes:
 a day without a note shows the template as its starting text, and the note is created — with
 the template, filled for that day — by the first change; looking at a day never creates it.
 Entries appended to today's note (quick capture, shares, the Android widgets' quick add, which

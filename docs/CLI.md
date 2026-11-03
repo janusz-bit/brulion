@@ -152,7 +152,7 @@ Qt's LinguistTools (`BRULION_BUILD_APP=OFF`, `find_package` finds no `lrelease`)
 | 3 | not found: page, block, line, heading, history version |
 | 4 | conflict: stale ref, hash mismatch, ambiguous page name (with candidates), target exists, a file that keeps changing, not UTF-8 |
 | 5 | unavailable: no notebook, not a folder, lock timeout, no running app, the app's remote control off, no notebook open in the app |
-| 6 | not understood: a date phrase, a recurrence, a query, a calculation |
+| 6 | not understood: a date phrase, a week or month phrase, a recurrence, a query, a calculation |
 | 7 | refused by policy: `--read-only`, a destructive command without `--allow-destructive` |
 
 ## References
@@ -196,6 +196,12 @@ Never compute a hash yourself.
 | `journal read [<date>]` | `[--blocks]`; also `journal [<date>]` | a daily note (today by default) | |
 | `journal path [<date>]` | | where a daily note is (also under another accepted name) | |
 | `journal append <text>` | `[--date D] [--stdin]` | a block in a daily note, created from the journal template | yes |
+| `week read [<when>]` | also `week [<when>]` | a weekly note (ISO week; this week by default): `{period, start, end, week, weekYear, path, exists, hash, content}` | |
+| `week path [<when>]` | | where a weekly note is, else where it will be created | |
+| `week append <text>` | `[--when W] [--stdin]` | a block in a weekly note, created from `weeklyTemplate` | yes |
+| `month read [<when>]` | also `month [<when>]` | a monthly note (this month by default) | |
+| `month path [<when>]` | | where a monthly note is, else where it will be created | |
+| `month append <text>` | `[--when M] [--stdin]` | a block in a monthly note, created from `monthlyTemplate` | yes |
 | `capture <text>` | `[--stdin]` | the app's quick capture into today's note: a date makes a task with ⏰ (time) or 📅 | yes |
 | `task list` | `[--status S] [--due E] [--tag T] [--page P] [--limit N] \| --query Q` | tasks (open by default) with refs | |
 | `task add <text>` | `[--due D] [--scheduled D] [--start D] [--remind D \| --alarm D] [--every R] [--priority P] [--page P \| --date D]` | a task with canonical tokens | yes |
@@ -248,6 +254,11 @@ Never compute a hash yourself.
 | `completion <shell>` | bash, fish, zsh | a completion script (`brulion-cli completion bash > ~/.local/share/bash-completion/completions/brulion-cli`) | |
 | `mcp` | `[--read-only] [--allow-destructive] [--app-control]` | the MCP server (below) | |
 <!-- /commands -->
+
+`week` and `month` take a period phrase (docs/SYNTAX.md §1 "Weekly and monthly notes"): "ten
+tydzień", "next week", "zeszły miesiąc", `2026-W45`, `tydzień 45`, `2026-11`, `listopad 2026`, or a
+day ("jutro", `2027-01-01` — in week `2026-W53`); a phrase that names no week or month is exit 6
+`week_not_understood` / `month_not_understood` with examples.
 
 `help --json` and `schema` describe every argument (type, required, positional or `--option`); the
 same registry builds the argument parser, the help, the schema and the MCP tools, and a test checks

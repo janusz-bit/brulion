@@ -214,6 +214,8 @@ private Q_SLOTS:
         QVERIFY(f.open());
         VaultConfig expected;
         expected.journalsFolder = u"Dziennik"_s;
+        expected.weeklyFolder = u"Dziennik"_s; // weekly and monthly notes follow the daily ones
+        expected.monthlyFolder = u"Dziennik"_s;
         expected.weekStartsOn = Qt::Sunday;
         QVERIFY(sameVaultConfig(f.vault->config(), expected));
         QVERIFY(f.text(u".brulion/config.json"_s).contains(u"Dziennik"_s));

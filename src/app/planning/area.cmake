@@ -27,6 +27,7 @@ qt_target_qml_sources(brulion
         qml/planning/PlanningTokenMenu.qml
         qml/planning/CalendarHeader.qml
         qml/planning/CalendarMonthGrid.qml
+        qml/planning/CalendarWeekNumber.qml
         qml/planning/CalendarWeekGrid.qml
         qml/planning/CalendarAgendaList.qml
         qml/planning/CalendarDayPanel.qml

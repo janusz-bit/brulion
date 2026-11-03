@@ -46,6 +46,9 @@ class NoteFind : public QObject {
     /// elsewhere) and those in the YAML frontmatter, which the block view hides in its panel.
     Q_PROPERTY(int linkMatches READ linkMatches NOTIFY matchesChanged FINAL)
     Q_PROPERTY(int frontmatterMatches READ frontmatterMatches NOTIFY matchesChanged FINAL)
+    /// Next and previous go round the note (default). Off (the journal stream: StreamFind), the
+    /// note's end is endReached() instead — also a new query or a replace with nothing after it.
+    Q_PROPERTY(bool wrap READ wrap WRITE setWrap NOTIFY wrapChanged FINAL)
 
 public:
     explicit NoteFind(QObject *parent = nullptr);
@@ -68,6 +71,16 @@ public:
     int linkMatches() const { return m_linkMatches; }
     int frontmatterMatches() const { return m_frontmatterMatches; }
     text::FindOptions options() const { return m_options; }
+    bool wrap() const { return m_wrap; }
+    void setWrap(bool wrap);
+    /// The matches as counted (in the text of sourceOfSearch() at the last recount).
+    const QList<text::TextRange> &matches() const { return m_matches; }
+    /// A recount is pending (the text, the query or the options changed since).
+    bool stale() const;
+    /// Show the note's first (`first`) or last match as soon as the note is loaded and counted —
+    /// the journal stream moving to another day; the controller may change before that. A note
+    /// without a match then: endReached(first).
+    Q_INVOKABLE void enter(bool first);
 
     /// The next match goes from where the caret is: `sourcePosition` in source mode's TextEdit, else
     /// the block being edited or selected (the bar was just opened).
@@ -94,6 +107,9 @@ Q_SIGNALS:
     void targetRequested(const QVariantMap &target);
     /// Source mode: replace these [{ from, to }] (TextEdit positions, ascending) in the TextEdit.
     void sourceReplaceRequested(const QVariantList &ranges, const QString &replacement);
+    void wrapChanged();
+    /// `wrap` off: there is no match after (`forward`) / before the one on show in this note.
+    void endReached(bool forward);
 
 private:
     void connectController();
@@ -119,6 +135,8 @@ private:
     int m_frontmatterMatches = 0;
     qsizetype m_origin = 0;
     bool m_jump = false;
+    bool m_wrap = true;
+    enum class Enter { None, First, Last } m_enter = Enter::None;
     QTimer m_timer;
 };
 

@@ -36,6 +36,7 @@ qt_add_library(brulion_editor STATIC
     notefind.h notefind.cpp
     lazyhtmlmimedata.h lazyhtmlmimedata.cpp
     streamselection.h streamselection.cpp
+    streamfind.h streamfind.cpp
     dayclock.h dayclock.cpp
     markdownhighlighter.h markdownhighlighter.cpp
     richtext_p.h

@@ -195,6 +195,8 @@ private Q_SLOTS:
         QVERIFY2(parsed.warnings.isEmpty(), qPrintable(parsed.warnings.join(u'\n')));
         VaultConfig expected;
         expected.journalsFolder = u"Dziennik"_s;
+        expected.weeklyFolder = u"Dziennik"_s; // weekly and monthly notes follow the daily ones
+        expected.monthlyFolder = u"Dziennik"_s;
         expected.weekStartsOn = Qt::Sunday;
         expected.defaultReminderTime = QTime(8, 30);
         QVERIFY(sameVaultConfig(parsed.config, expected));
@@ -356,6 +358,37 @@ private Q_SLOTS:
         QVERIFY(!sameVaultConfig(pageOnly, VaultConfig{}));
     }
 
+    void periodicKeys()
+    {
+        // Their own folders, formats and templates; a format that cannot work is a warning.
+        const ParsedVaultConfig parsed = parseVaultConfig(
+                R"({"journalsFolder":"Dziennik","weeklyFolder":"Dziennik/Tygodnie","weeklyFileFormat":" 'Tydzień' ww yyyy ",)"
+                R"("weeklyTemplate":"szablony/tydzień.md","monthlyFileFormat":"yyyy-MM-dd","monthlyTemplate":"szablony/miesiąc.md"})"_ba);
+        QCOMPARE(parsed.config.weeklyFolder, u"Dziennik/Tygodnie"_s);
+        QCOMPARE(parsed.config.weeklyFileFormat, u"'Tydzień' ww yyyy"_s);
+        QCOMPARE(parsed.config.weeklyTemplate, u"szablony/tydzień.md"_s);
+        QCOMPARE(parsed.config.monthlyFolder, u"Dziennik"_s);
+        QCOMPARE(parsed.config.monthlyFileFormat, u"yyyy-MM"_s);
+        QCOMPARE(parsed.config.monthlyTemplate, u"szablony/miesiąc.md"_s);
+        QCOMPARE(parsed.warnings.size(), 1);
+        QVERIFY(parsed.warnings.first().contains(u"monthlyFileFormat"_s));
+        // Written back and read again; each key takes part in the comparison.
+        const ParsedVaultConfig again = parseVaultConfig(serializeVaultConfig(parsed.config, parsed.raw));
+        QVERIFY2(again.warnings.isEmpty(), qPrintable(again.warnings.join(u'\n')));
+        QVERIFY(sameVaultConfig(again.config, parsed.config));
+        for (QString VaultConfig::*field :
+             {&VaultConfig::weeklyFolder, &VaultConfig::weeklyFileFormat, &VaultConfig::weeklyTemplate,
+              &VaultConfig::monthlyFolder, &VaultConfig::monthlyFileFormat, &VaultConfig::monthlyTemplate}) {
+            VaultConfig other = parsed.config;
+            other.*field += u"x"_s;
+            QVERIFY(!sameVaultConfig(other, parsed.config));
+        }
+        // An unusable format set in memory is written as the default.
+        VaultConfig broken;
+        broken.weeklyFileFormat = u"ww"_s;
+        QCOMPARE(vaultConfigToJson(broken).value("weeklyFileFormat"_L1).toString(), u"yyyy-'W'ww"_s);
+    }
+
     void serializeRoundTrip()
     {
         VaultConfig config;
@@ -393,7 +426,7 @@ private Q_SLOTS:
         QCOMPARE(json.value("journalsFolder"_L1).toString(), u"Dni"_s);
         QCOMPARE(json.value("journalMode"_L1).toString(), u"outline"_s);
         QCOMPARE(json.value("pageMode"_L1).toString(), u"document"_s);
-        QCOMPARE(json.size(), 11);
+        QCOMPARE(json.size(), 17); // with the weekly and monthly notes' six
     }
 
     void usableJournalFormat_data()

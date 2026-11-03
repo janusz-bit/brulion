@@ -361,6 +361,48 @@ private Q_SLOTS:
         QFile::remove(ini);
     }
 
+    void weeklyAndMonthlyNotes()
+    {
+        // kNow is Wednesday 2026-10-14: ISO week 42.
+        const QString dir = vault({{u"templates/weekly.md"_s, "# Tydzień {{week}}: {{date:d.MM}}–{{end:d.MM}}\n- \n"},
+                                   {u"journals/2026-10.md"_s, "- październik\n"}});
+        Run r = run(dir, {u"week"_s, u"path"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"journals/2026-W42.md"_s);
+        QCOMPARE(r.result().value(u"start"_s).toString(), u"2026-10-12"_s);
+        QCOMPARE(r.result().value(u"end"_s).toString(), u"2026-10-18"_s);
+        QCOMPARE(r.result().value(u"week"_s).toInt(), 42);
+        QCOMPARE(r.result().value(u"exists"_s).toBool(), false);
+        // Week 53 belongs to its week-year.
+        r = run(dir, {u"week"_s, u"path"_s, u"2027-01-01"_s});
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"journals/2026-W53.md"_s);
+        QCOMPARE(r.result().value(u"weekYear"_s).toInt(), 2026);
+        r = run(dir, {u"week"_s, u"path"_s, u"next"_s, u"week"_s});
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"journals/2026-W43.md"_s);
+        // Appending creates it from the weekly template.
+        r = run(dir, {u"week"_s, u"append"_s, u"Przegląd celów — żółw"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(readFile(dir + u"/journals/2026-W42.md"_s),
+                 QString(u"# Tydzień 42: 12.10–18.10\n- Przegląd celów — żółw\n"_s).toUtf8());
+        QCOMPARE(r.result().value(u"line"_s).toInt(), 1);
+        // The month's note exists: read it; another month by name.
+        r = run(dir, {u"month"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"content"_s).toString(), u"- październik\n"_s);
+        QCOMPARE(r.result().value(u"exists"_s).toBool(), true);
+        r = run(dir, {u"month"_s, u"path"_s, u"listopad"_s});
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"journals/2026-11.md"_s);
+        r = run(dir, {u"month"_s, u"append"_s, u"Plan"_s, u"--when"_s, u"następny miesiąc"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(readFile(dir + u"/journals/2026-11.md"_s), "- Plan\n"_ba);
+        // Not a week: an error with examples.
+        r = run(dir, {u"week"_s, u"path"_s, u"2027-W53"_s});
+        QVERIFY(r.code != 0);
+        QCOMPARE(r.errorCode(), u"week_not_understood"_s);
+        r = run(dir, {u"month"_s, u"żółw"_s});
+        QCOMPARE(r.errorCode(), u"month_not_understood"_s);
+    }
+
     void obsidianVaultSettings()
     {
         // An Obsidian vault without .brulion/config.json: its daily notes settings are used.

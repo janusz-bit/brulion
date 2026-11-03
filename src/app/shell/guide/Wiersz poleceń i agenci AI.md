@@ -20,6 +20,8 @@ brulion-cli task list --due '<=+7d'                # otwarte zadania na najbliż
 brulion-cli task add "Oddać książkę" --due "w piątek"
 brulion-cli journal append "Pomysł na prezent"     # dopisz do dzisiejszego dziennika
 brulion-cli --format text journal wczoraj          # przeczytaj wczorajszy dziennik
+brulion-cli week append "Przegląd celów"           # dopisz do notatki tego tygodnia
+brulion-cli --format text month "zeszły miesiąc"   # przeczytaj notatkę poprzedniego miesiąca
 brulion-cli search zolw                            # znajdzie „żółw”
 brulion-cli help                                   # wszystkie polecenia
 ```

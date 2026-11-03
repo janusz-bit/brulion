@@ -1141,6 +1141,16 @@ VaultConfig vaultConfigFromMap(const QVariantMap &m)
         c.journalMode = *mode;
     if (const auto mode = markdown::parseNoteMode(m.value(u"pageMode"_s).toString()))
         c.pageMode = *mode;
+    // Weekly and monthly notes (periodic/periodic.h): their folders follow the journals folder.
+    c.weeklyFolder = m.contains(u"weeklyFolder"_s) ? m.value(u"weeklyFolder"_s).toString() : c.journalsFolder;
+    c.monthlyFolder = m.contains(u"monthlyFolder"_s) ? m.value(u"monthlyFolder"_s).toString() : c.journalsFolder;
+    for (const auto &[key, field] :
+         {std::pair{u"weeklyFileFormat"_s, &c.weeklyFileFormat}, std::pair{u"weeklyTemplate"_s, &c.weeklyTemplate},
+          std::pair{u"monthlyFileFormat"_s, &c.monthlyFileFormat},
+          std::pair{u"monthlyTemplate"_s, &c.monthlyTemplate}}) {
+        if (m.contains(key))
+            *field = m.value(key).toString();
+    }
     return c;
 }
 

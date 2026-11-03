@@ -5,6 +5,7 @@
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
 #include "notebook/journals.h"
+#include "notebook/periodicnotes.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -163,11 +164,15 @@ notebook::Notebook::WriteOptions creatingJournal(Call &call, const VaultPath &pa
     notebook::Notebook::WriteOptions options;
     Vault *v = call.vault();
     const std::optional<QDate> day = v ? markdown::journalDateFromPath(path, v->config()) : std::nullopt;
-    if (!day)
+    // A weekly or monthly note is created from its own template (notebook/periodicnotes.h).
+    const auto period = v && !day ? periodic::periodicNoteFromPath(path, v->config()) : std::nullopt;
+    if (!day && !period)
         return options;
     options.mayCreate = true;
     if (!QFileInfo(v->absolutePath(path)).isFile())
-        options.initialText = notebook::newJournalText(*v, *day, call.ctx.now(), call.ctx.locale());
+        options.initialText =
+                day ? notebook::newJournalText(*v, *day, call.ctx.now(), call.ctx.locale())
+                    : notebook::newPeriodicText(*v, period->period, period->start, call.ctx.now(), call.ctx.locale());
     return options;
 }
 

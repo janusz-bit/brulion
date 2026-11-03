@@ -21,8 +21,10 @@ import Brulion
 // and copying"): Shift+click, Shift+↑/↓ past a day's edge, a drag, a tap in the touch selection
 // mode; such a selection is copied only.
 // Ctrl+F (Ctrl+H: with replace) in the stream: the find bar (FindBar, docs/UI.md "Find and replace")
-// over the day being written in, named in its field; a tap in another day moves the search there.
-// One day as a page: its PageView has the bar. The notebook-wide search and replace cover all days.
+// over the stream's days (StreamFind): matches counted in every day, next / previous going on to
+// the next day with one (scrolled to, made the day written in), every day on screen tinted, Replace
+// all over all of them; the current match is in the day written in (NoteFind). One day as a page:
+// its PageView has the bar. The notebook-wide search and replace cover all notes.
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
 // (one day: its date), `sidePanel`, `editing`, `toolbarDocked`, `endEditing()` and `sourceMode`.
 FocusScope {
@@ -128,6 +130,19 @@ FocusScope {
         controller: root.activeDay ? root.activeDay.controller : null
         active: root.findOpen && !root.single
     }
+    StreamFind {
+        id: streamFind
+        objectName: "journalStreamFind"
+        host: Workspace
+        model: listLoader.item ? listLoader.item.daysModel : null
+        find: noteFind
+        // Another day has the next match: there it goes (the list scrolls, the day is written in).
+        onDayRequested: (row, path) => {
+            const journals = listLoader.item
+            if (journals)
+                journals.activateDay(row)
+        }
+    }
     Loader {
         id: findBarLoader
         anchors.top: parent.top
@@ -138,8 +153,9 @@ FocusScope {
         z: 2
         sourceComponent: FindBar {
             find: noteFind
+            stream: streamFind
             editor: root.activeDay ? root.activeDay.editor : null
-            scopeLabel: root.activeDay ? DatesHelper.formatLong(root.activeDay.date) : ""
+            placeholder: qsTr("Find in the journal")
             onCloseRequested: root.closeFind()
         }
     }
@@ -239,6 +255,19 @@ FocusScope {
             /// does not flick meanwhile.
             function holdScrolling(held) {
                 list.interactive = !held
+            }
+            /// The day model (StreamFind searches its days).
+            readonly property JournalListModel daysModel: days
+            /// Make the day at `row` the one written in (the stream's find bar goes on there): scrolled
+            /// to, created when it was not, activated.
+            function activateDay(row) {
+                if (row < 0 || row >= days.count)
+                    return
+                list.positionViewAtIndex(row, ListView.Contain)
+                list.forceLayout()
+                const item = list.itemAtIndex(row)
+                if (item && item.day)
+                    item.day.activated()
             }
             function scrollToDate(date) {
                 const row = days.rowOfDate(date)
@@ -420,6 +449,7 @@ FocusScope {
                     }
                     ContentJournalDay {
                         find: noteFind
+                        streamFind: streamFind
                         id: dayView
                         y: dayItem.index > 0 ? separator.y + separator.height + dayItem.gap : 0
                         width: parent.width

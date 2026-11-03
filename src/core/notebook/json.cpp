@@ -274,7 +274,13 @@ QJsonObject vaultConfigJson(const VaultConfig &c)
             {u"defaultReminderTime"_s, c.defaultReminderTime.toString(u"HH:mm"_s)},
             {u"weekStartsOn"_s, int(c.weekStartsOn)},
             {u"journalMode"_s, markdown::noteModeName(c.journalMode)},
-            {u"pageMode"_s, markdown::noteModeName(c.pageMode)}};
+            {u"pageMode"_s, markdown::noteModeName(c.pageMode)},
+            {u"weeklyFolder"_s, c.weeklyFolder},
+            {u"weeklyFileFormat"_s, c.weeklyFileFormat},
+            {u"weeklyTemplate"_s, c.weeklyTemplate},
+            {u"monthlyFolder"_s, c.monthlyFolder},
+            {u"monthlyFileFormat"_s, c.monthlyFileFormat},
+            {u"monthlyTemplate"_s, c.monthlyTemplate}};
 }
 
 } // namespace brulion::notebook

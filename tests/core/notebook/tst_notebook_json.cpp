@@ -143,8 +143,11 @@ private Q_SLOTS:
         const QJsonObject config = vaultConfigJson(VaultConfig());
         QCOMPARE(keys(config),
                  (QStringList{u"attachmentsFolder"_s, u"defaultReminderTime"_s, u"journalFileFormat"_s,
-                              u"journalMode"_s, u"journalTemplate"_s, u"journalsFolder"_s, u"newPagesFolder"_s,
-                              u"pageMode"_s, u"templatesFolder"_s, u"weekStartsOn"_s}));
+                              u"journalMode"_s, u"journalTemplate"_s, u"journalsFolder"_s, u"monthlyFileFormat"_s,
+                              u"monthlyFolder"_s, u"monthlyTemplate"_s, u"newPagesFolder"_s, u"pageMode"_s,
+                              u"templatesFolder"_s, u"weekStartsOn"_s, u"weeklyFileFormat"_s, u"weeklyFolder"_s,
+                              u"weeklyTemplate"_s}));
+        QCOMPARE(config.value(u"weeklyFileFormat"_s).toString(), u"yyyy-'W'ww"_s);
         QCOMPARE(config.value(u"defaultReminderTime"_s).toString(), u"09:00"_s);
         ScheduledNotification n;
         n.id = u"x"_s;

@@ -4,8 +4,9 @@ import QtQuick.Layouts
 import Brulion
 
 // CalendarHeader — the bar above the calendar: previous / next period, "Today", the period title
-// ("Październik 2026", "12–18 października 2026") and the Month / Week / Agenda switch. On
-// narrow views the switch moves to a second row and stretches.
+// ("Październik 2026", "12–18 października 2026"; a click opens the month's / week's note:
+// titleClicked(), a small book when it has one) and the Month / Week / Agenda switch. On narrow
+// views the switch moves to a second row and stretches.
 //
 //   CalendarHeader { title: cal.title; mode: cal.mode; showingToday: cal.showingToday
 //                    onPrevious: cal.previous(); onNext: cal.next(); onToday: cal.goToday()
@@ -17,6 +18,10 @@ Item {
     /// Title for narrow headers (CalendarModel.shortTitle).
     property string shortTitle: title
     property string mode: "month"
+    /// The title opens the period's note (the month's in the month view, the week's in the week
+    /// view: titleClicked()); `titleHasNote`: it has one already.
+    property bool titleOpensNote: mode === "month" || mode === "week"
+    property bool titleHasNote: false
     property bool showingToday: true
     property int overdueCount: 0
     /// The vault is still being indexed (entries are still coming in).
@@ -29,6 +34,7 @@ Item {
     signal today()
     signal modeRequested(string mode)
     signal overdueRequested()
+    signal titleClicked()
 
     readonly property string previousLabel: mode === "week" ? qsTr("Previous week")
                                           : mode === "agenda" ? qsTr("Earlier") : qsTr("Previous month")
@@ -66,17 +72,56 @@ Item {
                 shortcut: "PgDown"
                 onClicked: root.next()
             }
-            Text {
+            Item {
                 Layout.fillWidth: true
                 Layout.leftMargin: Theme.space2
-                text: root.stacked ? root.shortTitle : root.title
-                font.family: Theme.fontUi
-                font.pixelSize: root.stacked ? Theme.textLg : Theme.textXl
-                font.weight: Theme.weightSemiBold
-                color: Theme.fg
-                elide: Text.ElideRight
-                Accessible.role: Accessible.Heading
-                Accessible.name: text
+                implicitHeight: titleText.implicitHeight
+                Text {
+                    id: titleText
+                    objectName: "calendarTitle"
+                    width: Math.min(parent.width, implicitWidth)
+                    text: root.stacked ? root.shortTitle : root.title
+                    font.family: Theme.fontUi
+                    font.pixelSize: root.stacked ? Theme.textLg : Theme.textXl
+                    font.weight: Theme.weightSemiBold
+                    font.underline: root.titleOpensNote && titleHover.hovered
+                    color: Theme.fg
+                    elide: Text.ElideRight
+                    Accessible.role: Accessible.Heading
+                    Accessible.name: text
+                }
+                // A click on the title: the month's / week's note (docs/SYNTAX.md §1).
+                Item {
+                    objectName: "calendarTitleNote"
+                    visible: root.titleOpensNote
+                    width: titleText.width
+                    height: Math.max(titleText.height, Theme.touchUi ? Theme.touchTarget : 0)
+                    anchors.verticalCenter: titleText.verticalCenter
+                    Accessible.role: Accessible.Button
+                    Accessible.name: root.mode === "week" ? qsTr("Weekly note: %1").arg(titleText.text)
+                                                          : qsTr("Monthly note: %1").arg(titleText.text)
+                    Accessible.onPressAction: root.titleClicked()
+                    HoverHandler {
+                        id: titleHover
+                        enabled: !Theme.touchUi
+                        cursorShape: Qt.PointingHandCursor
+                    }
+                    TapHandler { onTapped: root.titleClicked() }
+                    BToolTip {
+                        // (Not over another view once this one is hidden: a popup outlives its item's visibility.)
+                        visible: titleHover.hovered && root.visible
+                        text: root.mode === "week" ? (root.titleHasNote ? qsTr("Open this week's note") : qsTr("Write a note for this week"))
+                                                   : (root.titleHasNote ? qsTr("Open this month's note") : qsTr("Write a note for this month"))
+                    }
+                }
+                BIcon {
+                    visible: root.titleOpensNote && root.titleHasNote
+                    x: titleText.width + Theme.space1
+                    anchors.verticalCenter: titleText.verticalCenter
+                    name: "book-open"
+                    size: 14
+                    color: Theme.fgFaint
+                }
             }
             BSpinner {
                 visible: root.busy

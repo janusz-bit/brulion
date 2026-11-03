@@ -3,6 +3,7 @@
 
 #include "index/query.h"
 #include "index/vaultindex.h"
+#include "periodic/periodic.h"
 #include "util/paths.h"
 
 #include <QHash>
@@ -111,9 +112,13 @@ QList<UnreferencedFile> unreferencedFiles(const VaultIndex &index, const VaultCo
         journals.insert(journal.path);
     const QString templates = paths::normalize(config.templatesFolder);
     const VaultPath journalTemplate = paths::normalize(config.journalTemplate);
+    const VaultPath weeklyTemplate = periodic::templatePath(periodic::Period::Week, config);
+    const VaultPath monthlyTemplate = periodic::templatePath(periodic::Period::Month, config);
     const auto left = [&](const VaultPath &path) {
-        return !referenced.contains(path) && !journals.contains(path) && path != journalTemplate && !isHidden(path)
-            && (templates.isEmpty() || !path.startsWith(templates + u'/'));
+        return !referenced.contains(path) && !journals.contains(path) && path != journalTemplate
+               && path != weeklyTemplate && path != monthlyTemplate && !isHidden(path)
+               && (templates.isEmpty() || !path.startsWith(templates + u'/'))
+               && !periodic::periodicNoteFromPath(path, config); // weekly and monthly notes, like the days
     };
 
     QList<UnreferencedFile> out;

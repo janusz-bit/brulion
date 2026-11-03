@@ -121,11 +121,35 @@ FocusScope {
         return out
     }
 
+    /// The week's number in the corner was clicked: its Monday ("YYYY-MM-DD").
+    signal weekOpened(string monday)
+    /// Mondays of weekly notes in the shown range (the number's accent).
+    readonly property var weekNotes: {
+        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
+        if (calendar.rangeStart === "" || Workspace.revision < 0)
+            return []
+        return Workspace.periodicNoteStarts("week", calendar.rangeStart, calendar.rangeEnd)
+    }
+
     // ---- Day headers + all-day strip --------------------------------------------------------
     Item {
         id: top
         width: parent.width
         height: root.headerHeight + root.allDayHeight
+
+        // The ISO week (of the week's middle day) in the corner above the hours: its note.
+        CalendarWeekNumber {
+            readonly property string middle: root.calendar.rangeStart !== ""
+                                             ? DatesHelper.addDays(root.calendar.rangeStart, 3) : ""
+            objectName: "calendarWeekNumber"
+            width: root.gutter
+            height: root.headerHeight
+            showWord: true
+            week: DatesHelper.isoWeek(middle)
+            monday: middle !== "" ? DatesHelper.addDays(middle, 1 - DatesHelper.dayOfWeek(middle)) : ""
+            hasNote: root.weekNotes.indexOf(monday) >= 0
+            onOpened: (date) => root.weekOpened(date)
+        }
 
         Repeater {
             model: root.calendar

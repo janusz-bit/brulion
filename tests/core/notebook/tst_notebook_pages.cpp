@@ -377,13 +377,20 @@ private Q_SLOTS:
         QVERIFY(env);
         const Relocation journals = renameFolder(*env->vault, env->index.get(), u"journals"_s, u"Dziennik"_s, false);
         QCOMPARE(journals.path, u"Dziennik"_s);
-        QCOMPARE(journals.rebased.size(), 1);
+        // The weekly and monthly notes' folders are the journals folder: they follow it.
+        QCOMPARE(journals.rebased.size(), 3);
         QCOMPARE(journals.rebased.first().key, u"journalsFolder"_s);
         QCOMPARE(env->vault->config().journalsFolder, u"Dziennik"_s);
+        QCOMPARE(env->vault->config().weeklyFolder, u"Dziennik"_s);
+        QCOMPARE(env->vault->config().monthlyFolder, u"Dziennik"_s);
         QVERIFY(journals.configError.isEmpty());
         const Relocation templates = renameFolder(*env->vault, env->index.get(), u"templates"_s, u"Szablony"_s, false);
-        QCOMPARE(templates.rebased.size(), 2); // the folder and the journal template in it
+        QCOMPARE(templates.rebased.size(), 4); // the folder and the journal, weekly and monthly templates in it
         QCOMPARE(env->vault->config().journalTemplate, u"Szablony/journal.md"_s);
+        QCOMPARE(env->vault->config().weeklyTemplate, u"Szablony/weekly.md"_s);
+        QCOMPARE(env->vault->config().monthlyTemplate, u"Szablony/monthly.md"_s);
+        // Named once: the journals folder names the weekly and monthly ones beside it.
+        QCOMPARE(specialsWithin(env->vault->config(), u"Dziennik"_s).size(), 1);
         const Relocation assets = movePath(*env->vault, env->index.get(), u"assets"_s, u"Pliki"_s);
         QCOMPARE(assets.path, u"Pliki/assets"_s);
         QCOMPARE(env->vault->config().attachmentsFolder, u"Pliki/assets"_s);
