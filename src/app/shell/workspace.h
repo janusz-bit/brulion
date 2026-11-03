@@ -231,6 +231,13 @@ public:
     QVariantList propertyKeys() const override;
     QVariantList propertyValues(const QString &key, const QString &prefix, int limit = 20) const override;
     Q_INVOKABLE QString resolveLink(const QString &target, const QString &fromPath) const override;
+    markdown::PageIcon pageIcon(const QString &path) const override;
+    /// Pictures of the notebook this device can show, for a page's cover (docs/UI.md "Page icon
+    /// and cover"): [{ path, title (the file name), folder, url (assetUrl) }] whose path matches
+    /// every word of `query` (case and diacritics aside), in path order; at most `limit`.
+    Q_INVOKABLE QVariantList pictureAttachments(const QString &query, int limit = 60) const;
+    /// The icon of the page at `path` for QML lists (editor::pageIconMap: { kind, name }).
+    Q_INVOKABLE QVariantMap pageIconOf(const QString &path) const;
     /// The shortest [[target]] reaching `path` from `fromPath` (VaultIndex::linkTarget(): "Dom",
     /// "Projekty/Dom" when the title alone names another page); "" when unknown.
     Q_INVOKABLE QString linkTarget(const QString &path, const QString &fromPath = QString()) const override;

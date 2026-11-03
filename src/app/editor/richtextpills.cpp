@@ -16,6 +16,13 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::editor {
 
+namespace {
+
+/// The anchor name of a page's app icon (InlineRenderer, markdown/inlinerenderer.h).
+constexpr QStringView IconAnchorPrefix = u"brulion-icon:";
+
+} // namespace
+
 RichTextPills::RichTextPills(QObject *parent)
     : QObject(parent)
 {
@@ -125,7 +132,10 @@ QVariantList RichTextPills::pills() const
                 {u"width"_s, p.rect.width()},
                 {u"height"_s, p.rect.height()},
                 {u"color"_s, p.color},
-                {u"kind"_s, p.round ? u"pill"_s : u"box"_s},
+                {u"kind"_s, !p.icon.isEmpty() ? u"icon"_s
+                            : p.round         ? u"pill"_s
+                                              : u"box"_s},
+                {u"icon"_s, p.icon},
         });
     }
     return out;
@@ -358,6 +368,8 @@ void RichTextPills::refresh()
             QColor color;
             bool round;
             QFont font;
+            QString icon;
+            QString href; ///< an icon's link
         };
         for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
             // The block's tinted spans: adjacent fragments of one colour are one span.
@@ -370,14 +382,32 @@ void RichTextPills::refresh()
                 const QVariant tint = f.property(TintColorProperty);
                 if (!tint.isValid())
                     continue;
-                const QColor color = tint.value<QColor>();
+                QColor color = tint.value<QColor>();
                 const bool round = f.property(TintRoundProperty).toBool();
-                if (!spans.isEmpty() && spans.last().to == fragment.position() && spans.last().color == color) {
+                // A page's app icon (InlineRenderer's iconLink): drawn in the link's colour.
+                QString icon;
+                for (const QString &name : f.anchorNames()) {
+                    if (name.startsWith(IconAnchorPrefix)) {
+                        icon = name.sliced(IconAnchorPrefix.size());
+                        color = f.foreground().color();
+                        break;
+                    }
+                }
+                // Qt names only the anchor's first character: the rest of the icon's room (its
+                // other no-break spaces, the same link, still transparent) is the icon's too.
+                if (icon.isEmpty() && !spans.isEmpty() && !spans.last().icon.isEmpty()
+                    && spans.last().to == fragment.position() && spans.last().href == f.anchorHref()
+                    && color.alpha() == 0) {
+                    spans.last().to += fragment.length();
+                    continue;
+                }
+                if (!spans.isEmpty() && spans.last().to == fragment.position() && spans.last().color == color
+                    && spans.last().icon == icon && icon.isEmpty()) {
                     spans.last().to += fragment.length();
                     spans.last().round = spans.last().round && round;
                 } else {
                     spans.append({fragment.position(), fragment.position() + fragment.length(), color, round,
-                                  f.font().resolve(base)});
+                                  f.font().resolve(base), icon, icon.isEmpty() ? QString() : f.anchorHref()});
                 }
             }
             if (spans.isEmpty())
@@ -392,7 +422,7 @@ void RichTextPills::refresh()
                     const qreal bottom = baseline + metrics.descent() - m_inset;
                     out.append({QRectF(origin.x() + segment.x1, origin.y() + top, segment.x2 - segment.x1,
                                        std::max<qreal>(1, bottom - top)),
-                                span.color, span.round, span.from, span.to});
+                                span.color, span.round, span.from, span.to, span.icon});
                 }
             }
         }

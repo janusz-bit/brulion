@@ -315,6 +315,8 @@ FocusScope {
 
                 readonly property string journal: row.model.journalDate
                 readonly property string shownTitle: journal !== "" ? DatesHelper.formatLong(journal) : row.model.title
+                /// The page's own icon (docs/UI.md "Page icon and cover"), following its edits.
+                readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(row.model.path) : ({})
 
                 // Full width (ListView places delegates at x 0); the row itself is inset.
                 readonly property real margin: root.rowMargin
@@ -364,8 +366,9 @@ FocusScope {
                                 anchors.leftMargin: Theme.space2
                                 anchors.rightMargin: Theme.space3
                                 spacing: Theme.space2
-                                BIcon {
-                                    name: row.journal !== "" ? "calendar-days" : "file-text"
+                                BPageIcon {
+                                    icon: row.pageIcon
+                                    fallback: row.journal !== "" ? "calendar-days" : "file-text"
                                     size: Theme.iconSizeSm
                                     color: Theme.fgFaint
                                 }
@@ -417,12 +420,22 @@ FocusScope {
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width
                         spacing: 2
-                        ContentHighlightText {
+                        RowLayout {
                             Layout.fillWidth: true
-                            source: row.shownTitle
-                            positions: row.journal !== "" ? [] : row.model.titleMatches
-                            font.weight: Theme.weightMedium
-                            font.pixelSize: Theme.textMd
+                            spacing: Theme.space2
+                            BPageIcon {
+                                visible: width > 0
+                                icon: row.pageIcon
+                                size: Theme.iconSizeSm
+                                color: Theme.fgFaint
+                            }
+                            ContentHighlightText {
+                                Layout.fillWidth: true
+                                source: row.shownTitle
+                                positions: row.journal !== "" ? [] : row.model.titleMatches
+                                font.weight: Theme.weightMedium
+                                font.pixelSize: Theme.textMd
+                            }
                         }
                         BText {
                             Layout.fillWidth: true

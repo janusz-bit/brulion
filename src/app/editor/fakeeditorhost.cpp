@@ -433,6 +433,12 @@ QString FakeEditorHost::resolveLink(const QString &target, const QString &fromPa
     return {};
 }
 
+markdown::PageIcon FakeEditorHost::pageIcon(const QString &path) const
+{
+    const ParsedNote *note = paths::isMarkdown(path) ? currentIndex().note(path) : nullptr;
+    return note ? editor::availablePageIcon(markdown::pageLook(note->properties).icon) : markdown::PageIcon();
+}
+
 QString FakeEditorHost::blockText(const QString &blockId) const
 {
     for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it) {

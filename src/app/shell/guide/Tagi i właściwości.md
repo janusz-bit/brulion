@@ -37,6 +37,7 @@ brulion: outline
 - `tags` — tagi całej strony,
 - `aliases` — dodatkowe nazwy, pod którymi strona odpowiada na linki,
 - `brulion` — tryb notatki ([[Dokument i konspekt|dokument albo konspekt]]),
+- `icon`, `banner`, `banner_y` — [[#Ikona i okładka strony|ikona i okładka strony]],
 - dowolne własne klucze, np. `status` — Brulion pokazuje je w panelu **Właściwości** nad treścią.
 
 Inne programy widzą te same wpisy jako zwykłe właściwości. Zamiast nagłówka YAML możesz też zacząć stronę od linii `klucz:: wartość` (styl Logseq).
@@ -60,6 +61,24 @@ Brulion zmienia tylko tę jedną właściwość — reszta nagłówka (komentarz
 
 ### Tagi i aliasy w nagłówku strony
 Tagi i aliasy strony stoją też pod jej tytułem. Prawy przycisk na etykiecie (na telefonie przytrzymanie) otwiera menu: tag możesz otworzyć albo usunąć z tej strony, alias skopiować albo usunąć. Przycisk „+” na końcu dodaje tag albo alias bez otwierania panelu. Gdy panel **Właściwości** jest rozwinięty, tych etykiet pod tytułem nie ma — te same tagi i aliasy (z „+”, na komputerze także z ×, na telefonie z tym samym menu etykiety) są w panelu tuż pod nimi; po zwinięciu panelu wracają.
+
+## Ikona i okładka strony
+Strona może mieć **ikonę** — emoji albo jedną z ikon aplikacji — i **okładkę**, czyli obraz na górze strony. Ustawisz je w menu strony **⋯**: **Dodaj ikonę…** i **Dodaj okładkę…** (potem „Zmień…”). Ikonę zmienisz też, klikając ją obok tytułu.
+
+- **Ikona**: wpisz albo wklej dowolne emoji (na telefonie z klawiatury emoji), wybierz jedno z popularnych albo ikonę aplikacji. Widać ją przed tytułem, w drzewie stron w pasku bocznym, w ulubionych i ostatnich, we **Wszystkich stronach**, w szybkim przełączniku (Ctrl+O) i przed każdym linkiem do tej strony.
+- **Okładka**: wybierz obraz z notatnika (miniatury z wyszukiwaniem po nazwie), **Z pliku…** (obraz trafi do folderu załączników) albo podaj adres obrazu z internetu. Obraz z internetu Brulion pobierze dopiero, gdy klikniesz **Pokaż** na okładce (albo gdy w ustawieniach pozwolisz pokazywać takie obrazy bez pytania), i zachowa go na tym urządzeniu. Przycisk **Przesuń** na okładce pozwala przeciągnąć obraz w górę lub w dół, żeby było widać jego ważniejszą część; **Zapisz położenie** to zapamiętuje.
+
+Obie rzeczy są zwykłymi właściwościami strony, więc jadą razem z plikiem na inne urządzenia i do innych programów — w kluczach, które czytają wtyczki Iconize i Banners do Obsidiana oraz Logseq:
+
+```
+---
+icon: 🚀
+banner: "![[góry.jpg]]"
+banner_y: 0.3
+---
+```
+
+Ikona aplikacji jest zapisana jak w Iconize, np. `icon: LiBookOpen`. Usunięcie ikony albo okładki w ich oknie zdejmuje te klucze (okładki razem z `banner_y`); resztę nagłówka Brulion zostawia bez zmian. Każdą zmianę cofniesz.
 
 ## Właściwości bloków
 W stylu Logseq/Dataview: linia `klucz:: wartość` bezpośrednio w bloku.

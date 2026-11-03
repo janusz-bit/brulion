@@ -196,6 +196,13 @@ class PageController : public QObject {
     /// to; -1: none — that block is hidden, a `brulion`-only frontmatter, or there is none: the
     /// editor's draft row adds the property) }.
     Q_PROPERTY(QVariantMap pageProperties READ pageProperties NOTIFY pagePropertiesChanged FINAL)
+    /// The page's look (docs/UI.md "Page icon and cover"), from its properties as they are now:
+    /// { icon: { kind: "emoji" | "app" | "" (none), name } (an app icon only when this build has it),
+    /// cover: { kind: "file" | "web" | "" (none), target (as written), position (0 top … 1 bottom),
+    /// url (a file's asset URL; a web picture's cached copy once ready), state ("ready" | "missing" —
+    /// no such picture in the notebook — | "ask" | "loading" | "failed": a web picture, as
+    /// EditorHost::webPicture()), host (a web picture's site), error } }.
+    Q_PROPERTY(QVariantMap look READ look NOTIFY lookChanged FINAL)
 
 public:
     explicit PageController(QObject *parent = nullptr);
@@ -333,6 +340,19 @@ public:
     /// cannot be kept is cleared and the result says { lost: true } (the panel's toast offers
     /// "Cofnij").
     Q_INVOKABLE QVariantMap setPagePropertyType(const QString &source, const QString &key, const QString &type);
+    // --- Page icon and cover (docs/UI.md "Page icon and cover", markdown/pagelook.h) -------------
+    QVariantMap look() const { return m_look; }
+    /// The page icon: `kind` "emoji" | "app" with its `name` (an emoji; an icon name of the app,
+    /// Lucide's "book-open"), written as the property `icon` (Iconize's form for app icons:
+    /// `LiBookOpen`); `kind` "" removes the icon (`icon` and the Banners plugin's `banner_icon`).
+    /// One undo step; { ok, status, reason } as setPageProperty().
+    Q_INVOKABLE QVariantMap setPageIcon(const QString &kind, const QString &name);
+    /// The cover: `target` a notebook file's vault path (written `banner: "![[link]]"` with the
+    /// shortest link to it) or an http(s) URL; "" removes it (`banner` and `banner_y`). One undo
+    /// step; { ok, status, reason }.
+    Q_INVOKABLE QVariantMap setPageCover(const QString &target);
+    /// The cover's vertical position: 0 top … 1 bottom (`banner_y`, two decimals). One undo step.
+    Q_INVOKABLE QVariantMap setPageCoverPosition(double position);
     /// The page header's tags and aliases: `kind` "tags" | "aliases" (markdown::addPageListItem).
     Q_INVOKABLE QVariantMap addPageListItem(const QString &kind, const QString &item);
     Q_INVOKABLE QVariantMap removePageListItem(const QString &kind, const QString &item);
@@ -448,6 +468,14 @@ public:
     Q_INVOKABLE int insertToken(int row, int cursor, const QString &token);
     /// Replace [from, to) of the row's edit text. Returns the new cursor (end of `text`).
     Q_INVOKABLE int replaceRange(int row, int from, int to, const QString &text);
+    /// "Zakreśl" (docs/UI.md "Coloured highlights"): highlight [from, to) of the row's edit text in
+    /// `color` (a palette name, markdown::parseHighlightColorName: "default" writes `==…==`,
+    /// another `<mark style="background: …;">…</mark>`), recolour the highlight around it, or
+    /// with "" remove that highlight (markdown::setHighlight). One undo step. { changed, from, to
+    /// (the highlighted text in the new edit text, to select), refused (a selection over several
+    /// lines or one cutting a highlight's marker: nothing changed) }; nothing changes for an
+    /// unknown colour either.
+    Q_INVOKABLE QVariantMap setHighlight(int row, int from, int to, const QString &color);
     /// Text with line breaks pasted / dropped / committed into [from, to) of a row's edit text
     /// (text and heading blocks): several Markdown blocks (a list, paragraphs) become blocks
     /// after this one (the first joins the text before the caret, relative nesting kept, the
@@ -929,6 +957,7 @@ Q_SIGNALS:
     void modeChanged();
     void allowNewBlockIdsChanged();
     void pagePropertiesChanged();
+    void lookChanged();
     /// An attachment could not be read or stored (file name for the message).
     void attachmentFailed(const QString &name);
     /// downloadWebPictures() finished: `stored` pictures are attachments now, `failed` names the
@@ -1052,6 +1081,8 @@ private:
     /// Recompute `pageProperties` from the leading frontmatter rows (or the source text in source
     /// mode) when their text changed; `visibleRow` always.
     void updatePageProperties();
+    /// `look` from m_lookProperties and the host (the cover's file, a web picture's state).
+    void updateLook();
     /// Run a pure property edit on the page's text (the source text in source mode) as one undo
     /// step.
     markdown::PropertyEditStatus
@@ -1159,6 +1190,8 @@ private:
     bool m_allowNewBlockIds = true;
     QVariantMap m_pageProperties;
     QString m_pagePropertiesText; ///< the text pageProperties was read from
+    Properties m_lookProperties;  ///< the page properties `look` is read from (keys lower case)
+    QVariantMap m_look;
     bool m_pagePropertiesRead = false;
     /// Folded key -> type of the notebook's page properties (notebookPropertyType()); reset when
     /// the host's index changes.

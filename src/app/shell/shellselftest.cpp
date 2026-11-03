@@ -4682,6 +4682,164 @@ void checkPeriodicNotes(QQuickWindow *window, AppController *app, const Check &c
     settle(300);
 }
 
+/// A page's icon and cover (docs/UI.md "Page icon and cover"): the page menu's "Dodaj ikonę…"
+/// opens the icon dialog, an emoji picked there is written into the page's properties (that line
+/// only) and shown before the title and in the sidebar's tree; "Dodaj okładkę…" takes a picture of
+/// the notebook for a band at the top of the page; both removed from their dialogs, the file as it
+/// was.
+void checkPageLook(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const QString page = u"Wygląd strony próba.md"_s;
+    const QString text = u"---\ntags: [próba]\n---\n- Zażółć gęślą jaźń\n"_s;
+    ws->writeFile(page, text);
+    QImage picture(64, 32, QImage::Format_RGB32);
+    picture.fill(Qt::darkCyan);
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    picture.save(&buffer, "PNG");
+    const QString cover = ws->createAttachment(u"assets/Wygląd okładka.png"_s, buffer.data());
+    check(!cover.isEmpty(), "a picture for the cover is in the notebook");
+    app->openPage(page);
+    const auto openMenu = [&]() {
+        QQuickItem *menuButton = nullptr;
+        waitFor(
+                [&] {
+                    QQuickItem *header = findShown(window->contentItem(), [&](QQuickItem *item) {
+                        return isA(item, "ContentPageHeader") && item->property("path").toString() == page;
+                    });
+                    menuButton = header ? header->property("menuAnchor").value<QQuickItem *>() : nullptr;
+                    return menuButton && menuButton->isVisible();
+                },
+                3000);
+        if (menuButton)
+            tapOrClick(window, pointIn(menuButton), touch);
+    };
+    const auto menuItem = [&](const QString &name, const char *what) {
+        QQuickItem *item = nullptr;
+        check(waitFor([&] { return (item = named(name)) != nullptr; }), what);
+        if (item)
+            tapOrClick(window, pointIn(item), touch);
+        return item != nullptr;
+    };
+    settle(400); // the view fades in
+    openMenu();
+    if (menuItem(u"pageMenuIcon"_s, "the page menu offers “Dodaj ikonę…”")) {
+        QQuickItem *emojis = nullptr;
+        check(waitFor([&] { return (emojis = named(u"pageIconEmojis"_s)) != nullptr; }, 3000),
+              "“Dodaj ikonę…” opens the icon dialog with its emoji");
+        settle(300); // the dialog opens
+        QQuickItem *first = nullptr;
+        if (emojis) {
+            for (QQuickItem *child : emojis->childItems()) {
+                if (child->property("emoji").toString() == u"📝"_s)
+                    first = child;
+            }
+        }
+        if (first)
+            tapOrClick(window, pointIn(first), touch);
+        check(first
+                      && waitFor(
+                              [&] {
+                                  return ws->readFile(page)
+                                         == u"---\ntags: [próba]\nicon: 📝\n---\n- Zażółć gęślą jaźń\n"_s;
+                              },
+                              5000),
+              "a picked emoji is written as the page's `icon`, nothing else changes");
+        check(waitFor([&] { return named(u"pageIconEmojis"_s) == nullptr; }, 3000), "the icon dialog closes");
+        settle(400);
+        check(waitFor([&] { return named(u"pageIconButton"_s) != nullptr; }, 3000), "the icon stands before the title");
+        check(waitFor([&] { return ws->pageIconOf(page).value(u"name"_s).toString() == u"📝"_s; }, 3000),
+              "the lists have it (Workspace.pageIconOf)");
+        if (!touch) {
+            check(waitFor(
+                          [&] {
+                              return findShown(window->contentItem(),
+                                               [&](QQuickItem *item) {
+                                                   return item->objectName() == u"treeRow"
+                                                          && item->property("path").toString() == page
+                                                          && item->property("iconEmoji").toString() == u"📝"_s;
+                                               })
+                                     != nullptr;
+                          },
+                          3000),
+                  "the sidebar's tree shows the page's emoji");
+        }
+    }
+    closeMenus(window);
+    openMenu();
+    if (menuItem(u"pageMenuCover"_s, "the page menu offers “Dodaj okładkę…”")) {
+        QQuickItem *pictures = nullptr;
+        QQuickItem *tile = nullptr;
+        check(waitFor(
+                      [&] {
+                          pictures = named(u"pageCoverPictures"_s);
+                          if (!pictures)
+                              return false;
+                          for (QQuickItem *child : pictures->childItems()) {
+                              if (child->property("modelData").toMap().value(u"path"_s).toString() == cover)
+                                  tile = child;
+                          }
+                          return tile != nullptr;
+                      },
+                      3000),
+              "the cover dialog shows the notebook's picture");
+        settle(300);
+        if (tile)
+            tapOrClick(window, pointIn(tile), touch);
+        check(waitFor(
+                      [&] {
+                          const QString now = ws->readFile(page);
+                          return now.contains(u"\nbanner: \"![["_s) && now.contains(u"Wygląd okładka.png]]\"\n"_s);
+                      },
+                      5000),
+              "the picture is written as the page's `banner`");
+        QQuickItem *band = nullptr;
+        check(waitFor(
+                      [&] {
+                          band = named(u"pageCover"_s);
+                          QQuickItem *image = band ? shownNamed(band, u"pageCoverImage"_s) : nullptr;
+                          return image && image->property("status").toInt() == 1; // Image.Ready
+                      },
+                      5000),
+              "the cover is a band at the top of the page");
+        waitFor([&] { return named(u"pageCoverPictures"_s) == nullptr; }, 3000);
+        settle(400);
+    }
+    closeMenus(window);
+    // Both removed from their dialogs: the file as it was.
+    openMenu();
+    if (menuItem(u"pageMenuIcon"_s, "“Zmień ikonę…”")) {
+        QQuickItem *remove = nullptr;
+        check(waitFor([&] { return (remove = named(u"pageIconRemove"_s)) != nullptr; }, 3000), "“Usuń ikonę”");
+        settle(300);
+        if (remove)
+            tapOrClick(window, pointIn(remove), touch);
+        check(waitFor([&] { return named(u"pageIconEmojis"_s) == nullptr; }, 3000), "the icon dialog closes");
+        settle(400); // its exit transition (the modal overlay) is over
+    }
+    closeMenus(window);
+    openMenu();
+    if (menuItem(u"pageMenuCover"_s, "“Zmień okładkę…”")) {
+        QQuickItem *remove = nullptr;
+        check(waitFor([&] { return (remove = named(u"pageCoverRemove"_s)) != nullptr; }, 3000), "“Usuń okładkę”");
+        settle(300);
+        if (remove)
+            tapOrClick(window, pointIn(remove), touch);
+        waitFor([&] { return named(u"pageCoverPictures"_s) == nullptr; }, 3000);
+        settle(400);
+    }
+    check(waitFor([&] { return ws->readFile(page) == text; }, 5000),
+          "removing the icon and the cover leaves the file as it was");
+    closeMenus(window);
+    app->goHome();
+    settle(300);
+    ws->deletePage(page);
+    ws->deletePage(cover);
+}
+
 void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -6006,6 +6164,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h. Weekly and monthly notes: opened from the shortcut's action, the page's arrows, the calendar.
     checkPeriodicNotes(window, app, check);
+    closeMenus(window);
+    // 3i. A page's icon and cover: the page menu, their dialogs, the header, the sidebar's tree.
+    checkPageLook(window, app, check);
     closeMenus(window);
 
     // 4. The command palette: Escape closes it; the focus returns to the shell.

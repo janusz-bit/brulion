@@ -60,6 +60,16 @@ public:
     /// (InlineRenderer::withFindHighlight(); docs/UI.md "Find and replace"). `html` unchanged for "".
     Q_INVOKABLE QString findHighlightedHtml(const QString &html, const QString &query, bool matchCase,
                                             bool matchDiacritics, bool wholeWord, const QString &color) const;
+    /// The editor's "Zakreśl" on a block's text (markdown::setHighlight(), docs/UI.md "Coloured
+    /// highlights"): `color` a palette name ("default", "red", …) or "" to remove the highlight
+    /// around the selection [from, to). { text, from, to (the highlighted text), changed }.
+    Q_INVOKABLE QVariantMap setHighlight(const QString &text, int from, int to, const QString &color) const;
+    /// The page icon a typed or pasted text names (markdown::parsePageIcon(): an emoji, Iconize's
+    /// `LiBookOpen`): { kind: "emoji" | "app" | "", name }.
+    Q_INVOKABLE QVariantMap pageIcon(const QString &text) const;
+    /// The highlight palette for menus: [{ name, tint (what the app draws), written (what the
+    /// note gets) }], "default" first.
+    Q_INVOKABLE QVariantList highlightColors() const;
 };
 
 } // namespace brulion::ui

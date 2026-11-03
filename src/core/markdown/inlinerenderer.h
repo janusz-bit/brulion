@@ -4,9 +4,11 @@
 //
 // Security: notes come from anywhere, so everything that is not recognised syntax is escaped —
 // raw HTML in a note is shown as text, never interpreted. The output only contains <b>, <i>,
-// <s>, <code>, <sup>, <sub>, <br/>, <span style>, <a href> and <hr/> (renderBlock) with attribute
-// values built by the renderer. No <img> is ever emitted (embeds and images become placeholder
-// links, the editor delegate shows the pictures), so rendering never loads anything.
+// <s>, <code>, <sup>, <sub>, <br/>, <span style>, <a href> (and <a name> for a page's app icon)
+// and <hr/> (renderBlock) with attribute values built by the renderer; a `<mark>` of the note is
+// a span tinted with one of the fixed highlight colours (markdown/highlight.h), never its CSS. No
+// <img> is ever emitted (embeds and images become placeholder links, the editor delegate shows
+// the pictures), so rendering never loads anything.
 //
 // Links (handled by the QML delegate's onLinkActivated):
 //   page:<target>[#<heading> | #^<id>]  wiki links, embeds, relative Markdown links
@@ -28,6 +30,7 @@
 
 #include "dates/names.h"
 #include "markdown/inline.h"
+#include "markdown/pagelook.h"
 #include "types.h"
 
 #include <QDate>
@@ -106,6 +109,11 @@ struct RenderContext {
     /// `journalConfig`; not with a `#heading` / `#^id`) are `day:<from>-<to>` links naming the
     /// link's range — the block editor's date menu on them — instead of `page:` links.
     bool dayLinks = false;
+    /// The icon of the page a link leads to (its target as written; docs/SYNTAX.md §4 "Page icon
+    /// and cover"), shown in front of a wiki link or a Markdown link to a note that resolves (not a
+    /// day: link): an emoji as text, an app icon as an anchor `<a name="brulion-icon:<name>">` with
+    /// three no-break spaces that RichTextPills draws the icon over. Unset or None: nothing.
+    std::function<PageIcon(const QString &target)> pageIcon;
     /// The vault's journal settings for `dayLinks`.
     VaultConfig journalConfig;
     /// Path parts of page links (docs/SYNTAX.md §2 "Path parts"): what parent part `part` (1-based)

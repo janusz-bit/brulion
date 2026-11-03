@@ -462,6 +462,29 @@ private Q_SLOTS:
         QVERIFY(page.contains(u"<a class=\"block-ref\" href=\"Inna.html#block-b1\">Strona i #wewnątrz</a>"_s));
     }
 
+    // Coloured highlights (docs/SYNTAX.md §11): `<mark>` with the palette's colour as Brulion writes
+    // it, never the note's CSS or attributes; unpaired tags and tags in code are text.
+    void htmlColouredHighlights()
+    {
+        ExportInput in;
+        in.files = {
+                iotest::text(u"Zakreślenia.md"_s,
+                             u"Zażółć <mark style=\"background: #FF5582A6;\">gęślą **jaźń**</mark> i ==zwykłe==.\n\n"
+                             u"<mark class=\"hltr-blue\" onclick=\"alert(1)\">niebieskie</mark> "
+                             u"<mark style=\"background:url(https://t.example/p.gif);position:fixed\">bez</mark>\n\n"
+                             u"`<mark>kod</mark>` <mark>otwarte\n"_s)};
+        const QList<FileEntry> entries = readZip(exportWith(u"html-site"_s, in).data);
+        const QString page = textOf(entries, u"Brulion/Zakreślenia.html"_s);
+        QVERIFY2(page.contains(u"Zażółć <mark style=\"background: #FF5582A6;\">gęślą <strong>jaźń</strong></mark> i "
+                               u"<mark>zwykłe</mark>."_s),
+                 qPrintable(page));
+        QVERIFY(page.contains(u"<mark style=\"background: #ADCCFFA6;\">niebieskie</mark> <mark>bez</mark>"_s));
+        QVERIFY(!page.contains(u"onclick"_s));
+        QVERIFY(!page.contains(u"t.example"_s));
+        QVERIFY(!page.contains(u"position:fixed"_s));
+        QVERIFY(page.contains(u"<code>&lt;mark&gt;kod&lt;/mark&gt;</code> &lt;mark&gt;otwarte"_s));
+    }
+
     void htmlHeadingLinksMatchLikeTheApp()
     {
         // Heading links and embeds as Brulion copies them (SYNTAX §2): markup and tag hashes left

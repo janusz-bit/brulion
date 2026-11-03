@@ -72,6 +72,8 @@ public:
     QVariantList propertyKeys() const override;
     QVariantList propertyValues(const QString &key, const QString &prefix, int limit = 20) const override;
     QString resolveLink(const QString &target, const QString &fromPath) const override;
+    /// The page's `icon` (markdown::pageLook of the file's properties, as the shell's Workspace).
+    markdown::PageIcon pageIcon(const QString &path) const override;
     /// The real index's shortest target (VaultIndex::linkTarget(), as the shell's Workspace).
     QString linkTarget(const QString &path, const QString &fromPath) const override;
     /// The real index's path parts (VaultIndex::resolveLinkPart(), as the shell's Workspace).

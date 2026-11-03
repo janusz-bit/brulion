@@ -16,7 +16,10 @@
 //      Recomputed when the layout changes (width, font, text) and only announced when different.
 // kind: "pill" for a span with its own text colour (a chip, a tag: radius = height / 2), "box" for
 // a fixed-pitch span (inline code) or any other background (a highlight: a small radius). Adjacent
-// fragments of one colour are one span (a highlight with bold words in it).
+// fragments of one colour are one span (a highlight with bold words in it). "icon": a page's app
+// icon in front of a link to it (an anchor named `brulion-icon:<name>`, docs/UI.md "Page icon and
+// cover") — {…, kind: "icon", icon: <name>, color: the link's colour}: the Repeater draws a BIcon
+// there instead of a shape.
 //
 //   TextEdit { id: edit; textFormat: TextEdit.RichText; readOnly: true; text: html }
 //   RichTextPills { id: pills; textDocument: edit.textDocument; lineHeight: 26 }
@@ -80,6 +83,9 @@ public:
         bool round = true; ///< "pill" (else "box")
         int from = 0;      ///< document positions of the whole span
         int to = 0;
+        /// A page's app icon in front of a link (InlineRenderer: an anchor named
+        /// `brulion-icon:<name>` over three no-break spaces): kind "icon", `color` the link's text colour.
+        QString icon;
         bool operator==(const Pill &other) const = default;
     };
 

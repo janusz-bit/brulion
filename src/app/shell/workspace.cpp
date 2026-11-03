@@ -865,6 +865,40 @@ QString Workspace::resolveLink(const QString &target, const QString &fromPath) c
     return m_index->resolveLink(target, fromPath).value_or(QString());
 }
 
+markdown::PageIcon Workspace::pageIcon(const QString &path) const
+{
+    const ParsedNote *note = m_index && !path.isEmpty() ? m_index->note(path) : nullptr;
+    return note ? editor::availablePageIcon(markdown::pageLook(note->properties).icon) : markdown::PageIcon();
+}
+
+QVariantList Workspace::pictureAttachments(const QString &query, int limit) const
+{
+    QVariantList out;
+    if (!m_index || limit <= 0)
+        return out;
+    const QStringList words = text::foldKey(query).split(u' ', Qt::SkipEmptyParts);
+    for (const VaultPath &path : m_index->attachments()) {
+        if (out.size() >= limit)
+            break;
+        if (paths::isIgnored(path) || !paths::isPicturePath(path) || !editor::canDecodePictureFormat(path))
+            continue;
+        const QString key = text::foldKey(path);
+        if (!std::all_of(words.cbegin(), words.cend(), [&](const QString &w) { return key.contains(w); }))
+            continue;
+        const qsizetype slash = path.lastIndexOf(u'/');
+        out.append(QVariantMap{{u"path"_s, path},
+                               {u"title"_s, path.mid(slash + 1)},
+                               {u"folder"_s, slash < 0 ? QString() : path.left(slash)},
+                               {u"url"_s, assetUrl(path)}});
+    }
+    return out;
+}
+
+QVariantMap Workspace::pageIconOf(const QString &path) const
+{
+    return editor::pageIconMap(pageIcon(paths::normalize(path)));
+}
+
 QVariantMap Workspace::linkPart(const QString &target, int part, const QString &fromPath) const
 {
     return linkPartToMap(m_index ? m_index->resolveLinkPart(target, part, fromPath) : std::nullopt);
@@ -1773,10 +1807,15 @@ QVariantList Workspace::switcherPages(const QString &query, int limit) const
         if (!alias.isEmpty())
             subtitle = folder.isEmpty() ? alias : alias + u" · "_s + folder;
         const bool journal = !journalDate(path).isEmpty();
-        out.append(QVariantMap{ { u"title"_s, paths::pageTitle(path) },
-                                { u"subtitle"_s, subtitle },
-                                { u"icon"_s, journal ? u"calendar"_s : u"file-text"_s },
-                                { u"path"_s, path } });
+        // The page's own icon (docs/UI.md "Page icon and cover") in place of the file's.
+        const markdown::PageIcon icon = pageIcon(path);
+        out.append(QVariantMap{{u"title"_s, paths::pageTitle(path)},
+                               {u"subtitle"_s, subtitle},
+                               {u"icon"_s, icon.kind == markdown::PageIcon::Kind::App ? icon.name
+                                           : journal                                  ? u"calendar"_s
+                                                                                      : u"file-text"_s},
+                               {u"emoji"_s, icon.kind == markdown::PageIcon::Kind::Emoji ? icon.name : QString()},
+                               {u"path"_s, path}});
     };
     const QString q = query.trimmed();
     if (q.isEmpty()) {

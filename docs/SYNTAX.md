@@ -820,6 +820,52 @@ stay as written (`[[A]]`, `#b`), any other item becomes `[[item]]` (a text `a, b
 properties go; removing one takes it out of every property holding it and removes a property
 whose list becomes empty.
 
+### Ikona i okładka strony / Page icon and cover
+
+A page's icon and cover are page properties (`markdown/pagelook.h`), in the keys that Obsidian's
+Iconize and Banners plugins and Logseq read, so they travel with the file and show in those apps:
+
+```yaml
+---
+icon: 🚀                       # or an app icon: LiBookOpen
+banner: "![[assets/góry.jpg]]" # or https://example.com/góry.jpg
+banner_y: 0.3                  # 0 top … 1 bottom (default 0.5)
+---
+```
+
+or in Logseq style `icon:: 🚀`, `banner:: ![[assets/góry.jpg]]`.
+
+* **Icon** — `icon`, else `banner_icon` (the Banners plugin's; a key whose value is no icon is
+  skipped): an **emoji** — at most two grapheme clusters, at most 32 UTF-16 units, no letters, no
+  blanks or control characters, at least one character from U+2000 on (`🚀`, `❤️`, `👨‍👩‍👧`,
+  `🇵🇱`, `1️⃣`, `★`; not `1`, `-`, `dom`) — or **one of the app's icons** written as Iconize writes
+  Lucide icons: `Li` + the name in Pascal case (`LiBookOpen` = `book-open`; a run of digits is a word
+  of its own: `LiHeading1` = `heading-1`). Other icon packs (`FasHome`, `RiHome…`), words and links
+  are no icon: shown nowhere, kept as written; so is a Lucide icon this build has no picture for.
+  Quotes around a Logseq value are dropped.
+* **Cover** — `banner`: `![[file]]` (Banners' own form), `[[file]]`, `[[file|alias]]` (alias and a
+  fragment dropped), `![alt](file)` / `![](<file with spaces>)` (percent-encoding decoded), a bare
+  path (`assets/a.png`) — resolved like any link to a file of the notebook — or an `http:` /
+  `https:` URL with a host (also inside `![](…)`): a picture from the internet, shown only through
+  the web-picture path of §2 ("Pictures from the internet": from the device's cache, fetched when
+  the user allows it, never by QML). An unquoted YAML `[[file]]` (a nested list) is read by its first
+  item. Other schemes (`javascript:`, `data:`, `file:`), several links, text around the picture or a
+  line break are no cover. **`banner_y`**: a number 0 … 1 (also text, a decimal comma allowed) — the
+  part of the picture shown when it is taller than the cover's band; anything else is ½.
+* **Writing** (the page menu's "Ikona strony…" / "Okładka…", the header): through the page-property
+  edits above, so only the edited key's line changes (a new key goes where new properties go: the
+  frontmatter, or the `key::` lines of a Logseq page). An emoji is written as it is, an app icon as
+  `LiBookOpen`; a cover as `"![[link]]"` (YAML quotes it: a `!` would start a tag) with the shortest
+  link to the file, as `[[` completion writes one, or as the URL; the position with two decimals.
+  Removing the icon removes `icon` and `banner_icon`; removing the cover `banner` and `banner_y`. A
+  file whose name no wiki link can hold (`]]`, `|`, `#`) is refused.
+* **Where it shows** (docs/UI.md "Page icon and cover"): the icon before the page's title, in the
+  sidebar's tree, favourites and recent pages, All pages, the quick switcher, and in front of links
+  to the page in rendered text (`InlineRenderer`: an emoji as text; an app icon as an anchor named
+  `brulion-icon:<name>` over three no-break spaces, drawn by the app — the exports and the clipboard's HTML do
+  not show it); the cover as a band at the top of the page. Block properties `icon::` are no page
+  icon.
+
 ### Tryb notatki / Note mode
 
 Every note is shown in one of two modes; the Markdown is the same in both:
@@ -1135,10 +1181,51 @@ type:tasks ref:this status:open group:page
 
 ## 11. Other rendering extensions (Obsidian compatible)
 
-`==highlight==`, `%%hidden comment%%`, callouts `> [!note] Title` (`note`, `tip`,
-`warning`, `danger`, `info`, `todo`, `quote`), footnotes `[^1]`, GFM tables, task lists,
-strikethrough, autolinks, math formulas and Mermaid diagrams (below). Raw HTML in notes is
-rendered as escaped text (never executed).
+`==highlight==`, coloured highlights (below), `%%hidden comment%%`, callouts `> [!note] Title`
+(`note`, `tip`, `warning`, `danger`, `info`, `todo`, `quote`), footnotes `[^1]`, GFM tables, task
+lists, strikethrough, autolinks, math formulas and Mermaid diagrams (below). Raw HTML in notes is
+rendered as escaped text (never executed) — apart from the `<mark>` tags of coloured highlights,
+which are read, never passed on.
+
+### Kolorowe zakreślenia / Coloured highlights
+
+Obsidian has no syntax of its own for a coloured highlight; its Highlightr plugin writes HTML that
+Obsidian, GitHub, Pandoc and browsers show without any plugin. Brulion reads and writes that
+(`markdown/highlight.h`):
+
+```markdown
+To jest ==zwykłe zakreślenie==, a to <mark style="background: #FF5582A6;">czerwone</mark>.
+<mark class="hltr-blue">niebieskie</mark> · <mark>bez koloru</mark>
+```
+
+* **Palette** — Highlightr's default colours, written exactly so: red `#FF5582A6`, orange
+  `#FFB86CA6`, yellow `#FFF3A3A6`, green `#BBFABBA6`, cyan `#ABF7F7A6`, blue `#ADCCFFA6`, purple
+  `#D2B3FFA6`, pink `#FFB8EBA6`, grey `#CACFD9A6`; `==…==` (and a `<mark>` without a colour) is the
+  default highlight (the theme's).
+* **Reading** — a `<mark …>` tag as CommonMark reads an HTML tag (tag name in any case, attributes
+  quoted or not, on one line, at most 512 characters; `<marker>`, `<mark/>` are not), closed by
+  `</mark>`; each `</mark>` closes the nearest open one (nesting allowed), unpaired tags stay text,
+  and so do tags in code spans and comments. The text between is inline Markdown (`**bold**`,
+  links, `==…==`). The colour comes from the `style`'s `background-color` / `background`
+  declaration (the last one; its first colour: `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`,
+  `rgba()`, a CSS colour name, also inside `linear-gradient(…)` as Highlightr's "lowlight" writes
+  it), else from Highlightr's class `hltr-<colour>`; Highlightr's colours are matched exactly
+  (with or without their alpha), any other colour goes to the nearest palette colour by hue (grey
+  when barely coloured or nearly black or white), anything else (no colour, `url(…)`, an
+  expression) is the default highlight. **Safety**: the note's CSS and other attributes are never
+  passed on — the renderer, the editor's syntax colours and the exports show only palette colours
+  (`InlineRenderer`: a span tinted with the palette's translucent colour, readable on light and
+  dark paper).
+* **Writing** (the editor's "Zakreśl", docs/UI.md "Coloured highlights";
+  `markdown::setHighlight`) — the default colour as `==text==` (or `<mark>text</mark>` where `==`
+  could not pair, "a==(b)==c"), the others as `<mark style="background: #FF5582A6;">text</mark>`.
+  A selection inside a highlight (or covering one exactly, markers included) recolours or removes
+  that highlight; otherwise the selection, without blanks at its ends, is wrapped and highlights
+  wholly inside it lose their markers. A selection over several lines or one cutting a highlight's
+  marker is refused. Nothing else of the text changes.
+* **Exports** — HTML: `<mark style="background: #FF5582A6;">` (the palette's colour; `<mark>`
+  for the default); Pandoc: `[text]{.mark .hltr-red}` (`[text]{.mark}` for the default); the
+  Markdown, Obsidian and Logseq exports keep the source.
 
 ### Math formulas
 

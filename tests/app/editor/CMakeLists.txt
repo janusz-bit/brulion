@@ -78,6 +78,10 @@ brulion_add_test(tst_editor_notemode
 brulion_add_test(tst_editor_pageprops
     SOURCES tst_editor_pageprops.cpp
     LIBS brulion_editor brulion_core_markdown)
+# The page's look (icon, cover) and coloured highlights: PageController.look, its edits, setHighlight.
+brulion_add_test(tst_editor_look
+    SOURCES tst_editor_look.cpp
+    LIBS brulion_editor brulion_core_markdown)
 # The size of embedded pictures read from their headers / an SVG's root (picturesize.h).
 brulion_add_test(tst_editor_picturesize
     SOURCES tst_editor_picturesize.cpp

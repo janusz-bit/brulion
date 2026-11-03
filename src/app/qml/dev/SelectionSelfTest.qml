@@ -472,6 +472,29 @@ QtObject {
                 tap(window.menuItemNamed(editor.textMenu, "editTextCopy"))
             },
             wait(() => clip() === "Jadę" && !editor.textMenu.opened, "its Kopiuj copies the selected text"),
+            // ---- Its "Zakreśl…" (docs/UI.md "Coloured highlights") -----------------------------------
+            () => {
+                const edit = editor.activeEditor
+                edit.select(0, 4)
+                const r = edit.positionToRectangle(2)
+                events.mouseClick(edit, r.x, r.y + r.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+            },
+            wait(() => editor.textMenu !== null && editor.textMenu.opened, "the edited text's menu again"),
+            () => tap(window.menuItemNamed(editor.textMenu, "editTextHighlight")),
+            wait(() => editor.highlightMenu !== null && editor.highlightMenu.opened && !editor.textMenu.opened,
+                 "Zakreśl… opens the colours"),
+            () => {
+                check(window.menuItemNamed(editor.highlightMenu, "highlight-default") !== null
+                      && window.menuItemNamed(editor.highlightMenu, "highlight-remove") !== null,
+                      "with the default colour and Usuń zakreślenie")
+                tap(window.menuItemNamed(editor.highlightMenu, "highlight-red"))
+            },
+            wait(() => window.pageText().indexOf("- <mark style=\"background: #FF5582A6;\">Jadę</mark> \u00a0Anią\n") > 0,
+                 () => "Czerwony highlights the selection: " + JSON.stringify(window.pageText().slice(0, 160))),
+            wait(() => editor.activeEditor !== null && editor.activeEditor.selectedText === "Jadę",
+                 "the highlighted text stays selected"),
+            () => page.undo(),
+            wait(() => window.pageText().indexOf("- Jadę \u00a0Anią\n") > 0, "the highlight is one undo step"),
             () => {
                 page.undo()
                 page.stopEditing()

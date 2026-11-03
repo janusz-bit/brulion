@@ -12,7 +12,8 @@ import Brulion
 //       onItemActivated: (item) => …
 //   }
 //
-// items: array of { title, subtitle?, icon?, shortcut?, … } (extra fields are passed back).
+// items: array of { title, subtitle?, icon?, emoji? (in the icon's place), shortcut?, … } (extra
+// fields are passed back).
 // Filtering is fuzzy and diacritic-insensitive (TextHelper.fuzzyRank: "zolw" finds "Żółw";
 // subtitles match at half weight); matched characters are highlighted. `extraResults` are
 // appended after the matches (e.g. "Create page …"). Keyboard: Up/Down (wrapping),
@@ -234,6 +235,7 @@ T.Popup {
                 titleMarkup: modelData.markup
                 subtitle: modelData.item.subtitle || ""
                 iconName: modelData.item.icon || control.defaultIcon
+                iconEmoji: modelData.item.emoji || ""
                 selected: index === control.currentIndex
                 // Floating: one-line rows, the subtitle after the title (an even rhythm);
                 // full screen (phones): two lines.

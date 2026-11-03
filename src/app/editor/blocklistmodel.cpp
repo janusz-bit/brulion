@@ -1010,6 +1010,19 @@ std::function<markdown::LinkPartTarget::Kind(const QString &, int)> linkPartReso
     };
 }
 
+/// RenderContext::pageIcon through the host: the icon of the page a link on `path` leads to
+/// (EditorHost::pageIcon()); none without a host.
+std::function<markdown::PageIcon(const QString &)> pageIconResolver(const QPointer<EditorHost> &host,
+                                                                    const QString &path)
+{
+    return [host, path](const QString &target) -> markdown::PageIcon {
+        if (!host)
+            return {};
+        const QString resolved = host->resolveLink(target, path);
+        return resolved.isEmpty() ? markdown::PageIcon() : host->pageIcon(resolved);
+    };
+}
+
 } // namespace
 
 QString BlockListModel::linkUrlAt(int row, const QString &text, int position) const
@@ -1045,6 +1058,7 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
         };
     }
     ctx.resolveLinkPart = linkPartResolver(host, path);
+    ctx.pageIcon = pageIconResolver(host, path);
     ctx.blockText = [this, host](const QString &id) -> std::optional<QString> {
         for (int k = 0; k < m_doc.count(); ++k) {
             if (m_doc.at(k).blockId == id)
@@ -1100,6 +1114,7 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
     ctx.dateLinks = true;         // token menus (PageController::tokenChipIn; ranges in the block's body)
     const QPointer<EditorHost> host = m_host;
     ctx.resolveLinkPart = linkPartResolver(host, path);
+    ctx.pageIcon = pageIconResolver(host, path);
     if (host) {
         ctx.resolvePage = [host, path](const QString &target) -> std::optional<QString> {
             if (!host)

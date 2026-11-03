@@ -19,6 +19,8 @@ T.MenuItem {
     id: control
 
     property string iconName
+    /// A colour square in the icon's place (the highlight colours); transparent: none.
+    property color swatch: "transparent"
     property string shortcut
     property bool danger: false
     property string unavailable: ""
@@ -65,12 +67,23 @@ T.MenuItem {
                 id: menuIcon
                 anchors.verticalCenter: parent.verticalCenter
                 // A submenu's item: the submenu's icon (BMenu.iconName).
-                name: control.checkable ? (control.checked ? "check" : "")
+                name: control.swatch.a > 0 ? ""
+                    : control.checkable ? (control.checked ? "check" : "")
                     : control.iconName !== "" ? control.iconName
                     : (control.subMenu as BMenu)?.iconName ?? ""
-                collapseWhenEmpty: !control.checkable
+                collapseWhenEmpty: !control.checkable && control.swatch.a === 0
                 size: Theme.iconSize
                 color: control.danger ? Theme.dangerText : control.checkable ? Theme.link : Theme.fgMuted
+                Rectangle {
+                    visible: control.swatch.a > 0
+                    anchors.centerIn: parent
+                    width: Math.round(parent.width * 0.8)
+                    height: width
+                    radius: Theme.radiusXs
+                    color: control.swatch
+                    border.width: 1
+                    border.color: Theme.border
+                }
             }
             Text {
                 id: menuLabel

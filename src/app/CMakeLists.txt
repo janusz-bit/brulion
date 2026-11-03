@@ -64,6 +64,7 @@ set(BRULION_UI_QML
     qml/components/BMenuItem.qml
     qml/components/BMenuSeparator.qml
     qml/components/BMergeView.qml
+    qml/components/BPageIcon.qml
     qml/components/BPalette.qml
     qml/components/BProgressBar.qml
     qml/components/BQuickSwitcher.qml

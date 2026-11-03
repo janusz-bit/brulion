@@ -1,5 +1,7 @@
 #include "contentutil.h"
 
+#include "editorhost.h"
+
 #include "dates/format.h"
 #include "index/vaultindex.h"
 #include "markdown/blockdocument.h"
@@ -133,6 +135,12 @@ markdown::RenderContext renderContext(const VaultIndex *index, const VaultPath &
     if (index) {
         ctx.resolvePage = [index, fromPath](const QString &target) -> std::optional<QString> {
             return index->resolveLink(target, fromPath);
+        };
+        // A page's icon in front of links to it (docs/SYNTAX.md §4 "Page icon and cover").
+        ctx.pageIcon = [index, fromPath](const QString &target) -> markdown::PageIcon {
+            const std::optional<QString> path = index->resolveLink(target, fromPath);
+            const ParsedNote *note = path ? index->note(*path) : nullptr;
+            return note ? editor::availablePageIcon(markdown::pageLook(note->properties).icon) : markdown::PageIcon();
         };
         // [[Firma/Adam]]: every path part a link (docs/SYNTAX.md §2 "Path parts").
         ctx.resolveLinkPart = [index, fromPath](const QString &target, int part) {

@@ -6,6 +6,7 @@
 // leaves a square behind. The lists' mode (BRichText): the HTML set by RichTextPills itself and
 // cut after maximumLineCount lines with "…" — never inside a character, never as part of a link
 // or a chip —, cut anew for another width or font, nothing done before the QML object is complete.
+#include "markdown/highlight.h"
 #include "markdown/inlinerenderer.h"
 #include "richtextpills.h"
 
@@ -200,6 +201,44 @@ private Q_SLOTS:
             QCOMPARE(m.value(u"color"_s).value<QColor>(), pills.pillList()[i].color);
             QCOMPARE(m.value(u"width"_s).toReal(), pills.pillList()[i].rect.width());
         }
+    }
+
+    // Coloured highlights (`<mark>`) are boxes in their palette colours; a page's app icon in front
+    // of a link is a pill of kind "icon" naming the icon, in the link's colour, over its em space.
+    void colouredHighlightsAndPageIcons()
+    {
+        RenderContext c;
+        c.palette.link = u"#2c6aa3"_s;
+        c.pageIcon = [](const QString &target) {
+            return target == u"Książki"_s ? PageIcon{PageIcon::Kind::App, u"book-open"_s} : PageIcon();
+        };
+        const QString html = InlineRenderer(c).render(
+                u"Czytam <mark style=\"background: #FF5582A6;\">ważne</mark> w [[Książki]] i ==to=="_s);
+        QTextDocument doc;
+        setUp(doc);
+        RichTextPills pills;
+        pills.setLineHeight(LineHeight);
+        pills.attach(&doc);
+        doc.setHtml(html);
+        QCOMPARE(brushesLeft(doc), 0);
+        const QVariantList list = pills.pills();
+        QCOMPARE(list.size(), 3);
+        const QVariantMap red = list[0].toMap();
+        QCOMPARE(red.value(u"kind"_s).toString(), u"box"_s);
+        QCOMPARE(red.value(u"color"_s).value<QColor>(), QColor(highlightTint(HighlightColor::Red)));
+        const QVariantMap icon = list[1].toMap();
+        QCOMPARE(icon.value(u"kind"_s).toString(), u"icon"_s);
+        QCOMPARE(icon.value(u"icon"_s).toString(), u"book-open"_s);
+        QCOMPARE(icon.value(u"color"_s).value<QColor>(), QColor(u"#2c6aa3"_s));
+        QVERIFY(icon.value(u"width"_s).toReal() > 4);
+        const RichTextPills::Pill &iconPill = pills.pillList()[1];
+        QCOMPARE(doc.toRawText().mid(iconPill.from, iconPill.to - iconPill.from), QString(3, QChar(0x00A0)));
+        QCOMPARE(list[2].toMap().value(u"kind"_s).toString(), u"box"_s);
+        QCOMPARE(list[2].toMap().value(u"icon"_s).toString(), QString());
+        // The icon's anchor is the link's: a click on it follows the link.
+        QTextCursor cursor(&doc);
+        cursor.setPosition(iconPill.from + 1);
+        QCOMPARE(cursor.charFormat().anchorHref(), u"page:Ksi%C4%85%C5%BCki"_s);
     }
 
     // Each rectangle covers its span's glyphs and stays inside its fixed-height line, centred on

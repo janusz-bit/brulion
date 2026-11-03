@@ -109,8 +109,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Statystyki i tryb skupienia** — liczba słów i znaków, czas czytania; widok bez pasków bocznych,
   kursor trzymany na środku ekranu.
 * **Własne skróty klawiszowe** — zmiana skrótów w ustawieniach, opcjonalnie tryb Vim (Obsidian).
-* **Wygląd stron** — ikona strony, okładka; kolorowe zakreślenia (Obsidian) obok dzisiejszego
-  `==…==`.
 
 ## Widoki i dane
 

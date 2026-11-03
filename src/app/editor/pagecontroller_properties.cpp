@@ -9,11 +9,16 @@
 
 #include "markdown/frontmatter.h"
 #include "markdown/notemode.h"
+#include "markdown/pagelook.h"
 #include "markdown/properties.h"
 #include "text/text.h"
+#include "util/paths.h"
 
 #include <QJSValue>
 #include <QSet>
+#include <QUrl>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -160,6 +165,14 @@ void PageController::updatePageProperties()
                                         {u"editable"_s, p.editable}});
             }
         }
+        // The look's properties (keys lower case, as parseNote() keeps them): lists by their items.
+        m_lookProperties.clear();
+        for (const markdown::PageProperty &p : props.items) {
+            const QString key = p.key.toLower();
+            if (!m_lookProperties.contains(key))
+                m_lookProperties.insert(key, p.type == PropertyType::List ? QVariant(p.items) : p.value);
+        }
+        updateLook();
         map = {{u"items"_s, items},
                {u"tags"_s, tags},
                {u"aliases"_s, aliases},
@@ -186,6 +199,137 @@ void PageController::updatePageProperties()
         return;
     m_pageProperties = map;
     Q_EMIT pagePropertiesChanged();
+}
+
+void PageController::updateLook()
+{
+    const markdown::PageLook look = markdown::pageLook(m_lookProperties);
+    const markdown::PageCover &c = look.cover;
+    QVariantMap cover{{u"kind"_s, QString()}, {u"target"_s, c.target}, {u"position"_s, c.position},
+                      {u"url"_s, QString()},  {u"state"_s, QString()}, {u"host"_s, QString()},
+                      {u"error"_s, QString()}};
+    if (c.kind == markdown::PageCover::Kind::File) {
+        cover.insert(u"kind"_s, u"file"_s);
+        const QString path = m_host ? m_host->resolveLink(c.target, m_path) : QString();
+        if (path.isEmpty() || !paths::isPicturePath(path) || !m_host->canDecodePicture(path)) {
+            cover.insert(u"state"_s, u"missing"_s);
+        } else {
+            cover.insert(u"state"_s, u"ready"_s);
+            cover.insert(u"url"_s, m_host->assetUrl(path).toString());
+        }
+    } else if (c.kind == markdown::PageCover::Kind::Web) {
+        // QML loads nothing from the network: the host's cached copy, once the user allowed it.
+        cover.insert(u"kind"_s, u"web"_s);
+        const QVariantMap picture = m_host ? m_host->webPicture(c.target) : QVariantMap();
+        cover.insert(u"state"_s, picture.value(u"state"_s, u"ask"_s).toString());
+        cover.insert(u"url"_s, picture.value(u"url"_s).toString());
+        cover.insert(u"error"_s, picture.value(u"error"_s).toString());
+        cover.insert(u"host"_s, QUrl(c.target).host());
+    }
+    const QVariantMap map{{u"icon"_s, editor::pageIconMap(editor::availablePageIcon(look.icon))}, {u"cover"_s, cover}};
+    if (map == m_look)
+        return;
+    m_look = map;
+    Q_EMIT lookChanged();
+}
+
+namespace {
+
+/// Set `key` where the page has it (any case: the key as written), else where new properties go.
+markdown::PropertyEditResult setLookProperty(const QString &content, const QString &key, const QVariant &value,
+                                             PropertyType type)
+{
+    const markdown::PageProperties props = markdown::readPageProperties(content);
+    PropertySource source = props.addTarget();
+    QString written = key;
+    for (const markdown::PageProperty &p : props.items) {
+        if (p.key.compare(key, Qt::CaseInsensitive) == 0) {
+            source = p.source;
+            written = p.key;
+            break;
+        }
+    }
+    return markdown::setPageProperty(content, source, written, value, type);
+}
+
+/// Remove every property named one of `keys` (any case, either block); Unchanged when none.
+markdown::PropertyEditResult removeLookProperties(const QString &content, const QStringList &keys)
+{
+    markdown::PropertyEditResult out{content, PropertyEditStatus::Unchanged};
+    for (const QString &key : keys) {
+        for (int guard = 0; guard < 8; ++guard) {
+            const markdown::PageProperties props = markdown::readPageProperties(out.content);
+            const auto it =
+                    std::find_if(props.items.cbegin(), props.items.cend(), [&](const markdown::PageProperty &p) {
+                        return p.key.compare(key, Qt::CaseInsensitive) == 0;
+                    });
+            if (it == props.items.cend())
+                break;
+            const markdown::PropertyEditResult r = markdown::removePageProperty(out.content, it->source, it->key);
+            if (r.status != PropertyEditStatus::Changed)
+                return {content, r.status};
+            out = r;
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+QVariantMap PageController::setPageIcon(const QString &kind, const QString &name)
+{
+    markdown::PageIcon icon;
+    if (kind == u"emoji")
+        icon = {markdown::PageIcon::Kind::Emoji, name.trimmed()};
+    else if (kind == u"app")
+        icon = {markdown::PageIcon::Kind::App, name.trimmed()};
+    const QString value = markdown::pageIconValue(icon);
+    if (!kind.isEmpty() && (value.isEmpty() || markdown::parsePageIcon(value) != icon))
+        return editResult(PropertyEditStatus::InvalidValue, tr("Not an emoji or an icon of the app"));
+    const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
+        if (value.isEmpty())
+            return removeLookProperties(content,
+                                        {markdown::PageIconKey.toString(), markdown::PageIconFallbackKey.toString()});
+        return setLookProperty(content, markdown::PageIconKey.toString(), value, PropertyType::Text);
+    });
+    return editResult(status, reasonFor(status, u"text"_s, {}));
+}
+
+QVariantMap PageController::setPageCover(const QString &given)
+{
+    const QString target = given.trimmed();
+    QString value;
+    if (!target.isEmpty()) {
+        markdown::PageCover cover = markdown::parsePageCover(target);
+        if (cover.kind != markdown::PageCover::Kind::Web) {
+            // A notebook file: the shortest link to it, as `[[` completion writes one.
+            const QString path = paths::normalize(target);
+            QString link = m_host ? m_host->linkTarget(path, m_path) : QString();
+            if (link.isEmpty())
+                link = path;
+            cover = {markdown::PageCover::Kind::File, link, 0.5};
+        }
+        value = markdown::pageCoverValue(cover);
+        // A name no wiki link can hold (`]]`, `|`, `#`) would read as another file.
+        if (markdown::parsePageCover(value).target != cover.target)
+            return editResult(PropertyEditStatus::InvalidValue, tr("This file's name cannot be used in a link"));
+    }
+    const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
+        if (value.isEmpty())
+            return removeLookProperties(content,
+                                        {markdown::PageCoverKey.toString(), markdown::PageCoverPositionKey.toString()});
+        return setLookProperty(content, markdown::PageCoverKey.toString(), value, PropertyType::Text);
+    });
+    return editResult(status, reasonFor(status, u"text"_s, {}));
+}
+
+QVariantMap PageController::setPageCoverPosition(double position)
+{
+    const QString value = markdown::coverPositionValue(position);
+    const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
+        return setLookProperty(content, markdown::PageCoverPositionKey.toString(), value, PropertyType::Number);
+    });
+    return editResult(status, reasonFor(status, u"number"_s, {}));
 }
 
 PropertyEditStatus

@@ -287,6 +287,13 @@ QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
     const QString masked = markdown::maskInlineCode(text);
     QList<InlineAtom> atoms;
     codeAndCommentAtoms(text, masked, atoms, codeSpan);
+    // Coloured highlights: pandoc's highlight span with Highlightr's class for the colour.
+    markAtoms(masked, atoms, [](markdown::HighlightColor color) {
+        const QString close = color == markdown::HighlightColor::Default
+                                      ? u"]{.mark}"_s
+                                      : u"]{.mark .hltr-"_s + markdown::highlightColorName(color) + u'}';
+        return std::pair{u"["_s, close};
+    });
 
     // Formulas (docs/SYNTAX.md §11) as pandoc's TeX math: no space inside the dollars.
     for (const markdown::MathSpan &span : markdown::findMathSpans(masked)) {
