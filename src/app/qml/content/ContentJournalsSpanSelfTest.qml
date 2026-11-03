@@ -145,6 +145,10 @@ Item {
         return !test.stream.active
     }
 
+    /// A step is running. QtTest's events process events before they return (a touch sequence's
+    /// commit(), a mouse click), so a step that outlasts the interval lets the timer fire from
+    /// inside it: that tick is skipped — it would run the same step again and then skip the next.
+    property bool inStep: false
     Timer {
         interval: 120
         repeat: true
@@ -156,12 +160,16 @@ Item {
                 Qt.exit(test.failures === 0 ? 0 : 1)
                 return
             }
+            if (test.inStep)
+                return
             let done = true
+            test.inStep = true
             try {
                 done = test.steps[test.stepIndex]() !== false
             } catch (e) {
                 test.check(false, "step " + test.stepIndex + " threw: " + e)
             }
+            test.inStep = false
             if (!done && ++test.waited < 80)
                 return
             if (!done)
