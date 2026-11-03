@@ -16,6 +16,7 @@
 #include "queryresultmodel.h"
 #include "richtextlinks.h"
 #include "richtextpills.h"
+#include "streamfind.h"
 #include "streamselection.h"
 #include "suggestionmodel.h"
 
@@ -39,6 +40,12 @@ struct StreamSelectionForeign {
     Q_GADGET
     QML_FOREIGN(brulion::editor::StreamSelection)
     QML_NAMED_ELEMENT(StreamSelection)
+};
+
+struct StreamFindForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::StreamFind)
+    QML_NAMED_ELEMENT(StreamFind)
 };
 
 struct BlockListModelForeign {

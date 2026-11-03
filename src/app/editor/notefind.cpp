@@ -100,6 +100,7 @@ void NoteFind::setActive(bool active)
         return;
     }
     m_timer.stop();
+    m_enter = Enter::None;
     m_text.clear();
     m_matches.clear();
     m_current = -1;
@@ -146,6 +147,30 @@ void NoteFind::setWholeWord(bool on)
     schedule(true);
 }
 
+void NoteFind::setWrap(bool wrap)
+{
+    if (m_wrap == wrap)
+        return;
+    m_wrap = wrap;
+    Q_EMIT wrapChanged();
+}
+
+bool NoteFind::stale() const
+{
+    return m_timer.isActive() || m_jump || m_appliedQuery != m_query || m_appliedOptions != m_options
+           || m_text != sourceOfSearch();
+}
+
+void NoteFind::enter(bool first)
+{
+    m_enter = first ? Enter::First : Enter::Last;
+    m_jump = false;
+    if (!m_controller || !m_controller->loaded() || !m_active)
+        return; // once the note is loaded (recount())
+    m_timer.stop();
+    recount();
+}
+
 void NoteFind::schedule(bool jump)
 {
     m_jump = m_jump || jump;
@@ -187,6 +212,26 @@ void NoteFind::recount()
 {
     QString text = sourceOfSearch();
     const bool sameSearch = m_appliedQuery == m_query && m_appliedOptions == m_options;
+    if (m_enter != Enter::None) {
+        // Entering a note (the journal stream): its first or last match once it is loaded.
+        if (!m_controller || !m_controller->loaded())
+            return;
+        const bool first = m_enter == Enter::First;
+        m_enter = Enter::None;
+        m_jump = false;
+        m_text = std::move(text);
+        m_matches = text::findMatches(m_text, m_query, m_options);
+        m_appliedQuery = m_query;
+        m_appliedOptions = m_options;
+        countRisks();
+        m_current = -1;
+        Q_EMIT matchesChanged();
+        if (m_matches.isEmpty())
+            Q_EMIT endReached(first);
+        else
+            show(first ? 0 : int(m_matches.size() - 1));
+        return;
+    }
     if (sameSearch && text == m_text && !m_jump)
         return;
     const qsizetype keep = m_current >= 0 && m_current < m_matches.size() ? m_matches.at(m_current).start : -1;
@@ -205,10 +250,14 @@ void NoteFind::recount()
         return;
     }
     Q_EMIT matchesChanged();
-    if (m_matches.isEmpty())
-        return;
     const auto at = std::lower_bound(m_matches.cbegin(), m_matches.cend(), m_origin,
                                      [](const text::TextRange &r, qsizetype v) { return r.start < v; });
+    if (at == m_matches.cend() && !m_wrap) {
+        Q_EMIT endReached(true); // nothing from here on in this note
+        return;
+    }
+    if (m_matches.isEmpty())
+        return;
     show(at == m_matches.cend() ? 0 : int(std::distance(m_matches.cbegin(), at)));
 }
 
@@ -258,29 +307,51 @@ void NoteFind::show(int index)
 void NoteFind::next()
 {
     refresh();
-    if (m_matches.isEmpty())
+    if (m_matches.isEmpty()) {
+        if (!m_wrap)
+            Q_EMIT endReached(true);
         return;
+    }
     if (m_current >= 0) {
+        if (!m_wrap && m_current + 1 >= m_matches.size()) {
+            Q_EMIT endReached(true);
+            return;
+        }
         show(int((m_current + 1) % m_matches.size()));
         return;
     }
     const auto at = std::lower_bound(m_matches.cbegin(), m_matches.cend(), m_origin,
                                      [](const text::TextRange &r, qsizetype v) { return r.start < v; });
+    if (at == m_matches.cend() && !m_wrap) {
+        Q_EMIT endReached(true);
+        return;
+    }
     show(at == m_matches.cend() ? 0 : int(std::distance(m_matches.cbegin(), at)));
 }
 
 void NoteFind::previous()
 {
     refresh();
-    if (m_matches.isEmpty())
+    if (m_matches.isEmpty()) {
+        if (!m_wrap)
+            Q_EMIT endReached(false);
         return;
+    }
     if (m_current >= 0) {
+        if (!m_wrap && m_current == 0) {
+            Q_EMIT endReached(false);
+            return;
+        }
         show(int((m_current + m_matches.size() - 1) % m_matches.size()));
         return;
     }
     const auto at = std::lower_bound(m_matches.cbegin(), m_matches.cend(), m_origin,
                                      [](const text::TextRange &r, qsizetype v) { return r.start < v; });
     const qsizetype before = std::distance(m_matches.cbegin(), at) - 1;
+    if (before < 0 && !m_wrap) {
+        Q_EMIT endReached(false);
+        return;
+    }
     show(before >= 0 ? int(before) : int(m_matches.size() - 1));
 }
 
@@ -307,7 +378,10 @@ bool NoteFind::replaceCurrent(const QString &replacement)
     QString line = replacement;
     line.replace(u'\r', u' ').replace(u'\n', u' ');
     if (QStringView(m_text).sliced(range.start, range.length) == line) {
-        show(int((m_current + 1) % m_matches.size()));
+        if (!m_wrap && m_current + 1 >= m_matches.size())
+            Q_EMIT endReached(true);
+        else
+            show(int((m_current + 1) % m_matches.size()));
         return false;
     }
     if (sourceMode()) {
