@@ -118,15 +118,15 @@ ApplicationWindow {
     }
 
     Shortcut {
-        sequence: "Alt+Left"
+        sequence: ShortcutMap.sequences["nav.back"] || ""
         onActivated: AppController.back(window.tabId)
     }
     Shortcut {
-        sequence: "Alt+Right"
+        sequence: ShortcutMap.sequences["nav.forward"] || ""
         onActivated: AppController.forward(window.tabId)
     }
     Shortcut {
-        sequence: "Ctrl+W"
+        sequence: ShortcutMap.sequences["tab.close"] || ""
         onActivated: window.close()
     }
 }
