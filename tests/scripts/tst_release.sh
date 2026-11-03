@@ -640,6 +640,13 @@ expect "no section for 0.3.6: pointed out" has 'Lista zmian.md has no section "#
 commit "$work" 'src/app/shell/guide/Lista zmian.md' '## 0.3.6 — 22 października 2026' "List the changes of 0.3.6"
 rel "$work" --dry-run patch
 expect "a section for 0.3.6: no warning" lacks 'has no section'
+# A long list after the section: the search stops at the section while git is still writing,
+# which must not count as a missing section (SIGPIPE under pipefail).
+yes 'Starsza zmiana z długim opisem, żeby lista była dłuższa niż bufor potoku.' |
+  head -c 2000000 >>"$work/src/app/shell/guide/Lista zmian.md" || true
+commit "$work" 'src/app/shell/guide/Lista zmian.md' '' "List older changes"
+rel "$work" --dry-run patch
+expect "a section above a long list: no warning" lacks 'has no section'
 rel "$work" --dry-run 0.4.0-rc.1
 expect "a pre-release needs no section" lacks 'has no section'
 

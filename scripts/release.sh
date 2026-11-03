@@ -266,10 +266,11 @@ if [[ $(news_of "$release_head") == "$(news_of "$main_head")" ]]; then
   warn "$notes has not changed since $last (its news; commit \"Update release notes for $tag\" on main first)"
 fi
 # The documentation notebook's list of changes has a section "## X.Y.Z — <date>" per release (a
-# pre-release needs none).
+# pre-release needs none). grep reads the whole list (no -q): stopping at the section would kill
+# git show with SIGPIPE, which pipefail reports as a missing section.
 changelog='src/app/shell/guide/Lista zmian.md'
 if [[ $new == "$release" ]] && git cat-file -e "$main_head:$changelog" 2>/dev/null &&
-  ! git show "$main_head:$changelog" | grep -qE "^## ${release//./\\.}( |$)"; then
+  ! git show "$main_head:$changelog" | grep -E "^## ${release//./\\.}( |$)" >/dev/null; then
   warn "$changelog has no section \"## $release\" (add the changes of $tag to it on main first)"
 fi
 
