@@ -111,6 +111,16 @@ private Q_SLOTS:
         // Narrower: scaled down, the height too.
         v.setWidth(natural.width() / 2);
         QCOMPARE(v.implicitHeight(), std::ceil(natural.height() / 2));
+        // A very tall diagram is scaled down to MaxPaintExtent (its texture stays small enough).
+        MermaidView tall;
+        QString chain = u"graph TD\n"_s;
+        for (int i = 0; i < 80; ++i)
+            chain += u"n"_s + QString::number(i) + u"-->n"_s + QString::number(i + 1) + u'\n';
+        tall.setSource(chain);
+        QVERIFY(tall.diagramSize().height() > MermaidView::MaxPaintExtent);
+        tall.setWidth(600);
+        QVERIFY(tall.implicitHeight() <= MermaidView::MaxPaintExtent);
+        QVERIFY(tall.paintScale() < 1);
         // The font changes the layout.
         v.setFontPixelSize(20);
         QVERIFY(v.diagramSize().width() > natural.width());
@@ -182,7 +192,7 @@ private Q_SLOTS:
                 QVERIFY2(m.contains(u"7"_s), qPrintable(m));
         }
         for (const QString &what : {u"nodes"_s, u"links"_s, u"subgraphs"_s, u"nesting"_s, u"participants"_s,
-                                    u"messages"_s, u"slices"_s, u"source"_s, u"layout"_s})
+                                    u"messages"_s, u"statements"_s, u"slices"_s, u"source"_s, u"size"_s, u"layout"_s})
             QVERIFY(!MermaidView::errorMessage(Error{Error::Code::TooLarge, 0, what}, QString()).contains(u"Line"_s));
     }
 

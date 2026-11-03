@@ -98,7 +98,7 @@ gantt
     Płytki :a1, 2026-11-10, 5d
 ```
 
-Układ węzłów jest podobny do tego z Obsidiana, ale nie identyczny co do piksela. Bardzo duże diagramy (ponad 1000 węzłów, 3000 połączeń albo 100 kB tekstu) nie są rysowane — Brulion pokazuje wtedy źródło i wyjaśnia dlaczego.
+Układ węzłów jest podobny do tego z Obsidiana, ale nie identyczny co do piksela. Bardzo duże diagramy (ponad 1000 węzłów, 3000 połączeń, 100 kB tekstu albo rysunek dłuższy niż 50 000 pikseli) nie są rysowane — Brulion pokazuje wtedy źródło i wyjaśnia dlaczego.
 
 ## Eksport
 Eksport HTML (strona i jeden plik) zawiera diagram jako obraz SVG, który ciemnieje razem z ciemnym motywem przeglądarki, a pod nim zwinięte źródło. W eksporcie do Markdowna, Obsidiana, Logseqa i Pandoca zostaje źródło (Pandoc z dodatkiem `mermaid-filter` też je narysuje). Skopiowany blok trafia do schowka jako źródło.

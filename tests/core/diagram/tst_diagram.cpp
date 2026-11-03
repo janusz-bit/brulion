@@ -122,6 +122,10 @@ private Q_SLOTS:
         QTest::newRow("sequence nonsense") << u"sequenceDiagram\n\nA => B"_s << int(C::Syntax) << 3;
         QTest::newRow("note without colon") << u"sequenceDiagram\nNote right of A tekst"_s << int(C::Syntax) << 2;
         QTest::newRow("pie value") << u"pie\n\"Psy\" : dużo"_s << int(C::InvalidValue) << 2;
+        QTest::newRow("accDescr unclosed")
+                << u"graph TD\nA-->B\naccDescr {\n opis\nC-->D"_s << int(C::UnclosedBlock) << 3;
+        QTest::newRow("sequence accDescr unclosed")
+                << u"sequenceDiagram\naccDescr {\nA->>B: x"_s << int(C::UnclosedBlock) << 2;
         QTest::newRow("pie no quotes") << u"pie\nPsy : 3"_s << int(C::Syntax) << 2;
         QTest::newRow("pie no data") << u"pie title Nic"_s << int(C::NoData) << 1;
         QTest::newRow("pie only zeros") << u"pie\n\"A\" : 0\n\"B\" : -3"_s << int(C::NoData) << 0;
@@ -398,6 +402,11 @@ private Q_SLOTS:
         QCOMPARE(f.nodes.size(), 2);
         QCOMPARE(flow(u"graph TD\naccTitle: Dostępny tytuł\naccDescr {\n wiele\n linii\n}\nA"_s).title,
                  u"Dostępny tytuł"_s);
+        // Only the keywords: nodes named like them are nodes.
+        const Flowchart acc = flow(u"graph TD\naccTitleNode --> accDescrNode"_s);
+        QCOMPARE(acc.nodes.size(), 2);
+        QCOMPARE(acc.edges.size(), 1);
+        QVERIFY(acc.title.isEmpty());
     }
 
     void cssColors_data()
@@ -507,6 +516,21 @@ private Q_SLOTS:
                                       u"and:"_s, u"critical:krytyczne"_s, u"option:awaria"_s, u"opt:opcja"_s,
                                       u"break:przerwa"_s, u"rect:#c8dcff"_s}));
         QVERIFY(render(u"sequenceDiagram\nA->>B: x"_s).ok());
+        // Spaces anywhere before the colon; the text after it as written.
+        auto spaced = parseSequence(u"sequenceDiagram\nAlicja   Kowalska  ->>+   Bob :  Tekst:  z dwukropkiem"_s);
+        QVERIFY(spaced);
+        QCOMPARE(spaced->participants[0].id, u"Alicja Kowalska"_s);
+        QCOMPARE(spaced->participants[1].id, u"Bob"_s);
+        QVERIFY(spaced->events[0].activateTarget);
+        QCOMPARE(spaced->events[0].text, u"Tekst:  z dwukropkiem"_s);
+        auto noText = parseSequence(u"sequenceDiagram\nA->>B"_s);
+        QVERIFY(noText);
+        QVERIFY(noText->events[0].text.isEmpty());
+        auto note = parseSequence(u"sequenceDiagram\nnote   RIGHT OF   A :  uwaga: tak"_s);
+        QVERIFY(note);
+        QCOMPARE(note->events[0].place, SeqEvent::NotePlace::RightOf);
+        QCOMPARE(note->events[0].text, u"uwaga: tak"_s);
+        QVERIFY(parseSequence(u"sequenceDiagram\naccDescr {\nopis\n}\nA->>B: x"_s));
     }
 
     void sequenceExtras()
@@ -565,6 +589,13 @@ private Q_SLOTS:
         QCOMPARE(angles.size(), 3);
         QVERIFY(std::abs(std::accumulate(angles.cbegin(), angles.cend(), 0.0) - 360.0) < 1e-9);
         QVERIFY(std::abs(angles[0] - 386.0 / 486.5 * 360) < 1e-9);
+        // A `;` after the value; values whose sum overflows.
+        auto semi = parsePie(u"pie\n\"A\" : 1;\n\"B\" : 3 ;"_s);
+        QVERIFY(semi);
+        QCOMPARE(semi->slices[1].value, 3.0);
+        auto huge = parsePie(u"pie\n\"a\" : 1e308\n\"b\" : 1e308"_s);
+        QVERIFY(huge);
+        QCOMPARE(pieAngles(*huge), (QList<qreal>{180, 180}));
         auto t = parsePie(u"pie title Tytuł w nagłówku\n\"A\" : 1"_s);
         QVERIFY(t);
         QCOMPARE(t->title, u"Tytuł w nagłówku"_s);
@@ -611,7 +642,13 @@ private Q_SLOTS:
         for (int i = 0; i < 999; ++i)
             chain += u"n"_s + QString::number(i) + u"-->n"_s + QString::number(i + 1) + u'\n';
         chain += u"n999-->n0\n"_s;
-        QTest::newRow("long cycle") << chain << true;
+        // (1000 nodes in a row: wider than limits::MaxSceneExtent.)
+        QTest::newRow("long cycle") << chain << false;
+        QString shorter = u"graph LR\n"_s;
+        for (int i = 0; i < 299; ++i)
+            shorter += u"n"_s + QString::number(i) + u"-->n"_s + QString::number(i + 1) + u'\n';
+        shorter += u"n299-->n0\n"_s;
+        QTest::newRow("cycle") << shorter << true;
         QString dense = u"graph TD\n"_s;
         for (int i = 0; i < 60; ++i)
             for (int j = 0; j < 50; ++j)
@@ -630,6 +667,19 @@ private Q_SLOTS:
         for (int i = 0; i <= limits::MaxSlices; ++i)
             slices += u"\"s"_s + QString::number(i) + u"\" : 1\n"_s;
         QTest::newRow("too many slices") << slices << false;
+        // Long runs of spaces where the regular expressions look for an arrow or a colon.
+        QTest::newRow("spaces in a message") << u"sequenceDiagram\nA"_s + QString(90000, u' ') + u"B->>C: x"_s << true;
+        QTest::newRow("spaces around an arrow")
+                << u"sequenceDiagram\nA"_s + QString(45000, u' ') + u"->>"_s + QString(45000, u' ') + u"B: x"_s << true;
+        QTest::newRow("spaces in a note")
+                << u"sequenceDiagram\nNote over A"_s + QString(90000, u' ') + u": x"_s << true;
+        // Drawings beyond any screen, within the other limits.
+        QString tall = u"graph TD\n"_s;
+        for (int i = 0; i < 999; ++i)
+            tall += u"n"_s + QString::number(i) + u" ----------> n"_s + QString::number(i + 1) + u'\n';
+        QTest::newRow("too tall") << tall << false;
+        QString sections = u"sequenceDiagram\nalt a\n"_s + QString(u"else b\n"_s).repeated(3000) + u"end\n"_s;
+        QTest::newRow("too many statements") << sections << false;
         QString deepSeq = u"sequenceDiagram\n"_s;
         for (int i = 0; i < 30; ++i)
             deepSeq += u"loop x\n"_s;

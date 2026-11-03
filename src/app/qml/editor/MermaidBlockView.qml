@@ -83,7 +83,8 @@ Rectangle {
         MermaidView {
             id: diagram
             objectName: "mermaidDiagram"
-            width: Math.max(scroller.width, Math.min(diagramSize.width, diagramSize.width * 0.7))
+            // (At most MermaidView.MaxPaintExtent wide: the view scales anything larger down.)
+            width: Math.max(scroller.width, Math.min(diagramSize.width * 0.7, 4096))
             height: implicitHeight
             source: root.block.model.editText
             fontFamily: Theme.fontUi

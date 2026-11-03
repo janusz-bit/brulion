@@ -37,6 +37,8 @@ public:
                 return *e;
         if (!m_open.isEmpty())
             return makeError(Code::UnclosedBlock, m_open.last().second);
+        if (m_accDescrLine > 0)
+            return makeError(Code::UnclosedBlock, m_accDescrLine);
         return std::move(m_d);
     }
 
@@ -67,6 +69,8 @@ private:
             if (++m_messages > limits::MaxMessages)
                 return makeError(Code::TooLarge, m_line, u"messages"_s);
         }
+        if (m_d.events.size() >= limits::MaxStatements)
+            return makeError(Code::TooLarge, m_line, u"statements"_s);
         e.line = m_line;
         m_d.events.append(std::move(e));
         return std::nullopt;
@@ -77,6 +81,16 @@ private:
         m_line = st.line;
         const QStringView s = st.text;
         std::optional<Error> error;
+        // `accDescr {` … `}` over several lines: not drawn.
+        if (m_accDescrLine > 0) {
+            if (s.contains(u'}'))
+                m_accDescrLine = 0;
+            return std::nullopt;
+        }
+        if (startsWithWord(s, u"accDescr") && s.sliced(8).trimmed().startsWith(u'{') && !s.contains(u'}')) {
+            m_accDescrLine = m_line;
+            return std::nullopt;
+        }
         // participant A / actor A as Alice / create participant A
         QStringView decl = s;
         if (startsWithWord(decl, u"create"))
@@ -211,9 +225,14 @@ private:
 
     std::optional<Error> note(QStringView rest)
     {
-        static const QRegularExpression re(u"^(left of|right of|over)\\s+([^:]+?)\\s*:(.*)$"_s,
+        // (The part before the colon with its spaces collapsed: no backtracking over long runs.)
+        const qsizetype colon = rest.indexOf(u':');
+        if (colon < 0)
+            return makeError(Code::Syntax, m_line, excerpt(rest));
+        const QString head = rest.first(colon).toString().simplified();
+        static const QRegularExpression re(u"^(left of|right of|over) (.+)$"_s,
                                            QRegularExpression::CaseInsensitiveOption);
-        const auto m = re.matchView(rest);
+        const auto m = re.match(head);
         if (!m.hasMatch())
             return makeError(Code::Syntax, m_line, excerpt(rest));
         std::optional<Error> error;
@@ -232,16 +251,20 @@ private:
         e.to = who.size() == 2 ? participant(who.back().toString(), error) : e.from;
         if (e.to < 0)
             return error;
-        e.text = cleanLabel(m.capturedView(3));
+        e.text = cleanLabel(rest.sliced(colon + 1));
         return event(e);
     }
 
     std::optional<Error> message(QStringView s)
     {
+        // The participants and the arrow before the first colon, spaces collapsed (no backtracking
+        // over long runs of them); the text after it as written.
+        const qsizetype colon = s.indexOf(u':');
+        const QString head = (colon < 0 ? s : s.first(colon)).toString().simplified();
         static const QRegularExpression re(
-                u"^([^\\-<>:,;+][^<>:,;]*?)\\s*(<<-->>|<<->>|-->>|->>|--x|-x|--\\)|-\\)|-->|->)\\s*([+-]?)\\s*"
-                u"([^\\-<>:,;+][^<>:,;]*?)\\s*(?::(.*))?$"_s);
-        const auto m = re.matchView(s);
+                u"^([^\\-<>:,;+][^<>:,;]*?) ?(<<-->>|<<->>|-->>|->>|--x|-x|--\\)|-\\)|-->|->) ?([+-]?) ?"
+                u"([^\\-<>:,;+][^<>:,;]*?)$"_s);
+        const auto m = re.match(head);
         if (!m.hasMatch())
             return makeError(Code::Syntax, m_line, excerpt(s));
         std::optional<Error> error;
@@ -267,7 +290,7 @@ private:
         }
         e.activateTarget = m.captured(3) == u"+";
         e.deactivateSource = m.captured(3) == u"-";
-        e.text = cleanLabel(m.capturedView(5));
+        e.text = colon < 0 ? QString() : cleanLabel(s.sliced(colon + 1));
         if (m_number > 0) {
             e.number = m_number;
             m_number = std::min(m_number + m_step, 1000000000);
@@ -279,6 +302,7 @@ private:
     QHash<QString, int> m_ids;
     QList<std::pair<QString, int>> m_open; ///< blocks and the box being read: keyword, line
     int m_box = -1;
+    int m_accDescrLine = 0; ///< inside `accDescr {` from this line
     int m_line = 0;
     int m_messages = 0;
     int m_number = 0;

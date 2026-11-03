@@ -760,7 +760,7 @@ Result render(QStringView source, const Metrics &metricsIn)
             return r;
         }
         r.scene = detail::drawFlowchart(*parsed, *laid, metrics);
-        return r;
+        break;
     }
     case Kind::Sequence: {
         auto parsed = detail::parseSequence(source);
@@ -769,7 +769,7 @@ Result render(QStringView source, const Metrics &metricsIn)
             return r;
         }
         r.scene = detail::drawSequence(*parsed, metrics);
-        return r;
+        break;
     }
     case Kind::Pie: {
         auto parsed = detail::parsePie(source);
@@ -778,8 +778,13 @@ Result render(QStringView source, const Metrics &metricsIn)
             return r;
         }
         r.scene = detail::drawPie(*parsed, metrics);
-        return r;
+        break;
     }
+    }
+    // A drawing beyond any screen (a chain of long links, thousands of `else`): reported, not drawn.
+    if (!(r.scene.size.width() <= limits::MaxSceneExtent && r.scene.size.height() <= limits::MaxSceneExtent)) {
+        r.scene = Scene{};
+        r.error = detail::makeError(Error::Code::TooLarge, 0, u"size"_s);
     }
     return r;
 }

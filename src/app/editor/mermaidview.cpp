@@ -214,9 +214,17 @@ void MermaidView::relayout()
 void MermaidView::updateImplicitSize()
 {
     const QSizeF s = diagramSize();
-    setImplicitWidth(s.width());
-    const qreal scale = s.width() > 0 && width() > 0 ? std::min<qreal>(1, width() / s.width()) : 1;
-    setImplicitHeight(std::ceil(s.height() * scale));
+    setImplicitWidth(std::min(s.width(), MaxPaintExtent));
+    setImplicitHeight(std::ceil(s.height() * paintScale()));
+}
+
+qreal MermaidView::paintScale() const
+{
+    const QSizeF s = diagramSize();
+    if (s.width() <= 0 || s.height() <= 0)
+        return 1;
+    const qreal w = width() > 0 ? std::min(width(), MaxPaintExtent) : MaxPaintExtent;
+    return std::min({qreal(1), w / s.width(), MaxPaintExtent / s.height()});
 }
 
 void MermaidView::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
@@ -245,10 +253,10 @@ void MermaidView::paint(QPainter *painter)
     const QSizeF s = m_result->scene.size;
     if (s.width() <= 0 || s.height() <= 0)
         return;
-    const qreal scale = std::min<qreal>(1, width() / s.width());
+    const qreal k = paintScale();
     painter->save();
-    painter->translate((width() - s.width() * scale) / 2, 0);
-    painter->scale(scale, scale);
+    painter->translate((width() - s.width() * k) / 2, 0);
+    painter->scale(k, k);
     paintScene(painter, m_result->scene, palette(), m_fontFamily);
     painter->restore();
 }
@@ -335,6 +343,10 @@ QString MermaidView::errorMessage(const Error &error, const QString &typeName)
             text = tr("more than %1 participants").arg(diagram::limits::MaxParticipants);
         else if (error.detail == u"messages")
             text = tr("more than %1 messages and notes").arg(diagram::limits::MaxMessages);
+        else if (error.detail == u"statements")
+            text = tr("more than %1 statements").arg(diagram::limits::MaxStatements);
+        else if (error.detail == u"size")
+            text = tr("larger than %1 pixels").arg(int(diagram::limits::MaxSceneExtent));
         else if (error.detail == u"slices")
             text = tr("more than %1 slices").arg(diagram::limits::MaxSlices);
         else if (error.detail == u"source")

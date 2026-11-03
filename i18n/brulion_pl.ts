@@ -15678,107 +15678,117 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Diagram</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="313"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="321"/>
         <source>The diagram is empty.</source>
         <translation>Diagram jest pusty.</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="315"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="323"/>
         <source>Line %1: the diagram does not start with a Mermaid type (graph, flowchart, sequenceDiagram, pie…).</source>
         <translation>Wiersz %1: diagram nie zaczyna się od typu Mermaid (graph, flowchart, sequenceDiagram, pie…).</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="318"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="326"/>
         <source>Brulion does not draw “%1” diagrams yet: this is their source.</source>
         <translation>Brulion nie rysuje jeszcze diagramów „%1” — to ich źródło.</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="319"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="327"/>
         <source>Line %1: cannot read “%2”.</source>
         <translation>Wiersz %1: nie da się odczytać „%2”.</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="320"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="328"/>
         <source>Line %1: a quote or a bracket is not closed.</source>
         <translation>Wiersz %1: cudzysłów albo nawias nie jest zamknięty.</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="321"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="329"/>
         <source>Line %1: “end” without a block to close.</source>
         <translation>Wiersz %1: „end” bez bloku do zamknięcia.</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="322"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="330"/>
         <source>Line %1: this block has no “end”.</source>
         <translation>Wiersz %1: ten blok nie ma „end”.</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="323"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="331"/>
         <source>Line %1: “%2” is not a number.</source>
         <translation>Wiersz %1: „%2” to nie liczba.</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="324"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="332"/>
         <source>The chart has no value above zero.</source>
         <translation>Wykres nie ma żadnej wartości większej od zera.</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="327"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="335"/>
         <source>more than %1 nodes</source>
         <translation>ponad %1 węzłów</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="329"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="337"/>
         <source>more than %1 links</source>
         <translation>ponad %1 połączeń</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="331"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="339"/>
         <source>more than %1 subgraphs</source>
         <translation>ponad %1 podgrafów</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="333"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="341"/>
         <source>blocks nested more than %1 deep</source>
         <translation>bloki zagnieżdżone głębiej niż na %1 poziomów</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="335"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="343"/>
         <source>more than %1 participants</source>
         <translation>ponad %1 uczestników</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="337"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="345"/>
         <source>more than %1 messages and notes</source>
         <translation>ponad %1 wiadomości i notatek</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="339"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="347"/>
+        <source>more than %1 statements</source>
+        <translation>ponad %1 instrukcji</translation>
+    </message>
+    <message>
+        <location filename="../src/app/editor/mermaidview.cpp" line="349"/>
+        <source>larger than %1 pixels</source>
+        <translation>większy niż %1 pikseli</translation>
+    </message>
+    <message>
+        <location filename="../src/app/editor/mermaidview.cpp" line="351"/>
         <source>more than %1 slices</source>
         <translation>ponad %1 wycinków</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="341"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="353"/>
         <source>more than %1 kB of text</source>
         <translation>ponad %1 kB tekstu</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="343"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="355"/>
         <source>too many long links</source>
         <translation>za dużo długich połączeń</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="344"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="356"/>
         <source>Line %1: the diagram is too large to draw (%2).</source>
         <translation>Wiersz %1: diagram jest za duży, by go narysować (%2).</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="345"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="357"/>
         <source>The diagram is too large to draw (%1).</source>
         <translation>Diagram jest za duży, by go narysować (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/mermaidview.cpp" line="348"/>
+        <location filename="../src/app/editor/mermaidview.cpp" line="360"/>
         <source>Line %1: cannot read the diagram.</source>
         <translation>Wiersz %1: nie da się odczytać diagramu.</translation>
     </message>

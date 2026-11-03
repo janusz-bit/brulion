@@ -6,7 +6,8 @@
 // measured with the app's font (`fontFamily`, `fontPixelSize`).
 //
 // The diagram is drawn at its natural size, scaled down to the item's width when wider (never
-// up) and centred; implicitWidth/implicitHeight follow (the height for the current width).
+// up) and to MaxPaintExtent on either side, centred; implicitWidth/implicitHeight follow (the
+// height for the current width).
 // `status`: "ok", "unsupported" (a Mermaid type Brulion does not draw yet: `typeName`), "error"
 // (`message`: translated, with the line). Laid-out sources are kept in a small cache shared by all
 // views (a delegate made again while scrolling lays nothing out again); colours only repaint.
@@ -77,6 +78,12 @@ public:
     QSizeF diagramSize() const;
 
     void paint(QPainter *painter) override;
+
+    /// The largest side the item paints (logical pixels): a larger diagram is scaled down further,
+    /// so its texture stays within what every GPU and phone can hold.
+    static constexpr qreal MaxPaintExtent = 4096;
+    /// The scale the diagram is painted at (≤ 1: the item's width, MaxPaintExtent).
+    qreal paintScale() const;
 
     /// The translated text of `error` (the type for Unsupported).
     static QString errorMessage(const diagram::Error &error, const QString &typeName);

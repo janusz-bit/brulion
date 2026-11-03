@@ -165,6 +165,8 @@ public:
         }
         if (!m_stack.isEmpty())
             return makeError(Code::UnclosedBlock, m_chart.clusters[m_stack.last()].line);
+        if (m_inAccDescr)
+            return makeError(Code::UnclosedBlock, m_accDescrLine);
         if (auto e = finish())
             return *e;
         return std::move(m_chart);
@@ -211,16 +213,19 @@ private:
         // Interactions are never run: links, callbacks and tooltips are left out entirely.
         if (startsWithWord(s, u"click") || startsWithWord(s, u"href") || startsWithWord(s, u"callback"))
             return std::nullopt;
-        if (s.startsWith(u"accTitle")) {
+        if (s.startsWith(u"accTitle") && s.sliced(8).trimmed().startsWith(u':')) {
             const qsizetype colon = s.indexOf(u':');
             if (colon > 0 && m_chart.title.isEmpty())
                 m_chart.title = cleanLabel(s.sliced(colon + 1));
             return std::nullopt;
         }
-        if (s.startsWith(u"accDescr")) {
+        if (s.startsWith(u"accDescr")
+            && (s.sliced(8).trimmed().startsWith(u':') || s.sliced(8).trimmed().startsWith(u'{'))) {
             const QStringView rest = s.sliced(8).trimmed();
-            if (rest.startsWith(u'{') && !rest.contains(u'}'))
+            if (rest.startsWith(u'{') && !rest.contains(u'}')) {
                 m_inAccDescr = true;
+                m_accDescrLine = m_line;
+            }
             return std::nullopt;
         }
         if (startsWithWord(s, u"title")) {
@@ -742,6 +747,7 @@ private:
     QList<std::pair<int, Style>> m_linkStyles;
     Style m_defaultLinkStyle;
     bool m_inAccDescr = false;
+    int m_accDescrLine = 0;
     int m_line = 0;
 };
 

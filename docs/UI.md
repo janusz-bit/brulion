@@ -936,7 +936,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `src/app/editor/mermaidview.h` painting the core `diagram::Scene` with QPainter, text measured
   in the UI font, colours from Theme (`fg`, `fgMuted`, `bgSunken`, `border`, `accent`, `dark`:
   `diagram::themedPalette`) — on the sunken panel, centred, scaled down to the column to 70 % at
-  most and then scrolled sideways (a horizontal Flickable, as a wide table); laid-out sources are
+  most and then scrolled sideways (a horizontal Flickable, as a wide table); the item paints at
+  most 4096 px on either side (`MermaidView::MaxPaintExtent`: a taller or wider diagram is scaled
+  down further, so its texture fits every GPU and phone); laid-out sources are
   kept in a cache of 64 shared by all views, so delegates made again while scrolling lay nothing
   out and a change of theme only repaints. A click (Shift/Ctrl+click: block selection; a finger
   held: the block's selection) edits the source in place — CodeBlockView's monospace editor with

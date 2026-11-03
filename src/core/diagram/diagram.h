@@ -42,8 +42,10 @@ inline constexpr int MaxClusters = 200;                 ///< flowchart subgraphs
 inline constexpr int MaxNesting = 16;                   ///< subgraphs / sequence blocks inside each other
 inline constexpr int MaxParticipants = 300;             ///< sequence participants
 inline constexpr int MaxMessages = 500;                 ///< sequence messages and notes
+inline constexpr int MaxStatements = 2000;              ///< sequence events of any kind (blocks, activations…)
 inline constexpr int MaxSlices = 64;                    ///< pie slices
 inline constexpr int MaxLayoutNodes = 30000;            ///< flowchart nodes plus the layout's bends
+inline constexpr qreal MaxSceneExtent = 50000;          ///< the scene's width and height (px at fontSize)
 inline constexpr qsizetype MaxLabelLength = 1000;       ///< characters of one label (longer: cut, "…")
 inline constexpr int MaxLabelLines = 40;                ///< lines of one label after wrapping
 } // namespace limits

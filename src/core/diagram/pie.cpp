@@ -45,7 +45,7 @@ Outcome<PieChart> parsePie(QStringView source)
         chart.title = cleanLabel(head);
     else if (!head.isEmpty())
         return makeError(Code::Syntax, st.front().line, excerpt(head));
-    static const QRegularExpression entry(u"^\"([^\"]*)\"\\s*:\\s*(\\S+)\\s*;?$"_s);
+    static const QRegularExpression entry(u"^\"([^\"]*)\"\\s*:\\s*([^\\s;]+)\\s*;?$"_s);
     bool any = false;
     for (qsizetype i = 1; i < st.size(); ++i) {
         QStringView s = st[i].text;
@@ -80,14 +80,32 @@ Outcome<PieChart> parsePie(QStringView source)
     return chart;
 }
 
+namespace {
+
+/// The values divided by the largest (their sum stays finite whatever they are).
+QList<double> scaledValues(const PieChart &chart, double *total)
+{
+    double largest = 0;
+    for (const PieSlice &s : chart.slices)
+        largest = std::max(largest, s.value);
+    QList<double> out;
+    *total = 0;
+    for (const PieSlice &s : chart.slices) {
+        out.append(largest > 0 ? s.value / largest : 0);
+        *total += out.last();
+    }
+    return out;
+}
+
+} // namespace
+
 QList<qreal> pieAngles(const PieChart &chart)
 {
     double total = 0;
-    for (const PieSlice &s : chart.slices)
-        total += s.value;
+    const QList<double> values = scaledValues(chart, &total);
     QList<qreal> out;
-    for (const PieSlice &s : chart.slices)
-        out.append(total > 0 ? s.value / total * 360.0 : 0);
+    for (const double v : values)
+        out.append(total > 0 ? v / total * 360.0 : 0);
     return out;
 }
 
@@ -108,8 +126,7 @@ Scene drawPie(const PieChart &chart, const Metrics &m)
     const QPointF c(margin + R, top + R);
     const QList<qreal> angles = pieAngles(chart);
     double total = 0;
-    for (const PieSlice &s : chart.slices)
-        total += s.value;
+    const QList<double> scaled = scaledValues(chart, &total);
     // Slices clockwise from the top.
     qreal a = -pi / 2;
     QList<Item> labels;
@@ -128,7 +145,7 @@ Scene drawPie(const PieChart &chart, const Metrics &m)
         // The share on the slice when it has room for it.
         if (angles[i] >= 14) {
             const qreal mid = a + span / 2;
-            const qreal share = chart.slices[i].value / total * 100;
+            const qreal share = scaled[i] / total * 100;
             const QString text =
                     share >= 9.95 ? QString::number(std::lround(share)) + u'%' : QString::number(share, 'f', 1) + u'%';
             const TextBlock t = layoutText(m, text, fs * 0.9, true, 0);
@@ -145,8 +162,9 @@ Scene drawPie(const PieChart &chart, const Metrics &m)
     const qreal swatch = fs * 0.95;
     QList<TextBlock> rows;
     qreal rowH = 0, legendW = 0;
-    for (const PieSlice &s : chart.slices) {
-        const double share = s.value / total * 100;
+    for (qsizetype i = 0; i < chart.slices.size(); ++i) {
+        const PieSlice &s = chart.slices[i];
+        const double share = scaled[i] / total * 100;
         QString text = s.label;
         text += chart.showData ? u" ["_s + formatValue(s.value) + u"]"_s : QString();
         text += u" ("_s + QString::number(share, 'f', share >= 9.95 ? 0 : 1) + u"%)"_s;

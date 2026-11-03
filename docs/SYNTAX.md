@@ -1197,8 +1197,9 @@ Colours follow the theme, as in Obsidian: nodes, actors and activations tinted w
 colour on the block's background, lines in the muted text colour, notes amber, pie slices from
 a fixed set (light pastels in the light theme, deep tones in the dark one); colours a diagram
 sets itself are kept in both themes. Bounds (sources come from sync and imports): 100 kB of
-source, 1000 nodes, 3000 links, 200 subgraphs, 300 participants, 500 messages and notes,
-64 slices, 16 levels of nesting; more is reported as too large instead of being drawn. The
+source, 1000 nodes, 3000 links, 200 subgraphs, 300 participants, 500 messages and notes
+(2000 statements of a sequence diagram in all), 64 slices, 16 levels of nesting, a drawing of
+at most 50 000 px on either side; more is reported as too large instead of being drawn. The
 layout is a layered one like Mermaid's (dagre) but not the same pixel for pixel: subgraphs are
 laid out from the inside out, so a link into one runs from its frame to the node.
 
