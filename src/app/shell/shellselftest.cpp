@@ -5,6 +5,7 @@
 #include "commandmodel.h"
 #include "demovault.h"
 #include "keyboardinsets.h"
+#include "shortcutmap.h"
 #include "traypopup.h"
 #include "uidriver.h"
 #include "workspace.h"
@@ -4682,6 +4683,209 @@ void checkPeriodicNotes(QQuickWindow *window, AppController *app, const Check &c
     settle(300);
 }
 
+/// Focus mode (F8 — the command's shortcut —, Esc, the Back key, its corner button), the word count in
+/// the page's corner and typewriter scrolling (desktop), and one command's shortcut changed in
+/// Ustawienia → Skróty klawiszowe with real keys: another command's key is refused with the reason,
+/// the new one works and the old one no longer does, the palette shows it, and back to the default.
+void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    AppSettings *settings = app->settings();
+    ShortcutMap *shortcuts = app->shortcuts();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    // A key as a keyboard gives it: the window's Shortcut objects first.
+    const auto press = [&](int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+        const bool handled = uidriver::deliverKey(window, {key, modifiers, {}}, uidriver::KeyDelivery::System);
+        settle(80);
+        return handled;
+    };
+
+    // A page long enough to scroll: 60 blocks of 6 words.
+    const QString note = u"Próba skupienia.md"_s;
+    QString text;
+    for (int i = 1; i <= 60; ++i)
+        text += u"- Zdanie numer %1 z kilkoma słowami\n"_s.arg(i);
+    ws->writeFile(note, text);
+    app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, note}});
+    QObject *controller = nullptr;
+    QQuickItem *editor = nullptr;
+    check(waitFor([&] {
+              editor = named(u"pageEditor"_s);
+              controller = editor ? editor->property("controller").value<QObject *>() : nullptr;
+              return controller && controller->property("loaded").toBool()
+                     && controller->property("path").toString() == note;
+          }),
+          "the page for focus mode is open");
+    if (!controller || !editor)
+        return;
+    settle(300);
+    QVariantMap stats;
+    QMetaObject::invokeMethod(controller, "pageStats", Q_RETURN_ARG(QVariantMap, stats));
+    check(stats.value(u"words"_s).toInt() == 360 && stats.value(u"readingMinutes"_s).toInt() == 2,
+          "the page counts 360 words, 2 minutes of reading");
+
+    // ---- Focus mode: F8 (the command's default shortcut) hides the bars, the text column centred.
+    check(named(u"shellTopBar"_s) != nullptr && named(u"focusModeExit"_s) == nullptr,
+          "outside focus mode the top bar is shown");
+    press(Qt::Key_F8);
+    check(waitFor([&] { return settings->focusMode() && named(u"shellTopBar"_s) == nullptr; }),
+          "F8 turns focus mode on: no top bar");
+    check(settings->value(u"ui/focusMode"_s, false).toBool(), "focus mode is kept as this device's setting");
+    check(named(u"focusModeExit"_s) != nullptr && named(u"shellBottomNav"_s) == nullptr,
+          "in focus mode only its corner button is there, no bottom navigation");
+    const qreal contentX = editor->property("contentX").toReal();
+    const qreal contentWidth = editor->property("contentWidth").toReal();
+    const QPointF editorAt = editor->mapToScene(QPointF(0, 0));
+    check(editorAt.x() < 1 && qAbs(editor->width() - window->width()) < 1
+                  && (touch || qAbs(contentX + contentWidth / 2 - editor->width() / 2) <= 1),
+          "in focus mode the editor fills the window, its text column centred");
+    // Esc: what the view does not need ends it (a selected block first, if any).
+    for (int i = 0; i < 3 && settings->focusMode(); ++i)
+        sendKey(window, Qt::Key_Escape);
+    check(waitFor([&] { return !settings->focusMode() && named(u"shellTopBar"_s) != nullptr; }),
+          "Esc leaves focus mode and the top bar is back");
+    check(app->currentView() == u"page", "leaving focus mode stays on the page");
+    // The corner button; the Back key (phones) — both end focus mode, nothing else happens.
+    settings->setFocusMode(true);
+    QQuickItem *exit = nullptr;
+    check(waitFor([&] { return (exit = named(u"focusModeExit"_s)) != nullptr; }),
+          "focus mode's corner button is shown");
+    if (exit)
+        tapOrClick(window, pointIn(exit), touch);
+    check(waitFor([&] { return !settings->focusMode(); }), "the corner button leaves focus mode");
+    settings->setFocusMode(true);
+    settle(100);
+    check(sendKey(window, Qt::Key_Back) && waitFor([&] { return !settings->focusMode(); })
+                  && app->currentView() == u"page",
+          "the Back key leaves focus mode first and stays on the page");
+    // Not on other views: the setting stays, their bars show.
+    settings->setFocusMode(true);
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    check(waitFor([&] { return named(u"shellTopBar"_s) != nullptr; }), "other views keep their bars in focus mode");
+    settings->setFocusMode(false);
+    app->back();
+    check(waitFor([&] { return app->currentView() == u"page" && (editor = named(u"pageEditor"_s)) != nullptr; }),
+          "back on the page");
+
+    // ---- The word count in the corner (wide windows) follows the typing, after a pause; the
+    //      caret's line stays in the middle with typewriter scrolling.
+    if (!touch && editor) {
+        controller = editor->property("controller").value<QObject *>();
+        QQuickItem *footer = nullptr;
+        check(waitFor([&] {
+                  footer = named(u"pageStatsFooter"_s);
+                  return footer && footer->property("text").toString().contains(u"360"_s);
+              }),
+              "the page's corner shows its word count");
+        settings->setTypewriterScrolling(true);
+        const int last = 59;
+        QMetaObject::invokeMethod(editor, "startEditing", Q_ARG(QVariant, last), Q_ARG(QVariant, -1));
+        QQuickItem *edit = nullptr;
+        check(waitFor([&] {
+                  edit = editor->property("activeEditor").value<QQuickItem *>();
+                  return edit && edit->hasActiveFocus();
+              }),
+              "the last block is being edited");
+        if (edit) {
+            for (const QChar ch : u" dwa trzy"_s)
+                sendKey(window, 0, Qt::NoModifier, QString(ch));
+            QQuickItem *list = editor->property("listView").value<QQuickItem *>();
+            const auto caretOffset = [&] {
+                const QRectF caret = edit->property("cursorRectangle").toRectF();
+                const QPointF at = edit->mapToItem(list, caret.center());
+                const qreal middle = (list->height() - list->property("bottomMargin").toReal()) / 2;
+                return qAbs(at.y() - middle);
+            };
+            const qreal lineHeight = editor->property("lineHeight").toReal();
+            check(list && waitFor([&] { return caretOffset() <= lineHeight; }),
+                  "typewriter scrolling keeps the caret's line in the middle of the view");
+            check(waitFor(
+                          [&] {
+                              footer = named(u"pageStatsFooter"_s);
+                              return footer && footer->property("text").toString().contains(u"362"_s);
+                          },
+                          5000),
+                  "the word count follows what is typed (after a pause)");
+            sendKey(window, Qt::Key_Escape);
+            sendKey(window, Qt::Key_Escape);
+        }
+        settings->setTypewriterScrolling(false);
+    }
+
+    // ---- A custom shortcut, recorded in Ustawienia → Skróty klawiszowe.
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"shortcuts"_s}});
+    QQuickItem *change = nullptr;
+    check(waitFor([&] { return (change = named(u"shortcutChange_journal.today"_s)) != nullptr; }, 5000),
+          "the shortcuts' settings list today's journal");
+    if (change) {
+        settle(300);
+        uidriver::scrollIntoView(window, change);
+        settle(100);
+        tapOrClick(window, pointIn(change), touch);
+        check(waitFor([&] {
+                  const QQuickItem *focus = window->activeFocusItem();
+                  return focus && focus->objectName() == u"shortcutRecorder";
+              }),
+              "“Zmień” waits for the new shortcut");
+        // Another command's shortcut (the palette's Ctrl+K): refused with the reason, nothing opens.
+        sendKey(window, Qt::Key_K, Qt::ControlModifier);
+        QQuickItem *message = nullptr;
+        check(waitFor([&] {
+                  message = named(u"shortcutMessage"_s);
+                  return message && message->property("text").toString().contains(shortcuts->title(u"palette"_s))
+                         && named(u"shortcutTakeOver"_s) != nullptr;
+              }),
+              "another command's shortcut is refused, saying whose it is");
+        check(shortcuts->sequence(u"journal.today"_s) == u"Ctrl+J" && shortcuts->sequence(u"palette"_s) == u"Ctrl+K",
+              "the refused shortcut changes nothing");
+        // A key the editor uses: refused too.
+        sendKey(window, Qt::Key_C, Qt::ControlModifier);
+        check(waitFor([&] {
+                  message = named(u"shortcutMessage"_s);
+                  return message && message->property("text").toString().contains(u"Ctrl+C"_s);
+              }),
+              "the editor's own keys cannot be a command's shortcut");
+        sendKey(window, Qt::Key_J, Qt::ControlModifier | Qt::AltModifier);
+        check(waitFor([&] { return shortcuts->sequence(u"journal.today"_s) == u"Ctrl+Alt+J"; }),
+              "Ctrl+Alt+J becomes today's journal's shortcut");
+        check(settings->shortcutOverrides().value(u"journal.today"_s).toString() == u"Ctrl+Alt+J",
+              "the custom shortcut is kept as this device's setting");
+        QString paletteShortcut;
+        for (const QVariant &v : app->commands()->commands()) {
+            if (v.toMap().value(u"id"_s).toString() == u"journal.today")
+                paletteShortcut = v.toMap().value(u"shortcut"_s).toString();
+        }
+        check(paletteShortcut == u"Ctrl+Alt+J", "the palette shows the custom shortcut");
+        // The keys: the new one opens today's journal, the old one no longer does.
+        app->navigate({{u"view"_s, u"tasks"_s}});
+        settle(300);
+        press(Qt::Key_J, Qt::ControlModifier);
+        check(app->currentView() == u"tasks", "the old shortcut no longer opens today's journal");
+        press(Qt::Key_J, Qt::ControlModifier | Qt::AltModifier);
+        check(waitFor([&] { return app->currentView() == u"journals" || app->currentView() == u"journal"; }),
+              "the new shortcut opens today's journal");
+        // Back to the default from its row.
+        app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"shortcuts"_s}});
+        QQuickItem *reset = nullptr;
+        check(waitFor([&] { return (reset = named(u"shortcutReset_journal.today"_s)) != nullptr; }, 5000),
+              "a custom shortcut can be restored to its default");
+        if (reset) {
+            settle(300);
+            uidriver::scrollIntoView(window, reset);
+            settle(100);
+            tapOrClick(window, pointIn(reset), touch);
+        }
+        check(waitFor([&] { return shortcuts->sequence(u"journal.today"_s) == u"Ctrl+J"; })
+                      && !shortcuts->isCustom(u"journal.today"_s),
+              "“Przywróć” gives today's journal Ctrl+J again");
+    }
+    shortcuts->resetAll();
+    ws->deletePage(note);
+    app->goHome();
+    settle(300);
+}
+
 void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -6006,6 +6210,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h. Weekly and monthly notes: opened from the shortcut's action, the page's arrows, the calendar.
     checkPeriodicNotes(window, app, check);
+    closeMenus(window);
+    // 3i. Focus mode, the word count, typewriter scrolling and a custom shortcut.
+    checkFocusAndShortcuts(window, app, check);
     closeMenus(window);
 
     // 4. The command palette: Escape closes it; the focus returns to the shell.

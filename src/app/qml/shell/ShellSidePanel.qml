@@ -69,7 +69,7 @@ Rectangle {
                 BIconButton {
                     iconName: "x"
                     label: qsTr("Close side panel")
-                    shortcut: "Ctrl+\\"
+                    shortcut: ShortcutMap.sequences["panel.toggle"] || ""
                     size: "small"
                     onClicked: AppController.sidePanelVisible = false
                 }

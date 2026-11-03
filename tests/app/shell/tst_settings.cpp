@@ -312,6 +312,54 @@ private Q_SLOTS:
         QCOMPARE(s.editorWidth(), expected);
     }
 
+    // The word count, focus mode and typewriter scrolling (docs/UI.md "Statistics and focus
+    // mode"): defaults, kept after a restart, a stored value that is no bool gives the default;
+    // the custom shortcuts' group (ShortcutMap reads it).
+    void focusAndStats()
+    {
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QVERIFY(s.wordCountShown());
+            QVERIFY(!s.focusMode());
+            QVERIFY(!s.typewriterScrolling());
+            QSignalSpy focus(&s, &AppSettings::focusModeChanged);
+            s.setFocusMode(true);
+            s.setFocusMode(true);
+            QCOMPARE(focus.size(), 1);
+            s.setTypewriterScrolling(true);
+            s.setWordCountShown(false);
+            s.setShortcutOverride(u"journal.today"_s, u"Ctrl+Alt+J"_s);
+            s.setShortcutOverride(u"palette"_s, QString());
+            s.setShortcutOverride(u"go.settings"_s, u"Ctrl+Shift+,"_s);
+            s.setShortcutOverride(u"bad/id"_s, u"Ctrl+1"_s); // never a group of its own
+        }
+        {
+            AppSettings s(file, m_tmp.path());
+            QVERIFY(s.focusMode());
+            QVERIFY(s.typewriterScrolling());
+            QVERIFY(!s.wordCountShown());
+            const QVariantMap shortcuts = s.shortcutOverrides();
+            QCOMPARE(shortcuts.size(), 3);
+            QCOMPARE(shortcuts.value(u"journal.today"_s).toString(), u"Ctrl+Alt+J"_s);
+            QCOMPARE(shortcuts.value(u"palette"_s).toString(), QString());
+            QCOMPARE(shortcuts.value(u"go.settings"_s).typeId(), QMetaType::QString);
+            s.setShortcutOverride(u"journal.today"_s, std::nullopt);
+            QCOMPARE(s.shortcutOverrides().size(), 2);
+            s.clearShortcutOverrides();
+            QVERIFY(s.shortcutOverrides().isEmpty());
+            QVERIFY(s.focusMode()); // the other settings stay
+        }
+        {
+            QSettings raw(file, QSettings::IniFormat);
+            raw.setValue(u"ui/focusMode"_s, u"zażółć"_s);
+            raw.setValue(u"editor/wordCountShown"_s, u"false"_s);
+        }
+        AppSettings s(file, m_tmp.path());
+        QVERIFY(!s.focusMode());
+        QVERIFY(!s.wordCountShown());
+    }
+
     void appearanceEdits()
     {
         AppSettings s(nextFile(), m_tmp.path());

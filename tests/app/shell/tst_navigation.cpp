@@ -9,6 +9,7 @@
 #include "demovault.h"
 #include "navigation.h"
 #include "olddocs.h"
+#include "shortcutmap.h"
 #include "traypopup.h"
 #include "workspace.h"
 
@@ -18,6 +19,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJSEngine>
+#include <QSet>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -1200,6 +1202,45 @@ private Q_SLOTS:
             return QVariantMap();
         };
         QCOMPARE(commandNamed(u"block.copyRef"_s).value(u"shortcut"_s).toString(), u"Ctrl+Shift+C"_s);
+        // The shortcuts' actions (ShortcutMap): the palette, then every command; each default can
+        // be a shortcut and belongs to one action. The palette shows a custom one.
+        {
+            using brulion::shell::ShortcutMap;
+            const QList<ShortcutMap::Action> actions = model->shortcutActions();
+            QCOMPARE(actions.first().id, u"palette"_s);
+            QCOMPARE(actions.size(), ids.size() + 1);
+            QSet<QString> defaults;
+            for (const ShortcutMap::Action &a : actions) {
+                QVERIFY(!a.title.isEmpty());
+                if (a.defaultSequence.isEmpty())
+                    continue;
+                QCOMPARE(ShortcutMap::normalize(a.defaultSequence), a.defaultSequence);
+                QVERIFY2(!ShortcutMap::typesText(a.defaultSequence), qPrintable(a.id));
+                QVERIFY2(ShortcutMap::reservedUse(a.defaultSequence).isEmpty(), qPrintable(a.id));
+                QVERIFY2(!defaults.contains(a.defaultSequence), qPrintable(a.defaultSequence));
+                defaults.insert(a.defaultSequence);
+            }
+            QCOMPARE(app->shortcuts()->sequence(u"view.focus"_s), u"F8"_s);
+            QSignalSpy shortcutsChanged(model, &CommandModel::commandsChanged);
+            QVERIFY(app->shortcuts()->assign(u"journal.today"_s, u"Ctrl+Alt+J"_s));
+            QCOMPARE(shortcutsChanged.size(), 1);
+            QCOMPARE(commandNamed(u"journal.today"_s).value(u"shortcut"_s).toString(), u"Ctrl+Alt+J"_s);
+            app->shortcuts()->resetAll();
+            QCOMPARE(commandNamed(u"journal.today"_s).value(u"shortcut"_s).toString(), u"Ctrl+J"_s);
+            // Focus mode and typewriter scrolling are device settings the palette switches.
+            QVERIFY(!app->settings()->focusMode());
+            QVERIFY(model->run(u"view.focus"_s));
+            QVERIFY(app->settings()->focusMode());
+            QCOMPARE(commandNamed(u"view.focus"_s).value(u"title"_s).toString(), CommandModel::tr("Leave focus mode"));
+            QVERIFY(model->run(u"view.focus"_s));
+            QVERIFY(!app->settings()->focusMode());
+            QVERIFY(model->run(u"view.typewriter"_s));
+            QVERIFY(app->settings()->typewriterScrolling());
+            QVERIFY(model->run(u"view.typewriter"_s));
+            QVERIFY(model->run(u"settings.shortcuts"_s));
+            QCOMPARE(app->currentRoute().value(u"section"_s).toString(), u"shortcuts"_s);
+            QVERIFY(app->back());
+        }
         // Source mode: no blocks to point at — the block and heading commands are off (not a toast
         // after choosing them), the page's link stays; back to blocks, they are on again.
         QSignalSpy commandsChanged(model, &CommandModel::commandsChanged);

@@ -27,6 +27,7 @@
 #include <QVariantList>
 
 #include <memory>
+#include <optional>
 
 class QSettings;
 
@@ -92,6 +93,16 @@ class AppSettings : public QObject {
     /// waits for "Pokaż" — a synced or imported note cannot make the device fetch anything).
     Q_PROPERTY(
             bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
+    /// The word and character count in the corner of a page (wide windows; the page's Więcej menu
+    /// always has it). Default on.
+    Q_PROPERTY(bool wordCountShown READ wordCountShown WRITE setWordCountShown NOTIFY wordCountShownChanged FINAL)
+    /// Focus mode (docs/UI.md "Statistics and focus mode"): on a page or in the journal no sidebar,
+    /// top bar, side panel or bottom navigation — the text column alone, centred. F8 (a custom
+    /// shortcut), Esc, the Back key or its corner button leave it. Kept on this device.
+    Q_PROPERTY(bool focusMode READ focusMode WRITE setFocusMode NOTIFY focusModeChanged FINAL)
+    /// Typewriter scrolling: the editor keeps the caret's line in the middle of the view.
+    Q_PROPERTY(bool typewriterScrolling READ typewriterScrolling WRITE setTypewriterScrolling NOTIFY
+                       typewriterScrollingChanged FINAL)
     /// The export's choice for pictures from the internet (ExportController::webPictures):
     /// "link" (default: the addresses stay) | "include" (copies in the HTML and Pandoc exports).
     Q_PROPERTY(QString exportWebPictures READ exportWebPictures WRITE setExportWebPictures NOTIFY
@@ -211,6 +222,21 @@ public:
     void setWebPicturesShown(bool on);
     QString exportWebPictures() const;
     void setExportWebPictures(const QString &mode);
+    bool wordCountShown() const;
+    void setWordCountShown(bool on);
+    bool focusMode() const;
+    void setFocusMode(bool on);
+    bool typewriterScrolling() const;
+    void setTypewriterScrolling(bool on);
+
+    /// Custom keyboard shortcuts (ShortcutMap): the stored values of group "shortcuts", command id
+    /// -> what was stored (a string as written, "" for none; anything else is malformed and left to
+    /// ShortcutMap to ignore).
+    QVariantMap shortcutOverrides() const;
+    /// Store `id`'s custom shortcut (portable text, "" for none); nullopt removes it (the default).
+    void setShortcutOverride(const QString &id, const std::optional<QString> &sequence);
+    /// Remove every custom shortcut.
+    void clearShortcutOverrides();
 
     QString currentVault() const;
     void setCurrentVault(const QString &path);
@@ -321,6 +347,9 @@ Q_SIGNALS:
     void propertiesExpandedChanged();
     void webPicturesShownChanged();
     void exportWebPicturesChanged();
+    void wordCountShownChanged();
+    void focusModeChanged();
+    void typewriterScrollingChanged();
     void currentVaultChanged();
     void recentVaultsChanged();
     void closeToTrayChanged();

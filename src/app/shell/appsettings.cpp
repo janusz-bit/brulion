@@ -48,6 +48,10 @@ constexpr auto kEditorSource = "editor/sourceMode";
 constexpr auto kPropertiesExpanded = "editor/propertiesExpanded";
 constexpr auto kWebPictures = "editor/webPicturesShown";
 constexpr auto kExportWebPictures = "export/webPictures";
+constexpr auto kWordCount = "editor/wordCountShown";
+constexpr auto kFocusMode = "ui/focusMode";
+constexpr auto kTypewriter = "editor/typewriterScrolling";
+constexpr auto kShortcuts = "shortcuts";
 constexpr auto kCurrentVault = "vaults/current";
 constexpr auto kRecentVaults = "vaults/recent";
 constexpr auto kCloseToTray = "app/closeToTray";
@@ -584,6 +588,69 @@ void AppSettings::setExportWebPictures(const QString &mode)
     const QString clean = mode == u"include" ? mode : u"link"_s;
     if (store(key(kExportWebPictures), clean, exportWebPictures()))
         Q_EMIT exportWebPicturesChanged();
+}
+
+bool AppSettings::wordCountShown() const
+{
+    return value(key(kWordCount), true).toBool(); // (not a bool: the default)
+}
+
+void AppSettings::setWordCountShown(bool on)
+{
+    if (store(key(kWordCount), on, wordCountShown()))
+        Q_EMIT wordCountShownChanged();
+}
+
+bool AppSettings::focusMode() const
+{
+    return value(key(kFocusMode), false).toBool(); // (not a bool: the default)
+}
+
+void AppSettings::setFocusMode(bool on)
+{
+    if (store(key(kFocusMode), on, focusMode()))
+        Q_EMIT focusModeChanged();
+}
+
+bool AppSettings::typewriterScrolling() const
+{
+    return value(key(kTypewriter), false).toBool(); // (not a bool: the default)
+}
+
+void AppSettings::setTypewriterScrolling(bool on)
+{
+    if (store(key(kTypewriter), on, typewriterScrolling()))
+        Q_EMIT typewriterScrollingChanged();
+}
+
+// ---- Keyboard shortcuts (ShortcutMap) -------------------------------------------------------
+
+QVariantMap AppSettings::shortcutOverrides() const
+{
+    QVariantMap out;
+    m_settings->beginGroup(key(kShortcuts));
+    const QStringList ids = m_settings->childKeys();
+    for (const QString &id : ids)
+        out.insert(id, m_settings->value(id));
+    m_settings->endGroup();
+    return out;
+}
+
+void AppSettings::setShortcutOverride(const QString &id, const std::optional<QString> &sequence)
+{
+    // (An id never holds a '/': it would be a group of its own.)
+    if (id.isEmpty() || id.contains(u'/') || id.contains(u'\\'))
+        return;
+    const QString k = key(kShortcuts) + u'/' + id;
+    if (sequence)
+        m_settings->setValue(k, *sequence);
+    else
+        m_settings->remove(k);
+}
+
+void AppSettings::clearShortcutOverrides()
+{
+    m_settings->remove(key(kShortcuts));
 }
 
 // ---- Vaults ---------------------------------------------------------------------------------

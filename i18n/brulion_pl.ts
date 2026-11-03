@@ -487,6 +487,11 @@
         <source>Changed since, left as they are: %1</source>
         <translation>Zmienione w międzyczasie, zostają bez zmian: %1</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="484"/>
+        <source>Leave focus mode</source>
+        <translation>Wyjdź z trybu skupienia</translation>
+    </message>
 </context>
 <context>
     <name>BAccentDialog</name>
@@ -7880,6 +7885,48 @@
         <source>Find and replace…</source>
         <translation>Znajdź i zamień…</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="424"/>
+        <source>%n word(s)</source>
+        <translation>
+            <numerusform>%n słowo</numerusform>
+            <numerusform>%n słowa</numerusform>
+            <numerusform>%n słów</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="424"/>
+        <source>%n character(s)</source>
+        <translation>
+            <numerusform>%n znak</numerusform>
+            <numerusform>%n znaki</numerusform>
+            <numerusform>%n znaków</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="426"/>
+        <source>%n without spaces</source>
+        <comment>characters</comment>
+        <translation>
+            <numerusform>%n bez spacji</numerusform>
+            <numerusform>%n bez spacji</numerusform>
+            <numerusform>%n bez spacji</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="428"/>
+        <source>%n min read</source>
+        <translation>
+            <numerusform>%n min czytania</numerusform>
+            <numerusform>%n min czytania</numerusform>
+            <numerusform>%n min czytania</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/PageView.qml" line="616"/>
+        <source>Selection: %1</source>
+        <translation>Zaznaczenie: %1</translation>
+    </message>
 </context>
 <context>
     <name>PdfEmbedTile</name>
@@ -10115,6 +10162,46 @@
         <source>Off: a picture with a web address waits for “Show”, so opening a synced or imported note tells no site that you read it. Pictures saved to the notebook are always shown.</source>
         <translation>Wyłączone: obraz z adresem internetowym czeka na „Pokaż”, więc otwarcie zsynchronizowanej albo zaimportowanej notatki nie zdradza żadnej stronie, że ją czytasz. Obrazy zapisane w notatniku są widoczne zawsze.</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="60"/>
+        <source>Keyboard shortcuts</source>
+        <translation>Skróty klawiszowe</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="705"/>
+        <source>Word count</source>
+        <translation>Liczba słów</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="706"/>
+        <source>Words, characters and reading time in the corner of a page (wide windows); the page&apos;s menu always shows them.</source>
+        <translation>Słowa, znaki i czas czytania w rogu strony (w szerokim oknie); menu strony pokazuje je zawsze.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="713"/>
+        <source>Focus mode</source>
+        <translation>Tryb skupienia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="714"/>
+        <source>On a page and in the journal only the text, without side bars and toolbars. %1 or Esc leaves it.</source>
+        <translation>Na stronie i w dzienniku sam tekst, bez pasków bocznych i narzędzi. Wychodzi się z niego przez %1 albo Esc.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="715"/>
+        <source>The command palette</source>
+        <translation>paletę poleceń</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="722"/>
+        <source>Typewriter scrolling</source>
+        <translation>Przewijanie jak w maszynie do pisania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="723"/>
+        <source>The line you are writing stays in the middle of the screen.</source>
+        <translation>Wiersz, w którym piszesz, zostaje na środku ekranu.</translation>
+    </message>
 </context>
 <context>
     <name>ShellAboutDialog</name>
@@ -11012,6 +11099,118 @@
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="162"/>
         <source>New pages go to the notebook&apos;s folder for new pages.</source>
         <translation>Nowe strony trafiają do folderu notatnika na nowe strony.</translation>
+    </message>
+</context>
+<context>
+    <name>ShellShortcutSettings</name>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="39"/>
+        <source>“%1” now has %2</source>
+        <translation>„%1” ma teraz skrót %2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="51"/>
+        <source>“%1” now has %2; “%3” has no shortcut</source>
+        <translation>„%1” ma teraz skrót %2, a „%3” nie ma żadnego</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="57"/>
+        <source>“%1” has no shortcut now</source>
+        <translation>„%1” nie ma teraz skrótu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="65"/>
+        <source>Keyboard shortcuts</source>
+        <translation>Skróty klawiszowe</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="72"/>
+        <source>The shortcuts of the commands in the command palette, kept on this device. The keys of writing and editing (Enter, Tab, Ctrl+C, Ctrl+Z…) stay as they are.</source>
+        <translation>Skróty poleceń z palety poleceń, zapamiętane na tym urządzeniu. Klawisze pisania i edycji (Enter, Tab, Ctrl+C, Ctrl+Z…) zostają bez zmian.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="84"/>
+        <source>Search commands and keys…</source>
+        <translation>Szukaj poleceń i klawiszy…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="89"/>
+        <source>Restore all</source>
+        <translation>Przywróć wszystkie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="105"/>
+        <source>Press the new shortcut</source>
+        <translation>Naciśnij nowy skrót</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="140"/>
+        <source>No command matches “%1”.</source>
+        <translation>Żadne polecenie nie pasuje do „%1”.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="164"/>
+        <source>Press the new shortcut… Esc cancels.</source>
+        <translation>Naciśnij nowy skrót… Esc anuluje.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="166"/>
+        <source>Default: %1</source>
+        <translation>Domyślnie: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="167"/>
+        <source>Default: none</source>
+        <translation>Domyślnie: brak</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="178"/>
+        <source>No shortcut</source>
+        <translation>Brak skrótu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="183"/>
+        <source>Cancel</source>
+        <translation>Anuluj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="121"/>
+        <source>Change</source>
+        <translation>Zmień</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="194"/>
+        <source>No shortcut for “%1”</source>
+        <translation>Bez skrótu dla „%1”</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="203"/>
+        <source>Restore the default, %1</source>
+        <translation>Przywróć domyślny: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="204"/>
+        <source>Restore the default (no shortcut)</source>
+        <translation>Przywróć domyślny (bez skrótu)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="228"/>
+        <source>Assign here</source>
+        <translation>Przypisz tutaj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="243"/>
+        <source>Restore every default shortcut?</source>
+        <translation>Przywrócić wszystkie domyślne skróty?</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="244"/>
+        <source>%n command(s) have a shortcut of their own now.</source>
+        <translation>
+            <numerusform>%n polecenie ma teraz własny skrót.</numerusform>
+            <numerusform>%n polecenia mają teraz własne skróty.</numerusform>
+            <numerusform>%n poleceń ma teraz własne skróty.</numerusform>
+        </translation>
     </message>
 </context>
 <context>
@@ -18247,6 +18446,71 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <source>Find and replace in every note, with a preview</source>
         <translation>Znajdź i zamień we wszystkich notatkach, z podglądem</translation>
     </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="136"/>
+        <source>Find and replace in note</source>
+        <translation>Znajdź i zamień w notatce</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="152"/>
+        <source>Rename page…</source>
+        <translation>Zmień nazwę strony…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="167"/>
+        <source>Leave focus mode</source>
+        <translation>Wyjdź z trybu skupienia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="164"/>
+        <source>Focus mode</source>
+        <translation>Tryb skupienia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="168"/>
+        <source>Only the text, without side bars and toolbars</source>
+        <translation>Sam tekst, bez pasków bocznych i narzędzi</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="173"/>
+        <source>Turn off typewriter scrolling</source>
+        <translation>Wyłącz przewijanie jak w maszynie do pisania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="174"/>
+        <source>Typewriter scrolling</source>
+        <translation>Przewijanie jak w maszynie do pisania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="175"/>
+        <source>Keep the line being written in the middle of the screen</source>
+        <translation>Wiersz, w którym piszesz, na środku ekranu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="203"/>
+        <source>Keyboard shortcuts</source>
+        <translation>Skróty klawiszowe</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="203"/>
+        <source>Change them in Settings</source>
+        <translation>Zmień je w ustawieniach</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="392"/>
+        <source>Command palette</source>
+        <translation>Paleta poleceń</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="396"/>
+        <source>Add to or remove from favorites</source>
+        <translation>Dodaj do ulubionych albo usuń z nich</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="398"/>
+        <source>Brulion documentation or back to my notebook</source>
+        <translation>Dokumentacja Brulionu albo powrót do mojego notatnika</translation>
+    </message>
 </context>
 <context>
     <name>brulion::shell::DesktopTray</name>
@@ -18279,6 +18543,64 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/shell/desktop/desktoptray.cpp" line="111"/>
         <source>Quit</source>
         <translation>Zakończ</translation>
+    </message>
+</context>
+<context>
+    <name>brulion::shell::ShortcutMap</name>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="97"/>
+        <source>editing text</source>
+        <translation>edycji tekstu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="99"/>
+        <source>blocks in the editor</source>
+        <translation>edytora bloków</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="101"/>
+        <source>drawings</source>
+        <translation>edytora rysunków</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="103"/>
+        <source>the PDF viewer</source>
+        <translation>przeglądarki PDF</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="66"/>
+        <source>menus</source>
+        <translation>menu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="283"/>
+        <source>There is no such command.</source>
+        <translation>Nie ma takiego polecenia.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="286"/>
+        <source>“%1” is not a key combination Brulion can use: press one key with Ctrl, Alt or a function key.</source>
+        <translation>„%1” to nie jest kombinacja klawiszy, której Brulion może użyć: naciśnij jeden klawisz z Ctrl albo Alt lub klawisz funkcyjny.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="288"/>
+        <source>%1 types or moves the caret in text. Add Ctrl or Alt, or use a function key (F1–F12).</source>
+        <translation>%1 pisze w tekście albo przesuwa w nim kursor. Dodaj Ctrl albo Alt lub użyj klawisza funkcyjnego (F1–F12).</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="291"/>
+        <source>%1 types a Polish letter on Windows (AltGr). Choose another key.</source>
+        <translation>%1 wpisuje na Windows polską literę (AltGr). Wybierz inny klawisz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="293"/>
+        <source>%1 is used for %2 and cannot be a command&apos;s shortcut.</source>
+        <translation>%1 to klawisz %2 i nie może być skrótem polecenia.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/shortcutmap.cpp" line="300"/>
+        <source>%1 is already the shortcut of “%2”.</source>
+        <translation>%1 jest już skrótem polecenia „%2”.</translation>
     </message>
 </context>
 <context>

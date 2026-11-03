@@ -103,7 +103,7 @@ Rectangle {
             enabled: AppController.canGoBack
             iconName: "arrow-left"
             label: qsTr("Back")
-            shortcut: "Alt+Left"
+            shortcut: ShortcutMap.sequences["nav.back"] || ""
             onClicked: AppController.back()
         }
         BIconButton {
@@ -111,7 +111,7 @@ Rectangle {
             enabled: AppController.canGoForward
             iconName: "arrow-right"
             label: qsTr("Forward")
-            shortcut: "Alt+Right"
+            shortcut: ShortcutMap.sequences["nav.forward"] || ""
             onClicked: AppController.forward()
         }
 
@@ -147,28 +147,28 @@ Rectangle {
         BIconButton {
             iconName: "search"
             label: qsTr("Search")
-            shortcut: "Ctrl+Shift+F"
+            shortcut: ShortcutMap.sequences["go.search"] || ""
             onClicked: AppController.search("")
         }
         BIconButton {
             visible: !Theme.narrow
             iconName: "command"
             label: qsTr("Command palette")
-            shortcut: "Ctrl+K"
+            shortcut: ShortcutMap.sequences["palette"] || ""
             onClicked: bar.paletteRequested()
         }
         BIconButton {
             visible: !Theme.narrow
             iconName: "plus"
             label: qsTr("Quick capture")
-            shortcut: "Ctrl+Shift+N"
+            shortcut: ShortcutMap.sequences["capture"] || ""
             onClicked: bar.captureRequested()
         }
         BIconButton {
             visible: !Theme.narrow
             iconName: "panel-right"
             label: AppController.sidePanelVisible ? qsTr("Hide side panel") : qsTr("Show side panel")
-            shortcut: "Ctrl+\\"
+            shortcut: ShortcutMap.sequences["panel.toggle"] || ""
             checkable: true
             checked: AppController.sidePanelVisible
             onClicked: AppController.sidePanelVisible = !AppController.sidePanelVisible
@@ -196,7 +196,7 @@ Rectangle {
             height: visible ? implicitHeight : 0
             text: qsTr("Rename…")
             iconName: "pencil"
-            shortcut: "F2"
+            shortcut: ShortcutMap.sequences["page.rename"] || ""
             onTriggered: bar.renameRequested(bar.pagePath)
         }
         BMenuItem {
@@ -238,7 +238,7 @@ Rectangle {
             text: !bar.picture ? qsTr("Markdown source")
                 : bar.pictureAsText ? qsTr("Show picture") : qsTr("Show as text")
             iconName: bar.picture && bar.pictureAsText ? "image" : "code"
-            shortcut: "Ctrl+E"
+            shortcut: ShortcutMap.sequences["page.source"] || ""
             onTriggered: AppController.requestUiAction("toggleSourceMode")
         }
         BMenuItem {
@@ -282,13 +282,13 @@ Rectangle {
         BMenuItem {
             text: qsTr("New page")
             iconName: "square-pen"
-            shortcut: "Ctrl+N"
+            shortcut: ShortcutMap.sequences["page.new"] || ""
             onTriggered: bar.newPageRequested()
         }
         BMenuItem {
             text: qsTr("Command palette")
             iconName: "command"
-            shortcut: "Ctrl+K"
+            shortcut: ShortcutMap.sequences["palette"] || ""
             onTriggered: bar.paletteRequested()
         }
         BMenuSeparator {}
@@ -327,7 +327,7 @@ Rectangle {
             height: visible ? implicitHeight : 0
             text: qsTr("Find in note")
             iconName: "search"
-            shortcut: "Ctrl+F"
+            shortcut: ShortcutMap.sequences["page.find"] || ""
             onTriggered: AppController.requestUiAction("findInNote")
         }
         BMenuItem {
@@ -341,7 +341,7 @@ Rectangle {
         BMenuItem {
             text: qsTr("Settings")
             iconName: "settings"
-            shortcut: "Ctrl+,"
+            shortcut: ShortcutMap.sequences["go.settings"] || ""
             onTriggered: AppController.navigate({ view: "settings" })
         }
         BMenuItem {

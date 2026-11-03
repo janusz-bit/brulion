@@ -489,6 +489,14 @@ public:
     /// top blocks in document order, each with its subtree (a selection with gaps too).
     Q_INVOKABLE QString selectionMarkdown() const;
     Q_INVOKABLE QString selectionPlainText() const;
+    /// Word and character counts and the reading time of the page as it is now (its source in
+    /// source mode; stats/textstats.h): { words, characters, charactersNoSpaces, readingMinutes,
+    /// length } — length is the text's size, for a caller that waits longer after typing in a
+    /// long page —; {} before it is loaded. (docs/UI.md "Statistics and focus mode".)
+    Q_INVOKABLE QVariantMap pageStats() const;
+    /// The same of a selection: `editSelection` (the Markdown selected in the block being edited)
+    /// when it is not empty, else the selected blocks; {} when nothing is selected.
+    Q_INVOKABLE QVariantMap selectionStats(const QString &editSelection = QString()) const;
     /// Copy the selection: Markdown as text/plain plus the host's text/html (EditorHost::renderHtml,
     /// rendered when another application asks for it: writeClipboard()), or `plainText`; on Linux also the primary selection. Returns { ok, count (visible blocks),
     /// reason: "empty" | "tooLarge" | "noClipboard" }.

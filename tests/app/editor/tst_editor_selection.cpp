@@ -81,6 +81,31 @@ class TestSelection : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
+    // The page's and the selection's word counts (stats/textstats.h; the page footer).
+    void stats()
+    {
+        Fixture f(u"---\ntags: [plan]\n---\n# Plan dnia\n\n- [ ] Kupić żółć 📅 2026-10-15\n- [[Sklep|sklep]] "
+                  u"biało-czerwony\n"
+                  u"```\nkod się nie liczy\n```\n"_s);
+        QVERIFY(f.page.loaded());
+        const QVariantMap page = f.page.pageStats();
+        QCOMPARE(page.value(u"words"_s).toInt(), 6);
+        QCOMPARE(page.value(u"characters"_s).toInt(), 9 + 10 + 20);
+        QCOMPARE(page.value(u"charactersNoSpaces"_s).toInt(), 8 + 9 + 19);
+        QCOMPARE(page.value(u"readingMinutes"_s).toInt(), 1);
+        QCOMPARE(page.value(u"length"_s).toLongLong(), qlonglong(f.text().size()));
+        // Nothing selected: nothing to count; a block selection; a text selection in a block.
+        QVERIFY(f.page.selectionStats().isEmpty());
+        f.page.selectRange(2, 3);
+        QCOMPARE(f.page.selectionStats().value(u"words"_s).toInt(), 4);
+        QCOMPARE(f.page.selectionStats(u"**Kupić** żółć"_s).value(u"words"_s).toInt(), 2);
+        QCOMPARE(f.page.selectionStats(u"**Kupić** żółć"_s).value(u"characters"_s).toInt(), 10);
+        // Source mode counts the source as it is typed.
+        f.page.setSourceMode(true);
+        f.page.setSourceText(f.page.sourceText() + u"\nJeszcze dwa"_s);
+        QCOMPARE(f.page.pageStats().value(u"words"_s).toInt(), 8);
+    }
+
     void rangesTakeWholeSubtrees()
     {
         Fixture f(Outline);

@@ -135,8 +135,18 @@ FocusScope {
     property Item toolbarHost: null
     readonly property Item dockHost: toolbarHost !== null ? toolbarHost : editor
     /// What scrolls the editor instead of its own list (a day of the journal stream: the journal
-    /// list; any object with ensureVisible(item, rect)), else null.
+    /// list; any object with ensureVisible(item, rect), and centerInView(item, rect) for
+    /// typewriter scrolling), else null.
     property var scroller: null
+    /// Typewriter scrolling (AppSettings.typewriterScrolling; docs/UI.md "Statistics and focus
+    /// mode"): the caret's line is kept in the middle of the view while writing (the view gives
+    /// room under the last block for it: PageView's bottomSpace).
+    property bool typewriter: false
+    /// The editor's own keys for copying a block reference and for source mode, handled here only
+    /// while they are those commands' shortcuts (the views bind the shell's ShortcutMap: another
+    /// key is a window Shortcut that asks the view instead); the block menu shows the first.
+    property string copyRefShortcut: "Ctrl+Shift+C"
+    property string sourceModeShortcut: "Ctrl+E"
     /// The source's text editor in source mode (the toolbar inserts into it), else null.
     readonly property TextEdit sourceTextEdit: sourceLoader.item ? (sourceLoader.item as SourceEditor).textEdit : null
 
@@ -1023,8 +1033,32 @@ FocusScope {
     /// Keep the caret of an inline editor visible (called after layout settled). Not while the
     /// keyboard slides (the view changes size every frame): once it has settled.
     function ensureCaretVisible(edit) {
-        if (edit && edit.activeFocus && !KeyboardInsets.animating)
+        if (!edit || !edit.activeFocus || KeyboardInsets.animating)
+            return
+        if (editor.typewriter)
+            centerInView(edit, edit.cursorRectangle)
+        else
             ensureVisible(edit, edit.cursorRectangle)
+    }
+    /// Typewriter scrolling: `rect` of `item` (the caret) to the middle of the visible part of
+    /// the list — or of the list scrolling the editor — as far as the content goes.
+    function centerInView(item, rect) {
+        if (!item || !list || !editor.alive)
+            return
+        if (editor.scroller) {
+            if (editor.scroller.centerInView)
+                editor.scroller.centerInView(item, rect)
+            else
+                editor.scroller.ensureVisible(item, rect)
+            return
+        }
+        const p = item.mapToItem(list.contentItem, rect.x, rect.y)
+        const visibleHeight = list.height - list.bottomMargin
+        const top = list.originY - list.topMargin
+        const bottom = Math.max(top, list.contentHeight + list.originY - list.height + list.bottomMargin)
+        const target = Math.max(top, Math.min(bottom, p.y + rect.height / 2 - visibleHeight / 2))
+        if (Math.abs(target - list.contentY) >= 1)
+            list.contentY = target
     }
     /// Keep what is being edited visible: the caret of the block, else the table cell.
     function ensureEditVisible() {
@@ -1296,7 +1330,11 @@ FocusScope {
             switch (event.key) {
             case Qt.Key_Z: undoStep(shift); return true
             case Qt.Key_Y: undoStep(true); return true
-            case Qt.Key_E: toggleSourceMode(); return true
+            case Qt.Key_E:
+                if (editor.sourceModeShortcut !== "Ctrl+E")
+                    return false
+                toggleSourceMode()
+                return true
             case Qt.Key_Period: controller.toggleFold(row); return true
             case Qt.Key_Return:
             case Qt.Key_Enter:
@@ -1310,6 +1348,8 @@ FocusScope {
                 // Ctrl+Shift+C: the block's reference ((id)); Ctrl+C copies the selected text
                 // exactly (TextEdit's own copy turns no-break spaces into spaces).
                 if (shift) {
+                    if (editor.copyRefShortcut !== "Ctrl+Shift+C")
+                        return false
                     copyCurrentLink("blockRef")
                     return true
                 }
@@ -1531,6 +1571,8 @@ FocusScope {
                 return true
             case Qt.Key_C:
                 if (shift) {
+                    if (editor.copyRefShortcut !== "Ctrl+Shift+C")
+                        return false
                     copyCurrentLink("blockRef") // nothing selected: says what to do
                     return true
                 }

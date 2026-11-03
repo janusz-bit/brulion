@@ -2,6 +2,7 @@
 
 #include "appcontroller.h"
 #include "appsettings.h"
+#include "shortcutmap.h"
 #include "workspace.h"
 
 #include <QCoreApplication>
@@ -24,11 +25,15 @@ struct Command {
     bool enabled = true;
 };
 
-QVariantMap toMap(const Command &c)
+/// `c` for the palette, with the shortcut it has now (ShortcutMap: custom or default).
+QVariantMap toMap(const Command &c, const ShortcutMap *shortcuts)
 {
-    return { { u"id"_s, c.id },           { u"title"_s, c.title },
-             { u"subtitle"_s, c.subtitle }, { u"icon"_s, c.icon },
-             { u"shortcut"_s, c.shortcut }, { u"enabled"_s, c.enabled } };
+    return {{u"id"_s, c.id},
+            {u"title"_s, c.title},
+            {u"subtitle"_s, c.subtitle},
+            {u"icon"_s, c.icon},
+            {u"shortcut"_s, shortcuts ? shortcuts->sequence(c.id) : c.shortcut},
+            {u"enabled"_s, c.enabled}};
 }
 
 } // namespace
@@ -46,6 +51,14 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
     connect(app, &AppController::sourceModeShownChanged, this, &CommandModel::commandsChanged);
     connect(app, &AppController::languageChanged, this, &CommandModel::commandsChanged);
     connect(app->workspace(), &Workspace::favoritesChanged, this, &CommandModel::commandsChanged);
+    connect(app->settings(), &AppSettings::focusModeChanged, this, &CommandModel::commandsChanged);
+    connect(app->settings(), &AppSettings::typewriterScrollingChanged, this, &CommandModel::commandsChanged);
+    // The shortcuts' list: these commands with their default shortcuts (titles in the language:
+    // again after a language switch, eventFilter()).
+    if (ShortcutMap *shortcuts = app->shortcuts()) {
+        shortcuts->setActions(shortcutActions());
+        connect(shortcuts, &ShortcutMap::changed, this, &CommandModel::commandsChanged);
+    }
 }
 
 CommandModel::~CommandModel()
@@ -56,8 +69,11 @@ CommandModel::~CommandModel()
 
 bool CommandModel::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == QCoreApplication::instance() && event->type() == QEvent::LanguageChange)
+    if (watched == QCoreApplication::instance() && event->type() == QEvent::LanguageChange) {
+        if (ShortcutMap *shortcuts = m_app->shortcuts())
+            shortcuts->setActions(shortcutActions());
         Q_EMIT commandsChanged();
+    }
     return QObject::eventFilter(watched, event);
 }
 
@@ -120,6 +136,7 @@ static QList<Command> buildCommands(const AppController *app)
             // (The open note's find bar; in the journal stream the day being written in.)
             {u"page.find"_s, CommandModel::tr("Find in note"), CommandModel::tr("And replace"), u"search"_s,
              u"Ctrl+F"_s, inEditor},
+            {u"page.replace"_s, CommandModel::tr("Find and replace in note"), {}, u"search"_s, u"Ctrl+H"_s, inEditor},
             {u"go.replace"_s,
              CommandModel::tr("Replace in notebook"),
              CommandModel::tr("Find and replace in every note, with a preview"),
@@ -133,6 +150,8 @@ static QList<Command> buildCommands(const AppController *app)
              {},
              onPage},
             {u"page.history"_s, CommandModel::tr("Page history"), {}, u"history"_s, {}, onPage},
+            // (The shell's rename dialog; a daily note is named by its date.)
+            {u"page.rename"_s, CommandModel::tr("Rename page…"), {}, u"pencil"_s, u"F2"_s, onPage},
             // The editor's Ctrl+E — the only way on a phone to leave source mode once it is on.
             {u"page.source"_s, CommandModel::tr("Markdown source"),
              CommandModel::tr("Switch between blocks and the page's text"), u"code"_s, u"Ctrl+E"_s, inEditor},
@@ -144,6 +163,18 @@ static QList<Command> buildCommands(const AppController *app)
              u"panel-right"_s,
              u"Ctrl+\\"_s,
              ready && app->sidePanelAllowed()},
+            // Focus mode and typewriter scrolling (docs/UI.md "Statistics and focus mode"): device
+            // settings; the bars go only where an editor is shown.
+            {u"view.focus"_s,
+             app->settings()->focusMode() ? CommandModel::tr("Leave focus mode") : CommandModel::tr("Focus mode"),
+             CommandModel::tr("Only the text, without side bars and toolbars"), u"maximize"_s, u"F8"_s, true},
+            {u"view.typewriter"_s,
+             app->settings()->typewriterScrolling() ? CommandModel::tr("Turn off typewriter scrolling")
+                                                    : CommandModel::tr("Typewriter scrolling"),
+             CommandModel::tr("Keep the line being written in the middle of the screen"),
+             u"text-select"_s,
+             {},
+             true},
             {u"sync.now"_s,
              CommandModel::tr("Sync now"),
              CommandModel::tr("Nextcloud"),
@@ -168,6 +199,12 @@ static QList<Command> buildCommands(const AppController *app)
              {},
              true},
             {u"go.settings"_s, CommandModel::tr("Settings"), {}, u"settings"_s, u"Ctrl+,"_s, ready},
+            {u"settings.shortcuts"_s,
+             CommandModel::tr("Keyboard shortcuts"),
+             CommandModel::tr("Change them in Settings"),
+             u"keyboard"_s,
+             {},
+             ready},
             {u"vault.docs"_s,
              app->inDocsVault() ? CommandModel::tr("Back to my notebook") : CommandModel::tr("Brulion documentation"),
              CommandModel::tr("Switch notebook"), u"book-open"_s, u"Ctrl+Shift+B"_s, !app->docsVaultPath().isEmpty()},
@@ -347,7 +384,27 @@ QVariantList CommandModel::commands() const
 {
     QVariantList out;
     for (const Command &c : allCommands(m_app))
-        out.append(toMap(c));
+        out.append(toMap(c, m_app->shortcuts()));
+    return out;
+}
+
+QList<ShortcutMap::Action> CommandModel::shortcutActions() const
+{
+    // The palette itself first; titles that follow the state ("Add to favorites" / "Remove…")
+    // by what the command does.
+    QList<ShortcutMap::Action> out{{u"palette"_s, tr("Command palette"), u"Ctrl+K"_s}};
+    for (const Command &c : allCommands(m_app)) {
+        QString title = c.title;
+        if (c.id == u"page.favorite")
+            title = tr("Add to or remove from favorites");
+        else if (c.id == u"vault.docs")
+            title = tr("Brulion documentation or back to my notebook");
+        else if (c.id == u"view.focus")
+            title = tr("Focus mode");
+        else if (c.id == u"view.typewriter")
+            title = tr("Typewriter scrolling");
+        out.append({c.id, title, c.shortcut});
+    }
     return out;
 }
 
@@ -397,6 +454,16 @@ bool CommandModel::run(const QString &id)
         m_app->navigate({ { u"view"_s, u"history"_s }, { u"path"_s, m_app->currentRoute().value(u"path"_s) } });
     else if (id == u"page.find")
         m_app->requestUiAction(u"findInNote"_s);
+    else if (id == u"page.replace")
+        m_app->requestUiAction(u"replaceInNote"_s);
+    else if (id == u"page.rename")
+        m_app->requestUiAction(u"renamePage"_s);
+    else if (id == u"view.focus")
+        m_app->settings()->setFocusMode(!m_app->settings()->focusMode());
+    else if (id == u"view.typewriter")
+        m_app->settings()->setTypewriterScrolling(!m_app->settings()->typewriterScrolling());
+    else if (id == u"settings.shortcuts")
+        m_app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"shortcuts"_s}});
     else if (id == u"page.source")
         m_app->requestUiAction(u"toggleSourceMode"_s);
     else if (id == u"page.mode")

@@ -113,6 +113,7 @@ AppController::AppController(const Options &options, QObject *parent)
     m_settings->recordSharedNextcloudOwner(isDocsPath(current) ? lastUserVault() : current);
     m_workspace = std::make_unique<Workspace>();
     m_workspace->setUiLanguage(m_settings->language());
+    m_shortcuts = std::make_unique<ShortcutMap>(m_settings.get());
     m_commands = std::make_unique<CommandModel>(this);
     m_syncStatus = { { u"state"_s, u"disabled"_s }, { u"text"_s, QString() }, { u"lastSync"_s, QString() } };
 

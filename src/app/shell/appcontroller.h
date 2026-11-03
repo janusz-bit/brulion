@@ -78,6 +78,7 @@ class WasmNotifier;
 namespace brulion::shell {
 
 class CommandModel;
+class ShortcutMap;
 
 class AppController : public QObject {
     Q_OBJECT
@@ -206,6 +207,8 @@ public:
     Workspace *workspace() const { return m_workspace.get(); }
     AppUpdates *updates() const { return m_updates.get(); }
     CommandModel *commands() const { return m_commands.get(); }
+    /// The commands' keyboard shortcuts, custom ones included (Settings → Skróty klawiszowe).
+    ShortcutMap *shortcuts() const { return m_shortcuts.get(); }
 
     /// Boot: open the last vault (or the one from --vault), else show onboarding. Call once,
     /// after the QML UI is loaded (so it sees the first toasts).
@@ -514,6 +517,7 @@ private:
     std::unique_ptr<AppSettings> m_settings;
     std::unique_ptr<Workspace> m_workspace;
     std::unique_ptr<AppUpdates> m_updates;
+    std::unique_ptr<ShortcutMap> m_shortcuts;
     std::unique_ptr<CommandModel> m_commands;
     std::unique_ptr<platform::Autostart> m_autostart;
     QString m_dataDir;

@@ -415,7 +415,7 @@ Rectangle {
             BIconButton {
                 iconName: "square-pen"
                 label: qsTr("New page")
-                shortcut: "Ctrl+N"
+                shortcut: ShortcutMap.sequences["page.new"] || ""
                 size: "small"
                 onClicked: sidebar.newPageRequested("")
             }
@@ -1004,7 +1004,7 @@ Rectangle {
             objectName: "pagesMenuNewPage"
             text: qsTr("New page")
             iconName: "square-pen"
-            shortcut: "Ctrl+N"
+            shortcut: ShortcutMap.sequences["page.new"] || ""
             onTriggered: sidebar.newPageRequested("")
         }
         BMenuItem {

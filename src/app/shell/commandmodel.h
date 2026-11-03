@@ -2,12 +2,15 @@
 // navigation, journals, new page, quick capture, the page's source and note mode, copying links to
 // the page, the current block and its heading, theme,
 // language, sync, panels, settings, about. `commands` is the array BCommandPalette takes ({ id, title, subtitle, icon,
-// shortcut, enabled }); QML runs the chosen one with run(id). Commands that only move around or change state run here;
-// those that open shell popups (new page, quick switcher, capture, about, theme toggle — the effective theme is known
-// to QML only) come back as AppController::uiActionRequested(action).
+// shortcut, enabled }; the shortcut is the one ShortcutMap gives — custom or default —, and the
+// commands with their default shortcuts are ShortcutMap's actions); QML runs the chosen one with run(id). Commands that
+// only move around or change state run here; those that open shell popups (new page, quick switcher, capture, about,
+// theme toggle — the effective theme is known to QML only) come back as AppController::uiActionRequested(action).
 //
 // Titles are translated (tr); `commands` is re-read after a language switch.
 #pragma once
+
+#include "shortcutmap.h"
 
 #include <QObject>
 #include <QVariantList>
@@ -29,6 +32,8 @@ public:
     Q_INVOKABLE bool run(const QString &id);
     /// Ids of all commands (tests).
     QStringList ids() const;
+    /// The actions ShortcutMap offers: the palette, then every command with its default shortcut.
+    QList<ShortcutMap::Action> shortcutActions() const;
 
 Q_SIGNALS:
     void commandsChanged();

@@ -53,7 +53,12 @@ import Brulion
 // A picture takes "links" | "outline" | "calendar" and "text" (its text view).
 // Ctrl+F, the page menu's "Znajdź i zamień…" and the palette's command open the find bar (FindBar,
 // NoteFind; Ctrl+H with its replace row; route.open "find"; docs/UI.md "Find and replace"): in the
-// main pane only, and a PDF has its own search.
+// main pane only, and a PDF has its own search. These keys — and Ctrl+E, Ctrl+; — are the
+// commands' shortcuts as ShortcutMap has them (custom ones too).
+// The word count (docs/UI.md "Statistics and focus mode"): the page's and the selection's words,
+// characters and reading time in the corner (pageStatsFooter: wide windows, AppSettings.wordCountShown)
+// and at the top of the page menu, counted after a pause (PageController.pageStats / selectionStats);
+// typewriter scrolling (AppSettings.typewriterScrolling) keeps the caret's line in the middle.
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
 // (daily notes by their date), `sidePanel`, `editing`, `toolbarDocked`, `endEditing()` and `sourceMode`. `--editor-script <state>` drives the
@@ -372,15 +377,91 @@ FocusScope {
             onCloseRequested: root.closeFind()
         }
     }
+    // (The shortcuts of the views' commands can be changed: ShortcutMap.)
     Shortcut {
-        sequence: "Ctrl+F"
+        sequence: ShortcutMap.sequences["page.find"] || ""
         enabled: root.visible && !root.inSidePanel && root.findable
         onActivated: root.openFind(false)
     }
     Shortcut {
-        sequence: "Ctrl+H"
+        sequence: ShortcutMap.sequences["page.replace"] || ""
         enabled: root.visible && !root.inSidePanel && root.findable
         onActivated: root.openFind(true)
+    }
+
+    // ---- Statistics (docs/UI.md "Statistics and focus mode") -------------------------------------
+    /// The page's counts ({ words, characters, charactersNoSpaces, readingMinutes, length }:
+    /// PageController.pageStats), counted again a moment after the page changed — later on long
+    /// pages, never on every keystroke —; {} for a picture, a PDF or another file.
+    property var pageStats: ({})
+    /// The selection's counts while text or blocks are selected, else {}.
+    property var selectionStats: ({})
+    readonly property bool statsAvailable: page.loaded && !root.pictureRoute && !root.pdfRoute && !root.fileRoute
+    /// The counts in the view's corner (wide windows, the setting on; the page menu has them always).
+    readonly property bool statsFooterShown: AppSettings.wordCountShown && !Theme.narrow && !root.inSidePanel
+                                             && root.statsAvailable && root.visible
+    onStatsAvailableChanged: root.countNow()
+    onStatsFooterShownChanged: if (statsFooterShown) root.countNow()
+    function countNow() {
+        statsTimer.stop()
+        root.pageStats = root.statsAvailable ? page.pageStats() : ({})
+        root.countSelection()
+    }
+    function scheduleCount() {
+        if (!root.statsFooterShown)
+            return // counted when the menu opens
+        // About 5 ms per 100 000 characters: a long page waits longer after the last change.
+        statsTimer.interval = Math.min(3000, 400 + Math.round((root.pageStats.length || 0) / 100))
+        statsTimer.restart()
+    }
+    function countSelection() {
+        selectionTimer.stop()
+        const edit = editor.activeEditor
+        const text = edit && edit.selectionStart !== edit.selectionEnd ? edit.selectedText : ""
+        root.selectionStats = root.statsAvailable && (text !== "" || page.selectionCount > 0)
+                              ? page.selectionStats(text) : ({})
+    }
+    /// "123 words · 820 characters · 1 min read" (`reading`: with the reading time and the
+    /// characters without spaces).
+    function statsSummary(stats, details) {
+        if (!stats || stats.words === undefined)
+            return ""
+        const parts = [qsTr("%n word(s)", "", stats.words), qsTr("%n character(s)", "", stats.characters)]
+        if (details)
+            parts.push(qsTr("%n without spaces", "characters", stats.charactersNoSpaces))
+        if (stats.readingMinutes > 0)
+            parts.push(qsTr("%n min read", "", stats.readingMinutes))
+        return parts.join(" · ")
+    }
+    Timer {
+        id: statsTimer
+        onTriggered: root.pageStats = root.statsAvailable ? page.pageStats() : ({})
+    }
+    Timer {
+        id: selectionTimer
+        interval: 150
+        onTriggered: root.countSelection()
+    }
+    Connections {
+        target: page.blocks
+        function onModelReset() { root.scheduleCount() }
+        function onRowsInserted() { root.scheduleCount() }
+        function onRowsRemoved() { root.scheduleCount() }
+        function onDataChanged() { root.scheduleCount() }
+    }
+    Connections {
+        target: page
+        function onSourceTextChanged() { root.scheduleCount() }
+        function onSelectionChanged() { if (root.statsFooterShown) selectionTimer.restart() }
+        function onPathChanged() { root.pageStats = ({}); root.selectionStats = ({}) }
+        function onEditingRowChanged() { if (root.statsFooterShown) selectionTimer.restart() }
+    }
+    Connections {
+        target: editor.activeEditor
+        enabled: root.statsFooterShown
+        ignoreUnknownSignals: true
+        function onSelectionStartChanged() { selectionTimer.restart() }
+        function onSelectionEndChanged() { selectionTimer.restart() }
     }
 
     function copyLink() {
@@ -488,7 +569,13 @@ FocusScope {
         headerShowsListChips: true
         // The side panel is narrow: phone-like margins there.
         horizontalPadding: Theme.compact || root.inSidePanel ? Theme.space3 : Theme.space8
-        bottomSpace: refsSection.visible ? root.refsGap + refsSection.height + Theme.space16 : Theme.space16 * 2
+        // Typewriter scrolling: room under the last block to bring it to the middle.
+        bottomSpace: (refsSection.visible ? root.refsGap + refsSection.height + Theme.space16 : Theme.space16 * 2)
+                     + (typewriter ? height / 2 : 0)
+        typewriter: AppSettings.typewriterScrolling && !root.inSidePanel
+        // The editor's own keys as the shortcuts are now (ShortcutMap).
+        copyRefShortcut: ShortcutMap.sequences["block.copyRef"] || ""
+        sourceModeShortcut: ShortcutMap.sequences["page.source"] || ""
         header: Component {
             ContentPageHeader {
                 id: pageHeader
@@ -513,6 +600,41 @@ FocusScope {
         target: editor
         property: "propertiesExpanded"
         value: AppSettings.propertiesExpanded
+    }
+
+    // The page's word count in the corner (the selection's while there is one); its details in a
+    // tooltip. Not over a docked touch toolbar.
+    Rectangle {
+        id: statsFooter
+        objectName: "pageStatsFooter"
+        visible: root.statsFooterShown && root.pageStats.words !== undefined && !editor.toolbarVisible
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: Theme.space4
+        anchors.bottomMargin: Theme.space2
+        z: 2
+        width: statsLabel.implicitWidth + 2 * Theme.space2
+        height: statsLabel.implicitHeight + Theme.space1 * 2
+        radius: Theme.radiusSm
+        color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.85)
+        readonly property bool selection: root.selectionStats.words !== undefined
+        readonly property string text: selection ? qsTr("Selection: %1").arg(root.statsSummary(root.selectionStats, false))
+                                                 : root.statsSummary(root.pageStats, false)
+        Accessible.role: Accessible.StaticText
+        Accessible.name: selection ? qsTr("Selection: %1").arg(root.statsSummary(root.selectionStats, true))
+                                   : root.statsSummary(root.pageStats, true)
+        BText {
+            id: statsLabel
+            anchors.centerIn: parent
+            text: statsFooter.text
+            font.pixelSize: Theme.textXs
+            color: Theme.fgMuted
+        }
+        HoverHandler { id: statsHover }
+        BToolTip {
+            visible: statsHover.hovered
+            text: statsFooter.Accessible.name
+        }
     }
 
     // A picture attachment: the picture itself or its text, read-only (the editor behind it
@@ -581,6 +703,21 @@ FocusScope {
 
     BMenu {
         id: pageMenu
+        onAboutToShow: root.countNow()
+
+        // The page's counts (and the selection's), for reading only.
+        BMenuItem {
+            objectName: "pageMenuStats"
+            visible: root.statsAvailable && root.pageStats.words !== undefined
+            height: visible ? implicitHeight : 0
+            enabled: false
+            text: root.statsSummary(root.pageStats, true)
+            iconName: "type"
+        }
+        BMenuSeparator {
+            visible: root.statsAvailable && root.pageStats.words !== undefined
+            height: visible ? implicitHeight : 0
+        }
 
         BMenuItem {
             text: qsTr("Version history")
@@ -620,7 +757,7 @@ FocusScope {
             height: visible ? implicitHeight : 0
             text: qsTr("Find and replace…")
             iconName: "search"
-            shortcut: "Ctrl+F"
+            shortcut: ShortcutMap.sequences["page.find"] || ""
             enabled: root.findable
             onTriggered: root.openFind(false)
         }
@@ -652,14 +789,14 @@ FocusScope {
             objectName: "pageMenuAddProperty"
             text: qsTr("Add property")
             iconName: "plus"
-            shortcut: root.inSidePanel ? "" : "Ctrl+;"
+            shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["page.addProperty"] || ""
             enabled: page.loaded && !page.sourceMode && !root.pictureRoute
             onTriggered: editor.addProperty()
         }
         BMenuItem {
             text: page.sourceMode ? qsTr("Edit as blocks") : qsTr("Markdown source")
             iconName: "code"
-            shortcut: root.inSidePanel ? "" : "Ctrl+E"
+            shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["page.source"] || ""
             onTriggered: editor.toggleSourceMode()
         }
         BMenuSeparator {}
@@ -739,8 +876,8 @@ FocusScope {
                     editor.toggleSourceMode()
             } else if (action === "toggleNoteMode" && root.visible && !root.inSidePanel) {
                 root.toggleNoteMode()
-            } else if (action === "findInNote" && root.visible && !root.inSidePanel) {
-                root.openFind(false)
+            } else if ((action === "findInNote" || action === "replaceInNote") && root.visible && !root.inSidePanel) {
+                root.openFind(action === "replaceInNote")
             } else if (action.startsWith("copyLink:") && root.visible && !root.inSidePanel && !root.pictureRoute
                        && !root.pdfRoute && !root.fileRoute) {
                 editor.copyCurrentLink(action.slice(9))
@@ -754,13 +891,13 @@ FocusScope {
 
     // "Dodaj właściwość" (docs/UI.md "Page properties"): the panel's add row.
     Shortcut {
-        sequence: "Ctrl+;"
+        sequence: ShortcutMap.sequences["page.addProperty"] || ""
         enabled: root.visible && !root.inSidePanel && editor.visible && page.loaded && !page.sourceMode
         onActivated: editor.addProperty()
     }
 
     Shortcut {
-        sequence: "Ctrl+E"
+        sequence: ShortcutMap.sequences["page.source"] || ""
         enabled: root.visible && !root.inSidePanel // one per window (two would be ambiguous)
         // A picture: the picture ⇄ its text (read-only); a PDF, another file: nothing.
         onActivated: {

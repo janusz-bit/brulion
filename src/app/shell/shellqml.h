@@ -9,6 +9,7 @@
 //                                       Workspace.sync / Workspace.backups
 //   ReplaceSession   uncreatable — Workspace.replacing (the notebook-wide replace)
 //   CommandModel     singleton — the command palette's commands
+//   ShortcutMap      singleton — the commands' keyboard shortcuts (custom ones too)
 //   FolderTreeModel  creatable — FolderTreeModel { workspace: Workspace }
 #pragma once
 
@@ -18,6 +19,7 @@
 #include "commandmodel.h"
 #include "foldertreemodel.h"
 #include "replacesession.h"
+#include "shortcutmap.h"
 #include "workspace.h"
 #include "workspacebackups.h"
 #include "workspacereminders.h"
@@ -128,6 +130,18 @@ public:
     static CommandModel *create(QQmlEngine *, QJSEngine *)
     {
         return detail::cppOwned(detail::controllerForQml()->commands());
+    }
+};
+
+struct ShortcutMapForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ShortcutMap)
+    QML_NAMED_ELEMENT(ShortcutMap)
+    QML_SINGLETON
+public:
+    static ShortcutMap *create(QQmlEngine *, QJSEngine *)
+    {
+        return detail::cppOwned(detail::controllerForQml()->shortcuts());
     }
 };
 

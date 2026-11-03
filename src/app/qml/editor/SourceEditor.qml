@@ -17,7 +17,8 @@ import Brulion
 // on from there where the platform has them).
 // Touch UIs: while the text has the keyboard the editor's toolbar is docked on it with the source
 // tools ([[, #, /, undo, redo, hide keyboard; BlockEditor.toolbarMode "source"); the view ends at
-// the keyboard (the shell lifts it), the caret is kept above the toolbar.
+// the keyboard (the shell lifts it), the caret is kept above the toolbar — with the editor's
+// typewriter scrolling in the middle of the view.
 Flickable {
     id: root
 
@@ -30,7 +31,8 @@ Flickable {
 
     contentWidth: width
     contentHeight: source.height + 2 * Theme.space6
-    bottomMargin: toolbarRoom
+    // (Typewriter scrolling: room under the last line to bring it to the middle.)
+    bottomMargin: toolbarRoom + (editor && editor.typewriter ? height / 2 : 0)
     boundsBehavior: Flickable.StopAtBounds
     clip: true
     TouchFlick.enabled: true
@@ -60,6 +62,14 @@ Flickable {
         const top = source.y + source.cursorRectangle.y
         const bottom = top + source.cursorRectangle.height
         const visibleHeight = root.height - root.toolbarRoom
+        if (root.editor && root.editor.typewriter) {
+            // Typewriter scrolling: the caret's line in the middle.
+            const target = Math.max(0, Math.min(root.contentHeight + root.bottomMargin - root.height,
+                                                (top + bottom) / 2 - visibleHeight / 2))
+            if (Math.abs(target - root.contentY) >= 1)
+                root.contentY = target
+            return
+        }
         if (top < root.contentY + Theme.space4)
             root.contentY = Math.max(0, top - Theme.space4)
         else if (bottom > root.contentY + visibleHeight - Theme.space4)

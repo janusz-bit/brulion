@@ -96,9 +96,8 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   (na komputerze np. Hunspell, na Androidzie systemowe sprawdzanie klawiatury).
 * **Karty i wiele okien** — kilka otwartych stron w kartach, podział widoku na więcej niż główny i
   boczny panel, strona w osobnym oknie (Obsidian).
-* **Statystyki i tryb skupienia** — liczba słów i znaków, czas czytania; widok bez pasków bocznych,
-  kursor trzymany na środku ekranu.
-* **Własne skróty klawiszowe** — zmiana skrótów w ustawieniach, opcjonalnie tryb Vim (Obsidian).
+* **Tryb Vim** — opcjonalne poruszanie się i edycja klawiszami Vima w edytorze bloków i w trybie
+  źródła (Obsidian); skróty poleceń zmienia się już w Ustawienia → Skróty klawiszowe.
 * **Wygląd stron** — ikona strony, okładka; kolorowe zakreślenia (Obsidian) obok dzisiejszego
   `==…==`.
 

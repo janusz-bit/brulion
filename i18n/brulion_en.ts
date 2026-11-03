@@ -850,6 +850,42 @@
     </message>
 </context>
 <context>
+    <name>PageView</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="424"/>
+        <source>%n word(s)</source>
+        <translation>
+            <numerusform>%n word</numerusform>
+            <numerusform>%n words</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="424"/>
+        <source>%n character(s)</source>
+        <translation>
+            <numerusform>%n character</numerusform>
+            <numerusform>%n characters</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="426"/>
+        <source>%n without spaces</source>
+        <comment>characters</comment>
+        <translation>
+            <numerusform>%n without spaces</numerusform>
+            <numerusform>%n without spaces</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="428"/>
+        <source>%n min read</source>
+        <translation>
+            <numerusform>%n min read</numerusform>
+            <numerusform>%n min read</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>PdfEmbedTile</name>
     <message numerus="yes">
         <location filename="../src/app/qml/editor/PdfEmbedTile.qml" line="149"/>
@@ -1194,6 +1230,17 @@
         <translation>
             <numerusform>%n file shared</numerusform>
             <numerusform>%n files shared</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>ShellShortcutSettings</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="244"/>
+        <source>%n command(s) have a shortcut of their own now.</source>
+        <translation>
+            <numerusform>%n command has a shortcut of its own now.</numerusform>
+            <numerusform>%n commands have a shortcut of their own now.</numerusform>
         </translation>
     </message>
 </context>
