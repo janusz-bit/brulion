@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Templates as T
 import Brulion
 
 // ShellTopBar — the bar above the current view: sidebar/drawer button, back/forward, the title
@@ -11,6 +12,9 @@ import Brulion
 // (`menuButtonShown`: the bottom navigation's Menu opens the drawer, so ☰ only shows while that
 // bar is not there — a view replaces it, or the on-screen keyboard is up). With no button before
 // it, the title starts on the view's content edge.
+// Phones (narrow windows) show no tab bar: with two tabs or more a square with their number comes
+// before Szukaj — the tab switcher, a menu of the tabs (one tap shows it) with Nowa karta, Zamknij
+// kartę and Zamknij pozostałe karty (docs/UI.md "Tabs, split view and windows").
 // On a picture attachment (`picture`) the menu's "Markdown source" is the picture bar's "Show as
 // text" / "Show picture" (Ctrl+E there too), and the note mode is not offered (no note to switch).
 // `topInset` extends the bar under the Android status bar (edge-to-edge).
@@ -33,6 +37,8 @@ Rectangle {
     /// innej aplikacji" (the browser: "Otwórz w nowej karcie").
     property bool pdf: false
     property bool fileOnly: false
+    /// The title of a route (AppShell.routeTitle), for the tab switcher's entries.
+    property var titleOf: (route) => ""
 
     signal menuClicked()
     signal sidebarToggled()
@@ -104,7 +110,7 @@ Rectangle {
             iconName: "arrow-left"
             label: qsTr("Back")
             shortcut: "Alt+Left"
-            onClicked: AppController.back()
+            onClicked: AppController.back(AppController.focusedTab)
         }
         BIconButton {
             visible: !Theme.narrow
@@ -112,7 +118,7 @@ Rectangle {
             iconName: "arrow-right"
             label: qsTr("Forward")
             shortcut: "Alt+Right"
-            onClicked: AppController.forward()
+            onClicked: AppController.forward(AppController.focusedTab)
         }
 
         // Title or breadcrumb.
@@ -144,6 +150,39 @@ Rectangle {
             }
         }
 
+        // Phones: the tab switcher, a square with the number of tabs (two or more).
+        T.AbstractButton {
+            id: tabSwitcherButton
+            objectName: "topBarTabs"
+            visible: Theme.narrow && AppController.tabCount > 1
+            implicitWidth: Theme.touchTarget
+            implicitHeight: Theme.touchTarget
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Tabs (%1)").arg(AppController.tabCount)
+            onClicked: tabSwitcher.popup(tabSwitcherButton, tabSwitcherButton.width - tabSwitcher.width, tabSwitcherButton.height)
+            background: Rectangle {
+                radius: Theme.radiusFull
+                color: tabSwitcherButton.down ? Theme.bgPressed : "transparent"
+            }
+            contentItem: Item {
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: Theme.iconSize + 2
+                    height: Theme.iconSize + 2
+                    radius: Theme.radiusXs
+                    color: "transparent"
+                    border.width: 2
+                    border.color: Theme.fgMuted
+                    BText {
+                        anchors.centerIn: parent
+                        text: AppController.tabCount > 99 ? "99+" : String(AppController.tabCount)
+                        variant: "small"
+                        font.weight: Theme.weightSemiBold
+                        color: Theme.fgMuted
+                    }
+                }
+            }
+        }
         BIconButton {
             iconName: "search"
             label: qsTr("Search")
@@ -178,6 +217,49 @@ Rectangle {
             iconName: "ellipsis-vertical"
             label: qsTr("More")
             onClicked: moreMenu.popup(moreButton, moreButton.width - moreMenu.width, moreButton.height)
+        }
+    }
+
+    // The tab switcher (phones): the tabs, the one shown checked; then new / close.
+    BMenu {
+        id: tabSwitcher
+        objectName: "tabSwitcher"
+        Instantiator {
+            model: AppController.tabs
+            delegate: BMenuItem {
+                required property var modelData
+                objectName: "tabSwitcherEntry"
+                text: bar.titleOf(modelData.route)
+                iconName: modelData.id === AppController.focusedTab ? "check" : "file-text"
+                onTriggered: AppController.selectTab(modelData.id)
+            }
+            onObjectAdded: (index, object) => tabSwitcher.insertItem(index, object)
+            // (takeItem: the Instantiator destroys its objects itself.)
+            onObjectRemoved: (index, object) => {
+                for (let i = 0; i < tabSwitcher.count; ++i) {
+                    if (tabSwitcher.itemAt(i) === object) {
+                        tabSwitcher.takeItem(i)
+                        return
+                    }
+                }
+            }
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            text: qsTr("New tab")
+            iconName: "plus"
+            onTriggered: AppController.newTab()
+        }
+        BMenuItem {
+            text: qsTr("Close tab")
+            iconName: "x"
+            onTriggered: AppController.closeTab(AppController.focusedTab)
+        }
+        BMenuItem {
+            objectName: "tabSwitcherCloseOthers"
+            text: qsTr("Close other tabs")
+            iconName: "x"
+            onTriggered: AppController.closeOtherTabs(AppController.focusedTab)
         }
     }
 
@@ -265,6 +347,28 @@ Rectangle {
             text: qsTr("Open in side panel")
             iconName: "panel-right"
             onTriggered: AppController.openPage(bar.pagePath, -1, true)
+        }
+        BMenuItem {
+            objectName: "menuOpenInNewTab"
+            text: qsTr("Open in new tab")
+            iconName: "plus"
+            onTriggered: AppController.openTab(bar.route)
+        }
+        BMenuItem {
+            objectName: "menuOpenInNewWindow"
+            visible: AppController.windowsAllowed && !Theme.narrow
+            height: visible ? implicitHeight : 0
+            text: qsTr("Open in new window")
+            iconName: "app-window"
+            onTriggered: AppController.openWindow(bar.route)
+        }
+        BMenuItem {
+            objectName: "menuSplitView"
+            visible: !Theme.narrow
+            height: visible ? implicitHeight : 0
+            text: AppController.splitTab !== 0 ? qsTr("Close split view") : qsTr("Split view")
+            iconName: AppController.splitTab !== 0 ? "square" : "columns-2"
+            onTriggered: AppController.splitTab !== 0 ? AppController.closeSplit() : AppController.splitView()
         }
         BMenuItem {
             visible: bar.onPage

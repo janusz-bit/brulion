@@ -12,7 +12,8 @@ import Brulion
 //
 // chosen(action): "open" (what a click does: the page — created by its first content when it does
 // not exist yet —, a path part's page or folder, the tag's page, the block, the address),
-// "openSide" (in the side panel; wide windows only), "copy" (the link, a folder's path, the tag or
+// "openSide" (in the side panel; wide windows only), "openTab" / "openWindow" (what "open" does, in a
+// new tab / a window of its own: where the app's shell offers them, OpenIn), "copy" (the link, a folder's path, the tag or
 // the address as text), and for a tag "overview" (the
 // tag view: everything tagged), "tasks" (Tasks with the tag), "filter" (Tasks: filter the list by
 // it — `filterFirst`).
@@ -65,11 +66,25 @@ BMenu {
         onTriggered: menu.chosen("open")
     }
     ShownItem {
+        objectName: "linkMenuOpenTab"
+        shown: OpenIn.tabs && !menu.external
+        text: qsTr("Open in new tab")
+        iconName: "plus"
+        onTriggered: menu.chosen("openTab")
+    }
+    ShownItem {
         objectName: "linkMenuOpenSide"
         shown: menu.sidePanel && !menu.external
         text: qsTr("Open in side panel")
         iconName: "panel-right"
         onTriggered: menu.chosen("openSide")
+    }
+    ShownItem {
+        objectName: "linkMenuOpenWindow"
+        shown: OpenIn.windows && !menu.external
+        text: qsTr("Open in new window")
+        iconName: "app-window"
+        onTriggered: menu.chosen("openWindow")
     }
     ShownItem {
         objectName: "linkMenuOverview"

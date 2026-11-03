@@ -55,8 +55,12 @@ import Brulion
 // NoteFind; Ctrl+H with its replace row; route.open "find"; docs/UI.md "Find and replace"): in the
 // main pane only, and a PDF has its own search.
 //
-// Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
-// (daily notes by their date), `sidePanel`, `editing`, `toolbarDocked`, `endEditing()` and `sourceMode`. `--editor-script <state>` drives the
+// Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`, `paneActive`
+// (false: the other pane of a split view — the window's shortcuts and the palette's actions are
+// the focused pane's); offers `title` (daily notes by their date), `sidePanel`, `editing`,
+// `toolbarDocked`, `endEditing()`, `sourceMode` and `viewState()` / `restoreViewState()` (where
+// the blocks were scrolled: the tab keeps it while another tab is shown, docs/UI.md "Tabs, split
+// view and windows"). `--editor-script <state>` drives the
 // editor for screenshots through qml/dev/PageScript.qml.
 FocusScope {
     id: root
@@ -64,6 +68,55 @@ FocusScope {
     property var route: ({})
     /// Shown in the side panel: the window's Ctrl+E and "Markdown source" act on the main view.
     property bool inSidePanel: false
+    /// In the focused pane of the window (false: the other pane of a split view; its shortcuts
+    /// and the palette's actions are the focused pane's).
+    property bool paneActive: true
+    /// The window's shortcuts and the shell's actions are this view's.
+    readonly property bool commandTarget: root.visible && !root.inSidePanel && root.paneActive
+
+    /// Where the blocks are scrolled: { row (the first one in view), offset (px above it) } —
+    /// {} for a picture, a PDF, source mode or a page not loaded.
+    function viewState() {
+        const list = editor.listView
+        if (!page.loaded || page.path === "" || !editor.visible || page.sourceMode || !list)
+            return {}
+        const row = editor.rowAt(list.width / 2, list.contentY + 1)
+        const item = row >= 0 ? list.itemAtIndex(row) : null
+        if (!item)
+            return list.contentY > list.originY + 1 ? { top: list.contentY - list.originY } : {}
+        return { row: row, offset: Math.round(list.contentY - item.y) }
+    }
+    /// Scroll back to what viewState() gave, once this route's page is loaded (instead of the
+    /// route's own target: switching back to a tab does not flash its block again).
+    function restoreViewState(state) {
+        root._pendingState = state && (state.row !== undefined || state.top !== undefined)
+                ? { state: state, path: root.routePath } : null
+        if (root._pendingState)
+            root._revealed = JSON.stringify([root.routePath, route.blockId, route.line, route.heading])
+        Qt.callLater(() => { if (root && root.alive) root.applyViewState() })
+    }
+    property var _pendingState: null
+    function applyViewState() {
+        const pending = root._pendingState
+        if (!pending || !page.loaded || page.loading || page.path !== pending.path)
+            return
+        root._pendingState = null
+        // After the editor's own scroll to the top once a page has loaded (BlockEditor).
+        editor.later(() => editor.later(() => {
+            const list = editor.listView
+            const s = pending.state
+            list.userMoved = true
+            if (s.row !== undefined && s.row >= 0 && s.row < list.count) {
+                list.positionViewAtIndex(s.row, ListView.Beginning)
+                list.forceLayout()
+                const item = list.itemAtIndex(s.row)
+                if (item)
+                    list.contentY = Math.max(list.originY, item.y + (s.offset || 0))
+            } else if (s.top !== undefined) {
+                list.contentY = list.originY + s.top
+            }
+        }))
+    }
 
     /// The page's day ("YYYY-MM-DD") when it is a daily note, else "".
     readonly property string journalDate: page.path !== "" ? Workspace.journalDate(page.path) : ""
@@ -202,6 +255,7 @@ FocusScope {
         }
         revealTarget()
         openRequested()
+        applyViewState()
     }
 
     /// The picture's two views: the picture itself ⇄ the file read as text (read-only).
@@ -366,12 +420,12 @@ FocusScope {
     }
     Shortcut {
         sequence: "Ctrl+F"
-        enabled: root.visible && !root.inSidePanel && root.findable
+        enabled: root.commandTarget && root.findable
         onActivated: root.openFind(false)
     }
     Shortcut {
         sequence: "Ctrl+H"
-        enabled: root.visible && !root.inSidePanel && root.findable
+        enabled: root.commandTarget && root.findable
         onActivated: root.openFind(true)
     }
 
@@ -408,6 +462,7 @@ FocusScope {
                 root.restoreFolds()
                 root.revealTarget()
                 root.openRequested()
+                root.applyViewState()
             }
         }
     }
@@ -532,6 +587,7 @@ FocusScope {
             path: root.routePath
             route: root.route
             inSidePanel: root.inSidePanel
+            paneActive: root.paneActive
             rendererPalette: editor.rendererPalette
             refsInSidePanel: root.refsInSidePanel
         }
@@ -721,6 +777,8 @@ FocusScope {
     Connections {
         target: AppController
         function onUiActionRequested(action) {
+            if (!root.paneActive)
+                return
             if (action === "toggleSourceMode" && root.visible && !root.inSidePanel) {
                 // A picture: Ctrl+E / "Markdown source" switch between the picture and its text;
                 // a PDF and another file have no Markdown.
@@ -746,13 +804,13 @@ FocusScope {
     // "Dodaj właściwość" (docs/UI.md "Page properties"): the panel's add row.
     Shortcut {
         sequence: "Ctrl+;"
-        enabled: root.visible && !root.inSidePanel && editor.visible && page.loaded && !page.sourceMode
+        enabled: root.commandTarget && editor.visible && page.loaded && !page.sourceMode
         onActivated: editor.addProperty()
     }
 
     Shortcut {
         sequence: "Ctrl+E"
-        enabled: root.visible && !root.inSidePanel // one per window (two would be ambiguous)
+        enabled: root.commandTarget // one per window (two would be ambiguous)
         // A picture: the picture ⇄ its text (read-only); a PDF, another file: nothing.
         onActivated: {
             if (root.pictureRoute)

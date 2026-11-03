@@ -23,13 +23,33 @@ import Brulion
 // Ctrl+F (Ctrl+H: with replace) in the stream: the find bar (FindBar, docs/UI.md "Find and replace")
 // over the day being written in, named in its field; a tap in another day moves the search there.
 // One day as a page: its PageView has the bar. The notebook-wide search and replace cover all days.
-// Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
-// (one day: its date), `sidePanel`, `editing`, `toolbarDocked`, `endEditing()` and `sourceMode`.
+// Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`, `paneActive` (false:
+// the other pane of a split view); offers `title` (one day: its date), `sidePanel`, `editing`,
+// `toolbarDocked`, `endEditing()`, `sourceMode` and `viewState()` / `restoreViewState()` (the stream:
+// the day at the top and how far into it; one day: its PageView's).
 FocusScope {
     id: root
 
     property var route: ({})
     property bool inSidePanel: false
+    property bool paneActive: true
+
+    /// Where the view is scrolled (a tab keeps it while another tab is shown): one day as a page
+    /// — its PageView's; the stream — { date (the day at the top), offset (px into it) }.
+    function viewState() {
+        if (root.single)
+            return root.pageView ? root.pageView.viewState() : {}
+        const journals = listLoader.item
+        return journals ? journals.viewState() : {}
+    }
+    function restoreViewState(state) {
+        if (root.single) {
+            if (root.pageView)
+                root.pageView.restoreViewState(state)
+        } else if (listLoader.item) {
+            listLoader.item.restoreViewState(state)
+        }
+    }
 
     readonly property bool single: !!route && route.view === "journal"
     readonly property string date: route && route.date ? route.date : DatesHelper.today
@@ -67,7 +87,7 @@ FocusScope {
     Connections {
         target: AppController
         function onUiActionRequested(action) {
-            if (root.single || root.inSidePanel || !root.visible || !root.activeDay)
+            if (root.single || root.inSidePanel || !root.paneActive || !root.visible || !root.activeDay)
                 return
             if (action.startsWith("copyLink:")) {
                 root.activeDay.editor.copyCurrentLink(action.slice(9))
@@ -95,7 +115,7 @@ FocusScope {
     // Ctrl+; in the stream: a property of the day being written in (one day as a page: its PageView).
     Shortcut {
         sequence: "Ctrl+;"
-        enabled: !root.single && !root.inSidePanel && root.visible && root.activeDay !== null
+        enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeDay !== null
                  && !root.activeDay.controller.sourceMode
         onActivated: root.activeDay.editor.addProperty()
     }
@@ -145,12 +165,12 @@ FocusScope {
     }
     Shortcut {
         sequence: "Ctrl+F"
-        enabled: !root.single && !root.inSidePanel && root.visible && root.activeDay !== null
+        enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeDay !== null
         onActivated: root.openFind(false)
     }
     Shortcut {
         sequence: "Ctrl+H"
-        enabled: !root.single && !root.inSidePanel && root.visible && root.activeDay !== null
+        enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeDay !== null
         onActivated: root.openFind(true)
     }
 
@@ -162,6 +182,7 @@ FocusScope {
         focus: root.single
         sourceComponent: PageView {
             inSidePanel: root.inSidePanel
+            paneActive: root.paneActive
             focus: true
             route: {
                 const r = { view: "page", path: root.route.path ? root.route.path : tools.journalPathFor(root.date) }
@@ -245,6 +266,35 @@ FocusScope {
                 if (row >= 0)
                     list.positionViewAtIndex(row, ListView.Beginning)
             }
+            /// JournalsView.viewState() of the stream.
+            function viewState() {
+                const item = list.itemAt(list.width / 2, list.contentY + 1)
+                for (let i = 0; item && i < item.children.length; ++i) {
+                    const day = item.children[i] as ContentJournalDay
+                    if (day)
+                        return { date: day.date, offset: Math.round(list.contentY - item.y) }
+                }
+                return {}
+            }
+            property var pendingState: null
+            function restoreViewState(state) {
+                journals.pendingState = state && state.date ? state : null
+                if (journals.pendingState)
+                    days.scrolled = true // not to route.date: where the tab was
+                Qt.callLater(() => { if (journals) journals.applyViewState() })
+            }
+            function applyViewState() {
+                const s = journals.pendingState
+                const row = s ? days.rowOfDate(s.date) : -1
+                if (row < 0)
+                    return // (once the days are known: onRefreshed)
+                journals.pendingState = null
+                list.positionViewAtIndex(row, ListView.Beginning)
+                list.forceLayout()
+                const item = list.itemAtIndex(row)
+                if (item)
+                    list.contentY = Math.max(list.originY, item.y + (s.offset || 0))
+            }
 
             // One selection over several days: the days' controllers attach while they exist.
             StreamSelection {
@@ -271,6 +321,8 @@ FocusScope {
                 property bool scrolled: false
                 // route.date: once the days are known.
                 onRefreshed: {
+                    if (journals.pendingState)
+                        Qt.callLater(() => { if (journals) journals.applyViewState() })
                     if (!scrolled && root.route && root.route.date && count > 0) {
                         scrolled = true
                         Qt.callLater(() => { if (journals && root && root.route) journals.scrollToDate(root.route.date) })

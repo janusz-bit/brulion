@@ -6,8 +6,8 @@ import Brulion
 // BLinkPreview — the popup of a link's hover preview (docs/UI.md "Link previews"), opened by
 // LinkPreviews: the page, section or block a [[link]] or ((reference)) opens, read-only and
 // rendered like an embed (LinkPreview: InlineRenderer's escaped rich text in BRichText — never a
-// note's own HTML), scrollable. The header names it (a click opens it, Ctrl+click in the side
-// panel); a click on a link inside follows that link. A page that does not exist yet says so (a
+// note's own HTML), scrollable. The header names it (a click opens it; a Ctrl+click or a middle
+// click in a new tab — OpenIn); a click on a link inside follows that link (in a new tab alike). A page that does not exist yet says so (a
 // click on the header creates it). It never takes the keyboard focus: the note being written
 // keeps it.
 //
@@ -184,8 +184,10 @@ T.Popup {
                 TapHandler {
                     id: headerTap
                     gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: popup.activated(popup.href, popup.fromPath,
-                                              (headerTap.point.modifiers & Qt.ControlModifier) !== 0 && !Theme.narrow)
+                    acceptedButtons: OpenIn.tabs ? Qt.LeftButton | Qt.MiddleButton : Qt.LeftButton
+                    // Ctrl+click, a middle click: in a new tab (OpenIn).
+                    onTapped: (eventPoint, button) => OpenIn.run(OpenIn.clickTarget(button, headerTap.point.modifiers),
+                                                                 () => popup.activated(popup.href, popup.fromPath, false))
                 }
             }
 
@@ -321,12 +323,13 @@ T.Popup {
                             TapHandler {
                                 id: entryTap
                                 gesturePolicy: TapHandler.ReleaseWithinBounds
-                                onTapped: (eventPoint) => {
+                                acceptedButtons: OpenIn.tabs ? Qt.LeftButton | Qt.MiddleButton : Qt.LeftButton
+                                onTapped: (eventPoint, button) => {
                                     const p = eventPoint.position
                                     const link = popup.followable(text.linkAt(p.x - text.x, p.y - text.y))
                                     if (link !== "")
-                                        popup.activated(link, entry.modelData.path || popup.fromPath,
-                                                        (entryTap.point.modifiers & Qt.ControlModifier) !== 0 && !Theme.narrow)
+                                        OpenIn.run(OpenIn.clickTarget(button, entryTap.point.modifiers),
+                                                   () => popup.activated(link, entry.modelData.path || popup.fromPath, false))
                                 }
                             }
                         }

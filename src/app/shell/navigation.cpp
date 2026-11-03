@@ -114,6 +114,32 @@ bool RouteHistory::forward()
     return true;
 }
 
+bool RouteHistory::restore(const QList<QVariantMap> &back, const QVariantMap &current,
+                           const QList<QVariantMap> &forward)
+{
+    const QVariantMap now = normalizeRoute(current);
+    if (now.isEmpty())
+        return false;
+    // `toward` is the end next to the current route (back: the last, forward: the last too).
+    const auto clean = [&now](const QList<QVariantMap> &routes) {
+        QList<QVariantMap> out;
+        for (const QVariantMap &route : routes) {
+            const QVariantMap r = normalizeRoute(route);
+            if (!r.isEmpty() && (out.isEmpty() || !sameRoute(out.last(), r)))
+                out.append(r);
+        }
+        while (!out.isEmpty() && sameRoute(out.last(), now))
+            out.removeLast();
+        while (out.size() > MaxDepth)
+            out.removeFirst();
+        return out;
+    };
+    m_back = clean(back);
+    m_forward = clean(forward);
+    m_current = now;
+    return true;
+}
+
 void RouteHistory::reset()
 {
     m_back.clear();

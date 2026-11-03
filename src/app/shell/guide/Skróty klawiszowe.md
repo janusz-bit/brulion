@@ -16,7 +16,11 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | Ctrl+N | nowa strona |
 | Ctrl+Shift+N | szybka notatka do dziennika |
 | Ctrl+Shift+B | dokumentacja Brulionu / powrót do poprzedniego notatnika |
-| Alt+← / Alt+→ | wstecz / dalej |
+| Alt+← / Alt+→ | wstecz / dalej (w bieżącej karcie) |
+| Ctrl+T | nowa karta |
+| Ctrl+W | zamknij kartę (w osobnym oknie strony: to okno) |
+| Ctrl+Tab / Ctrl+Shift+Tab | następna / poprzednia karta (także Ctrl+PgDown / Ctrl+PgUp) |
+| Ctrl+1 … Ctrl+8 / Ctrl+9 | karta o tym numerze / ostatnia karta |
 | Ctrl+\ | panel boczny (szerokie okno) |
 | F2 | zmiana nazwy strony |
 | Ctrl+, | ustawienia |
@@ -26,6 +30,15 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | Ctrl+; | dodaj właściwość strony |
 | Delete | w drzewku stron: przenieś stronę, plik albo folder do kosza (po potwierdzeniu; „Cofnij” w powiadomieniu przywraca) |
 | Ctrl+Enter | w oknach: zatwierdź |
+
+## Karty, podział widoku i okna
+Kilka stron może być otwartych naraz, każda w swojej karcie. Każda karta ma własną historię (wstecz / dalej) i pamięta, gdzie strona była przewinięta. Karty zapamiętują się osobno dla każdego notatnika na tym urządzeniu i wracają po ponownym uruchomieniu.
+
+* **Nowa karta**: Ctrl+T albo „+” na pasku kart. Stronę z paska bocznego, listy wszystkich stron, wyników wyszukiwania czy odnośników otworzysz w nowej karcie **środkowym przyciskiem myszy** albo **Ctrl+kliknięciem**. Link w notatce — środkowym przyciskiem albo z menu linku (prawy przycisk): „Otwórz w nowej karcie” (w edytorze Ctrl+kliknięcie zaznacza bloki).
+* **Pasek kart** pojawia się, gdy kart jest co najmniej dwie. Karty można przeciągać, środkowy przycisk albo × zamyka kartę, prawy przycisk otwiera jej menu.
+* **Podział widoku**: *Więcej* ⋮ → „Podziel widok” (albo paleta poleceń) pokazuje drugą stronę obok — kliknij w połowę okna, w której chcesz pracować. „Zamknij podział” wraca do jednego widoku.
+* **Osobne okno** (komputer): „Otwórz w nowym oknie” z menu linku, menu strony w drzewku albo *Więcej* ⋮. Zmiany w jednym oknie od razu widać w drugim. „Przenieś do okna głównego” robi z okna z powrotem kartę.
+* **Na telefonie** nie ma paska kart: gdy kart jest kilka, na górnym pasku pojawia się kwadracik z ich liczbą — dotknij go, żeby przełączyć kartę albo zamknąć pozostałe.
 
 ## Edycja bloków
 | Skrót | Działanie |

@@ -113,6 +113,10 @@ AppController::AppController(const Options &options, QObject *parent)
     m_workspace = std::make_unique<Workspace>();
     m_workspace->setUiLanguage(m_settings->language());
     m_commands = std::make_unique<CommandModel>(this);
+    m_tabsSaveTimer = new QTimer(this);
+    m_tabsSaveTimer->setSingleShot(true);
+    m_tabsSaveTimer->setInterval(500);
+    connect(m_tabsSaveTimer, &QTimer::timeout, this, &AppController::saveTabs);
     m_syncStatus = { { u"state"_s, u"disabled"_s }, { u"text"_s, QString() }, { u"lastSync"_s, QString() } };
 
     connect(m_settings.get(), &AppSettings::currentVaultChanged, this, &AppController::inDocsVaultChanged);
@@ -202,6 +206,7 @@ AppController::AppController(const Options &options, QObject *parent)
 
 AppController::~AppController()
 {
+    saveTabs();
     m_workspace->close();
     if (g_instance == this)
         g_instance = nullptr;
@@ -216,6 +221,10 @@ void AppController::setStatus(const QString &status, const QString &error)
 {
     if (m_status == status && m_error == error)
         return;
+    // Leaving the notebook (another one opens, it closes): its tabs are saved while the shell
+    // that shows them still exists — it goes with this change.
+    if (m_status == u"ready" && status != u"ready")
+        saveTabs();
     m_status = status;
     m_error = error;
     Q_EMIT statusChanged();
@@ -291,23 +300,93 @@ void AppController::start()
 
 // ---- Navigation -------------------------------------------------------------------------------
 
+QVariantMap AppController::currentRoute() const
+{
+    return m_tabs.route(m_tabs.focusedBarTab());
+}
+
 QString AppController::currentView() const
 {
-    return m_history.current().value(u"view"_s).toString();
+    return currentRoute().value(u"view"_s).toString();
+}
+
+bool AppController::canGoBack() const
+{
+    const RouteHistory *h = m_tabs.history(m_tabs.focusedBarTab());
+    return h && h->canGoBack();
+}
+
+bool AppController::canGoForward() const
+{
+    const RouteHistory *h = m_tabs.history(m_tabs.focusedBarTab());
+    return h && h->canGoForward();
 }
 
 bool AppController::atHome() const
 {
-    return sameRoute(m_history.current(), m_history.home());
+    return sameRoute(currentRoute(), m_tabs.home());
 }
 
-void AppController::routeChanged()
+AppController::TabsSnapshot AppController::beginTabs() const
 {
-    const QVariantMap route = m_history.current();
-    if (route.value(u"view"_s).toString() == u"page")
-        m_workspace->notePageOpened(route.value(u"path"_s).toString());
-    Q_EMIT currentRouteChanged();
-    Q_EMIT historyChanged();
+    TabsSnapshot s;
+    s.bar = m_tabs.bar();
+    s.windows = m_tabs.windows();
+    s.main = m_tabs.mainTab();
+    s.split = m_tabs.splitTab();
+    s.active = m_tabs.active();
+    s.focused = m_tabs.focusedBarTab();
+    s.splitFocused = m_tabs.splitFocused();
+    for (const QList<int> &ids : {s.bar, s.windows}) {
+        for (const int id : ids) {
+            const RouteHistory *h = m_tabs.history(id);
+            s.routes.insert(id, h->current());
+            s.nav.insert(id, (h->canGoBack() ? 1 : 0) | (h->canGoForward() ? 2 : 0));
+        }
+    }
+    return s;
+}
+
+void AppController::endTabs(const TabsSnapshot &before, bool pageOpened)
+{
+    const TabsSnapshot after = beginTabs();
+    bool barChanged = before.bar != after.bar || before.main != after.main || before.split != after.split
+                      || before.active != after.active || before.splitFocused != after.splitFocused;
+    QList<int> routed;
+    for (const QList<int> &ids : {after.bar, after.windows}) {
+        for (const int id : ids) {
+            const auto was = before.routes.constFind(id);
+            const bool moved = was == before.routes.constEnd() || !sameRoute(*was, after.routes.value(id));
+            if (moved)
+                routed.append(id);
+            if (after.bar.contains(id) && (moved || before.nav.value(id, -1) != after.nav.value(id)))
+                barChanged = true;
+        }
+    }
+    const bool windowsChanged = before.windows != after.windows;
+    const bool currentChanged = before.focused != after.focused
+                                || !sameRoute(before.routes.value(before.focused), after.routes.value(after.focused));
+    const bool navChanged = currentChanged || before.nav.value(before.focused) != after.nav.value(after.focused);
+    if (!barChanged && !windowsChanged && routed.isEmpty())
+        return;
+    // Recent pages: a page the user opened in the tab they work in.
+    if (pageOpened && routed.contains(after.active)) {
+        const QVariantMap route = after.routes.value(after.active);
+        if (route.value(u"view"_s).toString() == u"page")
+            m_workspace->notePageOpened(route.value(u"path"_s).toString());
+    }
+    for (const int id : std::as_const(routed))
+        Q_EMIT tabRouteChanged(id);
+    if (barChanged)
+        Q_EMIT tabsChanged();
+    if (windowsChanged)
+        Q_EMIT windowTabsChanged();
+    if (currentChanged)
+        Q_EMIT currentRouteChanged();
+    if (navChanged)
+        Q_EMIT historyChanged();
+    if (m_tabsSaveTimer && !m_tabsVault.isEmpty())
+        m_tabsSaveTimer->start();
 }
 
 void AppController::navigate(const QVariantMap &route, bool newPane)
@@ -325,36 +404,281 @@ void AppController::navigate(const QVariantMap &route, bool newPane)
         setSidePanelVisible(true);
         return;
     }
-    if (m_history.navigate(r))
-        routeChanged();
+    // openIn(): this navigation (one) goes to a new tab or window.
+    if (!newPane && !m_openIn.isEmpty()) {
+        const QString target = std::exchange(m_openIn, {});
+        if (target == u"window" && windowsAllowed())
+            openWindow(r);
+        else if (target == u"tab" || target == u"window")
+            openTab(r);
+        else
+            navigate(r);
+        return;
+    }
+    const TabsSnapshot before = beginTabs();
+    m_tabs.navigate(0, r);
+    endTabs(before);
 }
 
 void AppController::replaceRoute(const QVariantMap &route)
 {
-    const QVariantMap before = m_history.current();
-    if (m_history.replace(route) && !sameRoute(before, m_history.current()))
-        Q_EMIT currentRouteChanged();
+    const TabsSnapshot before = beginTabs();
+    m_tabs.replace(0, route);
+    endTabs(before, false);
 }
 
-bool AppController::back()
+bool AppController::back(int tab)
 {
-    if (!m_history.back())
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.back(tab))
         return false;
-    routeChanged();
+    endTabs(before);
     return true;
 }
 
-bool AppController::forward()
+bool AppController::forward(int tab)
 {
-    if (!m_history.forward())
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.forward(tab))
         return false;
-    routeChanged();
+    endTabs(before);
     return true;
 }
 
 void AppController::goHome()
 {
-    navigate(m_history.home());
+    navigate(m_tabs.home());
+}
+
+// ---- Tabs ---------------------------------------------------------------------------------------
+
+QVariantList AppController::tabs() const
+{
+    QVariantList out;
+    for (const int id : m_tabs.bar()) {
+        const RouteHistory *h = m_tabs.history(id);
+        out.append(QVariantMap{{u"id"_s, id},
+                               {u"route"_s, h->current()},
+                               {u"canGoBack"_s, h->canGoBack()},
+                               {u"canGoForward"_s, h->canGoForward()}});
+    }
+    return out;
+}
+
+QVariantList AppController::windowTabs() const
+{
+    QVariantList out;
+    for (const int id : m_tabs.windows())
+        out.append(id);
+    return out;
+}
+
+int AppController::newTab(const QVariantMap &route)
+{
+    return openTab(route.isEmpty() ? m_tabs.home() : route);
+}
+
+int AppController::openTab(const QVariantMap &route, bool background)
+{
+    const TabsSnapshot before = beginTabs();
+    const int id = m_tabs.open(route, !background);
+    if (id == 0) {
+        toast(tr("Too many tabs are open: close some first."), u"warning"_s);
+        return 0;
+    }
+    // From a page's own window: the new tab is in the main window.
+    if (!background && m_tabs.tab(before.active) && m_tabs.tab(before.active)->windowed)
+        Q_EMIT showWindowRequested();
+    endTabs(before);
+    return id;
+}
+
+int AppController::openWindow(const QVariantMap &route)
+{
+    if (!windowsAllowed())
+        return openTab(route);
+    const TabsSnapshot before = beginTabs();
+    const int id = m_tabs.openWindow(route);
+    if (id == 0) {
+        toast(tr("Too many tabs are open: close some first."), u"warning"_s);
+        return 0;
+    }
+    endTabs(before);
+    return id;
+}
+
+void AppController::openIn(const QString &target, const QJSValue &open)
+{
+    if (!open.isCallable())
+        return;
+    m_openIn = target;
+    open.call();
+    m_openIn.clear();
+}
+
+bool AppController::closeTab(int id)
+{
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.close(id == 0 ? m_tabs.active() : id))
+        return false;
+    endTabs(before, false);
+    return true;
+}
+
+bool AppController::closeOtherTabs(int id)
+{
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.closeOthers(id))
+        return false;
+    endTabs(before, false);
+    return true;
+}
+
+bool AppController::selectTab(int id)
+{
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.select(id))
+        return false;
+    endTabs(before);
+    return true;
+}
+
+bool AppController::selectTabAt(int index)
+{
+    const QList<int> bar = m_tabs.bar();
+    return selectTab(index >= 0 && index < bar.size() ? bar.at(index) : bar.value(bar.size() - 1));
+}
+
+bool AppController::nextTab()
+{
+    return m_tabs.bar().size() > 1 && selectTab(m_tabs.neighbour(1));
+}
+
+bool AppController::previousTab()
+{
+    return m_tabs.bar().size() > 1 && selectTab(m_tabs.neighbour(-1));
+}
+
+bool AppController::moveTab(int from, int to)
+{
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.move(from, to))
+        return false;
+    endTabs(before, false);
+    return true;
+}
+
+bool AppController::splitView(int id)
+{
+    if (!m_sidePanelAllowed) // a wide window only (a phone shows one view)
+        return false;
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.split(id))
+        return false;
+    endTabs(before, false);
+    return true;
+}
+
+bool AppController::closeSplit()
+{
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.closeSplit())
+        return false;
+    endTabs(before, false);
+    return true;
+}
+
+bool AppController::focusPane(bool split)
+{
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.focusPane(split))
+        return false;
+    endTabs(before, false);
+    return true;
+}
+
+void AppController::mainWindowActivated()
+{
+    const TabsSnapshot before = beginTabs();
+    if (m_tabs.focusMainWindow())
+        endTabs(before, false);
+}
+
+bool AppController::detachTab(int id)
+{
+    if (!windowsAllowed())
+        return false;
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.detach(id == 0 ? m_tabs.focusedBarTab() : id))
+        return false;
+    endTabs(before, false);
+    return true;
+}
+
+bool AppController::attachTab(int id)
+{
+    const TabsSnapshot before = beginTabs();
+    if (!m_tabs.attach(id))
+        return false;
+    endTabs(before, false);
+    Q_EMIT showWindowRequested();
+    return true;
+}
+
+QVariantMap AppController::tabRoute(int id) const
+{
+    return m_tabs.route(id);
+}
+
+bool AppController::tabCanGoBack(int id) const
+{
+    const RouteHistory *h = m_tabs.contains(id) ? m_tabs.history(id) : nullptr;
+    return h && h->canGoBack();
+}
+
+bool AppController::tabCanGoForward(int id) const
+{
+    const RouteHistory *h = m_tabs.contains(id) ? m_tabs.history(id) : nullptr;
+    return h && h->canGoForward();
+}
+
+QVariantMap AppController::tabViewState(int id) const
+{
+    const Tab *t = m_tabs.tab(id);
+    return t ? t->viewState : QVariantMap();
+}
+
+void AppController::setTabViewState(int id, const QVariantMap &state)
+{
+    if (m_tabs.setViewState(id, state) && m_tabsSaveTimer && !m_tabsVault.isEmpty())
+        m_tabsSaveTimer->start();
+}
+
+QString AppController::tabsKey(const QString &vaultPath) const
+{
+    return vaultPath.isEmpty() ? QString() : u"tabs/"_s + Vault::idForPath(vaultPath);
+}
+
+void AppController::saveTabs()
+{
+    if (m_tabsVault.isEmpty())
+        return;
+    Q_EMIT tabViewStatesRequested();
+    if (m_tabsSaveTimer)
+        m_tabsSaveTimer->stop(); // (also started again by the states just handed over)
+    m_settings->setValue(tabsKey(m_tabsVault), QString::fromUtf8(m_tabs.save()));
+}
+
+void AppController::restoreTabs(const QString &vaultPath)
+{
+    m_tabs.restore(m_settings->value(tabsKey(vaultPath)).toString().toUtf8());
+    // Pages deleted, moved or renamed while the notebook was closed (sync, another program).
+    m_tabs.removeIf([this](const QVariantMap &route) {
+        const QString view = route.value(u"view"_s).toString();
+        return (view == u"page" || view == u"history" || view == u"drawing")
+               && !m_workspace->exists(route.value(u"path"_s).toString());
+    });
+    m_tabsVault = vaultPath;
 }
 
 bool AppController::handleBackKey()
@@ -533,10 +857,9 @@ void AppController::onPathRenamed(const QString &oldPath, const QString &newPath
         }
         return false;
     };
-    bool changed = false;
-    m_history.transform([&](QVariantMap &route) { changed |= rewrite(route); });
-    if (changed)
-        Q_EMIT currentRouteChanged();
+    const TabsSnapshot before = beginTabs();
+    m_tabs.transform([&](QVariantMap &route) { rewrite(route); });
+    endTabs(before, false);
     if (rewrite(m_sideRoute))
         Q_EMIT sidePanelRouteChanged();
 }
@@ -562,10 +885,9 @@ void AppController::onFolderRenamed(const QString &oldPath, const QString &newPa
             changed = rebase(route, u"path"_s) || changed;
         return changed;
     };
-    bool changed = false;
-    m_history.transform([&](QVariantMap &route) { changed |= rewrite(route); });
-    if (changed)
-        Q_EMIT currentRouteChanged();
+    const TabsSnapshot before = beginTabs();
+    m_tabs.transform([&](QVariantMap &route) { rewrite(route); });
+    endTabs(before, false);
     if (rewrite(m_sideRoute))
         Q_EMIT sidePanelRouteChanged();
 }
@@ -576,13 +898,9 @@ void AppController::onPathRemoved(const QString &path)
     const auto gone = [&](const QVariantMap &route) {
         return route.value(u"view"_s).toString() == u"page" && route.value(u"path"_s).toString() == path;
     };
-    const QVariantMap before = m_history.current();
-    if (m_history.removeIf(gone)) {
-        if (!sameRoute(before, m_history.current()))
-            routeChanged();
-        else
-            Q_EMIT historyChanged();
-    }
+    const TabsSnapshot before = beginTabs();
+    m_tabs.removeIf(gone);
+    endTabs(before, false);
     if (gone(m_sideRoute)) {
         m_sideRoute.clear();
         Q_EMIT sidePanelRouteChanged();
@@ -949,7 +1267,15 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
         m_settings->forgetRecentVault(docsVaultPath()); // listed by 0.3.0–0.3.5
     else
         m_settings->addRecentVault(m_workspace->rootPath());
-    m_history.reset();
+    // The notebook's tabs as they were left on this device (not for --route: screenshots and
+    // tests start from one tab showing it, and leave the saved tabs alone).
+    const TabsSnapshot tabsBefore = beginTabs();
+    if (m_devRoute.isEmpty()) {
+        restoreTabs(m_workspace->rootPath());
+    } else {
+        m_tabs.reset();
+        m_tabsVault.clear();
+    }
     m_sideRoute.clear();
     Q_EMIT sidePanelRouteChanged();
 
@@ -963,18 +1289,21 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
         refuseOtherNotebookRoute(afterVault); // asked for (app open) while this notebook was opening
     if (!after.isEmpty() && afterHere) {
         m_startToday = false;
-        m_history.navigate(afterVault.isEmpty() ? after : m_workspace->resolveRoute(after));
+        m_tabs.navigate(0, afterVault.isEmpty() ? after : m_workspace->resolveRoute(after));
     } else if (m_startToday) {
         m_startToday = false;
         const QString date = today();
-        m_history.navigate(
-                {{u"view"_s, u"journal"_s}, {u"date"_s, date}, {u"path"_s, m_workspace->journalFileFor(date)}});
+        m_tabs.navigate(0,
+                        {{u"view"_s, u"journal"_s}, {u"date"_s, date}, {u"path"_s, m_workspace->journalFileFor(date)}});
     } else if (!first.isEmpty())
-        m_history.navigate(first);
+        m_tabs.navigate(0, first);
     else if (showWelcome && m_workspace->exists(docs ? docsWelcomePage() : demoWelcomePage()))
-        m_history.navigate({ { u"view"_s, u"page"_s }, { u"path"_s, docs ? docsWelcomePage() : demoWelcomePage() } });
+        m_tabs.navigate(0, {{u"view"_s, u"page"_s}, {u"path"_s, docs ? docsWelcomePage() : demoWelcomePage()}});
     setStatus(u"ready"_s);
-    routeChanged();
+    endTabs(tabsBefore);
+    // (Signalled also when nothing differs from before: the new shell shows the first route.)
+    Q_EMIT currentRouteChanged();
+    Q_EMIT historyChanged();
     applyPendingNotification();
     if (m_share)
         // After the shell (which owns the dialog) has been created for "ready".
@@ -994,10 +1323,13 @@ QVariantMap AppController::initialRoute() const
 void AppController::closeVault()
 {
     m_settings->setCurrentVault(QString());
-    m_history.reset();
+    saveTabs();
+    m_tabsVault.clear();
+    const TabsSnapshot tabsBefore = beginTabs();
+    m_tabs.reset();
     m_sideRoute.clear();
     Q_EMIT sidePanelRouteChanged();
-    routeChanged();
+    endTabs(tabsBefore, false);
     // The status change unloads the shell; QML deletes it (and the editors in it) a moment
     // later, and an editor saves its last keystrokes when it goes. Close the vault only after
     // that, or those words would be lost. A vault opened in the meantime (openVault() also
@@ -1170,6 +1502,8 @@ bool AppController::capture(const QString &text)
 
 void AppController::showWindow()
 {
+    // Whatever comes next (a reminder's page, quick capture) is for the main window.
+    mainWindowActivated();
     Q_EMIT showWindowRequested();
 }
 
@@ -1253,6 +1587,7 @@ void AppController::quit()
         m_quitting = true;
         Q_EMIT quittingChanged();
     }
+    saveTabs();
     m_settings->sync();
     Q_EMIT quitRequested();
 }

@@ -50,6 +50,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/foldertreemodel.h ${_brulion_shell_dir}/foldertreemodel.cpp
     ${_brulion_shell_dir}/indexworkers.h
     ${_brulion_shell_dir}/navigation.h ${_brulion_shell_dir}/navigation.cpp
+    ${_brulion_shell_dir}/tabs.h ${_brulion_shell_dir}/tabs.cpp
     ${_brulion_shell_dir}/replacesession.h ${_brulion_shell_dir}/replacesession.cpp
     ${_brulion_shell_dir}/traypopup.h ${_brulion_shell_dir}/traypopup.cpp
     ${_brulion_shell_dir}/workspace.h ${_brulion_shell_dir}/workspace.cpp
@@ -122,6 +123,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellMoveDialog.qml
     qml/shell/ShellMoveWords.qml
     qml/shell/ShellNewPageDialog.qml
+    qml/shell/ShellPageWindow.qml
     qml/shell/ShellQuickCapture.qml
     qml/shell/ShellRenameDialog.qml
     qml/shell/ShellRouteView.qml
@@ -132,6 +134,8 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellSidebar.qml
     qml/shell/ShellSplash.qml
     qml/shell/ShellSyncFooter.qml
+    qml/shell/ShellTabBar.qml
+    qml/shell/ShellTabPane.qml
     qml/shell/ShellTopBar.qml
     qml/shell/ShellTrayCalendar.qml
     qml/shell/ShellUpdateBanner.qml

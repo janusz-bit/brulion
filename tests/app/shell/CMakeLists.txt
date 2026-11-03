@@ -2,6 +2,9 @@
 # history, settings persistence, the Workspace's EditorHost implementation against a real vault
 # folder, the sample vault, commands and the folder tree (single-instance messages: tests/ipc).
 brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_shell brulion_platform)
+# The tabs (tabs.h): opening, closing, moving, the split pane, tabs in windows of their own, each
+# tab's history and view state, saving them per notebook (also malformed JSON).
+brulion_add_test(tst_shell_tabs SOURCES tst_tabs.cpp LIBS brulion_shell)
 # "Udostępnij → Brulion" on AppController (appshare.cpp; the --share option): the share dialog's
 # data, saving to the journal or to new pages, waiting for the notebook, the copies removed; files
 # opened with Brulion (--open, a second launch's `share` message: copies, the files untouched, a
@@ -45,7 +48,9 @@ brulion_add_test(tst_shell_workspace_pdf SOURCES tst_workspace_pdf.cpp
 # "Strony" header, the desktop run's mouse drag and drop with Escape, All pages' folder rows and
 # breadcrumb), the block editor inside the shell (real keys, source mode, a link to a missing
 # page), PDFs (the thumbnail, the viewer's keys, zoom, search, page jump, a drawing on a page, a
-# locked PDF from tests/data/pdf: BRULION_SELFTEST_PDF_DIR) and closing the notebook from the UI.
+# locked PDF from tests/data/pdf: BRULION_SELFTEST_PDF_DIR), tabs (shortcuts, middle and Ctrl+clicks,
+# the bar's drag, the split view, a page window; the phone's tab switcher) and closing the notebook
+# from the UI.
 # Exit code = failures.
 # A private XDG home keeps the sample notebook and settings out of the user's own.
 # Qt's QML modules are found as for tst_editor_qml (tests/app/editor/CMakeLists.txt).

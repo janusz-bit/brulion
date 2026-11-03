@@ -221,6 +221,17 @@ Item {
                     root.editor.editAt(root.block.index, p.x, p.y)
             }
         }
+        // A middle click on a page, tag or block link: that link in a new tab (OpenIn; the app's
+        // shell — Ctrl+click picks blocks here, docs/UI.md "Tabs, split view and windows").
+        TapHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            acceptedButtons: Qt.MiddleButton
+            enabled: OpenIn.tabs
+            onTapped: (eventPoint) => {
+                const p = eventPoint.position
+                root.editor.openLinkInTab(root.block.index, root.linkAt(p.x, p.y))
+            }
+        }
         // A right-click: a token's menu, a link's menu, else the block menu (as the list's handler
         // opens it; WithinBounds takes the press, so that one does not open it too).
         TapHandler {

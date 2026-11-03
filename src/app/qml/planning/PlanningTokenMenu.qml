@@ -153,6 +153,8 @@ Item {
         case "filter": if (l.filter) l.filter(l.tag); break
         case "open": actions.openLink(l.url, l.fromPath, false); break
         case "openSide": actions.openLink(l.url, l.fromPath, true); break
+        case "openTab": OpenIn.run("tab", () => actions.openLink(l.url, l.fromPath, false)); break
+        case "openWindow": OpenIn.run("window", () => actions.openLink(l.url, l.fromPath, false)); break
         case "overview": AppController.navigate({ view: "tag", tag: l.tag, overview: true }); break
         case "tasks": if (linkMenu) AppController.navigate({ view: "tasks", query: linkMenu.tasksQuery(l.tag) }); break
         case "copy": {

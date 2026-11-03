@@ -88,8 +88,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   (tym, w którym piszesz); zamiana w całym notatniku obejmuje wszystkie dni.
 * **Sprawdzanie pisowni** — podkreślanie błędów i podpowiedzi w edytorze, po polsku i angielsku
   (na komputerze np. Hunspell, na Androidzie systemowe sprawdzanie klawiatury).
-* **Karty i wiele okien** — kilka otwartych stron w kartach, podział widoku na więcej niż główny i
-  boczny panel, strona w osobnym oknie (Obsidian).
 * **Notatki tygodniowe i miesięczne** — strony okresowe obok dziennych, z własnym szablonem i
   dostępem z kalendarza.
 * **Statystyki i tryb skupienia** — liczba słów i znaków, czas czytania; widok bez pasków bocznych,

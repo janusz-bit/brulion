@@ -369,6 +369,8 @@ usuwa go w całości.
 | `Ctrl+Shift+F` | wyszukiwanie |
 | `Ctrl+F` / `Ctrl+H` | znajdź w notatce / znajdź i zamień |
 | `Alt+←` / `Alt+→` | wstecz / dalej |
+| `Ctrl+T` / `Ctrl+W` | nowa karta / zamknij kartę (strona w nowej karcie: środkowy przycisk albo `Ctrl`+kliknięcie na liście stron) |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab`, `Ctrl+1`…`Ctrl+9` | następna / poprzednia karta, karta o numerze (9 — ostatnia) |
 | `Enter` / `Shift+Enter` | nowy blok (na początku tekstu: pusty blok nad nim, przy zadaniu puste zadanie) / nowa linia w bloku |
 | `Tab` / `Shift+Tab` | wcięcie / wysunięcie bloku z dziećmi |
 | `Alt+↑` / `Alt+↓` | przeniesienie bloku z dziećmi |

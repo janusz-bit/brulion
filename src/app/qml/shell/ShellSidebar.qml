@@ -110,8 +110,11 @@ Rectangle {
         AppController.navigate(route)
         sidebar.navigated()
     }
-    function openPage(path) {
-        AppController.openPage(path)
+    /// Open the page `path` as a click does — `target` "tab": in a new tab; by default where the
+    /// click asks (Ctrl+click, Ctrl+Enter: a new tab — OpenIn).
+    function openPage(path, target) {
+        const where = target !== undefined ? target : OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers())
+        OpenIn.run(where, () => AppController.openPage(path))
         sidebar.navigated()
     }
     function showContextMenu(item, path, isDir) {
@@ -561,6 +564,13 @@ Rectangle {
                             onClicked: sidebar.openPage(modelData.path)
                             onPressAndHold: sidebar.showContextMenu(favoriteItem, modelData.path, false)
                             TapHandler {
+                                // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                acceptedButtons: Qt.MiddleButton
+                                enabled: OpenIn.tabs
+                                onTapped: sidebar.openPage(favoriteItem.modelData.path, "tab")
+                            }
+                            TapHandler {
                                 // Right-click only (see the tree rows below): never a finger.
                                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                                 acceptedButtons: Qt.RightButton
@@ -592,12 +602,20 @@ Rectangle {
                     Repeater {
                         model: sidebar.recentOthers
                         delegate: BListItem {
+                            id: recentItem
                             required property var modelData
                             width: parent.width
                             dense: true
                             text: modelData.title
                             iconName: "clock"
                             onClicked: sidebar.openPage(modelData.path)
+                            TapHandler {
+                                // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                acceptedButtons: Qt.MiddleButton
+                                enabled: OpenIn.tabs
+                                onTapped: sidebar.openPage(recentItem.modelData.path, "tab")
+                            }
                         }
                     }
                 }
@@ -694,6 +712,13 @@ Rectangle {
                         sidebar.openPage(path)
                 }
                 onPressAndHold: sidebar.showContextMenu(row, path, isDir)
+                TapHandler {
+                    // A middle click on a page: in a new tab.
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    acceptedButtons: Qt.MiddleButton
+                    enabled: OpenIn.tabs && !row.isDir
+                    onTapped: sidebar.openPage(row.path, "tab")
+                }
                 Keys.onRightPressed: if (isDir && !expanded) tree.toggle(index)
                 Keys.onLeftPressed: if (isDir && expanded) tree.toggle(index)
                 Keys.onMenuPressed: sidebar.showContextMenu(row, path, isDir)
@@ -937,11 +962,27 @@ Rectangle {
             onTriggered: sidebar.go({ view: "search", folder: contextMenu.path })
         }
         BMenuItem {
+            objectName: "treeMenuOpenTab"
+            visible: !contextMenu.isDir
+            height: visible ? implicitHeight : 0
+            text: qsTr("Open in new tab")
+            iconName: "plus"
+            onTriggered: sidebar.openPage(contextMenu.path, "tab")
+        }
+        BMenuItem {
             visible: !contextMenu.isDir && !Theme.narrow
             height: visible ? implicitHeight : 0
             text: qsTr("Open in side panel")
             iconName: "panel-right"
             onTriggered: AppController.openPage(contextMenu.path, -1, true)
+        }
+        BMenuItem {
+            objectName: "treeMenuOpenWindow"
+            visible: !contextMenu.isDir && AppController.windowsAllowed && !Theme.narrow
+            height: visible ? implicitHeight : 0
+            text: qsTr("Open in new window")
+            iconName: "app-window"
+            onTriggered: AppController.openWindow({ view: "page", path: contextMenu.path })
         }
         BMenuItem {
             visible: contextMenu.page

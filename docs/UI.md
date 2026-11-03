@@ -101,6 +101,8 @@ components — no Material/Fusion look, so all targets look identical.
     sync status footer (opens the sync center).
   * Top bar (`ShellTopBar`): sidebar toggle, back / forward, the title (a breadcrumb for pages
     in folders), Szukaj, Paleta poleceń, Szybka notatka, side panel toggle and **Więcej** (⋮).
+    Under it, with two tabs or more, the **tab bar** (`ShellTabBar`), and the view: one pane or two
+    side by side (the split view) — "Tabs, split view and windows".
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's
     context — for pages and journals the tabs **Linki** (linked references and unlinked
     mentions), **Konspekt** (headings: a click scrolls to one, a right-click / long press copies
@@ -177,7 +179,8 @@ components — no Material/Fusion look, so all targets look identical.
   sidebar, the drawer on phones), Historia strony, Źródło Markdown (Ctrl+E), Przełącz
   tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza — on a picture attachment
   Źródło Markdown is the picture bar's Pokaż jako tekst / Pokaż obraz and the note mode is not
-  offered (nor in the palette: a picture is no note); always — Nowa strona (Ctrl+N), Paleta
+  offered (nor in the palette: a picture is no note); always — Otwórz w nowej karcie, Otwórz w
+  nowym oknie (desktop, wide), Podziel widok / Zamknij podział (wide), Nowa strona (Ctrl+N), Paleta
   poleceń (Ctrl+K), **Centrum synchronizacji, Importuj notatki (the import tab), Import i eksport,
   Kosz (n), Sprzątanie, Ustawienia (Ctrl+,), O Brulionie**. These destinations have no button of their own: on
   phones this menu (and the command palette) is the way to them. A new notebook (at most one
@@ -502,7 +505,11 @@ everything near the bottom, the same way on Android, in the browser and with a s
 | Ctrl+N | new page |
 | Ctrl+Shift+N | quick capture (from the documentation notebook: back to the user's notebook first) |
 | Ctrl+Shift+B | the documentation notebook / back to the notebook used before |
-| Alt+← / Alt+→ | back / forward |
+| Alt+← / Alt+→ | back / forward (in the focused tab) |
+| Ctrl+T | new tab (at home) |
+| Ctrl+W | close the focused tab (a page's own window: that window) |
+| Ctrl+Tab / Ctrl+Shift+Tab (Ctrl+PgDown / Ctrl+PgUp) | next / previous tab (round past the ends) |
+| Ctrl+1 … Ctrl+8 / Ctrl+9 | that tab / the last tab |
 | Ctrl+\\ | side panel on/off (wide windows) |
 | F2 | rename the current page |
 | Delete on a focused row of the sidebar's tree | move that page, file or folder to the trash (after the confirmation) |
@@ -538,9 +545,10 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 
 ## Navigation
 
-`AppController` keeps the main view's route history (`navigation.h`: `RouteHistory`, routes are
-`QVariantMap`s `{view, path?, line?, blockId?, date?, tag?, query?, section?, …}`);
-`ShellRouteView` shows the view for the current route (and for the side panel's route).
+`AppController` keeps the route history of every tab (`navigation.h`: `RouteHistory`, routes are
+`QVariantMap`s `{view, path?, line?, blockId?, date?, tag?, query?, section?, …}`; the tabs:
+`tabs.h`, "Tabs, split view and windows" below); `ShellRouteView` shows the view for a route — a
+tab's in its pane (`ShellTabPane`), and the side panel's route.
 
 | Route `view` | View | Parameters |
 |---|---|---|
@@ -564,6 +572,84 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 
 `OnboardingView` is shown before a notebook is open (pick or create a folder, or the sample
 notebook "Przykładowy brulion").
+
+## Tabs, split view and windows
+
+Several pages open at once (Obsidian's tabs, panes and pop-out windows), kept simple: one tab bar
+for the main window, at most two panes side by side, and pages in windows of their own on desktops.
+The model is `TabSet` (`src/app/shell/tabs.h`, pure, `tst_shell_tabs`); `AppController` keeps one
+for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar`, `ShellTabPane`,
+`ShellPageWindow`; self-test `checkTabs`).
+
+* **A tab** has its own back / forward history (`RouteHistory`) and the view state of its current
+  route: where its page or the journal stream was scrolled (`PageView.viewState()` — the first row
+  in view and how far into it —, `JournalsView`'s — the day at the top). The pane hands that state
+  to the tab before it shows another one and gives it back when the tab is shown again (the view
+  is then at that place, the route's `line` / `blockId` is not flashed again); a new route in the
+  tab (a link, Back) drops it. `AppController.currentRoute`, `canGoBack`, `canGoForward`, `atHome`
+  are the main window's **focused tab**'s (`focusedTab`); `navigate()`, `replaceRoute()`, `back()`,
+  `forward()` act on the **active tab** (`activeTab`) — the focused tab, or a page's own window
+  while it has the focus (its views navigate in it; `Main.qml` gives the main window its tab back
+  when it is activated: `mainWindowActivated()`). A pane follows its tab through
+  `tabRoute(id)` / `tabRouteChanged(id)`.
+* **Opening a tab:** Ctrl+T or the bar's **+** (a new tab at home), a **middle click** or a
+  **Ctrl+click** on a page in the sidebar (tree, Ulubione, Ostatnie), All pages, search results,
+  linked references and a link preview's header or links; a **middle click** on a page, tag or
+  block link in the editor (Ctrl+click there picks blocks: "Selecting and copying"); the link menu's
+  and the sidebar's / All pages' row menus' **Otwórz w nowej karcie**; the top bar's Więcej and the
+  palette's **Otwórz w nowej karcie** (a copy of the view shown) and **Nowa karta**. A new tab goes
+  right after the focused one, is shown and has no history (Back does nothing there; its first
+  route is the page). These go through `OpenIn` (`qml/components/OpenIn.qml`): the shell sets
+  `OpenIn.openIn` → `AppController.openIn(target, fn)`, which runs the click's own function (the
+  editor's `activateLink`, a row's `openPage`) with its one navigation going to a new tab
+  (`target` "tab") or window ("window") — the editor and the lists need no shell (without it, in the
+  editor's tests, only the usual click). At most `TabSet::MaxTabs` (100) tabs: more says so.
+* **The tab bar** (`ShellTabBar`, wide windows): between the top bar and the view, shown while
+  there are two tabs or more (or the view is split). Equal widths (120–220 px; past that the bar
+  scrolls with the wheel), the view's icon and title (`AppShell.routeTitle`), × (shown on the
+  focused tab and on hover). The tab of the focused pane is drawn like the view below it with a
+  2-px accent line on top, the other pane's tab of a split view like the view without the line. A
+  click shows a tab (in the focused pane; a tab already shown in the other pane focuses that pane),
+  a middle click or × closes it, a drag along the bar moves it (`moveTab`), a right-click or long
+  press opens its menu: Zamknij kartę, Zamknij pozostałe karty, Pokaż w podziale / Zamknij podział,
+  Przenieś do nowego okna (desktop). Closing the shown tab shows its neighbour (the next one, else
+  the previous one); closing the last one leaves a fresh tab at home.
+* **Split view** (wide windows): the main area holds two panes side by side (`SplitView` with
+  `BSplitHandle`): **Podziel widok** (the top bar's Więcej, the palette, a tab's menu Pokaż w
+  podziale — that tab beside the main one) opens a copy of the focused tab in the right pane,
+  focused. A click (any button) or the keyboard focus in a pane focuses it; the top bar, the side
+  panel's context, the palette's page commands, the window's shortcuts (Ctrl+E, Ctrl+F, Ctrl+;)
+  and the bar's accent line follow the focused pane (the other pane's views get `paneActive:
+  false`: their window-wide shortcuts are off — two would be ambiguous —, a PDF there writes no
+  page into the route). Closing the split pane's tab, or **Zamknij podział**, leaves one pane (its
+  tab stays in the bar unless closed). Only vertical splits, two panes: the side panel stays the
+  place for a third page. A narrow window shows only the focused tab.
+* **A page in its own window** (desktop only; Android and the browser have one window):
+  **Otwórz w nowym oknie** (the link menu, the sidebar's row menu, the top bar's Więcej, the
+  palette) or a tab's **Przenieś do nowego okna** (`detachTab`). `ShellPageWindow` — an
+  `ApplicationWindow` without a transient parent, 760 × 720 — has its own bar: back / forward (the
+  tab's history), the title, **Przenieś do okna głównego** (`attachTab`: a tab of the bar again);
+  Alt+← / Alt+→, Ctrl+W (closes it) and its view's own shortcuts work in it. It shares the
+  Workspace: its editor and the main window's are two editors of the same notes, and each one's
+  saves reach the other (`EditorHost::fileChanged`), as with the side panel. Toasts and the shell's
+  dialogs (rename, move, delete) stay in the main window. Closing the window drops its tab.
+* **Remembered per notebook** on this device: `AppSettings` key `tabs/<Vault::idForPath>` — the
+  bar's tabs (windows' tabs come back as tabs of the bar), each with up to 20 back and 20 forward
+  routes and its view state, the main and the split pane, the focused one (`TabSet::save()`,
+  JSON). Saved half a second after a change, when the notebook is left (another opens, it closes),
+  on quitting and when the app goes to the background; restored when the notebook opens — routes
+  of pages deleted meanwhile drop out, malformed JSON means one tab at home. The documentation
+  notebook keeps its tabs too (it still opens on its table of contents). `--route` (screenshots,
+  tests) starts with one tab showing that route and leaves the saved tabs alone.
+* **Phones and narrow windows:** no tab bar and no split; the tabs are kept (a wide window may
+  have opened them; the link menu's Otwórz w nowej karcie opens more) and **collapse into a tab
+  switcher**: with two tabs or more the top bar shows a small square with their number before
+  Szukaj (`topBarTabs`); it opens a menu of the tabs (the shown one checked; a tap shows a tab), Nowa
+  karta, Zamknij kartę, Zamknij pozostałe karty. The Android back key walks the shown tab's history.
+* **Performance:** only the tabs shown — at most the two panes and the windows — have views (an
+  editor, a PDF viewer…); every other tab is a route, its history and a view state. A pane that
+  shows another tab of the same view keeps its view (as a new route does) and switches the page;
+  of another view the view is made again ("docs/PERFORMANCE.md" "Tabs").
 
 ## Cleaning up (`qml/views/CleanupView.qml`)
 
@@ -789,7 +875,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
     closed, `anchorItem` turns null) or the block is edited; another link moves it after the
     delay. It never takes the keyboard focus. Its header (icon, title — `missingPage` in the
     unresolved colour) opens the link (`LinkPreview.openLink()`: the host's `navigate()`, as a
-    click in a note; Ctrl+click: the side panel), a click on a link inside follows that link from
+    click in a note; Ctrl+click or a middle click: a new tab — "Tabs, split view and windows"), a click on a link inside follows that link from
     the note it is written in; task boxes, reminders and the chips a click edits do nothing there.
     A page not written yet says "“%1” does not exist yet. Click the title to create it." (a click
     on the title creates it, as any link to a missing page), a missing section or block says so,
@@ -2947,7 +3033,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--accent <name\|#rrggbb>`, `--surface paper\|white\|slate\|black`, `--density compact\|comfortable` | the appearance settings for this run (screenshots; the settings themselves stay): accent preset or custom colour, light or dark background, density |
 | `--keyboard <px>` | a simulated on-screen keyboard of that height (`KeyboardInsets.simulated`; 0 = none, and a real one is ignored), drawn as a grey block of keys |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, the command palette's and quick switcher's rows (one line high while floating, a subtitle beside the title; two lines on a phone), and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the drawer's edge swipe (`--touch`: a finger from the left edge opens it, to the left closes it, with a simulated gesture-navigation zone (`GestureInsets.simulate`) from beyond it; a vertical scroll and a swipe farther in leave it closed, a tap in the strip reaches the button under it, no strip while blocks are selected or the keyboard is up, so the selection's start grip at the left edge keeps its drag — the drawer opened by its button still closes with a swipe —, nor on the calendar's week and month grids, whose swipe from the left edge — not a fast flick — shows the previous period, and the drawer opened over them closes with a swipe); the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag overview's "#" in its header — the page menu's "Zadania z tym tagiem" opening Tasks filtered by the tag, no row of buttons under the title, a tag's sub-tags as chips there —, back returns; in Tasks a click filters, Ctrl+click opens the tag's page, a long press its menu — "Filtruj po tagu", its "Otwórz stronę tagu" opens the page; a row of the tag list opens the page, its button the overview); in Tasks a due date's chip has the date menu, whose "Dzień później" writes the task's note; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); PDFs ("PDF viewer": a note's thumbnail drawn on a white page, a tap / click opens the viewer without loading the PDF into the editor, "Strona 1 z 3", Ctrl+G 3 Enter, Home, PageDown, Ctrl++ zooming with sideways panning, Ctrl+0, a pinch — `--touch` — or Ctrl+wheel, a double tap both ways, Ctrl+F "gesla" finding "gęślą" with a highlight, Esc closing the search and then the viewer, the note's link with `#page=3`, "Rysuj na tej stronie" on page 2 — the drawing's backdrop is page 2, embedded right after the PDF's block, Back returns to the viewer on page 2, the second time the drawing is offered and opened, no second file —, Więcej → "Otwórz w innej aplikacji" through a recording hook, a locked PDF from `tests/data/pdf` — `BRULION_SELFTEST_PDF_DIR` —, a ZIP read-only; a build without a renderer: the chip, its click hands the file over, the viewer's message); a drawing (a tap / click on its embed opens the drawing editor, a stroke drawn with a finger — `--touch` — or the mouse is saved by itself with its undo kept, Cofnij / Ctrl+Z is saved too, the page's embed shows the drawing saved again; a text being written low on the paper stays on it when the window shrinks — a browser's keyboard); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back); Settings → Wygląd (the logo's colours by default, a tap on an accent swatch recolours the app and is saved, a colour typed in the accent dialog, a sidebar entry unticked leaves the sidebar — the drawer on phones — and stays in the palette, a bottom navigation slot takes a view from its menu and the phone's bar shows it — the view it already has, picked again, stays checked —, the quick note button switched off and on, "Przywróć domyślny wygląd"; Edytor → Czcionka → "Inna…" cancelled leaves the selection where it was and opens the picker again, a missing family names the serif or sans-serif font used instead); the share dialog ("Udostępnij → Brulion": shared text saved to today's journal by a real tap / click on "Zapisz" without a reminder, a shared `.md` saved as a new page titled after it byte for byte and its copy removed, a file opened with Brulion from outside the notebook — the "to save in the notebook" subtitle and the copy hint, saved as a page byte for byte, the file itself left unchanged —, Escape dropping a share) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, the command palette's and quick switcher's rows (one line high while floating, a subtitle beside the title; two lines on a phone), and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the drawer's edge swipe (`--touch`: a finger from the left edge opens it, to the left closes it, with a simulated gesture-navigation zone (`GestureInsets.simulate`) from beyond it; a vertical scroll and a swipe farther in leave it closed, a tap in the strip reaches the button under it, no strip while blocks are selected or the keyboard is up, so the selection's start grip at the left edge keeps its drag — the drawer opened by its button still closes with a swipe —, nor on the calendar's week and month grids, whose swipe from the left edge — not a fast flick — shows the previous period, and the drawer opened over them closes with a swipe); the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag overview's "#" in its header — the page menu's "Zadania z tym tagiem" opening Tasks filtered by the tag, no row of buttons under the title, a tag's sub-tags as chips there —, back returns; in Tasks a click filters, Ctrl+click opens the tag's page, a long press its menu — "Filtruj po tagu", its "Otwórz stronę tagu" opens the page; a row of the tag list opens the page, its button the overview); in Tasks a due date's chip has the date menu, whose "Dzień później" writes the task's note; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); PDFs ("PDF viewer": a note's thumbnail drawn on a white page, a tap / click opens the viewer without loading the PDF into the editor, "Strona 1 z 3", Ctrl+G 3 Enter, Home, PageDown, Ctrl++ zooming with sideways panning, Ctrl+0, a pinch — `--touch` — or Ctrl+wheel, a double tap both ways, Ctrl+F "gesla" finding "gęślą" with a highlight, Esc closing the search and then the viewer, the note's link with `#page=3`, "Rysuj na tej stronie" on page 2 — the drawing's backdrop is page 2, embedded right after the PDF's block, Back returns to the viewer on page 2, the second time the drawing is offered and opened, no second file —, Więcej → "Otwórz w innej aplikacji" through a recording hook, a locked PDF from `tests/data/pdf` — `BRULION_SELFTEST_PDF_DIR` —, a ZIP read-only; a build without a renderer: the chip, its click hands the file over, the viewer's message); a drawing (a tap / click on its embed opens the drawing editor, a stroke drawn with a finger — `--touch` — or the mouse is saved by itself with its undo kept, Cofnij / Ctrl+Z is saved too, the page's embed shows the drawing saved again; a text being written low on the paper stays on it when the window shrinks — a browser's keyboard); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back); Settings → Wygląd (the logo's colours by default, a tap on an accent swatch recolours the app and is saved, a colour typed in the accent dialog, a sidebar entry unticked leaves the sidebar — the drawer on phones — and stays in the palette, a bottom navigation slot takes a view from its menu and the phone's bar shows it — the view it already has, picked again, stays checked —, the quick note button switched off and on, "Przywróć domyślny wygląd"; Edytor → Czcionka → "Inna…" cancelled leaves the selection where it was and opens the picker again, a missing family names the serif or sans-serif font used instead); the share dialog ("Udostępnij → Brulion": shared text saved to today's journal by a real tap / click on "Zapisz" without a reminder, a shared `.md` saved as a new page titled after it byte for byte and its copy removed, a file opened with Brulion from outside the notebook — the "to save in the notebook" subtitle and the copy hint, saved as a page byte for byte, the file itself left unchanged —, Escape dropping a share); tabs ("Tabs, split view and windows": Ctrl+T, Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1 / Ctrl+9 and Ctrl+W with real keys, each tab's own history, a middle click and a Ctrl+click on a sidebar page, a middle click on a link and the link menu's "Otwórz w nowej karcie", a tab dragged in the bar, a tab back where its page was scrolled, no editor for a tab not shown, the split view — a click focuses a pane, Ctrl+W closes it —, a page window seeing the main window's edit; `--touch`: no bar, the top bar's tab switcher, the back key in a tab) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-row-bar`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — or the thumb of the view's `BRowScrollBar` jumps (against the content, or while it stands still) — with `--probe-row-bar` also when the view has no such bar over it —, ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
