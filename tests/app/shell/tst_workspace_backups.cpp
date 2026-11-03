@@ -551,10 +551,11 @@ private Q_SLOTS:
         m_now = m_now.addDays(1);
         const QString away = root + u"-odpięty"_s;
         std::atomic_bool pulled = false;
+        std::atomic_bool moved = false;
         // a.md is in the archive already, the rest goes with the drive.
         b->setReadHook([&](const QString &path, qint64) {
             if (path == u"b.md" && !pulled.exchange(true))
-                QDir().rename(root, away);
+                moved = QDir().rename(root, away);
         });
         QSignalSpy written(b, &WorkspaceBackups::backupWritten);
         QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
@@ -562,6 +563,8 @@ private Q_SLOTS:
         QVERIFY(settled(b));
         b->setReadHook({});
         QVERIFY(pulled);
+        if (!moved) // Windows: a folder with files open in it cannot be moved away
+            QSKIP("the notebook's folder cannot be moved while the notebook is open here");
         QVERIFY(written.isEmpty());
         QCOMPARE(zipsIn(drive), good);
         QCOMPARE(b->status(), u"failed"_s);

@@ -25,7 +25,7 @@ QList<QPair<QString, QByteArray>> sampleFiles()
     QRandomGenerator generator(42);
     for (qsizetype i = 0; i < random.size(); ++i)
         random[i] = char(generator.bounded(256));
-    return {
+    QList<QPair<QString, QByteArray>> files = {
             {u"Żółw ąćęłńóśźż.md"_s, "- zażółć gęślą jaźń\n"},
             {u"BOM.md"_s, "\xEF\xBB\xBF- z BOM\n"},
             {u"Windows.md"_s, "- a\r\n- b\r\n"},
@@ -38,8 +38,10 @@ QList<QPair<QString, QByteArray>> sampleFiles()
             {u"assets/losowe.bin"_s, random},
             {u"assets/film z dźwiękiem.mp4"_s, random.left(10'000)},
             {u".brulion/config.json"_s, "{\"journalsFolder\": \"dziennik\"}\n"},
-            {u"Spotkanie 10:30.md"_s, "- dwukropek w środku nazwy\n"},
     };
+    if (brulion::test::allowsColonInNames()) // a notebook synced from Linux or Android may have it
+        files.append({u"Spotkanie 10:30.md"_s, "- dwukropek w środku nazwy\n"});
+    return files;
 }
 
 QStringList entryNames(const QString &zipPath)

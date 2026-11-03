@@ -43,8 +43,6 @@ const QString kLast = u"backup/last"_s;           // { time, file, bytes, finger
 const QString kStatus = u"backup/status"_s;       // { failure, detail } | { skipped }
 const QString kRestoring = u"backup/restoring"_s; // { backup, safety, time }: a restore being applied
 
-/// More names than any limit keeps: older entries are files long gone or in another folder.
-constexpr qsizetype MaxOwnNames = 512;
 constexpr int DefaultFirstCheckMs = 30 * 1000;
 constexpr int DefaultPeriodMs = 60 * 60 * 1000;
 constexpr int StoredTimeoutMs = 60 * 1000;

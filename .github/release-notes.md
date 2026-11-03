@@ -2,6 +2,8 @@
 
 **Nowości w {{VERSION}}**
 
+Wersja 0.8.0 nie została opublikowana, więc jej nowości trafiają do Ciebie dopiero w tym wydaniu.
+
 * **Automatyczne kopie zapasowe** — codziennie albo co tydzień archiwum ZIP z notatkami, załącznikami i ustawieniami notatnika, które rozpakujesz dowolnym programem. Wybierasz liczbę zachowanych kopii i folder (np. pendrive). **Przywróć** najpierw pokazuje, co się zmieni, i robi kopię bezpieczeństwa obecnego stanu. **Ustawienia → Kopie zapasowe**; domyślnie włączone, w przeglądarce wyłączone.
 * **Znajdź i zamień** — **Ctrl+F** szuka w otwartej notatce, **Ctrl+H** od razu z zamianą (na telefonie w menu strony). Wielkość liter i polskie znaki można pomijać albo uwzględniać, a „Zamień wszystko” cofa jedno **Ctrl+Z**. **Zamień w notatniku** (menu **Więcej**, paleta poleceń) pokazuje każde trafienie „przed → po” do odznaczenia i ma **Cofnij**.
 * **Klikalne części tagu zagnieżdżonego** — w `#praca/raporty` kliknięcie `#praca` otwiera tag nadrzędny, a `raporty` cały tag.

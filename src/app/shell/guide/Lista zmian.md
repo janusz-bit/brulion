@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.8.1 — 3 listopada 2026
+
+**Uwaga**
+- Wersja 0.8.0 nie została opublikowana: wydanie zatrzymały błędy w testach i w budowaniu na Androida, a nie w działaniu aplikacji. Wszystkie jej nowości, opisane poniżej, są dostępne od tej wersji.
+
 ## 0.8.0 — 3 listopada 2026
 
 **Nowe**
