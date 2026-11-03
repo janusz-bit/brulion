@@ -14,7 +14,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[Dokument i konspekt|Dokument i konspekt]] — dwa tryby pisania i praca na blokach.
 
 ## Pisanie i porządkowanie
-- [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]] — `[[strony]]`, odwołania do bloków, osadzenia.
+- [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]] — `[[strony]]`, odwołania do bloków, osadzenia, podgląd linku.
 - [[Tagi i właściwości|Tagi i właściwości]] — `#tagi` (i ich strony), nagłówek YAML, `klucz:: wartość`, edycja właściwości w polach.
 - [[Wzory matematyczne|Wzory matematyczne]] — LaTeX w tekście i blokach: ułamki, pierwiastki, macierze.
 - [[Diagramy|Diagramy]] — schematy blokowe, diagramy sekwencji i wykresy kołowe z bloków `mermaid`.

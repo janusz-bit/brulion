@@ -16,8 +16,10 @@ import Brulion
 //       onTaskStatusRequested: (status) => refs.setTaskStatus(index, status)
 //   }
 //
-// A click on a link follows it (`tools`: PageTools.openLink, resolved from `sourcePath`), a click on the
-// task checkbox emits taskToggled() (a right-click or long press on it: the status menu,
+// A click on a link follows it (`tools`: PageTools.openLink, resolved from `sourcePath`); the mouse
+// pointer resting on a [[page]] or ((block)) link shows its preview (LinkPreviews). Tags and chips
+// are rounded shapes (BRichText), the text cut after 12 lines (6 when compact) with "…". A click
+// on the task checkbox emits taskToggled() (a right-click or long press on it: the status menu,
 // taskStatusRequested()), a click anywhere else opens the block in its page.
 // Keyboard: focusable, Enter opens, Ctrl+Enter opens in the side panel (wide windows).
 FocusScope {
@@ -119,28 +121,23 @@ FocusScope {
                 elide: Text.ElideMiddle
                 maximumLineCount: 1
             }
-            Text {
+            BRichText {
                 id: textItem
                 Layout.fillWidth: true
-                textFormat: Text.RichText
-                text: TextHelper.hoveredLinkHtml(row.html, row.hoveredLink)
-                wrapMode: Text.Wrap
+                html: row.html
+                hoveredLink: row.hoveredLink
                 maximumLineCount: row.compact ? 6 : 12
-                elide: Text.ElideRight
                 font.family: Theme.fontEditor
                 font.pixelSize: row.fontSize
-                lineHeightMode: Text.FixedHeight
+                font.strikeout: row.taskStatus === "cancelled"
                 lineHeight: Theme.lineHeightPx(row.fontSize, Theme.lineHeight)
                 color: row.closed ? Theme.fgFaint : Theme.fg
-                linkColor: Theme.link
-                font.strikeout: row.taskStatus === "cancelled"
-                Accessible.ignored: true
                 // Screen readers: the text's links as link items of their own (the row stays the
                 // link to the reference; the task checkbox is TaskBox).
                 BLinkTargets {
                     x: 0
                     y: 0
-                    textItem: textItem
+                    textItem: textItem.textItem
                     html: row.html
                     lineHeight: textItem.lineHeight
                     maxHeight: textItem.height
@@ -172,14 +169,25 @@ FocusScope {
         const h = link.startsWith("task:") ? "" : link
         if (h !== row.hoveredLink)
             row.hoveredLink = h
+        return p
     }
 
     HoverHandler {
         id: hover
         enabled: !Theme.touchUi
         cursorShape: Qt.PointingHandCursor
-        onPointChanged: row.trackLink(point.position)
-        onHoveredChanged: if (!hovered && !tap.pressed) row.hoveredLink = ""
+        onPointChanged: {
+            // The link under the resting pointer: its preview (LinkPreviews, docs/UI.md "Link previews").
+            const p = row.trackLink(point.position)
+            LinkPreviews.hover(textItem, row.hoveredLink, row.sourcePath, Workspace, p.x, p.y)
+        }
+        onHoveredChanged: {
+            if (!hovered) {
+                LinkPreviews.leave(textItem)
+                if (!tap.pressed)
+                    row.hoveredLink = ""
+            }
+        }
     }
     TapHandler {
         id: tap

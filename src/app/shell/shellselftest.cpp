@@ -2667,6 +2667,146 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
     QObject::disconnect(toasts);
 }
 
+/// 5l. Link previews (docs/UI.md "Link previews") and rounded tags outside the editor's blocks:
+/// the mouse pointer resting on a [[link]] opens the page's preview after a moment — rendered
+/// text with rounded chips and tags —, it stays while the pointer is on it and closes once the
+/// pointer left both; a page not written yet says so; a click on the header opens the page, a
+/// click on a link inside follows it. The linked references under a page show tags as rounded
+/// shapes too and cut a long block after 12 lines with "…". Desktop only: touch screens have no
+/// hover (no previews there).
+void checkLinkPreviews(QQuickWindow *window, AppController *app, const Check &check,
+                       const std::function<QObject *(const QString &)> &controllerFor)
+{
+    if (QCoreApplication::arguments().contains(u"--touch"_s))
+        return;
+    Workspace *ws = app->workspace();
+    const QString source = u"Podgląd źródło.md"_s;
+    const QString target = u"Podgląd cel.md"_s;
+    const QString third = u"Podgląd trzeci.md"_s;
+    QString longText;
+    for (int i = 0; i < 40; ++i)
+        longText += u"Bardzo długi akapit o łące, źdźble trawy i żółwiu %1, "_s.arg(i);
+    ws->write(third, u"- Trzecia strona\n"_s);
+    ws->write(target,
+              u"- Pierwszy blok o wyjeździe #podróże 📅 2026-10-20\n- Drugi blok prowadzi do [[Podgląd trzeci]]\n"_s);
+    ws->write(source, u"- Zobacz [[Podgląd cel]] oraz [[Podgląd nowej strony]] #krótkie\n- "_s + longText
+                              + u"[[Podgląd cel]] #długie\n"_s);
+    const auto opened = [&](const QString &path) {
+        return waitFor([&] {
+            QObject *page = controllerFor(path);
+            return page && page->property("loaded").toBool() && app->currentRoute().value(u"path"_s).toString() == path;
+        });
+    };
+    const auto header = [window] { return shownNamed(window->contentItem(), u"linkPreviewHeader"_s); };
+    const auto headerTitle = [window]() -> QString {
+        QQuickItem *title = shownNamed(window->contentItem(), u"linkPreviewTitle"_s);
+        return title ? title->property("text").toString() : QString();
+    };
+    app->openPage(source);
+    check(opened(source), "the page with links opens");
+    settle(300);
+    QQuickItem *text = renderedTextContaining(window->contentItem(), u"nowej"_s);
+    const QPointF at = text ? linkPoint(text, u"cel"_s) : QPointF(-1, -1);
+    const QPointF missingAt = text ? linkPoint(text, u"nowej"_s) : QPointF(-1, -1);
+    check(at.x() >= 0 && missingAt.x() >= 0, "the page shows its links");
+    if (at.x() < 0 || missingAt.x() < 0)
+        return;
+    const QPointF away = pointIn(text, 0.02, 0.5); // "Zobacz": text, no link
+    mouseMove(window, away);
+    mouseMove(window, at);
+    settle(150);
+    check(header() == nullptr, "no preview at once: the pointer only passes");
+    check(waitFor([&] { return header() != nullptr; }), "the pointer resting on a [[link]] opens the page's preview");
+    check(waitFor([&] { return headerTitle() == u"Podgląd cel"; }), "its header names the page");
+    QQuickItem *rounded = nullptr;
+    check(waitFor([&] {
+              QQuickItem *body = shownNamed(window->contentItem(), u"linkPreviewBody"_s);
+              rounded = body ? findShown(body,
+                                         [](QQuickItem *item) {
+                                             return isA(item, "BRichText") && item->property("rich").toBool();
+                                         })
+                             : nullptr;
+              return rounded != nullptr && renderedTextContaining(body, u"wyjeździe"_s) != nullptr;
+          }),
+          "the preview shows the page's text, its tag and date chip as rounded shapes");
+    // The pointer moves onto the preview: it stays; it leaves both: the preview closes.
+    if (QQuickItem *h = header())
+        mouseMove(window, pointIn(h, 0.3, 0.5));
+    settle(900);
+    check(header() != nullptr, "the preview stays while the pointer is on it");
+    mouseMove(window, away);
+    check(waitFor([&] { return header() == nullptr; }), "the preview closes once the pointer left the link and it");
+    // A page not written yet.
+    mouseMove(window, missingAt);
+    const QString notYet =
+            QCoreApplication::translate("BLinkPreview", "“%1” does not exist yet. Click the title to create it.")
+                    .arg(u"Podgląd nowej strony"_s);
+    check(waitFor([&] {
+              QQuickItem *message = shownNamed(window->contentItem(), u"linkPreviewMessage"_s);
+              return message && message->property("text").toString() == notYet;
+          }),
+          "the preview of a link to a page not written yet says so");
+    mouseMove(window, away);
+    check(waitFor([&] { return header() == nullptr; }), "and closes");
+    // A click on a link inside the preview follows it.
+    mouseMove(window, at);
+    check(waitFor([&] { return header() != nullptr; }), "the preview opens again");
+    QQuickItem *inner = header() ? renderedTextContaining(header()->parentItem(), u"trzeci"_s) : nullptr;
+    const QPointF innerAt = inner ? linkPoint(inner, u"trzeci"_s) : QPointF(-1, -1);
+    check(innerAt.x() >= 0, "the preview shows the page's own link");
+    if (innerAt.x() >= 0) {
+        mouseMove(window, innerAt);
+        mouseClick(window, innerAt);
+        check(opened(third), "a click on a link in the preview follows it");
+        check(waitFor([&] { return header() == nullptr; }), "and the preview closes");
+        app->back();
+        check(opened(source), "back on the page with links");
+        settle(300);
+    }
+    // A click on the header opens the previewed page.
+    text = renderedTextContaining(window->contentItem(), u"nowej"_s);
+    const QPointF again = text ? linkPoint(text, u"cel"_s) : QPointF(-1, -1);
+    mouseMove(window, away);
+    waitFor([&] { return header() == nullptr; });
+    mouseMove(window, again);
+    check(waitFor([&] { return header() != nullptr; }), "the preview opens once more");
+    if (QQuickItem *h = header()) {
+        const QPointF on = pointIn(h, 0.3, 0.5);
+        mouseMove(window, on);
+        mouseClick(window, on);
+        check(opened(target), "a click on the preview's header opens the page");
+        check(waitFor([&] { return header() == nullptr; }), "and the preview closes");
+    }
+    // The page's linked references: rounded tags, a long block cut after 12 lines with "…".
+    QQuickItem *cut = nullptr;
+    check(waitFor([&] {
+              cut = findShown(window->contentItem(), [](QQuickItem *item) {
+                  return isA(item, "BRichText") && hasAncestor(item, "ContentRefRow")
+                         && item->property("truncated").toBool();
+              });
+              return cut != nullptr;
+          }),
+          "a long linked reference is cut");
+    if (cut) {
+        const qreal line = cut->property("lineHeight").toReal();
+        check(line > 0 && std::abs(cut->height() - 12 * line) < 1, "after 12 lines");
+    }
+    QQuickItem *tagged = findShown(window->contentItem(), [](QQuickItem *item) {
+        return isA(item, "BRichText") && hasAncestor(item, "ContentRefRow") && item->property("tinted").toBool()
+               && !item->property("truncated").toBool();
+    });
+    QQuickItem *edit =
+            tagged ? findShown(tagged, [](QQuickItem *item) { return isA(item, "QQuickTextEdit"); }) : nullptr;
+    QQuickItem *pill = edit ? findShown(edit,
+                                        [](QQuickItem *item) {
+                                            return isA(item, "QQuickRectangle")
+                                                   && item->property("radius").toReal() * 2 >= item->height() - 0.5;
+                                        })
+                            : nullptr;
+    check(pill != nullptr, "a linked reference's #tag is a rounded pill");
+    mouseMove(window, QPointF(2, window->height() - 2));
+}
+
 /// 5b. A picture attachment opens as a picture (ContentPictureView): its bytes are not a note and
 /// never reach the editor — the older view read them as text there, mojibake for a binary picture,
 /// and a typed character was saved over it. "Pokaż jako tekst" (a real tap / click) and Ctrl+E
@@ -6248,6 +6388,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             checkBlockLinks(window, app, check, controllerFor);
             // 5k. The path parts of a link to a page in a folder.
             checkLinkParts(window, app, check, controllerFor);
+            // 5l. Link previews; rounded tags in linked references.
+            checkLinkPreviews(window, app, check, controllerFor);
             // 5b. A picture opens as a picture (checkPictureView).
             checkPictureView(window, app, check, controllerFor);
             // 5k. PDFs: the thumbnail, the viewer, drawing on a page (checkPdfViewer).

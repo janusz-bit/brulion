@@ -307,31 +307,30 @@ Item {
                                 anchors.margins: 1
                                 color: Theme.alpha(Theme.info, Theme.dark ? 0.07 : 0.06)
                             }
-                            Text {
+                            BRichText {
                                 id: cellText
                                 visible: !cell.editingCell
-                                anchors.fill: parent
-                                anchors.leftMargin: root.cellPadding
-                                anchors.rightMargin: root.cellPadding
-                                verticalAlignment: Text.AlignVCenter
+                                x: root.cellPadding
+                                y: Math.round((parent.height - height) / 2)
+                                width: parent.width - 2 * root.cellPadding
                                 horizontalAlignment: cell.align === "right" || (cell.formula && cell.align === "") ? Text.AlignRight
                                                    : cell.align === "center" ? Text.AlignHCenter : Text.AlignLeft
-                                // Rich text cannot elide: one line, clipped at the cell's edge.
-                                text: TextHelper.hoveredLinkHtml(cell.shownHtml, cell.hoveredLink)
-                                textFormat: Text.RichText
-                                wrapMode: Text.NoWrap
-                                clip: contentWidth > width
+                                // One line: a longer text ends with "…" (its tooltip shows it all).
+                                html: cell.shownHtml
+                                hoveredLink: cell.hoveredLink
+                                maximumLineCount: 1
+                                lineHeight: Theme.lineHeightPx(Theme.textBase, 1.4)
                                 font.family: Theme.fontUi
                                 font.pixelSize: Theme.textBase
                                 font.weight: cell.headerCell ? Theme.weightSemiBold : cell.formula ? Theme.weightMedium : Theme.weightNormal
                                 color: cell.error !== "" ? Theme.dangerText : Theme.fg
-                                linkColor: Theme.link
-                                Accessible.ignored: true
                             }
                             // Screen readers: the cell's links as link items (the cell stays the
                             // accessible Cell; its text item is ignored).
                             BLinkTargets {
-                                textItem: cellText
+                                x: cellText.x
+                                y: cellText.y
+                                textItem: cellText.textItem
                                 html: cell.shownHtml
                                 shown: !cell.editingCell
                                 maxHeight: cellText.height
@@ -345,7 +344,7 @@ Item {
                             // Created when shown: a tooltip (a popup with its own items) in
                             // every cell made a table slow to create while scrolling.
                             Loader {
-                                active: cellHover.hovered && (cell.error !== "" || cellText.contentWidth > cellText.width)
+                                active: cellHover.hovered && (cell.error !== "" || cellText.truncated)
                                 sourceComponent: BToolTip {
                                     parent: cell
                                     visible: true
@@ -357,8 +356,20 @@ Item {
                                 enabled: !Theme.touchUi
                                 cursorShape: cellText.linkAt(point.position.x - cellText.x, point.position.y - cellText.y) !== ""
                                              ? Qt.PointingHandCursor : Qt.IBeamCursor
-                                onPointChanged: cell.trackLink(point.position.x, point.position.y)
-                                onHoveredChanged: if (!hovered && !cellTap.pressed) cell.hoveredLink = ""
+                                onPointChanged: {
+                                    cell.trackLink(point.position.x, point.position.y)
+                                    // The link under the resting pointer: its preview (LinkPreviews).
+                                    LinkPreviews.hover(cellText, cell.hoveredLink, root.block.controller ? root.block.controller.path : "",
+                                                       root.block.controller ? root.block.controller.host : null,
+                                                       point.position.x - cellText.x, point.position.y - cellText.y)
+                                }
+                                onHoveredChanged: {
+                                    if (!hovered) {
+                                        LinkPreviews.leave(cellText)
+                                        if (!cellTap.pressed)
+                                            cell.hoveredLink = ""
+                                    }
+                                }
                             }
                             // A finger held on a cell selects the table (touch UIs) — on a token or a
                             // link of its text, outside the selection mode, opens its menu.

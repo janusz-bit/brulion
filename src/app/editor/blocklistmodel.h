@@ -236,6 +236,12 @@ public:
     /// text) follows, read with row `row`'s render context (InlineRenderer::linkUrlAt(): part: for
     /// a path part of a link); "" when no link is there. The keyboard's Alt+Enter.
     QString linkUrlAt(int row, const QString &text, int position) const;
+    /// The preview of what a link of rendered text written on `fromPath` ("" = this page) opens
+    /// (docs/UI.md "Link previews", LinkPreview): for page:Target[#Heading | #^id] and block:id
+    /// the transclusion map of `![[Target…]]` / `!((id))` — {kind, target, title, href, path,
+    /// found, message, more, blocks} —; {} for other links and for a page link to an attachment
+    /// or a drawing.
+    QVariantMap linkPreview(const QString &url, const QString &fromPath) const;
     /// The host's vault configuration (cached until the rendering is invalidated).
     const VaultConfig &vaultConfig() const;
     void setEnglish(bool english);

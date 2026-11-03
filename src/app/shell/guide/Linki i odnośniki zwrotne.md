@@ -24,6 +24,14 @@ Przykłady: [[Spis treści|Spis treści]], [[Zadania#Powtarzanie]], oraz strona,
 
 **Menu linku** — prawy przycisk myszy na linku (na telefonie przytrzymanie palcem): „Otwórz” (przy stronie, której jeszcze nie ma: „Utwórz stronę”), „Otwórz w panelu bocznym” (na szerokim oknie) i „Kopiuj link”. Skopiowany link nazywa stronę tak, że zadziała wklejony w dowolnej notatce (`[[Strona#Nagłówek]]`). Na adresie internetowym menu ma „Otwórz w przeglądarce” i „Kopiuj adres”. Link do dnia dziennika (`[[2026-10-20]]`) ma menu daty — zobacz [[Dziennik, kalendarz i szablony#Dziennik|Dziennik]].
 
+## Podgląd linku
+Zatrzymaj kursor myszy na linku do strony (`[[Strona]]`, `[[Strona#Nagłówek]]`, `[[Strona#^id]]`) albo na odwołaniu `((id))` — po chwili obok pojawi się dymek z treścią strony, sekcji albo bloku, bez wychodzenia z notatki. Tak samo w odnośnikach zwrotnych, **Zadaniach**, osadzonych stronach, tabelach i wynikach zapytań.
+- Dymek zostaje, dopóki kursor jest na linku albo na dymku — dłuższą treść przewiniesz kółkiem myszy. Znika chwilę po tym, jak kursor opuści oba, albo po kliknięciu gdzie indziej.
+- Kliknięcie nazwy u góry dymku otwiera stronę (z `Ctrl` — w panelu bocznym), a kliknięcie linku w dymku przechodzi tam, dokąd prowadzi ten link.
+- Przy stronie, której jeszcze nie ma, dymek mówi, że strona jeszcze nie istnieje — kliknięcie nazwy ją tworzy. Przy brakującym nagłówku albo bloku mówi, że go nie znaleziono.
+- Dymek tylko pokazuje: pola wyboru zadań i daty w nim się nie zmieniają. Linki do załączników (zdjęć, PDF-ów) i rysunków nie mają podglądu.
+- Na telefonie i tablecie podglądu nie ma (ekran dotykowy nie zna „najechania”); przytrzymanie linku otwiera jak dotąd jego menu, a **Otwórz w panelu bocznym** pokaże stronę obok notatki na szerokim ekranie.
+
 ## Jak Brulion znajduje stronę
 Nazwa z linku jest dopasowywana do plików po kolei: pełna ścieżka w notatniku, ścieżka względem bieżącego folderu, sama nazwa pliku (bez względu na wielkość liter), a na końcu aliasy z nagłówka strony (`aliases: [Skrót]`). Przy kilku pasujących wygrywa strona o najkrótszej ścieżce. Gdy dwie strony mają tę samą nazwę w różnych folderach, użyj ścieżki: `[[Projekty/Dom]]`.
 

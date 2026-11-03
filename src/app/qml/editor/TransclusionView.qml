@@ -13,7 +13,8 @@ import Brulion
 // would take the menu away — and come a moment after it closed). A right-click or long press on a
 // date, reminder, 🔁 or priority chip opens its menu (the change goes to the source's file, with a
 // toast to undo it), on a link the link's menu. A click on the header opens the source; a click on
-// the content edits the block with the embed.
+// the content edits the block with the embed. Tags and chips are rounded shapes (BRichText); the
+// mouse pointer resting on a [[page]] or ((block)) link shows its preview (LinkPreviews).
 Column {
     id: root
 
@@ -340,36 +341,46 @@ Column {
                             onMenuOpenChanged: root.menuShown(taskBox, menuOpen)
                         }
 
-                        Text {
+                        BRichText {
                             id: body
                             visible: !entry.nested && !entry.rule
                             x: entry.indent + (entry.isTask ? root.editor.taskBoxWidth + 2 : 0)
                             y: 1
                             width: parent.width - x
-                            textFormat: Text.RichText
-                            text: entry.nested || entry.rule ? "" : TextHelper.hoveredLinkHtml(entry.modelData.html, entry.hoveredLink)
-                            wrapMode: Text.Wrap
+                            html: entry.nested || entry.rule ? "" : entry.modelData.html
+                            hoveredLink: entry.hoveredLink
                             font.family: entry.modelData.view === "code" ? Theme.fontMono : Theme.fontEditor
                             font.pixelSize: entry.modelData.view === "code" ? Theme.textSm : entry.fontSize
                             font.weight: entry.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
                             font.strikeout: entry.task === "cancelled"
-                            lineHeightMode: Text.FixedHeight
                             lineHeight: entry.lineHeightPx
                             color: entry.closed ? Theme.fgFaint : entry.modelData.view === "quote" ? Theme.fgMuted : Theme.fg
-                            linkColor: Theme.link
-                            Accessible.role: Accessible.StaticText
-                            Accessible.name: text
+                            accessibleName: entry.modelData.raw || ""
 
                             HoverHandler {
                                 id: bodyHover
                                 enabled: !Theme.touchUi
                                 cursorShape: body.linkAt(point.position.x, point.position.y) !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
-                                onPointChanged: entry.trackLink(point.position.x, point.position.y)
-                                onHoveredChanged: if (!hovered && !bodyTap.pressed) entry.hoveredLink = ""
+                                onPointChanged: {
+                                    entry.trackLink(point.position.x, point.position.y)
+                                    // The link under the resting pointer: its preview (LinkPreviews).
+                                    LinkPreviews.hover(body, entry.hoveredLink, entry.modelData.path || "",
+                                                       root.controller ? root.controller.host : null,
+                                                       point.position.x, point.position.y)
+                                }
+                                onHoveredChanged: {
+                                    if (!hovered) {
+                                        LinkPreviews.leave(body)
+                                        if (!bodyTap.pressed)
+                                            entry.hoveredLink = ""
+                                    }
+                                }
                             }
                         }
                         BLinkTargets {
-                            textItem: body
+                            x: body.x
+                            y: body.y
+                            textItem: body.textItem
                             html: entry.nested || entry.rule ? "" : entry.modelData.html
                             lineHeight: entry.lineHeightPx
                             shown: body.visible

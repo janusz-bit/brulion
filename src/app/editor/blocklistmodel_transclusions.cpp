@@ -117,9 +117,10 @@ public:
 
     bool usedOwnPage() const { return m_local; }
 
-    QVariantMap build(const Transclusion &t)
+    /// `fromPath`: the note it is written in ("" = the model's page).
+    QVariantMap build(const Transclusion &t, const QString &fromPath = QString())
     {
-        const Resolved r = resolve(t, m_ownPath);
+        const Resolved r = resolve(t, fromPath.isEmpty() ? m_ownPath : fromPath);
         QVariantMap out{{u"kind"_s, kindName(t)},
                         {u"target"_s, t.blockRef ? t.blockId : t.target},
                         {u"title"_s, r.title},
@@ -401,6 +402,60 @@ private:
 };
 
 } // namespace
+
+namespace {
+
+/// The embed a link of rendered text shows in its preview: page:Target[#Heading | #^id] as
+/// `![[Target…]]` (an empty target: the note the link is in), block:id as `!((id))`.
+std::optional<Transclusion> transclusionOfLink(const QString &url)
+{
+    Transclusion t;
+    if (url.startsWith(u"block:")) {
+        t.kind = Transclusion::Kind::Block;
+        t.blockRef = true;
+        t.blockId = QUrl::fromPercentEncoding(url.mid(6).toUtf8()).trimmed();
+        if (t.blockId.isEmpty())
+            return std::nullopt;
+        return t;
+    }
+    if (!url.startsWith(u"page:"))
+        return std::nullopt;
+    const QString rest = url.mid(5);
+    const qsizetype hash = rest.indexOf(u'#');
+    t.target = QUrl::fromPercentEncoding((hash >= 0 ? rest.left(hash) : rest).toUtf8());
+    const QString fragment = hash >= 0 ? QUrl::fromPercentEncoding(rest.mid(hash + 1).toUtf8()) : QString();
+    if (fragment.startsWith(u'^') && fragment.size() > 1) {
+        t.kind = Transclusion::Kind::Block;
+        t.blockId = fragment.mid(1);
+    } else if (!fragment.isEmpty() && fragment != u"^"_s) {
+        t.kind = Transclusion::Kind::Heading;
+        t.heading = fragment;
+    } else if (t.target.isEmpty()) {
+        return std::nullopt;
+    }
+    return t;
+}
+
+} // namespace
+
+QVariantMap BlockListModel::linkPreview(const QString &url, const QString &fromPath) const
+{
+    const std::optional<Transclusion> t = transclusionOfLink(url);
+    if (!t)
+        return {};
+    const QString from = fromPath.isEmpty() ? m_path : fromPath;
+    if (!t->blockRef && !t->target.isEmpty()) {
+        // A link to an attachment (a picture, a PDF; found or not) or to a drawing has no text to
+        // show.
+        if (paths::isAttachmentExtension(paths::extension(t->target)))
+            return {};
+        const QString path = m_host ? m_host->resolveLink(t->target, from) : QString();
+        if (!path.isEmpty() && (!paths::isMarkdown(path) || (m_host && m_host->isDrawing(path))))
+            return {};
+    }
+    Builder builder(*this, m_host, m_doc, m_path);
+    return builder.build(*t, from);
+}
 
 void BlockListModel::ensureTransclusions(int row) const
 {

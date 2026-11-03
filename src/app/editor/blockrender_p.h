@@ -7,6 +7,7 @@
 #include "markdown/inlinerenderer.h"
 
 #include <QString>
+#include <QVariantMap>
 
 namespace brulion::editor::detail {
 
@@ -19,5 +20,10 @@ QString renderBodyHtml(const markdown::BlockEntry &entry, const BlockShape &shap
 
 /// The visible text of renderer output (tags removed, entities decoded) — for measuring.
 QString richTextToPlain(const QString &html);
+
+/// The renderer's colours from QML's map (PageController.palette, LinkPreview.palette: link,
+/// unresolved, muted, codeBackground, highlightBackground, <chip>Fg / <chip>Bg — colour names or
+/// QColors; a missing or invalid one keeps the default). Defined in linkpreview.cpp.
+markdown::Palette rendererPalette(const QVariantMap &map);
 
 } // namespace brulion::editor::detail

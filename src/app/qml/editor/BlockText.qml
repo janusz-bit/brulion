@@ -23,7 +23,8 @@ import Brulion
 // (LinkMenu); a right-click elsewhere the block menu. The link under the mouse — or under the
 // finger or button while it presses — is underlined (hoveredLink, TextHelper.hoveredLinkHtml: the
 // shown text only), so each path part of [[A/B/C]] shows what a click opens; with a screen reader
-// on every link is an accessible item of its own (BLinkTargets).
+// on every link is an accessible item of its own (BLinkTargets). The mouse pointer resting on a
+// [[page]] or ((block)) link (or a day's link) shows its preview (LinkPreviews).
 Item {
     id: root
 
@@ -75,7 +76,15 @@ Item {
         if (hovered !== root.hoveredLink)
             root.hoveredLink = hovered
     }
-    onEditingChanged: root.hoveredLink = ""
+    onEditingChanged: {
+        root.hoveredLink = ""
+        LinkPreviews.leave(root)
+    }
+    /// The link whose preview the resting pointer asks for (LinkPreviews: page: and block:; a day
+    /// of the journal, a day: chip here, by the page it names).
+    readonly property string previewLink: root.hoveredLink.startsWith("day:") && root.editor.controller
+                                          ? (root.editor.controller.dateChip(root.block.index, root.hoveredLink).url || "")
+                                          : root.hoveredLink
 
     /// The rendered text's height in whole fixed-height lines.
     readonly property real renderedHeight: lineHeightPx > 0 ? Math.max(1, Math.round(renderedItem.implicitHeight / lineHeightPx)) * lineHeightPx
@@ -174,8 +183,20 @@ Item {
                 const link = root.linkAt(point.position.x, point.position.y)
                 return link !== "" && !root.editor.editsOnClick(link) ? Qt.PointingHandCursor : Qt.IBeamCursor
             }
-            onPointChanged: root.trackLink(point.position.x, point.position.y)
-            onHoveredChanged: if (!hovered && !tap.pressed) root.hoveredLink = ""
+            onPointChanged: {
+                root.trackLink(point.position.x, point.position.y)
+                // The link under the resting pointer: its preview (docs/UI.md "Link previews").
+                const controller = root.editor.controller
+                LinkPreviews.hover(root, tap.pressed ? "" : root.previewLink, controller ? controller.path : "",
+                                   controller ? controller.host : null, point.position.x, point.position.y)
+            }
+            onHoveredChanged: {
+                if (!hovered) {
+                    LinkPreviews.leave(root)
+                    if (!tap.pressed)
+                        root.hoveredLink = ""
+                }
+            }
         }
         TapHandler {
             id: tap

@@ -88,6 +88,17 @@
     </message>
 </context>
 <context>
+    <name>BLinkPreview</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/components/BLinkPreview.qml" line="344"/>
+        <source>… and %n more block(s)</source>
+        <translation>
+            <numerusform>… and %n more block</numerusform>
+            <numerusform>… and %n more blocks</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>BMergeView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/components/BMergeView.qml" line="103"/>
