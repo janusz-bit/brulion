@@ -328,7 +328,8 @@ private Q_SLOTS:
         QCOMPARE(vault.config().journalsFolder, u"dziennik"_s);
 
         // Reversible: the trash has what left, History what was replaced, and nothing else moved.
-        QVERIFY(std::any_of(vault.trash().cbegin(), vault.trash().cend(),
+        const QList<FileStat> trash = vault.trash(); // one list: begin and end of the same one
+        QVERIFY(std::any_of(trash.cbegin(), trash.cend(),
                             [](const FileStat &f) { return f.path.contains(u"Dodana później"_s); }));
         const QList<HistoryEntry> versions = vault.history()->list(u"Żółw.md"_s);
         QVERIFY(!versions.isEmpty());

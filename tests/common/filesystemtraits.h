@@ -1,10 +1,11 @@
 // What the file system of a test run can do, for the tests whose subject needs it: symbolic links,
-// Unix file modes and names that differ only in letter case. Where it cannot, such a test (or the
-// part of it) is skipped with the reason instead of failing on what the platform never does.
+// Unix file modes, names that differ only in letter case and names with a colon. Where it cannot,
+// such a test (or the part of it) is skipped with the reason instead of failing on what the
+// platform never does.
 //
 // Windows: QFile::link() makes a shortcut (a .lnk file), not a symbolic link; file modes are only
 // the read-only attribute (folders ignore it, other users are kept out by access lists, not mode
-// bits); NTFS folders are case-insensitive by default.
+// bits); NTFS folders are case-insensitive by default; ':' is not allowed in a file name.
 #pragma once
 
 #include <QDir>
@@ -28,6 +29,16 @@ inline bool hasSymlinks()
 
 /// Whether Unix file modes (owner/group/other bits, a folder without write permission) apply here.
 inline bool hasUnixPermissions()
+{
+#ifdef Q_OS_WIN
+    return false;
+#else
+    return true;
+#endif
+}
+
+/// Whether a file name may contain ':' (Windows reserves it, e.g. "Spotkanie 10:30.md").
+inline bool allowsColonInNames()
 {
 #ifdef Q_OS_WIN
     return false;

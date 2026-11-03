@@ -251,15 +251,28 @@ private:
         return text ? text->property("text").toString() : QString();
     }
 
-    /// The sound menu of a setting is open. (Phones: the settings sections are Repeater
-    /// delegates, outside the window's QObject tree — look below the setting's item.)
-    bool menuOpen(const char *name) const
+    /// The sound menu of a setting. (Phones: the settings sections are Repeater delegates,
+    /// outside the window's QObject tree — look below the setting's item.)
+    QObject *soundMenu(const char *name) const
     {
         const QString menuName = QString::fromLatin1(name);
         const QString settingName = menuName.left(menuName.indexOf(u"SoundMenu"_s)) + u"SoundSetting"_s;
         QQuickItem *setting = item(settingName.toLatin1().constData());
-        QObject *menu = setting ? setting->findChild<QObject *>(menuName) : nullptr;
+        return setting ? setting->findChild<QObject *>(menuName) : nullptr;
+    }
+    /// The sound menu is open (its enter transition done).
+    bool menuOpen(const char *name) const
+    {
+        const QObject *menu = soundMenu(name);
         return menu && menu->property("opened").toBool();
+    }
+    /// The sound menu is closed for good: `opened` turns false when the exit transition starts,
+    /// while the menu still shows (and takes taps) until it ends — a tap meant for the page in
+    /// that moment may land on the menu.
+    bool menuClosed(const char *name) const
+    {
+        const QObject *menu = soundMenu(name);
+        return !menu || (!menu->property("opened").toBool() && !menu->property("visible").toBool());
     }
 
     // 1. Silent reminders.
@@ -305,7 +318,7 @@ private:
               "choosing “Bell” makes it the alarm sound");
         check(stored("alarm", "mode") == u"custom" && stored("alarm", "uri") == name,
               "the alarm sound is stored in the settings");
-        check(waitFor([this] { return !menuOpen("alarmSoundMenu"); }), "the menu closes");
+        check(waitFor([this] { return menuClosed("alarmSoundMenu"); }), "the menu closes");
         check(summary("alarm")
                       == QCoreApplication::translate("ReminderSoundSetting", "Ringtone: %1")
                                  .arg(QCoreApplication::translate("ReminderSoundSetting",
@@ -317,7 +330,7 @@ private:
         tap(item("alarmSoundPick"));
         check(waitFor([this] { return menuOpen("alarmSoundMenu"); }), "“Choose ringtone…” opens the sound menu");
         sendKey(m_window, Qt::Key_Escape);
-        check(waitFor([this] { return !menuOpen("alarmSoundMenu"); }), "Escape closes it");
+        check(waitFor([this] { return menuClosed("alarmSoundMenu"); }), "Escape closes it");
         settle(200);
     }
 
@@ -332,7 +345,7 @@ private:
                       && m_sounds->choice(SoundKind::Alarm).uri == themeSound(),
               "“Ringtone” brings the chosen sound back");
         settle(300);
-        check(!menuOpen("alarmSoundMenu"), "… without the menu");
+        check(menuClosed("alarmSoundMenu"), "… without the menu");
     }
 
     // 5. Default reminders and "Play sample".
