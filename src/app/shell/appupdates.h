@@ -6,6 +6,8 @@
 // only logged and asked again a few hours later). The last answer is kept, so the message also
 // shows offline. The message stays until the app is updated or dismiss() — a later release shows
 // it again. Opening the release's page is the user's: QML passes `releaseUrl` to Workspace.openUrl.
+// A build with the CMake option BRULION_UPDATE_CHECK=OFF (store builds: F-Droid, IzzyOnDroid) has
+// none of it: checkBuiltIn() is false, so it is never `supported` and never asks.
 #pragma once
 
 #include <QDateTime>
@@ -49,6 +51,11 @@ public:
 
     explicit AppUpdates(const Options &options, QObject *parent = nullptr);
     ~AppUpdates() override;
+
+    /// This build may tell about new versions at all: the CMake option BRULION_UPDATE_CHECK (OFF
+    /// for builds a store updates, e.g. F-Droid). False: never supported, whatever Options say —
+    /// no message, no switch in the settings, no request to GitHub.
+    static bool checkBuiltIn();
 
     /// Starts asking (AppController::start()).
     void start();

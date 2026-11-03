@@ -86,7 +86,8 @@ target_link_libraries(brulion_shell
 # WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,
 # src/app/pdf — its area is included before this one — and openexternal.h).
 target_link_libraries(brulion_shell PRIVATE brulion_platform brulion_pdfview)
-target_compile_definitions(brulion_shell PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(brulion_shell PRIVATE BRULION_VERSION="${PROJECT_VERSION}"
+    BRULION_UPDATE_CHECK=$<BOOL:${BRULION_UPDATE_CHECK}>)
 qt_extract_metatypes(brulion_shell)
 brulion_set_warnings(brulion_shell)
 

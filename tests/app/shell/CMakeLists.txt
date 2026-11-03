@@ -12,7 +12,10 @@ brulion_add_test(tst_shell_share SOURCES tst_share.cpp LIBS brulion_shell brulio
 brulion_add_test(tst_shell_traypopup SOURCES tst_traypopup.cpp LIBS brulion_shell Qt6::Gui)
 brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell brulion_core_text)
 # The message about a newer version (appupdates.h; a local HTTP server stands in for GitHub).
+# BRULION_UPDATE_CHECK_EXPECTED: the CMake option, which the library's AppUpdates::checkBuiltIn()
+# must follow (an OFF build runs the tests of a build without the check).
 brulion_add_test(tst_shell_appupdates SOURCES tst_appupdates.cpp ../minihttpserver.h LIBS brulion_shell Qt6::Network)
+target_compile_definitions(tst_shell_appupdates PRIVATE BRULION_UPDATE_CHECK_EXPECTED=$<BOOL:${BRULION_UPDATE_CHECK}>)
 brulion_add_test(tst_shell_workspace SOURCES tst_workspace.cpp LIBS brulion_shell brulion_core_vault brulion_core_markdown)
 brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp
     LIBS brulion_shell brulion_core_vault brulion_core_markdown brulion_core_index brulion_core_calc
