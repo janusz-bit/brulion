@@ -295,3 +295,9 @@ endif()
 brulion_add_test(tst_editor_mermaid
     SOURCES tst_editor_mermaid.cpp
     LIBS brulion_editor brulion_core_diagram)
+# Tables and charts in the editor: sorting (one undo step, byte for byte, CRLF), the view's filters,
+# CSV out and in, a ```chart block's chartData following its table, ChartView laid out and painted
+# (BRULION_CHART_SHOTS=<dir> saves the charts as PNG).
+brulion_add_test(tst_editor_tables
+    SOURCES tst_editor_tables.cpp
+    LIBS brulion_editor brulion_core_chart brulion_core_diagram)

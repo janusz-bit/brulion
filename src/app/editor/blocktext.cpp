@@ -127,6 +127,7 @@ QString viewName(BlockView view)
     case BlockView::Query: return u"query"_s;
     case BlockView::Math: return u"math"_s;
     case BlockView::Mermaid: return u"mermaid"_s;
+    case BlockView::Chart: return u"chart"_s;
     case BlockView::Table: return u"table"_s;
     case BlockView::Quote: return u"quote"_s;
     case BlockView::Callout: return u"callout"_s;
@@ -424,12 +425,13 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
     const auto fenced = [&](const Fence &f) {
         s.lang = f.lang;
         // ```math / ```latex / ```tex: a formula block (docs/SYNTAX.md §11); ```mermaid: a diagram
-        // (docs/SYNTAX.md §11 "Mermaid diagrams").
+        // (docs/SYNTAX.md §11 "Mermaid diagrams"); ```chart: a chart (docs/SYNTAX.md §9 "Charts").
         const bool math = f.lang == u"math" || f.lang == u"latex" || f.lang == u"tex";
         s.view = math                   ? BlockView::Math
                  : f.lang == u"calc"    ? BlockView::Calc
                  : f.lang == u"query"   ? BlockView::Query
                  : f.lang == u"mermaid" ? BlockView::Mermaid
+                 : f.lang == u"chart"   ? BlockView::Chart
                                         : BlockView::Code;
         s.editOffset = f.innerOffset;
         if (f.closed && !f.onlyMetadataAfter) {
@@ -542,7 +544,8 @@ QString bodyWithEditText(const markdown::BlockEntry &e, const QString &editText)
     QString tail = e.body.right(s.editSuffix);
     QString out;
     if (s.view == BlockView::Code || s.view == BlockView::Calc || s.view == BlockView::Query
-        || s.view == BlockView::Math || s.view == BlockView::Mermaid || s.view == BlockView::Frontmatter) {
+        || s.view == BlockView::Math || s.view == BlockView::Mermaid || s.view == BlockView::Chart
+        || s.view == BlockView::Frontmatter) {
         // The fence lines are hidden, so every line typed between them is code. A line that would
         // close the fence (``` alone on its line, say, when writing about fenced code) must not
         // end the block: widen the opening and closing fence past the longest such line. Keeping
@@ -616,7 +619,8 @@ QString plainTextOf(const markdown::BlockEntry &e, int maxLength)
     case BlockView::Calc:
     case BlockView::Query:
     case BlockView::Math:
-    case BlockView::Mermaid: t = s.editText; break;
+    case BlockView::Mermaid:
+    case BlockView::Chart: t = s.editText; break;
     case BlockView::Rule: return u"―"_s;
     default: t = markdown::stripTokens(s.editText); break;
     }
@@ -1216,6 +1220,14 @@ const QList<SlashCommand> &slashCommands()
              u"```mermaid block: flowchart, sequence, pie chart"_s,
              {u"mermaid"_s, u"schemat"_s, u"schemat blokowy"_s, u"graf"_s, u"wykres"_s, u"sekwencja"_s,
               u"flowchart"_s, u"graph"_s, u"chart"_s, u"sequence"_s, u"pie"_s}},
+            {u"chart"_s, u"Wykres"_s, u"Chart"_s, u"chart-column"_s, u"```chart"_s,
+             u"wykres z tabeli powyżej: słupkowy, liniowy, kołowy"_s,
+             u"chart of the table above: bar, line, pie"_s,
+             {u"wykres"_s, u"diagram"_s, u"słupki"_s, u"słupkowy"_s, u"liniowy"_s, u"kołowy"_s, u"graph"_s,
+              u"chart"_s, u"plot"_s, u"bar"_s, u"line"_s, u"pie"_s}},
+            {u"csvTable"_s, u"Tabela z CSV…"_s, u"Table from CSV…"_s, u"table"_s, u"CSV"_s,
+             u"tabela z pliku CSV (Excel, arkusz)"_s, u"table from a CSV file (Excel, spreadsheet)"_s,
+             {u"csv"_s, u"import"_s, u"excel"_s, u"arkusz"_s, u"tabela"_s, u"spreadsheet"_s, u"table"_s}},
             {u"query"_s, u"Zapytanie"_s, u"Query"_s, u"filter"_s, u"```query"_s,
              u"blok ```query"_s, u"```query block"_s,
              {u"kwerenda"_s, u"wyszukaj"_s, u"lista zadań"_s, u"filtr"_s, u"search"_s}},
@@ -1341,6 +1353,10 @@ QString slashTemplate(QStringView id, bool english, int *cursor)
     } else if (id == u"mermaid") {
         const QString first = u"```mermaid\nflowchart TD\n    A["_s + (english ? u"Start"_s : u"Początek"_s);
         text = first + u"] --> B["_s + (english ? u"End"_s : u"Koniec"_s) + u"]\n```"_s;
+        c = int(text.size() - 4);
+    } else if (id == u"chart") {
+        text = english ? u"```chart\ntype: bar\ntable: above\n```"_s
+                       : u"```chart\ntyp: słupkowy\ntabela: powyżej\n```"_s;
         c = int(text.size() - 4);
     } else if (id == u"query") {
         text = u"```query\ntype:tasks status:open\n```"_s;

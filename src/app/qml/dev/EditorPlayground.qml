@@ -3786,6 +3786,21 @@ ApplicationWindow {
                 editor.startEditing(row, -1)
             break
         }
+        case "chart":
+        case "chart-filter": {
+            // A ```chart of the sample's table (its Razem column) under it, and a pie of the calc
+            // block; "chart-filter": the table's filter row with a filter typed.
+            const table = viewRow("table")
+            const row = page.insertBlockAfter(table, "```chart\ntyp: słupkowy\nwartości: Ilość, Cena\ntytuł: Materiały\n```")
+            page.insertBlockAfter(row, "```chart\nobliczenia: powyżej\ntyp: kołowy\n```")
+            page.stopEditing()
+            if (name === "chart-filter") {
+                page.setTableFilterOpen(table, true)
+                page.setTableFilter(table, 2, "> 40")
+            }
+            editor.listView.positionViewAtIndex(name === "chart-filter" ? table : row, ListView.Beginning)
+            break
+        }
         case "embeds":
             editor.listView.positionViewAtIndex(rowOf("Powiązane"), ListView.Beginning)
             break

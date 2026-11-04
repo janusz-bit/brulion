@@ -120,9 +120,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Tablica (nieskończone płótno)** — notatki, obrazy, PDF-y i rysunki rozłożone na płótnie, z
   połączeniami; najlepiej w formacie JSON Canvas (Obsidian Canvas, AFFiNE). Edytor rysunków
   pokrywa szkice, ale nie osadza w nich notatek.
-* **Wykresy** — wykres z tabeli z formułami, bloku `calc` albo wyników zapytania.
-* **Sortowanie i filtrowanie tabel Markdown** — z nagłówka kolumny, bez ręcznego przestawiania
-  wierszy; import i eksport CSV pojedynczej tabeli.
 * **Fiszki z powtórkami** — karty z bloków (`pytanie :: odpowiedź`, ukrywane fragmenty), powtórki
   w odstępach (np. FSRS), karty do powtórki na dziś, stan zapisany w plikach i scalany przez
   synchronizację (Logseq, SiYuan).

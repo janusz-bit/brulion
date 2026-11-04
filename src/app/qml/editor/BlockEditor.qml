@@ -1101,6 +1101,44 @@ FocusScope {
             table.startCell(r, c)
     }
 
+    /// The toast after "/Tabela z CSV…" made a table (`truncated`: rows, columns or text left out).
+    function csvInserted(truncated) {
+        if (truncated)
+            notice(qsTr("The CSV was too large: the table holds its first rows and columns."), "info")
+    }
+    /// Show the filter row of the table in `row` with the keys in column `c`'s field (the block
+    /// menu's "Filtruj wiersze" / "Filtruj według tej kolumny…": once `menu` is gone).
+    function openTableFilter(row, c, menu) {
+        if (!controller || row < 0 || row >= controller.blocks.count)
+            return
+        controller.setTableFilterOpen(row, true)
+        const focus = () => later(() => {
+            list.forceLayout()
+            const item = list.itemAtIndex(row) as BlockDelegate
+            const table = item ? item.contentItem as TableBlockView : null
+            if (table)
+                table.openFilter(c)
+        })
+        // A menu closing gives the keys back to what had them: the field takes them after that.
+        if (menu && (menu.opened || menu.visible)) {
+            const once = () => {
+                menu.closed.disconnect(once)
+                focus()
+            }
+            menu.closed.connect(once)
+        } else {
+            focus()
+        }
+    }
+    /// The table in `row` shows its filter row.
+    function tableFiltering(row) {
+        if (!controller || row < 0 || row >= controller.blocks.count)
+            return false
+        const item = list.itemAtIndex(row) as BlockDelegate
+        const table = item ? item.contentItem as TableBlockView : null
+        return table !== null && table.filtering
+    }
+
     /// The same once `menu` is closed: a menu closing gives the keys back to what had them, which
     /// would end the cell's editing at once.
     function editTableCellOnceClosed(menu, row, r, c) {
@@ -1185,6 +1223,7 @@ FocusScope {
         case "template": dialogs.pickTemplate(row); break
         case "image": dialogs.pickImage(row, result.cursor); break
         case "fileLink": dialogs.pickFileLink(row, result.cursor); break
+        case "csvTable": dialogs.pickCsvTable(row); break
         case "webImage": dialogs.pickWebImage(row, result.cursor); break
         case "drawing": insertDrawing(row, result.cursor); break
         case "drawingOn": dialogs.pickDrawingBackdrop(row, result.cursor); break
@@ -1774,6 +1813,12 @@ FocusScope {
         }
         function onAttachmentFailed(name) {
             editor.notice(qsTr("Could not add “%1” to the notebook").arg(name), "error")
+        }
+        function onCsvTableInserted(row, truncated) {
+            editor.csvInserted(truncated)
+        }
+        function onCsvTableFailed(name) {
+            editor.notice(qsTr("“%1” holds no table Brulion can read.").arg(name), "error")
         }
         function onWebPicturesDownloaded(stored, failed) {
             if (failed.length > 0)

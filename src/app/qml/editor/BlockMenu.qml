@@ -19,7 +19,9 @@ import Brulion
 // On touch UIs the "Kopiuj odnośnik" submenu opens in place of the menu (BMenu: no cascade).
 // From a table's cell (a right-click on it, the cell toolbar's "Więcej": BlockEditor.openBlockMenu's
 // `cell`) also Wiersz ▸ and Kolumna ▸: insert, move and delete that cell's row or column, the
-// column's alignment; a new row or column has its cell opened for typing.
+// column's alignment, sorting the rows by the column and filtering them (docs/SYNTAX.md §9); a new
+// row or column has its cell opened for typing. Any table's menu also has Filtruj wiersze,
+// Kopiuj jako CSV and Zapisz jako CSV….
 //
 //   BlockMenu { editor: editor }    menu.openFor(row); menu.popup(item, x, y)
 BMenu {
@@ -52,6 +54,8 @@ BMenu {
     property int tableColumns: 0
     property string cellAlign: ""
     readonly property bool inCell: cellRow > -2
+    /// The block is a table (its CSV and filter items).
+    property bool table: false
 
     // Submenu items are OptionalItems too, shown as their OptionalMenu says. Set before the first
     // submenu below: a menu makes the item of a submenu as soon as it gets it.
@@ -76,6 +80,7 @@ BMenu {
         tableColumns = cell ? cell.columns : 0
         cellAlign = cell ? cell.align : ""
         const info = controller.blocks.get(row)
+        table = info.view === "table"
         listItem = info.kind === "listItem"
         heading = controller.isHeading(row)
         hasChildren = info.hasChildren
@@ -181,6 +186,35 @@ BMenu {
         onTriggered: menu.act((r) => { menu.selectFor(r); menu.editor.copySelection(true) })
     }
     OptionalItem {
+        objectName: "tableCopyCsv"
+        shown: menu.table && !menu.inSelection
+        text: qsTr("Copy as CSV")
+        iconName: "copy"
+        onTriggered: menu.act((r) => {
+            if (menu.controller.copyTableCsv(r))
+                menu.editor.notice(qsTr("The table was copied as CSV."), "success")
+        })
+    }
+    OptionalItem {
+        objectName: "tableSaveCsv"
+        shown: menu.table && !menu.inSelection
+        text: qsTr("Save as CSV…")
+        iconName: "download"
+        onTriggered: menu.act((r) => menu.editor.dialogs.saveTableCsv(r))
+    }
+    OptionalItem {
+        objectName: "tableFilterRows"
+        shown: menu.table && !menu.inSelection
+        text: menu.editor && menu.editor.tableFiltering(menu.row()) ? qsTr("Hide filters") : qsTr("Filter rows")
+        iconName: "filter"
+        onTriggered: menu.act((r) => {
+            if (menu.editor.tableFiltering(r))
+                menu.controller.setTableFilterOpen(r, false)
+            else
+                menu.editor.openTableFilter(r, menu.inCell ? menu.cellColumn : 0, menu)
+        })
+    }
+    OptionalItem {
         objectName: "blockMenuSelect"
         shown: !menu.inSelection
         text: qsTr("Select")
@@ -256,6 +290,33 @@ BMenu {
             iconName: "arrow-right"
             onTriggered: menu.insertAndEdit((r) => menu.controller.insertTableColumn(r, menu.cellColumn + 1),
                                             -1, menu.cellColumn + 1)
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "tableSortAscending"
+            text: qsTr("Sort ascending")
+            iconName: "arrow-up-narrow-wide"
+            enabled: menu.tableRows > 1
+            onTriggered: menu.act((r) => {
+                if (!menu.controller.sortTable(r, menu.cellColumn, false))
+                    menu.editor.notice(qsTr("The rows are in that order already."), "info")
+            })
+        }
+        BMenuItem {
+            objectName: "tableSortDescending"
+            text: qsTr("Sort descending")
+            iconName: "arrow-down-wide-narrow"
+            enabled: menu.tableRows > 1
+            onTriggered: menu.act((r) => {
+                if (!menu.controller.sortTable(r, menu.cellColumn, true))
+                    menu.editor.notice(qsTr("The rows are in that order already."), "info")
+            })
+        }
+        BMenuItem {
+            objectName: "tableFilterColumn"
+            text: qsTr("Filter by this column…")
+            iconName: "filter"
+            onTriggered: menu.act((r) => menu.editor.openTableFilter(r, menu.cellColumn, menu))
         }
         BMenuSeparator {}
         BMenuItem {

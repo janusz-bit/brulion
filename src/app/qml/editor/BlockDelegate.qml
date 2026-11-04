@@ -8,7 +8,7 @@ import Brulion
 // zoom into the block; right click / long press: the editor's block menu — a right-click
 // anywhere else on a block opens it too, BlockEditor), the task checkbox (click: toggle;
 // right click / long press: the editor's status menu), and the content for the block's `view`
-// (rendered text / inline editor, code, calc, math, a Mermaid diagram, table, query, callout, quote,
+// (rendered text / inline editor, code, calc, math, a Mermaid diagram, a chart, table, query, callout, quote,
 // rule, frontmatter) with image embeds and embedded pages / sections / blocks (TransclusionView) below.
 // Document mode (BlockEditor.documentMode): no guides, fold arrows or bullets for paragraphs and
 // headings; a list item shows its Markdown marker in its level's marker column — a bullet (the
@@ -70,7 +70,7 @@ Item {
     readonly property real contentRight: editor.contentX + editor.contentWidth
     // Vertical rhythm: headings get air above them, framed blocks a little on both sides.
     readonly property bool framed: view === "code" || view === "calc" || view === "query" || view === "math"
-                                   || view === "mermaid" || view === "table" || view === "callout"
+                                   || view === "mermaid" || view === "chart" || view === "table" || view === "callout"
                                    || view === "frontmatter"
     // The title shown above the properties panel (see the file comment).
     readonly property bool titleFirst: editor.titleFirst && index === editor.controller.titleRow
@@ -131,7 +131,8 @@ Item {
     /// Paragraphs, list items, headings (most blocks): their text is created with the block, not
     /// through the content Loader — the Loader's own work was a large part of creating a block.
     readonly property bool textView: view !== "code" && view !== "calc" && view !== "query" && view !== "math"
-                                     && view !== "mermaid" && view !== "table" && view !== "quote" && view !== "callout"
+                                     && view !== "mermaid" && view !== "chart" && view !== "table" && view !== "quote"
+                                     && view !== "callout"
                                      && view !== "rule" && view !== "frontmatter"
     readonly property real contentHeight: noTextLine ? 0 : textView ? textContent.height : content.height
     readonly property real embedsY: topPad + contentHeight + (contentHeight > 0 && !model.onlyEmbeds ? Theme.space2 : 0)
@@ -478,6 +479,7 @@ Item {
             case "query": return queryComponent
             case "math": return mathComponent
             case "mermaid": return mermaidComponent
+            case "chart": return chartComponent
             case "table": return tableComponent
             case "quote":
             case "callout": return calloutComponent
@@ -577,6 +579,10 @@ Item {
     Component {
         id: mermaidComponent
         MermaidBlockView { block: block }
+    }
+    Component {
+        id: chartComponent
+        ChartBlockView { block: block }
     }
     Component {
         id: tableComponent

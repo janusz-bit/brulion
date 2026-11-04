@@ -1,10 +1,11 @@
 // Full HTML rendering of notes for the HTML exporters: blocks of a ParsedNote become semantic
-// HTML (headings, paragraphs, nested lists, task checkboxes, code, Mermaid diagrams as SVG with
-// their source, tables, quotes, callouts, rules), inline Markdown of the Brulion dialect becomes
+// HTML (headings, paragraphs, nested lists, task checkboxes, code, Mermaid diagrams and charts as SVG
+// with their source, tables, quotes, callouts, rules), inline Markdown of the Brulion dialect becomes
 // <strong>/<em>/<del>/<mark>/<code>, links, images, tags, block references and date chips. Everything not recognised is
 // escaped — raw HTML in notes is shown as text, never interpreted. Internal to the io module.
 #pragma once
 
+#include "chart/chart.h"
 #include "types.h"
 
 #include <QString>
@@ -40,9 +41,12 @@ struct HtmlLinks {
     /// Pictures, audio and video as links to them instead of <img> / <audio> / <video> (the
     /// clipboard: clipboardHtml()).
     bool mediaAsLinks = false;
-    /// ```mermaid blocks as their source (<pre>) instead of the diagram's SVG (the clipboard:
-    /// apps a copy is pasted into seldom show inline SVG).
+    /// ```mermaid and ```chart blocks as their source (<pre>) instead of the diagram's SVG (the
+    /// clipboard: apps a copy is pasted into seldom show inline SVG).
     bool diagramsAsSource = false;
+    /// The groups of a ```chart block's `query:` run in the note's vault; unset: such a chart
+    /// stays its source.
+    std::function<chart::QueryCounts(const QString &query)> chartQuery;
 };
 
 class HtmlRenderer {
@@ -69,6 +73,9 @@ private:
     QString renderBlock(const ParsedNote &note, int index) const;
     QString renderListItem(const ParsedNote &note, int index) const;
     QString renderTable(const QString &source) const;
+    /// A ```chart block (`code`, at `line` of `note`) as SVG with its data and source folded under
+    /// it; "" when it cannot be drawn (it stays code).
+    QString chartHtml(const ParsedNote &note, int line, const QString &code, const QString &id) const;
     QString metaChips(const Block &block) const;
     /// HTML of the page embedded by `text` when it is a single page embed (`![[Page]]`), else "".
     QString embeddedContent(const QString &text) const;

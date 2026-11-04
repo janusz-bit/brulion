@@ -79,6 +79,10 @@ int displayWidth(QStringView text);
 bool insertTableRow(TableModel &model, int at);
 bool removeTableRow(TableModel &model, int row);
 bool moveTableRow(TableModel &model, int from, int to);
+/// Rows reordered (a sort): `order[i]` is the old index of the row that goes to position i. A
+/// reference follows the row it names; a range over several rows keeps its place. False when
+/// `order` is no permutation of the rows or leaves every row where it is.
+bool permuteTableRows(TableModel &model, const QList<int> &order);
 /// A new empty column called `header` at `at` (0..columns; columns = at the end).
 bool insertTableColumn(TableModel &model, int at, const QString &header);
 /// False for the only column: a table without columns is no table.

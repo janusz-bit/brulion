@@ -28,7 +28,13 @@
 //   tableData    table views: { header: [..], headerHtml: [..], aligns: ["left"|"center"|"right"|""],
 //                rows: [[{ text, display, html, plain, error, formula }]] } with table formulas
 //                evaluated; `html` is the cell's Markdown rendered by the InlineRenderer (formula
-//                results and errors escaped), `plain` its visible text (column widths)
+//                results and errors escaped), `plain` its visible text (column widths); the view's
+//                filters (setTableFilter(), nothing written): filters ["" per column], filtering
+//                (the filter row shown), shown [bool per row: passes the filters], shownCount
+//   chartData    chart views (docs/SYNTAX.md §9 "Charts"): { ok, error (translated, with the line),
+//                labels: [..], labelsName, series: [{ name, values: [number | NaN] }] } — the
+//                numbers of the table, calc block or query the block names (chart::resolveData);
+//                ChartView lays them out
 //   embeds       [{ target, alt, image, url, path, drawing, darkUrl, width, height }] attachment
 //                embeds (url from EditorHost::assetUrl; path: the attachment's vault path; drawing:
 //                a drawing, EditorHost::isDrawing — an SVG, `![[x.excalidraw]]`, an Obsidian
@@ -124,6 +130,7 @@ public:
         IsZoomRootRole,
         CalcResultsRole,
         TableDataRole,
+        ChartDataRole,
         EmbedsRole,
         OnlyEmbedsRole,
         PropertiesRole,
@@ -251,6 +258,12 @@ public:
     /// Everything rendered may look different (index changed, links resolve differently).
     void invalidateRendering();
 
+    // --- Table filters (view only: nothing is written; docs/SYNTAX.md §9) ------------------------
+    /// The filter of column `column` of the table in `row` (calc::tableValueMatches(); "" none).
+    void setTableFilter(int row, int column, const QString &text);
+    /// Show or hide the table's filter row; hiding it clears the filters.
+    void setTableFilterOpen(int row, bool open);
+
 Q_SIGNALS:
     void countChanged();
     void visibleCountChanged();
@@ -279,6 +292,15 @@ private:
         bool onlyEmbeds = false;
         QVariantList calcResults;
         QVariantMap tableData;
+        /// The table's filters by column and whether its filter row is shown (view state: kept
+        /// while the page is open, never written).
+        QStringList tableFilters;
+        bool tableFiltering = false;
+        /// Chart views: the data (chartData role) and what it was computed from (the block's
+        /// text; query charts are computed again only when it or the index changes).
+        QVariantMap chartData;
+        QString chartSource;
+        bool chartValid = false;
         /// Rendered table cells by text (until the rendering changes; no inline calculations or
         /// block references: those depend on more than the cell's text).
         QHash<QString, QString> cellHtml;
@@ -344,6 +366,9 @@ private:
     void refresh(bool contentChanged);
     QVariantList computeCalcResults(int docIndex) const;
     QVariantMap computeTableData(int docIndex) const;
+    QVariantMap computeChartData(int docIndex) const;
+    /// The table of `row` computed again (its filters changed) and told to the views.
+    void refreshTable(int row);
     void emitRowsChanged(const QList<int> &rows, const QList<int> &roles);
 
     // --- Calculations (docs/SYNTAX.md §9) ---------------------------------------------------------

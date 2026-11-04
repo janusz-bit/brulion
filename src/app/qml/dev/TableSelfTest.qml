@@ -11,7 +11,10 @@ import Brulion
 // Alt+arrows move the cell's row or column with the cell still edited, Ctrl+Enter inserts a row; the
 // header's items that make no sense are disabled; the alignment is ticked, also after choosing the
 // one it already has; deleting a row and a column; the formulas' references follow (=B2*C2, =REF!);
-// each step is undone and the page's text comes back byte for byte.
+// each step is undone and the page's text comes back byte for byte. Sorting from the header's menu
+// (the summary row stays, the rows keep their lines, one undo step; rows already in order: nothing
+// written), the filter row (typing "> 40" hides a row, nothing is written, "Wyczyść filtry"), "Kopiuj
+// jako CSV" (formulas as their results) and a ```chart of the table following its cells.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -23,6 +26,7 @@ QtObject {
 
     property var events: null
     property int row: -1
+    property int chartRow: -1
     property string before: ""
     /// Alt+Left / Alt+Right, as AppShell's Back and Forward take them, fired.
     property int appShortcuts: 0
@@ -54,7 +58,7 @@ QtObject {
     function pointOf(r, c) {
         const t = view()
         return Qt.point(t.columnWidths.slice(0, c).reduce((a, b) => a + b, 0) + t.columnWidths[c] / 2,
-                        (r + 1) * t.rowHeight + t.rowHeight / 2)
+                        t.rowY(r) + t.rowHeight / 2)
     }
     function tapCell(r, c) {
         const t = view()
@@ -108,6 +112,22 @@ QtObject {
             },
             wait(() => !menuOpen(), "choosing " + name + " closes the menu")
         ]
+    }
+    /// Item `name` of the block menu itself (not of a submenu): tapped, the menu gone.
+    function chooseTop(name) {
+        return [
+            () => {
+                const it = window.menuItemNamed(menu(), name)
+                check(it !== null && it.visible && it.enabled, name + " is in the menu")
+                window.tapItem(it)
+            },
+            wait(() => !menuOpen(), "choosing " + name + " closes the menu")
+        ]
+    }
+    function filterField(c) { return window.findItem(view(), "tableFilter" + c) }
+    function chartView() {
+        const item = chartRow >= 0 ? window.delegateAt(chartRow) : null
+        return item ? window.findItem(item, "chartView") : null
     }
     function undoes(n, what) {
         return () => {
@@ -269,6 +289,73 @@ QtObject {
             closeCell(),
             undoes(1, "one undo step brings the column back"),
             ...editedCellMenu,
+            // ---- Sorting from the header ----------------------------------------------------------------
+            ...openOn(-1, 2),
+            () => check(item("tableColumnMenu", "tableSortAscending").enabled, "the header's column sorts"),
+            ...choose("tableColumnMenu", "tableSortAscending"),
+            wait(() => raw(0, 0).indexOf("Fuga") === 0 && raw(2, 0).indexOf("**Płytki**") === 0,
+                 () => "sorted by the price: " + raw(0, 0) + " / " + raw(2, 0)),
+            () => {
+                check(raw(3, 0) === "Suma", "the summary row stays at the end")
+                check(raw(1, 3) === "=B2*C2", "a formula of a row that stayed: " + raw(1, 3))
+                check(window.pageText().indexOf("| Fuga #zakupy | 2 | 38 | =[Ilość]*[Cena] |\n| Klej *elastyczny* | 4 | 45 | =B2*C2 |\n| **Płytki**") > 0,
+                      "the rows keep their lines")
+            },
+            closeCell(),
+            undoes(1, "one undo step takes the sort back"),
+            ...openOn(-1, 2),
+            ...choose("tableColumnMenu", "tableSortDescending"),
+            () => check(window.pageText() === before, "rows in that order already: nothing written"),
+            // ---- Filters -------------------------------------------------------------------------------
+            ...openOn(0, 2),
+            ...chooseTop("tableFilterRows"),
+            wait(() => view().filtering && filterField(2) !== null && filterField(2).activeFocus,
+                 "the filter row shows, the keys in the column's field"),
+            () => {
+                for (const ch of "> 40")
+                    EditorInput.sendKey(filterField(2), 0, 0, ch)
+            },
+            wait(() => view().shownRows.length === 3, () => "a row under 40 is hidden: " + view().shownRows),
+            () => {
+                check(view().shownRows.indexOf(2) < 0 && view().shownRows.indexOf(3) >= 0, "Fuga hidden, the summary row shown")
+                check(window.pageText() === before, "filtering writes nothing")
+                check(window.findItem(view(), "tableFilterStatus").text.indexOf("3") >= 0, "the rows shown are counted")
+            },
+            () => {
+                // The field gives the keys back (on touch UIs the keyboard and its toolbar go).
+                filterField(2).focus = false
+                editor.listView.forceActiveFocus()
+                editor.listView.positionViewAtIndex(row, ListView.Beginning) // the buttons above the bottom bar
+            },
+            wait(() => !filterField(2).activeFocus && editor.toolbarMode !== "cell",
+                 () => "the filter field is left: " + filterField(2).activeFocus + " " + editor.toolbarMode + " " + window.activeFocusItem),
+            () => window.tapItem(window.findItem(view(), "tableClearFilters")),
+            wait(() => !view().filtering && view().shownRows.length === 4,
+                 () => "Clear filters shows every row: " + view().filtering + " " + view().shownRows
+                       + " " + window.findItem(view(), "tableClearFilters")),
+            // ---- CSV -----------------------------------------------------------------------------------
+            ...openOn(0, 1),
+            ...chooseTop("tableCopyCsv"),
+            wait(() => window.clipboardText().indexOf("Pozycja,Ilość,Cena,Razem\r\n") === 0
+                       || window.clipboardText().indexOf("Pozycja,Ilość,Cena,Razem\n") === 0,
+                 () => "the table copied as CSV: " + window.clipboardText().slice(0, 40)),
+            () => check(window.clipboardText().indexOf("=[") < 0 && window.clipboardText().indexOf("Fuga #zakupy,2,38,76") > 0,
+                        "formulas as their results"),
+            closeCell(),
+            // ---- A chart of the table ----------------------------------------------------------------------
+            () => {
+                chartRow = page.insertBlockAfter(row, "```chart\ntype: bar\ny: Razem\n```")
+                page.stopEditing()
+                editor.listView.positionViewAtIndex(chartRow, ListView.Center)
+            },
+            wait(() => chartView() !== null && chartView().status === "ok" && chartView().height > 50,
+                 () => "the chart is drawn: " + (chartView() ? chartView().status + " " + chartView().message : "none")),
+            () => check(chartView().description.indexOf("Fuga") >= 0 && chartView().description.indexOf("Suma") < 0,
+                        "its text alternative names the rows, not the summary: " + chartView().description),
+            () => page.setTableCell(row, 2, 2, "100"),
+            wait(() => chartView() !== null && chartView().description.indexOf("200") >= 0,
+                 () => "the chart follows the table: " + (chartView() ? chartView().description : "")),
+            undoes(2, "two undo steps take the cell and the chart back"),
             () => check(window.pageText() === before, "the page's text is as it was")
         ]
     }

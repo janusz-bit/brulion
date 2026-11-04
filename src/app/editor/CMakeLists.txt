@@ -6,7 +6,7 @@
 # the core module spell over the platform's backends, src/platform/spellbackends.h), QueryResultModel
 # (live ```query results), the pure helpers of blocktext.h and the
 # in-memory FakeEditorHost (playground, tests; queries run on the real index module), MermaidView
-# (a ```mermaid block drawn by the core module diagram).
+# (a ```mermaid block drawn by the core module diagram), ChartView (a ```chart block: core module chart).
 # A static library so tests/app/editor links it without the app; the app's QML module "Brulion"
 # registers the classes through QML_FOREIGN wrappers (editorforeign.h, included by area.cmake),
 # which needs the metatypes extracted below.
@@ -50,6 +50,7 @@ qt_add_library(brulion_editor STATIC
     fakeeditorhost.h fakeeditorhost.cpp
     editorinput.h editorinput.cpp
     mermaidview.h mermaidview.cpp
+    chartview.h chartview.cpp
 )
 target_include_directories(brulion_editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_editor
@@ -57,7 +58,8 @@ target_link_libraries(brulion_editor
     PRIVATE brulion_core_calc brulion_core_dates brulion_core_text brulion_core_util brulion_core_index
             brulion_core_webpicture brulion_core_drawing
             brulion_core_notebook brulion_core_stats
-    PUBLIC brulion_core_diagram)
+    PUBLIC brulion_core_diagram brulion_core_chart
+    PRIVATE brulion_core_io)
 # External changes while the page has unsaved edits are merged three-way with sync::merge3 when
 # the sync module is part of the build (otherwise the local text is kept and a conflict flagged).
 if(TARGET brulion_core_sync)

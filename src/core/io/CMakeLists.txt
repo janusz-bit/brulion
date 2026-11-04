@@ -2,7 +2,8 @@
 # (Obsidian, Logseq, Notion, Evernote, Google Keep, Microsoft To Do (Graph JSON), Joplin,
 # Simplenote, Roam, Trilium, Bear, Markdown, HTML, iCalendar), exporters (Markdown / Obsidian / Logseq ZIP, HTML site, single
 # HTML, Pandoc Markdown, JSON, iCalendar, OPML, CSV tasks), ZIP via vendored miniz, tar, CSV, iCalendar,
-# HTML <-> Markdown, the clipboard's HTML of copied blocks; ```mermaid diagrams as SVG in HTML (diagram).
+# HTML <-> Markdown, the clipboard's HTML of copied blocks; ```mermaid diagrams and ```chart charts as SVG
+# in HTML (diagram, chart); one table as CSV and back (tablecsv.h, calc).
 # Public headers: io.h (overview) and the headers it includes; internal headers end in _p.h.
 # QtGui is used for QTextDocument (HTML parsing).
 if(NOT TARGET brulion_miniz)
@@ -17,6 +18,7 @@ brulion_add_core_module(io
         zip.h zip.cpp
         tar.h tar.cpp
         csv.h csv.cpp
+        tablecsv.h tablecsv.cpp
         ical.h ical.cpp
         htmlmarkdown.h htmlmarkdown.cpp htmlutil_p.h
         links_p.h links.cpp
@@ -46,6 +48,6 @@ brulion_add_core_module(io
         export_html.cpp
         export_pandoc.cpp
         export_data.cpp
-    DEPS util text dates markdown index notebook drawing diagram
+    DEPS util text dates markdown index notebook drawing diagram calc chart
     QT Gui)
 target_link_libraries(brulion_core_io PRIVATE brulion_miniz)

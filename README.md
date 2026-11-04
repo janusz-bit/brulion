@@ -138,6 +138,12 @@
 * **Obliczenia.** Bloki ` ```calc ` liczą jak kalkulator w notatniku (zmienne, procenty,
   jednostki `5 km to mi`, waluty `12 zł + 5 zł`, `suma`), tabele z formułami jak w arkuszu
   (`=sum(above)`, `=[Cena]*[Ilość]`), obliczenia w tekście `` `= 2*21` ``.
+* **Tabele i wykresy.** Tabelę sortujesz z menu kolumny (liczby, daty, polski alfabet; wiersze
+  przestawione w pliku, Ctrl+Z cofa) i filtrujesz polami pod nagłówkiem (`> 100`, `!tekst` — plik
+  się nie zmienia), kopiujesz lub zapisujesz jako CSV, a `/Tabela z CSV…` wstawia tabelę z pliku.
+  Blok ` ```chart ` (`/Wykres`) rysuje wykres słupkowy, liniowy albo kołowy z tabeli nad nim, bloku
+  `calc` albo wyników zapytania — w kolorach motywu, z opisem dla czytnika ekranu, jako SVG w
+  eksporcie HTML.
 * **Wzory matematyczne.** LaTeX w notatkach (`$E=mc^2$`, `$$\frac{a}{b}$$`, blok
   ` ```math `) jest od razu rysowany jako wzór — greckie litery, ułamki, pierwiastki,
   macierze, układy równań. Plik zachowuje źródło LaTeX, a eksport HTML pokazuje gotowy wzór.
@@ -544,6 +550,12 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   underlined, corrections, "add to dictionary" and "ignore" from the right-click menu (a tap on
   touch screens); code, links, tags, dates and formulas are skipped. Hunspell with bundled
   dictionaries on the desktop, the system's spell checker on Android.
+* Tables sorted from a column's menu (numbers, dates, Polish alphabetical order; the rows
+  rewritten in the file, one undo step) and filtered with fields under the header (`> 100`,
+  `!text` — nothing written), copied or saved as CSV, and `/Tabela z CSV…` makes a table of a CSV
+  file. A ```` ```chart ```` block (`/Wykres`) draws a bar, line or pie chart of the table above it,
+  a calc block or a query's results — in the theme's colours, with a text alternative for screen
+  readers, as SVG in the HTML export.
 * Mermaid diagrams in ```` ```mermaid ```` blocks — flowcharts (with subgraphs and styles),
   sequence diagrams and pie charts — drawn by Brulion's own renderer in the theme's light or dark
   colours, nothing from a note ever executed; a click edits the source with a live preview, the

@@ -18,10 +18,12 @@ namespace {
 
 /// What one edit does to positions along its axis (rows or columns).
 struct AxisEdit {
-    enum class Kind { Insert, Remove, Move };
+    enum class Kind { Insert, Remove, Move, Permute };
     Kind kind = Kind::Insert;
     int at = 0;
     int to = 0; ///< Move: where `at` goes
+    /// Permute: the new position of each old one (positions past its end stay).
+    const QList<int> *newPositions = nullptr;
 
     /// Where position `v` goes; nullopt when it is deleted.
     std::optional<int> point(int v) const
@@ -41,6 +43,7 @@ struct AxisEdit {
             if (to <= v && v < at)
                 return v + 1;
             return v;
+        case Kind::Permute: return v >= 0 && v < newPositions->size() ? newPositions->at(v) : v;
         }
         return v;
     }
@@ -57,7 +60,7 @@ struct AxisEdit {
         case Kind::Remove:
             return std::pair(a > at ? a - 1 : a, b >= at ? b - 1 : b);
         case Kind::Move:
-            return std::pair(a, b); // a range over several keeps its place
+        case Kind::Permute: return std::pair(a, b); // a range over several keeps its place
         }
         return std::pair(a, b);
     }
@@ -196,6 +199,34 @@ bool moveTableRow(TableModel &model, int from, int to)
     squared(model);
     followReferences(model, {AxisEdit::Kind::Move, from, to}, Axis::Rows);
     model.rows.move(from, to);
+    return true;
+}
+
+bool permuteTableRows(TableModel &model, const QList<int> &order)
+{
+    const qsizetype n = model.rows.size();
+    if (order.size() != n)
+        return false;
+    QList<int> newPositions(n, -1);
+    bool changed = false;
+    for (qsizetype i = 0; i < n; ++i) {
+        const int old = order.at(i);
+        if (old < 0 || old >= n || newPositions.at(old) >= 0)
+            return false;
+        newPositions[old] = int(i);
+        changed = changed || old != i;
+    }
+    if (!changed)
+        return false;
+    squared(model);
+    AxisEdit edit{AxisEdit::Kind::Permute};
+    edit.newPositions = &newPositions;
+    followReferences(model, edit, Axis::Rows);
+    QList<QStringList> rows;
+    rows.reserve(n);
+    for (const int old : order)
+        rows.append(std::move(model.rows[old]));
+    model.rows = std::move(rows);
     return true;
 }
 

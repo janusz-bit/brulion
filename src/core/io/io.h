@@ -15,9 +15,9 @@
 //                    run(files, options) }
 //                  importers()  — obsidian, logseq, notion, evernote, keep (Google Keep Takeout),
 //                    mstodo (Microsoft To Do: Graph JSON — the mstodo module's download or Graph
-//                    Explorer's lists?$expand=tasks), joplin (JEX / RAW / MD+Front Matter), simplenote, roam (JSON), trilium (ZIP
-//                    export, HTML or Markdown), bear (TextBundle / .bear2bk), markdown
-//                    (md/markdown/txt + attachments), html, ics
+//                    Explorer's lists?$expand=tasks), joplin (JEX / RAW / MD+Front Matter), simplenote, roam (JSON),
+//                    trilium (ZIP export, HTML or Markdown), bear (TextBundle / .bear2bk), markdown (md/markdown/txt +
+//                    attachments), html, ics
 //                  importerById(id), detectImporter(files) -> best importer or nullptr
 //                  prepareImportFiles(files, &warnings, limits) (archives unpacked in place:
 //                    .zip, .jex/.tar, .bear2bk, .textpack — archives in archives only for a ZIP of
@@ -44,6 +44,9 @@
 //                    modified}) -> QByteArray, isZip(data), sanitizeArchivePath(name)
 //   tar.h          readTar(tar, &warnings), isTar(data) — ustar / GNU long names / PAX paths
 //   csv.h          parseCsv(text, sep), csvField, csvRow, csvSafeText (formula injection)
+//   tablecsv.h     tableToCsv(model, eval) (one Markdown table, formulas as their results),
+//                  detectCsvSeparator(text) (, ; tab, sep=), tableFromCsv(text) -> CsvTable{model,
+//                  separator, truncated} (bounded; `=` values stay text)
 //   ical.h         namespace ical: parse(data) -> Components (unfolding, unescaping),
 //                  Writer (CRLF, 75-octet UTF-8-safe folding, escaping), parseDateTime,
 //                  toWallClock(value, zone), parseDuration / parseDurationParts (nominal days +
@@ -67,5 +70,6 @@
 #include "io/htmlmarkdown.h"
 #include "io/ical.h"
 #include "io/importer.h"
+#include "io/tablecsv.h"
 #include "io/tar.h"
 #include "io/zip.h"

@@ -37,6 +37,7 @@ enum class BlockView {
     Query,
     Math,
     Mermaid,
+    Chart,
     Table,
     Quote,
     Callout,
@@ -45,7 +46,7 @@ enum class BlockView {
     Html
 };
 
-/// "text", "heading", "code", "calc", "query", "math", "mermaid", "table", "quote", "callout", "rule",
+/// "text", "heading", "code", "calc", "query", "math", "mermaid", "chart", "table", "quote", "callout", "rule",
 /// "frontmatter", "html" (the `view` role of BlockListModel).
 QString viewName(BlockView view);
 /// "listItem", "paragraph", "heading", "code", "table", "quote", "callout", "rule", "html",

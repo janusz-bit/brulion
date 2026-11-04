@@ -47,12 +47,14 @@ Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu j
 
 ## Eksport
 - archiwum **ZIP** z Markdownem, także w układzie Obsidiana lub Logseqa,
-- statyczna **strona HTML** albo jeden plik HTML (diagramy Mermaid jako obrazy, zobacz [[Diagramy#Eksport|Diagramy]]),
+- statyczna **strona HTML** albo jeden plik HTML (diagramy Mermaid i wykresy jako obrazy, zobacz [[Diagramy#Eksport|Diagramy]] i [[Tabele i wykresy|Tabele i wykresy]]),
 - **Pandoc Markdown** — jeden dokument do zamiany w plik Worda, LibreOffice, PDF albo EPUB,
 - **JSON** z całą zawartością,
 - **iCalendar** — zadania i przypomnienia do kalendarza,
 - **OPML** — konspekt,
 - **CSV** — lista zadań.
+
+Pojedynczą tabelę z notatki skopiujesz albo zapiszesz jako CSV z jej menu, a plik CSV wstawisz jako tabelę poleceniem `/Tabela z CSV…` — zobacz [[Tabele i wykresy#CSV: arkusze kalkulacyjne|Tabele i wykresy]].
 
 Gotowy plik zapiszesz przyciskiem **Zapisz…** w oknie zapisu systemu; w przeglądarce plik się pobiera (Chrome i Edge na komputerze najpierw pytają, gdzie go zapisać).
 

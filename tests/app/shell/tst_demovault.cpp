@@ -6,6 +6,7 @@
 #include "olddocs.h"
 
 #include "calc/calc.h"
+#include "chart/chart.h"
 #include "dates/recurrence.h"
 #include "diagram/diagram.h"
 #include "index/query.h"
@@ -408,6 +409,7 @@ private Q_SLOTS:
 
         int queries = 0;
         int diagrams = 0;
+        int charts = 0;
         for (const DemoFile &f : docs) {
             const QString &content = f.content;
             for (const calc::CalcBlock &block : calc::findCalcBlocks(content)) {
@@ -441,6 +443,15 @@ private Q_SLOTS:
                          qPrintable(f.path + u": "_s + m.captured(1).section(u'\n', 0, 0)));
                 ++diagrams;
             }
+            // Every ```chart example draws, with the data of its page.
+            static const QRegularExpression chartBlock(u"```chart\n(.*?)```"_s,
+                                                       QRegularExpression::DotMatchesEverythingOption);
+            for (const auto &m : chartBlock.globalMatch(content)) {
+                const int line = int(QStringView(content).left(m.capturedStart()).count(u'\n'));
+                const chart::Result r = chart::render(m.captured(1), chart::pageSources(content, line));
+                QVERIFY2(r.ok(), qPrintable(f.path + u": "_s + (r.error ? r.error->message() : QString())));
+                ++charts;
+            }
             static const QRegularExpression queryBlock(u"```query\n(.*?)```"_s,
                                                        QRegularExpression::DotMatchesEverythingOption);
             for (const auto &m : queryBlock.globalMatch(content)) {
@@ -452,6 +463,7 @@ private Q_SLOTS:
         }
         QVERIFY(queries >= 1);
         QVERIFY(diagrams >= 5);
+        QVERIFY(charts >= 2);
     }
 
     void listOfChangesHasNoLiveSyntax()

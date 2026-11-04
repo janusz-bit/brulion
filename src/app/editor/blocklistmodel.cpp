@@ -2,8 +2,10 @@
 
 #include "blockrender_p.h"
 #include "editorhost.h"
+#include "queryhost.h"
 
 #include "calc/calc.h"
+#include "chart/chart.h"
 #include "markdown/inline.h"
 #include "markdown/linkformat.h"
 #include "markdown/math.h"
@@ -301,6 +303,7 @@ QHash<int, QByteArray> BlockListModel::roleNames() const
             {IsZoomRootRole, "isZoomRoot"},
             {CalcResultsRole, "calcResults"},
             {TableDataRole, "tableData"},
+            {ChartDataRole, "chartData"},
             {EmbedsRole, "embeds"},
             {OnlyEmbedsRole, "onlyEmbeds"},
             {PropertiesRole, "properties"},
@@ -733,6 +736,7 @@ void BlockListModel::refresh(bool contentChanged)
     QList<int> visibleRows;  // in order (selection edges)
     QList<int> calcRows;
     QList<int> tableRows;
+    QList<int> chartRows;
     QList<int> htmlRows;
     QList<int> transclusionRows;
     QList<int> lineRows; // blocks moved to other lines of the file by changes above them
@@ -813,6 +817,25 @@ void BlockListModel::refresh(bool contentChanged)
             st.tableData.clear();
             tableRows.append(row);
         }
+        if (shape.view != BlockView::Chart && (st.chartValid || !st.chartData.isEmpty())) {
+            st.chartData.clear();
+            st.chartSource.clear();
+            st.chartValid = false;
+            chartRows.append(row);
+        }
+        if (shape.view == BlockView::Chart) {
+            // A chart of a table or a calc block follows every change of the page; one of a query
+            // its own text (and the index: invalidateRendering()).
+            if (!st.chartValid || st.chartSource != shape.editText || !st.chartData.value(u"query"_s).toBool()) {
+                QVariantMap chart = computeChartData(i);
+                st.chartValid = true;
+                st.chartSource = shape.editText;
+                if (chart != st.chartData) {
+                    st.chartData = chart;
+                    chartRows.append(row);
+                }
+            }
+        }
         if (shape.view == BlockView::Calc || shape.view == BlockView::Table) {
             if (!st.resultsValid || (st.resultsUseScope && st.resultsEpoch != m_calcEpoch)
                 || (shape.view == BlockView::Table && st.resultsUseRefs)) {
@@ -886,6 +909,7 @@ void BlockListModel::refresh(bool contentChanged)
     }
     emitRowsChanged(calcRows, {CalcResultsRole});
     emitRowsChanged(tableRows, {TableDataRole});
+    emitRowsChanged(chartRows, {ChartDataRole});
     emitRowsChanged(htmlRows, {HtmlRole});
     emitRowsChanged(transclusionRows, {TransclusionsRole});
     emitRowsChanged(lineRows, {LineRole});
@@ -983,10 +1007,146 @@ QVariantMap BlockListModel::computeTableData(int i) const
         }
         rows.append(QVariant(cells));
     }
+    // The view's filters (docs/SYNTAX.md §9): which rows pass them.
+    QStringList filters = st.tableFilters;
+    filters.resize(model->header.size());
+    calc::TableSortOptions sortOptions;
+    sortOptions.locale = calcLocale();
+    sortOptions.today = m_today.isValid() ? m_today : QDate::currentDate();
+    QVariantList shown;
+    int shownCount = 0;
+    for (const bool passes : calc::tableRowsShown(*model, eval, filters, sortOptions)) {
+        shown.append(passes);
+        shownCount += passes ? 1 : 0;
+    }
     return {{u"header"_s, QVariant(QStringList(model->header))},
             {u"headerHtml"_s, headerHtml},
             {u"aligns"_s, aligns},
-            {u"rows"_s, rows}};
+            {u"rows"_s, rows},
+            {u"filters"_s, filters},
+            {u"filtering"_s, st.tableFiltering},
+            {u"shown"_s, shown},
+            {u"shownCount"_s, shownCount}};
+}
+
+namespace {
+
+/// What a chart counts of a query's result (QueryHost::runQuery): each group's items, without
+/// `group:` the items of each page.
+chart::QueryCounts queryCounts(const QVariantMap &result)
+{
+    chart::QueryCounts out;
+    if (!result.value(u"ok"_s).toBool()) {
+        out.error = result.value(u"error"_s).toString();
+        if (out.error.isEmpty())
+            out.error = BlockListModel::tr("no results are available here.");
+        return out;
+    }
+    const QVariantList groups = result.value(u"groups"_s).toList();
+    if (!groups.isEmpty()) {
+        for (const QVariant &g : groups) {
+            const QVariantMap group = g.toMap();
+            out.groups.append({group.value(u"label"_s).toString(), double(group.value(u"items"_s).toList().size())});
+        }
+        return out;
+    }
+    QHash<QString, qsizetype> at;
+    for (const QVariant &i : result.value(u"items"_s).toList()) {
+        const QString title = i.toMap().value(u"title"_s).toString();
+        const auto it = at.constFind(title);
+        if (it == at.constEnd()) {
+            at.insert(title, out.groups.size());
+            out.groups.append({title, 1.0});
+        } else {
+            out.groups[*it].second += 1;
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+QVariantMap BlockListModel::computeChartData(int i) const
+{
+    const markdown::BlockEntry &e = m_doc.at(i);
+    const BlockShape s = shapeOf(e);
+    QVariantMap out{{u"ok"_s, false}};
+    const chart::SpecResult spec = chart::parseSpec(s.editText);
+    if (spec.error) {
+        out.insert(u"error"_s, spec.error->message());
+        return out;
+    }
+    const bool query = spec.spec.source == chart::SourceKind::Query;
+    out.insert(u"query"_s, query);
+    chart::PageSources page = chart::pageSources(text(), e.line, calcLocale());
+    if (query) {
+        if (auto *queries = qobject_cast<QueryHost *>(m_host.data())) {
+            const QString path = m_path;
+            page.runQuery = [queries, path](const QString &source) {
+                return queryCounts(queries->runQuery(source, path));
+            };
+        }
+    }
+    const chart::DataResult data = chart::resolveData(spec.spec, page);
+    if (data.error) {
+        out.insert(u"error"_s, data.error->message());
+        return out;
+    }
+    QVariantList series;
+    for (const chart::Series &serie : data.data.series) {
+        QVariantList values;
+        values.reserve(serie.values.size());
+        for (const double v : serie.values)
+            values.append(std::isfinite(v) ? QVariant(v) : QVariant()); // a gap: null (NaN never compares equal)
+        series.append(QVariantMap{{u"name"_s, serie.name}, {u"values"_s, values}});
+    }
+    out.insert(u"ok"_s, true);
+    out.insert(u"labels"_s, data.data.labels);
+    out.insert(u"labelsName"_s, data.data.labelsName);
+    out.insert(u"series"_s, series);
+    return out;
+}
+
+void BlockListModel::refreshTable(int row)
+{
+    const int i = docIndexOfRow(row);
+    if (i < 0 || cachedShape(row).view != BlockView::Table)
+        return;
+    RowState &st = stateFor(m_rows[row]);
+    QVariantMap table = computeTableData(i);
+    st.resultsValid = true;
+    st.resultsEpoch = m_calcEpoch;
+    if (table != st.tableData) {
+        st.tableData = table;
+        emitRowsChanged({row}, {TableDataRole});
+    }
+}
+
+void BlockListModel::setTableFilter(int row, int column, const QString &text)
+{
+    if (row < 0 || row >= m_rows.size() || column < 0 || column > 1000)
+        return;
+    RowState &st = stateFor(m_rows[row]);
+    if (st.tableFilters.size() <= column)
+        st.tableFilters.resize(column + 1);
+    if (st.tableFilters.at(column) == text && st.tableFiltering)
+        return;
+    st.tableFilters[column] = text;
+    st.tableFiltering = true;
+    refreshTable(row);
+}
+
+void BlockListModel::setTableFilterOpen(int row, bool open)
+{
+    if (row < 0 || row >= m_rows.size())
+        return;
+    RowState &st = stateFor(m_rows[row]);
+    if (st.tableFiltering == open && (open || st.tableFilters.isEmpty()))
+        return;
+    st.tableFiltering = open;
+    if (!open)
+        st.tableFilters.clear();
+    refreshTable(row);
 }
 
 const VaultConfig &BlockListModel::vaultConfig() const
@@ -1561,6 +1721,7 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case IsZoomRootRole: return st.zoomRoot;
     case CalcResultsRole: return st.calcResults;
     case TableDataRole: return st.tableData;
+    case ChartDataRole: return st.chartData;
     case EmbedsRole: ensureEmbeds(row); return stateFor(e.uid).embeds;
     case OnlyEmbedsRole: ensureEmbeds(row); return stateFor(e.uid).onlyEmbeds;
     case PropertiesRole: ensureProperties(row); return stateFor(e.uid).properties;
@@ -1730,6 +1891,7 @@ void BlockListModel::setEnglish(bool english)
     for (auto it = m_state.begin(); it != m_state.end(); ++it) {
         it->calcResults.clear();
         it->tableData.clear();
+        it->chartValid = false;
     }
     invalidateRendering();
     refresh(true);
@@ -1819,10 +1981,26 @@ void BlockListModel::invalidateRendering()
             tableRows.append(row);
         }
     }
+    // Charts: the index may give a query other results; the language its messages.
+    QList<int> chartRows;
+    for (int row = 0; row < m_rows.size(); ++row) {
+        const int i = docIndexOfRow(row);
+        if (i < 0 || cachedShape(row).view != BlockView::Chart)
+            continue;
+        RowState &st = stateFor(m_rows[row]);
+        QVariantMap chart = computeChartData(i);
+        st.chartValid = true;
+        st.chartSource = cachedShape(row).editText;
+        if (chart != st.chartData) {
+            st.chartData = chart;
+            chartRows.append(row);
+        }
+    }
     if (!m_rows.isEmpty())
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1),
                            {HtmlRole, EmbedsRole, OnlyEmbedsRole, TransclusionsRole, PropertiesRole});
     emitRowsChanged(tableRows, {TableDataRole});
+    emitRowsChanged(chartRows, {ChartDataRole});
 }
 
 } // namespace brulion::editor

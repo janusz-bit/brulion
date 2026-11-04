@@ -25,6 +25,13 @@ import Brulion
 // closeCell(): the cell stays edited after undo and redo), and the cell is kept above it. The
 // table is the current block meanwhile (Ctrl+Shift+C, the palette's link commands); a cell left
 // for the palette or the side panel leaves the table selected (stayCurrent()).
+// Sorting and filters (docs/SYNTAX.md §9): the Kolumna submenu sorts the rows by the cell's column
+// (PageController.sortTable: the file's rows rewritten, one undo step) and "Filtruj wiersze" shows a
+// row of filter fields under the header (one per column: "> 100", "!tekst", "zolw"); rows that do
+// not match are hidden — nothing is written, the filters last while the page is open
+// (BlockListModel.setTableFilter) — and the line under the grid says how many rows show, with
+// "Wyczyść filtry". A row being edited stays shown until it is left. The block menu also copies the
+// table as CSV or saves it to a file (EditorDialogs.saveTableCsv).
 Item {
     id: root
 
@@ -35,6 +42,20 @@ Item {
     readonly property var aligns: table.aligns || []
     readonly property var rows: table.rows || []
     readonly property int columns: header.length
+    /// The filter row is shown (the block menu's "Filtruj wiersze"); its texts by column.
+    readonly property bool filtering: table.filtering || false
+    readonly property var filters: table.filters || []
+    /// The rows shown, in order: those passing the filters, and the row being edited.
+    readonly property var shownRows: {
+        const flags = table.shown || []
+        const out = []
+        for (let r = 0; r < rows.length; ++r) {
+            if (flags[r] !== false || r === editRow)
+                out.push(r)
+        }
+        return out
+    }
+    readonly property real filterHeight: filtering ? (Theme.touchUi ? 48 : 36) : 0
     readonly property int cellPadding: Theme.space3
     readonly property int rowHeight: Theme.touchUi ? 40 : 32
     readonly property real firstLineCenter: rowHeight / 2
@@ -47,7 +68,7 @@ Item {
     /// pointer moved everything below it while the page scrolled past, and room kept for hidden
     /// buttons left a gap under every table (docs/UI.md "Scrolling performance"). Selecting the
     /// table or editing a cell — never scrolling — adds it.
-    readonly property bool buttonsShown: active || Theme.touchUi
+    readonly property bool buttonsShown: active || Theme.touchUi || filtering
 
     /// Natural column widths (clamped), stretched to fill the available width.
     readonly property var columnWidths: {
@@ -115,6 +136,31 @@ Item {
         root.block.controller.stopEditing()
         editRow = r
         editColumn = c
+    }
+    /// The y of row `r` in the grid (-1 the header); a hidden row: where it would be.
+    function rowY(r) {
+        if (r < 0)
+            return 0
+        const shown = shownRows.indexOf(r)
+        return rowHeight + filterHeight + (shown >= 0 ? shown : shownRows.length) * rowHeight
+    }
+    /// The shown row after (`step` 1) or before (-1) row `r` (-1 the header): rows.length after the
+    /// last, -1 before the first.
+    function nextShownRow(r, step) {
+        for (let n = r + step; n >= 0 && n < rows.length; n += step) {
+            if ((table.shown || [])[n] !== false)
+                return n
+        }
+        return step > 0 ? rows.length : -1
+    }
+    /// Show the filter row with the keys in column `c`'s field.
+    function openFilter(c) {
+        root.block.controller.setTableFilterOpen(root.block.index, true)
+        Qt.callLater(() => {
+            const field = filterRepeater.itemAt(Math.max(0, c))
+            if (field)
+                field.forceActiveFocus()
+        })
     }
     function rawText(r, c) {
         if (r === -1)
@@ -230,7 +276,7 @@ Item {
         Rectangle {
             id: grid
             width: root.gridWidth
-            height: (root.rows.length + 1) * root.rowHeight
+            height: (root.shownRows.length + 1) * root.rowHeight + root.filterHeight
             radius: Theme.radius
             color: Theme.bgElevated
             border.width: 1
@@ -247,13 +293,56 @@ Item {
                 color: Theme.bgSunken
             }
 
+            // The filter fields under the header (only while filtering).
+            Item {
+                visible: root.filtering
+                y: root.rowHeight
+                width: parent.width
+                height: root.filterHeight
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: Theme.borderSubtle
+                }
+                Repeater {
+                    id: filterRepeater
+                    model: root.filtering ? root.columns : 0
+                    delegate: BTextField {
+                        id: filterField
+                        required property int index
+                        objectName: "tableFilter" + index
+                        x: root.columnWidths.slice(0, index).reduce((a, b) => a + b, 0) + 2
+                        y: Math.round((root.filterHeight - implicitHeight) / 2)
+                        width: (root.columnWidths[index] || 0) - 4
+                        implicitWidth: 40 // (its width is the column's)
+                        size: "small"
+                        clearable: true
+                        placeholderText: qsTr("Filter")
+                        accessibleName: qsTr("Filter of column %1").arg(root.header[index] || "")
+                        text: root.filters[index] || ""
+                        onTextEdited: root.block.controller.setTableFilter(root.block.index, index, text)
+                        onCleared: root.block.controller.setTableFilter(root.block.index, index, "")
+                        // Escape in an empty field: the filters go, the table is selected.
+                        onEscapePressed: {
+                            const controller = root.block.controller
+                            const list = root.block.editor.listView
+                            const blockRow = root.block.index
+                            controller.setTableFilterOpen(blockRow, false)
+                            controller.selectedRow = blockRow
+                            list.forceActiveFocus()
+                        }
+                        onAccepted: filterField.focus = false
+                    }
+                }
+            }
+
             Repeater {
-                model: root.rows.length + 1
+                model: root.shownRows.length + 1
                 delegate: Item {
                     id: rowItem
                     required property int index
-                    readonly property int r: index - 1  // -1 = header
-                    y: index * root.rowHeight
+                    readonly property int r: index === 0 ? -1 : (root.shownRows[index - 1] ?? -1)  // -1 = header
+                    y: index === 0 ? 0 : index * root.rowHeight + root.filterHeight
                     width: grid.width
                     height: root.rowHeight
 
@@ -324,6 +413,15 @@ Item {
                                 font.pixelSize: Theme.textBase
                                 font.weight: cell.headerCell ? Theme.weightSemiBold : cell.formula ? Theme.weightMedium : Theme.weightNormal
                                 color: cell.error !== "" ? Theme.dangerText : Theme.fg
+                            }
+                            // A column with a filter: its funnel in the header.
+                            BIcon {
+                                visible: cell.headerCell && (root.filters[cell.c] || "").trim() !== ""
+                                x: parent.width - width - 4
+                                y: Math.round((parent.height - height) / 2)
+                                name: visible ? "filter" : ""
+                                size: 12
+                                color: Theme.accent
                             }
                             // Screen readers: the cell's links as link items (the cell stays the
                             // accessible Cell; its text item is ignored).
@@ -490,7 +588,7 @@ Item {
                                         const r = rowItem.r
                                         const c = cell.c
                                         if (c + 1 < root.columns) leave(r, c + 1)
-                                        else leave(r + 1, 0)
+                                        else leave(root.nextShownRow(r, 1), 0)
                                     }
                                     function undoTable() {
                                         done = true
@@ -563,14 +661,14 @@ Item {
                                                                          (event.modifiers & Qt.ShiftModifier) !== 0 && !Theme.narrow)
                                             event.accepted = true
                                         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                            leave(r + 1, c)
+                                            leave(root.nextShownRow(r, 1), c)
                                             event.accepted = true
                                         } else if (event.key === Qt.Key_Tab) {
                                             next()
                                             event.accepted = true
                                         } else if (event.key === Qt.Key_Backtab) {
                                             if (c > 0) leave(r, c - 1)
-                                            else if (r > -1) leave(r - 1, root.columns - 1)
+                                            else if (r > -1) leave(root.nextShownRow(r, -1), root.columns - 1)
                                             event.accepted = true
                                         } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Z) {
                                             undoTable()
@@ -607,8 +705,43 @@ Item {
         y: frame.height + Theme.space1
         // Placed by bindings (a Row would take its size only in its next polish).
         sourceComponent: Item {
-            implicitWidth: addColumn.x + addColumn.implicitWidth
-            implicitHeight: Math.max(addRow.implicitHeight, addColumn.implicitHeight)
+            id: buttonRow
+            readonly property real lineHeight: Math.max(addRow.implicitHeight, addColumn.implicitHeight)
+            readonly property real addedWidth: addColumn.x + addColumn.implicitWidth
+            /// The filters' line under the add buttons when both do not fit side by side (a phone).
+            readonly property bool wrapped: root.filtering
+                                            && addedWidth + Theme.space3 + filterStatus.implicitWidth + Theme.space1
+                                               + clearFilters.implicitWidth > root.width
+            implicitWidth: !root.filtering ? addedWidth : clearFilters.x + clearFilters.implicitWidth
+            implicitHeight: wrapped ? 2 * lineHeight : lineHeight
+            // While filtering: how many rows show, and the way back to all of them.
+            Text {
+                id: filterStatus
+                objectName: "tableFilterStatus"
+                visible: root.filtering
+                x: buttonRow.wrapped ? Theme.space2 : buttonRow.addedWidth + Theme.space3
+                y: buttonRow.wrapped ? buttonRow.lineHeight : 0
+                height: buttonRow.lineHeight
+                verticalAlignment: Text.AlignVCenter
+                text: qsTr("%1 of %n row(s) shown", "", root.rows.length).arg((root.table.shownCount ?? root.rows.length))
+                textFormat: Text.PlainText
+                font.family: Theme.fontUi
+                font.pixelSize: Theme.textXs
+                color: Theme.fgMuted
+            }
+            BButton {
+                id: clearFilters
+                objectName: "tableClearFilters"
+                visible: root.filtering
+                x: filterStatus.x + filterStatus.implicitWidth + Theme.space1
+                y: filterStatus.y
+                size: "small"
+                variant: "ghost"
+                iconName: "x"
+                text: qsTr("Clear filters")
+                focusPolicy: Qt.NoFocus
+                onClicked: root.block.controller.setTableFilterOpen(root.block.index, false)
+            }
             BButton {
                 id: addRow
                 size: "small"

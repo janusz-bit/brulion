@@ -734,6 +734,38 @@ public:
     Q_INVOKABLE void moveTableColumn(int row, int from, int to);
     /// `align`: "left", "center", "right", "" = none (the delimiter row's colons).
     Q_INVOKABLE void setTableColumnAlign(int row, int column, const QString &align);
+    // Sorting, filters and CSV (docs/SYNTAX.md §9 "Sorting and filtering tables", "CSV").
+    /// Sort the table's rows by `column` (calc::sortTableText(): numbers, dates, Polish order,
+    /// stable, empty cells last, summary rows in place; each row keeps its line byte for byte unless
+    /// A1 references follow it). One undo step; false when the rows are in that order already, the
+    /// column is out of range or the table is too long.
+    Q_INVOKABLE bool sortTable(int row, int column, bool descending);
+    /// The view's filter of a column ("> 100", "!tekst", "zolw"; "" none): rows that do not match
+    /// are hidden, nothing is written (BlockListModel::setTableFilter()).
+    Q_INVOKABLE void setTableFilter(int row, int column, const QString &text);
+    /// Show the table's filter row (`open`) or hide it, clearing every filter.
+    Q_INVOKABLE void setTableFilterOpen(int row, bool open);
+    /// The table as CSV (io::tableToCsv(): formulas as their results); "" when `row` is no table.
+    Q_INVOKABLE QString tableCsv(int row) const;
+    /// tableCsv() on the clipboard; false when there is none or `row` is no table.
+    Q_INVOKABLE bool copyTableCsv(int row);
+    /// "<page title>.csv" for the save picker.
+    Q_INVOKABLE QString tableCsvFileName(int row) const;
+    /// Write tableCsv() (with a UTF-8 BOM, which spreadsheets need to read Polish letters) to a
+    /// picked file (local or an Android content:// document). False when it could not be written.
+    Q_INVOKABLE bool saveTableCsv(int row, const QUrl &url);
+    /// Browser (WebAssembly): the browser's save picker or a download of the CSV; false elsewhere.
+    Q_INVOKABLE bool downloadTableCsv(int row);
+    /// "/Tabela z CSV…": the CSV text `text` as a table block (io::tableFromCsv()) in place of the
+    /// empty block `row` (the command's own), else after it. One undo step. Returns { row, truncated }
+    /// (row -1: nothing read — not a CSV with text, or too large).
+    Q_INVOKABLE QVariantMap insertCsvTable(int row, const QString &text);
+    /// The same for a picked file (desktop and Android: FilePicker), read as text (UTF-8, else
+    /// windows-1250/1252: text::decodeText); { row: -1 } when it cannot be read or is too large.
+    Q_INVOKABLE QVariantMap insertCsvFile(int row, const QUrl &url);
+    /// Browser: the browser's file picker for a CSV file, inserted as insertCsvTable() does
+    /// (asynchronously: csvTableInserted() / csvTableFailed()). False elsewhere.
+    Q_INVOKABLE bool pickCsvInBrowser(int row);
 
     // --- Links ----------------------------------------------------------------------------------
     /// A link of the rendered text was activated (page:, tag:, block:, ext:, task:, reminder:;
@@ -968,6 +1000,10 @@ Q_SIGNALS:
     void lookChanged();
     /// An attachment could not be read or stored (file name for the message).
     void attachmentFailed(const QString &name);
+    /// A CSV picked in the browser became a table (pickCsvInBrowser(); `truncated`: rows, columns
+    /// or text left out) — or could not be read (`name`: the file's).
+    void csvTableInserted(int row, bool truncated);
+    void csvTableFailed(const QString &name);
     /// downloadWebPictures() finished: `stored` pictures are attachments now, `failed` names the
     /// ones that could not be fetched or stored (webpicture::displayName()).
     void webPicturesDownloaded(int stored, const QStringList &failed);
