@@ -180,12 +180,14 @@ private Q_SLOTS:
     {
         ExportController c;
         QVERIFY(c.paperSize() == u"a4" || c.paperSize() == u"letter");
+        // (The default follows the region: Letter on a US machine, so setting it changes nothing.)
+        const bool startsLetter = c.paperSize() == u"letter";
         QSignalSpy options(&c, &ExportController::optionsChanged);
         c.setPaperSize(u"LETTER"_s);
         QCOMPARE(c.paperSize(), u"letter"_s);
         c.setPaperSize(u"nie-ma"_s);
         QCOMPARE(c.paperSize(), u"a4"_s);
-        QCOMPARE(options.size(), c.paperSize() == u"a4" ? 2 : 1);
+        QCOMPARE(options.size(), startsLetter ? 1 : 2);
     }
 
     void printToFile()

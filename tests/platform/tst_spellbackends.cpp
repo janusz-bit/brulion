@@ -10,6 +10,9 @@
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
+#include <QtGlobal>
+
+#include <cstdlib> // _wputenv_s (Windows)
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -49,7 +52,13 @@ private Q_SLOTS:
         write(m_dir + u"/en_US.aff"_s, "SET UTF-8\nTRY esianrtolcdugmphbyfvkwz'\nWORDCHARS '\n");
         write(m_dir + u"/en_US.dic"_s, "3\ncat\ndon't\nmeeting\n");
         // Found first; nothing else of this machine (the system's dictionaries) gets in the way.
+#ifdef Q_OS_WIN
+        // (qputenv's bytes are the ANSI code page's, which has no "ł": the wide environment, which
+        // qEnvironmentVariable reads.)
+        QVERIFY(_wputenv_s(L"DICPATH", reinterpret_cast<const wchar_t *>(m_dir.utf16())) == 0);
+#else
         qputenv("DICPATH", QFile::encodeName(m_dir));
+#endif
     }
 
     void engine()
@@ -122,6 +131,7 @@ private Q_SLOTS:
         std::vector<std::unique_ptr<spell::SpellBackend>> backends;
         backends.push_back(platform::createSpellBackend(u"pl"_s));
         backends.push_back(platform::createSpellBackend(u"en"_s));
+        QVERIFY(backends[0] && backends[1]);
         spell::SpellChecker checker;
         checker.setBackends(std::move(backends));
         QCOMPARE(checker.checkAll({u"kot"_s, u"cat"_s, u"kot-cat"_s, u"don’t"_s, u"zażułć"_s, u"Kot."_s}),

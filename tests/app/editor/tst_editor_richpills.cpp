@@ -542,11 +542,13 @@ private Q_SLOTS:
     void widthChangeCutsAnew()
     {
         QTextDocument doc;
-        setUp(doc, 1200);
+        // (Wide enough for the whole text on one line in any font: DejaVu, the Nix sandbox's only one,
+        // is wider than most.)
+        setUp(doc, 4000);
         RichTextPills pills;
         pills.setLineHeight(LineHeight);
         pills.setMaximumLineCount(2);
-        pills.setWidth(1200);
+        pills.setWidth(4000);
         pills.attach(&doc);
         pills.setHtml(longText());
         QVERIFY(!pills.truncated());
@@ -556,7 +558,7 @@ private Q_SLOTS:
         QCOMPARE(lineCountOf(doc), 2);
         QCOMPARE(doc.textWidth(), qreal(200));
         // Wider again: the whole text is back (it is set again, not grown from the cut one).
-        pills.setWidth(1200);
+        pills.setWidth(4000);
         QVERIFY(!pills.truncated());
         QCOMPARE(doc.toPlainText(), whole);
         QCOMPARE(brushesLeft(doc), 0);
@@ -565,11 +567,11 @@ private Q_SLOTS:
     void fontChangeCutsAnew()
     {
         QTextDocument doc;
-        setUp(doc, 400);
+        setUp(doc, 800);
         RichTextPills pills;
         pills.setLineHeight(LineHeight);
         pills.setMaximumLineCount(3);
-        pills.setWidth(400);
+        pills.setWidth(800);
         QFont small;
         small.setPixelSize(8);
         pills.setFont(small);

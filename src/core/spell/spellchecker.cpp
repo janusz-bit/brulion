@@ -150,6 +150,8 @@ SpellChecker::~SpellChecker() = default;
 void SpellChecker::setBackends(std::vector<std::unique_ptr<SpellBackend>> backends)
 {
     m_backends = std::move(backends);
+    // (A language without a dictionary gives no backend: never one to call.)
+    std::erase_if(m_backends, [](const std::unique_ptr<SpellBackend> &b) { return !b; });
 }
 
 QStringList SpellChecker::languages() const

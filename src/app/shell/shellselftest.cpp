@@ -3666,11 +3666,26 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
                       return third != nullptr;
                   }),
                   "the table of contents lists its chapters");
+            if (!third) {
+                // What there is instead (a failure in the Nix sandbox only): the entries shown, the
+                // outline the view has.
+                QStringList entries;
+                for (QQuickItem *item : uidriver::matching(window, [](QQuickItem *i) {
+                         return i->objectName() == u"pdfOutlineEntry"_s;
+                     }))
+                    entries.append(item->property("text").toString());
+                QQuickItem *shownPdf = pdfView();
+                QObject *viewPdf = shownPdf ? shownPdf->property("model").value<QObject *>() : nullptr;
+                qWarning().noquote() << "selftest: outline entries" << entries << "outline"
+                                     << (viewPdf ? viewPdf->property("outline") : QVariant());
+                closeMenus(window);
+            }
             if (third)
                 tapOrClick(window, pointIn(third), touch);
-            check(waitFor([&] { return opened(3); }), "a chapter of the table of contents opens its page");
+            check(third && waitFor([&] { return opened(3); }), "a chapter of the table of contents opens its page");
         }
-        pdfView()->forceActiveFocus();
+        if (QQuickItem *shownPdf = pdfView())
+            shownPdf->forceActiveFocus();
         sendKey(window, Qt::Key_Home);
         QQuickItem *link = nullptr;
         check(waitFor(
@@ -4859,11 +4874,14 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
     check(settings->value(u"ui/focusMode"_s, false).toBool(), "focus mode is kept as this device's setting");
     check(named(u"focusModeExit"_s) != nullptr && named(u"shellBottomNav"_s) == nullptr,
           "in focus mode only its corner button is there, no bottom navigation");
-    const qreal contentX = editor->property("contentX").toReal();
-    const qreal contentWidth = editor->property("contentWidth").toReal();
-    const QPointF editorAt = editor->mapToScene(QPointF(0, 0));
-    check(editorAt.x() < 1 && qAbs(editor->width() - window->width()) < 1
-                  && (touch || qAbs(contentX + contentWidth / 2 - editor->width() / 2) <= 1),
+    // (Waited for: the bars hide and the layout follows over a few frames — slower on Windows.)
+    check(waitFor([&] {
+              const qreal contentX = editor->property("contentX").toReal();
+              const qreal contentWidth = editor->property("contentWidth").toReal();
+              const QPointF editorAt = editor->mapToScene(QPointF(0, 0));
+              return editorAt.x() < 1 && qAbs(editor->width() - window->width()) < 1
+                     && (touch || qAbs(contentX + contentWidth / 2 - editor->width() / 2) <= 1);
+          }),
           "in focus mode the editor fills the window, its text column centred");
     // Esc: what the view does not need ends it (a selected block first, if any).
     for (int i = 0; i < 3 && settings->focusMode(); ++i)

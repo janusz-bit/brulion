@@ -470,7 +470,7 @@ private:
             return out;
         };
         const auto bulletLevel = [](const QString &text, const QString &font) {
-            return [text, font](int i) {
+            return [text, font](int i) -> QString {
                 return u"<w:lvl w:ilvl=\""_s + num(i)
                        + u"\"><w:start w:val=\"1\"/><w:numFmt w:val=\"bullet\"/><w:lvlText w:val=\""_s + text
                        + u"\"/><w:lvlJc w:val=\"left\"/><w:pPr><w:ind w:left=\""_s + num(720 * (i + 1))
