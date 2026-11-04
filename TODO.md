@@ -134,7 +134,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   przy zadaniu nadrzędnym.
 * **Śledzenie czasu i historia statusów** — licznik czasu przy zadaniu, podsumowania; zapis zmian
   statusu (Logseq; wpisy `LOGBOOK` z Logseq są dziś tylko rozpoznawane).
-* **Nawyki** — powtarzalne punkty dnia z serią i widokiem miesiąca, zapisane w dzienniku.
 
 ## Przechwytywanie
 

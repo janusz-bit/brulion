@@ -612,6 +612,54 @@ private Q_SLOTS:
         QCOMPARE(ws->journalDate(u"Dziennik/19.10.2026.md"_s), u"2026-10-19"_s);
     }
 
+    void habits()
+    {
+        // A habit's day (docs/SYNTAX.md §5 "Nawyki / Habits"): the daily note created from the
+        // template only when something is written, the line next to the day's other checks, undo
+        // by writing the previous state back; a new habit on its page.
+        auto ws = open({{u"templates/journal.md"_s, u"# Dzień\n- \n"_s},
+                        {u"journals/2026-10-13.md"_s, u"- [x] Joga #nawyk\r\n- notatka\r\n"_s}});
+        ws->setClock([] { return QDateTime(QDate(2026, 10, 14), QTime(10, 30)); });
+        // Nothing to undo on a day without a note: nothing written.
+        QVariantMap r = ws->setHabitCheck(u"Medytacja"_s, u"2026-10-14"_s, u"open"_s);
+        QVERIFY(r.value(u"ok"_s).toBool());
+        QVERIFY(!r.value(u"changed"_s).toBool());
+        QVERIFY(!ws->exists(u"journals/2026-10-14.md"_s));
+        r = ws->setHabitCheck(u"Medytacja"_s, u"2026-10-14"_s, u"done"_s);
+        QVERIFY(r.value(u"ok"_s).toBool() && r.value(u"changed"_s).toBool());
+        QCOMPARE(r.value(u"before"_s).toString(), QString());
+        QCOMPARE(ws->readFile(u"journals/2026-10-14.md"_s), u"# Dzień\n- [x] Medytacja #nawyk ✅ 2026-10-14\n"_s);
+        // A past day with other checks, CRLF kept.
+        r = ws->setHabitCheck(u"Medytacja"_s, u"2026-10-13"_s, u"skipped"_s);
+        QVERIFY(r.value(u"changed"_s).toBool());
+        QCOMPARE(ws->readFile(u"journals/2026-10-13.md"_s),
+                 u"- [x] Joga #nawyk\r\n- [-] Medytacja #nawyk ❌ 2026-10-14\r\n- notatka\r\n"_s);
+        QCOMPARE(r.value(u"line"_s).toInt(), 1);
+        // Undo: the previous state ("" = none) written back as open.
+        r = ws->setHabitCheck(u"Medytacja"_s, u"2026-10-13"_s, u"open"_s);
+        QCOMPARE(r.value(u"before"_s).toString(), u"skipped"_s);
+        QCOMPARE(ws->readFile(u"journals/2026-10-13.md"_s),
+                 u"- [x] Joga #nawyk\r\n- [ ] Medytacja #nawyk\r\n- notatka\r\n"_s);
+        // A page habit links to its page; English notes write #habit.
+        ws->setUiLanguage(u"en"_s);
+        r = ws->setHabitCheck(u"Bieganie"_s, u"2026-10-14"_s, u"done"_s, true);
+        QVERIFY(ws->readFile(u"journals/2026-10-14.md"_s).contains(u"- [x] [[Bieganie]] #habit ✅ 2026-10-14\n"_s));
+        // Bad input.
+        QVERIFY(!ws->setHabitCheck(u"Medytacja"_s, u"wczoraj"_s, u"done"_s).value(u"ok"_s).toBool());
+        QVERIFY(!ws->setHabitCheck(u"Medytacja"_s, u"2026-10-14"_s, u"może"_s).value(u"ok"_s).toBool());
+        QVERIFY(!ws->setHabitCheck(u"#nawyk"_s, u"2026-10-14"_s, u"done"_s).value(u"ok"_s).toBool());
+
+        // New habits: a new "Habits" page (English), then the page given.
+        const QString page = ws->addHabit(u"Reading"_s, u"3 times a week"_s);
+        QCOMPARE(page, u"Habits.md"_s);
+        QCOMPARE(ws->readFile(page), u"- Reading\n  habit:: 3 times a week\n"_s);
+        QCOMPARE(ws->addHabit(u"Yoga"_s, QString(), page), page);
+        QCOMPARE(ws->readFile(page), u"- Reading\n  habit:: 3 times a week\n- Yoga\n  habit:: every day\n"_s);
+        QVERIFY(ws->addHabit(u"  "_s, QString()).isEmpty());
+        ws->setUiLanguage(u"pl"_s);
+        QCOMPARE(ws->addHabit(u"Medytacja"_s, QString(), QString()), u"Nawyki.md"_s);
+    }
+
     void periodicNotes()
     {
         // Weekly and monthly notes (docs/SYNTAX.md §1): where they are, never written by looking.

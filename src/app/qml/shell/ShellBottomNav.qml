@@ -28,6 +28,7 @@ Rectangle {
         calendar: { id: "calendar", title: qsTr("Calendar"), icon: "calendar" },
         search: { id: "search", title: qsTr("Search"), icon: "search" },
         tasks: { id: "tasks", title: qsTr("Tasks"), icon: "list-todo" },
+        habits: { id: "habits", title: qsTr("Habits"), icon: "flame" },
         allPages: { id: "allPages", title: qsTr("Pages"), icon: "files" },
         tags: { id: "tags", title: qsTr("Tags"), icon: "tags" },
         graph: { id: "graph", title: qsTr("Graph"), icon: "waypoints" }

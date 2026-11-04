@@ -403,6 +403,87 @@ private Q_SLOTS:
         QCOMPARE(r.errorCode(), u"month_not_understood"_s);
     }
 
+    void habits()
+    {
+        // kNow is Wednesday 2026-10-14.
+        const QString dir =
+                vault({{u"Nawyki.md"_s, "- Medytacja\n  habit:: codziennie\n- Czytanie książek\n  habit:: 3 razy w "
+                                        "tygodniu\n- Coś\n  habit:: kiedy mi się zachce\n"},
+                       {u"templates/journal.md"_s, "# Dzień\n- \n"},
+                       {u"journals/2026-10-12.md"_s, "- [x] Medytacja #nawyk\r\n- [x] Spacer #nawyk\r\n"},
+                       {u"journals/2026-10-13.md"_s, "- [x] Medytacja #nawyk\n- [x] Czytanie książek #habit\n"}});
+        Run r = run(dir, {u"habit"_s, u"list"_s, u"--days"_s, u"3"_s});
+        QCOMPARE(r.code, 0);
+        const QJsonArray list = r.result().value(u"habits"_s).toArray();
+        QCOMPARE(list.size(), 3);
+        const QJsonObject med = list[0].toObject();
+        QCOMPARE(med.value(u"name"_s).toString(), u"Medytacja"_s);
+        QCOMPARE(med.value(u"streak"_s).toObject().value(u"current"_s).toInt(), 2);
+        QCOMPARE(med.value(u"today"_s).toObject().value(u"due"_s).toBool(), true);
+        QCOMPARE(med.value(u"today"_s).toObject().value(u"mark"_s).toString(), QString());
+        QCOMPARE(med.value(u"days"_s).toArray().size(), 3);
+        QCOMPARE(med.value(u"days"_s).toArray()[2].toObject().value(u"state"_s).toString(), u"due"_s);
+        QCOMPARE(med.value(u"rate"_s).toDouble(), 1.0);
+        const QJsonObject read = list[1].toObject();
+        QCOMPARE(read.value(u"period"_s).toObject().value(u"done"_s).toInt(), 1);
+        QCOMPARE(read.value(u"period"_s).toObject().value(u"target"_s).toInt(), 3);
+        QCOMPARE(list[2].toObject().value(u"problem"_s).toString(), u"schedule_not_understood"_s);
+        QCOMPARE(r.result().value(u"undefined"_s).toArray(), QJsonArray{u"spacer"_s});
+
+        // Tick today: the note is created from the template; the rest of the notes stay.
+        r = run(dir, {u"--lang"_s, u"pl"_s, u"habit"_s, u"tick"_s, u"medytacja"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"created"_s).toBool(), true);
+        QCOMPARE(r.result().value(u"mark"_s).toString(), u"done"_s);
+        QCOMPARE(readFile(dir + u"/journals/2026-10-14.md"_s),
+                 QString(u"# Dzień\n- [x] Medytacja #nawyk ✅ 2026-10-14\n"_s).toUtf8());
+        r = run(dir, {u"habit"_s, u"list"_s});
+        QCOMPARE(r.result()
+                         .value(u"habits"_s)
+                         .toArray()[0]
+                         .toObject()
+                         .value(u"streak"_s)
+                         .toObject()
+                         .value(u"current"_s)
+                         .toInt(),
+                 3);
+        // Ticking again changes nothing; a past day next to its checks, CRLF kept; a multi-word name.
+        r = run(dir, {u"habit"_s, u"tick"_s, u"Medytacja"_s});
+        QCOMPARE(r.result().value(u"changed"_s).toBool(), false);
+        r = run(dir, {u"--lang"_s, u"pl"_s, u"habit"_s, u"set"_s, u"Czytanie książek"_s, u"pominięte"_s, u"--date"_s,
+                      u"przedwczoraj"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(
+                readFile(dir + u"/journals/2026-10-12.md"_s),
+                QString(u"- [x] Medytacja #nawyk\r\n- [x] Spacer #nawyk\r\n- [-] Czytanie książek #nawyk ❌ 2026-10-14\r\n"_s)
+                        .toUtf8());
+        QCOMPARE(r.result().value(u"line"_s).toInt(), 2);
+        r = run(dir, {u"habit"_s, u"set"_s, u"Czytanie książek"_s, u"open"_s, u"--date"_s, u"2026-10-12"_s});
+        QCOMPARE(r.result().value(u"before"_s).toString(), u"skipped"_s);
+        QVERIFY(readFile(dir + u"/journals/2026-10-12.md"_s)
+                        .endsWith(QString(u"- [ ] Czytanie książek #nawyk\r\n"_s).toUtf8()));
+        // Open on a day without a note writes nothing; a dry run writes nothing.
+        r = run(dir, {u"habit"_s, u"set"_s, u"Medytacja"_s, u"open"_s, u"--date"_s, u"2026-10-01"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(!QFileInfo::exists(dir + u"/journals/2026-10-01.md"_s));
+        r = run(dir, {u"--dry-run"_s, u"habit"_s, u"skip"_s, u"Medytacja"_s, u"--date"_s, u"2026-10-02"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(!QFileInfo::exists(dir + u"/journals/2026-10-02.md"_s));
+        // Errors.
+        r = run(dir, {u"habit"_s, u"tick"_s, u"Pływanie"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"habit_not_found"_s);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"details"_s).toObject().value(u"habits"_s).toArray().size(),
+                 3);
+        r = run(dir, {u"habit"_s, u"set"_s, u"Medytacja"_s, u"może"_s});
+        QCOMPARE(r.code, 2);
+        r = run(dir, {u"--read-only"_s, u"habit"_s, u"tick"_s, u"Medytacja"_s});
+        QCOMPARE(r.code, 7);
+        r = run(dir, {u"--format"_s, u"text"_s, u"habit"_s, u"list"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(QString::fromUtf8(r.out).contains(u"[x] Medytacja"_s));
+    }
+
     void obsidianVaultSettings()
     {
         // An Obsidian vault without .brulion/config.json: its daily notes settings are used.

@@ -495,6 +495,7 @@ Rectangle {
                             { view: "journals", also: "journal", title: qsTr("Journals"), icon: "book-open" },
                             { view: "calendar", title: qsTr("Calendar"), icon: "calendar" },
                             { view: "tasks", title: qsTr("Tasks"), icon: "list-todo" },
+                            { view: "habits", title: qsTr("Habits"), icon: "flame" },
                             { view: "allPages", title: qsTr("All pages"), icon: "files" },
                             { view: "tags", also: "tag", title: qsTr("Tags"), icon: "tags" },
                             { view: "graph", title: qsTr("Graph"), icon: "waypoints" },

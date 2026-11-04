@@ -93,6 +93,7 @@ Item {
         case "page": return pageView
         case "calendar": return calendarView
         case "tasks": return tasksView
+        case "habits": return habitsView
         case "graph": return graphView
         case "search": return searchView
         case "allPages": return allPagesView
@@ -138,6 +139,7 @@ Item {
     Component { id: pageView; PageView { route: root.route; inSidePanel: root.inSidePanel; paneActive: root.paneActive } }
     Component { id: calendarView; CalendarView { route: root.route; covered: root.covered } }
     Component { id: tasksView; TasksView { route: root.route } }
+    Component { id: habitsView; HabitsView { route: root.route } }
     Component { id: graphView; GraphView { route: root.route } }
     Component { id: searchView; SearchView { route: root.route } }
     Component { id: allPagesView; AllPagesView { route: root.route } }

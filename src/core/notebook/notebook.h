@@ -26,6 +26,10 @@
 //   embeds.h     insertBlockAfterEmbed(content, lineHint, embedsIt, body) -> {content, line,
 //                afterEmbed}: a block right after the block embedding an attachment (the PDF
 //                viewer's drawing under its PDF), else appended — pure, untouched bytes kept
+//   habitchecks.h setHabitCheck(content, path, config, date, name, mark, today, tag) -> {content,
+//                changed, created, line, before}: a habit's check in a daily note set done / skipped /
+//                open (a new `- [x] Name #nawyk` line next to the other checks), pure;
+//                habitCheckLine, habitDefinitionBlock, habitsPageTitle
 //   cleanup.h    unreferencedFiles(index, config) -> notes and attachments nothing refers to (no
 //                daily notes, templates, hidden files), with their open tasks and reminders
 //   replace.h    text replaced in the whole notebook with a preview: planReplace / ReplaceScan (worker
@@ -64,6 +68,7 @@
 #include "notebook/capture.h"
 #include "notebook/cleanup.h"
 #include "notebook/embeds.h"
+#include "notebook/habitchecks.h"
 #include "notebook/indexcachekeeper.h"
 #include "notebook/indexloader.h"
 #include "notebook/itemref.h"

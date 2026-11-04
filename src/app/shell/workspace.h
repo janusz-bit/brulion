@@ -30,7 +30,8 @@
 //                                      would rewrite), folderPaths, folderInfo, subfolders
 //   history                            history(path), historyText(id), restoreVersion(path, id)
 //   journals                           journalPath(date), ensureJournal(date) (creates the daily
-//                                      note from the journal template), quickCapture(text)
+//                                      note from the journal template), setHabitCheck(name, date,
+//                                      state) / addHabit (habits), quickCapture(text)
 //                                      ("Kupić mleko jutro o 18" -> a task with ⏰ in today's
 //                                      journal, notebook/capture.h), captureToJournal(text)
 //   device-local state                 favorites, recentPages, foldState(path) (LocalStore)
@@ -585,6 +586,19 @@ public:
     /// the date), date ("YYYY-MM-DD" or ""), time ("HH:mm" or ""), when (human: "jutro 18:00"),
     /// line (the first line written) } — for a live preview in the capture dialog.
     Q_INVOKABLE QVariantMap quickCapturePreview(const QString &text) const;
+    /// A habit's day (docs/SYNTAX.md §5 "Nawyki / Habits", notebook::setHabitCheck()): habit
+    /// `name` in the daily note of `date` ("YYYY-MM-DD") set to `state` ("done" | "skipped" |
+    /// "open"): the day's check ticked, or a new line "- [x] Name #nawyk ✅ today" next to the
+    /// day's other checks; the note is created from the journal template only when something is
+    /// written. `pageLink`: the habit is a page (the new line links to it). Returns { ok, changed,
+    /// path, line, before ("open" | "done" | "skipped"; "" when the day had no check) }; ok false
+    /// (and errorOccurred) when it could not be written.
+    Q_INVOKABLE QVariantMap setHabitCheck(const QString &name, const QString &date, const QString &state,
+                                          bool pageLink = false);
+    /// A new habit: "- Name\n  habit:: schedule" appended to `page` (a path; "" = the page
+    /// "Nawyki" / "Habits" where new pages go, created when missing). Returns the page's path ("" on
+    /// failure: an empty name, a write error).
+    Q_INVOKABLE QString addHabit(const QString &name, const QString &schedule, const QString &page = QString());
     /// Daily notes, newest first: [{ date, path, title }] from `offset`, at most `limit`.
     Q_INVOKABLE QVariantList journals(int offset = 0, int limit = 50) const;
     /// Days "YYYY-MM-DD" within [from, to] that have a daily note (calendar dots).

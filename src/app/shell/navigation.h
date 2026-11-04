@@ -8,6 +8,7 @@
 //   "page"         PageView                      path, line?, blockId?
 //   "calendar"     CalendarView                  date?
 //   "tasks"        TasksView                     query?
+//   "habits"       HabitsView                    month? ("YYYY-MM")
 //   "graph"        GraphView                     path? (focus)
 //   "search"       SearchView                    query?
 //   "allPages"     AllPagesView                  path? (folder)

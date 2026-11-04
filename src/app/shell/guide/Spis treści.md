@@ -25,6 +25,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 ## Planowanie
 - [[Zadania|Zadania]] — terminy, priorytety, powtarzanie.
 - [[Przypomnienia i alarmy|Przypomnienia i alarmy]] — powiadomienia i budziki.
+- [[Nawyki|Nawyki]] — codzienne punkty do odhaczania, serie i kalendarz miesiąca.
 - [[Zapytania|Zapytania]] — listy zadań i bloków zbierane z całego notatnika.
 
 ## Liczenie

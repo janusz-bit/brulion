@@ -304,13 +304,13 @@ void AppSettings::setReducedMotion(bool on)
 
 QStringList AppSettings::sidebarItems()
 {
-    return {u"journals"_s, u"calendar"_s, u"tasks"_s, u"allPages"_s, u"tags"_s,
-            u"graph"_s,    u"search"_s,   u"favorites"_s, u"recent"_s};
+    return {u"journals"_s, u"calendar"_s, u"tasks"_s,  u"habits"_s,    u"allPages"_s,
+            u"tags"_s,     u"graph"_s,    u"search"_s, u"favorites"_s, u"recent"_s};
 }
 
 QStringList AppSettings::bottomNavViews()
 {
-    return {u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s, u"allPages"_s, u"tags"_s, u"graph"_s};
+    return {u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s, u"habits"_s, u"allPages"_s, u"tags"_s, u"graph"_s};
 }
 
 QStringList AppSettings::defaultBottomNavTabs()

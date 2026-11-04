@@ -1,6 +1,7 @@
 # Planning views' C++ (library brulion_planning, src/app/planning): CalendarModel (month / week /
 # agenda grids, week starts, DST months, recurring entries, overdue), TaskListModel (sections,
-# filters, the equivalent query, sorting, incremental updates), PlanningActions (task toggles,
+# filters, the equivalent query, sorting, incremental updates), HabitListModel (rows, month grids,
+# incremental updates), PlanningActions (task toggles,
 # undo, journal appends, quick add) and the graph (ForceLayout determinism and convergence,
 # GraphModel toggles / local graph / cap, the worker thread and its inline fallback, the
 # scene-graph geometry, GraphItem hit-testing, camera and painting with 2000 nodes, and in a window
@@ -8,6 +9,7 @@
 # Quick item).
 brulion_add_test(tst_planning_calendar SOURCES tst_planning_calendar.cpp planningtest.h LIBS brulion_planning)
 brulion_add_test(tst_planning_tasks SOURCES tst_planning_tasks.cpp planningtest.h LIBS brulion_planning)
+brulion_add_test(tst_planning_habits SOURCES tst_planning_habits.cpp planningtest.h LIBS brulion_planning)
 brulion_add_test(tst_planning_graph SOURCES tst_planning_graph.cpp planningtest.h LIBS brulion_planning)
 # GraphItem in a real window: the scene-graph renderer on the RHI null backend, and (a second entry
 # of the same binary) the software renderer's QPainter image node.

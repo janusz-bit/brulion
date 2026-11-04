@@ -203,6 +203,7 @@ FocusScope {
         case "page": return pageLabel(r.path)
         case "calendar": return qsTr("Calendar")
         case "tasks": return qsTr("Tasks")
+        case "habits": return qsTr("Habits")
         case "graph": return qsTr("Graph")
         case "search": return qsTr("Search")
         case "allPages": return r.path ? r.path.split("/").pop() : qsTr("All pages")

@@ -96,6 +96,7 @@ Item {
         { id: "journals", title: qsTr("Journals") },
         { id: "calendar", title: qsTr("Calendar") },
         { id: "tasks", title: qsTr("Tasks") },
+        { id: "habits", title: qsTr("Habits") },
         { id: "allPages", title: qsTr("All pages") },
         { id: "tags", title: qsTr("Tags") },
         { id: "graph", title: qsTr("Graph") },
@@ -109,6 +110,7 @@ Item {
         { value: "calendar", text: qsTr("Calendar"), icon: "calendar" },
         { value: "search", text: qsTr("Search"), icon: "search" },
         { value: "tasks", text: qsTr("Tasks"), icon: "list-todo" },
+        { value: "habits", text: qsTr("Habits"), icon: "flame" },
         { value: "allPages", text: qsTr("All pages"), icon: "files" },
         { value: "tags", text: qsTr("Tags"), icon: "tags" },
         { value: "graph", text: qsTr("Graph"), icon: "waypoints" }
