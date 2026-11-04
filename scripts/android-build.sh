@@ -131,6 +131,11 @@ fi
   die "BRULION_ANDROID_OPENSSL must be kdab or source, not '$OPENSSL_SOURCE'"
 [[ $QT_SOURCE == aqt || $OPENSSL_SOURCE == source ]] ||
   die "BRULION_ANDROID_QT=source needs BRULION_ANDROID_OPENSSL=source (Qt's TLS plugin is built against its headers)"
+# Absolute paths without "..": Qt's CMake packages compare them with the paths Qt was built
+# with (an unnormalised QT_HOST_PATH loses Qt6LinguistTools in a cross build).
+QT_ROOT=$(realpath -m -- "$QT_ROOT")
+[[ -z ${QT_HOST_PATH:-} ]] || QT_HOST_PATH=$(realpath -m -- "$QT_HOST_PATH")
+[[ -z ${BRULION_OPENSSL_OUT:-} ]] || BRULION_OPENSSL_OUT=$(realpath -m -- "$BRULION_OPENSSL_OUT")
 SIGN=${BRULION_ANDROID_SIGN:-1}
 [[ $SIGN == 0 || $SIGN == 1 ]] || die "BRULION_ANDROID_SIGN must be 0 or 1, not '$SIGN'"
 NDK_VERSION=${NDK_VERSION:-27.2.12479018}
@@ -303,7 +308,9 @@ elif [[ -n ${QT_ANDROID_KEYSTORE_BASE64:-} ]]; then
   ) || die "QT_ANDROID_KEYSTORE_BASE64 is not valid base64"
   export QT_ANDROID_KEYSTORE_PATH=$keystore
 fi
-if [[ -n ${QT_ANDROID_KEYSTORE_PATH:-} ]]; then
+if ((!SIGN)); then
+  : # no key at all
+elif [[ -n ${QT_ANDROID_KEYSTORE_PATH:-} ]]; then
   [[ -f $QT_ANDROID_KEYSTORE_PATH ]] || die "QT_ANDROID_KEYSTORE_PATH=$QT_ANDROID_KEYSTORE_PATH does not exist"
   [[ -n ${QT_ANDROID_KEYSTORE_ALIAS:-} ]] || die "QT_ANDROID_KEYSTORE_ALIAS is required with a release keystore"
   [[ -n ${QT_ANDROID_KEYSTORE_STORE_PASS:-} ]] || die "QT_ANDROID_KEYSTORE_STORE_PASS is required with a release keystore"
@@ -384,7 +391,9 @@ cmake "${cmake_args[@]}"
 android_build=$BUILD_DIR/src/app/android-build
 selftest_build=$BUILD_DIR/src/platform/android/selftest/android-build
 # Never pick up an APK of an earlier run.
-rm -rf -- "$android_build/build/outputs" "$selftest_build/build/outputs"
+# Their stamp files too, or Ninja would consider the APK targets up to date and build none.
+rm -rf -- "$android_build/build/outputs" "$selftest_build/build/outputs" \
+  "$android_build/brulion.apk" "$android_build/brulion.aab" "$selftest_build/brulion_android_selftest.apk"
 
 targets=(brulion_make_apk)
 [[ ${BRULION_ANDROID_AAB:-0} == 1 ]] && targets+=(brulion_make_aab)
@@ -503,7 +512,7 @@ echo "native libraries: $(grep -c 'lib/.*\.so$' <<<"$listing") in lib/{$(IFS=, &
 openssl=$(unzip -p "$apk" "lib/${ABIS[0]}/libcrypto_3.so" | LC_ALL=C grep -a -o -m 1 'OpenSSL 3\.[0-9.]* [0-9]* [A-Z][a-z]* [0-9]*' || true)
 echo "OpenSSL: ${openssl:-version not found} (libssl_3.so, libcrypto_3.so)"
 # Builds from source: the APK's Qt and OpenSSL libraries are the ones built here (same ELF build
-# ID — Gradle strips them, which keeps the ID), not prebuilt ones from elsewhere.
+# ID — Gradle strips them, which keeps the ID; OpenSSL has none: same bytes), not prebuilt ones.
 readelf_bin=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf
 build_id() { "$readelf_bin" -n "$1" | sed -nE 's/^[[:space:]]*Build ID: ([0-9a-f]+).*/\1/p'; }
 if [[ $QT_SOURCE == source || $OPENSSL_SOURCE == source ]]; then
@@ -523,9 +532,15 @@ if [[ $QT_SOURCE == source || $OPENSSL_SOURCE == source ]]; then
       name=${pair%%=*}
       built=${pair#*=}
       unzip -q -o "$apk" "lib/$abi/$name" -d "$id_tmp" || die "lib/$abi/$name missing from the APK"
+      # The build ID where the linker wrote one (Qt), else the bytes (OpenSSL: stripped already).
       in_apk=$(build_id "$id_tmp/lib/$abi/$name")
-      [[ -n $in_apk && $in_apk == "$(build_id "$built")" ]] ||
-        die "lib/$abi/$name in the APK (build ID ${in_apk:-none}) is not the one built from source ($built)"
+      if [[ -n $in_apk ]]; then
+        [[ $in_apk == "$(build_id "$built")" ]] ||
+          die "lib/$abi/$name in the APK (build ID $in_apk) is not the one built from source ($built)"
+      else
+        cmp -s "$id_tmp/lib/$abi/$name" "$built" ||
+          die "lib/$abi/$name in the APK (no build ID) differs from the one built from source ($built)"
+      fi
     done
   done
   echo "from source: Qt ($QT_SOURCE) and OpenSSL ($OPENSSL_SOURCE) libraries in the APK match the local builds"

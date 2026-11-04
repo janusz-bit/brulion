@@ -1,16 +1,6 @@
-# Draft of the fdroiddata recipe (metadata/io.github.januszbit.brulion.yml in
-# https://gitlab.com/fdroid/fdroiddata) — docs/ANDROID.md, "F-Droid". Kept here so that it is
-# checked against the build scripts (tests/scripts/tst_fdroid_recipe.sh); fdroiddata's copy is the
-# one F-Droid uses (its bot adds the Builds of new tags).
-#
-# The APK is built entirely from source: Qt 6.11.2 (srclib Qt5, the qt5.git super-repository,
-# only the modules the app uses) and OpenSSL 3.5 (srclib OpenSSL) are compiled with the NDK by
-# scripts/android-qt-from-source.sh and scripts/android-openssl-from-source.sh, called by
-# scripts/android-build.sh (BRULION_ANDROID_QT=source). No prebuilt Qt (aqt) or OpenSSL (KDAB).
-# Summary, description, icon and screenshots come from fastlane/metadata/android in the repository.
 Categories:
-  - Note
   - Calendar & Agenda
+  - Note
   - Task
   - Writing
 License: AGPL-3.0-or-later
@@ -43,6 +33,7 @@ Builds:
       - ./init-repository -f --module-subset=qtbase,qtshadertools,qtsvg,qtdeclarative,qttools,qttranslations
     scandelete:
       - tests/core/io/fixtures/trilium
+      - tests/data/drawing/lzstring
     build:
       - export ANDROID_SDK_ROOT="$$SDK$$" ANDROID_NDK_ROOT="$$NDK$$"
       - export BRULION_QT_SOURCE_DIR="$$Qt5$$" BRULION_OPENSSL_SOURCE_DIR="$$OpenSSL$$"

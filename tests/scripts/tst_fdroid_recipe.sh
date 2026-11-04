@@ -43,7 +43,11 @@ field() { sed -nE "s/^$1: *(.*)$/\\1/p" <<<"$text" | head -n 1; }
 last_build=$(awk '/^  - versionName:/ { buf = "" } { buf = buf $0 "\n" } END { printf "%s", buf }' <<<"$text")
 build_field() { sed -nE "s/^ *(- )?$1: *(.*)$/\\2/p" <<<"$last_build" | head -n 1; }
 
-# --- metadata --------------------------------------------------------------------------------------
+# --- metadata ---------------------------------------------------------------------------------------
+
+# fdroiddata's CI requires the file as `fdroid rewritemeta` writes it: no comments (it drops them).
+if grep -qE '^[[:space:]]*#' "$recipe"; then fail "comments in the recipe (fdroid rewritemeta drops them)"; else pass "no comments"; fi
+# Fields.
 
 same "License" AGPL-3.0-or-later "$(field License)"
 same "RepoType" git "$(field RepoType)"
@@ -54,7 +58,7 @@ case $(field UpdateCheckMode) in
   Tags*) pass "UpdateCheckMode: Tags" ;;
   *) fail "UpdateCheckMode should be Tags, not '$(field UpdateCheckMode)'" ;;
 esac
-if [[ $text == *$'\nCategories:\n  - '* ]]; then pass "Categories"; else fail "no Categories"; fi
+if grep -A1 '^Categories:$' "$recipe" | grep -q '^  - '; then pass "Categories"; else fail "no Categories"; fi
 
 # --- version ---------------------------------------------------------------------------------------
 
