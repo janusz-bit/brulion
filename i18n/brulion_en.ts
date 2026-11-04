@@ -1870,4 +1870,34 @@
         </translation>
     </message>
 </context>
+<context>
+    <name>TasksRow</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="1"/>
+        <source>Blocks %n task(s)</source>
+        <translation>
+            <numerusform>Blocks %n task</numerusform>
+            <numerusform>Blocks %n tasks</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>TasksTimeDialog</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>Total: %1 · %n task(s)</source>
+        <translation>
+            <numerusform>Total: %1 · %n task</numerusform>
+            <numerusform>Total: %1 · %n tasks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>%n task(s)</source>
+        <translation>
+            <numerusform>%n task</numerusform>
+            <numerusform>%n tasks</numerusform>
+        </translation>
+    </message>
+</context>
 </TS>

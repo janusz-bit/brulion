@@ -135,12 +135,10 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Kalendarze CalDAV** — dwukierunkowa synchronizacja zadań i wydarzeń (Nextcloud, Google,
   Thunderbird, DAVx⁵) i subskrypcja kalendarzy ICS tylko do podglądu w widoku kalendarza. Dziś
   jest jednorazowy import i eksport iCalendar.
-* **Zależności zadań i postęp podzadań** — składnia Obsidian Tasks `🆔` / `⛔` jest rozpoznawana,
-  ale nic nie robi: zadania zablokowane w widokach i zapytaniach (`is:blocked`), licznik „3/5”
-  przy zadaniu nadrzędnym.
-* **Śledzenie czasu i historia statusów** — licznik czasu przy zadaniu, podsumowania; zapis zmian
-  statusu (Logseq; wpisy `LOGBOOK` z Logseq są dziś tylko rozpoznawane).
 * **Nawyki** — powtarzalne punkty dnia z serią i widokiem miesiąca, zapisane w dzienniku.
+* **Czas zadań przy imporcie z Logseqa** — import grafu Logseqa wciąż pomija szufladki
+  `:LOGBOOK:`, choć Brulion je teraz czyta i zapisuje (licznik czasu, historia statusów); powinny
+  zostać przy zadaniach.
 
 ## Przechwytywanie
 

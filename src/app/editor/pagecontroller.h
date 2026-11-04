@@ -387,6 +387,26 @@ public:
     Q_INVOKABLE void setTaskStatus(int row, const QString &status);
     /// Remove the task marker (the block stays a plain bullet).
     Q_INVOKABLE void removeTaskMarker(int row);
+
+    // --- Task dependencies and time (docs/SYNTAX.md §5, docs/UI.md "Tasks: dependencies, subtasks
+    // and time") ----------------------------------------------------------------------------------
+    /// What the task menu and its hint show of the task at `row`: notebook::taskRelations() from
+    /// the index (the tasks it waits for, those waiting for it, cycles, missing ids) with the
+    /// clock and the subtask progress as this page has them now; {isTask: false} for a block that
+    /// is no task.
+    Q_INVOKABLE QVariantMap taskInfo(int row) const;
+    /// Start the task's clock (`CLOCK: [now]` in its `:LOGBOOK:`), or stop it when it runs — one
+    /// undo step; starting stops the clock running on another task (this page in the same step,
+    /// other files written through the host). False for a block that is no task.
+    Q_INVOKABLE bool toggleTaskClock(int row);
+    /// The dependency picker's tasks (notebook::dependencyCandidates(); this task left out).
+    Q_INVOKABLE QVariantList dependencyCandidates(int row, const QString &text, int limit = 30) const;
+    /// The task at `row` waits for the task at `line` of `path`: that one gets a `🆔` when it has
+    /// none (this page: the same undo step; another file: written through the host), this one a
+    /// `⛔ id` (Obsidian Tasks' order). False when nothing was written.
+    Q_INVOKABLE bool addTaskDependency(int row, const QString &path, int line);
+    /// `id` taken out of the task's `⛔` list.
+    Q_INVOKABLE bool removeTaskDependency(int row, const QString &id);
     /// Delete a block with its children. Returns the row that should get focus (-1: none).
     Q_INVOKABLE int deleteBlock(int row);
     /// Insert a new list item after `row` (its subtree) at the same depth; -1 = at the start.
@@ -996,6 +1016,11 @@ private:
     QString newColumnHeader(const calc::TableModel &model) const;
     /// Apply a whole new document text as one command (keeps unchanged rows).
     void applyText(const QString &text, const Focus &after);
+    /// Inside a command: the page's text becomes `text` (only the changed blocks).
+    void replaceTextInCommand(const QString &text);
+    /// The status history (EditorHost::taskStatusHistory()) of a status change of the task with
+    /// block uid `uid` from `before` to `after`, inside the command that changed it.
+    void logTaskStatus(quint64 uid, TaskStatus before, TaskStatus after);
     /// Move the caret to a document index + body cursor from an EditResult.
     Focus focusFromResult(const markdown::EditResult &r, int fallbackRow) const;
     void setFocus(const Focus &focus, bool resetText);

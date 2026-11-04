@@ -1298,6 +1298,31 @@
 <context>
     <name>BlockEditor</name>
     <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1"/>
+        <source>No task in the notebook has the id %1</source>
+        <translation>Żadne zadanie w notatniku nie ma identyfikatora %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1"/>
+        <source>Timer stopped</source>
+        <translation>Zatrzymano licznik czasu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1"/>
+        <source>Timer started</source>
+        <translation>Uruchomiono licznik czasu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1"/>
+        <source>Put the cursor in a task first</source>
+        <translation>Najpierw umieść kursor w zadaniu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1"/>
+        <source>Dependency added</source>
+        <translation>Dodano zależność</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="180"/>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="2676"/>
         <source>Undo</source>
@@ -9065,6 +9090,16 @@
 <context>
     <name>SettingsView</name>
     <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1"/>
+        <source>Log task status changes</source>
+        <translation>Zapisuj zmiany statusu zadań</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1"/>
+        <source>Each change is written to the task's LOGBOOK with its time, and “In progress” starts and stops the task's timer, as in Logseq.</source>
+        <translation>Każda zmiana trafia z godziną do LOGBOOK zadania, a „W toku” uruchamia i zatrzymuje licznik czasu zadania — jak w Logsequ.</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="62"/>
         <source>Backups</source>
         <translation>Kopie zapasowe</translation>
@@ -13292,6 +13327,21 @@
 <context>
     <name>TaskStatusMenu</name>
     <message>
+        <location filename="../src/app/qml/editor/TaskStatusMenu.qml" line="1"/>
+        <source>Stop timer</source>
+        <translation>Zatrzymaj licznik czasu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TaskStatusMenu.qml" line="1"/>
+        <source>Start timer</source>
+        <translation>Uruchom licznik czasu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TaskStatusMenu.qml" line="1"/>
+        <source>Add dependency…</source>
+        <translation>Dodaj zależność…</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/editor/TaskStatusMenu.qml" line="31"/>
         <source>Task status</source>
         <translation>Status zadania</translation>
@@ -13334,6 +13384,11 @@
 </context>
 <context>
     <name>TasksFilterBar</name>
+    <message>
+        <location filename="../src/app/qml/planning/TasksFilterBar.qml" line="1"/>
+        <source>Time spent</source>
+        <translation>Czas pracy</translation>
+    </message>
     <message>
         <location filename="../src/app/qml/planning/TasksFilterBar.qml" line="22"/>
         <source>All tasks</source>
@@ -13696,6 +13751,30 @@
 </context>
 <context>
     <name>TasksRow</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="1"/>
+        <source>Blocks %n task(s)</source>
+        <translation>
+            <numerusform>Blokuje %n zadanie</numerusform>
+            <numerusform>Blokuje %n zadania</numerusform>
+            <numerusform>Blokuje %n zadań</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="1"/>
+        <source>Waits for: %1</source>
+        <translation>Czeka na: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="1"/>
+        <source>Dependency cycle</source>
+        <translation>Cykl zależności</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="1"/>
+        <source>Missing dependency</source>
+        <translation>Brak zależności</translation>
+    </message>
     <message>
         <location filename="../src/app/qml/planning/TasksRow.qml" line="81"/>
         <source>Journal · %1</source>
@@ -13769,6 +13848,21 @@
 </context>
 <context>
     <name>TasksView</name>
+    <message>
+        <location filename="../src/app/qml/views/TasksView.qml" line="1"/>
+        <source>Timer stopped</source>
+        <translation>Zatrzymano licznik czasu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/TasksView.qml" line="1"/>
+        <source>Timer started</source>
+        <translation>Uruchomiono licznik czasu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/TasksView.qml" line="1"/>
+        <source>Dependency added</source>
+        <translation>Dodano zależność</translation>
+    </message>
     <message>
         <location filename="../src/app/qml/views/TasksView.qml" line="26"/>
         <location filename="../src/app/qml/views/TasksView.qml" line="148"/>
@@ -14455,6 +14549,106 @@
 </context>
 <context>
     <name>brulion::cli</name>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>The line is no task: %1</source>
+        <translation>Ten wiersz nie jest zadaniem: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>The clock of this task already runs</source>
+        <translation>Licznik czasu tego zadania już działa</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>Clock started: %1</source>
+        <translation>Uruchomiono licznik czasu: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>No clock runs</source>
+        <translation>Żaden licznik czasu nie działa</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>No clock runs on this task</source>
+        <translation>Licznik czasu tego zadania nie działa</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>--by is day, page, tag or task</source>
+        <translation>--by to day, page, tag albo task</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>(no tag)</source>
+        <translation>(bez tagu)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>Total: %1 (tasks: %2)</source>
+        <translation>Razem: %1 (zadania: %2)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>That task has no id (🆔): it has no dependents</source>
+        <translation>To zadanie nie ma identyfikatora (🆔): nic na nie nie czeka</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>Only blocked tasks: waiting for an open task (⛔ / 🆔)</source>
+        <translation>Tylko zablokowane zadania: czekające na otwarte zadanie (⛔ / 🆔)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>Log the change in the task's :LOGBOOK: (doing starts its clock, leaving doing stops it), as the app's status history setting</source>
+        <translation>Zapisz zmianę w :LOGBOOK: zadania (doing uruchamia jego licznik czasu, wyjście z doing go zatrzymuje), jak ustawienie historii statusów w aplikacji</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>Start a task's clock (a CLOCK line in its :LOGBOOK:); a running one elsewhere stops</source>
+        <translation>Uruchom licznik czasu zadania (wiersz CLOCK w jego :LOGBOOK:); działający gdzie indziej się zatrzyma</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>Stop a task's clock (without a ref: every running one)</source>
+        <translation>Zatrzymaj licznik czasu zadania (bez odnośnika: każdy działający)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>The task's line (Dom.md#L12@hash); default: the running clocks</source>
+        <translation>Wiersz zadania (Dom.md#L12@hash); domyślnie: działające liczniki</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>Time clocked on tasks per day, page, tag or task</source>
+        <translation>Czas zapisany przy zadaniach według dni, stron, tagów albo zadań</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>day (default), page, tag, task</source>
+        <translation>day (domyślnie), page, tag, task</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>Only the tasks of this query (&quot;tag:praca&quot;)</source>
+        <translation>Tylko zadania z tego zapytania (&quot;tag:praca&quot;)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>Make a task wait for another (⛔ id; the other gets a 🆔 when it has none)</source>
+        <translation>Niech zadanie czeka na inne (⛔ id; tamto dostaje 🆔, gdy go nie ma)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>The task it waits for</source>
+        <translation>Zadanie, na które ma czekać</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_tasks.cpp" line="1"/>
+        <source>Remove the dependency instead</source>
+        <translation>Zamiast tego usuń zależność</translation>
+    </message>
     <message>
         <location filename="../src/cli/args.cpp" line="96"/>
         <location filename="../src/cli/args.cpp" line="206"/>
@@ -17882,6 +18076,11 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::planning::PlanningActions</name>
     <message>
+        <location filename="../src/app/planning/planningactions.cpp" line="1"/>
+        <source>No task in the notebook has the id %1</source>
+        <translation>Żadne zadanie w notatniku nie ma identyfikatora %1</translation>
+    </message>
+    <message>
         <location filename="../src/app/planning/planningactions.cpp" line="140"/>
         <location filename="../src/app/planning/planningactions.cpp" line="229"/>
         <source>The change could not be saved.</source>
@@ -18142,6 +18341,36 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 </context>
 <context>
     <name>brulion::shell::CommandModel</name>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="1"/>
+        <source>Start or stop task timer</source>
+        <translation>Licznik czasu zadania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="1"/>
+        <source>The task at the cursor; the time goes to its LOGBOOK</source>
+        <translation>Zadanie pod kursorem; czas trafia do jego LOGBOOK</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="1"/>
+        <source>Add task dependency…</source>
+        <translation>Dodaj zależność zadania…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="1"/>
+        <source>The task at the cursor waits for another one (⛔)</source>
+        <translation>Zadanie pod kursorem czeka na inne (⛔)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="1"/>
+        <source>Stop task timer</source>
+        <translation>Zatrzymaj licznik czasu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="1"/>
+        <source>No timer runs</source>
+        <translation>Żaden licznik nie działa</translation>
+    </message>
     <message>
         <location filename="../src/app/shell/commandmodel.cpp" line="146"/>
         <source>Backups</source>
@@ -20066,6 +20295,120 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/main.cpp" line="550"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
+    </message>
+</context>
+<context>
+    <name>TaskDependencyDialog</name>
+    <message>
+        <location filename="../src/app/qml/editor/TaskDependencyDialog.qml" line="1"/>
+        <source>Add dependency</source>
+        <translation>Dodaj zależność</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TaskDependencyDialog.qml" line="1"/>
+        <source>This task waits until the chosen task is done.</source>
+        <translation>To zadanie poczeka, aż wybrane zadanie zostanie zrobione.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TaskDependencyDialog.qml" line="1"/>
+        <source>Add</source>
+        <translation>Dodaj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TaskDependencyDialog.qml" line="1"/>
+        <source>Search open tasks</source>
+        <translation>Szukaj otwartych zadań</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TaskDependencyDialog.qml" line="1"/>
+        <source>The notebook has no other open tasks.</source>
+        <translation>Notatnik nie ma innych otwartych zadań.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TaskDependencyDialog.qml" line="1"/>
+        <source>No open task matches.</source>
+        <translation>Żadne otwarte zadanie nie pasuje.</translation>
+    </message>
+</context>
+<context>
+    <name>TasksTimeDialog</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>Total: %1 · %n task(s)</source>
+        <translation>
+            <numerusform>Razem: %1 · %n zadanie</numerusform>
+            <numerusform>Razem: %1 · %n zadania</numerusform>
+            <numerusform>Razem: %1 · %n zadań</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>%n task(s)</source>
+        <translation>
+            <numerusform>%n zadanie</numerusform>
+            <numerusform>%n zadania</numerusform>
+            <numerusform>%n zadań</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>Time spent</source>
+        <translation>Czas pracy</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>Close</source>
+        <translation>Zamknij</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>Today</source>
+        <translation>Dziś</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>This week</source>
+        <translation>Ten tydzień</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>This month</source>
+        <translation>Ten miesiąc</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>All</source>
+        <translation>Wszystko</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>Days</source>
+        <translation>Dni</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>Pages</source>
+        <translation>Strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>Tags</source>
+        <translation>Tagi</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>Tasks</source>
+        <translation>Zadania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>No time was logged on these tasks in this period. Start a timer from a task's menu.</source>
+        <translation>W tym okresie nie zapisano czasu przy tych zadaniach. Licznik uruchomisz z menu zadania.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/TasksTimeDialog.qml" line="1"/>
+        <source>No tag</source>
+        <translation>Bez tagu</translation>
     </message>
 </context>
 </TS>

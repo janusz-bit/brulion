@@ -231,6 +231,9 @@ void integrateWorkspace(AppController *app)
     // Pictures from the internet: shown without asking only when the device's setting says so.
     AppSettings *settings = app->settings();
     Workspace *ws = app->workspace();
+    ws->setTaskStatusHistory(settings->taskStatusHistory());
+    QObject::connect(settings, &AppSettings::taskStatusHistoryChanged, ws,
+                     [settings, ws] { ws->setTaskStatusHistory(settings->taskStatusHistory()); });
     ws->setWebPicturesShown(settings->webPicturesShown());
     QObject::connect(settings, &AppSettings::webPicturesShownChanged, ws,
                      [settings, ws] { ws->setWebPicturesShown(settings->webPicturesShown()); });

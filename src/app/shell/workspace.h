@@ -146,6 +146,10 @@ class Workspace : public EditorHost, public QueryHost {
     /// webPicturesShown; workspacepictures.cpp). Off: each waits for "Pokaż".
     Q_PROPERTY(
             bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
+    /// Task status changes are logged in the task's `:LOGBOOK:` and "W toku" starts / stops its
+    /// clock (AppSettings' taskStatusHistory; docs/SYNTAX.md §5). Off by default.
+    Q_PROPERTY(bool taskStatusHistory READ taskStatusHistory WRITE setTaskStatusHistory NOTIFY taskStatusHistoryChanged
+                       FINAL)
     /// PDFs open in the app's own viewer (a PDF renderer is built in: platform::pdfAvailable();
     /// workspacepdf.cpp). Off (the browser): they go to another app / a new tab.
     Q_PROPERTY(bool pdfViewable READ pdfViewable CONSTANT FINAL)
@@ -276,6 +280,12 @@ public:
     QByteArray webPictureData(const QString &url, QString *format) const override;
     bool webPicturesShown() const;
     void setWebPicturesShown(bool shown);
+    /// EditorHost: the index for task dependencies and clocks; the status history setting.
+    const VaultIndex *taskIndex() const override;
+    bool taskStatusHistory() const override { return m_taskStatusHistory; }
+    void setTaskStatusHistory(bool on);
+    /// Stop every running task clock (the palette's "Zatrzymaj licznik czasu"); how many stopped.
+    Q_INVOKABLE int stopTaskClocks();
     /// The cache's folder (tests: a temporary one; "" — the default).
     void setWebPictureCacheDir(const QString &dir);
     /// The size the cache is pruned to (tests; 0 — the default: 200 MB, 50 MB in the browser,
@@ -646,6 +656,7 @@ Q_SIGNALS:
     void favoritesChanged();
     void recentPagesChanged();
     void webPicturesShownChanged();
+    void taskStatusHistoryChanged();
     /// Files changed (paths, in change order) — after the index was updated.
     void filesChanged(const QStringList &paths);
     /// A path was renamed or moved (pages: links were rewritten already).
@@ -745,6 +756,7 @@ private:
     WebPictures *webPictures() const;
     mutable WebPictures *m_webPictures = nullptr;
     bool m_webPicturesShown = false;
+    bool m_taskStatusHistory = false;
     QString m_webPictureCacheDir;
     qint64 m_webPictureCacheBytes = 0;
     std::function<bool(const QString &)> m_webPictureHostCheck;

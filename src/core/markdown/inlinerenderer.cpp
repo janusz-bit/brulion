@@ -7,6 +7,7 @@
 #include "markdown/inline_p.h"
 #include "markdown/journal.h"
 #include "markdown/lines_p.h"
+#include "markdown/logbook.h"
 #include "markdown/math.h"
 #include "markdown/properties.h"
 #include "markdown/structure_p.h"
@@ -936,8 +937,34 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 html = m_ctx.dateLinks ? linkChip(u"prio:"_s + range(tok), pal.neutral, source.sliced(2, 1).toString())
                                        : chip(pal.neutral, source.sliced(2, 1).toString());
                 break;
-            case TokenKind::TaskId:
             case TokenKind::DependsOn:
+                if (m_ctx.taskDependency) {
+                    // One chip per id: the task it waits for, a link to it (SYNTAX §5).
+                    QStringList chips;
+                    for (QStringView part : QStringView(tok.value).split(u',')) {
+                        const QString id = part.trimmed().toString();
+                        if (id.isEmpty())
+                            continue;
+                        const auto dep = m_ctx.taskDependency(id);
+                        const QString href = u"taskdep:"_s + id;
+                        if (!dep) {
+                            chips.append(linkChip(href, ChipColors{pal.unresolved, pal.neutral.background},
+                                                  u"⛔ "_s + id + u'?'));
+                            continue;
+                        }
+                        QString label = dep->text.simplified();
+                        if (label.size() > 40)
+                            label = label.first(39) + u'…';
+                        if (label.isEmpty())
+                            label = id;
+                        chips.append(linkChip(href, dep->open ? pal.overdue : pal.done, u"⛔ "_s + label));
+                    }
+                    html = chips.join(u' ');
+                    break;
+                }
+                html = muted(pal, esc(source));
+                break;
+            case TokenKind::TaskId:
             case TokenKind::OnCompletion: html = muted(pal, esc(source)); break;
             case TokenKind::Planning:
                 html = tok.field == TokenKind::Due ? dueChip(tok.spec())
@@ -1176,6 +1203,31 @@ QString InlineRenderer::linkUrlAt(QStringView text, qsizetype position) const
             url = found;
     });
     return url;
+}
+
+QString taskTimeLabel(qint64 clockedSeconds, const QDateTime &clockStart, dates::UiLocale locale)
+{
+    QString time;
+    if (clockedSeconds > 0)
+        time = formatSpentTime(clockedSeconds);
+    if (clockStart.isValid()) {
+        const QString since =
+                (locale == dates::UiLocale::Polish ? u"od "_s : u"since "_s) + clockStart.time().toString(u"HH:mm"_s);
+        time = time.isEmpty() ? since : time + u" + "_s + since;
+    }
+    return time;
+}
+
+QString taskChipsHtml(int done, int total, qint64 clockedSeconds, const QDateTime &clockStart, const Palette &palette,
+                      dates::UiLocale locale)
+{
+    QStringList chips;
+    if (total > 0)
+        chips.append(chip(done >= total ? palette.done : palette.neutral, u"%1/%2"_s.arg(done).arg(total)));
+    const QString time = taskTimeLabel(clockedSeconds, clockStart, locale);
+    if (!time.isEmpty())
+        chips.append(chip(clockStart.isValid() ? palette.reminder : palette.neutral, u"⏱ "_s + time));
+    return chips.join(u' ');
 }
 
 } // namespace brulion::markdown

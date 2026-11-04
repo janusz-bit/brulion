@@ -907,6 +907,77 @@ Logseq planning lines inside the block are understood too:
 above the completed one (dates shifted by the rule), exactly like Obsidian Tasks, and the
 completed line gets `✅ <today>`.
 
+### Dependencies (Obsidian Tasks `🆔` / `⛔`)
+
+| Token | Meaning |
+|---|---|
+| `🆔 abc123` | the task's id: one or more of `[A-Za-z0-9_-]` (case-sensitive; the first `🆔` of the line counts) |
+| `⛔ abc123` / `⛔ abc123,def456` | the task waits for the tasks with those ids (blanks around commas allowed; several `⛔` tokens add up) |
+
+* A task is **blocked** while it is not done or cancelled and one of the tasks it depends on —
+  every task in the notebook carrying that `🆔` (an id written twice: all of them) — is not done
+  or cancelled (todo, doing and deferred tasks block). The task itself is left out (`🆔 a ⛔ a`
+  blocks nothing).
+* A task is **blocking** while it has a `🆔`, is not done or cancelled, and a task that is not done
+  or cancelled waits for it.
+* An id no task carries does not block; it is flagged (the `⛔` chip shows `⛔ id?`, the Tasks view
+  "Brak zależności"). A **cycle** (`A ⛔ b`, `B ⛔ a`, or longer, through tasks that are not done or
+  cancelled) is flagged too ("Cykl zależności"); both tasks stay blocked until one of them is
+  done or cancelled. Only direct dependencies decide blocking, so a cycle never loops.
+* An id stops at the first other character: `🆔 zadanie-ąę` is the id `zadanie-` followed by text.
+* Brulion writes them in Obsidian Tasks' order: description, `🆔`, `⛔`, priority, `🔁`, dates — a
+  new `🆔` before the first metadata token of the line (at its end, before a block id, when it has
+  none), a new `⛔ id` right after the `🆔` (or where it would go), a further id appended to an
+  existing `⛔` as `,id`. Generated ids are 6 characters `[a-z0-9]` unused in the notebook.
+* The editor, query results and Tasks show `⛔` as a chip per id with the text of the task it waits
+  for (red while it is open), a link to that task. Queries filter with `is:blocked` /
+  `is:blocking` (§10).
+
+### Subtasks
+
+A task's **progress** "3/5" counts the tasks among its descendants (child list items at any depth,
+also below a child that is no task): done ones over all but the cancelled ones — a cancelled
+subtask is neither done nor waiting. Without subtasks (or only cancelled ones) no counter is shown.
+The counter follows the parent's own page (no index needed) and is shown after its text in the
+editor, query results and Tasks.
+
+### Time tracking and status history (Logseq `:LOGBOOK:`)
+
+A task's time is kept in a Logseq `:LOGBOOK:` drawer — continuation lines of its list item, read
+and written exactly as Logseq does:
+
+```
+- DOING Napisać raport
+  :LOGBOOK:
+  CLOCK: [2026-11-03 Tue 10:00:00]--[2026-11-03 Tue 10:25:00] =>  00:25:00
+  CLOCK: [2026-11-03 Tue 11:00:00]
+  State "DOING"      from "TODO"       [2026-11-03 Tue 11:00]
+  :END:
+```
+
+* `CLOCK: [start]` alone is a **running** clock; `--[end] =>  HH:MM:SS` closes it. Times are local
+  wall-clock time (never converted through UTC; no time zone stored); the day name is written in
+  English and ignored when read (org mode's `[2026-11-03 wt. 10:00]` and a time without seconds
+  read too). The elapsed time is measured between the two local times, so a clock across a
+  daylight-saving change counts the hours that really passed; the written `=>` duration is read
+  only when the timestamps give none (the end before the start: an hour repeated when the clocks
+  go back). A line that does not read (bad date, end before start without `=>`) is ignored;
+  only the last clock without an end runs.
+* Totals: overlapping entries of one task count once; a running clock counts up to now in views
+  that show live totals (the summaries), and its chip names its start ("⏱ 25 min + od 10:00").
+  Summaries split entries at local midnight (a day of 23 or 25 hours on a daylight-saving change).
+* One clock runs at a time: starting one (the task menu, the palette, `brulion-cli task start`)
+  stops the running one first. The clock is in the file, so it survives a restart and syncs.
+* A new drawer goes after the task's first line and the planning / `key:: value` lines right after
+  it, indented like its continuation lines (Logseq: a tab outline keeps its tab). Drawer lines are
+  not part of the block's text (they are hidden when rendered).
+* **Status history** (the setting "Zapisuj zmiany statusu zadań", default off; `brulion-cli task
+  set --history`): every status change of a task adds `State "NEW" from "OLD" [YYYY-MM-DD Ddd
+  HH:mm]` (org mode's padding, Logseq keywords — `TODO`, `DOING`, `DONE`, `CANCELED`, `WAITING`,
+  `LATER`/`NOW` kept) to its `:LOGBOOK:`, and — as Logseq does — becoming doing starts its clock,
+  leaving doing stops it. Brulion writes the line without org's leading `- `, which Markdown would
+  read as a child list item; it reads both.
+
 ## 6. Reminders and alarms
 
 | Syntax | Meaning |
@@ -1077,7 +1148,7 @@ sort:due,-priority limit:20
 
 | Key (aliases) | Values |
 |---|---|
-| `type:` (`typ:`) | `tasks` (`zadania`), `blocks` (`bloki`), `pages` (`strony`, `notes`, `notatki`), `reminders` (`przypomnienia`). Default: `tasks` when a task filter, sort or group is used (status, priority, due, scheduled, start, done, created), `reminders` when `remind:` is, else `blocks`. |
+| `type:` (`typ:`) | `tasks` (`zadania`), `blocks` (`bloki`), `pages` (`strony`, `notes`, `notatki`), `reminders` (`przypomnienia`). Default: `tasks` when a task filter, sort or group is used (status, priority, due, scheduled, start, done, created, is), `reminders` when `remind:` is, else `blocks`. |
 | `status:` (`stan:`) | `todo` (`do-zrobienia`), `doing` (`in-progress`, `w-toku`), `done` (`zrobione`, `wykonane`), `cancelled` (`canceled`, `anulowane`), `deferred` (`waiting`, `odłożone`), `open` (`otwarte`) = todo + doing, `closed` (`zamknięte`) = done + cancelled, `all` (`any`, `wszystkie`) |
 | `priority:` (`priorytet:`, `prio:`) | `highest` (`najwyższy`), `high` (`wysoki`), `medium` (`średni`), `low` (`niski`), `lowest` (`najniższy`), `none` (`normal`, `brak`, `normalny`) = no priority set |
 | `tag:` (`tags:`, `tagi:`), `#tag` | tag with or without `#`; `projekt` also matches nested `projekt/dom`. A block has its own tags, its ancestors' and the page's tags. |
@@ -1088,6 +1159,7 @@ sort:due,-priority limit:20
 | `due:` (`termin:`, `deadline:`), `scheduled:` (`zaplanowane:`, `plan:`), `start:` (`początek:`), `done:` (`zrobione:`, `wykonane:`), `created:` (`utworzone:`) | date condition on the task's 📅 ⏳ 🛫 ✅ ➕ date |
 | `remind:` (`reminder:`, `przypomnienie:`) | date condition on ⏰ reminders |
 | `date:` (`data:`, `dzień:`) | date condition on the journal date of the page |
+| `is:` (`jest:`) | `blocked` (`zablokowane`) — waits for an open task (§5 "Dependencies"); `blocking` (`blokujące`) — an open task waits for it; `running` (`mierzone`) — its clock runs; `tracked` (`z-czasem`) — it has clocked time. `-is:blocked` = not blocked. A task filter (makes the query `type:tasks`). |
 | `sort:` (`sortuj:`) | comma list of `due` (`termin`), `scheduled` (`zaplanowane`), `start`, `done` (`zrobione`), `created` (`utworzone`), `remind` (`przypomnienie`), `date` (`data`), `priority` (`priorytet`), `status`, `page` (`title`, `strona`, `tytuł`), `path` (`ścieżka`); `-key` descending. Missing values sort last. Default order: tasks and blocks by path then line, reminders by time, pages by title. |
 | `group:` (`grupuj:`) | `page` (`strona`), `due` (`termin`), `scheduled` (`zaplanowane`), `date` (`data`), `tag` (one group per tag), `status`, `priority` (`priorytet`) |
 | `limit:` | 1 … 10000 |
@@ -1130,6 +1202,9 @@ ref:this                                // bloki, które linkują do tej strony 
 ```
 ```query
 type:tasks ref:this status:open group:page
+```
+```query
+status:open -is:blocked sort:due        // co można zrobić już teraz
 ```
 ````
 

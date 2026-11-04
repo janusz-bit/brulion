@@ -15,6 +15,8 @@
 //   snoozeReminder(path, line, text, value, at)   one occurrence of a recurring reminder later (a one-off
 //                                       child bullet, the series untouched: reminders/snooze.h)
 //   linkText(url, fromPath) / copyText(text)   the link menu's "Kopiuj"
+//   toggleClock(path, line, text)       the task's timer (:LOGBOOK: CLOCK lines; one at a time)
+//   dependencyCandidates / addDependency   "Dodaj zależność…" (🆔 / ⛔, docs/SYNTAX.md §5)
 //   undo()                              puts the file back as it was before the last change made
 //                                       here — only while nobody changed it since (canUndo)
 //   appendBlock(path, block)            a new block at the end of a page (a trailing empty
@@ -29,6 +31,7 @@
 #pragma once
 
 #include "editorhost.h"
+#include "markdown/logbook.h"
 #include "markdown/tokenedit.h"
 #include "notebook/links.h"
 #include "types.h"
@@ -89,6 +92,17 @@ public:
     /// task marker goes, the item and its text stay).
     Q_INVOKABLE bool setTaskStatus(const QString &path, int line, const QString &status,
                                    const QString &text = QString());
+    /// Start the task's clock (`CLOCK:` in its `:LOGBOOK:`, docs/SYNTAX.md §5), or stop it when it
+    /// runs; starting stops the clock running elsewhere (one at a time). undo() puts the task's
+    /// file back.
+    Q_INVOKABLE bool toggleClock(const QString &path, int line, const QString &text = QString());
+    /// The dependency picker's tasks for the task at `line` of `path` (notebook::dependencyCandidates()).
+    Q_INVOKABLE QVariantList dependencyCandidates(const QString &path, int line, const QString &text) const;
+    /// The task at `line` of `path` (or the one with plain text `text` nearest to it) waits for the
+    /// task at `onLine` of `onPath`: that one gets a `🆔` when it has none, this one a `⛔ id`.
+    /// undo() takes the `⛔` back (a new `🆔` stays: it harms nothing).
+    Q_INVOKABLE bool addDependency(const QString &path, int line, const QString &text, const QString &onPath,
+                                   int onLine);
     /// Undo the last change made through this object (false when the file changed since).
     Q_INVOKABLE bool undo();
     /// Append `block` at the end of `path` (created when missing). Returns whether it was written.
@@ -166,6 +180,8 @@ Q_SIGNALS:
     void undoChanged();
     /// A task's status was written (`status`: the new status name, "" for no status).
     void taskChanged(const QString &path, int line, const QString &status);
+    /// A task's clock started (`running`) or stopped.
+    void clockToggled(const QString &path, int line, bool running);
     /// Something could not be done (translated message for a toast).
     void failed(const QString &message);
 
@@ -174,6 +190,8 @@ private:
     QDateTime currentTime() const;
     VaultConfig config() const;
     bool writeChange(const QString &path, const QString &before, const QString &after);
+    /// The status history setting (the host's) and the time of a change now.
+    markdown::StatusLogOptions statusLog() const;
     /// `url` (a link written in `fromPath`) as the link menus copy and resolve it.
     notebook::CopiedLink copiedLink(const QString &url, const QString &fromPath) const;
     /// The TokenRef of a menu's token (`kind` as editToken() takes it); nullopt for unknown kinds.

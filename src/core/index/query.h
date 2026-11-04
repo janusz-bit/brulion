@@ -23,7 +23,9 @@
 // `*` wildcards), ref (items linking to a page), text, and the date fields due, scheduled,
 // start, done, created, remind and date (journal date of the page) with an optional `<`, `<=`,
 // `>`, `>=` before a dates::resolveDateExpr() expression (`today`, `+7d`, `this-week`,
-// `2026-10-15`, `today..+7d`, `overdue`, `none`, `any`). sort: due, scheduled, start, done,
+// `2026-10-15`, `today..+7d`, `overdue`, `none`, `any`), and is (blocked, blocking: task
+// dependencies `🆔` / `⛔`; running, tracked: a `:LOGBOOK:` clock running / any clocked time —
+// SYNTAX §5). sort: due, scheduled, start, done,
 // created, remind, date, priority, status, page, path (`-key` descending; missing values last).
 // group: page, due, scheduled, date, tag, status, priority. limit: 1…MaxQueryLimit.
 #pragma once
@@ -64,13 +66,14 @@ struct QueryDateCondition {
     friend bool operator==(const QueryDateCondition &, const QueryDateCondition &) = default;
 };
 
-enum class QueryFilterKind { Status, Priority, Tag, Page, Path, Ref, Text, Date };
+enum class QueryFilterKind { Status, Priority, Tag, Page, Path, Ref, Text, Date, Is };
 
 /// A filter. Values of one filter are ORed; `negate` (written `-key:`) inverts the filter.
 struct QueryFilter {
     QueryFilterKind kind = QueryFilterKind::Text;
     bool negate = false;
-    /// Tag (lower-case NFC, no '#'), Page, Path, Ref and Text values.
+    /// Tag (lower-case NFC, no '#'), Page, Path, Ref and Text values; Is: "blocked", "blocking",
+    /// "running", "tracked".
     QStringList values;
     QList<TaskStatus> statuses;                 ///< Status
     QList<Priority> priorities;                 ///< Priority (Priority::None = no priority set)

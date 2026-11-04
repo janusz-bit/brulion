@@ -15,6 +15,8 @@ ColumnLayout {
     required property TaskListModel tasks
 
     signal queryRequested()
+    /// "Czas pracy": the time summary of the listed tasks (TasksTimeDialog).
+    signal timeRequested()
 
     spacing: Theme.space2
 
@@ -68,6 +70,15 @@ ColumnLayout {
             onSearch: (query) => root.tasks.textFilter = query
         }
         Item { Layout.fillWidth: !Theme.compact; visible: !Theme.compact }
+        BButton {
+            objectName: "tasksTimeButton"
+            size: "small"
+            variant: "ghost"
+            iconName: "clock"
+            text: Theme.compact ? "" : qsTr("Time spent")
+            Accessible.name: qsTr("Time spent")
+            onClicked: root.timeRequested()
+        }
         BButton {
             size: "small"
             variant: "ghost"

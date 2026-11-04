@@ -521,6 +521,86 @@ private Q_SLOTS:
         QCOMPARE(r.errorCode(), u"query_error"_s);
     }
 
+    // Dependencies (⛔ / 🆔), the :LOGBOOK: clock (one at a time, local time) and time summaries.
+    void taskDependenciesAndClock()
+    {
+        const QString dir = vault({{u"Budowa.md"_s, "- [ ] Wylać fundament\n- [ ] Postawić ściany 📅 2026-10-20\n"}});
+        const auto at = [&](const QString &now, QStringList args) {
+            return cli(QStringList{u"--vault"_s, dir, u"--now"_s, now} + args);
+        };
+        Run r = run(dir, {u"task"_s, u"depend"_s, u"Budowa.md#L2"_s, u"--on"_s, u"Budowa.md#L1"_s});
+        QCOMPARE(r.code, 0);
+        const QString id = r.result().value(u"id"_s).toString();
+        QCOMPARE(id.size(), 6);
+        QString budowa = QString::fromUtf8(readFile(dir + u"/Budowa.md"_s));
+        QCOMPARE(budowa,
+                 u"- [ ] Wylać fundament 🆔 "_s + id + u"\n- [ ] Postawić ściany ⛔ "_s + id + u" 📅 2026-10-20\n"_s);
+        // Blocked: the flag, the JSON and the text form.
+        r = run(dir, {u"task"_s, u"list"_s, u"--blocked"_s});
+        QCOMPARE(r.code, 0);
+        QJsonArray items = r.result().value(u"items"_s).toArray();
+        QCOMPARE(items.size(), 1);
+        QVERIFY(items[0].toObject().value(u"blocked"_s).toBool());
+        QCOMPARE(items[0].toObject().value(u"blockedBy"_s).toArray().first().toObject().value(u"text"_s).toString(),
+                 u"Wylać fundament"_s);
+        r = run(dir, {u"--format"_s, u"text"_s, u"task"_s, u"list"_s});
+        QVERIFY2(r.out.contains("[todo] \xE2\x9B\x94 Postawi"), r.out.constData());
+        // Removing it again.
+        r = run(dir, {u"task"_s, u"depend"_s, u"Budowa.md#L2"_s, u"--on"_s, u"Budowa.md#L1"_s, u"--remove"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(!readFile(dir + u"/Budowa.md"_s).contains("\xE2\x9B\x94"));
+
+        // The clock: start one, start another (the first stops), stop.
+        r = at(u"2026-10-14 10:00"_s, {u"task"_s, u"start"_s, u"Budowa.md#L1"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(readFile(dir + u"/Budowa.md"_s).contains("  :LOGBOOK:\n  CLOCK: [2026-10-14 Wed 10:00:00]\n  :END:\n"));
+        r = at(u"2026-10-14 10:05"_s, {u"task"_s, u"start"_s, u"Budowa.md#L1"_s});
+        QVERIFY(r.warnings().contains(u"already_running"_s));
+        r = run(dir, {u"task"_s, u"list"_s, u"--query"_s, u"is:running"_s});
+        QCOMPARE(r.result().value(u"total"_s).toInt(), 1);
+        r = at(u"2026-10-14 10:25"_s, {u"task"_s, u"start"_s, u"Budowa.md#L5"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"stopped"_s).toArray().size(), 1);
+        QCOMPARE(r.result().value(u"stopped"_s).toArray().first().toObject().value(u"seconds"_s).toInt(), 25 * 60);
+        budowa = QString::fromUtf8(readFile(dir + u"/Budowa.md"_s));
+        QVERIFY2(budowa.contains(u"CLOCK: [2026-10-14 Wed 10:00:00]--[2026-10-14 Wed 10:25:00] =>  00:25:00"_s),
+                 qPrintable(budowa));
+        QVERIFY2(budowa.contains(
+                         u"- [ ] Postawić ściany 📅 2026-10-20\n  :LOGBOOK:\n  CLOCK: [2026-10-14 Wed 10:25:00]\n"_s),
+                 qPrintable(budowa));
+        r = at(u"2026-10-14 11:00"_s, {u"task"_s, u"stop"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"stopped"_s).toArray().first().toObject().value(u"seconds"_s).toInt(), 35 * 60);
+        r = at(u"2026-10-14 11:05"_s, {u"task"_s, u"stop"_s, u"Budowa.md#L1"_s});
+        QVERIFY(r.warnings().contains(u"not_running"_s));
+        r = run(dir, {u"task"_s, u"start"_s, u"Budowa.md"_s});
+        QCOMPARE(r.errorCode(), u"item_ref_required"_s);
+
+        // Summaries.
+        r = run(dir, {u"task"_s, u"time"_s, u"--by"_s, u"task"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"total"_s).toInt(), 60 * 60);
+        const QJsonArray rows = r.result().value(u"rows"_s).toArray();
+        QCOMPARE(rows.size(), 2);
+        QCOMPARE(rows[0].toObject().value(u"label"_s).toString(), u"Postawić ściany"_s);
+        QCOMPARE(rows[0].toObject().value(u"duration"_s).toString(), u"00:35:00"_s);
+        r = run(dir, {u"task"_s, u"time"_s, u"--from"_s, u"jutro"_s});
+        QCOMPARE(r.result().value(u"total"_s).toInt(), 0);
+        r = run(dir, {u"task"_s, u"time"_s, u"--by"_s, u"miesiąc"_s});
+        QCOMPARE(r.errorCode(), u"bad_argument"_s);
+
+        // The status history: doing starts the clock, done stops it.
+        r = at(u"2026-10-14 12:00"_s, {u"task"_s, u"set"_s, u"Budowa.md#L1"_s, u"doing"_s, u"--history"_s});
+        QCOMPARE(r.code, 0);
+        r = at(u"2026-10-14 12:30"_s, {u"task"_s, u"set"_s, u"Budowa.md#L1"_s, u"done"_s, u"--history"_s});
+        QCOMPARE(r.code, 0);
+        budowa = QString::fromUtf8(readFile(dir + u"/Budowa.md"_s));
+        QVERIFY2(budowa.contains(u"  CLOCK: [2026-10-14 Wed 12:00:00]--[2026-10-14 Wed 12:30:00] =>  00:30:00\n"
+                                 "  State \"DOING\"      from \"TODO\"       [2026-10-14 Wed 12:00]\n"
+                                 "  State \"DONE\"       from \"DOING\"      [2026-10-14 Wed 12:30]\n  :END:\n"_s),
+                 qPrintable(budowa));
+    }
+
     void reminders()
     {
         const QString dir = vault();

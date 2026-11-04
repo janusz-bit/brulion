@@ -41,6 +41,13 @@ const QStringList Lines = {
         u"- [[D]] [[E]] [[Brak]]"_s,
         u"- samo [[#Nagłówek]] i [[#^id1]]"_s,
         u"Akapit o żółwiu i A oraz D."_s,
+        // Task dependencies across notes (SYNTAX §5): an id, tasks waiting for it, a cycle.
+        u"- [ ] najpierw 🆔 t1"_s,
+        u"- [x] gotowe 🆔 t2"_s,
+        u"- [ ] potem ⛔ t1,t2"_s,
+        u"- [/] czeka 🆔 t3 ⛔ t4"_s,
+        u"- [ ] w kółko 🆔 t4 ⛔ t3"_s,
+        u"- [ ] brak ⛔ nieznane"_s,
 };
 
 const QStringList Headers = {
@@ -93,6 +100,12 @@ QString fingerprint(const VaultIndex &index, const VaultPath &path)
     if (!note)
         return {};
     QStringList parts = describeTasks(index.tasksOf(path)) + describeReminders(index.remindersOf(path));
+    // Blocked and blocking depend on the statuses of other notes' tasks.
+    for (const TaskRef &t : index.tasksOf(path)) {
+        parts << u"deps %1 %2 %3"_s.arg(t.blockIndex)
+                         .arg(index.isTaskBlocked(path, t.blockIndex))
+                         .arg(index.isTaskBlocking(path, t.blockIndex));
+    }
     parts << (note->journalDate ? note->journalDate->toString(Qt::ISODate) : u"-"_s) << note->title;
     for (const ResolvedLink &l : index.outgoingLinks(path)) {
         parts << u"%1->%2"_s.arg(l.link.from).arg(l.target);
@@ -512,6 +525,9 @@ private Q_SLOTS:
                 u"due:none"_s,
                 u"remind:overdue"_s,
                 u"type:tasks sort:page,-status limit:5"_s,
+                u"is:blocked"_s,
+                u"-is:blocked status:open sort:due"_s,
+                u"is:blocking,blocked group:status"_s,
         };
         QList<Query> queries;
         for (const QString &source : sources) {

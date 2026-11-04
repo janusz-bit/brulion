@@ -20,7 +20,10 @@ import Brulion
 // link (TasksView filters by it); Ctrl+click (mouse) on it asks for the tag's page instead
 // (tagPageRequested, docs/SYNTAX.md §3). The text's #tags and chips are rounded shapes and it ends
 // with "…" after 4 lines (BRichText); the mouse pointer resting on a [[page]] or ((block)) link
-// shows its preview (LinkPreviews, docs/UI.md "Link previews").
+// shows its preview (LinkPreviews, docs/UI.md "Link previews"). Task dependencies and time
+// (docs/SYNTAX.md §5): "Czeka na: …" when it is blocked (a click opens the task it waits for: a
+// taskdep: link), a missing id or a cycle, how many tasks wait for it, its subtasks "3/5" and its
+// clocked time; the menu starts or stops its timer and adds a dependency.
 T.ItemDelegate {
     id: control
 
@@ -33,6 +36,9 @@ T.ItemDelegate {
     /// Ctrl+click on the #tag `tag`: open the page it names.
     signal tagPageRequested(string tag)
     signal statusRequested(string status)
+    /// The menu's "Uruchom / Zatrzymaj licznik czasu" and "Dodaj zależność…" (docs/SYNTAX.md §5).
+    signal clockRequested()
+    signal dependencyRequested()
     /// A right-click or long press on a chip: the menu of its token `kind` ("due" | "scheduled" |
     /// "start" | "reminder" | "recurrence" | "priority") at (x, y) of `item`.
     signal tokenMenuRequested(string kind, Item item, real x, real y)
@@ -333,6 +339,50 @@ T.ItemDelegate {
                     text: control.task.recurrenceLabel
                 }
                 BChip {
+                    objectName: "taskBlockedChip"
+                    visible: control.task.blocked === true && !control.closed
+                    size: "small"
+                    variant: "overdue"
+                    iconName: "lock"
+                    interactive: true
+                    outlined: false
+                    text: qsTr("Waits for: %1").arg(control.task.blockedBy || "")
+                    width: Math.min(implicitWidth, control.availableWidth - 40)
+                    onClicked: control.linkActivated("taskdep:" + control.task.blockedById)
+                }
+                BChip {
+                    objectName: "taskDependencyProblemChip"
+                    visible: (control.task.dependencyProblem || "") !== ""
+                    size: "small"
+                    variant: "neutral"
+                    iconName: "triangle-alert"
+                    text: control.task.dependencyProblem === "cycle" ? qsTr("Dependency cycle") : qsTr("Missing dependency")
+                }
+                BChip {
+                    objectName: "taskBlockingChip"
+                    visible: (control.task.blockingCount || 0) > 0 && !control.closed
+                    size: "small"
+                    variant: "neutral"
+                    iconName: "link"
+                    text: qsTr("Blocks %n task(s)", "", control.task.blockingCount || 0)
+                }
+                BChip {
+                    objectName: "taskProgressChip"
+                    visible: (control.task.progress || "") !== ""
+                    size: "small"
+                    variant: control.task.progressComplete ? "done" : "neutral"
+                    iconName: "list-checks"
+                    text: control.task.progress || ""
+                }
+                BChip {
+                    objectName: "taskTimeChip"
+                    visible: (control.task.timeLabel || "") !== ""
+                    size: "small"
+                    variant: control.task.clockRunning ? "reminder" : "neutral"
+                    iconName: "clock"
+                    text: control.task.timeLabel || ""
+                }
+                BChip {
                     objectName: "taskChip_priority" // (its token menu: openMenuAt())
                     visible: control.priorityLabel !== ""
                     size: "small"
@@ -373,6 +423,7 @@ T.ItemDelegate {
         if (!statusMenu)
             statusMenu = menuComponent.createObject(control) as TaskStatusMenu
         statusMenu.status = control.task.status || "todo"
+        statusMenu.clockRunning = control.task.clockRunning === true
         if (a === undefined)
             statusMenu.popup()
         else if (c === undefined)
@@ -385,7 +436,10 @@ T.ItemDelegate {
         id: menuComponent
         TaskStatusMenu {
             showOpen: true
+            showTaskTools: true
             onOpenRequested: control.opened()
+            onClockRequested: control.clockRequested()
+            onDependencyRequested: control.dependencyRequested()
             onStatusChosen: (status) => {
                 if (status !== (control.task.status || "todo"))
                     control.statusRequested(status)

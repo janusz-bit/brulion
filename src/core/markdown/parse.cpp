@@ -5,6 +5,7 @@
 #include "markdown/frontmatter.h"
 #include "markdown/inline_p.h"
 #include "markdown/journal.h"
+#include "markdown/logbook.h"
 #include "markdown/properties.h"
 #include "markdown/structure_p.h"
 #include "markdown/tasks.h"
@@ -294,6 +295,8 @@ struct TaskMeta {
     Priority priority = Priority::None;
     Priority logseqPriority = Priority::None;
     QString repeater;
+    QString id;
+    QStringList dependsOn;
 };
 
 void taskMetaFromTokens(const QList<Token> &tokens, TaskMeta &meta)
@@ -336,6 +339,17 @@ void taskMetaFromTokens(const QList<Token> &tokens, TaskMeta &meta)
             if (meta.logseqPriority == Priority::None)
                 meta.logseqPriority = t.priority;
             break;
+        case TokenKind::TaskId:
+            if (meta.id.isEmpty())
+                meta.id = t.value;
+            break;
+        case TokenKind::DependsOn:
+            for (QStringView part : QStringView(t.value).split(u',')) {
+                const QString id = part.trimmed().toString();
+                if (!id.isEmpty() && !meta.dependsOn.contains(id))
+                    meta.dependsOn.append(id);
+            }
+            break;
         default: break;
         }
     }
@@ -374,7 +388,28 @@ Task buildTask(const TaskMarker &marker, const TaskMeta &meta, const QString &te
             task.recurrence = dates::formatRecurrence(*rule, dates::UiLocale::English);
     }
     task.priority = meta.priority != Priority::None ? meta.priority : meta.logseqPriority;
+    task.id = meta.id;
+    task.dependsOn = meta.dependsOn;
     return task;
+}
+
+/// The clock of a task from its block's drawer lines (Logseq's `:LOGBOOK:`, markdown/logbook.h).
+void taskClockFromDrawers(const Structure &st, const QList<LineInfo> &infos, Task &task)
+{
+    QString drawers;
+    for (const LineInfo &info : infos) {
+        if (info.cls != LineClass::Drawer)
+            continue;
+        if (!drawers.isEmpty())
+            drawers += u'\n';
+        drawers += st.text(info.own->view);
+    }
+    if (drawers.isEmpty())
+        return;
+    const Logbook book = readLogbook(drawers);
+    task.clockedSeconds = clockedSeconds(book.clocks);
+    if (const ClockEntry *running = book.running())
+        task.clockStart = running->start;
 }
 
 /// Ranges (line coordinates, from `begin`) hidden by document-level `%%comments%%` — where the
@@ -754,6 +789,7 @@ Block buildBlock(const Node &node, Ctx &ctx)
         for (const LineInfo &info : std::as_const(infos))
             taskMetaFromPlanning(info.tokens, meta);
         block.task = buildTask(*marker, meta, text.first, node.line);
+        taskClockFromDrawers(st, infos, *block.task);
     }
     blockReminders(infos, block, ctx);
     return block;

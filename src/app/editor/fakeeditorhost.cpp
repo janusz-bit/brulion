@@ -1,5 +1,7 @@
 #include "fakeeditorhost.h"
 
+#include "markdown/logbook.h"
+
 #include "blocktext.h"
 
 #include "dates/local.h"
@@ -202,11 +204,12 @@ bool FakeEditorHost::setTaskStatus(const QString &path, int line, const QString 
     const auto it = m_files.find(path);
     if ((!wanted && !status.isEmpty()) || line < 0 || it == m_files.end())
         return false;
-    QDate today = QDate::currentDate();
+    QDateTime now = QDateTime::currentDateTime();
     if (const auto spec = dates::parseDateSpec(m_now))
-        today = spec->date;
+        now = spec->toLocalDateTime();
+    markdown::StatusLogOptions log{m_taskStatusHistory, now};
     const QString edited =
-            wanted ? markdown::setTaskStatus(*it, line, *wanted, today) : markdown::removeTaskMarker(*it, line);
+            wanted ? markdown::setTaskStatusLogged(*it, line, *wanted, log) : markdown::removeTaskMarker(*it, line);
     if (edited == *it)
         return false;
     *it = edited;

@@ -1,12 +1,15 @@
-// Tasks and reminders: task list/add/set (+ done, doing, todo, cancel, defer), remind
-// add/list/snooze.
+// Tasks and reminders: task list/add/set (+ done, doing, todo, cancel, defer), task start/stop
+// (the :LOGBOOK: clock), task time (summaries), task depend (🆔 / ⛔), remind add/list/snooze.
 #include "commands_p.h"
 
 #include "dates/dates.h"
 #include "index/query.h"
+#include "index/tasktime.h"
 #include "index/vaultindex.h"
 #include "markdown/edit.h"
+#include "markdown/logbook.h"
 #include "markdown/parse.h"
+#include "markdown/taskdeps.h"
 #include "markdown/tokens.h"
 #include "notebook/journals.h"
 #include "notebook/json.h"
@@ -131,6 +134,8 @@ Result taskList(Call &call)
             f.values = {tag.normalized(QString::NormalizationForm_C).toLower()};
             extra.append(f);
         }
+        if (call.flag(u"blocked"_s))
+            source += u" is:blocked"_s;
         if (call.has(u"limit"_s))
             source += u" limit:"_s + QString::number(std::clamp(call.integer(u"limit"_s, 500), 1, MaxQueryLimit));
     }
@@ -157,7 +162,12 @@ Result taskList(Call &call)
     QString text;
     for (const QJsonValue &v : result.value(u"items"_s).toArray()) {
         const QJsonObject o = v.toObject();
-        text += u'[' + o.value(u"task"_s).toObject().value(u"status"_s).toString() + u"] "_s
+        QString marks;
+        if (o.value(u"blocked"_s).toBool())
+            marks += u"⛔ "_s;
+        if (const QJsonObject sub = o.value(u"subtasks"_s).toObject(); !sub.isEmpty())
+            marks += u"%1/%2 "_s.arg(sub.value(u"done"_s).toInt()).arg(sub.value(u"total"_s).toInt());
+        text += u'[' + o.value(u"task"_s).toObject().value(u"status"_s).toString() + u"] "_s + marks
                 + o.value(u"text"_s).toString().simplified() + u"  "_s + o.value(u"ref"_s).toString() + u'\n';
     }
     return call.ok(result, text);
@@ -283,7 +293,6 @@ Result taskSet(Call &call)
         return call.failed();
     const VaultPath path = target->first;
     const notebook::ItemRef item = target->second;
-    const QDate today = call.ctx.today();
     int line = -1;
     int inserted = 0;
     bool wasTask = false;
@@ -295,7 +304,10 @@ Result taskSet(Call &call)
         const ParsedNote note = markdown::parseNote(path, content, call.vault()->config());
         const int block = markdown::blockAtLine(note, line);
         wasTask = block >= 0 && note.blocks.at(block).task.has_value();
-        *next = wanted.status ? markdown::setTaskStatus(content, line, *wanted.status, today)
+        markdown::StatusLogOptions log;
+        log.history = call.flag(u"history"_s);
+        log.now = call.ctx.now();
+        *next = wanted.status ? markdown::setTaskStatusLogged(content, line, *wanted.status, log)
                               : markdown::removeTaskMarker(content, line);
         inserted = int(text::splitLines(*next).size() - text::splitLines(content).size());
         return true;
@@ -315,6 +327,274 @@ Result taskSet(Call &call)
                                         {u"ref"_s, Call::lineRef(path, written->after, line)},
                                         {u"text"_s, lineText(written->after, line)}});
     return call.ok(o, lineText(written->after, completed));
+}
+
+/// The first line of the task block `ref` points at now, or an error.
+std::optional<int> taskLineOf(Call &call, const QString &content, const notebook::ItemRef &item)
+{
+    const auto at = refLine(call, content, item);
+    if (!at)
+        return std::nullopt;
+    const int line = markdown::taskBlockLine(content, *at);
+    if (line < 0) {
+        call.setError(ExitUsage, u"not_a_task"_s, tr("The line is no task: %1").arg(lineText(content, *at)),
+                      {{u"ref"_s, notebook::formatRef(item)}});
+        return std::nullopt;
+    }
+    return line;
+}
+
+/// Stop the running clocks (all, or all but the one at `keepPath`:`keepLine`): what was stopped
+/// [{ref, text, seconds}]; nullopt after an error.
+std::optional<QJsonArray> stopClocks(Call &call, const VaultPath &keepPath = {}, int keepLine = -1)
+{
+    VaultIndex *index = call.index();
+    if (!index)
+        return std::nullopt;
+    QJsonArray stopped;
+    const QDateTime now = call.ctx.now();
+    for (const TaskRef &t : index->runningClocks()) {
+        const ParsedNote *note = index->note(t.path);
+        if (!note || t.blockIndex >= note->blocks.size())
+            continue;
+        const int line = note->blocks[t.blockIndex].line;
+        if (t.path == keepPath && line == keepLine)
+            continue;
+        const QDateTime start = t.task.clockStart;
+        const auto written = call.edit(t.path, [&](const QString &content, bool, QString *next) {
+            *next = markdown::stopTaskClock(content, line, now);
+            return true;
+        });
+        if (!written)
+            return std::nullopt;
+        stopped.append(QJsonObject{{u"ref"_s, Call::lineRef(t.path, written->after, line)},
+                                   {u"text"_s, t.task.text},
+                                   {u"seconds"_s, std::max<qint64>(0, start.secsTo(now))}});
+    }
+    return stopped;
+}
+
+Result taskStart(Call &call)
+{
+    const auto target = itemOf(call, call.str(u"ref"_s));
+    if (!target)
+        return call.failed();
+    const VaultPath path = target->first;
+    VaultIndex *index = call.index();
+    if (!index)
+        return call.failed();
+    // The task's line as the index has it, to keep its clock when it already runs.
+    int line = -1;
+    const QString current = index->content(path);
+    if (!current.isNull()) {
+        const notebook::ResolvedLine r = notebook::resolve(current, target->second, call.vault()->config());
+        if (r.line >= 0)
+            line = markdown::taskBlockLine(current, r.line);
+    }
+    // One clock at a time: the others stop first.
+    const auto stopped = stopClocks(call, path, line);
+    if (!stopped)
+        return call.failed();
+    const QDateTime now = call.ctx.now();
+    bool running = false;
+    const auto written = call.edit(path, [&](const QString &content, bool, QString *next) {
+        const auto at = taskLineOf(call, content, target->second);
+        if (!at)
+            return false;
+        line = *at;
+        running = markdown::taskLogbook(content, line).running() != nullptr;
+        *next = markdown::startTaskClock(content, line, now);
+        return true;
+    });
+    if (!written)
+        return call.failed();
+    if (running)
+        call.warn(u"already_running"_s, tr("The clock of this task already runs"));
+    QJsonObject o = call.writeJson(*written);
+    o.insert(u"line"_s, line);
+    o.insert(u"ref"_s, Call::lineRef(path, written->after, line));
+    o.insert(u"started"_s, now.toString(u"yyyy-MM-ddTHH:mm:ss"_s));
+    o.insert(u"stopped"_s, *stopped);
+    return call.ok(o, tr("Clock started: %1").arg(lineText(written->after, line).trimmed()));
+}
+
+Result taskStop(Call &call)
+{
+    if (!call.has(u"ref"_s)) {
+        const auto stopped = stopClocks(call);
+        if (!stopped)
+            return call.failed();
+        QString text;
+        for (const QJsonValue &v : *stopped) {
+            const QJsonObject o = v.toObject();
+            text += markdown::formatClockDuration(o.value(u"seconds"_s).toInteger()) + u"  "_s
+                    + o.value(u"text"_s).toString() + u"  "_s + o.value(u"ref"_s).toString() + u'\n';
+        }
+        if (stopped->isEmpty())
+            text = tr("No clock runs");
+        return call.ok(QJsonObject{{u"stopped"_s, *stopped}}, text);
+    }
+    const auto target = itemOf(call, call.str(u"ref"_s));
+    if (!target)
+        return call.failed();
+    const VaultPath path = target->first;
+    const QDateTime now = call.ctx.now();
+    int line = -1;
+    qint64 seconds = -1;
+    const auto written = call.edit(path, [&](const QString &content, bool, QString *next) {
+        const auto at = taskLineOf(call, content, target->second);
+        if (!at)
+            return false;
+        line = *at;
+        if (const markdown::ClockEntry *running = markdown::taskLogbook(content, line).running())
+            seconds = std::max<qint64>(0, running->start.secsTo(now));
+        *next = markdown::stopTaskClock(content, line, now);
+        return true;
+    });
+    if (!written)
+        return call.failed();
+    if (seconds < 0)
+        call.warn(u"not_running"_s, tr("No clock runs on this task"));
+    QJsonObject o = call.writeJson(*written);
+    o.insert(u"line"_s, line);
+    o.insert(u"ref"_s, Call::lineRef(path, written->after, line));
+    o.insert(u"seconds"_s, std::max<qint64>(0, seconds));
+    return call.ok(o, markdown::formatClockDuration(std::max<qint64>(0, seconds)) + u"  "_s
+                              + lineText(written->after, line).trimmed());
+}
+
+Result taskTime(Call &call)
+{
+    VaultIndex *index = call.index();
+    if (!index)
+        return call.failed();
+    const QString by = call.has(u"by"_s) ? text::foldKey(call.str(u"by"_s).trimmed()) : u"day"_s;
+    TimeGroup group = TimeGroup::Day;
+    if (by == u"day" || by == u"dzien")
+        group = TimeGroup::Day;
+    else if (by == u"page" || by == u"strona")
+        group = TimeGroup::Page;
+    else if (by == u"tag")
+        group = TimeGroup::Tag;
+    else if (by == u"task" || by == u"zadanie")
+        group = TimeGroup::Task;
+    else
+        return call.fail(ExitUsage, u"bad_argument"_s, tr("--by is day, page, tag or task"), {{u"by"_s, by}});
+    QDate from;
+    QDate to;
+    if (call.has(u"from"_s)) {
+        const auto d = call.date(call.str(u"from"_s));
+        if (!d)
+            return call.failed();
+        from = *d;
+    }
+    if (call.has(u"to"_s)) {
+        const auto d = call.date(call.str(u"to"_s));
+        if (!d)
+            return call.failed();
+        to = *d;
+    }
+    QList<TaskRef> tasks;
+    if (call.has(u"query"_s)) {
+        QString source = call.str(u"query"_s);
+        static const QRegularExpression typed(u"(^|\\s)-?(type|typ):"_s, QRegularExpression::CaseInsensitiveOption);
+        if (!typed.match(source).hasMatch())
+            source.prepend(u"type:tasks "_s);
+        source += u" is:tracked limit:"_s + QString::number(MaxQueryLimit);
+        const std::variant<Query, QString> parsed = parseQuery(source);
+        if (const QString *message = std::get_if<QString>(&parsed))
+            return call.fail(ExitParse, u"query_error"_s, *message, {{u"query"_s, source}});
+        const QueryResult r =
+                runQuery(std::get<Query>(parsed), *index, call.ctx.today(), call.vault()->config().weekStartsOn);
+        for (const QueryItem &i : r.items) {
+            if (i.task)
+                tasks.append(TaskRef{i.path, i.blockIndex, *i.task});
+        }
+    } else {
+        tasks = index->tasks();
+    }
+    const TimeSummary summary = summarizeTime(*index, tasks, group, from, to, call.ctx.now());
+    QJsonArray rows;
+    QString text;
+    for (const TimeSummaryRow &r : summary.rows) {
+        QJsonObject o{{u"key"_s, r.key},
+                      {u"label"_s, r.label},
+                      {u"seconds"_s, r.seconds},
+                      {u"duration"_s, markdown::formatClockDuration(r.seconds)},
+                      {u"tasks"_s, r.tasks}};
+        if (!r.path.isEmpty())
+            o.insert(u"path"_s, r.path);
+        if (r.line >= 0)
+            o.insert(u"ref"_s, Call::lineRef(r.path, index->content(r.path), r.line));
+        rows.append(o);
+        text += markdown::formatClockDuration(r.seconds) + u"  "_s
+                + (r.label.isEmpty() && group == TimeGroup::Tag ? tr("(no tag)") : r.label) + u'\n';
+    }
+    text += tr("Total: %1 (tasks: %2)").arg(markdown::formatClockDuration(summary.total)).arg(summary.tasks);
+    QJsonObject o{{u"by"_s, by},
+                  {u"rows"_s, rows},
+                  {u"total"_s, summary.total},
+                  {u"duration"_s, markdown::formatClockDuration(summary.total)},
+                  {u"tasks"_s, summary.tasks}};
+    if (from.isValid())
+        o.insert(u"from"_s, from.toString(Qt::ISODate));
+    if (to.isValid())
+        o.insert(u"to"_s, to.toString(Qt::ISODate));
+    return call.ok(o, text);
+}
+
+Result taskDepend(Call &call)
+{
+    const auto target = itemOf(call, call.str(u"ref"_s));
+    if (!target)
+        return call.failed();
+    const auto on = itemOf(call, call.str(u"on"_s));
+    if (!on)
+        return call.failed();
+    VaultIndex *index = call.index();
+    if (!index)
+        return call.failed();
+    const bool remove = call.flag(u"remove"_s);
+    // The id of the task depended on: its 🆔, else a new one written to it.
+    QString id;
+    const auto idWritten = call.edit(on->first, [&](const QString &content, bool, QString *next) {
+        const auto line = taskLineOf(call, content, on->second);
+        if (!line)
+            return false;
+        const ParsedNote note = markdown::parseNote(on->first, content, call.vault()->config());
+        const int b = markdown::blockAtLine(note, *line);
+        id = b >= 0 && note.blocks[b].task ? note.blocks[b].task->id : QString();
+        if (!id.isEmpty() || remove) {
+            *next = content;
+            return true;
+        }
+        id = markdown::generateTaskId([&](const QString &c) { return index->hasTaskId(c) || content.contains(c); });
+        *next = markdown::setTaskId(content, *line, id);
+        return true;
+    });
+    if (!idWritten)
+        return call.failed();
+    if (id.isEmpty())
+        return call.fail(ExitUsage, u"no_task_id"_s, tr("That task has no id (🆔): it has no dependents"));
+    int line = -1;
+    const auto written = call.edit(target->first, [&](const QString &content, bool, QString *next) {
+        const auto at = taskLineOf(call, content, target->second);
+        if (!at)
+            return false;
+        line = *at;
+        *next = remove ? markdown::removeTaskDependency(content, line, id)
+                       : markdown::addTaskDependency(content, line, id);
+        return true;
+    });
+    if (!written)
+        return call.failed();
+    QJsonObject o = call.writeJson(*written);
+    o.insert(u"id"_s, id);
+    o.insert(u"line"_s, line);
+    o.insert(u"ref"_s, Call::lineRef(target->first, written->after, line));
+    if (idWritten->status != notebook::Notebook::WriteResult::Unchanged)
+        o.insert(u"idWritten"_s, call.writeJson(*idWritten));
+    return call.ok(o, lineText(written->after, line).trimmed());
 }
 
 Result taskStatusAlias(Call &call, const QString &status)
@@ -464,6 +744,8 @@ void addTaskCommands(QList<Command> &out)
               option(u"page"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "In this page")),
               option(u"limit"_s, ArgType::Int,
                      QT_TRANSLATE_NOOP("brulion::cli", "At most this many (the total is still counted)")),
+              flag(u"blocked"_s,
+                   QT_TRANSLATE_NOOP("brulion::cli", "Only blocked tasks: waiting for an open task (⛔ / 🆔)")),
               option(u"query"_s, ArgType::String,
                      QT_TRANSLATE_NOOP(
                              "brulion::cli",
@@ -499,10 +781,51 @@ void addTaskCommands(QList<Command> &out)
     c.id = u"task.set"_s;
     c.summary = cliText(QT_TRANSLATE_NOOP(
             "brulion::cli", "Set a task's status (completing a recurring task adds its next occurrence)"));
-    c.args = {ref, positional(u"status"_s, ArgType::String,
-                              QT_TRANSLATE_NOOP("brulion::cli", "todo, doing, done, cancelled, deferred, none — or "
-                                                                "zrobione, w toku, anulowane, odłożone, brak"))};
+    c.args = {ref,
+              positional(u"status"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli", "todo, doing, done, cancelled, deferred, none — or "
+                                                           "zrobione, w toku, anulowane, odłożone, brak")),
+              flag(u"history"_s,
+                   QT_TRANSLATE_NOOP("brulion::cli", "Log the change in the task's :LOGBOOK: (doing starts its clock, "
+                                                     "leaving doing stops it), as the app's status history setting"))};
     c.run = taskSet;
+    c.writes = true;
+    out.append(c);
+    c = Command();
+    c.id = u"task.start"_s;
+    c.summary = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli", "Start a task's clock (a CLOCK line in its :LOGBOOK:); a running one elsewhere stops"));
+    c.args = {ref};
+    c.run = taskStart;
+    c.writes = true;
+    out.append(c);
+    c = Command();
+    c.id = u"task.stop"_s;
+    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Stop a task's clock (without a ref: every running one)"));
+    c.args = {positional(
+            u"ref"_s, ArgType::Ref,
+            QT_TRANSLATE_NOOP("brulion::cli", "The task's line (Dom.md#L12@hash); default: the running clocks"),
+            false)};
+    c.run = taskStop;
+    c.writes = true;
+    out.append(c);
+    c = Command();
+    c.id = u"task.time"_s;
+    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Time clocked on tasks per day, page, tag or task"));
+    c.args = {option(u"by"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "day (default), page, tag, task")),
+              option(u"from"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "From this day")),
+              option(u"to"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "To this day")),
+              option(u"query"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP("brulion::cli", "Only the tasks of this query (\"tag:praca\")"))};
+    c.run = taskTime;
+    out.append(c);
+    c = Command();
+    c.id = u"task.depend"_s;
+    c.summary = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli", "Make a task wait for another (⛔ id; the other gets a 🆔 when it has none)"));
+    c.args = {ref, option(u"on"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "The task it waits for"), true),
+              flag(u"remove"_s, QT_TRANSLATE_NOOP("brulion::cli", "Remove the dependency instead"))};
+    c.run = taskDepend;
     c.writes = true;
     out.append(c);
     const struct {

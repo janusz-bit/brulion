@@ -1,4 +1,8 @@
 #include "blocklistmodel.h"
+#include "taskhelpers.h"
+
+#include "markdown/logbook.h"
+#include "markdown/taskdeps.h"
 
 #include "blockrender_p.h"
 #include "editorhost.h"
@@ -837,7 +841,11 @@ void BlockListModel::refresh(bool contentChanged)
         }
         if (st.htmlValid && st.dependsOnCalc)
             calcConsumers = true;
-        if (st.htmlValid && (st.dependsOnRefs || (st.dependsOnCalc && st.htmlCalcEpoch != m_calcEpoch))) {
+        // A parent task's "3/5" follows its subtasks (their rows changed, not its own).
+        const bool progressChanged = st.htmlValid && e.taskStatus && (hasChildren || st.htmlProgress.total > 0)
+                                     && subtaskProgressAt(i) != st.htmlProgress;
+        if (st.htmlValid
+            && (progressChanged || st.dependsOnRefs || (st.dependsOnCalc && st.htmlCalcEpoch != m_calcEpoch))) {
             const QString before = st.html;
             st.htmlValid = false;
             if (renderHtml(i) != before)
@@ -1045,6 +1053,7 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
         };
     }
     ctx.resolveLinkPart = linkPartResolver(host, path);
+    ctx.taskDependency = taskDependencyResolver(host ? host->taskIndex() : nullptr); // ⛔ id chips
     ctx.blockText = [this, host](const QString &id) -> std::optional<QString> {
         for (int k = 0; k < m_doc.count(); ++k) {
             if (m_doc.at(k).blockId == id)
@@ -1100,6 +1109,7 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
     ctx.dateLinks = true;         // token menus (PageController::tokenChipIn; ranges in the block's body)
     const QPointer<EditorHost> host = m_host;
     ctx.resolveLinkPart = linkPartResolver(host, path);
+    ctx.taskDependency = taskDependencyResolver(host ? host->taskIndex() : nullptr);
     if (host) {
         ctx.resolvePage = [host, path](const QString &target) -> std::optional<QString> {
             if (!host)
@@ -1145,7 +1155,20 @@ QString BlockListModel::renderHtml(int i) const
     const BlockShape s = shapeOf(e);
     const markdown::InlineRenderer renderer(renderContext(i));
     int offset = 0;
-    const QString html = detail::renderBodyHtml(e, s, renderer, &offset);
+    QString html = detail::renderBodyHtml(e, s, renderer, &offset);
+    if (e.taskStatus) {
+        // After the text: the subtask progress "3/5" and the clocked time (docs/UI.md).
+        const markdown::SubtaskProgress progress = subtaskProgressAt(i);
+        st.htmlProgress = progress;
+        const markdown::Logbook book = markdown::readLogbook(e.body);
+        const markdown::ClockEntry *running = book.running();
+        const QString chips =
+                markdown::taskChipsHtml(progress.done, progress.total, markdown::clockedSeconds(book.clocks),
+                                        running ? running->start : QDateTime(), m_palette,
+                                        m_english ? dates::UiLocale::English : dates::UiLocale::Polish);
+        if (!chips.isEmpty())
+            html += u' ' + chips;
+    }
     st.html = html;
     st.htmlValid = true;
     st.renderOffset = offset;
@@ -1156,6 +1179,27 @@ QString BlockListModel::renderHtml(int i) const
     if (st.dependsOnCalc)
         m_hasCalcConsumers = true;
     return html;
+}
+
+markdown::SubtaskProgress BlockListModel::subtaskProgressAt(int i) const
+{
+    markdown::SubtaskProgress out;
+    const int depth = m_doc.at(i).depth;
+    if (m_doc.at(i).kind != BlockKind::ListItem)
+        return out;
+    // The list items after it that are deeper: its descendants (document order).
+    for (int k = i + 1; k < m_doc.count(); ++k) {
+        const markdown::BlockEntry &c = m_doc.at(k);
+        if (c.kind != BlockKind::ListItem || c.depth <= depth)
+            break;
+        if (!c.taskStatus)
+            continue;
+        if (*c.taskStatus == TaskStatus::Done)
+            ++out.done;
+        if (*c.taskStatus != TaskStatus::Cancelled)
+            ++out.total;
+    }
+    return out;
 }
 
 // --- Calculations ------------------------------------------------------------------------------
@@ -1591,7 +1635,8 @@ QVariantMap BlockListModel::get(int row) const
             {u"headingLevel"_s, data(idx, HeadingLevelRole)},
             {u"plainText"_s, data(idx, PlainTextRole)},
             {u"editText"_s, data(idx, EditTextRole)},
-            {u"listMarker"_s, data(idx, ListMarkerRole)}};
+            {u"listMarker"_s, data(idx, ListMarkerRole)},
+            {u"html"_s, data(idx, HtmlRole)}};
 }
 
 // --- View state ------------------------------------------------------------------------------

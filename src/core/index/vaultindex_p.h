@@ -12,6 +12,7 @@
 #include <QTimer>
 
 #include <deque>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -191,6 +192,8 @@ struct VaultIndex::Private {
     QHash<QString, index_detail::PathSet> blockOwners;     ///< block id -> notes defining it
     QHash<QString, index_detail::PathSet> blockRefSources; ///< block id -> notes with ((id))
     QHash<QString, index_detail::PathCounts> tagIndex;     ///< tag -> note -> occurrences
+    QHash<QString, index_detail::PathSet> taskIdOwners;    ///< task id (🆔) -> notes with such a task
+    QHash<QString, index_detail::PathSet> taskDependents;  ///< task id -> notes with a task waiting for it (⛔)
     /// A folder holding notes (in it or below), counted per spelling: `spelled` is the spelling
     /// noteFolder() answers with, kept while a note under it is left; when its last note goes
     /// (a case-only rename, `Firma/` beside `firma/` on a case-sensitive file system) the
@@ -236,6 +239,11 @@ struct VaultIndex::Private {
     /// The note `tag` names (VaultIndex::resolveTag()); empty when none.
     VaultPath resolveTagPath(const QString &tag) const;
     const index_detail::TagTargets &tagTargets();
+    /// Visit the tasks carrying `🆔 id`: f(entry, blockIndex, task).
+    void forTasksWithId(const QString &id, const std::function<void(const Entry &, int, const Task &)> &f) const;
+    /// VaultIndex::isTaskBlocked() / isTaskBlocking() of a note's record.
+    bool taskBlocked(const Entry &e, int block) const;
+    bool taskBlocking(const Entry &e, int block) const;
     /// Notes with a ```query block (VaultIndex::notesWithQueries()).
     const QList<VaultPath> &queryNotes();
     /// The tag keys naming `path`: resolved ones for a note, for a missing page the unresolved

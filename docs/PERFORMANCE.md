@@ -745,6 +745,22 @@ afresh + 5 ms (looking each changed note up among all matches took 275 vs 45 ms 
 sanitizers). The Raspberry Pi was not
 measured (no builds on it in this sweep): L3b in "Next steps"; it took 0.95 s before.
 
+### Task dependencies, subtasks and clocks: kept with the index (2026-11-04)
+
+Blocked tasks depend on other notes (docs/SYNTAX.md §5), so they follow L3's rules rather than
+scanning the vault: the index keeps two compact maps — task id (`🆔`) -> notes defining it, and id
+-> notes with a task waiting for it (`⛔`) — patched by `attachNote()` / `detachNote()` like the
+block ids. `isTaskBlocked()` / `isTaskBlocking()` look up only the few tasks behind one id, and a
+change logs, besides the note, the notes whose tasks it can block or unblock (waiting for its ids,
+or defining the ids its tasks wait for — the `((id))` pattern), so `QueryCache` (`is:blocked`,
+`is:blocking`), the Tasks list and every other `changesSince()` consumer evaluate just those
+(`tst_index_consistency` checks it on random edits with dependencies across notes, cycles and
+missing ids, and three `is:` queries against `runQuery()`). The parse adds a task's id, its
+dependencies and its clock totals to `Task` (the `:LOGBOOK:` drawer is read only for blocks that
+have one); summaries read the drawers of the tasks with time only (`summarizeTime()`). The subtask
+counter "3/5" needs no index: the parent's own page (the editor re-renders a parent row only when
+its count changes).
+
 ### Drawing backdrops: PDF renderers and what they cost (2026-10-30)
 
 A drawing's backdrop (docs/UI.md "Drawing editor") needs PDF pages drawn as pictures on the

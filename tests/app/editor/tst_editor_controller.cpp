@@ -3421,6 +3421,75 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.text(), u"- Kupić mleko\n"_s);
     }
 
+    // The task timer, dependencies and the status history in the editor (docs/SYNTAX.md §5):
+    // one undo step each, the subtask counter and the ⛔ chips in the rendered text.
+    void taskClockAndDependencies()
+    {
+        const QString content = u"- [ ] Rodzic\n  - [x] jeden\n  - [ ] dwa\n- [ ] Czeka\n"_s;
+        Fixture f(content);
+        QVERIFY(f.role(0, "html").toString().replace(u"&nbsp;"_s, u" "_s).contains(u" 1/2 "_s));
+        QCOMPARE(f.page.taskInfo(0).value(u"progressTotal"_s).toInt(), 2);
+        QVERIFY(!f.page.toggleTaskClock(1 + 99)); // no such row
+
+        QVERIFY(f.page.toggleTaskClock(3));
+        QCOMPARE(f.text(), content + u"  :LOGBOOK:\n  CLOCK: [2026-10-15 Thu 10:00:00]\n  :END:\n"_s);
+        QVERIFY(f.page.taskInfo(3).value(u"clockRunning"_s).toBool());
+        QVERIFY(f.role(3, "html").toString().replace(u"&nbsp;"_s, u" "_s).contains(u"⏱ od 10:00"_s));
+        // Another task's timer: the first one stops in the same step.
+        f.page.setNow(u"2026-10-15 10:30"_s);
+        QVERIFY(f.page.toggleTaskClock(0));
+        QVERIFY(f.text().contains(u"CLOCK: [2026-10-15 Thu 10:00:00]--[2026-10-15 Thu 10:30:00] =>  00:30:00"_s));
+        QVERIFY(f.text().startsWith(u"- [ ] Rodzic\n  :LOGBOOK:\n  CLOCK: [2026-10-15 Thu 10:30:00]\n  :END:\n"_s));
+        f.page.undo();
+        QCOMPARE(f.text(), content + u"  :LOGBOOK:\n  CLOCK: [2026-10-15 Thu 10:00:00]\n  :END:\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+
+        // A dependency on a task of this page: an id for it, ⛔ for this one — one step.
+        QVERIFY(f.page.addTaskDependency(3, Page, 0));
+        const QString id = f.text().section(u"🆔 "_s, 1).left(6);
+        QCOMPARE(id.size(), 6);
+        QVERIFY(f.text().contains(u"- [ ] Czeka ⛔ "_s + id + u'\n'));
+        QVERIFY(!f.page.addTaskDependency(3, Page, 3)); // not on itself
+        QVERIFY(f.page.removeTaskDependency(3, id));
+        QVERIFY(f.text().contains(u"- [ ] Czeka\n"_s));
+        f.page.undo();
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+
+        // On a task of another page; the chip shows it (once the index knows), a click opens it.
+        f.host.setFile(u"Plan.md"_s, u"- [/] Zrobić plan 🆔 plan01\n"_s);
+        QVERIFY(f.page.addTaskDependency(3, u"Plan.md"_s, 0));
+        QVERIFY(f.text().contains(u"- [ ] Czeka ⛔ plan01\n"_s));
+        QTRY_VERIFY(f.role(3, "html").toString().replace(u"&nbsp;"_s, u" "_s).contains(u"⛔ Zrobić plan"_s));
+        QTRY_COMPARE(f.page.taskInfo(3).value(u"blocked"_s).toBool(), true);
+        f.page.activateLink(3, u"taskdep:plan01"_s, false);
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"Plan.md"_s);
+        QCOMPARE(f.page.activateLink(3, u"taskdep:nikt"_s, false).value(u"kind"_s).toString(), u"task"_s);
+        const QVariantList candidates = f.page.dependencyCandidates(3, u"plan"_s);
+        QCOMPARE(candidates.size(), 0); // already waited for
+    }
+
+    void taskStatusHistory()
+    {
+        Fixture f(u"- TODO pisać raport\n"_s);
+        f.host.setTaskStatusHistory(true);
+        f.page.setTaskStatus(0, u"doing"_s);
+        QCOMPARE(f.text(), u"- DOING pisać raport\n  :LOGBOOK:\n  CLOCK: [2026-10-15 Thu 10:00:00]\n"
+                           "  State \"DOING\"      from \"TODO\"       [2026-10-15 Thu 10:00]\n  :END:\n"_s);
+        f.page.setNow(u"2026-10-15 10:45"_s);
+        f.page.toggleTask(0); // done, through the history
+        QVERIFY2(f.text().startsWith(u"- DONE pisać raport"_s), qPrintable(f.text()));
+        QVERIFY(f.text().contains(u"--[2026-10-15 Thu 10:45:00] =>  00:45:00"_s));
+        QVERIFY(f.text().contains(u"State \"DONE\"       from \"DOING\"      [2026-10-15 Thu 10:45]"_s));
+        f.page.undo();
+        QVERIFY(f.text().startsWith(u"- DOING pisać raport\n"_s));
+        // Off: as before.
+        Fixture g(u"- [ ] a\n"_s);
+        g.page.setTaskStatus(0, u"doing"_s);
+        QCOMPARE(g.text(), u"- [/] a\n"_s);
+    }
+
     void taskStatusOnRecurringTask()
     {
         // Done from a "/" command: the next occurrence goes above, in the same undo step as the

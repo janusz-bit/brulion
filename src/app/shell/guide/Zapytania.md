@@ -33,6 +33,7 @@ Wstaw zapytanie poleceniem `/Zapytanie` albo przyciskiem „Pokaż jako zapytani
 | `due:`, `scheduled:`, `start:`, `done:`, `created:` | warunek na datę zadania |
 | `remind:` (`przypomnienie:`) | warunek na datę przypomnienia |
 | `date:` (`data:`) | warunek na datę dziennika |
+| `is:` (`jest:`) | `blocked`/`zablokowane` — zadanie czeka na niezrobione zadanie (`⛔`), `blocking`/`blokujące` — inne zadanie czeka na nie, `running`/`mierzone` — licznik czasu działa, `tracked`/`z-czasem` — ma zapisany czas; `-is:blocked` to zadania niezablokowane |
 | `sort:` (`sortuj:`) | np. `sort:due,-priority`; minus odwraca |
 | `group:` (`grupuj:`) | `page`, `due`, `tag`, `status`, `priority`… |
 | `limit:` | maksymalna liczba wyników |
@@ -53,6 +54,7 @@ Przykład: `due:<=+7d` oznacza „termin w ciągu tygodnia, łącznie z zaległy
 - `remind:this-week` — przypomnienia na ten tydzień,
 - `type:pages tag:projekt sort:page` — strony projektów,
 - `ref:this` — bloki, które linkują do tej strony albo mają jej tag,
-- `type:tasks ref:this status:open group:page` — otwarte zadania powiązane z tą stroną, pogrupowane.
+- `type:tasks ref:this status:open group:page` — otwarte zadania powiązane z tą stroną, pogrupowane,
+- `status:open -is:blocked sort:due` — to, co można zrobić już teraz (bez zadań, które na coś czekają).
 
 Zobacz też [[Przypomnienia i alarmy|Przypomnienia i alarmy]]. Jeśli w zapytaniu jest błąd, w miejscu wyników pojawia się opis, co poprawić.

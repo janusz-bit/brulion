@@ -36,7 +36,14 @@
 // scheduledLabel, start, startLabel, recurrence (canonical), recurrenceLabel (UI language),
 // priority (0 = none … 5 = highest), priorityName, tags, reminderLabel (next reminder in the
 // block, "jutro 09:00"), reminderAlarm, reminderSpec (that reminder as the index reads it, "YYYY-MM-DD
-// HH:mm": its chip's menu names it), doneDate, created.
+// HH:mm": its chip's menu names it), doneDate, created; dependencies and time (docs/SYNTAX.md §5):
+// blocked, blockedBy (the text of an open task it waits for), blockedById (its id: a taskdep: link
+// opens it), blockingCount (open tasks waiting for it), dependencyProblem ("missing" | "cycle" |
+// ""), progress ("3/5" of its subtasks, "" without), progressComplete, timeLabel ("1 h 05 min +
+// od 10:00", "" without), clockRunning.
+//
+// timeSummary(group, range): the time clocked on the listed tasks (the filters apply) per day,
+// page, tag or task (index/tasktime.h) — the view's "Czas pracy".
 #pragma once
 
 #include "index/notecache.h"
@@ -135,6 +142,15 @@ public:
         ReminderSpecRole,
         DoneDateRole,
         CreatedRole,
+        BlockedRole,
+        BlockedByRole,
+        BlockedByIdRole,
+        BlockingCountRole,
+        DependencyProblemRole,
+        ProgressRole,
+        ProgressCompleteRole,
+        TimeLabelRole,
+        ClockRunningRole,
     };
     Q_ENUM(Role)
 
@@ -210,6 +226,10 @@ public:
     Q_INVOKABLE QVariantMap get(int row) const;
     /// Rebuild now.
     Q_INVOKABLE void refresh();
+    /// Time clocked on the listed tasks: `group` "day" | "page" | "tag" | "task", `range` "today" |
+    /// "week" (today's week) | "month" | "all"; { rows: [{ key, label, seconds, duration ("1 h 05
+    /// min"), tasks, path, line }], total, totalLabel, tasks } — a running clock counts up to now.
+    Q_INVOKABLE QVariantMap timeSummary(const QString &group, const QString &range) const;
 
     /// Test hook: the clock used when `today` is "".
     void setClock(std::function<QDate()> clock);
@@ -254,6 +274,15 @@ private:
         bool isJournal = false;
         QStringList tags;
         std::optional<Reminder> reminder;
+        // Dependencies (computed with the item: a change of another note's task is logged for
+        // this note, which is then made again) and subtasks.
+        bool blocked = false;
+        QString blockedBy;
+        QString blockedById;
+        int blockingCount = 0;
+        QString dependencyProblem;
+        int progressDone = 0;
+        int progressTotal = 0;
         // What the list is sorted by (itemLess()).
         qsizetype sectionRank = 0;
         std::optional<QDate> finished; ///< the done section's date

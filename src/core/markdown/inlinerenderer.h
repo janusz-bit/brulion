@@ -31,6 +31,7 @@
 #include "types.h"
 
 #include <QDate>
+#include <QDateTime>
 #include <QString>
 #include <QStringView>
 
@@ -65,6 +66,12 @@ struct Palette {
     ChipColors neutral{QStringLiteral("#535a6a"), QStringLiteral("#0f1f2430")};
 };
 
+/// A `⛔ id` as the renderer shows it (RenderContext::taskDependency).
+struct TaskDependencyView {
+    QString text;      ///< plain text of the task carrying `🆔 id` (the first one)
+    bool open = false; ///< it is not done or cancelled: it blocks
+};
+
 /// Everything the renderer needs besides the text. All callbacks are optional.
 struct RenderContext {
     /// Page link target (as written, e.g. "Projekty/Dom") -> resolved vault path, or nullopt
@@ -79,6 +86,11 @@ struct RenderContext {
     /// nullopt when unknown. A link without an alias shows "Page › " and the first 60 characters
     /// (escaped); unset or unknown: "Page › ^id".
     std::function<std::optional<QString>(const QString &target, const QString &id)> linkedBlockText;
+    /// Task dependencies (docs/SYNTAX.md §5): the task carrying `🆔 id`, nullopt when no task has
+    /// it. Set: `⛔ a,b` is one `taskdep:<id>` link chip per id — "⛔ " and the first 40 characters
+    /// of that task's text, in the overdue colours while it is open and the done ones' after;
+    /// "⛔ id?" in the unresolved colour for a missing id. Unset: the token as muted text.
+    std::function<std::optional<TaskDependencyView>(const QString &id)> taskDependency;
     /// Inline calculation `= expr` -> result text; an empty result shows the code as written.
     std::function<QString(const QString &expr)> inlineCalc;
     /// Text shown for a wiki link or page embed without an alias, from its target as written
@@ -116,6 +128,18 @@ struct RenderContext {
     /// the last part. Unset (exports, the clipboard's HTML, brulion-cli): one link as before.
     std::function<LinkPartTarget::Kind(const QString &target, int part)> resolveLinkPart;
 };
+
+/// The chips shown after a task's text (docs/UI.md "Tasks: dependencies, subtasks and time"): its
+/// subtask progress "3/5" (markdown::subtaskProgress(); the done colours once all are done; none
+/// for total 0) and its clocked time "⏱ 1 h 05 min", with a running clock "⏱ od 10:00" ("since"
+/// in English) after it. "" when there is nothing to show. Static: a running clock's chip names
+/// its start, so it needs no redraw while it runs.
+/// The time part of those chips without the ⏱: "1 h 05 min", "od 10:00", "25 min + od 10:00"; "" for
+/// none.
+QString taskTimeLabel(qint64 clockedSeconds, const QDateTime &clockStart,
+                      dates::UiLocale locale = dates::UiLocale::Polish);
+QString taskChipsHtml(int done, int total, qint64 clockedSeconds, const QDateTime &clockStart,
+                      const Palette &palette = Palette(), dates::UiLocale locale = dates::UiLocale::Polish);
 
 /// The part: URL of part `part` (1-based, a parent part) of the page-link target `target`.
 QString linkPartUrl(QStringView target, int part);

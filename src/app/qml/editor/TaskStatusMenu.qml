@@ -17,6 +17,10 @@ import Brulion
 // the choice also when it is the current status; callers write only changes. React to it with
 // the last statement of the handler: writing the status may destroy the checkbox that owns the
 // menu (no status, a query result that leaves the query).
+//
+// With `showTaskTools` (the editor, Tasks) the menu also starts or stops the task's timer
+// (clockRequested(); `clockRunning` names the action) and adds a dependency
+// (dependencyRequested(): the picker), docs/SYNTAX.md §5.
 BMenu {
     id: menu
 
@@ -25,8 +29,15 @@ BMenu {
     /// "Otwórz" (openRequested()) above the statuses.
     property bool showOpen: false
 
+    /// The timer and dependency items below the statuses.
+    property bool showTaskTools: false
+    /// The task's timer runs ("Zatrzymaj licznik czasu" instead of "Uruchom …").
+    property bool clockRunning: false
+
     signal statusChosen(string status)
     signal openRequested()
+    signal clockRequested()
+    signal dependencyRequested()
 
     title: qsTr("Task status")
 
@@ -106,4 +117,38 @@ BMenu {
     StatusItem { value: "cancelled"; text: qsTr("Cancelled") }
     BMenuSeparator {}
     StatusItem { value: ""; text: qsTr("No status") }
+
+    /// An action of the task tools: shown with showTaskTools, reached by Up / Down then.
+    component ToolItem: BMenuItem {
+        id: toolItem
+        signal chosen()
+        visible: menu.showTaskTools
+        height: visible ? implicitHeight : 0
+        focusPolicy: menu.showTaskTools ? Qt.TabFocus : Qt.NoFocus
+        onTriggered: toolItem.chosen()
+        Keys.onReturnPressed: {
+            menu.close()
+            toolItem.chosen()
+        }
+        Keys.onEnterPressed: {
+            menu.close()
+            toolItem.chosen()
+        }
+    }
+    BMenuSeparator {
+        visible: menu.showTaskTools
+        height: visible ? implicitHeight : 0
+    }
+    ToolItem {
+        objectName: "taskClockToggle"
+        text: menu.clockRunning ? qsTr("Stop timer") : qsTr("Start timer")
+        iconName: menu.clockRunning ? "square" : "play"
+        onChosen: menu.clockRequested()
+    }
+    ToolItem {
+        objectName: "taskAddDependency"
+        text: qsTr("Add dependency…")
+        iconName: "link"
+        onChosen: menu.dependencyRequested()
+    }
 }

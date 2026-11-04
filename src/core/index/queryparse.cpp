@@ -39,6 +39,7 @@ enum class Key {
     Created,
     Remind,
     Date,
+    Is,
     Sort,
     Group,
     Limit,
@@ -47,7 +48,7 @@ enum class Key {
 const QString &publicKeys()
 {
     static const QString keys = u"type, status, tag, page, path, ref, due, scheduled, start, done, created, "
-                                u"remind, date, priority, text, sort, group, limit"_s;
+                                u"remind, date, priority, is, text, sort, group, limit"_s;
     return keys;
 }
 
@@ -101,6 +102,8 @@ const QHash<QString, Key> &keyAliases()
             {u"group"_s, Key::Group},
             {u"grupuj"_s, Key::Group},
             {u"limit"_s, Key::Limit},
+            {u"is"_s, Key::Is},
+            {u"jest"_s, Key::Is},
     };
     return table;
 }
@@ -126,6 +129,19 @@ const QHash<QString, QueryType> &typeAliases()
             {u"reminder"_s, QueryType::Reminders},
             {u"przypomnienia"_s, QueryType::Reminders},
             {u"przypomnienie"_s, QueryType::Reminders},
+    };
+    return table;
+}
+
+/// `is:` values (folded) -> canonical value (QueryFilter::values).
+const QHash<QString, QString> &isAliases()
+{
+    static const QHash<QString, QString> table = {
+            {u"blocked"_s, u"blocked"_s},    {u"zablokowane"_s, u"blocked"_s}, {u"zablokowany"_s, u"blocked"_s},
+            {u"blocking"_s, u"blocking"_s},  {u"blokujace"_s, u"blocking"_s},  {u"blokuje"_s, u"blocking"_s},
+            {u"running"_s, u"running"_s},    {u"timing"_s, u"running"_s},      {u"mierzone"_s, u"running"_s},
+            {u"w-pomiarze"_s, u"running"_s}, {u"tracked"_s, u"tracked"_s},     {u"timed"_s, u"tracked"_s},
+            {u"z-czasem"_s, u"tracked"_s},
     };
     return table;
 }
@@ -225,7 +241,8 @@ bool isTaskKey(Key k)
     case Key::Scheduled:
     case Key::Start:
     case Key::Done:
-    case Key::Created: return true;
+    case Key::Created:
+    case Key::Is: return true;
     default: return false;
     }
 }
@@ -268,6 +285,7 @@ QString keyName(Key k)
     case Key::Created: return u"created"_s;
     case Key::Remind: return u"remind"_s;
     case Key::Date: return u"date"_s;
+    case Key::Is: return u"is"_s;
     case Key::Sort: return u"sort"_s;
     case Key::Group: return u"group"_s;
     case Key::Limit: return u"limit"_s;
@@ -289,6 +307,7 @@ QString exampleFor(Key k)
     case Key::Sort: return u"sort:due"_s;
     case Key::Group: return u"group:page"_s;
     case Key::Limit: return u"limit:20"_s;
+    case Key::Is: return u"is:blocked"_s;
     default: return keyName(k) + u":today"_s;
     }
 }
@@ -635,6 +654,17 @@ bool Parser::applyKey(Key key, const QString &written, const QString &rawValue, 
                 if (!f.statuses.contains(s))
                     f.statuses.append(s);
             }
+        }
+        break;
+    }
+    case Key::Is: {
+        QStringList list;
+        if (!mapValues(written, values, isAliases(), u"blocked, blocking, running, tracked"_s, list))
+            return false;
+        f.kind = QueryFilterKind::Is;
+        for (const QString &v : std::as_const(list)) {
+            if (!f.values.contains(v))
+                f.values.append(v);
         }
         break;
     }

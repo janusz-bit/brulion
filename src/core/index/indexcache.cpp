@@ -27,7 +27,7 @@ static_assert(sizeof(void *) != 8 || sizeof(brulion::Block) == 232,
 static_assert(sizeof(void *) != 8 || sizeof(brulion::ParsedNote) == 256,
               "a field was added to ParsedNote: update the index cache codec, tests/common/notedump.h and bump "
               "indexcache::FormatVersion");
-static_assert(sizeof(void *) != 8 || sizeof(brulion::Task) == 216,
+static_assert(sizeof(void *) != 8 || sizeof(brulion::Task) == 280,
               "a field was added to Task: update the index cache codec, tests/common/notedump.h and bump "
               "indexcache::FormatVersion");
 static_assert(sizeof(void *) != 8 || sizeof(brulion::Reminder) == 80,
@@ -506,6 +506,15 @@ void writeTask(Out &o, const Task &t)
     writeOptDate(o, t.cancelledDate);
     o.str(t.recurrence);
     o.varint(quint64(t.priority));
+    o.str(t.id);
+    writeStrings(o, t.dependsOn);
+    o.zigzag(t.clockedSeconds);
+    // A running clock's start as written: local wall-clock date and time, never an instant.
+    o.boolean(t.clockStart.isValid());
+    if (t.clockStart.isValid()) {
+        writeDate(o, t.clockStart.date());
+        writeTime(o, t.clockStart.time());
+    }
 }
 
 Task readTask(In &in)
@@ -523,6 +532,17 @@ Task readTask(In &in)
     t.cancelledDate = readOptDate(in);
     t.recurrence = in.str();
     t.priority = Priority(in.small(int(Priority::Highest)));
+    t.id = in.str();
+    t.dependsOn = readStrings(in);
+    t.clockedSeconds = in.zigzag();
+    if (in.boolean()) {
+        const QDate date = readDate(in);
+        const std::optional<QTime> time = readTime(in);
+        if (!date.isValid() || !time || !time->isValid())
+            in.fail();
+        else
+            t.clockStart = QDateTime(date, *time);
+    }
     return t;
 }
 

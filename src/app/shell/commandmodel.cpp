@@ -4,6 +4,8 @@
 #include "appsettings.h"
 #include "workspace.h"
 
+#include "notebook/tasktools.h"
+
 #include <QCoreApplication>
 #include <QEvent>
 
@@ -382,6 +384,31 @@ static QList<Command> allCommands(const AppController *app)
     // Copying links, after the page property: where it is available.
     for (const Command &c : linkCommands(inEditor, app->sourceModeShown()))
         out.insert(at++, c);
+    // Tasks (docs/SYNTAX.md §5): the timer and a dependency of the task at the cursor (uiActions
+    // "taskClock" / "taskDependency": BlockEditor.toggleCurrentTaskClock() /
+    // openCurrentDependencyPicker()), and stopping the timer that runs, wherever it is.
+    const bool blocks = inEditor && !app->sourceModeShown();
+    out.insert(at++, {u"task.clock"_s,
+                      CommandModel::tr("Start or stop task timer"),
+                      CommandModel::tr("The task at the cursor; the time goes to its LOGBOOK"),
+                      u"clock"_s,
+                      {},
+                      blocks});
+    out.insert(at++, {u"task.addDependency"_s,
+                      CommandModel::tr("Add task dependency…"),
+                      CommandModel::tr("The task at the cursor waits for another one (⛔)"),
+                      u"link"_s,
+                      {},
+                      blocks});
+    const VaultIndex *index = app->workspace()->taskIndex();
+    const QList<notebook::TaskPlace> running =
+            index ? notebook::runningClockPlaces(*index) : QList<notebook::TaskPlace>();
+    out.insert(at++, {u"task.stopClocks"_s,
+                      CommandModel::tr("Stop task timer"),
+                      running.isEmpty() ? CommandModel::tr("No timer runs") : running.first().task.text,
+                      u"square"_s,
+                      {},
+                      !running.isEmpty()});
     // Pictures from the internet on the page into the notebook (uiAction "saveWebPictures": the
     // editor on screen, BlockEditor.downloadWebPictures("")).
     out.insert(at++, {u"page.saveWebPictures"_s,
@@ -478,6 +505,12 @@ bool CommandModel::run(const QString &id)
         m_app->requestUiAction(u"addProperty"_s);
     else if (id == u"page.saveWebPictures")
         m_app->requestUiAction(u"saveWebPictures"_s);
+    else if (id == u"task.clock")
+        m_app->requestUiAction(u"taskClock"_s);
+    else if (id == u"task.addDependency")
+        m_app->requestUiAction(u"taskDependency"_s);
+    else if (id == u"task.stopClocks")
+        m_app->workspace()->stopTaskClocks();
     else if (const QString action = linkAction(id); !action.isEmpty())
         m_app->requestUiAction(action);
     else if (id == u"nav.back")

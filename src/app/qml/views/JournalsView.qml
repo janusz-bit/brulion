@@ -107,6 +107,14 @@ FocusScope {
                 root.activeDay.editor.addProperty()
                 return
             }
+            if (action === "taskClock") {
+                root.activeDay.editor.toggleCurrentTaskClock()
+                return
+            }
+            if (action === "taskDependency") {
+                root.activeDay.editor.openCurrentDependencyPicker()
+                return
+            }
             if (action !== "toggleNoteMode")
                 return
             if (!root.activeDay.controller.toggleMode())

@@ -99,6 +99,11 @@ public:
     /// Recorded (openedInOtherApp()); true.
     bool openInOtherApp(const QString &path) override;
     QVariantMap vaultConfig() const override;
+    /// The real index (task dependencies and clocks, as the shell's Workspace).
+    const VaultIndex *taskIndex() const override { return &currentIndex(); }
+    bool taskStatusHistory() const override { return m_taskStatusHistory; }
+    /// Tests and the playground: the "Historia statusów" setting.
+    Q_INVOKABLE void setTaskStatusHistory(bool on) { m_taskStatusHistory = on; }
     void navigate(const QVariantMap &route, bool newPane = false) override;
     void openUrl(const QUrl &url) override;
     /// The clipboard's HTML for tests: the Markdown escaped in a <pre> (the real app renders it).
@@ -223,6 +228,7 @@ private:
     /// The index for queries and link targets, rebuilt from the files after a change.
     mutable std::unique_ptr<VaultIndex> m_index;
     mutable bool m_indexDirty = true;
+    bool m_taskStatusHistory = false;
     const VaultIndex &currentIndex() const;
     bool m_indexSignalPending = false;
     /// Files changed: the index is out of date; indexChanged() follows on the next turn.

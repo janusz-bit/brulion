@@ -5,6 +5,7 @@
 #include "dayclock.h"
 #include "editorhost.h"
 #include "queryhost.h"
+#include "taskhelpers.h"
 
 #include "calc/table.h"
 #include "dates/local.h"
@@ -12,14 +13,19 @@
 #include "drawing/backdrop.h"
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
+#include "index/vaultindex.h"
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
+#include "markdown/logbook.h"
 #include "markdown/notemode.h"
+#include "markdown/parse.h"
+#include "markdown/taskdeps.h"
 #include "markdown/templates.h"
 #include "markdown/tokens.h"
 #include "notebook/links.h"
+#include "notebook/tasktools.h"
 #include "periodic/periodic.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -1600,6 +1606,14 @@ void PageController::toggleTask(int row)
 {
     if (!validRow(row))
         return;
+    if (m_host && m_host->taskStatusHistory()) {
+        if (const std::optional<TaskStatus> s = m_model->shapeAt(row).task) {
+            // Through setTaskStatus(): the change is logged.
+            const bool closed = *s == TaskStatus::Done || *s == TaskStatus::Cancelled;
+            setTaskStatus(row, closed ? u"todo"_s : u"done"_s);
+            return;
+        }
+    }
     const QDate day = today();
     beginCommand();
     applyOp([&](BlockDocument &d) { return d.toggleTask(row, day); });
@@ -1672,8 +1686,168 @@ void PageController::applyTaskStatus(int row, const QString &status)
             applyOp([&](BlockDocument &d) { return d.setBody(r, body); });
         }
     } else if (const auto s = taskStatusFromName(status)) {
+        const std::optional<TaskStatus> before = m_model->shapeAt(row).task;
+        const quint64 uid = m_model->uidAt(row);
         applyOp([&](BlockDocument &d) { return d.setTaskStatus(row, *s, day); });
+        if (before && *before != *s && m_host && m_host->taskStatusHistory())
+            logTaskStatus(uid, *before, *s);
     }
+}
+
+void PageController::replaceTextInCommand(const QString &newText)
+{
+    if (newText == text())
+        return;
+    const QHash<quint64, quint64> mapping = m_model->replaceContent(newText);
+    remapBlocks(mapping);
+    m_model->setEditingUid(m_editingUid);
+}
+
+void PageController::logTaskStatus(quint64 uid, TaskStatus before, TaskStatus after)
+{
+    const int r = m_model->rowOfUid(uid);
+    if (r < 0 || !m_host)
+        return;
+    const QDateTime now = currentDateTime();
+    const int line = m_model->document().at(r).line;
+    QString t = text();
+    if (after == TaskStatus::Doing) {
+        // As Logseq: "W toku" starts the clock — one at a time.
+        stopTaskClocksElsewhere(*m_host, now, m_path);
+        t = stopTaskClocksIn(t, now, line);
+        t = markdown::startTaskClock(t, line, now);
+    } else if (before == TaskStatus::Doing) {
+        t = markdown::stopTaskClock(t, line, now);
+    }
+    t = markdown::logStatusChange(t, line, before, after, now);
+    replaceTextInCommand(t);
+}
+
+QVariantMap PageController::taskInfo(int row) const
+{
+    if (!validRow(row) || !m_model->shapeAt(row).task)
+        return {{u"isTask"_s, false}};
+    const int line = m_model->document().at(row).line;
+    const QString content = text();
+    QVariantMap out;
+    if (const VaultIndex *index = m_host ? m_host->taskIndex() : nullptr; index && !m_path.isEmpty())
+        out = notebook::taskRelations(*index, m_path, line);
+    out.insert(u"isTask"_s, true);
+    // The clock and the subtasks as this page has them now (the index may be a moment behind).
+    const markdown::Logbook book = markdown::taskLogbook(content, line);
+    const markdown::ClockEntry *running = book.running();
+    out.insert(u"clockRunning"_s, running != nullptr);
+    out.insert(u"clockStart"_s, running ? running->start.toString(u"HH:mm"_s) : QString());
+    out.insert(u"clockedSeconds"_s, markdown::clockedSeconds(book.clocks));
+    const ParsedNote note = markdown::parseNote(m_path, content);
+    const int block = markdown::blockAtLine(note, line);
+    const markdown::SubtaskProgress progress = markdown::subtaskProgress(note, block);
+    out.insert(u"progressDone"_s, progress.done);
+    out.insert(u"progressTotal"_s, progress.total);
+    if (block >= 0 && note.blocks[block].task) {
+        out.insert(u"id"_s, note.blocks[block].task->id);
+        out.insert(u"dependsOnIds"_s, note.blocks[block].task->dependsOn);
+    }
+    return out;
+}
+
+bool PageController::toggleTaskClock(int row)
+{
+    if (!validRow(row) || !m_model->shapeAt(row).task)
+        return false;
+    const QDateTime now = currentDateTime();
+    const int line = m_model->document().at(row).line;
+    const QString before = text();
+    QString after;
+    if (markdown::taskLogbook(before, line).running()) {
+        after = markdown::stopTaskClock(before, line, now);
+    } else {
+        if (m_host)
+            stopTaskClocksElsewhere(*m_host, now, m_path);
+        after = markdown::startTaskClock(stopTaskClocksIn(before, now, line), line, now);
+    }
+    if (after == before)
+        return false;
+    beginCommand();
+    replaceTextInCommand(after);
+    endCommand(currentFocus());
+    Q_EMIT editingRowChanged();
+    emitEditTextReset();
+    return true;
+}
+
+QVariantList PageController::dependencyCandidates(int row, const QString &textFilter, int limit) const
+{
+    const VaultIndex *index = m_host ? m_host->taskIndex() : nullptr;
+    if (!index)
+        return {};
+    const int line = validRow(row) ? m_model->document().at(row).line : -1;
+    return notebook::dependencyCandidates(*index, textFilter, m_path, line, limit);
+}
+
+bool PageController::addTaskDependency(int row, const QString &path, int otherLine)
+{
+    if (!validRow(row) || !m_model->shapeAt(row).task)
+        return false;
+    const VaultIndex *index = m_host ? m_host->taskIndex() : nullptr;
+    const auto taken = [&](const QString &id) { return (index && index->hasTaskId(id)) || text().contains(id); };
+    const int line = m_model->document().at(row).line;
+    QString content = text();
+    QString id;
+    if (path == m_path) {
+        if (markdown::taskBlockLine(content, otherLine) < 0 || markdown::taskBlockLine(content, otherLine) == line)
+            return false;
+        const ParsedNote note = markdown::parseNote(m_path, content);
+        const int b = markdown::blockAtLine(note, otherLine);
+        id = note.blocks[b].task->id;
+        if (id.isEmpty()) {
+            id = markdown::generateTaskId(taken);
+            content = markdown::setTaskId(content, otherLine, id);
+        }
+    } else {
+        if (!m_host)
+            return false;
+        bool ok = false;
+        const QString other = m_host->read(path, &ok);
+        if (!ok)
+            return false;
+        const ParsedNote note = markdown::parseNote(path, other);
+        const int b = markdown::blockAtLine(note, otherLine);
+        if (b < 0 || !note.blocks[b].task)
+            return false;
+        id = note.blocks[b].task->id;
+        if (id.isEmpty()) {
+            id = markdown::generateTaskId([&](const QString &c) { return taken(c) || other.contains(c); });
+            const QString written = markdown::setTaskId(other, otherLine, id);
+            if (m_host->writeIfUnchanged(path, written, other) != EditorHost::WriteResult::Written)
+                return false;
+        }
+    }
+    const QString after = markdown::addTaskDependency(content, line, id);
+    if (after == text())
+        return false;
+    beginCommand();
+    replaceTextInCommand(after);
+    endCommand(currentFocus());
+    Q_EMIT editingRowChanged();
+    emitEditTextReset();
+    return true;
+}
+
+bool PageController::removeTaskDependency(int row, const QString &id)
+{
+    if (!validRow(row))
+        return false;
+    const QString before = text();
+    const QString after = markdown::removeTaskDependency(before, m_model->document().at(row).line, id);
+    if (after == before)
+        return false;
+    beginCommand();
+    replaceTextInCommand(after);
+    endCommand(currentFocus());
+    Q_EMIT editingRowChanged();
+    emitEditTextReset();
+    return true;
 }
 
 void PageController::setTaskStatus(int row, const QString &status)
@@ -3271,6 +3445,14 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
         if (m_host)
             m_host->openUrl(QUrl(rest));
         return out;
+    }
+    if (scheme == u"taskdep") {
+        // A ⛔ id: the task it waits for (docs/SYNTAX.md §5), wherever it is.
+        const VaultIndex *index = m_host ? m_host->taskIndex() : nullptr;
+        const auto place = index ? notebook::firstTaskWithId(*index, rest) : std::nullopt;
+        if (!place)
+            return QVariantMap{{u"action"_s, u"notFound"_s}, {u"kind"_s, u"task"_s}, {u"name"_s, rest}};
+        return openLocation(place->path, place->line, newPane);
     }
     if (scheme == u"tag") {
         if (m_host)

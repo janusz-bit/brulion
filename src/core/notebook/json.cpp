@@ -3,6 +3,7 @@
 #include "index/vaultindex.h"
 #include "markdown/journal.h"
 #include "markdown/notemode.h"
+#include "markdown/taskdeps.h"
 #include "markdown/tokenedit.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -149,8 +150,63 @@ QJsonObject taskJson(const Task &task)
     if (task.cancelledDate)
         o.insert(u"cancelled"_s, task.cancelledDate->toString(Qt::ISODate));
     insertIf(o, u"recurrence"_s, task.recurrence);
+    insertIf(o, u"id"_s, task.id);
+    if (!task.dependsOn.isEmpty())
+        o.insert(u"dependsOn"_s, QJsonArray::fromStringList(task.dependsOn));
+    if (task.clockedSeconds > 0)
+        o.insert(u"clockedSeconds"_s, task.clockedSeconds);
+    if (task.clockStart.isValid()) // local wall-clock time, no zone
+        o.insert(u"clockStart"_s, task.clockStart.toString(u"yyyy-MM-ddTHH:mm:ss"_s));
     return o;
 }
+
+namespace {
+
+/// A task item's dependencies (docs/SYNTAX.md §5): blocked?, blocking?, cycle?, blockedBy [{id,
+/// path, line, text, status}] (the open tasks it waits for), missingIds, subtasks {done, total}.
+void insertTaskRelations(QJsonObject &o, const VaultIndex &index, const VaultPath &path, int blockIndex)
+{
+    const ParsedNote *note = index.note(path);
+    if (!note || blockIndex < 0 || blockIndex >= note->blocks.size() || !note->blocks[blockIndex].task)
+        return;
+    const Task &task = *note->blocks[blockIndex].task;
+    if (!task.dependsOn.isEmpty() || !task.id.isEmpty()) {
+        const TaskDependencies deps = index.taskDependencies(path, blockIndex);
+        if (deps.blocked)
+            o.insert(u"blocked"_s, true);
+        if (index.isTaskBlocking(path, blockIndex))
+            o.insert(u"blocking"_s, true);
+        if (deps.cycle)
+            o.insert(u"cycle"_s, true);
+        QJsonArray blockedBy;
+        QJsonArray missing;
+        for (const TaskDependency &d : deps.dependsOn) {
+            if (d.tasks.isEmpty())
+                missing.append(d.id);
+            for (const TaskRef &t : d.tasks) {
+                if (t.task.status == TaskStatus::Done || t.task.status == TaskStatus::Cancelled)
+                    continue;
+                const ParsedNote *other = index.note(t.path);
+                const int line =
+                        other && t.blockIndex < other->blocks.size() ? other->blocks[t.blockIndex].line : t.task.line;
+                blockedBy.append(QJsonObject{{u"id"_s, d.id},
+                                             {u"path"_s, t.path},
+                                             {u"line"_s, line},
+                                             {u"text"_s, t.task.text},
+                                             {u"status"_s, taskStatusName(t.task.status)}});
+            }
+        }
+        if (!blockedBy.isEmpty())
+            o.insert(u"blockedBy"_s, blockedBy);
+        if (!missing.isEmpty())
+            o.insert(u"missingIds"_s, missing);
+    }
+    const markdown::SubtaskProgress progress = markdown::subtaskProgress(*note, blockIndex);
+    if (progress.total > 0)
+        o.insert(u"subtasks"_s, QJsonObject{{u"done"_s, progress.done}, {u"total"_s, progress.total}});
+}
+
+} // namespace
 
 QJsonObject reminderJson(const Reminder &reminder)
 {
@@ -203,6 +259,8 @@ QJsonObject queryItemJson(const VaultIndex &index, const QueryItem &item)
         o.insert(u"task"_s, taskJson(*item.task));
         if (item.blockIndex < 0)
             o.insert(u"line"_s, item.task->line);
+        else
+            insertTaskRelations(o, index, item.path, item.blockIndex);
     }
     if (item.reminder) {
         o.insert(u"reminder"_s, reminderJson(*item.reminder));

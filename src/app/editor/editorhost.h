@@ -24,6 +24,8 @@
 
 namespace brulion {
 
+class VaultIndex;
+
 /// The largest file stored as an attachment or used as a drawing's backdrop (pictures, PDFs; not
 /// whole videos by mistake): one limit for the note's pickers, the drawing editor's and the
 /// backdrop's preparation (src/app/drawing/backdropimage.h).
@@ -135,6 +137,15 @@ public:
     virtual QString ensureBlockId(const QString &path, int line) = 0;
     /// Templates: list of { path, title }.
     virtual QVariantList templates() const = 0;
+
+    // --- Tasks (docs/SYNTAX.md §5 "Dependencies", "Time tracking and status history") ---------
+    /// The notebook's index for what tasks show of other notes: the tasks a `⛔ id` waits for,
+    /// the running clocks (one at a time), the dependency picker's candidates. nullptr when the
+    /// host has none: dependencies show as plain text then.
+    virtual const VaultIndex *taskIndex() const { return nullptr; }
+    /// The "Historia statusów" setting (AppSettings::taskStatusHistory): status changes are
+    /// logged in the task's `:LOGBOOK:` and "W toku" starts and stops its clock, as in Logseq.
+    virtual bool taskStatusHistory() const { return false; }
 
     // --- Assets ------------------------------------------------------------------------------
     /// URL the UI can load an attachment from (file:// on desktop/Android, blob/data on WASM).

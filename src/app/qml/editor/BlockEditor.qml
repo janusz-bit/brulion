@@ -608,6 +608,11 @@ FocusScope {
     }
     /// noticeMissing() for PageController.activateLink's {action: "notFound", kind, name}.
     function noticeNotFound(r) {
+        if (r.kind === "task") {
+            // A ⛔ id no task carries (docs/SYNTAX.md §5): it blocks nothing.
+            notice(qsTr("No task in the notebook has the id %1").arg(r.name), "info")
+            return
+        }
         noticeMissing(r.kind === "heading" ? "" : r.name, r.kind === "heading" ? r.name : "", r.kind === "ref")
     }
 
@@ -2805,6 +2810,9 @@ FocusScope {
                         && activeEditor.activeFocus
         taskMenuReturn = editing ? "edit" : list.activeFocus ? "list" : ""
         taskMenu.status = taskStatusOf(row)
+        // The timer and "Dodaj zależność…" for a task (docs/SYNTAX.md §5).
+        taskMenu.showTaskTools = taskMenu.status !== ""
+        taskMenu.clockRunning = taskMenu.showTaskTools && controller.taskInfo(row).clockRunning === true
         closeSuggestions()
         // A word the keyboard is still composing becomes text first (the status resets the text).
         if (editing)
@@ -2908,10 +2916,87 @@ FocusScope {
             controller.setTaskStatus(row, status)
         }
     }
+    /// The task the menu was opened for (its tracking ends), -1 when gone.
+    function takeTaskMenuRow() {
+        if (!controller || taskMenuBlock < 0)
+            return -1
+        const row = controller.trackedRow(taskMenuBlock)
+        controller.untrack(taskMenuBlock)
+        taskMenuBlock = -1
+        taskMenuForSelection = false
+        return row
+    }
+    /// Start or stop the timer of the task at `row` (one timer at a time: another one stops).
+    function toggleTaskClock(row) {
+        if (!controller || row < 0 || taskStatusOf(row) === "")
+            return false
+        const running = controller.taskInfo(row).clockRunning === true
+        if (!controller.toggleTaskClock(row))
+            return false
+        notice(running ? qsTr("Timer stopped") : qsTr("Timer started"), "success")
+        return true
+    }
+    /// The block the palette's task commands act on: the one being edited, else the selected one.
+    function currentTaskRow() {
+        const row = currentRow()
+        return row >= 0 && taskStatusOf(row) !== "" ? row : -1
+    }
+    /// The palette's "Licznik czasu zadania": the current task's timer.
+    function toggleCurrentTaskClock() {
+        const row = currentTaskRow()
+        if (row < 0) {
+            notice(qsTr("Put the cursor in a task first"), "info")
+            return
+        }
+        toggleTaskClock(row)
+    }
+    /// "Dodaj zależność…": the picker for the task at `row`.
+    property TaskDependencyDialog dependencyDialog: null
+    property int dependencyBlock: -1
+    function openDependencyPicker(row) {
+        if (!controller || row < 0 || taskStatusOf(row) === "")
+            return
+        if (!dependencyDialog)
+            dependencyDialog = dependencyDialogComponent.createObject(editor.Window.contentItem || editor) as TaskDependencyDialog
+        if (dependencyBlock >= 0)
+            controller.untrack(dependencyBlock)
+        dependencyBlock = controller.trackBlock(row)
+        dependencyDialog.open()
+    }
+    function openCurrentDependencyPicker() {
+        const row = currentTaskRow()
+        if (row < 0) {
+            notice(qsTr("Put the cursor in a task first"), "info")
+            return
+        }
+        openDependencyPicker(row)
+    }
+    Component {
+        id: dependencyDialogComponent
+        TaskDependencyDialog {
+            candidates: (text) => {
+                const row = editor.controller && editor.dependencyBlock >= 0
+                          ? editor.controller.trackedRow(editor.dependencyBlock) : -1
+                return row >= 0 ? editor.controller.dependencyCandidates(row, text) : []
+            }
+            onChosen: (path, line) => {
+                const row = editor.controller.trackedRow(editor.dependencyBlock)
+                if (row >= 0 && editor.controller.addTaskDependency(row, path, line))
+                    editor.notice(qsTr("Dependency added"), "success")
+            }
+            onClosed: {
+                if (editor.controller && editor.dependencyBlock >= 0)
+                    editor.controller.untrack(editor.dependencyBlock)
+                editor.dependencyBlock = -1
+            }
+        }
+    }
     Component {
         id: taskMenuComponent
         TaskStatusMenu {
             onStatusChosen: (status) => editor.chooseTaskStatus(status)
+            onClockRequested: editor.toggleTaskClock(editor.takeTaskMenuRow())
+            onDependencyRequested: editor.openDependencyPicker(editor.takeTaskMenuRow())
             // The menu had the keyboard: back to the block's text (the caret where it was) or to
             // the selected block.
             onClosed: {

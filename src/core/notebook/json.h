@@ -44,7 +44,8 @@ QString calendarKindName(CalendarItem::Kind kind);
 // ---- Values ---------------------------------------------------------------------------------
 
 /// {status, marker, text, priority, due?, scheduled?, start?, created?, done?, cancelled?,
-/// recurrence?} — the keys of Workspace::runQuery's `task`.
+/// recurrence?, id?, dependsOn?, clockedSeconds?, clockStart? (local "YYYY-MM-DDTHH:mm:ss")} — the
+/// keys of Workspace::runQuery's `task`.
 QJsonObject taskJson(const Task &task);
 /// {at "YYYY-MM-DD HH:mm", alarm, recurrence?}.
 QJsonObject reminderJson(const Reminder &reminder);
@@ -52,7 +53,8 @@ QJsonObject reminderJson(const Reminder &reminder);
 /// reminders?, tags?}.
 QJsonObject blockJson(const Block &block);
 /// A query item as Workspace::runQuery gives it: {path, title, folder, line, depth, text, raw,
-/// blockId?, task?, reminder?}.
+/// blockId?, task?, reminder?}; a task also blocked?, blocking?, cycle?, blockedBy? [{id, path,
+/// line, text, status}], missingIds?, subtasks? {done, total} (docs/SYNTAX.md §5).
 QJsonObject queryItemJson(const VaultIndex &index, const QueryItem &item);
 /// {type, total, items, groups: [{key, label, items}]}.
 QJsonObject queryResultJson(const VaultIndex &index, const QueryResult &result);
