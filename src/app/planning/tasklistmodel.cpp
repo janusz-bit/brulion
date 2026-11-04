@@ -4,7 +4,11 @@
 #include "dates/recurrence.h"
 #include "index/query.h"
 #include "index/querycache.h"
+#include "index/tasktime.h"
 #include "index/vaultindex.h"
+#include "markdown/inlinerenderer.h"
+#include "markdown/logbook.h"
+#include "markdown/taskdeps.h"
 #include "planningutil.h"
 
 #include <QCoreApplication>
@@ -310,8 +314,69 @@ QVariant TaskListModel::taskRowData(const Item &item, int role) const
         return finished ? isoDate(*finished) : QString();
     }
     case CreatedRole: return t.created ? isoDate(*t.created) : QString();
+    case BlockedRole: return item.blocked;
+    case BlockedByRole: return item.blockedBy;
+    case BlockedByIdRole: return item.blockedById;
+    case BlockingCountRole: return item.blockingCount;
+    case DependencyProblemRole: return item.dependencyProblem;
+    case ProgressRole:
+        return item.progressTotal > 0 ? u"%1/%2"_s.arg(item.progressDone).arg(item.progressTotal) : QString();
+    case ProgressCompleteRole: return item.progressTotal > 0 && item.progressDone >= item.progressTotal;
+    case TimeLabelRole: return markdown::taskTimeLabel(t.clockedSeconds, t.clockStart, loc);
+    case ClockRunningRole: return t.clockStart.isValid();
     default: return {};
     }
+}
+
+QVariantMap TaskListModel::timeSummary(const QString &group, const QString &range) const
+{
+    QVariantMap out;
+    if (!m_index)
+        return out;
+    const TimeGroup g = group == u"page"   ? TimeGroup::Page
+                        : group == u"tag"  ? TimeGroup::Tag
+                        : group == u"task" ? TimeGroup::Task
+                                           : TimeGroup::Day;
+    const QDate today = currentDay();
+    QDate from;
+    QDate to;
+    if (range == u"today") {
+        from = to = today;
+    } else if (range == u"week") {
+        from = today.addDays(-((today.dayOfWeek() - int(weekStartDay()) + 7) % 7));
+        to = from.addDays(6);
+    } else if (range == u"month") {
+        from = QDate(today.year(), today.month(), 1);
+        to = from.addMonths(1).addDays(-1);
+    }
+    QList<TaskRef> tasks;
+    tasks.reserve(m_items.size());
+    for (const Item &item : m_items)
+        tasks.append(item.ref);
+    // A running clock counts up to now (on a fixed `today`, a test's, up to its end).
+    const QDateTime now = m_todayText.isEmpty() ? QDateTime::currentDateTime() : QDateTime(today, QTime(23, 59, 59));
+    const TimeSummary summary = summarizeTime(*m_index, tasks, g, from, to, now);
+    const dates::UiLocale loc = uiLocale(m_locale);
+    QVariantList rows;
+    for (const TimeSummaryRow &r : summary.rows) {
+        QString label = r.label;
+        if (g == TimeGroup::Day)
+            label = humanDate(DateSpec{QDate::fromString(r.key, Qt::ISODate), std::nullopt}, loc, today);
+        else if (g == TimeGroup::Task)
+            label = plainText(r.label);
+        rows.append(QVariantMap{{u"key"_s, r.key},
+                                {u"label"_s, label},
+                                {u"seconds"_s, r.seconds},
+                                {u"duration"_s, markdown::formatSpentTime(r.seconds)},
+                                {u"tasks"_s, r.tasks},
+                                {u"path"_s, r.path},
+                                {u"line"_s, r.line}});
+    }
+    out.insert(u"rows"_s, rows);
+    out.insert(u"total"_s, summary.total);
+    out.insert(u"totalLabel"_s, markdown::formatSpentTime(summary.total));
+    out.insert(u"tasks"_s, summary.tasks);
+    return out;
 }
 
 QHash<int, QByteArray> TaskListModel::roleNames() const
@@ -343,6 +408,15 @@ QHash<int, QByteArray> TaskListModel::roleNames() const
             {PriorityRole, "priority"},
             {PriorityNameRole, "priorityName"},
             {TagsRole, "tags"},
+            {BlockedRole, "blocked"},
+            {BlockedByRole, "blockedBy"},
+            {BlockedByIdRole, "blockedById"},
+            {BlockingCountRole, "blockingCount"},
+            {DependencyProblemRole, "dependencyProblem"},
+            {ProgressRole, "progress"},
+            {ProgressCompleteRole, "progressComplete"},
+            {TimeLabelRole, "timeLabel"},
+            {ClockRunningRole, "clockRunning"},
             {ReminderLabelRole, "reminderLabel"},
             {ReminderAlarmRole, "reminderAlarm"},
             {ReminderSpecRole, "reminderSpec"},
@@ -664,7 +738,8 @@ bool TaskListModel::applyQuery(const QString &query)
         }
         case QueryFilterKind::Text: words << f.values; break;
         case QueryFilterKind::Ref:
-        case QueryFilterKind::Date: break;
+        case QueryFilterKind::Date:
+        case QueryFilterKind::Is: break;
         }
     }
     text = words.join(u' ');
@@ -842,6 +917,24 @@ TaskListModel::Item TaskListModel::makeItem(const QueryItem &qi, QDate today, Qt
             const Block &block = note->blocks.at(qi.blockIndex);
             item.tags = block.tags;
             item.reminder = nextReminder(block.reminders, today);
+            const markdown::SubtaskProgress progress = markdown::subtaskProgress(*note, qi.blockIndex);
+            item.progressDone = progress.done;
+            item.progressTotal = progress.total;
+            if (!qi.task->dependsOn.isEmpty() || !qi.task->id.isEmpty()) {
+                const TaskDependencies deps = m_index->taskDependencies(qi.path, qi.blockIndex);
+                item.blocked = deps.blocked;
+                item.blockingCount = int(deps.dependents.size());
+                item.dependencyProblem = deps.cycle ? u"cycle"_s : deps.missing ? u"missing"_s : QString();
+                for (const TaskDependency &dep : deps.dependsOn) {
+                    const auto open = std::find_if(dep.tasks.cbegin(), dep.tasks.cend(),
+                                                   [](const TaskRef &r) { return !isClosed(r.task.status); });
+                    if (open != dep.tasks.cend()) {
+                        item.blockedBy = plainText(open->task.text);
+                        item.blockedById = dep.id;
+                        break;
+                    }
+                }
+            }
         }
     }
     const Task &t = item.ref.task;

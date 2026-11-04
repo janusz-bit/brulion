@@ -483,14 +483,24 @@ void VaultIndex::Private::noteChanged(const Entry *before, const Entry *after)
 {
     // The log: the note, and the notes whose `((id))` show one of its blocks (a new note with a
     // smaller path may also take over an id another note defines).
+    // Task dependencies (SYNTAX §5): the notes with tasks waiting for one of its task ids (blocked
+    // or not by them now), and the notes defining the ids its tasks wait for (blocking or not).
+    const auto logAll = [this](const QHash<QString, index_detail::PathSet> &map, const QString &key) {
+        const auto it = map.constFind(key);
+        if (it != map.constEnd())
+            it->forEach([this](const VaultPath &s) { pending.notes.insert(s); });
+    };
     for (const Entry *e : {before, after}) {
         if (!e)
             continue;
         pending.notes.insert(e->path);
-        for (auto id = e->note.blockIds.cbegin(); id != e->note.blockIds.cend(); ++id) {
-            const auto sources = blockRefSources.constFind(id.key());
-            if (sources != blockRefSources.constEnd())
-                sources->forEach([this](const VaultPath &s) { pending.notes.insert(s); });
+        for (auto id = e->note.blockIds.cbegin(); id != e->note.blockIds.cend(); ++id)
+            logAll(blockRefSources, id.key());
+        for (const Task &t : e->note.tasks) {
+            if (!t.id.isEmpty())
+                logAll(taskDependents, t.id);
+            for (const QString &dep : t.dependsOn)
+                logAll(taskIdOwners, dep);
         }
     }
 
@@ -614,6 +624,12 @@ void VaultIndex::Private::attachNote(std::unique_ptr<Entry> owned, bool countFol
         multiAdd(blockRefSources, e.note.links[r].blockId, path);
     for (auto it = e.note.blockIds.cbegin(); it != e.note.blockIds.cend(); ++it)
         multiAdd(blockOwners, it.key(), path);
+    for (const Task &t : std::as_const(e.note.tasks)) {
+        if (!t.id.isEmpty())
+            multiAdd(taskIdOwners, t.id, path);
+        for (const QString &dep : t.dependsOn)
+            multiAdd(taskDependents, dep, path);
+    }
     if (!e.note.tags.isEmpty()) {
         QHash<QString, int> perTag;
         for (const Block &b : std::as_const(e.note.blocks)) {
@@ -694,6 +710,12 @@ std::unique_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(cons
         multiRemove(blockRefSources, e.note.links[r].blockId, path);
     for (auto b = e.note.blockIds.cbegin(); b != e.note.blockIds.cend(); ++b)
         multiRemove(blockOwners, b.key(), path);
+    for (const Task &t : e.note.tasks) {
+        if (!t.id.isEmpty())
+            multiRemove(taskIdOwners, t.id, path);
+        for (const QString &dep : t.dependsOn)
+            multiRemove(taskDependents, dep, path);
+    }
     for (const QString &tag : e.note.tags) {
         const auto t = tagIndex.find(tag);
         if (t == tagIndex.end())
@@ -957,6 +979,8 @@ void VaultIndex::clear()
     d->unresolved.clear();
     d->blockOwners.clear();
     d->blockRefSources.clear();
+    d->taskIdOwners.clear();
+    d->taskDependents.clear();
     d->tagIndex.clear();
     d->noteFolders.clear();
     d->searchTimer->stop();

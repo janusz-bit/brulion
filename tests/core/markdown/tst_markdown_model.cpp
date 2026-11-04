@@ -22,7 +22,7 @@ namespace {
 /// dumpDigest() of the frozen corpus parsed with the default config. Recorded on the tree before
 /// the memory diet (sweep2 82d0357); it changes only when parseNote() returns something
 /// different for some input — then bump markdown::ParserVersion and record the new digest.
-constexpr const char *kParseDigest = "35b66981cba24be59c0974a85b774894";
+constexpr const char *kParseDigest = "05109a55abc5e6c28a1bf1008ee82769";
 
 QList<ParsedNote> parseCorpus()
 {

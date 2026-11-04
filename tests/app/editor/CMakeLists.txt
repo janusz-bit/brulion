@@ -150,6 +150,18 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 ENVIRONMENT "${_playground_env}"
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
+        # The task menu's timer and dependency picker (`--editor-script taskclock`, docs/SYNTAX.md §5).
+        foreach(_clockmenu "tst_editor_qml_taskclock;1280x800;" "tst_editor_qml_taskclock_touch;412x915;--touch")
+            list(GET _clockmenu 0 _clockmenu_test)
+            list(GET _clockmenu 1 _clockmenu_size)
+            list(GET _clockmenu 2 _clockmenu_touch)
+            add_test(NAME ${_clockmenu_test}
+                COMMAND brulion --editor --editor-script taskclock --no-single-instance
+                    --size ${_clockmenu_size} ${_clockmenu_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_clockmenu_test} PROPERTIES
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+        endforeach()
         # The menu of date chips (`--editor-script datechips`): right-clicks with the mouse on a
         # desktop, long presses with a finger on a phone on 📅 and ⏰ chips, its items tapped.
         foreach(_chips "tst_editor_qml_datechips;1280x800;" "tst_editor_qml_datechips_touch;412x915;--touch")

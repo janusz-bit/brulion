@@ -64,6 +64,18 @@ FocusScope {
         if (planningActions.setTaskStatus(task.path, task.line, status, task.text))
             toasts.show(qsTr("Status changed"), { actionText: qsTr("Undo"), onAction: () => planningActions.undo() })
     }
+    /// The menu's timer (docs/SYNTAX.md §5): one at a time — another one stops.
+    function toggleClock(task) {
+        const running = task.clockRunning === true
+        if (planningActions.toggleClock(task.path, task.line, task.text))
+            toasts.show(running ? qsTr("Timer stopped") : qsTr("Timer started"),
+                        { kind: "success", actionText: qsTr("Undo"), onAction: () => planningActions.undo() })
+    }
+    /// "Dodaj zależność…": the picker of the task it will wait for.
+    function openDependencyPicker(task) {
+        dependencyDialog.task = { path: task.path, line: task.line, text: task.text }
+        dependencyDialog.open()
+    }
     /// The menu of a task's chip: its token in the task's file (PlanningTokenMenu).
     function openTokenMenu(task, kind, item, x, y) {
         const value = kind === "due" ? task.due : kind === "scheduled" ? task.scheduled : kind === "start" ? task.start
@@ -185,6 +197,7 @@ FocusScope {
                     Layout.fillWidth: true
                     tasks: taskModel
                     onQueryRequested: queryDialog.open()
+                    onTimeRequested: timeDialog.open()
                     Component.onCompleted: filterBar.bar = filterBarItem
                 }
                 Text {
@@ -243,6 +256,8 @@ FocusScope {
                     onLinkActivated: (url) => root.activateLink(url, row.model)
                     onTagPageRequested: (tag) => AppController.openTag(tag)
                     onStatusRequested: (status) => root.setStatus(row.model, status)
+                    onClockRequested: root.toggleClock(row.model)
+                    onDependencyRequested: root.openDependencyPicker(row.model)
                     onTokenMenuRequested: (kind, item, x, y) => root.openTokenMenu(row.model, kind, item, x, y)
                     onLinkMenuRequested: (url, item, x, y) =>
                         tokenMenu.openLink(url, row.model.path, item, x, y, (tag) => { taskModel.tagFilter = tag })
@@ -293,6 +308,21 @@ FocusScope {
         running: visible
     }
 
+    TasksTimeDialog {
+        id: timeDialog
+        tasks: taskModel
+        onTaskOpened: (path, line) => AppController.openPage(path, line)
+    }
+    TaskDependencyDialog {
+        id: dependencyDialog
+        property var task: null
+        candidates: (text) => task ? planningActions.dependencyCandidates(task.path, task.line, text) : []
+        onChosen: (path, line) => {
+            if (task && planningActions.addDependency(task.path, task.line, task.text, path, line))
+                toasts.show(qsTr("Dependency added"), { kind: "success", actionText: qsTr("Undo"),
+                                                        onAction: () => planningActions.undo() })
+        }
+    }
     TasksQueryDialog {
         id: queryDialog
         query: taskModel.queryText

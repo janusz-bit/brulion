@@ -64,8 +64,39 @@ Po odhaczeniu zadania cyklicznego Brulion dopisuje jego następne wystąpienie n
 
 Regułę zmienisz z menu: prawy przycisk myszy na znaczniku 🔁 (na telefonie przytrzymanie) daje „Zmień regułę…”, gotowe reguły („Codziennie”, „W dni robocze”, „Co tydzień”, „Co 2 tygodnie”, „Co miesiąc”, „Co roku”), przełącznik „Od daty wykonania” (`when done`) i „Nie powtarzaj”. Zmienia się tylko reguła — w `🔁 co tydzień kupić mleko` tekst „kupić mleko” zostaje.
 
+## Zależności między zadaniami
+Zadanie może czekać na inne — zapis jak we wtyczce Obsidian Tasks: zadanie, na które się czeka, ma identyfikator `🆔 fund01`, a zadanie czekające — `⛔ fund01` (kilka identyfikatorów po przecinku: `⛔ fund01,sciany`).
+
+```
+- [ ] Wylać fundament 🆔 fund01
+- [ ] Postawić ściany ⛔ fund01 📅 2026-11-20
+```
+
+Zadanie jest **zablokowane**, dopóki któreś z zadań, na które czeka (w dowolnej notatce), nie jest zrobione ani anulowane. W notatce, w wynikach zapytań i w widoku Zadania znacznik `⛔` pokazuje tekst zadania, na które się czeka — na czerwono, póki nie jest zrobione; kliknięcie otwiera to zadanie. Identyfikator, którego nie ma żadne zadanie, niczego nie blokuje (znacznik ma znak zapytania, widok Zadania pisze „Brak zależności”); zadania czekające na siebie nawzajem są oznaczone „Cykl zależności”.
+
+Zależność dodasz bez pisania znaczników: w menu statusu zadania (prawy przycisk albo przytrzymanie pola wyboru) wybierz **Dodaj zależność…** i znajdź zadanie, na które to ma czekać. Brulion sam nada mu identyfikator (sześć znaków) i dopisze znaczniki w kolejności Obsidian Tasks. To samo jest w palecie poleceń (**Ctrl+K**: „Dodaj zależność zadania…”).
+
+W [[Zapytania|zapytaniach]] `is:blocked` (`jest:zablokowane`) wybiera zadania zablokowane, a `-is:blocked` — te, które można zrobić już teraz.
+
+## Podzadania
+Zadanie z zadaniami wciętymi pod nim pokazuje licznik postępu, np. **3/5**: zrobione podzadania na tle wszystkich (na dowolnej głębokości). Anulowane podzadania się nie liczą — ani jako zrobione, ani jako czekające. Licznik widać w notatce, w wynikach zapytań i w widoku Zadania.
+
+## Licznik czasu
+W menu statusu zadania jest **Uruchom licznik czasu** (i **Zatrzymaj licznik czasu**, gdy działa); w palecie poleceń — „Licznik czasu zadania” i „Zatrzymaj licznik czasu”. Działa jeden licznik naraz: uruchomienie nowego zatrzymuje poprzedni. Czas trafia do pliku, w szufladkę `:LOGBOOK:` pod zadaniem, w zapisie Logseqa — dlatego licznik przetrwa zamknięcie aplikacji i dotrze na inne urządzenia:
+
+```
+- [ ] Napisać raport
+  :LOGBOOK:
+  CLOCK: [2026-11-03 Tue 10:00:00]--[2026-11-03 Tue 10:25:00] =>  00:25:00
+  :END:
+```
+
+Godziny są lokalne (tak jak na zegarze). Zadanie pokazuje łączny czas, np. „⏱ 1 h 05 min”, a przy działającym liczniku „od 10:00”. **Czas pracy** w widoku Zadania podsumowuje czas widocznych zadań (filtry działają) dziś, w tym tygodniu, w tym miesiącu albo w ogóle — według dni, stron, tagów albo zadań.
+
+**Historia statusów** — w Ustawieniach (Edytor) włączysz „Zapisuj zmiany statusu zadań”. Wtedy każda zmiana statusu dopisuje do `:LOGBOOK:` wiersz z godziną, np. `State "DONE" from "DOING" [2026-11-03 Tue 10:25]`, a status **W toku** uruchamia licznik czasu i zatrzymuje go przy zmianie na inny — jak w Logsequ. Domyślnie wyłączone.
+
 ## Widok Zadania
-Widok **Zadania** zbiera zadania z całego notatnika: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki. Kliknięcie tagu w zadaniu filtruje listę po tym tagu; Ctrl+kliknięcie otwiera stronę tagu, a prawy przycisk (na telefonie przytrzymanie) — menu tagu: „Filtruj po tagu”, „Otwórz stronę tagu”, „Widok tagu”, „Otwórz w panelu bocznym”, „Kopiuj tag”. Prawy przycisk albo przytrzymanie znacznika pod zadaniem (termin, zaplanowanie, początek, przypomnienie, powtarzanie, priorytet) otwiera jego menu; zmianę cofniesz przyciskiem **Cofnij** w powiadomieniu.
+Widok **Zadania** zbiera zadania z całego notatnika: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki. Kliknięcie tagu w zadaniu filtruje listę po tym tagu; Ctrl+kliknięcie otwiera stronę tagu, a prawy przycisk (na telefonie przytrzymanie) — menu tagu: „Filtruj po tagu”, „Otwórz stronę tagu”, „Widok tagu”, „Otwórz w panelu bocznym”, „Kopiuj tag”. Prawy przycisk albo przytrzymanie znacznika pod zadaniem (termin, zaplanowanie, początek, przypomnienie, powtarzanie, priorytet) otwiera jego menu; zmianę cofniesz przyciskiem **Cofnij** w powiadomieniu. Pod zadaniem widać też, na co czeka („Czeka na: …” — kliknięcie otwiera to zadanie), ile zadań czeka na nie, postęp podzadań i zapisany czas.
 
 Zadania z terminami pokazuje też kalendarz ([[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]]).
 

@@ -105,6 +105,21 @@ private Q_SLOTS:
         QCOMPARE(s.sidebarHidden(), QStringList());
         QCOMPARE(s.bottomNavTabs(), (QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s}));
         QVERIFY(s.captureButtonShown());
+        QVERIFY(!s.taskStatusHistory()); // docs/SYNTAX.md §5: off by default
+    }
+
+    void taskStatusHistoryPersists()
+    {
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QSignalSpy changed(&s, &AppSettings::taskStatusHistoryChanged);
+            s.setTaskStatusHistory(true);
+            s.setTaskStatusHistory(true);
+            QCOMPARE(changed.count(), 1);
+        }
+        AppSettings again(file, m_tmp.path());
+        QVERIFY(again.taskStatusHistory());
     }
 
     void persistence()

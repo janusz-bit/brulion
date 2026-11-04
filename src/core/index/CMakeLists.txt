@@ -1,5 +1,5 @@
 # index — the in-memory vault index (VaultIndex: link resolution, backlinks, unlinked references,
-# block ids, tags, tasks, reminders, journals, attachments, search, suggestions, page-property keys and
+# block ids, tags, tasks and their dependencies (taskdeps.cpp), time summaries (tasktime.h), reminders, journals, attachments, search, suggestions, page-property keys and
 # values, graph) and the
 # query language (docs/SYNTAX.md §10), and the index cache on the device (indexcache.h, L2 of
 # docs/PERFORMANCE.md). Public headers: index.h (overview), vaultindex.h, searchindex.h, query.h,
@@ -17,6 +17,7 @@ brulion_add_core_module(index
         relocate.cpp
         resolve_p.h resolve.cpp
         suggest_p.h suggest.cpp
+        tasktime.h tasktime.cpp taskdeps.cpp
         textutil_p.h textutil.cpp
         unlinked_p.h unlinked.cpp
     DEPS util text dates markdown)

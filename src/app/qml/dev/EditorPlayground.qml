@@ -19,7 +19,8 @@ import Brulion
 // document-paragraph, document-list, document-heading, document-task (editing one),
 // document-outline (the same page switched to an outline); `selftest` runs keyboard/input-method
 // checks (outline and document mode) and exits; `clock` checks the round clock and its buttons
-// (clockTest()) and exits; `taskstatus` checks the task status menu and commands
+// (clockTest()) and exits; `taskclock` the task menu's timer and dependency picker;
+// `taskstatus` checks the task status menu and commands
 // (taskStatusTest()) and exits; `keyboard` checks the touch toolbar on a simulated on-screen
 // keyboard (keyboardTest(): KeyboardInsets.simulated) and exits; `blocklinks` checks copying links
 // to blocks and headings and following them (blockLinksTest()) and exits; `refreshtest` checks
@@ -2642,6 +2643,76 @@ ApplicationWindow {
         stepIndex = 0
         stepTimer.start()
     }
+    // ---- The task menu's timer and dependency (`--editor-script taskclock`, tst_editor_qml_taskclock*,
+    // docs/SYNTAX.md §5): "Uruchom licznik czasu" writes a running CLOCK into the task's :LOGBOOK:
+    // (its chip "⏱ od 10:00"), "Zatrzymaj …" closes it, one undo step each; "Dodaj zależność…"
+    // opens the picker, a search finds the task of the page, choosing it writes 🆔 / ⛔ and the
+    // ⛔ chip shows that task's text.
+    /// The rendered text of `row` with its no-break spaces as spaces (chips use them).
+    function rowHtml(row) {
+        return (info(row).html || "").replace(/&nbsp;|\u00a0/g, " ")
+    }
+    function taskClockTest() {
+        taskEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "taskEvents")
+        const original = host.file(page.path)
+        steps = [
+            () => {
+                window.taskRow = rowOf("Wywieźć gruz")
+                editor.listView.positionViewAtIndex(window.taskRow, ListView.Center)
+            },
+            ...menuGesture(() => blockTaskBox(window.taskRow), editorMenuOpen),
+            waitStep(editorMenuOpen, "the task's menu opens"),
+            () => {
+                const start = menuItemNamed(editor.taskMenu, "taskClockToggle")
+                check(start !== null && start.visible && start.text === "Uruchom licznik czasu",
+                      "the menu offers the timer: " + (start ? start.text : "none"))
+                check(menuItemNamed(editor.taskMenu, "taskAddDependency") !== null, "and “Dodaj zależność…”")
+                tapItem(start)
+            },
+            waitStep(() => !editor.taskMenu.visible && pageText().indexOf("\t- [ ] Wywieźć gruz ⏳ 2026-10-18\n\t  :LOGBOOK:\n\t  CLOCK: [2026-10-15 Thu 10:00:00]\n\t  :END:\n") >= 0,
+                     () => "the timer is written to the task's LOGBOOK: " + JSON.stringify(pageText().slice(pageText().indexOf("Wywieźć"), pageText().indexOf("Wywieźć") + 120))),
+            waitStep(() => rowHtml(window.taskRow).indexOf("⏱ od 10:00") >= 0, "the task shows its running timer"),
+            ...menuGesture(() => blockTaskBox(window.taskRow), editorMenuOpen),
+            waitStep(editorMenuOpen, "the menu opens again"),
+            () => {
+                const stop = menuItemNamed(editor.taskMenu, "taskClockToggle")
+                check(stop !== null && stop.text === "Zatrzymaj licznik czasu", "it offers to stop the timer")
+                tapItem(stop)
+            },
+            waitStep(() => pageText().indexOf("CLOCK: [2026-10-15 Thu 10:00:00]--[2026-10-15 Thu 10:00:00] =>  00:00:00") >= 0,
+                     "stopping closes the CLOCK line"),
+            () => page.undo(),
+            () => page.undo(),
+            () => check(pageText() === original, "two undo steps take both back"),
+            // ---- A dependency through the picker ------------------------------------------------
+            ...menuGesture(() => blockTaskBox(window.taskRow), editorMenuOpen),
+            waitStep(editorMenuOpen, "the menu opens for a dependency"),
+            () => tapItem(menuItemNamed(editor.taskMenu, "taskAddDependency")),
+            waitStep(() => editor.dependencyDialog !== null && editor.dependencyDialog.opened, "the picker opens"),
+            () => {
+                const field = findItem(editor.dependencyDialog.contentItem, "taskDependencySearch")
+                check(field !== null, "the picker has its search field")
+                field.text = "skuc"
+            },
+            () => {
+                const items = editor.dependencyDialog.items
+                check(items.length === 1 && items[0].text === "Skuć stare płytki",
+                      "a search without diacritics finds the task: " + JSON.stringify(items))
+                editor.dependencyDialog.tryAccept()
+            },
+            waitStep(() => !editor.dependencyDialog.visible && pageText().indexOf("- [ ] Wywieźć gruz ⛔ ") >= 0
+                           && pageText().indexOf("- [ ] Skuć stare płytki 🆔 ") >= 0,
+                     () => "choosing it writes 🆔 and ⛔: " + fileLineOf(pageText(), "Wywieźć gruz")),
+            waitStep(() => rowHtml(rowOf("Wywieźć gruz")).indexOf("⛔ Skuć stare płytki") >= 0,
+                     "the ⛔ chip shows the task it waits for"),
+            () => {
+                page.undo()
+                host.setFile(page.path, original)
+            }
+        ]
+        stepIndex = 0
+        stepTimer.start()
+    }
     // ---- Links to blocks and headings (`--editor-script blocklinks`, tst_editor_qml_blocklinks*) --
     // "Kopiuj odnośnik" with real input: the block menu from a right-click on a heading's text, a
     // paragraph, a callout and a calc block (desktop) — a finger's long press on text selects the
@@ -3462,6 +3533,9 @@ ApplicationWindow {
             break
         case "taskstatus":
             taskStatusTest()
+            break
+        case "taskclock":
+            taskClockTest()
             break
         case "keyboard":
             keyboardTest()

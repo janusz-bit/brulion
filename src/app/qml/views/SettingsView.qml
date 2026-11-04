@@ -770,6 +770,15 @@ Item {
                 checked: AppSettings.editorSourceMode
                 onToggled: AppSettings.editorSourceMode = checked
             }
+            // Task status history in the task's :LOGBOOK: (docs/SYNTAX.md §5; default off).
+            BSwitch {
+                objectName: "settingsTaskStatusHistory"
+                Layout.fillWidth: true
+                text: qsTr("Log task status changes")
+                description: qsTr("Each change is written to the task's LOGBOOK with its time, and “In progress” starts and stops the task's timer, as in Logseq.")
+                checked: AppSettings.taskStatusHistory
+                onToggled: AppSettings.taskStatusHistory = checked
+            }
             // Spell checking (docs/UI.md "Spell checking"): only where this device can check.
             BSwitch {
                 objectName: "settingsSpellCheck"

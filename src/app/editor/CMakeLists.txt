@@ -15,14 +15,16 @@
 # QObject interface whose moc output must be compiled exactly once: the tiny library
 # brulion_editorhost provides it, with the picture size helper both sides use (picturesize.h:
 # the editor for local files, the shell's Workspace for the browser's data: URLs; whether an SVG
-# is a drawing, by the core module drawing). The editor area
+# is a drawing, by the core module drawing) and one task clock at a time (taskhelpers.h). The editor area
 # is included before the shell's, which reuses this target (src/app/shell/area.cmake defines the
 # same one only when it is missing).
 if(NOT TARGET brulion_editorhost)
     qt_add_library(brulion_editorhost STATIC ${CMAKE_CURRENT_SOURCE_DIR}/editorhost.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/picturesize.h ${CMAKE_CURRENT_SOURCE_DIR}/picturesize.cpp)
+        ${CMAKE_CURRENT_SOURCE_DIR}/picturesize.h ${CMAKE_CURRENT_SOURCE_DIR}/picturesize.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/taskhelpers.h ${CMAKE_CURRENT_SOURCE_DIR}/taskhelpers.cpp)
     target_include_directories(brulion_editorhost PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(brulion_editorhost PUBLIC Qt6::Core PRIVATE Qt6::Gui brulion_core_drawing)
+    target_link_libraries(brulion_editorhost PUBLIC Qt6::Core PRIVATE Qt6::Gui brulion_core_drawing
+        brulion_core_markdown brulion_core_notebook)
     qt_extract_metatypes(brulion_editorhost)
     brulion_set_warnings(brulion_editorhost)
 endif()

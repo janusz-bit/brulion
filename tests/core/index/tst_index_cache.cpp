@@ -31,7 +31,7 @@ namespace {
 /// SHA-256 (first 16 bytes, hex) of the record bodies and the search section of the frozen corpus:
 /// changes only with the encoding — then bump indexcache::FormatVersion (or
 /// SearchIndex::FormatVersion for the search part) and record the new digest.
-constexpr const char *kCacheDigest = "e127592f7160f78f03479a5ae7c88d8f";
+constexpr const char *kCacheDigest = "acc68c0ff240c069f248905787eeb248";
 
 QList<std::pair<VaultPath, QString>> guideNotes()
 {

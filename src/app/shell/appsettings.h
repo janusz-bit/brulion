@@ -93,6 +93,12 @@ class AppSettings : public QObject {
     /// waits for "Pokaż" — a synced or imported note cannot make the device fetch anything).
     Q_PROPERTY(
             bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
+    /// Task status history (docs/SYNTAX.md §5 "Time tracking and status history"; default off):
+    /// a status change adds a `State "DONE" from "TODO" [time]` line to the task's `:LOGBOOK:`, and
+    /// "W toku" starts its clock (leaving it stops the clock), as Logseq does. Pushed into the
+    /// Workspace (EditorHost::taskStatusHistory()).
+    Q_PROPERTY(bool taskStatusHistory READ taskStatusHistory WRITE setTaskStatusHistory NOTIFY taskStatusHistoryChanged
+                       FINAL)
     /// Spell checking in the editor (SpellCheck, docs/UI.md "Spell checking"; default on).
     Q_PROPERTY(bool spellCheck READ spellCheck WRITE setSpellCheck NOTIFY spellCheckChanged FINAL)
     /// Its languages: "auto" (default: the UI language, the system's, English), "pl", "en",
@@ -232,6 +238,8 @@ public:
     void setExportWebPictures(const QString &mode);
     bool spellCheck() const;
     void setSpellCheck(bool on);
+    bool taskStatusHistory() const;
+    void setTaskStatusHistory(bool on);
     QString spellLanguages() const;
     void setSpellLanguages(const QString &languages);
     QStringList spellingWords() const;
@@ -362,6 +370,7 @@ Q_SIGNALS:
     void webPicturesShownChanged();
     void exportWebPicturesChanged();
     void spellCheckChanged();
+    void taskStatusHistoryChanged();
     void spellLanguagesChanged();
     void spellingWordsChanged();
     void wordCountShownChanged();

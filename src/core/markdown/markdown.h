@@ -29,6 +29,14 @@
 //                  parseLogseqTimestamp(inner), recurrenceOf(token)
 //   tasks.h        statusFromCheckbox / statusFromKeyword / statusChar / keywordFor,
 //                  matchTaskMarker(text, start)
+//   taskdeps.h     Obsidian Tasks dependencies: isValidTaskId, generateTaskId, setTaskId /
+//                  addTaskDependency / removeTaskDependency(content, line, id) (🆔 / ⛔ written in
+//                  Obsidian Tasks' order), subtaskProgress(note, block) -> {done, total} ("3/5")
+//   logbook.h      Logseq's :LOGBOOK: drawer: readLogbook(text) -> Logbook{clocks (CLOCK lines,
+//                  local wall-clock time), changes (State lines), malformed}, clockedSeconds /
+//                  clockedSecondsByDay, formatClockLine / formatClockTimestamp / formatStatusChange;
+//                  edits startTaskClock / stopTaskClock / logStatusChange(content, line, …),
+//                  setTaskStatusLogged / toggleTaskLogged (the status history setting)
 //   properties.h   parsePropertyValue(key, raw), matchPropertyLine(line),
 //                  frontmatterProperties(data), namesFrom(value, splitWhitespace)
 //   frontmatter.h  findFrontmatter / parseFrontmatter(content), parseYaml(yaml) (subset, no
@@ -130,12 +138,14 @@
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
+#include "markdown/logbook.h"
 #include "markdown/notemode.h"
 #include "markdown/pagelook.h"
 #include "markdown/pageprops.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"
 #include "markdown/rename.h"
+#include "markdown/taskdeps.h"
 #include "markdown/tasks.h"
 #include "markdown/templates.h"
 #include "markdown/tokenedit.h"

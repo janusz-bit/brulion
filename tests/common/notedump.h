@@ -124,7 +124,12 @@ inline QString task(const Task &t)
                                   .arg(t.line)
                                   .arg(spec(t.due), spec(t.scheduled), spec(t.start), optDate(t.created),
                                        optDate(t.doneDate), optDate(t.cancelledDate), str(t.recurrence))
-                                  .arg(int(t.priority));
+                                  .arg(int(t.priority))
+                          + QStringLiteral(" id=%1 deps=%2 clock=%3/%4")
+                                                   .arg(str(t.id), str(t.dependsOn.join(u',')))
+                                                   .arg(t.clockedSeconds)
+                                                   .arg(t.clockStart.isValid() ? t.clockStart.toString(Qt::ISODate)
+                                                                               : QStringLiteral("-"));
 }
 
 inline QString reminder(const Reminder &r)

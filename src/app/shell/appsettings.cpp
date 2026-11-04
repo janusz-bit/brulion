@@ -48,6 +48,7 @@ constexpr auto kEditorSource = "editor/sourceMode";
 constexpr auto kPropertiesExpanded = "editor/propertiesExpanded";
 constexpr auto kWebPictures = "editor/webPicturesShown";
 constexpr auto kSpellCheck = "spelling/enabled";
+constexpr auto kTaskStatusHistory = "tasks/statusHistory";
 constexpr auto kSpellLanguages = "spelling/languages";
 constexpr auto kSpellingWords = "spelling/words";
 constexpr auto kExportWebPictures = "export/webPictures";
@@ -590,6 +591,17 @@ void AppSettings::setSpellCheck(bool on)
 {
     if (store(key(kSpellCheck), on, spellCheck()))
         Q_EMIT spellCheckChanged();
+}
+
+bool AppSettings::taskStatusHistory() const
+{
+    return m_settings->value(key(kTaskStatusHistory), false).toBool();
+}
+
+void AppSettings::setTaskStatusHistory(bool on)
+{
+    if (store(key(kTaskStatusHistory), on, taskStatusHistory()))
+        Q_EMIT taskStatusHistoryChanged();
 }
 
 QString AppSettings::spellLanguages() const

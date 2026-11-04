@@ -48,6 +48,61 @@ private Q_SLOTS:
         QVERIFY(host.file(u"Dom.md"_s).endsWith(u"- nowa linia\n"_s));
     }
 
+    // The timer (one at a time, across files), "Dodaj zależność…" (🆔 written to the other task)
+    // and the status history setting of the host.
+    void clockDependencyAndHistory()
+    {
+        FakeEditorHost host;
+        host.setFile(u"A.md"_s, u"- [ ] Pierwsze\n- [ ] Drugie\n"_s);
+        host.setFile(u"B.md"_s, u"- [ ] W innym pliku\n"_s);
+        PlanningActions actions;
+        actions.setHost(&host);
+        actions.setVaultIndex(const_cast<brulion::VaultIndex *>(host.taskIndex()));
+        actions.setNow(u"2026-10-15 10:00"_s);
+        QVERIFY(actions.toggleClock(u"B.md"_s, 0, u"W innym pliku"_s));
+        QCOMPARE(host.file(u"B.md"_s),
+                 u"- [ ] W innym pliku\n  :LOGBOOK:\n  CLOCK: [2026-10-15 Thu 10:00:00]\n  :END:\n"_s);
+        actions.setVaultIndex(const_cast<brulion::VaultIndex *>(host.taskIndex())); // rebuilt after the write
+        actions.setNow(u"2026-10-15 10:30"_s);
+        QVERIFY(actions.toggleClock(u"A.md"_s, 1, u"Drugie"_s)); // the other one stops
+        QVERIFY(host.file(u"B.md"_s).contains(u"--[2026-10-15 Thu 10:30:00] =>  00:30:00"_s));
+        QVERIFY(host.file(u"A.md"_s).contains(u"- [ ] Drugie\n  :LOGBOOK:\n  CLOCK: [2026-10-15 Thu 10:30:00]\n"_s));
+        QVERIFY(actions.undo()); // the task's own file
+        QCOMPARE(host.file(u"A.md"_s), u"- [ ] Pierwsze\n- [ ] Drugie\n"_s);
+
+        // A dependency on a task of another file: it gets an id.
+        actions.setVaultIndex(const_cast<brulion::VaultIndex *>(host.taskIndex()));
+        const QVariantList candidates = actions.dependencyCandidates(u"A.md"_s, 0, u"inny"_s);
+        QCOMPARE(candidates.size(), 1);
+        QCOMPARE(candidates.first().toMap().value(u"path"_s).toString(), u"B.md"_s);
+        QVERIFY(actions.addDependency(u"A.md"_s, 0, u"Pierwsze"_s, u"B.md"_s, 0));
+        const QString b = host.file(u"B.md"_s);
+        const QString id = b.section(u"🆔 "_s, 1).left(6);
+        QCOMPARE(id.size(), 6);
+        QCOMPARE(host.file(u"A.md"_s), u"- [ ] Pierwsze ⛔ "_s + id + u"\n- [ ] Drugie\n"_s);
+        // In the same file.
+        actions.setVaultIndex(const_cast<brulion::VaultIndex *>(host.taskIndex()));
+        QVERIFY(actions.addDependency(u"A.md"_s, 1, u"Drugie"_s, u"A.md"_s, 0));
+        QVERIFY(host.file(u"A.md"_s).contains(u"- [ ] Drugie ⛔ "_s));
+        QVERIFY(host.file(u"A.md"_s).startsWith(u"- [ ] Pierwsze 🆔 "_s));
+        // Not on itself.
+        QVERIFY(!actions.addDependency(u"A.md"_s, 1, u"Drugie"_s, u"A.md"_s, 1));
+
+        // The status history: logged, "W toku" starts the clock.
+        host.setFile(u"C.md"_s, u"- [ ] Historia\n"_s);
+        host.setTaskStatusHistory(true);
+        actions.setNow(u"2026-10-15 11:00"_s);
+        QVERIFY(actions.setTaskStatus(u"C.md"_s, 0, u"doing"_s, u"Historia"_s));
+        QCOMPARE(host.file(u"C.md"_s),
+                 u"- [/] Historia\n  :LOGBOOK:\n  CLOCK: [2026-10-15 Thu 11:00:00]\n"
+                 "  State \"DOING\"      from \"TODO\"       [2026-10-15 Thu 11:00]\n  :END:\n"_s);
+        actions.setNow(u"2026-10-15 11:20"_s);
+        QVERIFY(actions.toggleTask(u"C.md"_s, 0, u"Historia"_s));
+        QVERIFY(host.file(u"C.md"_s).contains(
+                u"CLOCK: [2026-10-15 Thu 11:00:00]--[2026-10-15 Thu 11:20:00] =>  00:20:00"_s));
+        QVERIFY(host.file(u"C.md"_s).contains(u"State \"DONE\"       from \"DOING\"      [2026-10-15 Thu 11:20]"_s));
+    }
+
     void movedAndMissingTasks()
     {
         FakeEditorHost host;

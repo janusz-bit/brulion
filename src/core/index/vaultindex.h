@@ -104,6 +104,22 @@ struct TaskRef {
     Task task;
 };
 
+/// One `⛔ id` of a task and the tasks carrying that `🆔` (see VaultIndex::taskDependencies()).
+struct TaskDependency {
+    QString id;
+    QList<TaskRef> tasks; ///< the tasks with `🆔 id` (the task itself left out); empty: no such id
+    bool open = false;    ///< one of them is not done or cancelled: it blocks
+};
+
+/// A task's dependencies both ways (docs/SYNTAX.md §5 "Dependencies").
+struct TaskDependencies {
+    QList<TaskDependency> dependsOn; ///< one per `⛔` id, as written
+    QList<TaskRef> dependents;       ///< tasks that are not done or cancelled and wait for this one's 🆔
+    bool blocked = false;            ///< VaultIndex::isTaskBlocked()
+    bool missing = false;            ///< a `⛔` id no task carries (it does not block)
+    bool cycle = false;              ///< following the open tasks' `⛔` leads back to this task
+};
+
 /// A reminder with its location (and the task when the block is one).
 struct ReminderRef {
     VaultPath path;
@@ -543,6 +559,27 @@ public:
     QList<ReminderRef> remindersOf(const VaultPath &path) const;
     /// Daily notes, newest first (ties by path).
     QList<JournalRef> journals() const;
+
+    // ---- task dependencies (docs/SYNTAX.md §5 "Dependencies") -------------------------------------
+
+    /// The tasks carrying `🆔 id` (case-sensitive), notes by path, document order.
+    QList<TaskRef> tasksWithId(const QString &id) const;
+    /// Does a task carry `🆔 id`?
+    bool hasTaskId(const QString &id) const;
+    /// Is the task of block `blockIndex` of `path` blocked: it is not done or cancelled, and one
+    /// of the tasks it depends on (`⛔ id`, the tasks with `🆔 id` anywhere in the vault, itself
+    /// excepted) is not done or cancelled? An id no task carries does not block. False for a block
+    /// that is no task.
+    bool isTaskBlocked(const VaultPath &path, int blockIndex) const;
+    /// Is it blocking: it has a `🆔`, is not done or cancelled, and a task that is not done or
+    /// cancelled depends on it?
+    bool isTaskBlocking(const VaultPath &path, int blockIndex) const;
+    /// Both directions of the task's dependencies, with missing ids and cycles flagged (empty for
+    /// a block that is no task).
+    TaskDependencies taskDependencies(const VaultPath &path, int blockIndex) const;
+    /// The tasks with a running clock (`CLOCK:` without an end in their `:LOGBOOK:`), as tasks()
+    /// lists them — one at most when only Brulion starts clocks.
+    QList<TaskRef> runningClocks() const;
 
     // ---- search and suggestions -----------------------------------------------------------------
 

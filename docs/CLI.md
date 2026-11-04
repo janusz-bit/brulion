@@ -203,9 +203,13 @@ Never compute a hash yourself.
 | `month path [<when>]` | | where a monthly note is, else where it will be created | |
 | `month append <text>` | `[--when M] [--stdin]` | a block in a monthly note, created from `monthlyTemplate` | yes |
 | `capture <text>` | `[--stdin]` | the app's quick capture into today's note: a date makes a task with ⏰ (time) or 📅 | yes |
-| `task list` | `[--status S] [--due E] [--tag T] [--page P] [--limit N] \| --query Q` | tasks (open by default) with refs | |
+| `task list` | `[--status S] [--due E] [--tag T] [--page P] [--blocked] [--limit N] \| --query Q` | tasks (open by default) with refs; a task also has `blocked`, `blocking`, `cycle`, `blockedBy` (the open tasks it waits for), `missingIds` and `subtasks {done, total}` (docs/SYNTAX.md §5); the text form marks a blocked task `⛔` and shows `3/5` | |
 | `task add <text>` | `[--due D] [--scheduled D] [--start D] [--remind D \| --alarm D] [--every R] [--priority P] [--page P \| --date D]` | a task with canonical tokens | yes |
-| `task set <ref> <status>` | todo, doing, done, cancelled, deferred, none (Polish words too) | a recurring task done → its next occurrence | yes |
+| `task set <ref> <status>` | todo, doing, done, cancelled, deferred, none (Polish words too); `[--history]` | a recurring task done → its next occurrence; `--history` logs the change in the task's `:LOGBOOK:` (doing starts its clock, leaving doing stops it) as the app's „Historia statusów” setting does | yes |
+| `task start <ref>` | | start the task's clock: `CLOCK: [2026-11-03 Tue 10:00:00]` in its `:LOGBOOK:` (local time); a clock running elsewhere is stopped first (`stopped`) — one at a time | yes |
+| `task stop [<ref>]` | | stop the task's clock (`--[…] =>  00:25:00`); without a ref every running one | yes |
+| `task time` | `[--by day\|page\|tag\|task] [--from D] [--to D] [--query Q]` | time clocked: `{rows [{key, label, seconds, duration, tasks, path?, ref?}], total, tasks}`; entries crossing midnight are split, overlapping ones of a task count once, a running clock counts up to now | |
+| `task depend <ref>` | `--on <ref> [--remove]` | the task waits for the other (`⛔ id` after its `🆔`, Obsidian Tasks' order); the other gets a `🆔` (6 characters) when it has none | yes |
 | `task done <ref>` | | `task set <ref> done` | yes |
 | `task doing <ref>` | | in progress | yes |
 | `task todo <ref>` | | open again | yes |

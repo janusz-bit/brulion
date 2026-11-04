@@ -17,6 +17,7 @@ brulion_add_core_module(markdown
         journal.h journal.cpp
         linkformat.h linkformat.cpp
         lines_p.h lines.cpp
+        logbook.h logbook.cpp
         math.h math.cpp
         notemode.h notemode.cpp
         notetags.cpp
@@ -26,6 +27,7 @@ brulion_add_core_module(markdown
         properties.h properties.cpp
         rename.h rename.cpp
         structure_p.h structure.cpp
+        taskdeps.h taskdeps.cpp
         tasks.h tasks.cpp
         templates.h templates.cpp
         tokens.h tokens_p.h tokens.cpp

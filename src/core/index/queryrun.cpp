@@ -331,6 +331,18 @@ bool Runner::test(const QueryFilter &f, const View &view)
     case QueryFilterKind::Date:
         return std::any_of(f.dates.cbegin(), f.dates.cend(),
                            [&](const QueryDateCondition &c) { return dateMatches(f.field, c, view); });
+    case QueryFilterKind::Is:
+        return view.task && std::any_of(f.values.cbegin(), f.values.cend(), [&](const QString &v) {
+                   if (v == u"blocked")
+                       return m_index.isTaskBlocked(view.path(), view.block);
+                   if (v == u"blocking")
+                       return m_index.isTaskBlocking(view.path(), view.block);
+                   if (v == u"running")
+                       return view.task->clockStart.isValid();
+                   if (v == u"tracked")
+                       return view.task->clockedSeconds > 0 || view.task->clockStart.isValid();
+                   return false;
+               });
     }
     return false;
 }

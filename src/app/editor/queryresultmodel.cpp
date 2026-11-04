@@ -404,8 +404,22 @@ QString QueryResultModel::renderItem(const QVariantMap &item) const
     ctx.inlineCalc = nullptr; // the item's page variables are not at hand: `= expr` shown as written
     ctx.hideTransclusions = false; // no embed frames in result rows: placeholder links
     const markdown::InlineRenderer renderer(ctx);
-    const QString html = detail::renderBodyHtml(e, shape, renderer);
-    return html.isEmpty() ? markdown::InlineRenderer::escape(plainTextOf(e, 300)) : html;
+    QString html = detail::renderBodyHtml(e, shape, renderer);
+    if (html.isEmpty())
+        return markdown::InlineRenderer::escape(plainTextOf(e, 300));
+    // A task's subtask progress and clocked time after its text (notebook::queryItemJson's
+    // `subtasks`, `task.clockedSeconds`, `task.clockStart`; docs/SYNTAX.md §5).
+    const QVariantMap task = item.value(u"task"_s).toMap();
+    if (!task.isEmpty()) {
+        const QVariantMap sub = item.value(u"subtasks"_s).toMap();
+        const QDateTime start = QDateTime::fromString(task.value(u"clockStart"_s).toString(), u"yyyy-MM-ddTHH:mm:ss"_s);
+        const QString chips =
+                markdown::taskChipsHtml(sub.value(u"done"_s).toInt(), sub.value(u"total"_s).toInt(),
+                                        task.value(u"clockedSeconds"_s).toLongLong(), start, ctx.palette, ctx.locale);
+        if (!chips.isEmpty())
+            html += u' ' + chips;
+    }
+    return html;
 }
 
 int QueryResultModel::currentLine(const Row &row) const

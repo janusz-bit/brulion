@@ -1513,6 +1513,15 @@ private Q_SLOTS:
             QCOMPARE(app->currentRoute().value(u"section"_s).toString(), u"shortcuts"_s);
             QVERIFY(app->back());
         }
+        // Tasks (docs/SYNTAX.md §5): the timer and a dependency of the task at the cursor go to the
+        // editor; "Zatrzymaj licznik czasu" only while a timer runs.
+        for (const auto &[command, action] :
+             {std::pair{u"task.clock"_s, u"taskClock"_s}, std::pair{u"task.addDependency"_s, u"taskDependency"_s}}) {
+            QVERIFY(model->run(command));
+            QCOMPARE(sourceUi.last().first().toString(), action);
+        }
+        QVERIFY(!commandNamed(u"task.stopClocks"_s).value(u"enabled"_s).toBool());
+        QVERIFY(!model->run(u"task.stopClocks"_s));
         // Source mode: no blocks to point at — the block and heading commands are off (not a toast
         // after choosing them), the page's link stays; back to blocks, they are on again.
         QSignalSpy commandsChanged(model, &CommandModel::commandsChanged);

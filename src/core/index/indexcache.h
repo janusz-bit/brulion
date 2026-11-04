@@ -50,7 +50,7 @@ class VaultIndex;
 namespace brulion::indexcache {
 
 /// Bump when the encoding changes (also when Block, Task, Reminder or Link gain a field).
-inline constexpr quint32 FormatVersion = 1;
+inline constexpr quint32 FormatVersion = 2;
 
 /// What a cache file must have been written with to be used.
 struct Identity {

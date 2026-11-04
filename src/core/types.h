@@ -82,6 +82,16 @@ struct Task {
     std::optional<QDate> created, doneDate, cancelledDate;
     QString recurrence;  ///< canonical English rule ("every week on Monday"), empty if none
     Priority priority = Priority::None;
+    /// Obsidian Tasks dependencies (docs/SYNTAX.md §5 "Dependencies"): the task's `🆔 id` (the
+    /// first one on its first line; empty if none) and the ids of its `⛔ a,b` tokens (written
+    /// order, duplicates removed).
+    QString id;
+    QStringList dependsOn;
+    /// Time tracking (SYNTAX §5 "Time tracking"): seconds of the closed `CLOCK:` entries of the
+    /// block's `:LOGBOOK:` drawer (overlapping entries counted once) and the start of a running
+    /// one (local wall-clock time; invalid when no clock runs).
+    qint64 clockedSeconds = 0;
+    QDateTime clockStart;
 };
 
 struct Reminder {

@@ -78,6 +78,7 @@
 #include "calc/calclocale.h"
 #include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
+#include "markdown/taskdeps.h"
 
 #include <QAbstractListModel>
 #include <QDate>
@@ -312,6 +313,8 @@ private:
         QVariantList transclusions;
         bool dependsOnRefs = false; ///< `((id))`, `[[…#^id]]`: re-render on any change of the page
         bool dependsOnCalc = false; ///< inline calculations: re-render when the calc scope may change
+        /// A task's subtask progress the html shows ("3/5"): re-rendered when its subtasks change.
+        markdown::SubtaskProgress htmlProgress;
         int htmlCalcEpoch = -1;     ///< m_calcEpoch the html's inline calculations saw
         int renderOffset = 0;       ///< offset of the rendered text in the body (reminder: ranges)
         // Calculations: calcResults / tableData are current while resultsValid and, when they
@@ -341,6 +344,8 @@ private:
     RowState &stateFor(quint64 uid) const;
     const BlockShape &cachedShape(int row) const;
     QString renderHtml(int docIndex) const;
+    /// The subtask progress of the list item at `docIndex` (its descendants' tasks, SYNTAX §5).
+    markdown::SubtaskProgress subtaskProgressAt(int docIndex) const;
     markdown::RenderContext renderContext(int docIndex) const;
     void ensureEmbeds(int row) const;
     /// The embeds role entry of a picture from the internet (EditorHost::webPicture).

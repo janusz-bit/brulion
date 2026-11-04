@@ -585,6 +585,58 @@ private Q_SLOTS:
         QCOMPARE(resets.count(), 0);
     }
 
+    // Dependencies, subtasks and time (docs/SYNTAX.md §5): the roles, unblocking when the task
+    // waited for in another note is done (incremental), the time summary.
+    void dependenciesAndTime()
+    {
+        auto index = makeIndex(
+                {{u"Budowa.md"_s, u"- [ ] Wylać fundament 🆔 fund\n"
+                                  "- [ ] Postawić ściany ⛔ fund\n"
+                                  "  - [x] Kupić cegły\n"
+                                  "  - [ ] Zamówić dźwig\n"
+                                  "  - [-] Anulowane\n"
+                                  "- [ ] Dach ⛔ brak\n"
+                                  "- [/] Pisanie #praca\n"
+                                  "  :LOGBOOK:\n"
+                                  "  CLOCK: [2026-10-14 Wed 09:00:00]--[2026-10-14 Wed 10:05:00] =>  01:05:00\n"
+                                  "  CLOCK: [2026-10-15 Thu 08:00:00]\n"
+                                  "  :END:\n"_s},
+                 {u"Inna.md"_s, u"- [ ] Zamówić żwir ⛔ fund\n"_s}});
+        TaskListModel m;
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setVaultIndex(index.get());
+        const QVariantMap walls = m.get(m.rowOfKey(u"Budowa.md:1"_s));
+        QVERIFY(walls.value(u"blocked"_s).toBool());
+        QCOMPARE(walls.value(u"blockedBy"_s).toString(), u"Wylać fundament"_s);
+        QCOMPARE(walls.value(u"blockedById"_s).toString(), u"fund"_s);
+        QCOMPARE(walls.value(u"progress"_s).toString(), u"1/2"_s);
+        QCOMPARE(walls.value(u"progressComplete"_s).toBool(), false);
+        const QVariantMap base = m.get(m.rowOfKey(u"Budowa.md:0"_s));
+        QCOMPARE(base.value(u"blocked"_s).toBool(), false);
+        QCOMPARE(base.value(u"blockingCount"_s).toInt(), 2);
+        QCOMPARE(m.get(m.rowOfKey(u"Budowa.md:5"_s)).value(u"dependencyProblem"_s).toString(), u"missing"_s);
+        const QVariantMap writing = m.get(m.rowOfKey(u"Budowa.md:6"_s));
+        QCOMPARE(writing.value(u"timeLabel"_s).toString(), u"1 h 05 min + od 08:00"_s);
+        QVERIFY(writing.value(u"clockRunning"_s).toBool());
+        QVERIFY(m.get(m.rowOfKey(u"Inna.md:0"_s)).value(u"blocked"_s).toBool());
+
+        // Done in its own note: the task in another note is not blocked any more.
+        index->update(u"Budowa.md"_s, index->content(u"Budowa.md"_s).replace(u"- [ ] Wylać"_s, u"- [x] Wylać"_s));
+        QTRY_VERIFY(!m.get(m.rowOfKey(u"Inna.md:0"_s)).value(u"blocked"_s).toBool());
+
+        // Time per tag today (the running clock up to the end of a fixed today).
+        const QVariantMap tags = m.timeSummary(u"tag"_s, u"today"_s);
+        const QVariantList rows = tags.value(u"rows"_s).toList();
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first().toMap().value(u"label"_s).toString(), u"praca"_s);
+        QCOMPARE(rows.first().toMap().value(u"seconds"_s).toLongLong(), qint64(16 * 3600 - 1));
+        const QVariantMap week = m.timeSummary(u"day"_s, u"week"_s);
+        QCOMPARE(week.value(u"rows"_s).toList().size(), 2);
+        QCOMPARE(week.value(u"rows"_s).toList().first().toMap().value(u"duration"_s).toString(), u"1 h 05 min"_s);
+        QCOMPARE(m.timeSummary(u"task"_s, u"all"_s).value(u"tasks"_s).toInt(), 1);
+    }
+
     void emptyAndNoIndex()
     {
         TaskListModel none;

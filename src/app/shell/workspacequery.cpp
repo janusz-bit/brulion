@@ -7,6 +7,7 @@
 #include "markdown/markdown.h"
 #include "notebook/json.h"
 #include "reminders/calendar.h"
+#include "taskhelpers.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 
@@ -283,11 +284,38 @@ bool Workspace::setTaskStatus(const QString &rawPath, int line, const QString &s
     const QString content = m_vault->readText(path, &ok);
     if (!ok)
         return false;
-    const QString edited = wanted ? markdown::setTaskStatus(content, line, *wanted, now().date())
-                                  : markdown::removeTaskMarker(content, line);
+    markdown::StatusLogOptions log;
+    log.history = m_taskStatusHistory;
+    log.now = now();
+    QString edited = wanted ? markdown::setTaskStatusLogged(content, line, *wanted, log)
+                            : markdown::removeTaskMarker(content, line);
     if (edited == content)
         return false;
+    // The status history starts the clock of a task that became doing: one clock at a time.
+    if (log.history && wanted == TaskStatus::Doing) {
+        stopTaskClocksElsewhere(*this, log.now, path);
+        const int task = markdown::taskBlockLine(edited, line);
+        edited = stopTaskClocksIn(edited, log.now, task);
+    }
     return write(path, edited);
+}
+
+const VaultIndex *Workspace::taskIndex() const
+{
+    return m_index.get();
+}
+
+int Workspace::stopTaskClocks()
+{
+    return stopTaskClocksElsewhere(*this, now());
+}
+
+void Workspace::setTaskStatusHistory(bool on)
+{
+    if (m_taskStatusHistory == on)
+        return;
+    m_taskStatusHistory = on;
+    Q_EMIT taskStatusHistoryChanged();
 }
 
 } // namespace brulion::shell

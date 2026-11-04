@@ -990,6 +990,10 @@ FocusScope {
                 editor.downloadWebPictures("")
             } else if (action === "addProperty" && root.visible && !root.inSidePanel && editor.visible) {
                 editor.addProperty()
+            } else if (action === "taskClock" && root.visible && !root.inSidePanel && editor.visible) {
+                editor.toggleCurrentTaskClock()
+            } else if (action === "taskDependency" && root.visible && !root.inSidePanel && editor.visible) {
+                editor.openCurrentDependencyPicker()
             }
         }
     }

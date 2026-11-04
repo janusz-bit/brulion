@@ -7,11 +7,15 @@
 #include "markdown/blockdocument.h"
 #include "markdown/edit.h"
 #include "markdown/inline.h"
+#include "markdown/logbook.h"
 #include "markdown/parse.h"
+#include "markdown/taskdeps.h"
 #include "markdown/tokenedit.h"
 #include "notebook/links.h"
+#include "notebook/tasktools.h"
 #include "planningutil.h"
 #include "reminders/snooze.h"
+#include "taskhelpers.h"
 
 #include <QClipboard>
 #include <QGuiApplication>
@@ -162,7 +166,7 @@ bool PlanningActions::toggleTask(const QString &path, int line, const QString &t
         Q_EMIT failed(tr("The task was changed in the meantime."));
         return false;
     }
-    const QString after = markdown::toggleTask(content, at, currentDay());
+    const QString after = markdown::toggleTaskLogged(content, at, statusLog());
     if (after == content)
         return false;
     if (!writeChange(path, content, after))
@@ -198,14 +202,110 @@ bool PlanningActions::setTaskStatus(const QString &path, int line, const QString
         Q_EMIT failed(tr("The task was changed in the meantime."));
         return false;
     }
-    const QString after =
-            s ? markdown::setTaskStatus(content, at, *s, currentDay()) : markdown::removeTaskMarker(content, at);
+    const markdown::StatusLogOptions log = statusLog();
+    QString after = s ? markdown::setTaskStatusLogged(content, at, *s, log) : markdown::removeTaskMarker(content, at);
     if (after == content)
         return false;
+    if (log.history && s == TaskStatus::Doing) {
+        // The status history started its clock: one clock at a time.
+        stopTaskClocksElsewhere(*m_host, log.now, path);
+        after = stopTaskClocksIn(after, log.now, markdown::taskBlockLine(after, at));
+    }
     if (!writeChange(path, content, after))
         return false;
     Q_EMIT taskChanged(path, at, status);
     return true;
+}
+
+markdown::StatusLogOptions PlanningActions::statusLog() const
+{
+    markdown::StatusLogOptions log;
+    log.history = m_host && m_host->taskStatusHistory();
+    // The ✅ date is today's (`today` may be set without `now`).
+    const QDateTime t = currentTime();
+    log.now =
+            m_now.isEmpty() ? QDateTime(currentDay(), QTime(t.time().hour(), t.time().minute(), t.time().second())) : t;
+    return log;
+}
+
+bool PlanningActions::toggleClock(const QString &path, int line, const QString &text)
+{
+    if (!m_host)
+        return false;
+    bool ok = false;
+    const QString content = m_host->read(path, &ok);
+    if (!ok) {
+        Q_EMIT failed(tr("The page could not be read."));
+        return false;
+    }
+    const int found = locateTask(path, content, line, text);
+    const int at = found < 0 ? -1 : markdown::taskBlockLine(content, found);
+    if (at < 0) {
+        Q_EMIT failed(tr("The task was changed in the meantime."));
+        return false;
+    }
+    const QDateTime now = statusLog().now;
+    QString after;
+    const bool running = markdown::taskLogbook(content, at).running() != nullptr;
+    if (running) {
+        after = markdown::stopTaskClock(content, at, now);
+    } else {
+        stopTaskClocksElsewhere(*m_host, now, path);
+        after = markdown::startTaskClock(stopTaskClocksIn(content, now, at), at, now);
+    }
+    if (after == content || !writeChange(path, content, after))
+        return false;
+    Q_EMIT clockToggled(path, at, !running);
+    return true;
+}
+
+QVariantList PlanningActions::dependencyCandidates(const QString &path, int line, const QString &text) const
+{
+    return m_index ? notebook::dependencyCandidates(*m_index, text, path, line) : QVariantList();
+}
+
+bool PlanningActions::addDependency(const QString &path, int line, const QString &text, const QString &onPath,
+                                    int onLine)
+{
+    if (!m_host)
+        return false;
+    bool ok = false;
+    const QString content = m_host->read(path, &ok);
+    if (!ok) {
+        Q_EMIT failed(tr("The page could not be read."));
+        return false;
+    }
+    const int at = locateTask(path, content, line, text);
+    if (at < 0) {
+        Q_EMIT failed(tr("The task was changed in the meantime."));
+        return false;
+    }
+    // The task waited for: its 🆔, else a new one written to it first.
+    const QString other = onPath == path ? content : m_host->read(onPath, &ok);
+    if (!ok)
+        return false;
+    const ParsedNote note = markdown::parseNote(onPath, other, config());
+    const int b = markdown::blockAtLine(note, onLine);
+    if (b < 0 || !note.blocks[b].task
+        || (onPath == path && markdown::taskBlockLine(content, at) == note.blocks[b].line))
+        return false;
+    QString id = note.blocks[b].task->id;
+    QString before = content;
+    if (id.isEmpty()) {
+        id = markdown::generateTaskId(
+                [&](const QString &c) { return (m_index && m_index->hasTaskId(c)) || other.contains(c); });
+        const QString withId = markdown::setTaskId(other, onLine, id);
+        if (onPath == path) {
+            before = withId;
+        } else if (m_host->writeIfUnchanged(onPath, withId, other) != EditorHost::WriteResult::Written) {
+            Q_EMIT failed(tr("The change could not be saved."));
+            return false;
+        }
+    }
+    const QString after = markdown::addTaskDependency(before, at, id);
+    if (after == content)
+        return false;
+    return writeChange(path, content, after);
 }
 
 bool PlanningActions::undo()
@@ -430,6 +530,16 @@ bool PlanningActions::openLink(const QString &url, const QString &fromPath, bool
     }
     if (scheme == u"block") {
         m_host->navigate({{u"view"_s, u"page"_s}, {u"blockId"_s, rest}}, newPane);
+        return true;
+    }
+    if (scheme == u"taskdep") {
+        // A ⛔ id: the task it waits for (docs/SYNTAX.md §5).
+        const auto place = m_index ? notebook::firstTaskWithId(*m_index, rest) : std::nullopt;
+        if (!place) {
+            Q_EMIT failed(tr("No task in the notebook has the id %1").arg(rest));
+            return false;
+        }
+        m_host->navigate({{u"view"_s, u"page"_s}, {u"path"_s, place->path}, {u"line"_s, place->line}}, newPane);
         return true;
     }
     if (scheme == u"part") {

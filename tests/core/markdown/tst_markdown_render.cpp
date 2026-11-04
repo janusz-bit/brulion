@@ -297,6 +297,52 @@ private Q_SLOTS:
                  link(u"page:2026-10-13"_s, u"L"_s, u"13"_s + nb + u"paź"_s + nb + u"2026"_s));
     }
 
+    // `⛔ a,b` with RenderContext::taskDependency: one taskdep: link chip per id, the text of the
+    // task it waits for (open: overdue colours), "⛔ id?" for a missing id; unset: muted text.
+    void taskDependencies()
+    {
+        RenderContext c = context();
+        QCOMPARE(InlineRenderer(c).render(u"a ⛔ x1"_s).contains(u"taskdep:"_s), false);
+        c.taskDependency = [](const QString &id) -> std::optional<TaskDependencyView> {
+            if (id == u"x1")
+                return TaskDependencyView{u"Wylać <fundament> żółty"_s, true};
+            if (id == u"x2")
+                return TaskDependencyView{QString(60, u'ż'), false};
+            return std::nullopt;
+        };
+        const QString html = InlineRenderer(c).render(u"Ściany ⛔ x1,x2, brak"_s).replace(u"&nbsp;"_s, u" "_s);
+        QVERIFY2(html.contains(u"href=\"taskdep:x1\""_s), qPrintable(html));
+        QVERIFY2(html.contains(u"⛔ Wylać &lt;fundament&gt; żółty"_s), qPrintable(html)); // escaped
+        QVERIFY2(html.contains(u"href=\"taskdep:x2\""_s), qPrintable(html));
+        QVERIFY2(html.contains(QString(39, u'ż') + u'…'), qPrintable(html)); // 40 characters at most
+        QVERIFY2(html.contains(u"href=\"taskdep:brak\""_s) && html.contains(u"⛔ brak?"_s), qPrintable(html));
+        QVERIFY(html.contains(c.palette.overdue.foreground));
+        QVERIFY(!html.contains(u"x1,x2"_s)); // the token itself is not shown
+        // 🆔 stays muted text.
+        QVERIFY(InlineRenderer(c).render(u"a 🆔 abc"_s).contains(u"🆔 abc"_s));
+    }
+
+    void taskChips()
+    {
+        QCOMPARE(taskChipsHtml(0, 0, 0, QDateTime()), QString());
+        const auto chips = [](int done, int total, qint64 seconds, const QDateTime &start, const Palette &p = Palette(),
+                              dates::UiLocale l = dates::UiLocale::Polish) {
+            return taskChipsHtml(done, total, seconds, start, p, l).replace(u"&nbsp;"_s, u" "_s);
+        };
+        const QString progress = chips(3, 5, 0, QDateTime());
+        QVERIFY2(progress.contains(u"3/5"_s) && !progress.contains(u"⏱"_s), qPrintable(progress));
+        const Palette p;
+        QVERIFY(taskChipsHtml(5, 5, 0, QDateTime()).contains(p.done.background));
+        QVERIFY(taskChipsHtml(3, 5, 0, QDateTime()).contains(p.neutral.background));
+        const QString time = chips(0, 0, 3900, QDateTime());
+        QVERIFY2(time.contains(u"⏱ 1 h 05 min"_s), qPrintable(time));
+        const QDateTime start(QDate(2026, 11, 3), QTime(10, 0));
+        QVERIFY(chips(0, 0, 0, start).contains(u"⏱ od 10:00"_s));
+        QVERIFY(chips(0, 0, 25 * 60, start, p, dates::UiLocale::English).contains(u"⏱ 25 min + since 10:00"_s));
+        QCOMPARE(taskTimeLabel(25 * 60, start), u"25 min + od 10:00"_s);
+        QCOMPARE(taskTimeLabel(0, QDateTime()), QString());
+    }
+
     void linkParts_data()
     {
         QTest::addColumn<QString>("input");
