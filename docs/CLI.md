@@ -211,6 +211,10 @@ Never compute a hash yourself.
 | `task todo <ref>` | | open again | yes |
 | `task cancel <ref>` | | cancelled | yes |
 | `task defer <ref>` | | deferred (waiting) | yes |
+| `habit list` | `[--date D] [--days N]` | the habits (docs/SYNTAX.md §5 "Nawyki / Habits"): `{name, key, schedule, scheduleText, valid, problem?, path, line, ref, start, today: {date, mark, due}, streak: {current, longest, unit}, done, met, expected, rate, period?: {done, target}, lastDone?, days: [{date, state}]}` (the last N days, 7 by default), `undefined`: names ticked that no habit has | |
+| `habit set <name> <state>` | done, skipped, open (zrobione, pominięte, brak); `[--date D]` | the day's check in its daily note: ticks the existing one, else writes `- [x] Name #nawyk ✅ today` next to the day's other checks (the note created from the journal template); open sets them back to `[ ]` | yes |
+| `habit tick <name>` | `[--date D]` | `habit set <name> done` | yes |
+| `habit skip <name>` | `[--date D]` | `habit set <name> skipped`: an excused day (the streak goes on) | yes |
 | `remind add <text>` | `--at D [--alarm] [--every R] [--task] [--page P \| --date D]` | a reminder ⏰ / alarm ⏰! | yes |
 | `remind list` | `[--upcoming DAYS] [--from D --to D] [--limit N]` | reminders due, recurring ones expanded; no state kept | |
 | `remind snooze <ref>` | `--minutes N \| --to D` | move a reminder (a recurring one gets a one-off child) | yes |
@@ -254,6 +258,12 @@ Never compute a hash yourself.
 | `completion <shell>` | bash, fish, zsh | a completion script (`brulion-cli completion bash > ~/.local/share/bash-completion/completions/brulion-cli`) | |
 | `mcp` | `[--read-only] [--allow-destructive] [--app-control]` | the MCP server (below) | |
 <!-- /commands -->
+
+`habit set` takes the habit's name in any letter case (quoted when it has several words; `habit
+tick` and `habit skip` take the rest of the line): a name no habit has is exit 3 `habit_not_found`
+with the `habits` there are; a name that cannot be written as a check (it would read back as
+another) is exit 2 `bad_name`. Example: `brulion-cli habit tick Medytacja`, `brulion-cli habit set
+"Czytanie książek" skipped --date wczoraj`.
 
 `week` and `month` take a period phrase (docs/SYNTAX.md §1 "Weekly and monthly notes"): "ten
 tydzień", "next week", "zeszły miesiąc", `2026-W45`, `tydzień 45`, `2026-11`, `listopad 2026`, or a

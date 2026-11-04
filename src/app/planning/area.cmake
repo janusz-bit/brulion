@@ -36,6 +36,8 @@ qt_target_qml_sources(brulion
         qml/planning/TasksQuickAdd.qml
         qml/planning/TasksRow.qml
         qml/planning/TasksQueryDialog.qml
+        qml/planning/HabitCard.qml
+        qml/planning/HabitAddDialog.qml
         qml/planning/GraphToolbar.qml
         qml/planning/GraphNodeCard.qml
 )

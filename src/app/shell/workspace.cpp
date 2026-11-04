@@ -14,6 +14,7 @@
 #include "log/slowscope.h"
 #include "markdown/markdown.h"
 #include "notebook/capture.h"
+#include "notebook/habitchecks.h"
 #include "notebook/journals.h"
 #include "notebook/json.h"
 #include "notebook/pages.h"
@@ -1617,6 +1618,81 @@ QString Workspace::appendToTodaysJournal(const QString &block)
     // A template's empty last bullet is filled, the note's line ending kept (notebook/journals.h).
     const QString content = notebook::appendBlock(text, block);
     return writeFile(path, content) ? path : QString();
+}
+
+QVariantMap Workspace::setHabitCheck(const QString &name, const QString &date, const QString &state, bool pageLink)
+{
+    QVariantMap out{{u"ok"_s, false}, {u"changed"_s, false}};
+    const QDate d = QDate::fromString(date, Qt::ISODate);
+    const auto mark = habits::markFromName(state);
+    if (!m_vault || !d.isValid() || !mark)
+        return out;
+    const dates::UiLocale locale = notebook::contentLocale(m_language);
+    const QString tag = habits::checkTag(locale);
+    VaultPath path = notebook::journalFileFor(*m_vault, d);
+    bool exists = m_vault->exists(path);
+    QString content;
+    if (exists) {
+        bool ok = false;
+        content = m_vault->readText(path, &ok);
+        if (!ok)
+            return out;
+        // Not UTF-8: written back, each of its other bytes would be U+FFFD (appendToTodaysJournal).
+        if (content.contains(QChar::ReplacementCharacter) && !isUtf8Text(m_vault->readBinary(path))) {
+            qCWarning(lcWorkspace) << "Not changing" << path << "- it is not UTF-8 text";
+            Q_EMIT errorOccurred(tr("The journal page is not UTF-8 text; it was left unchanged."));
+            return out;
+        }
+    }
+    const QDate today = now().date();
+    notebook::HabitCheckEdit edit =
+            notebook::setHabitCheck(content, path, m_vault->config(), d, name, *mark, today, tag, pageLink);
+    out.insert(u"path"_s, path);
+    out.insert(u"before"_s, edit.hadCheck ? habits::markName(edit.before) : QString());
+    out.insert(u"line"_s, edit.line);
+    if (edit.refused)
+        return out;
+    if (!edit.changed) {
+        out.insert(u"ok"_s, true);
+        return out;
+    }
+    if (!exists) {
+        // Written now: the day's note starts from the journal template, like any first edit.
+        path = ensureJournal(date);
+        if (path.isEmpty())
+            return out;
+        bool ok = false;
+        content = m_vault->readText(path, &ok);
+        if (!ok)
+            return out;
+        edit = notebook::setHabitCheck(content, path, m_vault->config(), d, name, *mark, today, tag, pageLink);
+        out.insert(u"path"_s, path);
+        out.insert(u"line"_s, edit.line);
+        if (edit.refused)
+            return out;
+    }
+    if (edit.changed && !writeFile(path, edit.content))
+        return out;
+    out.insert(u"ok"_s, true);
+    out.insert(u"changed"_s, edit.changed);
+    return out;
+}
+
+QString Workspace::addHabit(const QString &name, const QString &schedule, const QString &page)
+{
+    const QString clean = habits::habitName(name);
+    if (!m_vault || clean.isEmpty())
+        return {};
+    const dates::UiLocale locale = notebook::contentLocale(m_language);
+    const QString path = page.isEmpty() ? newPagePath(notebook::habitsPageTitle(locale)) : page;
+    if (path.isEmpty())
+        return {};
+    bool ok = false;
+    const QString content = m_vault->exists(path) ? m_vault->readText(path, &ok) : QString();
+    if (m_vault->exists(path) && !ok)
+        return {};
+    const QString after = notebook::appendBlock(content, notebook::habitDefinitionBlock(clean, schedule, locale));
+    return writeFile(path, after) ? path : QString();
 }
 
 // ---- Sidebar lists ---------------------------------------------------------------------------

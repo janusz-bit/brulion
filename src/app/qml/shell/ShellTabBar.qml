@@ -34,6 +34,7 @@ Rectangle {
         case "journal": return "notebook-pen"
         case "calendar": return "calendar"
         case "tasks": return "list-todo"
+        case "habits": return "flame"
         case "graph": return "waypoints"
         case "search": return "search"
         case "allPages": return "files"

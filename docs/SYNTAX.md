@@ -953,6 +953,88 @@ Logseq planning lines inside the block are understood too:
 above the completed one (dates shifted by the rule), exactly like Obsidian Tasks, and the
 completed line gets `✅ <today>`.
 
+### Nawyki / Habits
+
+Recurring points of the day (`src/core/habits`, writing a check: `notebook/habitchecks.h`), kept as
+plain Markdown that Obsidian and Logseq read as ordinary blocks and tasks: a habit is **defined**
+once, and each day's **check** is a task in that day's daily note — so it syncs and merges like any
+note, and a tick in the journal itself counts.
+
+**Definition** — a block (list item or paragraph) with the property `habit::` (or `nawyk::`); its
+text is the habit's name. A page whose page properties (YAML frontmatter or leading `key:: value`
+lines) have `habit` is a habit named by its title. Anywhere in the notebook; Brulion's "Dodaj nawyk"
+appends to the page holding the first habit, else creates `Nawyki.md` (`Habits.md` in English)
+where new pages go.
+
+```markdown
+- Medytacja
+  habit:: codziennie
+- Bieganie #zdrowie
+  habit:: pn, śr, pt
+  start:: 2026-10-05
+- Czytanie
+  habit:: 3 razy w tygodniu
+```
+
+* **Name**: the block's first line with tags dropped and `[[links]]` as their labels (alias, else
+  the target's last part); compared case-insensitively (NFC, case folded, spaces collapsed — not
+  diacritic-insensitive). A name defined twice: the first definition (by path, then document
+  order) counts, the other is shown as a problem. A block without a name defines nothing.
+* **Schedule** (the property's value; Polish or English, diacritics optional; the recurrence parser
+  of §7 where it fits):
+
+  | Written | Due |
+  |---|---|
+  | empty, `codziennie`, `daily`, `every day`, `co 2 dni`, `every 3 days` | every (n-th) day from the start |
+  | `pn, śr, pt`, `poniedziałek i czwartek`, `mon, fri`, `w dni robocze`, `every weekday`, `co tydzień w poniedziałek, piątek`, `every 2 weeks on Monday` | those weekdays (of every n-th week, counted from the start's week) |
+  | `co miesiąc 15.`, `every month on the 15th`, `co miesiąc ostatniego` | that day of the month (31 → the month's last day) |
+  | `3 razy w tygodniu`, `3x w tygodniu`, `3/tydz`, `3 dni w tygodniu`, `raz w miesiącu`, `dwa razy w miesiącu`, `5 razy na 2 tygodnie`, `3 times a week`, `twice a month`, `3x/week`; also `co tydzień` / `every week` / `co miesiąc` / `every year` (= once per period, any day) | at least N days in every week (by `weekStartsOn`), month or year — or block of n periods counted from the start's |
+
+  Not understood (`co drugi wtorek`, `8 razy w tygodniu`, `every month on the 2nd Tuesday`): the
+  habit is listed with a problem and has no statistics. `when done` / `po wykonaniu` is ignored.
+* `start::` (or `od::`): the first day counted (`2026-10-05`, `[[2026-10-05]]`, a YAML date);
+  without it, the habit's first recorded day (a check of any state), else today.
+
+**Check** — in a daily note, a task tagged `#nawyk` or `#habit` (the block's own tags) whose name
+(the same rule as above) is the habit's; a Logseq keyword task counts too:
+
+```markdown
+- [x] Medytacja #nawyk ✅ 2026-11-03
+- [-] Bieganie #nawyk ❌ 2026-11-03
+- DONE Czytanie #habit
+```
+
+| Task | The day |
+|---|---|
+| `[x]`, `DONE` | done |
+| `[-]`, `CANCELLED` | skipped — excused: neither done nor missed, the streak goes on |
+| `[ ]`, `[/]`, `[>]`, `TODO` … | not done (open) |
+
+Several checks of one habit on one day (also in two notes of one day): done wins over skipped over
+open. Checks on other pages, untagged tasks and blocks that define a habit are no checks. A journal
+template may list the habits as `- [ ] Medytacja #nawyk` lines: each day starts with them open.
+
+**What Brulion writes** (the Habits view, `brulion-cli habit set`): the day's first check of the
+habit gets the status (§5 `setTaskStatus`: `✅ today` / `❌ today`, a Logseq keyword stays one);
+without one, a new line `- [x] Name #nawyk ✅ today` (`#habit` when notes are written in English; a
+page habit as `[[Name]]`) goes right after the note's last check of any habit, with its
+indentation, else as the note's last block (a template's empty last bullet is filled); the daily
+note is created from the journal template only then. "Not done" sets the day's done and skipped
+checks back to `[ ]` and writes nothing when there is none. Every other byte stays.
+
+**Counting** (local calendar days — no times, no time zones, so DST and year boundaries change
+nothing; at most the last 3660 days):
+
+* Days, weekdays, month days: each due day from the start to today is done, skipped, missed (a
+  due day before today without a done or skipped check — also a day **without a daily note**) or,
+  today, pending (not done yet: it does not break the streak). The current streak counts the due
+  days done in a row up to today, skipped ones passed over; extra days done off the schedule are
+  shown but not counted. Completion rate = due days done / (done + missed).
+* N times per period: a period is met with N days done (each skipped day needs one fewer; all
+  skipped: excused), missed when it ended with fewer, and today's period is pending until met.
+  The start's period, when the habit starts inside it, counts only when met. Streaks count
+  periods met in a row; the rate is periods met / (met + missed).
+
 ## 6. Reminders and alarms
 
 | Syntax | Meaning |

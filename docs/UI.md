@@ -552,6 +552,40 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y | undo, redo (per page) | same (undoing a deletion selects the blocks again) |
 | Esc | close the suggestions, else stop editing and select the block | deselect (also Android's Back in the touch selection mode) |
 
+## Habits
+
+`qml/views/HabitsView.qml` (route `habits`; the sidebar's **Nawyki** under Zadania, a bottom-bar
+tab to choose, the palette's "Nawyki" `go.habits`, the tab icon `flame`): recurring points of the
+day recorded in the journal (docs/SYNTAX.md §5 "Nawyki / Habits"). A view of its own rather than a
+section of Tasks or the Calendar: habits are not tasks with dates (one line a day, not one task),
+and their month grids need the width.
+
+* **Model**: `HabitListModel` (`src/app/planning/habitlistmodel.h`) over the index through a
+  `habits::HabitCache` (only the notes a change names are read again; only the habits whose checks
+  or definition changed are computed again — `dataChanged` for those rows, a reset when habits are
+  added, removed or reordered). One row per definition, in the notebook's order (by path, then as
+  written). The model's `month` moves every grid at once (the header's arrows, ←/→ or PgUp/PgDn;
+  "Ten miesiąc" when another is shown).
+* **Card** (`qml/planning/HabitCard.qml`, laid out with bindings: its final height at creation):
+  today's round check (a click ticks it, again opens it; a right-click or long press: done /
+  skipped / no check), the name, the schedule in the UI language and, for "N razy w tygodniu", the
+  period's progress ("2 z 3 w tym tygodniu"); a flame with "Seria: 5 dni · najdłuższa: 12 dni ·
+  wykonano: 80%"; the month grid (weekday heads from `weekStartsOn`): done days in the success
+  tint, missed due days in the danger tint, skipped ones muted and struck out, today with an accent
+  ring, a due day with a thin one; a click on a past day ticks it or opens it again, a right-click
+  or long press offers done / skipped (no streak lost) / no check / the day's journal. The "⋯"
+  menu: Zrobione dziś, Pomiń dziś, Bez odhaczenia dziś, Otwórz definicję (the page at its line),
+  Otwórz dzisiejszy dziennik. A definition not understood or given twice shows its problem
+  (`warningText`) and no statistics.
+* **Writing**: `Workspace.setHabitCheck(name, date, state, pageLink)` → `notebook::setHabitCheck`
+  on the daily note (created from the journal template only when something is written); the toast
+  has Cofnij (the previous state written back). A tick in the journal editor counts the same: the
+  view follows the index.
+* **Dodaj nawyk** (N; `HabitAddDialog`): name and schedule, previewed in words
+  (`HabitListModel.describeSchedule`; "Nie rozumiem — spróbuj …" otherwise), refused for a name in
+  use; `Workspace.addHabit` appends `- Name` + `  habit:: schedule` to the page of the first
+  definition, else to a new `Nawyki` page where new pages go. The empty state explains the syntax.
+
 ## Statistics and focus mode
 
 **Word count** (`stats/textstats.h`, `PageController.pageStats()` / `selectionStats(text)`): the
@@ -641,6 +675,7 @@ tab's in its pane (`ShellTabPane`), and the side panel's route.
 | `page` | `PageView` — page header (tags and aliases as chips, edited there: "Page properties"; note mode toggle — on a wide header; a small one, phones and the side panel, leaves it to the page menu "⋯", the top bar's Więcej and the palette —, favourite, page menu with "Dodaj właściwość"; the page actions end the title row, and a page without one — it starts with its own "# Title" — puts them at the end of its chips' first line, the chips wrapping short of them, or on a row of their own when it has no chips; for a page named by a tag in use — with a rename at once, at every width — Widok tagu is a "#" button among the page actions before the note mode toggle, Zadania z tym tagiem is in the page menu "⋯" (also in Widok tagu and every `#tag`'s menu), and its sub-tags are chips under the title; no row of buttons comes between the title and the properties), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "cała strona" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions (that section is not drawn while the side panel shows them on its Linki tab: "Window layout"). A weekly or monthly note (docs/SYNTAX.md §1 "Weekly and monthly notes"; `Workspace.periodicNoteOf`) has its period under the title (`periodicNav`: "Tydzień 45 (2–8 listopada 2026)", also the top bar's title, with the previous / next period's arrows and "Ten tydzień" / "Ten miesiąc" when it is another one), and one not written yet starts from its period's template (`weeklyTemplate` / `monthlyTemplate`, `{{date}}` the period's first day) as a day without a note does. A page not written yet opens ready to type, except one opened from a `#tag` (`fromTag`, set by `Workspace::resolveRoute`) on a touch UI: the keyboard would cover the tagged blocks listed below, so the header's "Zacznij pisać" or a tap under it starts typing. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it. A picture attachment opens in the picture view, a PDF in the PDF viewer ("PDF viewer": `pdfPage`, `from`, `fromLine`), any other file that is no note read-only as text | `path`, `line?`, `blockId?`, `heading?`, `open?`, `fromTag?`, `pdfPage?`, `from?`, `fromLine?`, `pdfScale?` |
 | `calendar` | `CalendarView` — Miesiąc / Tydzień / Agenda, the day panel, add dialog. In the month and week grids today is a red disc on its number (`accentSolid`) and the selected day a dark one (`Theme.primary` with `primaryFg`, as in `BDatePicker`; ≥ 3:1, WCAG 1.4.11 — today selected shows only the red one); no cell or header fills: the month's cells are one surface, days of other months have faint numbers (`fgFaint`, normal weight); an alarm's pill in the month is in the reminder's tint with its alarm clock. Done entries read as in Tasks and the editor: the "done" chip's fill and muted text with a small check, not struck out; cancelled ones are struck out with an x (the week grid's pills and the day panel's rows follow the same rule). In a month cell and in the day panel's "Plan dnia", open entries come first (a stable partition, times keep their order), so "+N więcej" hides finished ones first and a click on a pill opens the entry shown there. The day panel's actions (Otwórz dziennik / Pisz w dzienniku, Dodaj zadanie, Dodaj przypomnienie) are one even list of full-width rows (icon and label, buttons for accessibility; 30 px with a mouse, 44 px on touch) under the date, the icons in line with it. The day panel's empty "Plan dnia" is a short note in line with its header, without a picture. Weekly and monthly notes (docs/SYNTAX.md §1): the month grid has a column of ISO week numbers on its left (`CalendarWeekNumber`: the ISO week of each row's middle day, also when weeks start on a Sunday; faint, a week with a note semi-bold in `accentText`; a tap / click opens the week's note through `AppController.openPeriodicNote`), the week grid has its number in the corner above the hours ("TYDZ." over it), the header's title opens the month's note (month view) or the week's (week view; a small book after the title when it has one, underlined on hover), and W / M open the selected day's week / month note | `date?`, `mode?` |
 | `tasks` | `TasksView` — quick add, filters, sections (Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione), "Pokaż jako zapytanie"; a click on a task's `#tag` filters the list, Ctrl+click opens the tag's page, a long press or right-click its menu (Filtruj po tagu, Otwórz stronę tagu, Widok tagu, Otwórz w panelu bocznym, Kopiuj tag); a right-click or long press on a chip: its token's menu ("Token and link menus") | `query?` |
+| `habits` | `HabitsView` — the habits (docs/SYNTAX.md §5 "Nawyki / Habits"), each a card: today's check, schedule, streaks, completion rate, the month grid ("Habits" below) | `month?` ("YYYY-MM"), `open?` (`add`: the add dialog) |
 | `graph` | `GraphView` — whole / local graph (depth 1–2), toggles for tags (the "#tag" nodes of tags that name no page; a tag naming a page is an edge to it), missing pages, journals, templates. The layout is computed on a worker thread (in slices between frames in the browser) and unfolds over about a second at the display's frame rate (phones 60 fps): pan, zoom, select and drag work from the first frame, a dragged node follows the finger at once. Reduced motion: the layout is computed without animation and shown once; a fresh one shows a spinner (`graphModel.settling`) instead of a spiral that jumps — also when a filter, the local graph or the index changes before it is shown. Drawn through the scene graph (GPU) | `path?`, `depth?`, `select?` |
 | `search` | `SearchView` — results in a folder of any depth with `folder` (the tree's "Szukaj w folderze"; the route follows its renames and moves) | `query?`, `folder?` |
 | `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves; a path part of a link naming a folder opens it (below) | `path?` (folder), `sort?` |

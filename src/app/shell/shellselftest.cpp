@@ -4683,6 +4683,131 @@ void checkPeriodicNotes(QQuickWindow *window, AppController *app, const Check &c
     settle(300);
 }
 
+/// Habits (docs/UI.md "Habits"): the view from the palette's command, a habit added through its
+/// dialog (written as a `habit::` block), today's check ticked and opened again with real input
+/// (the line in today's journal), a tick written in the journal itself shown in the card, a past
+/// day of the month grid ticked; the notebook is left as it was.
+void checkHabits(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const QString today = app->today();
+    const QString yesterday = app->today(-1);
+    const QString journal = ws->journalFileFor(today);
+    const bool hadJournal = ws->exists(journal);
+    const QString oldJournal = hadJournal ? ws->readFile(journal) : QString();
+    const QString pastJournal = ws->journalFileFor(yesterday);
+    const bool hadPast = ws->exists(pastJournal);
+    const QString oldPast = hadPast ? ws->readFile(pastJournal) : QString();
+    // The page new habits go to and the checks' tag follow the notes' language (Polish: "Nawyki",
+    // #nawyk; English: "Habits", #habit).
+    QHash<QString, QString> oldPages;
+    for (const QString &title : {u"Nawyki"_s, u"Habits"_s}) {
+        const QString path = ws->newPagePath(title);
+        oldPages.insert(path, ws->exists(path) ? ws->readFile(path) : QString());
+    }
+    const auto line = [](const QString &box) {
+        return QRegularExpression(u"- \\["_s + QRegularExpression::escape(box)
+                                  + u"\\] Rozciąganie samotestu #(nawyk|habit)"_s);
+    };
+
+    check(app->commands() && app->commands()->run(u"go.habits"_s), "the palette's command opens Habits");
+    check(waitFor([&] { return app->currentView() == u"habits"; }, 3000), "the Habits view shows");
+    QQuickItem *add = nullptr;
+    check(waitFor([&] { return (add = named(u"habitAdd"_s)) != nullptr; }, 3000), "it has “Dodaj nawyk”");
+    settle(400); // the view fades in
+    QQuickItem *habitsView = nullptr;
+    for (QQuickItem *up = add; up && !habitsView; up = up->parentItem()) {
+        if (isA(up, "HabitsView"))
+            habitsView = up;
+    }
+    QObject *dialog = habitsView ? habitsView->findChild<QObject *>(u"habitAddDialog"_s) : nullptr;
+    check(dialog != nullptr, "the view has its add dialog");
+    // (With a mouse its click as a signal: a pointer left hovering the button keeps its tooltip.)
+    if (add && touch)
+        tapOrClick(window, pointIn(add), touch);
+    else if (add)
+        QMetaObject::invokeMethod(add, "clicked");
+    check(waitFor([&] { return dialog && dialog->property("opened").toBool(); }, 3000), "the add dialog opens");
+    QQuickItem *nameField = named(u"habitAddName"_s);
+    QQuickItem *scheduleField = named(u"habitAddSchedule"_s);
+    check(nameField && scheduleField, "it asks for a name and a schedule");
+    if (!dialog || !nameField || !scheduleField) {
+        if (dialog)
+            QMetaObject::invokeMethod(dialog, "close");
+        app->goHome();
+        settle(300);
+        return;
+    }
+    nameField->setProperty("text", u"Rozciąganie samotestu"_s);
+    scheduleField->setProperty("text", u"co 2 tygodnie w poniedziałek"_s);
+    check(!dialog->property("preview").toString().isEmpty(), "the schedule is previewed in words");
+    scheduleField->setProperty("text", u"co drugi wtorek"_s);
+    check(!dialog->property("acceptEnabled").toBool(), "a schedule not understood cannot be added");
+    scheduleField->setProperty("text", u"codziennie"_s);
+    check(dialog->property("acceptEnabled").toBool(), "a daily habit can be added");
+    QMetaObject::invokeMethod(dialog, "accept");
+    const QString key = u"rozciąganie samotestu"_s;
+    QQuickItem *toggle = nullptr;
+    check(waitFor([&] { return (toggle = named(u"habitToggle_"_s + key)) != nullptr; }, 3000),
+          "the new habit has a card");
+    bool written = false;
+    for (auto it = oldPages.cbegin(); it != oldPages.cend(); ++it)
+        written |= ws->readFile(it.key()).contains(u"- Rozciąganie samotestu\n  habit:: codziennie"_s);
+    check(written, "it is written as a habit:: block");
+
+    // Today's check: a tap writes the line, another one opens it again (once the dialog's closing
+    // transition, whose dimmed overlay takes the clicks, is over).
+    waitFor([&] { return !dialog->property("visible").toBool(); }, 3000);
+    settle(200);
+    // Today's check: a tap writes the line, another one opens it again.
+    if (toggle)
+        tapOrClick(window, pointIn(toggle), touch);
+    check(waitFor([&] { return ws->readFile(journal).contains(line(u"x"_s)); }, 3000),
+          "a tap ticks the habit in today's journal");
+    check(waitFor([&] { return toggle && toggle->property("mark").toString() == u"done"_s; }, 3000),
+          "the card shows today done");
+    if (toggle)
+        tapOrClick(window, pointIn(toggle), touch);
+    check(waitFor([&] { return ws->readFile(journal).contains(line(u" "_s)); }, 3000),
+          "a second tap opens the check again (the line stays)");
+    // A tick written in the journal itself counts.
+    ws->writeFile(journal, ws->readFile(journal).replace(u"- [ ] Rozciąganie samotestu #"_s,
+                                                         u"- [x] Rozciąganie samotestu #"_s));
+    check(waitFor([&] { return toggle && toggle->property("mark").toString() == u"done"_s; }, 3000),
+          "a tick in the journal shows in the card");
+
+    // Yesterday in the month grid (when it is this month's).
+    if (yesterday.left(7) == today.left(7)) {
+        QQuickItem *day = named(u"habitDay_"_s + key + u'_' + yesterday);
+        check(day != nullptr, "the month grid has yesterday");
+        if (day)
+            tapOrClick(window, pointIn(day), touch);
+        check(waitFor([&] { return ws->readFile(pastJournal).contains(line(u"x"_s)); }, 3000),
+              "a click on a past day ticks it in that day's journal");
+    }
+
+    // Leave the notebook as it was.
+    if (hadJournal)
+        ws->writeFile(journal, oldJournal);
+    else
+        ws->deletePage(journal);
+    if (hadPast)
+        ws->writeFile(pastJournal, oldPast);
+    else if (ws->exists(pastJournal))
+        ws->deletePage(pastJournal);
+    for (auto it = oldPages.cbegin(); it != oldPages.cend(); ++it) {
+        if (!it.value().isEmpty())
+            ws->writeFile(it.key(), it.value());
+        else if (ws->exists(it.key()))
+            ws->deletePage(it.key());
+    }
+    closeMenus(window);
+    app->goHome();
+    settle(300);
+}
+
 /// Focus mode (F8 — the command's shortcut —, Esc, the Back key, its corner button), the word count in
 /// the page's corner and typewriter scrolling (desktop), and one command's shortcut changed in
 /// Ustawienia → Skróty klawiszowe with real keys: another command's key is refused with the reason,
@@ -6699,6 +6824,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h. Weekly and monthly notes: opened from the shortcut's action, the page's arrows, the calendar.
     checkPeriodicNotes(window, app, check);
+    closeMenus(window);
+    // 3h'. Habits: added in the view, today's check ticked and opened again, a tick from the journal.
+    checkHabits(window, app, check);
     closeMenus(window);
     // 3i. Focus mode, the word count, typewriter scrolling and a custom shortcut.
     checkFocusAndShortcuts(window, app, check);

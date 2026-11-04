@@ -8,13 +8,15 @@
 # (IndexCacheKeeper); text replaced in the whole notebook with a preview (replace.h).
 # The shell's Workspace delegates to it; brulion-cli (src/cli) is built on it.
 # Public headers: notebook.h (overview), capture.h, journals.h, pages.h, links.h, itemref.h,
-# json.h, session.h, share.h, embeds.h, cleanup.h, replace.h, periodicnotes.h (weekly and monthly notes).
+# json.h, session.h, share.h, embeds.h, cleanup.h, replace.h, periodicnotes.h (weekly and monthly notes),
+# habitchecks.h (a habit's check in a daily note).
 brulion_add_core_module(notebook
     SOURCES
         notebook.h
         capture.h capture.cpp
         cleanup.h cleanup.cpp
         embeds.h embeds.cpp
+        habitchecks.h habitchecks.cpp
         indexloader.h indexloader.cpp
         indexcachekeeper.h indexcachekeeper.cpp
         itemref.h itemref.cpp
@@ -26,4 +28,4 @@ brulion_add_core_module(notebook
         replace.h replace.cpp
         session.h session.cpp
         share.h share.cpp
-    DEPS util text dates markdown vault index reminders log drawing periodic)
+    DEPS util text dates markdown vault index reminders log drawing periodic habits)

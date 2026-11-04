@@ -628,6 +628,17 @@
     </message>
 </context>
 <context>
+    <name>HabitsView</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/HabitsView.qml"/>
+        <source>%n with a problem</source>
+        <translation>
+            <numerusform>%n with a problem</numerusform>
+            <numerusform>%n with a problem</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>HistoryView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/views/HistoryView.qml" line="95"/>
@@ -1645,6 +1656,54 @@
         <translation>
             <numerusform>Snooze %n min</numerusform>
             <numerusform>Snooze %n min</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::planning::HabitListModel</name>
+    <message numerus="yes">
+        <location filename="../src/app/planning/habitlistmodel.cpp"/>
+        <source>%n day(s)</source>
+        <comment>habit streak</comment>
+        <translation>
+            <numerusform>%n day</numerusform>
+            <numerusform>%n days</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/planning/habitlistmodel.cpp"/>
+        <source>%n time(s)</source>
+        <comment>habit streak</comment>
+        <translation>
+            <numerusform>%n time</numerusform>
+            <numerusform>%n times</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/planning/habitlistmodel.cpp"/>
+        <source>%n week(s)</source>
+        <comment>habit streak</comment>
+        <translation>
+            <numerusform>%n week</numerusform>
+            <numerusform>%n weeks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/planning/habitlistmodel.cpp"/>
+        <source>%n month(s)</source>
+        <comment>habit streak</comment>
+        <translation>
+            <numerusform>%n month</numerusform>
+            <numerusform>%n months</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/planning/habitlistmodel.cpp"/>
+        <source>%n year(s)</source>
+        <comment>habit streak</comment>
+        <translation>
+            <numerusform>%n year</numerusform>
+            <numerusform>%n years</numerusform>
         </translation>
     </message>
 </context>

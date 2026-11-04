@@ -85,7 +85,9 @@
   `((…))`, linki `[[…]]`, tagi `#…`, odnośniki zwrotne. Obok dni — notatki tygodniowe (tydzień
   ISO, `2026-W45.md`) i miesięczne (`2026-11.md`) z własnymi szablonami, otwierane z kalendarza
   (numer tygodnia, nazwa miesiąca) albo skrótami `Ctrl+Alt+W` / `Ctrl+Alt+M`. `Ctrl+F` w
-  dzienniku szuka we wszystkich dniach naraz. Tagi działają jak linki do stron, jak
+  dzienniku szuka we wszystkich dniach naraz. **Nawyki**: punkt z `habit:: codziennie` (albo
+  `pn, śr, pt`, `3 razy w tygodniu`) odhaczasz w widoku Nawyki albo w dzienniku (`- [x] Medytacja
+  #nawyk`) — z serią, skutecznością i kalendarzem miesiąca. Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
   pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego
   bloku i nagłówka — `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]` — skopiujesz z menu bloku
@@ -487,6 +489,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 * Weekly (ISO week, `2026-W45.md`) and monthly notes (`2026-11.md`) next to the daily ones, with
   their own folders, file names and templates, opened from the calendar's week numbers and month
   title or with `Ctrl+Alt+W` / `Ctrl+Alt+M`; `Ctrl+F` in the journal searches every day at once.
+* **Habits**: a block with `habit:: codziennie` (`pn, śr, pt`, `3 razy w tygodniu`, `every day`…)
+  is a habit; each day's tick is a `- [x] Name #nawyk` task in that day's journal (also ticked in
+  the journal itself). The Habits view ticks today, shows the streaks, the completion rate and a
+  month grid; `brulion-cli habit list` / `habit tick`.
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
   a page is created and switchable at any time; stored in the note as `brulion: document` /

@@ -688,6 +688,13 @@ every ```query block of the open pages, the Android widgets. Now:
   query matching more than 5000 items is not kept — its cache would hold every match, ~0.2 KB each,
   for the session),
   `WidgetPublisher` (the snapshot's caches kept across publishes).
+* **Habits** (added later, `habits/habitcache.h`) follow the same log: a `NoteCache` of each note's
+  habit definitions and checks (only notes with any are kept — the habits' pages and the daily
+  notes with checks), the merged lists rebuilt from those values after a change (never from the
+  whole vault) with a revision per habit; `HabitListModel` computes a habit's streaks and month
+  grid again only when its revision moved (a tick in one daily note: that habit's row alone;
+  `tst_habits` cacheManyNotes and `tst_planning_habits` incremental check it). Statistics walk at
+  most the last 3660 days of a habit.
 * **Full syncs stay as cheap as the old full computation.** A first view, another range or the
   date picker's marks compute everything: a `NoteCache` then fills its values from the index's own
   task and reminder lists (contiguous, kept up to date by the index) rather than visiting 10 000

@@ -1,6 +1,7 @@
 # brulion_planning — the C++ side of the planning views (docs/UI.md: CalendarView, TasksView,
 # GraphView): CalendarModel (month / week / agenda over reminders::calendarItems), TaskListModel
 # (sections Zaległe … Zrobione, filters evaluated by the query engine, the equivalent ```query),
+# HabitListModel (the habits: today's checks, streaks, rates, month grids over a habits::HabitCache),
 # ForceLayout (deterministic Barnes–Hut force layout) run on a worker thread by GraphSimulation
 # (inline in slices in the browser) + GraphModel (the link graph, local graph, toggles, cap) +
 # GraphItem (zoom / pan / drag / pinch; drawn through the scene graph — vertex-antialiased meshes
@@ -14,6 +15,7 @@ qt_add_library(brulion_planning STATIC
     planningutil.h planningutil.cpp
     calendarmodel.h calendarmodel.cpp
     tasklistmodel.h tasklistmodel.cpp
+    habitlistmodel.h habitlistmodel.cpp
     forcelayout.h forcelayout.cpp
     graphsimulation.h graphsimulation.cpp
     graphgeometry.h graphgeometry.cpp
@@ -25,7 +27,7 @@ qt_add_library(brulion_planning STATIC
 target_include_directories(brulion_planning PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_planning
     PUBLIC Qt6::Core Qt6::Gui Qt6::Quick brulion_editorhost brulion_core_index brulion_core_reminders
-           brulion_core_markdown brulion_core_dates
+           brulion_core_markdown brulion_core_dates brulion_core_habits
     PRIVATE brulion_core_text brulion_core_util brulion_core_notebook)
 qt_extract_metatypes(brulion_planning)
 brulion_set_warnings(brulion_planning)

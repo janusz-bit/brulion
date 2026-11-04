@@ -55,6 +55,7 @@ MCP: `brulion-cli mcp --vault <folder>` serves the same commands as tools (`brul
 | Add a task | `task add "Zadzwonić do Łukasza" --due "w piątek" --remind "jutro 9:00" --every "co tydzień" --priority high` |
 | What is open / due | `task list` · `task list --due '<=+7d'` · `task list --query "status:open tag:praca sort:due"` |
 | Complete a task | `task done <ref>` with the `ref` from `task list` (also `doing`, `todo`, `cancel`, `defer`) |
+| Habits | `habit list` (today's checks, streaks, rate) · `habit tick Medytacja` · `habit skip Bieganie --date wczoraj` |
 | Reminders due soon | `remind list --upcoming 3` (stateless: keep your own "already told" state) |
 | Snooze a reminder | `remind snooze <ref> --minutes 30` |
 | Search | `search "zolw"` (diacritic-insensitive) |
