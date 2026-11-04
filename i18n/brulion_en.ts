@@ -1360,6 +1360,17 @@
     </message>
 </context>
 <context>
+    <name>TableBlockView</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="719"/>
+        <source>%1 of %n row(s) shown</source>
+        <translation>
+            <numerusform>%1 of %n row shown</numerusform>
+            <numerusform>%1 of %n rows shown</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>TagsView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/views/TagsView.qml" line="116"/>

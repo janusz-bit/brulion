@@ -105,12 +105,21 @@ enum class Role : quint8 {
     LegendText,
     Slice0, ///< pie slices: Slice0 + (n % SliceCount)
     LastSlice = Slice0 + 11,
+    /// Chart series (core module chart): lines and the outline of bars — slice n's colour, deep
+    /// enough to read on the background (Series0 + (n % SliceCount)).
+    Series0,
+    LastSeries = Series0 + 11,
+    Grid, ///< chart grid lines
 };
-inline constexpr int RoleCount = int(Role::LastSlice) + 1;
+inline constexpr int RoleCount = int(Role::Grid) + 1;
 inline constexpr int SliceCount = int(Role::LastSlice) - int(Role::Slice0) + 1;
 inline Role sliceRole(int n)
 {
     return Role(int(Role::Slice0) + (n % SliceCount + SliceCount) % SliceCount);
+}
+inline Role seriesRole(int n)
+{
+    return Role(int(Role::Series0) + (n % SliceCount + SliceCount) % SliceCount);
 }
 
 /// A colour: `color` ("#rrggbb" or "#rrggbbaa", validated) when set, else the palette's `role`.

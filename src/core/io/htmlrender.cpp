@@ -1,5 +1,7 @@
 #include "io/htmlrender_p.h"
 
+#include "calc/table.h"
+#include "chart/chart.h"
 #include "dates/recurrence.h"
 #include "diagram/diagram.h"
 #include "diagram/svg.h"
@@ -491,7 +493,12 @@ QString HtmlRenderer::renderListItem(const ParsedNote &note, int index) const
     const auto fence = b.task ? std::nullopt : itemFence(b.text);
     const QString embedded = b.task || fence ? QString() : embeddedContent(b.text);
     out += u'>' + box;
-    if (fence)
+    QString chart;
+    if (fence && !m_links.diagramsAsSource && fence->first.compare(u"chart", Qt::CaseInsensitive) == 0)
+        chart = chartHtml(note, b.line, fence->second, QString());
+    if (!chart.isEmpty())
+        out += chart;
+    else if (fence)
         out += codeBlockHtml(fence->first, fence->second, QString(), m_links.diagramsAsSource);
     else if (!embedded.isEmpty())
         out += u"<div class=\"embed\">"_s + embedded + u"</div>"_s;
@@ -551,6 +558,42 @@ QString HtmlRenderer::renderTable(const QString &source) const
     return out + u"</tbody></table>"_s;
 }
 
+QString HtmlRenderer::chartHtml(const ParsedNote &note, int line, const QString &code, const QString &id) const
+{
+    // The page's tables and calc blocks, also those of list items (formulas see the calc blocks
+    // above them).
+    chart::PageSources page;
+    page.chartLine = line;
+    for (const Block &other : note.blocks) {
+        if (other.kind == BlockKind::Table) {
+            page.tables.append({other.line, other.text});
+        } else if (other.kind == BlockKind::Code) {
+            if (other.lang.section(u' ', 0, 0).compare(u"calc", Qt::CaseInsensitive) == 0)
+                page.calcs.append({other.line, other.text});
+        } else if (other.kind == BlockKind::ListItem && !other.task) {
+            if (const auto fence = itemFence(other.text)) {
+                if (fence->first.compare(u"calc", Qt::CaseInsensitive) == 0)
+                    page.calcs.append({other.line, fence->second});
+            } else if (other.text.startsWith(u'|') && calc::parseTable(other.text)) {
+                page.tables.append({other.line, other.text});
+            }
+        }
+    }
+    page.runQuery = m_links.chartQuery;
+    const chart::Result r = chart::render(code, page);
+    if (!r.ok())
+        return {};
+    const diagram::Palette dark = diagram::darkPalette();
+    diagram::SvgOptions options;
+    options.fallbackTitle = chart::typeName(r.spec.type);
+    // The values in words and the source under the chart.
+    return u"<figure class=\"mermaid chart\""_s + id + u'>'
+           + diagram::toSvg(r.scene, diagram::lightPalette(), &dark, options) + u"<details><summary>"_s
+           + esc(IoMessages::tr("Chart data and source")) + u"</summary><p>"_s
+           + esc(chart::describeChart(r.spec, r.data)) + u"</p><pre><code class=\"language-chart\">"_s + esc(code)
+           + u"</code></pre></details></figure>"_s;
+}
+
 QString HtmlRenderer::renderBlock(const ParsedNote &note, int index) const
 {
     const Block &b = note.blocks[index];
@@ -569,7 +612,14 @@ QString HtmlRenderer::renderBlock(const ParsedNote &note, int index) const
             return u"<div class=\"embed\""_s + id + u'>' + embedded + u"</div>"_s;
         return u"<p"_s + id + u'>' + renderInline(b.text) + metaChips(b) + u"</p>"_s;
     }
-    case BlockKind::Code: return codeBlockHtml(b.lang.section(u' ', 0, 0), b.text, id, m_links.diagramsAsSource);
+    case BlockKind::Code: {
+        const QString lang = b.lang.section(u' ', 0, 0);
+        if (!m_links.diagramsAsSource && lang.compare(u"chart", Qt::CaseInsensitive) == 0) {
+            if (const QString chart = chartHtml(note, b.line, b.text, id); !chart.isEmpty())
+                return chart;
+        }
+        return codeBlockHtml(lang, b.text, id, m_links.diagramsAsSource);
+    }
     case BlockKind::Table: return u"<div class=\"table\""_s + id + u'>' + renderTable(b.text) + u"</div>"_s;
     case BlockKind::Quote: {
         if (!b.children.isEmpty())

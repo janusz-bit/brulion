@@ -1641,6 +1641,16 @@
             <numerusform>Zapisano %n obrazów w notatniku</numerusform>
         </translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1779"/>
+        <source>“%1” holds no table Brulion can read.</source>
+        <translation>W pliku „%1” nie ma tabeli, którą Brulion umie odczytać.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1073"/>
+        <source>The CSV was too large: the table holds its first rows and columns.</source>
+        <translation>Plik CSV był za duży: tabela zawiera jego pierwsze wiersze i kolumny.</translation>
+    </message>
 </context>
 <context>
     <name>BlockMenu</name>
@@ -1850,6 +1860,51 @@
             <numerusform>Usuń %n bloki</numerusform>
             <numerusform>Usuń %n bloków</numerusform>
         </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="297"/>
+        <source>Sort ascending</source>
+        <translation>Sortuj rosnąco</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="307"/>
+        <source>Sort descending</source>
+        <translation>Sortuj malejąco</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="302"/>
+        <source>The rows are in that order already.</source>
+        <translation>Wiersze są już w tej kolejności.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="317"/>
+        <source>Filter by this column…</source>
+        <translation>Filtruj według tej kolumny…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="191"/>
+        <source>Copy as CSV</source>
+        <translation>Kopiuj jako CSV</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="195"/>
+        <source>The table was copied as CSV.</source>
+        <translation>Skopiowano tabelę jako CSV.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="201"/>
+        <source>Save as CSV…</source>
+        <translation>Zapisz jako CSV…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="208"/>
+        <source>Hide filters</source>
+        <translation>Ukryj filtry</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="208"/>
+        <source>Filter rows</source>
+        <translation>Filtruj wiersze</translation>
     </message>
 </context>
 <context>
@@ -2297,6 +2352,154 @@
         <location filename="../src/app/qml/planning/CalendarWeekNumber.qml" line="70"/>
         <source>Write the note of week %1</source>
         <translation>Napisz notatkę tygodnia %1</translation>
+    </message>
+</context>
+<context>
+    <name>ChartMessages</name>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="195"/>
+        <source>Bar chart</source>
+        <translation>Wykres słupkowy</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="196"/>
+        <source>Line chart</source>
+        <translation>Wykres liniowy</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="197"/>
+        <source>Pie chart</source>
+        <translation>Wykres kołowy</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="199"/>
+        <source>Chart</source>
+        <translation>Wykres</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="208"/>
+        <source>cannot read “%1”: write “key: value”.</source>
+        <translation>nie można odczytać „%1”: napisz „klucz: wartość”.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="210"/>
+        <source>unknown key “%1” (type, table, calc, query, x, y, title).</source>
+        <translation>nieznany klucz „%1” (typ, tabela, obliczenia, zapytanie, etykiety, wartości, tytuł).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="212"/>
+        <source>“%1” is no chart type (bar, line, pie).</source>
+        <translation>„%1” to nie jest rodzaj wykresu (słupkowy, liniowy, kołowy).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="214"/>
+        <source>“%1” names no table or calc block (“above” or its number on the page).</source>
+        <translation>„%1” nie wskazuje tabeli ani bloku obliczeń (napisz „powyżej” albo jego numer na stronie).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="217"/>
+        <source>a chart takes its data from one table, calc block or query.</source>
+        <translation>wykres bierze dane z jednej tabeli, bloku obliczeń albo zapytania.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="220"/>
+        <source>there is no table above the chart.</source>
+        <translation>nad wykresem nie ma tabeli.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="221"/>
+        <source>the page has no table number %1.</source>
+        <translation>na stronie nie ma tabeli numer %1.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="224"/>
+        <source>there is no calc block above the chart.</source>
+        <translation>nad wykresem nie ma bloku obliczeń.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="225"/>
+        <source>the page has no calc block number %1.</source>
+        <translation>na stronie nie ma bloku obliczeń numer %1.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="227"/>
+        <source>the table has no column “%1”.</source>
+        <translation>tabela nie ma kolumny „%1”.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="228"/>
+        <source>there are no numbers to draw.</source>
+        <translation>nie ma liczb do narysowania.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="229"/>
+        <source>a pie chart needs values above zero.</source>
+        <translation>wykres kołowy potrzebuje wartości większych od zera.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="232"/>
+        <source>too many points to draw (more than %1).</source>
+        <translation>za dużo punktów do narysowania (więcej niż %1).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="234"/>
+        <source>too many series to draw (more than %1).</source>
+        <translation>za dużo serii do narysowania (więcej niż %1).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="236"/>
+        <source>too many slices to draw (more than %1).</source>
+        <translation>za dużo wycinków do narysowania (więcej niż %1).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="238"/>
+        <source>the chart&apos;s text is too long (more than %1 kB).</source>
+        <translation>opis wykresu jest za długi (więcej niż %1 kB).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="240"/>
+        <source>the query cannot run: %1</source>
+        <translation>nie można uruchomić zapytania: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="241"/>
+        <source>charts of query results are drawn in the app only.</source>
+        <translation>wykresy wyników zapytań rysuje tylko aplikacja.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="242"/>
+        <source>write the query after “query:”.</source>
+        <translation>napisz zapytanie po „zapytanie:”.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/spec.cpp" line="245"/>
+        <source>Line %1: %2</source>
+        <translation>Wiersz %1: %2</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/data.cpp" line="278"/>
+        <source>%1 “%2”</source>
+        <translation>%1 „%2”</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/data.cpp" line="280"/>
+        <source>no value</source>
+        <translation>brak wartości</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/data.cpp" line="296"/>
+        <source>%1: %2 (%3%)</source>
+        <translation>%1: %2 (%3%)</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/data.cpp" line="299"/>
+        <source>%1: %2</source>
+        <translation>%1: %2</translation>
+    </message>
+    <message>
+        <location filename="../src/core/chart/data.cpp" line="303"/>
+        <source>%1 %2</source>
+        <translation>%1 %2</translation>
     </message>
 </context>
 <context>
@@ -4734,6 +4937,46 @@
         <source>A copy in the attachments folder: shown offline and synced with the notes. Without it the picture is loaded from the site when it is shown.</source>
         <translation>Kopia w folderze załączników: widać ją bez sieci i synchronizuje się razem z notatkami. Bez niej obraz jest pobierany ze strony, gdy go pokazujesz.</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="526"/>
+        <source>Table from a CSV file</source>
+        <translation>Tabela z pliku CSV</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="530"/>
+        <source>CSV files (*.csv *.tsv *.txt)</source>
+        <translation>Pliki CSV (*.csv *.tsv *.txt)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="530"/>
+        <source>All files (*)</source>
+        <translation>Wszystkie pliki (*)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="534"/>
+        <source>“%1” holds no table Brulion can read.</source>
+        <translation>W pliku „%1” nie ma tabeli, którą Brulion umie odczytać.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="561"/>
+        <source>Save the table as CSV</source>
+        <translation>Zapisz tabelę jako CSV</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="565"/>
+        <source>CSV files (*.csv)</source>
+        <translation>Pliki CSV (*.csv)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="569"/>
+        <source>The table was saved as CSV.</source>
+        <translation>Zapisano tabelę jako CSV.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="571"/>
+        <source>The file could not be written.</source>
+        <translation>Nie udało się zapisać pliku.</translation>
+    </message>
 </context>
 <context>
     <name>EditorPlayground</name>
@@ -6569,6 +6812,11 @@
         <location filename="../src/core/io/htmlrender.cpp" line="113"/>
         <source>Diagram source</source>
         <translation>Źródło diagramu</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/htmlrender.cpp" line="592"/>
+        <source>Chart data and source</source>
+        <translation>Dane i źródło wykresu</translation>
     </message>
 </context>
 <context>
@@ -13129,6 +13377,30 @@
         <source>Column</source>
         <translation>Kolumna</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="321"/>
+        <source>Filter</source>
+        <translation>Filtr</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="322"/>
+        <source>Filter of column %1</source>
+        <translation>Filtr kolumny %1</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="719"/>
+        <source>%1 of %n row(s) shown</source>
+        <translation>
+            <numerusform>Pokazano %1 z %n wiersza</numerusform>
+            <numerusform>Pokazano %1 z %n wierszy</numerusform>
+            <numerusform>Pokazano %1 z %n wierszy</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="733"/>
+        <source>Clear filters</source>
+        <translation>Wyczyść filtry</translation>
+    </message>
 </context>
 <context>
     <name>TagsView</name>
@@ -16496,6 +16768,27 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
 </context>
 <context>
+    <name>brulion::editor::BlockListModel</name>
+    <message>
+        <location filename="../src/app/editor/blocklistmodel.cpp" line="1042"/>
+        <source>no results are available here.</source>
+        <translation>wyniki nie są tu dostępne.</translation>
+    </message>
+</context>
+<context>
+    <name>brulion::editor::ChartView</name>
+    <message>
+        <location filename="../src/app/editor/chartview.cpp" line="146"/>
+        <source>The chart is being prepared.</source>
+        <translation>Wykres jest przygotowywany.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/editor/chartview.cpp" line="149"/>
+        <source>There are no numbers to draw.</source>
+        <translation>Nie ma liczb do narysowania.</translation>
+    </message>
+</context>
+<context>
     <name>brulion::editor::MermaidView</name>
     <message>
         <location filename="../src/app/editor/mermaidview.cpp" line="157"/>
@@ -16774,6 +17067,11 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="99"/>
         <source>The value “%1” could not be kept — it was cleared.</source>
         <translation>Wartości „%1” nie dało się zachować — wyczyszczono ją.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3360"/>
+        <source>CSV files (*.csv *.tsv *.txt)</source>
+        <translation>Pliki CSV (*.csv *.tsv *.txt)</translation>
     </message>
 </context>
 <context>

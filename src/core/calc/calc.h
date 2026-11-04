@@ -29,6 +29,12 @@
 //     replaceTable(content, span, model) -> content with the table rewritten (EOLs preserved)
 //     evaluateTable(model, locale, scope) -> TableEval{values, errors}   ("#ERR", "#CYCLE")
 //     displayWidth(text), splitTableRow(line), parseDelimiterRow(line), columnName/cellName
+//     insert/remove/moveTableRow|Column, permuteTableRows(model, order) (references follow)
+//
+//   Sorting and filtering tables                                                calc/tablesort.h
+//     sortTableText(table, column, order, options, scope) -> sorted text (rows byte for byte)
+//     tableSortOrder, tableColumnKind (Number | Date | Text), tableSummaryRows (stay in place)
+//     tableValueMatches(value, "> 100" | "!tekst" | "zolw"), tableRowsShown(model, eval, filters)
 //
 //   Numbers, units, errors                       calc/numbers.h, calc/units.h, calc/errors.h
 //     formatNumber(1234.5, Polish) == "1234,5", formatNumber(12345.5, Polish) == "12 345,5"
@@ -65,6 +71,7 @@
 #include "calc/errors.h"
 #include "calc/numbers.h"
 #include "calc/table.h"
+#include "calc/tablesort.h"
 #include "calc/units.h"
 #include "calc/value.h"
 

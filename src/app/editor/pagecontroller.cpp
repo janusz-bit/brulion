@@ -6,12 +6,15 @@
 #include "editorhost.h"
 #include "queryhost.h"
 
+#include "calc/calc.h"
 #include "calc/table.h"
+#include "calc/tablesort.h"
 #include "dates/local.h"
 #include "dates/recurrence.h"
 #include "drawing/backdrop.h"
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
+#include "io/tablecsv.h"
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
@@ -21,6 +24,7 @@
 #include "markdown/tokens.h"
 #include "notebook/links.h"
 #include "periodic/periodic.h"
+#include "text/decode.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "webpicture/webpicture.h"
@@ -3001,7 +3005,7 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
     } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
                || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"fileLink" || cmd == u"webImage"
-               || cmd == u"drawing" || cmd == u"drawingOn") {
+               || cmd == u"drawing" || cmd == u"drawingOn" || cmd == u"csvTable") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -3044,8 +3048,8 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         focus = {currentRow(), cursor + int(prefix.size())};
         // Quote/callout views edit the raw body.
         focus.cursor = std::clamp(focus.cursor, 0, int(m_model->editTextAt(focus.row).size()));
-    } else if (cmd == u"table" || cmd == u"calc" || cmd == u"math" || cmd == u"mermaid" || cmd == u"query"
-               || cmd == u"code" || cmd == u"rule") {
+    } else if (cmd == u"table" || cmd == u"calc" || cmd == u"math" || cmd == u"mermaid" || cmd == u"chart"
+               || cmd == u"query" || cmd == u"code" || cmd == u"rule") {
         int templateCursor = 0;
         const QString tpl = slashTemplate(cmd, m_english, &templateCursor);
         const int r = currentRow();
@@ -3232,6 +3236,151 @@ void PageController::setTableColumnAlign(int row, int column, const QString &ali
         m.aligns[column] = chosen;
         return true;
     });
+}
+
+// --- Tables: sorting, filters, CSV ---------------------------------------------------------------------
+
+namespace {
+
+/// Larger CSV files are not read (bytes).
+constexpr qint64 MaxCsvFileBytes = 16LL * 1024 * 1024;
+
+} // namespace
+
+bool PageController::sortTable(int row, int column, bool descending)
+{
+    if (!validRow(row))
+        return false;
+    const calc::CalcLocale locale = m_english ? calc::CalcLocale::English : calc::CalcLocale::Polish;
+    calc::TableSortOptions options;
+    options.locale = locale;
+    options.today = today();
+    const markdown::BlockEntry &e = m_model->document().at(row);
+    const auto sorted =
+            calc::sortTableText(e.body, column, descending ? calc::SortOrder::Descending : calc::SortOrder::Ascending,
+                                options, calc::pageScope(m_model->text(), e.line, locale));
+    if (!sorted)
+        return false;
+    editBody(row, *sorted);
+    return true;
+}
+
+void PageController::setTableFilter(int row, int column, const QString &text)
+{
+    if (validRow(row))
+        m_model->setTableFilter(row, column, text);
+}
+
+void PageController::setTableFilterOpen(int row, bool open)
+{
+    if (validRow(row))
+        m_model->setTableFilterOpen(row, open);
+}
+
+QString PageController::tableCsv(int row) const
+{
+    if (!validRow(row))
+        return {};
+    const markdown::BlockEntry &e = m_model->document().at(row);
+    const auto model = calc::parseTable(e.body);
+    if (!model)
+        return {};
+    const calc::CalcLocale locale = m_english ? calc::CalcLocale::English : calc::CalcLocale::Polish;
+    return io::tableToCsv(*model,
+                          calc::evaluateTable(*model, locale, calc::pageScope(m_model->text(), e.line, locale)));
+}
+
+bool PageController::copyTableCsv(int row)
+{
+    QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
+    const QString csv = tableCsv(row);
+    if (!clipboard || csv.isEmpty())
+        return false;
+    clipboard->setText(csv);
+    return true;
+}
+
+QString PageController::tableCsvFileName(int row) const
+{
+    Q_UNUSED(row);
+    QString name = paths::sanitizeFileName(paths::pageTitle(path()));
+    if (name.isEmpty())
+        name = m_english ? u"Table"_s : u"Tabela"_s;
+    return name + u".csv"_s;
+}
+
+bool PageController::saveTableCsv(int row, const QUrl &url)
+{
+    const QString csv = tableCsv(row);
+    if (csv.isEmpty() || !url.isValid() || url.isEmpty())
+        return false;
+    const QByteArray data = QByteArray("\xEF\xBB\xBF") + csv.toUtf8();
+    QFile file(url.isLocalFile() ? url.toLocalFile() : url.toString());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    const bool written = file.write(data) == data.size();
+    file.close();
+    return written;
+}
+
+bool PageController::downloadTableCsv(int row)
+{
+#ifdef Q_OS_WASM
+    const QString csv = tableCsv(row);
+    if (csv.isEmpty())
+        return false;
+    platform::wasm::saveFile(QByteArray("\xEF\xBB\xBF") + csv.toUtf8(), tableCsvFileName(row));
+    return true;
+#else
+    Q_UNUSED(row);
+    return false;
+#endif
+}
+
+QVariantMap PageController::insertCsvTable(int row, const QString &text)
+{
+    const std::optional<io::CsvTable> table = io::tableFromCsv(text);
+    if (!table)
+        return {{u"row"_s, -1}, {u"truncated"_s, false}};
+    const int inserted = insertMarkdown(validRow(row) ? row : m_model->count() - 1, calc::serializeTable(table->model));
+    return {{u"row"_s, inserted}, {u"truncated"_s, table->truncated}};
+}
+
+QVariantMap PageController::insertCsvFile(int row, const QUrl &url)
+{
+    QFile file(url.isLocalFile() ? url.toLocalFile() : url.toString());
+    if (url.isEmpty() || !file.open(QIODevice::ReadOnly) || file.size() > MaxCsvFileBytes)
+        return {{u"row"_s, -1}, {u"truncated"_s, false}};
+    return insertCsvTable(row, text::decodeText(file.read(MaxCsvFileBytes)));
+}
+
+bool PageController::pickCsvInBrowser(int row)
+{
+#ifdef Q_OS_WASM
+    const int handle = trackBlock(row); // the block may move or go while the picker is open
+    const QPointer<PageController> self(this);
+    platform::wasm::openFiles(
+            {tr("CSV files (*.csv *.tsv *.txt)")}, false, MaxCsvFileBytes, MaxCsvFileBytes,
+            [self, handle](const QList<platform::PickedFile> &picked) {
+                if (!self)
+                    return;
+                const int current = self->trackedRow(handle);
+                self->untrack(handle);
+                if (picked.isEmpty())
+                    return; // cancelled
+                const platform::PickedFile &file = picked.first();
+                const QVariantMap r = file.isRead() ? self->insertCsvTable(current, text::decodeText(file.data))
+                                                    : QVariantMap{{u"row"_s, -1}};
+                if (r.value(u"row"_s).toInt() < 0)
+                    Q_EMIT self->csvTableFailed(file.name);
+                else
+                    Q_EMIT self->csvTableInserted(r.value(u"row"_s).toInt(), r.value(u"truncated"_s).toBool());
+            });
+    return true;
+#else
+    Q_UNUSED(row);
+    return false;
+#endif
 }
 
 // --- Links ------------------------------------------------------------------------------------------------
@@ -3421,6 +3570,7 @@ QString PageController::linkAtCursor(int row, int position) const
     case BlockView::Query:
     case BlockView::Math:
     case BlockView::Mermaid:
+    case BlockView::Chart:
     case BlockView::Table:
     case BlockView::Frontmatter:
     case BlockView::Html:

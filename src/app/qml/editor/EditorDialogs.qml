@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import QtCore
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Templates as T
@@ -8,6 +9,8 @@ import Brulion
 //   createReminder(row, alarm)      BReminderDialog → ⏰ / ⏰! token (+ 🔁) on the block
 //   editReminder(row, from, to)     a clicked reminder chip: edit / delete that token
 //   pickDate(row, field)            Termin (📅 due) / Zaplanuj (⏳ scheduled): BDatePicker
+//   pickCsvTable(row)               "/Tabela z CSV…": FilePicker → PageController.insertCsvFile
+//   saveTableCsv(row)               "Zapisz jako CSV…": FilePicker (save) → saveTableCsv
 //   pickDateAt(row, from, to, kind, at)  a date chip's "Zmień datę…" (DateChipMenu): that token
 //                                   (kind "day": a [[day]] link, a date without a time)
 //   pickRecurrence(row)             Powtarzaj (🔁): quick choices or a rule typed in Polish/English
@@ -50,6 +53,8 @@ Item {
                                     || (templateDialog !== null && templateDialog.opened)
                                     || (imageDialog !== null && imageDialog.visible)
                                     || (fileLinkDialog !== null && fileLinkDialog.visible)
+                                    || (csvDialog !== null && csvDialog.visible)
+                                    || (csvSaveDialog !== null && csvSaveDialog.visible)
                                     || (webImageDialog !== null && webImageDialog.opened)
                                     || (backdropPicker !== null && backdropPicker.visible)
                                     || (backdropDialog !== null && backdropDialog.opened)
@@ -62,6 +67,8 @@ Item {
     property var templateDialog: null
     property FilePicker imageDialog: null
     property FilePicker fileLinkDialog: null
+    property FilePicker csvDialog: null
+    property FilePicker csvSaveDialog: null
     property var webImageDialog: null
     property FilePicker backdropPicker: null
     property DrawingBackdropDialog backdropDialog: null
@@ -497,6 +504,72 @@ Item {
                 root.refocus()
             }
             onRejected: root.refocus()
+        }
+    }
+
+    /// "/Tabela z CSV…": a CSV file as a table in place of the block (PageController.insertCsvFile).
+    function pickCsvTable(r) {
+        if (!controller)
+            return
+        remember(r)
+        // The browser has its own picker (asynchronous, inserted by the controller).
+        if (controller.pickCsvInBrowser(r))
+            return
+        if (!csvDialog)
+            csvDialog = csvComponent.createObject(root) as FilePicker
+        csvDialog.open()
+    }
+
+    Component {
+        id: csvComponent
+        FilePicker {
+            title: qsTr("Table from a CSV file")
+            fileMode: FilePicker.OpenFile
+            dark: Theme.dark
+            colors: Theme.colors
+            nameFilters: [qsTr("CSV files (*.csv *.tsv *.txt)"), qsTr("All files (*)")]
+            onAccepted: {
+                const result = root.controller.insertCsvFile(root.blockRow(), selectedFile)
+                if (result.row < 0)
+                    root.editor.notice(qsTr("“%1” holds no table Brulion can read.")
+                                      .arg(decodeURIComponent(String(selectedFile).split("/").pop())), "error")
+                else
+                    root.editor.csvInserted(result.truncated)
+            }
+            onRejected: root.refocus()
+        }
+    }
+
+    /// The table menu's "Zapisz jako CSV…": the system's save picker (the browser: a download).
+    function saveTableCsv(r) {
+        if (!controller)
+            return
+        if (controller.downloadTableCsv(r))
+            return
+        remember(r)
+        if (!csvSaveDialog)
+            csvSaveDialog = csvSaveComponent.createObject(root) as FilePicker
+        csvSaveDialog.currentFolder = StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        csvSaveDialog.selectedFile = csvSaveDialog.currentFolder + "/" + controller.tableCsvFileName(r)
+        csvSaveDialog.open()
+    }
+
+    Component {
+        id: csvSaveComponent
+        FilePicker {
+            objectName: "tableCsvSaveDialog"
+            title: qsTr("Save the table as CSV")
+            fileMode: FilePicker.SaveFile
+            dark: Theme.dark
+            colors: Theme.colors
+            nameFilters: [qsTr("CSV files (*.csv)")]
+            defaultSuffix: "csv"
+            onAccepted: {
+                if (root.controller.saveTableCsv(root.blockRow(), selectedFile))
+                    root.editor.notice(qsTr("The table was saved as CSV."), "success")
+                else
+                    root.editor.notice(qsTr("The file could not be written."), "error")
+            }
         }
     }
 

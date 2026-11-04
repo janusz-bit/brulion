@@ -1,6 +1,7 @@
 // HTML exporters: a static site in a ZIP (a page per note with relative links, tag pages, an
 // index of journals and pages, backlinks, CSS) and a single self-contained HTML document (table of
 // contents, links as anchors, images as data: URIs).
+#include "index/query.h"
 #include "index/vaultindex.h"
 #include "io/exporters_p.h"
 #include "io/exportutil_p.h"
@@ -21,6 +22,41 @@ namespace {
 QString esc(const QString &s)
 {
     return HtmlRenderer::escape(s);
+}
+
+/// The groups of a ```chart block's query in the exported vault (docs/SYNTAX.md §9 "Charts"): each
+/// `group:` group's number of items, without `group:` the items of each page.
+chart::QueryCounts chartQueryCounts(const ExportVault &vault, const QString &source, const VaultPath &page)
+{
+    chart::QueryCounts out;
+    const std::variant<Query, QString> parsed = parseQuery(source);
+    if (const QString *error = std::get_if<QString>(&parsed)) {
+        out.error = *error;
+        return out;
+    }
+    QueryOptions options;
+    options.currentPath = page;
+    options.now = vault.input().now.time();
+    options.defaultLimit = MaxQueryLimit;
+    const QueryResult result = runQuery(std::get<Query>(parsed), vault.index(), vault.input().now.date(),
+                                        vault.config().weekStartsOn, options);
+    if (!result.groups.isEmpty()) {
+        for (const QueryGroup &g : result.groups)
+            out.groups.append({g.label, double(g.items.size())});
+        return out;
+    }
+    QHash<QString, qsizetype> at;
+    for (const QueryItem &item : result.items) {
+        const QString title = paths::pageTitle(item.path);
+        const auto it = at.constFind(title);
+        if (it == at.constEnd()) {
+            at.insert(title, out.groups.size());
+            out.groups.append({title, 1.0});
+        } else {
+            out.groups[*it].second += 1;
+        }
+    }
+    return out;
 }
 
 const char *styleSheet()
@@ -171,6 +207,8 @@ public:
         };
         l.tag = [this](const QString &tag) { return tagLink(tag); };
         l.webPicture = m_webPicture;
+        if (m_vault.input().now.isValid()) // (queries need a today)
+            l.chartQuery = [=, this](const QString &query) { return chartQueryCounts(m_vault, query, notePath); };
         l.block = [=, this](const QString &id) -> std::optional<std::pair<QString, QString>> {
             const auto block = m_vault.block(id);
             if (!block)

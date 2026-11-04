@@ -66,8 +66,19 @@ Palette themedPalette(const ThemeColors &theme)
     static const QString deep[SliceCount] = {u"#3b6e9e"_s, u"#8f6a1c"_s, u"#a1483e"_s, u"#2f7a52"_s,
                                              u"#6a5296"_s, u"#2a7676"_s, u"#9a5a26"_s, u"#66733a"_s,
                                              u"#8f4a6e"_s, u"#4c566b"_s, u"#7d6a3f"_s, u"#4a6e4d"_s};
-    for (int i = 0; i < SliceCount; ++i)
+    // Chart series: lines and bar outlines, readable on the background (light: deeper than the
+    // pastel fills; dark: lighter than the deep ones).
+    static const QString lightLine[SliceCount] = {u"#2f6ea8"_s, u"#a8740f"_s, u"#b2493d"_s, u"#2c8350"_s,
+                                                  u"#7253a6"_s, u"#1f7f80"_s, u"#b0601f"_s, u"#6a7a2a"_s,
+                                                  u"#a8467b"_s, u"#55617a"_s, u"#8a7232"_s, u"#4a7d4e"_s};
+    static const QString darkLine[SliceCount] = {u"#8fbce8"_s, u"#f0c060"_s, u"#f0968b"_s, u"#86d3a2"_s,
+                                                 u"#c2aaeb"_s, u"#7fd0d0"_s, u"#f2a76b"_s, u"#c6d48c"_s,
+                                                 u"#eda0c9"_s, u"#b3bdd2"_s, u"#ddc78f"_s, u"#a6cfa8"_s};
+    for (int i = 0; i < SliceCount; ++i) {
         p[sliceRole(i)] = dark ? deep[i] : light[i];
+        p[seriesRole(i)] = dark ? darkLine[i] : lightLine[i];
+    }
+    p[Role::Grid] = mix(border, bg, 0.2);
     return p;
 }
 

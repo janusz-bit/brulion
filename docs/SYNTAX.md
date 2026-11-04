@@ -1041,6 +1041,117 @@ column takes the references to it along, also ranges within it (`B1:B3`, `B:B` w
 a range over several rows or columns keeps its place. `[Header]`, `above` and the other relative
 references need no rewriting. Editing the file by hand rewrites nothing.
 
+### Sorting and filtering tables
+
+A table is sorted by a column from the menu of one of its cells (docs/UI.md "The block editor":
+Kolumna ▸ Sortuj rosnąco / malejąco). Sorting rewrites the table's rows in the file — one undo step,
+nothing else on the page changes:
+* A column compares by what all its non-empty cells are: **numbers** as people write them
+  (`12,50 zł`, `23%`, `1 200`; `12.50` in English), else **dates** in the forms Brulion reads
+  elsewhere (`2026-10-15`, `2026-10-15 09:30`, `15.10.2026`, `15 października 2026`, `[[2026-10-15]]`;
+  a date without a year — `15 paź` — is its next occurrence, as in §8), else **text** in Polish
+  alphabetical order: case-insensitive, `ą` after `a`, `ł` after `l`, `ż` after `ź`, digit runs by
+  value (`Pokój 2` before `Pokój 10`) — the same order on every platform (Brulion's own collation,
+  not the system's, which the browser does not have). Text is compared as shown: `[[Strona|alias]]`
+  by `alias`, `**x**` by `x`. A formula cell compares by its result.
+* Empty cells go last in both directions; rows that compare equal keep their order (stable).
+* **Summary rows stay where they are**: rows at the end of the table whose formulas add up the
+  column — `above` / `powyżej`, a range of several rows (`B1:B4`), a whole column (`B:B`) — and rows
+  at its start reading `below` / `poniżej`.
+* Each row keeps its line byte for byte (its padding, escaped pipes `\|`, the delimiter row with
+  the alignment colons, the line endings). Only when a formula names a moved row by its `A1`
+  address are the references rewritten to follow their rows (as when a row is moved, above) and the
+  table written anew in the pretty form.
+* A table of more than 20 000 rows is not sorted.
+
+**Filters** only hide rows in the editor — nothing is written, and they last while the page is
+open (they are view state, like a fold, and not synced: a filter that hid rows on one device only
+would be confusing in a shared file). The menu's "Filtruj wiersze" shows a field under each column
+header; a row shows when every non-empty field matches its cell (as shown — a formula's result):
+* `tekst` — contains it, case- and diacritic-insensitive (`zolw` finds `Żółw`); `!tekst` — does not;
+* `> 100`, `>= 2026-01-01`, `< 5`, `<=`, `=`, `!=` (also `<>`, `≥`, `≤`, `≠`) — numbers and dates
+  compare by value (both the cell and the value must be one), `=` / `!=` compare text
+  case- and diacritic-insensitively, `<` / `>` text alphabetically;
+* `=` alone — empty cells; `!=` alone — cells with text.
+Summary rows (above) always show. A row being edited stays shown until it is left.
+
+### CSV
+
+One table as CSV: the block menu's "Kopiuj jako CSV" and "Zapisz jako CSV…" (the browser:
+a download). RFC 4180 with `,`, CRLF line ends, the header first, a UTF-8 BOM in a saved file (the
+clipboard has none) so that spreadsheets read Polish letters; formula cells are their results,
+other cells their text as written (`<br>` a line break, `\|` a pipe); a value a spreadsheet would
+run as a formula (`=`, `+`, `-`, `@` first, not a number) gets an apostrophe.
+
+`/Tabela z CSV…` reads a CSV file into a new table block (in place of the empty block the command
+was typed in): the separator is detected (`,`, `;` or tab — the one that splits the first records
+most consistently; Excel's `sep=;` first line too), quotes, doubled quotes and line breaks in quotes,
+CRLF / LF / CR, a UTF-8 BOM (files that are no UTF-8 are read as windows-1250/1252); the first
+record is the header; records without text are left out, short rows padded. Every value is text:
+one starting with `=` is written `\=` (no formula), pipes are escaped and line breaks become
+`<br>`. At most 2000 rows, 64 columns and 10 000 characters a cell are read (the editor says when
+more was left out); a file over 16 MB is not read.
+
+### Charts
+
+A fenced block with the language `chart` draws a chart of numbers on the page — a table (with
+formulas: their results), a ```calc block or a query's results. Brulion draws it with its own
+code (core module `chart`): no script engine, no web view, nothing from the note is executed. The
+file keeps plain `key: value` lines that read well anywhere (other apps show a code block).
+
+````
+| Miesiąc | Przychód | Koszt |
+|---|--:|--:|
+| Styczeń | 1 200 zł | 900 |
+| Luty | 1 500 zł | =B1+300 |
+| Razem | =sum(above) | =sum(above) |
+
+```chart
+type: bar               // bar | line | pie
+title: Budżet 2026
+```
+````
+
+| Key (Polish) | Value |
+|---|---|
+| `type:` (`typ:`) | `bar` (`słupkowy`), `line` (`liniowy`), `pie` (`kołowy`); default `bar` |
+| `table:` (`tabela:`) | the data: `above` (`powyżej`, the default) — the nearest table above the chart; `2` — the page's second table (also one below) |
+| `calc:` (`obliczenia:`) | the data: a ```calc block, `above` or its number on the page |
+| `query:` (`zapytanie:`) | the data: a query on one line (§10), e.g. `query: type:tasks tag:praca group:status` |
+| `x:` (`etykiety:`) | the labels' column: its header (case- and diacritic-insensitive) or letter `A`; default: the first column (row numbers for a table of one column) |
+| `y:` (`wartości:`) | the values' columns, separated by `,` or `;` (a name with a comma in quotes: `"Cena, brutto"`); default: every other column whose filled cells are mostly numbers (at most 12) |
+| `title:` (`tytuł:`) | the title drawn above the chart |
+
+Keys are case- and diacritic-insensitive; `//` starts a comment (after a blank), `#` a comment
+line; blank lines are skipped; only one of `table:`, `calc:`, `query:`.
+
+* **Tables**: one point per row except the summary rows (as for sorting); cells are read as numbers
+  like formula cells (`12,50 zł`, `23%`); text, `#ERR`, non-finite values and magnitudes above 10¹⁵
+  are gaps (a missing bar, a break in the line). Formulas see the page's calc variables.
+* **Calc blocks**: one point per line with a numeric result — an assignment by its name
+  (`czynsz = 1800` → „czynsz”), a `Label: expr` line by its label, other lines by their text;
+  `sum` / `avg` lines and errors are left out.
+* **Queries**: one point per group of `group:` with its number of items; without `group:` one per
+  page. The count is of the items the query returns (its `limit:`; the HTML export counts up to
+  10 000).
+* **Bar** charts start at zero, several columns are grouped bars with a legend; **line** charts fit
+  their range, with dots on each point when there are up to 60; a **pie** draws the first column's
+  values above zero (at most 64 slices) with their shares, legend beside or under it.
+* Colours follow the theme (light and dark): series in a fixed set of colours, grid and labels in
+  the muted text colour. The chart is as wide as the column; labels that do not fit are thinned out
+  and cut with "…".
+* Bounds (notes come from sync and imports): 10 kB of source, 400 points, 12 series, labels of
+  200 characters; more is reported instead of drawn. A chart that cannot be drawn shows its source
+  with the reason and its line.
+* A text alternative (the type, the title and every value) is given to screen readers and, in the
+  HTML export, folded under the chart with its source.
+
+The HTML exports draw a chart as inline SVG like a Mermaid diagram (§11: light colours, dark ones
+in a `@media (prefers-color-scheme: dark)` rule, nothing active) with its values in words and its
+source folded under it (`<details>`); a chart that cannot be drawn — and a query chart in an export
+without a date — stays a code block. The clipboard, the Markdown, Obsidian, Logseq and Pandoc
+exports keep the source. Embedded pages and blocks show a chart's source.
+
 ## 10. Queries
 
 A fenced block with language `query` renders live results in the editor (tasks can be checked
@@ -1277,7 +1388,8 @@ controls or surrogates). Long labels wrap at about 15 em and are cut at 1000 cha
 * **Pie charts** — `pie`, optionally `showData` and `title …` on the same line or `title …`
   on its own; slices `"Label" : 42.5` (a number with `.`). Zero and negative values are left
   out; slices go clockwise from the top in the written order, with their share on slices of
-  14° or more and in the legend (with the value too under `showData`).
+  14° or more and in the legend (with the value too under `showData`). A chart of the numbers of
+  a table, a calc block or a query is a ```chart block (§9 "Charts").
 
 Other Mermaid types (`classDiagram`, `stateDiagram`, `erDiagram`, `gantt`, `journey`, `mindmap`,
 `timeline`, `gitGraph`, `C4…`, `quadrantChart`, `requirementDiagram`, `sankey`, `xychart`,

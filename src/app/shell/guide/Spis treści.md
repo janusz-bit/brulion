@@ -29,6 +29,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 
 ## Liczenie
 - [[Obliczenia|Obliczenia]] — bloki `calc`, tabele z formułami, rachunki w tekście.
+- [[Tabele i wykresy|Tabele i wykresy]] — sortowanie i filtrowanie tabel, CSV, wykresy z tabel i obliczeń.
 
 ## Pliki i urządzenia
 - [[Synchronizacja|Synchronizacja]] — Syncthing, Nextcloud, konflikty, historia wersji.

@@ -66,6 +66,8 @@ Wiersze i kolumny zmieniasz w menu komórki: kliknij ją prawym przyciskiem (na 
 
 Formuły nadal wskazują te same komórki: po wstawieniu wiersza nad komórką `B2` odwołanie w formule zmieni się na `B3`. Jeśli usuniesz wiersz lub kolumnę, do których odwołuje się formuła, w jej treści pojawi się `REF!`, a w komórce `#ERR`.
 
+Tabelę posortujesz i przefiltrujesz z menu kolumny, wymienisz z arkuszem przez CSV, a jej liczby pokażesz na wykresie — zobacz [[Tabele i wykresy|Tabele i wykresy]].
+
 Wstaw tabelę albo blok obliczeń poleceniami `/Tabela` i `/Obliczenia`. Zobacz też [[Tagi i właściwości|właściwości]], z których wartości można liczyć.
 
 Wzory matematyczne to inna rzecz niż rachunki: Brulion składa je w notatkach, ale nie oblicza ich wartości — zobacz [[Wzory matematyczne|Wzory matematyczne]].

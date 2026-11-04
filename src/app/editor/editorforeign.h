@@ -1,12 +1,13 @@
 // QML registration of the block editor classes in brulion_editor (src/app/editor/CMakeLists.txt):
 // the classes know nothing about QML; these wrappers make them types of the app's QML module
-// "Brulion" (PageController, BlockListModel, MarkdownHighlighter, MermaidView, RichTextPills, RichTextLinks,
-// LinkPreview, SuggestionModel, QueryResultModel, StreamSelection, FakeEditorHost, the EditorInput and SpellCheck singletons;
-// EditorHost as an uncreatable interface type), so qmllint/qmlcachegen see their full API from the library's extracted
-// metatypes.
+// "Brulion" (PageController, BlockListModel, MarkdownHighlighter, MermaidView, ChartView, RichTextPills, RichTextLinks,
+// LinkPreview, SuggestionModel, QueryResultModel, StreamSelection, FakeEditorHost, the EditorInput and SpellCheck
+// singletons; EditorHost as an uncreatable interface type), so qmllint/qmlcachegen see their full API from the
+// library's extracted metatypes.
 #pragma once
 
 #include "blocklistmodel.h"
+#include "chartview.h"
 #include "editorhost.h"
 #include "editorinput.h"
 #include "fakeeditorhost.h"
@@ -69,6 +70,12 @@ struct MermaidViewForeign {
     Q_GADGET
     QML_FOREIGN(brulion::editor::MermaidView)
     QML_NAMED_ELEMENT(MermaidView)
+};
+
+struct ChartViewForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::ChartView)
+    QML_NAMED_ELEMENT(ChartView)
 };
 
 struct RichTextPillsForeign {

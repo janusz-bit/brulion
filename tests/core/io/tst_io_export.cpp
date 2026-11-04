@@ -571,6 +571,44 @@ private Q_SLOTS:
         QVERIFY(!doc.contains(u"<svg"_s));
     }
 
+    // ```chart: the chart's SVG (light and dark) with its values in words and its source folded
+    // under it; a table's formulas are evaluated, a calc block of a list item read; a chart Brulion
+    // cannot draw stays code; the clipboard and Pandoc keep the source.
+    void htmlChart()
+    {
+        ExportInput in;
+        in.now = QDateTime(QDate(2026, 11, 3), QTime(12, 0));
+        in.files = {iotest::text(u"Wykresy.md"_s,
+                                 u"| Miesiąc | Kwota |\n|---|---|\n| Styczeń | 100 |\n| Luty | =B1*2 |\n"
+                                 u"| Razem | =sum(above) |\n\n"
+                                 u"```chart\ntype: bar\ntitle: Wydatki <i>\n```\n\n"
+                                 u"```chart\ntype: radar\n```\n\n"
+                                 u"- ```calc\n  czynsz = 1800\n  prąd = 200\n  ```\n"
+                                 u"- ```chart\n  calc: above\n  type: pie\n  ```\n"
+                                 u"- [ ] zadanie #dom\n"
+                                 u"- ```chart\n  query: type:tasks group:status\n  ```\n"_s)};
+        for (const QString &format : {u"html-site"_s, u"html-single"_s}) {
+            const ExportedFile f = exportWith(format, in);
+            const QString page = format == u"html-site" ? textOf(readZip(f.data), u"Brulion/Wykresy.html"_s)
+                                                        : QString::fromUtf8(f.data);
+            QCOMPARE(page.count(u"<figure class=\"mermaid chart\"><svg xmlns=\"http://www.w3.org/2000/svg\""_s), 3);
+            QVERIFY2(page.contains(u"<title>Wydatki &lt;i&gt;</title>"_s), qPrintable(page));
+            QVERIFY(page.contains(u"Bar chart “Wydatki &lt;i&gt;”: Styczeń: 100; Luty: 200."_s));
+            QVERIFY(!page.contains(u"Razem: 300"_s)); // the summary row is left out
+            QVERIFY(page.contains(u"<details><summary>Chart data and source</summary>"_s));
+            QVERIFY(page.contains(
+                    u"<pre><code class=\"language-chart\">type: bar\ntitle: Wydatki &lt;i&gt;</code></pre>"_s));
+            QVERIFY(page.contains(u"czynsz: 1"_s)); // the pie of the list item's calc block
+            QVERIFY(page.contains(u"Do zrobienia: 1"_s) || page.contains(u"To do: 1"_s)); // the query's group
+            QVERIFY(page.contains(u"<pre><code class=\"language-chart\">type: radar</code></pre>"_s));
+            QVERIFY(page.contains(u"@media (prefers-color-scheme:dark){.bmd-"_s));
+            QVERIFY(!page.contains(u"<script"_s));
+        }
+        const QString copied = io::clipboardHtml(u"```chart\ntype: bar\n```\n"_s);
+        QVERIFY2(copied.contains(u"<code class=\"language-chart\">type: bar</code>"_s), qPrintable(copied));
+        QVERIFY(!copied.contains(u"<svg"_s));
+    }
+
     // `/Wzór matematyczny` in an outline or a journal writes a ```math block inside a list item:
     // the export shows the formula there too, and other fenced items as code blocks.
     void htmlFencesInListItems()
