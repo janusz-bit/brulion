@@ -72,7 +72,7 @@ QList<SpellDictionary> dictionaries()
 std::string hunspellPath(const QString &path)
 {
 #ifdef Q_OS_WIN
-    return (u"\\\\?\\"_s + QDir::toNativeSeparators(QDir::cleanPath(path))).toStdString();
+    return QString(u"\\\\?\\"_s + QDir::toNativeSeparators(QDir::cleanPath(path))).toStdString();
 #else
     return QFile::encodeName(path).toStdString();
 #endif
