@@ -9,16 +9,18 @@ brulion_add_test(tst_content_models SOURCES tst_content_models.cpp
 
 # The views in their real QML (qml-smoke.sh): every content view (journals, a page with its side
 # panel and dialogs, all pages, tags, a tag, search, trash, history) at desktop and phone sizes
-# with the sample notebook; QML warnings from the content files fail the test.
+# with the sample notebook; QML warnings from the content files fail the test, and so does a run
+# that never gets to its screenshot (each run is bounded: a layout loop fails its route quickly).
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
 if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
     math(EXPR _content_qml_timeout "300 + 10 * ${BRULION_TEST_SLOWDOWN}")
+    math(EXPR _content_qml_run_timeout "30 + 10 * ${BRULION_TEST_SLOWDOWN}")
     # Windows: qml-smoke.sh is a bash script (not run there; the self-tests below are).
     if(NOT WIN32)
         add_test(NAME tst_content_qml
             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/qml-smoke.sh $<TARGET_FILE:brulion> ${CMAKE_CURRENT_BINARY_DIR}/qml-smoke)
         set_tests_properties(tst_content_qml PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};BRULION_SMOKE_RUN_TIMEOUT=${_content_qml_run_timeout}"
             TIMEOUT ${_content_qml_timeout})
     endif()
 
