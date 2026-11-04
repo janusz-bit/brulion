@@ -32,6 +32,11 @@ FocusScope {
     /// Side margin of the rows (and the toolbar and column headers above them).
     readonly property real rowMargin: wide ? Math.max(Theme.space6, (width - maximumWidth) / 2) : Theme.space2
     readonly property real toolbarMargin: wide ? rowMargin : Theme.space3
+    /// The toolbar's width, from the view's: the filter field is sized from it, never from the
+    /// Flow's own width — while the column cannot lay out (the view not sized yet: a tab's pane
+    /// is 0 px high when it creates it) the Flow's width is its implicit width, which a field of
+    /// the Flow's width made grow on every polish, without end.
+    readonly property real toolbarWidth: Math.max(0, width - 2 * toolbarMargin)
 
     readonly property var sortKeys: [
         { value: "title", text: qsTr("Title"), icon: "file-text" },
@@ -110,7 +115,7 @@ FocusScope {
 
             BSearchField {
                 id: filterField
-                width: root.wide ? Math.min(360, toolbar.width * 0.45) : toolbar.width
+                width: root.wide ? Math.min(360, root.toolbarWidth * 0.45) : root.toolbarWidth
                 placeholderText: root.folder !== "" ? qsTr("Filter pages in %1…").arg(root.folder) : qsTr("Filter pages…")
                 debounce: 120
                 Keys.onDownPressed: {

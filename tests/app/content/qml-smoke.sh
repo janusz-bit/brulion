@@ -5,12 +5,15 @@
 # TagsView (all tags, a tag's overview), SearchView, TrashView, CleanupView and HistoryView in the real app with the
 # sample notebook, desktop and phone sizes, headless, and fails when the app does not start or QML
 # reports a warning or error from one of these files (binding loops, type errors, missing
-# properties, layout loops).
+# properties, layout loops). Every run is bounded (BRULION_SMOKE_RUN_TIMEOUT seconds, default 60):
+# a view that never settles — a layout or polish loop Qt reports nothing about — fails its route
+# at once instead of the whole test timing out.
 #
 #   tests/app/content/qml-smoke.sh <brulion binary> <scratch dir>
 set -uo pipefail
 bin="$1"
 work="$2"
+run_timeout="${BRULION_SMOKE_RUN_TIMEOUT:-60}"
 rm -rf "$work"
 mkdir -p "$work"
 
@@ -55,9 +58,17 @@ for size in desktop phone; do
     home="$work/home"
     rm -rf "$home"
     log="$work/log.txt"
-    if ! XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
-      "$bin" --demo --route "$route" --no-single-instance "${geometry[@]}" --now "2026-10-14 10:00" \
-      --locale pl --delay 1500 --screenshot "$work/shot.png" 2> "$log"; then
+    XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
+      timeout --kill-after=10 "$run_timeout" "$bin" --demo --route "$route" --no-single-instance "${geometry[@]}" --now "2026-10-14 10:00" \
+      --locale pl --delay 1500 --screenshot "$work/shot.png" 2> "$log"
+    status=$?
+    if (( status == 124 || status == 137 )); then
+      echo "FAIL: the app hung for $route ($size): no screenshot within ${run_timeout} s (a layout or polish loop?)"
+      tail -n 20 "$log"
+      failed=$((failed + 1))
+      continue
+    fi
+    if (( status != 0 )); then
       echo "FAIL: the app did not run for $route ($size)"
       cat "$log"
       failed=$((failed + 1))
