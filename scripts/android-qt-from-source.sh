@@ -11,7 +11,8 @@
 #   $QT_ROOT/6.11.2/gcc_64              host Qt (QT_HOST_PATH)
 #   $QT_ROOT/6.11.2/android_<arch>      Qt for Android, one per ABI
 # Idempotent: a module whose stamp (version, sources, options) matches is not built again.
-# Takes ~25 min (16 cores; ~10 GB of disk while building, ~1.5 GB installed).
+# Takes ~30 min with 6 jobs on a 16-core x86_64 (F-Droid's build server image, measured); needs
+# ~13 GB of disk while building (deleted afterwards), ~400 MB installed.
 #
 # Usage: scripts/android-qt-from-source.sh [--help]
 #

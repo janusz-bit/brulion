@@ -595,6 +595,8 @@ niezaufany certyfikat także przy poprawnym serwerze.
   `androiddeployqt` dokłada je do `lib/<abi>/` (`QT_ANDROID_EXTRA_LIBS`). Bez sieci:
   `BRULION_ANDROID_OPENSSL_DIR=<checkout android_openssl na tym commicie>`. Build Nix bierze ten sam
   commit z `nix/android/openssl.json`. 64-bitowe biblioteki mają segmenty wyrównane do 16 KB.
+  Build ze źródeł (F-Droid) zamiast nich kompiluje OpenSSL 3.5.9 (LTS) NDK-iem —
+  `scripts/android-openssl-from-source.sh`, [Budowanie ze źródeł](#budowanie-ze-źródeł-f-droid).
 * **Aktualizacja** (nowe wydanie OpenSSL u KDAB): nowy commit i sumy SHA-256
   (`sha256sum ssl_3/*/lib{ssl,crypto}_3.so` w checkoutcie) w `src/app/CMakeLists.txt`, potem
   `nix/android/update-locks.sh --openssl <commit>`.
@@ -750,6 +752,7 @@ Wymaga hosta **Linux x86_64** (NDK i narzędzia Qt są tylko na x86_64) — nie 
 | Gradle / Android Gradle Plugin | 9.3.1 / 9.0.0 (szablon Qt 6.11, wbudowana obsługa Kotlina) | wrapper Gradle z Qt |
 | minSdk / targetSdk / compileSdk | 28 / 36 / 36 | `src/app/CMakeLists.txt` |
 | OpenSSL (HTTPS) | 3.1.8, KDAB android_openssl `b71f147` | pobierany przez CMake, sprawdzany po SHA-256 (`src/app/CMakeLists.txt`) |
+| Build ze źródeł (`BRULION_ANDROID_QT=source`, F-Droid) | Qt 6.11.2 (6 modułów) i OpenSSL 3.5.9 ze źródeł | [Budowanie ze źródeł](#budowanie-ze-źródeł-f-droid) |
 
 Zmienne (wszystkie opcjonalne): `QT_ROOT`, `QT_VERSION`, `QT_HOST_PATH`, `ANDROID_SDK_ROOT`
 (domyślnie `~/.cache/brulion-android-sdk`; brakujące pakiety instaluje jego `cmdline-tools`),
@@ -759,7 +762,9 @@ z kilkoma architekturami), `BRULION_ANDROID_BUILD_DIR` (domyślnie `build-androi
 `BRULION_ANDROID_UNIT_TESTS=1` (testy Kotlina), `BRULION_ANDROID_LINT=1` (Android lint),
 `BRULION_ANDROID_SELFTEST=1` (także APK testowy mostu), `BRULION_ANDROID_VERSION_CODE`,
 `BRULION_ANDROID_CMAKE=system`, `BRULION_ANDROID_OPENSSL_DIR` (OpenSSL z checkoutu
-KDAB/android_openssl zamiast pobierania), `BRULION_WERROR=ON` (ostrzeżenia w naszym C++ są
+KDAB/android_openssl zamiast pobierania), `BRULION_ANDROID_QT=source` i
+`BRULION_ANDROID_OPENSSL=source` (Qt i OpenSSL ze źródeł), `BRULION_ANDROID_SIGN=0` (APK bez
+podpisu), `BRULION_WERROR=ON` (ostrzeżenia w naszym C++ są
 błędami), `JOBS`, `SOURCE_DATE_EPOCH` (czas plików w zasobach Qt, rcc; domyślnie czas ostatniego
 commita — powtarzalne APK).
 
@@ -1001,6 +1006,300 @@ Zmierzone 2026-10-17 na laptopie x86_64 (16 rdzeni):
   brulion, edycja bloku, przypomnienie (powiadomienie w tle, otwarcie bloku po dotknięciu),
   eksport do ZIP, obrót ekranu; w logcat żadnych awarii. Emulator z `-gpu swangle_indirect`
   rysuje poprawnie (`swiftshader_indirect` zostawia czarne pasy na przyciskach).
+
+## Budowanie ze źródeł (F-Droid)
+
+F-Droid buduje każdą aplikację sam, **wyłącznie ze źródeł** — gotowe binaria w buildzie są
+niedozwolone. Zwykły build (`scripts/android-build.sh`, Nix) bierze dwie rzeczy gotowe: Qt for
+Android i Qt hosta z archiwów The Qt Company (aqt) oraz OpenSSL 3 z KDAB/android_openssl. Build ze
+źródeł kompiluje obie sam, tym samym NDK r27c:
+
+```sh
+BRULION_ANDROID_QT=source scripts/android-build.sh                       # podpisany (klucz wydań albo jednorazowy)
+BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh # niepodpisany, jak w F-Droid
+# wynik: dist-android/brulion-<wersja>-arm64-v8a[-unsigned].apk
+```
+
+`BRULION_ANDROID_QT=source` uruchamia po kolei (każdy skrypt można też wołać osobno, `--help`):
+
+1. **`scripts/android-openssl-from-source.sh`** — OpenSSL **3.5.9** (seria LTS, wsparcie do
+   04.2030; archiwum z wydań GitHuba `openssl/openssl`, SHA-256 przypięty w skrypcie) dla każdego
+   ABI: `libssl_3.so`, `libcrypto_3.so` (nazwy, które wczytuje wtyczka TLS Qt: wariant `_3`
+   jak u KDAB, ale przez własny cel `Configure` zamiast łatki), API 28, segmenty 16 KB dla
+   64-bitowych ABI, `strip`. Układ `ssl_3/<abi>/…` jak w KDAB, więc wynik idzie wprost do
+   `BRULION_ANDROID_OPENSSL_DIR`; do tego `ssl_3/<abi>/include` dla buildu Qt. CMake nie sprawdza
+   wtedy sum KDAB (`-DBRULION_ANDROID_OPENSSL_CHECK_SHA256=OFF`, ustawia skrypt) — sprawdzane są
+   źródła. Skrypt sam weryfikuje SONAME, zależność `libssl_3.so → libcrypto_3.so`, wyrównanie
+   16 KB i wersję w bibliotece. Około 1 min na ABI.
+2. **`scripts/android-qt-from-source.sh`** — Qt **6.11.2** z oficjalnych archiwów źródeł
+   (`download.qt.io/official_releases/qt/6.11/6.11.2/submodules/`, SHA-256 każdego modułu
+   przypięte w skrypcie, zgodne z plikami `.sha256` Qt), w układzie aqt
+   (`$QT_ROOT/6.11.2/gcc_64` i `…/android_arm64_v8a`, domyślnie `QT_ROOT=~/.cache/brulion-qt-source`):
+   * **Qt hosta** (narzędzia, które uruchamia build krzyżowy: moc, rcc, qmlcachegen,
+     qmltyperegistrar, qmlimportscanner, qsb, svgtoqml, androiddeployqt, lrelease, lupdate) oraz
+     tłumaczenia Qt (`qtbase_pl.qm`…, wbudowywane w aplikację): qtbase, qtshadertools, qtsvg,
+     qtdeclarative, qttools (tylko narzędzia Linguista), qttranslations — bez OpenGL, X11,
+     Wayland i TLS;
+   * **Qt for Android**: qtbase, qtshadertools, qtsvg, qtdeclarative — dokładnie moduły, z których
+     korzysta aplikacja (`Core Gui Network Qml Quick QuickControls2 Svg`, `GuiPrivate`;
+     LinguistTools to tylko narzędzie hosta, Qt PDF na Androidzie zastępuje systemowy
+     `PdfRenderer`), z wtyczką TLS OpenSSL ładującą bibliotekę w czasie działania
+     (`-openssl-runtime`, nagłówki z punktu 1) i 16 KB stronami (`ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES`).
+   * Wyłączone po obu stronach: SQL, drukowanie, D-Bus, Qt Widgets (UI to Qt Quick — dlatego nie
+     ma też `uic`), zstd (rcc kompresowałby nim zasoby, których Qt for Android nie odczyta),
+     w qtdeclarative style Qt Quick Controls inne niż Basic, QtQuick.Dialogs i pomocniki Qt Design
+     Studio (aplikacja ich nie używa, a skrypt i tak odrzuca APK z innymi stylami — połowa czasu
+     budowania qtdeclarative), biblioteki systemowe (zawsze wbudowane zlib, PCRE2, libpng, libjpeg, FreeType, HarfBuzz —
+     wynik rcc nie zależy od zlib maszyny budującej), ICU, glib, qmlls, qdoc (wymagałby libclang).
+   * Moduł ma znacznik z wersją, źródłami i opcjami (łańcuchowo: nowy qtbase przebudowuje moduły
+     nad nim), więc ponowne uruchomienie nic nie robi. `BRULION_QT_KEEP_BUILD=1` zostawia katalogi
+     budowania (`$QT_ROOT/build`).
+
+Skrypt główny sprawdza potem dodatkowo, że `libQt6Core`, `libQt6Quick`, `libssl_3.so`
+i `libcrypto_3.so` w APK mają ten sam ELF build ID co biblioteki zbudowane lokalnie (żadne gotowe
+Qt ani OpenSSL nie trafiły do paczki), i że **wszystkie** 64-bitowe biblioteki mają segmenty
+16 KB (z Qt z aqt tylko ostrzega).
+
+Potrzebne: host Linux x86_64, kompilator C++ hosta (`g++`), `make`, `perl`, JDK 17+ (21),
+pakiety SDK `platforms;android-36`, `build-tools;36.0.0`, `cmake;3.31.6` (z Ninja) i NDK r27c —
+na NixOS skrypty same wchodzą w `nix shell` (gcc, JDK 21, ccache, perl, make). Źródła mogą też
+pochodzić z gotowych drzew (`BRULION_QT_SOURCE_DIR` — np. `qt5.git` po `init-repository`,
+`BRULION_OPENSSL_SOURCE_DIR` — checkout taga `openssl-3.5.9`); tak robi F-Droid (srclibs).
+
+### Wynik (zweryfikowane 2026-11-04, x86_64, NixOS)
+
+`BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh` (SDK, NDK r27c
+i CMake 3.31.6 z nixpkgs `androidenv`, jak w `nix/android.nix`; do porównawczego buildu z aqt
+na maszynie nie było żadnego gotowego Qt):
+
+* `dist-android/brulion-0.8.1-arm64-v8a-unsigned.apk`, **88,2 MB** (ten sam kod z Qt z aqt
+  i OpenSSL KDAB: 86,3 MB). Ta sama lista plików w APK co z aqt (49 bibliotek natywnych, te same
+  moduły QML: QtQuick, Controls.Basic, Templates, Layouts, Shapes, Effects, Window, QtCore,
+  Qt.labs.folderlistmodel, QtTest); biblioteki Qt różnią się rozmiarem o mniej niż 85 KB. Różnica
+  +1,9 MB to OpenSSL 3.5.9 zamiast 3.1.8 (`libcrypto_3.so` 5,59 MB zamiast 4,03 MB,
+  `libssl_3.so` 1,03 MB zamiast 0,63 MB).
+* Sprawdzenia skryptu: `aapt2 dump badging` (pakiet, `versionCode` 8001, minSdk 28,
+  targetSdk 36, 13 uprawnień), komponenty manifestu, klasy Kotlina i Javy Qt po R8,
+  `zipalign -c -P 16 4`, **wszystkie 49** bibliotek 64-bitowych z segmentami 16 KB,
+  `libssl_3.so`/`libcrypto_3.so` (OpenSSL 3.5.9 29 Sep 2026), build ID `libQt6Core`/`libQt6Quick`
+  i bajty OpenSSL zgodne z lokalnymi buildami, APK bez podpisu.
+* Qt ze źródeł: Qt hosta (qtbase 1239 kroków Ninja, qtdeclarative 2437) i Qt for Android —
+  ok. 30 min z 6 zadaniami na 16-rdzeniowym x86_64 (zmierzone w kontenerze F-Droid, razem z
+  OpenSSL i APK); przy mocno obciążonej maszynie kilka godzin. W trakcie ~13 GB na dysku (katalogi
+  budowania są potem usuwane), zainstalowane ~400 MB. Kolejne uruchomienia: sekundy (znaczniki),
+  APK ~5 min.
+* Dwa kolejne buildy APK (ten sam Qt, Gradle od nowa) — **identyczny plik**. Uwaga: ponownie
+  użyty katalog budowania nie przebudowuje zasobów rcc, gdy zmienił się tylko `SOURCE_DATE_EPOCH`
+  (nowy commit) — APK do porównań i wydań zawsze z czystego katalogu (jak w CI i F-Droid).
+* **Nie sprawdzone na urządzeniu ani emulatorze** — wymaga Qt dla x86_64 ze źródeł
+  (`BRULION_ANDROID_ABIS=x86_64`) i `scripts/android-emulator-test.sh`, albo instalacji APK
+  (podpisanego) na telefonie.
+
+### Przepis F-Droid
+
+Szkic przepisu dla [fdroiddata](https://gitlab.com/fdroid/fdroiddata):
+`packaging/fdroid/io.github.januszbit.brulion.yml` (sprawdzany przez
+`tests/scripts/tst_fdroid_recipe.sh`, w ctest `tst_scripts_fdroid_recipe`: wersje NDK, pakietów
+SDK, Qt i OpenSSL zgodne ze skryptami, `versionCode` ze wzoru `src/app/CMakeLists.txt`, ścieżka
+APK, ustawiane zmienne). Najważniejsze decyzje:
+
+* **srclibs zamiast pobierania w `prebuild`** — F-Droid woli źródła z repozytoriów git
+  opisanych w `fdroiddata/srclibs/`: `Qt5@v6.11.2` (super-repozytorium `qt5.git`;
+  `init-repository --module-subset=…` dociąga tylko sześć potrzebnych modułów) i
+  `OpenSSL@openssl-3.5.9`. Oba srclibs już istnieją w fdroiddata; tak samo buduje Qt 6 np.
+  przepis `net.sourceforge.kid3`. Skrypty bez srclibs pobierają archiwa i sprawdzają SHA-256.
+* `sudo`: tylko `g++` i `make` (obraz buildservera to Debian 13 z JDK 21, perl jest);
+  CMake 3.31.6 i Ninja z pakietu SDK (`sdkmanager` w `prebuild`).
+* `build`: `scripts/android-build.sh` z `BRULION_ANDROID_QT=source`, `BRULION_ANDROID_SIGN=0`
+  (F-Droid podpisuje sam) i `BRULION_UPDATE_CHECK=OFF` (bez pytania GitHuba o nowe wersje —
+  aktualizacje daje F-Droid; opcję CMake i jej przekazanie przez skrypt dodaje osobna zmiana),
+  `SOURCE_DATE_EPOCH` = czas commita taga (jak w skrypcie domyślnie).
+* `output: dist-android/brulion-$$VERSION$$-arm64-v8a-unsigned.apk`, `ndk: r27c`,
+  `timeout: 14400` (Qt dwa razy — host i Android — przekracza domyślne 2 h buildservera przy
+  mniejszej liczbie rdzeni).
+* `scandelete: tests/core/io/fixtures/trilium, tests/data/drawing/lzstring` — archiwa ZIP z testów
+  importu i dane testowe LZ-String, które skaner F-Droid zgłasza jako binaria (sprawdzone
+  w kontenerze); build Androida ich nie używa.
+* Plik jest dokładnie taki, jak go zapisuje `fdroid rewritemeta` (bez komentarzy — opis
+  w `packaging/fdroid/README.md`, kategorie alfabetycznie), `fdroid lint` przechodzi.
+* `AutoUpdateMode: Version`, `UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$` — bot F-Droid
+  sam dopisuje build dla każdego nowego taga `vX.Y.Z` (bez `-rc`).
+* Kategorie: Note, Calendar & Agenda, Task, Writing. Opis, zrzuty i ikonę F-Droid bierze
+  z `fastlane/metadata/android/` w repozytorium.
+* **Pierwszy build musi wskazywać wydanie, które ma te skrypty** — v0.8.1 ich nie ma. W przepisie
+  stoi wersja z `CMakeLists.txt` (0.8.1, `versionCode` 8001); przed zgłoszeniem zmień
+  `versionName`/`versionCode`/`commit`/`CurrentVersion*` na pierwsze wydanie z tą zmianą.
+
+Sprawdzenie lokalnie w kontenerze buildservera F-Droid (jak zadanie „fdroid build” w CI
+fdroiddata), podman albo docker:
+
+```sh
+mkdir -p ~/fdroid && cd ~/fdroid
+git clone --depth 1 https://gitlab.com/fdroid/fdroidserver.git
+git clone --depth 1 https://gitlab.com/fdroid/fdroiddata.git
+cp <brulion>/packaging/fdroid/io.github.januszbit.brulion.yml fdroiddata/metadata/
+podman run --rm -it -u root --entrypoint /bin/bash \
+  -v "$PWD/fdroiddata:/build:z" -v "$PWD/fdroidserver:/home/vagrant/fdroidserver:Z" \
+  registry.gitlab.com/fdroid/fdroidserver:buildserver
+# w kontenerze:
+source /etc/profile.d/bsenv.sh && apt-get update && apt-get install -y fdroidserver sudo
+cd /build && export PATH=/home/vagrant/fdroidserver:$PATH
+fdroid lint io.github.januszbit.brulion && fdroid readmeta
+fdroid fetchsrclibs io.github.januszbit.brulion --verbose
+fdroid build --verbose --test --on-server --no-tarball io.github.januszbit.brulion
+```
+
+(Przed wydaniem z tymi skryptami — test na lokalnej gałęzi: w kopii przepisu `Repo:` na
+lokalne repozytorium, `commit:` na hash commita.)
+
+Zweryfikowane 2026-11-04 dokładnie tak (obraz `registry.gitlab.com/fdroid/fdroidserver:buildserver`
+— Debian 13, JDK 21 — i kroki zadania „fdroid build” z CI fdroiddata: `fetchsrclibs`, potem
+`fdroid build --test --on-server --no-tarball`, z kopią przepisu wskazującą lokalne repozytorium):
+`fdroid lint` i `fdroid readmeta` bez uwag, `fdroid rewritemeta` nic nie zmienia, srclibs
+`Qt5@v6.11.2` (+ `init-repository`, ok. 2 min) i `OpenSSL@openssl-3.5.9` pobrane, skaner F-Droid
+bez błędów (po `scandelete`), build Qt hosta i Qt for Android oraz APK — **„Successfully built
+io.github.januszbit.brulion:8001”**, wynik `tmp/io.github.januszbit.brulion_8001.apk` (88,2 MB,
+te same sprawdzenia `android-build.sh` co lokalnie). Krok `build` (Qt hosta, Qt for Android, OpenSSL,
+APK) z 6 zadaniami: 29–45 min. Pierwsze próby znalazły rzeczy poprawione w skryptach i przepisie:
+dane testowe LZ-String jako „binaria” dla skanera, ścieżka z `..` w `QT_ROOT` (Qt nie znajdował
+wtedy `Qt6LinguistTools` hosta) i różnice bajtów między buildami (niżej).
+
+Do sprawdzenia przez fdroiddata przy zgłoszeniu: czas buildu na ich buildserverze (mniej rdzeni
+niż tu; `timeout: 14400` = 4 h) i to, czy recenzenci zaakceptują srclib `Qt5` z `init-repository`
+(sieć w `prebuild`; robi tak już `net.sourceforge.kid3`).
+
+### Podpis: decyzja dla właściciela
+
+F-Droid może wydawać Brulion na dwa sposoby. **Trzeba wybrać jeden przed zgłoszeniem** (zmiana
+później oznacza dla użytkowników F-Droid odinstalowanie aplikacji):
+
+**(a) F-Droid podpisuje własnym kluczem** — przepis jak w szkicu, nic więcej.
+* Najprostsze; build F-Droid nie musi być identyczny z APK z GitHuba.
+* APK z F-Droid i APK z wydań GitHuba mają **różne podpisy**: nie da się zaktualizować jednego
+  drugim — przejście wymaga odinstalowania (to usuwa prywatne dane aplikacji; notatki w folderze
+  Syncthing na pamięci współdzielonej zostają, ustawienia i notatnik w katalogu prywatnym nie).
+* Komunikat „Dostępny jest Brulion X.Y.Z” znika w buildzie F-Droid (`BRULION_UPDATE_CHECK=OFF`).
+
+**(b) Powtarzalny build i podpis z GitHuba** (`Binaries:` + `AllowedAPKSigningKeys:`) — F-Droid
+buduje APK sam, porównuje go bit w bit z APK z wydania GitHuba (bez podpisu) i gdy są identyczne,
+publikuje **APK z podpisem właściciela**. Jedna aplikacja dla obu źródeł, aktualizacje
+krzyżowe działają. Do przepisu doszłoby:
+
+```yaml
+Binaries: https://github.com/janusz-bit/brulion/releases/download/v%v/brulion-%v-arm64-v8a.apk
+AllowedAPKSigningKeys: <SHA-256 certyfikatu klucza wydań, małe litery, bez dwukropków>
+```
+
+ale to wymaga, żeby **wydanie na GitHubie było zbudowane tak samo jak w F-Droid**, czyli też
+z Qt i OpenSSL ze źródeł, i bez sprawdzania aktualizacji (APK musi być identyczny, a F-Droid
+nie przyjmie wbudowanego mechanizmu aktualizacji obok swojego):
+
+* `.github/workflows/android.yml`: `BRULION_ANDROID_QT=source` i `BRULION_UPDATE_CHECK=OFF`
+  w kroku `build`; zamiast cache'y aqt — `actions/cache` dla `~/.cache/brulion-qt-source/6.11.2`
+  (klucz z hashem `scripts/android-qt-from-source.sh`) i `~/.cache/brulion-openssl`; pierwszy
+  build ~1 h na runnerze (4 rdzenie), potem minuty. `SOURCE_DATE_EPOCH` z commita taga (już
+  domyślne). JDK 21, NDK r27c, build-tools 36.0.0 — te same co na buildserverze (runner ma JDK
+  Temurin, buildserver OpenJDK z Debiana: przy tej samej wersji 21.0.x `javac` daje te same klasy,
+  ale potwierdzi to dopiero pierwsze porównanie F-Droid — można je zrobić wcześniej lokalnie,
+  `fdroid build` w kontenerze z `Binaries:` w przepisie).
+* `release.yml`: bez zmian w krokach; APK podpisuje dalej `android-build.sh` kluczem wydań
+  (apksigner, schemat v2/v3 — F-Droid kopiuje podpis z tego pliku do swojego buildu).
+* Każdy nowy tag: F-Droid buduje i porównuje; różnica choćby jednego bajtu = wersja się
+  nie ukaże (F-Droid pokazuje diff w logu buildu), więc zmiany środowiska (nowy JDK, inny
+  Gradle) trzeba wtedy wyrównać po obu stronach.
+* Użytkownicy aplikacji z GitHuba tracą komunikat o nowej wersji (albo zostaje on tylko
+  w buildzie dla innych sklepów — wtedy APK z GitHuba ≠ APK F-Droid i wracamy do (a)).
+
+**Powtarzalność — sprawdzone 2026-11-04:** APK z kontenera buildservera F-Droid (Debian 13,
+OpenJDK 21 z Debiana, NDK r27c pobrany przez `fdroid`, Qt z srclib `Qt5` = `qt5.git`
++ `init-repository`, OpenSSL z srclib git, ścieżki `/home/vagrant/build/…`) i APK zbudowany
+`BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh` w świeżym klonie
+na NixOS (SDK/NDK z nixpkgs, JDK 21 z nixpkgs, Qt i OpenSSL z archiwów źródeł, inne ścieżki) są
+**identyczne bit w bit**: `brulion-0.8.1-arm64-v8a-unsigned.apk`, SHA-256
+`82bf9d9d563a719e94b76d1ab8ea41c9301efc0c00b71ddf714c2131e9fc5ed7` (commit `3b3c9b5e`). Już sam
+OpenSSL wychodzi identyczny z obu (`libssl_3.so` `88d316f6…`, `libcrypto_3.so` `3b472705…`).
+Po drodze trzeba było usunąć cztery źródła różnic (wszystkie poprawione w skryptach):
+
+1. ścieżki źródeł Qt i nagłówków libc++ z NDK w `.rodata` (`__FILE__`) — plik toolchain NDK
+   ignoruje `CFLAGS`/`CXXFLAGS` ze środowiska, więc `-ffile-prefix-map` idzie jako
+   `CMAKE_C(XX)_FLAGS`, każda ścieżka także jako jej ścieżka rzeczywista (dowiązania SDK);
+2. znaczniki czasu plików w zasobach rcc samego Qt (czas checkoutu lub rozpakowania) — Qt for
+   Android budowane ze stałym `SOURCE_DATE_EPOCH=315532800`;
+3. czas w nagłówku gzip bazy MIME w `libQt6Core` — `QT_AVOID_CMAKE_ARCHIVING_API=ON`
+   (`gzip -n`);
+4. build ID `libbrulion` (zależny od informacji debugowania) — ścieżki checkoutu, katalogu
+   budowania, NDK i Qt mapowane w `CMakeLists.txt` (Android).
+
+Warunki powtarzalności: ten sam commit (i `SOURCE_DATE_EPOCH` = czas tego commita, domyślne),
+**czysty** katalog budowania w domyślnym miejscu (`build-android` w checkoutcie — względne ścieżki
+do nagłówków w plikach moc trafiają do informacji debugowania, więc katalog budowania poza
+checkoutem daje inny build ID), te same wersje: NDK r27c, build-tools 36.0.0, CMake 3.31.6,
+JDK 21 (sprawdzone na 21.0.12 po obu stronach), zależności Gradle z szablonu Qt.
+
+**Rekomendacja.** Technicznie (b) jest gotowe — build jest powtarzalny bit w bit między
+buildserverem F-Droid a innym systemem (wyżej). Wybór zależy od jednego pytania: **czy APK
+z GitHuba może stracić komunikat o nowej wersji?** Jeśli tak — **(b)**: jedna aplikacja, jeden
+podpis, użytkownicy mogą przechodzić między GitHubem, IzzyOnDroid i F-Droid bez odinstalowania;
+koszt to wolniejszy build wydania (Qt ze źródeł, z cache ~minuty) i pilnowanie, żeby środowisko
+CI i F-Droid się nie rozjechało. Jeśli komunikat w APK z GitHuba ma zostać — **(a)**: F-Droid
+podpisuje sam, nic w wydaniach się nie zmienia, a osoby z F-Droid i z GitHuba mają dwie
+„różne” aplikacje (zmiana źródła = odinstalowanie). Decyzję trzeba podjąć **przed pierwszym
+wydaniem w F-Droid**: przejście z (a) na (b) później zmienia podpis wersji w F-Droid i wymusza
+odinstalowanie u jej użytkowników.
+
+### Zgłoszenie (robi właściciel)
+
+Nic z poniższego nie jest wysłane. Kolejność:
+
+1. Wydanie z tymi skryptami (tag `vX.Y.Z`), poprawiony szkic przepisu (wersja, commit).
+2. **Merge request do fdroiddata** (najszybsza droga, bez RFP): fork
+   `gitlab.com/fdroid/fdroiddata`, gałąź `io.github.januszbit.brulion`, plik
+   `metadata/io.github.januszbit.brulion.yml` ze szkicu, `fdroid lint` i `fdroid rewritemeta`
+   lokalnie (formatowanie), MR według szablonu „App inclusion”; CI fdroiddata zbuduje aplikację.
+   Opis MR:
+
+   > **New app: Brulion** (io.github.januszbit.brulion)
+   >
+   > Offline-first Markdown notes: a block outliner with daily journals, a calendar,
+   > reminders and alarms, calculations, and Syncthing/Nextcloud sync. Plain `.md` files in a
+   > folder (compatible with Obsidian/Logseq vaults). C++/Qt 6 (Qt Quick) with a small Kotlin
+   > part; Qt 6.11.2 and OpenSSL 3.5 are built from source (srclibs Qt5, OpenSSL) by the
+   > project's scripts. AGPL-3.0-or-later.
+   >
+   > * [x] The app complies with the inclusion criteria
+   > * [x] The original app author has been notified (I am the author) and supports the inclusion
+   > * [x] All related fdroiddata and RFP issues have been referenced in this merge request
+   > * [x] Builds with `fdroid build` and all pipelines pass
+   >
+   > Permissions: `MANAGE_EXTERNAL_STORAGE` (the notes folder synchronised by Syncthing lives in
+   > shared storage), `SCHEDULE_EXACT_ALARM`/`USE_EXACT_ALARM` (reminders and alarms),
+   > `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `USE_FULL_SCREEN_INTENT` (alarm screen),
+   > `INTERNET` (Nextcloud/WebDAV sync, images from the web — both opt-in). No trackers, no
+   > Google Play Services. The in-app update check is disabled in this build
+   > (`BRULION_UPDATE_CHECK=OFF`).
+
+3. Zamiast MR można złożyć **Request For Packaging** (`gitlab.com/fdroid/rfp`, „New issue” →
+   szablon „Request for packaging”) — wolniejsze, przepis pisze wtedy wolontariusz; ten sam tekst
+   co wyżej plus link do szkicu przepisu.
+4. **IzzyOnDroid** (repozytorium z APK z wydań GitHuba, podpis właściciela, szybkie aktualizacje,
+   niezależne od decyzji (a)/(b)): issue w `gitlab.com/IzzyOnDroid/repo` (szablon „App inclusion
+   request”). Wymagania: APK w wydaniach GitHuba (jest: `brulion-<wersja>-arm64-v8a.apk`), metadane
+   fastlane w repozytorium; plik APK ma ~85 MB (biblioteki natywne nieskompresowane, wyrównane do
+   16 KB), więcej niż domyślny limit rozmiaru IzzyOnDroid — w zgłoszeniu poprosić o wyjątek.
+   Tekst:
+
+   > **App inclusion request: Brulion**
+   >
+   > * Source: https://github.com/janusz-bit/brulion (AGPL-3.0-or-later)
+   > * APK: GitHub releases, `brulion-<version>-arm64-v8a.apk`, signed with the release key
+   > * Package: `io.github.januszbit.brulion`
+   > * Offline-first Markdown notes (outliner, journals, calendar, reminders/alarms, Syncthing and
+   >   Nextcloud sync). No trackers, no proprietary libraries. Fastlane metadata in
+   >   `fastlane/metadata/android`.
+   > * The app has its own update notice (GitHub releases, can be turned off in the settings).
+   > * The APK is ~85 MB (Qt's native libraries are stored uncompressed for 16 KB page alignment);
+   >   please allow an exception to the size limit.
+   > * I am the author.
 
 ## Dla programistów
 

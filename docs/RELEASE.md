@@ -185,6 +185,34 @@ ponownie). Ręczne uruchomienie (Actions → Release → Run workflow) dla istni
 uruchomić **z tego taga** („Use workflow from” → Tags); nowy tag powstaje na wybranej gałęzi
 przy publikacji.
 
+## F-Droid i IzzyOnDroid
+
+Przepis F-Droid (szkic: `packaging/fdroid/io.github.januszbit.brulion.yml`, opis, decyzja
+o podpisie i teksty zgłoszeń: docs/ANDROID.md „Budowanie ze źródeł (F-Droid)”) ma
+`AutoUpdateMode: Version` i `UpdateCheckMode: Tags`: po przyjęciu do fdroiddata bot F-Droid sam
+zauważa każdy nowy tag `vX.Y.Z` (wydania testowe `-rc` pomija), dopisuje build i buduje go ze
+źródeł z tagu — przy wydaniu nie trzeba nic robić. Build F-Droid trwa długo (Qt i OpenSSL ze
+źródeł), a nowa wersja pojawia się w F-Droid zwykle po kilku dniach.
+
+Co psuje build F-Droid (sprawdzaj przed tagiem, gdy się zmienia):
+
+* wersje przypięte w skryptach (Qt 6.11.2 i SHA-256 modułów w
+  `scripts/android-qt-from-source.sh`, OpenSSL w `scripts/android-openssl-from-source.sh`, NDK,
+  pakiety SDK w `scripts/android-build.sh`) — przepis w fdroiddata ma je osobno (srclibs
+  `Qt5@v…`, `OpenSSL@openssl-…`, `ndk:`, `sdkmanager …`): po podbiciu trzeba poprawić przepis
+  w fdroiddata (MR), a szkic w repozytorium razem z nim (`tst_scripts_fdroid_recipe` pilnuje,
+  żeby szkic zgadzał się ze skryptami);
+* nowy moduł Qt w aplikacji (musi trafić do `HOST_MODULES`/`ANDROID_MODULES` skryptu Qt
+  i `--module-subset` przepisu);
+* zależność Gradle spoza Maven Central / Google Maven albo nowy plik binarny w repozytorium
+  (skaner F-Droid; archiwa testów są w `scandelete`).
+
+Lokalnie to samo co F-Droid: `BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0
+scripts/android-build.sh` (pierwszy raz kilkadziesiąt minut: Qt hosta i Qt for Android ze źródeł).
+
+**IzzyOnDroid** (po przyjęciu) bierze APK z wydań GitHuba (`brulion-<wersja>-arm64-v8a.apk`,
+podpis klucza wydań) — nazwa pliku w `release.yml` musi zostać ta sama.
+
 ## AppImage lokalnie
 
 `scripts/appimage-build.sh` buduje na zwykłej dystrybucji z glibc (nie na NixOS — tam

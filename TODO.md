@@ -189,7 +189,7 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 * **iOS, iPadOS i macOS** — dziś tylko wersja w przeglądarce; Obsidian, Joplin, Anytype i inni mają
   tam aplikacje. Na iOS trzeba by rozwiązać alarmy, dostęp do folderu notatnika i Syncthing.
-* **Sklepy i repozytoria** — F-Droid, Flathub, winget, AUR, Homebrew. Google Play ogranicza dostęp
+* **Sklepy i repozytoria** — Flathub, winget, AUR, Homebrew. Google Play ogranicza dostęp
   do wszystkich plików, którego wymaga folder Syncthinga (docs/ANDROID.md).
 * **Więcej języków interfejsu** — tłumaczenia poza polskim i angielskim, a z nimi daty w języku
   naturalnym, kalkulator i wprowadzenie (Obsidian: wiele języków, także na start).
