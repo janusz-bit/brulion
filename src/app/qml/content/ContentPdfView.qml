@@ -119,9 +119,17 @@ Item {
         // Two pages side by side, as last chosen on this device (QSettings' INI gives strings).
         twoPages: String(AppSettings.value("pdf/twoPages", false)) === "true"
         coverAlone: String(AppSettings.value("pdf/coverAlone", false)) === "true"
-        // (Once the bindings on the status, `ready` among them, followed it.)
-        onStatusChanged: if (status === PdfViewModel.Ready) Qt.callLater(root.whenReady)
+        // (Once the bindings on the status, `ready` among them, followed it: readyLater — a
+        // Timer of this view, not Qt.callLater, so a view destroyed meanwhile — a tab switched
+        // away — is never called back.)
+        onStatusChanged: if (status === PdfViewModel.Ready) readyLater.restart()
         onCurrentPageChanged: if (root.ready) writeRoute.restart()
+    }
+
+    Timer {
+        id: readyLater
+        interval: 0
+        onTriggered: root.whenReady()
     }
 
     // ---- Route ------------------------------------------------------------------------------
