@@ -4,6 +4,9 @@
 # Builds Brulion's Android APK (optionally also an AAB) with Qt for Android: installs what is
 # missing (Qt via aqt, NDK/platform/build-tools via sdkmanager), configures with CMake, builds
 # the `brulion` target and its APK with androiddeployqt (Gradle), signs the APK and checks it.
+# From source (F-Droid, docs/ANDROID.md): BRULION_ANDROID_QT=source builds Qt and OpenSSL first
+# (scripts/android-qt-from-source.sh, scripts/android-openssl-from-source.sh) instead of
+# downloading prebuilt ones; BRULION_ANDROID_SIGN=0 leaves the APK unsigned.
 # Idempotent: run it again after changes (an existing build directory is reused).
 # Works on a normal x86_64 Linux (GitHub Actions) and on NixOS (needs programs.nix-ld; the
 # script re-runs itself inside `nix shell` with ccache and JDK 21). CMake and Ninja come from
@@ -13,8 +16,12 @@
 #
 # Environment (all optional):
 #   QT_VERSION                   Qt version (default 6.11.2)
-#   QT_ROOT                      where aqt installs Qt (default ~/.cache/brulion-qt):
-#                                $QT_ROOT/$QT_VERSION/android_<abi> and .../gcc_64 (host)
+#   BRULION_ANDROID_QT=source    Qt built from source by scripts/android-qt-from-source.sh
+#                                (default aqt: The Qt Company's prebuilt Qt); implies
+#                                BRULION_ANDROID_OPENSSL=source (Qt's build needs OpenSSL's headers)
+#   QT_ROOT                      where aqt installs Qt (default ~/.cache/brulion-qt; from source
+#                                ~/.cache/brulion-qt-source): $QT_ROOT/$QT_VERSION/android_<abi>
+#                                and .../gcc_64 (host)
 #   QT_HOST_PATH                 host Qt of the same version (default $QT_ROOT/$QT_VERSION/gcc_64)
 #   ANDROID_SDK_ROOT             Android SDK (else ANDROID_HOME, else ~/.cache/brulion-android-sdk);
 #                                missing packages are installed with its cmdline-tools (sdkmanager)
@@ -36,13 +43,21 @@
 #                                store updates (F-Droid, IzzyOnDroid; docs/ANDROID.md)
 #   BRULION_ANDROID_CMAKE=system use the cmake/ninja on PATH instead of the SDK's (NixOS's
 #                                patched cmake does not find the NDK sysroot's EGL/GLES headers)
+#   BRULION_ANDROID_OPENSSL=source  OpenSSL 3 built from source by
+#                                scripts/android-openssl-from-source.sh (into BRULION_OPENSSL_OUT,
+#                                default ~/.cache/brulion-openssl/<version>) instead of KDAB's
+#                                prebuilt libraries (default kdab)
 #   BRULION_ANDROID_OPENSSL_DIR  a checkout of KDAB/android_openssl for offline builds (default:
 #                                CMake downloads the pinned OpenSSL 3 libraries, src/app/CMakeLists.txt)
+#   BRULION_QT_SOURCE_DIR, BRULION_OPENSSL_SOURCE_DIR   source trees for the two scripts above
+#                                (F-Droid's srclibs) instead of their pinned source archives
 #   BRULION_WERROR=ON            warnings in Brulion's own C++ code are errors
 #   JOBS                         parallel compile jobs (default: all cores)
 #   SOURCE_DATE_EPOCH            time stamp of the files in Qt resources (rcc), for reproducible
 #                                builds (default: the time of the last git commit)
 # Signing — the release keystore (same variables androiddeployqt reads):
+#   BRULION_ANDROID_SIGN=0       no signing: dist-android/brulion-<version>-<abis>-unsigned.apk,
+#                                zip-aligned (F-Droid signs it, or compares it with the release APK)
 #   QT_ANDROID_KEYSTORE_PATH     keystore file, or
 #   QT_ANDROID_KEYSTORE_BASE64   the keystore as base64 (CI secret)
 #   QT_ANDROID_KEYSTORE_ALIAS    key alias
@@ -51,9 +66,9 @@
 #   ~/.cache/brulion-android/ (BRULION_THROWAWAY_KEYSTORE): it installs, but cannot update an
 #   APK signed with the release key. Create a release key: scripts/android-new-keystore.sh.
 #
-# Output: dist-android/brulion-<version>-<abis>.apk (+ .aab). On GitHub Actions also written to
-# $GITHUB_OUTPUT as `apk`, `aab`, `version`, `signing` (release/throwaway) and `openssl` (its
-# version).
+# Output: dist-android/brulion-<version>-<abis>.apk (+ .aab; with BRULION_ANDROID_SIGN=0
+# brulion-<version>-<abis>-unsigned.apk). On GitHub Actions also written to $GITHUB_OUTPUT as
+# `apk`, `aab`, `version`, `signing` (release/throwaway/unsigned) and `openssl` (its version).
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -104,7 +119,28 @@ fi
 # --- configuration ---------------------------------------------------------------------------
 
 QT_VERSION=${QT_VERSION:-6.11.2}
-QT_ROOT=${QT_ROOT:-$HOME/.cache/brulion-qt}
+QT_SOURCE=${BRULION_ANDROID_QT:-aqt}
+case $QT_SOURCE in
+  aqt) QT_ROOT=${QT_ROOT:-$HOME/.cache/brulion-qt} ;;
+  source) QT_ROOT=${QT_ROOT:-$HOME/.cache/brulion-qt-source} ;;
+  *) die "BRULION_ANDROID_QT must be aqt or source, not '$QT_SOURCE'" ;;
+esac
+OPENSSL_SOURCE=${BRULION_ANDROID_OPENSSL:-}
+if [[ -z $OPENSSL_SOURCE ]]; then
+  OPENSSL_SOURCE=kdab
+  [[ $QT_SOURCE == source ]] && OPENSSL_SOURCE=source
+fi
+[[ $OPENSSL_SOURCE == kdab || $OPENSSL_SOURCE == source ]] ||
+  die "BRULION_ANDROID_OPENSSL must be kdab or source, not '$OPENSSL_SOURCE'"
+[[ $QT_SOURCE == aqt || $OPENSSL_SOURCE == source ]] ||
+  die "BRULION_ANDROID_QT=source needs BRULION_ANDROID_OPENSSL=source (Qt's TLS plugin is built against its headers)"
+# Absolute paths without "..": Qt's CMake packages compare them with the paths Qt was built
+# with (an unnormalised QT_HOST_PATH loses Qt6LinguistTools in a cross build).
+QT_ROOT=$(realpath -m -- "$QT_ROOT")
+[[ -z ${QT_HOST_PATH:-} ]] || QT_HOST_PATH=$(realpath -m -- "$QT_HOST_PATH")
+[[ -z ${BRULION_OPENSSL_OUT:-} ]] || BRULION_OPENSSL_OUT=$(realpath -m -- "$BRULION_OPENSSL_OUT")
+SIGN=${BRULION_ANDROID_SIGN:-1}
+[[ $SIGN == 0 || $SIGN == 1 ]] || die "BRULION_ANDROID_SIGN must be 0 or 1, not '$SIGN'"
 NDK_VERSION=${NDK_VERSION:-27.2.12479018}
 SDK_PLATFORM=android-36
 BUILD_TOOLS=36.0.0
@@ -129,7 +165,7 @@ qt_arch() { # ABI -> aqt arch / Qt directory name
   esac
 }
 
-info "Brulion $VERSION for Android: Qt $QT_VERSION, ABIs ${ABIS[*]}, $BUILD_TYPE"
+info "Brulion $VERSION for Android: Qt $QT_VERSION ($QT_SOURCE), OpenSSL ($OPENSSL_SOURCE), ABIs ${ABIS[*]}, $BUILD_TYPE"
 
 # --- JDK ----------------------------------------------------------------------------------------
 
@@ -194,6 +230,25 @@ echo "SDK: $SDK"
 echo "NDK: $NDK ($ndk_revision)"
 echo "CMake: $(command -v cmake) ($(cmake --version | head -n 1 | cut -d' ' -f3)), Ninja $(ninja --version)"
 
+# --- OpenSSL and Qt from source (optional) ------------------------------------------------------
+
+abis_env=$(IFS=' ' && echo "${ABIS[*]}")
+if [[ $OPENSSL_SOURCE == source ]]; then
+  [[ -z ${BRULION_ANDROID_OPENSSL_DIR:-} ]] ||
+    die "BRULION_ANDROID_OPENSSL=source and BRULION_ANDROID_OPENSSL_DIR exclude each other (use BRULION_OPENSSL_OUT)"
+  info "OpenSSL from source (scripts/android-openssl-from-source.sh)"
+  openssl_version=$(sed -nE 's/^OPENSSL_VERSION=([0-9.]+)$/\1/p' "$ROOT/scripts/android-openssl-from-source.sh")
+  export BRULION_OPENSSL_OUT=${BRULION_OPENSSL_OUT:-$HOME/.cache/brulion-openssl/$openssl_version}
+  BRULION_ANDROID_ABIS=$abis_env JOBS=$JOBS bash "$ROOT/scripts/android-openssl-from-source.sh"
+  export BRULION_ANDROID_OPENSSL_DIR=$BRULION_OPENSSL_OUT
+fi
+if [[ $QT_SOURCE == source ]]; then
+  [[ $QT_VERSION == 6.11.2 ]] || die "scripts/android-qt-from-source.sh builds Qt 6.11.2, not QT_VERSION=$QT_VERSION"
+  info "Qt from source (scripts/android-qt-from-source.sh)"
+  QT_ROOT=$QT_ROOT BRULION_ANDROID_ABIS=$abis_env JOBS=$JOBS bash "$ROOT/scripts/android-qt-from-source.sh"
+  QT_HOST_PATH=${QT_HOST_PATH:-$QT_ROOT/$QT_VERSION/gcc_64}
+fi
+
 # --- Qt for Android (aqt) -----------------------------------------------------------------------
 
 aqt() {
@@ -214,13 +269,14 @@ QT_HOST_PATH=${QT_HOST_PATH:-$QT_ROOT/$QT_VERSION/gcc_64}
 for abi in "${ABIS[@]}"; do
   arch=$(qt_arch "$abi")
   if [[ ! -f $QT_ROOT/$QT_VERSION/$arch/lib/cmake/Qt6/qt.toolchain.cmake ]]; then
+    [[ $QT_SOURCE == aqt ]] || die "$QT_ROOT/$QT_VERSION/$arch has no Qt for Android (scripts/android-qt-from-source.sh failed?)"
     info "Installing Qt $QT_VERSION $arch (aqt) into $QT_ROOT"
     mkdir -p "$QT_ROOT"
     aqt install-qt all_os android "$QT_VERSION" "$arch" -O "$QT_ROOT"
   fi
 done
 if [[ ! -x $QT_HOST_PATH/libexec/moc ]]; then
-  [[ $QT_HOST_PATH == "$QT_ROOT/$QT_VERSION/gcc_64" ]] || die "QT_HOST_PATH=$QT_HOST_PATH has no libexec/moc"
+  [[ $QT_HOST_PATH == "$QT_ROOT/$QT_VERSION/gcc_64" && $QT_SOURCE == aqt ]] || die "QT_HOST_PATH=$QT_HOST_PATH has no libexec/moc"
   info "Installing the host Qt $QT_VERSION linux_gcc_64 (aqt) into $QT_ROOT"
   aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$QT_ROOT"
 fi
@@ -232,7 +288,7 @@ for tool in libexec/moc libexec/rcc libexec/qmlcachegen libexec/qmlimportscanner
   fi
 done
 QT_MAIN=$QT_ROOT/$QT_VERSION/$(qt_arch "${ABIS[0]}")
-echo "Qt: $QT_MAIN (host tools: $QT_HOST_PATH)"
+echo "Qt: $QT_MAIN (host tools: $QT_HOST_PATH, $QT_SOURCE)"
 
 # --- signing key -----------------------------------------------------------------------------
 
@@ -240,7 +296,13 @@ cleanup_files=()
 trap 'rm -rf -- "${cleanup_files[@]}"' EXIT
 
 signing=release
-if [[ -n ${QT_ANDROID_KEYSTORE_BASE64:-} ]]; then
+if ((!SIGN)); then
+  signing=unsigned
+  # androiddeployqt must not sign either (it would with these variables set).
+  unset QT_ANDROID_KEYSTORE_PATH QT_ANDROID_KEYSTORE_BASE64 QT_ANDROID_KEYSTORE_ALIAS \
+    QT_ANDROID_KEYSTORE_STORE_PASS QT_ANDROID_KEYSTORE_KEY_PASS
+  echo "Signing: none (BRULION_ANDROID_SIGN=0)"
+elif [[ -n ${QT_ANDROID_KEYSTORE_BASE64:-} ]]; then
   keystore=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/brulion-release-$$.jks
   cleanup_files+=("$keystore")
   (
@@ -249,7 +311,9 @@ if [[ -n ${QT_ANDROID_KEYSTORE_BASE64:-} ]]; then
   ) || die "QT_ANDROID_KEYSTORE_BASE64 is not valid base64"
   export QT_ANDROID_KEYSTORE_PATH=$keystore
 fi
-if [[ -n ${QT_ANDROID_KEYSTORE_PATH:-} ]]; then
+if ((!SIGN)); then
+  : # no key at all
+elif [[ -n ${QT_ANDROID_KEYSTORE_PATH:-} ]]; then
   [[ -f $QT_ANDROID_KEYSTORE_PATH ]] || die "QT_ANDROID_KEYSTORE_PATH=$QT_ANDROID_KEYSTORE_PATH does not exist"
   [[ -n ${QT_ANDROID_KEYSTORE_ALIAS:-} ]] || die "QT_ANDROID_KEYSTORE_ALIAS is required with a release keystore"
   [[ -n ${QT_ANDROID_KEYSTORE_STORE_PASS:-} ]] || die "QT_ANDROID_KEYSTORE_STORE_PASS is required with a release keystore"
@@ -313,6 +377,11 @@ cmake_args=(
 )
 [[ ${BRULION_ANDROID_SELFTEST:-0} == 1 ]] && cmake_args+=(-DBRULION_ANDROID_SELFTEST=ON)
 [[ -n ${BRULION_ANDROID_OPENSSL_DIR:-} ]] && cmake_args+=(-DBRULION_ANDROID_OPENSSL_DIR="$BRULION_ANDROID_OPENSSL_DIR")
+if [[ $OPENSSL_SOURCE == source ]]; then
+  cmake_args+=(-DBRULION_ANDROID_OPENSSL_CHECK_SHA256=OFF)
+else
+  cmake_args+=(-DBRULION_ANDROID_OPENSSL_CHECK_SHA256=ON)
+fi
 for abi in "${ABIS[@]:1}"; do
   cmake_args+=("-DQT_PATH_ANDROID_ABI_$abi=$QT_ROOT/$QT_VERSION/$(qt_arch "$abi")")
 done
@@ -326,7 +395,9 @@ cmake "${cmake_args[@]}"
 android_build=$BUILD_DIR/src/app/android-build
 selftest_build=$BUILD_DIR/src/platform/android/selftest/android-build
 # Never pick up an APK of an earlier run.
-rm -rf -- "$android_build/build/outputs" "$selftest_build/build/outputs"
+# Their stamp files too, or Ninja would consider the APK targets up to date and build none.
+rm -rf -- "$android_build/build/outputs" "$selftest_build/build/outputs" \
+  "$android_build/brulion.apk" "$android_build/brulion.aab" "$selftest_build/brulion_android_selftest.apk"
 
 targets=(brulion_make_apk)
 [[ ${BRULION_ANDROID_AAB:-0} == 1 ]] && targets+=(brulion_make_aab)
@@ -353,8 +424,13 @@ cleanup_files+=("$ROOT/$aligned")
 apksigner=(java -jar "$BT/lib/apksigner.jar")
 
 sign_apk() { # <input apk> <output apk>
-  info "Signing $1"
   # 16 KB alignment of uncompressed native libraries (Android 15+ devices with 16 KB pages).
+  if ((!SIGN)); then
+    info "Zip-aligning $1 (unsigned)"
+    "$BT/zipalign" -P 16 -f 4 "$1" "$2"
+    return
+  fi
+  info "Signing $1"
   "$BT/zipalign" -P 16 -f 4 "$1" "$aligned"
   "${apksigner[@]}" sign --ks "$QT_ANDROID_KEYSTORE_PATH" --ks-key-alias "$QT_ANDROID_KEYSTORE_ALIAS" \
     --ks-pass env:QT_ANDROID_KEYSTORE_STORE_PASS --key-pass env:QT_ANDROID_KEYSTORE_KEY_PASS \
@@ -364,13 +440,15 @@ sign_apk() { # <input apk> <output apk>
 
 apk_in=$(newest_apk "$android_build")
 [[ -n $apk_in ]] || die "androiddeployqt produced no APK under $android_build/build/outputs/apk"
-apk=$OUT_DIR/brulion-$VERSION-$abi_tag.apk
+unsigned_suffix=
+((SIGN)) || unsigned_suffix=-unsigned
+apk=$OUT_DIR/brulion-$VERSION-$abi_tag$unsigned_suffix.apk
 sign_apk "$apk_in" "$apk"
 selftest_apk=
 if [[ ${BRULION_ANDROID_SELFTEST:-0} == 1 ]]; then
   selftest_in=$(newest_apk "$selftest_build")
   [[ -n $selftest_in ]] || die "no self-test APK under $selftest_build/build/outputs/apk"
-  selftest_apk=$OUT_DIR/brulion-selftest-$VERSION-$abi_tag.apk
+  selftest_apk=$OUT_DIR/brulion-selftest-$VERSION-$abi_tag$unsigned_suffix.apk
   sign_apk "$selftest_in" "$selftest_apk"
 fi
 
@@ -378,17 +456,23 @@ aab=
 if [[ ${BRULION_ANDROID_AAB:-0} == 1 ]]; then
   aab_in=$(find "$android_build/build/outputs/bundle" -type f -name '*.aab' | sort | head -n 1)
   [[ -n $aab_in ]] || die "no AAB under $android_build/build/outputs/bundle"
-  aab=$OUT_DIR/brulion-$VERSION-$abi_tag.aab
+  aab=$OUT_DIR/brulion-$VERSION-$abi_tag$unsigned_suffix.aab
   cp -- "$aab_in" "$aab"
-  jarsigner -keystore "$QT_ANDROID_KEYSTORE_PATH" -storepass:env QT_ANDROID_KEYSTORE_STORE_PASS \
-    -keypass:env QT_ANDROID_KEYSTORE_KEY_PASS "$aab" "$QT_ANDROID_KEYSTORE_ALIAS" >/dev/null
+  if ((SIGN)); then
+    jarsigner -keystore "$QT_ANDROID_KEYSTORE_PATH" -storepass:env QT_ANDROID_KEYSTORE_STORE_PASS \
+      -keypass:env QT_ANDROID_KEYSTORE_KEY_PASS "$aab" "$QT_ANDROID_KEYSTORE_ALIAS" >/dev/null
+  fi
 fi
 
 # --- check the APK -----------------------------------------------------------------------------
 
 info "Checking $apk"
-"${apksigner[@]}" verify --print-certs "$apk" | grep -E 'Signer #1 certificate (DN|SHA-256)' ||
-  die "apksigner cannot verify $apk"
+if ((SIGN)); then
+  "${apksigner[@]}" verify --print-certs "$apk" | grep -E 'Signer #1 certificate (DN|SHA-256)' ||
+    die "apksigner cannot verify $apk"
+elif unzip -l "$apk" | grep -qE 'META-INF/[^ ]*\.(RSA|DSA|EC|SF)$'; then
+  die "$apk should be unsigned (BRULION_ANDROID_SIGN=0) but has a JAR signature"
+fi
 badging=$("$BT/aapt2" dump badging "$apk")
 grep -E "^(package|minSdkVersion|sdkVersion|targetSdkVersion|application-label|native-code):" <<<"$badging"
 grep -q "^package: name='io.github.januszbit.brulion'" <<<"$badging" || die "wrong package name"
@@ -431,6 +515,40 @@ done
 echo "native libraries: $(grep -c 'lib/.*\.so$' <<<"$listing") in lib/{$(IFS=, && echo "${ABIS[*]}")}"
 openssl=$(unzip -p "$apk" "lib/${ABIS[0]}/libcrypto_3.so" | LC_ALL=C grep -a -o -m 1 'OpenSSL 3\.[0-9.]* [0-9]* [A-Z][a-z]* [0-9]*' || true)
 echo "OpenSSL: ${openssl:-version not found} (libssl_3.so, libcrypto_3.so)"
+# Builds from source: the APK's Qt and OpenSSL libraries are the ones built here (same ELF build
+# ID — Gradle strips them, which keeps the ID; OpenSSL has none: same bytes), not prebuilt ones.
+readelf_bin=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf
+build_id() { "$readelf_bin" -n "$1" | sed -nE 's/^[[:space:]]*Build ID: ([0-9a-f]+).*/\1/p'; }
+if [[ $QT_SOURCE == source || $OPENSSL_SOURCE == source ]]; then
+  id_tmp=$(mktemp -d)
+  cleanup_files+=("$id_tmp")
+  for abi in "${ABIS[@]}"; do
+    pairs=()
+    if [[ $QT_SOURCE == source ]]; then
+      qt_lib=$QT_ROOT/$QT_VERSION/$(qt_arch "$abi")/lib
+      pairs+=("libQt6Core_$abi.so=$qt_lib/libQt6Core_$abi.so" "libQt6Quick_$abi.so=$qt_lib/libQt6Quick_$abi.so")
+    fi
+    if [[ $OPENSSL_SOURCE == source ]]; then
+      pairs+=("libssl_3.so=$BRULION_ANDROID_OPENSSL_DIR/ssl_3/$abi/libssl_3.so"
+        "libcrypto_3.so=$BRULION_ANDROID_OPENSSL_DIR/ssl_3/$abi/libcrypto_3.so")
+    fi
+    for pair in "${pairs[@]}"; do
+      name=${pair%%=*}
+      built=${pair#*=}
+      unzip -q -o "$apk" "lib/$abi/$name" -d "$id_tmp" || die "lib/$abi/$name missing from the APK"
+      # The build ID where the linker wrote one (Qt), else the bytes (OpenSSL: stripped already).
+      in_apk=$(build_id "$id_tmp/lib/$abi/$name")
+      if [[ -n $in_apk ]]; then
+        [[ $in_apk == "$(build_id "$built")" ]] ||
+          die "lib/$abi/$name in the APK (build ID $in_apk) is not the one built from source ($built)"
+      else
+        cmp -s "$id_tmp/lib/$abi/$name" "$built" ||
+          die "lib/$abi/$name in the APK (no build ID) differs from the one built from source ($built)"
+      fi
+    done
+  done
+  echo "from source: Qt ($QT_SOURCE) and OpenSSL ($OPENSSL_SOURCE) libraries in the APK match the local builds"
+fi
 if [[ $BUILD_TYPE == Release || $BUILD_TYPE == MinSizeRel ]] && grep -q 'libplugins_qmltooling_' <<<"$listing"; then
   die "QML debugging plugins (qmltooling) in a $BUILD_TYPE APK (src/app/CMakeLists.txt leaves them out)"
 fi
@@ -443,9 +561,8 @@ unused_qml=$(grep -oE 'lib/[^ ]*(QuickControls2(Material|Universal|Imagine|Fusio
 # 16 KB pages (Android 15+ devices with 16 KB memory pages refuse other libraries): the 64-bit
 # libraries must be stored uncompressed at 16 KB boundaries in the APK and have ELF LOAD
 # segments aligned to at least 16 KB. Brulion's own library and the OpenSSL it bundles must
-# comply; Qt's prebuilt ones are reported.
+# comply; Qt's prebuilt ones are reported (Qt built from source must comply as well).
 "$BT/zipalign" -c -P 16 4 "$apk" >/dev/null || die "$apk is not zip-aligned for 16 KB pages (zipalign -c -P 16 4)"
-readelf_bin=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf
 if [[ -x $readelf_bin ]]; then
   elf_tmp=$(mktemp -d)
   cleanup_files+=("$elf_tmp")
@@ -462,7 +579,8 @@ if [[ -x $readelf_bin ]]; then
     ((min > 0)) || die "$lib: llvm-readelf found no LOAD segments"
     checked=$((checked + 1))
     if ((min < 16384)); then
-      [[ $lib != */libbrulion_* && $lib != */libssl_3.so && $lib != */libcrypto_3.so ]] ||
+      # Qt built from source is linked for 16 KB pages too (scripts/android-qt-from-source.sh).
+      [[ $QT_SOURCE != source && $lib != */libbrulion_* && $lib != */libssl_3.so && $lib != */libcrypto_3.so ]] ||
         die "$lib: LOAD segments aligned to $min bytes, 16 KB pages need 16384"
       misaligned+=("$lib ($min)")
     fi

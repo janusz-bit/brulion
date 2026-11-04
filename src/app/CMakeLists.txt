@@ -241,6 +241,16 @@ if(ANDROID)
     # SHA-256, for every ABI of the build (androiddeployqt puts each one into lib/<its ABI>/).
     set(BRULION_ANDROID_OPENSSL_DIR "" CACHE PATH
         "android_openssl checkout with ssl_3/<abi>/lib{crypto,ssl}_3.so (default: download the pinned files)")
+    # Builds from source (F-Droid; scripts/android-build.sh with BRULION_ANDROID_OPENSSL=source):
+    # BRULION_ANDROID_OPENSSL_DIR is the output of scripts/android-openssl-from-source.sh (the same
+    # layout, OpenSSL built with the NDK), whose files cannot match KDAB's sums. That script pins and
+    # checks the OpenSSL sources (SHA-256 of the release archive) instead.
+    option(BRULION_ANDROID_OPENSSL_CHECK_SHA256
+        "Check the OpenSSL libraries against the SHA-256 sums of KDAB's pinned build (OFF: built from source)" ON)
+    if(NOT BRULION_ANDROID_OPENSSL_CHECK_SHA256 AND NOT BRULION_ANDROID_OPENSSL_DIR)
+        message(FATAL_ERROR "BRULION_ANDROID_OPENSSL_CHECK_SHA256=OFF needs BRULION_ANDROID_OPENSSL_DIR "
+            "(scripts/android-openssl-from-source.sh): downloaded libraries are always checked")
+    endif()
     # OpenSSL 3.1.8, 16 KB pages for 64-bit ABIs; https://github.com/KDAB/android_openssl. The Nix
     # build (nix/android.nix) passes this commit as BRULION_ANDROID_OPENSSL_DIR: pin the same one in
     # nix/android/openssl.json (nix/android/update-locks.sh --openssl <commit>).
@@ -294,9 +304,12 @@ if(ANDROID)
         if(NOT EXISTS ${_file})
             message(FATAL_ERROR "${_file} not found (BRULION_ANDROID_OPENSSL_DIR)")
         endif()
-        file(SHA256 ${_file} _actual)
-        if(NOT _actual STREQUAL _sha256)
-            message(FATAL_ERROR "${_file}: SHA-256 ${_actual}, expected ${_sha256} (KDAB/android_openssl ${_brulion_openssl_commit})")
+        if(BRULION_ANDROID_OPENSSL_CHECK_SHA256)
+            file(SHA256 ${_file} _actual)
+            if(NOT _actual STREQUAL _sha256)
+                message(FATAL_ERROR "${_file}: SHA-256 ${_actual}, expected ${_sha256} (KDAB/android_openssl ${_brulion_openssl_commit}; "
+                    "OpenSSL built from source: BRULION_ANDROID_OPENSSL_CHECK_SHA256=OFF)")
+            endif()
         endif()
         list(APPEND _brulion_openssl_libs ${_file})
     endforeach()

@@ -45,3 +45,10 @@ if(BRULION_BASH)
                      ${PROJECT_SOURCE_DIR}/scripts/check-fastlane-metadata.sh
                      ${PROJECT_SOURCE_DIR}/fastlane/metadata/android ${PROJECT_SOURCE_DIR}/CMakeLists.txt)
 endif()
+
+# The draft F-Droid recipe (packaging/fdroid) against the Android build scripts it calls and the
+# project version (docs/ANDROID.md, "F-Droid").
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_fdroid_recipe
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_fdroid_recipe.sh ${PROJECT_SOURCE_DIR})
+endif()
