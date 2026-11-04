@@ -65,8 +65,17 @@ if(ANDROID)
     if(QT_HOST_PATH)
         list(APPEND _brulion_path_maps "${QT_HOST_PATH}=/qt-host")
     endif()
+    # Each path also as its real path (the compiler sees the NDK through the real path of its
+    # clang, e.g. in a symlinked SDK).
     foreach(_map IN LISTS _brulion_path_maps)
-        add_compile_options("-ffile-prefix-map=${_map}")
+        string(REGEX MATCH "^(.*)=([^=]*)$" _match "${_map}")
+        set(_from "${CMAKE_MATCH_1}")
+        set(_to "${CMAKE_MATCH_2}")
+        file(REAL_PATH "${_from}" _real)
+        add_compile_options("-ffile-prefix-map=${_from}=${_to}")
+        if(NOT _real STREQUAL _from)
+            add_compile_options("-ffile-prefix-map=${_real}=${_to}")
+        endif()
     endforeach()
 endif()
 

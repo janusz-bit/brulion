@@ -193,10 +193,21 @@ fi
 
 # --- build helpers ------------------------------------------------------------------------------
 
-# Build paths do not end up in the libraries (debug info, __FILE__): the same sources give the
-# same Qt in any directory (F-Droid's build server, GitHub Actions, a laptop).
+# Build paths do not end up in the libraries (__FILE__ in Qt's and libc++'s messages, debug info
+# and through it the build ID): the same sources give the same Qt in any directory (F-Droid's
+# build server, GitHub Actions, a laptop). Each path also as its real path: the compiler sees the
+# NDK through the real path of its clang (a symlinked SDK, e.g. Nix's).
 prefix_maps() { # <build dir> <prefix>
-  printf '%s' "-ffile-prefix-map=$SRC=/qt-src -ffile-prefix-map=$1=/qt-build -ffile-prefix-map=$2=/qt -ffile-prefix-map=$NDK=/ndk"
+  local from to maps=() seen=" "
+  for pair in "$SRC=/qt-src" "$1=/qt-build" "$2=/qt" "$NDK=/ndk"; do
+    to=${pair##*=}
+    for from in "${pair%=*}" "$(realpath -m -- "${pair%=*}")"; do
+      [[ $seen == *" $from "* ]] && continue
+      seen+="$from "
+      maps+=("-ffile-prefix-map=$from=$to")
+    done
+  done
+  printf '%s' "${maps[*]}"
 }
 
 # build_module <name> <build dir> <prefix> <stamp text> <configure command…>
@@ -293,7 +304,7 @@ for module in "${HOST_MODULES[@]}"; do
   fi
   [[ $module == qtdeclarative ]] && extra+=("${declarative_features[@]}")
   # Host tools: optimised, no debug info, nothing of the host's paths matters for the APK.
-  CFLAGS='' CXXFLAGS='' build_module "$module" "$build" "$HOST_PREFIX" "$stamp" \
+  build_module "$module" "$build" "$HOST_PREFIX" "$stamp" \
     "${configure[@]}" -- "${common_features[@]}" "${host_features[@]}" "${extra[@]}"
 done
 for tool in libexec/moc libexec/rcc libexec/qmlcachegen libexec/qmltyperegistrar libexec/qmlimportscanner \
@@ -334,9 +345,13 @@ for abi in "${ABIS[@]}"; do
       extra=("${module_cmake[@]}")
     fi
     [[ $module == qtdeclarative ]] && extra+=("${declarative_features[@]}")
+    # The NDK's (legacy) toolchain file ignores CFLAGS/CXXFLAGS from the environment, but adds its
+    # flags to CMAKE_C(XX)_FLAGS given on the command line.
     flags=$(prefix_maps "$build" "$prefix")
-    CFLAGS=$flags CXXFLAGS=$flags build_module "$module" "$build" "$prefix" "$stamp" \
-      "${configure[@]}" -- "${common_features[@]}" "${android_features[@]}" "${extra[@]}"
+    stamp+=" flags $flags"
+    build_module "$module" "$build" "$prefix" "$stamp" \
+      "${configure[@]}" -- "${common_features[@]}" "${android_features[@]}" "${extra[@]}" \
+      "-DCMAKE_C_FLAGS=$flags" "-DCMAKE_CXX_FLAGS=$flags"
   done
   [[ -f $prefix/lib/cmake/Qt6/qt.toolchain.cmake ]] || die "$prefix has no lib/cmake/Qt6/qt.toolchain.cmake"
   [[ -f $prefix/plugins/tls/libplugins_tls_qopensslbackend_$abi.so ]] ||
