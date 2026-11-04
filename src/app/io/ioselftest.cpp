@@ -189,6 +189,7 @@ public:
         phoneSteps();
         importTypedPath();
         exportSaveDialog();
+        pageExport();
         return m_failures;
     }
 
@@ -501,6 +502,82 @@ private:
         check(waitFor([dialog] { return !dialog->property("visible").toBool(); }), "the save dialog closes");
         QMetaObject::invokeMethod(controller, "discard");
         settle(200);
+    }
+
+    // 8. One page (docs/UI.md "Exporting and printing a page"): "Export page" of the imported
+    //    page → PDF → "Save as file…" makes the PDF and opens the save dialog with its name;
+    //    "Print…" (into a PDF file instead of the system's print dialog) prints the page.
+    void pageExport()
+    {
+        const QString pagePath = u"Import/Obsidian/Zażółć gęślą jaźń.md"_s;
+        if (!m_app->workspace()->exists(pagePath)) {
+            check(false, "the imported page is there to export");
+            return;
+        }
+        m_app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, pagePath}, {u"open"_s, u"export"_s}});
+        QObject *controller = nullptr;
+        QQuickItem *pdf = nullptr;
+        QQuickItem *save = nullptr;
+        waitFor(
+                [&] {
+                    controller = nullptr;
+                    for (QObject *c : m_window->findChildren<QObject *>(u"pageExportController"_s)) {
+                        if (c->property("page").toString() == pagePath)
+                            controller = c;
+                    }
+                    // The tiles of a Repeater: items of the grid, not its QObject children.
+                    pdf = nullptr;
+                    if (QQuickItem *grid = item("pageExportFormats")) {
+                        for (QQuickItem *tile : grid->childItems()) {
+                            if (tile->objectName() == u"pageExportFormat_pdf")
+                                pdf = tile;
+                        }
+                    }
+                    save = item("pageExportSave");
+                    return controller && shown(pdf) && shown(save) && save->isEnabled();
+                },
+                10000);
+        std::fprintf(stderr, "selftest: page view %s, controller %s, PDF tile %s, save button %s\n",
+                     qPrintable(m_app->currentView()), controller ? "found" : "missing",
+                     pdf ? (shown(pdf) ? "shown" : "hidden") : "missing",
+                     save ? (shown(save) ? (save->isEnabled() ? "enabled" : "disabled") : "hidden") : "missing");
+        check(controller && shown(pdf) && shown(save), "“Export page” shows the formats of one page");
+        if (!controller || !shown(pdf) || !shown(save))
+            return;
+        tap(pdf);
+        check(waitFor([controller] { return controller->property("format").toString() == u"pdf"; }),
+              "the PDF tile chooses PDF");
+        QObject *dialog =
+                controller->parent() ? controller->parent()->findChild<QObject *>(u"pageExportSaveDialog"_s) : nullptr;
+        if (!dialog) {
+            check(false, "the page's save dialog exists");
+            return;
+        }
+        {
+            OpenWatcher watcher(dialog);
+            tap(save);
+            const bool opened = waitFor([&watcher] { return watcher.opened(); }, 20000);
+            check(opened, "“Save as file…” makes the PDF and opens the save dialog");
+            const QString name = controller->property("fileName").toString();
+            std::fprintf(stderr, "selftest: page export “%s”, the dialog opened with “%s”\n", qPrintable(name),
+                         qPrintable(watcher.fileAtOpen().toString()));
+            check(name == u"Zażółć gęślą jaźń-2026-10-14.pdf"_s && watcher.fileAtOpen().fileName() == name,
+                  "the save dialog opens with the PDF's name");
+            QMetaObject::invokeMethod(dialog, "reject");
+            check(waitFor([dialog] { return !dialog->property("visible").toBool(); }), "the save dialog closes");
+        }
+        QQuickItem *print = item("pageExportPrint");
+        check(shown(print), "the page's export offers “Print…”");
+        if (!shown(print))
+            return;
+        const QString printed = scratch().filePath(u"wydruk.pdf"_s);
+        QMetaObject::invokeMethod(controller, "setPrintToFile", Q_ARG(QString, printed));
+        tap(print);
+        check(waitFor([controller] { return controller->property("state").toString() == u"printed"; }, 20000),
+              "“Print…” prints the page");
+        QFile file(printed);
+        check(file.open(QIODevice::ReadOnly) && file.read(5) == "%PDF-", "the printed pages are there");
+        settle(300);
     }
 
     QQmlApplicationEngine *m_engine;

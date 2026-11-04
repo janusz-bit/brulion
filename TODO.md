@@ -176,9 +176,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Współdzielone notatniki** — notatnik wspólny z inną osobą: kto co zmienił, komentarze; do
   ustalenia, czy wystarczy Nextcloud, czy edycja na żywo (Logseq RTC, AFFiNE, Obsidian:
   „Multiplayer” w planach).
-* **Drukowanie i bezpośredni PDF/DOCX** — druk i eksport strony do PDF-a oraz DOCX bez
-  instalowania Pandoca i LaTeX-a, także na telefonie (Obsidian, SiYuan).
-* **Eksport jednej strony** — z menu strony, bez przechodzenia przez eksport notatnika.
 
 ## Platformy i dystrybucja
 

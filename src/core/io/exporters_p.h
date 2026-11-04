@@ -12,10 +12,15 @@ std::unique_ptr<Exporter> makeObsidianZipExporter();
 std::unique_ptr<Exporter> makeLogseqZipExporter();
 std::unique_ptr<Exporter> makeHtmlSiteExporter();
 std::unique_ptr<Exporter> makeHtmlSingleExporter();
+std::unique_ptr<Exporter> makePdfExporter();
+std::unique_ptr<Exporter> makeDocxExporter();
 std::unique_ptr<Exporter> makePandocExporter();
 std::unique_ptr<Exporter> makeJsonExporter();
 std::unique_ptr<Exporter> makeIcsExporter();
 std::unique_ptr<Exporter> makeOpmlExporter();
 std::unique_ptr<Exporter> makeTasksCsvExporter();
+
+/// runExport()'s cleaning of the input (paths normalised, ignored and duplicate files dropped).
+ExportInput cleanExportInput(const ExportInput &input);
 
 } // namespace brulion::io::detail

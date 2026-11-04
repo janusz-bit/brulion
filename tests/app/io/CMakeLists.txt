@@ -10,6 +10,13 @@ brulion_add_test(tst_appio_import SOURCES tst_appio_import.cpp
     LIBS brulion_ioviews brulion_core_io brulion_core_vault brulion_platform)
 brulion_add_test(tst_appio_export SOURCES tst_appio_export.cpp ../minihttpserver.h
     LIBS brulion_ioviews brulion_core_io brulion_core_vault brulion_core_webpicture Qt6::Network)
+# One page: the page's file, Markdown with attachments, PDF, DOCX, printing into a PDF read back
+# with the platform's PDF reader (QTEST_MAIN: fonts).
+brulion_add_test(tst_appio_pageexport SOURCES tst_appio_pageexport.cpp
+    LIBS brulion_ioviews brulion_core_io brulion_core_vault brulion_platform)
+if(BRULION_DESKTOP)
+    target_compile_definitions(tst_appio_pageexport PRIVATE BRULION_PRINT_DIALOG)
+endif()
 brulion_add_test(tst_appio_conflicts SOURCES tst_appio_conflicts.cpp
     LIBS brulion_ioviews brulion_core_sync brulion_core_vault brulion_core_drawing)
 # Microsoft To Do: sign-in and download against the core's FakeMicrosoft, then preview and import.

@@ -3,9 +3,10 @@
 # Simplenote, Roam, Trilium, Bear, Markdown, HTML, iCalendar), exporters (Markdown / Obsidian / Logseq ZIP, HTML site, single
 # HTML, Pandoc Markdown, JSON, iCalendar, OPML, CSV tasks), ZIP via vendored miniz, tar, CSV, iCalendar,
 # HTML <-> Markdown, the clipboard's HTML of copied blocks; ```mermaid diagrams and ```chart charts as SVG
-# in HTML (diagram, chart); one table as CSV and back (tablecsv.h, calc).
+# in HTML (diagram, chart); one table as CSV and back (tablecsv.h, calc); paper documents (paper.h):
+# PDF (QPdfWriter), DOCX (written here) and printing on any paged device.
 # Public headers: io.h (overview) and the headers it includes; internal headers end in _p.h.
-# QtGui is used for QTextDocument (HTML parsing).
+# QtGui is used for QTextDocument (HTML parsing, the paper documents) and QPdfWriter.
 if(NOT TARGET brulion_miniz)
     add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/miniz ${CMAKE_BINARY_DIR}/3rdparty/miniz)
 endif()
@@ -48,6 +49,9 @@ brulion_add_core_module(io
         export_html.cpp
         export_pandoc.cpp
         export_data.cpp
+        paper.h export_paper.cpp
+        paperdoc_p.h paperdoc.cpp
+        docx_p.h docx.cpp
     DEPS util text dates markdown index notebook drawing diagram calc chart
     QT Gui)
 target_link_libraries(brulion_core_io PRIVATE brulion_miniz)

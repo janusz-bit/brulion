@@ -25,6 +25,7 @@ Skróty na komputerze — te z tabeli „Ogólne” możesz zmienić: zobacz [[#
 | Ctrl+1 … Ctrl+8 / Ctrl+9 | karta o tym numerze / ostatnia karta |
 | Ctrl+\ | panel boczny (szerokie okno) |
 | F2 | zmiana nazwy strony |
+| Ctrl+P | drukuj stronę ([[Import i eksport#Jedna strona|eksport i druk strony]]) |
 | Ctrl+, | ustawienia |
 | F8 | tryb skupienia: sam tekst, bez pasków (Esc też z niego wychodzi; [[Dokument i konspekt#Statystyki i tryb skupienia|Tryb skupienia]]) |
 | Ctrl+E | tryb źródła Markdown |

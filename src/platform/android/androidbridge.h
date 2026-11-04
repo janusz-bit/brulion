@@ -169,6 +169,13 @@ public:
      * (platform/openexternal.h). Static: needs no bridge instance.
      */
     static ViewResult viewFile(const QString &path, const QString &mimeType);
+    /**
+     * "Drukuj…": the PDF at @p path (the app's cache; deleted when the print job is done with it)
+     * in the system's print dialog as the job @p jobName — PrintManager with a PrintDocumentAdapter
+     * copying the file (PdfPrint.kt), no WebView. False when the file is missing or the call
+     * failed. Static: needs no bridge instance.
+     */
+    static bool printPdf(const QString &path, const QString &jobName);
 
     // Documents picked with the system's picker (content:// URIs) for imports: one
     // ContentResolver query per call. Static and thread-safe — import listings run on worker

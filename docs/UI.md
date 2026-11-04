@@ -517,6 +517,7 @@ everything near the bottom, the same way on Android, in the browser and with a s
 | Ctrl+1 … Ctrl+8 / Ctrl+9 | that tab / the last tab |
 | Ctrl+\\ | side panel on/off (wide windows) |
 | F2 | rename the current page |
+| Ctrl+P | print the current page ("Exporting and printing a page") |
 | Delete on a focused row of the sidebar's tree | move that page, file or folder to the trash (after the confirmation) |
 | Ctrl+, | settings |
 | F8 | focus mode on / off ("Statistics and focus mode") |
@@ -681,7 +682,7 @@ tab's in its pane (`ShellTabPane`), and the side panel's route.
 | `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves; a path part of a link naming a folder opens it (below) | `path?` (folder), `sort?` |
 | `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Otwórz stronę" or "Utwórz stronę", "Zadania z tym tagiem"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
 | `sync` | `SyncView` — Przegląd, Syncthing, Nextcloud (live progress, history of runs), Konflikty (merge; drawings element by element) | `tab?`, `copy?`, `run?` (open a run's details) |
-| `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder (the system's picker, `FilePicker`; the browser's own, several files at once) / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles, what to export (notebook / folder / page), for the HTML and Pandoc formats **Obrazy z internetu**: Zostaw adresy / Dołącz kopie (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Pobieranie obrazów z internetu (1 z 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Eksportuj…, the progress card, save (the system's save picker, `FilePicker`; the browser's save picker or a download) | `tab?`, `importer?`, `files?`, … |
+| `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder (the system's picker, `FilePicker`; the browser's own, several files at once) / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles (also PDF and Word: "Exporting and printing a page"), what to export (notebook / folder / page; several notes in a PDF or DOCX: each on its own page), for the HTML, PDF, Word and Pandoc formats **Obrazy z internetu**: Zostaw adresy / Dołącz kopie (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Pobieranie obrazów z internetu (1 z 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Eksportuj…, the progress card, save (the system's save picker, `FilePicker`; the browser's save picker or a download) | `tab?`, `importer?`, `files?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Zastąpiona z wiersza poleceń (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` | — |
 | `cleanup` | `CleanupView` — notes and attachments nothing refers to ("Cleaning up" below) | `kind?`, `selected?` (written when a row opens a file, so Back returns to the same choice) |
@@ -769,6 +770,44 @@ for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar
   editor, a PDF viewer…); every other tab is a route, its history and a view state. A pane that
   shows another tab of the same view keeps its view (as a new route does) and switches the page;
   of another view the view is made again ("docs/PERFORMANCE.md" "Tabs").
+
+## Exporting and printing a page (`qml/content/ContentExportDialog.qml`)
+
+The page's menu has **Eksportuj stronę…** and **Drukuj…** (Ctrl+P; also the palette's "Eksportuj
+stronę…" / "Drukuj stronę…", uiActions `exportPage` / `printPage`, handled by the PageView on
+screen; a picture, a PDF or another file has no "Drukuj…"). Both open `ContentExportDialog` —
+"Drukuj…" starts printing right away — without going through Import and export:
+
+* **Format** tiles (three columns, two on phones): Markdown (the page's file as it is,
+  `ExportController` format `markdown-file`, page scope only), Markdown z załącznikami
+  (`markdown-zip`: the page and the pictures and files it links to), HTML (`html-single`, the
+  pictures inside), PDF, Word (DOCX) and Pandoc Markdown; the chosen one explained below.
+  **Obrazy z internetu** (Zostaw adresy / Dołącz kopie, `AppSettings.exportWebPictures`) for the
+  HTML, PDF, Word and Pandoc formats.
+* **Zapisz jako plik…** (the browser: **Pobierz**) makes the file in the background (a progress
+  bar and **Anuluj** under the tiles), then the system's save dialog (`FilePicker`, Android: the
+  system's "Save as") or the browser's save picker / a download; **Zapisz w Pobranych** on
+  Android (MediaStore); **Kopiuj do schowka** for Markdown and HTML (`PageTools.copyExport`);
+  **Więcej opcji eksportu…** opens Import and export with the page and the format chosen.
+* **Drukuj…** (`ExportController.print()`): desktop — the system's print dialog (`QPrintDialog`,
+  Qt Print Support, linked on the desktop only), the pages painted on the printer
+  (`io::printNotes`: the PDF's look, its page size and margins from the dialog, a page number
+  at the bottom); Android — the PDF export handed to the system's print service
+  (`AndroidBridge::printPdf`: PrintManager with a WebView-free PrintDocumentAdapter copying the
+  file, `PdfPrint.kt`; its printers and "Zapisz jako PDF"); the browser — the HTML document in
+  its print dialog (a hidden frame sandboxed without scripts, `platform/wasm/wasmopen.h`).
+
+PDF and DOCX are Brulion's own (`io/paper.h`, no Pandoc or LaTeX, also on the phone): the HTML
+document export laid out for paper — headings, lists with the tasks' checkboxes, tables with
+borders (a table above 1500 rows or 10 000 cells keeps its first rows), code, math as the HTML
+shows it, pictures scaled to the page, Mermaid diagrams (and other SVG) as pictures, dates and
+reminders in words ("termin: 2026-11-20"; colour emoji fonts do not print); links to the web stay
+links, links inside the notebook are text. The PDF embeds its fonts (Polish letters as written);
+the paper is A4, Letter where the system's locale uses it (`io::paperSizeFor`). The DOCX has
+Word's styles (heading 1…6, Source Code, Quote, Hyperlink), real list numbering, hyperlinks,
+tables with header rows (at most 63 columns, Word's limit) and the pictures as embedded media.
+Tests: `tst_io_paper` (also through LibreOffice when installed), `tst_appio_pageexport` (printing
+into a PDF read back), the import self-test's step 8 (the dialog, the save dialog's name, printing).
 
 ## Cleaning up (`qml/views/CleanupView.qml`)
 

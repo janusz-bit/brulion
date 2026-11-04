@@ -488,6 +488,17 @@ AndroidBridge::ViewResult AndroidBridge::viewFile(const QString &path, const QSt
     }
 }
 
+bool AndroidBridge::printPdf(const QString &path, const QString &jobName)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return false;
+    const jboolean ok = QJniObject::callStaticMethod<jboolean>(
+            kClass, "printPdf", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)Z", context.object(),
+            QJniObject::fromString(path).object<jstring>(), QJniObject::fromString(jobName).object<jstring>());
+    return !failed("printPdf") && ok;
+}
+
 DownloadResult AndroidBridge::saveToDownloads(const QString &name, const QString &mimeType, const QByteArray &data)
 {
     DownloadResult result;

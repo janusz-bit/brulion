@@ -29,14 +29,20 @@
 //                  appendImported(existing, imported) -> merged daily note
 //
 //   exporter.h     struct ExportInput { QList<FileEntry> files; VaultConfig config; QString
-//                    vaultName; QDateTime now; }
+//                    vaultName; QDateTime now; webPictures; paperSize ("a4" | "letter") }
 //                  struct ExportedFile { QString name, mime; QByteArray data; }
 //                  struct ExportResult { QList<ExportedFile> files; QStringList warnings; }
 //                  class Exporter { id(), name(), fileExtension(), run(input) }
 //                  exporters()  — markdown-zip, obsidian-zip, logseq-zip, html-site,
-//                    html-single, pandoc (one Pandoc Markdown document + linked attachments),
+//                    html-single, pdf, docx (paper.h), pandoc (one Pandoc Markdown document +
+//                    linked attachments),
 //                    json (brulion-export v1), ics, opml, tasks-csv
 //                  exporterById(id), runExport(exporter, input) (input cleaned first)
+//
+//   paper.h        PaperSize (A4 / Letter), paperSizeFor(locale), paperLayout(size),
+//                  printNotes(input, QPagedPaintDevice*) — the PDF export's pages on a printer;
+//                  the PDF and DOCX exporters lay the HTML document export out for paper
+//                  (QTextDocument loading only the export's own pictures)
 //
 //   zip.h          readZip(zip, &warnings, ZipReadOptions{expandNested, maxNestingDepth,
 //                    maxEntrySize, maxTotalSize, maxEntries}) -> QList<FileEntry>,
@@ -70,6 +76,7 @@
 #include "io/htmlmarkdown.h"
 #include "io/ical.h"
 #include "io/importer.h"
+#include "io/paper.h"
 #include "io/tablecsv.h"
 #include "io/tar.h"
 #include "io/zip.h"

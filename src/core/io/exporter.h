@@ -41,6 +41,9 @@ struct ExportInput {
     /// target gives it (webPictureTargets()). A picture not in here keeps its URL; other
     /// exporters keep every URL (the notes' text is not changed).
     QHash<QString, WebPictureCopy> webPictures;
+    /// Paper of the PDF and DOCX exports: "a4" | "letter" (io/paper.h: paperSizeFor() of the
+    /// device's locale); anything else is A4.
+    QString paperSize;
 };
 
 /// A produced file: a suggested file name, its MIME type and content.
@@ -63,11 +66,12 @@ public:
     virtual ~Exporter() = default;
 
     /// Stable identifier: "markdown-zip", "obsidian-zip", "logseq-zip", "html-site", "html-single",
-    /// "pandoc", "json", "ics", "opml", "tasks-csv".
+    /// "pdf", "docx", "pandoc", "json", "ics", "opml", "tasks-csv".
     virtual QString id() const = 0;
     /// Display name ("Obsidian (ZIP)", "iCalendar").
     virtual QString name() const = 0;
-    /// Extension of the produced file (".zip", ".html", ".json", ".ics", ".opml", ".csv").
+    /// Extension of the produced file (".zip", ".html", ".pdf", ".docx", ".json", ".ics", ".opml",
+    /// ".csv").
     virtual QString fileExtension() const = 0;
     /// Export. Use runExport(), which cleans the input first.
     virtual ExportResult run(const ExportInput &input) const = 0;

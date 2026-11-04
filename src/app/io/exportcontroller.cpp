@@ -7,6 +7,7 @@
 #include "iobackground.h"
 
 #include "index/vaultindex.h"
+#include "io/paper.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 #include "webpicture/webpicture.h"
@@ -25,6 +26,11 @@
 
 #ifdef Q_OS_WASM
 #include "wasm/wasmfiles.h"
+#include "wasm/wasmopen.h"
+#endif
+#ifdef BRULION_PRINT_DIALOG
+#include <QPrintDialog>
+#include <QPrinter>
 #endif
 #ifdef Q_OS_ANDROID
 #include "android/androidbridge.h"
@@ -102,7 +108,7 @@ ExportSelection selectExportFiles(const QList<FileStat> &files, const QString &s
 // ---- ExportController -----------------------------------------------------------------------------
 
 ExportController::ExportController(QObject *parent)
-    : QObject(parent)
+    : QObject(parent), m_paperSize(io::paperSizeId(io::paperSizeFor(QLocale::system())))
 {
     m_summaryTimer.setSingleShot(true);
     m_summaryTimer.setInterval(150);
@@ -180,6 +186,11 @@ QVariantList ExportController::formats() const
                      u"monitor"_s };
         if (id == u"html-single")
             return { tr("Everything in one HTML file – easy to print, send or archive."), u"file-text"_s };
+        if (id == u"pdf")
+            return {tr("Pages ready to print or send, the same on every device – no other program needed."),
+                    u"printer"_s};
+        if (id == u"docx")
+            return {tr("A document to edit in Word, LibreOffice Writer or Google Docs."), u"type"_s};
         if (id == u"pandoc")
             return {tr("One Markdown document for Pandoc, to turn into Word, LibreOffice, PDF or EPUB."),
                     u"book-open"_s};
@@ -209,7 +220,8 @@ QVariantList ExportController::formats() const
 
 void ExportController::setFormat(const QString &format)
 {
-    if (format == m_format || !io::exporterById(format))
+    // "markdown-file": the page's file as it is (page scope; no exporter of the notebook's).
+    if (format == m_format || (!io::exporterById(format) && format != u"markdown-file"))
         return;
     m_format = format;
     discard();
@@ -228,7 +240,32 @@ void ExportController::setWebPictures(const QString &mode)
 
 bool ExportController::webPicturesApply() const
 {
-    return m_format == u"html-site" || m_format == u"html-single" || m_format == u"pandoc";
+    return m_format == u"html-site" || m_format == u"html-single" || m_format == u"pandoc" || m_format == u"pdf"
+           || m_format == u"docx";
+}
+
+void ExportController::setPaperSize(const QString &paper)
+{
+    const QString clean = io::paperSizeId(io::paperSizeFromId(paper));
+    if (clean == m_paperSize)
+        return;
+    m_paperSize = clean;
+    discard();
+    Q_EMIT optionsChanged();
+}
+
+bool ExportController::printAvailable() const
+{
+#if defined(BRULION_PRINT_DIALOG) || defined(Q_OS_ANDROID) || defined(Q_OS_WASM)
+    return true;
+#else
+    return false;
+#endif
+}
+
+void ExportController::setPrintToFile(const QString &pdfPath)
+{
+    m_printToFile = pdfPath;
 }
 
 void ExportController::setScope(const QString &scope)
@@ -306,6 +343,8 @@ void ExportController::updateSummary()
         error = m_folder.isEmpty() ? tr("Choose a folder.") : tr("The folder “%1” does not exist.").arg(m_folder);
     else if (m_scope == u"page" && (m_page.isEmpty() || !vault->exists(m_page)))
         error = m_page.isEmpty() ? tr("Choose a page.") : tr("The page “%1” does not exist.").arg(pageTitle());
+    else if (m_format == u"markdown-file" && m_scope != u"page")
+        error = tr("A Markdown file holds one page: choose a page or another format.");
     const ExportSelection sel = error.isEmpty() ? currentSelection() : ExportSelection();
     if (error.isEmpty() && sel.paths.isEmpty())
         error = tr("There is nothing to export yet.");
@@ -396,6 +435,24 @@ void ExportController::prepare()
 {
     if (busy())
         return;
+    m_printing = false;
+    startReading();
+}
+
+void ExportController::print()
+{
+    if (busy())
+        return;
+    if (!printAvailable()) {
+        setState(u"error"_s, tr("Printing is not available here."));
+        return;
+    }
+    m_printing = true;
+    startReading();
+}
+
+void ExportController::startReading()
+{
     updateSummary();
     if (!m_summary.value(u"valid"_s).toBool()) {
         setState(u"error"_s, m_summary.value(u"error"_s).toString());
@@ -606,20 +663,50 @@ void ExportController::stopWebPictures()
     m_webPending.clear();
 }
 
-void ExportController::runExporter()
+io::ExportInput ExportController::exportInput()
 {
-    const io::Exporter *exporter = io::exporterById(m_format);
-    if (!exporter || !m_workspace || !m_workspace->vault()) {
-        setState(u"error"_s, tr("This format is not available."));
-        return;
-    }
     io::ExportInput input;
     input.files = std::exchange(m_readFiles, {});
     input.config = m_workspace->vault()->config();
     input.vaultName = exportName();
     input.now = m_clock ? m_clock() : m_workspace->now();
     input.webPictures = std::exchange(m_webCopies, {});
+    input.paperSize = m_paperSize;
     m_readQueue.clear();
+    return input;
+}
+
+void ExportController::runExporter()
+{
+    if (!m_workspace || !m_workspace->vault()) {
+        setState(u"error"_s, tr("This format is not available."));
+        return;
+    }
+    if (m_printing) {
+        runPrint(exportInput());
+        return;
+    }
+    if (m_format == u"markdown-file") {
+        // The page's file as it is.
+        const io::ExportInput input = exportInput();
+        const auto page = std::find_if(input.files.cbegin(), input.files.cend(),
+                                       [this](const io::FileEntry &f) { return f.path == m_page; });
+        if (m_scope != u"page" || page == input.files.cend()) {
+            setState(u"error"_s, m_readWarnings.isEmpty() ? tr("Nothing was exported.") : m_readWarnings.first());
+            return;
+        }
+        m_result = {io::ExportedFile{paths::sanitizeFileName(pageTitle()) + u".md"_s, u"text/markdown"_s, page->data}};
+        m_warnings = m_readWarnings;
+        setProgress(1);
+        setState(u"ready"_s);
+        return;
+    }
+    const io::Exporter *exporter = io::exporterById(m_format);
+    if (!exporter) {
+        setState(u"error"_s, tr("This format is not available."));
+        return;
+    }
+    const io::ExportInput input = exportInput();
     setProgress(-1, tr("Creating “%1”…").arg(exporter->name()));
     const int generation = m_generation;
     runInBackground<io::ExportResult>(
@@ -642,6 +729,100 @@ void ExportController::runExporter()
                 }
                 setState(u"ready"_s);
             });
+}
+
+// ---- Printing --------------------------------------------------------------------------------------
+
+void ExportController::runPrint(io::ExportInput input)
+{
+    const QString title = exportName().isEmpty() ? u"Brulion"_s : exportName();
+#if defined(BRULION_PRINT_DIALOG)
+    // The desktop: the system's print dialog (or a PDF file for tests), then the pages painted on
+    // the printer here — a short block of the GUI thread for the page being printed.
+    QPrinter printer(QPrinter::ScreenResolution);
+    printer.setDocName(title);
+    printer.setCreator(u"Brulion"_s);
+    printer.setPageLayout(io::paperLayout(io::paperSizeFromId(m_paperSize)));
+    if (!m_printToFile.isEmpty()) {
+        printer.setOutputFormat(QPrinter::PdfFormat);
+        printer.setOutputFileName(m_printToFile);
+    } else {
+        setProgress(-1, tr("Choose a printer…"));
+        QPrintDialog dialog(&printer);
+        dialog.setWindowTitle(tr("Print “%1”").arg(title));
+        dialog.setOptions(QAbstractPrintDialog::PrintToFile | QAbstractPrintDialog::PrintShowPageSize
+                          | QAbstractPrintDialog::PrintCollateCopies);
+        const int generation = m_generation;
+        const bool accepted = dialog.exec() == QDialog::Accepted;
+        if (generation != m_generation || m_state != u"preparing")
+            return;
+        if (!accepted) {
+            m_printing = false;
+            setState(u"idle"_s);
+            return;
+        }
+    }
+    setProgress(-1, tr("Printing “%1”…").arg(title));
+    QStringList warnings;
+    const int pages = io::printNotes(input, &printer, &warnings);
+    qCInfo(logging::lcIo).noquote() << u"Printed %1 page(s), %2 warning(s)"_s.arg(pages).arg(warnings.size());
+    finishPrint(pages > 0, tr("The printer could not be used."), m_readWarnings + warnings);
+#elif defined(Q_OS_ANDROID) || defined(Q_OS_WASM)
+    // Android: the PDF export for the system's print service; the browser: the HTML document
+    // export in its print dialog.
+#ifdef Q_OS_ANDROID
+    const io::Exporter *exporter = io::exporterById(u"pdf");
+#else
+    const io::Exporter *exporter = io::exporterById(u"html-single");
+#endif
+    setProgress(-1, tr("Preparing to print…"));
+    const int generation = m_generation;
+    runInBackground<io::ExportResult>(
+            this, [exporter, input] { return io::runExport(*exporter, input); },
+            [this, generation, title](io::ExportResult result) {
+                if (generation != m_generation || m_state != u"preparing")
+                    return;
+                if (result.files.isEmpty()) {
+                    finishPrint(false,
+                                result.warnings.isEmpty() ? tr("Nothing was exported.") : result.warnings.first(), {});
+                    return;
+                }
+#ifdef Q_OS_ANDROID
+                const QString dir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + u"/print"_s;
+                QDir().mkpath(dir);
+                const QString path = dir + u'/' + paths::sanitizeFileName(title) + u".pdf"_s;
+                QString error;
+                const bool written = writeToUrl(QUrl::fromLocalFile(path), result.files.first().data, &error);
+                const bool ok = written && platform::AndroidBridge::printPdf(path, title);
+                finishPrint(ok, written ? tr("The system's printing could not be opened.") : error,
+                            m_readWarnings + result.warnings);
+#else
+                platform::wasm::printHtml(result.files.first().data);
+                finishPrint(true, {}, m_readWarnings + result.warnings);
+#endif
+            });
+#else
+    Q_UNUSED(input);
+    Q_UNUSED(title);
+    finishPrint(false, tr("Printing is not available here."), {});
+#endif
+}
+
+void ExportController::finishPrint(bool ok, const QString &error, const QStringList &warnings)
+{
+    m_printing = false;
+    setProgress(1);
+    if (!ok) {
+        setState(u"error"_s, error);
+        return;
+    }
+    m_warnings = warnings;
+    setState(u"printed"_s);
+#if defined(BRULION_PRINT_DIALOG)
+    Q_EMIT printed(tr("“%1” went to the printer.").arg(exportName()));
+#else
+    Q_EMIT printed(QString());
+#endif
 }
 
 // ---- Saving ----------------------------------------------------------------------------------------
@@ -732,6 +913,7 @@ void ExportController::discard()
 {
     if (m_state == u"preparing")
         ++m_generation;
+    m_printing = false;
     m_readTimer.stop();
     stopWebPictures();
     m_webCopies.clear();

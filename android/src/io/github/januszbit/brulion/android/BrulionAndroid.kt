@@ -524,6 +524,24 @@ object BrulionAndroid {
   @JvmStatic
   fun viewFile(context: Context, path: String, mime: String): Int = OpenWith.view(context, path, mime)
 
+  /**
+   * "Drukuj…": the PDF at [path] (in the app's cache) in the system's print dialog as the job
+   * [name] (PdfPrint.kt). False when there is no such file; the dialog opens on the main thread
+   * (no activity at that moment: nothing happens, logged).
+   */
+  @JvmStatic
+  fun printPdf(context: Context, path: String, name: String): Boolean {
+    val file = java.io.File(path)
+    if (!file.isFile) return false
+    onMain {
+      val activity = currentActivity()
+      if (activity == null || !PdfPrint.print(activity, file, name)) {
+        Log.w(TAG, "printPdf: no activity or print service")
+      }
+    }
+    return true
+  }
+
   // -----------------------------------------------------------------------------------------
   // Sounds of reminders and alarms (ReminderSounds.kt; Settings → Reminders in the app)
   // -----------------------------------------------------------------------------------------
