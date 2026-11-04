@@ -69,6 +69,9 @@ declare -A QT_SHA256=(
 HOST_MODULES=(qtbase qtshadertools qtsvg qtdeclarative qttools qttranslations)
 ANDROID_MODULES=(qtbase qtshadertools qtsvg qtdeclarative)
 SDK_CMAKE=3.31.6
+# Time stamp of the files in Qt's own resources (rcc): fixed, so that every build of Qt for
+# Android gives the same libraries (1980-01-01, like nixpkgs and zip archives).
+QT_SOURCE_DATE_EPOCH=315532800
 QT_MIRRORS=(
   https://download.qt.io/official_releases/qt
   https://ftp.fau.de/qtproject/official_releases/qt
@@ -125,6 +128,7 @@ if [[ ${BRULION_ANDROID_CMAKE:-sdk} != system ]]; then
 fi
 { command -v cmake && command -v ninja; } >/dev/null || die "cmake and ninja are needed"
 command -v c++ >/dev/null || die "a host C++ compiler (c++) is needed for the host Qt"
+command -v gzip >/dev/null || die "gzip is needed (Qt's MIME database)"
 
 if [[ -z ${JAVA_HOME:-} ]]; then
   java=$(command -v java || true)
@@ -330,10 +334,13 @@ for abi in "${ABIS[@]}"; do
     -DOPENSSL_ROOT_DIR="$ssl" -DOPENSSL_INCLUDE_DIR="$ssl/include"
     # 16 KB pages (Android 15+ devices): NDK r27 aligns 64-bit libraries to 16 KB only when asked.
     -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
+    # The MIME database in QtCore compressed by `gzip -n` (no time stamp) instead of CMake's
+    # archive API, which writes the build time into the gzip header.
+    -DQT_AVOID_CMAKE_ARCHIVING_API=ON
   )
   for module in "${ANDROID_MODULES[@]}"; do
     build=$BUILD_ROOT/$abi-$module
-    stamp="qt $QT_VERSION $abi $module ($src_id) ndk $ndk_revision openssl-headers $ssl_id features ${common_features[*]} ${android_features[*]}"
+    stamp="qt $QT_VERSION $abi $module ($src_id) ndk $ndk_revision openssl-headers $ssl_id features ${common_features[*]} ${android_features[*]} epoch $QT_SOURCE_DATE_EPOCH"
     [[ $module == qtdeclarative ]] && stamp+=" ${declarative_features[*]}"
     if [[ $module == qtbase ]]; then
       configure=("$SRC/qtbase/configure" -prefix "$prefix" -platform android-clang
@@ -349,7 +356,9 @@ for abi in "${ABIS[@]}"; do
     # flags to CMAKE_C(XX)_FLAGS given on the command line.
     flags=$(prefix_maps "$build" "$prefix")
     stamp+=" flags $flags"
-    build_module "$module" "$build" "$prefix" "$stamp" \
+    # rcc stamps Qt's own resources with SOURCE_DATE_EPOCH instead of the files' times (which are
+    # the checkout's or the unpacking's).
+    SOURCE_DATE_EPOCH=$QT_SOURCE_DATE_EPOCH build_module "$module" "$build" "$prefix" "$stamp" \
       "${configure[@]}" -- "${common_features[@]}" "${android_features[@]}" "${extra[@]}" \
       "-DCMAKE_C_FLAGS=$flags" "-DCMAKE_CXX_FLAGS=$flags"
   done
