@@ -92,8 +92,11 @@ install_deps() {
     libxcb-keysyms1 libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-shape0 libxcb-shm0
     libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xkb1 libxkbcommon0 libxkbcommon-x11-0
     libsm6 libice6 libwayland-client0 libwayland-cursor0 libwayland-egl1 libegl1 libgl1
-    # spell checking: Hunspell (bundled by linuxdeploy) and the dictionaries copied into the AppDir
-    libhunspell-dev hunspell-pl hunspell-en-us
+    # printing (Qt's CUPS print support plugin: "Drukuj…" lists the system's printers)
+    libcups2
+    # spell checking: Hunspell (bundled by linuxdeploy; CMake finds it through pkg-config, which
+    # minimal containers lack) and the dictionaries copied into the AppDir
+    pkg-config libhunspell-dev hunspell-pl hunspell-en-us
   )
   # Ubuntu 22.04's default g++ 11 lacks parts of C++20; g++-12 is in its main archive.
   local default_gcc
