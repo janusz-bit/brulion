@@ -409,6 +409,11 @@ Gotowy plik eksportu (ZIP, HTML, iCalendar…) zapiszesz na dwa sposoby:
   plików”); zajęta nazwa dostaje od systemu dopisek „(1)”, a raport podaje nazwę pliku. Na
   Androidzie 9 plik jest zapisywany bezpośrednio w *Download* (potrzebne uprawnienie do pamięci).
 
+**Drukuj…** strony (menu strony, paleta) robi PDF tak jak eksport do PDF-a (papier A4 albo Letter
+według regionu urządzenia), kładzie go w pamięci podręcznej aplikacji (`cache/print/`) i oddaje
+systemowej usłudze drukowania (`AndroidBridge::printPdf`, `PdfPrint.kt`): drukarki, liczba kopii i
+„Zapisz jako PDF” są systemu; po zamknięciu jego okna plik jest usuwany.
+
 ## Kopie zapasowe
 
 Domyślny folder kopii leży w prywatnych plikach aplikacji (`<dane>/…/backups`): nie wymaga uprawnień,
@@ -1189,6 +1194,7 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | `PdfReader::pageText(page)` / `find(page, query)` | `pdfPageText(Int, Int): String?` / `pdfSearch(Int, Int, Array<String>): String` — `[{"start", "rects": [[l, t, r, b], …]}, …]` każdej podanej pisowni |
 | `~PdfReader` | `pdfClose(Int)` |
 | `AndroidBridge::viewFile(path, mime)` (statyczna) | `viewFile(Context, String, String): Int` — `OpenWith.kt`: 0 uruchomiono, 1 brak aplikacji, 2 błąd, 3 kopiowanie (karta pamięci) |
+| `AndroidBridge::printPdf(path, jobName)` (statyczna) | `printPdf(Context, String, String): Boolean` — `PdfPrint.kt`: PDF z pamięci podręcznej w systemowym oknie drukowania (`PrintManager`, `PrintDocumentAdapter` kopiujący plik, bez WebView); plik usuwany po zakończeniu zadania |
 
 * Element `scheduleReminders`: `{id: int, title, body, at: ms od epoki, alarm: bool,
   ringMinutes: int (alarmy, 1–60, domyślnie 10), path: ścieżka notatki w notatniku, line: int,

@@ -132,8 +132,9 @@ private Q_SLOTS:
             QCOMPARE(r.files.size(), 1);
             QVERIFY(r.files.first().name.endsWith(e->fileExtension()));
         }
-        QCOMPARE(ids, QStringList({u"markdown-zip"_s, u"obsidian-zip"_s, u"logseq-zip"_s, u"html-site"_s,
-                                   u"html-single"_s, u"pandoc"_s, u"json"_s, u"ics"_s, u"opml"_s, u"tasks-csv"_s}));
+        QCOMPARE(ids,
+                 QStringList({u"markdown-zip"_s, u"obsidian-zip"_s, u"logseq-zip"_s, u"html-site"_s, u"html-single"_s,
+                              u"pdf"_s, u"docx"_s, u"pandoc"_s, u"json"_s, u"ics"_s, u"opml"_s, u"tasks-csv"_s}));
         QVERIFY(exporterById(u"nope") == nullptr);
     }
 

@@ -974,7 +974,7 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
 |---|---|
 | `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | powłoka HTML, service worker, manifest |
 | `wasm/icons/` | ikony PWA; PNG wygenerowane z `assets/logo.svg` i `wasm/icons/maskable.svg` (odstęp bezpieczny dla ikon maskowalnych) oraz `badge.svg` (monochromatyczna plakietka powiadomień) |
-| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, `WasmShare` (udostępnienia przekazane przez inną kartę), most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), wybór plików i pobieranie (`wasmfiles.h`, bez Qt Widgets), testy trwałości i wyboru plików (`wasmselftest.h`) |
+| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, `WasmShare` (udostępnienia przekazane przez inną kartę), most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), wybór plików i pobieranie (`wasmfiles.h`, bez Qt Widgets), nowa karta z plikiem i drukowanie strony (`wasmopen.h`: „Drukuj…” — dokument HTML eksportu w ukrytej ramce bez skryptów i okno drukowania przeglądarki), testy trwałości i wyboru plików (`wasmselftest.h`) |
 | `src/app/diag/webselftest.h` | testy aplikacji dla przeglądarek: `?selftest=webpictures` (obrazy z internetu, eksport z kopiami), `?selftest=pen` (płótno pod rysikiem); testy na komputerze: `tests/app/diag/tst_webselftest.cpp` |
 | `tests/web/`, `scripts/web-test.sh` | testy Playwright w Chromium i Firefoksie (obrazy z internetu, rysik) i ich uruchamianie (CI: `wasm.yml`, zadanie `browsers`) |
 | `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |

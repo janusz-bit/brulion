@@ -5,11 +5,11 @@ import QtQuick.Templates as T
 import Brulion
 
 // ExportPanel — the "Export" tab of ImportExportView (ExportController): format (Markdown ZIP,
-// Obsidian, Logseq, HTML website, one HTML file, Pandoc Markdown, JSON, iCalendar, OPML, tasks
-// CSV), what to export (the whole notebook / a folder / a page, with the attachments they use),
+// Obsidian, Logseq, HTML website, one HTML file, PDF, Word, Pandoc Markdown, JSON, iCalendar, OPML,
+// tasks CSV), what to export (the whole notebook / a folder / a page, with the attachments they use),
 // then "Eksportuj…": the file is produced in the background and saved where the user says.
 //
-// Pictures from the internet (`![](https://…)`): the HTML and Pandoc formats offer "Zostaw
+// Pictures from the internet (`![](https://…)`): the HTML, PDF, Word and Pandoc formats offer "Zostaw
 // adresy" (the export shows them only online) or "Dołącz kopie" (copies from the device's cache,
 // the missing ones fetched first); the choice is remembered on the device (AppSettings).
 //
@@ -245,7 +245,7 @@ ColumnLayout {
         }
     }
 
-    // ---- Pictures from the internet (HTML, Pandoc) -------------------------------------------------
+    // ---- Pictures from the internet (HTML, PDF, Word, Pandoc) --------------------------------------
     ColumnLayout {
         Layout.fillWidth: true
         visible: exporterObject.webPicturesApply

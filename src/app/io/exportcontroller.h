@@ -14,6 +14,20 @@
 //             thread; progress) → "ready" (fileName, sizeText, warnings) → saveTo(url) /
 //             saveInBrowser() / saveToExportFolder() → "saved" (savedTo) | "error" (errorText)
 //
+// One page (ContentExportDialog, the page's menu and the palette): scope "page" with the formats
+// that make sense for one page — "markdown-file" (the page's file as it is; page scope only),
+// markdown-zip (with its attachments), html-single, pdf, docx (io/paper.h, the paper of the
+// device's locale: A4 / Letter), pandoc.
+//
+// Printing (print()): the scope is read like for an export, then
+//   desktop     the system's print dialog (QPrintDialog, Qt Print Support) and the pages painted on
+//               the chosen printer (io::printNotes: the PDF export's look); setPrintToFile(): a
+//               PDF file instead, without a dialog (tests, self-tests)
+//   Android     the PDF export handed to the system's print service (PrintManager through the
+//               platform's Android bridge: printers, "Save as PDF")
+//   browser     the HTML document export in the browser's print dialog (a hidden frame)
+// state "preparing" → "printed" (printedMessage) | "idle" (the dialog was cancelled) | "error".
+//
 // Saving per platform:
 //   desktop     QML FilePicker (fileMode: SaveFile, selectedFile = suggestedSaveFile; the system's
 //               dialog) → saveTo(url)
@@ -77,7 +91,7 @@ class ExportController : public QObject {
     /// Pictures from the internet in the HTML and Pandoc exports: "link" (default) | "include".
     Q_PROPERTY(QString webPictures READ webPictures WRITE setWebPictures NOTIFY optionsChanged FINAL)
     /// The chosen format can include copies of pictures from the internet (html-site,
-    /// html-single, pandoc).
+    /// html-single, pdf, docx, pandoc).
     Q_PROPERTY(bool webPicturesApply READ webPicturesApply NOTIFY optionsChanged FINAL)
     Q_PROPERTY(QString state READ state NOTIFY stateChanged FINAL)
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged FINAL)
@@ -97,6 +111,11 @@ class ExportController : public QObject {
     Q_PROPERTY(QUrl suggestedSaveFile READ suggestedSaveFile NOTIFY stateChanged FINAL)
     /// Folder used by saveToExportFolder().
     Q_PROPERTY(QString exportFolder READ exportFolder CONSTANT FINAL)
+    /// print() can reach a printer here (desktop with Qt Print Support, Android, the browser).
+    Q_PROPERTY(bool printAvailable READ printAvailable CONSTANT FINAL)
+    /// Paper of the PDF and DOCX exports and of printing in the browser: "a4" | "letter" (default:
+    /// io::paperSizeFor the system's locale).
+    Q_PROPERTY(QString paperSize READ paperSize WRITE setPaperSize NOTIFY optionsChanged FINAL)
 
 public:
     explicit ExportController(QObject *parent = nullptr);
@@ -132,6 +151,9 @@ public:
     QUrl defaultSaveFolder() const;
     QUrl suggestedSaveFile() const;
     QString exportFolder() const;
+    bool printAvailable() const;
+    QString paperSize() const { return m_paperSize; }
+    void setPaperSize(const QString &paper);
 
     /// Produce the file (async; "ready" when done).
     Q_INVOKABLE void prepare();
@@ -145,6 +167,12 @@ public:
     /// Forget the produced file (back to "idle").
     Q_INVOKABLE void discard();
     Q_INVOKABLE void cancel();
+    /// Print the scope (async; "printed" when handed to the printer or the system's print service,
+    /// "idle" when the print dialog was cancelled).
+    Q_INVOKABLE void print();
+    /// Desktop: print() paints into this PDF file without the print dialog (tests and self-tests;
+    /// "" — the dialog again).
+    Q_INVOKABLE void setPrintToFile(const QString &pdfPath);
 
     /// The produced files (tests).
     QList<io::ExportedFile> result() const { return m_result; }
@@ -167,6 +195,8 @@ Q_SIGNALS:
     void progressChanged();
     /// The produced file was saved (translated one-line message).
     void saved(const QString &message);
+    /// The scope went to the printer (translated one-line message).
+    void printed(const QString &message);
 
 protected:
     /// QEvent::LanguageChange of the application (a translator was installed or removed).
@@ -176,6 +206,8 @@ private:
     void setState(const QString &state, const QString &error = {});
     void setProgress(qreal value, const QString &text = {});
     void updateSummary();
+    /// prepare() and print(): the scope's files read in chunks, then the exporter or the printing.
+    void startReading();
     ExportSelection currentSelection() const;
     void readStep();
     /// "include": the pictures from the internet of the read notes, copies from the cache, the
@@ -191,7 +223,11 @@ private:
     void webPictureProgress();
     void stopWebPictures();
     void runExporter();
+    /// print(): the read files to the platform's printing.
+    void runPrint(io::ExportInput input);
+    void finishPrint(bool ok, const QString &error, const QStringList &warnings);
     QString exportName() const;
+    io::ExportInput exportInput();
 
     QPointer<shell::Workspace> m_workspace;
     QString m_format = QStringLiteral("markdown-zip");
@@ -218,6 +254,9 @@ private:
     QList<io::FileEntry> m_readFiles;
     QStringList m_readWarnings;
     QString m_webPictures = QStringLiteral("link");
+    QString m_paperSize;
+    bool m_printing = false;
+    QString m_printToFile;
     // The copies of pictures from the internet being collected (webPictures "include").
     QHash<QString, io::WebPictureCopy> m_webCopies;
     QStringList m_webQueue; ///< the pictures of the notes, looked up in the cache

@@ -23,9 +23,10 @@ struct Registry {
 
     Registry()
     {
-        for (auto *make : {makeMarkdownZipExporter, makeObsidianZipExporter, makeLogseqZipExporter,
-                           makeHtmlSiteExporter, makeHtmlSingleExporter, makePandocExporter, makeJsonExporter,
-                           makeIcsExporter, makeOpmlExporter, makeTasksCsvExporter}) {
+        for (auto *make :
+             {makeMarkdownZipExporter, makeObsidianZipExporter, makeLogseqZipExporter, makeHtmlSiteExporter,
+              makeHtmlSingleExporter, makePdfExporter, makeDocxExporter, makePandocExporter, makeJsonExporter,
+              makeIcsExporter, makeOpmlExporter, makeTasksCsvExporter}) {
             owned.push_back(make());
             list.append(owned.back().get());
         }
@@ -54,9 +55,7 @@ const Exporter *exporterById(QStringView id)
     return nullptr;
 }
 
-namespace {
-
-ExportInput cleanInput(const ExportInput &input)
+ExportInput detail::cleanExportInput(const ExportInput &input)
 {
     ExportInput clean = input;
     clean.files.clear();
@@ -74,11 +73,9 @@ ExportInput cleanInput(const ExportInput &input)
     return clean;
 }
 
-} // namespace
-
 QStringList webPictureTargets(const ExportInput &input)
 {
-    ExportInput clean = cleanInput(input);
+    ExportInput clean = cleanExportInput(input);
     clean.webPictures.clear();
     const ExportVault vault(clean);
     QStringList out;
@@ -104,7 +101,7 @@ QStringList webPictureTargets(const ExportInput &input)
 
 ExportResult runExport(const Exporter &exporter, const ExportInput &input)
 {
-    return exporter.run(cleanInput(input));
+    return exporter.run(cleanExportInput(input));
 }
 
 } // namespace brulion::io

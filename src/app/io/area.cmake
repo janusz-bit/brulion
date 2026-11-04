@@ -16,7 +16,9 @@
 #                      ImportController::setInput (preview, report)
 #   ExportController   exporters, scope (vault / folder / page with its attachments), progress,
 #                      saving (FilePicker URL incl. Android content:// documents, an export folder
-#                      fallback, the browser's save picker or a download: wasmfiles.h)
+#                      fallback, the browser's save picker or a download: wasmfiles.h), printing
+#                      (desktop: QPrintDialog; Android: the system's print service; browser: its
+#                      print dialog)
 #   NextcloudSetup     the Nextcloud form: drafts, validation, the WebDAV address, "Test
 #                      connection" with explained errors (401, 404 + create the folder, TLS,
 #                      CORS in the browser), saving into AppSettings
@@ -49,6 +51,14 @@ target_link_libraries(brulion_ioviews
 # Android bridge). Browser: its file picker and downloads (platform/wasm/wasmfiles.h; no Qt
 # Widgets in the browser build).
 target_link_libraries(brulion_ioviews PRIVATE brulion_platform)
+# The desktop (Linux, Windows): printing through Qt Print Support's dialog and printer
+# (ExportController::print; qtbase has it in the Nix package, the AppImage and the Windows
+# build). Android prints through the system's print service, the browser through its own dialog.
+if(BRULION_DESKTOP)
+    find_package(Qt6 REQUIRED COMPONENTS PrintSupport)
+    target_link_libraries(brulion_ioviews PRIVATE Qt6::PrintSupport)
+    target_compile_definitions(brulion_ioviews PRIVATE BRULION_PRINT_DIALOG)
+endif()
 qt_extract_metatypes(brulion_ioviews)
 brulion_set_warnings(brulion_ioviews)
 

@@ -1,8 +1,8 @@
 # Tests of the io module (brulion_core_io): archives and formats, HTML -> Markdown, every importer
-# and exporter (the Pandoc one also through pandoc itself when it is installed), and the Logseq
-# round trip. QTEST_MAIN with the offscreen platform (QtGui is used for QTextDocument). iotest.h
+# and exporter (the Pandoc one also through pandoc itself when it is installed, DOCX through
+# LibreOffice), the paper documents (PDF, DOCX, printing) and the Logseq round trip. QTEST_MAIN with the offscreen platform (QtGui is used for QTextDocument). iotest.h
 # holds shared helpers (fixtures built in code, a tiny tar writer).
-foreach(_t formats html import logseq import_apps import_ics import_mstodo export pandoc robust)
+foreach(_t formats html import logseq import_apps import_ics import_mstodo export pandoc robust paper)
     brulion_add_test(tst_io_${_t} SOURCES tst_io_${_t}.cpp iotest.h LIBS brulion_core_io)
 endforeach()
 # Trilium: real exports of Trilium servers (fixtures/trilium, see its README) plus synthetic ones.

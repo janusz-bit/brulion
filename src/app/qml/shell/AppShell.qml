@@ -816,6 +816,7 @@ FocusScope {
         switch (id) {
         case "panel.toggle": return !Theme.narrow
         case "page.rename": return shell.route.view === "page"
+        case "page.print": return shell.route.view === "page"
         }
         return true
     }

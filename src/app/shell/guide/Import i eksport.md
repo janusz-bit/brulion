@@ -48,6 +48,7 @@ Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu j
 ## Eksport
 - archiwum **ZIP** z Markdownem, także w układzie Obsidiana lub Logseqa,
 - statyczna **strona HTML** albo jeden plik HTML (diagramy Mermaid jako obrazy, zobacz [[Diagramy#Eksport|Diagramy]]),
+- **PDF** i **Word (DOCX)** — gotowe do druku i edycji, robione przez sam Brulion, bez Pandoca i LaTeX-a, także na telefonie (zobacz [[#Jedna strona|Jedna strona]]),
 - **Pandoc Markdown** — jeden dokument do zamiany w plik Worda, LibreOffice, PDF albo EPUB,
 - **JSON** z całą zawartością,
 - **iCalendar** — zadania i przypomnienia do kalendarza,
@@ -56,7 +57,7 @@ Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu j
 
 Gotowy plik zapiszesz przyciskiem **Zapisz…** w oknie zapisu systemu; w przeglądarce plik się pobiera (Chrome i Edge na komputerze najpierw pytają, gdzie go zapisać).
 
-**Zdjęcia z internetu** (`![opis](https://…)`) w eksporcie HTML i Pandoc: wybierz **Zostaw adresy** — plik jest mały, ale zdjęcia pokażą się tylko z dostępem do sieci — albo **Dołącz kopie**: zdjęcia trafią do eksportu (w jednym pliku HTML — wewnątrz pliku, na stronie HTML i w archiwum Pandoca — do folderu `assets/web`). Brulion bierze kopie z pamięci podręcznej urządzenia, brakujące najpierw pobiera; zdjęcie, którego nie uda się pobrać, zostaje adresem, a raport po eksporcie to wymienia. Zdjęć z tego urządzenia albo twojej sieci domowej (np. `192.168.…`, `nas.local`) eksport sam nie pobiera — dołączy je, jeśli wcześniej wyświetlisz je w notatce. Kopii jest najwyżej 256 MB łącznie; dalsze zdjęcia zostają adresami. Wybór zapamiętuje to urządzenie. Inne formaty zostawiają tekst notatek bez zmian.
+**Zdjęcia z internetu** (`![opis](https://…)`) w eksporcie HTML, PDF, DOCX i Pandoc: wybierz **Zostaw adresy** — plik jest mały, ale zdjęcia pokażą się tylko z dostępem do sieci — albo **Dołącz kopie**: zdjęcia trafią do eksportu (w jednym pliku HTML — wewnątrz pliku, na stronie HTML i w archiwum Pandoca — do folderu `assets/web`). Brulion bierze kopie z pamięci podręcznej urządzenia, brakujące najpierw pobiera; zdjęcie, którego nie uda się pobrać, zostaje adresem, a raport po eksporcie to wymienia. Zdjęć z tego urządzenia albo twojej sieci domowej (np. `192.168.…`, `nas.local`) eksport sam nie pobiera — dołączy je, jeśli wcześniej wyświetlisz je w notatce. Kopii jest najwyżej 256 MB łącznie; dalsze zdjęcia zostają adresami. Wybór zapamiętuje to urządzenie. Inne formaty zostawiają tekst notatek bez zmian.
 
 W eksporcie HTML tag prowadzi do strony, którą nazywa, a eksport do Logseqa zapisuje `#[[Projekty/Dom]]`, gdy strona ma tam inną nazwę niż tag. Eksport do Obsidiana i Markdowna zostawia tagi bez zmian.
 
@@ -68,6 +69,22 @@ pandoc "Mój notatnik.md" -o "Mój notatnik.docx"
 ```
 
 Zamiast `.docx` możesz podać `.odt`, `.epub`, `.html` albo `.pdf` (PDF wymaga LaTeX-a). Każda notatka jest rozdziałem z tytułem jako nagłówkiem. Linki `[[…]]`, odwołania do bloków i nagłówków prowadzą do miejsc w dokumencie, a osadzenia są wstawione. Wzory (`$…$`, `$$…$$`, blok ` ```math `) stają się wzorami pandoca, callouty — ramkami (`::: callout`), a zadania — polami wyboru. Daty i przypomnienia są zapisane słowami („termin: 2026-10-20”), bo emoji nie działają w każdym formacie. Tekst, który pandoc odczytałby inaczej niż Brulion (HTML, `@`, `^`, `~`), jest poprzedzony ukośnikiem.
+
+### Jedna strona
+Otwartą stronę wyeksportujesz bez zaglądania tutaj: w menu strony (⋮) wybierz **Eksportuj stronę…** albo **Drukuj…** (także z palety poleceń; na komputerze Ctrl+P). Formaty jednej strony:
+
+- **Markdown** — plik notatki dokładnie taki, jaki jest,
+- **Markdown z załącznikami** — archiwum ZIP z notatką i obrazami oraz plikami, do których prowadzi,
+- **HTML** — jedna strona internetowa z obrazami w środku,
+- **PDF** — strony gotowe do druku albo wysłania,
+- **Word (DOCX)** — dokument do dalszej edycji w Wordzie, LibreOffice Writerze albo Dokumentach Google,
+- **Pandoc Markdown** — dokument dla programu pandoc (zobacz niżej).
+
+**Zapisz jako plik…** otwiera okno zapisu systemu (na Androidzie „Zapisz jako”, obok jest też **Zapisz w Pobranych**), w przeglądarce plik się pobiera. Markdown i HTML skopiujesz też do schowka.
+
+PDF i DOCX robi sam Brulion: nagłówki, listy z polami wyboru zadań, tabele, kod, wzory, obrazy dopasowane do strony i [[Diagramy|diagramy]] jako obrazy. Terminy i przypomnienia są zapisane słowami („termin: 2026-11-20”), bo kolorowych emoji nie da się wydrukować. Linki do stron internetowych działają, a linki do innych notatek są zwykłym tekstem. PDF ma wbudowane czcionki, więc polskie litery wyglądają tak samo na każdym urządzeniu. Papier to A4 — albo Letter, jeśli tak ustawiony jest region urządzenia (np. USA, Kanada). Bardzo duża tabela (ponad 1500 wierszy) trafia na papier tylko z pierwszymi wierszami, a Word przyjmie najwyżej 63 kolumny — raport po eksporcie to wymienia. W eksporcie całego notatnika albo folderu do PDF-a czy DOCX każda notatka zaczyna się od nowej strony.
+
+**Drukuj…** na komputerze otwiera okno drukowania systemu (drukarka, liczba kopii, rozmiar papieru), na Androidzie — drukowanie systemu z jego drukarkami i opcją „Zapisz jako PDF”, a w przeglądarce — jej okno drukowania.
 
 Ponieważ notatki to zwykłe pliki, najprostszą kopią zapasową jest skopiowanie folderu notatnika.
 

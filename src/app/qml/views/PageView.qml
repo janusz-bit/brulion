@@ -342,7 +342,7 @@ FocusScope {
             editor.later(() => root.openFind(false))
             break
         case "export":
-            editor.later(() => exportDialog.openFor(page.path))
+            editor.later(() => exportDialog.openFor(page.path, false))
             break
         case "menu":
             menuTimer.restart()
@@ -390,6 +390,9 @@ FocusScope {
     property bool findOpen: false
     /// A note is shown in the editor: there is something to find in.
     readonly property bool findable: !root.pictureRoute && !root.pdfRoute && !root.fileRoute && page.loaded
+    /// "Drukuj…" (the menu, the palette, Ctrl+P): a note — a picture, a PDF or another file has
+    /// its own app for that.
+    readonly property bool printable: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
     onFindableChanged: if (!findable && findOpen) root.closeFind()
     function openFind(withReplace) {
         if (!root.findable)
@@ -787,10 +790,21 @@ FocusScope {
             onTriggered: root.copyLink()
         }
         BMenuItem {
+            objectName: "pageMenuExport"
             text: qsTr("Export page…")
             iconName: "share"
             enabled: page.exists
-            onTriggered: exportDialog.openFor(page.path)
+            onTriggered: exportDialog.openFor(page.path, false)
+        }
+        BMenuItem {
+            objectName: "pageMenuPrint"
+            visible: root.printable
+            height: visible ? implicitHeight : 0
+            text: qsTr("Print…")
+            iconName: "printer"
+            shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["page.print"] || ""
+            enabled: page.exists
+            onTriggered: exportDialog.openFor(page.path, true)
         }
         BMenuItem {
             visible: root.journalDate === "" && page.exists
@@ -943,6 +957,9 @@ FocusScope {
                 editor.downloadWebPictures("")
             } else if (action === "addProperty" && root.visible && !root.inSidePanel && editor.visible) {
                 editor.addProperty()
+            } else if ((action === "exportPage" || action === "printPage") && root.visible && !root.inSidePanel
+                       && page.exists && !root.pictureRoute && !root.pdfRoute && !root.fileRoute) {
+                exportDialog.openFor(page.path, action === "printPage")
             }
         }
     }

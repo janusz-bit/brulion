@@ -2612,6 +2612,70 @@
         <source>The file could not be written.</source>
         <translation>Nie udało się zapisać pliku.</translation>
     </message>
+    <message>
+        <source>Markdown with attachments</source>
+        <translation>Markdown z załącznikami</translation>
+    </message>
+    <message>
+        <source>A ZIP archive of the note with the pictures and files it links to.</source>
+        <translation>Archiwum ZIP z notatką oraz obrazami i plikami, do których prowadzi.</translation>
+    </message>
+    <message>
+        <source>PDF</source>
+        <translation>PDF</translation>
+    </message>
+    <message>
+        <source>Pages ready to print or send, the same on every device – no other program needed.</source>
+        <translation>Strony gotowe do druku albo wysłania, takie same na każdym urządzeniu – bez innych programów.</translation>
+    </message>
+    <message>
+        <source>Word (DOCX)</source>
+        <translation>Word (DOCX)</translation>
+    </message>
+    <message>
+        <source>A document to edit in Word, LibreOffice Writer or Google Docs.</source>
+        <translation>Dokument do edycji w Wordzie, LibreOffice Writerze albo Dokumentach Google.</translation>
+    </message>
+    <message>
+        <source>Pandoc Markdown</source>
+        <translation>Pandoc Markdown</translation>
+    </message>
+    <message>
+        <source>A ZIP archive with one Markdown document for Pandoc, to turn into EPUB or other formats.</source>
+        <translation>Archiwum ZIP z jednym dokumentem Markdown dla Pandoca, do zamiany w EPUB albo inne formaty.</translation>
+    </message>
+    <message>
+        <source>Pictures from the internet</source>
+        <translation>Obrazy z internetu</translation>
+    </message>
+    <message>
+        <source>Keep addresses</source>
+        <translation>Zostaw adresy</translation>
+    </message>
+    <message>
+        <source>Include copies</source>
+        <translation>Dołącz kopie</translation>
+    </message>
+    <message>
+        <source>Download</source>
+        <translation>Pobierz</translation>
+    </message>
+    <message>
+        <source>Save to Downloads</source>
+        <translation>Zapisz w Pobranych</translation>
+    </message>
+    <message>
+        <source>Print…</source>
+        <translation>Drukuj…</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Anuluj</translation>
+    </message>
+    <message>
+        <source>All files (*)</source>
+        <translation>Wszystkie pliki (*)</translation>
+    </message>
 </context>
 <context>
     <name>ContentJournalDay</name>
@@ -6575,6 +6639,58 @@
         <source>Diagram source</source>
         <translation>Źródło diagramu</translation>
     </message>
+    <message>
+        <source>The picture “%1” could not be shown in the document.</source>
+        <translation>Obrazu „%1” nie udało się pokazać w dokumencie.</translation>
+    </message>
+    <message>
+        <source>Picture: %1</source>
+        <translation>Obraz: %1</translation>
+    </message>
+    <message>
+        <source>A diagram could not be drawn in the document – its source is shown instead.</source>
+        <translation>Diagramu nie udało się narysować w dokumencie – zamiast niego jest jego kod.</translation>
+    </message>
+    <message>
+        <source>Picture</source>
+        <translation>Obraz</translation>
+    </message>
+    <message>
+        <source>A picture could not be shown in the document.</source>
+        <translation>Obrazu nie udało się pokazać w dokumencie.</translation>
+    </message>
+    <message>
+        <source>[Audio recording]</source>
+        <translation>[Nagranie dźwiękowe]</translation>
+    </message>
+    <message>
+        <source>[Video]</source>
+        <translation>[Film]</translation>
+    </message>
+    <message>
+        <source>(%1 more rows are left out)</source>
+        <translation>(pominięte wiersze: %1)</translation>
+    </message>
+    <message>
+        <source>A table is too large for paper: only its first %1 rows are shown.</source>
+        <translation>Tabela jest za duża na papier: pokazane są tylko jej pierwsze wiersze (%1).</translation>
+    </message>
+    <message>
+        <source>A table has more columns than Word allows: only its first %1 are in the document.</source>
+        <translation>Tabela ma więcej kolumn, niż pozwala Word: w dokumencie są tylko pierwsze kolumny (%1).</translation>
+    </message>
+    <message>
+        <source>PDF and Word documents are made by the app (they need its fonts).</source>
+        <translation>Dokumenty PDF i Worda tworzy aplikacja (potrzebuje do nich swoich czcionek).</translation>
+    </message>
+    <message>
+        <source>PDF document</source>
+        <translation>Dokument PDF</translation>
+    </message>
+    <message>
+        <source>Word document (DOCX)</source>
+        <translation>Dokument Worda (DOCX)</translation>
+    </message>
 </context>
 <context>
     <name>IoPathPickerDialog</name>
@@ -7963,6 +8079,10 @@
         <location filename="../src/app/qml/views/PageView.qml" line="616"/>
         <source>Selection: %1</source>
         <translation>Zaznaczenie: %1</translation>
+    </message>
+    <message>
+        <source>Print…</source>
+        <translation>Drukuj…</translation>
     </message>
 </context>
 <context>
@@ -17251,6 +17371,50 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <source>“%1” is being downloaded.</source>
         <translation>Trwa pobieranie „%1”.</translation>
     </message>
+    <message>
+        <source>Pages ready to print or send, the same on every device – no other program needed.</source>
+        <translation>Strony gotowe do druku albo wysłania, takie same na każdym urządzeniu – bez innych programów.</translation>
+    </message>
+    <message>
+        <source>A document to edit in Word, LibreOffice Writer or Google Docs.</source>
+        <translation>Dokument do edycji w Wordzie, LibreOffice Writerze albo Dokumentach Google.</translation>
+    </message>
+    <message>
+        <source>A Markdown file holds one page: choose a page or another format.</source>
+        <translation>Plik Markdown to jedna strona: wybierz stronę albo inny format.</translation>
+    </message>
+    <message>
+        <source>Printing is not available here.</source>
+        <translation>Drukowanie nie jest tu dostępne.</translation>
+    </message>
+    <message>
+        <source>Choose a printer…</source>
+        <translation>Wybierz drukarkę…</translation>
+    </message>
+    <message>
+        <source>Print “%1”</source>
+        <translation>Drukuj „%1”</translation>
+    </message>
+    <message>
+        <source>Printing “%1”…</source>
+        <translation>Drukowanie „%1”…</translation>
+    </message>
+    <message>
+        <source>The printer could not be used.</source>
+        <translation>Nie udało się użyć drukarki.</translation>
+    </message>
+    <message>
+        <source>Preparing to print…</source>
+        <translation>Przygotowywanie wydruku…</translation>
+    </message>
+    <message>
+        <source>The system&apos;s printing could not be opened.</source>
+        <translation>Nie udało się otworzyć drukowania systemu.</translation>
+    </message>
+    <message>
+        <source>“%1” went to the printer.</source>
+        <translation>„%1” wysłano do drukarki.</translation>
+    </message>
 </context>
 <context>
     <name>brulion::ioviews::FileGatherer</name>
@@ -18822,6 +18986,22 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/shell/commandmodel.cpp" line="398"/>
         <source>Brulion documentation or back to my notebook</source>
         <translation>Dokumentacja Brulionu albo powrót do mojego notatnika</translation>
+    </message>
+    <message>
+        <source>Export page…</source>
+        <translation>Eksportuj stronę…</translation>
+    </message>
+    <message>
+        <source>Markdown, HTML, PDF, Word</source>
+        <translation>Markdown, HTML, PDF, Word</translation>
+    </message>
+    <message>
+        <source>Print page…</source>
+        <translation>Drukuj stronę…</translation>
+    </message>
+    <message>
+        <source>Or save it as PDF</source>
+        <translation>Albo zapisz jako PDF</translation>
     </message>
 </context>
 <context>

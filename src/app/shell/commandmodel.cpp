@@ -151,6 +151,16 @@ static QList<Command> buildCommands(const AppController *app)
              {},
              onPage},
             {u"page.history"_s, CommandModel::tr("Page history"), {}, u"history"_s, {}, onPage},
+            // One page as Markdown, HTML, PDF, Word… and printing it (ContentExportDialog of the
+            // page on screen: uiActions "exportPage", "printPage").
+            {u"page.export"_s,
+             CommandModel::tr("Export page…"),
+             CommandModel::tr("Markdown, HTML, PDF, Word"),
+             u"share"_s,
+             {},
+             onPage},
+            {u"page.print"_s, CommandModel::tr("Print page…"), CommandModel::tr("Or save it as PDF"), u"printer"_s,
+             u"Ctrl+P"_s, onPage},
             // (The shell's rename dialog; a daily note is named by its date.)
             {u"page.rename"_s, CommandModel::tr("Rename page…"), {}, u"pencil"_s, u"F2"_s, onPage},
             // The editor's Ctrl+E — the only way on a phone to leave source mode once it is on.
@@ -531,6 +541,10 @@ bool CommandModel::run(const QString &id)
         m_app->requestUiAction(u"replaceInNote"_s);
     else if (id == u"page.rename")
         m_app->requestUiAction(u"renamePage"_s);
+    else if (id == u"page.export")
+        m_app->requestUiAction(u"exportPage"_s);
+    else if (id == u"page.print")
+        m_app->requestUiAction(u"printPage"_s);
     else if (id == u"view.focus")
         m_app->settings()->setFocusMode(!m_app->settings()->focusMode());
     else if (id == u"view.typewriter")

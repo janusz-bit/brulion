@@ -35,6 +35,38 @@ EM_JS(int, brulion_open_blob, (const char *data, int size, const char *mime, con
     return 1;
 });
 
+// "Drukuj…" (ExportController::print): the HTML document export in a hidden frame and its print().
+// The frame is sandboxed without scripts (the document has none; same origin only so that this
+// page may call its print()); the previous one is removed first.
+EM_JS(void, brulion_print_html, (const char *data, int size), {
+    var html = UTF8ToString(data, size);
+    var old = document.getElementById("brulion-print-frame");
+    if (old) {
+        old.remove();
+    }
+    var frame = document.createElement("iframe");
+    frame.id = "brulion-print-frame";
+    frame.setAttribute("sandbox", "allow-same-origin allow-modals");
+    frame.setAttribute("aria-hidden", "true");
+    frame.setAttribute("tabindex", "-1");
+    frame.style.position = "fixed";
+    frame.style.right = "0";
+    frame.style.bottom = "0";
+    frame.style.width = "0";
+    frame.style.height = "0";
+    frame.style.border = "0";
+    frame.onload = function() {
+        try {
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        } catch (e) {
+            console.warn("Brulion: printing failed", e);
+        }
+    };
+    frame.srcdoc = html;
+    document.body.appendChild(frame);
+});
+
 namespace brulion::platform {
 
 namespace wasm {
@@ -44,6 +76,11 @@ bool openBlobInNewTab(const QByteArray &bytes, const QString &mimeType, const QS
     return brulion_open_blob(bytes.constData(), int(bytes.size()), mimeType.toUtf8().constData(),
                              name.toUtf8().constData())
            != 0;
+}
+
+void printHtml(const QByteArray &html)
+{
+    brulion_print_html(html.constData(), int(html.size()));
 }
 
 } // namespace wasm
