@@ -3,7 +3,7 @@
 # conflict hunks (DiffHelper), Qt's own translations (QtTranslations), the on-screen keyboard's
 # height (KeyboardInsets), the system's gesture zones at the window's edges (GestureInsets) and the
 # appearance settings' colours with their contrast checks and the font pickers' filter
-# (ThemePalette) —
+# (ThemePalette), and the JavaScript built-ins that compiled QML cannot use (Js, jshelper.h) —
 # their sources are connected by the app, ui/keyboardsources.cpp. A static
 # library (QtCore + core modules only) so that tests/app links it without the app; the app's QML
 # module "Brulion" registers the classes as QML singletons through QML_FOREIGN wrappers
@@ -13,6 +13,7 @@ qt_add_library(brulion_ui_helpers STATIC
     dateshelper.h dateshelper.cpp
     diffhelper.h diffhelper.cpp
     texthelper.h texthelper.cpp
+    jshelper.h jshelper.cpp
     qttranslations.h qttranslations.cpp
     keyboardinsets.h keyboardinsets.cpp
     gestureinsets.h gestureinsets.cpp

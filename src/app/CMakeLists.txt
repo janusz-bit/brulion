@@ -196,6 +196,13 @@ brulion_windows_resources(brulion "Brulion")
 # An area adds its C++ with target_sources(brulion PRIVATE <area>/x.cpp ...) and its QML with
 # qt_target_qml_sources(brulion QML_FILES qml/<area>/X.qml ...) (paths relative to src/app),
 # so parallel work never edits this file. C++ types use QML_ELEMENT/QML_SINGLETON.
+# Every QML file is compiled to C++ (docs/UI.md "Compiled QML"; ctest tst_qml_compiled reads the
+# statistics): qt_target_qml_sources() writes qmlcachegen's statistics (<file>.cpp.aotstats) only
+# when do_qml_aotstats is set in the calling scope — Qt 6.11's qt_add_qml_module() sets it in its
+# own scope only, so without this the files of the areas are compiled but not counted.
+if(NOT DEFINED QT_QML_GENERATE_AOTSTATS OR QT_QML_GENERATE_AOTSTATS)
+    set(do_qml_aotstats ON)
+endif()
 file(GLOB _brulion_app_areas CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*/area.cmake)
 list(SORT _brulion_app_areas)
 foreach(_area IN LISTS _brulion_app_areas)

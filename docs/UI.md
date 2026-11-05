@@ -3485,6 +3485,75 @@ Math afterwards. In the browser: `scripts/wasm-smoke.mjs --glyphs` (`?selftest=g
 docs/WEB.md). A new emoji in the UI or the syntax: add it to `brulionEmoji()`, re-run
 `scripts/fallback-fonts.py` (it takes every emoji of `src/` by itself), commit `assets/fonts/`.
 
+## Compiled QML
+
+Every binding, signal handler and function of the app's QML is compiled to C++ ahead of time
+by qmlcachegen (Qt Quick Compiler); none is left to the QML interpreter. ctest
+`tst_qml_compiled` reads qmlcachegen's statistics of the build and lists anything that is not
+compiled, with qmlcachegen's reason:
+
+```sh
+cmake --build build --target brulion
+cmake -DLIST=build/src/app/.rcc/qmlcache/module_brulion.aotstatslist -DSOURCE_DIR=$PWD \
+      [-DFILTER=/qml/editor/] [-DREPORT_ONLY=ON] -P cmake/BrulionQmlCompiledCheck.cmake
+```
+
+The statistics are the per-file `.aotstats` that qmlcachegen writes with `--dump-aot-stats`
+(`all_aotstats` prints Qt's own summary). Qt 6.11 writes them for `qt_add_qml_module()`'s files only;
+`src/app/CMakeLists.txt` turns them on for the areas' `qt_target_qml_sources()` too. Compiling
+fails only on what Qt 6.11 (and 6.12) cannot compile; the rules below avoid it.
+
+**Types everywhere.** Functions get annotated parameters and return types
+(`function f(text: string, at: int): bool`, `: void`); signal handlers name their parameters
+(`onX: (a, b) => …`). Properties have their real type, not `var`: `list<string>`, `list<var>`,
+`list<int>`, `rect`, `point`, a component or C++ type. `pragma ComponentBehavior: Bound` in every
+file, and delegates declare what they use as `required property`.
+
+**What does not compile (Qt 6.11), and what to write instead:**
+
+* JavaScript's String and Number methods (`s.trim()`, `s.indexOf()`, `s.slice()`, `split`,
+  `replace`, `startsWith`, `toLowerCase`, `toFixed`, `Number(s)`, `parseInt`, `isNaN`…), regular
+  expression literals, `JSON.stringify`: the singleton `Js` (`src/app/ui/jshelper.h`) has each of
+  them with the same result (`Js.trim(s)`, `Js.indexOf(s, x)`, `Js.test(s, "^\\d+$", "")`,
+  `Js.replaceRegExp(s, "\\s+", "g", " ")`). What still compiles: `s.length`, `s[i]`, `===`,
+  `+` (also `"" + n` for a number's text), template strings, `qsTr().arg()`, `Math.*`.
+* Building lists: `push`, `concat`, `splice`, `sort`, `reverse`, `filter`, `map`, `forEach`, an
+  assignment to `list[i]` of a local. `Js.appended(list, x)`, `Js.concat`, `Js.removedAt`,
+  `Js.sortedStrings`… for simple cases; anything more (sorting by a key, filtering, grouping)
+  belongs in the C++ that produces the data (controllers, models). What compiles on lists:
+  `length`, `[i]`, `indexOf`, `includes`, `join`, `slice`, `for (let i = 0; i < l.length; ++i)`.
+* Closures: arrow functions and `function () {}` as values (`array.map(x => …)`,
+  `Qt.callLater(f)`, `Qt.binding(() => …)`, `connect(f)`). A deferred call is a `Timer { interval: 0 }`
+  restarted (`restart()` also merges repeated calls like `Qt.callLater`); a binding set later is
+  a declared binding with a condition or a `Binding { when: … }`.
+* `try`/`catch`/`finally`, `for…of`, `for…in`, `instanceof` (use `x as Item` and compare with
+  `null`), `typeof`, `delete`, `arguments`.
+* Reading a member of something typed `var`: a JavaScript object, a `QVariantMap` or
+  `QVariantList` held in a `var` property, parameter or local, `modelData` of an array model.
+  Delegates take each key as a `required property` with its type (`required property string title`
+  — the model's rows must all carry every key the delegate requires: a missing string arrives as
+  "undefined"). Elsewhere a C++ type gives the fields: a `Q_PROPERTY(QVariantMap info … FINAL)`'s
+  `info.title` compiles, a `Q_GADGET` value type (`QML_VALUE_TYPE`) with `FINAL` properties
+  compiles everywhere.
+* Results of `Q_INVOKABLE` methods are "shadowable" (a QML subclass could replace the method):
+  passing them on, returning them and comparing with `===` compiles, a member of the result
+  (`TextHelper.fuzzyMatch(q, t).score`, `item.mapToItem(…).y`) or `==` on it does not. Expose a
+  `FINAL` property instead, return what QML needs (the score itself), or launder the result
+  through a typed QML function of the same file (`function names(): list<string> { return
+  Helper.names() }` — then `names().length` compiles) or a typed property
+  (`root.at = item.mapToItem(…); root.at.y`). A method returning `QColor`, `QPointF` or a gadget
+  cannot be stored in a typed property at all: a `FINAL` property or a scalar result instead.
+* `Qt.rgba()`, `Qt.hsla()`, `Qt.lighter()`, `Qt.darker()`, `Qt.tint()`, `Qt.alpha()`, `Qt.color()`
+  (they return `var`): the `color` type's own methods compile — `c.alpha(0.5)`, `c.lighter(1.2)`,
+  `c.darker(1.5)`, `c.tint(other)` — and a colour literal (`"#80ffffff"`) or a string property
+  bound to a `color`.
+* Anchors to a `var` (`anchors.left: cond ? a.right : b.right` where a or b is untyped): both items
+  typed.
+* Unqualified access to a property of an outer component from a delegate or inline component:
+  qualify it with the id (`root.x`), with `pragma ComponentBehavior: Bound`.
+* The members of C++ types used from QML are `FINAL` (`Q_PROPERTY(… FINAL)`): a non-final
+  property is shadowable too — reading it compiles, but not looking further into its value.
+
 ## Dev tools, screenshots and UI tests
 
 Command-line options of `brulion` (`src/app/ui/devtools.h`, `src/app/shell/appcontroller.h`,
