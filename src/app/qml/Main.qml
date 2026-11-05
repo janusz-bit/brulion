@@ -5,7 +5,7 @@ import QtQuick.Templates as T
 import Brulion
 
 // Main — Brulion's window. Shows, by AppController.status: the splash (boot, loading), the
-// onboarding (no vault yet), an error screen (the vault could not be opened) or the AppShell
+// intro (IntroView, first start) and the onboarding (no vault yet), an error screen (the vault could not be opened) or the AppShell
 // (docs/UI.md). Applies the user's settings to the design system (theme, fonts, motion) and
 // the window size to Theme (narrow/compact layouts), hosts the toasts and handles window
 // requests: show/raise (tray, second launch, notification tap), close to the tray, quit, the
@@ -90,7 +90,7 @@ ApplicationWindow {
         sourceComponent: {
             switch (AppController.status) {
             case "ready": return shellComponent
-            case "onboarding": return onboardingComponent
+            case "onboarding": return AppController.introPending ? introComponent : onboardingComponent
             case "error": return errorComponent
             default: return splashComponent
             }
@@ -100,6 +100,10 @@ ApplicationWindow {
     Component {
         id: shellComponent
         AppShell { toasts: toastHost }
+    }
+    Component {
+        id: introComponent
+        IntroView {}
     }
     Component {
         id: onboardingComponent
@@ -247,6 +251,10 @@ ApplicationWindow {
         window.hideTrayCalendar()
         if (AppController.isAndroid && !AppController.quitting) {
             close.accepted = false
+            // The intro: a step back first.
+            const intro = stage.item as IntroView
+            if (intro && intro.backStep())
+                return
             if (AppController.status !== "ready" || !AppController.handleBackKey())
                 AppController.moveToBackground()
             return

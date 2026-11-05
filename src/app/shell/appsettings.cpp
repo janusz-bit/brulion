@@ -16,6 +16,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QSysInfo>
+#include <QTime>
 
 #include <algorithm>
 
@@ -57,6 +58,8 @@ constexpr auto kWordCount = "editor/wordCountShown";
 constexpr auto kFocusMode = "ui/focusMode";
 constexpr auto kTypewriter = "editor/typewriterScrolling";
 constexpr auto kShortcuts = "shortcuts";
+constexpr auto kIntroDone = "app/introDone";
+constexpr auto kNewNotebookConfig = "app/newNotebookConfig";
 constexpr auto kCurrentVault = "vaults/current";
 constexpr auto kRecentVaults = "vaults/recent";
 constexpr auto kCloseToTray = "app/closeToTray";
@@ -265,13 +268,13 @@ bool AppSettings::store(const QString &k, const T &value, const T &current)
 
 QString AppSettings::themeMode() const
 {
-    const QString mode = m_settings->value(key(kTheme)).toString();
-    return mode == u"light" || mode == u"dark" ? mode : u"system"_s;
+    // Never chosen (or unknown): dark — with the black background (darkSurface()).
+    return oneOf(m_settings->value(key(kTheme)).toString(), {u"dark", u"light", u"system"});
 }
 
 void AppSettings::setThemeMode(const QString &mode)
 {
-    const QString v = mode == u"light" || mode == u"dark" ? mode : u"system"_s;
+    const QString v = oneOf(mode, {u"dark", u"light", u"system"});
     if (store(key(kTheme), v, themeMode()))
         Q_EMIT themeModeChanged();
 }
@@ -284,7 +287,7 @@ QString AppSettings::language() const
 
 void AppSettings::setLanguage(const QString &language)
 {
-    const QString v = language == u"en" ? u"en"_s : u"pl"_s;
+    const QString v = language == u"pl" ? u"pl"_s : u"en"_s;
     if (store(key(kLanguage), v, this->language()))
         Q_EMIT languageChanged();
 }
@@ -385,12 +388,12 @@ void AppSettings::setLightSurface(const QString &name)
 
 QString AppSettings::darkSurface() const
 {
-    return oneOf(m_settings->value(key(kDarkSurface)).toString(), {u"slate", u"black"});
+    return oneOf(m_settings->value(key(kDarkSurface)).toString(), {u"black", u"slate"});
 }
 
 void AppSettings::setDarkSurface(const QString &name)
 {
-    if (store(key(kDarkSurface), oneOf(name, {u"slate", u"black"}), darkSurface()))
+    if (store(key(kDarkSurface), oneOf(name, {u"black", u"slate"}), darkSurface()))
         Q_EMIT surfacesChanged();
 }
 
@@ -496,7 +499,7 @@ void AppSettings::resetAppearance()
 {
     setAccentColor(u"red"_s);
     setLightSurface(u"paper"_s);
-    setDarkSurface(u"slate"_s);
+    setDarkSurface(u"black"_s);
     setUiFontFamily(QString());
     setDensity(u"comfortable"_s);
     setFontScale(1.0);
@@ -851,6 +854,65 @@ void AppSettings::setTrayClick(const QString &action)
     const QString clean = action == u"window" || action == u"calendar" ? action : defaultTrayClick();
     if (store(key(kTrayClick), clean, trayClick()))
         Q_EMIT trayClickChanged();
+}
+
+// ---- Intro ----------------------------------------------------------------------------------
+
+bool AppSettings::introDone() const
+{
+    // Brulion was used before the intro existed: an update never shows it.
+    const bool usedBefore = m_settings->contains(key(kCurrentVault)) || !recentVaults().isEmpty();
+    return m_settings->value(key(kIntroDone), usedBefore).toBool();
+}
+
+void AppSettings::setIntroDone(bool done)
+{
+    if (store(key(kIntroDone), done, introDone()))
+        Q_EMIT introDoneChanged();
+}
+
+namespace {
+
+/// The usable part of the intro's notebook settings (Workspace::setConfig() validates again).
+QVariantMap cleanNotebookConfig(const QVariantMap &config)
+{
+    QVariantMap out;
+    for (const char16_t *k : {u"journalMode", u"pageMode"}) {
+        const QString name = QString::fromUtf16(k);
+        const QString mode = config.value(name).toString();
+        if (mode == u"outline" || mode == u"document")
+            out.insert(name, mode);
+    }
+    bool ok = false;
+    const int day = config.value(u"weekStartsOn"_s).toInt(&ok);
+    if (ok && (day == 1 || day == 6 || day == 7))
+        out.insert(u"weekStartsOn"_s, day);
+    const QTime time = QTime::fromString(config.value(u"defaultReminderTime"_s).toString().trimmed(), u"H:mm"_s);
+    if (time.isValid())
+        out.insert(u"defaultReminderTime"_s, time.toString(u"HH:mm"_s));
+    const QString format = config.value(u"journalFileFormat"_s).toString().trimmed();
+    if (format == u"yyyy-MM-dd" || format == u"yyyy_MM_dd" || format == u"dd.MM.yyyy")
+        out.insert(u"journalFileFormat"_s, format);
+    return out;
+}
+
+} // namespace
+
+QVariantMap AppSettings::newNotebookConfig() const
+{
+    return cleanNotebookConfig(m_settings->value(key(kNewNotebookConfig)).toMap());
+}
+
+void AppSettings::setNewNotebookConfig(const QVariantMap &config)
+{
+    const QVariantMap clean = cleanNotebookConfig(config);
+    if (clean == newNotebookConfig())
+        return;
+    if (clean.isEmpty())
+        m_settings->remove(key(kNewNotebookConfig));
+    else
+        m_settings->setValue(key(kNewNotebookConfig), clean);
+    Q_EMIT newNotebookConfigChanged();
 }
 
 // ---- Reminders ------------------------------------------------------------------------------

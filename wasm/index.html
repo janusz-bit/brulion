@@ -10,7 +10,7 @@
   scripts/wasm-single-file.py turns the built page into the single-file version (one .html opened
   from disk, file://): the app inside the page, no service worker, no web app manifest.
 -->
-<html lang="pl">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <!-- 1:1 mapping between CSS pixels and Qt device independent pixels (as in Qt's shell).
@@ -36,31 +36,25 @@
       })();
     </script>
     <title>Brulion</title>
-    <meta name="description" content="Brulion — notatki offline w Markdown: konspekt, dziennik, kalendarz, przypomnienia.">
+    <meta name="description" content="Brulion — offline-first Markdown notes: outliner, daily journal, calendar, reminders and calculations.">
     <meta name="application-name" content="Brulion">
-    <meta name="theme-color" content="#1f2430">
-    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#000000">
+    <meta name="color-scheme" content="dark">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icons/logo.svg" type="image/svg+xml">
     <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <link rel="license" href="https://www.gnu.org/licenses/agpl-3.0.html">
     <style>
+      /* The app's default look: dark with the black (OLED) background (AppSettings.themeMode,
+         darkSurface), so the loading screen does not flash a light page before it. */
       :root {
-        --paper: #fbf7ee;
-        --ink: #1f2430;
-        --muted: #5b6375;
+        --paper: #000000;
+        --ink: #ece6d8;
+        --muted: #a7aebf;
         --accent: #e2574c;
-        --track: rgba(31, 36, 48, 0.12);
-        color-scheme: light dark;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --paper: #1f2430;
-          --ink: #ece6d8;
-          --muted: #a7aebf;
-          --track: rgba(236, 230, 216, 0.16);
-        }
+        --track: rgba(236, 230, 216, 0.16);
+        color-scheme: dark;
       }
       /* The page covers the visual viewport with no scroll bars (as in Qt's shell). */
       html, body {
@@ -145,12 +139,12 @@
     <div id="screen" hidden></div>
     <div id="loader" role="status" aria-live="polite">
       <img src="icons/logo.svg" alt="" width="112" height="112">
-      <div id="title">Wczytywanie Brulionu…</div>
+      <div id="title">Loading Brulion…</div>
       <div id="bar" class="indeterminate" aria-hidden="true"><div></div></div>
       <div id="status"></div>
       <div id="details" hidden></div>
       <div id="actions" hidden></div>
-      <noscript>Brulion potrzebuje JavaScriptu i WebAssembly — włącz JavaScript w przeglądarce.</noscript>
+      <noscript>Brulion needs JavaScript and WebAssembly — turn on JavaScript in the browser.</noscript>
     </div>
 
     <!-- brulion-single-file: the app's scripts (scripts/wasm-single-file.py) -->
@@ -187,8 +181,11 @@
         var embeddedWasm = document.getElementById('brulion-wasm');
         var singleFile = !!embeddedWasm;
 
-        // Polish by default, English for English browsers (like the app's own translation).
-        var english = /^en\b/i.test(navigator.language || '');
+        // English first, as the app: Polish once it was chosen there (the app remembers its
+        // language in localStorage "brulion.language": src/platform/wasm/wasmshell.h).
+        var savedLanguage = '';
+        try { savedLanguage = window.localStorage.getItem('brulion.language') || ''; } catch (e) {}
+        var english = savedLanguage !== 'pl';
         var T = english ? {
           title: 'Loading Brulion…',
           download: 'Downloading the app…',
@@ -224,7 +221,7 @@
           shared: 'Przekazano do Brulionu otwartego w innej karcie.',
           sharedHint: 'Możesz zamknąć tę kartę.'
         };
-        if (english) document.documentElement.lang = 'en';
+        if (!english) document.documentElement.lang = 'pl';
 
         var screen = document.getElementById('screen');
         var loader = document.getElementById('loader');

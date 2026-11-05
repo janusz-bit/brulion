@@ -104,7 +104,7 @@ public:
     QString lightSurface() const { return m_lightSurface; }
     QString darkSurface() const { return m_darkSurface; }
     QString density() const { return m_density; }
-    /// "pl" or "en": --locale, else English when the system locale is English, else Polish.
+    /// "pl" or "en": --locale, else English (the app's default; main() then sets the saved one).
     QString language() const { return m_language; }
     bool touch() const { return m_touch; }
     int keyboard() const { return m_keyboard; }

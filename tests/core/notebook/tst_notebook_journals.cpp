@@ -117,7 +117,8 @@ private Q_SLOTS:
         QCOMPARE(notebook::contentLocale(u"de"), dates::UiLocale::Polish);
     }
 
-    // The app's language for its setting ui/language: as saved, else the system's.
+    // The app's language for its setting ui/language: as saved, else English — also on a Polish
+    // system (English first; Polish is chosen in the intro or the settings).
     void appLanguages()
     {
         const QLocale system;
@@ -128,9 +129,11 @@ private Q_SLOTS:
         QCOMPARE(notebook::appLanguage(u"de"_s), u"en"_s);   // unknown
         QCOMPARE(notebook::appLanguage(u"pl"_s), u"pl"_s);
         QLocale::setDefault(QLocale(u"pl_PL"_s));
-        QCOMPARE(notebook::appLanguage(QString()), u"pl"_s);
+        QCOMPARE(notebook::appLanguage(QString()), u"en"_s);
+        QCOMPARE(notebook::appLanguage(u"Polski"_s), u"en"_s); // not a code
+        QCOMPARE(notebook::appLanguage(u"pl"_s), u"pl"_s);
         QLocale::setDefault(QLocale(u"de_DE"_s));
-        QCOMPARE(notebook::appLanguage(QString()), u"pl"_s);
+        QCOMPARE(notebook::appLanguage(QString()), u"en"_s);
         QLocale::setDefault(system);
     }
 

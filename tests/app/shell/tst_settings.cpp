@@ -72,8 +72,11 @@ private Q_SLOTS:
     void defaults()
     {
         AppSettings s(nextFile(), m_tmp.path());
-        QCOMPARE(s.themeMode(), u"system"_s);
-        QVERIFY(s.language() == u"pl" || s.language() == u"en");
+        // English first, dark with the black background, whatever the system's locale and scheme.
+        QCOMPARE(s.themeMode(), u"dark"_s);
+        QCOMPARE(s.language(), u"en"_s);
+        QVERIFY(!s.introDone());
+        QVERIFY(s.newNotebookConfig().isEmpty());
         QCOMPARE(s.fontScale(), 1.0);
         QCOMPARE(s.editorFont(), u"serif"_s);
         QCOMPARE(s.editorFontSize(), 16);
@@ -96,7 +99,7 @@ private Q_SLOTS:
         QCOMPARE(s.accentColor(), u"red"_s);
         QCOMPARE(s.customAccent(), QString());
         QCOMPARE(s.lightSurface(), u"paper"_s);
-        QCOMPARE(s.darkSurface(), u"slate"_s);
+        QCOMPARE(s.darkSurface(), u"black"_s);
         QCOMPARE(s.uiFontFamily(), QString());
         QCOMPARE(s.editorFontFamily(), QString());
         QCOMPARE(s.editorMonoFamily(), QString());
@@ -129,8 +132,9 @@ private Q_SLOTS:
         {
             AppSettings s(file, m_tmp.path());
             s.setCurrentVault(u"/home/łucja/Notatki"_s);
-            s.setThemeMode(u"dark"_s);
-            s.setLanguage(u"en"_s);
+            // (Not the defaults — dark, English, black —, so the file has to keep them.)
+            s.setThemeMode(u"light"_s);
+            s.setLanguage(u"pl"_s);
             s.setFontScale(1.15);
             s.setReducedMotion(true);
             s.setEditorFont(u"sans"_s);
@@ -152,7 +156,7 @@ private Q_SLOTS:
             s.setAccentColor(u"custom"_s);
             s.setCustomAccent(u"#A1B2C3"_s);
             s.setLightSurface(u"white"_s);
-            s.setDarkSurface(u"black"_s);
+            s.setDarkSurface(u"slate"_s);
             s.setUiFontFamily(u"Łódź Sans"_s);
             s.setEditorFontFamily(u"Źródło Serif Pro"_s);
             s.setEditorMonoFamily(u"  Zażółć Mono  "_s);
@@ -163,8 +167,8 @@ private Q_SLOTS:
             s.setCaptureButtonShown(false);
         }
         AppSettings s(file, m_tmp.path());
-        QCOMPARE(s.themeMode(), u"dark"_s);
-        QCOMPARE(s.language(), u"en"_s);
+        QCOMPARE(s.themeMode(), u"light"_s);
+        QCOMPARE(s.language(), u"pl"_s);
         QCOMPARE(s.fontScale(), 1.15);
         QVERIFY(s.reducedMotion());
         QCOMPARE(s.editorFont(), u"sans"_s);
@@ -187,7 +191,7 @@ private Q_SLOTS:
         QCOMPARE(s.accentColor(), u"custom"_s);
         QCOMPARE(s.customAccent(), u"#a1b2c3"_s);
         QCOMPARE(s.lightSurface(), u"white"_s);
-        QCOMPARE(s.darkSurface(), u"black"_s);
+        QCOMPARE(s.darkSurface(), u"slate"_s);
         QCOMPARE(s.uiFontFamily(), u"Łódź Sans"_s);
         QCOMPARE(s.editorFontFamily(), u"Źródło Serif Pro"_s);
         QCOMPARE(s.editorMonoFamily(), u"Zażółć Mono"_s);
@@ -224,8 +228,9 @@ private Q_SLOTS:
         QTest::newRow("light white") << "lightSurface" << QVariant(u"white"_s) << QVariant(u"white"_s);
         QTest::newRow("light black") << "lightSurface" << QVariant(u"black"_s) << QVariant(u"paper"_s);
         QTest::newRow("dark black") << "darkSurface" << QVariant(u"black"_s) << QVariant(u"black"_s);
-        QTest::newRow("dark white") << "darkSurface" << QVariant(u"white"_s) << QVariant(u"slate"_s);
-        QTest::newRow("dark Polish") << "darkSurface" << QVariant(u"czarne"_s) << QVariant(u"slate"_s);
+        QTest::newRow("dark slate") << "darkSurface" << QVariant(u"slate"_s) << QVariant(u"slate"_s);
+        QTest::newRow("dark white") << "darkSurface" << QVariant(u"white"_s) << QVariant(u"black"_s);
+        QTest::newRow("dark Polish") << "darkSurface" << QVariant(u"granatowe"_s) << QVariant(u"black"_s);
         QTest::newRow("font trimmed") << "uiFontFamily" << QVariant(u"  DejaVu Serif  "_s) << QVariant(u"DejaVu Serif"_s);
         QTest::newRow("font diacritics") << "editorFontFamily" << QVariant(u"Źródło Serif Pro"_s)
                                          << QVariant(u"Źródło Serif Pro"_s);
@@ -448,7 +453,7 @@ private Q_SLOTS:
         QCOMPARE(s.accentColor(), u"red"_s);
         QCOMPARE(s.customAccent(), u"#123456"_s); // kept for "Własny…"
         QCOMPARE(s.lightSurface(), u"paper"_s);
-        QCOMPARE(s.darkSurface(), u"slate"_s);
+        QCOMPARE(s.darkSurface(), u"black"_s);
         QCOMPARE(s.uiFontFamily(), QString());
         QCOMPARE(s.editorFontFamily(), QString());
         QCOMPARE(s.editorMonoFamily(), QString());
@@ -852,13 +857,76 @@ private Q_SLOTS:
         QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
     }
 
+    // The intro (IntroView): never shown again once done; never at all after an update from a
+    // version without it (a notebook was opened before); its notebook settings validated.
+    void intro()
+    {
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QVERIFY(!s.introDone());
+            QSignalSpy done(&s, &AppSettings::introDoneChanged);
+            s.setIntroDone(true);
+            s.setIntroDone(true);
+            QCOMPARE(done.size(), 1);
+            QSignalSpy config(&s, &AppSettings::newNotebookConfigChanged);
+            s.setNewNotebookConfig({{u"journalMode"_s, u"document"_s},
+                                    {u"pageMode"_s, u"outline"_s},
+                                    {u"weekStartsOn"_s, 7},
+                                    {u"defaultReminderTime"_s, u" 7:30 "_s},
+                                    {u"journalFileFormat"_s, u"dd.MM.yyyy"_s},
+                                    {u"journalsFolder"_s, u"Dziennik/Żółw"_s}}); // not the intro's
+            QCOMPARE(config.size(), 1);
+        }
+        {
+            AppSettings s(file, m_tmp.path());
+            QVERIFY(s.introDone());
+            const QVariantMap config = s.newNotebookConfig();
+            QCOMPARE(config.size(), 5);
+            QCOMPARE(config.value(u"journalMode"_s).toString(), u"document"_s);
+            QCOMPARE(config.value(u"pageMode"_s).toString(), u"outline"_s);
+            QCOMPARE(config.value(u"weekStartsOn"_s).toInt(), 7);
+            QCOMPARE(config.value(u"defaultReminderTime"_s).toString(), u"07:30"_s);
+            QCOMPARE(config.value(u"journalFileFormat"_s).toString(), u"dd.MM.yyyy"_s);
+            QVERIFY(!config.contains(u"journalsFolder"_s));
+            // Bad values are dropped, good ones kept.
+            s.setNewNotebookConfig({{u"journalMode"_s, u"konspekt"_s},
+                                    {u"weekStartsOn"_s, 3},
+                                    {u"defaultReminderTime"_s, u"25:00"_s},
+                                    {u"journalFileFormat"_s, u"yyyy"_s},
+                                    {u"pageMode"_s, u"document"_s}});
+            QCOMPARE(s.newNotebookConfig(), (QVariantMap{{u"pageMode"_s, u"document"_s}}));
+            QSignalSpy cleared(&s, &AppSettings::newNotebookConfigChanged);
+            s.setNewNotebookConfig({});
+            QVERIFY(s.newNotebookConfig().isEmpty());
+            s.setNewNotebookConfig({});
+            QCOMPARE(cleared.size(), 1);
+        }
+        // An update: a notebook was opened before the intro existed.
+        {
+            AppSettings s(nextFile(), m_tmp.path());
+            s.setCurrentVault(m_tmp.filePath(u"Notatnik Łucji"_s));
+            QVERIFY(s.introDone());
+            s.setIntroDone(false); // "Run the intro again"
+            QVERIFY(!s.introDone());
+        }
+    }
+
     void validation()
     {
         AppSettings s(nextFile(), m_tmp.path());
-        s.setThemeMode(u"purple"_s);
+        s.setThemeMode(u"system"_s);
         QCOMPARE(s.themeMode(), u"system"_s);
-        s.setLanguage(u"de"_s);
+        s.setThemeMode(u"purple"_s);
+        QCOMPARE(s.themeMode(), u"dark"_s);
+        s.setThemeMode(u"ciemny"_s);
+        QCOMPARE(s.themeMode(), u"dark"_s);
+        s.setLanguage(u"pl"_s);
         QCOMPARE(s.language(), u"pl"_s);
+        s.setLanguage(u"de"_s);
+        QCOMPARE(s.language(), u"en"_s);
+        s.setLanguage(u"polski"_s);
+        QCOMPARE(s.language(), u"en"_s);
         s.setFontScale(5);
         QCOMPARE(s.fontScale(), 1.4);
         s.setFontScale(0.1);
@@ -952,7 +1020,7 @@ private Q_SLOTS:
     {
         AppSettings s(nextFile(), m_tmp.path());
         QSignalSpy theme(&s, &AppSettings::themeModeChanged);
-        s.setThemeMode(u"system"_s); // the default: stored, but no change
+        s.setThemeMode(u"dark"_s); // the default: stored, but no change
         QCOMPARE(theme.size(), 0);
         s.setThemeMode(u"light"_s);
         s.setThemeMode(u"light"_s);

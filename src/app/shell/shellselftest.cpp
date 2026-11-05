@@ -6500,8 +6500,8 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     const auto color = [theme](const char *name) { return theme->property(name).value<QColor>().name(); };
     const bool dark = theme->property("dark").toBool();
     check(color("accent") == u"#e2574c" && color("accentText") == (dark ? u"#ef7a6f"_s : u"#ad3e2c"_s)
-                  && color("bg") == (dark ? u"#1c2130"_s : u"#fbf7ee"_s),
-          "the default look keeps the logo's colours (margin red, paper / slate)");
+                  && color("bg") == (dark ? u"#000000"_s : u"#fbf7ee"_s),
+          "the default look keeps the logo's colours (margin red, paper / black)");
     // Visible, maybe scrolled out of the view (activate() scrolls it in).
     const auto shownItem = [window](const QString &name) {
         QQuickItem *found = nullptr;
@@ -6565,11 +6565,14 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
             return {};
         };
         const auto rowsShaped = [&](bool compact, bool roomy, QString *problem) {
-            const QList<std::pair<QString, int>> expected{
-                    {u"lightSurfaceSetting"_s, compact && !roomy ? -1 : 0},
-                    {u"darkSurfaceSetting"_s, compact && !roomy ? -1 : 0},
-                    {u"themeModeSetting"_s, compact ? 1 : 0},
-                    {u"fontScaleSetting"_s, compact ? 1 : 0}};
+            // (The dark theme — the default — hides the light background's row, the light one the
+            // dark background's.)
+            QList<std::pair<QString, int>> expected{{u"themeModeSetting"_s, compact ? 1 : 0},
+                                                    {u"fontScaleSetting"_s, compact ? 1 : 0}};
+            if (settings->themeMode() != u"dark")
+                expected.append({u"lightSurfaceSetting"_s, compact && !roomy ? -1 : 0});
+            if (settings->themeMode() != u"light")
+                expected.append({u"darkSurfaceSetting"_s, compact && !roomy ? -1 : 0});
             for (const auto &[name, stacked] : expected) {
                 *problem = shapeProblem(name, stacked);
                 if (!problem->isEmpty())

@@ -22,9 +22,8 @@ dates::UiLocale contentLocale(QStringView language)
 
 QString appLanguage(const QString &saved)
 {
-    if (saved == u"pl" || saved == u"en")
-        return saved;
-    return QLocale().name().startsWith(u"en"_s) ? u"en"_s : u"pl"_s;
+    // English first: Polish only when it was chosen (the intro's first step, the settings).
+    return saved == u"pl" ? saved : u"en"_s;
 }
 
 VaultPath existingJournal(const Vault &vault, QDate date)

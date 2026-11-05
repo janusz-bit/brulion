@@ -53,8 +53,9 @@ docs/CLI.md.
 3. **Compatible with Obsidian (+Tasks plugin) and readable by Logseq** — see docs/SYNTAX.md.
 4. **Core is GUI-free and fully unit-tested** (QtTest). It compiles unchanged for Linux,
    Android and WebAssembly. No `#ifdef` platform code in `src/core`.
-5. **Polish first.** Source strings in English with `tr()`/`qsTr()`; the Polish translation
-   (`i18n/brulion_pl.ts`) is the default UI language; English selectable.
+5. **English first, Polish too.** Source strings in English with `tr()`/`qsTr()`; English is
+   the default UI language (also in the browser and on a Polish system); the Polish translation
+   (`i18n/brulion_pl.ts`) is chosen in the intro's first step or the settings.
 6. **Round-trip fidelity.** Editing one block never rewrites other bytes of the file
    (line endings, indentation, BOM, unknown syntax preserved).
 7. **Deterministic.** Core code never reads the clock itself (callers pass `now`/`today`);

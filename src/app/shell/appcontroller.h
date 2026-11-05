@@ -101,6 +101,10 @@ class AppController : public QObject {
 
     /// "boot" | "onboarding" | "loading" | "ready" | "error"
     Q_PROPERTY(QString status READ status NOTIFY statusChanged FINAL)
+    /// The status "onboarding" starts with the intro (IntroView: language, look, permissions,
+    /// the first notebook's settings) before the notebook is chosen (OnboardingView): it was
+    /// never finished on this device (AppSettings.introDone), or --intro; --onboarding skips it.
+    Q_PROPERTY(bool introPending READ introPending NOTIFY introPendingChanged FINAL)
     /// Why opening the vault failed (status "error"), translated.
     Q_PROPERTY(QString errorString READ errorString NOTIFY statusChanged FINAL)
     Q_PROPERTY(brulion::shell::AppSettings *settings READ settings CONSTANT FINAL)
@@ -411,6 +415,12 @@ public:
     /// "Try again" after an error: open failedVaultPath() again (else the current vault).
     Q_INVOKABLE void retryOpenVault();
     Q_INVOKABLE void showOnboarding();
+    bool introPending() const;
+    /// The intro is finished (or skipped): the notebook is chosen next.
+    Q_INVOKABLE void finishIntro();
+    /// Settings → General → "Run the intro again": closes the notebook (closeVault()) and starts
+    /// the intro; the notebook is chosen again at its end.
+    Q_INVOKABLE void restartIntro();
     /// Local path of a folder URL from a file dialog ("file:///home/x" -> "/home/x").
     Q_INVOKABLE QString localPath(const QUrl &url) const;
     /// Whether a vault at `path` would need Android's "All files access" (shared storage).
@@ -544,6 +554,7 @@ public:
 
 Q_SIGNALS:
     void statusChanged();
+    void introPendingChanged();
     void currentRouteChanged();
     void historyChanged();
     void sidePanelRouteChanged();
@@ -588,6 +599,11 @@ private:
     /// not shown one yet: scanning a big vault must not keep the window blank.
     void scheduleOpening(const QString &path, bool seedDemo);
     void finishOpening(const QString &path, bool seedDemo);
+    /// The intro's settings for the first notebook (AppSettings::newNotebookConfig) go to the
+    /// notebook just opened when it is new — no notes, no .brulion/config.json, no Obsidian
+    /// settings — and are dropped after the first notebook of the user's (not the documentation
+    /// or the sample notebook: `special`) either way.
+    void applyIntroNotebookConfig(bool special);
     /// What the tab signals compare (beginTabs() before a change, endTabs() after it emits
     /// tabsChanged, tabRouteChanged, currentRouteChanged, historyChanged… for what differs).
     struct TabsSnapshot {
@@ -681,6 +697,7 @@ private:
     QString m_devVault;
     bool m_devDemo = false;
     bool m_devOnboarding = false;
+    bool m_devIntro = false; ///< --intro: the intro also on a device that finished it
     QVariantMap m_devRoute;
     QString m_devPopup;
     QByteArray m_startShare;   ///< --share, or the --open files as share JSON (received by start())

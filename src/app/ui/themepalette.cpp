@@ -182,10 +182,10 @@ Rgb over(const Rgb &fg, double alpha, const Rgb &bg)
 Surface surface(QStringView name, bool dark)
 {
     if (dark) {
-        if (name == u"black") // OLED: true black, elevated surfaces barely lifted
+        if (name == u"black") // OLED, the default: true black, elevated surfaces barely lifted
             return {hex(0x000000), hex(0x111318), hex(0x1a1d24), hex(0x0a0b0e),
                     hex(0x262a33), hex(0x1a1d24), hex(0x3a404d), hex(0x6c7793)};
-        // "slate", the default: the logo's deep blue-grey
+        // "slate": the logo's deep blue-grey
         return {hex(0x1c2130), hex(0x232a3b), hex(0x2b3245), hex(0x171b28),
                 hex(0x343c51), hex(0x2b3245), hex(0x48526b), hex(0x6c7793)};
     }

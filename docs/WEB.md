@@ -81,7 +81,7 @@ leży w `~/.cache`).
 
 | Plik | Opis |
 |---|---|
-| `index.html` | nasza powłoka (z `wasm/index.html`, na bazie `wasm_shell.html` Qt): ekran ładowania z logo i postępem pobierania, „Wczytywanie Brulionu…”, ekrany błędów, rejestracja service workera |
+| `index.html` | nasza powłoka (z `wasm/index.html`, na bazie `wasm_shell.html` Qt): ekran ładowania z logo i postępem pobierania, „Loading Brulion…”, ekrany błędów, rejestracja service workera. Czarny jak domyślny motyw aplikacji; po angielsku, dopóki w aplikacji nie wybrano polskiego (aplikacja zapamiętuje język w `localStorage` „brulion.language”: `rememberShellLanguage()`, `src/platform/wasm/wasmshell.h`) |
 | `brulion.js`, `brulion.wasm` | aplikacja (glue Emscriptena + moduł WebAssembly) |
 | `qtloader.js` | loader Qt (`qtLoad()`) |
 | `sw.js` | service worker (z `wasm/sw.js`): offline, kliknięcia w powiadomienia |

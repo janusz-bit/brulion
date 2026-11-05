@@ -17,6 +17,7 @@
 #include "sync/syncengine.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
+#include "vault/vaultconfig.h"
 
 #include <QCoreApplication>
 #include <QCursor>
@@ -143,6 +144,8 @@ AppController::AppController(const Options &options, QObject *parent)
     m_devVault = cleanLocalPath(argValue(args, u"--vault"_s));
     m_devDemo = args.contains(u"--demo"_s);
     m_devOnboarding = args.contains(u"--onboarding"_s);
+    m_devIntro = args.contains(u"--intro"_s);
+    connect(m_settings.get(), &AppSettings::introDoneChanged, this, &AppController::introPendingChanged);
     m_startHidden = args.contains(u"--hidden"_s);
     m_startCapture = args.contains(u"--capture"_s);
     m_startToday = args.contains(u"--today"_s);
@@ -269,7 +272,7 @@ void AppController::start()
         }
         return;
     }
-    if (m_devOnboarding) {
+    if (m_devOnboarding || m_devIntro) {
         setStatus(u"onboarding"_s);
         return;
     }
@@ -1262,6 +1265,7 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
         return;
     }
     m_failedPath.clear();
+    applyIntroNotebookConfig(docs || seedDemo);
     if (!docs) {
         // The sync settings of 0.3.0 and older go to the notebook they belong to (the one its
         // sync bookkeeping or the start says was synced, also the sample notebook), never to the
@@ -1334,6 +1338,21 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     }
 }
 
+void AppController::applyIntroNotebookConfig(bool special)
+{
+    const QVariantMap config = m_settings->newNotebookConfig();
+    if (special || config.isEmpty())
+        return;
+    Vault *vault = m_workspace->vault();
+    const bool fresh = vault && vault->markdownFiles().isEmpty() && !vault->exists(vaultConfigPath())
+            && vault->configAdoptedFromObsidian().isEmpty();
+    if (fresh && !m_workspace->setConfig(config))
+        qCWarning(lcApp) << "The intro's notebook settings could not be saved";
+    else if (fresh)
+        qCInfo(lcApp) << "The intro's notebook settings were saved to the new notebook";
+    m_settings->setNewNotebookConfig({});
+}
+
 QVariantMap AppController::initialRoute() const
 {
     return m_devRoute;
@@ -1383,6 +1402,34 @@ void AppController::retryOpenVault()
 void AppController::showOnboarding()
 {
     setStatus(u"onboarding"_s);
+}
+
+bool AppController::introPending() const
+{
+    return m_devIntro || (!m_devOnboarding && !m_settings->introDone());
+}
+
+void AppController::finishIntro()
+{
+    const bool was = introPending();
+    m_devIntro = false;
+    m_devOnboarding = false;
+    m_settings->setIntroDone(true);
+    if (was != introPending())
+        Q_EMIT introPendingChanged();
+}
+
+void AppController::restartIntro()
+{
+    const bool was = introPending();
+    m_devOnboarding = false;
+    m_settings->setIntroDone(false);
+    if (was != introPending())
+        Q_EMIT introPendingChanged();
+    if (m_status == u"ready")
+        closeVault();
+    else
+        setStatus(u"onboarding"_s);
 }
 
 // ---- Permissions ------------------------------------------------------------------------------

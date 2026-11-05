@@ -22,7 +22,7 @@ namespace brulion::notebook {
 dates::UiLocale contentLocale(QStringView language);
 
 /// The app's language, "pl" or "en", for the value of its setting ui/language: that value, else
-/// (never chosen, or unknown) the system's — English for an English locale, Polish otherwise.
+/// (never chosen, or unknown) English — whatever the system's locale.
 /// AppSettings::language() and brulion-cli (which only reads the settings) both use it, so they
 /// write notes in the same language.
 QString appLanguage(const QString &saved);

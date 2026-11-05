@@ -39,7 +39,7 @@ class QuickAddActivity : Activity() {
   private lateinit var status: TextView
   private val chips = HashMap<String, TextView>()
   private var kind = WidgetAction.KIND_TASK
-  private var locale = "pl"
+  private var locale = "en"
 
   /** The day chip (resolved to a date only when an entry is added), the date of Data…, the time, alarm. */
   private var choice = QuickAdd.DayChoice.TODAY

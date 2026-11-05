@@ -37,6 +37,14 @@ EM_JS(void, brulion_shell_index_cache_saved, (), {
     if (shell && shell.indexCacheSaved) shell.indexCacheSaved();
 });
 
+EM_JS(void, brulion_shell_language, (int polish), {
+    try {
+        var storage = globalThis["localStorage"];
+        if (storage) storage.setItem("brulion.language", polish ? "pl" : "en");
+    } catch (e) {
+    }
+});
+
 EM_JS(int, brulion_shell_page_scheme, (), {
     var location = globalThis["location"];
     var protocol = location ? String(location.protocol) : "";
@@ -224,6 +232,11 @@ void reportIndexStats(int notes, int fromCache)
 void reportIndexCacheSaved()
 {
     brulion_shell_index_cache_saved();
+}
+
+void rememberShellLanguage(const QString &language)
+{
+    brulion_shell_language(language == QLatin1String("pl") ? 1 : 0);
 }
 
 QString pageScheme()

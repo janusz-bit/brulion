@@ -149,15 +149,15 @@ class WidgetSnapshotTest {
     assertFalse(WidgetSnapshot.EMPTY.hasVault)
   }
 
-  /** Before the app published a snapshot the widgets speak the language the app starts in. */
+  /** Before the app published a snapshot the widgets speak the language the app starts in: English. */
   @Test
-  fun withoutASnapshotThePhonesLanguage() {
-    assertEquals("en", WidgetSnapshot.localeOf("", "en"))
-    assertEquals("pl", WidgetSnapshot.localeOf("", "pl"))
-    assertEquals("pl", WidgetSnapshot.localeOf("", "de"))
-    assertEquals("pl", WidgetSnapshot.localeOf("pl", "en"))
-    assertEquals("en", WidgetSnapshot.localeOf("en", "pl"))
-    assertEquals("pl", WidgetSnapshot.localeOf("fr", "pl"))
+  fun withoutASnapshotEnglish() {
+    // English first: Polish only when the app published it.
+    assertEquals("en", WidgetSnapshot.localeOf(""))
+    assertEquals("pl", WidgetSnapshot.localeOf("pl"))
+    assertEquals("en", WidgetSnapshot.localeOf("en"))
+    assertEquals("en", WidgetSnapshot.localeOf("fr"))
+    assertEquals("en", WidgetSnapshot.localeOf("Polski"))
     assertEquals(WidgetSnapshot.localeOf(""), WidgetSnapshot.EMPTY.locale)
     assertEquals("pl", golden.locale)
   }

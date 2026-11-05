@@ -58,6 +58,11 @@ struct BrowserViewport {
 /// top. Without visualViewport (old browsers) nothing is reported. docs/WEB.md "Klawiatura ekranowa".
 void watchVisualViewport(std::function<void(const BrowserViewport &viewport)> callback);
 
+/// Remembers the UI language ("en" or "pl") in the page's localStorage ("brulion.language"), so
+/// the loading screen of the next start speaks it before Qt runs (wasm/index.html: English
+/// until Polish was chosen). Storage that refuses is ignored.
+void rememberShellLanguage(const QString &language);
+
 /// The scheme of the page the app runs on: "https", "http", or "" (another one, unknown). A
 /// page opened over https cannot fetch anything over http (mixed content).
 QString pageScheme();

@@ -349,14 +349,10 @@ internal class WidgetSnapshot private constructor(val json: JSONObject) {
     val EMPTY = WidgetSnapshot(JSONObject().put("version", VERSION))
 
     /**
-     * "pl" or "en": the snapshot's [value], else (no snapshot yet) what the app starts in on this
-     * phone — English on an English phone, else Polish (notebook::appLanguage()).
+     * "pl" or "en": the snapshot's [value], else (no snapshot yet) what the app starts in —
+     * English, whatever the phone's language (notebook::appLanguage()).
      */
-    fun localeOf(value: String, system: String = java.util.Locale.getDefault().language): String =
-      when (value) {
-        "pl", "en" -> value
-        else -> if (system == "en") "en" else "pl"
-      }
+    fun localeOf(value: String): String = if (value == "pl") "pl" else "en"
 
     /** The snapshot in [raw]; [EMPTY] when missing, broken or of another version. */
     fun parse(raw: String?): WidgetSnapshot {

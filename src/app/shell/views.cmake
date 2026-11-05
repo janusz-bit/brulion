@@ -1,9 +1,10 @@
 # The views shown for routes (docs/UI.md "Navigation"; mapping in qml/shell/ShellRouteView.qml).
-# OnboardingView and SettingsView belong to the shell; the others are placeholders until the
+# IntroView, OnboardingView and SettingsView belong to the shell; the others are placeholders until the
 # views are written. Whoever takes the views over may move this list into their own area
 # fragment (src/app/views/area.cmake) — then delete this file and its include in area.cmake
 # (a QML file must be registered once).
 qt_target_qml_sources(brulion QML_FILES
+    qml/views/IntroView.qml
     qml/views/OnboardingView.qml
     qml/views/SettingsView.qml
     qml/views/AllPagesView.qml

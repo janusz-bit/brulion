@@ -1,6 +1,7 @@
 // Shell journey — `brulion --journey <dir> [--size …] [--touch] [--theme …] [--now …]`: a dev
 // tool that walks the real app like a first-time user, headlessly, and saves a screenshot after
-// every step into <dir> (NN-<step>.png): onboarding → the sample notebook → writing in today's
+// every step into <dir> (NN-<step>.png): the intro (Polish, the run's theme) → onboarding → the
+// sample notebook → writing in today's
 // journal (an outline with Tab, a [[link]] from the suggestions, a task with a reminder from the
 // slash menu) → the calendar with that reminder → ticking the task off in Tasks → a page reached
 // through a [[link]] with its references → search "zolw" finding "żółw" → graph → sync center →

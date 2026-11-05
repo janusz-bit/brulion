@@ -121,6 +121,27 @@ private:
         clickAt(item->mapToScene(QPointF(item->width() * fx, item->height() * fy)));
         return true;
     }
+    /// The visible item named `name` (objectName), waiting for it like findText().
+    QQuickItem *findName(const QString &name, int timeoutMs = 3000) const
+    {
+        QQuickItem *found = nullptr;
+        waitFor(
+            [&] {
+                found = find([&](QQuickItem *item) { return item->objectName() == name; });
+                return found != nullptr;
+            },
+            timeoutMs);
+        return found;
+    }
+    bool clickName(const QString &name)
+    {
+        QQuickItem *item = findName(name);
+        if (!item) {
+            log(u"no visible item named \""_s + name + u'"');
+            return false;
+        }
+        return click(item);
+    }
     bool clickText(const QString &text, const char *within = nullptr)
     {
         QQuickItem *item = findText(text, within);
@@ -253,6 +274,7 @@ private:
 
     void emptyNotebook();
     void longTitles();
+    void intro();
     void onboarding();
     void writeInToday();
     void calendar();
@@ -275,12 +297,58 @@ private:
     const bool m_touch = QCoreApplication::arguments().contains(u"--touch"_s);
 };
 
+void Journey::intro()
+{
+    // The first start: the intro's four steps (IntroView). Polish is chosen (the settings step
+    // switches to English at the end), the theme the run started with is kept.
+    if (m_app->status() != u"onboarding" || !m_app->introPending())
+        return;
+    const auto next = [this](const QString &what) {
+        if (!clickName(u"introContinue"_s))
+            fail(u"the intro's Continue ("_s + what + u')');
+    };
+    if (!findName(u"introStep_language"_s, 5000))
+        fail(u"the intro's language step shows"_s);
+    shot(u"intro-language"_s, 1200);
+    if (!clickName(u"introLanguage_pl"_s)) {
+        fallback(u"choose Polish in the intro"_s);
+        m_app->settings()->setLanguage(u"pl"_s);
+    }
+    if (!waitFor([this] { return m_app->settings()->language() == u"pl"; }))
+        fail(u"the intro switches to Polish"_s);
+    shot(u"intro-language-polish"_s, 900);
+    next(u"language"_s);
+    if (!findName(u"introStep_look"_s))
+        fail(u"the intro's look step shows"_s);
+    const bool light = m_app->settings()->themeMode() == u"light";
+    if (!clickName(light ? u"introTheme_light"_s : u"introTheme_black"_s))
+        fail(u"the intro's theme tiles"_s);
+    shot(u"intro-look"_s, 900);
+    next(u"look"_s);
+    if (!findName(u"introStep_permissions"_s))
+        fail(u"the intro's permissions step shows"_s);
+    shot(u"intro-permissions"_s, 900);
+    next(u"permissions"_s);
+    if (!findName(u"introStep_notes"_s))
+        fail(u"the intro's notes step shows"_s);
+    if (!clickName(u"introJournal_document"_s)
+        || !waitFor([this] { return m_app->settings()->newNotebookConfig().value(u"journalMode"_s).toString() == u"document"; }))
+        fail(u"the intro's journal mode"_s);
+    if (!clickName(u"introJournal_outline"_s)) // back to the sample notebook's outline
+        fail(u"the intro's journal mode (outline)"_s);
+    shot(u"intro-notes"_s, 900);
+    next(u"Choose a notebook"_s);
+    if (!waitFor([this] { return !m_app->introPending(); }))
+        fail(u"the intro ends"_s);
+}
+
 void Journey::onboarding()
 {
     if (!waitFor([this] { return m_app->status() == u"onboarding" || m_app->status() == u"ready"; }, 20000)) {
         fail(u"the app starts (status: "_s + m_app->status() + u')');
         return;
     }
+    intro();
     if (m_app->status() == u"onboarding") {
         shot(u"onboarding"_s, 1200);
         if (!clickText(ui("OnboardingView", "Try the sample notebook"))) {
@@ -582,7 +650,7 @@ void Journey::settings()
     }
     shot(u"settings"_s, 1000);
     const bool dark = m_app->settings()->themeMode() == u"dark";
-    if (!clickText(u"English"_s))
+    if (!clickText(u"English"_s, "SettingsView"))
         fail(u"the language switch"_s);
     if (!waitFor([this] { return m_app->settings()->language() == u"en"; }))
         fail(u"switching to English"_s);
@@ -640,6 +708,7 @@ void Journey::emptyNotebook()
         fail(u"onboarding shows"_s);
         return;
     }
+    intro();
     if (!clickText(ui("OnboardingView", "Open notebook"))) {
         fallback(u"open an empty notebook"_s);
         m_app->openVault(m_app->defaultVaultPath());

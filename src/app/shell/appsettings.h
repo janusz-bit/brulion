@@ -4,7 +4,7 @@
 // in the IndexedDB-backed app data folder. Vault settings shared between devices are NOT here —
 // they live in the vault's .brulion/config.json (Workspace.config / Workspace.setConfig).
 //
-// Every property is validated (unknown theme -> "system", sizes clamped) and written at once;
+// Every property is validated (unknown theme -> "dark", sizes clamped) and written at once;
 // QML binds to them directly: `Theme.mode: AppSettings.themeMode`.
 //
 // The Nextcloud app password is deliberately not kept in QSettings: it is stored in its own
@@ -25,6 +25,7 @@
 #include <QStringList>
 #include <QVariant>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <memory>
 #include <optional>
@@ -37,9 +38,10 @@ class AppSettings : public QObject {
     Q_OBJECT
 
     // ---- General ------------------------------------------------------------------------
-    /// "system" | "light" | "dark" (Theme.mode).
+    /// "dark" (default, with the black background: darkSurface) | "light" | "system" (Theme.mode).
     Q_PROPERTY(QString themeMode READ themeMode WRITE setThemeMode NOTIFY themeModeChanged FINAL)
-    /// UI language "pl" | "en". Default: English when the system locale is English, else Polish.
+    /// UI language "en" | "pl". Default: English (whatever the system's locale); the intro's
+    /// first step and Settings → General choose Polish.
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged FINAL)
     /// UI text size factor 0.85 … 1.4 (Theme.fontScale).
     Q_PROPERTY(qreal fontScale READ fontScale WRITE setFontScale NOTIFY fontScaleChanged FINAL)
@@ -124,6 +126,18 @@ class AppSettings : public QObject {
     /// "link" (default: the addresses stay) | "include" (copies in the HTML and Pandoc exports).
     Q_PROPERTY(QString exportWebPictures READ exportWebPictures WRITE setExportWebPictures NOTIFY
                        exportWebPicturesChanged FINAL)
+
+    // ---- Intro (first run: IntroView) -----------------------------------------------------
+    /// The intro (language, look, permissions, the first notebook's settings) was finished or
+    /// skipped. Never stored: true when a notebook was opened before (an update from a version
+    /// without the intro), else false.
+    Q_PROPERTY(bool introDone READ introDone WRITE setIntroDone NOTIFY introDoneChanged FINAL)
+    /// The settings the intro chose for the first notebook (keys of Workspace.setConfig():
+    /// journalMode, pageMode, weekStartsOn, defaultReminderTime, journalFileFormat); applied
+    /// once to the next new (empty, without .brulion/config.json) notebook, then cleared
+    /// (AppController::finishOpening). {} when none are waiting.
+    Q_PROPERTY(QVariantMap newNotebookConfig READ newNotebookConfig WRITE setNewNotebookConfig NOTIFY
+                       newNotebookConfigChanged FINAL)
 
     // ---- Vaults -------------------------------------------------------------------------
     /// Absolute path of the vault opened last ("" before the first one).
@@ -269,6 +283,12 @@ public:
     /// Remove every custom shortcut.
     void clearShortcutOverrides();
 
+    bool introDone() const;
+    void setIntroDone(bool done);
+    QVariantMap newNotebookConfig() const;
+    /// Keeps only the known keys with usable values; {} clears it.
+    void setNewNotebookConfig(const QVariantMap &config);
+
     QString currentVault() const;
     void setCurrentVault(const QString &path);
     QVariantList recentVaults() const;
@@ -362,6 +382,8 @@ public:
     QString fileName() const;
 
 Q_SIGNALS:
+    void introDoneChanged();
+    void newNotebookConfigChanged();
     void themeModeChanged();
     void languageChanged();
     void fontScaleChanged();

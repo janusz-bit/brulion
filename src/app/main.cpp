@@ -264,8 +264,8 @@ int main(int argc, char *argv[])
                          }
                      });
 
-    // Polish is the default UI language (English when the system or --locale en asks for it,
-    // or the language chosen in the settings). English loads brulion_en.qm too: it holds the
+    // English is the default UI language (Polish when --locale pl or the settings ask for it:
+    // the intro's first step, Settings → General). English loads brulion_en.qm too: it holds the
     // plural forms of the English source texts.
     QTranslator translator;
     if (translator.load(QStringLiteral(":/i18n/brulion_") + devTools.language() + QStringLiteral(".qm")))
@@ -368,6 +368,14 @@ int main(int argc, char *argv[])
             devTools.setLanguage(controller->settings()->language());
         QObject::connect(controller.get(), &AppController::languageChanged, &devTools,
                          &brulion::ui::DevTools::setLanguage);
+#ifdef Q_OS_WASM
+        // The loading screen of the next start speaks the chosen language (wasm/index.html).
+        brulion::platform::rememberShellLanguage(controller->settings()->language());
+        QObject::connect(controller->settings(), &brulion::shell::AppSettings::languageChanged, controller.get(),
+                         [settings = controller->settings()] {
+                             brulion::platform::rememberShellLanguage(settings->language());
+                         });
+#endif
         // The detailed event log (Settings → Application, the event log page) is a device setting.
         brulion::shell::AppSettings *settings = controller->settings();
         logs.setDetailed(settings->value(u"diagnostics/logVerbosity"_s).toString() == u"detailed");

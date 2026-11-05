@@ -112,7 +112,7 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
     if (locale == u"pl" || locale == u"en")
         m_language = locale;
     else
-        m_language = QLocale().name().startsWith(u"en") ? u"en"_s : u"pl"_s;
+        m_language = u"en"_s; // English first (notebook::appLanguage())
     applyDefaultLocale(m_language);
 
     bool ok = false;

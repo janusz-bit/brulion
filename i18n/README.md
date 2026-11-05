@@ -1,7 +1,8 @@
 # Tłumaczenia Brulionu
 
 Teksty interfejsu są po angielsku w kodzie (`qsTr()` w QML, `tr()` / `QCoreApplication::translate()`
-w C++). `brulion_pl.ts` to tłumaczenie polskie (domyślny język aplikacji), `brulion_en.ts` zawiera
+w C++). Angielski jest domyślnym językiem aplikacji (także w przeglądarce i w polskim systemie);
+`brulion_pl.ts` to tłumaczenie polskie, wybierane w pierwszym kroku wprowadzenia albo w ustawieniach. `brulion_en.ts` zawiera
 tylko angielskie formy liczby mnogiej tekstów z `%n`. Te same pliki tłumaczą też wiersz poleceń
 `brulion-cli` (kontekst `brulion::cli`, zobacz [docs/CLI.md](../docs/CLI.md#language)): nazwy
 poleceń, opcji i wartości (`task add`, `--due`, `todo`, `today`) zostają w tłumaczeniu bez zmian.

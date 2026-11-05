@@ -279,6 +279,91 @@ private Q_SLOTS:
         QCOMPARE(again.workspace()->name(), u"Mój notatnik"_s);
     }
 
+    // The intro (IntroView) on the first start only; --onboarding skips it, --intro forces it;
+    // "Run the intro again" starts it over and closes the notebook.
+    void introOnTheFirstStart()
+    {
+        auto app = makeApp();
+        QVERIFY(app->introPending());
+        app->start();
+        QCOMPARE(app->status(), u"onboarding"_s);
+        QSignalSpy pending(app.get(), &AppController::introPendingChanged);
+        app->finishIntro();
+        QVERIFY(!app->introPending());
+        QVERIFY(app->settings()->introDone());
+        QVERIFY(pending.size() >= 1);
+        QCOMPARE(app->status(), u"onboarding"_s); // the notebook is chosen next
+
+        app->openVault(m_tmp.filePath(u"Notatnik po wstępie"_s));
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        app->restartIntro();
+        QVERIFY(app->introPending());
+        QVERIFY(!app->settings()->introDone());
+        QCOMPARE(app->status(), u"onboarding"_s);
+        QTRY_VERIFY(!app->workspace()->isOpen());
+
+        QVERIFY(!makeApp({u"--onboarding"_s})->introPending());
+        auto forced = makeApp({u"--intro"_s});
+        forced->settings()->setIntroDone(true);
+        QVERIFY(forced->introPending());
+        forced->finishIntro();
+        QVERIFY(!forced->introPending());
+    }
+
+    // The intro's settings for the first notebook go to a new, empty notebook once — never to one
+    // in use, the sample notebook or a later one.
+    void introNotebookSettings()
+    {
+        const QVariantMap chosen{{u"journalMode"_s, u"document"_s},
+                                 {u"pageMode"_s, u"outline"_s},
+                                 {u"weekStartsOn"_s, 7},
+                                 {u"defaultReminderTime"_s, u"07:30"_s},
+                                 {u"journalFileFormat"_s, u"dd.MM.yyyy"_s}};
+        {
+            auto app = makeApp();
+            app->settings()->setNewNotebookConfig(chosen);
+            app->openVault(m_tmp.filePath(u"Nowy zeszyt Łucji"_s));
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            const brulion::VaultConfig &c = app->workspace()->vault()->config();
+            QCOMPARE(c.journalMode, brulion::NoteMode::Document);
+            QCOMPARE(c.pageMode, brulion::NoteMode::Outline);
+            QCOMPARE(c.weekStartsOn, Qt::Sunday);
+            QCOMPARE(c.defaultReminderTime, QTime(7, 30));
+            QCOMPARE(c.journalFileFormat, u"dd.MM.yyyy"_s);
+            QVERIFY(QFileInfo::exists(m_tmp.filePath(u"Nowy zeszyt Łucji/.brulion/config.json"_s)));
+            QVERIFY(app->settings()->newNotebookConfig().isEmpty());
+            // The next new notebook gets the defaults.
+            app->openVault(m_tmp.filePath(u"Drugi zeszyt"_s));
+            QTRY_COMPARE(app->workspace()->name(), u"Drugi zeszyt"_s);
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            QCOMPARE(app->workspace()->vault()->config().journalMode, brulion::VaultConfig().journalMode);
+        }
+        {
+            // A notebook in use (it has notes) keeps its settings; the choice is dropped.
+            const QString used = m_tmp.filePath(u"Używany"_s);
+            QVERIFY(QDir().mkpath(used));
+            QFile note(used + u"/Zakupy.md"_s);
+            QVERIFY(note.open(QIODevice::WriteOnly));
+            note.write("- mleko\n");
+            note.close();
+            auto app = makeApp();
+            app->settings()->setNewNotebookConfig(chosen);
+            app->openVault(used);
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            QCOMPARE(app->workspace()->vault()->config().journalMode, brulion::VaultConfig().journalMode);
+            QVERIFY(!QFileInfo::exists(used + u"/.brulion/config.json"_s));
+            QVERIFY(app->settings()->newNotebookConfig().isEmpty());
+        }
+        {
+            // The sample notebook does not take it either, and leaves it for the user's own.
+            auto app = makeApp();
+            app->settings()->setNewNotebookConfig(chosen);
+            app->openDemoVault();
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            QCOMPARE(app->settings()->newNotebookConfig(), chosen);
+        }
+    }
+
     void missingVaultFolderIsNotRecreated()
     {
         auto app = makeApp();

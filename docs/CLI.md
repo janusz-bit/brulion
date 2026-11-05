@@ -81,7 +81,7 @@ clamp(cores − 1, 1, 4)).
 | `--read-only` | refuse every command that writes (exit 7); the device's index cache (device state, not the notebook) may still be updated |
 | `--allow-destructive` | allow the destructive commands (see the table) |
 | `--now "YYYY-MM-DD HH:mm"` | a fixed clock, local time (tests, reproducible runs) |
-| `--lang pl\|en` | language of written dates and templates (`{{weekday}}`, quick capture); default: the app's language (as the app picks it when it was never chosen: English on an English system, else Polish) |
+| `--lang pl\|en` | language of written dates and templates (`{{weekday}}`, quick capture); default: the app's language (English when it was never chosen) |
 | `--stdin` | the command's text argument from standard input |
 | `-v`, `--verbose` | diagnostics on standard error (standard output stays JSON) |
 | `-h`, `--help` | help; `help --json` describes every command for programs |

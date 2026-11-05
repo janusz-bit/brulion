@@ -4,7 +4,8 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// SettingsView — route "settings" ({section?}). Sections: Ogólne (language), Wygląd (theme,
+// SettingsView — route "settings" ({section?}). Sections: Ogólne (language, "Run the intro
+// again": AppController.restartIntro()), Wygląd (theme,
 // accent colour with presets and BAccentDialog, light and dark backgrounds, text size, interface
 // font, density, reduce motion; Układ: sidebar entries and sections, the bottom navigation's
 // four buttons, the quick note button; back to the default look — AppSettings, Theme inputs),
@@ -449,9 +450,20 @@ Item {
                 description: qsTr("The language of menus and messages.")
                 BSegmented {
                     accessibleName: qsTr("Language")
-                    model: [{ value: "pl", text: "Polski" }, { value: "en", text: "English" }]
+                    model: [{ value: "en", text: "English" }, { value: "pl", text: "Polski" }]
                     currentValue: AppSettings.language
                     onActivated: (value) => AppSettings.language = value
+                }
+            }
+            ShellSettingRow {
+                title: qsTr("Intro")
+                description: qsTr("Language, look, permissions and the settings of a new notebook, step by step. The notebook closes and is chosen again at the end.")
+                BButton {
+                    objectName: "settingsRestartIntro"
+                    size: "small"
+                    text: qsTr("Run the intro again")
+                    iconName: "sparkles"
+                    onClicked: AppController.restartIntro()
                 }
             }
         }

@@ -68,7 +68,7 @@ internal object WidgetDates {
       else -> short(date, locale, today.year)
     }
 
-  /** [context] with the app's language (the widgets' texts in res/values, values-en). */
+  /** [context] with the app's language (the widgets' texts in res/values — English —, values-pl). */
   fun localized(context: Context, locale: String): Context {
     val config = Configuration(context.resources.configuration)
     config.setLocale(if (en(locale)) Locale.ENGLISH else Locale.forLanguageTag("pl"))

@@ -11,7 +11,7 @@
 //                note another program just created), newJournalText (what it starts with),
 //                templateText, pure appendBlock(content, block) (fills a template's empty last
 //                bullet, the note's own line ending) and blockFromText(text), contentLocale("pl" |
-//                "en"), appLanguage(saved ui/language) (else the system's)
+//                "en"), appLanguage(saved ui/language) (else English)
 //   pages.h      newPagePath, newPageText, createPage (letter-case twins are one page),
 //                createFolder, folderPaths, folderInfo, specialsWithin; renames and moves through
 //                relocate() (VaultIndex::planRelocation(): every link and tag keeps its target,

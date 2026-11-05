@@ -82,14 +82,11 @@ class TestCliProcess : public QObject {
     int m_n = 0;
 
     /// {{weekday}} in a journal template (1 = Monday): brulion-cli's language when none is set is
-    /// the system's — Polish for LANG=C.UTF-8 (environment()); Windows ignores LANG, there it is
-    /// the user's language (English on the CI runners).
+    /// the app's default, English, whatever the system's (notebook::appLanguage()).
     static QString weekday(int day)
     {
-#ifdef Q_OS_WIN
         if (brulion::notebook::appLanguage({}) == u"en")
             return QLocale(QLocale::English).dayName(day);
-#endif
         static const QStringList polish{u"poniedziałek"_s, u"wtorek"_s, u"środa"_s,    u"czwartek"_s,
                                         u"piątek"_s,       u"sobota"_s, u"niedziela"_s};
         return polish.at(day - 1);
@@ -1070,7 +1067,7 @@ private Q_SLOTS:
         QCOMPARE(r.code, 5);
         QCOMPARE(r.errorCode(), u"no_vault"_s);
         QVERIFY(!QFileInfo::exists(docs + u"/journals"_s));
-        // ui/language never chosen: the system's, as the app (an English one: English notes).
+        // ui/language never chosen: English, as the app — also on a Polish system.
         {
             QSettings settings(ini, QSettings::IniFormat);
             settings.setValue(u"vaults/current"_s, dir);
@@ -1084,6 +1081,13 @@ private Q_SLOTS:
         r = cli({u"date"_s, u"parse"_s, u"jutro o 9"_s, u"--now"_s, kNow}, {}, env);
         QCOMPARE(r.result().value(u"human"_s).toString(), u"tomorrow 09:00"_s);
         env.insert(u"LANG"_s, u"pl_PL.UTF-8"_s);
+        r = cli({u"info"_s}, {}, env);
+        QCOMPARE(r.result().value(u"language"_s).toString(), u"en"_s);
+        // Chosen in the app: its language.
+        {
+            QSettings settings(ini, QSettings::IniFormat);
+            settings.setValue(u"ui/language"_s, u"pl"_s);
+        }
         r = cli({u"info"_s}, {}, env);
         QCOMPARE(r.result().value(u"language"_s).toString(), u"pl"_s);
         QFile::remove(ini);
