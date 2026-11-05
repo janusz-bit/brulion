@@ -44,11 +44,4 @@ QtObject {
     function end(): void {
         endRequested()
     }
-    /// The older form, not compiled (it takes a function): run `open` (a function that navigates
-    /// as a click does) between begin(target) and end().
-    function run(target: string, open: var): void {
-        begin(target)
-        open()
-        end()
-    }
 }

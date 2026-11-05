@@ -503,25 +503,15 @@ FocusScope {
     // Scrolled blocks must not draw over what surrounds the editor (the shell's top bar).
     clip: true
 
-    /// False once the editor is being destroyed (see later()).
+    /// False once the editor is being destroyed (the deferred Timers below check it).
     property bool alive: true
     Component.onDestruction: alive = false
 
-    /// Qt.callLater for deferred work of other components: `fn` runs once the event loop is idle —
-    /// unless the editor went away meanwhile (a day of the journal stream scrolled out of view, the
-    /// page closed). Qt.callLater does not tie an arrow function to the component that made it: run
-    /// after the editor is gone it met a null `list` (TypeError). Ids (editor, list) read null
-    /// then, so they are what is checked; `fn` should use ids or qualified properties only.
-    /// (A closure: not compiled ahead of time. The editor's own deferred work uses the Timers below
-    /// — interval 0, restarted: repeated requests before they fire are one, with the last values.)
-    function later(fn) {
-        Qt.callLater(() => {
-            if (editor && list && editor.alive)
-                fn()
-        })
-    }
-    /// ensureEditVisible() once the event loop is idle (what later(() => editor.ensureEditVisible())
-    /// did).
+    // Deferred work (instead of Qt.callLater, whose closures are not compiled ahead of time): the
+    // Timers below — interval 0, restarted: repeated requests before they fire are one, with the
+    // last values — and they check `alive` (a day of the journal stream scrolled out of view, the
+    // page closed meanwhile).
+    /// ensureEditVisible() once the event loop is idle.
     function laterEnsureEditVisible(): void {
         editVisibleLater.restart()
     }

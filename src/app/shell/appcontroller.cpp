@@ -1825,6 +1825,11 @@ int AppController::toastRestore(const QString &text, const QString &actionText, 
     return id;
 }
 
+int AppController::toastRestorePage(const QString &text, const QString &actionText, const QString &trashPath)
+{
+    return toastRestore(text, actionText, QStringList{trashPath});
+}
+
 void AppController::setToastHostId(int id, int hostId)
 {
     if (id > 0 && hostId > 0)

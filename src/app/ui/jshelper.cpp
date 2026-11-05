@@ -743,6 +743,15 @@ QStringList JsHelper::trimmedStrings(const QStringList &list) const
     return out;
 }
 
+QVariantList JsHelper::fromStrings(const QStringList &strings) const
+{
+    QVariantList out;
+    out.reserve(strings.size());
+    for (const QString &s : strings)
+        out.append(s);
+    return out;
+}
+
 QVariantList JsHelper::filled(int count, const QVariant &value) const
 {
     QVariantList out;

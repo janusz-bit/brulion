@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Templates as T
 import Brulion
 
-// BToast — one transient notification (normally created by BToastHost.show()).
+// BToast — one transient notification (normally created by BToastHost.showToast()).
 //
 // kind: "info" | "success" | "warning" | "error"; optional action button ("Cofnij") and a
 // close button. Inverse colours so it stands out over any content. The message is plain text

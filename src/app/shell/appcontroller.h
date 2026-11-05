@@ -575,6 +575,8 @@ public:
     /// An "info" toast whose button restores `trashPaths` from the trash (Workspace::restoreAll),
     /// also once the view that deleted them is gone: its id.
     Q_INVOKABLE int toastRestore(const QString &text, const QString &actionText, const QStringList &trashPaths);
+    /// toastRestore() for one page (compiled QML cannot pass a list literal).
+    Q_INVOKABLE int toastRestorePage(const QString &text, const QString &actionText, const QString &trashPath);
     /// Main.qml: toast `id` of toastWithAction() is shown by the window's toast host as `hostId`.
     Q_INVOKABLE void setToastHostId(int id, int hostId);
     /// Main.qml: the button of the toast host's toast `hostId` was pressed (toastAction()'s

@@ -152,7 +152,7 @@ Rectangle {
                 visible: bar.crumbs.length > 0
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width
-                model: Js.appendedString(bar.crumbs, bar.title)
+                model: Js.appended(Js.fromStrings(bar.crumbs), bar.title)
                 onActivated: (index) => {
                     if (index < 0 || index >= bar.crumbPaths.length)
                         return

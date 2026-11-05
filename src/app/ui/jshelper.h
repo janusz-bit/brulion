@@ -151,6 +151,8 @@ public:
     Q_INVOKABLE QStringList nonEmptyStrings(const QStringList &list) const;
     /// Each string trimmed (list.map(s => s.trim())).
     Q_INVOKABLE QStringList trimmedStrings(const QStringList &list) const;
+    /// The strings as a list of values (a list<string> where a list<var> is wanted).
+    Q_INVOKABLE QVariantList fromStrings(const QStringList &strings) const;
     /// A list of `count` copies of `value` (Array(count).fill(value)).
     Q_INVOKABLE QVariantList filled(int count, const QVariant &value) const;
     /// [0, 1, …, count − 1]

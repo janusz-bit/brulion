@@ -179,9 +179,7 @@ Item {
         case "move":
             // One time of a recurring reminder (the calendar's other dates): snoozed, the series stays.
             if (targetKind === "reminder" && targetOccurrence) {
-                const at = occurrenceAt()
-                snooze(action === "shift" ? DatesHelper.addMinutes(at, b)
-                                          : DatesHelper.addDays(DatesHelper.today, a) + " " + (targetTime !== "" ? targetTime : "09:00"))
+                snoozeOccurrence(action === "shift", 0 + a, 0 + b)
                 break
             }
             run(action, a, b)
@@ -191,12 +189,18 @@ Item {
             break
         }
     }
-    /// The open link in a new tab or window (OpenIn). (OpenIn.run() takes a function: not
-    /// compiled until OpenIn's begin()/end() replace it.)
+    /// One time of a recurring reminder moved by `minutes` (`shift`) or to `days` from today.
+    function snoozeOccurrence(shift: bool, days: real, minutes: real): void {
+        if (shift)
+            snooze(DatesHelper.addMinutes(occurrenceAt(), minutes))
+        else
+            snooze(DatesHelper.addDays(DatesHelper.today, days) + " " + (targetTime !== "" ? targetTime : "09:00"))
+    }
+    /// The open link in a new tab or window (OpenIn).
     function openLinkIn(target: string): void {
-        const url = linkUrl
-        const fromPath = linkFromPath
-        OpenIn.run(target, () => root.actions.openLink(url, fromPath, false))
+        OpenIn.begin(target)
+        actions.openLink(linkUrl, linkFromPath, false)
+        OpenIn.end()
     }
     function chooseLink(action: string): void {
         switch (action) {

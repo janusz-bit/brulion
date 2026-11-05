@@ -64,16 +64,8 @@ FocusScope {
     function dayOf(item: Item): ContentJournalDay {
         if (!item)
             return null
-        const children = root.childrenOf(item)
-        for (let i = 0; i < children.length; ++i) {
-            const day = children[i] as ContentJournalDay
-            if (day)
-                return day
-        }
-        return null
-    }
-    function childrenOf(item: Item): list<Item> {
-        return item.children
+        // The delegate's `day` (an inline delegate type: read as a property).
+        return AppController.propertyOf(item, "day") as ContentJournalDay
     }
     /// The stream's item at (x, y) of its content (null: none).
     function streamItemAt(x: real, y: real): Item {
@@ -373,27 +365,34 @@ FocusScope {
             /// the frame ends at the keyboard (the shell lifts it). Not while the keyboard slides:
             /// the day's editor asks again once it has settled.
             function ensureVisible(item: Item, rect: rect): void {
+                // (The rect's fields first: a parameter is not read again after a call.)
+                const rx = rect.x
+                const ry = rect.y
+                const rh = rect.height
                 if (!item || KeyboardInsets.animating)
                     return
-                journals.mapped = item.mapToItem(list.contentItem, rect.x, rect.y)
+                journals.mapped = item.mapToItem(list.contentItem, rx, ry)
                 const py = journals.mapped.y
                 const margin = Theme.space8
                 const bottom = list.height - (toolbarDocked ? Theme.editToolbarHeight : 0)
                 const top = py - list.contentY
                 if (top < margin)
                     list.contentY = Math.max(list.originY, py - margin)
-                else if (top + rect.height > bottom - margin)
-                    list.contentY = py + rect.height - bottom + margin
+                else if (top + rh > bottom - margin)
+                    list.contentY = py + rh - bottom + margin
             }
             /// Typewriter scrolling (BlockEditor.typewriter): `rect` of `item` to the middle of
             /// the visible part, as far as the stream goes.
             function centerInView(item: Item, rect: rect): void {
+                const rx = rect.x
+                const ry = rect.y
+                const rh = rect.height
                 if (!item || KeyboardInsets.animating)
                     return
-                journals.mapped = item.mapToItem(list.contentItem, rect.x, rect.y)
+                journals.mapped = item.mapToItem(list.contentItem, rx, ry)
                 const visibleHeight = list.height - (toolbarDocked ? Theme.editToolbarHeight : 0)
                 const end = Math.max(list.originY, list.originY + list.contentHeight - list.height + list.bottomMargin)
-                const target = Math.max(list.originY, Math.min(end, journals.mapped.y + rect.height / 2 - visibleHeight / 2))
+                const target = Math.max(list.originY, Math.min(end, journals.mapped.y + rh / 2 - visibleHeight / 2))
                 if (Math.abs(target - list.contentY) >= 1)
                     list.contentY = target
             }

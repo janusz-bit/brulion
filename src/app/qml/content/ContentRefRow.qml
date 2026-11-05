@@ -21,7 +21,7 @@ import Brulion
 // are rounded shapes (BRichText), the text cut after 12 lines (6 when compact) with "…". A click
 // on the task checkbox emits taskToggled() (a right-click or long press on it: the status menu,
 // taskStatusRequested()), a click anywhere else opens the block in its page — a Ctrl+click or a middle
-// click in a new tab (OpenIn: opened(false) emitted inside OpenIn.run("tab", …)), links too.
+// click in a new tab (OpenIn: opened(false) emitted between OpenIn.begin("tab") and OpenIn.end()), links too.
 // Keyboard: focusable, Enter opens, Ctrl+Enter opens in the side panel (wide windows).
 FocusScope {
     id: row

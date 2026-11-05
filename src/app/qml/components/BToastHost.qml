@@ -17,8 +17,7 @@ import Brulion
 // "error"; actionText: the button ("" for none; pressing it dismisses the toast and emits
 // actionTriggered(id)); timeout: ms, < 0 the default (4 s, 7 s with an action), 0 = until closed.
 // Hovering a toast pauses its timer. dismiss(id), clear(). toastShown(id, text, kind) tells about
-// each one shown (the remote control's state.lastToasts). The older show(text, { kind, actionText,
-// onAction, timeout }) still works but does not compile (it takes a function): use showToast().
+// each one shown (the remote control's state.lastToasts).
 Item {
     id: host
 
@@ -48,43 +47,6 @@ Item {
         host.Accessible.announce(text, Accessible.Polite)
         toastShown(id, text, k)
         return id
-    }
-
-    /// The older API (options: { kind, actionText, onAction, timeout }): onAction runs when the
-    /// toast's button is pressed, after the toast is dismissed (_connectAction(): not compiled, it
-    /// takes a function).
-    function show(text: string, options: var): int {
-        // (Kept in a property, the fields as plain values: compiled code passes them on after the
-        // calls that read the others.)
-        _showOptions = options
-        const kind = "" + UiModels.stringField(_showOptions, "kind")
-        const actionText = "" + UiModels.stringField(_showOptions, "actionText")
-        const timeout = 0 + UiModels.numberField(_showOptions, "timeout", -1)
-        const id = showToast(text, kind, actionText, timeout)
-        _connectAction(id, _showOptions)
-        _showOptions = null
-        return id
-    }
-    property var _showOptions: null
-    function _connectAction(id: int, options: var): void {
-        const o = options || {}
-        if (typeof o.onAction === "function") {
-            const run = (toastId) => {
-                if (toastId !== id)
-                    return
-                actionTriggered.disconnect(run)
-                toastRemoved.disconnect(forget)
-                o.onAction()
-            }
-            const forget = (toastId) => {
-                if (toastId !== id)
-                    return
-                actionTriggered.disconnect(run)
-                toastRemoved.disconnect(forget)
-            }
-            actionTriggered.connect(run)
-            toastRemoved.connect(forget)
-        }
     }
 
     function dismiss(toastId: int): void {

@@ -42,17 +42,18 @@ FocusScope {
         AppController.replaceRoute({ view: "cleanup", kind: kind, selected: ticked })
         AppController.navigate({ view: "page", path: path })
     }
+    /// The trash paths of the last "Move to trash" (read from a property: compiled QML reads a
+    /// list parameter only before the first call).
+    property list<string> lastTrashed
     function moveTickedToTrash(): void {
-        const trashed = root.trashed(Workspace.deletePages(selection.shownTicked))
-        if (trashed.length > 0) {
+        lastTrashed = Workspace.deletePages(selection.shownTicked)
+        if (lastTrashed.length > 0) {
             // Restored by the controller, not by this view: the toast outlives the view when the
             // user goes elsewhere before pressing Cofnij.
-            AppController.toastRestore(qsTr("%n file(s) moved to the trash", "", trashed.length), qsTr("Undo"), trashed)
+            AppController.toastRestore(qsTr("%n file(s) moved to the trash", "", lastTrashed.length), qsTr("Undo"),
+                                       lastTrashed)
         }
         reload()
-    }
-    function trashed(paths: list<string>): list<string> {
-        return paths
     }
     function nonEmpty(parts: list<string>): list<string> {
         return Js.nonEmptyStrings(parts)

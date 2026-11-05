@@ -47,7 +47,7 @@ BDialog {
         dialog.mode = modeChoice.preferred()
     }
     onAccepted: {
-        const name = Js.trim(nameField.text)
+        const name = "" + Js.trim(nameField.text)
         if (dialog.folderMode) {
             const created = Workspace.createFolder(dialog.folder !== "" ? dialog.folder + "/" + name : name)
             if (created !== "")

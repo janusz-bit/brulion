@@ -413,6 +413,8 @@ void TstJsHelper::lists()
     QCOMPARE(js.reversed({}), QVariantList());
     QCOMPARE(js.filled(3, u"-"_s), (QVariantList{u"-"_s, u"-"_s, u"-"_s}));
     QCOMPARE(js.filled(-1, 0), QVariantList());
+    QCOMPARE(js.fromStrings({u"ą"_s, QString()}), (QVariantList{u"ą"_s, QString()}));
+    QCOMPARE(js.fromStrings({}), QVariantList());
     QCOMPARE(js.range(4), (QList<int>{0, 1, 2, 3}));
     QCOMPARE(js.range(0), QList<int>());
 

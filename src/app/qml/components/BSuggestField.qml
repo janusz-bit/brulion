@@ -18,21 +18,17 @@ import Brulion
 // Keys: Down / Up move the highlight (none at first: Enter takes what is typed — committed();
 // with a highlighted row picked()), Tab picks the highlighted row or the first one, Escape —
 // cancelled(); keyPressedFirst(event) sees every key first (event.accepted = true: the field
-// ignores it). The older `provider` function and `keyFilter` still work, not compiled. A tap or click on a row picks it. The list never takes the keyboard (the field
+// ignores it). A tap or click on a row picks it. The list never takes the keyboard (the field
 // keeps typing), and it is created when it is first shown (docs/UI.md "Scrolling performance").
 BTextField {
     id: field
 
     /// The owner provides suggestions (suggestionsRequested).
     property bool suggesting: false
-    /// The older form, not compiled: (text) → [{ title, subtitle?, icon?, value? }]; null: none.
-    property var provider: null
     /// The suggestions for the text now: { title, subtitle, icon, value } (strings).
     property list<var> suggestions
     /// The highlighted row, -1: none.
     property int currentIndex: -1
-    /// The older form of keyPressedFirst, not compiled: (event) → true when it handled the key.
-    property var keyFilter: null
     /// The list is shown (the field has the focus and there is something to suggest).
     readonly property bool listShown: popupLoader.item !== null && (popupLoader.item as T.Popup).opened
     /// The list's popup (null until first shown; self-tests check where it is).
@@ -54,8 +50,6 @@ BTextField {
     function refresh(): void {
         if (activeFocus && suggesting)
             suggestionsRequested(typedText)
-        else if (activeFocus && provider !== null)
-            suggestions = _provided(typedText)
         else
             suggestions = []
         currentIndex = Math.min(currentIndex, suggestions.length - 1)
@@ -70,17 +64,6 @@ BTextField {
                 popup.close()
             }
         }
-    }
-    /// The older `provider`'s suggestions, as rows with every key; not compiled.
-    function _provided(text: string): list<var> {
-        return (provider(text) || []).map(s => ({
-            title: String(s.title), subtitle: s.subtitle || "", icon: s.icon || "",
-            value: s.value !== undefined ? String(s.value) : ""
-        }))
-    }
-    /// The older `keyFilter`'s answer; not compiled.
-    function _filtered(event: KeyEvent): bool {
-        return !!keyFilter(event)
     }
     /// The list under the field, above it when there is no room (the keyboard, the window's bottom).
     function placePopup(): void {
@@ -125,17 +108,12 @@ BTextField {
                 (popupLoader.item as T.Popup).close()
         }
     }
-    onProviderChanged: if (activeFocus) refresh()
     onSuggestingChanged: if (activeFocus) refresh()
 
     Keys.onPressed: (event) => {
         field.keyPressedFirst(event)
         if (event.accepted)
             return
-        if (field.keyFilter !== null && field._filtered(event)) {
-            event.accepted = true
-            return
-        }
         if (event.key === Qt.Key_Down && suggestions.length > 0) {
             currentIndex = (currentIndex + 1) % suggestions.length
             event.accepted = true

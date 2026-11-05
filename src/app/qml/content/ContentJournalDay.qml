@@ -115,7 +115,7 @@ FocusScope {
             page.setFoldState(day._folds)
         day._foldsRestored = true
     }
-    // Deferred like the editor's later(): gone with the day (a stream scrolled away).
+    // Deferred like the editor's own Timers: gone with the day (a stream scrolled away).
     Timer {
         id: revealLater
         interval: 0
@@ -139,8 +139,8 @@ FocusScope {
         onEditingRowChanged: {
             if (page.editingRow >= 0) {
                 day.activated()
-                // Through the editor's later(): the day may be gone by then (the stream left right
-                // after a block started being edited — a palette command, a link).
+                // Deferred, checking the editor is still alive: the day may be gone by then (the
+                // stream left right after a block started being edited — a palette command, a link).
                 revealLater.restart()
             }
         }

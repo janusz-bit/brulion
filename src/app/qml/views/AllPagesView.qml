@@ -677,7 +677,7 @@ FocusScope {
             const trashPath = Workspace.deletePage(path)
             if (trashPath !== "") {
                 // Restored by the controller: the toast outlives this view.
-                AppController.toastRestore(qsTr("Moved to trash"), qsTr("Undo"), [trashPath])
+                AppController.toastRestorePage(qsTr("Moved to trash"), qsTr("Undo"), trashPath)
             }
         }
     }
