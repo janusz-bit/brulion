@@ -924,6 +924,15 @@ void WorkspaceSync::refreshConflicts()
     Q_EMIT conflictsChanged();
 }
 
+QStringList WorkspaceSync::conflictCopies() const
+{
+    QStringList copies;
+    copies.reserve(m_conflicts.size());
+    for (const QVariant &v : m_conflicts)
+        copies.append(v.toMap().value(u"copy"_s).toString());
+    return copies;
+}
+
 std::optional<QVariantMap> WorkspaceSync::conflictFor(const QString &copy) const
 {
     const QString c = paths::normalize(copy);

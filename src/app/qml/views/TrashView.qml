@@ -16,28 +16,32 @@ FocusScope {
     property var route: ({})
     readonly property int maximumWidth: 860
     readonly property real sideMargin: Math.max(Theme.compact ? Theme.space3 : Theme.space6, (width - maximumWidth) / 2)
-    property var items: []
+    // Workspace.trashItems(): rows { trashPath, original, title, folder, files, size, deletedAt, when }.
+    property list<var> items: []
 
-    function reload() {
+    function reload(): void {
         items = Workspace.trashItems()
     }
-    function sizeLabel(bytes) {
+    function sizeLabel(bytes: real): string {
         const locale = Qt.locale(DatesHelper.locale === "en" ? "en_US" : "pl_PL")
         if (bytes < 1024)
             return qsTr("%1 B").arg(bytes)
         if (bytes < 1024 * 1024)
-            return qsTr("%1 kB").arg(Number(bytes / 1024).toLocaleString(locale, "f", bytes < 10240 ? 1 : 0))
-        return qsTr("%1 MB").arg(Number(bytes / (1024 * 1024)).toLocaleString(locale, "f", 1))
+            return qsTr("%1 kB").arg(locale.toString(bytes / 1024, "f", bytes < 10240 ? 1 : 0))
+        return qsTr("%1 MB").arg(locale.toString(bytes / (1024 * 1024), "f", 1))
     }
-    function restore(item) {
-        const path = Workspace.restore(item.trashPath)
+    function nonEmpty(parts: list<string>): list<string> {
+        return Js.nonEmptyStrings(parts)
+    }
+    function restore(trashPath: string, title: string): void {
+        const path = "" + Workspace.restore(trashPath)
         if (path === "") {
-            AppController.toast(qsTr("“%1” could not be restored.").arg(item.title), "error")
+            AppController.toast(qsTr("“%1” could not be restored.").arg(title), "error")
             return
         }
         const folder = Workspace.folderOf(path)
-        AppController.toast(folder !== "" ? qsTr("“%1” is back in the folder %2").arg(item.title).arg(folder)
-                                          : qsTr("“%1” is back in the notebook").arg(item.title), "success")
+        AppController.toast(folder !== "" ? qsTr("“%1” is back in the folder %2").arg(title).arg(folder)
+                                          : qsTr("“%1” is back in the notebook").arg(title), "success")
     }
 
     focus: true
@@ -98,10 +102,16 @@ FocusScope {
         delegate: Item {
             id: entry
             required property int index
-            required property var modelData
-            readonly property var item: modelData
-            readonly property string journalDay: item.folder ? "" : Workspace.journalDate(item.original)
-            readonly property string shownTitle: journalDay !== "" ? DatesHelper.formatLong(journalDay) : item.title
+            required property string trashPath
+            required property string original
+            required property string title
+            required property bool folder
+            required property int files
+            required property real size
+            required property string when
+            readonly property string journalDay: folder ? "" : Workspace.journalDate(original)
+            readonly property string shownTitle: journalDay !== "" ? DatesHelper.formatLong(journalDay) : title
+            readonly property string fromFolder: Workspace.folderOf(original)
 
             width: list.width
             implicitHeight: Math.max(Theme.listItemHeightTwoLine, rowLayout.implicitHeight + 2 * Theme.space2)
@@ -123,7 +133,7 @@ FocusScope {
                 spacing: Theme.space3
 
                 BIcon {
-                    name: entry.item.folder ? "folder" : entry.journalDay !== "" ? "calendar-days" : "file-text"
+                    name: entry.folder ? "folder" : entry.journalDay !== "" ? "calendar-days" : "file-text"
                     size: Theme.iconSize
                     color: Theme.fgMuted
                     Layout.alignment: Qt.AlignTop
@@ -140,11 +150,11 @@ FocusScope {
                     }
                     BText {
                         Layout.fillWidth: true
-                        text: [entry.journalDay !== "" ? qsTr("journal")
-                               : Workspace.folderOf(entry.item.original) !== "" ? qsTr("from %1").arg(Workspace.folderOf(entry.item.original)) : "",
-                               entry.item.when !== "" ? qsTr("deleted %1").arg(entry.item.when) : "",
-                               entry.item.folder ? qsTr("%n file(s)", "", entry.item.files) : "",
-                               root.sizeLabel(entry.item.size)].filter(s => s !== "").join(" · ")
+                        text: root.nonEmpty([entry.journalDay !== "" ? qsTr("journal")
+                                             : entry.fromFolder !== "" ? qsTr("from %1").arg(entry.fromFolder) : "",
+                                             entry.when !== "" ? qsTr("deleted %1").arg(entry.when) : "",
+                                             entry.folder ? qsTr("%n file(s)", "", entry.files) : "",
+                                             root.sizeLabel(entry.size)]).join(" · ")
                         variant: "small"
                         color: Theme.fgMuted
                         wrapMode: Text.Wrap
@@ -155,7 +165,7 @@ FocusScope {
                     iconName: "undo-2"
                     text: Theme.compact ? "" : qsTr("Restore")
                     Accessible.name: qsTr("Restore %1").arg(entry.shownTitle)
-                    onClicked: root.restore(entry.item)
+                    onClicked: root.restore(entry.trashPath, entry.title)
                 }
                 BIconButton {
                     size: "small"
@@ -163,7 +173,7 @@ FocusScope {
                     iconName: "x"
                     iconColor: Theme.dangerText
                     label: qsTr("Delete %1 for good").arg(entry.shownTitle)
-                    onClicked: deleteDialog.openFor(entry.item)
+                    onClicked: deleteDialog.openFor(entry.trashPath, entry.title, entry.folder, entry.files)
                 }
             }
         }
@@ -181,20 +191,26 @@ FocusScope {
 
     BConfirmDialog {
         id: deleteDialog
-        property var item: ({})
-        function openFor(i) {
-            item = i
+        property string itemTrashPath
+        property string itemTitle
+        property bool itemFolder
+        property int itemFiles
+        function openFor(trashPath: string, title: string, folder: bool, files: int): void {
+            itemTrashPath = trashPath
+            itemTitle = title
+            itemFolder = folder
+            itemFiles = files
             open()
         }
         parent: T.Overlay.overlay
         title: qsTr("Delete for good?")
-        message: deleteDialog.item.folder
-                 ? qsTr("The folder “%1” and the %n file(s) in it will be deleted permanently.", "", deleteDialog.item.files || 0).arg(deleteDialog.item.title)
-                 : qsTr("“%1” will be deleted permanently. This cannot be undone.").arg(deleteDialog.item.title)
+        message: deleteDialog.itemFolder
+                 ? qsTr("The folder “%1” and the %n file(s) in it will be deleted permanently.", "", deleteDialog.itemFiles).arg(deleteDialog.itemTitle)
+                 : qsTr("“%1” will be deleted permanently. This cannot be undone.").arg(deleteDialog.itemTitle)
         confirmText: qsTr("Delete")
         destructive: true
         onAccepted: {
-            if (Workspace.deleteForever(deleteDialog.item.trashPath))
+            if (Workspace.deleteForever(deleteDialog.itemTrashPath))
                 AppController.toast(qsTr("Deleted"), "info")
         }
     }

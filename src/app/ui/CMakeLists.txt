@@ -14,6 +14,7 @@ qt_add_library(brulion_ui_helpers STATIC
     diffhelper.h diffhelper.cpp
     texthelper.h texthelper.cpp
     jshelper.h jshelper.cpp
+    mapholder.h
     qttranslations.h qttranslations.cpp
     keyboardinsets.h keyboardinsets.cpp
     gestureinsets.h gestureinsets.cpp

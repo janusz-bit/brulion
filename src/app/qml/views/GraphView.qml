@@ -43,25 +43,25 @@ FocusScope {
     /// The card shows the selected node (search, tap) with its buttons.
     readonly property string cardId: graph.selectedId !== "" ? graph.selectedId : ""
 
-    function flag(value) {
+    function flag(value: var): bool {
         return value === true || value === "true"
     }
-    function applyRoute() {
-        focusPath = route && route.path ? route.path : ""
+    function applyRoute(): void {
+        focusPath = AppController.routeText(route, "path")
         localMode = focusPath !== ""
-        depth = route && (route.depth === 2 || route.depth === "2") ? 2 : 1
+        depth = AppController.routeText(route, "depth") === "2" ? 2 : 1
         graph.selectedId = ""
         graph.resetView()
-        if (route && route.select)
+        if (AppController.routeFlag(route, "select"))
             selectTimer.restart()
     }
     // Select once the layout had a moment to unfold (screenshots of the node card).
     Timer {
         id: selectTimer
         interval: 600
-        onTriggered: if (root.route && root.route.select) root.choose(root.route.select)
+        onTriggered: if (AppController.routeFlag(root.route, "select")) root.choose(AppController.routeText(root.route, "select"))
     }
-    function setOption(name, on) {
+    function setOption(name: string, on: bool): void {
         switch (name) {
         case "tags": showTags = on; AppSettings.setValue("graph/showTags", on); break
         case "missing": showMissing = on; AppSettings.setValue("graph/showMissing", on); break
@@ -70,39 +70,43 @@ FocusScope {
         }
         graph.resetView()
     }
-    function setLocal(on) {
+    // graphModel.nodeInfo(id): { id, kind ("page" | "journal" | "tag" | "missing"), title, path, … }.
+    function setLocal(on: bool): void {
         if (on && focusPath === "" && graph.selectedId !== "") {
-            const info = graphModel.nodeInfo(graph.selectedId)
-            if (info.path)
-                focusPath = info.path
+            const path = AppController.routeText(graphModel.nodeInfo(graph.selectedId), "path")
+            if (path !== "")
+                focusPath = path
         }
         localMode = on && focusPath !== ""
         graph.resetView()
     }
-    function showLocal(id) {
-        const info = graphModel.nodeInfo(id)
-        if (!info.path)
+    function showLocal(id: string): void {
+        const path = AppController.routeText(graphModel.nodeInfo(id), "path")
+        if (path === "")
             return
-        focusPath = info.path
+        focusPath = path
         localMode = true
         graph.selectedId = ""
         graph.resetView()
     }
-    function openNode(id) {
-        const info = graphModel.nodeInfo(id)
-        switch (info.kind) {
-        case "tag": AppController.openTag(info.title.replace(/^#/, "")); break
+    MapHolder { id: nodeInfo }
+    function openNode(id: string): void {
+        nodeInfo.map = graphModel.nodeInfo(id)
+        const kind = "" + nodeInfo.map.kind
+        switch (kind) {
+        case "tag": AppController.openTag(Js.replaceRegExp("" + nodeInfo.map.title, "^#", "", "")); break
         case "missing": {
             // The id is the link target as written ("missing:" + name when a note has that path).
-            const name = info.id.startsWith("missing:") ? info.id.slice(8) : info.id
+            const nodeId = "" + nodeInfo.map.id
+            const name = Js.startsWith(nodeId, "missing:") ? "" + Js.sliceFrom(nodeId, 8) : nodeId
             AppController.openPage(Workspace.newPagePath(name))
             break
         }
         case "page":
-        case "journal": AppController.openPage(info.path); break
+        case "journal": AppController.openPage("" + nodeInfo.map.path); break
         }
     }
-    function choose(id) {
+    function choose(id: string): void {
         graph.selectedId = id
         graph.centerOn(id, Math.max(graph.zoom, graph.labelZoom * 1.2))
         graph.forceActiveFocus()
@@ -131,7 +135,7 @@ FocusScope {
         // the GUI thread in slices between its frames.
         frameInterval: DeviceInfo.platform === "wasm" ? 33 : 16
         reducedMotion: Theme.reducedMotion
-        active: root.visible && Qt.application.state === Qt.ApplicationActive
+        active: root.visible && Application.state === Qt.ApplicationActive
         vaultIndex: PlanningContext.vaultIndex
     }
 
@@ -149,7 +153,7 @@ FocusScope {
         fitTopMargin: toolbar.visible ? toolbar.y + toolbar.implicitHeight + Theme.space2 : Theme.space8
         fitBottomMargin: Theme.narrow ? Theme.space12 : Theme.space10
         backgroundColor: Theme.bg
-        edgeColor: Theme.alpha(Theme.fg, Theme.dark ? 0.2 : 0.17)
+        edgeColor: Theme.fg.alpha(Theme.dark ? 0.2 : 0.17)
         highlightColor: Theme.accent
         pageColor: Theme.link
         journalColor: Theme.markColor("journal")
@@ -157,7 +161,7 @@ FocusScope {
         missingColor: Theme.linkMissing
         focusColor: Theme.warning
         labelColor: Theme.fg
-        labelBackground: Theme.alpha(Theme.bg, 0.8)
+        labelBackground: Theme.bg.alpha(0.8)
         font.family: Theme.fontUi
         font.pixelSize: Theme.textXs
 
@@ -309,12 +313,8 @@ FocusScope {
         anchors.leftMargin: Theme.narrow ? Theme.space3 : Theme.space4
         anchors.bottomMargin: Theme.narrow ? Theme.space3 : Theme.space4
         width: Math.min(implicitWidth, root.width - zoomControls.width - 3 * Theme.space4)
-        text: {
-            const parts = [qsTr("%n nodes", "", graphModel.nodeCount), qsTr("%n links", "", graphModel.edgeCount)]
-            if (graphModel.truncated)
-                parts.push(qsTr("the %n best connected shown", "", graphModel.nodeCount))
-            return parts.join(" · ")
-        }
+        text: qsTr("%n nodes", "", graphModel.nodeCount) + " · " + qsTr("%n links", "", graphModel.edgeCount)
+              + (graphModel.truncated ? " · " + qsTr("the %n best connected shown", "", graphModel.nodeCount) : "")
         font.family: Theme.fontUi
         font.pixelSize: Theme.textXs
         color: Theme.fgFaint
@@ -334,7 +334,8 @@ FocusScope {
             delegate: Row {
                 id: legendItem
                 required property int index
-                readonly property color color: [graph.pageColor, graph.journalColor, graph.tagColor, graph.missingColor][index]
+                readonly property color color: index === 0 ? graph.pageColor : index === 1 ? graph.journalColor
+                                               : index === 2 ? graph.tagColor : graph.missingColor
                 visible: [true, root.showJournals, root.showTags, root.showMissing][index]
                 spacing: 4
                 Rectangle {

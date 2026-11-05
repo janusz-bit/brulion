@@ -81,46 +81,132 @@ FocusScope {
 
     /// Where the blocks are scrolled: { row (the first one in view), offset (px above it) } —
     /// {} for a picture, a PDF, source mode or a page not loaded.
-    function viewState() {
+    function viewState(): var {
         const list = editor.listView
         if (!page.loaded || page.path === "" || !editor.visible || page.sourceMode || !list)
             return {}
         const row = editor.rowAt(list.width / 2, list.contentY + 1)
-        const item = row >= 0 ? list.itemAtIndex(row) : null
+        const item = row >= 0 ? root.editorItemAt(row) : null
         if (!item)
             return list.contentY > list.originY + 1 ? { top: list.contentY - list.originY } : {}
         return { row: row, offset: Math.round(list.contentY - item.y) }
     }
+    /// The editor list's item of `row` (null: not created).
+    function editorItemAt(row: int): Item {
+        return editor.listView.itemAtIndex(row)
+    }
     /// Scroll back to what viewState() gave, once this route's page is loaded (instead of the
     /// route's own target: switching back to a tab does not flash its block again).
-    function restoreViewState(state) {
-        root._pendingState = state && (state.row !== undefined || state.top !== undefined)
-                ? { state: state, path: root.routePath } : null
-        if (root._pendingState)
-            root._revealed = JSON.stringify([root.routePath, route.blockId, route.line, route.heading])
-        Qt.callLater(() => { if (root && root.alive) root.applyViewState() })
+    MapHolder { id: stateInfo }
+    function restoreViewState(state: var): void {
+        stateInfo.map = state
+        const hasRow = stateInfo.map.row !== undefined
+        const hasTop = stateInfo.map.top !== undefined
+        pending.active = hasRow || hasTop
+        pending.hasRow = hasRow
+        pending.row = hasRow ? stateInfo.map.row : -1
+        pending.offset = stateInfo.map.offset !== undefined ? stateInfo.map.offset : 0
+        pending.top = hasTop ? stateInfo.map.top : 0
+        pending.path = root.routePath
+        if (pending.active)
+            root._revealed = root.revealKey(root.routePath)
+        applyStateLater.restart()
     }
-    property var _pendingState: null
-    function applyViewState() {
-        const pending = root._pendingState
-        if (!pending || !page.loaded || page.loading || page.path !== pending.path)
+    // The view state to restore ({ row, offset } or { top }) once this path is loaded, and the one
+    // being applied (two event-loop turns later).
+    QtObject {
+        id: pending
+        property bool active: false
+        property bool hasRow: false
+        property int row: -1
+        property int offset: 0
+        property real top: 0
+        property string path
+    }
+    QtObject {
+        id: applying
+        property bool hasRow: false
+        property int row: -1
+        property int offset: 0
+        property real top: 0
+    }
+    function applyViewState(): void {
+        if (!pending.active || !page.loaded || page.loading || page.path !== pending.path)
             return
-        root._pendingState = null
+        pending.active = false
+        applying.hasRow = pending.hasRow
+        applying.row = pending.row
+        applying.offset = pending.offset
+        applying.top = pending.top
         // After the editor's own scroll to the top once a page has loaded (BlockEditor).
-        editor.later(() => editor.later(() => {
-            const list = editor.listView
-            const s = pending.state
-            list.userMoved = true
-            if (s.row !== undefined && s.row >= 0 && s.row < list.count) {
-                list.positionViewAtIndex(s.row, ListView.Beginning)
-                list.forceLayout()
-                const item = list.itemAtIndex(s.row)
-                if (item)
-                    list.contentY = Math.max(list.originY, item.y + (s.offset || 0))
-            } else if (s.top !== undefined) {
-                list.contentY = list.originY + s.top
+        applyStateFirst.restart()
+    }
+    function scrollToAppliedState(): void {
+        const list = editor.listView
+        editor.markUserMoved()
+        if (applying.hasRow && applying.row >= 0 && applying.row < list.count) {
+            list.positionViewAtIndex(applying.row, ListView.Beginning)
+            list.forceLayout()
+            const item = root.editorItemAt(applying.row)
+            if (item)
+                list.contentY = Math.max(list.originY, item.y + applying.offset)
+        } else if (!applying.hasRow) {
+            list.contentY = list.originY + applying.top
+        }
+    }
+    // Deferred calls (instead of Qt.callLater and the editor's later()).
+    Timer {
+        id: applyStateLater
+        interval: 0
+        onTriggered: root.applyViewState()
+    }
+    Timer {
+        id: applyStateFirst
+        interval: 0
+        onTriggered: applyStateSecond.restart()
+    }
+    Timer {
+        id: applyStateSecond
+        interval: 0
+        onTriggered: root.scrollToAppliedState()
+    }
+    Timer {
+        id: routeLater
+        interval: 0
+        onTriggered: {
+            root._routeQueued = false
+            root.applyRoute()
+        }
+    }
+    /// What route.open asks for, done one turn later (openRequested()).
+    Timer {
+        id: openLater
+        property string action
+        interval: 0
+        onTriggered: {
+            switch (action) {
+            case "rename":
+                if (root.pageHeader)
+                    root.pageHeader.startTitleEdit()
+                break
+            case "find":
+                root.openFind(false)
+                break
+            case "export":
+                exportDialog.openFor(page.path, false)
+                break
+            default: // a side panel tab
+                AppSettings.setValue("ui/sidePanel/tab", action)
+                AppController.sidePanelVisible = true
+                break
             }
-        }))
+        }
+    }
+    /// The route's target ("" when it names none) for `path`: revealTarget() goes there once.
+    function revealKey(path: string): string {
+        return path + "\n" + AppController.routeText(route, "blockId") + "\n"
+                + (Js.hasKey(route, "line") ? AppController.routeText(route, "line") : "-") + "\n"
+                + AppController.routeText(route, "heading")
     }
 
     /// The page's day ("YYYY-MM-DD") when it is a daily note, else "".
@@ -132,7 +218,7 @@ FocusScope {
                                     ? Workspace.periodicNoteOf(page.path) : ({})
     /// Top bar title: daily notes by their date, weekly and monthly notes by their period; other
     /// pages use the shell's default (file name).
-    readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : (periodic.label || "")
+    readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : AppController.routeText(periodic, "label")
     /// A block (or the source) is being edited, or a picture, a PDF or another file fills the view.
     readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute || root.pdfRoute
                                     || root.fileRoute
@@ -141,7 +227,7 @@ FocusScope {
     readonly property bool toolbarDocked: editor.toolbarVisible
     /// The shell's quick capture from the bottom navigation: the editing the docked toolbar is for
     /// ends first, as when the page is left.
-    function endEditing() {
+    function endEditing(): void {
         editor.endTouchEditing()
     }
     /// The page is shown as Markdown source (the shell turns the palette's block commands off).
@@ -158,16 +244,16 @@ FocusScope {
     /// the blocks is not drawn a second time. Closing the panel, pinning a page there or another
     /// tab brings it back at once.
     readonly property bool refsInSidePanel: !root.inSidePanel && !Theme.narrow && AppController.sidePanelVisible
-                                            && !(AppController.sidePanelRoute && AppController.sidePanelRoute.view !== undefined)
+                                            && !Js.hasKey(AppController.sidePanelRoute, "view")
                                             && root.sidePanelTab === "links"
     readonly property alias controller: page
     readonly property alias editor: editor
 
-    readonly property string routePath: route && route.path ? route.path : ""
+    readonly property string routePath: AppController.routeText(route, "path")
     /// A drawing of Obsidian's Excalidraw plugin (`Szkic.excalidraw.md`, a note whose frontmatter
     /// has `excalidraw-plugin`) or a `.excalidraw` scene: shown as its drawing, never in the block
     /// editor (its Markdown is the plugin's; "Edytuj rysunek" opens the drawing editor).
-    readonly property bool drawingPage: /\.(md|excalidraw)$/i.test(root.routePath) && Workspace.isDrawing(root.routePath)
+    readonly property bool drawingPage: Js.test(root.routePath, "\\.(md|excalidraw)$", "i") && Workspace.isDrawing(root.routePath)
     /// A picture attachment opens as a picture (its bytes are not a note, the editor never loads
     /// them), a drawing page as its drawing; the file read as text, read-only, when asked for
     /// ("Pokaż jako tekst", Ctrl+E).
@@ -178,10 +264,10 @@ FocusScope {
     /// Any other file that is no note (DOCX, ZIP, MP3…): read-only as text — a typed character
     /// would have been saved over its bytes.
     readonly property bool fileRoute: root.routePath !== "" && !root.pictureRoute && !root.pdfRoute
-                                      && !/\.(md|markdown)$/i.test(root.routePath)
+                                      && !Js.test(root.routePath, "\\.(md|markdown)$", "i")
     /// The view swipes sideways from the left edge itself: a PDF zoomed past the view's width pans
     /// (the drawer's edge strip yields to it, ShellRouteView.viewEdgeSwipe).
-    readonly property bool edgeSwipe: root.pdfRoute && pdfLoader.item !== null && pdfLoader.item.pannedSideways
+    readonly property bool edgeSwipe: root.pdfRoute && pdfLoader.item !== null && (pdfLoader.item as ContentPdfView).pannedSideways
     property string _revealed: ""
     property string _opened: ""
     property bool _openedMissing: false
@@ -196,15 +282,23 @@ FocusScope {
 
     focus: true
 
-    function updateStartsWithTitle() {
-        let first = null
-        for (let i = 0; i < page.blocks.count && first === null; ++i) {
-            const b = page.blocks.get(i)
-            if (b.view !== "frontmatter")
-                first = b
+    MapHolder { id: firstBlock }
+    function updateStartsWithTitle(): void {
+        // The first block after the properties: { view, headingLevel, plainText, … }.
+        let first = -1
+        for (let i = 0; i < page.blocks.count && first < 0; ++i) {
+            if (AppController.routeText(page.blocks.get(i), "view") !== "frontmatter")
+                first = i
         }
-        startsWithTitle = first !== null && first.view === "heading" && first.headingLevel === 1
-                          && TextHelper.fold(first.plainText.trim()) === TextHelper.fold(page.title.trim())
+        if (first < 0) {
+            startsWithTitle = false
+            return
+        }
+        firstBlock.map = page.blocks.get(first)
+        const plain = "" + Js.trim("" + firstBlock.map.plainText)
+        const title = "" + Js.trim(page.title)
+        startsWithTitle = firstBlock.map.view === "heading" && firstBlock.map.headingLevel === 1
+                          && ("" + TextHelper.fold(plain)) === ("" + TextHelper.fold(title))
     }
 
     // One event-loop turn late: on a rename the shell rewrites its routes before
@@ -216,12 +310,7 @@ FocusScope {
         if (_routeQueued)
             return
         _routeQueued = true
-        Qt.callLater(() => {
-            if (!root || !root.alive)
-                return
-            root._routeQueued = false
-            root.applyRoute()
-        })
+        routeLater.restart()
     }
     property bool _routeQueued: false
     // A new path: a picture opens as a picture again (before applyRoute, called later).
@@ -241,7 +330,7 @@ FocusScope {
     /// switching to another view) does nothing then.
     property bool alive: true
 
-    function applyRoute() {
+    function applyRoute(): void {
         if (root.routePath === "")
             return
         // A picture's, a PDF's or another file's bytes are not a note: the editor stays unloaded
@@ -264,16 +353,16 @@ FocusScope {
             root.restoreFolds()
             root.updateStartsWithTitle()
             root._openedMissing = page.loaded && !page.exists
-            page.sourceMode = AppSettings.editorSourceMode || root.route.source === true
+            page.sourceMode = AppSettings.editorSourceMode || AppController.routeText(root.route, "source") === "true"
             // A page that does not exist yet: something to type into. A day without a note starts
             // from the journal template, like in the journal stream — written only once changed; a
             // week or month without a note from its own template.
             // A page opened from a #tag on a touch screen waits for a tap ("Zacznij pisać", the
             // space under the header): the keyboard would cover the blocks with the tag it lists.
-            const waits = Theme.touchUi && !!root.route.fromTag && root.journalDate === ""
+            const waits = Theme.touchUi && AppController.routeFlag(root.route, "fromTag") && root.journalDate === ""
             if (page.loaded && !page.exists && page.blocks.count === 0 && !waits)
                 editor.startEditing(page.startNewPage(root.journalDate !== "" ? (Workspace.config.journalTemplate || "")
-                                                                               : (root.periodic.template || "")), -1)
+                                                                               : AppController.routeText(root.periodic, "template")), -1)
         }
         revealTarget()
         openRequested()
@@ -281,77 +370,80 @@ FocusScope {
     }
 
     /// The picture's two views: the picture itself ⇄ the file read as text (read-only).
-    function showPictureAsText() {
+    function showPictureAsText(): void {
         if (root.pictureRoute)
             root.pictureAsText = true
     }
-    function showPictureView() {
+    function showPictureView(): void {
         root.pictureAsText = false
     }
     /// Ctrl+E, "Markdown source" and the bar's button on a picture: the other view.
-    function togglePictureText() {
+    function togglePictureText(): void {
         if (root.pictureAsText)
             root.showPictureView()
         else
             root.showPictureAsText()
     }
 
-    function restoreFolds() {
+    /// The fold state being restored (Workspace.foldState()).
+    property list<var> _folds
+    function restoreFolds(): void {
         if (!page.loaded || root._foldsFor === page.path)
             return
-        const folds = Workspace.foldState(page.path)
-        if (folds.length > 0)
-            page.setFoldState(folds)
+        root._folds = Workspace.foldState(page.path)
+        if (root._folds.length > 0)
+            page.setFoldState(root._folds)
         root._foldsFor = page.path
     }
 
     /// Scroll to the block the route names (once per route).
-    function revealTarget() {
-        if (!page.loaded || !route)
+    function revealTarget(): void {
+        if (!page.loaded)
             return
-        const key = JSON.stringify([page.path, route.blockId, route.line, route.heading])
+        const key = root.revealKey(page.path)
         if (key === root._revealed)
             return
         root._revealed = key
+        const blockId = "" + AppController.routeText(route, "blockId")
+        const heading = "" + AppController.routeText(route, "heading")
+        const line = Js.hasKey(route, "line") ? AppController.routeInt(route, "line", 0) : -1
         let row = -1
-        if (route.blockId)
-            row = page.rowOfBlockId(route.blockId)
-        else if (route.line !== undefined)
-            row = page.rowOfLine(route.line)
-        else if (route.heading)
-            row = page.rowOfHeading(route.heading)
+        if (blockId !== "")
+            row = page.rowOfBlockId(blockId)
+        else if (line >= 0)
+            row = page.rowOfLine(line)
+        else if (heading !== "")
+            row = page.rowOfHeading(heading)
         if (row >= 0)
-            editor.later(() => editor.revealRow(row))
-        else if (route.blockId || route.heading)
-            editor.noticeMissing(route.blockId || "", route.blockId ? "" : route.heading)
+            editor.laterRevealRow(row)
+        else if (blockId !== "" || heading !== "")
+            editor.noticeMissing(blockId, blockId !== "" ? "" : heading, false)
     }
 
     /// route.open: a dialog or section opened right away (screenshots, smoke tests).
-    function openRequested() {
-        if (!route || !route.open || (!root.pictureRoute && !root.pdfRoute && !root.fileRoute && !page.loaded))
+    function openRequested(): void {
+        const open = AppController.routeText(route, "open")
+        if (open === "" || (!root.pictureRoute && !root.pdfRoute && !root.fileRoute && !page.loaded))
             return
-        const key = root.routePath + "\n" + route.open
+        const key = root.routePath + "\n" + open
         if (key === root._opened)
             return
         root._opened = key
         // A picture has no title, menu or editor: its text view, or the side panel's tabs (a PDF's own
         // values — search, jump, draw — are ContentPdfView's).
-        if ((root.pictureRoute || root.fileRoute) && ["text", "links", "outline", "calendar"].indexOf(route.open) < 0)
+        if ((root.pictureRoute || root.fileRoute) && ["text", "links", "outline", "calendar"].indexOf(open) < 0)
             return
-        if (root.pdfRoute && ["links", "outline", "calendar"].indexOf(route.open) < 0)
+        if (root.pdfRoute && ["links", "outline", "calendar"].indexOf(open) < 0)
             return
-        switch (route.open) {
+        switch (open) {
         case "text":
             root.showPictureAsText()
             break
         case "rename":
-            editor.later(() => { if (root.pageHeader) root.pageHeader.startTitleEdit() })
-            break
         case "find":
-            editor.later(() => root.openFind(false))
-            break
         case "export":
-            editor.later(() => exportDialog.openFor(page.path, false))
+            openLater.action = open
+            openLater.restart()
             break
         case "menu":
             menuTimer.restart()
@@ -367,28 +459,29 @@ FocusScope {
             // view's Component.onCompleted (a picture opens at once) the shell still offers the
             // previous view's side panel, whose context went with that view ("Cannot create a
             // component in an invalid context").
-            const tab = route.open
-            editor.later(() => {
-                AppSettings.setValue("ui/sidePanel/tab", tab)
-                AppController.sidePanelVisible = true
-            })
+            openLater.action = open
+            openLater.restart()
             break
         }
         }
     }
 
-     function rename(newTitle) {
+    MapHolder { id: renameImpact }
+    function rename(newTitle: string): void {
         page.save()
-        const impact = Workspace.renameImpact(page.path, newTitle, false)
-        renameDialog.openFor(page.path, newTitle, impact, false)
-        if ((impact.links || 0) + (impact.tags || 0) > 0)
+        // { links, tags, … }
+        renameImpact.map = Workspace.renameImpact(page.path, newTitle, false)
+        renameDialog.openFor(page.path, newTitle, renameImpact.map, false)
+        const links = renameImpact.map.links !== undefined ? renameImpact.map.links : 0
+        const tags = renameImpact.map.tags !== undefined ? renameImpact.map.tags : 0
+        if (links + tags > 0)
             renameDialog.open()
         else
             renameDialog.rename()
     }
 
     /// Switch between document and outline (the header's toggle, the menu, the palette).
-    function toggleNoteMode() {
+    function toggleNoteMode(): void {
         if (!page.loaded)
             return
         if (!page.toggleMode())
@@ -403,7 +496,7 @@ FocusScope {
     /// its own app for that.
     readonly property bool printable: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
     onFindableChanged: if (!findable && findOpen) root.closeFind()
-    function openFind(withReplace) {
+    function openFind(withReplace: bool): void {
         if (!root.findable)
             return
         if (!root.findOpen) {
@@ -419,7 +512,7 @@ FocusScope {
         else
             bar.focusField()
     }
-    function closeFind() {
+    function closeFind(): void {
         root.findOpen = false
         editor.findClosed()
     }
@@ -436,7 +529,7 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         active: root.findOpen
-        height: active && item ? item.implicitHeight : 0
+        height: active && item !== null ? (item as Item).implicitHeight : 0
         sourceComponent: FindBar {
             find: noteFind
             editor: editor
@@ -468,36 +561,41 @@ FocusScope {
                                              && root.statsAvailable && root.visible
     onStatsAvailableChanged: root.countNow()
     onStatsFooterShownChanged: if (statsFooterShown) root.countNow()
-    function countNow() {
+    function countNow(): void {
         statsTimer.stop()
         root.pageStats = root.statsAvailable ? page.pageStats() : ({})
         root.countSelection()
     }
-    function scheduleCount() {
+    function scheduleCount(): void {
         if (!root.statsFooterShown)
             return // counted when the menu opens
         // About 5 ms per 100 000 characters: a long page waits longer after the last change.
-        statsTimer.interval = Math.min(3000, 400 + Math.round((root.pageStats.length || 0) / 100))
+        statsTimer.interval = Math.min(3000, 400 + Math.round(AppController.routeInt(root.pageStats, "length", 0) / 100))
         statsTimer.restart()
     }
-    function countSelection() {
+    function countSelection(): void {
         selectionTimer.stop()
         const edit = editor.activeEditor
-        const text = edit && edit.selectionStart !== edit.selectionEnd ? edit.selectedText : ""
+        // (The selected text is "" without a selection.)
+        const text = edit ? "" + edit.selectedText : ""
         root.selectionStats = root.statsAvailable && (text !== "" || page.selectionCount > 0)
                               ? page.selectionStats(text) : ({})
     }
     /// "123 words · 820 characters · 1 min read" (`reading`: with the reading time and the
     /// characters without spaces).
-    function statsSummary(stats, details) {
-        if (!stats || stats.words === undefined)
+    MapHolder { id: statsInfo }
+    function statsSummary(stats: var, details: bool): string {
+        statsInfo.map = stats
+        const s = statsInfo.map
+        if (s.words === undefined)
             return ""
-        const parts = [qsTr("%n word(s)", "", stats.words), qsTr("%n character(s)", "", stats.characters)]
-        if (details)
-            parts.push(qsTr("%n without spaces", "characters", stats.charactersNoSpaces))
-        if (stats.readingMinutes > 0)
-            parts.push(qsTr("%n min read", "", stats.readingMinutes))
-        return parts.join(" · ")
+        const words = s.words
+        const characters = s.characters
+        const noSpaces = s.charactersNoSpaces
+        const minutes = s.readingMinutes
+        return qsTr("%n word(s)", "", words) + " · " + qsTr("%n character(s)", "", characters)
+                + (details ? " · " + qsTr("%n without spaces", "characters", noSpaces) : "")
+                + (minutes > 0 ? " · " + qsTr("%n min read", "", minutes) : "")
     }
     Timer {
         id: statsTimer
@@ -530,7 +628,7 @@ FocusScope {
         function onSelectionEndChanged() { selectionTimer.restart() }
     }
 
-    function copyLink() {
+    function copyLink(): void {
         const link = tools.wikiLink(page.path)
         if (tools.copyText(link))
             AppController.toast(qsTr("Copied %1").arg(link), "success")
@@ -582,7 +680,7 @@ FocusScope {
         id: scrollToEnd
         interval: 400
         onTriggered: {
-            editor.listView.userMoved = true
+            editor.markUserMoved()
             editor.listView.positionViewAtEnd()
         }
     }
@@ -599,12 +697,12 @@ FocusScope {
         target: Workspace
         // The notebook's default modes changed (settings, another device).
         function onConfigChanged() { page.refreshMode() }
-        function onPathRenamed(oldPath, newPath) {
+        function onPathRenamed(oldPath: string, newPath: string) {
             if (page.path === oldPath) {
                 page.followRename(oldPath, newPath)
                 root._foldsFor = newPath
-            } else if (page.path.startsWith(oldPath + "/")) {
-                const moved = newPath + page.path.slice(oldPath.length)
+            } else if (Js.startsWith(page.path, oldPath + "/")) {
+                const moved = newPath + Js.sliceFrom(page.path, oldPath.length)
                 page.followRename(page.path, moved)
                 root._foldsFor = moved
             }
@@ -625,8 +723,14 @@ FocusScope {
         focus: !root.pdfRoute
         controller: page
         // Problems the editor reports (a picture that could not be added) as the window's toast.
-        onMessage: (text, kind, action) => action ? AppController.toastAction(text, kind, action.text, action.run)
-                                                  : AppController.toast(text, kind)
+        onMessage: (text, kind, action) => {
+            if (action) {
+                root.messageAction = action
+                root.messageToast = AppController.toastWithAction(text, kind, action.text)
+            } else {
+                AppController.toast(text, kind)
+            }
+        }
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
         // The properties panel open or folded: a device setting (the panel's header switches it);
         // bound here for the rows made with the editor, then by the Binding below.
@@ -676,7 +780,7 @@ FocusScope {
     Rectangle {
         id: statsFooter
         objectName: "pageStatsFooter"
-        visible: root.statsFooterShown && root.pageStats.words !== undefined && !editor.toolbarVisible
+        visible: root.statsFooterShown && Js.hasKey(root.pageStats, "words") && !editor.toolbarVisible
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: Theme.space4
@@ -685,8 +789,8 @@ FocusScope {
         width: statsLabel.implicitWidth + 2 * Theme.space2
         height: statsLabel.implicitHeight + Theme.space1 * 2
         radius: Theme.radiusSm
-        color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.85)
-        readonly property bool selection: root.selectionStats.words !== undefined
+        color: Theme.bg.alpha(0.85)
+        readonly property bool selection: Js.hasKey(root.selectionStats, "words")
         readonly property string text: selection ? qsTr("Selection: %1").arg(root.statsSummary(root.selectionStats, false))
                                                  : root.statsSummary(root.pageStats, false)
         Accessible.role: Accessible.StaticText
@@ -737,8 +841,25 @@ FocusScope {
             refsInSidePanel: root.refsInSidePanel
         }
         // The viewer takes the keys (PageDown, Ctrl+F, Esc…) when it opens in the main pane.
-        onLoaded: if (!root.inSidePanel) Qt.callLater(() => { if (item) item.forceActiveFocus() })
+        onLoaded: if (!root.inSidePanel) pdfFocusLater.restart()
     }
+    Timer {
+        id: pdfFocusLater
+        interval: 0
+        onTriggered: if (pdfLoader.item !== null) (pdfLoader.item as Item).forceActiveFocus()
+    }
+    /// The editor's last message with an action (a toast's button runs it: messageToast).
+    property EditorToastAction messageAction: null
+    property int messageToast: -1
+    Connections {
+        target: AppController
+        function onToastActionTriggered(id: int) {
+            if (id === root.messageToast && root.messageAction)
+                root.messageAction.run()
+        }
+    }
+    /// The editor list's footer (the references go right below it).
+    readonly property Item editorFooter: editor.listView.footerItem
 
     // The references live in the editor's scrolling content, right under the blocks (in the
     // space the editor's footer keeps free: bottomSpace).
@@ -750,7 +871,7 @@ FocusScope {
         // stays alive.)
         visible: page.loaded && !page.sourceMode && page.zoomBlock < 0 && page.path !== "" && !root.refsInSidePanel
         x: editor.contentX + (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)
-        y: (editor.listView.footerItem ? editor.listView.footerItem.y : 0) + root.refsGap
+        y: (root.editorFooter ? root.editorFooter.y : 0) + root.refsGap
         width: editor.contentWidth - (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)
         path: page.path
         rendererPalette: editor.rendererPalette
@@ -778,14 +899,14 @@ FocusScope {
         // The page's counts (and the selection's), for reading only.
         BMenuItem {
             objectName: "pageMenuStats"
-            visible: root.statsAvailable && root.pageStats.words !== undefined
+            visible: root.statsAvailable && Js.hasKey(root.pageStats, "words")
             height: visible ? implicitHeight : 0
             enabled: false
             text: root.statsSummary(root.pageStats, true)
             iconName: "type"
         }
         BMenuSeparator {
-            visible: root.statsAvailable && root.pageStats.words !== undefined
+            visible: root.statsAvailable && Js.hasKey(root.pageStats, "words")
             height: visible ? implicitHeight : 0
         }
 
@@ -856,7 +977,7 @@ FocusScope {
             height: visible ? implicitHeight : 0
             text: qsTr("Tasks with this tag")
             iconName: "list-todo"
-            onTriggered: AppController.navigate({ view: "tasks", query: root.pageHeader.tagQuery(root.pageHeader.tagInfo.key) })
+            onTriggered: AppController.navigate({ view: "tasks", query: root.pageHeader.tagQuery(root.pageHeader.tagKey) })
         }
         // The note mode (also the header's toggle on a wide header, Więcej, the palette).
         BMenuItem {
@@ -869,14 +990,14 @@ FocusScope {
         // The page's look (docs/UI.md "Page icon and cover").
         BMenuItem {
             objectName: "pageMenuIcon"
-            text: (page.look.icon || {}).kind ? qsTr("Change icon…") : qsTr("Add icon…")
+            text: AppController.routeFlag(page.look.icon, "kind") ? qsTr("Change icon…") : qsTr("Add icon…")
             iconName: "sparkles"
             enabled: page.loaded && !root.pictureRoute
             onTriggered: root.openIconDialog()
         }
         BMenuItem {
             objectName: "pageMenuCover"
-            text: (page.look.cover || {}).kind ? qsTr("Change cover…") : qsTr("Add cover…")
+            text: AppController.routeFlag(page.look.cover, "kind") ? qsTr("Change cover…") : qsTr("Add cover…")
             iconName: "image"
             enabled: page.loaded && !root.pictureRoute
             onTriggered: root.openCoverDialog()
@@ -908,14 +1029,14 @@ FocusScope {
     // Made when first opened.
     property ContentPageIconDialog iconDialog: null
     property ContentPageCoverDialog coverDialog: null
-    function openIconDialog() {
+    function openIconDialog(): void {
         if (!page.loaded)
             return
         if (!iconDialog)
             iconDialog = iconDialogComponent.createObject(T.Overlay.overlay, { controller: page, editor: editor }) as ContentPageIconDialog
         iconDialog.open()
     }
-    function openCoverDialog() {
+    function openCoverDialog(): void {
         if (!page.loaded)
             return
         if (!coverDialog)
@@ -952,9 +1073,8 @@ FocusScope {
             page.save()
             const trashPath = Workspace.deletePage(page.path)
             if (trashPath !== "") {
-                // A bound method: the toast outlives this view (the page closes when deleted).
-                AppController.toastAction(qsTr("Moved to trash"), "info", qsTr("Undo"),
-                                          Workspace.restore.bind(Workspace, trashPath))
+                // Restored by the controller: the toast outlives this view (the page closes when deleted).
+                AppController.toastRestore(qsTr("Moved to trash"), qsTr("Undo"), [trashPath])
             }
         }
     }
@@ -987,7 +1107,7 @@ FocusScope {
     // Command palette / page menu: "Markdown source".
     Connections {
         target: AppController
-        function onUiActionRequested(action) {
+        function onUiActionRequested(action: string) {
             if (!root.paneActive)
                 return
             if (action === "toggleSourceMode" && root.visible && !root.inSidePanel) {
@@ -1001,9 +1121,9 @@ FocusScope {
                 root.toggleNoteMode()
             } else if ((action === "findInNote" || action === "replaceInNote") && root.visible && !root.inSidePanel) {
                 root.openFind(action === "replaceInNote")
-            } else if (action.startsWith("copyLink:") && root.visible && !root.inSidePanel && !root.pictureRoute
+            } else if (Js.startsWith(action, "copyLink:") && root.visible && !root.inSidePanel && !root.pictureRoute
                        && !root.pdfRoute && !root.fileRoute) {
-                editor.copyCurrentLink(action.slice(9))
+                editor.copyCurrentLink(Js.sliceFrom(action, 9))
             } else if (action === "saveWebPictures" && root.visible && !root.inSidePanel && editor.visible) {
                 editor.downloadWebPictures("")
             } else if (action === "addProperty" && root.visible && !root.inSidePanel && editor.visible) {

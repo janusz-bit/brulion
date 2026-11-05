@@ -182,6 +182,8 @@ class WorkspaceSync : public QObject {
     // ---- Conflicts ----------------------------------------------------------------------
     Q_PROPERTY(QVariantList conflicts READ conflicts NOTIFY conflictsChanged FINAL)
     Q_PROPERTY(int conflictCount READ conflictCount NOTIFY conflictsChanged FINAL)
+    /// The conflicts' copies (their "copy" paths), in the order of `conflicts` (SyncView).
+    Q_PROPERTY(QStringList conflictCopies READ conflictCopies NOTIFY conflictsChanged FINAL)
 
 public:
     static constexpr int SyncthingPollMs = 60 * 1000;
@@ -247,6 +249,7 @@ public:
     QVariantMap syncthingStatus() const { return m_syncthingStatus; }
     QVariantList conflicts() const { return m_conflicts; }
     int conflictCount() const { return int(m_conflicts.size()); }
+    QStringList conflictCopies() const;
     /// { state, text, lastSync } for AppController.syncStatus.
     QVariantMap appStatus() const;
     QVariantMap live() const { return m_live; }

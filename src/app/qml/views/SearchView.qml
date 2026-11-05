@@ -21,58 +21,57 @@ FocusScope {
     property var route: ({})
     readonly property int maximumWidth: 860
     readonly property real sideMargin: Math.max(Theme.compact ? Theme.space3 : Theme.space6, (width - maximumWidth) / 2)
-    property var recent: []
+    property list<string> recent: []
+    /// No highlighted matches (a daily note's title).
+    readonly property list<var> noMatches: []
 
-    readonly property string query: field.text.trim()
+    readonly property string query: Js.trim(field.text)
 
-    function loadRecent() {
-        const saved = AppSettings.value("search/recent", [])
-        recent = Array.isArray(saved) ? saved.map(String) : (saved ? [String(saved)] : [])
+    function loadRecent(): void {
+        recent = AppSettings.recentSearches()
     }
-    function remember(q) {
-        q = q.trim()
-        if (q === "")
+    function remember(q: string): void {
+        if (Js.trim(q) === "")
             return
-        const key = TextHelper.fold(q)
-        const list = [q].concat(recent.filter(r => TextHelper.fold(r) !== key)).slice(0, 8)
-        recent = list
-        AppSettings.setValue("search/recent", list)
+        recent = AppSettings.rememberSearch(q)
     }
-    function clearRecent() {
+    function clearRecent(): void {
         recent = []
-        AppSettings.setValue("search/recent", [])
+        AppSettings.clearRecentSearches()
     }
     /// Open result `row`: here, in the side panel (`newPane`) or in `target` ("tab": a new tab).
-    function openResult(row, newPane, target) {
-        const r = results.get(row)
-        if (!r.path)
+    MapHolder { id: resultInfo }
+    function openResult(row: int, newPane: bool, target: string): void {
+        // { path, line, … }
+        resultInfo.map = results.get(row)
+        const path = "" + resultInfo.map.path
+        if (resultInfo.map.path === undefined || path === "")
             return
         remember(field.text)
-        OpenIn.run(target || "", () => AppController.openPage(r.path, r.line, newPane === true && !Theme.narrow))
+        OpenIn.begin(target)
+        AppController.openPage(path, resultInfo.map.line, newPane && !Theme.narrow)
+        OpenIn.end()
     }
-    function move(delta) {
+    function move(delta: int): void {
         if (results.count === 0)
             return
         list.currentIndex = Math.max(0, Math.min(results.count - 1, list.currentIndex + delta))
         list.positionViewAtIndex(list.currentIndex, ListView.Contain)
     }
-    function applyQuery(q) {
+    function applyQuery(q: string): void {
         field.text = q
         field.cursorPosition = q.length
         results.query = q
     }
     /// The route keeps the query and the folder (back returns to them; folder moves follow).
-    function syncRoute() {
-        if (AppController.currentRoute.view !== "search")
+    function syncRoute(): void {
+        if (AppController.routeText(AppController.currentRoute, "view") !== "search")
             return
-        const r = { view: "search" }
-        if (field.text.trim() !== "")
-            r.query = field.text
-        if (results.folder !== "")
-            r.folder = results.folder
-        AppController.replaceRoute(r)
+        // (Empty parameters are left out of the route.)
+        AppController.replaceRoute({ view: "search", query: Js.trim(field.text) !== "" ? field.text : "",
+                                     folder: results.folder })
     }
-    function setFolder(folder) {
+    function setFolder(folder: string): void {
         results.folder = folder
         syncRoute()
     }
@@ -80,16 +79,18 @@ FocusScope {
     focus: true
     Component.onCompleted: {
         loadRecent()
-        if (route && route.folder)
-            results.folder = String(route.folder)
-        if (route && route.query)
-            applyQuery(String(route.query))
+        const folder = AppController.routeText(route, "folder")
+        if (folder !== "")
+            results.folder = folder
+        const q = AppController.routeText(route, "query")
+        if (q !== "")
+            applyQuery(q)
         field.forceActiveFocus()
     }
     onRouteChanged: {
-        if (route && route.query !== undefined && String(route.query) !== field.text)
-            applyQuery(String(route.query))
-        const folder = route && route.folder ? String(route.folder) : ""
+        if (Js.hasKey(route, "query") && AppController.routeText(route, "query") !== field.text)
+            applyQuery(AppController.routeText(route, "query"))
+        const folder = AppController.routeText(route, "folder")
         if (folder !== results.folder)
             results.folder = folder
     }
@@ -121,16 +122,16 @@ FocusScope {
             onSearch: (q) => {
                 results.query = q
                 // Back from a result comes back to these results.
-                if (String(AppController.currentRoute.query || "") !== q)
+                if (AppController.routeText(AppController.currentRoute, "query") !== q)
                     root.syncRoute()
             }
-            onAccepted: if (results.count > 0) root.openResult(Math.max(0, list.currentIndex), false)
+            onAccepted: if (results.count > 0) root.openResult(Math.max(0, list.currentIndex), false, "")
             Keys.onDownPressed: root.move(1)
             Keys.onUpPressed: root.move(-1)
             Keys.onPressed: (event) => {
                 if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ControlModifier)) {
                     if (results.count > 0)
-                        root.openResult(Math.max(0, list.currentIndex), true)
+                        root.openResult(Math.max(0, list.currentIndex), true, "")
                     event.accepted = true
                 } else if (event.key === Qt.Key_PageDown) {
                     root.move(8)
@@ -210,8 +211,13 @@ FocusScope {
             delegate: T.ItemDelegate {
                 id: hit
                 required property int index
-                required property var model
-                readonly property bool journal: hit.model.journalDate !== ""
+                required property string title
+                required property string folder
+                required property string excerpt
+                required property list<var> excerptMatches
+                required property list<var> titleMatches
+                required property string journalDate
+                readonly property bool journal: hit.journalDate !== ""
 
                 // Full width (ListView places delegates at x 0); the row itself is inset.
                 width: list.width
@@ -225,7 +231,7 @@ FocusScope {
                 highlighted: ListView.isCurrentItem
                 focusPolicy: Qt.NoFocus
                 Accessible.role: Accessible.ListItem
-                Accessible.name: (journal ? DatesHelper.formatLong(hit.model.journalDate) : hit.model.title) + ": " + hit.model.excerpt
+                Accessible.name: (journal ? DatesHelper.formatLong(hit.journalDate) : hit.title) + ": " + hit.excerpt
                 // Ctrl+click: a new tab (OpenIn).
                 onClicked: root.openResult(hit.index, false, OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers()))
                 TapHandler {
@@ -253,8 +259,8 @@ FocusScope {
                         }
                         ContentHighlightText {
                             Layout.fillWidth: true
-                            source: hit.journal ? DatesHelper.formatLong(hit.model.journalDate) : hit.model.title
-                            positions: hit.journal ? [] : hit.model.titleMatches
+                            source: hit.journal ? DatesHelper.formatLong(hit.journalDate) : hit.title
+                            positions: hit.journal ? root.noMatches : hit.titleMatches
                             // On the highlighted row the accent is too light: the text colour (the
                             // matches stay bold).
                             highlightColor: hit.highlighted ? Theme.fg : Theme.accentText
@@ -263,9 +269,9 @@ FocusScope {
                             font.pixelSize: Theme.textBase
                         }
                         BText {
-                            visible: hit.model.folder !== "" && !hit.journal
+                            visible: hit.folder !== "" && !hit.journal
                             Layout.maximumWidth: hitColumn.width * 0.4
-                            text: hit.model.folder
+                            text: hit.folder
                             variant: "caption"
                             // (fgFaint is AA on the page, not on the highlighted row.)
                             color: hit.highlighted ? Theme.fgMuted : Theme.fgFaint
@@ -273,10 +279,10 @@ FocusScope {
                         }
                     }
                     ContentHighlightText {
-                        visible: hit.model.excerpt !== ""
+                        visible: hit.excerpt !== ""
                         Layout.fillWidth: true
-                        source: hit.model.excerpt
-                        positions: hit.model.excerptMatches
+                        source: hit.excerpt
+                        positions: hit.excerptMatches
                         highlightColor: hit.highlighted ? Theme.fg : Theme.accentText
                         color: Theme.fgMuted
                         font.pixelSize: Theme.textBase
@@ -373,16 +379,18 @@ FocusScope {
     }
     Instantiator {
         model: results.folders
+        // results.folders: [{ folder, count }]
         delegate: BMenuItem {
-            required property var modelData
-            text: (modelData.folder !== "" ? modelData.folder : qsTr("Notebook root")) + "  (" + modelData.count + ")"
+            required property string folder
+            required property int count
+            text: (folder !== "" ? folder : qsTr("Notebook root")) + "  (" + count + ")"
             iconName: "folder"
             checkable: true
-            checked: results.folder === modelData.folder && modelData.folder !== ""
-            enabled: modelData.folder !== ""
-            onTriggered: root.setFolder(modelData.folder)
+            checked: results.folder === folder && folder !== ""
+            enabled: folder !== ""
+            onTriggered: root.setFolder(folder)
         }
-        onObjectAdded: (index, object) => folderMenu.insertItem(index + 2, object)
-        onObjectRemoved: (index, object) => folderMenu.removeItem(object)
+        onObjectAdded: (index, object) => folderMenu.insertItem(index + 2, object as Item)
+        onObjectRemoved: (index, object) => folderMenu.removeItem(object as Item)
     }
 }

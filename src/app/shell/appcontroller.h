@@ -552,6 +552,21 @@ public:
     void setClock(std::function<QDateTime()> clock);
     QDateTime now() const;
 
+    // ---- Route parameters for compiled QML ------------------------------------------------
+    // Views get their route as `property var route` (a QVariantMap); reading `route.key` there
+    // is not compiled by qmlcachegen, these are (also for other maps held in `var`, e.g. the
+    // results of Workspace calls). All accept a missing key and a null route.
+    /// The value of `key` as text ("" when missing or null; a number as its text: 12 → "12").
+    Q_INVOKABLE QString routeText(const QVariantMap &route, const QString &key) const;
+    /// The value of `key` as an int (`fallback` when missing, null or not a number).
+    Q_INVOKABLE int routeInt(const QVariantMap &route, const QString &key, int fallback) const;
+    /// JavaScript's truthiness of the value of `key` (`if (route.key)`): false when missing,
+    /// null, false, 0, NaN or ""; true otherwise (also for the text "false" and an empty list).
+    Q_INVOKABLE bool routeFlag(const QVariantMap &route, const QString &key) const;
+    /// `base` plus the `keys` that `route` has (even null ones): a view's route made from
+    /// another's parameters (JournalsView's one day as a PageView route).
+    Q_INVOKABLE QVariantMap routeWith(const QVariantMap &base, const QVariantMap &route, const QStringList &keys) const;
+
 Q_SIGNALS:
     void statusChanged();
     void introPendingChanged();

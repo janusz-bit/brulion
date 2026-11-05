@@ -17,7 +17,7 @@ FocusScope {
     id: root
 
     property var route: ({})
-    readonly property string path: route && route.path ? route.path : ""
+    readonly property string path: AppController.routeText(route, "path")
     /// Daily notes by their date, other pages by their title.
     readonly property string pageLabel: {
         const day = path !== "" ? Workspace.journalDate(path) : ""
@@ -28,10 +28,12 @@ FocusScope {
     property int selected: -1
     /// Phones: the diff is shown instead of the list.
     property bool showingDiff: false
-    readonly property var version: selected >= 0 && history.count > selected ? history.get(selected) : ({})
+    /// When the version shown was saved ("dziś 09:12"; "" for none).
+    readonly property string versionWhen: selected >= 0 && history.count > selected
+                                          ? AppController.routeText(history.get(selected), "when") : ""
     readonly property string versionText: selected >= 0 && history.count > selected ? history.textAt(selected) : ""
 
-    function select(row) {
+    function select(row: int): void {
         selected = row
         if (!wide)
             showingDiff = true
@@ -49,7 +51,8 @@ FocusScope {
             if (root.selected >= count)
                 root.selected = count - 1
             if (root.selected < 0 && count > 0 && root.wide) {
-                const wanted = root.route && root.route.version ? rowOf(root.route.version) : -1
+                const version = AppController.routeText(root.route, "version")
+                const wanted = version !== "" ? rowOf(version) : -1
                 root.selected = wanted >= 0 ? wanted : 0
             }
         }
@@ -173,16 +176,20 @@ FocusScope {
                 delegate: BListItem {
                     id: v
                     required property int index
-                    required property var model
+                    required property string reasonIcon
+                    required property string clock
+                    required property string reasonLabel
+                    required property string sizeLabel
+                    required property bool newest
                     // Full width (ListView places delegates at x 0); the row itself is inset.
                     width: versions.width
                     leftInset: Theme.space2
                     rightInset: Theme.space2
                     leftPadding: Theme.space2 + (Theme.touchUi ? 14 : 10)
                     rightPadding: Theme.space2 + (Theme.touchUi ? 12 : 8)
-                    iconName: v.model.reasonIcon
-                    text: v.model.clock + "  ·  " + v.model.reasonLabel
-                    subtitle: v.model.sizeLabel + (v.model.newest ? " · " + qsTr("the text before the latest change") : "")
+                    iconName: v.reasonIcon
+                    text: v.clock + "  ·  " + v.reasonLabel
+                    subtitle: v.sizeLabel + (v.newest ? " · " + qsTr("the text before the latest change") : "")
                     selected: root.wide && root.selected === v.index
                     selectionBar: true
                     onClicked: root.select(v.index)
@@ -215,16 +222,19 @@ FocusScope {
                         spacing: 0
                         BText {
                             Layout.fillWidth: true
-                            text: root.version.when ? qsTr("Version: %1").arg(root.version.when) : ""
+                            text: root.versionWhen !== "" ? qsTr("Version: %1").arg(root.versionWhen) : ""
                             variant: "label"
                             elide: Text.ElideRight
                         }
                         BText {
                             Layout.fillWidth: true
+                            // DiffHelper.stats(): { added, removed } (lines).
                             readonly property var stats: DiffHelper.stats(root.versionText, history.currentText)
+                            readonly property int added: AppController.routeInt(stats, "added", 0)
+                            readonly property int removed: AppController.routeInt(stats, "removed", 0)
                             text: history.exists
-                                  ? (stats.added + stats.removed === 0 ? qsTr("Same as now")
-                                     : qsTr("Since then: %n line(s) added", "", stats.added) + ", " + qsTr("%n removed", "", stats.removed))
+                                  ? (added + removed === 0 ? qsTr("Same as now")
+                                     : qsTr("Since then: %n line(s) added", "", added) + ", " + qsTr("%n removed", "", removed))
                                   : qsTr("The page does not exist now")
                             variant: "small"
                             color: Theme.fgMuted
@@ -249,7 +259,7 @@ FocusScope {
                     Layout.bottomMargin: Theme.space3
                     oldText: root.versionText
                     newText: history.currentText
-                    oldLabel: root.version.when ? qsTr("Version: %1").arg(root.version.when) : qsTr("Version")
+                    oldLabel: root.versionWhen !== "" ? qsTr("Version: %1").arg(root.versionWhen) : qsTr("Version")
                     newLabel: history.exists ? qsTr("Now") : qsTr("Deleted")
                 }
                 Item {
@@ -273,11 +283,11 @@ FocusScope {
         id: restoreDialog
         parent: T.Overlay.overlay
         title: qsTr("Restore this version?")
-        message: qsTr("“%1” gets the text from %2 back.").arg(root.pageLabel).arg(root.version.when || "")
+        message: qsTr("“%1” gets the text from %2 back.").arg(root.pageLabel).arg(root.versionWhen)
         detail: qsTr("The current text is kept as a version, so you can go back to it.")
         confirmText: qsTr("Restore")
         onAccepted: {
-            const when = root.version.when
+            const when = root.versionWhen
             if (history.restore(root.selected)) {
                 AppController.toast(qsTr("Restored the version from %1").arg(when), "success")
                 root.selected = 0

@@ -25,9 +25,10 @@ Rectangle {
 
     property var route: ({})
 
-    readonly property var safe: SafeArea.margins
+    readonly property real safeTop: SafeArea.margins.top
+    readonly property real safeBottom: SafeArea.margins.bottom
     property int step: 0
-    readonly property var steps: [
+    readonly property list<var> steps: [
         { id: "language", title: qsTr("Language"), icon: "languages" },
         { id: "look", title: qsTr("Look"), icon: "palette" },
         { id: "permissions", title: qsTr("Permissions"), icon: "shield-check" },
@@ -39,19 +40,19 @@ Rectangle {
     focus: true
 
     /// One step back; false on the first one (Android's back gesture then leaves the app).
-    function backStep() {
+    function backStep(): bool {
         if (step === 0)
             return false
         --step
         return true
     }
-    function nextStep() {
+    function nextStep(): void {
         if (lastStep)
             finish()
         else
             ++step
     }
-    function finish() {
+    function finish(): void {
         AppController.finishIntro()
     }
 
@@ -76,15 +77,48 @@ Rectangle {
         weekStartsOn: 1,
         defaultReminderTime: "09:00"
     })
-    function notebookValue(key) {
-        const chosen = AppSettings.newNotebookConfig[key]
-        return chosen !== undefined ? chosen : notebookDefaults[key]
+    /// The first notebook's setting `key` as chosen, else its default (texts; notebookInt: numbers).
+    function notebookText(key: string): string {
+        return Js.hasKey(AppSettings.newNotebookConfig, key) ? AppController.routeText(AppSettings.newNotebookConfig, key)
+                                                             : AppController.routeText(root.notebookDefaults, key)
     }
-    function setNotebookValue(key, value) {
-        const config = Object.assign({}, notebookDefaults, AppSettings.newNotebookConfig)
-        config[key] = value
-        AppSettings.newNotebookConfig = config
+    function notebookInt(key: string): int {
+        return Js.hasKey(AppSettings.newNotebookConfig, key) ? AppController.routeInt(AppSettings.newNotebookConfig, key, 0)
+                                                             : AppController.routeInt(root.notebookDefaults, key, 0)
     }
+    MapHolder { id: notebookChange }
+    function setNotebookValue(key: string, value: var): void {
+        notebookChange.map = Js.withKey({}, key, value)
+        AppSettings.newNotebookConfig = Js.merged(Js.merged(root.notebookDefaults, AppSettings.newNotebookConfig), notebookChange.map)
+    }
+    /// Today's date written in `format` (the journal file name formats).
+    function todayAs(format: string): string {
+        return Qt.formatDate(AppController.today(0), format)
+    }
+    function journalFormats(): list<var> {
+        return [{ value: "yyyy-MM-dd", text: root.todayAs("yyyy-MM-dd") },
+                { value: "dd.MM.yyyy", text: root.todayAs("dd.MM.yyyy") },
+                { value: "yyyy_MM_dd", text: root.todayAs("yyyy_MM_dd") }]
+    }
+    /// The text size step nearest to the current scale.
+    function nearestFontScale(): real {
+        const steps = [0.9, 1.0, 1.15, 1.3]
+        let best = 1.0
+        for (let i = 0; i < steps.length; ++i) {
+            if (Math.abs(steps[i] - AppSettings.fontScale) < Math.abs(best - AppSettings.fontScale))
+                best = steps[i]
+        }
+        return best
+    }
+    /// The accent colours ({ value, name }).
+    readonly property list<var> accents: [
+        { value: "red", name: qsTr("Red") },
+        { value: "blue", name: qsTr("Blue") },
+        { value: "green", name: qsTr("Green") },
+        { value: "teal", name: qsTr("Teal") },
+        { value: "violet", name: qsTr("Violet") },
+        { value: "graphite", name: qsTr("Graphite") }
+    ]
 
     // ---- Pieces ------------------------------------------------------------------------------
 
@@ -123,7 +157,7 @@ Rectangle {
             text: header.text
             variant: "muted"
             font.pixelSize: Theme.textMd
-            lineHeight: Theme.lineHeightPx(Theme.textMd)
+            lineHeight: Theme.lineHeightPx(Theme.textMd, Theme.lineHeight)
             wrapMode: Text.Wrap
         }
     }
@@ -206,6 +240,8 @@ Rectangle {
                                                              Theme.accentName, Theme.customAccent)
         readonly property var lightColors: ThemePalette.colors(false, AppSettings.lightSurface, AppSettings.darkSurface,
                                                               Theme.accentName, Theme.customAccent)
+        /// One "page" per half (two on "system").
+        readonly property list<var> pages: mode === "system" ? [darkColors, lightColors] : [mode === "light" ? lightColors : darkColors]
         Layout.fillWidth: true
         Layout.preferredWidth: 1
         clickable: true
@@ -228,7 +264,7 @@ Rectangle {
                     // "System": half light, half dark.
                     anchors.fill: parent
                     radius: Theme.radius
-                    color: tile.mode === "light" ? tile.lightColors.bg : tile.darkColors.bg
+                    color: "" + AppController.routeText(tile.mode === "light" ? tile.lightColors : tile.darkColors, "bg")
                     border.width: 1
                     border.color: Theme.border
                 }
@@ -237,30 +273,35 @@ Rectangle {
                     anchors { top: parent.top; bottom: parent.bottom; right: parent.right; margins: 1 }
                     width: parent.width / 2 - 1
                     radius: Theme.radius
-                    color: tile.lightColors.bg
+                    color: "" + AppController.routeText(tile.lightColors, "bg")
                 }
                 Repeater {
                     // One "page" per half (two on "system").
-                    model: tile.mode === "system" ? [tile.darkColors, tile.lightColors] : [tile.mode === "light" ? tile.lightColors : tile.darkColors]
+                    model: tile.pages
+                    // ThemePalette.colors(): { accent, fg, fgMuted, bgElevated, border, … }
                     delegate: Column {
                         id: page
-                        required property var modelData
+                        required property color accent
+                        required property color fg
+                        required property color fgMuted
+                        required property color bgElevated
+                        required property color border
                         required property int index
                         readonly property real slot: tile.mode === "system" ? parent.width / 2 : parent.width
                         x: index * slot + Theme.space2
                         y: Theme.space2
                         width: slot - 2 * Theme.space2
                         spacing: 5
-                        Rectangle { width: 10; height: 10; radius: 5; color: page.modelData.accent }
-                        Rectangle { width: page.width * 0.8; height: 5; radius: 2; color: page.modelData.fg }
-                        Rectangle { width: page.width * 0.6; height: 5; radius: 2; color: page.modelData.fgMuted }
+                        Rectangle { width: 10; height: 10; radius: 5; color: page.accent }
+                        Rectangle { width: page.width * 0.8; height: 5; radius: 2; color: page.fg }
+                        Rectangle { width: page.width * 0.6; height: 5; radius: 2; color: page.fgMuted }
                         Rectangle {
                             width: page.width
                             height: 16
                             radius: 4
-                            color: page.modelData.bgElevated
+                            color: page.bgElevated
                             border.width: 1
-                            border.color: page.modelData.border
+                            border.color: page.border
                         }
                     }
                 }
@@ -292,7 +333,7 @@ Rectangle {
         property string text
         property string icon
         property bool optional: false
-        readonly property bool granted: AppController.permissions[name] === true
+        readonly property bool granted: AppController.routeFlag(AppController.permissions, name)
         objectName: "introPermission_" + name
         Layout.fillWidth: true
         padding: Theme.space4
@@ -349,7 +390,7 @@ Rectangle {
     Flickable {
         id: flick
         anchors.top: parent.top
-        anchors.topMargin: root.safe.top
+        anchors.topMargin: root.safeTop
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: footer.top
@@ -524,22 +565,17 @@ Rectangle {
                                 Layout.maximumWidth: 6 * (Theme.touchUi ? Theme.touchTarget : 34)
                                 spacing: 0
                                 Repeater {
-                                    model: [
-                                        { value: "red", text: qsTr("Red") },
-                                        { value: "blue", text: qsTr("Blue") },
-                                        { value: "green", text: qsTr("Green") },
-                                        { value: "teal", text: qsTr("Teal") },
-                                        { value: "violet", text: qsTr("Violet") },
-                                        { value: "graphite", text: qsTr("Graphite") }
-                                    ]
+                                    model: root.accents
                                     delegate: BColorSwatch {
-                                        required property var modelData
-                                        objectName: "introAccent_" + modelData.value
-                                        color: ThemePalette.accentSwatch(modelData.value, "", Theme.dark,
-                                                                         Theme.dark ? Theme.darkSurface : Theme.lightSurface)
-                                        label: modelData.text
-                                        selected: Theme.accentName === modelData.value
-                                        onClicked: AppSettings.accentColor = modelData.value
+                                        id: swatch
+                                        required property string value
+                                        required property string name
+                                        objectName: "introAccent_" + value
+                                        color: "" + ThemePalette.accentSwatch(value, "", Theme.dark,
+                                                                              Theme.dark ? Theme.darkSurface : Theme.lightSurface)
+                                        label: name
+                                        selected: Theme.accentName === value
+                                        onClicked: AppSettings.accentColor = swatch.value
                                     }
                                 }
                             }
@@ -555,8 +591,7 @@ Rectangle {
                                     { value: 1.15, text: qsTr("Large") },
                                     { value: 1.3, text: qsTr("Larger") }
                                 ]
-                                currentValue: [0.9, 1.0, 1.15, 1.3].reduce((best, v) =>
-                                    Math.abs(v - AppSettings.fontScale) < Math.abs(best - AppSettings.fontScale) ? v : best, 1.0)
+                                currentValue: root.nearestFontScale()
                                 onActivated: (value) => AppSettings.fontScale = value
                             }
                         }
@@ -662,10 +697,11 @@ Rectangle {
                             text: qsTr("Start when you sign in")
                             description: qsTr("Brulion starts hidden in the tray, so reminders ring from the moment you sign in.")
                             iconName: "power"
-                            checked: AppController.startAtLogin
+                            Binding on checked { value: AppController.startAtLogin }
                             onToggled: {
                                 AppController.startAtLogin = checked
-                                checked = Qt.binding(() => AppController.startAtLogin)
+                                // (Refused: the switch shows how it is.)
+                                checked = AppController.startAtLogin
                             }
                         }
                         ShellSettingRow {
@@ -709,7 +745,7 @@ Rectangle {
                             icon: "list"
                             title: qsTr("Outline")
                             subtitle: qsTr("Every line is a bullet you can fold, move and link to — like Logseq.")
-                            chosen: root.notebookValue("journalMode") === "outline"
+                            chosen: root.notebookText("journalMode") === "outline"
                             onClicked: root.setNotebookValue("journalMode", "outline")
                         }
                         ChoiceCard {
@@ -717,7 +753,7 @@ Rectangle {
                             icon: "file-text"
                             title: qsTr("Document")
                             subtitle: qsTr("Paragraphs, headings and lists, edited in place — like Obsidian.")
-                            chosen: root.notebookValue("journalMode") === "document"
+                            chosen: root.notebookText("journalMode") === "document"
                             onClicked: root.setNotebookValue("journalMode", "document")
                         }
                     }
@@ -732,7 +768,7 @@ Rectangle {
                                     { value: "document", text: qsTr("Document"), icon: "file-text" },
                                     { value: "outline", text: qsTr("Outline"), icon: "list" }
                                 ]
-                                currentValue: root.notebookValue("pageMode")
+                                currentValue: root.notebookText("pageMode")
                                 onActivated: (value) => root.setNotebookValue("pageMode", value)
                             }
                         }
@@ -742,11 +778,8 @@ Rectangle {
                             BSegmented {
                                 objectName: "introJournalFormat"
                                 accessibleName: qsTr("Journal file names")
-                                model: ["yyyy-MM-dd", "dd.MM.yyyy", "yyyy_MM_dd"].map(format => ({
-                                    value: format,
-                                    text: Qt.formatDate(new Date(AppController.today() + "T12:00:00"), format)
-                                }))
-                                currentValue: root.notebookValue("journalFileFormat")
+                                model: root.journalFormats()
+                                currentValue: root.notebookText("journalFileFormat")
                                 onActivated: (value) => root.setNotebookValue("journalFileFormat", value)
                             }
                         }
@@ -760,7 +793,7 @@ Rectangle {
                                     { value: 7, text: qsTr("Sunday") },
                                     { value: 6, text: qsTr("Saturday") }
                                 ]
-                                currentValue: root.notebookValue("weekStartsOn")
+                                currentValue: root.notebookInt("weekStartsOn")
                                 onActivated: (value) => root.setNotebookValue("weekStartsOn", value)
                             }
                         }
@@ -770,9 +803,9 @@ Rectangle {
                             BButton {
                                 objectName: "introReminderTime"
                                 size: "small"
-                                text: root.notebookValue("defaultReminderTime")
+                                text: root.notebookText("defaultReminderTime")
                                 iconName: "clock"
-                                onClicked: reminderTimeDialog.openFor(root.notebookValue("defaultReminderTime"))
+                                onClicked: reminderTimeDialog.openFor(root.notebookText("defaultReminderTime"))
                             }
                         }
                     }
@@ -787,7 +820,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: Math.max(root.safe.bottom, KeyboardInsets.overlap)
+        anchors.bottomMargin: Math.max(root.safeBottom, KeyboardInsets.overlap)
         implicitHeight: footerRow.implicitHeight + 2 * Theme.space3
         color: Theme.bg
 

@@ -29,23 +29,26 @@ Item {
 
     property var route: ({})
     readonly property string title: qsTr("Settings")
-    property string section: route.section || "general"
+    property string section: AppController.routeText(route, "section") !== "" ? AppController.routeText(route, "section") : "general"
     onSectionChanged: scrollToSection()
 
     // Narrow windows show every section in one list: the route's section is brought to the top,
     // also while the sections above it are still being laid out (until the user scrolls).
     property bool _scrollPending: false
-    function scrollToSection() {
+    function scrollToSection(): void {
         _scrollPending = Theme.narrow
         if (_scrollPending)
             scrollSettle.restart()
         for (let i = 0; i < narrowSections.count; ++i) {
-            const item = narrowSections.itemAt(i)
-            if (item && root.sections[i].id === root.section)
+            const item = root.narrowItemAt(i)
+            if (item && AppController.routeText(root.sections[i], "key") === root.section)
                 scrollTo(i === 0 ? 0 : item.y)
         }
     }
-    function scrollTo(y) {
+    function narrowItemAt(i: int): Item {
+        return narrowSections.itemAt(i)
+    }
+    function scrollTo(y: real): void {
         if (_scrollPending)
             flick.contentY = Math.max(0, Math.min(y, flick.contentHeight - flick.height))
     }
@@ -55,19 +58,21 @@ Item {
         onTriggered: root._scrollPending = false
     }
 
-    readonly property var sections: [
-        { id: "general", title: qsTr("General"), icon: "settings" },
-        { id: "appearance", title: qsTr("Appearance"), icon: "palette" },
-        { id: "editor", title: qsTr("Editor"), icon: "pencil" },
-        { id: "shortcuts", title: qsTr("Keyboard shortcuts"), icon: "keyboard" },
-        { id: "vault", title: qsTr("Notebook"), icon: "notebook-pen" },
-        { id: "reminders", title: qsTr("Reminders"), icon: "bell" },
-        { id: "sync", title: qsTr("Sync"), icon: "folder-sync" },
-        { id: "backups", title: qsTr("Backups"), icon: "hard-drive" },
-        { id: "app", title: qsTr("Application"), icon: "info" }
+    /// The sections ({ key, title, iconName }).
+    readonly property list<var> sections: [
+        { key: "general", title: qsTr("General"), iconName: "settings" },
+        { key: "appearance", title: qsTr("Appearance"), iconName: "palette" },
+        { key: "editor", title: qsTr("Editor"), iconName: "pencil" },
+        { key: "shortcuts", title: qsTr("Keyboard shortcuts"), iconName: "keyboard" },
+        { key: "vault", title: qsTr("Notebook"), iconName: "notebook-pen" },
+        { key: "reminders", title: qsTr("Reminders"), iconName: "bell" },
+        { key: "sync", title: qsTr("Sync"), iconName: "folder-sync" },
+        { key: "backups", title: qsTr("Backups"), iconName: "hard-drive" },
+        { key: "app", title: qsTr("Application"), iconName: "info" }
     ]
+    readonly property list<var> noSections: []
 
-    function sectionComponent(id) {
+    function sectionComponent(id: string): Component {
         switch (id) {
         case "appearance": return appearanceSection
         case "editor": return editorSection
@@ -83,51 +88,134 @@ Item {
 
     /// Font families can be chosen (not in the browser: Qt there has only its bundled fonts).
     readonly property bool fontChoice: DeviceInfo.platform !== "wasm"
-    /// Accent presets with their names.
-    readonly property var accents: [
-        { value: "red", text: qsTr("Red") },
-        { value: "blue", text: qsTr("Blue") },
-        { value: "green", text: qsTr("Green") },
-        { value: "teal", text: qsTr("Teal") },
-        { value: "violet", text: qsTr("Violet") },
-        { value: "graphite", text: qsTr("Graphite") }
+    /// Accent presets with their names ({ value, name }).
+    readonly property list<var> accents: [
+        { value: "red", name: qsTr("Red") },
+        { value: "blue", name: qsTr("Blue") },
+        { value: "green", name: qsTr("Green") },
+        { value: "teal", name: qsTr("Teal") },
+        { value: "violet", name: qsTr("Violet") },
+        { value: "graphite", name: qsTr("Graphite") }
     ]
-    /// The sidebar's navigation entries and sections (AppSettings.sidebarItems()).
-    readonly property var sidebarItems: [
-        { id: "journals", title: qsTr("Journals") },
-        { id: "calendar", title: qsTr("Calendar") },
-        { id: "tasks", title: qsTr("Tasks") },
-        { id: "habits", title: qsTr("Habits") },
-        { id: "allPages", title: qsTr("All pages") },
-        { id: "tags", title: qsTr("Tags") },
-        { id: "graph", title: qsTr("Graph") },
-        { id: "search", title: qsTr("Search") },
-        { id: "favorites", title: qsTr("Favorites section") },
-        { id: "recent", title: qsTr("Recent section") }
+    /// The sidebar's navigation entries and sections (AppSettings.sidebarItems(); { key, title }).
+    readonly property list<var> sidebarItems: [
+        { key: "journals", title: qsTr("Journals") },
+        { key: "calendar", title: qsTr("Calendar") },
+        { key: "tasks", title: qsTr("Tasks") },
+        { key: "habits", title: qsTr("Habits") },
+        { key: "allPages", title: qsTr("All pages") },
+        { key: "tags", title: qsTr("Tags") },
+        { key: "graph", title: qsTr("Graph") },
+        { key: "search", title: qsTr("Search") },
+        { key: "favorites", title: qsTr("Favorites section") },
+        { key: "recent", title: qsTr("Recent section") }
     ]
-    /// The sidebar's page sections, whose order can change (AppSettings.sidebarSectionIds()).
-    readonly property var sidebarSections: ({
-        favorites: { title: qsTr("Favorites"), icon: "star" },
-        recent: { title: qsTr("Recent"), icon: "clock" },
-        pages: { title: qsTr("Pages (the folder tree)"), icon: "folder-tree" }
-    })
-    /// Views the bottom navigation offers (AppSettings.bottomNavViews()).
-    readonly property var bottomNavViews: [
-        { value: "journals", text: qsTr("Journal"), icon: "book-open" },
-        { value: "calendar", text: qsTr("Calendar"), icon: "calendar" },
-        { value: "search", text: qsTr("Search"), icon: "search" },
-        { value: "tasks", text: qsTr("Tasks"), icon: "list-todo" },
-        { value: "habits", text: qsTr("Habits"), icon: "flame" },
-        { value: "allPages", text: qsTr("All pages"), icon: "files" },
-        { value: "tags", text: qsTr("Tags"), icon: "tags" },
-        { value: "graph", text: qsTr("Graph"), icon: "waypoints" }
+    /// The sidebar's page sections, whose order can change (AppSettings.sidebarSectionIds()): their
+    /// names and icons (an unknown one: its id, no icon).
+    function sidebarSectionTitle(id: string): string {
+        switch (id) {
+        case "favorites": return qsTr("Favorites")
+        case "recent": return qsTr("Recent")
+        case "pages": return qsTr("Pages (the folder tree)")
+        }
+        return id
+    }
+    function sidebarSectionIcon(id: string): string {
+        switch (id) {
+        case "favorites": return "star"
+        case "recent": return "clock"
+        case "pages": return "folder-tree"
+        }
+        return ""
+    }
+    /// Views the bottom navigation offers (AppSettings.bottomNavViews(); { value, text, iconName }).
+    readonly property list<var> bottomNavViews: [
+        { value: "journals", text: qsTr("Journal"), iconName: "book-open" },
+        { value: "calendar", text: qsTr("Calendar"), iconName: "calendar" },
+        { value: "search", text: qsTr("Search"), iconName: "search" },
+        { value: "tasks", text: qsTr("Tasks"), iconName: "list-todo" },
+        { value: "habits", text: qsTr("Habits"), iconName: "flame" },
+        { value: "allPages", text: qsTr("All pages"), iconName: "files" },
+        { value: "tags", text: qsTr("Tags"), iconName: "tags" },
+        { value: "graph", text: qsTr("Graph"), iconName: "waypoints" }
     ]
     /// The name of a spelling language ("pl", "en") in the UI language.
-    function languageName(code) {
+    function languageName(code: string): string {
         return code === "pl" ? qsTr("Polish") : code === "en" ? qsTr("English") : code
     }
-    function viewInfo(value) {
-        return bottomNavViews.find(v => v.value === value) || { value: value, text: value, icon: "" }
+    /// The bottom navigation's view `value`: its name (the value itself when unknown) and icon.
+    function viewText(value: string): string {
+        for (let i = 0; i < bottomNavViews.length; ++i) {
+            if (AppController.routeText(bottomNavViews[i], "value") === value)
+                return AppController.routeText(bottomNavViews[i], "text")
+        }
+        return value
+    }
+    function viewIcon(value: string): string {
+        for (let i = 0; i < bottomNavViews.length; ++i) {
+            if (AppController.routeText(bottomNavViews[i], "value") === value)
+                return AppController.routeText(bottomNavViews[i], "iconName")
+        }
+        return ""
+    }
+    /// The text size step nearest to the current scale.
+    function nearestFontScale(): real {
+        const steps = [0.9, 1.0, 1.15, 1.3]
+        let best = 1.0
+        for (let i = 0; i < steps.length; ++i) {
+            if (Math.abs(steps[i] - AppSettings.fontScale) < Math.abs(best - AppSettings.fontScale))
+                best = steps[i]
+        }
+        return best
+    }
+    /// "Polish, English" of the spelling languages checked now.
+    function languageNames(codes: list<string>): string {
+        let out = ""
+        for (let i = 0; i < codes.length; ++i) {
+            const code = codes[i]
+            out += (i > 0 ? ", " : "") + (code === "pl" ? qsTr("Polish") : code === "en" ? qsTr("English") : code)
+        }
+        return out
+    }
+    /// The spelling language choices this device has dictionaries for.
+    function spellChoices(have: list<string>): list<var> {
+        const pl = have.indexOf("pl") >= 0
+        const en = have.indexOf("en") >= 0
+        const auto = { value: "auto", text: qsTr("Automatic", "spelling languages") }
+        const polish = { value: "pl", text: qsTr("Polish") }
+        const english = { value: "en", text: qsTr("English") }
+        const both = { value: "pl,en", text: qsTr("Both", "spelling languages") }
+        if (pl && en)
+            return [auto, polish, english, both]
+        if (pl)
+            return [auto, polish]
+        if (en)
+            return [auto, english]
+        return [auto]
+    }
+    /// The names of Obsidian settings taken over (Workspace.configFromObsidian()).
+    function obsidianLabels(keys: list<string>): string {
+        let out = ""
+        for (let i = 0; i < keys.length; ++i) {
+            const key = keys[i]
+            const label = key === "journalsFolder" ? qsTr("Journal folder")
+                        : key === "journalFileFormat" ? qsTr("Journal file names")
+                        : key === "journalTemplate" ? qsTr("Journal template")
+                        : key === "templatesFolder" ? qsTr("Templates folder")
+                        : key === "attachmentsFolder" ? qsTr("Attachments folder") : key
+            out += (i > 0 ? ", " : "") + label
+        }
+        return out
+    }
+    function adoptedSettings(): list<string> {
+        return Workspace.configFromObsidian()
+    }
+    function configWarnings(): list<string> {
+        return Workspace.configWarnings()
+    }
+    /// The file of the week's or month's note holding today ("" when unknown).
+    function periodicPath(period: string): string {
+        return AppController.routeText(Workspace.periodicNote(period, AppController.today(0)), "path")
     }
     /// The bottom navigation slot whose menu is open.
     property int navSlot: 0
@@ -136,7 +224,7 @@ Item {
         id: fontPicker
         /// "ui" | "editor" | "mono"
         property string target
-        function openTarget(which) {
+        function openTarget(which: string): void {
             target = which
             fixedOnly = which === "mono"
             title = which === "ui" ? qsTr("Interface font") : which === "mono" ? qsTr("Code font") : qsTr("Font of notes")
@@ -170,8 +258,8 @@ Item {
         showReject: false
         acceptText: qsTr("Close")
         initialFocusItem: newWord
-        function addTyped() {
-            const w = newWord.text.trim()
+        function addTyped(): void {
+            const w = Js.trim(newWord.text)
             if (w !== "") {
                 SpellCheck.addToDictionary(w)
                 newWord.text = ""
@@ -191,7 +279,7 @@ Item {
                 objectName: "spellAddButton"
                 text: qsTr("Add")
                 iconName: "plus"
-                enabled: newWord.text.trim() !== ""
+                enabled: Js.trim(newWord.text) !== ""
                 onClicked: dictionaryDialog.addTyped()
             }
         }
@@ -238,21 +326,22 @@ Item {
     Instantiator {
         model: root.bottomNavViews
         delegate: BMenuItem {
-            required property var modelData
-            objectName: "bottomNavChoice_" + modelData.value
-            text: modelData.text
-            iconName: modelData.icon
+            id: navChoice
+            required property string value
+            required text
+            required iconName
+            objectName: "bottomNavChoice_" + value
             checkable: true
-            checked: AppSettings.bottomNavTabs[root.navSlot] === modelData.value
+            Binding on checked { value: AppSettings.bottomNavTabs[root.navSlot] === navChoice.value }
             onTriggered: {
-                AppSettings.setBottomNavTab(root.navSlot, modelData.value)
+                AppSettings.setBottomNavTab(root.navSlot, navChoice.value)
                 // The tap toggled the item itself; the view already in the slot changes nothing
-                // in AppSettings, so the binding would not be evaluated again.
-                checked = Qt.binding(() => AppSettings.bottomNavTabs[root.navSlot] === modelData.value)
+                // in AppSettings, so the binding above would not be applied again.
+                checked = AppSettings.bottomNavTabs[root.navSlot] === navChoice.value
             }
         }
-        onObjectAdded: (index, object) => navSlotMenu.insertItem(index, object)
-        onObjectRemoved: (index, object) => navSlotMenu.removeItem(object)
+        onObjectAdded: (index, object) => navSlotMenu.insertItem(index, object as Item)
+        onObjectRemoved: (index, object) => navSlotMenu.removeItem(object as Item)
     }
 
     // ---- Building blocks --------------------------------------------------------------------
@@ -307,28 +396,25 @@ Item {
         id: field
         required property string key
         property string invalidText: qsTr("This value cannot be used.")
-        readonly property string configText: Workspace.config[key] !== undefined ? String(Workspace.config[key]) : ""
+        readonly property string configText: AppController.routeText(Workspace.config, key)
         Layout.preferredWidth: Theme.compact ? -1 : 260
         Layout.fillWidth: Theme.compact
-        text: configText
+        // (A Binding: assigning the text below does not end it.)
+        Binding on text { value: field.configText }
         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
-        function save() {
+        function save(): void {
             if (text === configText)
                 return
-            const change = {}
-            change[key] = text.trim()
-            errorText = Workspace.setConfig(change) ? "" : invalidText
+            const value = "" + Js.trim(text)
+            errorText = Workspace.setConfig(Js.withKey({}, key, value)) ? "" : invalidText
         }
-        /// Save a value picked elsewhere (a clock dialog) at once. The text is not assigned —
-        /// that would end its binding to the config, and a value changed later elsewhere would
-        /// no longer show (and be written back on the next edit): the binding shows the value.
-        function applyValue(value) {
-            const change = {}
-            change[key] = value
-            errorText = Workspace.setConfig(change) ? "" : invalidText
+        /// Save a value picked elsewhere (a clock dialog) at once. The binding to the config
+        /// shows the value (a value changed later elsewhere shows too).
+        function applyValue(value: string): void {
+            errorText = Workspace.setConfig(Js.withKey({}, key, value)) ? "" : invalidText
             // Typed text the pick replaces, when the config already had that value.
             if (text !== configText)
-                text = Qt.binding(() => field.configText)
+                text = configText
         }
         onEditingFinished: save()
     }
@@ -337,7 +423,7 @@ Item {
     component PermissionRow: ShellSettingRow {
         id: permission
         required property string name
-        readonly property bool granted: AppController.permissions[name] === true
+        readonly property bool granted: AppController.routeFlag(AppController.permissions, name)
         BBadge {
             Layout.alignment: Qt.AlignVCenter
             text: permission.granted ? qsTr("Allowed") : qsTr("Not allowed")
@@ -373,13 +459,15 @@ Item {
                 Repeater {
                     model: root.sections
                     delegate: BListItem {
-                        required property var modelData
+                        id: sectionItem
+                        required property string key
+                        required property string title
+                        required iconName
                         width: parent.width
-                        text: modelData.title
-                        iconName: modelData.icon
-                        selected: root.section === modelData.id
+                        text: title
+                        selected: root.section === key
                         selectionBar: true
-                        onClicked: AppController.replaceRoute({ view: "settings", section: modelData.id })
+                        onClicked: AppController.replaceRoute({ view: "settings", section: sectionItem.key })
                     }
                 }
             }
@@ -424,14 +512,15 @@ Item {
                 // Narrow: everything, scrolled to the route's section.
                 Repeater {
                     id: narrowSections
-                    model: Theme.narrow ? root.sections : []
+                    model: Theme.narrow ? root.sections : root.noSections
                     delegate: Loader {
-                        required property var modelData
+                        id: sectionLoader
+                        required property string key
                         required property int index
                         Layout.fillWidth: true
-                        sourceComponent: root.sectionComponent(modelData.id)
-                        onLoaded: if (modelData.id === root.section) root.scrollToSection()
-                        onYChanged: if (modelData.id === root.section) root.scrollTo(index === 0 ? 0 : y)
+                        sourceComponent: root.sectionComponent(key)
+                        onLoaded: if (sectionLoader.key === root.section) root.scrollToSection()
+                        onYChanged: if (sectionLoader.key === root.section) root.scrollTo(index === 0 ? 0 : y)
                     }
                 }
             }
@@ -503,22 +592,24 @@ Item {
                         Repeater {
                             model: root.accents
                             delegate: BColorSwatch {
-                                required property var modelData
-                                objectName: "accentSwatch_" + modelData.value
-                                color: ThemePalette.accentSwatch(modelData.value, "", Theme.dark,
-                                                                 Theme.dark ? Theme.darkSurface : Theme.lightSurface)
-                                label: modelData.text
+                                id: swatch
+                                required property string value
+                                required property string name
+                                objectName: "accentSwatch_" + value
+                                color: "" + ThemePalette.accentSwatch(value, "", Theme.dark,
+                                                                      Theme.dark ? Theme.darkSurface : Theme.lightSurface)
+                                label: name
                                 // Theme: the setting, or a screenshot's --accent.
-                                selected: Theme.accentName === modelData.value
-                                onClicked: AppSettings.accentColor = modelData.value
+                                selected: Theme.accentName === value
+                                onClicked: AppSettings.accentColor = swatch.value
                             }
                         }
                         BColorSwatch {
                             objectName: "accentSwatch_custom"
                             readonly property string custom: Theme.accentName === "custom" ? Theme.customAccent
                                                                                            : AppSettings.customAccent
-                            color: custom !== "" ? ThemePalette.accentSwatch("custom", custom, Theme.dark,
-                                                                             Theme.dark ? Theme.darkSurface : Theme.lightSurface)
+                            color: custom !== "" ? "" + ThemePalette.accentSwatch("custom", custom, Theme.dark,
+                                                                                  Theme.dark ? Theme.darkSurface : Theme.lightSurface)
                                                  // (bgSunken is a black hole in the dark.)
                                                  : Theme.dark ? Theme.bgElevated2 : Theme.bgSunken
                             iconName: custom !== "" ? "" : "plus"
@@ -569,8 +660,7 @@ Item {
                             { value: 1.15, text: qsTr("Large") },
                             { value: 1.3, text: qsTr("Larger") }
                         ]
-                        currentValue: [0.9, 1.0, 1.15, 1.3].reduce((best, v) =>
-                            Math.abs(v - AppSettings.fontScale) < Math.abs(best - AppSettings.fontScale) ? v : best, 1.0)
+                        currentValue: root.nearestFontScale()
                         onActivated: (value) => AppSettings.fontScale = value
                     }
                 }
@@ -628,12 +718,14 @@ Item {
                     Repeater {
                         model: root.sidebarItems
                         delegate: BCheckBox {
-                            required property var modelData
-                            objectName: "sidebarItem_" + modelData.id
+                            id: sidebarItem
+                            required property string key
+                            required property string title
+                            objectName: "sidebarItem_" + key
                             width: Theme.compact ? parent.width : (parent.width - Theme.space2) / 2
-                            text: modelData.title
-                            checked: AppSettings.sidebarHidden.indexOf(modelData.id) < 0
-                            onToggled: AppSettings.setSidebarItemShown(modelData.id, checked)
+                            text: title
+                            checked: AppSettings.sidebarHidden.indexOf(key) < 0
+                            onToggled: AppSettings.setSidebarItemShown(sidebarItem.key, checked)
                         }
                     }
                 }
@@ -651,7 +743,8 @@ Item {
                             id: sectionRow
                             required property string modelData
                             required property int index
-                            readonly property var info: root.sidebarSections[modelData] || ({ title: modelData, icon: "" })
+                            readonly property string sectionTitle: root.sidebarSectionTitle(modelData)
+                            readonly property string sectionIcon: root.sidebarSectionIcon(modelData)
                             objectName: "sidebarSection_" + modelData
                             width: Math.min(parent.width, 420)
                             height: Theme.touchUi ? Theme.touchTarget + 4 : Theme.controlHeight + 4
@@ -660,33 +753,33 @@ Item {
                             border.width: 1
                             border.color: Theme.borderSubtle
                             Accessible.role: Accessible.ListItem
-                            Accessible.name: qsTr("%1. %2").arg(index + 1).arg(info.title)
+                            Accessible.name: qsTr("%1. %2").arg(index + 1).arg(sectionTitle)
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.leftMargin: Theme.space3
                                 anchors.rightMargin: Theme.space1
                                 spacing: Theme.space2
                                 BText {
-                                    text: String(sectionRow.index + 1)
+                                    text: "" + (sectionRow.index + 1)
                                     color: Theme.fgFaint
                                     variant: "small"
                                     Accessible.ignored: true
                                 }
                                 BIcon {
-                                    name: sectionRow.info.icon
+                                    name: sectionRow.sectionIcon
                                     size: Theme.iconSizeSm
                                     color: Theme.fgMuted
                                 }
                                 BText {
                                     Layout.fillWidth: true
-                                    text: sectionRow.info.title
+                                    text: sectionRow.sectionTitle
                                     elide: Text.ElideRight
                                     Accessible.ignored: true
                                 }
                                 BIconButton {
                                     objectName: "sidebarSectionUp_" + sectionRow.modelData
                                     iconName: "chevron-up"
-                                    label: qsTr("Move %1 up").arg(sectionRow.info.title)
+                                    label: qsTr("Move %1 up").arg(sectionRow.sectionTitle)
                                     size: "small"
                                     enabled: sectionRow.index > 0
                                     onClicked: AppSettings.moveSidebarSection(sectionRow.modelData, -1)
@@ -694,7 +787,7 @@ Item {
                                 BIconButton {
                                     objectName: "sidebarSectionDown_" + sectionRow.modelData
                                     iconName: "chevron-down"
-                                    label: qsTr("Move %1 down").arg(sectionRow.info.title)
+                                    label: qsTr("Move %1 down").arg(sectionRow.sectionTitle)
                                     size: "small"
                                     enabled: sectionRow.index < AppSettings.sidebarSections.length - 1
                                     onClicked: AppSettings.moveSidebarSection(sectionRow.modelData, 1)
@@ -718,14 +811,14 @@ Item {
                         delegate: BButton {
                             id: slotButton
                             required property int index
-                            readonly property var view: root.viewInfo(AppSettings.bottomNavTabs[index])
+                            readonly property string view: index < AppSettings.bottomNavTabs.length ? AppSettings.bottomNavTabs[index] : ""
                             objectName: "bottomNavSlot_" + index
                             Layout.fillWidth: true
                             Layout.preferredWidth: 1 // equal widths
                             size: "small"
-                            iconName: view.icon
-                            text: view.text
-                            Accessible.name: qsTr("Button %1: %2").arg(index + 1).arg(view.text)
+                            iconName: root.viewIcon(view)
+                            text: root.viewText(view)
+                            Accessible.name: qsTr("Button %1: %2").arg(index + 1).arg(root.viewText(view))
                             onClicked: {
                                 root.navSlot = index
                                 navSlotMenu.popup(slotButton, 0, slotButton.height)
@@ -812,7 +905,8 @@ Item {
                 title: qsTr("Font size")
                 BSegmented {
                     accessibleName: qsTr("Font size")
-                    model: [14, 16, 18, 20, 22].map(v => ({ value: v, text: String(v) }))
+                    model: [{ value: 14, text: "14" }, { value: 16, text: "16" }, { value: 18, text: "18" },
+                            { value: 20, text: "20" }, { value: 22, text: "22" }]
                     currentValue: AppSettings.editorFontSize
                     onActivated: (value) => AppSettings.editorFontSize = value
                 }
@@ -881,21 +975,11 @@ Item {
                 title: qsTr("Spelling languages")
                 description: SpellCheck.languages.length === 0
                              ? qsTr("No dictionary on this device for this choice.")
-                             : qsTr("Checked now: %1.").arg(SpellCheck.languages.map(l => root.languageName(l)).join(", "))
+                             : qsTr("Checked now: %1.").arg(root.languageNames(SpellCheck.languages))
                 BSegmented {
                     objectName: "spellLanguagesSetting"
                     accessibleName: qsTr("Spelling languages")
-                    model: {
-                        const have = SpellCheck.availableLanguages
-                        const out = [{ value: "auto", text: qsTr("Automatic", "spelling languages") }]
-                        if (have.indexOf("pl") >= 0)
-                            out.push({ value: "pl", text: qsTr("Polish") })
-                        if (have.indexOf("en") >= 0)
-                            out.push({ value: "en", text: qsTr("English") })
-                        if (have.indexOf("pl") >= 0 && have.indexOf("en") >= 0)
-                            out.push({ value: "pl,en", text: qsTr("Both", "spelling languages") })
-                        return out
-                    }
+                    model: root.spellChoices(SpellCheck.availableLanguages)
                     currentValue: AppSettings.spellLanguages === "en,pl" ? "pl,en" : AppSettings.spellLanguages
                     onActivated: (value) => AppSettings.spellLanguages = value
                 }
@@ -1036,19 +1120,12 @@ Item {
                 id: obsidianRow
                 objectName: "obsidianSettingsRow"
                 // (config: re-read when Obsidian's settings change; revision: after a save)
-                readonly property var adopted: Workspace.config && Workspace.revision >= 0 && Workspace.isOpen
-                                               ? Workspace.configFromObsidian() : []
-                readonly property var labels: ({
-                    journalsFolder: qsTr("Journal folder"),
-                    journalFileFormat: qsTr("Journal file names"),
-                    journalTemplate: qsTr("Journal template"),
-                    templatesFolder: qsTr("Templates folder"),
-                    attachmentsFolder: qsTr("Attachments folder")
-                })
+                readonly property list<string> adopted: Workspace.config && Workspace.revision >= 0 && Workspace.isOpen
+                                                        ? root.adoptedSettings() : []
                 visible: obsidianRow.adopted.length > 0
                 title: qsTr("Settings from Obsidian")
                 description: qsTr("Taken from the Obsidian vault's settings (.obsidian): %1. They are saved to .brulion/config.json when you change a setting here.")
-                             .arg(obsidianRow.adopted.map(key => obsidianRow.labels[key] || key).join(", "))
+                             .arg(root.obsidianLabels(obsidianRow.adopted))
                 BButton {
                     objectName: "saveObsidianSettings"
                     text: qsTr("Save to the notebook")
@@ -1086,7 +1163,7 @@ Item {
                 title: qsTr("Weekly note file names")
                 // (revision: the example follows a format just saved)
                 description: qsTr("yyyy is the week's year, ww its number (w without a leading zero), text in 'quotes'. This week: %1")
-                             .arg(Workspace.revision >= 0 ? (Workspace.periodicNote("week", AppController.today()).path || "") : "")
+                             .arg(Workspace.revision >= 0 ? root.periodicPath("week") : "")
                 ConfigField {
                     objectName: "weeklyFileFormatField"
                     key: "weeklyFileFormat"
@@ -1106,7 +1183,7 @@ Item {
             ShellSettingRow {
                 title: qsTr("Monthly note file names")
                 description: qsTr("Date format of the month, e.g. yyyy-MM or MMMM yyyy. This month: %1")
-                             .arg(Workspace.revision >= 0 ? (Workspace.periodicNote("month", AppController.today()).path || "") : "")
+                             .arg(Workspace.revision >= 0 ? root.periodicPath("month") : "")
                 ConfigField {
                     objectName: "monthlyFileFormatField"
                     key: "monthlyFileFormat"
@@ -1149,8 +1226,8 @@ Item {
                     iconName: "clock"
                     label: qsTr("Pick a time on a clock")
                     variant: "secondary"
-                    onClicked: defaultReminderTimeDialog.openFor(Workspace.config.defaultReminderTime
-                                                                || "09:00")
+                    onClicked: defaultReminderTimeDialog.openFor(AppController.routeText(Workspace.config, "defaultReminderTime") !== ""
+                                                                ? AppController.routeText(Workspace.config, "defaultReminderTime") : "09:00")
 
                     BTimePickerDialog {
                         id: defaultReminderTimeDialog
@@ -1181,7 +1258,7 @@ Item {
                     id: warnings
                     width: parent.width
                     // (config: also Obsidian's settings, which no file revision follows)
-                    text: Workspace.config && Workspace.revision >= 0 ? Workspace.configWarnings().join("\n") : ""
+                    text: Workspace.config && Workspace.revision >= 0 ? root.configWarnings().join("\n") : ""
                     wrapMode: Text.Wrap
                 }
             }
@@ -1254,7 +1331,8 @@ Item {
                 description: qsTr("How long “Snooze” postpones a reminder.")
                 BSegmented {
                     accessibleName: qsTr("Snooze")
-                    model: [5, 10, 15, 30].map(v => ({ value: v, text: qsTr("%1 min").arg(v) }))
+                    model: [{ value: 5, text: qsTr("%1 min").arg(5) }, { value: 10, text: qsTr("%1 min").arg(10) },
+                            { value: 15, text: qsTr("%1 min").arg(15) }, { value: 30, text: qsTr("%1 min").arg(30) }]
                     currentValue: AppSettings.snoozeMinutes
                     onActivated: (value) => AppSettings.snoozeMinutes = value
                 }
@@ -1264,7 +1342,8 @@ Item {
                 description: qsTr("An alarm stops by itself after this time.")
                 BSegmented {
                     accessibleName: qsTr("Alarms ring for")
-                    model: [1, 5, 10, 15].map(v => ({ value: v, text: qsTr("%1 min").arg(v) }))
+                    model: [{ value: 1, text: qsTr("%1 min").arg(1) }, { value: 5, text: qsTr("%1 min").arg(5) },
+                            { value: 10, text: qsTr("%1 min").arg(10) }, { value: 15, text: qsTr("%1 min").arg(15) }]
                     currentValue: AppSettings.alarmRingMinutes
                     onActivated: (value) => AppSettings.alarmRingMinutes = value
                 }
@@ -1282,23 +1361,26 @@ Item {
                 id: backgroundCheckRow
                 objectName: "backgroundCheckRow"
                 visible: AppController.isAndroid
-                property int minutes: Number(AppSettings.value("reminders/backgroundCheckMinutes", 30))
-                // The last check (Workspace.reminders.backgroundCheckStatus()), read when shown.
+                property int minutes: AppSettings.value("reminders/backgroundCheckMinutes", 30)
+                // The last check (Workspace.reminders.backgroundCheckStatus(): { when, ok, sync,
+                // reminders }), read when shown.
                 property var last: ({})
                 onVisibleChanged: if (visible) last = Workspace.reminders.backgroundCheckStatus()
                 Component.onCompleted: if (visible) last = Workspace.reminders.backgroundCheckStatus()
                 title: qsTr("Check notes in the background")
                 description: {
                     const what = qsTr("While Brulion is closed, Android reads the notebook now and then (after a Nextcloud sync, if set up), so reminders added on another device ring too. Android may postpone it while the phone sleeps.")
-                    if (minutes <= 0 || !last || !last.when)
+                    const when = AppController.routeText(last, "when")
+                    if (minutes <= 0 || when === "")
                         return what
-                    let done
-                    if (!last.ok)
-                        done = qsTr("Last check %1: the notebook could not be read.").arg(last.when)
-                    else if (last.sync === "failed")
-                        done = qsTr("Last check %1: %n reminder(s), the sync failed.", "", last.reminders).arg(last.when)
+                    const count = AppController.routeInt(last, "reminders", 0)
+                    let done = ""
+                    if (!AppController.routeFlag(last, "ok"))
+                        done = qsTr("Last check %1: the notebook could not be read.").arg(when)
+                    else if (AppController.routeText(last, "sync") === "failed")
+                        done = qsTr("Last check %1: %n reminder(s), the sync failed.", "", count).arg(when)
                     else
-                        done = qsTr("Last check %1: %n reminder(s).", "", last.reminders).arg(last.when)
+                        done = qsTr("Last check %1: %n reminder(s).", "", count).arg(when)
                     return what + "\n" + done
                 }
                 BSegmented {
@@ -1399,11 +1481,11 @@ Item {
                                    ? qsTr("Brulion starts hidden in the tray, so reminders ring from the moment you sign in.")
                                    : qsTr("Brulion starts after you sign in.")
                     iconName: "power"
-                    checked: AppController.startAtLogin
+                    Binding on checked { value: AppController.startAtLogin }
                     onToggled: {
                         AppController.startAtLogin = checked
-                        // Refused: follow the real state again.
-                        checked = Qt.binding(() => AppController.startAtLogin)
+                        // Refused: show the real state again.
+                        checked = AppController.startAtLogin
                     }
                 }
                 ShellSettingRow {

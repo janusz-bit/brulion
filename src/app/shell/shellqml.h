@@ -11,11 +11,13 @@
 //   CommandModel     singleton — the command palette's commands
 //   ShortcutMap      singleton — the commands' keyboard shortcuts (custom ones too)
 //   FolderTreeModel  creatable — FolderTreeModel { workspace: Workspace }
+//   CleanupSelection creatable — CleanupView's shown and ticked files
 #pragma once
 
 #include "appcontroller.h"
 #include "appsettings.h"
 #include "appupdates.h"
+#include "cleanupselection.h"
 #include "commandmodel.h"
 #include "foldertreemodel.h"
 #include "replacesession.h"
@@ -149,6 +151,12 @@ struct FolderTreeModelForeign {
     Q_GADGET
     QML_FOREIGN(brulion::shell::FolderTreeModel)
     QML_NAMED_ELEMENT(FolderTreeModel)
+};
+
+struct CleanupSelectionForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::CleanupSelection)
+    QML_NAMED_ELEMENT(CleanupSelection)
 };
 
 } // namespace brulion::shell

@@ -68,6 +68,8 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacesync.h ${_brulion_shell_dir}/workspacesync.cpp
     ${_brulion_shell_dir}/workspacesyncruns.cpp
     ${_brulion_shell_dir}/workspaceintegration.h ${_brulion_shell_dir}/workspaceintegration.cpp
+    # The views' C++ (qml/views/*.qml)
+    ${_brulion_shell_dir}/cleanupselection.h ${_brulion_shell_dir}/cleanupselection.cpp
 )
 # The documentation (guide/*.md, Brulion notes about Brulion) as :/guide/<name>.md;
 # demovault.cpp (updateDocsVault) writes them at the root of the separate notebook
