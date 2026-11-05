@@ -2727,6 +2727,11 @@ QVariantMap PageController::reminderAt(int row, int from, int to) const
     return {};
 }
 
+QString PageController::dateChipUrl(int row, const QString &url) const
+{
+    return dateChip(row, url).value(u"url"_s).toString();
+}
+
 QVariantMap PageController::dateChip(int row, const QString &url) const
 {
     if (!validRow(row))

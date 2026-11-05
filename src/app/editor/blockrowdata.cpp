@@ -1,6 +1,7 @@
 #include "blockrowdata.h"
 
-#include "blocklistmodel.h"
+#include <QJSValue>
+#include <QMetaMethod>
 
 namespace brulion::editor {
 
@@ -9,142 +10,90 @@ BlockRowData::BlockRowData(QObject *parent)
 {
 }
 
-BlockListModel *BlockRowData::model() const
+QObject *BlockRowData::source() const
 {
-    return m_model.data();
-}
-
-void BlockRowData::setModel(BlockListModel *model)
-{
-    if (m_model == model)
-        return;
-    disconnect(m_connection);
-    m_connection = {};
-    m_model = model;
-    Q_EMIT modelChanged();
-    announceAll();
-}
-
-void BlockRowData::setRow(int row)
-{
-    if (m_row == row)
-        return;
-    const bool first = m_row < 0;
-    m_row = row;
-    Q_EMIT rowChanged();
-    // The delegate's index moved (rows inserted or removed above): the same block, the same data.
-    if (first)
-        announceAll();
-}
-
-QVariant BlockRowData::value(int role) const
-{
-    if (!m_model || m_row < 0)
-        return {};
-    if (!m_connection) {
-        auto *self = const_cast<BlockRowData *>(this);
-        self->m_connection = connect(m_model.data(), &QAbstractItemModel::dataChanged, self,
-                                     [self](const QModelIndex &from, const QModelIndex &to, const QList<int> &roles) {
-                                         self->dataChanged(from.row(), to.row(), roles);
-                                     });
+    if (!m_sourceLooked && parent()) {
+        const QVariant model = parent()->property("model");
+        m_source = model.metaType() == QMetaType::fromType<QJSValue>() ? model.value<QJSValue>().toQObject()
+                                                                        : model.value<QObject *>();
+        m_sourceLooked = !m_source.isNull();
     }
-    return m_model->data(m_model->index(m_row), role);
+    return m_source.data();
 }
 
-void BlockRowData::dataChanged(int first, int last, const QList<int> &roles)
+QVariant BlockRowData::value(Role role, const char *name, void (BlockRowData::*changed)()) const
 {
-    if (m_row < first || m_row > last)
-        return;
-    const auto has = [&roles](int role) { return roles.isEmpty() || roles.contains(role); };
-    if (has(BlockListModel::HtmlRole))
-        Q_EMIT htmlChanged();
-    if (has(BlockListModel::PlainTextRole))
-        Q_EMIT plainTextChanged();
-    if (has(BlockListModel::EditTextRole))
-        Q_EMIT editTextChanged();
-    if (has(BlockListModel::LangRole))
-        Q_EMIT langChanged();
-    if (has(BlockListModel::CalloutTypeRole))
-        Q_EMIT calloutTypeChanged();
-    if (has(BlockListModel::IsSelectedRole))
-        Q_EMIT isSelectedChanged();
-    if (has(BlockListModel::CalcResultsRole))
-        Q_EMIT calcResultsChanged();
-    if (has(BlockListModel::TableDataRole))
-        Q_EMIT tableDataChanged();
-    if (has(BlockListModel::ChartDataRole))
-        Q_EMIT chartDataChanged();
-    if (has(BlockListModel::QueryRole))
-        Q_EMIT queryChanged();
-    if (has(BlockListModel::PropertiesRole))
-        Q_EMIT propertiesChanged();
-    if (has(BlockListModel::PropertiesInfoRole))
-        Q_EMIT propertiesInfoChanged();
-}
-
-void BlockRowData::announceAll()
-{
-    dataChanged(m_row, m_row, {});
+    QObject *object = source();
+    if (!object)
+        return {};
+    const QMetaObject *meta = object->metaObject();
+    const int index = meta->indexOfProperty(name);
+    if (index < 0)
+        return {};
+    const QMetaProperty property = meta->property(index);
+    if (!(m_connected & (1 << role))) {
+        m_connected |= 1 << role;
+        if (property.hasNotifySignal()) {
+            auto *self = const_cast<BlockRowData *>(this);
+            connect(object, property.notifySignal(), self, QMetaMethod::fromSignal(changed));
+        }
+    }
+    return property.read(object);
 }
 
 QString BlockRowData::html() const
 {
-    return value(BlockListModel::HtmlRole).toString();
-}
-
-QString BlockRowData::plainText() const
-{
-    return value(BlockListModel::PlainTextRole).toString();
+    return value(Html, "html", &BlockRowData::htmlChanged).toString();
 }
 
 QString BlockRowData::editText() const
 {
-    return value(BlockListModel::EditTextRole).toString();
+    return value(EditText, "editText", &BlockRowData::editTextChanged).toString();
 }
 
 QString BlockRowData::lang() const
 {
-    return value(BlockListModel::LangRole).toString();
+    return value(Lang, "lang", &BlockRowData::langChanged).toString();
 }
 
 QString BlockRowData::calloutType() const
 {
-    return value(BlockListModel::CalloutTypeRole).toString();
+    return value(CalloutType, "calloutType", &BlockRowData::calloutTypeChanged).toString();
 }
 
 bool BlockRowData::isSelected() const
 {
-    return value(BlockListModel::IsSelectedRole).toBool();
+    return value(IsSelected, "isSelected", &BlockRowData::isSelectedChanged).toBool();
 }
 
 QVariantList BlockRowData::calcResults() const
 {
-    return value(BlockListModel::CalcResultsRole).toList();
+    return value(CalcResults, "calcResults", &BlockRowData::calcResultsChanged).toList();
 }
 
 QVariantMap BlockRowData::tableData() const
 {
-    return value(BlockListModel::TableDataRole).toMap();
+    return value(TableData, "tableData", &BlockRowData::tableDataChanged).toMap();
 }
 
 QVariantMap BlockRowData::chartData() const
 {
-    return value(BlockListModel::ChartDataRole).toMap();
+    return value(ChartData, "chartData", &BlockRowData::chartDataChanged).toMap();
 }
 
 QVariantMap BlockRowData::query() const
 {
-    return value(BlockListModel::QueryRole).toMap();
+    return value(Query, "query", &BlockRowData::queryChanged).toMap();
 }
 
 QVariantList BlockRowData::properties() const
 {
-    return value(BlockListModel::PropertiesRole).toList();
+    return value(Properties, "properties", &BlockRowData::propertiesChanged).toList();
 }
 
 QVariantMap BlockRowData::propertiesInfo() const
 {
-    return value(BlockListModel::PropertiesInfoRole).toMap();
+    return value(PropertiesInfo, "propertiesInfo", &BlockRowData::propertiesInfoChanged).toMap();
 }
 
 } // namespace brulion::editor

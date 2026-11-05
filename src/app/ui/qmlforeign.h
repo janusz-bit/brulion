@@ -13,6 +13,7 @@
 #include "filepicker.h"
 #include "gestureinsets.h"
 #include "jshelper.h"
+#include "mapholder.h"
 #include "keyboardinsets.h"
 #include "rowscroll.h"
 #include "texthelper.h"
@@ -52,6 +53,13 @@ struct JsHelperForeign {
     QML_SINGLETON
 public:
     static JsHelper *create(QQmlEngine *, QJSEngine *) { return new JsHelper; }
+};
+
+// A QVariantMap in a typed property, for compiled QML (mapholder.h).
+struct MapHolderForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::MapHolder)
+    QML_NAMED_ELEMENT(MapHolder)
 };
 
 struct DiffHelperForeign {

@@ -85,6 +85,19 @@ struct BlockRowDataForeign {
     QML_NAMED_ELEMENT(BlockRowData)
 };
 
+struct RichTextPillForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::RichTextPill)
+    QML_VALUE_TYPE(richTextPill)
+};
+
+struct RichTextPillListForeign {
+    Q_GADGET
+    QML_FOREIGN(QList<brulion::editor::RichTextPill>)
+    QML_ANONYMOUS
+    QML_SEQUENTIAL_CONTAINER(brulion::editor::RichTextPill)
+};
+
 struct RichTextPillsForeign {
     Q_GADGET
     QML_FOREIGN(brulion::editor::RichTextPills)

@@ -55,6 +55,29 @@ class QTextDocument;
 
 namespace brulion::editor {
 
+/// One shape of RichTextPills::shapes: the typed form of a `pills` entry (QML value type
+/// `richTextPill`), for delegates compiled ahead of time (`required property richTextPill modelData`).
+struct RichTextPill {
+    Q_GADGET
+    Q_PROPERTY(qreal x MEMBER x FINAL)
+    Q_PROPERTY(qreal y MEMBER y FINAL)
+    Q_PROPERTY(qreal width MEMBER width FINAL)
+    Q_PROPERTY(qreal height MEMBER height FINAL)
+    Q_PROPERTY(QColor color MEMBER color FINAL)
+    /// "pill", "box" or "icon" (see `pills`).
+    Q_PROPERTY(QString kind MEMBER kind FINAL)
+    Q_PROPERTY(QString icon MEMBER icon FINAL)
+public:
+    qreal x = 0;
+    qreal y = 0;
+    qreal width = 0;
+    qreal height = 0;
+    QColor color;
+    QString kind;
+    QString icon;
+    bool operator==(const RichTextPill &other) const = default;
+};
+
 class RichTextPills : public QObject, public QQmlParserStatus {
     Q_OBJECT
     Q_INTERFACES(QQmlParserStatus)
@@ -62,6 +85,8 @@ class RichTextPills : public QObject, public QQmlParserStatus {
     Q_PROPERTY(qreal lineHeight READ lineHeight WRITE setLineHeight NOTIFY lineHeightChanged FINAL)
     Q_PROPERTY(qreal inset READ inset WRITE setInset NOTIFY insetChanged FINAL)
     Q_PROPERTY(QVariantList pills READ pills NOTIFY pillsChanged FINAL)
+    /// `pills` as typed values (the same shapes, the same order).
+    Q_PROPERTY(QList<brulion::editor::RichTextPill> shapes READ shapes NOTIFY pillsChanged FINAL)
     /// The rich text this object sets on the document (once written, the document's text is
     /// its: the TextEdit's own `text` stays unset). Needed for maximumLineCount.
     Q_PROPERTY(QString html READ html WRITE setHtml NOTIFY htmlChanged FINAL)
@@ -99,6 +124,7 @@ public:
     qreal inset() const { return m_inset; }
     void setInset(qreal px);
     QVariantList pills() const;
+    QList<RichTextPill> shapes() const;
     QString html() const { return m_html; }
     void setHtml(const QString &html);
     int maximumLineCount() const { return m_maxLines; }
